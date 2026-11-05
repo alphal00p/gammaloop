@@ -6,6 +6,7 @@
 mod alternatives;
 pub use alternatives::MomentumMatchLimits;
 pub(crate) use alternatives::first_minimal_acceptance;
+pub(crate) use alternatives::{MatroidProfile, integer_line_vector, matroid_basis_counts};
 
 use std::{
     collections::{BTreeMap, BTreeSet},

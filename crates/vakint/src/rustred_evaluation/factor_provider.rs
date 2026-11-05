@@ -146,65 +146,12 @@ fn physical_family(momenta: &[Atom], loops: usize) -> Result<MomentumFamily, Fac
 /// different profiles have no such map. `None` when a coefficient is not an
 /// integer or the profile is not defined.
 fn basis_profile(momenta: &[Atom], loops: usize) -> Option<(usize, Vec<usize>)> {
-    if loops == 0 || momenta.len() < loops || momenta.len() > 16 {
-        return None;
-    }
     let variables = (1..=loops).map(|axis| S.k.call(axis)).collect::<Vec<_>>();
-    let variable_refs = variables.iter().collect::<Vec<_>>();
-    let mut vectors = Vec::with_capacity(momenta.len());
-    for momentum in momenta {
-        let mut row = vec![0i128; loops];
-        for (monomial, coefficient) in momentum.expand().coefficient_list::<u16>(&variable_refs) {
-            let axis = variables.iter().position(|variable| variable == &monomial)?;
-            row[axis] += i128::from(crate::get_integer_from_atom(coefficient.as_view())?);
-        }
-        vectors.push(row);
-    }
-    // Fraction-free (Bareiss) elimination: nonzero determinant of a subset.
-    let independent = |subset: &[usize]| -> bool {
-        let mut matrix = subset.iter().map(|&line| vectors[line].clone()).collect::<Vec<_>>();
-        let n = matrix.len();
-        let mut previous = 1i128;
-        for pivot in 0..n {
-            let Some(row) = (pivot..n).find(|&row| matrix[row][pivot] != 0) else {
-                return false;
-            };
-            matrix.swap(pivot, row);
-            for row in pivot + 1..n {
-                for column in pivot + 1..n {
-                    matrix[row][column] = (matrix[row][column] * matrix[pivot][pivot]
-                        - matrix[row][pivot] * matrix[pivot][column])
-                        / previous;
-                }
-                matrix[row][pivot] = 0;
-            }
-            previous = matrix[pivot][pivot];
-        }
-        true
-    };
-    let mut total = 0usize;
-    let mut per_line = vec![0usize; momenta.len()];
-    let mut subset = (0..loops).collect::<Vec<_>>();
-    loop {
-        if independent(&subset) {
-            total += 1;
-            for &line in &subset {
-                per_line[line] += 1;
-            }
-        }
-        // Next combination in lexicographic order.
-        let mut index = loops;
-        while index > 0 && subset[index - 1] == momenta.len() - loops + index - 1 {
-            index -= 1;
-        }
-        if index == 0 {
-            break;
-        }
-        subset[index - 1] += 1;
-        for next in index..loops {
-            subset[next] = subset[next - 1] + 1;
-        }
-    }
+    let vectors = momenta
+        .iter()
+        .map(|momentum| crate::topologies::integer_line_vector(momentum, &variables))
+        .collect::<Option<Vec<_>>>()?;
+    let (total, mut per_line) = crate::topologies::matroid_basis_counts(&vectors, loops)?;
     per_line.sort_unstable();
     Some((total, per_line))
 }
@@ -548,8 +495,7 @@ impl VacuumFactorProvider for ShippedFactorProvider {
                 mapped_key(&source, &destination, &slots, target, 10)?
             };
             log::debug!(target: "vakint::saved_application", "phase=lower_factor_mapping program={index} found={} excluded_by_profile={excluded} target={:?} elapsed_seconds={:.6}", found.is_some(), target.powers(), mapping_started.elapsed().as_secs_f64());
-            if let Some((mapped, mapping)) = found
-            {
+            if let Some((mapped, mapping)) = found {
                 let (native, _) = programs
                     .native_program(index)
                     .ok_or("missing shipped candidate program")?;

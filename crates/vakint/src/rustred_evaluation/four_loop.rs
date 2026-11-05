@@ -65,12 +65,15 @@ struct Descriptor {
     family_fingerprint: String,
 }
 
-/// One four-loop package master in its own contracted long form (unit mass),
-/// for master recognition (see `five_loop::master_transport`).
+/// One scalar four-loop package master in its own contracted long form (unit
+/// mass), for master recognition (see `five_loop::master_transport`).
 pub(super) struct FourLoopMasterForm {
     pub(super) program: usize,
     pub(super) powers: Vec<i64>,
-    pub(super) canonical: symbolica::graph::Graph<u8, symbolica::graph::Empty>,
+    /// Power-colored profile of its line matroid.
+    pub(super) profile: crate::topologies::MatroidProfile,
+    /// Its denominators: sorted (line momentum up to sign, power).
+    pub(super) lines: Vec<(Vec<i128>, i64)>,
     pub(super) contracted: Atom,
 }
 

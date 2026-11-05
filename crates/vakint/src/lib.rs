@@ -2896,7 +2896,11 @@ impl VakintTerm {
         self.stage_numerical_inputs(vakint, settings)?;
         // A four-loop scalar integral equal to a shipped four-loop master is
         // written in that master's own program form before matching.
-        vakint.transport_four_loop_master(settings, &mut self.integral, self.numerator.as_view())?;
+        vakint.transport_four_loop_master(
+            settings,
+            &mut self.integral,
+            self.numerator.as_view(),
+        )?;
         let mut integral_specs = if let Some(replacement_rules) =
             vakint.match_topologies_for_settings(settings, self.integral.as_view())?
         {
@@ -2927,7 +2931,11 @@ impl VakintTerm {
             )? {
                 Some(witness) => witness,
                 None => vakint
-                    .match_rustred_input(settings, self.integral.as_view(), self.numerator.as_view())?
+                    .match_rustred_input(
+                        settings,
+                        self.integral.as_view(),
+                        self.numerator.as_view(),
+                    )?
                     .unwrap_or(integral_specs),
             };
         }
@@ -7517,9 +7525,25 @@ Evaluated (n_loops=1, mu_r=1) :
             MonitorContext::native_phase(observation.as_deref_mut(), "canonicalization", None);
             // A four-loop scalar integral equal to a shipped four-loop master is
             // written in its program's slot order before the legacy matcher,
-            // whose cost depends on the input's propagator order.
+            // whose cost depends on the input's propagator order; a five-loop
+            // term equal to a package master is written as the master's own
+            // parent form before canonicalization can move it onto another
+            // (possibly 2-isomorphic) census embedding. Both only when RustRed
+            // evaluates that loop count.
+            let five_loop = rustred_evaluation::rustred_evaluates_loop(settings, 5);
             for term in &mut vakint_expr.0 {
-                self.transport_four_loop_master(settings, &mut term.integral, term.numerator.as_view())?;
+                self.transport_four_loop_master(
+                    settings,
+                    &mut term.integral,
+                    term.numerator.as_view(),
+                )?;
+                if five_loop {
+                    self.transport_rustred_master_term(
+                        settings,
+                        &mut term.integral,
+                        &mut term.numerator,
+                    )?;
+                }
             }
             vakint_expr.canonicalize_with(settings, false, |input| {
                 self.match_topologies_for_settings(settings, input)

@@ -64,10 +64,11 @@ fn frontend_threads(settings: &VakintSettings) -> usize {
 /// the witness admitted (with its exact lowered key support) or not.
 type SelectedWitness = (ReplacementRules, Option<Option<Vec<IntegralKey>>>);
 
-#[path = "five_loop/witness_cache.rs"]
-mod witness_cache;
 #[path = "five_loop/master_transport.rs"]
 mod master_transport;
+#[path = "five_loop/witness_cache.rs"]
+mod witness_cache;
+pub(crate) use master_transport::rustred_evaluates_loop;
 #[path = "five_loop/witness_screen.rs"]
 mod witness_screen;
 pub use witness_cache::RustRedWitnessCacheStatistics;
@@ -92,11 +93,6 @@ mod test_profiles;
 #[cfg(test)]
 #[path = "five_loop/partial_acceptance.rs"]
 mod partial_acceptance;
-
-
-
-
-
 
 #[cfg(all(
     test,
@@ -156,6 +152,10 @@ pub(crate) struct SavedApplication {
     /// the first master-transport attempt (see
     /// [`Vakint::transport_rustred_master_term`]).
     master_forms: std::sync::OnceLock<Vec<master_transport::MasterForm>>,
+    /// Contracted scalar inputs (digests) the master transport found not to
+    /// be masters, so a repeated input skips its map enumeration; cleared with
+    /// the witness memo.
+    master_transport_misses: Mutex<BTreeSet<[u8; 32]>>,
     /// Ordered step-cache identity of the loaded package: its
     /// saved-application identity as rule tables and RustRed's binding
     /// (family, variables, policy).
@@ -981,11 +981,14 @@ impl Vakint {
         Ok(())
     }
 
-    /// Clear the optional frontend witness memo of the loaded package. Ordered
-    /// reduction retains no other result state between requests.
+    /// Clear the optional frontend witness memo of the loaded package and the
+    /// master-transport memo of non-master inputs. Ordered reduction retains
+    /// no other result state between requests.
     pub fn clear_rustred_application_witness_cache(&self) -> Result<(), VakintError> {
-        self.loaded_application()?
-            .witnesses
+        let application = self.loaded_application()?;
+        application.witnesses.lock().map_err(failure)?.clear();
+        application
+            .master_transport_misses
             .lock()
             .map_err(failure)?
             .clear();
@@ -1107,6 +1110,12 @@ impl Vakint {
             log::debug!(target: "vakint::five_loop_match", "phase=symbolic_input input={input}");
             let canonical_started = std::time::Instant::now();
             MonitorContext::native_phase(observation.as_deref_mut(), "canonicalization", None);
+            // A term equal to a package master is first written as the master's
+            // own parent form: canonicalization may move a contracted input onto
+            // another (possibly 2-isomorphic) census embedding of its graph.
+            for term in &mut expression.0 {
+                self.transport_rustred_master_term(settings, &mut term.integral, &mut term.numerator)?;
+            }
             expression.canonicalize(settings, &self.topologies, false)?;
             log::debug!(target: "vakint::saved_application", "phase=frontend_canonicalization elapsed_seconds={:.6}", canonical_started.elapsed().as_secs_f64());
             log::debug!(target: "vakint::five_loop_match", "phase=symbolic_canonical input={expression}");
@@ -1263,6 +1272,7 @@ impl SavedApplication {
             data,
             witnesses: Mutex::new(WitnessCache::default()),
             master_forms: std::sync::OnceLock::new(),
+            master_transport_misses: Mutex::new(BTreeSet::new()),
         })
     }
 
@@ -1314,6 +1324,47 @@ impl SavedApplication {
         &self.step_cache
     }
 
+    /// The reduction of a request whose keys are all remaining terminals
+    /// (masters) of the package's own family: those terminals with their
+    /// coalesced coefficients (each reduces to itself under the published
+    /// substitutions). `None` when some key is not such a terminal.
+    fn remaining_terminal_request(
+        application: &PreparedSavedApplication<15>,
+        own_terminals: &BTreeMap<IntegralKey, rustred_app::SavedApplicationIntegral>,
+        terms: &[(IntegralKey, Coefficient)],
+        settings: &VakintSettings,
+    ) -> Result<
+        Option<BTreeMap<rustred_app::SavedApplicationIntegral, Coefficient>>,
+        RustRedEvaluationError,
+    > {
+        if terms.is_empty()
+            || terms
+                .iter()
+                .any(|(key, _)| !own_terminals.contains_key(key))
+        {
+            return Ok(None);
+        }
+        let context = application.family().coefficient_context();
+        let limits = settings
+            .rustred_application_options
+            .reduction_limits
+            .exact_algebra;
+        let mut reduced = BTreeMap::new();
+        for (key, coefficient) in terms {
+            let terminal = own_terminals[key].clone();
+            let sum = match reduced.remove(&terminal) {
+                Some(previous) => context
+                    .try_add(&previous, coefficient, limits)
+                    .map_err(native_failure)?,
+                None => coefficient.clone(),
+            };
+            if !sum.is_zero() {
+                reduced.insert(terminal, sum);
+            }
+        }
+        Ok(Some(reduced))
+    }
+
     /// Reduce all matched contributions of one request with the ordered
     /// scheduler, one native frontier per (mass, spectator, exponent) channel.
     /// `step_cache` (bound to [`Self::ordered_cache_program`]) is attached to
@@ -1353,6 +1404,14 @@ impl SavedApplication {
         .map_err(native_failure)?;
         let mut batches = BTreeMap::<(Atom, Atom, i64), Vec<(IntegralKey, Coefficient)>>::new();
         let mut uncovered = BTreeSet::new();
+        // The remaining terminals (masters) of the package's own family: such a
+        // key reduces to itself, inside or outside the recorded entry union.
+        let own_terminals = application
+            .remaining_terminals()
+            .iter()
+            .filter(|terminal| terminal.family_fingerprint() == family.fingerprint())
+            .map(|terminal| (terminal.integral().clone(), terminal.clone()))
+            .collect::<BTreeMap<_, _>>();
         let mut conditions = BTreeSet::new();
         let mut mass_exponent_origins = BTreeMap::<Atom, i64>::new();
         let mut symbolic_masses = BTreeSet::new();
@@ -1426,9 +1485,10 @@ impl SavedApplication {
                 )
             });
             for (index, term) in lowering.terms().iter().enumerate() {
-                if !application
-                    .routed_entry_is_admitted(term.integral())
-                    .map_err(native_failure)?
+                if !own_terminals.contains_key(term.integral())
+                    && !application
+                        .routed_entry_is_admitted(term.integral())
+                        .map_err(native_failure)?
                 {
                     uncovered.insert(term.integral().clone());
                 }
@@ -1529,35 +1589,6 @@ impl SavedApplication {
             if let Some(progress) = progress {
                 progress.cohorts(cohort_index, cohort_total);
             }
-            let options = super::application_options(settings);
-            let mut dump = RequestDump::begin(DumpRequest {
-                loop_count,
-                program: DumpProgram::SavedApplication {
-                    path: &self.path,
-                    family_fingerprint: application.family().fingerprint(),
-                    options: &options,
-                },
-                weight_arithmetic: options.ordered_weight_arithmetic,
-                master_mode: request_dump::master_mode(settings),
-                channel: DumpChannel {
-                    index: cohort_index,
-                    total: cohort_total,
-                    mass_squared: &mass_squared,
-                    spectator: &spectator,
-                    exponent,
-                },
-                limits: settings.rustred_application_options.reduction_limits,
-                coefficient_variables: family_coefficient_variables.clone(),
-                inputs: &terms,
-                caller_conditions: conditions
-                    .iter()
-                    .map(|condition| condition.to_canonical_string())
-                    .collect(),
-            })?;
-            if dump.as_ref().is_some_and(RequestDump::only) {
-                skipped += 1;
-                continue;
-            }
             // Declare this before the returned native values: the complete
             // exact reduction/assembly interval includes their natural cleanup.
             // With one scheduler thread, deferred owners are prepared on this
@@ -1573,62 +1604,121 @@ impl SavedApplication {
                 .replace(dimension.to_pattern())
                 .with(physical_dimension.to_pattern());
             let mut cleanup = RetainedBatchCleanup::default();
-            let application_started = std::time::Instant::now();
-            MonitorContext::native_phase(
-                observation.as_deref_mut(),
-                "saved_rule_application",
-                None,
-            );
-            let preparation_before = math
-                .is_active()
-                .then(|| application.owner_preparation_statistics().preparation_time);
-            let reduced = request_dump::observe_native(
-                dump.as_mut(),
-                observation.as_deref_mut(),
-                |observation| {
-                    match observation {
-                        Some(observation) => application
-                            .reduce_routed_linear_combination_with_observation(
-                                terms,
-                                observation,
-                                None,
-                            ),
-                        None => application.reduce_routed_linear_combination(terms),
+            // A request made of remaining terminals (masters) only is its own
+            // reduction: it is built without the native request. A terminal of
+            // a composed pack that is not a terminal of the original rule
+            // tables would otherwise be walked through them and composed back
+            // onto itself, a first touch prepares owners, and the published
+            // terminal rows attach the package-wide guard vector, which the
+            // identity does not need.
+            let direct =
+                Self::remaining_terminal_request(&application, &own_terminals, &terms, settings)?;
+            let native;
+            let direct_terms;
+            let (reduced_terms, reduced_conditions): (
+                &BTreeMap<rustred_app::SavedApplicationIntegral, Coefficient>,
+                &[Coefficient],
+            ) = match direct {
+                Some(terms) => {
+                    MonitorContext::native_phase(
+                        observation.as_deref_mut(),
+                        "terminal_substitution",
+                        None,
+                    );
+                    log::debug!(target: "vakint::saved_application", "phase=saved_rule_application outcome=remaining_terminals_only terms={}", terms.len());
+                    direct_terms = terms;
+                    (&direct_terms, &[])
+                }
+                None => {
+                    let options = super::application_options(settings);
+                    let mut dump = RequestDump::begin(DumpRequest {
+                        loop_count,
+                        program: DumpProgram::SavedApplication {
+                            path: &self.path,
+                            family_fingerprint: application.family().fingerprint(),
+                            options: &options,
+                        },
+                        weight_arithmetic: options.ordered_weight_arithmetic,
+                        master_mode: request_dump::master_mode(settings),
+                        channel: DumpChannel {
+                            index: cohort_index,
+                            total: cohort_total,
+                            mass_squared: &mass_squared,
+                            spectator: &spectator,
+                            exponent,
+                        },
+                        limits: settings.rustred_application_options.reduction_limits,
+                        coefficient_variables: family_coefficient_variables.clone(),
+                        inputs: &terms,
+                        caller_conditions: conditions
+                            .iter()
+                            .map(|condition| condition.to_canonical_string())
+                            .collect(),
+                    })?;
+                    if dump.as_ref().is_some_and(RequestDump::only) {
+                        skipped += 1;
+                        continue;
                     }
-                    .map_err(super::cache::operation)
-                },
-            )??;
-            if let Some(dump) = dump {
-                dump.finish(
-                    reduced.terms().iter().map(|(terminal, coefficient)| {
-                        (
-                            terminal.family_fingerprint(),
-                            terminal.integral(),
-                            coefficient,
-                        )
-                    }),
-                    reduced.nonzero_conditions(),
-                    observation
-                        .as_deref()
-                        .and_then(|observer| observer.last_ordered_progress()),
-                )?;
-            }
-            if let Some(before) = preparation_before {
-                // Native reports elapsed WALL time for each deferred owner.
-                // The prepared-owner mutex and one-worker qualification keep
-                // these intervals serial and enclosed by this math span.
-                math.owner_preparation(
-                    before,
-                    application.owner_preparation_statistics().preparation_time,
-                );
-            }
-            log::debug!(target: "vakint::saved_application", "phase=saved_rule_application elapsed_seconds={:.6}", application_started.elapsed().as_secs_f64());
+                    let application_started = std::time::Instant::now();
+                    MonitorContext::native_phase(
+                        observation.as_deref_mut(),
+                        "saved_rule_application",
+                        None,
+                    );
+                    let preparation_before = math
+                        .is_active()
+                        .then(|| application.owner_preparation_statistics().preparation_time);
+                    let reduced = request_dump::observe_native(
+                        dump.as_mut(),
+                        observation.as_deref_mut(),
+                        |observation| {
+                            match observation {
+                                Some(observation) => application
+                                    .reduce_routed_linear_combination_with_observation(
+                                        terms,
+                                        observation,
+                                        None,
+                                    ),
+                                None => application.reduce_routed_linear_combination(terms),
+                            }
+                            .map_err(super::cache::operation)
+                        },
+                    )??;
+                    if let Some(dump) = dump {
+                        dump.finish(
+                            reduced.terms().iter().map(|(terminal, coefficient)| {
+                                (
+                                    terminal.family_fingerprint(),
+                                    terminal.integral(),
+                                    coefficient,
+                                )
+                            }),
+                            reduced.nonzero_conditions(),
+                            observation
+                                .as_deref()
+                                .and_then(|observer| observer.last_ordered_progress()),
+                        )?;
+                    }
+                    if let Some(before) = preparation_before {
+                        // Native reports elapsed WALL time for each deferred owner.
+                        // The prepared-owner mutex and one-worker qualification keep
+                        // these intervals serial and enclosed by this math span.
+                        math.owner_preparation(
+                            before,
+                            application.owner_preparation_statistics().preparation_time,
+                        );
+                    }
+                    log::debug!(target: "vakint::saved_application", "phase=saved_rule_application elapsed_seconds={:.6}", application_started.elapsed().as_secs_f64());
+                    native = reduced;
+                    (native.terms(), native.nonzero_conditions())
+                }
+            };
             MonitorContext::native_phase(observation.as_deref_mut(), "terminal_geometry", None);
             let products_started = std::time::Instant::now();
             let mut contribution = Atom::Zero;
             let mut products = Vec::new();
-            let mut product_conditions = reduced.nonzero_conditions().to_vec();
-            for (terminal, coefficient) in reduced.terms() {
+            let mut product_conditions = reduced_conditions.to_vec();
+            for (terminal, coefficient) in reduced_terms {
                 match application.terminal_product(terminal) {
                     Some(product) => {
                         let factors = product
@@ -1719,11 +1809,11 @@ impl SavedApplication {
                     log::warn!("RustRed lower-factor coverage is incomplete for {family} {:?}; retaining the exact parent terminals", target.powers());
                     // Preserve the original reduced sum and its complete guards;
                     // no failed or partially normalized product enters a cache.
-                    let original = reduced.terms().iter().map(|(terminal, coefficient)| {
+                    let original = reduced_terms.iter().map(|(terminal, coefficient)| {
                         coefficient.to_expression().replace(dimension.to_pattern()).with(physical_dimension.to_pattern())
                             * Self::symbolic_integral(terminal.family_fingerprint(), terminal.integral(), vk_symbol!("RustRedMaster"), &mut families)
                     }).sum::<Atom>();
-                    for condition in reduced.nonzero_conditions() {
+                    for condition in reduced_conditions {
                         let condition = condition.to_expression();
                         if condition.is_zero() || condition.get_all_symbols(true).iter().any(|symbol| !dimension.get_all_symbols(true).contains(symbol)) {
                             return Err(failure("saved application has an invalid non-generic-d guard").into());

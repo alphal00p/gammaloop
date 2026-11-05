@@ -71,6 +71,40 @@ pub(crate) fn power_preserving_momentum_maps(
     };
     source.power_preserving_maps(&target)
 }
+
+pub(crate) use momentum_mapping::{MatroidProfile, integer_line_vector, matroid_basis_counts};
+
+/// The power-colored line-matroid profile of a long-form input (see
+/// [`MatroidProfile`]), or `None` when it is not such a long form, a power is
+/// not a positive integer or a momentum coefficient is not an integer.
+pub(crate) fn power_colored_matroid_profile(
+    input: AtomView,
+    loop_count: usize,
+) -> Result<Option<MatroidProfile>, VakintError> {
+    Ok(
+        momentum_mapping::MomentumInput::from_expression(input, loop_count)?
+            .and_then(|source| source.power_colored_matroid_profile()),
+    )
+}
+
+/// The verified power-preserving maps between two long forms at the level of
+/// their line matroids (the incidence graphs may differ by Whitney twists),
+/// offered to `accept` one at a time until it returns `true` (`Some(true)`);
+/// `None` when either input is not such a long form.
+pub(crate) fn find_power_preserving_matroid_momentum_map(
+    source: AtomView,
+    target: AtomView,
+    loop_count: usize,
+    accept: impl FnMut(&[Atom]) -> Result<bool, VakintError>,
+) -> Result<Option<bool>, VakintError> {
+    let (Some(source), Some(target)) = (
+        momentum_mapping::MomentumInput::from_expression(source, loop_count)?,
+        momentum_mapping::MomentumInput::from_expression(target, loop_count)?,
+    ) else {
+        return Ok(None);
+    };
+    source.find_power_preserving_matroid_map(&target, accept)
+}
 pub use momentum_mapping::MomentumMatchLimits;
 #[cfg(test)]
 pub(crate) use momentum_mapping::first_minimal_acceptance;

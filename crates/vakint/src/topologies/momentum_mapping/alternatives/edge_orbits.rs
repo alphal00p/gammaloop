@@ -21,7 +21,9 @@ impl EdgeGraph {
     /// then preserve colors.
     pub fn new_colored(graph: &Graph<Empty, Atom>, colors: &[u8]) -> Result<Self, VakintError> {
         if colors.len() != graph.edges().len() || colors.contains(&0) {
-            return Err(invalid("edge colors must be nonzero, one per physical edge"));
+            return Err(invalid(
+                "edge colors must be nonzero, one per physical edge",
+            ));
         }
         Self::marked(graph, Some(colors))
     }

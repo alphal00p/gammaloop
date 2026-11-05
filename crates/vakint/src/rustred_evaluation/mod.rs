@@ -34,6 +34,7 @@ pub use shipped_cache::{
 mod factor_projection;
 mod factor_provider;
 pub(crate) mod five_loop;
+pub(crate) use five_loop::rustred_evaluates_loop;
 mod four_loop;
 mod mass_channels;
 mod matching;
