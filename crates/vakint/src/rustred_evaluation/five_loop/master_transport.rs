@@ -555,6 +555,41 @@ impl Vakint {
             return Ok(false);
         };
         let started = std::time::Instant::now();
+        // Already written in a program's own slot order: nothing to do.
+        if let AtomView::Fun(topo) = integral.as_view()
+            && topo.get_symbol() == S.topo
+            && topo.get_nargs() == 1
+        {
+            let pattern = vk_parse!("prop(id_,edge(nl_,nr_),q_,m_,pow_)").unwrap().to_pattern();
+            let mut lines = integral
+                .as_view()
+                .pattern_match(&pattern, None, None)
+                .map(|matched| {
+                    (
+                        crate::get_integer_from_atom(matched[&vk_symbol!("id_")].as_view()),
+                        crate::get_integer_from_atom(matched[&vk_symbol!("nl_")].as_view()),
+                        crate::get_integer_from_atom(matched[&vk_symbol!("nr_")].as_view()),
+                        matched[&vk_symbol!("q_")].clone(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            lines.sort_by_key(|line| line.0);
+            let mut index = 0;
+            while let (Some((_, edges)), Some(momenta)) =
+                (programs.physical_edges(index), programs.physical_momenta(index))
+            {
+                if lines.len() == momenta.len()
+                    && lines.iter().zip(edges.iter().zip(momenta)).enumerate().all(
+                        |(slot, ((id, left, right, q), ((l, r), momentum)))| {
+                            *id == Some(slot as i64 + 1) && *left == Some(*l) && *right == Some(*r) && q == momentum
+                        },
+                    )
+                {
+                    return Ok(false);
+                }
+                index += 1;
+            }
+        }
         let Some((contracted, contracted_numerator, mass)) =
             contract(settings, integral.as_view(), numerator)?
         else {
@@ -812,10 +847,11 @@ mod tests {
         }
     }
 
-    /// Every shipped four-loop master written in its program's slot order, with
-    /// reversed propagator ids, and under a unimodular loop relabelling is
-    /// rewritten into the program's own long form; a dotted variant that is
-    /// not a master is left unchanged.
+    /// Every shipped four-loop master with reversed propagator ids or under a
+    /// unimodular loop relabelling is rewritten into the program form of a
+    /// shipped master (the data ships some integrals in several families), the
+    /// program form itself is left untouched, and a dotted variant is
+    /// rewritten only onto a shipped master's form.
     #[test]
     #[ignore = "loads the official four-loop data"]
     fn every_four_loop_master_form_is_written_in_its_program_form() {
@@ -850,14 +886,25 @@ mod tests {
                 }
                 S.topo.call(integral)
             };
+            // Program forms of every shipped master (the data ships some integrals
+            // in several families: a rewrite may land on any of them).
+            let shipped = |integral: &Atom| {
+                programs.master_forms.get().unwrap().iter().any(|form| {
+                    let (_, edges) = programs.physical_edges(form.program).unwrap();
+                    let momenta = programs.physical_momenta(form.program).unwrap();
+                    four_loop_long_form(edges, momenta, &form.powers, &Atom::one()) == *integral
+                })
+            };
             for (form, input) in [own.clone(), reversed, relabel4(&own)].into_iter().enumerate() {
                 let mut integral = input;
                 let one = Atom::one();
-                assert!(
-                    engine.transport_four_loop_master(&settings, &mut integral, one.as_view()).unwrap(),
-                    "{alias} {powers:?} form {form}"
-                );
-                assert_eq!(integral, own, "{alias} {powers:?} form {form}");
+                let moved = engine.transport_four_loop_master(&settings, &mut integral, one.as_view()).unwrap();
+                if form == 0 {
+                    // The program form itself is left untouched.
+                    assert!(!moved && integral == own, "{alias} {powers:?} form 0");
+                } else {
+                    assert!(moved && shipped(&integral), "{alias} {powers:?} form {form}: {integral}");
+                }
             }
             // A dotted variant is rewritten only onto the program form of a
             // shipped master (it can equal one only under a symmetry).
@@ -867,14 +914,7 @@ mod tests {
             let mut integral = four_loop_long_form(edges, momenta, &dotted, &Atom::one());
             let one = Atom::one();
             if engine.transport_four_loop_master(&settings, &mut integral, one.as_view()).unwrap() {
-                assert!(
-                    programs.master_forms.get().unwrap().iter().any(|form| {
-                        let (_, edges) = programs.physical_edges(form.program).unwrap();
-                        let momenta = programs.physical_momenta(form.program).unwrap();
-                        four_loop_long_form(edges, momenta, &form.powers, &Atom::one()) == integral
-                    }),
-                    "{alias} dotted {dotted:?} rewritten onto a non-master"
-                );
+                assert!(shipped(&integral), "{alias} dotted {dotted:?} rewritten onto a non-master");
             }
             checked += 1;
         }
