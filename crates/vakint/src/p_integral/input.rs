@@ -41,8 +41,8 @@ pub(crate) enum PRejection {
     /// A well-formed integral outside the p-integral domain: a massive line, a
     /// non-integer power or several external heads (and, in the catalogue,
     /// more than four loops or a graph outside the 1L-4L registry). Under
-    /// `allow_unknown_integrals` it is matched as an unknown integral, as
-    /// before p-integrals existed; otherwise it is an error.
+    /// `allow_unknown_integrals` it is matched as an unknown integral;
+    /// otherwise it is an error.
     OutOfDomain(String),
     /// Malformed input (not a `prop`, a bad edge or vertex, broken momentum
     /// conservation, a loop-count mismatch, ...): always this error.

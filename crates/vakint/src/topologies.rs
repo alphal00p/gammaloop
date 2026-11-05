@@ -468,7 +468,7 @@ impl Topologies {
     }
 
     /// An out-of-domain p-integral is the unknown integral of its long form
-    /// under `allow_unknown_integrals`, as before p-integrals existed;
+    /// under `allow_unknown_integrals`, like any integral vakint does not know;
     /// otherwise, or when it is no unknown integral either (a short form),
     /// `rejection` is the error.
     fn match_unknown_propagator(

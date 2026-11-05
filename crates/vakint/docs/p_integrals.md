@@ -53,16 +53,17 @@ Kind inference (no flag):
   short-form head is a p family name. Otherwise it is a vacuum integral (`IntegralKind::Vacuum`), exactly as today.
 - This is unambiguous: no vacuum topology has `p` in its prop momenta, and the vacuum `UNKNOWN` matcher refuses them.
   The Atom therefore stays self-describing without a flag argument.
-- Out of domain (M1 review F1): a `topo` with `p` in its momenta that is well formed but not a p-integral vakint covers is
-  an unknown integral under `allow_unknown_integrals` (the default), exactly as before p-integrals existed, and an error
-  (items 1, 2, 4 and 8 below) otherwise. Out of domain means: a massive line (item 1), several external heads (item 2),
-  a non-integer power (item 4), more than four loops or a graph outside the registry (item 8). The unknown integral is
-  `topo(UNKNOWN(...))` of the long form (after the exact normalization of items 5-6 when only item 8 applies); its
-  momenta keep `p(i)` and its loop count is the number of `k(j)`. No backend evaluates it (pySecDec takes external
-  momenta only in numerators), so evaluating it is an error; `to_canonical` passes it through. A short form out of domain
-  (a non-integer power) is no unknown integral and keeps its error. Malformed inputs (not a `prop`, a bad edge or
-  vertex id, repeated prop ids, no external head, broken momentum conservation, a loop-count mismatch, a momentum that is
-  not an integer combination of heads, a non-unimodular routing, a tensor numerator) are errors under any setting.
+- Out of domain (M1 review F1): a `topo` with `p` in its momenta that is well formed but not a p-integral vakint
+  covers is an unknown integral under `allow_unknown_integrals` (the default), like any integral vakint does not know,
+  and an error (items 1, 2, 4 and 8 below) otherwise. Out of domain means: a massive line (item 1), several external
+  heads (item 2), a non-integer power (item 4), more than four loops or a graph outside the registry (item 8). The
+  unknown integral is `topo(UNKNOWN(...))` of the long form (after the exact normalization of items 5-6 when only item
+  8 applies); its momenta keep `p(i)` (only this fallback admits them; at base 64090b527 the `UNKNOWN` matcher refused
+  `p` heads) and its loop count is the number of `k(j)`. No backend evaluates it (pySecDec takes external momenta only
+  in numerators), so evaluating it is an error; `to_canonical` passes it through. A short form out of domain (a
+  non-integer power) is no unknown integral and keeps its error. Malformed inputs (not a `prop`, a bad edge or vertex
+  id, repeated prop ids, no external head, broken momentum conservation, a loop-count mismatch, a momentum that is not
+  an integer combination of heads, a non-unimodular routing, a tensor numerator) are errors under any setting.
 - In code: `p_integral::input::PRejection { OutOfDomain(String), Malformed(VakintError) }`; the fallback is
   `Topologies::match_propagator(input, allow_unknown_integrals)`.
 - Inference lives in `p_integral::infer_kind(integral: AtomView) -> Result<IntegralKind, VakintError>`.
