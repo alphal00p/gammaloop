@@ -1970,10 +1970,13 @@ mod tests {
         let cooking = idenso::CookSettings::indices()
             .with_mode(idenso::CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
+        // Dot's scalar payload is opaque to cooking, so prepare its operands first.
+        let expected_vector = cooking
+            .try_cook(compact(k, 1, &dimension).as_view())
+            .unwrap();
         let expected = cooking
             .try_cook(
-                (metric(&dimension, &mu, &nu)
-                    * dot(&compact(k, 1, &dimension), &compact(k, 1, &dimension))
+                (metric(&dimension, &mu, &nu) * dot(&expected_vector, &expected_vector)
                     / &dimension)
                     .as_view(),
             )
@@ -2329,8 +2332,15 @@ mod tests {
             assert_eq!(term.expression().unwrap().structure(), source.structure());
         }
         let result = reduced.into_expression().unwrap();
+        let expected_k0 = NumeratorInterface::admit(k0, None)
+            .unwrap()
+            .into_expression();
+        let expected_k1 = NumeratorInterface::admit(k1.clone(), None)
+            .unwrap()
+            .into_expression();
         let expected = NumeratorInterface::admit(
-            dot(&k0, &k0) * metric(&dimension, &mu, &nu) / &dimension + &unselected,
+            dot(&expected_k0, &expected_k0) * metric(&dimension, &mu, &nu) / &dimension
+                + &unselected,
             None,
         )
         .unwrap();
@@ -2350,7 +2360,9 @@ mod tests {
             .into_expression()
             .unwrap();
         let expected_head = NumeratorInterface::admit(
-            (dot(&k0, &k0) + dot(&k1, &k1)) * metric(&dimension, &mu, &nu) / &dimension,
+            (dot(&expected_k0, &expected_k0) + dot(&expected_k1, &expected_k1))
+                * metric(&dimension, &mu, &nu)
+                / &dimension,
             None,
         )
         .unwrap();
@@ -2372,11 +2384,12 @@ mod tests {
         let vector = NumeratorInterface::admit(indexed(k, 0, &dimension, &mu), None).unwrap();
         let external = TensorReducer::new(dimension.clone())
             .with_integrated_head(k)
-            .with_external_vector(k1.clone())
+            .with_external_vector(k1)
             .unwrap();
         let actual = external.reduce(&vector).unwrap().into_expression().unwrap();
         let expected = NumeratorInterface::admit(
-            dot(&k0, &k1) / dot(&k1, &k1) * indexed(k, 1, &dimension, &mu),
+            dot(&expected_k0, &expected_k1) / dot(&expected_k1, &expected_k1)
+                * indexed(k, 1, &dimension, &mu),
             None,
         )
         .unwrap();
@@ -2433,7 +2446,9 @@ mod tests {
             );
         }
         let result = reduced.into_expression().unwrap();
-        let k = compact(momentum, 0, &dimension);
+        let k = NumeratorInterface::admit(compact(momentum, 0, &dimension), None)
+            .unwrap()
+            .into_expression();
         let expected = NumeratorInterface::admit(
             dot(&k, &k) * metric(&dimension, &mu, &nu) / &dimension
                 + indexed(momentum, 1, &dimension, &mu) * indexed(momentum, 1, &dimension, &nu),
