@@ -20,20 +20,18 @@ use log::{debug, warn};
 use regex::Regex;
 use string_template_plus::{Render, RenderOptions, Template};
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
-use symbolica::coefficient::CoefficientView;
 use symbolica::function;
 use version_compare::{Cmp, compare_to};
 
 use super::ForcerOptions;
+use super::parts::{Fraction, PDot, PMonomial, split};
 use super::{
     FORCER_UPSTREAM_COMMIT, MINIMAL_FORCER_FORM_VERSION, PFamilyData, ReducedPropagatorValue,
-    external_head,
 };
 use crate::symbols::S;
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
 use crate::{
     ReplacementRules, TEMPLATES, Vakint, VakintError, VakintSettings, get_integer_from_atom,
-    get_prop_with_id,
 };
 
 mod vendored {
@@ -186,250 +184,6 @@ pub(crate) fn forcer_form_version(form_exe_path: &str) -> Result<String, String>
     }
 }
 
-/// One canonical line: endpoints and the integer coefficients of
-/// `k(1..=L)` and of the canonical `p(1)` in its momentum.
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct CanonicalLine {
-    from: i64,
-    to: i64,
-    loops: Vec<i64>,
-    external: i64,
-}
-
-impl CanonicalLine {
-    fn momentum(&self, external: &Atom) -> Atom {
-        let mut momentum = external * Atom::num(self.external);
-        for (index, coefficient) in self.loops.iter().enumerate() {
-            momentum += function!(S.k, Atom::num(index as i64 + 1)) * Atom::num(*coefficient);
-        }
-        momentum
-    }
-}
-
-fn canonical_lines(family: &PFamilyData) -> Result<Vec<CanonicalLine>, VakintError> {
-    let invalid = |detail: String| {
-        VakintError::InvalidGenericExpression(format!("{}: {detail}", family.name))
-    };
-    Vakint::initialize_vakint_symbols();
-    let expression = vk_parse!(family.lines).map_err(|error| invalid(error.to_string()))?;
-    let heads = (1..=family.loops)
-        .map(|i| function!(S.k, Atom::num(i as i64)))
-        .chain([function!(S.p, Atom::num(1))])
-        .collect::<Vec<_>>();
-    (1..=family.line_count())
-        .map(|id| {
-            let prop = get_prop_with_id(expression.as_view(), id)
-                .ok_or_else(|| invalid(format!("missing line {id}")))?;
-            let node = |name: &str| {
-                get_integer_from_atom(prop[&vk_symbol!(name)].as_view())
-                    .ok_or_else(|| invalid(format!("line {id} has a non-integer vertex")))
-            };
-            let momentum = &prop[&vk_symbol!("q_")];
-            let coefficients = heads
-                .iter()
-                .map(|head| {
-                    let mut value = momentum.clone();
-                    for other in &heads {
-                        let image = if other == head {
-                            Atom::num(1)
-                        } else {
-                            Atom::Zero
-                        };
-                        value = value.replace(other.to_pattern()).with(image.to_pattern());
-                    }
-                    get_integer_from_atom(value.expand().as_view())
-                        .ok_or_else(|| invalid(format!("line {id} is not an integer combination")))
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(CanonicalLine {
-                from: node("nl_")?,
-                to: node("nr_")?,
-                external: coefficients[family.loops],
-                loops: coefficients[..family.loops].to_vec(),
-            })
-        })
-        .collect()
-}
-
-/// Exact rational numbers for the small linear systems of a routing.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Fraction(i128, i128);
-
-impl Fraction {
-    fn new(numerator: i128, denominator: i128) -> Self {
-        fn gcd(a: i128, b: i128) -> i128 {
-            if b == 0 { a.abs() } else { gcd(b, a % b) }
-        }
-        let divisor = gcd(numerator, denominator).max(1) * denominator.signum();
-        Fraction(numerator / divisor, denominator / divisor)
-    }
-    fn is_zero(self) -> bool {
-        self.0 == 0
-    }
-    fn sub(self, other: Self) -> Self {
-        Self::new(self.0 * other.1 - other.0 * self.1, self.1 * other.1)
-    }
-    fn mul(self, other: Self) -> Self {
-        Self::new(self.0 * other.0, self.1 * other.1)
-    }
-    fn div(self, other: Self) -> Self {
-        Self::new(self.0 * other.1, self.1 * other.0)
-    }
-    /// A FORM factor such as `+p1`, `-2*Q` or `+1/2*p3`.
-    fn form_term(self, vector: &str) -> String {
-        let sign = if self.0 < 0 { "-" } else { "+" };
-        match (self.0.abs(), self.1) {
-            (1, 1) => format!("{sign}{vector}"),
-            (n, 1) => format!("{sign}{n}*{vector}"),
-            (n, d) => format!("{sign}{n}/{d}*{vector}"),
-        }
-    }
-}
-
-/// The loop momenta in terms of the remaining (positive-power) lines and the
-/// external momentum: row `j` holds the coefficients of `p1..pN` and of `Q`
-/// in `k(j+1)`. `None` when the remaining lines do not span the loop
-/// momenta: some loop carries no propagator and the integral is scaleless.
-fn loop_momenta_in_lines(lines: &[&CanonicalLine], loops: usize) -> Option<Vec<Vec<Fraction>>> {
-    // Gauss-Jordan elimination on [A | I] with A the loop coefficients of
-    // the remaining lines (rows), keeping the row operations to read off the
-    // left inverse X with X A = 1; then k = X (p - b Q).
-    let rows = lines.len();
-    let mut matrix = lines
-        .iter()
-        .enumerate()
-        .map(|(row, line)| {
-            let mut entries = line
-                .loops
-                .iter()
-                .map(|&value| Fraction::new(value as i128, 1))
-                .collect::<Vec<_>>();
-            entries.extend((0..rows).map(|column| Fraction::new((column == row) as i128, 1)));
-            entries
-        })
-        .collect::<Vec<_>>();
-    let mut pivot_rows = Vec::new();
-    for column in 0..loops {
-        let pivot = (pivot_rows.len()..rows).find(|&row| !matrix[row][column].is_zero())?;
-        let target = pivot_rows.len();
-        matrix.swap(target, pivot);
-        let pivot_value = matrix[target][column];
-        for entry in matrix[target].iter_mut() {
-            *entry = entry.div(pivot_value);
-        }
-        for row in 0..rows {
-            let factor = matrix[row][column];
-            if row != target && !factor.is_zero() {
-                let pivot_row = matrix[target].clone();
-                for (entry, pivot_entry) in matrix[row].iter_mut().zip(pivot_row) {
-                    *entry = entry.sub(factor.mul(pivot_entry));
-                }
-            }
-        }
-        pivot_rows.push(target);
-    }
-    Some(
-        (0..loops)
-            .map(|j| {
-                let inverse = &matrix[j][loops..];
-                let mut row = inverse.to_vec();
-                let shift = inverse
-                    .iter()
-                    .zip(lines)
-                    .fold(Fraction::new(0, 1), |sum, (x, line)| {
-                        sum.sub(x.mul(Fraction::new(-(line.external as i128), 1)))
-                    });
-                // k = X p - (X b) Q, with `shift` = X b.
-                row.push(Fraction::new(0, 1).sub(shift));
-                row
-            })
-            .collect(),
-    )
-}
-
-/// The contracted graph of a sector: union-find representatives of the
-/// vertices once all pinched lines are contracted. It decides scalelessness
-/// only; Forcer itself always gets the uncontracted family graph.
-struct ContractedGraph {
-    representative: BTreeMap<i64, i64>,
-}
-
-impl ContractedGraph {
-    fn new(lines: &[CanonicalLine], pinched: &[bool]) -> Self {
-        let mut representative = BTreeMap::new();
-        for line in lines {
-            representative.insert(line.from, line.from);
-            representative.insert(line.to, line.to);
-        }
-        let mut graph = ContractedGraph { representative };
-        for (line, &pinched) in lines.iter().zip(pinched) {
-            if pinched {
-                let (a, b) = (graph.find(line.from), graph.find(line.to));
-                graph.representative.insert(a.max(b), a.min(b));
-            }
-        }
-        graph
-    }
-
-    fn find(&self, mut vertex: i64) -> i64 {
-        while self.representative[&vertex] != vertex {
-            vertex = self.representative[&vertex];
-        }
-        vertex
-    }
-
-    /// The scaleless rule of `docs/p_integrals.md` (section 1, item 6) on the
-    /// remaining lines: the external vertices coincide, a self-loop remains,
-    /// or removing one vertex isolates a part without external vertex.
-    fn is_scaleless(&self, remaining: &[&CanonicalLine]) -> bool {
-        let (q_in, q_out) = (self.find(1), self.find(2));
-        if q_in == q_out {
-            return true;
-        }
-        let edges = remaining
-            .iter()
-            .map(|line| (self.find(line.from), self.find(line.to)))
-            .collect::<Vec<_>>();
-        if edges.iter().any(|(a, b)| a == b) {
-            return true;
-        }
-        let mut vertices = edges.iter().flat_map(|&(a, b)| [a, b]).collect::<Vec<_>>();
-        vertices.sort();
-        vertices.dedup();
-        vertices.iter().any(|&removed| {
-            // Components of the graph without `removed`: each must reach an
-            // external vertex (unless it is `removed`'s own external vertex).
-            let mut component = BTreeMap::new();
-            for &start in vertices.iter().filter(|&&v| v != removed) {
-                if component.contains_key(&start) {
-                    continue;
-                }
-                let mut stack = vec![start];
-                component.insert(start, start);
-                while let Some(vertex) = stack.pop() {
-                    for &(a, b) in &edges {
-                        for (x, y) in [(a, b), (b, a)] {
-                            if x == vertex && y != removed && !component.contains_key(&y) {
-                                component.insert(y, start);
-                                stack.push(y);
-                            }
-                        }
-                    }
-                }
-            }
-            let mut roots = component.values().copied().collect::<Vec<_>>();
-            roots.sort();
-            roots.dedup();
-            roots.iter().any(|root| {
-                component
-                    .iter()
-                    .filter(|(_, r)| *r == root)
-                    .all(|(&vertex, _)| vertex != q_in && vertex != q_out)
-            })
-        })
-    }
-}
-
 /// One homogeneous part of the numerator: its Forcer local, the scale power
 /// `w = 2L - Σa + r`, the sign `(-1)^(Σa+r)` and the factor left outside FORM.
 #[derive(Clone, Debug, PartialEq)]
@@ -447,91 +201,52 @@ pub(crate) struct ForcerInput {
     pub parts: Vec<ForcerPart>,
 }
 
-fn tensor_numerator(detail: impl std::fmt::Display) -> VakintError {
-    VakintError::InvalidNumerator(format!(
-        "p-integral: tensor p-integrals are not supported yet: {detail}"
-    ))
-}
-
-/// A real rational coefficient as an exact fraction, if it is one.
-fn rational(value: AtomView) -> Option<Fraction> {
-    let AtomView::Num(number) = value else {
-        return None;
-    };
-    match number.get_coeff_view() {
-        CoefficientView::Natural(numerator, denominator, 0, _) => {
-            Some(Fraction::new(numerator as i128, denominator as i128))
-        }
-        _ => None,
+/// `+p1`, `-2*Q` or `+1/2*p3`: a FORM factor of `vector`.
+fn form_term(value: Fraction, vector: &str) -> String {
+    let sign = if value.0 < 0 { "-" } else { "+" };
+    match (value.0.abs(), value.1) {
+        (1, 1) => format!("{sign}{vector}"),
+        (n, 1) => format!("{sign}{n}*{vector}"),
+        (n, d) => format!("{sign}{n}/{d}*{vector}"),
     }
 }
 
-/// Split a numerator coefficient into an exact rational and the rest.
-fn split_rational(coefficient: &Atom) -> (Fraction, Atom) {
-    if let Some(value) = rational(coefficient.as_view()) {
-        return (value, Atom::num(1));
+/// The FORM dot product of a canonical scalar product.
+fn form_dot(dot: PDot) -> String {
+    match dot {
+        PDot::Loops(i, j) => format!("k{i}.k{j}"),
+        PDot::External(i) => format!("k{i}.Q"),
     }
-    if let AtomView::Mul(product) = coefficient.as_view() {
-        let mut value = Fraction::new(1, 1);
-        let mut rest = Atom::num(1);
-        for factor in product.iter() {
-            match rational(factor) {
-                Some(number) => value = value.mul(number),
-                None => rest *= factor.to_owned(),
-            }
-        }
-        return (value, rest);
+}
+
+/// The FORM text of a monomial, `1` when it is empty.
+fn form_monomial(monomial: &PMonomial) -> String {
+    if monomial.0.is_empty() {
+        return "1".into();
     }
-    (Fraction::new(1, 1), coefficient.clone())
+    monomial
+        .0
+        .iter()
+        .map(|(dot, exponent)| format!("({})^{exponent}", form_dot(*dot)))
+        .collect::<Vec<_>>()
+        .join("*")
 }
 
 /// The Forcer program of `topo(NAME(external, powers...))` with a scalar
 /// numerator in the canonical `k(j)` and the user's head; `None` when the
-/// sector is scaleless (an exact zero).
+/// sector is scaleless (an exact zero). The numerator split is the shared
+/// [`split`]; Forcer only renders it.
 pub(crate) fn forcer_input(
     family: &PFamilyData,
     powers: &[i64],
     canonical_numerator: AtomView,
     external: &Atom,
 ) -> Result<Option<ForcerInput>, VakintError> {
-    let lines = canonical_lines(family)?;
-    if powers.len() != lines.len() {
-        return Err(VakintError::InvalidGenericExpression(format!(
-            "{}: {} powers for {} lines",
-            family.name,
-            powers.len(),
-            lines.len()
-        )));
-    }
-    let (head, sigma) = external_head(external)?;
-    let loops = family.loops;
-
-    // A negative power is a numerator factor in the user's momenta.
-    let mut numerator = canonical_numerator.to_owned();
-    for (line, &power) in lines.iter().zip(powers) {
-        if power < 0 {
-            let momentum = line.momentum(external);
-            numerator *= function!(S.dot, &momentum, &momentum).pow(Atom::num(-power));
-        }
-    }
-    let pinched = powers.iter().map(|&power| power <= 0).collect::<Vec<_>>();
-    let graph = ContractedGraph::new(&lines, &pinched);
-    // Line `i` (0-based canonical order) is the Forcer momentum `p{i+1}`.
-    let remaining = lines
-        .iter()
-        .zip(powers)
-        .enumerate()
-        .filter(|(_, (_, power))| **power > 0)
-        .map(|(index, (line, power))| (index, line, *power))
-        .collect::<Vec<_>>();
-    let remaining_lines = remaining.iter().map(|(_, line, _)| *line).collect::<Vec<_>>();
-    if graph.is_scaleless(&remaining_lines) {
-        return Ok(None);
-    }
-    let Some(loop_momenta) = loop_momenta_in_lines(&remaining_lines, loops) else {
+    let Some(split) = split(family, powers, canonical_numerator, external)? else {
         return Ok(None);
     };
-    let total_power: i64 = remaining.iter().map(|(_, _, power)| power).sum();
+    let loops = family.loops;
+    let remaining = &split.remaining;
 
     // Forcer recognizes an input only when its vertex structure is one of its
     // own topologies, whose vertices carry at most four momenta, and silently
@@ -543,7 +258,7 @@ pub(crate) fn forcer_input(
     // Incoming momenta count positively, Q enters at canonical vertex 1 and
     // leaves at vertex 2.
     let mut vertices = BTreeMap::<i64, Vec<String>>::new();
-    for (index, line) in lines.iter().enumerate() {
+    for (index, line) in split.lines.iter().enumerate() {
         let name = format!("p{}", index + 1);
         vertices.entry(line.from).or_default().push(format!("-{name}"));
         vertices.entry(line.to).or_default().push(name);
@@ -551,7 +266,7 @@ pub(crate) fn forcer_input(
     vertices.entry(1).or_default().push("Q".into());
     vertices.entry(2).or_default().push("-Q".into());
     let mut propagators = String::from("1");
-    for (index, _, power) in &remaining {
+    for (index, power) in remaining {
         let name = format!("p{}", index + 1);
         propagators.push_str(&format!("/({name}.{name})^{power}"));
     }
@@ -563,7 +278,8 @@ pub(crate) fn forcer_input(
             .collect::<Vec<_>>()
             .join("*")
     );
-    let substitutions = loop_momenta
+    let substitutions = split
+        .loop_momenta
         .iter()
         .enumerate()
         .map(|(j, row)| {
@@ -577,7 +293,7 @@ pub(crate) fn forcer_input(
                     } else {
                         format!("p{}", remaining[column].0 + 1)
                     };
-                    value.form_term(&vector)
+                    form_term(*value, &vector)
                 })
                 .collect::<String>();
             format!("id k{} = {image};", j + 1)
@@ -585,62 +301,22 @@ pub(crate) fn forcer_input(
         .collect::<Vec<_>>()
         .join("\n");
 
-    // Homogeneous parts: loop-momentum monomials, grouped by degree and by
-    // the non-rational factor of their coefficient.
-    let numerator = Vakint::convert_to_dot_notation(numerator.as_view()).expand();
-    let mut loop_dots = Vec::new();
-    let mut error = None;
-    numerator.visitor(&mut |part| {
-        if error.is_some() {
-            return false;
-        }
-        if let AtomView::Fun(function) = part
-            && function.get_symbol() == S.dot
-            && part.contains_symbol(S.k)
-        {
-            match form_dot(part, &head, sigma, loops) {
-                Ok(_) => loop_dots.push(part.to_owned()),
-                Err(e) => error = Some(e),
-            }
-            return false;
-        }
-        true
-    });
-    if let Some(error) = error {
-        return Err(error);
-    }
-    loop_dots.sort();
-    loop_dots.dedup();
-    let mut groups = Vec::<((i64, Atom), Vec<String>)>::new();
-    for (monomial, coefficient) in numerator.coefficient_list::<i8>(&loop_dots) {
-        if coefficient.contains_symbol(S.k) {
-            return Err(tensor_numerator(format!(
-                "the loop momenta must appear in scalar products only, found {coefficient}"
-            )));
-        }
-        let (degree, monomial_sign, form) = form_monomial(monomial.as_view(), &head, sigma, loops)?;
-        let (value, rest) = split_rational(&coefficient);
-        let term = Fraction::new(monomial_sign as i128, 1)
-            .mul(value)
-            .form_term(&format!("({form})"));
-        let key = (degree, rest);
-        match groups.iter_mut().find(|(group, _)| *group == key) {
-            Some((_, terms)) => terms.push(term),
-            None => groups.push((key, vec![term])),
-        }
-    }
-
+    // One Forcer local per homogeneous part.
     let mut parts = Vec::new();
     let mut locals = Vec::new();
-    for (index, ((degree, coefficient), terms)) in groups.into_iter().enumerate() {
+    for (index, part) in split.parts.into_iter().enumerate() {
         let name = format!("F{}", index + 1);
-        locals.push(format!("Local {name} = ({})*{topology};", terms.join("")));
-        let exponent = total_power + degree;
+        let terms = part
+            .polynomial
+            .iter()
+            .map(|(value, monomial)| form_term(*value, &format!("({})", form_monomial(monomial))))
+            .collect::<String>();
+        locals.push(format!("Local {name} = ({terms})*{topology};"));
         parts.push(ForcerPart {
             name,
-            scale_power: 2 * loops as i64 - total_power + degree,
-            sign: if exponent % 2 == 0 { 1 } else { -1 },
-            coefficient,
+            scale_power: part.scale_power,
+            sign: part.wick_sign,
+            coefficient: part.coefficient,
         });
     }
     let template = Template::parse_template(TEMPLATES.get("run_forcer.txt").unwrap()).unwrap();
@@ -670,97 +346,6 @@ pub(crate) fn forcer_input(
         })
         .map_err(|error| VakintError::InvalidGenericExpression(error.to_string()))?;
     Ok(Some(ForcerInput { program, parts }))
-}
-
-/// A loop index `j` of `k(j)` with `1 <= j <= loops`.
-fn loop_index(momentum: AtomView, loops: usize) -> Option<usize> {
-    let AtomView::Fun(function) = momentum else {
-        return None;
-    };
-    if function.get_symbol() != S.k || function.get_nargs() != 1 {
-        return None;
-    }
-    let index = get_integer_from_atom(function.iter().next().unwrap())?;
-    (1..=loops as i64)
-        .contains(&index)
-        .then_some(index as usize)
-}
-
-/// The FORM dot product of one loop-dependent `dot(...)` and its sign: the
-/// user's head `p(i)` is `σ·Q`.
-fn form_dot(
-    dot: AtomView,
-    head: &Atom,
-    sigma: i64,
-    loops: usize,
-) -> Result<(i64, String), VakintError> {
-    let AtomView::Fun(function) = dot else {
-        return Err(VakintError::InvalidNumerator(format!(
-            "p-integral: unexpected numerator factor {dot}"
-        )));
-    };
-    let arguments = function.iter().collect::<Vec<_>>();
-    let [a, b] = arguments.as_slice() else {
-        return Err(tensor_numerator(dot));
-    };
-    let (loop_argument, other) = match (loop_index(*a, loops), loop_index(*b, loops)) {
-        (Some(i), Some(j)) => return Ok((1, format!("k{i}.k{j}"))),
-        (Some(i), None) => (i, *b),
-        (None, Some(j)) => (j, *a),
-        (None, None) => {
-            return Err(VakintError::InvalidNumerator(format!(
-                "p-integral: unknown loop momentum in {dot}"
-            )));
-        }
-    };
-    if other == head.as_view() {
-        Ok((sigma, format!("k{loop_argument}.Q")))
-    } else {
-        Err(tensor_numerator(format!(
-            "{dot} contracts a loop momentum with a vector other than the external momentum {head}"
-        )))
-    }
-}
-
-/// Degree, sign and FORM text of a monomial in loop-dependent dot products.
-fn form_monomial(
-    monomial: AtomView,
-    head: &Atom,
-    sigma: i64,
-    loops: usize,
-) -> Result<(i64, i64, String), VakintError> {
-    let factors = match monomial {
-        AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
-        _ => vec![monomial],
-    };
-    let mut degree = 0;
-    let mut sign = 1;
-    let mut text = Vec::new();
-    for factor in factors {
-        let (base, exponent) = match factor {
-            AtomView::Pow(power) => {
-                let (base, exponent) = power.get_base_exp();
-                (base, get_integer_from_atom(exponent))
-            }
-            AtomView::Num(_) if rational(factor) == Some(Fraction::new(1, 1)) => continue,
-            _ => (factor, Some(1)),
-        };
-        let exponent = exponent.filter(|exponent| *exponent > 0).ok_or_else(|| {
-            VakintError::InvalidNumerator(format!(
-                "p-integral: the numerator must be polynomial in the loop momenta, found {factor}"
-            ))
-        })?;
-        let (factor_sign, dot) = form_dot(base, head, sigma, loops)?;
-        degree += exponent;
-        if exponent % 2 == 1 {
-            sign *= factor_sign;
-        }
-        text.push(format!("({dot})^{exponent}"));
-    }
-    if text.is_empty() {
-        text.push("1".into());
-    }
-    Ok((degree, sign, text.join("*")))
 }
 
 /// The exact Forcer output of one local in vakint's p-master basis: `rat(a,b)`

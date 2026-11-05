@@ -252,6 +252,25 @@ impl ForcerCase {
             .collect())
     }
 
+    /// The frozen value finalized by the shared p-finalizer in `mode` with
+    /// `settings` (normalization, Laurent depth, symbols), exactly as
+    /// `Vakint::evaluate` with Forcer would return it.
+    pub fn finalized(
+        &self,
+        settings: &VakintSettings,
+        mode: crate::rustred_evaluation::RustRedMasterMode,
+    ) -> Result<Atom, VakintError> {
+        let values = self.frozen(vk_symbol!(&settings.epsilon_symbol))?;
+        crate::p_integral::finalize::finalize(
+            &values,
+            self.loops()?,
+            &parse(&self.external)?,
+            settings,
+            mode,
+            "Forcer",
+        )
+    }
+
     /// The case as a vakint input, `(numerator)*topo(NAME(external, powers...))`.
     pub fn expression(&self) -> Result<Atom, VakintError> {
         let powers = self

@@ -11,6 +11,9 @@ use symbolica::atom::{Atom, AtomCore};
 use symbolica::transcendental::gamma;
 
 use super::super::finalize::{finalize, pg_value, tests as finalize_tests};
+use super::super::parts::{
+    CanonicalLine, ContractedGraph, Fraction, canonical_lines, loop_momenta_in_lines,
+};
 use super::super::{P_FAMILIES, PFamilyData, ReducedPropagatorValue, pg_symbol};
 use super::fixtures::{ForcerCase as Case, ForcerFixture as Battery};
 use super::*;

@@ -19,6 +19,7 @@ mod input;
 mod laurent;
 pub(crate) mod masters;
 pub(crate) mod mzv;
+pub(crate) mod parts;
 
 use std::sync::OnceLock;
 
