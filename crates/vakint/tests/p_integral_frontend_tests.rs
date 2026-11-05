@@ -339,10 +339,142 @@ mod errors {
     #[test]
     fn five_loop_inputs_are_outside_the_registry() {
         assert_p_error(
-            "topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(1,2),k(2),0,1)*prop(3,edge(1,2),k(3),0,1)\
-             *prop(4,edge(1,2),k(4),0,1)*prop(5,edge(1,2),k(5),0,1)\
-             *prop(6,edge(2,1),k(1)+k(2)+k(3)+k(4)+k(5)-p(1),0,1))",
+            FIVE_LOOP_SUNSET,
             "p-integral not covered by the 1L-4L registry",
+        );
+    }
+
+    #[test]
+    fn a_routing_that_is_not_unimodular_is_rejected() {
+        // 2*k(1) would rescale the measure by 2^-d: never silently accepted.
+        assert_p_malformed(
+            "topo(prop(1,edge(1,2),2*k(1),0,1)*prop(2,edge(2,1),2*k(1)-p(1),0,1))",
+            "no unimodular change of loop momenta",
+        );
+    }
+}
+
+/// The five-loop sunset: a p-integral outside the 1L-4L registry.
+const FIVE_LOOP_SUNSET: &str = "topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(1,2),k(2),0,1)\
+    *prop(3,edge(1,2),k(3),0,1)*prop(4,edge(1,2),k(4),0,1)*prop(5,edge(1,2),k(5),0,1)\
+    *prop(6,edge(2,1),k(1)+k(2)+k(3)+k(4)+k(5)-p(1),0,1))";
+
+/// Section 1, "Out of domain" (M1 review F1, missing test 8).
+mod out_of_domain {
+    use super::*;
+
+    #[test]
+    fn out_of_domain_inputs_are_unknown_integrals() {
+        assert_p_unknown(
+            "topo(prop(1,edge(1,2),k(1),muvsq,1)*prop(2,edge(2,1),k(1)-p(1),muvsq,1))",
+            "p-integrals are massless; prop 1 has mass muvsq",
+        );
+        assert_p_unknown(
+            "dot(k(1),p(1))*topo(prop(1,edge(1,2),k(1),0,a)*prop(2,edge(2,1),k(1)-p(1),0,1))",
+            "powers must be integers; prop 1 has power a",
+        );
+        assert_p_unknown(
+            "topo(prop(1,edge(1,2),k(1),0,1/2)*prop(2,edge(2,1),k(1)-p(1),0,1))",
+            "powers must be integers",
+        );
+        assert_p_unknown(
+            "topo(prop(1,edge(1,2),k(1)+p(2),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))",
+            "a p-integral has one external momentum; found",
+        );
+        assert_p_unknown(
+            FIVE_LOOP_SUNSET,
+            "p-integral not covered by the 1L-4L registry",
+        );
+    }
+
+    #[test]
+    fn unknown_vacuum_integrals_are_unchanged() {
+        let massive_sunset = "topo(prop(1,edge(1,2),k(1),muvsq,1)*prop(2,edge(2,1),k(1),muvsq,1)\
+            *prop(3,edge(1,2),k(2),muvsq,1)*prop(4,edge(2,1),k(2),muvsq,1)*prop(5,edge(1,2),k(3),muvsq,1)\
+            *prop(6,edge(2,1),k(1)+k(2)+k(3),muvsq,1))";
+        assert_eq!(
+            canonical(&parse(massive_sunset)),
+            parse(&format!(
+                "topo(UNKNOWN({}))",
+                &massive_sunset[5..massive_sunset.len() - 1]
+            )),
+        );
+    }
+
+    #[test]
+    fn malformed_inputs_are_errors_under_any_setting() {
+        assert_p_malformed(
+            "topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-2*p(1),0,1))",
+            "momentum conservation",
+        );
+        assert_p_malformed(
+            "topo(prop(1,edge(1,2),k(1)+k(2),0,1)*prop(2,edge(2,1),k(1)+k(2)-p(1),0,1))",
+            "the routing does not match the graph's loop count",
+        );
+        assert_p_malformed(
+            "topo(prop(1,edge(1,2),k(1),0,1)*prop(1,edge(2,1),k(1)-p(1),0,1))",
+            "prop ids must be distinct",
+        );
+        assert_p_malformed(
+            "topo(prop(1,edge(1,-2),k(1),0,1)*prop(2,edge(-2,1),k(1)-p(1),0,1))",
+            "vertex ids must be nonnegative",
+        );
+        assert_p_malformed(
+            "topo(prop(1,edge(1,2),k(1)/2,0,1)*prop(2,edge(2,1),k(1)/2-p(1),0,1))",
+            "is not an integer combination of k(j) and p(i)",
+        );
+        assert_p_malformed(
+            &format!("dot(k(1),p(2))*{BUBBLE}"),
+            "tensor p-integrals are not supported yet",
+        );
+        // A short form is no unknown integral: out of domain, it stays an error.
+        assert_p_malformed("topo(P1L(p(1),1/2,1))", "powers must be integers");
+    }
+}
+
+/// User numerators in the forms of section 1, item 7 (M1 review extras).
+mod numerators {
+    use super::*;
+
+    const KITE_SYMMETRIC: &str = "topo(prop(1,edge(1,3),k(1),0,1)*prop(2,edge(1,4),p(1)-k(1),0,1)\
+        *prop(3,edge(3,4),k(2),0,1)*prop(4,edge(3,2),k(1)-k(2),0,1)*prop(5,edge(4,2),p(1)-k(1)+k(2),0,1))";
+
+    #[test]
+    fn index_notation_is_a_scalar_product() {
+        assert_p_same_canonical(
+            &format!("k(1,mu)*p(1,mu)*{BUBBLE}"),
+            &format!("dot(k(1),p(1))*{BUBBLE}"),
+        );
+        assert_p_same_canonical(
+            &format!("k(1,mu)*p(1,mu)*k(2,nu)*k(1,nu)*{KITE}"),
+            &format!("dot(k(1),p(1))*dot(k(1),k(2))*{KITE}"),
+        );
+    }
+
+    #[test]
+    fn scalar_products_of_combinations_are_linear() {
+        for numerator in ["-dot(k(1),-p(1))", "1/2*dot(2*k(1),p(1))", "dot(p(1),k(1))"] {
+            assert_p_same_canonical(
+                &format!("{numerator}*{BUBBLE}"),
+                &format!("dot(k(1),p(1))*{BUBBLE}"),
+            );
+        }
+        assert_p_same_canonical(
+            &format!("dot(k(1)+k(2),p(1))*{KITE_SYMMETRIC}"),
+            &format!("(dot(k(1),p(1))+dot(k(2),p(1)))*{KITE_SYMMETRIC}"),
+        );
+    }
+
+    #[test]
+    fn a_scalar_product_of_a_sum_with_the_external_momentum_is_linear() {
+        assert_p_same_canonical(
+            &format!("dot(k(1)+p(1),p(1))*{BUBBLE}"),
+            &format!("(dot(k(1),p(1))+dot(p(1),p(1)))*{BUBBLE}"),
+        );
+        // Another external vector contracted with a loop momentum is a tensor.
+        assert_p_error(
+            &format!("dot(k(1)+p(2),p(2))*{BUBBLE}"),
+            "a loop momentum is contracted with p(2)",
         );
     }
 }

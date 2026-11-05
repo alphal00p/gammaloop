@@ -51,9 +51,20 @@ dot(k(1),p(3))^2 * topo(prop(1,edge(1,3),k(1),0,2)*prop(2,edge(1,4),p(3)-k(1),0,
 Kind inference (no flag):
 - The integral is a p-integral (`IntegralKind::Propagator`) iff some prop momentum contains a head `p(_)`, or its
   short-form head is a p family name. Otherwise it is a vacuum integral (`IntegralKind::Vacuum`), exactly as today.
-- This is unambiguous: vacuum matching already rejects `p` in prop momenta (`Integral::new`). Under `allow_unknown_integrals` a
-  `topo` with `p` in its momenta is validated as a p-integral and an invalid one is an error, not `UNKNOWN`.
-  The Atom therefore stays self-describing without a `topo(...)` argument.
+- This is unambiguous: no vacuum topology has `p` in its prop momenta, and the vacuum `UNKNOWN` matcher refuses them.
+  The Atom therefore stays self-describing without a flag argument.
+- Out of domain (M1 review F1): a `topo` with `p` in its momenta that is well formed but not a p-integral vakint covers is
+  an unknown integral under `allow_unknown_integrals` (the default), exactly as before p-integrals existed, and an error
+  (items 1, 2, 4 and 8 below) otherwise. Out of domain means: a massive line (item 1), several external heads (item 2),
+  a non-integer power (item 4), more than four loops or a graph outside the registry (item 8). The unknown integral is
+  `topo(UNKNOWN(...))` of the long form (after the exact normalization of items 5-6 when only item 8 applies); its
+  momenta keep `p(i)` and its loop count is the number of `k(j)`. No backend evaluates it (pySecDec takes external
+  momenta only in numerators), so evaluating it is an error; `to_canonical` passes it through. A short form out of domain
+  (a non-integer power) is no unknown integral and keeps its error. Malformed inputs (not a `prop`, a bad edge or
+  vertex id, repeated prop ids, no external head, broken momentum conservation, a loop-count mismatch, a momentum that is
+  not an integer combination of heads, a non-unimodular routing, a tensor numerator) are errors under any setting.
+- In code: `p_integral::input::PRejection { OutOfDomain(String), Malformed(VakintError) }`; the fallback is
+  `Topologies::match_propagator(input, allow_unknown_integrals)`.
 - Inference lives in `p_integral::infer_kind(integral: AtomView) -> Result<IntegralKind, VakintError>`.
   `Vakint::match_topologies_for_settings` dispatches on it before any vacuum or five-loop matcher runs.
 
@@ -485,7 +496,11 @@ Rules:
 - Every test is one short call of a shared helper in the new `tests/support/p_integrals.rs`. Helpers:
   `forcer_settings()`, `rustred_p_settings()`, `assert_p_backends_agree(input, laurent_terms)` (exact Retain
   comparison plus Numerical to 1e-30), `assert_p_routing_invariant(input, seeds)`, `assert_p_dot_round_trip(atom)`,
-  `assert_p_scaleless(input)`, `assert_p_error(input, fragment)`.
+  `assert_p_scaleless(input)`, `assert_p_error(input, fragment)` (with `allow_unknown_integrals: false`),
+  `assert_p_malformed(input, fragment)` (an error under either setting), `assert_p_unknown(input, fragment)` (section 1,
+  "Out of domain": `topo(UNKNOWN(input))` by default, the error otherwise, never a value),
+  `assert_p_identity(lhs, rhs)` (exact live Forcer equality, symbolic masters, G-scheme) and `fake_form(version)` (a
+  FORM that only reports its version).
 - Forcer battery data are frozen in `tests/fixtures/forcer/p{L}l_battery.json`: the canonical input (family, powers,
   numerator, external), the raw exact Forcer output of each homogeneous part, FORM version and Forcer commit.
   Without FORM, they test the input generation, the parser, the finalizer and RustRed.
@@ -512,8 +527,23 @@ Per loop count:
   - `Oep` guard, at 3L and 4L (1L-2L have only exact `PG`): a case where a `1/ε^k` coefficient pulls a `PMaster`
     tail into the requested order gives `MissingMasterOrders`, and the same request one order lower passes.
   - Error cases of section 1: massive line, two heads, broken conservation, non-integer power, tensor numerator,
-    5L input.
-  - Normalization: tree line, merged identical quadrics, negative power.
+    5L input, non-unimodular routing; the same out-of-domain inputs are `UNKNOWN` under `allow_unknown_integrals`, the
+    malformed ones stay errors, and unknown vacuum integrals are unchanged.
+  - Normalization: tree line, merged identical quadrics, negative power; evaluated (live Forcer): tree lines of power 1
+    and 2, a negative short-form power, a reversed short-form head, and a bubble chain through a cut vertex (`1/ε^2`,
+    not scaleless).
+  - Analytic identities (live Forcer, `tests/p_integral_forcer_tests.rs::identities`): odd and even rank and the
+    reversed external momentum (`σ = -1`) at 1L-4L (`k·q = (k² + q² - (k-q)²)/2` and its partial fractions on the
+    bubble, the kite, `NO` and `LA4`); index notation and linear `dot` arguments (also FORM-free on canonical forms).
+  - The `Oep` guard through `Vakint::evaluate` at 4L (`P4L_NO1`, symbolic and numerical masters).
+  - G-scheme on vacuum integrals (FORM-free, RustRed: the massive tadpole is `1/ε - 2 + ζ2 ε`) and on a vacuum plus a
+    p-integral (FORM 5).
+  - FORM older than 5 (fake FORM 4.3.1, FORM-free): `EvaluationOrder::all()` validates, a vacuum integral evaluates, a
+    p-integral reports `ForcerUnavailable`, and an order of Forcer alone fails validation.
+  - The MZV evaluator (`src/p_integral/mzv.rs`): stuffle relations at weights 8-12 and duality for every `ζ(n)` and
+    `MZV(...)` of the master table, directly and through the numerical evaluator.
+  - Forcer sources: a foreign or modified materialized directory is never used
+    (`forcer::tests::untrusted_source_directories_are_never_used`).
 - Registry and catalogue:
   - the `src/p_integral.rs` data tests;
   - catalogue determinism;

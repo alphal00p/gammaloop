@@ -34,6 +34,46 @@ pub(crate) struct PGraph {
     pub loops: usize,
 }
 
+/// Why an integral with an external momentum is not a p-integral vakint can
+/// identify (`docs/p_integrals.md`, section 1, "Out of domain").
+#[derive(Debug)]
+pub(crate) enum PRejection {
+    /// A well-formed integral outside the p-integral domain: a massive line, a
+    /// non-integer power or several external heads (and, in the catalogue,
+    /// more than four loops or a graph outside the 1L-4L registry). Under
+    /// `allow_unknown_integrals` it is matched as an unknown integral, as
+    /// before p-integrals existed; otherwise it is an error.
+    OutOfDomain(String),
+    /// Malformed input (not a `prop`, a bad edge or vertex, broken momentum
+    /// conservation, a loop-count mismatch, ...): always this error.
+    Malformed(VakintError),
+}
+
+impl PRejection {
+    pub(crate) fn is_out_of_domain(&self) -> bool {
+        matches!(self, Self::OutOfDomain(_))
+    }
+}
+
+impl From<VakintError> for PRejection {
+    fn from(error: VakintError) -> Self {
+        Self::Malformed(error)
+    }
+}
+
+impl From<PRejection> for VakintError {
+    fn from(rejection: PRejection) -> Self {
+        match rejection {
+            PRejection::OutOfDomain(detail) => invalid(detail),
+            PRejection::Malformed(error) => error,
+        }
+    }
+}
+
+fn out_of_domain(detail: impl std::fmt::Display) -> PRejection {
+    PRejection::OutOfDomain(detail.to_string())
+}
+
 /// The exact normalization of a p-integral (section 1, items 5 and 6).
 #[derive(Clone, Debug)]
 pub(crate) enum Normalized {
@@ -226,6 +266,19 @@ pub(super) fn is_scaleless(lines: &[(i64, i64)], entry: i64, exit: i64, loops: u
 impl PGraph {
     /// Parse and validate a long or short form p-integral (section 1, items 1-4).
     pub(crate) fn parse(integral: AtomView) -> Result<Self, VakintError> {
+        Self::parse_checked(integral).map_err(VakintError::from)
+    }
+
+    /// `integral` mentions an external momentum but is outside the p-integral
+    /// domain ([`PRejection::OutOfDomain`]) before any catalogue lookup.
+    pub(crate) fn is_out_of_domain(integral: AtomView) -> bool {
+        mentions_external_momentum(integral)
+            && Self::parse_checked(integral).is_err_and(|rejection| rejection.is_out_of_domain())
+    }
+
+    /// [`Self::parse`] with the reason of a rejection: out of the p-integral
+    /// domain, or malformed.
+    pub(crate) fn parse_checked(integral: AtomView) -> Result<Self, PRejection> {
         let argument = topology_argument(integral)
             .ok_or_else(|| invalid(format!("expected topo(...), found {integral}")))?;
         if let Some(family) = short_form_family(argument) {
@@ -234,13 +287,13 @@ impl PGraph {
         let mut lines = Vec::new();
         for factor in factors(argument) {
             let AtomView::Fun(prop) = factor else {
-                return Err(invalid(format!("{factor} is not a prop(...)")));
+                return Err(invalid(format!("{factor} is not a prop(...)")).into());
             };
             let arguments = prop.iter().collect::<Vec<_>>();
             if prop.get_symbol() != S.prop || arguments.len() != 5 {
-                return Err(invalid(format!(
-                    "{factor} is not a prop(id,edge(a,b),q,0,power)"
-                )));
+                return Err(
+                    invalid(format!("{factor} is not a prop(id,edge(a,b),q,0,power)")).into(),
+                );
             }
             let id = integer(arguments[0], || {
                 format!("prop ids must be integers: {factor}")
@@ -252,15 +305,13 @@ impl PGraph {
                     });
                     (ends.next().unwrap()?, ends.next().unwrap()?)
                 }
-                edge => return Err(invalid(format!("prop {id}: {edge} is not edge(a,b)"))),
+                edge => return Err(invalid(format!("prop {id}: {edge} is not edge(a,b)")).into()),
             };
             if ends.0 < 0 || ends.1 < 0 {
-                return Err(invalid(format!(
-                    "prop {id}: vertex ids must be nonnegative"
-                )));
+                return Err(invalid(format!("prop {id}: vertex ids must be nonnegative")).into());
             }
             if !arguments[3].is_zero() {
-                return Err(invalid(format!(
+                return Err(out_of_domain(format!(
                     "p-integrals are massless; prop {id} has mass {}",
                     arguments[3]
                 )));
@@ -269,7 +320,7 @@ impl PGraph {
         }
         lines.sort_by_key(|(id, ..)| *id);
         if lines.windows(2).any(|pair| pair[0].0 == pair[1].0) {
-            return Err(invalid("prop ids must be distinct"));
+            return Err(invalid("prop ids must be distinct").into());
         }
         let mut momenta = Vec::with_capacity(lines.len());
         for (id, _, momentum, _) in &lines {
@@ -280,7 +331,7 @@ impl PGraph {
             .flat_map(|momentum| momentum.keys().filter(|head| is_external(head)).cloned())
             .collect::<BTreeSet<_>>();
         if heads.len() != 1 {
-            return Err(invalid(format!(
+            let detail = format!(
                 "a p-integral has one external momentum; found {}",
                 if heads.is_empty() {
                     "none".to_owned()
@@ -291,7 +342,13 @@ impl PGraph {
                         .collect::<Vec<_>>()
                         .join(", ")
                 }
-            )));
+            );
+            // Several heads: a multi-scale integral; none: not a p-integral.
+            return Err(if heads.is_empty() {
+                invalid(detail).into()
+            } else {
+                out_of_domain(detail)
+            });
         }
         // Conservation is checked before the powers, as in the spec.
         let graph = Self::validated(
@@ -305,7 +362,7 @@ impl PGraph {
             .into_iter()
             .map(|(id, ends, momentum, power)| {
                 let power = get_integer_from_atom(power.as_view()).ok_or_else(|| {
-                    invalid(format!(
+                    out_of_domain(format!(
                         "powers must be integers; prop {id} has power {power}"
                     ))
                 })?;
@@ -316,14 +373,14 @@ impl PGraph {
                     power,
                 })
             })
-            .collect::<Result<Vec<_>, VakintError>>()?;
+            .collect::<Result<Vec<_>, PRejection>>()?;
         let graph = Self { lines, ..graph };
         graph.check_loop_count()?;
         Ok(graph)
     }
 
     /// Lines with integer powers, as produced by a short form.
-    fn from_lines(lines: Vec<PLine>) -> Result<Self, VakintError> {
+    fn from_lines(lines: Vec<PLine>) -> Result<Self, PRejection> {
         let external = lines
             .iter()
             .flat_map(|line| {
@@ -511,12 +568,12 @@ impl PGraph {
 
 impl PFamily {
     /// The lines of a short form `NAME(±p(i), a_1, ..., a_N)`.
-    fn short_form_lines(&self, view: AtomView) -> Result<Vec<PLine>, VakintError> {
+    fn short_form_lines(&self, view: AtomView) -> Result<Vec<PLine>, PRejection> {
         let AtomView::Fun(function) = view else {
             unreachable!("short forms are functions")
         };
         let arguments = function.iter().collect::<Vec<_>>();
-        let short = || VakintError::InvalidShortExpression(view.to_string());
+        let short = || PRejection::Malformed(VakintError::InvalidShortExpression(view.to_string()));
         if arguments.len() != self.lines.len() + 1 {
             return Err(short());
         }
@@ -538,7 +595,7 @@ impl PFamily {
                         .replace(S.p.call(1).to_pattern())
                         .with(external.to_pattern()),
                     power: get_integer_from_atom(*power)
-                        .ok_or_else(|| invalid(format!("powers must be integers: {view}")))?,
+                        .ok_or_else(|| out_of_domain(format!("powers must be integers: {view}")))?,
                     ..line.clone()
                 })
             })

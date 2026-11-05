@@ -63,9 +63,19 @@ pub fn assert_p_scaleless(input: &str) {
     );
 }
 
-/// `input` is rejected with an error mentioning `fragment`.
+/// `input` is rejected with an error mentioning `fragment` when unknown
+/// integrals are not allowed (an out-of-domain p-integral is otherwise an
+/// unknown integral, see [`assert_p_unknown`]).
 pub fn assert_p_error(input: &str, fragment: &str) {
-    match VAKINT.to_canonical(&VakintSettings::default(), parse(input).as_view(), false) {
+    let settings = VakintSettings {
+        allow_unknown_integrals: false,
+        ..VakintSettings::default()
+    };
+    assert_canonical_error(input, fragment, &settings);
+}
+
+fn assert_canonical_error(input: &str, fragment: &str, settings: &VakintSettings) {
+    match VAKINT.to_canonical(settings, parse(input).as_view(), false) {
         Ok(result) => panic!("{input} was accepted as {result}"),
         Err(error) => assert!(
             error.to_string().contains(fragment),
@@ -485,4 +495,81 @@ fn live_forcer_retain_settings(input: &Atom) -> Option<VakintSettings> {
 /// `ζ(n)`, as the finalized results write it.
 pub fn zeta(n: i64) -> Atom {
     symbolica::transcendental::zeta().call(Atom::num(n))
+}
+
+/// `input` is malformed: rejected with an error mentioning `fragment` with
+/// and without `allow_unknown_integrals` (section 1, "Out of domain").
+pub fn assert_p_malformed(input: &str, fragment: &str) {
+    assert_p_error(input, fragment);
+    assert_canonical_error(input, fragment, &VakintSettings::default());
+}
+
+/// `input` mentions an external momentum but is no p-integral vakint covers
+/// (section 1, "Out of domain"): without `allow_unknown_integrals` it is an
+/// error mentioning `fragment`; with it (the default) it canonicalizes to the
+/// unknown integral `topo(UNKNOWN(...))` of its long form, which is `input`
+/// itself, and evaluating it is an error, not a value.
+pub fn assert_p_unknown(input: &str, fragment: &str) {
+    assert_p_error(input, fragment);
+    let settings = VakintSettings::default();
+    assert!(settings.allow_unknown_integrals);
+    let atom = parse(input);
+    let unknown = VAKINT
+        .to_canonical(&settings, atom.as_view(), false)
+        .unwrap_or_else(|error| panic!("{input}: {error}"));
+    let expected = atom
+        .replace(parse("topo(x_)").to_pattern())
+        .with(parse("topo(UNKNOWN(x_))").to_pattern());
+    assert_eq!(unknown, expected, "{input}");
+    if let Ok(value) = VAKINT.evaluate(&settings, atom.as_view()) {
+        panic!("{input} is no p-integral, yet it evaluated to {value}");
+    }
+}
+
+/// `lhs` and `rhs` evaluate to exactly the same value with Forcer (symbolic
+/// masters, G-scheme, through `ε^1`): an analytic identity between
+/// p-integrals. Skipped without FORM 5.
+pub fn assert_p_identity(lhs: &str, rhs: &str) {
+    assert_p_identity_with(lhs, rhs, LoopNormalizationFactor::GScheme);
+}
+
+/// [`assert_p_identity`] in the loop normalization `normalization`.
+pub fn assert_p_identity_with(lhs: &str, rhs: &str, normalization: LoopNormalizationFactor) {
+    let Some(form) = forcer_form() else {
+        eprintln!("FORM 5 is unavailable: skipped the live Forcer identity {lhs} = {rhs}");
+        return;
+    };
+    let settings = forcer_settings(&form, RustRedMasterMode::Symbolic, normalization, 4);
+    let difference = (forcer_evaluate(&parse(lhs), &settings)
+        - forcer_evaluate(&parse(rhs), &settings))
+    .expand();
+    assert!(difference.is_zero(), "{lhs} - ({rhs}) = {difference}");
+}
+
+/// A fake FORM executable that reports `FORM {version}` to `form -version`
+/// and does nothing else; it lives as long as this value.
+pub struct FakeForm {
+    _directory: tempfile::TempDir,
+    pub path: String,
+}
+
+/// A [`FakeForm`] of `version`, e.g. "4.3.1" for a host without FORM 5.
+pub fn fake_form(version: &str) -> FakeForm {
+    use std::io::Write;
+    use std::os::unix::fs::PermissionsExt;
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("form");
+    {
+        let mut script = std::fs::File::create(&path).unwrap();
+        writeln!(
+            script,
+            "#!/bin/sh\necho \"FORM {version} (vakint test fake) 64-bits\""
+        )
+        .unwrap();
+    }
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    FakeForm {
+        path: path.to_str().unwrap().to_owned(),
+        _directory: directory,
+    }
 }
