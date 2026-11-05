@@ -273,7 +273,9 @@ anchor = "fn feyngen_str("
 # No-impact attestation 2026-11-05: the reviewed snapshot13 expectation update
 # preserves the certified QCD2 row and physical CLI controls. The review above
 # remains historical; this digest follows the accepted fixture-only child.
-digest = "620d91457488804fb3163fafcca6a49fdfc3473a"
+# No-impact attestation 2026-11-05: the CP fixture now accounts for the two
+# repaired physical merges; all QCD2 and other physical CLI controls remain unchanged.
+digest = "3c9a334e2e10e4c7bfcbc5d60af0f56270fa22c9"
 
 [[section.note]]
 id = "generation-frame-certificate"
