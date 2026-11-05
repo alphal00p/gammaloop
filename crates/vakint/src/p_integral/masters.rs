@@ -155,6 +155,23 @@ pub(crate) fn p_master_names() -> Result<Vec<&'static str>, VakintError> {
     Ok(p_master_table()?.keys().map(String::as_str).collect())
 }
 
+/// The name of `PMaster(name)`, if `atom` is one: a single argument, a symbol
+/// of vakint's namespace.
+pub(crate) fn p_master_name(atom: AtomView) -> Option<String> {
+    let AtomView::Fun(function) = atom else {
+        return None;
+    };
+    if function.get_symbol() != super::p_master_symbol() || function.get_nargs() != 1 {
+        return None;
+    }
+    match function.iter().next() {
+        Some(AtomView::Var(name)) if name.get_symbol().get_namespace() == crate::NAMESPACE => {
+            Some(name.get_symbol().get_stripped_name().to_string())
+        }
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

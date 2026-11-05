@@ -43,7 +43,7 @@ pub(crate) fn gamma_one_plus(c: i64, epsilon: &Atom) -> Atom {
 ///
 /// ```text
 /// Γ(1+(1+s)ε) Γ(1-(1+x1)ε) Γ(1-(1+x2)ε) (1-2ε) Γ(1-2ε)
-/// / (ε Γ(1+x1ε) Γ(1+x2ε) (1-(1+s)ε) Γ(1-(2+s)ε) Γ(1+ε) Γ(1-ε)²),   s = x1+x2.
+/// / (ε Γ(1+x1ε) Γ(1+x2ε) (1-(2+s)ε) Γ(1-(2+s)ε) Γ(1+ε) Γ(1-ε)²),   s = x1+x2.
 /// ```
 pub(crate) fn pg_value(x1: i64, x2: i64, epsilon: Symbol) -> Atom {
     let e = Atom::var(epsilon);
@@ -170,7 +170,8 @@ fn expand_exponents(expression: &Atom) -> Atom {
 /// `PGamma` expanded exactly and `PMaster` substituted from the Forcer table (constants stay
 /// symbolic; the numerical boundary of the caller evaluates them). A surviving
 /// unknown master tail is a [`crate::truncation_guard::MissingMasterOrders`]
-/// error naming `backend`.
+/// error naming `backend`. Malformed `PG`, `PGamma` and `PMaster` are errors
+/// in every mode ([`super::compare::check_symbols`]).
 pub(crate) fn finalize(
     values: &[ReducedPropagatorValue],
     loops: usize,
@@ -190,6 +191,7 @@ pub(crate) fn finalize(
     if reduced.is_zero() {
         return Ok(Atom::Zero);
     }
+    super::compare::check_symbols(&reduced)?;
     let l = loops as i64;
     let normalization = settings
         .get_staged_integral_normalization_factor_atom()?

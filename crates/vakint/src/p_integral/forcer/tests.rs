@@ -964,11 +964,12 @@ fn sources_used_after(tamper: impl Fn(&std::path::Path)) -> (bool, bool) {
     tamper(&shared);
     let base = root.path().to_string_lossy().into_owned();
     let used = materialized_sources(Some(&base)).unwrap();
-    let run = prepare_run_directory(&VakintSettings {
+    let (run, private_sources) = prepare_run_directory(&VakintSettings {
         temporary_directory: Some(base),
         ..VakintSettings::default()
     })
     .unwrap();
+    assert_eq!(private_sources, used.is_none());
     let sources = vendored_sources().unwrap();
     let trusted = match &used {
         Some(directory) => is_trusted(directory, owner, &sources),
@@ -1072,6 +1073,40 @@ fn untrusted_sources_leave_no_private_directory_behind() {
         b"* altered\n",
         "the planted directory is never touched"
     );
+}
+
+/// A run that fails beside untrusted sources keeps its program for diagnosis
+/// but not the private copy of the sources.
+#[cfg(unix)]
+fn assert_failed_run_removes_private_sources(form: &str, program: &str) {
+    let root = tempfile::tempdir().unwrap();
+    plant_untrusted_shared_directory(root.path());
+    let settings = VakintSettings {
+        temporary_directory: Some(root.path().to_string_lossy().into_owned()),
+        clean_tmp_dir: true,
+        ..settings(form)
+    };
+    run_forcer(&settings, program, &["F1"]).unwrap_err();
+    let run = leftovers(root.path());
+    assert_eq!(run.len(), 1, "{run:?}");
+    let run = root.path().join(&run[0]);
+    assert!(run.join("run_forcer.frm").is_file());
+    assert!(std::fs::symlink_metadata(run.join("forcer.h")).is_err());
+    assert!(std::fs::symlink_metadata(run.join("forcer")).is_err());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_failed_run_leaves_no_private_sources_behind() {
+    // FORM cannot be started.
+    assert_failed_run_removes_private_sources("/nonexistent/form", ".end\n");
+    let Some(form) = forcer_test_form() else {
+        eprintln!("FORM 5 is unavailable: skipped the live failures beside untrusted sources");
+        return;
+    };
+    // FORM fails, and FORM succeeds without the expected output.
+    assert_failed_run_removes_private_sources(&form, "Local F1 = ;\n.end\n");
+    assert_failed_run_removes_private_sources(&form, ".end\n");
 }
 
 #[test]

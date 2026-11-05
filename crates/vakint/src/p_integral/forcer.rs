@@ -104,8 +104,10 @@ fn is_trusted(directory: &Path, owner: u32, sources: &[(&str, Vec<u8>)]) -> bool
 /// the processes of one user. Anything else at that path, e.g. a directory
 /// planted by another user of a shared `/tmp` or a damaged copy, is never
 /// used: every Forcer run then writes a private copy of the sources into its
-/// own run directory, which goes away with it (`clean_tmp_dir`), so no private
-/// source directory outlives its run.
+/// own run directory ([`prepare_run_directory`]). The copy goes away with the
+/// run directory after a successful run (`clean_tmp_dir`) and on its own after
+/// a failed one, so no private copy outlives its run unless `clean_tmp_dir`
+/// is off.
 fn materialized_sources(base: Option<&str>) -> Result<Option<PathBuf>, VakintError> {
     static DIRECTORIES: LazyLock<Mutex<HashMap<PathBuf, Option<PathBuf>>>> =
         LazyLock::new(Default::default);
@@ -156,25 +158,41 @@ fn materialized_sources(base: Option<&str>) -> Result<Option<PathBuf>, VakintErr
     Ok(directory)
 }
 
-/// A fresh run directory for one Forcer program: `forcer.h` and `forcer/`
-/// link to the shared sources, or are a private copy (the directory made
-/// private) when there is no trusted shared copy.
-fn prepare_run_directory(settings: &VakintSettings) -> Result<PathBuf, VakintError> {
+/// A fresh run directory for one Forcer program and whether it holds a private
+/// copy of the sources: `forcer.h` and `forcer/` link to the shared sources, or
+/// are that copy (the directory made private) when there is no trusted shared
+/// copy. A directory that cannot be filled is removed.
+fn prepare_run_directory(settings: &VakintSettings) -> Result<(PathBuf, bool), VakintError> {
     let base = settings.temporary_directory.as_deref();
     let shared = materialized_sources(base)?;
     let run_directory = crate::create_unique_tmp_run_dir(base, "vakint_forcer")?;
-    match shared {
-        Some(sources) => {
-            for name in ["forcer.h", "forcer"] {
-                link(&sources.join(name), &run_directory.join(name))?;
-            }
-        }
-        None => {
-            make_private(&run_directory)?;
-            write_sources(&run_directory, &vendored_sources()?)?;
-        }
+    let filled = match &shared {
+        Some(sources) => ["forcer.h", "forcer"].iter().try_for_each(|name| {
+            link(&sources.join(name), &run_directory.join(name)).map_err(VakintError::from)
+        }),
+        None => make_private(&run_directory)
+            .map_err(VakintError::from)
+            .and_then(|()| write_sources(&run_directory, &vendored_sources()?)),
+    };
+    if let Err(error) = filled {
+        fs::remove_dir_all(&run_directory)?;
+        return Err(error);
     }
-    Ok(run_directory)
+    Ok((run_directory, shared.is_none()))
+}
+
+/// Remove the private copy of the sources from a failed run directory; the
+/// program and FORM's files stay for diagnosis (`VakintError::FormError` names
+/// the directory).
+fn remove_private_sources(run_directory: &Path) {
+    let removed = fs::remove_file(run_directory.join("forcer.h"))
+        .and_then(|()| fs::remove_dir_all(run_directory.join("forcer")));
+    if let Err(error) = removed {
+        warn!(
+            "Could not remove the private Forcer sources in '{}': {error}",
+            run_directory.display()
+        );
+    }
 }
 
 fn write_sources(directory: &Path, sources: &[(&str, Vec<u8>)]) -> Result<(), VakintError> {
@@ -469,10 +487,26 @@ fn run_forcer(
 ) -> Result<Vec<String>, VakintError> {
     crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Form);
     crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Forcer);
-    let run_directory = prepare_run_directory(settings)?;
+    let (run_directory, private_sources) = prepare_run_directory(settings)?;
+    let results = run_forcer_in(settings, program, locals, &run_directory);
+    match &results {
+        Ok(_) if settings.clean_tmp_dir => fs::remove_dir_all(&run_directory)?,
+        Err(_) if private_sources => remove_private_sources(&run_directory),
+        _ => {}
+    }
+    results
+}
+
+/// [`run_forcer`] in its prepared directory.
+fn run_forcer_in(
+    settings: &VakintSettings,
+    program: &str,
+    locals: &[&str],
+    run_directory: &Path,
+) -> Result<Vec<String>, VakintError> {
     fs::write(run_directory.join("run_forcer.frm"), program)?;
     let mut command = form_command(settings);
-    command.arg("run_forcer.frm").current_dir(&run_directory);
+    command.arg("run_forcer.frm").current_dir(run_directory);
     debug!("Running {} with command: {:?}", "Forcer".green(), command);
     let output = command
         .stderr(Stdio::piped())
@@ -496,17 +530,13 @@ fn run_forcer(
     if let Some(warning) = unrecognized_topology(&String::from_utf8_lossy(&output.stdout)) {
         return Err(VakintError::ForcerUnrecognizedTopology(warning));
     }
-    let results = locals
+    locals
         .iter()
         .map(|local| {
             fs::read_to_string(run_directory.join(format!("{local}.out")))
                 .map_err(|error| failure(format!("missing Forcer output for {local}: {error}")))
         })
-        .collect::<Result<Vec<_>, _>>()?;
-    if settings.clean_tmp_dir {
-        fs::remove_dir_all(&run_directory)?;
-    }
-    Ok(results)
+        .collect()
 }
 
 /// Forcer's warning for an input graph that matches none of its topologies

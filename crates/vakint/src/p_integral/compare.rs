@@ -20,6 +20,7 @@ use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use symbolica::transcendental::gamma;
 
 use super::finalize::{gamma_one_plus, pg_value};
+use super::laurent::unsupported_power;
 use super::{masters, p_gamma_symbol, p_master_symbol, pg_symbol};
 use crate::symbols::S;
 use crate::{VakintError, get_integer_from_atom};
@@ -66,7 +67,8 @@ fn normalize_gammas(expression: &Atom, epsilon: Symbol) -> Result<Atom, VakintEr
         {
             let argument = function.iter().next();
             if function.get_nargs() != 1
-                || integer_linear_argument(argument.unwrap(), epsilon).is_none()
+                || !integer_linear_argument(argument.unwrap(), epsilon)
+                    .is_some_and(|(n, c)| c != 0 || n > 0)
             {
                 unsupported = Some(part.to_owned());
             }
@@ -75,7 +77,7 @@ fn normalize_gammas(expression: &Atom, epsilon: Symbol) -> Result<Atom, VakintEr
         unsupported.is_none()
     });
     if let Some(part) = unsupported {
-        return Err(failure(format!("{part} is not Γ(n + cε)")));
+        return Err(failure(format!("{part} is not a finite Γ(n + cε)")));
     }
     Ok(expression
         .replace(gamma().call(Atom::var(S.x_)).to_pattern())
@@ -114,28 +116,13 @@ fn gamma_tag(atom: AtomView, epsilon: Symbol) -> Option<i64> {
     }
 }
 
-/// The name of `PMaster(name)`, if `atom` is one.
-fn master_name(atom: AtomView) -> Option<String> {
-    let AtomView::Fun(function) = atom else {
-        return None;
-    };
-    if function.get_symbol() != p_master_symbol() || function.get_nargs() != 1 {
-        return None;
-    }
-    match function.iter().next() {
-        Some(AtomView::Var(name)) => Some(name.get_symbol().get_stripped_name().to_string()),
-        _ => None,
-    }
-}
-
-/// `reduced` (any combination of `PG`, `PGamma`, `PMaster`, rational
-/// functions of `epsilon` and other symbols) in the tag basis. Unknown master
-/// names, malformed `PG`/`PGamma` arguments and Γ functions of other
-/// arguments are errors.
-pub fn tag_basis(reduced: &Atom, epsilon: Symbol) -> Result<TagBasis, VakintError> {
+/// Every `PG(x1,x2)` has two integer arguments, every `PGamma(m)` one nonzero
+/// integer argument and every `PMaster(name)` a tabulated name in vakint's
+/// namespace (`masters::p_master_names`); anything else is an error.
+pub(crate) fn check_symbols(expression: &Atom) -> Result<(), VakintError> {
     let known = masters::p_master_names()?;
     let mut malformed = None;
-    reduced.visitor(&mut |part| {
+    expression.visitor(&mut |part| {
         if let AtomView::Fun(function) = part {
             let integers = function
                 .iter()
@@ -145,6 +132,8 @@ pub fn tag_basis(reduced: &Atom, epsilon: Symbol) -> Result<TagBasis, VakintErro
                 integers.is_some_and(|x| x.len() == 2)
             } else if function.get_symbol() == p_gamma_symbol() {
                 integers.is_some_and(|m| m.len() == 1 && m[0] != 0)
+            } else if function.get_symbol() == p_master_symbol() {
+                masters::p_master_name(part).is_some_and(|name| known.contains(&name.as_str()))
             } else {
                 return malformed.is_none();
             };
@@ -155,8 +144,27 @@ pub fn tag_basis(reduced: &Atom, epsilon: Symbol) -> Result<TagBasis, VakintErro
         }
         malformed.is_none()
     });
-    if let Some(part) = malformed {
-        return Err(failure(format!("malformed {part}")));
+    match malformed {
+        Some(part) => Err(VakintError::EvaluationError(format!(
+            "p-integral: malformed {part}"
+        ))),
+        None => Ok(()),
+    }
+}
+
+/// `reduced` in the tag basis: a Laurent polynomial in the `PG` and `PGamma`
+/// and a polynomial in the `PMaster`, with coefficients rational in `epsilon`
+/// and in whatever other symbols they hold. Everything else is an error:
+/// unknown masters, malformed `PG`/`PGamma`/`PMaster` ([`check_symbols`]), Γ
+/// functions other than a finite `Γ(n + cε)`, powers that are not `i16`
+/// integers, negative master powers, and coefficients that still contain a Γ
+/// or a master (`1/(1+PGamma(1))`, `foo(PMaster(no))`).
+pub fn tag_basis(reduced: &Atom, epsilon: Symbol) -> Result<TagBasis, VakintError> {
+    check_symbols(reduced)?;
+    // Before the rational factors of a huge `PG` power get expanded.
+    let tags = [pg_symbol(), p_gamma_symbol(), p_master_symbol()];
+    if let Some(power) = unsupported_power(reduced, &tags) {
+        return Err(failure(format!("{power} is not an i16 integer power")));
     }
     let substituted = reduced
         .replace(
@@ -178,6 +186,9 @@ pub fn tag_basis(reduced: &Atom, epsilon: Symbol) -> Result<TagBasis, VakintErro
         &crate::Vakint::normalize_gamma_functions(substituted.as_view()),
         epsilon,
     )?;
+    if !normalized.is_finite() {
+        return Err(failure(format!("{reduced} is not finite")));
+    }
     let mut variables = BTreeSet::new();
     let mut unknown = None;
     normalized.visitor(&mut |part| {
@@ -191,12 +202,7 @@ pub fn tag_basis(reduced: &Atom, epsilon: Symbol) -> Result<TagBasis, VakintErro
                 return false;
             }
             if function.get_symbol() == p_master_symbol() {
-                match master_name(part) {
-                    Some(name) if known.contains(&name.as_str()) => {
-                        variables.insert(part.to_owned());
-                    }
-                    _ => unknown = Some(format!("unknown p-master {part}")),
-                }
+                variables.insert(part.to_owned());
                 return false;
             }
             if [pg_symbol(), p_gamma_symbol()].contains(&function.get_symbol()) {
@@ -210,8 +216,20 @@ pub fn tag_basis(reduced: &Atom, epsilon: Symbol) -> Result<TagBasis, VakintErro
         return Err(failure(detail));
     }
     let variables = variables.into_iter().collect::<Vec<_>>();
+    let expanded = normalized.expand();
+    if let Some(power) = unsupported_power(&expanded, &[gamma(), p_master_symbol()]) {
+        return Err(failure(format!("{power} is not an i16 integer power")));
+    }
     let mut basis = TagBasis::new();
-    for (key, coefficient) in normalized.expand().coefficient_list::<i16>(&variables) {
+    for (key, coefficient) in expanded.coefficient_list::<i16>(&variables) {
+        if [gamma(), p_master_symbol()]
+            .iter()
+            .any(|symbol| coefficient.contains_symbol(*symbol))
+        {
+            return Err(failure(format!(
+                "the coefficient {coefficient} still contains a Γ or a master"
+            )));
+        }
         let factors = match key.as_view() {
             AtomView::Mul(product) => product.iter().map(|f| f.to_owned()).collect(),
             _ => vec![key.clone()],
@@ -230,7 +248,10 @@ pub fn tag_basis(reduced: &Atom, epsilon: Symbol) -> Result<TagBasis, VakintErro
             let exponent = exponent.ok_or_else(|| failure(format!("monomial factor {factor}")))?;
             if let Some(m) = gamma_tag(base.as_view(), epsilon) {
                 gammas.push((m, exponent));
-            } else if let Some(name) = master_name(base.as_view()) {
+            } else if let Some(name) = masters::p_master_name(base.as_view()) {
+                if exponent < 0 {
+                    return Err(failure(format!("negative master power {factor}")));
+                }
                 masters.push((name, exponent));
             } else {
                 return Err(failure(format!("monomial factor {factor}")));
@@ -344,10 +365,61 @@ mod tests {
         let e = epsilon();
         for bad in [
             master("nothere"),
+            function!(
+                p_master_symbol(),
+                Atom::var(symbolica::symbol!("other::no"))
+            ),
+            function!(p_master_symbol(), Atom::var(vk_symbol!("no")), 2),
             p_gamma_symbol().call((0,)),
+            pg_symbol().call((1,)),
             vk_parse!("Gamma(1/2+ε)").unwrap(),
         ] {
             assert!(tag_basis(&bad, e).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn what_the_basis_cannot_hold_is_refused() {
+        let e = epsilon();
+        let ep = Atom::var(e);
+        let one = Atom::num(1);
+        let half = Atom::num(1) / Atom::num(2);
+        let foo = vk_symbol!("foo");
+        for bad in [
+            // Γ poles; Symbolica evaluates them to complex infinity.
+            vk_parse!("Gamma(0)").unwrap(),
+            vk_parse!("Gamma(0)+1").unwrap(),
+            &ep * vk_parse!("Gamma(-1)").unwrap(),
+            // Not a monomial in the tags and masters.
+            &one / (&one + tag(1)),
+            &one / (&one + master("no")),
+            function!(foo, tag(1)),
+            function!(foo, master("no")),
+            function!(foo, pg(1, 0)),
+            tag(1).pow(&half),
+            master("no").pow(&half),
+            tag(1).pow(ep.clone()),
+            // Negative master powers.
+            master("no").pow(Atom::num(-1)),
+            tag(1) * master("no").pow(Atom::num(-2)),
+            // Beyond the i16 exponents of the tags.
+            tag(1).pow(Atom::num(32768)),
+            tag(1).pow(Atom::num(-32769)),
+            tag(1).pow(Atom::num(40000)),
+            (tag(1).pow(Atom::num(30000)) + &one).pow(Atom::num(2)),
+            pg(1, 0).pow(Atom::num(40000)),
+        ] {
+            let error = tag_basis(&bad, e).expect_err(&bad.to_string());
+            assert!(
+                matches!(error, VakintError::EvaluationError(_)),
+                "{bad}: {error}"
+            );
+        }
+        // Γ(n + cε) with its ε-poles is fine, and so are the ends of the range.
+        assert!(tag_basis(&vk_parse!("Gamma(-1+ε)").unwrap(), e).is_ok());
+        for power in [i64::from(i16::MAX), i64::from(i16::MIN)] {
+            let basis = tag_basis(&tag(1).pow(Atom::num(power)), e).unwrap();
+            assert!(basis.contains_key(&(vec![(1, power)], vec![])), "{basis:?}");
         }
     }
 }

@@ -360,6 +360,36 @@ fn g_scheme_normalization_validates() {
 }
 
 #[test]
+fn malformed_symbols_fail_closed_in_every_mode() {
+    let head = parse("p(1)");
+    let settings = settings(LoopNormalizationFactor::GScheme, 3);
+    let gamma_tag = crate::p_integral::p_gamma_symbol();
+    let foreign_no = function!(
+        p_master_symbol(),
+        Atom::var(symbolica::symbol!("other::no"))
+    );
+    for reduced in [
+        gamma_tag.call((0,)),
+        gamma_tag.call((1, 2)),
+        pg_symbol().call((1,)),
+        function!(p_master_symbol(), Atom::var(vk_symbol!("nothere"))),
+        foreign_no,
+    ] {
+        for mode in [
+            RustRedMasterMode::Retain,
+            RustRedMasterMode::Symbolic,
+            RustRedMasterMode::Numerical,
+        ] {
+            let values = [value(0, reduced.clone())];
+            assert!(
+                finalize(&values, 1, &head, &settings, mode, "test").is_err(),
+                "{reduced} ({mode:?})"
+            );
+        }
+    }
+}
+
+#[test]
 fn gamma_tags_stay_symbolic_in_retain_and_expand_otherwise() {
     // RustRed's tags: PGamma(m) = Γ(1+mε), here on the bubble value PG(0,0).
     let head = parse("p(1)");
