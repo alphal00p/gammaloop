@@ -227,7 +227,8 @@ class Gallery:
           border-radius:15px; padding:20px 22px; min-width:0; }
         .vg-metric strong { display:block; color:var(--vg-navy);
           font-size:clamp(18px,2.4vw,28px); font-weight:600; letter-spacing:-.03em;
-          line-height:1.3; overflow-wrap:anywhere; }
+          line-height:1.3; overflow-wrap:break-word; }
+        .vg-metric strong.long { font-size:clamp(15px,1.7vw,21px); }
         .vg-metric span { display:block; font-size:12px; color:var(--vg-muted);
           margin-top:7px; line-height:1.5; }
         .vg-section { border-top:1px solid var(--vg-line); padding-top:1.7rem;
@@ -322,11 +323,15 @@ class Gallery:
 
     @staticmethod
     def metrics(mo, values):
+        # Long identifiers (modular_polynomial) get a smaller face and break
+        # after "_" rather than mid-word.
+        long_value = ' class="long"'
         return mo.Html(
             '<div class="vg-metrics">'
             + "".join(
                 '<div class="vg-metric">'
-                f"<strong>{html.escape(str(value))}</strong>"
+                f"<strong{long_value if len(str(value)) > 12 else ''}>"
+                f"{html.escape(str(value)).replace('_', '_<wbr>')}</strong>"
                 f"<span>{html.escape(label)}</span></div>"
                 for value, label in values
             )
@@ -1524,12 +1529,17 @@ class Gallery:
         )
         resources = status.get("resources") or {}
         state = str(status.get("state", "running"))
+        elapsed = cls._number(status.get("elapsed_seconds"))
+        updated = cls._number(status.get("updated_unix_seconds"))
+        if elapsed is not None and updated is not None and state == "running":
+            # The supervisor rewrites its status every five seconds.
+            elapsed += max(0.0, time.time() - updated)
         return cls.monitor_card(
             mo,
             model,
             state=state,
             title=title,
-            elapsed=cls._number(status.get("elapsed_seconds")),
+            elapsed=elapsed,
             activity=None
             if native_started
             else (stage.get("stage") if isinstance(stage.get("stage"), str) else None),

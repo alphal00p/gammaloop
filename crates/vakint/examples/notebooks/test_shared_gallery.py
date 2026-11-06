@@ -2158,6 +2158,11 @@ class GalleryMonitorCardTests(unittest.TestCase):
         }
         text = Gallery.job_monitor_card(self.mo, status).text
         self.assertIn("loading 4L external data", text)
+        # Between the supervisor's five-second status writes the clock runs on.
+        later = Gallery.job_monitor_card(
+            self.mo, {**status, "updated_unix_seconds": time.time() - 3}
+        ).text
+        self.assertRegex(later, r"10\.\d s elapsed")
         self.assertIn("3.0 GiB", text)
         self.assertIn("peak 4.0 GiB", text)
         self.assertIn("7.5 s elapsed", text)

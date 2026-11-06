@@ -62,13 +62,14 @@ def _(Gallery, mo):
         if Gallery.interruptible()
         else ""
     )
+    # Directory names only: the page never shows the server's paths.
     _source = (
-        f"the configured external-data checkout, {Gallery.data_directory()} "
-        "(validated locally, never downloaded)"
+        "the operator's external-data checkout "
+        f"({Gallery.data_directory().name}; validated locally, never downloaded)"
         if Gallery.configured_checkout()
         else "the official release packs, installed once into the download "
-        f"cache {Gallery.data_directory()}, never into the server's working "
-        "directory"
+        f"cache ({Gallery.data_directory().name}), never into the server's "
+        "working directory"
     )
     mo.vstack(
         [
