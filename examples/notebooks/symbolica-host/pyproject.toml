@@ -11,6 +11,9 @@ license-files = ["licenses/*"]
 
 [project.optional-dependencies]
 numpy = ["numpy"]
+# Live expression and tensor pagers in notebooks (marimo / Jupyter), as the
+# published symbolica wheel's extra of the same name.
+notebook-display = ["anywidget>=0.9,<1", "typst>=0.15,<0.16"]
 
 [tool.maturin]
 module-name = "symbolica.core"
