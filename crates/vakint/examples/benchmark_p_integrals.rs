@@ -10,9 +10,8 @@
 //! SIGTERM and SIGINT kill the measuring process group before the harness
 //! exits: the group sits outside the harness's own, so it would survive.
 //!
-//! Run with `cargo run --release --locked -p vakint --features
-//! vakint/feynkit-ingress,vakint/experimental-rustred --example
-//! benchmark_p_integrals -- --help`.
+//! Build with `just vakint-p-benchmark-build`, which stamps the binary with the
+//! source it is built from; a release measurement refuses any other binary.
 
 #[cfg(all(feature = "experimental-rustred", target_os = "linux"))]
 #[path = "benchmark_p_integrals/results.rs"]
@@ -58,13 +57,17 @@ mod harness {
     const PHYSICS: &str = include_str!("../tests/fixtures/benchmark_p_physics.json");
     const BUBBLE: &str = "topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))";
     const SCOPE: &str = "Wall time of Vakint::evaluate in Retain mode, in a fresh process, input \
-        parsed and engine (and RustRed library) loaded beforehand: same frontend and finalizer \
-        for both backends. RustRed cold: empty ordered-cache directory, shipped caches off. \
+        parsed, engine (and RustRed library) loaded and the one-loop bubble evaluated once \
+        beforehand by either backend, on directories of its own: same frontend and finalizer for \
+        both backends. RustRed cold: empty ordered-cache directory, shipped caches off. \
         Warm-same: fresh process replaying a read-only copy of the cache its cold run filled. \
         Warm-shared: per L one chain over the cells in table order sharing one cache from empty. \
         Forcer cold: private empty materialisation directory; warm: materialised (Forcer has no \
         result cache). Raw: the generated FORM programs run directly, one FORM process each. OS \
         pages are not flushed.";
+
+    /// The source this binary was built from; see `results::check_build`.
+    const BUILD_STAMP: Option<&str> = option_env!("VAKINT_P_BENCHMARK_SOURCE");
 
     /// The signal that asked this harness to stop, 0 before any.
     static STOP_SIGNAL: AtomicI32 = AtomicI32::new(0);
@@ -203,9 +206,11 @@ mod harness {
         --states LIST        rustred: cold,warm-same,warm-shared; forcer: cold,warm,raw (default: all)\n\
         --cap-seconds S      stop a measurement after S seconds and record it as capped\n\
         --stop-file PATH     stop cleanly between measurements when PATH exists (exit status 3)\n\
-        --child-program PATH run PATH instead of this executable as the measuring child (harness tests)\n\
+        --child-program PATH run PATH instead of this executable as the measuring child (harness tests,\n\
+                             refused with --build-profile release)\n\
         --select-current     select this run for the report; recorded runs stay\n\
-        A release measurement needs a clean tree (crates/vakint/docs/benchmark excepted).\n\
+        A release measurement needs a clean tree (crates/vakint/docs/benchmark excepted) and a binary\n\
+        of that tree, built by `just vakint-p-benchmark-build`.\n\
         Never removes anything outside its work directory; every Forcer run materialises under it.";
 
     impl Options {
@@ -409,16 +414,23 @@ mod harness {
         let engine = Vakint::new()?;
         let input = vakint_parse!(&cell.input).map_err(eyre::Report::msg)?;
         let settings = settings(options);
-        if options.backend == Backend::RustRed {
-            // The library loads on first use: load it here, out of the
-            // measurement, with no cache to touch.
-            let load = VakintSettings {
-                ordered_cache: OrderedCacheSettings::off(),
-                ..settings.clone()
-            };
-            let bubble = vakint_parse!(BUBBLE).map_err(eyre::Report::msg)?;
-            drop(engine.evaluate(&load, bubble.as_view())?);
-        }
+        // One evaluate before the clock, on either backend: what a process does
+        // once (the RustRed library load, the FORM version probe, tables built
+        // on first use) stays out of the measurement. It touches no directory
+        // of the measurement: no cache, and Forcer materialises apart.
+        let base = options
+            .base
+            .as_ref()
+            .ok_or_else(|| eyre::eyre!("a child needs --base"))?;
+        let apart = tempfile::tempdir_in(base)?;
+        let load = VakintSettings {
+            ordered_cache: OrderedCacheSettings::off(),
+            temporary_directory: Some(apart.path().to_string_lossy().into_owned()),
+            ..settings.clone()
+        };
+        let bubble = vakint_parse!(BUBBLE).map_err(eyre::Report::msg)?;
+        drop(engine.evaluate(&load, bubble.as_view())?);
+        apart.close()?;
         let load_seconds = started.elapsed().as_secs_f64();
         forcer_benchmark::enable();
         let started = Instant::now();
@@ -796,13 +808,10 @@ mod harness {
                     cache: None,
                     read_only: false,
                 };
-                self.run_child(
-                    &smallest,
-                    Backend::Forcer,
-                    threads,
-                    &placement,
-                    "forcer-warm-fill",
-                )?;
+                let label = "forcer-warm-fill";
+                let filled =
+                    self.run_child(&smallest, Backend::Forcer, threads, &placement, label)?;
+                ensure!(filled.is_some(), "the warm-state fill hit the cap");
             }
             Ok(base)
         }
@@ -1121,17 +1130,13 @@ mod harness {
             &[&["-C", &root, "status", "--porcelain", "--"], &sources[..]].concat(),
         )?
         .is_empty();
-        ensure!(
-            !(dirty && build_profile == "release"),
-            "a release measurement needs a clean tree: commit, or keep the change under \
-            crates/vakint/docs/benchmark"
-        );
         let source = Source {
             gammaloop_sha: &gammaloop_sha,
             rustred_sha: &rustred,
             build_profile: &build_profile,
             source_dirty: dirty,
         };
+        results::check_build(source, BUILD_STAMP, options.child_program.is_some())?;
         let form = executable(&options.form)?;
         if options.backends.contains(&Backend::Forcer) && options.threads.iter().any(|&n| n > 1) {
             check_tform(&form)?;
@@ -1169,6 +1174,7 @@ mod harness {
             "form_version": command_output(&form.to_string_lossy(), &["-v"])?,
             "form_sha256": sha256_of_file(&form)?,
             "binary_sha256": binary_sha256,
+            "build_stamp": BUILD_STAMP,
             "grid_sha256": format!("{:x}", Sha256::digest(GRID.as_bytes())),
             "physics_sha256": format!("{:x}", Sha256::digest(PHYSICS.as_bytes())),
             "exact_sha256": exact_sha256,

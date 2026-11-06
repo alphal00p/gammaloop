@@ -73,5 +73,6 @@ were agent-generated evidence and are no longer part of the repository;
 `docs/benchmark/data/results.json` stays. The p-integral benchmark does live
 here, by the user's ruling: `docs/benchmark/benchmark.typ` and `benchmark.pdf`
 are built from `data/p_results.json` (written by
-`examples/benchmark_p_integrals.rs`, append-only, never hand-edited) and
-`data/p_exact.json` with `just vakint-p-benchmark-pdf`.
+`examples/benchmark_p_integrals.rs`, built by `just vakint-p-benchmark-build`,
+append-only, never hand-edited) and `data/p_exact.json` with
+`just vakint-p-benchmark-pdf`.

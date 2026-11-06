@@ -505,8 +505,35 @@ mod results_file {
         assert!(results::check_exact(&exact("aaa", "ddd"), measured).is_err());
         let no_shas = json!({"schema": results::EXACT_SCHEMA, "cells": []});
         assert!(results::check_exact(&no_shas, measured).is_err());
-        let stub = include_str!("../docs/benchmark/data/p_exact.json");
-        assert!(results::check_exact(&serde_json::from_str(stub).unwrap(), measured).is_ok());
+        let stub = json!({"schema": results::EXACT_SCHEMA, "stub": true, "gammaloop_sha": null,
+                          "rustred_sha": null, "cells": []});
+        assert!(results::check_exact(&stub, measured).is_ok());
+    }
+
+    #[test]
+    fn a_release_measurement_needs_a_clean_stamped_build_of_the_real_child() {
+        let release = source("aaa", "bbb", "release");
+        let dirty = Source {
+            source_dirty: true,
+            ..release
+        };
+        assert!(results::check_build(release, Some("aaa"), false).is_ok());
+        assert!(results::check_build(release, None, false).is_err());
+        assert!(results::check_build(release, Some("older"), false).is_err());
+        assert!(results::check_build(release, Some("aaa"), true).is_err());
+        assert!(results::check_build(dirty, Some("aaa-dirty"), false).is_err());
+
+        let draft = source("aaa", "bbb", "ci-optim");
+        let dirty_draft = Source {
+            source_dirty: true,
+            ..draft
+        };
+        assert!(results::check_build(draft, None, true).is_ok());
+        assert!(results::check_build(draft, Some("aaa"), false).is_ok());
+        assert!(results::check_build(draft, Some("older"), false).is_err());
+        assert!(results::check_build(draft, Some("aaa-dirty"), false).is_err());
+        assert!(results::check_build(dirty_draft, Some("aaa-dirty"), false).is_ok());
+        assert!(results::check_build(dirty_draft, Some("aaa"), false).is_err());
     }
 
     #[test]
@@ -539,8 +566,9 @@ mod results_file {
             assert_eq!(count(grid, name)?, tops, "{name}");
         }
         let physics = include_str!("fixtures/benchmark_p_physics.json");
-        let terms = count(physics, "physics_L2")?;
-        assert!(terms < 26 && terms > 1, "{terms} integrals");
+        for (name, integrals) in [("physics_L2", 11), ("physics_L3", 53), ("physics_L4", 293)] {
+            assert_eq!(count(physics, name)?, integrals, "{name}");
+        }
         Ok(())
     }
 

@@ -5,10 +5,16 @@
 
 #let results = json("data/p_results.json")
 #let exact = json("data/p_exact.json")
+#assert(results.schema == "vakint.p-benchmark.v1", message: "data/p_results.json is not vakint.p-benchmark.v1")
+#assert(exact.schema == "vakint.p-exact.v1", message: "data/p_exact.json is not vakint.p-exact.v1")
 
 // The selected run and every run of the same source and build: a resumed run
 // continues the interrupted one.
 #let selected = results.runs.find(run => run.id == results.selected_run)
+#assert(
+  selected != none or results.selected_run == none,
+  message: "data/p_results.json has no run " + repr(results.selected_run),
+)
 #let protocol = if selected == none { (:) } else { selected.protocol }
 #let same-source(run) = (
   selected != none
@@ -65,13 +71,16 @@
   parts.at(0) + "." + frac + "0" * (d - frac.len())
 }
 
-// Significant figures suited to timings in seconds.
+// Significant figures suited to timings in seconds; never a printed zero.
 #let fmt(x) = {
   if not is-num(x) { return "—" }
   let a = calc.abs(x)
+  if a < 0.001 { return "< 0.001" }
   fixed(x, if a >= 100 { 0 } else if a >= 10 { 1 } else if a >= 1 { 2 } else { 3 })
 }
-#let fmt-ratio(r) = if r >= 10 { fixed(r, 0) } else { fixed(r, 2) }
+#let fmt-ratio(r) = if r >= 10 { fixed(r, 0) } else if r >= 0.01 { fixed(r, 2) } else {
+  "1/" + str(int(calc.round(1 / r)))
+}
 
 #let median(values) = {
   let sorted = values.sorted()
@@ -110,7 +119,7 @@
   if done > 0 and done < repetitions(loops) { "†" } else { "" }
 }
 
-#let ratio(a, b) = if is-num(a) and is-num(b) and b != 0 { a / b } else { none }
+#let ratio(a, b) = if is-num(a) and is-num(b) and a > 0 and b > 0 { a / b } else { none }
 
 // Diverging log2 palette: green (RustRed faster), white (parity), red (slower).
 #let palette = gradient.linear(
@@ -233,8 +242,9 @@
   }
   values
 }
-#let range-of(values) = if values.len() == 0 { [pending] } else {
-  [×#fixed(calc.min(..values), 2) to ×#fixed(calc.max(..values), 2)]
+// A capped or missing cell has no ratio, so the range says how many it covers.
+#let range-of(values, cells) = if values.len() == 0 { [pending] } else {
+  [×#fmt-ratio(calc.min(..values)) to ×#fmt-ratio(calc.max(..values)), #values.len() of #cells cells]
 }
 #let load-seconds = (
   measurements
@@ -269,7 +279,7 @@
   *Performance gates.* #h(1em)
   4L on par with Forcer at 1 thread, better at 16: n/a in v1 (RustRed 4L: M3). #h(1em)
   Cold start dominated by loading: load #if load-seconds.len() == 0 [pending] else [#fmt(median(load-seconds)) s (median)]. #h(1em)
-  G10b, 3L rank ≥ 4, 16 threads, RustRed cold ≤ Forcer (recorded, not blocking): #range-of(g10b).
+  G10b, 3L rank ≥ 4, 16 threads, RustRed cold ≤ Forcer (recorded, not blocking): #range-of(g10b, 9).
 ]
 
 #v(-0.3em)
@@ -321,7 +331,8 @@
 
   *Method.* Timed: the wall time of `Vakint::evaluate` in Retain mode (exact reduction onto masters,
   same frontend and finalizer for both backends) in one fresh process per measurement, with the
-  input parsed and the engine and library loaded beforehand; repetitions:
+  input parsed, the engine and library loaded and the 1L bubble evaluated once beforehand, by either
+  backend, on directories of its own; repetitions:
   #protocol.at("repetitions", default: 3), median. RustRed cold: empty ordered-cache directory, shipped caches off. ws: a fresh
   process on a read-only copy of the cache of its cold run. wc: per loop count, one chain over the
   cells in table order sharing one cache from empty, each cell measured once in the chain. Forcer

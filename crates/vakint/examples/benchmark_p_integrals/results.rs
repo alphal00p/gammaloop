@@ -202,6 +202,40 @@ pub fn check_exact(exact: &Value, source: Source) -> Result<()> {
     Ok(())
 }
 
+/// Whether this binary may record measurements of `source`. `stamp` is the
+/// source it was built from (`just vakint-p-benchmark-build`, an optional
+/// compile-time variable): the tree alone cannot tell an old binary from a
+/// current one. A release measurement is meant for the report, so it needs the
+/// stamp, a clean tree and the real measuring child.
+pub fn check_build(source: Source, stamp: Option<&str>, stub_child: bool) -> Result<()> {
+    if source.build_profile == "release" {
+        ensure!(
+            !source.source_dirty,
+            "a release measurement needs a clean tree: commit, or keep the change under \
+            crates/vakint/docs/benchmark"
+        );
+        ensure!(
+            !stub_child,
+            "--child-program does not measure vakint: refused for a release measurement"
+        );
+        ensure!(
+            stamp.is_some(),
+            "a release measurement needs a stamped binary: build it with \
+            `just vakint-p-benchmark-build`"
+        );
+    }
+    if let Some(stamp) = stamp {
+        let dirty = if source.source_dirty { "-dirty" } else { "" };
+        let tree = format!("{}{dirty}", source.gammaloop_sha);
+        ensure!(
+            stamp == tree,
+            "this binary is built from {stamp}, the tree is at {tree}: rebuild with \
+            `just vakint-p-benchmark-build`"
+        );
+    }
+    Ok(())
+}
+
 /// The seconds of the reduction sub-line. A capture without a math span
 /// reports zero, which is no measurement.
 pub fn reduction_seconds(complete: bool, intervals: usize, math: Option<f64>) -> Option<f64> {
