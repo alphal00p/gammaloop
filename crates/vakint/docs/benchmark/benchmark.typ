@@ -337,7 +337,7 @@
     #protocol.cpu_model on #protocol.host,
     CPUs #protocol.cpus.pairs().map(pair => pair.at(0) + " thread: " + pair.at(1)).join("; "),
     binding #if protocol.numactl == none [none] else { raw(protocol.numactl) },
-    RustRed arithmetic #protocol.ordered_weight_arithmetic.pairs().map(pair => pair.at(0) + " thread: " + pair.at(1)).join("; "),
+    RustRed arithmetic #protocol.ordered_weight_arithmetic.pairs().map(pair => pair.at(0) + " thread: " + pair.at(1).split("(").first()).join("; "),
     #raw(str(measurements.len())) measurements in `data/p_results.json`.
   ]
 ]
