@@ -20,12 +20,24 @@ use crate::{Vakint, VakintError};
 
 const RELEASES: &str = "https://github.com/alphal00p/vakint-external-data/releases/download";
 const MAX_MANIFEST_BYTES: u64 = 16 * 1024 * 1024;
+/// Bounds of the `data-latest` check that an existing `latest` installation makes on
+/// every load (one attempt, no retry, a small manifest behind a redirect): connecting,
+/// and the whole request. The caller's `timeout` and `read_idle_timeout` lower both
+/// (the read-idle bound applies to the whole check).
+const LATEST_CHECK_CONNECT: Duration = Duration::from_secs(5);
+const LATEST_CHECK_TOTAL: Duration = Duration::from_secs(20);
 
 #[derive(Clone, Debug)]
 pub struct OfficialExternalDataOptions {
+    /// A release tag, or "latest" (the default): the release the `data-latest` alias
+    /// names. An existing "latest" installation checks the alias on each load (one
+    /// bounded attempt, no retry) and moves to the release it names; when the alias
+    /// cannot be read, the cached release is used offline.
     pub version: String,
     /// None resolves the current working directory when the loader is called.
     pub local_artifacts_path: Option<PathBuf>,
+    /// With "latest": resolve `data-latest` with the ordinary transfer options and
+    /// report a failure instead of falling back to the cached release.
     pub refresh: bool,
     /// Optional timeout for each HTTP request; `None` (the default) sets none, so a
     /// large download on a slow link is never cut. Native authentication, copying
@@ -211,12 +223,10 @@ impl Vakint {
         if let Some(version) = &cached_version {
             version_component(version)?;
         }
-        let local_manifest = cached_version
-            .as_ref()
-            .map(|v| cache.join(v).join("manifest.json"));
-        let tls = ureq::native_tls::TlsConnector::new().map_err(data::failure)?;
+        let tls =
+            std::sync::Arc::new(ureq::native_tls::TlsConnector::new().map_err(data::failure)?);
         let mut builder = ureq::AgentBuilder::new()
-            .tls_connector(std::sync::Arc::new(tls))
+            .tls_connector(tls.clone())
             .redirects(8);
         if let Some(timeout) = options.timeout {
             builder = builder.timeout(timeout);
@@ -225,7 +235,24 @@ impl Vakint {
             builder = builder.timeout_connect(idle).timeout_read(idle);
         }
         let agent = builder.build();
-        let bytes = if let Some(path) = local_manifest.filter(|p| p.is_file()) {
+        // An existing `latest` installation follows the `data-latest` alias: when it
+        // names another valid release, that release is installed and activated as with
+        // `refresh` (a failure is reported and leaves the engine and the marker as they
+        // were). When the alias cannot be read in time or names no valid release, the
+        // cached release is used without network, as before.
+        let followed = match &cached_version {
+            Some(cached) if options.version == "latest" && !options.refresh => {
+                moved_data_latest(&tls, releases, options, max_loop_count, cached)
+            }
+            _ => None,
+        };
+        let cached_version = cached_version.filter(|_| followed.is_none());
+        let local_manifest = cached_version
+            .as_ref()
+            .map(|v| cache.join(v).join("manifest.json"));
+        let bytes = if let Some(bytes) = followed {
+            bytes
+        } else if let Some(path) = local_manifest.filter(|p| p.is_file()) {
             read_bounded(File::open(path).map_err(data::failure)?, MAX_MANIFEST_BYTES)?
         } else {
             let tag = if options.version == "latest" {
@@ -434,6 +461,38 @@ fn download_manifest(
         }
         Ok(bytes)
     })
+}
+
+/// The `data-latest` manifest if it names a valid release other than `cached`, from one
+/// bounded attempt without retry. Any failure (transport, HTTP status, size, an invalid
+/// manifest or one without the requested loop packs) gives `None`: the cached release
+/// stays in use.
+fn moved_data_latest(
+    tls: &std::sync::Arc<ureq::native_tls::TlsConnector>,
+    releases: &str,
+    options: &OfficialExternalDataOptions,
+    max_loop_count: usize,
+    cached: &str,
+) -> Option<Vec<u8>> {
+    // ureq's whole-request timeout takes precedence over a read timeout, so the
+    // caller's read-idle bound lowers the whole-check bound instead.
+    let shortest = |limit: Duration| {
+        [options.timeout, options.read_idle_timeout]
+            .into_iter()
+            .flatten()
+            .fold(limit, Duration::min)
+    };
+    let agent = ureq::AgentBuilder::new()
+        .tls_connector(tls.clone())
+        .redirects(8)
+        .timeout_connect(shortest(LATEST_CHECK_CONNECT))
+        .timeout(shortest(LATEST_CHECK_TOTAL))
+        .build();
+    let bytes =
+        download_manifest(&agent, &format!("{releases}/data-latest/manifest.json"), 0).ok()?;
+    let manifest: ReleaseManifest = serde_json::from_slice(&bytes).ok()?;
+    validate_manifest(&manifest, max_loop_count).ok()?;
+    (manifest.version != cached).then_some(bytes)
 }
 
 fn read_bounded(reader: impl Read, limit: u64) -> Result<Vec<u8>, RustRedEvaluationError> {

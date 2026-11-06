@@ -448,8 +448,7 @@ fn interrupted_pack_installation_is_transactional_and_resumes_completed_packs() 
 #[test]
 fn refresh_switches_all_requested_loops_together_and_preserves_the_old_installation() {
     let source = fixture();
-    let mut manifest = fixture_manifest(source.path());
-    let original_version = manifest.version.clone();
+    let original_version = fixture_manifest(source.path()).version;
     let refreshed_version = format!("{original_version}-refresh");
     let first = Server::start(release_assets(source.path()));
     let destination = tempfile::tempdir().unwrap();
@@ -463,28 +462,12 @@ fn refresh_switches_all_requested_loops_together_and_preserves_the_old_installat
         .load_official_external_data_from(2, &options, &first.url)
         .unwrap();
     assert_eq!(old.version, original_version);
-    manifest.version = refreshed_version.clone();
-    for pack in &mut manifest.loop_packs {
-        let path = source.path().join(&pack.manifest);
-        let mut payload: serde_json::Value =
-            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-        payload["version"] = serde_json::json!(manifest.version);
-        let bytes = serde_json::to_vec(&payload).unwrap();
-        pack.manifest_sha256 = format!("{:x}", Sha256::digest(&bytes));
-        pack.archive = format!(
-            "vakint-external-data-{}-{}L.tar.gz",
-            manifest.version, pack.loop_count
-        );
-        fs::write(path, bytes).unwrap();
-    }
-    fs::write(
-        source.path().join("manifest.json"),
-        serde_json::to_vec(&manifest).unwrap(),
-    )
-    .unwrap();
+    retag_release(source.path(), &refreshed_version);
     let newer = Server::start(release_assets(source.path()));
+    // Offline the existing installation keeps its cached release (with the release
+    // server reachable it would follow data-latest: see the test below).
     let unchanged = engine
-        .load_official_external_data_from(2, &options, &newer.url)
+        .load_official_external_data_from(2, &options, "http://127.0.0.1:1")
         .unwrap();
     assert_eq!(unchanged.version, original_version);
     assert_eq!(unchanged.path, old.path);
@@ -528,6 +511,171 @@ fn refresh_switches_all_requested_loops_together_and_preserves_the_old_installat
     assert_eq!(pinned.version, original_version);
     assert_eq!(pinned.path, old.path);
     assert!(pinned.loops.iter().all(|pack| pack.source == "reused"));
+}
+
+/// Re-declare the release in `root` as `version` (its root and loop-pack manifests and
+/// the archive names), as the next published release would be.
+fn retag_release(root: &Path, version: &str) {
+    let mut manifest = fixture_manifest(root);
+    manifest.version = version.to_owned();
+    for pack in &mut manifest.loop_packs {
+        let path = root.join(&pack.manifest);
+        let mut payload: serde_json::Value =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        payload["version"] = serde_json::json!(manifest.version);
+        let bytes = serde_json::to_vec(&payload).unwrap();
+        pack.manifest_sha256 = format!("{:x}", Sha256::digest(&bytes));
+        pack.archive = format!(
+            "vakint-external-data-{}-{}L.tar.gz",
+            manifest.version, pack.loop_count
+        );
+        fs::write(path, bytes).unwrap();
+    }
+    fs::write(
+        root.join("manifest.json"),
+        serde_json::to_vec(&manifest).unwrap(),
+    )
+    .unwrap();
+}
+
+#[test]
+fn cached_latest_follows_a_moved_data_latest_and_falls_back_offline() {
+    let source = fixture();
+    let original_version = fixture_manifest(source.path()).version;
+    let moved_version = format!("{original_version}-next");
+    let first = Server::start(release_assets(source.path()));
+    let destination = tempfile::tempdir().unwrap();
+    let installations = destination.path().join(".vakint-external-data");
+    let marker = installations.join("latest");
+    let options = OfficialExternalDataOptions {
+        local_artifacts_path: Some(destination.path().to_owned()),
+        timeout: Some(Duration::from_secs(3)),
+        ..Default::default()
+    };
+    let mut engine = Vakint::new().unwrap();
+    let old = engine
+        .load_official_external_data_from(2, &options, &first.url)
+        .unwrap();
+    assert_eq!(old.version, original_version);
+    assert_eq!(fs::read_to_string(&marker).unwrap(), original_version);
+    // data-latest still names the cached release: reused, nothing downloaded
+    let same = engine
+        .load_official_external_data_from(2, &options, &first.url)
+        .unwrap();
+    assert_eq!(same.path, old.path);
+    assert!(same.loops.iter().all(|pack| pack.source == "reused"));
+    drop(first);
+
+    // A new release is published and data-latest moves to it: the next ordinary
+    // load (no refresh) installs and activates it and moves the marker.
+    retag_release(source.path(), &moved_version);
+    let moved = Server::start(release_assets(source.path()));
+    let followed = engine
+        .load_official_external_data_from(2, &options, &moved.url)
+        .unwrap();
+    assert_eq!(followed.version, moved_version);
+    assert_eq!(followed.path, installations.join(&moved_version));
+    assert!(
+        followed
+            .loops
+            .iter()
+            .all(|pack| pack.source == "downloaded")
+    );
+    assert_eq!(fs::read_to_string(&marker).unwrap(), moved_version);
+    let active = engine.rustred_data().unwrap();
+    assert!((1..=2).all(|count| active.loops[&count].manifest.version == moved_version));
+    assert!(old.path.join("1L/ibps/rules.rrbin").is_file());
+    drop(moved);
+
+    // A data-latest manifest that is no valid release is not followed.
+    let broken = Server::start(BTreeMap::from([(
+        "/broken/manifest.json".to_owned(),
+        b"{}".to_vec(),
+    )]));
+    let kept = engine
+        .load_official_external_data_from(2, &options, &broken.url)
+        .unwrap();
+    assert_eq!(kept.version, moved_version);
+    assert!(kept.loops.iter().all(|pack| pack.source == "reused"));
+    drop(broken);
+    // Offline: the cached release, without network.
+    let offline = engine
+        .load_official_external_data_from(2, &options, "http://127.0.0.1:1")
+        .unwrap();
+    assert_eq!(offline.version, moved_version);
+    assert_eq!(offline.path, followed.path);
+    assert!(offline.loops.iter().all(|pack| pack.source == "reused"));
+    // An explicit version stays pinned and leaves the marker alone.
+    let pinned = engine
+        .load_official_external_data_from(
+            2,
+            &OfficialExternalDataOptions {
+                version: original_version.clone(),
+                ..options
+            },
+            "http://127.0.0.1:1",
+        )
+        .unwrap();
+    assert_eq!(pinned.version, original_version);
+    assert_eq!(pinned.path, old.path);
+    assert_eq!(fs::read_to_string(&marker).unwrap(), moved_version);
+}
+
+#[test]
+fn data_latest_check_is_one_bounded_attempt() {
+    let source = fixture();
+    let version = fixture_manifest(source.path()).version;
+    let server = Server::start(release_assets(source.path()));
+    let destination = tempfile::tempdir().unwrap();
+    let mut options = OfficialExternalDataOptions {
+        local_artifacts_path: Some(destination.path().to_owned()),
+        timeout: Some(Duration::from_secs(3)),
+        ..Default::default()
+    };
+    let mut engine = Vakint::new().unwrap();
+    engine
+        .load_official_external_data_from(1, &options, &server.url)
+        .unwrap();
+    drop(server);
+    // A release server that accepts connections and never answers.
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    listener.set_nonblocking(true).unwrap();
+    let stop = Arc::new(AtomicBool::new(false));
+    let accepted = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let handle = {
+        let (stop, accepted) = (Arc::clone(&stop), Arc::clone(&accepted));
+        thread::spawn(move || {
+            let mut open = Vec::new();
+            while !stop.load(Ordering::Relaxed) {
+                match listener.accept() {
+                    Ok((stream, _)) => {
+                        accepted.fetch_add(1, Ordering::Relaxed);
+                        open.push(stream);
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        thread::sleep(Duration::from_millis(5))
+                    }
+                    Err(error) => panic!("silent fixture server: {error}"),
+                }
+            }
+        })
+    };
+    // The read-idle bound limits the whole check; the retry counter does not apply.
+    options.read_idle_timeout = Some(Duration::from_millis(300));
+    options.transfer_retries = 5;
+    let started = std::time::Instant::now();
+    let report = engine
+        .load_official_external_data_from(1, &options, &url)
+        .unwrap();
+    let elapsed = started.elapsed();
+    thread::sleep(Duration::from_millis(50));
+    stop.store(true, Ordering::Relaxed);
+    handle.join().unwrap();
+    assert_eq!(report.version, version);
+    assert_eq!(report.loops[0].source, "reused");
+    assert_eq!(accepted.load(Ordering::Relaxed), 1, "one attempt, no retry");
+    assert!(elapsed < Duration::from_secs(3), "check took {elapsed:?}");
 }
 
 #[test]

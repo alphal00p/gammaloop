@@ -8,7 +8,8 @@ ship the Ordered step caches of every loop pack (the five-loop one trimmed to th
 size budget) and the five-loop route preparation add-on instead. A new managed
 installation of v0.2.0 or `data-latest` receives them, as does an existing one
 loaded with `version="v0.2.0"` or `refresh=True`; an existing `data-latest`
-installation keeps its cached release (for example v0.1.2) until it is refreshed
+installation (for example of v0.1.2) moves to the release `data-latest` names when
+it is next loaded with the release server reachable
 (see #link("docs/ordered_reduction.typ")[the ordered reduction notes]).
 FORM reduction rules and their hard-coded master formulas remain in Vakint.
 
@@ -60,8 +61,17 @@ unrelated valid `manifest.json` is preserved and does not block a managed instal
 empty loop-named directories alone do not identify an external-data checkout.
 
 Managed installations reuse validated files without downloading or extracting
-again. `refresh=True` checks the `data-latest` release alias; pinned versions remain
-immutable. A failed refresh reports an error and leaves the active engine intact.
+again. With `version="latest"` an existing installation checks the `data-latest`
+release alias on every load, once and without retry, bounded by 5 s to connect
+and 20 s in total (or the shorter `timeout` / `read_idle_timeout` of the options,
+which then bounds the whole check). When the alias names another release, that
+release is installed and activated as with `refresh=True` and becomes the cached
+`latest`; when the alias cannot be read or names no valid release, the cached
+release is used offline.
+`refresh=True` resolves the alias with the ordinary transfer options and reports a
+failure. Pinned versions remain immutable and are reused without network access.
+A failed refresh or a failed move to a new release reports an error and leaves the
+active engine and the cached `latest` release intact.
 Checksums, relative paths and schemas are checked before activation. Native
 program bindings are checked when their native payloads are activated. Loading a new snapshot replaces the prior external selection;
 old clones keep their existing immutable data and loaded applications.
