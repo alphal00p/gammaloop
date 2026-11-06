@@ -2,6 +2,7 @@
 # ruff: noqa: E501, F401
 
 import builtins
+import collections.abc
 import os
 import pathlib
 import symbolica
@@ -345,6 +346,19 @@ class Vakint:
     the five-loop catalogue is attached only after successful artifact loading.
     RustRed, which always reduces with its ordered scheduler, is the default
     backend; it does not need FORM.
+
+    Long calls (data loading, evaluation, cache warming) run their native work
+    with the GIL released, so other Python threads keep running. On the main
+    thread they are interruptible: Ctrl-C (or marimo's Interrupt button)
+    stops the native work at its next checkpoint, raises ``KeyboardInterrupt``
+    (marimo: its interruption) and leaves the engine usable. Evaluations stop
+    within a fraction of a second in most stages; loads stop between data
+    files and program load steps and keep the previously loaded data. Without
+    a Symbolica license the work stays on the calling thread (one Symbolica
+    thread) and only the final progress snapshot is delivered. The
+    ``progress`` keyword shows a status indicator in marimo notebooks ("auto",
+    the default), passes ``VakintProgress`` snapshots to a callable, or is off
+    (None).
     """
     @property
     def n_cores(self) -> builtins.int:
@@ -358,18 +372,59 @@ class Vakint:
         "exact" or "modular_sampled"; "threads" appears only when the selection
         fixes the modular workers instead of following `n_cores`.
         """
-    def load_external_data(self, path: builtins.str | os.PathLike | pathlib.Path, max_loop_count: builtins.int) -> None:
+    def load_external_data(self, path: builtins.str | os.PathLike | pathlib.Path, max_loop_count: builtins.int, *, progress: typing.Literal['auto'] | collections.abc.Callable[[VakintProgress], None] | None = 'auto') -> None:
         r"""
         Load a local external-data checkout without network access.
+
+        Ctrl-C stops the load between data files and program load steps (a
+        five-loop application load finishes its native step first); an
+        interrupted load keeps the previously loaded data.
+
+        Parameters
+        ----------
+
+        path : str | os.PathLike
+            The external-data checkout.
+        max_loop_count : int
+            Load the packs of 1 to max_loop_count loops.
+        progress : {"auto"}, Callable[[VakintProgress], None] or None, optional
+            Defaults to "auto": a marimo status indicator (spinner, or a bar over the
+            Ordered schedule) when marimo.running_in_notebook() is true and the call
+            takes longer than 0.5 s; nothing elsewhere. A callable receives
+            `VakintProgress` snapshots on the calling thread; an exception it raises
+            cancels the call and is re-raised. None disables progress.
         """
     def load_rustred_artifacts(self, loop_count: builtins.int, path: builtins.str | os.PathLike | pathlib.Path) -> None:
         r"""
         Load a local loop pack, or a sealed lower-loop native rules file.
         """
-    def load_official_external_data(self, max_loop_count: builtins.int, version: builtins.str = 'latest', local_artifacts_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, refresh: builtins.bool = False) -> dict:
+    def load_official_external_data(self, max_loop_count: builtins.int, version: builtins.str = 'latest', local_artifacts_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, refresh: builtins.bool = False, *, progress: typing.Literal['auto'] | collections.abc.Callable[[VakintProgress], None] | None = 'auto') -> dict:
         r"""
         Install all official loop packs through the requested maximum, or load a
         supplied checkout directly. Existing validated installations work offline.
+
+        Ctrl-C stops the load between download chunks, data files and program
+        load steps (a five-loop application load finishes its native step
+        first); an interrupted load keeps the previously loaded data, and a
+        partly downloaded pack is not installed.
+
+        Parameters
+        ----------
+
+        max_loop_count : int
+            Install and load the packs of 1 to max_loop_count loops.
+        version : str
+            Release tag, or "latest".
+        local_artifacts_path : Optional[str | os.PathLike]
+            A checkout to load instead of a download.
+        refresh : bool
+            Download again even when a validated installation exists.
+        progress : {"auto"}, Callable[[VakintProgress], None] or None, optional
+            Defaults to "auto": a marimo status indicator (spinner, or a bar over the
+            Ordered schedule) when marimo.running_in_notebook() is true and the call
+            takes longer than 0.5 s; nothing elsewhere. A callable receives
+            `VakintProgress` snapshots on the calling thread; an exception it raises
+            cancels the call and is re-raised. None disables progress.
         """
     def __new__(cls, run_time_decimal_precision: typing.Optional[builtins.int] = None, evaluation_order: typing.Optional[typing.Sequence[VakintEvaluationMethod]] = None, tensor_reduction_method: typing.Optional[builtins.str] = None, epsilon_symbol: typing.Optional[Expression] = None, mu_r_sq_symbol: typing.Optional[Expression] = None, form_exe_path: typing.Optional[builtins.str] = None, python_exe_path: typing.Optional[builtins.str] = None, verify_numerator_identification: typing.Optional[builtins.bool] = None, integral_normalization_factor: typing.Optional[builtins.str] = None, allow_unknown_integrals: typing.Optional[builtins.bool] = None, clean_tmp_dir: typing.Optional[builtins.bool] = None, number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None, use_dot_product_notation: typing.Optional[builtins.bool] = None, temporary_directory: typing.Optional[builtins.str] = None, rustred_artifact_path: typing.Optional[builtins.str] = None, rustred_cache_bytes: typing.Optional[builtins.int] = None, rustred_cache_terms: typing.Optional[builtins.int] = None, rustred_product_cache_bytes: typing.Optional[builtins.int] = None, rustred_product_cache_terms: typing.Optional[builtins.int] = None, rustred_scalar_max_work: typing.Optional[builtins.int] = None, max_process_rss_bytes: typing.Optional[builtins.int] = None, max_elapsed_seconds: typing.Optional[builtins.float] = None, n_cores: typing.Optional[builtins.int] = None, ordered_weight_arithmetic: typing.Optional[builtins.str] = None, ordered_cache: builtins.str = 'read-write', ordered_cache_directory: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, ordered_cache_ram_bytes: typing.Optional[builtins.int] = None, ordered_cache_autosave: builtins.str = 'after-evaluation') -> Vakint:
         r"""
@@ -472,7 +527,8 @@ class Vakint:
             Worker threads of this instance: the single source of every Vakint and RustRed
             worker count (Ordered scheduler, modular weight arithmetic, five-loop frontend,
             retained post-processing, five-loop route verification in data loading).
-            1 runs every computation on the calling thread without spawning a thread.
+            1 runs every computation on one thread without a thread pool (Python calls
+            run their native work on one request thread, so Ctrl-C stays responsive).
             None (default) uses min(10, cores available to this process), or 1 without a
             Symbolica license. Results are identical for every value.
         ordered_weight_arithmetic : Optional[str]
@@ -534,7 +590,7 @@ class Vakint:
         Files are kept and reopened by the next evaluation; unsaved records are
         discarded (call `save_ordered_cache` first to keep them).
         """
-    def warm_ordered_cache(self, integrals: typing.Sequence[Expression]) -> dict:
+    def warm_ordered_cache(self, integrals: typing.Sequence[Expression], *, progress: typing.Literal['auto'] | collections.abc.Callable[[VakintProgress], None] | None = 'auto') -> dict:
         r"""
         Populate the Ordered step caches by reducing each integral expression
         with RustRed (retained masters; the results are discarded), then save
@@ -549,13 +605,19 @@ class Vakint:
 
         integrals : Sequence[Expression]
           Vakint integral expressions, as accepted by `evaluate`.
+        progress : {"auto"}, Callable[[VakintProgress], None] or None, optional
+            Defaults to "auto": a marimo status indicator (spinner, or a bar over the
+            Ordered schedule) when marimo.running_in_notebook() is true and the call
+            takes longer than 0.5 s; nothing elsewhere. A callable receives
+            `VakintProgress` snapshots on the calling thread; an exception it raises
+            cancels the call and is re-raised. None disables progress.
         """
     def load_rustred_application(self, path: builtins.str) -> None:
         r"""
         Explicitly load a local five-loop application package once.
         Also selects this package in the engine settings.
         """
-    def evaluate_rustred_symbolic(self, integral_expression: Expression, *, monitor: builtins.str = 'off', progress_snapshot: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, progress_interval_seconds: builtins.float = 1.0) -> tuple[Expression, builtins.list[Expression], builtins.list[tuple[Expression, builtins.str]]]:
+    def evaluate_rustred_symbolic(self, integral_expression: Expression, *, monitor: builtins.str = 'off', progress_snapshot: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, progress_interval_seconds: builtins.float = 1.0, progress: typing.Literal['auto'] | collections.abc.Callable[[VakintProgress], None] | None = 'auto') -> tuple[Expression, builtins.list[Expression], builtins.list[tuple[Expression, builtins.str]]]:
         r"""
         Apply the selected five-loop package and retain its symbolic conditions.
 
@@ -565,7 +627,8 @@ class Vakint:
         master values are substituted. The ordinary native tensor prepass runs
         before scalar application, with the same settings as `evaluate`.
         Optional `monitor` diagnostics are local to this call. A snapshot path
-        enables JSON output independently of the terminal display.
+        enables JSON output independently of the terminal display. `progress`
+        is as for `evaluate`.
         """
     def get_constant(self, symbol: ConstantSymbol, prec: builtins.int = 16) -> VakintConstant:
         r"""
@@ -711,7 +774,7 @@ class Vakint:
         integral_expression : Expression
            A Symbolica expression representing a vakint integral.
         """
-    def evaluate_integral(self, integral_expression: Expression) -> Expression:
+    def evaluate_integral(self, integral_expression: Expression, *, progress: typing.Literal['auto'] | collections.abc.Callable[[VakintProgress], None] | None = 'auto') -> Expression:
         r"""
         Perform the parametric evaluation of *only the integral* appearing in the Symbolica expression given in input representing a vakint integral.
         The numerator is left unchanged.
@@ -740,8 +803,14 @@ class Vakint:
 
         integral_expression : Expression
           A Symbolica expression representing a vakint integral.
+        progress : {"auto"}, Callable[[VakintProgress], None] or None, optional
+            Defaults to "auto": a marimo status indicator (spinner, or a bar over the
+            Ordered schedule) when marimo.running_in_notebook() is true and the call
+            takes longer than 0.5 s; nothing elsewhere. A callable receives
+            `VakintProgress` snapshots on the calling thread; an exception it raises
+            cancels the call and is re-raised. None disables progress.
         """
-    def evaluate(self, integral_expression: Expression, *, monitor: builtins.str = 'off', progress_snapshot: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, progress_interval_seconds: builtins.float = 1.0) -> Expression:
+    def evaluate(self, integral_expression: Expression, *, monitor: builtins.str = 'off', progress_snapshot: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, progress_interval_seconds: builtins.float = 1.0, progress: typing.Literal['auto'] | collections.abc.Callable[[VakintProgress], None] | None = 'auto') -> Expression:
         r"""
         Perform the complete parametric evaluation of the Vakint integral represented by the Symbolica expression given in input.
         Note that the tensor reduction will be automatically performed on the input given.
@@ -770,8 +839,22 @@ class Vakint:
 
         integral_expression : Expression
           A Symbolica expression representing a vakint integral.
-        Optional native diagnostics use `monitor="tui"` or `monitor="json"`.
-        A `progress_snapshot` path also enables JSON with terminal monitoring off.
+        monitor : str
+          Native diagnostics: "off" (default), "tui" (terminal dashboard) or "json".
+        progress_snapshot : Optional[str | os.PathLike]
+          A file atomically replaced by the latest native JSON snapshot; enables JSON
+          with terminal monitoring off.
+        progress_interval_seconds : float
+          Minimum interval of native snapshots (and of `progress` deliveries).
+        progress : {"auto"}, Callable[[VakintProgress], None] or None, optional
+            Defaults to "auto": a marimo status indicator (spinner, or a bar over the
+            Ordered schedule) when marimo.running_in_notebook() is true and the call
+            takes longer than 0.5 s; nothing elsewhere. A callable receives
+            `VakintProgress` snapshots on the calling thread; an exception it raises
+            cancels the call and is re-raised. None disables progress.
+
+        Ctrl-C (or marimo's Interrupt) raises KeyboardInterrupt within a fraction
+        of a second in most stages and leaves the engine usable.
         """
 
 @typing.final
@@ -1217,6 +1300,125 @@ class VakintNumericalResult:
         max_pull : Optional[float]
            The maximum pull for comparison. Default is 3.0.
         """
+
+@typing.final
+class VakintProgress:
+    r"""
+    One immutable progress snapshot of a running (or finished) Vakint call.
+
+    Passed to a ``progress`` callback of ``Vakint.evaluate`` and the other
+    long calls, on the calling thread, at most once per
+    ``progress_interval_seconds`` (at least 0.25 s apart), on every stage
+    change and once at the end with the final ``status``. Snapshots stay valid
+    after the call. Counts are absent (None) when the current stage has no
+    such measurement; ``phase`` is a position in the Ordered schedule, not a
+    fraction of the remaining time.
+
+    Examples
+    --------
+    >>> from symbolica import E
+    >>> from symbolica.community.hepkit.vakint import Vakint, VakintEvaluationMethod
+    >>> engine = Vakint(evaluation_order=[VakintEvaluationMethod.new_rustred_method(master_mode="retain")])
+    >>> snapshots = []
+    >>> integral = E("topo(I1L(1,2))", default_namespace="vakint")
+    >>> _ = engine.evaluate(integral, progress=snapshots.append)
+    >>> snapshots[-1].status
+    'succeeded'
+    """
+    @property
+    def status(self) -> builtins.str:
+        r"""
+        "running", "succeeded", "failed", "partial" or "interrupted".
+        """
+    @property
+    def elapsed_seconds(self) -> builtins.float:
+        r"""
+        Seconds since the call started.
+        """
+    @property
+    def stage(self) -> builtins.str:
+        r"""
+        Stage kind: "setup", "data_load", "ingress", "lowering", "native",
+        "post_processing", "output" or "other".
+        """
+    @property
+    def activity(self) -> builtins.str:
+        r"""
+        What the call is doing now, in words (native activity or caller stage).
+        """
+    @property
+    def batch(self) -> typing.Optional[tuple[builtins.int, builtins.int, builtins.str]]:
+        r"""
+        Ordered batches of the evaluation: (completed, total, label).
+        """
+    @property
+    def phase(self) -> typing.Optional[tuple[builtins.int, builtins.int]]:
+        r"""
+        Ordered schedule position: (running phase index, phase total).
+        """
+    @property
+    def phase_kind(self) -> typing.Optional[builtins.str]:
+        r"""
+        Kind of the running Ordered phase: "route", "apply", "reduce" or "done".
+        """
+    @property
+    def processed_keys(self) -> typing.Optional[builtins.int]:
+        r"""
+        Integral keys processed by the native reduction request.
+        """
+    @property
+    def input_keys(self) -> typing.Optional[builtins.int]:
+        r"""
+        Input keys of the native reduction request.
+        """
+    @property
+    def keys_per_second(self) -> typing.Optional[builtins.float]:
+        r"""
+        Recent (about 30 s) or whole-request key rate.
+        """
+    @property
+    def frontier_keys(self) -> typing.Optional[builtins.int]:
+        r"""
+        Keys on the Ordered frontier now.
+        """
+    @property
+    def peak_frontier_keys(self) -> typing.Optional[builtins.int]:
+        r"""
+        Largest Ordered frontier of the request.
+        """
+    @property
+    def step_cache_hits(self) -> typing.Optional[builtins.int]:
+        r"""
+        Ordered step-cache hits of the request.
+        """
+    @property
+    def step_cache_misses(self) -> typing.Optional[builtins.int]:
+        r"""
+        Ordered step-cache misses (computed steps) of the request.
+        """
+    @property
+    def rss_bytes(self) -> typing.Optional[builtins.int]:
+        r"""
+        Resident memory of this process.
+        """
+    @property
+    def peak_rss_bytes(self) -> typing.Optional[builtins.int]:
+        r"""
+        Peak resident memory of this process.
+        """
+    @property
+    def summary(self) -> builtins.str:
+        r"""
+        One line with the available metrics, e.g.
+        "Apply 38/83 · 6312 keys/s · frontier 12.3k (peak 174.9k) · ...".
+        """
+    def to_dict(self) -> dict[str, typing.Any]:
+        r"""
+        The full monitor model (schema ``vakint.monitor.v2``, as in the
+        ``model`` object of a ``progress_snapshot`` file). Calls without a
+        native monitor give the status, elapsed time and stage only.
+        """
+    def __repr__(self) -> builtins.str: ...
 
 def integral_from_diagram(diagram: FeynmanDiagram, family: IntegralFamily, numerator: Expression, *, powers: typing.Sequence[int] | None = None, physical_slots: typing.Optional[typing.Sequence[builtins.int]] = None, parameter_substitutions: typing.Mapping[symbolica.Expression, symbolica.Expression] | None = None, external_momenta: typing.Sequence[Expression] = []) -> VakintExpression:
     r"""

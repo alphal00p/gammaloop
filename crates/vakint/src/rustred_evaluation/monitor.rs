@@ -25,6 +25,8 @@ mod tui;
 mod viewer;
 pub(crate) use runtime::{CallerProgress, MonitorContext};
 pub use runtime::{RustRedMonitorScope, RustRedMonitorWork};
+#[cfg(feature = "symbolica_community_module")]
+pub(crate) use sink::ProgressMetrics;
 pub use sink::RustRedProgressSink;
 pub use viewer::RustRedSnapshotViewer;
 

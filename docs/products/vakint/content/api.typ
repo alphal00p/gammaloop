@@ -89,6 +89,20 @@ display: reduction continues; `space` freezes the census, `d` shows details, and
 the terminal before interrupting as usual. The snapshot's `monitor.model` is the same typed view
 (schema `vakint.monitor.v2`).
 
+The long Python calls (`evaluate`, `evaluate_integral`, `evaluate_rustred_symbolic`,
+`warm_ordered_cache`, `load_official_external_data`, `load_external_data`) also take
+`progress`: `"auto"` (the default) shows a marimo status indicator (a bar over the Ordered
+schedule when its length is known) inside a marimo notebook and nothing elsewhere, a callable
+receives immutable `VakintProgress` snapshots (status, stage, Ordered phase position, key rate,
+frontier, step-cache counters, memory; `to_dict()` is the same `vakint.monitor.v2` model), and
+`None` disables it. Rust callers get the same model from `RustRedMonitorOptions::progress_sink`.
+These calls run their native work with the GIL released. Ctrl-C (or marimo's Interrupt) stops
+it through a `Cancellation` (Rust: `vakint::Cancellation`): evaluations at their next resource
+checkpoint, usually within a fraction of a second, loads between data files and program load
+steps; the original `KeyboardInterrupt` is raised and the engine stays usable. Without a
+Symbolica license (one Symbolica thread) the work stays on the calling thread, still
+interruptible, and only the final progress snapshot is delivered.
+
 The #link("reference/rust/")[Rust orientation] identifies the compiled crates, versions, and
 feature matrix and links directly to native Rustdoc. The generated
 #link("reference/topologies/")[topology reference] records the runtime topology library and
