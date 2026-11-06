@@ -508,6 +508,8 @@ fn run_forcer_in(
     let mut command = form_command(settings);
     command.arg("run_forcer.frm").current_dir(run_directory);
     debug!("Running {} with command: {:?}", "Forcer".green(), command);
+    #[cfg(feature = "experimental-rustred")]
+    let started = std::time::Instant::now();
     let output = command
         .stderr(Stdio::piped())
         .stdout(Stdio::piped())
@@ -516,6 +518,8 @@ fn run_forcer_in(
             form_exe_path: settings.form_exe_path.clone(),
             reason: format!("could not be run ({error})"),
         })?;
+    #[cfg(feature = "experimental-rustred")]
+    benchmark::record(program, started.elapsed());
     let failure = |stderr: String| {
         VakintError::FormError(
             stderr,
@@ -656,6 +660,36 @@ impl Vakint {
             options.master_mode,
             "Forcer",
         )
+    }
+}
+
+/// Process-global record of the FORM runs for
+/// `examples/benchmark_p_integrals.rs` (not part of the API). The Forcer
+/// materialisation base needs no hook: it is the settings'
+/// `temporary_directory`.
+#[cfg(feature = "experimental-rustred")]
+#[doc(hidden)]
+pub mod benchmark {
+    use std::sync::Mutex;
+    use std::time::Duration;
+
+    static RUNS: Mutex<(Duration, Vec<String>)> = Mutex::new((Duration::ZERO, Vec::new()));
+
+    pub(super) fn record(program: &str, elapsed: Duration) {
+        let mut runs = RUNS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        runs.0 += elapsed;
+        runs.1.push(program.to_owned());
+    }
+
+    /// The summed wall time of the FORM subprocesses and their programs, in
+    /// run order, since the previous call.
+    pub fn take() -> (Duration, Vec<String>) {
+        let mut runs = RUNS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        (std::mem::take(&mut runs.0), std::mem::take(&mut runs.1))
     }
 }
 

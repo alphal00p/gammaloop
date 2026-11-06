@@ -288,3 +288,8 @@ test_one TEST_NAME:
 # Run integration tests with nocapture (shows output during test execution)
 test-verbose TEST_NAME:
     cargo nextest run {{ TEST_NAME }} --nocapture
+
+# The p-integral benchmark report from crates/vakint/docs/benchmark/data; run it
+# inside the dev shell (Typst 0.15.1, Roboto in TYPST_FONT_PATHS).
+vakint-p-benchmark-pdf:
+    typst compile --root crates/vakint/docs/benchmark crates/vakint/docs/benchmark/benchmark.typ crates/vakint/docs/benchmark/benchmark.pdf

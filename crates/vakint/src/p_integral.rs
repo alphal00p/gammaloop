@@ -39,6 +39,10 @@ use crate::{
 
 pub(crate) use catalogue::{PMatch, match_graph};
 pub use dot::to_dot;
+/// FORM run record for the benchmark harness (not part of the API).
+#[cfg(feature = "experimental-rustred")]
+#[doc(hidden)]
+pub use forcer::benchmark as forcer_benchmark;
 /// Frozen Forcer outputs for the integration tests (not part of the API).
 #[doc(hidden)]
 pub use forcer::fixtures as forcer_fixtures;
