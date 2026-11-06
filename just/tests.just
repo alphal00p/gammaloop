@@ -288,3 +288,21 @@ test_one TEST_NAME:
 # Run integration tests with nocapture (shows output during test execution)
 test-verbose TEST_NAME:
     cargo nextest run {{ TEST_NAME }} --nocapture
+
+# The p-integral benchmark harness, stamped with the source it is built from: a
+# release measurement refuses any other binary. The stamp is what the harness
+# calls gammaloop_sha, the last commit outside crates/vakint/docs/benchmark.
+vakint-p-benchmark-build profile="release" *args="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    sources=(. ':(exclude)crates/vakint/docs/benchmark')
+    stamp=$(git log -1 --format=%H -- "${sources[@]}")
+    if [ -n "$(git status --porcelain -- "${sources[@]}")" ]; then stamp+=-dirty; fi
+    VAKINT_P_BENCHMARK_SOURCE=$stamp cargo build --profile {{ profile }} --locked -p vakint \
+        --features vakint/feynkit-ingress,vakint/experimental-rustred \
+        --example benchmark_p_integrals {{ args }}
+
+# The p-integral benchmark report from crates/vakint/docs/benchmark/data; run it
+# inside the dev shell (Typst 0.15.1, Roboto in TYPST_FONT_PATHS).
+vakint-p-benchmark-pdf:
+    typst compile --root crates/vakint/docs/benchmark crates/vakint/docs/benchmark/benchmark.typ crates/vakint/docs/benchmark/benchmark.pdf
