@@ -18,6 +18,7 @@ import tempfile
 import time
 from itertools import pairwise
 from pathlib import Path
+from typing import ClassVar
 from urllib.parse import quote
 
 import gallery_jobs
@@ -28,25 +29,41 @@ class Gallery:
     ladder_directory = directory / "data" / "ladder"
     display_receipt_bytes = 8 * 1024**2
     pages = (
-        ("graphs", "01", "Graphs & numerators"),
-        ("inspect", "02", "Constants & masters"),
-        ("five-loop", "03", "Five-loop: explore"),
-        ("closure", "04", "Pinches & closure"),
-        ("reduce", "05", "Reduce 3L & 4L"),
+        ("graphs", "01", "Graphs & numerators", "01_graphs_and_numerators.py"),
+        ("inspect", "02", "Constants & masters", "02_constants_and_masters.py"),
+        ("five-loop", "03", "Five-loop: explore", "03_five_loop_uv.py"),
+        ("closure", "04", "Pinches & closure", "04_pinches_and_cache.py"),
+        ("reduce", "05", "Reduce 3L & 4L", "05_ladder_reductions.py"),
     )
+    five_loop_fixture_directory = directory / "data" / "five-loop-q0"
     arithmetics = ("modular_polynomial", "modular_sampled", "exact")
     default_max_cores = 4
     default_max_seconds = 1800
     final_states = gallery_jobs.FINAL_STATES
 
+    @staticmethod
+    def mode(mo):
+        """marimo's mode: "edit", "run" (the served gallery) or "script"."""
+        try:
+            return mo.app_meta().mode
+        except (AttributeError, RuntimeError):
+            return None
+
     @classmethod
     def header(cls, mo, page, title, subtitle):
         prefix = os.environ.get("VAKINT_GALLERY_URL_PREFIX", "").rstrip("/")
+        # The gallery server mounts one route per app; marimo's edit server
+        # opens each notebook file of its directory instead.
+        edit = cls.mode(mo) == "edit" and not prefix
+
+        def link(key, source):
+            return f"/?file={quote(source)}" if edit else f"{prefix}/{key}/"
+
         navigation = "".join(
             f'<a class="{"active" if key == page else ""}" '
-            f'href="{html.escape(prefix)}/{key}/">'
+            f'href="{html.escape(link(key, source))}" target="_self">'
             f"<span>{number}</span>{html.escape(label)}</a>"
-            for key, number, label in cls.pages
+            for key, number, label, source in cls.pages
         )
         return mo.Html(
             cls.styles()
@@ -65,21 +82,130 @@ class Gallery:
             "font-display:swap;}</style>"
         )
 
+    # -- Expressions: static previews and the live Symbolica/HEPKit pager ----
+    pager_install_hint = 'pip install "symbolica[notebook-display]"'
+    # Symbolica's own preview footers name the live-notebook route; the
+    # gallery replaces only that sentence and keeps every omission note.
+    _pager_sentences = re.compile(
+        r"Use \.formatted\([^)]*\) in a live notebook with symbolica\[notebook\] "
+        r"to navigate\.|Navigation requires a live notebook with "
+        r"symbolica\[notebook-display\]\."
+    )
+
     @staticmethod
-    def native_formula(mo, expression):
-        """Keep native HTML and omission notes without a view-owned widget model."""
+    def is_tensor(value):
+        return type(value).__name__ == "TensorExpression"
+
+    @staticmethod
+    def live_pager_available(tensor=False):
+        """The live pager needs anywidget (and Typst for tensor pages)."""
+        import importlib.util
+
+        names = ("anywidget", "typst") if tensor else ("anywidget",)
+        return all(importlib.util.find_spec(name) is not None for name in names)
+
+    @classmethod
+    def static_formula(cls, mo, expression, *, note=None):
+        """Native static MathML preview with its omission notes; no widget model.
+
+        For small values and for containers that unmount their content (tabs,
+        accordions, tables). ``note`` replaces Symbolica's sentence about the
+        live notebook route; the preview's item count and markers stay."""
         payload = expression._repr_html_()
         if not isinstance(payload, str) or not payload.strip():
             raise ValueError("This expression has no native HTML presentation")
+        if "Page rendering failed" in payload and cls.is_tensor(expression):
+            # Tensor pages need Typst; the Symbolica MathML of the same value does not.
+            return cls.static_formula(mo, expression.to_expression(), note=note)
+        if note is not None:
+            payload = cls._pager_sentences.sub(html.escape(note), payload)
         return mo.Html('<div class="vg-native-formula">' + payload + "</div>")
 
+    native_formula = static_formula
+
+    @classmethod
+    def formula(cls, mo, value, *, page_size=25):
+        """The live Symbolica/HEPKit pager of a value: page through every item,
+        open numbered omission markers, zoom with + / - / 0.
+
+        Place the result directly in a cell's output (alone or in a vstack),
+        never inside mo.ui.tabs, mo.accordion or a table: those unmount their
+        panels, which disposes the pager's widget model. Without the display
+        packages this falls back to the static preview and says what to install."""
+        tensor = cls.is_tensor(value)
+        if tensor and not cls.live_pager_available(tensor=True):
+            value, tensor = value.to_expression(), False
+        if not cls.live_pager_available():
+            return cls.static_formula(
+                mo,
+                value,
+                note=f"Live pager unavailable here: {cls.pager_install_hint}.",
+            )
+        if tensor:
+            return value.paged(page_size=page_size)
+        return value.formatted(page_size=page_size)
+
     @staticmethod
-    def styles():
+    def frame(mo, payload, *, height=400):
+        """Isolated HTML (scripts, own styles) in an iframe that follows the
+        notebook's light/dark theme instead of the operating system's."""
+        mirror = (
+            "<script>(function(){function sync(){try{var b=window.parent.document.body;"
+            "var t=b.dataset.theme||(b.classList.contains('dark')?'dark':'light');"
+            "var r=document.documentElement;r.dataset.theme=t;r.style.colorScheme=t;"
+            "r.classList.remove('dark','light');r.classList.add(t)}catch(e){}}sync();"
+            "try{new MutationObserver(sync).observe(window.parent.document.body,"
+            "{attributes:true,attributeFilter:['class','data-theme']})}catch(e){}})();"
+            "</script>"
+        )
+        return mo.iframe(
+            mirror + Gallery.styles(frame=True) + payload, height=f"{int(height)}px"
+        )
+
+    @staticmethod
+    def styles(frame=False):
+        dark = (
+            ':is(.dark,.dark-theme,[data-theme="dark"],[data-jp-theme-light="false"])'
+        )
+        light = (
+            ':is(.light,.light-theme,[data-theme="light"],[data-jp-theme-light="true"])'
+        )
+        common = f"""
+        .vg-native-formula {{ max-width:100%; overflow-x:auto; }}
+        .vakint-card table {{ width:100%; }}
+        .vakint-card td,.vakint-card dd {{ overflow-wrap:anywhere; }}
+        /* Vakint cards follow the notebook theme, not the OS setting. */
+        {light} .vakint-card {{ --vk-ink:#18364d; --vk-line:#d5e1e9;
+          --vk-muted:#526777; background:#fff; }}
+        {light} .vakint-card th {{ background:#edf4f8; }}
+        {light} .vakint-card tbody tr:nth-child(even) {{ background:#f8fbfd; }}
+        {dark} .vakint-card {{ --vk-ink:#e1edf4; --vk-muted:#aac0ce;
+          --vk-line:#395361; background:#172b36; }}
+        {dark} .vakint-card th {{ background:#263e4b; }}
+        {dark} .vakint-card tbody tr:nth-child(even) {{ background:#1d3340; }}
+        {dark} .vakint-card .vk-warning {{ background:#41341c; color:#f4d295; }}
+        {dark} .vakint-card .vk-badge {{ background:#234137; color:#caefdf;
+          border-color:#487563; }}
+        """
+        if frame:
+            return (
+                Gallery.math_font_css()
+                + "<style>body{margin:0;font-family:system-ui,sans-serif}"
+                + f"{dark} body{{color:#e1edf4}}"
+                + common
+                + "</style>"
+            )
         return (
             Gallery.math_font_css()
             + """<style>
         :root { --vg-navy:#16324c; --vg-teal:#087e86; --vg-muted:#61758b;
-          --vg-line:#dbe5eb; --vg-paper:#f4f8fa; --vg-amber:#9f5707; }
+          --vg-line:#dbe5eb; --vg-paper:#f4f8fa; --vg-amber:#9f5707;
+          --vg-note-bg:#f0f9f7; --vg-note-ink:#234f54; --vg-note-line:#cfe5e2;
+          --vg-pending-bg:#fff8ec; --vg-pending-ink:#795124;
+          --vg-pending-line:#efd7b8; --vg-active-bg:#e7f5f3;
+          --vg-active-ink:#086c71; --vg-track:#d3ebe8; --vg-fill:#087e86;
+          --vg-good:#0b7d0b; --vg-critical:#c03535; --vg-serious:#b5532c;
+          --vg-warning:#8a5b00; }
         .vg-hero { background:linear-gradient(125deg,#102e46,#17566a);
           color:#fff; padding:2.5rem 2.7rem; border-radius:22px; margin:1rem 0; }
         .vg-eyebrow { font:600 11px/1.8 ui-sans-serif,system-ui;
@@ -93,14 +219,15 @@ class Gallery:
         .vg-nav a { color:var(--vg-muted); font-size:13px; text-decoration:none;
           padding:10px 13px; border:1px solid var(--vg-line); border-radius:9px; }
         .vg-nav span { font-size:10px; opacity:.65; margin-right:7px; }
-        .vg-nav a:hover,.vg-nav a.active { background:#e7f5f3; color:#086c71;
-          border-color:#acd9d3; }
+        .vg-nav a:hover,.vg-nav a.active { background:var(--vg-active-bg);
+          color:var(--vg-active-ink); border-color:#acd9d3; }
         .vg-metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(155px,1fr));
           gap:12px; margin:1.2rem 0; }
         .vg-metric { background:var(--vg-paper); border:1px solid var(--vg-line);
-          border-radius:15px; padding:20px 22px; }
-        .vg-metric strong { display:block; color:var(--vg-navy); font-size:28px;
-          font-weight:600; letter-spacing:-.03em; line-height:1.3; }
+          border-radius:15px; padding:20px 22px; min-width:0; }
+        .vg-metric strong { display:block; color:var(--vg-navy);
+          font-size:clamp(18px,2.4vw,28px); font-weight:600; letter-spacing:-.03em;
+          line-height:1.3; overflow-wrap:anywhere; }
         .vg-metric span { display:block; font-size:12px; color:var(--vg-muted);
           margin-top:7px; line-height:1.5; }
         .vg-section { border-top:1px solid var(--vg-line); padding-top:1.7rem;
@@ -108,25 +235,81 @@ class Gallery:
         .vg-section small { color:var(--vg-teal); font-size:10px;
           letter-spacing:.15em; text-transform:uppercase; }
         .vg-section h2 { font-size:24px; letter-spacing:-.025em; margin:.35rem 0; }
-        .vg-native-formula { max-width:100%; overflow-x:auto; }
         .vg-section p { color:var(--vg-muted); font-size:14px; line-height:1.6; }
-        .vg-note { border:1px solid #cfe5e2; border-left:4px solid #45a69a;
-          background:#f0f9f7; border-radius:10px; padding:17px 20px;
-          margin:1rem 0; color:#234f54; font-size:14px; line-height:1.65;
+        .vg-note { border:1px solid var(--vg-note-line); border-left:4px solid #45a69a;
+          background:var(--vg-note-bg); border-radius:10px; padding:17px 20px;
+          margin:1rem 0; color:var(--vg-note-ink); font-size:14px; line-height:1.65;
           white-space:pre-line; overflow-wrap:anywhere; }
-        .vg-note.pending { border-color:#efd7b8; border-left-color:#d99740;
-          background:#fff8ec; color:#795124; }
+        .vg-note.pending { border-color:var(--vg-pending-line);
+          border-left-color:#d99740; background:var(--vg-pending-bg);
+          color:var(--vg-pending-ink); }
         .vg-note strong { display:block; margin-bottom:4px; }
+        .vg-note code, .vg-legend code { font-size:12px; }
+        .vg-legend { color:var(--vg-muted); font-size:12px; line-height:1.6;
+          margin:.4rem 0 1rem; }
         .vg-foot { color:var(--vg-muted); border-top:1px solid var(--vg-line);
           font-size:11px; padding-top:1rem; margin-top:2rem; line-height:1.7; }
+        .vg-table-wrap { max-width:100%; overflow-x:auto; margin:.8rem 0 1.2rem;
+          border:1px solid var(--vg-line); border-radius:10px; }
+        .vg-table { border-collapse:collapse; width:100%; font-size:13px;
+          color:var(--vg-navy); }
+        .vg-table th { text-align:left; font-weight:600; color:var(--vg-muted);
+          background:var(--vg-paper); padding:9px 12px; font-size:12px;
+          border-bottom:1px solid var(--vg-line); }
+        .vg-table td { padding:9px 12px; vertical-align:top;
+          border-top:1px solid var(--vg-line); overflow-wrap:anywhere;
+          min-width:4.5rem; }
+        .vg-table td.num { font-variant-numeric:tabular-nums; text-align:right;
+          white-space:nowrap; }
+        .vg-table caption { caption-side:bottom; text-align:left; padding:8px 12px;
+          color:var(--vg-muted); font-size:12px; }
+        .vg-monitor { border:1px solid var(--vg-line); border-radius:15px;
+          background:var(--vg-paper); padding:18px 20px; margin:1rem 0;
+          color:var(--vg-navy); }
+        .vg-monitor-head { display:flex; flex-wrap:wrap; align-items:baseline;
+          gap:6px 14px; }
+        .vg-monitor-head strong { font-size:16px; font-weight:600; }
+        .vg-monitor-head .vg-elapsed { margin-left:auto; color:var(--vg-muted);
+          font-size:13px; font-variant-numeric:tabular-nums; }
+        .vg-badge { display:inline-flex; gap:5px; align-items:center;
+          font-size:12px; font-weight:600; padding:3px 9px; border-radius:999px;
+          border:1px solid currentColor; }
+        .vg-badge.running { color:var(--vg-teal); }
+        .vg-badge.succeeded { color:var(--vg-good); }
+        .vg-badge.failed { color:var(--vg-critical); }
+        .vg-badge.interrupted,.vg-badge.stopped { color:var(--vg-serious); }
+        .vg-badge.stale { color:var(--vg-warning); }
+        .vg-meter { margin:14px 0 4px; }
+        .vg-meter-track { height:8px; border-radius:4px; background:var(--vg-track);
+          overflow:hidden; }
+        .vg-meter-fill { height:100%; border-radius:4px; background:var(--vg-fill); }
+        .vg-meter-label { display:flex; justify-content:space-between; gap:12px;
+          font-size:12px; color:var(--vg-muted); margin-top:6px; }
+        .vg-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+          gap:10px; margin-top:14px; }
+        .vg-kpi { border-top:1px solid var(--vg-line); padding-top:8px; min-width:0; }
+        .vg-kpi span { display:block; font-size:12px; color:var(--vg-muted); }
+        .vg-kpi strong { display:block; font-size:20px; font-weight:600;
+          letter-spacing:-.02em; overflow-wrap:anywhere; }
+        .vg-kpi small { display:block; font-size:12px; color:var(--vg-muted); }
+        .vg-monitor-foot { margin-top:12px; font-size:12px; color:var(--vg-muted);
+          line-height:1.6; overflow-wrap:anywhere; }
         .vakint-card { max-width:100%; overflow-x:auto; }
         .vakint-card pre,.vakint-card .value { max-height:18rem; overflow:auto; }
         @media(max-width:600px) { .vg-hero {padding:1.6rem;} .vg-nav a {flex:1 1 40%;}
           .vg-eyebrow span {display:block;margin:0;} }
-        @media(prefers-color-scheme:dark) { :root { --vg-navy:#cbddea;
-          --vg-muted:#a9bdcc; --vg-paper:#172936; --vg-line:#345064; }
-          .vg-note {background:#173834;color:#c5e7df;} }
-        </style>"""
+        /* Dark rules follow the notebook's theme (marimo body class / Jupyter
+           attribute), never the operating system's preference. */
+        DARK { --vg-navy:#cbddea; --vg-muted:#a9bdcc; --vg-paper:#172936;
+          --vg-line:#345064; --vg-teal:#5cc6c0; --vg-note-bg:#173834;
+          --vg-note-ink:#c5e7df; --vg-note-line:#2e5b55; --vg-pending-bg:#3a2e1a;
+          --vg-pending-ink:#f1d3a2; --vg-pending-line:#6b5531;
+          --vg-active-bg:#173834; --vg-active-ink:#9fe0da; --vg-track:#1f4547;
+          --vg-fill:#4fb8b5; --vg-good:#5fd35f; --vg-critical:#ff8a8a;
+          --vg-serious:#f2a07c; --vg-warning:#f6c453; }
+        """.replace("DARK", dark)
+            + common
+            + "</style>"
         )
 
     @staticmethod
@@ -157,6 +340,93 @@ class Gallery:
             f"<strong>{html.escape(title)}</strong>{html.escape(message)}</div>"
         )
 
+    @staticmethod
+    def legend(mo, text):
+        """One small line explaining notation next to a formula."""
+        return mo.Html(f'<p class="vg-legend">{html.escape(text)}</p>')
+
+    @staticmethod
+    def cell_html(value):
+        """Table cell content: marimo Html (links, formulas) stays HTML,
+        everything else is escaped text."""
+        if hasattr(value, "text") and callable(getattr(value, "_mime_", None)):
+            return value.text
+        if value is None:
+            return "—"
+        if isinstance(value, float):
+            return html.escape(f"{value:,.3f}".rstrip("0").rstrip("."))
+        if isinstance(value, int) and not isinstance(value, bool):
+            return f"{value:,}"
+        return html.escape(str(value))
+
+    @classmethod
+    def table(cls, mo, rows, columns=None, *, caption=None, numeric=()):
+        """A small read-only table that wraps long cells instead of clipping them.
+
+        ``rows`` are dicts; ``columns`` (default: the first row's keys) fixes
+        the order; ``numeric`` columns align right in tabular figures."""
+        rows = list(rows)
+        if columns is None:
+            columns = list(rows[0]) if rows else []
+        head = "".join(f'<th scope="col">{html.escape(str(c))}</th>' for c in columns)
+        number_cell = ' class="num"'
+        body = "".join(
+            "<tr>"
+            + "".join(
+                f"<td{number_cell if column in numeric else ''}>"
+                f"{cls.cell_html(row.get(column))}</td>"
+                for column in columns
+            )
+            + "</tr>"
+            for row in rows
+        )
+        note = f"<caption>{html.escape(caption)}</caption>" if caption else ""
+        return mo.Html(
+            '<div class="vg-table-wrap"><table class="vg-table">'
+            f"{note}<thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>"
+        )
+
+    # -- Number formatting ---------------------------------------------------
+    @staticmethod
+    def compact(value):
+        """1,284 / 12.9K / 3.4M: auto-compact counts for metric tiles."""
+        if value is None:
+            return "—"
+        value = float(value)
+        for limit, suffix in ((1e9, "G"), (1e6, "M"), (1e4, "K")):
+            if abs(value) >= limit:
+                scaled = value / (limit if suffix != "K" else 1e3)
+                return f"{scaled:,.1f}{suffix}"
+        return (
+            f"{value:,.0f}"
+            if value.is_integer() or abs(value) >= 100
+            else f"{value:,.1f}"
+        )
+
+    @staticmethod
+    def gib(value):
+        return "—" if value is None else f"{value / 1024**3:,.1f} GiB"
+
+    @staticmethod
+    def duration(seconds):
+        """12.3 s below a minute, else 2:34 or 1:02:03."""
+        if seconds is None:
+            return "—"
+        seconds = max(0.0, float(seconds))
+        if seconds < 60:
+            return f"{seconds:.1f} s"
+        minutes, rest = divmod(round(seconds), 60)
+        hours, minutes = divmod(minutes, 60)
+        return f"{hours}:{minutes:02d}:{rest:02d}" if hours else f"{minutes}:{rest:02d}"
+
+    _long_float = re.compile(r"(\d\.\d{2})\d{6,}(?:\.\.\.|…)?(e[+-]?\d+)?")
+
+    @classmethod
+    def short_numbers(cls, text):
+        """Shorten printed binary floats (4.4408920985006261616945…e-16) to
+        three significant digits; exact rationals and integers are untouched."""
+        return cls._long_float.sub(lambda m: m.group(1) + (m.group(2) or ""), text)
+
     @classmethod
     def footer(cls, mo):
         runtime = cls.receipt("runtime")
@@ -166,9 +436,14 @@ class Gallery:
                 f"{html.escape(str(label))}: {html.escape(str(value))}"
                 for label, value in runtime.get("display", [])
             )
+        pager = (
+            "live expression pagers on"
+            if cls.live_pager_available()
+            else f"live expression pagers need {html.escape(cls.pager_install_hint)}"
+        )
         return mo.Html(
             '<footer class="vg-foot">Native Symbolica expressions · shared HEPKit '
-            "diagrams · precision-aware Vakint records<br>"
+            f"diagrams · precision-aware Vakint records · {pager}<br>"
             '<a href="https://www.hepkit.org/gallery/notebooks/four_loop_numerator.py">'
             "HEPKit numerator tutorial</a> · "
             '<a href="https://github.com/alphal00p/vakint-external-data">'
@@ -241,6 +516,23 @@ class Gallery:
         return f"{engine.ordered_weight_arithmetic} · {cores} core{'' if cores == 1 else 's'}"
 
     @staticmethod
+    def execution_metrics(execution):
+        """Two metric tiles (arithmetic, cores) from an ``execution`` string, so
+        a long arithmetic name never overflows one tile."""
+        arithmetic, _, cores = str(execution).partition(" · ")
+        tiles = [(arithmetic, "Ordered weight arithmetic")]
+        if cores:
+            count, _, unit = cores.partition(" ")
+            tiles.append((count, f"worker {unit or 'cores'}"))
+        return tiles
+
+    @staticmethod
+    def configured_checkout():
+        """The operator's external-data checkout (VAKINT_GALLERY_ARTIFACTS), or None."""
+        configured = os.environ.get("VAKINT_GALLERY_ARTIFACTS")
+        return Path(configured).resolve() if configured else None
+
+    @staticmethod
     def data_directory():
         """External data: a configured checkout (VAKINT_GALLERY_ARTIFACTS), else
         a download cache (VAKINT_GALLERY_DATA_CACHE, else the user cache
@@ -259,12 +551,71 @@ class Gallery:
     @staticmethod
     def five_loop_load_enabled():
         """The in-page 1L-5L catalogue load is a server opt-in
-        (VAKINT_GALLERY_ALLOW_5L=1): it runs in the page kernel for minutes,
-        holds several GB per session and cannot be cancelled."""
+        (VAKINT_GALLERY_ALLOW_5L=1): it runs in the page kernel for about a
+        minute and holds over 10 GB for the session."""
         return os.environ.get("VAKINT_GALLERY_ALLOW_5L") == "1"
 
+    # -- Live progress and interruption of in-kernel native calls ------------
+    @staticmethod
+    def supports_progress(method):
+        """True when this host's Vakint call takes ``progress=`` (live progress
+        and Ctrl-C / marimo Interrupt during the native call)."""
+        signature = getattr(method, "__text_signature__", None)
+        if not isinstance(signature, str):
+            return False
+        return re.search(r"\bprogress\s*=", signature) is not None
+
     @classmethod
-    def load_data(cls, engine, max_loop_count):
+    def progress_options(cls, method, progress):
+        """``{"progress": progress}`` when the host supports it, else ``{}``.
+        None keeps the host's default ("auto": marimo's own status spinner)."""
+        if progress is None or not cls.supports_progress(method):
+            return {}
+        return {"progress": progress}
+
+    @classmethod
+    def interruptible(cls):
+        """Whether in-kernel loads and reductions stop on Ctrl-C / Interrupt."""
+        try:
+            from symbolica.community.hepkit.vakint import Vakint
+        except ImportError:
+            return False
+        return cls.supports_progress(Vakint.evaluate)
+
+    # -- External data: version, catalogue counts and sizes ------------------
+    _builtin_version = None
+
+    @classmethod
+    def builtin_data_version(cls, engine=None):
+        """Release of the wheel's built-in 1L-3L registry (from a master's
+        provenance), or None."""
+        if cls._builtin_version is None:
+            try:
+                engine = engine or cls.engine(n_cores=1)
+                master = engine.get_master(engine.master_symbols()[0], prec=2)
+                version = master.provenance.version
+            except (ImportError, IndexError, ValueError, AttributeError, TypeError):
+                return None
+            if not isinstance(version, str) or not version:
+                return None
+            Gallery._builtin_version = version
+        return cls._builtin_version
+
+    @classmethod
+    def data_version(cls, engine=None):
+        """The release a load requests. VAKINT_GALLERY_DATA_VERSION wins. A
+        configured checkout is used as it is ("latest" accepts its manifest,
+        offline). Downloads ask for the built-in registry's release, so the
+        gallery never silently installs another published release."""
+        configured = os.environ.get("VAKINT_GALLERY_DATA_VERSION")
+        if configured:
+            return configured
+        if os.environ.get("VAKINT_GALLERY_ARTIFACTS"):
+            return "latest"
+        return cls.builtin_data_version(engine) or "latest"
+
+    @classmethod
+    def load_data(cls, engine, max_loop_count, *, progress=None):
         # A configured checkout is recognized and validated before any network
         # request. Otherwise the official packs install once into the cache.
         if max_loop_count >= 5 and not cls.five_loop_load_enabled():
@@ -274,9 +625,103 @@ class Gallery:
             )
         return engine.load_official_external_data(
             max_loop_count,
-            version="latest",
+            version=cls.data_version(engine),
             local_artifacts_path=str(cls.data_directory()),
+            **cls.progress_options(engine.load_official_external_data, progress),
         )
+
+    @staticmethod
+    def data_root(root=None):
+        """The configured checkout, else the newest installed release in the
+        download cache, else None. Never downloads."""
+        if root is None:
+            configured = os.environ.get("VAKINT_GALLERY_ARTIFACTS")
+            cache = os.environ.get("VAKINT_GALLERY_DATA_CACHE")
+            base = os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache"
+            root = Path(configured or cache or Path(base) / "vakint-gallery")
+        root = Path(root)
+        if (root / "manifest.json").is_file():
+            return root
+        installed = sorted(
+            (p.parent for p in root.glob(".vakint-external-data/*/manifest.json")),
+            reverse=True,
+        )
+        return installed[0] if installed else None
+
+    @classmethod
+    def catalogue_summary(cls, root=None):
+        """Release, and per loop count: masters, computed masters and unpacked
+        bytes, read from the external-data manifests (JSON only); None when no
+        checkout or installed release is available."""
+        root = cls.data_root(root)
+        if root is None:
+            return None
+        try:
+            manifest = json.loads((root / "manifest.json").read_text())
+            loops = {}
+            for pack in manifest.get("loop_packs", []):
+                path = root / pack["manifest"]
+                if not path.is_file() or path.stat().st_size > 64 * 1024**2:
+                    continue
+                loop = json.loads(path.read_text())
+                masters = loop.get("masters") or []
+                loops[int(pack["loop_count"])] = {
+                    "masters": len(masters),
+                    "computed": sum(
+                        1
+                        for master in masters
+                        if any(
+                            isinstance(c, dict) and c.get("numerical")
+                            for c in master.get("coefficients") or []
+                        )
+                    ),
+                    "bytes": path.stat().st_size
+                    + sum(
+                        int(entry.get("bytes") or 0)
+                        for entry in (loop.get("files") or {}).values()
+                        if isinstance(entry, dict)
+                    ),
+                }
+        except (OSError, ValueError, KeyError, TypeError):
+            return None
+        return {"version": manifest.get("version"), "path": str(root), "loops": loops}
+
+    @staticmethod
+    def size_text(size):
+        """ "46 MB" (decimal, as archives are quoted), or None."""
+        if not size:
+            return None
+        return f"{size / 1e9:.1f} GB" if size >= 1e9 else f"{size / 1e6:,.0f} MB"
+
+    # -- Master identities as readable labels --------------------------------
+    _master_symbol = re.compile(r"rustred_family_([0-9a-f]{8})[0-9a-f]*,([-\d,\s]+)\)")
+
+    @classmethod
+    def master_label(cls, symbol):
+        """ "3L · family 56d4ac62 · powers (1,1,1,0,1,0)" from a master symbol.
+
+        The arguments after the family are its propagator powers, one per
+        loop-momentum scalar product, so L(L+1)/2 of them give the loop count."""
+        text = str(getattr(symbol, "expression", symbol))
+        match = cls._master_symbol.search(text)
+        if match is None:
+            return text
+        powers = [p.strip() for p in match.group(2).split(",") if p.strip()]
+        loops = (int((8 * len(powers) + 1) ** 0.5) - 1) // 2
+        loops = f"{loops}L · " if loops * (loops + 1) // 2 == len(powers) else ""
+        return f"{loops}family {match.group(1)} · powers ({','.join(powers)})"
+
+    @classmethod
+    def master_options(cls, symbols):
+        """Dropdown options {readable label: symbol text}, by loops then family."""
+        options = {}
+        for symbol in symbols:
+            text = str(symbol.expression)
+            label = cls.master_label(text)
+            while label in options:
+                label += " ·"
+            options[label] = text
+        return dict(sorted(options.items()))
 
     @classmethod
     def evidence_file(cls, name, artifact_index=None):
@@ -411,11 +856,17 @@ class Gallery:
         schema = receipt.get("schema") if isinstance(receipt, dict) else None
         if schema == "vakint.gallery.coverage-advisory.v1":
             outcome = receipt["outcome"]
+            recorded_with = (receipt.get("provenance") or {}).get("data_version")
             return mo.vstack(
                 [
                     cls.note(
                         mo,
-                        "Recorded coverage advisory · reduction continued",
+                        "Recorded coverage advisory · reduction continued"
+                        + (
+                            f" · recorded with data {recorded_with}"
+                            if recorded_with
+                            else ""
+                        ),
                         receipt["recorded_warning"],
                         pending=True,
                     ),
@@ -523,7 +974,7 @@ class Gallery:
                     )
                 )
             if timing_rows:
-                parts.append(mo.ui.table(timing_rows, selection=None, pagination=False))
+                parts.append(cls.table(mo, timing_rows, numeric=("Seconds",)))
             if receipt.get("reduction_error"):
                 parts.append(
                     cls.note(
@@ -677,6 +1128,7 @@ class Gallery:
         if stage:
             live["stage"] = stage
         live["native_progress"] = benchmark_job.read_native_progress(work)
+        live["monitor"] = cls.job_monitor(work)
         if isinstance(current.get("worker_pid"), int):
             live["resources"] = benchmark_job.worker_resources(current["worker_pid"])
         return live
@@ -753,48 +1205,349 @@ class Gallery:
             return None
         return json.loads(receipt.read_text())
 
+    # -- Progress monitor card (background jobs and in-kernel calls) ---------
+    monitor_schema = "vakint.monitor.v2"
+    stale_seconds = 10.0
+    stage_labels: ClassVar[dict[str, str]] = {
+        "setup": "Setup",
+        "data_load": "Data load",
+        "ingress": "Ingress",
+        "lowering": "Scalar lowering",
+        "native": "Native reduction",
+        "post_processing": "Post-processing",
+        "output": "Output",
+        "other": "Other",
+    }
+    # Job states and native statuses -> (badge class, icon, label).
+    badges: ClassVar[dict[str, tuple[str, str, str]]] = {
+        "running": ("running", "●", "Running"),
+        "stopping": ("stopped", "■", "Stopping"),
+        "complete": ("succeeded", "✓", "Complete"),
+        "succeeded": ("succeeded", "✓", "Succeeded"),
+        "cancelled": ("interrupted", "■", "Cancelled"),
+        "interrupted": ("interrupted", "■", "Interrupted"),
+        "timed_out": ("stopped", "■", "Timed out"),
+        "failed": ("failed", "✕", "Failed"),
+        "partial": ("failed", "✕", "Partial result"),
+        "lost": ("failed", "✕", "Lost"),
+    }
+
+    @classmethod
+    def job_monitor(cls, path):
+        """A job's native monitor model (``monitor.json``, vakint.monitor.v2),
+        read whole (the native publisher bounds it), with the file's age as
+        ``snapshot_age_seconds``; None before the first snapshot or for any
+        other document."""
+        target = cls.checked_job(path) / "monitor.json"
+        try:
+            with target.open("rb") as stream:
+                payload = stream.read(cls.display_receipt_bytes + 1)
+                modified = os.fstat(stream.fileno()).st_mtime
+            if len(payload) > cls.display_receipt_bytes:
+                return None
+            document = json.loads(payload)
+        except (OSError, ValueError, RecursionError):
+            return None
+        monitor = document.get("monitor") if isinstance(document, dict) else None
+        if not isinstance(monitor, dict) or monitor.get("schema") != cls.monitor_schema:
+            return None
+        model = monitor.get("model")
+        if not isinstance(model, dict):
+            return None
+        return {**model, "snapshot_age_seconds": max(0.0, time.time() - modified)}
+
     @staticmethod
-    def progress_rows(status):
-        """A compact progress summary of a job status for the browser."""
-        rows = [("State", str(status.get("state", "unknown")).replace("_", " "))]
-        if status.get("elapsed_seconds") is not None:
-            rows.append(("Elapsed", f"{status['elapsed_seconds']:,.1f} s"))
-        stage = status.get("stage") or {}
-        if stage.get("stage"):
-            rows.append(("Stage", str(stage["stage"])))
-        native = (status.get("native_progress") or {}).get("snapshot") or {}
-        monitor = native.get("monitor") if isinstance(native, dict) else None
-        monitor = monitor if isinstance(monitor, dict) else {}
-        phase = monitor.get("phase") or native.get("caller_phase")
-        if phase:
-            rows.append(("Native phase", str(phase).replace("_", " ")))
-        ordered = native.get("ordered_reduction") or monitor.get("ordered_reduction")
-        if isinstance(ordered, dict):
-            if ordered.get("total_phases"):
-                rows.append(
-                    (
-                        "Ordered phases",
-                        f"{ordered.get('completed_phases', 0)} / {ordered['total_phases']}"
-                        + (
-                            f" ({ordered['phase_kind']})"
-                            if ordered.get("phase_kind")
-                            else ""
-                        ),
-                    )
-                )
-            for key, label in (
-                ("frontier_keys", "Frontier keys"),
-                ("processed_keys", "Processed keys"),
-                ("terminal_keys", "Terminal keys"),
-            ):
-                if isinstance(ordered.get(key), int):
-                    rows.append((label, f"{ordered[key]:,}"))
-        resources = status.get("resources") or {}
-        if resources.get("worker_rss_bytes"):
-            rows.append(
-                ("Worker RSS", f"{resources['worker_rss_bytes'] / 1024**3:.2f} GiB")
+    def progress_model(progress):
+        """A monitor model dict from a ``VakintProgress`` snapshot (or a dict).
+
+        Native evaluations carry the full vakint.monitor.v2 model
+        (``to_dict()``); data loads only report state, stage and elapsed time."""
+        if progress is None or isinstance(progress, dict):
+            return progress or {}
+        to_dict = getattr(progress, "to_dict", None)
+        model = to_dict() if callable(to_dict) else {}
+        status = getattr(progress, "status", None)
+        if model:
+            return {**model, "status": status or model.get("status")}
+
+        def get(name):
+            return getattr(progress, name, None)
+
+        return {
+            "status": status,
+            "elapsed_seconds": get("elapsed_seconds"),
+            "stage": {"kind": get("stage"), "activity": get("activity")},
+            "memory": {
+                "rss_bytes": get("rss_bytes"),
+                "peak_rss_bytes": get("peak_rss_bytes"),
+            },
+        }
+
+    @staticmethod
+    def _dict(value, *keys):
+        for key in keys:
+            value = value.get(key) if isinstance(value, dict) else None
+        return value if isinstance(value, dict) else {}
+
+    @staticmethod
+    def _number(value):
+        return (
+            value
+            if isinstance(value, (int, float)) and not isinstance(value, bool)
+            else None
+        )
+
+    @classmethod
+    def monitor_card(
+        cls,
+        mo,
+        model,
+        *,
+        state=None,
+        title=None,
+        elapsed=None,
+        activity=None,
+        rss=None,
+        peak_rss=None,
+    ):
+        """The simplified Vakint reduction monitor: the dashboard's most
+        important metrics in one card, for background jobs and in-kernel calls.
+
+        ``model`` is a vakint.monitor.v2 model (``monitor.json``'s
+        ``monitor.model`` or ``VakintProgress.to_dict()``), possibly partial or
+        None. ``state`` (a job state) overrides the native status; ``elapsed``,
+        ``activity`` and the RSS values fill in what the model lacks (a job's
+        coarse stage before the native monitor starts, the worker's memory)."""
+        model = model if isinstance(model, dict) else {}
+        number = cls._number
+        status = str(state or model.get("status") or "running").lower()
+        age = number(model.get("snapshot_age_seconds"))
+        badge, icon, label = cls.badges.get(status, ("running", "●", status.title()))
+        if badge == "running" and age is not None and age > cls.stale_seconds:
+            badge, icon, label = "stale", "⚠", f"No update for {cls.duration(age)}"
+        stage = cls._dict(model, "stage")
+        ordered = cls._dict(model, "ordered")
+        phase = cls._dict(ordered, "phase")
+        kind = stage.get("kind") if isinstance(stage.get("kind"), str) else None
+        headline = cls.stage_labels.get(kind, "") if kind else ""
+        detail = stage.get("activity") or (
+            stage.get("id").replace("_", " ")
+            if isinstance(stage.get("id"), str) and stage.get("id") != kind
+            else None
+        )
+        total = number(phase.get("total"))
+        index = number(phase.get("index"))
+        phase_kind = phase.get("kind") if isinstance(phase.get("kind"), str) else None
+        if kind == "native" and total:
+            if phase_kind == "done" or (index is not None and index >= total):
+                detail = "Ordered schedule complete"
+            else:
+                parts = [f"{(phase_kind or 'reduce').title()} phase"]
+                if number(phase.get("support")) is not None:
+                    parts.append(f"support {phase['support']}")
+                if number(phase.get("owner")) is not None:
+                    parts.append(f"owner {phase['owner']}")
+                detail = " · ".join(parts)
+        if activity and (not headline or kind == "setup"):
+            headline, detail = activity, None
+        headline = " · ".join(str(p) for p in (headline, detail) if p) or "Starting"
+        elapsed = number(model.get("elapsed_seconds")) if elapsed is None else elapsed
+
+        parts = [
+            '<div class="vg-monitor">',
+            '<div class="vg-monitor-head">',
+            (
+                f'<span class="vg-badge {badge}"><span aria-hidden="true">{icon}</span>'
+                f"{html.escape(label)}</span>"
+            ),
+            (
+                f"<strong>{html.escape(title + ' · ' if title else '')}"
+                f"{html.escape(headline)}</strong>"
+            ),
+            f'<span class="vg-elapsed">{html.escape(cls.duration(elapsed))} elapsed</span>'
+            if elapsed is not None
+            else "",
+            "</div>",
+        ]
+        if total:
+            done = min(int(index or 0), int(total))
+            parts.append(
+                '<div class="vg-meter">'
+                f'<div class="vg-meter-track" role="progressbar" aria-valuemin="0" '
+                f'aria-valuemax="{int(total)}" aria-valuenow="{done}" '
+                f'aria-label="Ordered schedule position">'
+                f'<div class="vg-meter-fill" style="width:{100 * done / total:.1f}%">'
+                "</div></div>"
+                f'<div class="vg-meter-label"><span>Ordered schedule: {done} / '
+                f"{int(total)} phases done</span><span>a position in the schedule, "
+                "not a share of the time</span></div></div>"
             )
-        return rows
+        tiles = []
+        rate = cls._dict(ordered, "recent_rate") or cls._dict(ordered, "request_rate")
+        if number(rate.get("keys")) is not None and number(rate.get("seconds")):
+            tiles.append(
+                (
+                    "Keys per second",
+                    cls.compact(rate["keys"] / rate["seconds"]),
+                    "recent"
+                    if cls._dict(ordered, "recent_rate")
+                    else "request average",
+                )
+            )
+        if number(ordered.get("processed_keys")) is not None:
+            inputs = number(ordered.get("input_keys"))
+            tiles.append(
+                (
+                    "Processed keys",
+                    cls.compact(ordered["processed_keys"]),
+                    f"{inputs:,} input keys" if inputs is not None else "",
+                )
+            )
+        frontier = cls._dict(ordered, "frontier")
+        if number(frontier.get("keys")) is not None:
+            peak = number(frontier.get("peak_keys"))
+            tiles.append(
+                (
+                    "Frontier keys",
+                    cls.compact(frontier["keys"]),
+                    f"peak {cls.compact(peak)}" if peak is not None else "",
+                )
+            )
+        hits = number(ordered.get("step_cache_hits"))
+        misses = number(ordered.get("step_cache_misses"))
+        if hits is not None and misses is not None:
+            looked_up = hits + misses
+            tiles.append(
+                (
+                    "Step cache",
+                    f"{cls.compact(hits)} / {cls.compact(misses)}",
+                    "hits / misses"
+                    + (f" · {hits / looked_up:.0%} hits" if looked_up else ""),
+                )
+            )
+        memory = cls._dict(model, "memory")
+        rss = number(memory.get("rss_bytes")) if rss is None else rss
+        peak_rss = (
+            number(memory.get("peak_rss_bytes")) if peak_rss is None else peak_rss
+        )
+        if rss is not None:
+            cpu = number(memory.get("cpu_percent"))
+            tiles.append(
+                (
+                    "Memory (RSS)",
+                    cls.gib(rss),
+                    " · ".join(
+                        part
+                        for part in (
+                            f"peak {cls.gib(peak_rss)}" if peak_rss else "",
+                            f"{cpu:.0f}% CPU" if cpu is not None else "",
+                        )
+                        if part
+                    ),
+                )
+            )
+        batch = cls._dict(model, "batch")
+        if number(batch.get("total")):
+            tiles.append(
+                (
+                    "Batch",
+                    f"{batch.get('completed', 0)} / {batch['total']}",
+                    str(batch.get("label") or ""),
+                )
+            )
+        if tiles:
+            parts.append(
+                '<div class="vg-kpis">'
+                + "".join(
+                    f'<div class="vg-kpi"><span>{html.escape(name)}</span>'
+                    f"<strong>{html.escape(value)}</strong>"
+                    f"<small>{html.escape(note)}</small></div>"
+                    for name, value, note in tiles
+                )
+                + "</div>"
+            )
+        notes = []
+        census = number(ordered.get("census_age_seconds"))
+        if badge in ("running", "stale") and kind == "native":
+            if total and index is not None and index >= total:
+                notes.append(
+                    "The schedule is done; the modular lift and finalization that "
+                    "follow report no live census."
+                )
+            elif census is not None and census > cls.stale_seconds:
+                notes.append(f"Last Ordered census {cls.duration(census)} ago.")
+        run = cls._dict(model, "run")
+        if run:
+            cores = number(run.get("n_cores"))
+            notes.append(
+                " · ".join(
+                    str(part)
+                    for part in (
+                        run.get("arithmetic"),
+                        f"{cores} core{'' if cores == 1 else 's'}" if cores else None,
+                        f"step cache {run['step_cache']}"
+                        if run.get("step_cache")
+                        else None,
+                    )
+                    if part
+                )
+            )
+        ledger = [
+            f"{cls.stage_labels.get(item.get('kind'), item.get('kind'))} "
+            f"{cls.duration(item['seconds'])}"
+            for item in model.get("stages") or []
+            if isinstance(item, dict)
+            and number(item.get("seconds"))
+            and item["seconds"] >= 0.05
+        ]
+        if ledger:
+            notes.append("Stages: " + " · ".join(ledger))
+        if notes:
+            parts.append(
+                '<div class="vg-monitor-foot">'
+                + "<br>".join(html.escape(n) for n in notes if n)
+                + "</div>"
+            )
+        parts.append("</div>")
+        return mo.Html("".join(parts))
+
+    @classmethod
+    def job_monitor_card(cls, mo, status, path=None, *, title=None):
+        """The monitor card of a background job: its state, coarse stage and
+        worker memory from the supervisor, the rest from the native model."""
+        model = status.get("monitor")
+        if model is None and path is not None:
+            model = cls.job_monitor(path)
+        stage = status.get("stage") or {}
+        native_started = bool(cls._dict(model, "stage").get("kind")) and (
+            cls._dict(model, "stage").get("kind") != "setup"
+        )
+        resources = status.get("resources") or {}
+        state = str(status.get("state", "running"))
+        return cls.monitor_card(
+            mo,
+            model,
+            state=state,
+            title=title,
+            elapsed=cls._number(status.get("elapsed_seconds")),
+            activity=None
+            if native_started
+            else (stage.get("stage") if isinstance(stage.get("stage"), str) else None),
+            rss=cls._number(resources.get("worker_rss_bytes")),
+            peak_rss=cls._number(resources.get("worker_peak_rss_bytes")),
+        )
+
+    @classmethod
+    def kernel_progress(cls, mo, *, title=None):
+        """A ``progress=`` callback that redraws this cell's output as the
+        monitor card, for in-kernel calls (edit mode)."""
+
+        def show(progress):
+            mo.output.replace(
+                cls.monitor_card(mo, cls.progress_model(progress), title=title)
+            )
+
+        return show
 
     # -- Ladder reductions (3L, 4L) -----------------------------------------
     @staticmethod
@@ -908,6 +1661,69 @@ class Gallery:
                 spec=spec,
             ),
         )
+
+    @classmethod
+    def kernel_work(cls, case, *, n_cores=None, arithmetic=None):
+        """A fresh run directory for an in-kernel reduction of ``case``."""
+        cases = cls.ladder_cases()
+        if case not in cases:
+            raise ValueError(f"Unknown ladder case: {case}")
+        cls.ladder_input(case)
+        arithmetic = arithmetic or "modular_polynomial"
+        if arithmetic not in cls.arithmetics:
+            raise ValueError(f"Unknown Ordered weight arithmetic: {arithmetic}")
+        stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime())
+        work = cls.work_root() / "kernel" / f"{case}-{stamp}-{os.getpid()}"
+        work.mkdir(parents=True, exist_ok=False)
+        spec = {
+            "case": case,
+            "n_cores": cls.bounded_cores(n_cores),
+            "arithmetic": arithmetic,
+            "data_directory": str(cls.data_directory())
+            if cases[case]["loop_count"] >= 4 or cls.configured_checkout()
+            else None,
+            # In memory: an in-kernel run never writes the jobs' persistent cache.
+            "ordered_cache_directory": None,
+        }
+        (work / "request.json").write_text(json.dumps({"kind": "kernel", "spec": spec}))
+        return str(work)
+
+    @classmethod
+    def reduce_in_kernel(cls, work, *, progress=None):
+        """Reduce a ``kernel_work`` run in this kernel (marimo edit mode).
+
+        Interrupt (or Ctrl-C in a terminal) stops the native call: the run is
+        recorded as cancelled and the KeyboardInterrupt propagates. The final
+        ``status.json`` makes the run look like a finished job to the page."""
+        import reduce_worker
+
+        work = cls.checked_job(work)
+        spec = json.loads((work / "request.json").read_text())["spec"]
+        started = time.monotonic()
+        state, message = "failed", None
+        try:
+            state = (
+                "complete"
+                if reduce_worker.run(work, spec, progress=progress) == 0
+                else "failed"
+            )
+        except KeyboardInterrupt:
+            state, message = "cancelled", "Interrupted in this kernel"
+            raise
+        finally:
+            (work / "status.json").write_text(
+                json.dumps(
+                    {
+                        "state": state,
+                        "kind": "kernel",
+                        "elapsed_seconds": time.monotonic() - started,
+                        "updated_unix_seconds": time.time(),
+                        "interrupted": state == "cancelled",
+                        **({"message": message} if message else {}),
+                    }
+                )
+            )
+        return str(work)
 
     # -- Script mode of the ladder page ---------------------------------------
     headless_options = ("case", "n-cores", "arithmetic", "max-seconds", "cancel-after")
@@ -1128,16 +1944,33 @@ class Gallery:
             ],
         }
 
-    @classmethod
-    def saved_five_loop_result(cls):
-        """The saved, checksummed 5L zero-momentum result (no reduction)."""
-        examples = str(cls.directory.parent)
-        if examples not in sys.path:
-            sys.path.append(examples)
-        import symbolica
-        from q0_coefficients import SavedQ0Result
+    @staticmethod
+    def checked_bytes(path, digest):
+        """A file's bytes, only if they match the recorded sha256."""
+        payload = Path(path).read_bytes()
+        if hashlib.sha256(payload).hexdigest() != digest:
+            raise ValueError(f"Evidence checksum mismatch: {Path(path).name}")
+        return payload
 
-        return SavedQ0Result.load(api=symbolica)
+    @classmethod
+    def five_loop_fixture(cls):
+        """The recorded current-basis five-loop zero-momentum run (no reduction):
+        its report, the native monitor's final model and the retained result's
+        path, each checked against data/manifest.json; None if not shipped."""
+        report = cls.receipt("five-loop-q0")
+        if report is None:
+            return None
+        fixture = {"report": report, "model": None, "retained": None}
+        for index in range(8):
+            resolved = cls.evidence_file("five-loop-q0", index)
+            if resolved is None:
+                break
+            path, digest = resolved
+            if path.name == "monitor-model.json":
+                fixture["model"] = json.loads(cls.checked_bytes(path, digest))
+            elif path.suffix == ".symbolica":
+                fixture["retained"] = (path, digest)
+        return fixture
 
     # -- Five-loop benchmark (explore-only unless the server opts in) --------
     @staticmethod

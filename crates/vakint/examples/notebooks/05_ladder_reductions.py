@@ -2,7 +2,9 @@
 
 Interactive: choose a case and press "Reduce in the background"; Cancel stops it.
 The page keeps showing its last run (``?job=<id>`` in the URL survives a
-reload); "Recent jobs" reopens any finished run.
+reload); "Recent jobs" reopens any finished run. In marimo's edit mode a case
+can also run in the notebook's own kernel, with the live monitor card;
+marimo's Interrupt button stops it there.
 
 Script mode runs one case headlessly and waits for it, for example
 ``python 05_ladder_reductions.py --case 3L-zero-momentum --n-cores 2``
@@ -24,10 +26,12 @@ app = marimo.App(width="full", app_title="Vakint · Reduce 3L & 4L")
 
 @app.cell
 def _():
+    from pathlib import Path
+
     import marimo as mo
     from shared_gallery import Gallery
 
-    return Gallery, mo
+    return Gallery, Path, mo
 
 
 @app.cell(hide_code=True)
@@ -48,18 +52,22 @@ def _(Gallery, mo):
     ladder_cases = Gallery.ladder_cases()
     _rows = [
         {
-            "case": case["label"],
+            "case": case["label"]
+            + (
+                ""
+                if Gallery.ladder_case_available(key)
+                else " (input not provided here)"
+            ),
             "prepared input": f"{case['input']['bytes'] / 1024:,.0f} KB",
             "external data": case["external_data"],
             "recorded data loading (s)": case["recorded"]["data_loading_seconds"],
             "recorded reduction (s)": case["recorded"]["retained_reduction_seconds"],
             "catalogue masters": case["catalogue_masters"],
-            "here": "ready"
-            if Gallery.ladder_case_available(key)
-            else "input not provided",
         }
         for key, case in ladder_cases.items()
     ]
+    _four = (Gallery.catalogue_summary() or {}).get("loops", {}).get(4, {})
+    _size = Gallery.size_text(_four.get("bytes"))
     mo.vstack(
         [
             Gallery.section(
@@ -70,7 +78,16 @@ def _(Gallery, mo):
                 "(graph, Dirac and color algebra, Taylor projection and vacuum "
                 "routing already done). Its sha256 is checked before reduction.",
             ),
-            mo.ui.table(_rows, selection=None, pagination=False, show_download=False),
+            Gallery.table(
+                mo,
+                _rows,
+                numeric=(
+                    "prepared input",
+                    "recorded data loading (s)",
+                    "recorded reduction (s)",
+                    "catalogue masters",
+                ),
+            ),
             Gallery.note(
                 mo,
                 "What a run computes",
@@ -79,7 +96,12 @@ def _(Gallery, mo):
                 "arithmetic and every core count return the identical expression, so "
                 "its sha256 is compared with the recorded fixture. Recorded timings are "
                 "one release-build run at 4 cores; the 4L cases first load the 4L "
-                "external-data pack (about 140 MB, installed once).",
+                "external-data pack"
+                + (
+                    f" ({_size} unpacked, installed once)."
+                    if _size
+                    else " (installed once)."
+                ),
             ),
         ]
     )
@@ -128,11 +150,21 @@ def _(Gallery, ladder_cases, mo):
         ),
     )
     run_button = mo.ui.run_button(label="Reduce in the background", kind="success")
+    # Edit mode only: marimo's Interrupt reaches this kernel there (the served
+    # app mode has no interrupt, so it keeps to cancellable background jobs).
+    kernel_button = (
+        mo.ui.run_button(label="Reduce in this kernel (Interrupt stops it)")
+        if Gallery.mode(mo) == "edit"
+        else None
+    )
     mo.vstack(
         [
             Gallery.section(mo, "02 / run", "Start a bounded background reduction"),
             run_form,
-            run_button,
+            mo.hstack(
+                [run_button] + ([kernel_button] if kernel_button is not None else []),
+                justify="start",
+            ),
             Gallery.note(
                 mo,
                 "Bounded and cancellable",
@@ -145,7 +177,7 @@ def _(Gallery, ladder_cases, mo):
             ),
         ]
     )
-    return run_button, run_form
+    return kernel_button, run_button, run_form
 
 
 @app.cell
@@ -159,7 +191,7 @@ def _(Gallery, mo):
 
 
 @app.cell
-def _(Gallery, mo, run_button, run_form):
+def _(Gallery, mo, run_button, run_form, set_shown_job):
     # Script mode runs exactly the case named on the command line; the report
     # cell below prints its outcome and sets the exit status.
     headless = mo.app_meta().mode == "script"
@@ -183,8 +215,46 @@ def _(Gallery, mo, run_button, run_form):
         # Refused (unknown case, missing input, another run going): report it
         # and exit; never watch or cancel another session's job.
         Gallery.headless_exit(run_request, start_error)
+    if started_job is not None and not headless:
+        set_shown_job(started_job)
     mo.callout(start_error, kind="warn") if start_error else mo.md("")
     return headless, run_request, started_job
+
+
+@app.cell
+def _(Gallery, kernel_button, mo, run_form, set_shown_job):
+    # In-kernel run (edit mode): the monitor card redraws this cell's output
+    # about once a second; Interrupt stops the native call within a moment.
+    mo.stop(kernel_button is None or not kernel_button.value)
+    _request = run_form.value
+    if not Gallery.interruptible():
+        mo.output.replace(
+            Gallery.note(
+                mo,
+                "This host has no live progress API",
+                "The reduction runs, but neither the monitor nor Interrupt reaches "
+                "the native call before it returns. Use the background job instead.",
+                pending=True,
+            )
+        )
+    try:
+        kernel_job = Gallery.kernel_work(
+            _request["case"],
+            n_cores=int(_request["n_cores"]),
+            arithmetic=_request["arithmetic"],
+        )
+    except (OSError, ValueError) as _error:
+        mo.stop(True, mo.callout(str(_error), kind="warn"))
+    try:
+        Gallery.reduce_in_kernel(
+            kernel_job, progress=Gallery.kernel_progress(mo, title="In this kernel")
+        )
+    except KeyboardInterrupt:
+        # Recorded as cancelled; the kernel and its engine stay usable.
+        pass
+    set_shown_job(kernel_job)
+    mo.md("")
+    return (kernel_job,)
 
 
 @app.cell
@@ -196,11 +266,14 @@ def _(Gallery, get_shown_job, headless, mo, set_shown_job, started_job):
         # Keep showing this session's last run when a control changes, else
         # re-attach to a run still going (a reload, another session).
         watched_job = (
-            started_job or get_shown_job() or Gallery.active_job(kind="ladder")
+            get_shown_job() or started_job or Gallery.active_job(kind="ladder")
         )
         if watched_job is not None and watched_job != get_shown_job():
             set_shown_job(watched_job)
-            mo.query_params()["job"] = watched_job.rsplit("/", 1)[-1]
+        _name = (watched_job or "").rsplit("/", 1)[-1]
+        if Gallery.ladder_job(_name):
+            # Background jobs survive a reload; in-kernel runs are per session.
+            mo.query_params()["job"] = _name
     return (watched_job,)
 
 
@@ -263,17 +336,14 @@ def _(
         or job_status.get("cancel_report")
         or Gallery.cancel_report(watched_job)
     )
+    _kernel = job_status.get("kind") == "kernel"
     _parts = [
-        Gallery.section(mo, "03 / progress", "The background run"),
-        mo.ui.table(
-            [
-                {"": label, "value": value}
-                for label, value in Gallery.progress_rows(job_status)
-            ],
-            selection=None,
-            pagination=False,
-            show_download=False,
+        Gallery.section(
+            mo,
+            "03 / progress",
+            "The in-kernel run" if _kernel else "The background run",
         ),
+        Gallery.job_monitor_card(mo, job_status, watched_job),
     ]
     if _report:
         _survivors = _report.get("survivors") or []
@@ -307,7 +377,7 @@ def _(Gallery, headless, job_status, run_request, watched_job):
 
 
 @app.cell(hide_code=True)
-def _(Gallery, job_status, ladder_cases, mo, watched_job):
+def _(Gallery, Path, job_status, ladder_cases, mo, watched_job):
     mo.stop(job_status.get("state") not in Gallery.final_states)
     ladder_result = Gallery.job_result(watched_job)
     _status = job_status
@@ -347,8 +417,8 @@ def _(Gallery, job_status, ladder_cases, mo, watched_job):
             "catalogue masters in the result",
         ),
         (f"{_seconds.get('Ordered reduction', 0):.3f} s", "Ordered reduction"),
-        (f"{_seconds['total']:.1f} s", "whole job (import, data, reduction)"),
-        (ladder_result["execution"], "arithmetic and cores"),
+        (f"{_seconds['total']:.1f} s", "whole run (import, data, reduction)"),
+        *Gallery.execution_metrics(ladder_result["execution"]),
     ]
     _cpu = ladder_result.get("cpu_seconds", {})
     _timings = [
@@ -363,29 +433,26 @@ def _(Gallery, job_status, ladder_cases, mo, watched_job):
         }
         for row in _case["numerical_reference"]["coefficients"]
     ]
-    _text = (Gallery.checked_job(watched_job) / _retained["file"]).read_text()
-    try:
-        from symbolica import E
-
-        _formula = Gallery.native_formula(mo, E(_text))
-    except (ImportError, ValueError, TypeError):
-        _formula = mo.ui.code_editor(_text[:20000], language="python", disabled=True)
     _cache = ladder_result.get("ordered_cache")
+    _data = ladder_result.get("data") or {}
+    _data_text = (
+        f"data {_data['version']} · {Path(str(_data.get('path', ''))).name}"
+        if _data.get("version")
+        else str(_data.get("source", "built-in 1L–3L registry"))
+    )
     mo.vstack(
         [
             Gallery.section(
                 mo,
                 "04 / result",
                 _case["label"],
-                f"sha256 {_retained['sha256']} · data: "
-                + Gallery.compact_json(ladder_result.get("data")),
+                f"sha256 {_retained['sha256']} · {_data_text}",
             ),
             Gallery.metrics(mo, _metrics),
             mo.accordion(
                 {
-                    "Retained-master result": _formula,
-                    "Stage timings (wall and CPU seconds)": mo.ui.table(
-                        _timings, selection=None, pagination=False, show_download=False
+                    "Stage timings (wall and CPU seconds)": Gallery.table(
+                        mo, _timings, numeric=("wall seconds", "CPU seconds")
                     ),
                     "Recorded numerical reference (not recomputed here)": mo.vstack(
                         [
@@ -393,12 +460,7 @@ def _(Gallery, job_status, ladder_cases, mo, watched_job):
                                 "High-precision Laurent coefficients of this input at "
                                 "mUV = μ = G = 1 (MSbar), from the rung fixture."
                             ),
-                            mo.ui.table(
-                                _reference,
-                                selection=None,
-                                pagination=False,
-                                show_download=False,
-                            ),
+                            Gallery.table(mo, _reference, numeric=("ε power",)),
                         ]
                     ),
                     "Ordered step cache": mo.json(_cache)
@@ -410,6 +472,34 @@ def _(Gallery, job_status, ladder_cases, mo, watched_job):
         ]
     )
     return (ladder_result,)
+
+
+@app.cell(hide_code=True)
+def _(Gallery, ladder_result, mo, watched_job):
+    # The retained-master result in the live pager, as this cell's own output
+    # (an accordion would unmount and dispose it).
+    _text = (
+        Gallery.checked_job(watched_job) / ladder_result["retained"]["file"]
+    ).read_text()
+    try:
+        from symbolica import E as _E
+
+        _formula = Gallery.formula(mo, _E(_text))
+    except (ImportError, ValueError, TypeError):
+        _formula = mo.ui.code_editor(_text[:20000], language="python", disabled=True)
+    mo.vstack(
+        [
+            mo.md("**Retained-master result**"),
+            _formula,
+            Gallery.legend(
+                mo,
+                "RustRedMaster(rustred_family_…, powers) are the catalogue masters; "
+                "GC_11 is the UFO strong coupling, mursq = μ_R², mUV the auxiliary UV "
+                "mass and ε the dimensional regulator (d = 4 − 2ε).",
+            ),
+        ]
+    )
+    return
 
 
 @app.cell(hide_code=True)
@@ -439,8 +529,8 @@ def _(Gallery, get_finished_job, mo, watched_job):
         [
             mo.accordion(
                 {
-                    "Recent jobs on this server": mo.ui.table(
-                        _rows, selection=None, pagination=False, show_download=False
+                    "Recent jobs on this server": Gallery.table(
+                        mo, _rows, numeric=("elapsed (s)",)
                     )
                     if _rows
                     else mo.md("None yet.")

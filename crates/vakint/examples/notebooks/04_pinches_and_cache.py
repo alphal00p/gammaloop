@@ -166,6 +166,7 @@ def _(
         powers=[_remaining, 1],
         parameter_substitutions={_mass: E("1")},
     ).to_expression()
+    # Live progress and Interrupt come from the host's default progress="auto".
     _engine = Gallery.engine()
     closure_execution = Gallery.execution(_engine)
     _start = perf_counter()
@@ -205,12 +206,18 @@ def _(
     target_result,
 ):
     # Native static MathML survives tab remounts without widget comm models.
+    # These values are short (a few items), so each preview is complete.
     closure_view = mo.ui.tabs(
         {
             "The identity": mo.vstack(
                 [
                     mo.md("**Cancelling numerator**"),
                     Gallery.native_formula(mo, cancelling_numerator),
+                    Gallery.legend(
+                        mo,
+                        "dot(K(i,mink(4)),K(j,mink(4))) is the native Minkowski "
+                        "product k_i·k_j of loop momenta; the mass is bound to 1.",
+                    ),
                     mo.md("**Source and target integrands**"),
                     Gallery.native_formula(mo, source_integral),
                     Gallery.native_formula(mo, target_integral),
@@ -236,7 +243,7 @@ def _(
                 [
                     ("Exact", "difference vanishes symbolically"),
                     (f"{closure_seconds:.3f} s", "this interactive paired reduction"),
-                    (closure_execution, "ordered weight arithmetic and worker cores"),
+                    *Gallery.execution_metrics(closure_execution),
                 ],
             ),
             closure_view,

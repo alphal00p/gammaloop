@@ -22,6 +22,7 @@ import unittest
 import uuid
 from pathlib import Path
 from types import MappingProxyType, SimpleNamespace
+from typing import ClassVar
 from unittest.mock import Mock, patch
 
 import benchmark_job
@@ -543,7 +544,7 @@ class GalleryReceiptTests(unittest.TestCase):
     def test_reused_input_null_preparation_is_not_a_current_timing(self):
         tables = []
 
-        def table(rows, **kwargs):
+        def table(_mo, rows, **kwargs):
             tables.append(rows)
             return rows
 
@@ -552,7 +553,6 @@ class GalleryReceiptTests(unittest.TestCase):
             vstack=lambda values: values,
             accordion=lambda values: values,
             json=lambda value: value,
-            ui=SimpleNamespace(table=table),
         )
         receipt = {
             "schema": "vakint.qcd-ladder.benchmark.v1",
@@ -568,6 +568,7 @@ class GalleryReceiptTests(unittest.TestCase):
         with (
             patch.object(Gallery, "receipt", return_value=receipt),
             patch.object(Gallery, "evidence_links", return_value="download"),
+            patch.object(Gallery, "table", side_effect=table),
         ):
             card = Gallery.evidence_card(mo, "synthetic", "Synthetic benchmark")
         self.assertIn("1.250", repr(card))
@@ -633,9 +634,13 @@ class GalleryClosurePresentationTests(unittest.TestCase):
         arguments.update(
             mo=mo,
             Gallery=SimpleNamespace(
-                metrics=lambda *_: "metrics", native_formula=Gallery.native_formula
+                metrics=lambda *_: "metrics",
+                native_formula=Gallery.native_formula,
+                legend=lambda *_: "legend",
+                execution_metrics=Gallery.execution_metrics,
             ),
             closure_seconds=0.1,
+            closure_execution="modular_polynomial · 4 cores",
         )
         formula_names = (
             "cancelling_numerator",
@@ -688,15 +693,28 @@ class GalleryNativeFormulaTests(unittest.TestCase):
                     Gallery.native_formula(mo, expression)
                 mo.Html.assert_not_called()
 
-    def test_all_four_tensor_panes_use_the_native_static_protocol(self):
-        path = Gallery.directory / "01_graphs_and_numerators.py"
+    @staticmethod
+    def page_cell(notebook, arguments):
+        path = Gallery.directory / notebook
         tree = ast.parse(path.read_text())
         cell = next(
             node
             for node in tree.body
             if isinstance(node, ast.FunctionDef)
-            and {arg.arg for arg in node.args.args}
-            == {
+            and {arg.arg for arg in node.args.args} == arguments
+        )
+        cell.decorator_list = []
+        namespace = {}
+        exec(  # noqa: S102 - Execute only this presentation cell with fake values.
+            compile(ast.Module(body=[cell], type_ignores=[]), str(path), "exec"),
+            namespace,
+        )
+        return namespace["_"]
+
+    def test_contraction_views_use_a_selector_and_one_live_pager(self):
+        select = self.page_cell(
+            "01_graphs_and_numerators.py",
+            {
                 "Gallery",
                 "contraction_seconds",
                 "mo",
@@ -704,41 +722,26 @@ class GalleryNativeFormulaTests(unittest.TestCase):
                 "projected",
                 "projector",
                 "reduced",
-            }
+            },
         )
-        cell.decorator_list = []
-        namespace = {}
-        exec(  # noqa: S102 - Execute only this presentation cell with fake native values.
-            compile(ast.Module(body=[cell], type_ignores=[]), str(path), "exec"),
-            namespace,
+        radio = Mock(
+            side_effect=lambda options, **kw: SimpleNamespace(
+                options=options, value=kw["value"]
+            )
         )
-        tabs = Mock(side_effect=lambda contents: SimpleNamespace(contents=contents))
         mo = SimpleNamespace(
-            Html=Mock(side_effect=lambda text: text),
-            vstack=lambda values: values,
-            ui=SimpleNamespace(tabs=tabs),
+            vstack=lambda values: values, ui=SimpleNamespace(radio=radio)
         )
         names = ("reduced", "projector", "numerator", "projected")
-        values = {
-            name: SimpleNamespace(
-                _repr_html_=Mock(return_value=f"<math><mi>{name}</mi></math>"),
-                _display_=Mock(side_effect=AssertionError("Interactive widget")),
-            )
-            for name in names
-        }
-        namespace["_"](
-            Gallery=SimpleNamespace(
-                native_formula=Gallery.native_formula,
-                metrics=lambda *_: "metrics",
-                note=lambda *_: "note",
-            ),
+        values = {name: SimpleNamespace(name=name) for name in names}
+        views, choice = select(
+            Gallery=SimpleNamespace(metrics=lambda *_: "metrics"),
             mo=mo,
             contraction_seconds=0.1,
             **values,
         )
-        contents = tabs.call_args.args[0]
         self.assertEqual(
-            list(contents),
+            list(views),
             [
                 "Scalar dot products",
                 "Projector",
@@ -746,13 +749,52 @@ class GalleryNativeFormulaTests(unittest.TestCase):
                 "Projected tensor",
             ],
         )
-        for name, payload in zip(names, contents.values(), strict=True):
-            values[name]._repr_html_.assert_called_once_with()
-            values[name]._display_.assert_not_called()
-            self.assertEqual(
-                payload,
-                f'<div class="vg-native-formula"><math><mi>{name}</mi></math></div>',
+        self.assertIs(views["Scalar dot products"], values["reduced"])
+        self.assertEqual(choice.value, "Scalar dot products")
+        show = self.page_cell(
+            "01_graphs_and_numerators.py",
+            {"Gallery", "contraction_views", "mo", "view_choice"},
+        )
+        formula = Mock(return_value="pager")
+        for label, name in zip(views, names, strict=True):
+            show(
+                Gallery=SimpleNamespace(formula=formula, note=lambda *_: "note"),
+                contraction_views=views,
+                mo=mo,
+                view_choice=SimpleNamespace(value=label),
             )
+            self.assertIs(formula.call_args.args[1], values[name])
+
+    def test_live_pagers_never_sit_inside_tabs_accordions_or_tables(self):
+        # Those containers unmount their panels; the frontend then disposes a
+        # live pager's widget model ("Model not found" after a switch).
+        containers = {"tabs", "accordion", "table"}
+        live = {"formula", "formatted", "paged"}
+        for path in sorted(Gallery.directory.glob("0*.py")):
+            tree = ast.parse(path.read_text())
+            found = [
+                inner.lineno
+                for node in ast.walk(tree)
+                if isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in containers
+                for inner in ast.walk(node)
+                if isinstance(inner, ast.Call)
+                and isinstance(inner.func, ast.Attribute)
+                and inner.func.attr in live
+            ]
+            with self.subTest(page=path.name):
+                self.assertEqual(found, [])
+            uses = [
+                node
+                for node in ast.walk(tree)
+                if isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "formula"
+            ]
+            if path.name != "04_pinches_and_cache.py":
+                # Every other page shows at least one large value in the pager.
+                self.assertTrue(uses, path.name)
 
     def test_physical_run_cell_exposes_only_zero_momentum(self):
         tree = ast.parse((Gallery.directory / "03_five_loop_uv.py").read_text())
@@ -919,10 +961,53 @@ class GalleryEngineTests(unittest.TestCase):
             self.assertEqual(
                 arguments.kwargs["local_artifacts_path"], str(Path(cache).resolve())
             )
+            # No progress keyword unless the host's signature declares it.
+            self.assertNotIn("progress", arguments.kwargs)
             with patch.dict(
                 os.environ, {"VAKINT_GALLERY_ARTIFACTS": "/data/checkout"}, clear=True
             ):
                 self.assertEqual(Gallery.data_directory(), Path("/data/checkout"))
+
+    def test_loads_request_the_built_in_release_unless_configured(self):
+        engine = Mock()
+        with (
+            tempfile.TemporaryDirectory() as cache,
+            patch.object(Gallery, "builtin_data_version", return_value="v9.1"),
+        ):
+            for environment, version in (
+                ({"VAKINT_GALLERY_DATA_CACHE": cache}, "v9.1"),
+                ({"VAKINT_GALLERY_ARTIFACTS": cache}, "latest"),
+                (
+                    {
+                        "VAKINT_GALLERY_DATA_CACHE": cache,
+                        "VAKINT_GALLERY_DATA_VERSION": "v8",
+                    },
+                    "v8",
+                ),
+            ):
+                with self.subTest(environment=sorted(environment)):
+                    with patch.dict(os.environ, environment, clear=True):
+                        Gallery.load_data(engine, 4)
+                    self.assertEqual(
+                        engine.load_official_external_data.call_args.kwargs["version"],
+                        version,
+                    )
+
+    def test_progress_keyword_only_when_the_host_declares_it(self):
+        def method(*args, **kwargs):
+            return None
+
+        method.__text_signature__ = '($self, max_loop_count, *, progress="auto")'
+        self.assertTrue(Gallery.supports_progress(method))
+        callback = object()
+        self.assertEqual(
+            Gallery.progress_options(method, callback), {"progress": callback}
+        )
+        self.assertEqual(Gallery.progress_options(method, None), {})
+        method.__text_signature__ = '($self, max_loop_count, version="latest")'
+        self.assertFalse(Gallery.supports_progress(method))
+        self.assertEqual(Gallery.progress_options(method, callback), {})
+        self.assertFalse(Gallery.supports_progress(Mock()))
 
     def test_five_loop_catalogue_load_needs_the_operator_opt_in(self):
         engine = Mock()
@@ -1206,8 +1291,8 @@ class GalleryLadderTests(unittest.TestCase):
     """The 3L/4L cases: shipped inputs, bounded launches and recorded hashes."""
 
     # Retained-result sha256 prefixes of the rung fixtures (recorded with vakint
-    # data v0.1.2, reproduced with v0.2.0).
-    recorded = {
+    # data v0.1.2, reproduced with v0.2.0 and v0.2.1).
+    recorded: ClassVar[dict[str, str]] = {
         "3L-zero-momentum": "2f48233c",
         "3L-quadratic": "5acbeebe",
         "4L-zero-momentum": "b93080b3",
@@ -1622,31 +1707,31 @@ class GalleryLadderTests(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertIsNone(Gallery.ladder_job(value))
 
-    def test_progress_rows_summarize_the_native_snapshot(self):
-        status = {
-            "state": "running",
-            "elapsed_seconds": 12.5,
-            "stage": {"stage": "Ordered reduction"},
-            "resources": {"worker_rss_bytes": 2 * 1024**3},
-            "native_progress": {
-                "snapshot": {
-                    "monitor": {"phase": "ordered_reduction"},
-                    "ordered_reduction": {
-                        "completed_phases": 3,
-                        "total_phases": 9,
-                        "phase_kind": "Routing",
-                        "frontier_keys": 1234,
-                        "processed_keys": 5,
-                    },
-                }
-            },
-        }
-        rows = dict(Gallery.progress_rows(status))
-        self.assertEqual(rows["Stage"], "Ordered reduction")
-        self.assertEqual(rows["Ordered phases"], "3 / 9 (Routing)")
-        self.assertEqual(rows["Frontier keys"], "1,234")
-        self.assertEqual(rows["Worker RSS"], "2.00 GiB")
-        self.assertEqual(dict(Gallery.progress_rows({}))["State"], "unknown")
+    def test_job_status_carries_the_unbudgeted_native_model(self):
+        with tempfile.TemporaryDirectory() as root:
+            work = Path(root) / "3L-zero-momentum-1"
+            work.mkdir()
+            (work / "status.json").write_text(json.dumps({"state": "running"}))
+            model = {
+                "status": "Running",
+                "ordered": {
+                    "phase": {"index": 3, "total": 9, "kind": "apply"},
+                    # Wider than display_receipt's budget: never truncated here.
+                    "phases": [{"index": i, "keys": i} for i in range(500)],
+                },
+            }
+            (work / "monitor.json").write_text(
+                json.dumps({"monitor": {"schema": "vakint.monitor.v2", "model": model}})
+            )
+            with patch.dict(os.environ, {"VAKINT_GALLERY_WORK": root}):
+                live = Gallery.job_status(work)
+                self.assertEqual(live["monitor"]["ordered"]["phase"]["index"], 3)
+                self.assertEqual(len(live["monitor"]["ordered"]["phases"]), 500)
+                self.assertGreaterEqual(live["monitor"]["snapshot_age_seconds"], 0)
+                (work / "monitor.json").write_text(
+                    json.dumps({"monitor": {"schema": "other", "model": model}})
+                )
+                self.assertIsNone(Gallery.job_monitor(work))
 
 
 class GalleryExploreOnlyTests(unittest.TestCase):
@@ -1712,8 +1797,9 @@ class GalleryExploreOnlyTests(unittest.TestCase):
 
     def test_five_loop_page_offers_no_enabled_run_without_opt_in(self):
         source = (Gallery.directory / "03_five_loop_uv.py").read_text()
-        self.assertIn("disabled=not _enabled", source)
-        self.assertIn("Gallery.five_loop_runs_enabled()", source)
+        # Without the opt-in there is no run button at all, only a note.
+        self.assertIn("run_benchmark = None", source)
+        self.assertIn("if Gallery.five_loop_runs_enabled():", source)
         heavy = {
             "evaluate",
             "evaluate_integral",
@@ -1733,7 +1819,7 @@ class GalleryExploreOnlyTests(unittest.TestCase):
         self.assertEqual(calls, [])
 
     def test_ladder_page_starts_nothing_until_asked(self):
-        run, arguments = self.cell(
+        run, _arguments = self.cell(
             "05_ladder_reductions.py",
             lambda node: any(
                 isinstance(call, ast.Attribute) and call.attr == "start_reduction"
@@ -1750,21 +1836,27 @@ class GalleryExploreOnlyTests(unittest.TestCase):
                 "ordered_cache": False,
             }
         )
+        shown = Mock()
         headless, request, started = run(
             Gallery=gallery,
             mo=self.fake_mo(),
             run_button=SimpleNamespace(value=False),
             run_form=form,
+            set_shown_job=shown,
         )
         self.assertEqual((headless, request, started), (False, None, None))
         gallery.start_reduction.assert_not_called()
+        shown.assert_not_called()
         headless, request, started = run(
             Gallery=gallery,
             mo=self.fake_mo(),
             run_button=SimpleNamespace(value=True),
             run_form=form,
+            set_shown_job=shown,
         )
         self.assertEqual(started, "job")
+        # The page now shows the run it just started.
+        shown.assert_called_once_with("job")
         self.assertIsNone(request["cancel_after"])
         gallery.start_reduction.assert_called_once_with(
             "3L-zero-momentum",
@@ -1822,6 +1914,7 @@ class GalleryExploreOnlyTests(unittest.TestCase):
                     mo=self.fake_mo("script", arguments),
                     run_button=SimpleNamespace(value=False),
                     run_form=form,
+                    set_shown_job=Mock(),
                 )
             self.assertEqual(stop.exception.code, 2)
             summary = json.loads(output.getvalue())
@@ -1848,7 +1941,11 @@ class GalleryExploreOnlyTests(unittest.TestCase):
 
     def test_ladder_page_keeps_showing_its_last_run(self):
         _, watch = self.ladder_cells()
-        gallery = SimpleNamespace(active_job=Mock(return_value=None))
+        gallery = SimpleNamespace(
+            active_job=Mock(return_value=None),
+            # Background jobs are reopened by name; in-kernel runs are not.
+            ladder_job=lambda name: None if name.startswith("kernel") else name,
+        )
         shown = {"job": None}
         query = {}
 
@@ -1882,6 +1979,13 @@ class GalleryExploreOnlyTests(unittest.TestCase):
         gallery.active_job.return_value = "/work/4L-zero-momentum-2"
         self.assertEqual(watched(None), "/work/4L-zero-momentum-2")
         self.assertEqual(shown["job"], "/work/4L-zero-momentum-2")
+        self.assertEqual(query, {"job": "4L-zero-momentum-2"})
+        # The latest run wins over an older started job (an in-kernel run set
+        # the shown run), and an in-kernel run never enters the URL.
+        shown["job"] = "/work/kernel/kernel-3L-1"
+        self.assertEqual(
+            watched("/work/3L-zero-momentum-1"), "/work/kernel/kernel-3L-1"
+        )
         self.assertEqual(query, {"job": "4L-zero-momentum-2"})
 
     def test_inspection_page_offers_the_five_loop_load_only_with_opt_in(self):
@@ -1952,6 +2056,422 @@ class GalleryExploreOnlyTests(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as empty:
             self.assertIsNone(Gallery.five_loop_plan(empty))
+
+
+class FakeHtml:
+    """marimo's Html: ``text`` and a ``_mime_`` method."""
+
+    def __init__(self, text):
+        self.text = text
+
+    def _mime_(self):
+        return ("text/html", self.text)
+
+
+def fake_display_mo(**extra):
+    return SimpleNamespace(
+        Html=FakeHtml,
+        md=lambda text: ("md", text),
+        vstack=lambda values: values,
+        iframe=lambda payload, **kwargs: ("iframe", payload, kwargs),
+        **extra,
+    )
+
+
+class GalleryMonitorCardTests(unittest.TestCase):
+    """The simplified progress monitor (jobs, in-kernel calls, recorded runs)."""
+
+    def setUp(self):
+        self.mo = fake_display_mo()
+        self.recorded = json.loads(
+            (Gallery.directory / "data/five-loop-q0/monitor-model.json").read_text()
+        )
+
+    def card(self, model, **kwargs):
+        return Gallery.monitor_card(self.mo, model, **kwargs).text
+
+    def test_recorded_five_loop_model_shows_the_key_metrics(self):
+        text = self.card(self.recorded, title="Recorded")
+        self.assertIn("Succeeded", text)
+        self.assertIn('aria-valuenow="83"', text)
+        self.assertIn("Ordered schedule: 83 / 83 phases done", text)
+        # The run ended in its output stage, after the schedule completed.
+        self.assertIn("Recorded · Output · report serialization", text)
+        self.assertIn("6,304", text)  # request-average keys per second
+        self.assertIn("peak 174.9K", text)  # frontier peak
+        self.assertIn("0 / 361.4K", text)  # step cache hits / misses
+        self.assertIn("1,750 input keys", text)
+        self.assertIn("964.6K", text)  # processed keys
+        self.assertIn("peak 14.0 GiB", text)
+        self.assertIn("modular_polynomial · 4 cores", text)
+        self.assertIn("Stages: Data load 51.3 s", text)
+        self.assertIn("Native reduction 2:33", text)
+        self.assertNotIn("No update", text)
+
+    def test_running_partial_and_missing_models(self):
+        model = {
+            "status": "Running",
+            "elapsed_seconds": 154.0,
+            "stage": {"kind": "native", "id": "native"},
+            "ordered": {
+                "phase": {
+                    "index": 38,
+                    "total": 83,
+                    "kind": "apply",
+                    "support": 6,
+                    "owner": 1,
+                },
+                "recent_rate": {"keys": 63120, "seconds": 10.0},
+                "processed_keys": 12345,
+            },
+            "batch": {"completed": 0, "total": 1, "label": "5L / Retain"},
+        }
+        text = self.card(model)
+        self.assertIn("Native reduction · Apply phase · support 6 · owner 1", text)
+        self.assertIn("width:45.8%", text)
+        self.assertIn("6,312", text)  # keys per second
+        self.assertIn("2:34 elapsed", text)
+        self.assertIn("0 / 1", text)
+        self.assertNotIn("Step cache", text)  # absent parts are omitted
+        self.assertIn("Starting", self.card(None))
+        self.assertIn("Running", self.card(None))
+        stale = self.card({**model, "snapshot_age_seconds": 30.0})
+        self.assertIn("No update for 30.0 s", stale)
+        lift = self.card(
+            {**model, "ordered": {"phase": {"index": 83, "total": 83, "kind": "done"}}}
+        )
+        self.assertIn("report no live census", lift)
+        failed = self.card(model, state="cancelled")
+        self.assertIn("Cancelled", failed)
+        self.assertNotIn("report no live census", failed)
+
+    def test_job_card_uses_the_worker_stage_before_the_native_monitor(self):
+        status = {
+            "state": "running",
+            "elapsed_seconds": 7.5,
+            "stage": {"stage": "loading 4L external data"},
+            "resources": {
+                "worker_rss_bytes": 3 * 1024**3,
+                "worker_peak_rss_bytes": 4 * 1024**3,
+            },
+            "monitor": None,
+        }
+        text = Gallery.job_monitor_card(self.mo, status).text
+        self.assertIn("loading 4L external data", text)
+        self.assertIn("3.0 GiB", text)
+        self.assertIn("peak 4.0 GiB", text)
+        self.assertIn("7.5 s elapsed", text)
+        status["monitor"] = {
+            "stage": {"kind": "native"},
+            "ordered": {"phase": {"index": 1, "total": 2, "kind": "route"}},
+        }
+        text = Gallery.job_monitor_card(self.mo, status).text
+        self.assertIn("Native reduction · Route phase", text)
+        self.assertNotIn("loading 4L", text)
+        self.assertIn(
+            "&lt;b&gt;",
+            Gallery.monitor_card(
+                self.mo, {"stage": {"kind": "setup"}}, activity="<b>"
+            ).text,
+        )
+
+    def test_progress_snapshots_become_models(self):
+        native = SimpleNamespace(
+            status="interrupted",
+            to_dict=lambda: {"status": "Running", "elapsed_seconds": 2.0},
+        )
+        self.assertEqual(Gallery.progress_model(native)["status"], "interrupted")
+        load = SimpleNamespace(
+            status="running",
+            elapsed_seconds=3.0,
+            stage="data_load",
+            activity="loading 1L-4L external data",
+            rss_bytes=1024**3,
+            peak_rss_bytes=None,
+            to_dict=dict,
+        )
+        model = Gallery.progress_model(load)
+        self.assertEqual(model["stage"]["kind"], "data_load")
+        text = self.card(model)
+        self.assertIn("Data load · loading 1L-4L external data", text)
+        self.assertIn("1.0 GiB", text)
+        shown = []
+        mo = fake_display_mo(output=SimpleNamespace(replace=shown.append))
+        Gallery.kernel_progress(mo, title="In this kernel")(load)
+        self.assertIn("In this kernel · Data load", shown[0].text)
+
+
+class GalleryPresentationHelperTests(unittest.TestCase):
+    def test_static_formula_rewrites_only_the_live_route_sentence(self):
+        footer = (
+            "<p>Expression preview · items 1–25 of 31. Omitted subexpressions are "
+            "marked ⋯. Use .formatted(page_size=25) in a live notebook with "
+            "symbolica[notebook] to navigate.</p>"
+        )
+        value = SimpleNamespace(_repr_html_=lambda: "<math>x</math>" + footer)
+        text = Gallery.static_formula(
+            fake_display_mo(), value, note="See the pager."
+        ).text
+        self.assertIn("items 1–25 of 31", text)
+        self.assertIn("marked ⋯", text)
+        self.assertIn("See the pager.", text)
+        self.assertNotIn("symbolica[notebook]", text)
+        unchanged = Gallery.static_formula(fake_display_mo(), value).text
+        self.assertIn("symbolica[notebook]", unchanged)
+
+    def test_formula_is_live_when_display_packages_exist_else_static(self):
+        expression = SimpleNamespace(
+            formatted=Mock(return_value="live"),
+            _repr_html_=lambda: (
+                "<math>x</math><p>Use .formatted(page_size=25) in a live notebook with symbolica[notebook] to navigate.</p>"
+            ),
+        )
+        mo = fake_display_mo()
+        with patch.object(Gallery, "live_pager_available", return_value=True):
+            self.assertEqual(Gallery.formula(mo, expression), "live")
+        expression.formatted.assert_called_once_with(page_size=25)
+        with patch.object(Gallery, "live_pager_available", return_value=False):
+            text = Gallery.formula(mo, expression).text
+        self.assertIn("symbolica[notebook-display]", text)
+        self.assertIn("Live pager unavailable", text)
+
+        class TensorExpression:
+            def paged(self, page_size):
+                return ("tensor pager", page_size)
+
+            def to_expression(self):
+                return expression
+
+        with patch.object(Gallery, "live_pager_available", return_value=True):
+            self.assertEqual(
+                Gallery.formula(mo, TensorExpression(), page_size=10),
+                ("tensor pager", 10),
+            )
+        # Without Typst a tensor falls back to the MathML pager of its expression.
+        with patch.object(
+            Gallery, "live_pager_available", side_effect=lambda tensor=False: not tensor
+        ):
+            self.assertEqual(Gallery.formula(mo, TensorExpression()), "live")
+
+    def test_table_wraps_escapes_and_keeps_html_cells(self):
+        text = Gallery.table(
+            fake_display_mo(),
+            [
+                {
+                    "name": "<b>",
+                    "link": FakeHtml('<a href="?job=x">show</a>'),
+                    "n": 12345,
+                    "x": None,
+                }
+            ],
+            numeric=("n",),
+            caption="c",
+        ).text
+        self.assertIn("&lt;b&gt;", text)
+        self.assertIn('<a href="?job=x">show</a>', text)
+        self.assertIn('<td class="num">12,345</td>', text)
+        self.assertIn("<td>—</td>", text)
+        self.assertIn("<caption>c</caption>", text)
+
+    def test_number_formats(self):
+        self.assertEqual(Gallery.compact(1284), "1,284")
+        self.assertEqual(Gallery.compact(12_900), "12.9K")
+        self.assertEqual(Gallery.compact(3_400_000), "3.4M")
+        self.assertEqual(Gallery.duration(12.34), "12.3 s")
+        self.assertEqual(Gallery.duration(154), "2:34")
+        self.assertEqual(Gallery.duration(3723), "1:02:03")
+        self.assertEqual(Gallery.size_text(46_265_113), "46 MB")
+        self.assertEqual(Gallery.size_text(583_200_704), "583 MB")
+        self.assertIsNone(Gallery.size_text(None))
+        self.assertEqual(
+            Gallery.short_numbers(
+                "absolute uncertainty 4.4408920985006261616945266723632812500000...e-16 at 1/3"
+            ),
+            "absolute uncertainty 4.44e-16 at 1/3",
+        )
+        self.assertEqual(Gallery.short_numbers("2.5 and 1.25"), "2.5 and 1.25")
+        self.assertEqual(
+            Gallery.execution_metrics("modular_polynomial · 4 cores"),
+            [
+                ("modular_polynomial", "Ordered weight arithmetic"),
+                ("4", "worker cores"),
+            ],
+        )
+
+    def test_master_labels_read_loops_family_and_powers(self):
+        family = "e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4"
+        self.assertEqual(
+            Gallery.master_label(f"RustRedMaster(rustred_family_{family},1)"),
+            "1L · family e74e81b2 · powers (1)",
+        )
+        self.assertEqual(
+            Gallery.master_label(f"RustRedMaster(rustred_family_{family},1,1,1,0,1,0)"),
+            "3L · family e74e81b2 · powers (1,1,1,0,1,0)",
+        )
+        five = ",".join(["-1", "1", "-1", "0"] + ["1"] * 11)
+        self.assertTrue(
+            Gallery.master_label(
+                f"RustRedMaster(rustred_family_{family},{five})"
+            ).startswith("5L · ")
+        )
+        self.assertEqual(Gallery.master_label("unparsed"), "unparsed")
+        symbols = [
+            SimpleNamespace(
+                expression=f"RustRedMaster(rustred_family_{family},1,1,1,0,1,0)"
+            ),
+            SimpleNamespace(expression=f"RustRedMaster(rustred_family_{family},1)"),
+        ]
+        options = Gallery.master_options(symbols)
+        self.assertEqual(next(iter(options)), "1L · family e74e81b2 · powers (1)")
+        self.assertEqual(
+            options["1L · family e74e81b2 · powers (1)"], str(symbols[1].expression)
+        )
+
+    def test_catalogue_summary_reads_counts_and_sizes_from_manifests(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            (root / "5L").mkdir()
+            (root / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "version": "v9",
+                        "loop_packs": [
+                            {"loop_count": 5, "manifest": "5L/manifest.json"}
+                        ],
+                    }
+                )
+            )
+            (root / "5L/manifest.json").write_text(
+                json.dumps(
+                    {
+                        "masters": [
+                            {"coefficients": [{"numerical": True}]},
+                            {"coefficients": [{"numerical": False}]},
+                            {"coefficients": []},
+                        ],
+                        "files": {"a": {"bytes": 1000}, "b": {"bytes": 2000}},
+                    }
+                )
+            )
+            summary = Gallery.catalogue_summary(root)
+            self.assertEqual(summary["version"], "v9")
+            five = summary["loops"][5]
+            self.assertEqual((five["masters"], five["computed"]), (3, 1))
+            self.assertEqual(
+                five["bytes"], 3000 + (root / "5L/manifest.json").stat().st_size
+            )
+        with tempfile.TemporaryDirectory() as empty:
+            self.assertIsNone(Gallery.catalogue_summary(empty))
+
+    def test_theme_follows_the_notebook_not_the_operating_system(self):
+        for css in (Gallery.styles(), Gallery.styles(frame=True)):
+            self.assertNotIn("prefers-color-scheme", css)
+            self.assertIn(".dark-theme", css)
+        # The Rust cards' own media query is overridden in both directions.
+        self.assertIn(":is(.light,.light-theme", Gallery.styles())
+        frame = Gallery.frame(fake_display_mo(), "<p>x</p>", height=300)
+        self.assertEqual(frame[2], {"height": "300px"})
+        self.assertIn("window.parent.document.body", frame[1])
+
+    def test_edit_mode_navigation_opens_notebook_files(self):
+        for mode, link in (
+            ("edit", "/?file=02_constants_and_masters.py"),
+            ("run", "/inspect/"),
+        ):
+            mo = fake_display_mo(app_meta=lambda mode=mode: SimpleNamespace(mode=mode))
+            with self.subTest(mode=mode), patch.dict(os.environ, {}, clear=True):
+                self.assertIn(
+                    f'href="{link}"', Gallery.header(mo, "graphs", "T", "S").text
+                )
+
+    def test_pages_hold_no_stale_catalogue_literals(self):
+        for path in sorted(Gallery.directory.glob("0*.py")):
+            source = path.read_text()
+            for literal in (
+                "640",
+                "140 MB",
+                "435 MB",
+                'uncomputed"',
+                'version="latest"',
+            ):
+                with self.subTest(page=path.name, literal=literal):
+                    self.assertNotIn(literal, source)
+
+    def test_reduce_worker_sets_no_in_process_time_budget(self):
+        tree = ast.parse((Gallery.directory / "reduce_worker.py").read_text())
+        keywords = {
+            keyword.arg
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            for keyword in node.keywords
+        }
+        self.assertNotIn("max_elapsed_seconds", keywords)
+
+
+class GalleryFiveLoopFixtureTests(unittest.TestCase):
+    def test_shipped_recorded_run_is_checked_and_current(self):
+        fixture = Gallery.five_loop_fixture()
+        report = fixture["report"]
+        self.assertEqual(
+            report["catalogue_closure"], {**report["catalogue_closure"], "closed": True}
+        )
+        self.assertEqual(report["data"]["version"], "v0.2.1")
+        self.assertNotIn("path", report["data"])
+        self.assertEqual(fixture["model"]["ordered"]["phase"]["total"], 83)
+        self.assertNotIn("worker_pid", fixture["model"]["details"])
+        path, digest = fixture["retained"]
+        self.assertEqual(digest, report["retained"]["sha256"])
+        self.assertEqual(
+            len(Gallery.checked_bytes(path, digest)), report["retained"]["bytes"]
+        )
+        with self.assertRaisesRegex(ValueError, "checksum"):
+            Gallery.checked_bytes(path, "0" * 64)
+
+
+class GalleryKernelRunTests(unittest.TestCase):
+    def test_kernel_button_only_in_edit_mode(self):
+        source = (Gallery.directory / "05_ladder_reductions.py").read_text()
+        self.assertIn('if Gallery.mode(mo) == "edit"', source)
+        self.assertIn("Gallery.reduce_in_kernel(", source)
+
+    def test_interrupted_kernel_run_is_recorded_and_reraised(self):
+        import reduce_worker
+
+        with (
+            tempfile.TemporaryDirectory() as root,
+            patch.dict(os.environ, {"VAKINT_GALLERY_WORK": root}, clear=False),
+        ):
+            work = Gallery.kernel_work("3L-zero-momentum", n_cores=1)
+            self.assertEqual(
+                json.loads((Path(work) / "request.json").read_text())["kind"], "kernel"
+            )
+            with (
+                patch.object(reduce_worker, "run", side_effect=KeyboardInterrupt),
+                self.assertRaises(KeyboardInterrupt),
+            ):
+                Gallery.reduce_in_kernel(work)
+            status = gallery_jobs.status(work)
+            self.assertEqual(status["state"], "cancelled")
+            self.assertTrue(status["interrupted"])
+            self.assertEqual(Gallery.job_status(work)["state"], "cancelled")
+            # In-kernel runs are per session: never listed with background jobs.
+            self.assertNotIn(work, Gallery.jobs())
+            with patch.object(reduce_worker, "run", return_value=0):
+                Gallery.reduce_in_kernel(work)
+            self.assertEqual(gallery_jobs.status(work)["state"], "complete")
+
+    def test_worker_records_an_interrupt_before_reraising(self):
+        import reduce_worker
+
+        with tempfile.TemporaryDirectory() as root:
+            with (
+                patch.object(reduce_worker, "reduce", side_effect=KeyboardInterrupt),
+                self.assertRaises(KeyboardInterrupt),
+            ):
+                reduce_worker.run(root, {"case": "3L-zero-momentum"})
+            receipt = json.loads((Path(root) / "benchmark.json").read_text())
+            self.assertTrue(receipt["interrupted"])
+            self.assertEqual(receipt["error"], "Interrupted")
 
 
 if __name__ == "__main__":

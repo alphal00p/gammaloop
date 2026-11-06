@@ -11,6 +11,14 @@ Ordered engine to retained masters, and writes
 - ``stage.json``: the current coarse stage, for the notebook's progress card;
 - ``monitor.json``: the native progress snapshot (Vakint's ``progress_snapshot``).
 
+The page's in-kernel run (marimo edit mode) calls ``run`` directly with a
+``progress`` callback; Ctrl-C or marimo's Interrupt then stops the native call
+and ``run`` records the run as interrupted before re-raising.
+
+No ``max_elapsed_seconds`` budget is set: the job supervisor enforces the
+deadline, and an active Symbolica budget makes every resource checkpoint read
+the clock, which slows the 4L external-data load about 2.5x.
+
 The settings are those of the rung test (tests/ordered_reduction_rungs.rs):
 MSbar, retained masters, dot-product notation and L+1 epsilon orders, so the
 retained sha256 must equal the recorded one for every arithmetic and n_cores.
@@ -69,7 +77,7 @@ def catalogue_closure(result, engine, E):
     return {"closed": unknown is None, "master_count": len(present)}
 
 
-def reduce(work, spec, stages):
+def reduce(work, spec, stages, progress=None):
     cases = Gallery.ladder_cases()
     case = cases[spec["case"]]
     loops = case["loop_count"]
@@ -109,7 +117,6 @@ def reduce(work, spec, stages):
         normalization="MSbar",
         use_dot_product_notation=True,
         number_of_terms_in_epsilon_expansion=loops + 1,
-        max_elapsed_seconds=float(spec["max_seconds"]),
         ordered_cache="read-write",
         ordered_cache_directory=cache_directory,
     )
@@ -119,7 +126,10 @@ def reduce(work, spec, stages):
     if data_directory:
         stages.enter(f"loading {loops}L external data")
         loaded = engine.load_official_external_data(
-            loops, version="latest", local_artifacts_path=data_directory
+            loops,
+            version=spec.get("data_version") or Gallery.data_version(engine),
+            local_artifacts_path=data_directory,
+            **Gallery.progress_options(engine.load_official_external_data, progress),
         )
         receipt["data"] = {"version": loaded["version"], "path": str(loaded["path"])}
     else:
@@ -140,6 +150,7 @@ def reduce(work, spec, stages):
         evaluated,
         progress_snapshot=str(work / "monitor.json"),
         progress_interval_seconds=0.5,
+        **Gallery.progress_options(engine.evaluate, progress),
     )
 
     stages.enter("writing the retained result")
@@ -164,14 +175,27 @@ def reduce(work, spec, stages):
     return receipt
 
 
-def main():
-    work = Path(sys.argv[1]).resolve()
+def run(work, spec, progress=None):
+    """Reduce ``spec`` into ``work``: write ``benchmark.json`` and return 0 on
+    success, 1 on failure. A KeyboardInterrupt (Ctrl-C, marimo's Interrupt) is
+    recorded as an interrupted run and re-raised."""
+    work = Path(work)
     stages = Stages(work)
     started = perf_counter()
-    spec = json.loads((work / "request.json").read_text())["spec"]
+    interrupted = None
     try:
-        receipt = reduce(work, spec, stages)
+        receipt = reduce(work, spec, stages, progress=progress)
         status = 0
+    except KeyboardInterrupt as error:
+        interrupted = error
+        receipt = {
+            "schema": "vakint.gallery.ladder-run.v1",
+            "case": spec.get("case"),
+            "error": "Interrupted",
+            "interrupted": True,
+            "failed_stage": stages.name,
+        }
+        status = 130
     except Exception as error:  # noqa: BLE001 - every failure is reported.
         traceback.print_exc()
         receipt = {
@@ -181,11 +205,16 @@ def main():
             "failed_stage": stages.name,
         }
         status = 1
-    stages.enter("done" if status == 0 else f"failed while {stages.name}")
+    if status == 0:
+        stages.enter("done")
+    elif interrupted is not None:
+        stages.enter(f"interrupted while {stages.name}")
+    else:
+        stages.enter(f"failed while {stages.name}")
     seconds = {
         key: round(value, 4)
         for key, value in stages.seconds.items()
-        if not key.startswith("failed while")
+        if not key.startswith(("failed while", "interrupted while"))
     }
     receipt["seconds"] = {**seconds, "total": round(perf_counter() - started, 4)}
     receipt["cpu_seconds"] = {
@@ -198,7 +227,15 @@ def main():
     temporary = work / "benchmark.tmp"
     temporary.write_text(json.dumps(receipt, indent=1, default=str))
     temporary.replace(work / "benchmark.json")
+    if interrupted is not None:
+        raise interrupted
     return status
+
+
+def main():
+    work = Path(sys.argv[1]).resolve()
+    spec = json.loads((work / "request.json").read_text())["spec"]
+    return run(work, spec)
 
 
 if __name__ == "__main__":
