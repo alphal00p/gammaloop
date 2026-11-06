@@ -404,7 +404,7 @@ mod results_file {
     use super::*;
     use serde_json::Value;
 
-    use super::results::{self, Key};
+    use super::results::{self, Key, Source};
 
     fn measurement(cell: &str, repetition: usize) -> Value {
         json!({"cell": cell, "backend": "forcer", "threads": 1, "state": "cold",
@@ -412,7 +412,17 @@ mod results_file {
     }
 
     fn protocol(gammaloop: &str, rustred: &str) -> Value {
-        json!({"gammaloop_sha": gammaloop, "rustred_sha": rustred, "build_profile": "ci-optim"})
+        json!({"gammaloop_sha": gammaloop, "rustred_sha": rustred, "build_profile": "ci-optim",
+               "source_dirty": false})
+    }
+
+    fn source<'a>(gammaloop: &'a str, rustred: &'a str, build_profile: &'a str) -> Source<'a> {
+        Source {
+            gammaloop_sha: gammaloop,
+            rustred_sha: rustred,
+            build_profile,
+            source_dirty: false,
+        }
     }
 
     #[test]
@@ -435,21 +445,102 @@ mod results_file {
             state: "cold".into(),
             repetition,
         };
-        let recorded = results::recorded(&document, "aaa", "bbb", "ci-optim")?;
+        let recorded = results::recorded(&document, source("aaa", "bbb", "ci-optim"), None)?;
         assert_eq!(
             recorded,
             [key("L1_d0_r0", 0), key("L1_d0_r0", 1)]
                 .into_iter()
                 .collect::<std::collections::BTreeSet<_>>()
         );
-        assert!(results::recorded(&document, "aaa", "bbb", "release")?.is_empty());
-        assert!(results::recorded(&document, "aaa", "zzz", "ci-optim")?.is_empty());
+        let recorded_for = |source| results::recorded(&document, source, None);
+        assert!(recorded_for(source("aaa", "bbb", "release"))?.is_empty());
+        assert!(recorded_for(source("aaa", "zzz", "ci-optim"))?.is_empty());
+        let dirty = Source {
+            source_dirty: true,
+            ..source("aaa", "bbb", "ci-optim")
+        };
+        assert!(recorded_for(dirty)?.is_empty());
 
         let before = std::fs::read(&path)?;
         assert!(results::append(&path, "first", measurement("L1_d0_r0", 0)).is_err());
         assert!(results::append(&path, "missing", measurement("L1_d0_r0", 2)).is_err());
         assert!(results::begin_run(&path, "first", &protocol("aaa", "bbb"), false).is_err());
         assert_eq!(std::fs::read(&path)?, before, "a refusal changed the file");
+        Ok(())
+    }
+
+    #[test]
+    fn a_capped_record_is_final_only_up_to_its_cap() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("p_results.json");
+        results::begin_run(&path, "run", &protocol("aaa", "bbb"), true)?;
+        let capped = |cell, status| {
+            json!({"cell": cell, "backend": "forcer", "threads": 16, "state": "warm",
+                   "repetition": 0, "status": status, "cap_seconds": 100.0})
+        };
+        results::append(&path, "run", capped("L4_d0_r0", "capped"))?;
+        results::append(&path, "run", capped("L4_d0_r2", "skipped"))?;
+
+        let document = results::read(&path)?;
+        let count = |cap| {
+            results::recorded(&document, source("aaa", "bbb", "ci-optim"), cap)
+                .map(|keys| keys.len())
+        };
+        assert_eq!(count(Some(50.0))?, 2);
+        assert_eq!(count(Some(100.0))?, 2);
+        assert_eq!(count(Some(1800.0))?, 0);
+        assert_eq!(count(None)?, 0);
+        Ok(())
+    }
+
+    #[test]
+    fn exact_marks_must_come_from_the_measured_source() {
+        let measured = source("aaa", "bbb", "release");
+        let exact = |gammaloop, rustred| {
+            json!({"schema": results::EXACT_SCHEMA, "gammaloop_sha": gammaloop,
+                   "rustred_sha": rustred, "cells": []})
+        };
+        assert!(results::check_exact(&exact("aaa", "bbb"), measured).is_ok());
+        assert!(results::check_exact(&exact("ccc", "bbb"), measured).is_err());
+        assert!(results::check_exact(&exact("aaa", "ddd"), measured).is_err());
+        let no_shas = json!({"schema": results::EXACT_SCHEMA, "cells": []});
+        assert!(results::check_exact(&no_shas, measured).is_err());
+        let stub = include_str!("../docs/benchmark/data/p_exact.json");
+        assert!(results::check_exact(&serde_json::from_str(stub).unwrap(), measured).is_ok());
+    }
+
+    #[test]
+    fn a_reduction_without_a_math_span_has_no_seconds() {
+        assert_eq!(results::reduction_seconds(true, 3, Some(1.5)), Some(1.5));
+        assert_eq!(results::reduction_seconds(true, 0, Some(0.0)), None);
+        assert_eq!(results::reduction_seconds(false, 3, Some(1.5)), None);
+        assert_eq!(results::reduction_seconds(false, 3, None), None);
+    }
+
+    #[test]
+    fn the_integral_count_is_one_per_top_on_the_grid_and_ignores_projector_powers() -> Result<()> {
+        Vakint::initialize_vakint_symbols();
+        let count = |fixture: &str, name: &str| -> Result<usize> {
+            let cells: Value = serde_json::from_str(fixture)?;
+            let cell = cells["cells"]
+                .as_array()
+                .and_then(|cells| cells.iter().find(|cell| cell["name"] == name))
+                .ok_or("no such cell")?;
+            let input = vakint::vakint_parse!(cell["input"].as_str().ok_or("no input")?)?;
+            Ok(results::integral_count(&input))
+        };
+        let grid = include_str!("fixtures/benchmark_p_integrals.json");
+        for (name, tops) in [
+            ("L1_d0_r0", 1),
+            ("L2_d1_r4", 1),
+            ("L3_d2_r8", 3),
+            ("L4_d0_r2", 11),
+        ] {
+            assert_eq!(count(grid, name)?, tops, "{name}");
+        }
+        let physics = include_str!("fixtures/benchmark_p_physics.json");
+        let terms = count(physics, "physics_L2")?;
+        assert!(terms < 26 && terms > 1, "{terms} integrals");
         Ok(())
     }
 

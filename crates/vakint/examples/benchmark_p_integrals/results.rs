@@ -2,8 +2,8 @@
 //! `docs/benchmark/data/p_results.json` (schema `vakint.p-benchmark.v1`): runs
 //! with their protocol, each holding the raw measurements in the order they
 //! were taken. Nothing recorded is ever rewritten; the report reads the
-//! measurements of every run with the shas of the selected run, so that a
-//! resumed run continues the interrupted one.
+//! measurements of every run of the same source as the selected run, so that
+//! a resumed run continues the interrupted one.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
@@ -12,11 +12,27 @@ use std::path::Path;
 
 use eyre::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
+use symbolica::{
+    atom::{Atom, AtomCore, AtomView},
+    symbol,
+};
 
 pub const SCHEMA: &str = "vakint.p-benchmark.v1";
+pub const EXACT_SCHEMA: &str = "vakint.p-exact.v1";
+
+/// What is measured: the sources and the build. `gammaloop_sha` is the last
+/// commit outside `crates/vakint/docs/benchmark`, `rustred_sha` the commit
+/// pinned in `Cargo.lock`. A dirty tree is another source than its clean sha.
+#[derive(Clone, Copy, Debug)]
+pub struct Source<'a> {
+    pub gammaloop_sha: &'a str,
+    pub rustred_sha: &'a str,
+    pub build_profile: &'a str,
+    pub source_dirty: bool,
+}
 
 /// What one measurement measures. A recorded key is never measured again for
-/// the same shas and profile.
+/// the same source, unless a capped record leaves room for a longer cap.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Key {
     pub cell: String,
@@ -114,47 +130,47 @@ pub fn append(path: &Path, id: &str, measurement: Value) -> Result<()> {
     write(path, &document)
 }
 
-/// The measurements of this source and build: every run with the same
-/// gammaloop and rustred shas and the same build profile.
-fn of_source<'a>(
-    document: &'a Value,
-    gammaloop_sha: &'a str,
-    rustred_sha: &'a str,
-    build_profile: &'a str,
-) -> impl Iterator<Item = &'a Value> {
+/// The measurements of `source`.
+fn of_source<'a>(document: &'a Value, source: Source<'a>) -> impl Iterator<Item = &'a Value> {
     document["runs"]
         .as_array()
         .into_iter()
         .flatten()
         .filter(move |run| {
             let protocol = &run["protocol"];
-            protocol["gammaloop_sha"] == gammaloop_sha
-                && protocol["rustred_sha"] == rustred_sha
-                && protocol["build_profile"] == build_profile
+            protocol["gammaloop_sha"] == source.gammaloop_sha
+                && protocol["rustred_sha"] == source.rustred_sha
+                && protocol["build_profile"] == source.build_profile
+                && protocol["source_dirty"] == source.source_dirty
         })
         .flat_map(|run| run["measurements"].as_array().into_iter().flatten())
 }
 
-/// The keys already measured for this source and build.
+/// Whether a measurement needs no new attempt under the cap `cap_seconds`: a
+/// measurement that hit a cap, or was skipped for that reason, proves nothing
+/// about a longer one.
+fn is_final(measurement: &Value, cap_seconds: Option<f64>) -> bool {
+    measurement["status"] == "ok"
+        || cap_seconds
+            .zip(measurement["cap_seconds"].as_f64())
+            .is_some_and(|(cap, recorded)| recorded >= cap)
+}
+
+/// The keys already measured for `source` that a run under `cap_seconds` skips.
 pub fn recorded(
     document: &Value,
-    gammaloop_sha: &str,
-    rustred_sha: &str,
-    build_profile: &str,
+    source: Source,
+    cap_seconds: Option<f64>,
 ) -> Result<BTreeSet<Key>> {
-    of_source(document, gammaloop_sha, rustred_sha, build_profile)
+    of_source(document, source)
+        .filter(|measurement| is_final(measurement, cap_seconds))
         .map(Key::of)
         .collect()
 }
 
-/// The result digest recorded per (cell, backend) for this source and build.
-pub fn outputs(
-    document: &Value,
-    gammaloop_sha: &str,
-    rustred_sha: &str,
-    build_profile: &str,
-) -> BTreeMap<(String, String), String> {
-    of_source(document, gammaloop_sha, rustred_sha, build_profile)
+/// The result digest recorded per (cell, backend) for `source`.
+pub fn outputs(document: &Value, source: Source) -> BTreeMap<(String, String), String> {
+    of_source(document, source)
         .filter_map(|measurement| {
             let cell = measurement["cell"].as_str()?.to_owned();
             let backend = measurement["backend"].as_str()?.to_owned();
@@ -162,4 +178,57 @@ pub fn outputs(
             Some(((cell, backend), digest))
         })
         .collect()
+}
+
+/// An exact-agreement file marks what was measured only for the same sources;
+/// the stub of the repository marks nothing.
+pub fn check_exact(exact: &Value, source: Source) -> Result<()> {
+    ensure!(
+        exact["schema"] == EXACT_SCHEMA && exact["cells"].is_array(),
+        "not a {EXACT_SCHEMA} document"
+    );
+    if exact["stub"] != true {
+        for (name, sha) in [
+            ("gammaloop_sha", source.gammaloop_sha),
+            ("rustred_sha", source.rustred_sha),
+        ] {
+            ensure!(
+                exact[name] == sha,
+                "the exact-agreement file has {name} {}, this source {sha}",
+                exact[name]
+            );
+        }
+    }
+    Ok(())
+}
+
+/// The seconds of the reduction sub-line. A capture without a math span
+/// reports zero, which is no measurement.
+pub fn reduction_seconds(complete: bool, intervals: usize, math: Option<f64>) -> Option<f64> {
+    math.filter(|_| complete && intervals > 0)
+}
+
+/// The integrals of an input: its expanded terms up to a coefficient free of
+/// loop momenta (the projector's powers of epsilon and of the external scale).
+pub fn integral_count(input: &Atom) -> usize {
+    let momentum = symbol!("vakint::k");
+    let expanded = input.expand();
+    let terms = match expanded.as_view() {
+        AtomView::Add(sum) => sum.iter().collect::<Vec<_>>(),
+        term => vec![term],
+    };
+    let integrals = terms.into_iter().map(|term| {
+        let factors = match term {
+            AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+            factor => vec![factor],
+        };
+        let mut integral = factors
+            .into_iter()
+            .filter(|factor| factor.contains_symbol(momentum))
+            .map(|factor| factor.to_canonical_string())
+            .collect::<Vec<_>>();
+        integral.sort();
+        integral
+    });
+    integrals.collect::<BTreeSet<_>>().len()
 }

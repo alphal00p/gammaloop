@@ -664,18 +664,28 @@ impl Vakint {
 }
 
 /// Process-global record of the FORM runs for
-/// `examples/benchmark_p_integrals.rs` (not part of the API). The Forcer
-/// materialisation base needs no hook: it is the settings'
-/// `temporary_directory`.
+/// `examples/benchmark_p_integrals.rs` (not part of the API), off unless the
+/// harness enables it. The Forcer materialisation base needs no hook: it is
+/// the settings' `temporary_directory`.
 #[cfg(feature = "experimental-rustred")]
 #[doc(hidden)]
 pub mod benchmark {
     use std::sync::Mutex;
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::time::Duration;
 
+    static RECORDING: AtomicBool = AtomicBool::new(false);
     static RUNS: Mutex<(Duration, Vec<String>)> = Mutex::new((Duration::ZERO, Vec::new()));
 
+    /// Record every FORM run from now on.
+    pub fn enable() {
+        RECORDING.store(true, Ordering::SeqCst);
+    }
+
     pub(super) fn record(program: &str, elapsed: Duration) {
+        if !RECORDING.load(Ordering::SeqCst) {
+            return;
+        }
         let mut runs = RUNS
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);

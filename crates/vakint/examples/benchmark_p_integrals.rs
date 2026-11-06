@@ -4,39 +4,42 @@
 //!
 //! Every measurement is one fresh child process of this executable, one input
 //! at a time, under the thread count and CPU list of its table. A measurement
-//! already recorded for the same gammaloop and rustred shas and build profile
-//! is skipped, so an interrupted run resumes by running the same command
-//! (results committed in between do not count as a source change).
+//! already recorded for the same gammaloop and rustred shas, build profile and
+//! tree state is skipped, so an interrupted run resumes by running the same
+//! command (results committed in between do not count as a source change).
+//! SIGTERM and SIGINT kill the measuring process group before the harness
+//! exits: the group sits outside the harness's own, so it would survive.
 //!
 //! Run with `cargo run --release --locked -p vakint --features
 //! vakint/feynkit-ingress,vakint/experimental-rustred --example
 //! benchmark_p_integrals -- --help`.
 
-#[cfg(feature = "experimental-rustred")]
+#[cfg(all(feature = "experimental-rustred", target_os = "linux"))]
 #[path = "benchmark_p_integrals/results.rs"]
 mod results;
 
-#[cfg(feature = "experimental-rustred")]
+#[cfg(all(feature = "experimental-rustred", target_os = "linux"))]
 fn main() -> eyre::Result<()> {
     harness::main()
 }
 
-#[cfg(not(feature = "experimental-rustred"))]
+#[cfg(not(all(feature = "experimental-rustred", target_os = "linux")))]
 fn main() {
-    eprintln!("benchmark_p_integrals needs the feature vakint/experimental-rustred");
+    eprintln!("benchmark_p_integrals needs Linux and the feature vakint/experimental-rustred");
     std::process::exit(2);
 }
 
-#[cfg(feature = "experimental-rustred")]
+#[cfg(all(feature = "experimental-rustred", target_os = "linux"))]
 mod harness {
     use std::collections::{BTreeMap, BTreeSet};
     use std::fs::{self, File};
     use std::os::unix::process::CommandExt;
     use std::path::{Path, PathBuf};
-    use std::process::{Command, ExitStatus, Stdio};
+    use std::process::{Child, Command, ExitStatus, Stdio};
+    use std::sync::atomic::{AtomicI32, Ordering};
     use std::time::{Duration, Instant};
 
-    use eyre::{Result, bail, ensure};
+    use eyre::{Context, Result, bail, ensure};
     use serde::Deserialize;
     use serde_json::{Value, json};
     use sha2::{Digest, Sha256};
@@ -49,11 +52,10 @@ mod harness {
         vakint_parse,
     };
 
-    use super::results::{self, Key};
+    use super::results::{self, Key, Source};
 
     const GRID: &str = include_str!("../tests/fixtures/benchmark_p_integrals.json");
     const PHYSICS: &str = include_str!("../tests/fixtures/benchmark_p_physics.json");
-    const EXACT_SCHEMA: &str = "vakint.p-exact.v1";
     const BUBBLE: &str = "topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))";
     const SCOPE: &str = "Wall time of Vakint::evaluate in Retain mode, in a fresh process, input \
         parsed and engine (and RustRed library) loaded beforehand: same frontend and finalizer \
@@ -63,6 +65,30 @@ mod harness {
         Forcer cold: private empty materialisation directory; warm: materialised (Forcer has no \
         result cache). Raw: the generated FORM programs run directly, one FORM process each. OS \
         pages are not flushed.";
+
+    /// The signal that asked this harness to stop, 0 before any.
+    static STOP_SIGNAL: AtomicI32 = AtomicI32::new(0);
+
+    extern "C" fn note_stop_signal(signal: libc::c_int) {
+        STOP_SIGNAL.store(signal, Ordering::SeqCst);
+    }
+
+    /// Note SIGTERM and SIGINT, for `run_capped` to act on.
+    fn catch_stop_signals() {
+        for signal in [libc::SIGTERM, libc::SIGINT] {
+            // SAFETY: the handler only stores into an atomic.
+            unsafe { libc::signal(signal, note_stop_signal as *const () as libc::sighandler_t) };
+        }
+    }
+
+    /// SIGKILL the process group `child` leads, then reap it.
+    fn kill_group(child: &mut Child) -> Result<()> {
+        // SAFETY: a plain system call; the group is the one of the unreaped
+        // `child`, so its id cannot have been reused.
+        unsafe { libc::kill(-(child.id() as libc::pid_t), libc::SIGKILL) };
+        child.wait()?;
+        Ok(())
+    }
 
     #[derive(Clone, Debug, Deserialize)]
     struct Cell {
@@ -162,7 +188,7 @@ mod harness {
     const USAGE: &str = "benchmark_p_integrals --build-profile release|ci-optim [OPTIONS]\n\
         --output PATH        results (default: crate docs/benchmark/data/p_results.json)\n\
         --exact PATH         exact marks (default: crate docs/benchmark/data/p_exact.json)\n\
-        --work-dir PATH      scratch directory, kept for resuming (default: cwd/workspace/p_benchmark)\n\
+        --work-dir PATH      scratch directory, kept for resuming (default: target/p_benchmark of the repository)\n\
         --form PATH          FORM executable; tform is its sibling (default: form on PATH)\n\
         --repetitions N      fresh processes per measurement (default: 3)\n\
         --threads LIST       thread counts (default: 1,16)\n\
@@ -179,6 +205,7 @@ mod harness {
         --stop-file PATH     stop cleanly between measurements when PATH exists (exit status 3)\n\
         --child-program PATH run PATH instead of this executable as the measuring child (harness tests)\n\
         --select-current     select this run for the report; recorded runs stay\n\
+        A release measurement needs a clean tree (crates/vakint/docs/benchmark excepted).\n\
         Never removes anything outside its work directory; every Forcer run materialises under it.";
 
     impl Options {
@@ -187,7 +214,7 @@ mod harness {
             let mut result = Self {
                 output: crate_path.join("docs/benchmark/data/p_results.json"),
                 exact: crate_path.join("docs/benchmark/data/p_exact.json"),
-                work_dir: std::env::current_dir()?.join("workspace/p_benchmark"),
+                work_dir: crate_path.join("../../target/p_benchmark"),
                 form: "form".into(),
                 child_program: None,
                 build_profile: None,
@@ -393,43 +420,59 @@ mod harness {
             drop(engine.evaluate(&load, bubble.as_view())?);
         }
         let load_seconds = started.elapsed().as_secs_f64();
-        drop(forcer_benchmark::take());
+        forcer_benchmark::enable();
         let started = Instant::now();
         let capture = capture_reduction_timing(|| engine.evaluate(&settings, input.as_view()));
         let evaluate_seconds = started.elapsed().as_secs_f64();
         let value = capture.result?;
         let (form, programs) = forcer_benchmark::take();
         if let Some(directory) = &options.programs {
-            fs::create_dir_all(directory)?;
-            for (index, program) in programs.iter().enumerate() {
-                fs::write(directory.join(format!("{index:04}.frm")), program)?;
-            }
+            write_programs(directory, &programs)?;
         }
         let timing = capture.timing;
-        let (reduction_seconds, gross_seconds) = match options.backend {
-            Backend::RustRed => (
+        let reduction_seconds = match options.backend {
+            Backend::RustRed => results::reduction_seconds(
+                timing.complete,
+                timing.interval_count,
                 timing.reduction_math.map(|math| math.as_secs_f64()),
-                Some(timing.gross.as_secs_f64()),
             ),
-            Backend::Forcer => (Some(form.as_secs_f64()), None),
+            Backend::Forcer => Some(form.as_secs_f64()),
         };
         let output = value.to_canonical_string();
         let terms = match value.as_view() {
             AtomView::Add(sum) => sum.get_nargs(),
             _ => 1,
         };
-        serde_json::to_writer(
-            File::create(report)?,
-            &json!({
-                "evaluate_seconds": evaluate_seconds,
-                "reduction_seconds": reduction_seconds,
-                "load_seconds": load_seconds,
-                "reduction_gross_seconds": gross_seconds,
-                "form_runs": programs.len(),
-                "output_sha256": format!("{:x}", Sha256::digest(output.as_bytes())),
-                "output_terms": terms,
-            }),
-        )?;
+        let mut record = json!({
+            "evaluate_seconds": evaluate_seconds,
+            "reduction_seconds": reduction_seconds,
+            "load_seconds": load_seconds,
+            "form_runs": programs.len(),
+            "output_sha256": format!("{:x}", Sha256::digest(output.as_bytes())),
+            "output_terms": terms,
+        });
+        if options.backend == Backend::RustRed {
+            record["reduction_gross_seconds"] = json!(timing.gross.as_secs_f64());
+            record["reduction_interval_count"] = json!(timing.interval_count);
+            record["reduction_timing_complete"] = json!(timing.complete);
+            record["reduction_incompleteness_reason"] = json!(timing.incompleteness_reason);
+        }
+        serde_json::to_writer(File::create(report)?, &record)?;
+        Ok(())
+    }
+
+    /// Replace the program directory at once: a killed child leaves either the
+    /// former programs or none, never a part of them.
+    fn write_programs(directory: &Path, programs: &[String]) -> Result<()> {
+        let partial = directory.with_extension(format!("partial-{}", std::process::id()));
+        fs::create_dir_all(&partial)?;
+        for (index, program) in programs.iter().enumerate() {
+            fs::write(partial.join(format!("{index:04}.frm")), program)?;
+        }
+        if directory.exists() {
+            fs::remove_dir_all(directory)?;
+        }
+        fs::rename(partial, directory)?;
         Ok(())
     }
 
@@ -480,18 +523,27 @@ mod harness {
             .map(|name| (name, threads.to_string()))
     }
 
-    /// `exact` must be a `vakint.p-exact.v1` document (or absent).
-    fn check_exact(path: &Path) -> Result<Option<String>> {
+    /// The digest of the exact-agreement file, which must mark `source` (or be
+    /// the stub, or absent).
+    fn check_exact(path: &Path, source: Source) -> Result<Option<String>> {
         if !path.exists() {
             return Ok(None);
         }
         let exact: Value = serde_json::from_reader(File::open(path)?)?;
-        ensure!(
-            exact["schema"] == EXACT_SCHEMA && exact["cells"].is_array(),
-            "{} is not a {EXACT_SCHEMA} document",
-            path.display()
-        );
+        results::check_exact(&exact, source).with_context(|| path.display().to_string())?;
         Ok(Some(sha256_of_file(path)?))
+    }
+
+    /// `form_command` falls back to plain `form` without a sibling `tform`,
+    /// which would measure one worker under a thread count.
+    fn check_tform(form: &Path) -> Result<()> {
+        let tform = form.with_file_name("tform");
+        let usable = Command::new(&tform)
+            .arg("-version")
+            .output()
+            .is_ok_and(|output| output.status.success());
+        ensure!(usable, "no usable tform at {}", tform.display());
+        Ok(())
     }
 
     struct Harness<'a> {
@@ -502,7 +554,7 @@ mod harness {
         executable: PathBuf,
         recorded: BTreeSet<Key>,
         outputs: BTreeMap<(String, String), String>,
-        terms: BTreeMap<String, usize>,
+        integrals: BTreeMap<String, usize>,
         work: PathBuf,
     }
 
@@ -566,17 +618,29 @@ mod harness {
 
         /// Run `command` in its own process group, so that the cap also stops
         /// its FORM processes. `None` when it hit the cap after `spent` seconds
-        /// of the same measurement.
+        /// of the same measurement. A stop signal kills the group and ends the
+        /// harness: the measurement in flight is not recorded. The wait polls
+        /// every millisecond, which is also the resolution of the raw seconds.
         fn run_capped(
             &self,
             command: &mut Command,
             spent: f64,
         ) -> Result<Option<(ExitStatus, f64)>> {
+            let stopped = |signal| eyre::eyre!("stopped by signal {signal}");
+            match STOP_SIGNAL.load(Ordering::SeqCst) {
+                0 => {}
+                signal => return Err(stopped(signal)),
+            }
             let started = Instant::now();
             let mut child = command.process_group(0).spawn()?;
             let status = loop {
                 if let Some(status) = child.try_wait()? {
                     break status;
+                }
+                let signal = STOP_SIGNAL.load(Ordering::SeqCst);
+                if signal != 0 {
+                    kill_group(&mut child)?;
+                    return Err(stopped(signal));
                 }
                 let elapsed = started.elapsed().as_secs_f64();
                 if self
@@ -584,14 +648,10 @@ mod harness {
                     .cap_seconds
                     .is_some_and(|cap| spent + elapsed > cap)
                 {
-                    // The group of the child only; it was created above.
-                    Command::new("kill")
-                        .args(["-KILL", "--", &format!("-{}", child.id())])
-                        .status()?;
-                    child.wait()?;
+                    kill_group(&mut child)?;
                     return Ok(None);
                 }
-                std::thread::sleep(Duration::from_millis(20));
+                std::thread::sleep(Duration::from_millis(1));
             };
             Ok(Some((status, started.elapsed().as_secs_f64())))
         }
@@ -650,19 +710,36 @@ mod harness {
             Ok(Some((report, process_seconds)))
         }
 
-        fn record(&mut self, key: Key, cell: &Cell, measured: Option<(Value, f64)>) -> Result<()> {
-            let mut measurement = json!({
+        /// The fields every record of `key` has.
+        fn measurement(&self, key: &Key, cell: &Cell) -> Result<Value> {
+            Ok(json!({
                 "cell": key.cell,
                 "loops": cell.loops,
                 "dots": cell.dots,
                 "rank": cell.rank,
-                "n": self.terms[&cell.name],
+                "n": self.integrals[&cell.name],
                 "backend": key.backend,
                 "threads": key.threads,
                 "state": key.state,
                 "repetition": key.repetition,
                 "finished_utc": utc_now()?,
-            });
+            }))
+        }
+
+        /// Record `key` as not measurable after a capped run, as `reason` says.
+        fn record_skipped(&mut self, key: Key, cell: &Cell, reason: String) -> Result<()> {
+            let mut measurement = self.measurement(&key, cell)?;
+            measurement["status"] = json!("skipped");
+            measurement["reason"] = json!(reason);
+            measurement["cap_seconds"] = json!(self.options.cap_seconds);
+            eprintln!("{} {} {}: {reason}", key.cell, key.backend, key.state);
+            results::append(&self.output, &self.run, measurement)?;
+            self.recorded.insert(key);
+            Ok(())
+        }
+
+        fn record(&mut self, key: Key, cell: &Cell, measured: Option<(Value, f64)>) -> Result<()> {
+            let mut measurement = self.measurement(&key, cell)?;
             match measured {
                 Some((report, process_seconds)) => {
                     measurement["status"] = json!("ok");
@@ -873,10 +950,14 @@ mod harness {
             };
             let label = format!("{}-rustred-cold-{threads}-{rep}", cell.name);
             let measured = self.run_child(cell, Backend::RustRed, threads, &placement, &label)?;
+            let capped = measured.is_none();
             if want_cold {
                 self.record(cold_key, cell, measured)?;
             }
-            if want_warm {
+            if want_warm && capped {
+                let reason = "cold run capped, its cache is partial".to_owned();
+                self.record_skipped(warm_key, cell, reason)?;
+            } else if want_warm {
                 let copy = directory.join("cache-read-only");
                 let status = Command::new("cp")
                     .arg("-a")
@@ -905,7 +986,9 @@ mod harness {
         /// The warm-shared chain of one L: one cache from empty over the cells
         /// in table order. The ledger names the cells the cache holds and the
         /// cell in flight; a chain that cannot continue is rebuilt from empty,
-        /// its recorded cells unmeasured.
+        /// its recorded cells unmeasured. A capped cell leaves a partial cache,
+        /// so it ends the chain: the cells after it are recorded as skipped,
+        /// and it stays in flight for a later run under a longer cap.
         fn chain(&mut self, cells: &[Cell], threads: usize, rep: usize) -> Result<()> {
             let backend = Backend::RustRed;
             let measured = |harness: &Self, cell: &Cell| {
@@ -943,7 +1026,7 @@ mod harness {
                 fs::create_dir_all(&cache)?;
                 ledger = json!({"done": [], "in_flight": null});
             }
-            for cell in cells {
+            for (position, cell) in cells.iter().enumerate() {
                 if holds(&ledger, cell) {
                     continue;
                 }
@@ -959,9 +1042,20 @@ mod harness {
                 };
                 let label = format!("{}-rustred-chain-{threads}-{rep}", cell.name);
                 let result = self.run_child(cell, backend, threads, &placement, &label)?;
+                let capped = result.is_none();
                 if !measured(self, cell) {
                     let key = self.key(cell, backend, threads, "warm-shared", rep);
                     self.record(key, cell, result)?;
+                }
+                if capped {
+                    for later in &cells[position + 1..] {
+                        if !measured(self, later) {
+                            let key = self.key(later, backend, threads, "warm-shared", rep);
+                            let reason = format!("chain capped at {}", cell.name);
+                            self.record_skipped(key, later, reason)?;
+                        }
+                    }
+                    return Ok(());
                 }
                 ledger["in_flight"] = Value::Null;
                 ledger["done"]
@@ -1027,12 +1121,26 @@ mod harness {
             &[&["-C", &root, "status", "--porcelain", "--"], &sources[..]].concat(),
         )?
         .is_empty();
+        ensure!(
+            !(dirty && build_profile == "release"),
+            "a release measurement needs a clean tree: commit, or keep the change under \
+            crates/vakint/docs/benchmark"
+        );
+        let source = Source {
+            gammaloop_sha: &gammaloop_sha,
+            rustred_sha: &rustred,
+            build_profile: &build_profile,
+            source_dirty: dirty,
+        };
         let form = executable(&options.form)?;
+        if options.backends.contains(&Backend::Forcer) && options.threads.iter().any(|&n| n > 1) {
+            check_tform(&form)?;
+        }
         let exe = match &options.child_program {
             Some(program) => program.clone(),
             None => std::env::current_exe()?,
         };
-        let exact_sha256 = check_exact(&options.exact)?;
+        let exact_sha256 = check_exact(&options.exact, source)?;
         let cpuinfo = fs::read_to_string("/proc/cpuinfo").unwrap_or_default();
         let status = fs::read_to_string("/proc/self/status").unwrap_or_default();
         let status_field = |name: &str| {
@@ -1079,6 +1187,10 @@ mod harness {
                     .map(|(name, value)| (name.to_owned(), value))
                     .collect::<BTreeMap<_, _>>())
             }).collect::<BTreeMap<_, _>>(),
+            "ordered_weight_arithmetic": options.threads.iter().map(|&threads| {
+                let settings = VakintSettings { n_cores: threads, ..Default::default() };
+                (threads.to_string(), format!("{:?}", settings.rustred_ordered_weight_arithmetic()))
+            }).collect::<BTreeMap<_, _>>(),
             "repetitions": options.repetitions,
             "cap_seconds": options.cap_seconds,
             "work_filesystem": command_output(
@@ -1095,20 +1207,14 @@ mod harness {
                 .collect::<BTreeMap<_, _>>()
         };
         Vakint::initialize_vakint_symbols();
-        let mut terms = BTreeMap::new();
+        let mut integrals = BTreeMap::new();
         for cell in by_loops.values().flatten() {
-            let input = vakint_parse!(&cell.input)
-                .map_err(eyre::Report::msg)?
-                .expand();
-            let count = match input.as_view() {
-                AtomView::Add(sum) => sum.get_nargs(),
-                _ => 1,
-            };
-            terms.insert(cell.name.clone(), count);
+            let input = vakint_parse!(&cell.input).map_err(eyre::Report::msg)?;
+            integrals.insert(cell.name.clone(), results::integral_count(&input));
         }
         let document = results::read(&options.output)?;
-        let recorded = results::recorded(&document, &gammaloop_sha, &rustred, &build_profile)?;
-        let outputs = results::outputs(&document, &gammaloop_sha, &rustred, &build_profile);
+        let recorded = results::recorded(&document, source, options.cap_seconds)?;
+        let outputs = results::outputs(&document, source);
         let run = format!("{started_utc}-{}", &binary_sha256[..12]);
         results::begin_run(&options.output, &run, &protocol, options.select_current)?;
         let output = options.output.canonicalize()?;
@@ -1120,9 +1226,10 @@ mod harness {
             executable: exe,
             recorded,
             outputs,
-            terms,
+            integrals,
             work,
         };
+        catch_stop_signals();
         let finished = harness.run(&by_loops)?;
         eprintln!(
             "{} run {run} in {}",
