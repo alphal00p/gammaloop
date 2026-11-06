@@ -110,7 +110,9 @@ impl MomentumInput {
     /// the loop basis, verified denominator by denominator with the Jacobian
     /// by FeynKit), as the images of this input's loop momenta in the target's
     /// loop momenta, in deterministic order. `None` if a power is not a
-    /// positive integer.
+    /// positive integer. Used by the tests; evaluation stops at the first
+    /// accepted map ([`Self::find_power_preserving_map`]).
+    #[cfg(test)]
     pub fn power_preserving_maps(
         &self,
         target: &MomentumInput,
@@ -124,9 +126,10 @@ impl MomentumInput {
             .map(|_| maps))
     }
 
-    /// The maps of [`Self::power_preserving_maps`] in the same order, offered
-    /// to `accept` one at a time until it returns `true` (then `Some(true)`);
-    /// the enumeration of the remaining isomorphisms is skipped.
+    /// Every verified power-preserving unimodular map onto `target` (as
+    /// described for the test helper `power_preserving_maps`, in the same
+    /// order), offered to `accept` one at a time until it returns `true` (then
+    /// `Some(true)`); the enumeration of the remaining isomorphisms is skipped.
     pub fn find_power_preserving_map(
         &self,
         target: &MomentumInput,
@@ -583,27 +586,31 @@ fn integer_determinant(mut matrix: Vec<Vec<i128>>) -> i128 {
 /// Adjugate (transposed cofactor matrix) of a square integer matrix.
 fn adjugate(matrix: &[Vec<i128>]) -> Vec<Vec<i128>> {
     let n = matrix.len();
-    let mut adjugate = vec![vec![0; n]; n];
-    for row in 0..n {
-        for column in 0..n {
-            let minor = matrix
-                .iter()
-                .enumerate()
-                .filter(|(index, _)| *index != row)
-                .map(|(_, values)| {
-                    values
-                        .iter()
-                        .enumerate()
-                        .filter(|(index, _)| *index != column)
-                        .map(|(_, value)| *value)
-                        .collect()
-                })
-                .collect();
-            let sign = if (row + column) % 2 == 0 { 1 } else { -1 };
-            adjugate[column][row] = sign * integer_determinant(minor);
-        }
-    }
-    adjugate
+    let cofactor = |row: usize, column: usize| {
+        let minor = matrix
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| *index != row)
+            .map(|(_, values)| {
+                values
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, _)| *index != column)
+                    .map(|(_, value)| *value)
+                    .collect()
+            })
+            .collect();
+        let sign = if (row + column).is_multiple_of(2) {
+            1
+        } else {
+            -1
+        };
+        sign * integer_determinant(minor)
+    };
+    // Entry (column, row) is the (row, column) cofactor.
+    (0..n)
+        .map(|column| (0..n).map(|row| cofactor(row, column)).collect())
+        .collect()
 }
 
 /// Row vector times matrix.

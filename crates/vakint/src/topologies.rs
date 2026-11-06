@@ -37,9 +37,10 @@ pub(crate) fn power_colored_canonical_graph(
     }
 }
 
-/// The power-preserving maps of [`power_preserving_momentum_maps`] offered to
-/// `accept` one at a time until it returns `true` (`Some(true)`); `None` when
-/// either input is not such a long form.
+/// The verified power-preserving unimodular loop-momentum maps from the long
+/// form `source` onto the long form `target`, offered to `accept` one at a time
+/// until it returns `true` (`Some(true)`); `None` when either input is not such
+/// a long form.
 pub(crate) fn find_power_preserving_momentum_map(
     source: AtomView,
     target: AtomView,
@@ -58,6 +59,9 @@ pub(crate) fn find_power_preserving_momentum_map(
 /// Every verified power-preserving unimodular loop-momentum map from the
 /// long form `source` onto the long form `target` (images of the source loop
 /// momenta in the target's), or `None` when either is not such a long form.
+/// Used by the tests; evaluation stops at the first accepted map
+/// ([`find_power_preserving_momentum_map`]).
+#[cfg(test)]
 pub(crate) fn power_preserving_momentum_maps(
     source: AtomView,
     target: AtomView,

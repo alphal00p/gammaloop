@@ -242,7 +242,7 @@ fn contract(
         }
         if *power < 0 {
             let exponent = u32::try_from(power.unsigned_abs()).map_err(failure)?;
-            numerator = numerator * (S.dot.call((momentum, momentum)) - &mass).pow(exponent);
+            numerator *= (S.dot.call((momentum, momentum)) - &mass).pow(exponent);
         }
     }
     let mut labels = BTreeMap::new();
@@ -391,7 +391,9 @@ impl Vakint {
     /// The exact lowered keys of a scalar numerator under one witness, without
     /// the saved entry-union admission check of [`Self::matched_input_key_with`]
     /// (a remaining terminal reduces to itself whether or not its own key is
-    /// inside the recorded entry predicates).
+    /// inside the recorded entry predicates). Used by the tests; evaluation
+    /// shares one lowering service per call ([`Self::witness_keys_with`]).
+    #[cfg(test)]
     pub(super) fn witness_keys_unchecked(
         &self,
         settings: &VakintSettings,
@@ -410,7 +412,8 @@ impl Vakint {
         self.witness_keys_with(settings, &scalar, numerator, matched)
     }
 
-    /// [`Self::witness_keys_unchecked`] with a prepared lowering service.
+    /// The exact lowered keys of a scalar numerator under one witness, without
+    /// the saved entry-union admission check, with a prepared lowering service.
     fn witness_keys_with(
         &self,
         settings: &VakintSettings,
@@ -1396,7 +1399,7 @@ mod tests {
                 value,
                 observer
                     .last_ordered_progress()
-                    .map(|progress| progress.processed_keys as usize),
+                    .map(|progress| progress.processed_keys),
             )
         };
         let mut checked = 0;
