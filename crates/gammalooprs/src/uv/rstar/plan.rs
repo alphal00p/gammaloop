@@ -9,13 +9,14 @@ use color_eyre::Result;
 use eyre::{ensure, eyre};
 use linnet::half_edge::{
     HedgeGraph, PowersetIterator,
-    involution::EdgeIndex,
+    involution::{EdgeIndex, HedgePair},
     subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
 };
 use symbolica::atom::{Atom, AtomCore};
 use vakint::Vakint;
 
 use crate::{
+    debug_tags,
     graph::{FeynmanGraph, Graph},
     model::Model,
     utils::GS,
@@ -104,9 +105,28 @@ impl GraphRegion {
     }
 
     pub fn contains_edge(&self, graph: &Graph, edge: EdgeIndex) -> bool {
-        graph
-            .iter_edges_of(&self.remaining)
-            .any(|(_, candidate, _)| candidate == edge)
+        self.remaining.includes(&graph[&edge].1)
+    }
+
+    /// A swallowed mass kills an unintegrated vacuum loop, not a local term.
+    pub(crate) fn is_scaleless(&self, graph: &Graph, marked_edge: EdgeIndex) -> bool {
+        self.loops > 0 && !self.contains_edge(graph, marked_edge)
+    }
+
+    fn largest_cut_component(&self, graph: &Graph, marked_edge: EdgeIndex) -> usize {
+        if self.loops == 0 {
+            return 0;
+        }
+        let mut cut = self.remaining.clone();
+        cut.sub(graph[&marked_edge].1);
+        let quotient = self.contracted_topology(graph);
+        let cyclic = quotient.non_bridges_of(&cut);
+        quotient
+            .connected_components(&cyclic)
+            .iter()
+            .map(|component| quotient.cyclotomatic_number(component))
+            .max()
+            .unwrap_or(0)
     }
 }
 
@@ -175,6 +195,125 @@ pub struct IrCorrection {
     pub forest: Vec<IrForestTerm>,
 }
 
+/// Structural work before algebraic zeros, tensor moments and backend reduction.
+/// These counts predict preparation size, not elapsed integration time.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RStarCost {
+    /// Largest edge-dependent reduction: a cut loop component or an IR UV map.
+    /// Proper UV child loop counts do not distinguish the marked lines.
+    pub max_reduction_loops: usize,
+    pub ordinary_terms: usize,
+    pub ir_terms: usize,
+    /// UV operations across surviving IR summands, before cache reuse.
+    pub quotient_calls: usize,
+    /// Degree-weighted hard preparations; tensor ranks can increase actual work.
+    pub hard_taylor_work: usize,
+    /// Cutting outside triangles preserves potential propagator reductions.
+    /// This does not certify that a backend triangle rule can be applied.
+    pub cuts_triangle: bool,
+}
+
+impl RStarCost {
+    pub fn terms(&self) -> usize {
+        self.ordinary_terms + self.ir_terms
+    }
+
+    fn selection_key(&self) -> (usize, usize, usize, usize, bool) {
+        (
+            self.max_reduction_loops,
+            self.terms(),
+            self.quotient_calls,
+            self.hard_taylor_work,
+            self.cuts_triangle,
+        )
+    }
+
+    fn estimate(
+        graph: &Graph,
+        support: &SuBitGraph,
+        marked_edge: EdgeIndex,
+        ordinary: &[UvPreparationTerm],
+        corrections: &[IrCorrection],
+    ) -> Self {
+        let mut cost = Self {
+            max_reduction_loops: ordinary
+                .iter()
+                .filter(|term| !term.remainder.is_scaleless(graph, marked_edge))
+                .map(|term| term.remainder.largest_cut_component(graph, marked_edge))
+                .max()
+                .unwrap_or(0),
+            ordinary_terms: ordinary
+                .iter()
+                .filter(|term| !term.remainder.is_scaleless(graph, marked_edge))
+                .count(),
+            cuts_triangle: Self::cuts_triangle(graph, support, marked_edge),
+            ..Self::default()
+        };
+        for correction in corrections
+            .iter()
+            .filter(|correction| correction.hard.includes(&graph[&marked_edge].1))
+        {
+            let preparations = correction
+                .preparation
+                .iter()
+                .filter(|term| !term.remainder.is_scaleless(graph, marked_edge))
+                .collect::<Vec<_>>();
+            let surviving = preparations.len();
+            if surviving > 0 {
+                for term in preparations {
+                    cost.max_reduction_loops = cost
+                        .max_reduction_loops
+                        .max(term.remainder.largest_cut_component(graph, marked_edge));
+                }
+                for call in correction.forest.iter().flat_map(|term| &term.steps) {
+                    cost.max_reduction_loops = cost.max_reduction_loops.max(call.argument.loops);
+                }
+            }
+            cost.ir_terms += surviving * correction.forest.len();
+            cost.quotient_calls += surviving
+                * correction
+                    .forest
+                    .iter()
+                    .map(|term| term.steps.len())
+                    .sum::<usize>();
+            cost.hard_taylor_work += surviving * (correction.taylor_order.max(0) as usize + 1);
+        }
+        cost
+    }
+
+    fn cuts_triangle(graph: &Graph, support: &SuBitGraph, edge: EdgeIndex) -> bool {
+        let HedgePair::Paired { source, sink } = graph[&edge].1 else {
+            return false;
+        };
+        let source = graph.node_id(source);
+        let sink = graph.node_id(sink);
+        if source == sink {
+            return false;
+        }
+        let neighbors = |node| {
+            graph
+                .iter_edges_of(support)
+                .filter_map(|(pair, _, _)| {
+                    let HedgePair::Paired { source: a, sink: b } = pair else {
+                        return None;
+                    };
+                    let a = graph.node_id(a);
+                    let b = graph.node_id(b);
+                    let other = if a == node {
+                        b
+                    } else if b == node {
+                        a
+                    } else {
+                        return None;
+                    };
+                    (other != source && other != sink).then_some(other)
+                })
+                .collect::<BTreeSet<_>>()
+        };
+        !neighbors(source).is_disjoint(&neighbors(sink))
+    }
+}
+
 /// Topology of -K I_rem T_compensated [R'_U + sum_gamma C^U B_gamma] G.
 ///
 /// This catalogue is independent of Feynman-rule evaluation. Hard coefficients
@@ -203,13 +342,49 @@ impl RStarPlan {
         marked_edge: EdgeIndex,
         settings: &UVgenerationSettings,
     ) -> Result<Self> {
+        Self::build(graph, model, Some(marked_edge), settings)
+    }
+
+    /// Prefer smaller loop reductions, then fewer surviving graph terms,
+    /// quotient calls and hard Taylor work, then a cut outside every triangle. Remaining ties
+    /// use the original edge index. Classification is shared
+    /// across candidates, and each hard component's forest is generated once.
+    /// This graph-only heuristic does not predict numerator zeros or Forcer's
+    /// reduction difficulty; an explicit mark remains available through `new`.
+    pub fn with_automatic_edge(
+        graph: &Graph,
+        model: &Model,
+        settings: &UVgenerationSettings,
+    ) -> Result<Self> {
+        Self::build(graph, model, None, settings)
+    }
+
+    pub fn estimated_cost(&self, graph: &Graph) -> RStarCost {
+        if graph.compute_dod(&self.support) < 0 {
+            return RStarCost::default();
+        }
+        RStarCost::estimate(
+            graph,
+            &self.support,
+            self.marked_edge,
+            &self.ordinary_uv,
+            &self.ir,
+        )
+    }
+
+    fn build(
+        graph: &Graph,
+        model: &Model,
+        marked_edge: Option<EdgeIndex>,
+        settings: &UVgenerationSettings,
+    ) -> Result<Self> {
         let support = graph
             .no_dummy()
             .subtract(&graph.external_filter::<SuBitGraph>());
         ensure!(
-            graph
+            marked_edge.is_none_or(|marked| graph
                 .iter_edges_of(&support)
-                .any(|(pair, edge, _)| { pair.is_paired() && edge == marked_edge }),
+                .any(|(pair, edge, _)| { pair.is_paired() && edge == marked })),
             "the R* marked edge must be an internal, non-dummy propagator"
         );
         ensure!(
@@ -253,11 +428,41 @@ impl RStarPlan {
         // An overall convergent graph can still have subdivergence poles.
         // Its local UV map vanishes, so only the physical UV preparation is
         // needed for reconstructing its bare pole part.
-        let ir = if overall_divergent {
+        let mut ir = if overall_divergent {
             Self::ir_corrections(graph, &support, marked_edge, &catalogue)?
         } else {
             Vec::new()
         };
+        let marked_edge = if let Some(marked_edge) = marked_edge {
+            marked_edge
+        } else {
+            graph
+                .iter_edges_of(&support)
+                .filter(|(pair, _, _)| pair.is_paired())
+                .map(|(_, edge, _)| {
+                    let cost = if overall_divergent {
+                        RStarCost::estimate(graph, &support, edge, &ordinary_uv, &ir)
+                    } else {
+                        RStarCost::default()
+                    };
+                    debug_tags!(#uv, #integrated, #rstar;
+                        stage = "massive_edge_candidate",
+                        marked_edge = usize::from(edge),
+                        max_reduction_loops = cost.max_reduction_loops,
+                        ordinary_terms = cost.ordinary_terms,
+                        ir_terms = cost.ir_terms,
+                        quotient_calls = cost.quotient_calls,
+                        hard_taylor_work = cost.hard_taylor_work,
+                        cuts_triangle = cost.cuts_triangle,
+                        "Estimated R* work for an internal massive line"
+                    );
+                    (cost.selection_key(), edge)
+                })
+                .min()
+                .ok_or_else(|| eyre!("the R* graph has no internal propagator"))?
+                .1
+        };
+        ir.retain(|correction| correction.hard.includes(&graph[&marked_edge].1));
         let mut counterterms = ordinary_uv
             .iter()
             .chain(ir.iter().flat_map(|correction| &correction.preparation))
@@ -380,14 +585,14 @@ impl RStarPlan {
     fn ir_corrections(
         graph: &Graph,
         support: &SuBitGraph,
-        marked_edge: EdgeIndex,
+        marked_edge: Option<EdgeIndex>,
         catalogue: &[Spinney],
     ) -> Result<Vec<IrCorrection>> {
         let mut corrections = Vec::new();
         for hard in catalogue.iter().filter(|spinney| {
             spinney.n_components() == 1
                 && spinney.filter() != support
-                && spinney.filter().includes(&graph[&marked_edge].1)
+                && marked_edge.is_none_or(|edge| spinney.filter().includes(&graph[&edge].1))
                 && graph.bridges_of(spinney.filter()).is_empty()
         }) {
             let mut forest = Vec::new();
@@ -439,7 +644,13 @@ impl RStarPlan {
                 ancestor.add(available[edge]);
             }
             // Contracting G here would leave a repeated overall c-operation.
-            if &ancestor == full {
+            // An insertion has total degree at most local_dod(contracted),
+            // including inherited masses and forced external momenta. Thus
+            // the decorated quotient's degree is at most local_dod(ancestor).
+            // A negative bound makes this UV map, and its entire branch, zero.
+            // Use the full local degree, not original loop power counting:
+            // forced external momenta also belong to the inserted polynomial.
+            if &ancestor == full || graph.local_dod(&ancestor) < 0 {
                 continue;
             }
             let call = CountertermCall::quotient(graph, &ancestor, contracted);
@@ -548,6 +759,92 @@ pub(super) mod tests {
     }
 
     #[test]
+    fn automatic_edge_avoids_ir_forests_and_counts_local_mixed_terms() -> Result<()> {
+        test_initialise()?;
+        let graph = logarithmic_graph()?;
+        let model = load_generic_model("scalars");
+        let settings = UVgenerationSettings::default();
+        let automatic = RStarPlan::with_automatic_edge(&graph, &model, &settings)?;
+        assert_eq!(automatic.marked_edge, EdgeIndex::from(2));
+        assert!(automatic.ir.is_empty());
+        assert_eq!(automatic.estimated_cost(&graph).terms(), 2);
+        for (_, edge, _) in graph.iter_edges_of(&automatic.support) {
+            let explicit = RStarPlan::new(&graph, &model, edge, &settings)?;
+            let cost = explicit.estimated_cost(&graph);
+            assert!(automatic.estimated_cost(&graph).selection_key() <= cost.selection_key());
+            if edge == EdgeIndex::from(0) {
+                // One ordinary term is scaleless, but BOTH hard-preparation
+                // terms survive: the bubble and its local counterterm.
+                assert_eq!(cost.ordinary_terms, 1);
+                assert_eq!(cost.ir_terms, 2);
+                assert_eq!(cost.quotient_calls, 2);
+            }
+            if edge == automatic.marked_edge {
+                assert_eq!(explicit.ordinary_uv, automatic.ordinary_uv);
+                assert_eq!(explicit.ir, automatic.ir);
+                assert_eq!(explicit.counterterms, automatic.counterterms);
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn automatic_edge_ranks_unavoidable_ir_corrections_deterministically() -> Result<()> {
+        test_initialise()?;
+        let graph = finalized_runtime_dot!(
+            digraph G {
+                graph [projector=1];
+                node [num=1];
+                edge [particle="scalar_1" num=1];
+                A -> B [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
+                A -> B [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
+                A -> B [id=2 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"];
+            }, "scalars"
+        )?;
+        let model = load_generic_model("scalars");
+        let settings = UVgenerationSettings::default();
+        let automatic = RStarPlan::with_automatic_edge(&graph, &model, &settings)?;
+        assert_eq!(automatic.marked_edge, EdgeIndex::from(0));
+        assert!(!automatic.ir.is_empty());
+        for (_, edge, _) in graph.iter_edges_of(&automatic.support) {
+            let explicit = RStarPlan::new(&graph, &model, edge, &settings)?;
+            assert_eq!(
+                explicit.estimated_cost(&graph),
+                automatic.estimated_cost(&graph)
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn triangle_tie_break_ignores_orientation_parallel_edges_and_self_loops() -> Result<()> {
+        test_initialise()?;
+        let graph = finalized_runtime_dot!(
+            digraph G {
+                graph [projector=1]; node [num=1];
+                edge [particle="scalar_1" num=1];
+                A -> B [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
+                B -> A [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
+                A -> C [id=2 source="{ufo_order:2}" sink="{ufo_order:0}"];
+                C -> B [id=3 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:2}"];
+                A -> A [id=4 lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:4}"];
+            }, "scalars"
+        )?;
+        let full = edges(&graph, &[0, 1, 2, 3, 4]);
+        for edge in [0, 1, 2, 3].map(EdgeIndex::from) {
+            assert!(RStarCost::cuts_triangle(&graph, &full, edge));
+        }
+        assert!(!RStarCost::cuts_triangle(&graph, &full, EdgeIndex::from(4)));
+        let bubble = edges(&graph, &[0, 1, 4]);
+        assert!(!RStarCost::cuts_triangle(
+            &graph,
+            &bubble,
+            EdgeIndex::from(0)
+        ));
+        Ok(())
+    }
+
+    #[test]
     fn restricted_ancestors_are_coefficientwise_and_smallest_first() -> Result<()> {
         test_initialise()?;
         // Four parallel edges produce two strict, incomparable one-edge
@@ -587,6 +884,43 @@ pub(super) mod tests {
                 call.scope == CountertermScope::InsertionMonomial && call.argument.loops > 0
             }));
         }
+        Ok(())
+    }
+
+    #[test]
+    fn ir_forests_skip_negative_degree_ancestors_before_expansion() -> Result<()> {
+        test_initialise()?;
+        let graph = finalized_runtime_dot!(
+            digraph G {
+                graph [projector=1]; node [num=1];
+                edge [particle="scalar_1" num=1];
+                A -> B [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
+                A -> B [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
+                A -> C [id=2 source="{ufo_order:2}" sink="{ufo_order:0}"];
+                C -> D [id=3 source="{ufo_order:1}" sink="{ufo_order:0}"];
+                D -> B [id=4 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:2}"];
+                C -> B [id=5 lmb_id=2 source="{ufo_order:2}" sink="{ufo_order:3}"];
+            }, "scalars"
+        )?;
+        let hard = edges(&graph, &[0, 1]);
+        let convergent = edges(&graph, &[0, 1, 2, 3, 4]);
+        let divergent = edges(&graph, &[0, 1, 2, 5]);
+        let full = edges(&graph, &[0, 1, 2, 3, 4, 5]);
+        assert_eq!(graph.local_dod(&convergent), -2);
+        assert_eq!(graph.local_dod(&divergent), 0);
+        assert!(
+            GraphRegion::new(&graph, &convergent, std::slice::from_ref(&hard))
+                .is_one_particle_irreducible(&graph)
+        );
+        let mut terms = Vec::new();
+        RStarPlan::ancestor_chains(&graph, &full, &hard, &mut Vec::new(), &mut terms)?;
+        let calls = terms
+            .iter()
+            .flat_map(|term| &term.steps)
+            .collect::<Vec<_>>();
+        assert!(calls.iter().all(|call| call.argument.support != convergent));
+        assert!(calls.iter().any(|call| call.argument.support == divergent));
+        assert!(calls.iter().all(|call| call.taylor_order >= 0));
         Ok(())
     }
 
@@ -631,6 +965,12 @@ pub(super) mod tests {
                 .windows(2)
                 .all(|calls| { calls[0].argument.loops <= calls[1].argument.loops })
         );
+        let automatic = RStarPlan::with_automatic_edge(&graph, &model, &Default::default())?;
+        assert_eq!(automatic.marked_edge, EdgeIndex::from(4));
+        // Cutting a joining line separates two one-loop p-integrals. Cutting
+        // inside a bubble leaves a two-loop block and a two-loop IR UV map.
+        assert_eq!(automatic.estimated_cost(&graph).max_reduction_loops, 1);
+        assert_eq!(plan.estimated_cost(&graph).max_reduction_loops, 2);
         Ok(())
     }
 

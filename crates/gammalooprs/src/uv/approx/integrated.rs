@@ -20,10 +20,10 @@ use spenso::{
         parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing},
         tags::SPENSO_TAG,
     },
-    structure::representation::{Minkowski, RepName},
+    structure::representation::{BaseRepName, Minkowski, RepName},
 };
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder},
     domains::atom::AtomField,
     function,
     id::Replacement,
@@ -297,12 +297,21 @@ impl Integrated<'_> {
                 "Vakint term after canonicalization"
             );
         }
+        // GammaLoop's source dimension denotes the regulated Lorentz space.
+        // Declare that identification before tensor reduction: opaque source
+        // tensors keep their input slots, and RustRed correctly refuses to
+        // infer this relation during scalar admission. Scalar d coefficients
+        // remain available for the existing post-integration contraction.
+        let minkowski = Minkowski::selfless_symbol();
+        let dimension = Atom::num(4) - Atom::num(2) * Atom::var(GS.dim_epsilon);
+        for term in &mut integrand_vakint.0 {
+            term.numerator = term
+                .numerator
+                .replace(function!(minkowski, GS.dim, W_.x___))
+                .with(function!(minkowski, &dimension, W_.x___));
+        }
         integrand_vakint.tensor_reduce(self.vakint, self.vakint_settings)?;
-        for (term_index, t) in integrand_vakint.0.iter_mut().enumerate() {
-            // Projector slots and retained source slots share one native
-            // Lorentz representation. Restore that metadata before the
-            // backend's Laurent expansion, keeping scalar epsilon factors.
-            t.numerator = Self::restore_lorentz_dimensions(&t.numerator);
+        for (term_index, t) in integrand_vakint.0.iter().enumerate() {
             debug_tags!(#uv,#integrated,#vakint,#trace,#tensor_reduce;
                 term_index = %term_index,
                 log.integral = t.integral,
@@ -389,9 +398,24 @@ impl Integrated<'_> {
         // The projector works in 4-2*epsilon while opaque source slots retain
         // d. These are the same Lorentz representation; unify only metadata,
         // leaving every scalar evanescent coefficient for the later expansion.
-        numerator
-            .replace(function!(minkowski, &regulated_dimension, W_.x___))
-            .with(function!(minkowski, GS.dim, W_.x___))
+        // Backend d/epsilon substitutions can return an unexpanded but equal
+        // dimension such as 4-(4-(4-2*epsilon)).
+        numerator.replace_map(|view, _, out| {
+            let AtomView::Fun(representation) = view else {
+                return;
+            };
+            if representation.get_symbol() == minkowski
+                && representation.get_nargs() > 0
+                && (representation.get(0).to_owned() - &regulated_dimension)
+                    .expand()
+                    .is_zero()
+            {
+                **out = FunctionBuilder::new(minkowski)
+                    .add_arg(GS.dim)
+                    .add_args(representation.iter().skip(1))
+                    .finish();
+            }
+        })
     }
 
     pub(crate) fn restore_numerator(mut res: Atom, topology_order: usize) -> Atom {
@@ -1333,6 +1357,16 @@ mod tests {
             Integrated::restore_lorentz_dimensions(&normalized),
             normalized,
             "metadata restoration is idempotent"
+        );
+        let regulated_dimension = Atom::num(4) - Atom::num(2) * &epsilon;
+        let unexpanded_dimension = Atom::num(4) - (Atom::num(4) - &regulated_dimension);
+        let unexpanded = source
+            .replace(regulated_dimension.to_pattern())
+            .with(unexpanded_dimension);
+        assert_eq!(
+            Integrated::restore_lorentz_dimensions(&unexpanded),
+            normalized,
+            "backend dimension substitutions need algebraic comparison"
         );
         let expanded = series(&normalized, 1).unwrap().to_atom();
         assert!(!expanded.contains_symbol(symbolica::atom::Symbol::DERIVATIVE));

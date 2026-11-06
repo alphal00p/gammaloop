@@ -53,3 +53,48 @@ fn numeric_values_never_establish_an_exact_pole_definition() {
         );
     }
 }
+
+#[test]
+fn laurent_expansion_preserves_open_metric_and_scalar_evanescences() {
+    use spenso::{
+        network::library::symbolic::ETS,
+        structure::representation::{BaseRepName, Minkowski, initialize},
+    };
+
+    Vakint::initialize_vakint_symbols();
+    initialize();
+    let matad = MATAD::with_settings(VakintSettings {
+        epsilon_symbol: "eps_metric".into(),
+        number_of_terms_in_epsilon_expansion: 2,
+        integral_normalization_factor: crate::LoopNormalizationFactor::FMFTandMATAD,
+        use_dot_product_notation: true,
+        ..Default::default()
+    });
+    let dimension = vk_parse!("d").unwrap();
+    let slot = |index| Minkowski::selfless_symbol().call((&dimension, index));
+    let metric = ETS.metric(slot(vk_symbol!("open_mu")), slot(vk_symbol!("open_nu")));
+    let input = &metric * vk_parse!("Gam(1,1)*(1+ep)/(ep*(1-ep)*(4-2*ep))").unwrap();
+    let input = matad.process_matad_form_output(input).unwrap();
+    let result = matad
+        .finalize_reduced_masters(
+            input,
+            1,
+            None,
+            &Atom::num(1),
+            &MATADOptions {
+                direct_numerical_substition: false,
+                substitute_hpls: false,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    // The unit-mass tadpole is 1/ep+1+O(ep); the scalar tensor factor
+    // contributes another 3/8 to the finite coefficient.
+    let metric = metric
+        .replace(dimension.to_pattern())
+        .with(vk_parse!("4-2*eps_metric").unwrap());
+    let expected = metric * vk_parse!("1/(4*eps_metric)+5/8").unwrap();
+    assert!(!result.contains_symbol(Symbol::DERIVATIVE));
+    assert!(!result.contains_symbol(vk_symbol!("ep")));
+    assert!((result - expected).expand().is_zero());
+}

@@ -1008,6 +1008,12 @@ impl MasterCatalog {
                 super::postprocessing_threads(settings),
             ));
         }
+        // The scalar/tensor admission boundary has already checked the source
+        // representations. Their dimensions label tensor interfaces rather
+        // than scalar epsilon dependence, so hold that metadata fixed during
+        // both valuation and Laurent expansion, then restore it on return.
+        let cooking = idenso::CookSettings::reversible().with_representation_payloads(false, true);
+        let raw = cooking.try_cook(raw.as_view()).map_err(failure)?;
         let raw = combine_exact(raw);
         self.require_coefficients(&raw, &BTreeMap::new())?;
         let epsilon = vk_symbol!(&settings.epsilon_symbol);
@@ -1169,9 +1175,9 @@ impl MasterCatalog {
             // An exact formula can still depend on snapshot-local finite
             // periods. Bind those leaves before returning a symbolic result,
             // so loading another release cannot silently change its value.
-            return self.bind_period_references(result);
+            result = self.bind_period_references(result)?;
         }
-        Ok(result)
+        Ok(cooking.uncook(result.as_view()))
     }
 
     fn master_multiplicities(
@@ -1923,6 +1929,35 @@ mod tests {
                         && source.available_decimal_precision == Some(30)
                 })
         }));
+    }
+
+    #[test]
+    fn symbolic_laurent_expansion_keeps_open_metric_dimensions_fixed() {
+        use spenso::{
+            network::library::symbolic::ETS,
+            structure::representation::{BaseRepName, Minkowski, initialize},
+        };
+
+        let (catalog, master) = catalog(Some("5/2"), 30);
+        initialize();
+        let dimension = vk_parse!("4-2*ep").unwrap();
+        let slot = |index| Minkowski::selfless_symbol().call((&dimension, index));
+        let metric = ETS.metric(slot(vk_symbol!("open_mu")), slot(vk_symbol!("open_nu")));
+        let scalar = vk_parse!("(1+ep)/(4-2*ep)").unwrap();
+        let result = catalog
+            .finalize(
+                master * &metric * scalar,
+                &settings(30, 2),
+                1,
+                RustRedMasterMode::Symbolic,
+            )
+            .unwrap();
+        // (1/ep+5/2)*(1+ep)/(4-2ep) = 1/(4ep)+1+O(ep).
+        // The finite term must include scalar evanescences, with no derivatives
+        // of the open metric's representation and no cooked metadata left.
+        let expected = metric * vk_parse!("1/(4*ep)+1").unwrap();
+        assert!(!result.contains_symbol(Symbol::DERIVATIVE));
+        assert!((result - expected).expand().is_zero());
     }
 
     #[test]

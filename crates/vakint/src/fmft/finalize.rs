@@ -96,6 +96,13 @@ impl FMFT {
                 expansion_depth
             );
             evaluated_integral = self.expand_masters(evaluated_integral.as_view())?;
+            // FORM has already restored source slots. Their dimensions are
+            // tensor metadata, not functions to differentiate in epsilon.
+            let cooking =
+                idenso::CookSettings::reversible().with_representation_payloads(false, true);
+            evaluated_integral = cooking
+                .try_cook(evaluated_integral.as_view())
+                .map_err(|error| VakintError::SymbolicaError(error.to_string()))?;
             evaluated_integral = evaluated_integral
                 .series(
                     vk_symbol!("ep"),
@@ -120,10 +127,28 @@ impl FMFT {
                 );
                 evaluated_integral = self.substitute_masters(evaluated_integral.as_view())?;
                 evaluated_integral = evaluated_integral.expand();
-                evaluated_integral = crate::hpl::normalize_constants(evaluated_integral.as_view())?;
                 // Sanity check, including tails inside the numerical tables.
                 Self::reject_unknown_orders(&evaluated_integral, expansion_depth)?;
+            } else {
+                // These coefficients have exact MATAD definitions. Use the
+                // same HPL basis even when numerical master substitution is
+                // disabled, so products from different backends can cancel.
+                for name in ["D6", "T1ep", "T1ep2"] {
+                    let source = Atom::var(vk_symbol!(name));
+                    if evaluated_integral.contains_symbol(vk_symbol!(name))
+                        && let Some(definition) =
+                            crate::inspection::constants::builtin_definition(source.as_view())?
+                    {
+                        evaluated_integral = evaluated_integral
+                            .replace(source.to_pattern())
+                            .with(definition);
+                    }
+                }
             }
+            evaluated_integral = crate::hpl::normalize_constants(evaluated_integral.as_view())?;
+            // Restore before renaming ep so source metadata follows the
+            // caller's regulator convention as well as scalar coefficients.
+            evaluated_integral = cooking.uncook(evaluated_integral.as_view());
         }
 
         evaluated_integral = evaluated_integral

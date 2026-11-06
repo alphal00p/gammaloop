@@ -206,6 +206,12 @@ apparent tensor slots are compared. The R forest, Taylor expansion, and tensor
 insertion algorithms are unchanged. The added forest accessor returns the
 counterterm before any enclosing global projector.
 
+At the Vakint handoff, GammaLoop identifies its Lorentz slot dimension `dim`
+with `4 - 2 epsilon` before tensor reduction, including slots on opaque source
+tensors. RustRed keeps these representation labels fixed while Laurent-expanding
+scalar coefficients; GammaLoop restores its slot notation after integration.
+Scalar evanescent factors still participate in the pole projection.
+
 `TaylorExpansion` operates on an explicit expression whose boundary momenta
 already carry a common scaling parameter. The outer substitution is
 `mu_squared -> (1-lambda^2)*M_squared`; a remaining loop momentum in
@@ -279,11 +285,11 @@ This retains the original external momentum orientations and omits global
 graph prefactors, as does the counterterm API.
 
 The four-loop nested ghost fixture extends the line to `A-B-C-D-E-F-G-H`
-with gluon chords `AH`, `BG`, `CF`, `DE`. It compares an inner gluon, the
-outer gluon and the inner ghost as the massive line, and requires a
+with gluon chords `AH`, `BG`, `CF`, `DE`. It compares all eleven internal
+lines and the automatically selected line, and requires a
 three-step IR chain. This is a selected-line consistency check; it has no
 independent four-loop massive reference attached.
-The three choices give
+The counterterm is
 `i GC_10^8 C_A^4 delta_ab (Q0.Q1) [-1/(384 epsilon^4) + 1/(128 epsilon^3) - 19/(1536 epsilon^2) + 5/(512 epsilon)]`
 in the same fixture conventions.
 
@@ -327,7 +333,8 @@ The five-loop checks use entries 76, 159, 169, and 203 of
 the ancillary data of
 #link("https://arxiv.org/abs/2104.08272")[_Glue-and-Cut at Five Loops_].
 The fixtures preserve the published edge lists, have ten unit-power internal
-propagators, and use the paper's G-scheme at `Q^2 = mu^2 = 1`. GammaLoop's
+propagators, and use the paper's G-scheme at `Q^2 = mu^2 = 1`. Each fixture
+checks all ten internal massive lines plus automatic selection. GammaLoop's
 `GScheme` setting selects Vakint's exact built-in normalization. All negative
 epsilon powers are compared symbolically:
 
@@ -340,13 +347,72 @@ epsilon powers are compared symbolically:
 
 The first two graphs are primitive. Master 76 has one proper UV bubble;
 master 203 has two disjoint UV bubbles, exercising their product spinney
-as well as the individual subtractions. These examples need only one-loop
-massive UV counterterms. They do not use a five-loop integral evaluation as
+as well as the individual subtractions. Their proper UV children are one-loop
+bubbles. Marking a line inside a bubble also exercises four-loop massive IR
+quotient counterterms through Vakint's RustRed backend in symbolic master
+mode. GammaLoop selects it with `evaluation_methods = ["rustred", "forcer"]`.
+The engine explicitly loads the pinned four-loop external data; one through
+three loops are vendored. One inside-bubble mark per nonprimitive master is
+also checked using MATAD/FMFT as an independent reduction backend.
+These exact reference comparisons use
+`fmft.expand_masters = true` and `fmft.susbstitute_masters = false`: FMFT's
+default substitution requests numerical constants. Symbolic FMFT and MATAD
+output share exact zeta and harmonic-polylogarithm representations so these
+constants cancel against each other and the p-integral result before the root
+pole projection. The tests do not use a five-loop integral evaluation as
 an oracle: the reference coefficients are the published ancillary values.
 Lower-loop analytic checks retain the external scale logarithm, the first
 open-index bubble moment, and the nonlocal pole of an overall-convergent
 bubble-in-kite graph. Inverse powers of the external virtuality remain scalar
 invariants during tensor restoration.
+
+=== Choosing the massive line
+
+`RStarPlan.with_automatic_edge(graph, model, settings)` chooses an internal
+line before Taylor expansion or counterterm integration. It shares the original UV catalogue
+between candidates and constructs each eligible hard component's IR forest
+once. `RStarPlan.new` remains available for an explicitly chosen line.
+
+The ranking first minimizes the largest edge-dependent loop reduction.
+For each surviving remainder, it cuts the marked line, removes graph bridges,
+and counts loops in the remaining connected components. This is a topology
+estimate, not a guarantee that the backend will factor every numerator into
+independent reductions. IR quotient UV calls
+also contribute their loop counts. The undecorated proper UV children are
+common across the choices and do not distinguish marks by loop count; their
+mass-dependent polynomials and actual costs can still differ. This prefers a
+cut that splits the propagator problem into smaller loop integrals, without
+ignoring a costly massive IR quotient introduced by the same cut.
+
+Ties minimize surviving graph summands: the ordinary UV terms plus, for each
+hard component, its surviving preparation terms times its number of IR forest
+terms. Further ties minimize quotient UV calls and then
+degree-weighted hard preparations, then prefer a line outside every triangle.
+The original edge index provides a deterministic final tie-break.
+`estimated_cost` exposes these counts and the triangle flag. The cost
+model and evaluator share the same scaleless test: an unintegrated loop
+without the massive line vanishes, but a local mixed counterterm survives.
+
+In particular, a line outside all proper UV components has no IR correction.
+This can also avoid expensive massive quotient counterterms. Term counts are
+structural estimates: numerator zeros, tensor moments, cache reuse and the
+cut graph's propagator-reduction difficulty can change the actual runtime.
+Preserving triangles retains potential local propagator reductions, but a
+graph triangle alone does not certify a Forcer reduction rule: powers and
+numerators also matter. The triangle preference breaks the otherwise equal
+primitive-master scores. It picks edge 1 for master 159 and edge 7 for master
+169, using the edge-list numbering in the fixtures. Counting how many
+triangles an edge destroys does not reliably order the remaining choices,
+so the tie-break only distinguishes cutting no triangle from cutting some.
+
+IR ancestor enumeration also discards branches with a negative total local
+degree before constructing their quotient operators. If the contracted
+insertion has degree at most `d(gamma)`, the decorated ancestor's degree is
+at most `d(A) - d(gamma) + degree(insertion) <= d(A)`. A negative bound
+therefore makes that UV map zero. This uses the total local degree, including
+forced external momenta and inherited mass powers, rather than membership in
+the original loop-UV catalogue. The evaluator already rejected such
+convergent decorated arguments; the earlier filter avoids their preparation.
 
 == Current Boundaries
 <current-boundaries>

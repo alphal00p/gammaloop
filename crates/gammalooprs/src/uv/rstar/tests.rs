@@ -41,7 +41,7 @@ pub(super) fn settings() -> UVgenerationSettings {
             ..Default::default()
         },
         vakint: GammaVakintSettings {
-            evaluation_methods: vec!["matad".into(), "forcer".into()],
+            evaluation_methods: vec!["rustred".into(), "forcer".into()],
             normalization: "FMFTandMATAD".into(),
             additional_normalization: "1".into(),
             matad: crate::uv::settings::MATADSettings {

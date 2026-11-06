@@ -7,9 +7,10 @@
 //! propagators have power one. Equation (11) uses the G-scheme at Euclidean
 //! Q²=1. The ten propagators give an even Wick-rotation sign.
 
-use std::{collections::BTreeMap, fmt::Write};
+use std::{collections::BTreeMap, fmt::Write, time::Instant};
 
 use eyre::Result;
+use linnet::half_edge::involution::HedgePair;
 use spenso::{
     network::tags::SPENSO_TAG,
     structure::representation::{Minkowski, RepName},
@@ -27,6 +28,7 @@ use crate::{
     initialisation::test_initialise,
     model::Model,
     utils::{GS, load_generic_model},
+    uv::UVgenerationSettings,
 };
 
 use super::{RStarPlan, tests::canonical_tensor};
@@ -34,7 +36,6 @@ use super::{RStarPlan, tests::canonical_tensor};
 struct PublishedMaster {
     number: usize,
     edges: [(usize, usize); 10],
-    marked: usize,
     proper_spinneys: usize,
 }
 
@@ -92,15 +93,22 @@ impl PublishedMaster {
         let graph = self.graph(&model)?;
         let mut settings = super::tests::settings();
         settings.vakint.normalization = "GScheme".into();
-        let marked = graph
-            .iter_edges()
-            .filter_map(|(pair, edge, _)| pair.is_paired().then_some(edge))
-            .nth(self.marked)
-            .unwrap();
-        let plan = RStarPlan::new(&graph, &model, marked, &settings)?;
-        assert_eq!(plan.taylor_order, 0);
-        assert_eq!(plan.ordinary_uv.len(), self.proper_spinneys + 1);
-        let result = plan.pole_part(&graph, &model, &Vakint::new()?, &settings)?;
+        let mut vakint = Vakint::new()?;
+        if self.proper_spinneys > 0 {
+            // Inside-bubble marks need four-loop massive quotient UV maps.
+            // Load the pinned data explicitly; no fallback to a FORM reducer.
+            let artifacts = std::env::var_os("VAKINT_TEST_EXTERNAL_DATA")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| std::env::temp_dir().join("gammaloop-rstar-rustred-data"));
+            vakint.load_official_external_data(
+                4,
+                &vakint::OfficialExternalDataOptions {
+                    version: "v0.2.0".into(),
+                    local_artifacts_path: Some(artifacts),
+                    ..Default::default()
+                },
+            )?;
+        }
         let external = graph
             .iter_edges()
             .find_map(|(pair, edge, _)| (!pair.is_paired()).then_some(edge))
@@ -108,25 +116,109 @@ impl PublishedMaster {
         let representation = Minkowski {}.new_rep(GS.dim).to_symbolic([]);
         let momentum = function!(GS.emr_mom, usize::from(external), representation);
         let squared = function!(SPENSO_TAG.dot, &momentum, &momentum);
-        let actual = canonical_tensor(&result)?
-            .replace(squared.to_pattern())
-            .with(Atom::num(-1))
-            .replace(GS.mu_r_sq)
-            .with(Atom::one())
-            .expand();
+        let check = |plan: &RStarPlan,
+                     automatic: bool,
+                     planning_ms: f64,
+                     settings: &UVgenerationSettings|
+         -> Result<()> {
+            assert_eq!(plan.taylor_order, 0);
+            assert_eq!(plan.ordinary_uv.len(), self.proper_spinneys + 1);
+            let (source, sink) = graph
+                .iter_edges()
+                .find_map(|(pair, edge, _)| match pair {
+                    HedgePair::Paired { source, sink } if edge == plan.marked_edge => {
+                        Some((graph.node_id(source), graph.node_id(sink)))
+                    }
+                    _ => None,
+                })
+                .unwrap();
+            let started = Instant::now();
+            let result = plan.pole_part(&graph, &model, &vakint, settings)?;
+            let elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
+            let cost = plan.estimated_cost(&graph);
+            let actual = canonical_tensor(&result)?
+                .replace(squared.to_pattern())
+                .with(Atom::num(-1))
+                .replace(GS.mu_r_sq)
+                .with(Atom::one())
+                .expand();
+            debug_tags!(#uv, #integrated, #rstar;
+                stage = "five_loop_published_master_comparison",
+                master = self.number,
+                marked_edge = usize::from(plan.marked_edge),
+                source = %graph.underlying[source].name.value,
+                sink = %graph.underlying[sink].name.value,
+                automatic,
+                evaluation_methods = ?settings.vakint.evaluation_methods,
+                planning_ms,
+                elapsed_ms,
+                max_reduction_loops = cost.max_reduction_loops,
+                ordinary_terms = cost.ordinary_terms,
+                ir_terms = cost.ir_terms,
+                quotient_calls = cost.quotient_calls,
+                cuts_triangle = cost.cuts_triangle,
+                log.actual = actual,
+                log.expected = expected,
+                "Five-loop bare pole part compared with arXiv:2104.08272"
+            );
+            let difference = (&actual - &expected).expand().together();
+            assert!(
+                difference.is_zero(),
+                "master {}, massive edge {} (automatic={automatic}): reconstructed {actual}; published {expected}; difference {difference}",
+                self.number,
+                usize::from(plan.marked_edge),
+            );
+            Ok(())
+        };
+
+        let started = Instant::now();
+        let automatic = RStarPlan::with_automatic_edge(&graph, &model, &settings)?;
+        if self.proper_spinneys == 0 {
+            assert!(!automatic.estimated_cost(&graph).cuts_triangle);
+        }
+        let automatic_planning_ms = started.elapsed().as_secs_f64() * 1000.0;
         debug_tags!(#uv, #integrated, #rstar;
-            stage = "five_loop_published_master_comparison",
+            stage = "five_loop_published_master_automatic_edge",
             master = self.number,
-            log.actual = actual,
-            log.expected = expected,
-            "Five-loop bare pole part compared with arXiv:2104.08272"
+            marked_edge = usize::from(automatic.marked_edge),
+            planning_ms = automatic_planning_ms,
+            "Selected a massive edge for the five-loop published master"
         );
-        let difference = (&actual - &expected).expand().together();
-        assert!(
-            difference.is_zero(),
-            "master {}: reconstructed {actual}; published {expected}; difference {difference}",
-            self.number,
-        );
+        // Every rearrangement must reproduce all published pole coefficients,
+        // including lines inside UV subgraphs and lines linking those subgraphs.
+        let mut checked = 0;
+        let mut comparison_mark = None;
+        for (pair, marked, _) in graph.iter_edges() {
+            if !pair.is_paired() {
+                continue;
+            }
+            let started = Instant::now();
+            let plan = RStarPlan::new(&graph, &model, marked, &settings)?;
+            if comparison_mark.is_none() && !plan.ir.is_empty() {
+                comparison_mark = Some(marked);
+            }
+            let planning_ms = started.elapsed().as_secs_f64() * 1000.0;
+            check(&plan, false, planning_ms, &settings)?;
+            checked += 1;
+        }
+        assert_eq!(checked, self.edges.len());
+        check(&automatic, true, automatic_planning_ms, &settings)?;
+        if let Some(marked) = comparison_mark {
+            // Compare one four-loop quotient per nonprimitive master against
+            // an independent reduction backend, keeping all constants exact.
+            let mut reference_settings = settings.clone();
+            reference_settings.vakint.evaluation_methods =
+                vec!["matad".into(), "fmft".into(), "forcer".into()];
+            reference_settings.vakint.fmft.susbstitute_masters = false;
+            let started = Instant::now();
+            let plan = RStarPlan::new(&graph, &model, marked, &reference_settings)?;
+            check(
+                &plan,
+                false,
+                started.elapsed().as_secs_f64() * 1000.0,
+                &reference_settings,
+            )?;
+        }
         Ok(())
     }
 }
@@ -148,7 +240,6 @@ fn five_loop_master_159_primitive_poles_match_publication() -> Result<()> {
             (3, 5),
             (2, 5),
         ],
-        marked: 0,
         proper_spinneys: 0,
     }
     .assert_pole_part(
@@ -173,7 +264,6 @@ fn five_loop_master_169_primitive_poles_match_publication() -> Result<()> {
             (2, 3),
             (1, 3),
         ],
-        marked: 0,
         proper_spinneys: 0,
     }
     .assert_pole_part(Atom::num(441) * zeta().call(7) / (Atom::num(40) * Atom::var(GS.dim_epsilon)))
@@ -201,7 +291,6 @@ fn five_loop_master_76_double_pole_matches_publication() -> Result<()> {
             (2, 6),
             (2, 9),
         ],
-        marked: 0,
         proper_spinneys: 1,
     }
     .assert_pole_part(expected)
@@ -232,7 +321,6 @@ fn five_loop_master_203_triple_pole_matches_publication() -> Result<()> {
             (2, 5),
             (1, 3),
         ],
-        marked: 1,
         proper_spinneys: 3,
     }
     .assert_pole_part(expected)

@@ -453,6 +453,9 @@ impl VakintSettings {
                             expand_masters: self.fmft.expand_masters,
                             susbstitute_masters: self.fmft.susbstitute_masters,
                         }),
+                        "rustred" => EvaluationMethod::RustRed(vakint::RustRedEvaluationOptions {
+                            master_mode: vakint::RustRedMasterMode::Symbolic,
+                        }),
                         "forcer" => EvaluationMethod::Forcer(vakint::ForcerOptions {
                             master_mode: vakint::RustRedMasterMode::Symbolic,
                         }),
@@ -673,6 +676,23 @@ mod tests {
         assert_eq!(
             settings.true_settings().tensor_reduction_method,
             TensorReductionMethod::FeynKit
+        );
+    }
+
+    #[test]
+    fn vakint_rustred_option_uses_exact_symbolic_masters() {
+        let settings: VakintSettings =
+            toml::from_str("evaluation_methods = [\"rustred\", \"forcer\"]").unwrap();
+        let mapped = settings.true_settings();
+        assert!(matches!(
+            mapped.evaluation_order.0[0],
+            vakint::EvaluationMethod::RustRed(vakint::RustRedEvaluationOptions {
+                master_mode: vakint::RustRedMasterMode::Symbolic,
+            })
+        ));
+        assert_eq!(
+            toml::from_str::<VakintSettings>(&toml::to_string(&settings).unwrap()).unwrap(),
+            settings
         );
     }
 

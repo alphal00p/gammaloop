@@ -399,6 +399,13 @@ impl MATAD {
                 settings.epsilon_symbol,
                 expansion_depth
             );
+            // Source slots have been restored after FORM. Freeze only their
+            // dimensions while expanding scalar evanescent coefficients.
+            let cooking =
+                idenso::CookSettings::reversible().with_representation_payloads(false, true);
+            evaluated_integral = cooking
+                .try_cook(evaluated_integral.as_view())
+                .map_err(|error| VakintError::SymbolicaError(error.to_string()))?;
             evaluated_integral = match evaluated_integral.series(
                 vk_symbol!("ep"),
                 Atom::Zero.as_view(),
@@ -421,7 +428,6 @@ impl MATAD {
             if options.direct_numerical_substition {
                 debug!("{}: Substituting period constants...", "MATAD".green());
                 evaluated_integral = evaluated_integral.expand();
-                evaluated_integral = crate::hpl::normalize_constants(evaluated_integral.as_view())?;
             } else if options.susbstitute_masters {
                 debug!("{}: Substituting masters with HPLs ...", "MATAD".green());
                 evaluated_integral = self.substitute_masters(evaluated_integral.as_view())?;
@@ -429,10 +435,11 @@ impl MATAD {
                     // Expanding here is important to improve efficiency and avoid symbolica bugs with floating point coefficients
                     evaluated_integral = evaluated_integral.expand();
                     debug!("{}: Substituting HPLs with numerics ...", "MATAD".green());
-                    evaluated_integral =
-                        crate::hpl::normalize_constants(evaluated_integral.as_view())?;
                 }
             }
+            // Exact and numerical results share canonical zeta and HPL
+            // spellings; normalization does not evaluate the constants.
+            evaluated_integral = crate::hpl::normalize_constants(evaluated_integral.as_view())?;
             // Sanity check: coefficients with epsilon poles can expose
             // master orders beyond the tabulated `Oep` tails.
             crate::truncation_guard::ensure_known_orders(
@@ -442,6 +449,8 @@ impl MATAD {
                 "MATAD",
                 crate::truncation_guard::plain_name,
             )?;
+            // The subsequent ep rename must also reach restored dimensions.
+            evaluated_integral = cooking.uncook(evaluated_integral.as_view());
         }
 
         evaluated_integral = evaluated_integral

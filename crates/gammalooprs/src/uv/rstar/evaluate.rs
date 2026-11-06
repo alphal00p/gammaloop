@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use eyre::{Result, WrapErr, ensure, eyre};
-use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike};
+use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use symbolica::{
     atom::{Atom, AtomCore, Symbol},
     parse, symbol,
@@ -163,7 +163,10 @@ impl<'a> Evaluation<'a> {
         }
         let mut prepared = Atom::Zero;
         for term in &self.plan.ordinary_uv {
-            if self.scaleless(term) {
+            if term
+                .remainder
+                .is_scaleless(self.graph, self.plan.marked_edge)
+            {
                 continue;
             }
             let remainder = self.remainder(term)?;
@@ -171,7 +174,10 @@ impl<'a> Evaluation<'a> {
         }
         for correction in &self.plan.ir {
             for term in &correction.preparation {
-                if self.scaleless(term) {
+                if term
+                    .remainder
+                    .is_scaleless(self.graph, self.plan.marked_edge)
+                {
                     continue;
                 }
                 let hard = self.remainder(term)?;
@@ -196,17 +202,6 @@ impl<'a> Evaluation<'a> {
 
     fn poles(&self, expression: &Atom) -> Result<Atom> {
         Ok(expression.series(self.epsilon, 0, -1)?.to_atom().expand())
-    }
-
-    fn scaleless(&self, term: &UvPreparationTerm) -> bool {
-        // A local mixed contribution can retain the reference mass after its
-        // marked edge is contracted. Only unintegrated massless vacuum loops
-        // vanish here, not a local polynomial or a UV counterterm operation.
-        term.remainder.loops > 0
-            && !term
-                .remainder
-                .remaining
-                .includes(&self.graph[&self.plan.marked_edge].1)
     }
 
     fn insertions(&self, term: &UvPreparationTerm) -> Result<Vec<Atom>> {

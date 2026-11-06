@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc, time::Instant};
 
 use eyre::{Result, eyre};
 use feynkit_generator::{
@@ -18,7 +18,7 @@ use crate::{
     initialisation::test_initialise,
     model::Model,
     utils::load_generic_model,
-    uv::{UltravioletGraph, uv_graph::UVE},
+    uv::{UVgenerationSettings, UltravioletGraph, uv_graph::UVE},
 };
 
 use super::{
@@ -119,6 +119,55 @@ fn ghost_self_energy(
     ))
 }
 
+fn automatic_ghost_plan(
+    graph: &Graph,
+    model: &Model,
+    settings: &UVgenerationSettings,
+) -> Result<RStarPlan> {
+    let started = Instant::now();
+    let plan = RStarPlan::with_automatic_edge(graph, model, settings)?;
+    debug_tags!(#uv, #integrated, #rstar;
+        stage = "ghost_automatic_hard_line_selection",
+        loops = graph.n_loops(&plan.support),
+        marked_edge = usize::from(plan.marked_edge),
+        elapsed_ms = started.elapsed().as_millis() as u64,
+        "Selected the massive ghost self-energy line"
+    );
+    Ok(plan)
+}
+
+fn timed_ghost_counterterm(
+    plan: &RStarPlan,
+    graph: &Graph,
+    model: &Model,
+    vakint: &Vakint,
+    settings: &UVgenerationSettings,
+) -> Result<Atom> {
+    let HedgePair::Paired { source, sink } = graph[&plan.marked_edge].1 else {
+        unreachable!("the marked line is an internal propagator");
+    };
+    let started = Instant::now();
+    let result = plan.counterterm(graph, model, vakint, settings)?;
+    let elapsed_ms = started.elapsed().as_millis() as u64;
+    let cost = plan.estimated_cost(graph);
+    debug_tags!(#uv, #integrated, #rstar;
+        stage = "ghost_hard_line_counterterm",
+        loops = graph.n_loops(&plan.support),
+        marked_edge = usize::from(plan.marked_edge),
+        particle = graph[plan.marked_edge].particle_pdg_code(model),
+        source = usize::from(graph.node_id(source)),
+        sink = usize::from(graph.node_id(sink)),
+        elapsed_ms,
+        max_reduction_loops = cost.max_reduction_loops,
+        ordinary_terms = cost.ordinary_terms,
+        ir_terms = cost.ir_terms,
+        quotient_calls = cost.quotient_calls,
+        file.counterterm = %canonical_tensor(&result)?,
+        "Evaluated the ghost self-energy counterterm for this massive line"
+    );
+    Ok(result)
+}
+
 #[test]
 fn one_loop_ghost_taylor_keeps_the_external_vertex_momentum() -> Result<()> {
     test_initialise()?;
@@ -168,26 +217,30 @@ fn three_loop_nested_ghost_hard_taylor_matches_massive_r() -> Result<()> {
         hard.taylor_order > 0 && hard.forest.iter().any(|forest| forest.steps.len() >= 2)
     }));
 
-    let inside_result = inside.counterterm(&graph, &model, &vakint, &settings)?;
+    let automatic = automatic_ghost_plan(&graph, &model, &settings)?;
+    let automatic_result = timed_ghost_counterterm(&automatic, &graph, &model, &vakint, &settings)?;
+    let inside_result = if inside.marked_edge == automatic.marked_edge {
+        automatic_result.clone()
+    } else {
+        timed_ghost_counterterm(&inside, &graph, &model, &vakint, &settings)?
+    };
+    assert_same_counterterm(&automatic_result, &inside_result)?;
     // Vary every internal line, including the five directed ghost propagators
     // and all three gluon chords. Different species and positions produce
     // different hard preparations while the local UV counterterm is fixed.
-    for (pair, marked, data) in graph.iter_edges() {
-        if !pair.is_paired() || marked == inside.marked_edge {
+    for (pair, marked, _) in graph.iter_edges() {
+        if !pair.is_paired() || marked == inside.marked_edge || marked == automatic.marked_edge {
             continue;
         }
         let plan = RStarPlan::new(&graph, &model, marked, &settings)?;
-        let result = plan.counterterm(&graph, &model, &vakint, &settings)?;
-        debug_tags!(#uv, #integrated, #rstar;
-            stage = "three_loop_ghost_hard_line_comparison",
-            marked_edge = usize::from(marked),
-            particle = data.data.particle_pdg_code(&model),
-            log.inside_counterterm = canonical_tensor(&inside_result)?,
-            log.counterterm = canonical_tensor(&result)?,
-            "Three-loop nested ghost counterterms before the hard-line comparison"
-        );
+        let result = timed_ghost_counterterm(&plan, &graph, &model, &vakint, &settings)?;
         assert_same_counterterm(&inside_result, &result)?;
     }
+
+    // Repeat the selected line after the sweep so its diagnostic timing can
+    // also be compared after the first-call initialization costs are paid.
+    let repeated = timed_ghost_counterterm(&automatic, &graph, &model, &vakint, &settings)?;
+    assert_same_counterterm(&automatic_result, &repeated)?;
 
     // Only the independent oracle integrates a three-loop massive vacuum.
     // All R* paths retain actual ghost/gluon Feynman numerators and use
@@ -211,23 +264,7 @@ fn four_loop_nested_ghost_hard_taylor_is_hard_line_independent() -> Result<()> {
     let graph = ghost_self_energy(&model, 4, |graph| {
         nested_ghost_marks(graph, &model).is_some()
     })?;
-    let (inside, outside) = nested_ghost_marks(&graph, &model).unwrap();
-    let HedgePair::Paired { source, sink } = graph[&inside].1 else {
-        unreachable!("the selected innermost gluon is an internal propagator");
-    };
-    let endpoints = [graph.node_id(source), graph.node_id(sink)];
-    let inner_ghost = graph
-        .iter_edges()
-        .find_map(|(pair, edge, data)| {
-            let HedgePair::Paired { source, sink } = pair else {
-                return None;
-            };
-            (data.data.particle_pdg_code(&model)?.abs() == 9_000_005
-                && endpoints.contains(&graph.node_id(source))
-                && endpoints.contains(&graph.node_id(sink)))
-            .then_some(edge)
-        })
-        .unwrap();
+    let (inside, _) = nested_ghost_marks(&graph, &model).unwrap();
     let settings = settings();
     let vakint = Vakint::new()?;
     let inside = RStarPlan::new(&graph, &model, inside, &settings)?;
@@ -244,23 +281,27 @@ fn four_loop_nested_ghost_hard_taylor_is_hard_line_independent() -> Result<()> {
         hard.taylor_order > 0 && hard.forest.iter().any(|forest| forest.steps.len() >= 3)
     }));
 
-    let inside_result = inside.counterterm(&graph, &model, &vakint, &settings)?;
+    let automatic = automatic_ghost_plan(&graph, &model, &settings)?;
+    let automatic_result = timed_ghost_counterterm(&automatic, &graph, &model, &vakint, &settings)?;
+    let inside_result = if inside.marked_edge == automatic.marked_edge {
+        automatic_result.clone()
+    } else {
+        timed_ghost_counterterm(&inside, &graph, &model, &vakint, &settings)?
+    };
     assert!(!canonical_tensor(&inside_result)?.is_zero());
-    // Probe both ends of the nested IR preparation and a directed ghost line.
+    assert_same_counterterm(&automatic_result, &inside_result)?;
+    // Vary all eleven internal lines, including every directed ghost and gluon.
     // Every production UV sub-operator has at most three loops; the root uses
     // Vakint's massless propagator reduction and the single-mass closure.
-    for marked in [outside, inner_ghost] {
+    for (pair, marked, _) in graph.iter_edges() {
+        if !pair.is_paired() || marked == inside.marked_edge || marked == automatic.marked_edge {
+            continue;
+        }
         let plan = RStarPlan::new(&graph, &model, marked, &settings)?;
-        let result = plan.counterterm(&graph, &model, &vakint, &settings)?;
-        debug_tags!(#uv, #integrated, #rstar;
-            stage = "four_loop_ghost_hard_line_comparison",
-            marked_edge = usize::from(marked),
-            particle = graph[marked].particle_pdg_code(&model),
-            log.inside_counterterm = canonical_tensor(&inside_result)?,
-            log.counterterm = canonical_tensor(&result)?,
-            "Four-loop nested ghost counterterms before the hard-line comparison"
-        );
+        let result = timed_ghost_counterterm(&plan, &graph, &model, &vakint, &settings)?;
         assert_same_counterterm(&inside_result, &result)?;
     }
+    let repeated = timed_ghost_counterterm(&automatic, &graph, &model, &vakint, &settings)?;
+    assert_same_counterterm(&automatic_result, &repeated)?;
     Ok(())
 }
