@@ -28,13 +28,15 @@
 # --draft           DRAFT watermark (never installable)
 # Other options go to tools/run_benchmarks.py (--cpus, --skip-heavy, --heavy-only, --only, --cells, --repetitions,
 # --max-sibling-busy, --max-run-delay, --max-foreign-cpu, --contention-retries, --allow-shared-l3,
-# --heavy-n-cores, --heavy-cpus, --form, --assemble-only). Needs python3, typst (0.15) and, for the
-# FORM backends, form on PATH (or --form).
+# --heavy-n-cores, --heavy-cpus, --form, --assemble-only). Needs python3, typst (0.15; on PATH or TYPST=<path>)
+# and, for the FORM backends, form on PATH (or --form).
 set -euo pipefail
 if (( $# < 3 )); then awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 2; fi
 ROOT=$(realpath "$1"); BIN=$2; [[ $BIN == - ]] || BIN=$(realpath "$BIN"); OUT=$3; shift 3
 mkdir -p "$OUT"; OUT=$(realpath "$OUT")
 HERE=$(cd "$(dirname "$0")" && pwd); DOCS=$(dirname "$HERE")
+TYPST=${TYPST:-typst}
+command -v "$TYPST" > /dev/null || { echo "typst not found (put typst 0.15 on PATH or set TYPST=<path>)" >&2; exit 2; }
 INSTALL=0; DRAFT=false; REFRESH=0; PASS=(); ACCEPT=()
 while (( $# )); do
   case $1 in
@@ -58,7 +60,7 @@ if (( REFRESH )); then
   TSTATUS=provisional; (( INSTALL )) && TSTATUS=final
   python3 -I "$HERE/tools/precision_tables.py" --data-root "$ROOT" --json "$OUT/tables.json" --md "$OUT/PRECISION-TABLES.md" \
     --status $TSTATUS ${PRECISION_TABLES_LABEL:+--label "$PRECISION_TABLES_LABEL"}
-  typst compile --root / --input results="$OUT/results.json" --input graphs="$HERE/data/graphs.json" \
+  "$TYPST" compile --root / --input results="$OUT/results.json" --input graphs="$HERE/data/graphs.json" \
     --input tables="$OUT/tables.json" --input draft=false "$DOCS/benchmark.typ" "$OUT/benchmark.pdf"
   echo "wrote $OUT/benchmark.pdf (timings: committed suite.json; tables: $ROOT)"
   if (( INSTALL )); then
@@ -66,7 +68,7 @@ if (( REFRESH )); then
     python3 -I "$HERE/tools/receipt.py" refresh --out "$OUT" --data-root "$ROOT" --dry-run
     cp "$OUT/tables.json" "$HERE/data/tables.json"
     cp "$OUT/PRECISION-TABLES.md" "$HERE/data/PRECISION-TABLES.md"
-    (cd "$DOCS" && typst compile --input draft=false benchmark.typ benchmark.pdf)
+    (cd "$DOCS" && "$TYPST" compile --input draft=false benchmark.typ benchmark.pdf)
     python3 -I "$HERE/tools/receipt.py" refresh --out "$OUT" --data-root "$ROOT" --pdf "$DOCS/benchmark.pdf" \
       --receipt "$HERE/data/receipt.json"
     echo "installed the precision tables of $ROOT and docs/benchmark.pdf (timings and their receipt kept)"
@@ -97,7 +99,7 @@ python3 -I "$HERE/tools/precision_tables.py" --data-root "$ROOT" --json "$OUT/ta
   --status $TSTATUS ${PRECISION_TABLES_LABEL:+--label "$PRECISION_TABLES_LABEL"}
 step tables "$t"
 t=$EPOCHREALTIME
-typst compile --root / --input results="$OUT/results.json" --input graphs="$OUT/graphs.json" \
+"$TYPST" compile --root / --input results="$OUT/results.json" --input graphs="$OUT/graphs.json" \
   --input tables="$OUT/tables.json" --input draft=$DRAFT "$DOCS/benchmark.typ" "$OUT/benchmark.pdf"
 step typst "$t"
 echo "wrote $OUT/benchmark.pdf"
@@ -108,7 +110,7 @@ if (( INSTALL )); then
   cp "$OUT/tables.json" "$HERE/data/tables.json"
   cp "$OUT/PRECISION-TABLES.md" "$HERE/data/PRECISION-TABLES.md"
   # Rebuild from the installed copies so the committed PDF is reproducible from the repository.
-  (cd "$DOCS" && typst compile --input draft=$DRAFT benchmark.typ benchmark.pdf)
+  (cd "$DOCS" && "$TYPST" compile --input draft=$DRAFT benchmark.typ benchmark.pdf)
   python3 -I "$HERE/tools/receipt.py" write --out "$OUT" --data-root "$ROOT" --pdf "$DOCS/benchmark.pdf" \
     --receipt "$HERE/data/receipt.json" "${ACCEPT[@]}"
   echo "installed docs/benchmark.pdf and docs/benchmark/data/{suite,graphs,tables,receipt}.json, PRECISION-TABLES.md"

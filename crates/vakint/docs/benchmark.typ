@@ -165,7 +165,9 @@
   RustRed ÷ reference; green = RustRed faster, red = slower (log scale); (·) = minimum over the runs.
   _Reduction_: masters retained; _full_: complete call with master values; _warm_: the identical call repeated
   in the process (step cache filled). Every timed call follows an untimed warm-up on another integral, so one-time
-  setup is excluded (listed below the table). _IBP_: RustRed's time in the reduction itself.
+  setup is excluded (listed below the table). _IBP_: RustRed's time in the reduction itself. Five loops (no FORM
+  backend): a master is recognised in any form and returned without a reduction walk; other inputs run RustRed's
+  modular ordered walk (`modular_sampled`, on the cores a cell names).
 ]
 
 = Timings <timings>
@@ -295,8 +297,8 @@
     [Harness binary], raw(str(ident.executable_sha256)),
     [FORM], [#form],
     [Host], [#host.at("cpu_model", default: "—"), #host.at("logical_cpus", default: "—") logical CPUs; timed on CPUs #host.at("cpus_used", default: ()).map(str).join(", ") (#pl(cn.at("l3_domains", default: 0), "L3 domain"))],
-    [Contention], [#cn.at("samples", default: "—") samples, #cn.at("contended_samples", default: "—") still contended after re-measurement (thresholds: SMT sibling #pct(cn.at("thresholds", default: (:)).at("sibling_busy", default: none)), other tasks #pct(cn.at("thresholds", default: (:)).at("foreign_cpu", default: none)), call run-queue wait #pct(cn.at("thresholds", default: (:)).at("run_delay", default: none))) · SMT sibling busy #pct(cn.at("sibling_busy_median", default: none)) median (max #pct(cn.at("sibling_busy_max", default: none))) · timed call waiting in the run queue #pct(cn.at("call_run_delay_median", default: none)) (max #pct(cn.at("call_run_delay_max", default: none))) · other tasks on the timed CPU #pct(cn.at("foreign_cpu_median", default: none)) (max #pct(cn.at("foreign_cpu_max", default: none))) · 1-min load ≤ #cn.at("load1_max", default: "—")],
-    [Regenerate], raw("crates/vakint/docs/benchmark/make-benchmark.sh DATA_ROOT BENCHMARK_BINARY OUT_DIR --install"),
+    [Contention], [#cn.at("samples", default: "—") samples, #cn.at("contended_samples", default: "—") still contended after re-measurement (thresholds: SMT sibling #pct(cn.at("thresholds", default: (:)).at("sibling_busy", default: none)), other tasks #pct(cn.at("thresholds", default: (:)).at("foreign_cpu", default: none)), call run-queue wait #pct(cn.at("thresholds", default: (:)).at("run_delay", default: none)) when other tasks ran on the timed CPU) · SMT sibling busy #pct(cn.at("sibling_busy_median", default: none)) median (max #pct(cn.at("sibling_busy_max", default: none))) · timed call waiting in the run queue #pct(cn.at("call_run_delay_median", default: none)) (max #pct(cn.at("call_run_delay_max", default: none))) · other tasks on the timed CPU #pct(cn.at("foreign_cpu_median", default: none)) (max #pct(cn.at("foreign_cpu_max", default: none))) · 1-min load ≤ #cn.at("load1_max", default: "—")],
+    [Regenerate], [#raw("crates/vakint/docs/benchmark/make-benchmark.sh DATA_ROOT BENCHMARK_BINARY OUT_DIR --install") (after a data release: #raw("DATA_ROOT - OUT_DIR --refresh-tables --install"), timings kept)],
     [Built], [#results.assembled_utc #if draft [· *DRAFT*: not the published data or build]],
   )
 }
@@ -418,8 +420,9 @@ graphs) are merged by their factors; numbers count masters (one to three loops: 
 }
 #let fig-graph(L, body, cap) = figure(body, caption: [*#(L)-loop reduction graph.* #cap #gstats(L).], kind: image)
 
-#grid(columns: (1fr, 1fr), column-gutter: 8mm,
-  fig-graph(1, draw-graph(graphs.loops.at("1"), width: 8.2cm, row: 1cm),
+// equal heights (the two-loop graph's), so that both captions start on the same line
+#grid(columns: (1fr, 1fr), column-gutter: 8mm, align: top,
+  fig-graph(1, block(height: 1.1cm + 2 * 0.27cm + 0.5cm, align(horizon, draw-graph(graphs.loops.at("1"), width: 8.2cm, row: 1cm))),
     [T1 carries the one-loop master; dots and numerators reduce inside it.]),
   fig-graph(2, draw-graph(graphs.loops.at("2"), width: 8.2cm, row: 1.1cm),
     [Removing any sunset line gives T1².]),

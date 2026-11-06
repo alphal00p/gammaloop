@@ -235,17 +235,24 @@ def sample_is_current(args, case, cell, rec):
     return (rec.get("harness") or {}).get("key") == sample_key(args, case, cell)
 
 
+# Below this foreign CPU fraction no other task ran on the timed CPU: a run-queue wait of the timed call is then the
+# process tree's own (vakint waiting while its FORM child runs on the same pinned CPU), not contention.
+SELF_WAIT_FOREIGN = 0.002
+
+
 def contention_score(args, meta):
     """Reasons a sample counts as contended (empty: clean). The CPU-level run-queue delay is recorded but is no criterion:
-    it includes a backend's own processes waiting for each other (vakint and its FORM child, ~3 % on an idle CPU)."""
+    it includes a backend's own processes waiting for each other (vakint and its FORM child, ~3 % on an idle CPU); the
+    timed call's run-queue wait counts only when other tasks ran on the timed CPU (SELF_WAIT_FOREIGN)."""
     why = []
     busy = [v for v in (meta.get("sibling_busy_fraction") or {}).values() if v is not None]
     if busy and max(busy) > args.max_sibling_busy:
         why.append(f"SMT sibling {max(busy):.0%} busy")
-    if (meta.get("foreign_cpu_fraction") or 0) > args.max_foreign_cpu:
+    foreign = meta.get("foreign_cpu_fraction")
+    if (foreign or 0) > args.max_foreign_cpu:
         why.append(f"other tasks ran {meta['foreign_cpu_fraction']:.1%} of the wall time on the timed CPU")
     call = meta.get("call_run_delay_fraction")
-    if call is not None and call > args.max_run_delay:
+    if call is not None and call > args.max_run_delay and (foreign is None or foreign >= SELF_WAIT_FOREIGN):
         why.append(f"timed call waited {call:.1%} in the run queue")
     return why
 
