@@ -31,6 +31,8 @@ use super::*;
 
 use crate::tensor::SymbolicNetParse;
 use crate::tensor::SymbolicTensor;
+use crate::tensor::inference::TensorInferenceError;
+use spenso::structure::partial::{PartialStructure, PartialStructureExt};
 use spenso::structure::{
     abstract_index::AbstractIndex,
     representation::{LibraryRep, Minkowski},
@@ -241,13 +243,15 @@ fn normalise_g() {
         gamma_chain(mink(dim, mu), bis(5), mink(dim, mu), bis(1), bis(2)),
         default_namespace = "spenso"
     );
-    // This legacy spelling is neither the shared chain shorthand nor a
-    // declared tensor head. Strict admission must not infer its arguments.
-    let error = crate::tensor::SymbolicTensor::infer(expr).unwrap_err();
-    assert!(
-        matches!(error, crate::tensor::inference::TensorInferenceError::Invalid(ref reason)
-        if reason.contains("not tagged as a tensor"))
-    );
+    // The untagged legacy spelling is opaque at inference; declared intake
+    // still rejects treating its arguments as tensor ports.
+    let scalar = SymbolicTensor::infer(expr.clone()).unwrap();
+    assert!(scalar.is_scalar());
+    assert_eq!(scalar.expression(), &expr);
+    let error = SymbolicTensor::from_declared_parts(expr, PartialStructure::from_logical_slots([]))
+        .unwrap_err();
+    assert!(matches!(error, TensorInferenceError::Invalid(ref reason)
+        if reason.contains("not tagged as a tensor")));
 }
 
 #[test]

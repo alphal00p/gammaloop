@@ -49,9 +49,18 @@ must not treat printed names alone as a complete serialized registry.
 
 == Core symbolic representation
 
-Tensor metadata is authoritative after initial admission. Raw Atom input is checked against
+Tensor metadata is authoritative after initial admission. Inferred raw Atom input containing
+any `spenso::tensor`-tagged symbol is checked against
 the tensor grammar, declared or inferred interface, placeholder scopes and index multiplicities
-at that boundary. Ordinary typed algebra derives its result from admitted operands and carries
+at that boundary. Tensor-free input is admitted as an opaque scalar with an empty
+interface and construction history, including malformed tensor-free Spenso operator syntax.
+The presence scan includes function heads, variables, exponents and scalar metadata;
+other tags, namespaces and callbacks do not exclude scalar admission. Intrinsic normalization,
+product readiness and algebra/rewrite guarantees remain separate lazy proofs.
+Declared-interface intake and checked-result boundaries retain their existing strict validation.
+Debug callback-contract assertions accept tensor-free results for an empty expected interface,
+using the same opaque scalar policy as admission; tensor-containing results remain checked.
+Ordinary typed algebra derives its result from admitted operands and carries
 their structure and scoped index usage. Release fast paths do not reconstruct or revalidate
 the resulting Atom to recover facts already established by the operation. Symbolica normalization may erase
 visible factors without erasing their construction history. Callbacks used by ordinary algebra
@@ -948,7 +957,7 @@ string, so formatting is confined to that serialization boundary.
 
 Admission establishes the logical interface and scoped index metadata once.
 Typed algebra uses those facts as the tensor's meaning, even when the resulting
-Atom no longer displays the same index occurrences. Raw admission still rejects
+Atom no longer displays the same index occurrences. Raw admission containing tensor-tagged symbols still rejects
 malformed signatures, incompatible sum interfaces, invalid placeholder scopes,
 excess index multiplicities and mismatched declared ports; cancellation in a
 generated payload is not permission to weaken those checks. A new arbitrary Atom
