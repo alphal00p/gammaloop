@@ -190,12 +190,13 @@ fn five_loop_monitor_preserves_full_results_and_final_substitution_errors() -> R
     assert_eq!(latest(&path, "succeeded")?["core"]["status"], "succeeded");
 
     // Inspect an already declared, positive-power scalar master: the last one
-    // the authenticated 5L manifest declares (P640 of the 640-terminal v0.2.0
-    // campaign). Its stored graph/routing/powers supply the public ingress; no
-    // new reduction search or replacement master fixture is introduced to
-    // provoke an error. A terminal without coefficients must fail its final
-    // substitution as a declared terminal; a computed one must fail closed when
-    // the request needs one Laurent order beyond its last published coefficient.
+    // the authenticated 5L manifest declares (P131 of the v0.2.1 pack, P640 of
+    // the 640-terminal v0.2.0 campaign). Its stored graph/routing/powers supply
+    // the public ingress; no new reduction search or replacement master
+    // fixture is introduced to provoke an error. A terminal without
+    // coefficients must fail its final substitution as a declared terminal; a
+    // computed one must fail closed when the request needs one Laurent order
+    // beyond its last published coefficient.
     let manifest: Value = serde_json::from_slice(&fs::read(report.path.join("5L/manifest.json"))?)?;
     let metadata = manifest["masters"]
         .as_array()
@@ -242,6 +243,16 @@ fn five_loop_monitor_preserves_full_results_and_final_substitution_errors() -> R
         master.graph().numerator().expression(),
         &DiagramIntegralOptions::default(),
     )?);
+    // A request made of package masters only is its own reduction: it is
+    // built without the native request (master transport), so that snapshot
+    // must claim no native core. To keep a request whose native reduction
+    // succeeds before its final substitution fails, the same master is also
+    // requested next to the positive-line fixture above. That request as a
+    // whole runs a native reduction: the fixture's terms still need the
+    // native walk (their ordered phases were checked above), while the
+    // master itself may still be reduced directly when it falls in a
+    // (mass, spectator, exponent) channel of its own.
+    let beside_native = input.clone() + &fixture.cancelled;
     for (mode, phase) in [
         (RustRedMasterMode::Symbolic, "symbolic_master_substitution"),
         (
@@ -253,41 +264,57 @@ fn five_loop_monitor_preserves_full_results_and_final_substitution_errors() -> R
         if let Some(depth) = depth {
             settings.number_of_terms_in_epsilon_expansion = depth;
         }
-        let reference = engine.evaluate(&settings, input.as_view()).unwrap_err();
-        let text = reference.to_string();
-        if computed {
+        for (request_input, native) in [(&input, false), (&beside_native, true)] {
+            let reference = engine
+                .evaluate(&settings, request_input.as_view())
+                .unwrap_err();
+            let text = reference.to_string();
+            if computed {
+                assert!(
+                    matches!(reference, vakint::VakintError::MissingMasterOrders(_)),
+                    "{name}: {text}"
+                );
+                assert!(
+                    text.contains("beyond the available expansion depth"),
+                    "{name}: {text}"
+                );
+                assert!(text.contains(identity), "{name}: {text}");
+            } else {
+                assert!(
+                    text.contains("declared terminal has no computed coefficients"),
+                    "{name}: {text}"
+                );
+            }
             assert!(
-                matches!(reference, vakint::VakintError::MissingMasterOrders(_)),
+                !text.contains("undeclared residual master"),
                 "{name}: {text}"
             );
-            assert!(
-                text.contains("beyond the available expansion depth"),
-                "{name}: {text}"
+            let observed = engine
+                .evaluate_with_monitor(&settings, request_input.as_view(), &options)
+                .unwrap_err();
+            assert_eq!(
+                std::mem::discriminant(&observed),
+                std::mem::discriminant(&reference)
             );
-            assert!(text.contains(identity), "{name}: {text}");
-        } else {
-            assert!(
-                text.contains("declared terminal has no computed coefficients"),
-                "{name}: {text}"
-            );
+            assert_eq!(observed.to_string(), reference.to_string());
+            let request = latest(&path, "failed")?;
+            assert_eq!(request["caller_phase"], phase);
+            if native {
+                // The request's native reduction (at least the fixture's)
+                // succeeded; the whole request failed later. Core success
+                // must never overwrite this final caller-owned error status.
+                assert_eq!(request["core"]["status"], "succeeded", "{name}");
+            } else {
+                // No native request ran: the failed status is the caller's own.
+                // This deliberately pins the direct path for a request made of
+                // the package's own masters only (built without the native
+                // request, so no core snapshot is recorded). If that path ever
+                // gains a native request, this assertion fails by design: that
+                // is a behaviour change of master transport, not a monitor
+                // regression.
+                assert_eq!(request["core"], Value::Null, "{name}");
+            }
         }
-        assert!(
-            !text.contains("undeclared residual master"),
-            "{name}: {text}"
-        );
-        let observed = engine
-            .evaluate_with_monitor(&settings, input.as_view(), &options)
-            .unwrap_err();
-        assert_eq!(
-            std::mem::discriminant(&observed),
-            std::mem::discriminant(&reference)
-        );
-        assert_eq!(observed.to_string(), reference.to_string());
-        let request = latest(&path, "failed")?;
-        assert_eq!(request["caller_phase"], phase);
-        // Native reduction succeeded; the whole request failed later. Core
-        // success must never overwrite this final caller-owned error status.
-        assert_eq!(request["core"]["status"], "succeeded");
     }
     Ok(())
 }
