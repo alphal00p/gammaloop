@@ -64,9 +64,12 @@ Kind inference (no flag):
   matcher's error ("UNKNOWN integrals must have propagator ids ranging from 1 to ..."). No backend evaluates an
   unknown integral with `p(i)` (pySecDec takes external momenta only in numerators), so evaluating it, or matching
   the `topo(UNKNOWN(...))` output again, is the error "out-of-domain p-integral (...): an unknown integral with an
-  external momentum p(i), which no backend evaluates"; `to_canonical` passes it through once. `Vakint::evaluate`
-  reports this error whatever the numerator. `Vakint::evaluate_integral` does not canonicalize, so a raw input reports
-  it for item 8, and the error of its own item for items 1, 2 and 4; no evaluation method is reached. A short form out
+  external momentum p(i), which no backend evaluates"; `to_canonical` passes it through once. `Vakint::tensor_reduce`
+  refuses it with the same error: a vacuum projection of its numerator would be wrong, and zero at odd rank.
+  `Vakint::evaluate` reports this error whatever the numerator, with one exception: an input with a tree line and a
+  float coefficient may stop earlier at `MalformedGraph` (the input coefficients are staged on the raw graph), which
+  is an error all the same. `Vakint::evaluate_integral` does not canonicalize, so a raw input reports it for item 8,
+  and the error of its own item for items 1, 2 and 4; no evaluation method is reached. A short form out
   of domain (a non-integer power) is no unknown integral and keeps its error. Malformed inputs (not a `prop`, a bad edge or vertex id, repeated prop ids, no external head,
   broken momentum conservation, a loop-count mismatch, a momentum that is not an integer combination of heads, a
   non-unimodular routing) are errors under any setting, also when the input is out of domain as well: malformed
@@ -516,8 +519,15 @@ Rules:
   `assert_p_scaleless(input)`, `assert_p_error(input, fragment)` (with `allow_unknown_integrals: false`),
   `assert_p_malformed(input, fragment)` (an error under either setting), `assert_p_unknown(input, fragment)` (section 1,
   "Out of domain": `topo(UNKNOWN(input))` by default, the error otherwise, never a value),
-  `assert_p_identity(lhs, rhs)` (exact live Forcer equality, symbolic masters, G-scheme) and `fake_form(version)` (a
-  FORM that only reports its version).
+  `assert_p_identity(lhs, rhs)` (exact live Forcer equality of a non-zero value, symbolic masters, G-scheme, through
+  `ε^(5-L)`: an identity between finite four-loop integrals needs `ε^0`), `p_identity_sides(lhs, rhs, normalization)`
+  (the two values, for a test that an identity can fail), `fake_form(version)` (a FORM that only reports its version)
+  and `fake_python(version)` (the same for the Python of pySecDec).
+- `tests/vacuum_byte_identity.rs` renders every public step on vacuum inputs on the RustRed, alphaLoop, MATAD and
+  all-backends lanes and compares the bytes with `tests/fixtures/vacuum_byte_identity.txt`, written by the same test
+  at the base of M2-V1. The shared paths edited for p-integrals must not change it. The report also holds the symbol
+  table, to read by hand: the test skips it, because a later symbol moves no term of any output, and the order of the
+  numerical source symbols of the FORM lanes differs between processes.
 - Forcer battery data are frozen in `tests/fixtures/forcer/p{L}l_battery.json`: the canonical input (family, powers,
   numerator, external), the raw exact Forcer output of each homogeneous part, FORM version and Forcer commit.
   Without FORM, they test the input generation, the parser, the finalizer and RustRed.
