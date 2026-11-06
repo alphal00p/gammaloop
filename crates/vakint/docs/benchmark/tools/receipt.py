@@ -129,8 +129,21 @@ def non_neutral(paths):
 
 
 def dirty_paths(repo):
-    lines = (git(repo, "status", "--porcelain", "--untracked-files=normal") or "").splitlines()
-    return non_neutral([l[3:].split(" -> ")[-1] for l in lines])
+    """Modified, staged or untracked non-neutral paths of the work tree (porcelain v1 -z: 'XY path', renames add the
+    source as the next entry)."""
+    r = subprocess.run(["git", "-C", str(repo), "status", "--porcelain", "-z", "--untracked-files=normal"],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        return [f"(git status failed in {repo})"]
+    entries, paths, skip = r.stdout.split("\0"), [], False
+    for e in entries:
+        if skip:
+            skip = False
+            continue
+        if len(e) > 3:
+            paths.append(e[3:])
+            skip = e[0] in "RC"
+    return non_neutral(paths)
 
 
 def source_reasons(repo, build_commit, recorded_digest=None):
