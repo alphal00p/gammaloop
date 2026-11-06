@@ -975,7 +975,17 @@ pub mod test {
             .add_arg(&target)
             .add_arg(&bound)
             .finish();
-        assert!(SymbolicTensor::infer(malformed).is_err());
+        let scalar = SymbolicTensor::infer(malformed.clone()).unwrap();
+        assert!(scalar.is_scalar());
+        assert_eq!(scalar.expression(), &malformed);
+        assert!(
+            SymbolicTensor::from_declared_parts(
+                malformed.clone(),
+                PartialStructure::from_logical_slots([]),
+            )
+            .is_err()
+        );
+        assert!(SymbolicTensor::infer(g!(&target, &bound) * malformed).is_err());
     }
 
     #[test]
