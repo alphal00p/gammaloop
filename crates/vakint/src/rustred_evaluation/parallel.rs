@@ -58,7 +58,7 @@ pub(crate) fn map_ordered_by_cost<T: Sync, R: Send>(
                             }
                         };
                         match &request {
-                            Some(request) => request.run_coarse(work),
+                            Some(request) => request.run(work),
                             None => work(),
                         }
                     })

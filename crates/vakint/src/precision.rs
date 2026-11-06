@@ -941,7 +941,7 @@ pub(crate) fn evaluate_series(
                 Some(order),
                 catalog.map_or("", |catalog| catalog.version.as_str()),
             );
-            log::warn!("{warning}");
+            log_once(warning);
         }
         result.coefficients.insert(order, value);
         result.warnings.extend(warnings);
@@ -1210,4 +1210,24 @@ pub(crate) fn evaluate_with_errors(
     central.align_orders(&error);
     error.align_orders(&central);
     Ok((central, Some(error)))
+}
+
+/// Log a precision warning once per process. The same data limit recurs on
+/// every evaluation that touches it, and each result also carries it as a
+/// typed warning; logging it again each time floods notebook consoles.
+pub(crate) fn log_once(warning: &impl std::fmt::Display) {
+    use std::sync::{LazyLock, Mutex, PoisonError};
+    /// Distinct texts remembered; beyond it every warning is logged again.
+    const REMEMBERED: usize = 4096;
+    static LOGGED: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(Default::default);
+    let text = warning.to_string();
+    let mut logged = LOGGED.lock().unwrap_or_else(PoisonError::into_inner);
+    if logged.contains(&text) {
+        return;
+    }
+    if logged.len() < REMEMBERED {
+        logged.insert(text.clone());
+    }
+    drop(logged);
+    log::warn!("{text}");
 }

@@ -140,7 +140,11 @@ impl FourLoopPrograms {
             .zip(&descriptors)
             .map(|(input, descriptor)| load(input, descriptor, data_version))
             .collect::<Result<Vec<_>, _>>()
-            .map_err(super::data::failure)?;
+            .map_err(|error| match error {
+                // Cancellation and engine limits keep their type.
+                LoadError::Resource(error) => RustRedEvaluationError::ResourceLimit(error),
+                LoadError::Program(detail) => super::data::failure(detail),
+            })?;
         crate::execution::checkpoint()?;
         Ok(Self {
             #[cfg(test)]
@@ -272,13 +276,34 @@ fn descriptor(label: &'static str, source: &str) -> Result<Descriptor, String> {
     })
 }
 
+/// Why one shipped program did not load.
+enum LoadError {
+    /// A checkpoint between the load steps failed (a cancelled request, or
+    /// the engine's time or memory limit).
+    Resource(symbolica::utils::resources::ResourceLimitError),
+    /// The program itself is unusable.
+    Program(String),
+}
+
+impl From<String> for LoadError {
+    fn from(detail: String) -> Self {
+        Self::Program(detail)
+    }
+}
+
+impl From<&str> for LoadError {
+    fn from(detail: &str) -> Self {
+        Self::Program(detail.to_owned())
+    }
+}
+
 fn load(
     input: &Input,
     descriptor: &Descriptor,
     data_version: &str,
-) -> Result<LoadedProgram, String> {
+) -> Result<LoadedProgram, LoadError> {
     // A cancelled request stops between the load steps of a program.
-    let checkpoint = || crate::execution::checkpoint().map_err(|error| error.to_string());
+    let checkpoint = || crate::execution::checkpoint().map_err(LoadError::Resource);
     checkpoint()?;
     let bytes = super::experimental::compressed::decode(&input.program, MAX_PROGRAM_BYTES)
         .map_err(|error| format!("decompress {}: {error}", input.label))?;

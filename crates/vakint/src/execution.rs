@@ -47,9 +47,71 @@ impl Request {
     }
 }
 
+/// One entered request scope and the scopes it is nested in.
+struct Scope {
+    request: Cancellation,
+    outer: Option<Arc<Scope>>,
+}
+
+impl Scope {
+    /// This request or an enclosing one is cancelled (polls included).
+    fn tripped(&self) -> bool {
+        let mut scope = Some(self);
+        while let Some(current) = scope {
+            if current.request.0.tripped() {
+                return true;
+            }
+            scope = current.outer.as_deref();
+        }
+        false
+    }
+
+    fn is_cancelled(&self) -> bool {
+        let mut scope = Some(self);
+        while let Some(current) = scope {
+            if current.request.is_cancelled() {
+                return true;
+            }
+            scope = current.outer.as_deref();
+        }
+        false
+    }
+}
+
 thread_local! {
-    /// The request scope of Vakint's coarse checkpoints on this thread.
-    static REQUEST: RefCell<Option<Cancellation>> = const { RefCell::new(None) };
+    /// The request scopes of Vakint's coarse checkpoints on this thread,
+    /// innermost first.
+    static REQUEST: RefCell<Option<Arc<Scope>>> = const { RefCell::new(None) };
+}
+
+/// Install `scopes` as this thread's request scopes for `operation`.
+fn with_scopes<R>(scopes: Option<Arc<Scope>>, operation: impl FnOnce() -> R) -> R {
+    struct Restore(Option<Arc<Scope>>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let previous = self.0.take();
+            REQUEST.with(|request| *request.borrow_mut() = previous);
+        }
+    }
+    let previous = REQUEST.with(|request| request.replace(scopes));
+    let _restore = Restore(previous);
+    operation()
+}
+
+/// The request scopes of a thread, carried to the workers it dispatches.
+#[derive(Clone)]
+pub(crate) struct RequestScopes(Arc<Scope>);
+
+impl RequestScopes {
+    /// Run `operation` on this (worker) thread inside the carried scopes.
+    pub(crate) fn run<R>(&self, operation: impl FnOnce() -> R) -> R {
+        with_scopes(Some(Arc::clone(&self.0)), operation)
+    }
+
+    /// Whether the request or an enclosing one was cancelled.
+    pub(crate) fn is_cancelled(&self) -> bool {
+        self.0.is_cancelled()
+    }
 }
 
 /// Cooperative cancellation of one request, shared by its clones.
@@ -75,7 +137,9 @@ thread_local! {
 /// [`Self::is_cancelled`] holds, treat any error of the operation as the
 /// cancellation. Caches never record a step that did not finish, so the
 /// engine stays usable and later requests return the same results as on a
-/// fresh engine.
+/// fresh engine. (RustRed keeps a failed one-time preparation of a
+/// five-loop owner; a stopped request that left one makes the engine reload
+/// the five-loop application before its next use.)
 ///
 /// ```
 /// use vakint::Cancellation;
@@ -160,22 +224,21 @@ impl Cancellation {
 
     /// Run `operation` with Vakint's own (coarse) checkpoints observing this
     /// flag, at no cost to Symbolica's and RustRed's checkpoints.
+    ///
+    /// Scopes nest like Symbolica budgets: an inner request never hides an
+    /// outer one, so cancelling either stops the inner operation.
     pub fn run_coarse<R>(&self, operation: impl FnOnce() -> R) -> R {
-        struct Restore(Option<Cancellation>);
-        impl Drop for Restore {
-            fn drop(&mut self) {
-                let previous = self.0.take();
-                REQUEST.with(|request| *request.borrow_mut() = previous);
-            }
-        }
-        let previous = REQUEST.with(|request| request.replace(Some(self.clone())));
-        let _restore = Restore(previous);
-        operation()
+        let outer = REQUEST.with(|request| request.borrow().clone());
+        let scope = Arc::new(Scope {
+            request: self.clone(),
+            outer,
+        });
+        with_scopes(Some(scope), operation)
     }
 
-    /// The request scope of this thread, for workers it dispatches.
-    pub(crate) fn current() -> Option<Self> {
-        REQUEST.with(|request| request.borrow().clone())
+    /// The request scopes of this thread, for workers it dispatches.
+    pub(crate) fn current() -> Option<RequestScopes> {
+        REQUEST.with(|request| request.borrow().clone().map(RequestScopes))
     }
 }
 
@@ -187,7 +250,7 @@ pub(crate) fn checkpoint() -> Result<(), ResourceLimitError> {
         request
             .borrow()
             .as_ref()
-            .is_some_and(|request| request.0.tripped())
+            .is_some_and(|scope| scope.tripped())
     });
     if cancelled {
         Err(ResourceLimitError::MonitorUnavailable {
@@ -482,7 +545,7 @@ mod tests {
     }
 
     #[test]
-    fn coarse_scope_is_seen_by_vakint_checkpoints_and_frontend_workers_only() {
+    fn coarse_scopes_nest_and_are_seen_by_vakint_checkpoints_and_frontend_workers_only() {
         let cancellation = Cancellation::default();
         cancellation.run_coarse(|| {
             checkpoint().unwrap();
@@ -502,12 +565,38 @@ mod tests {
                 checkpoint().is_err()
             });
             assert_eq!(seen, [true, true, true]);
-            // Nested scopes restore the outer one.
-            Cancellation::default().run_coarse(|| checkpoint().unwrap());
+            // A nested scope never hides the cancelled outer one, and the
+            // outer one is restored after it.
+            Cancellation::default().run_coarse(|| {
+                assert!(checkpoint().is_err());
+                assert!(Cancellation::current().unwrap().is_cancelled());
+            });
             assert!(checkpoint().is_err());
         });
         assert!(Cancellation::current().is_none());
         checkpoint().unwrap();
+        // Cancelling only the inner scope stops the inner operation only.
+        let outer = Cancellation::default();
+        outer.run_coarse(|| {
+            let inner = Cancellation::default();
+            inner.run_coarse(|| {
+                checkpoint().unwrap();
+                inner.cancel();
+                assert!(checkpoint().is_err());
+                // Workers carry the whole chain.
+                let seen = crate::rustred_evaluation::parallel::map_ordered(2, &[(); 2], |_, _| {
+                    checkpoint().is_err()
+                });
+                assert_eq!(seen, [true, true]);
+            });
+            checkpoint().unwrap();
+            // An outer cancellation reaches a scope entered before it.
+            Cancellation::default().run_coarse(|| {
+                checkpoint().unwrap();
+                outer.cancel();
+                assert!(checkpoint().is_err());
+            });
+        });
     }
 
     #[test]

@@ -12,7 +12,9 @@ use std::sync::{
 /// file, at the same cadence (the monitor interval, between 0.1 s and 1 s,
 /// plus request start, finish and admission), without a file or terminal.
 /// After the call returns the sink holds the call's final model. Clones share
-/// the model. The monitor thread is the only writer; readers never block it.
+/// the model. The monitor thread is the only writer; a reader holds the lock
+/// only to take a reference to the latest model (never while copying it) and
+/// never waits for the writer.
 ///
 /// ```
 /// use vakint::{RustRedMonitorOptions, RustRedProgressSink};
@@ -32,7 +34,8 @@ pub struct RustRedProgressSink(Arc<SinkState>);
 struct SinkState {
     /// Number of stored models; read without the lock.
     sequence: AtomicU64,
-    latest: Mutex<Option<serde_json::Value>>,
+    /// Shared, so a reader copies it outside the lock.
+    latest: Mutex<Option<Arc<serde_json::Value>>>,
 }
 
 impl RustRedProgressSink {
@@ -43,7 +46,7 @@ impl RustRedProgressSink {
             .latest
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        *latest = Some(model);
+        *latest = Some(Arc::new(model));
         // Under the lock, so a reader sees a sequence with its own model.
         self.0.sequence.fetch_add(1, Ordering::Release);
     }
@@ -60,13 +63,16 @@ impl RustRedProgressSink {
         if self.sequence() <= seen {
             return None;
         }
-        let latest = match self.0.latest.try_lock() {
-            Ok(latest) => latest,
-            Err(TryLockError::Poisoned(error)) => error.into_inner(),
-            Err(TryLockError::WouldBlock) => return None,
+        let (sequence, model) = {
+            let latest = match self.0.latest.try_lock() {
+                Ok(latest) => latest,
+                Err(TryLockError::Poisoned(error)) => error.into_inner(),
+                Err(TryLockError::WouldBlock) => return None,
+            };
+            (self.sequence(), latest.clone()?)
         };
-        let sequence = self.sequence();
-        latest.clone().map(|model| (sequence, model))
+        // The deep copy happens after the lock is released.
+        Some((sequence, model.as_ref().clone()))
     }
 }
 

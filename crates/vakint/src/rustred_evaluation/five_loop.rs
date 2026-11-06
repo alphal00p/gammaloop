@@ -160,6 +160,10 @@ pub(crate) struct SavedApplication {
     /// saved-application identity as rule tables and RustRed's binding
     /// (family, variables, policy).
     step_cache: super::cache::OrderedCacheProgram,
+    /// A request stopped by a cancellation or a resource limit left a failed
+    /// one-time owner preparation behind: the native application keeps that
+    /// failure for good, so the next request reloads the package.
+    poisoned: std::sync::atomic::AtomicBool,
 }
 
 #[derive(Debug, Clone)]
@@ -184,6 +188,27 @@ fn failure(error: impl fmt::Display) -> RustRedEvaluationError {
     RustRedEvaluationError::Reduction {
         detail: error.to_string(),
     }
+}
+
+/// Whether `error` reports an engine time or memory limit (also when RustRed
+/// carried it as text).
+fn stopped_by_resource_limit(error: &VakintError) -> bool {
+    if matches!(
+        error,
+        VakintError::ResourceLimit(_)
+            | VakintError::RustRedEvaluation(RustRedEvaluationError::ResourceLimit(_))
+    ) {
+        return true;
+    }
+    let text = error.to_string();
+    // Symbolica's `ResourceLimitError` texts.
+    [
+        "exceeds RAM budget",
+        "configured time budget",
+        "cannot enforce ",
+    ]
+    .iter()
+    .any(|marker| text.contains(marker))
 }
 
 fn native_failure(error: impl std::error::Error + 'static) -> RustRedEvaluationError {
@@ -853,6 +878,22 @@ impl Vakint {
             ..options
         };
         let mut loaded = self.rustred_application.lock().map_err(failure)?;
+        // A package poisoned by a stopped request is dropped before its
+        // replacement loads (its memory is not held twice); the catalogue is
+        // kept. Cache records survive: the reloaded package has the same
+        // rule-table identity.
+        let mut kept_catalogue = None;
+        if loaded
+            .as_ref()
+            .is_some_and(|current| current.application.is_poisoned())
+            && let Some(poisoned) = loaded.take()
+        {
+            eprintln!(
+                "vakint: reloading the 5L application: a stopped request left a failed \
+                 one-time owner preparation in it"
+            );
+            kept_catalogue = Some(poisoned.catalogue);
+        }
         if loaded.as_ref().is_none_or(|current| {
             current.path != path
                 || prepared_identity(current.options) != prepared_identity(options)
@@ -905,6 +946,7 @@ impl Vakint {
                 .topologies
                 .five_loop_catalogue()
                 .or_else(|| loaded.as_ref().map(|current| &current.catalogue))
+                .or(kept_catalogue.as_ref())
             {
                 Some(catalogue) => Arc::clone(catalogue),
                 None => crate::topologies::FiveLoopCatalogue::prepare()?,
@@ -1279,7 +1321,40 @@ impl SavedApplication {
             witnesses: Mutex::new(WitnessCache::default()),
             master_forms: std::sync::OnceLock::new(),
             master_transport_misses: Mutex::new(BTreeSet::new()),
+            poisoned: std::sync::atomic::AtomicBool::new(false),
         })
+    }
+
+    /// Whether a stopped request left a failed owner preparation behind.
+    pub(super) fn is_poisoned(&self) -> bool {
+        self.poisoned.load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    /// Deferred owners whose one-time preparation failed (RustRed keeps the
+    /// failure; only a reload retries them).
+    fn failed_owners(&self) -> Option<usize> {
+        self.prepared
+            .lock()
+            .ok()
+            .map(|prepared| prepared.owner_preparation_statistics().failed_owners)
+    }
+
+    /// RustRed retries an owner preparation refused by a typed resource
+    /// error, but a cancellation or limit reached inside its exact algebra
+    /// can arrive as an ordinary failure, which the owner then keeps. After
+    /// a request that was cancelled or stopped by a limit and left a new
+    /// failed owner, the package is reloaded before its next use.
+    fn note_stopped_request(&self, failed_before: Option<usize>, error: &VakintError) {
+        let stopped = crate::Cancellation::current().is_some_and(|scope| scope.is_cancelled())
+            || stopped_by_resource_limit(error);
+        let failed_after = self.failed_owners();
+        if stopped
+            && let (Some(before), Some(after)) = (failed_before, failed_after)
+            && after > before
+        {
+            self.poisoned
+                .store(true, std::sync::atomic::Ordering::Release);
+        }
     }
 
     fn symbolic_integral(
@@ -1376,6 +1451,28 @@ impl SavedApplication {
     /// `step_cache` (bound to [`Self::ordered_cache_program`]) is attached to
     /// the native application for this batch, or detached when absent.
     pub(super) fn evaluate_ordered_batch(
+        &self,
+        settings: &VakintSettings,
+        contributions: &[MatchedContribution],
+        step_cache: Option<Arc<rustred::reduction::OrderedStepCache>>,
+        observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
+        progress: Option<&super::monitor::CallerProgress>,
+    ) -> Result<RustRedSymbolicEvaluation, VakintError> {
+        let failed_before = self.failed_owners();
+        let result = self.evaluate_ordered_batch_locked(
+            settings,
+            contributions,
+            step_cache,
+            observation,
+            progress,
+        );
+        if let Err(error) = &result {
+            self.note_stopped_request(failed_before, error);
+        }
+        result
+    }
+
+    fn evaluate_ordered_batch_locked(
         &self,
         settings: &VakintSettings,
         contributions: &[MatchedContribution],
