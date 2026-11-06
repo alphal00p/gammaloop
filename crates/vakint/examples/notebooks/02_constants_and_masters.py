@@ -300,7 +300,8 @@ def _(master, mo):
     mo.stop(not _orders)
     master_order = mo.ui.radio(
         list(_orders),
-        value=next(iter(_orders)),
+        # The finite part when recorded, else the most singular order.
+        value="ε^0" if "ε^0" in _orders else next(iter(_orders)),
         inline=True,
         label="Exact coefficient of",
     )

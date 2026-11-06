@@ -119,6 +119,7 @@ def reduce(work, spec, stages, progress=None):
         number_of_terms_in_epsilon_expansion=loops + 1,
         ordered_cache="read-write",
         ordered_cache_directory=cache_directory,
+        **Gallery.interrupt_options(spec.get("interrupt")),
     )
     receipt["execution"] = Gallery.execution(engine)
 
@@ -235,7 +236,10 @@ def run(work, spec, progress=None):
 def main():
     work = Path(sys.argv[1]).resolve()
     spec = json.loads((work / "request.json").read_text())["spec"]
-    return run(work, spec)
+    # A background job is stopped by signalling its process group (SIGTERM,
+    # then SIGKILL), never by Ctrl-C: it skips the per-checkpoint cost of
+    # in-call interruption. In-kernel runs keep the default ("fine").
+    return run(work, {"interrupt": "off", **spec})
 
 
 if __name__ == "__main__":

@@ -243,10 +243,27 @@ def _(Gallery, contraction_seconds, mo, numerator, projected, projector, reduced
 @app.cell(hide_code=True)
 def _(Gallery, contraction_views, mo, view_choice):
     # A fresh live pager per selection, as this cell's own output: prev/next
-    # pages, page size, numbered omission markers, + / - / 0 zoom.
+    # pages, page size, numbered omission markers, + / - / 0 zoom. A single
+    # long product does not wrap there (it scrolls sideways): its factors are
+    # also listed one per line.
+    _value = contraction_views[view_choice.value]
+    _factors = Gallery.product_factors(_value)
     mo.vstack(
         [
-            Gallery.formula(mo, contraction_views[view_choice.value]),
+            Gallery.formula(mo, _value),
+            *(
+                [
+                    mo.accordion(
+                        {
+                            f"The {len(_factors)} factors of this product, one per line (index names are local to each line)": Gallery.factor_list(
+                                mo, _factors
+                            )
+                        }
+                    )
+                ]
+                if _factors
+                else []
+            ),
             Gallery.note(
                 mo,
                 "One native tensor workflow",

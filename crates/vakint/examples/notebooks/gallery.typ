@@ -59,29 +59,49 @@ coefficient map, never fabricated zeros.
 
 == Live progress and interruption
 
-The host's long Vakint calls (#raw("evaluate"), #raw("evaluate_integral"),
-#raw("load_official_external_data") and the other loads) take a
-#raw("progress") keyword: #raw("\"auto\"") (the default) shows marimo's own
-status spinner or progress bar in a notebook and costs nothing elsewhere; a
-callable receives an immutable #raw("VakintProgress") snapshot about once a
-second. The gallery's monitor card renders the same most important metrics as
-the terminal dashboard: state and elapsed time, stage, batch, the Ordered
-schedule position (phase n of N, a position, not a share of the time), keys per
-second, processed and frontier keys (with the peak), step-cache hits and misses
-and memory. Page 05 shows it for background jobs (from the job's
+The host's long Vakint calls #raw("evaluate"), #raw("evaluate_integral"),
+#raw("evaluate_rustred_symbolic"), #raw("warm_ordered_cache"),
+#raw("load_official_external_data") and #raw("load_external_data") take a
+#raw("progress") keyword (the other loads, such as #raw("load_rustred_application")
+and #raw("load_ordered_cache"), have none): #raw("\"auto\"") (the default) shows
+marimo's own status spinner or progress bar in a notebook and costs nothing
+elsewhere; a callable receives an immutable #raw("VakintProgress") snapshot
+about once a second. The gallery's monitor card renders the same most important
+metrics as the terminal dashboard: state and elapsed time, stage, batch, the
+Ordered schedule position (phase n of N, a position, not a share of the time),
+keys per second, processed and frontier keys (with the peak), step-cache hits
+and misses and memory. Page 05 shows it for background jobs (from the job's
 #raw("monitor.json")) and for in-kernel runs; page 03 shows the recorded
-five-loop run's final card. During these calls Ctrl-C, or marimo's Interrupt in
-edit mode, stops the native work and leaves the engine usable; a cancelled load
-leaves the previous registry active. Reductions stop within a fraction of a
-second (measured on the five-loop zero-momentum benchmark: 0.44 s after a
-terminal Ctrl-C, 0.5 s after marimo's Interrupt, both about a minute in), except
-in two native stretches without checkpoints that finish first: the five-loop
-application load step of a 1L–5L load (up to about 30 s) and the modular lift
-after the Ordered schedule is done (the monitor then shows the schedule complete;
-about 20 s for that benchmark). Application mode (the
-served gallery) has no interrupt; there every long run is a cancellable
-background job. A host without the #raw("progress") keyword still runs every
-page; the monitor then appears only for background jobs.
+five-loop run's final card.
+
+During these calls Ctrl-C, or marimo's Interrupt in edit mode, stops the native
+work and leaves the engine usable; a cancelled load leaves the previous
+registry active. An interrupted in-kernel run on page 05 keeps its final card
+(badge "Interrupted") in its own cell: marimo re-runs no other cell after an
+Interrupt. Reductions stop within a fraction of a second (measured on the
+five-loop zero-momentum benchmark: 0.44 s after a terminal Ctrl-C, 0.5 s after
+marimo's Interrupt, both about a minute in), except in native stretches without
+checkpoints that finish first: the five-loop application load step of a 1L–5L
+load (up to about 30 s), the expansion step of a large Apply phase (6–9 s
+measured in phase 73 of 83 of that benchmark) and the modular lift after the
+Ordered schedule is done (the monitor then shows the schedule complete; about
+20 s for that benchmark). Meanwhile marimo's status indicator says
+"Vakint · stopping". An interrupt that lands while a five-loop owner is being
+prepared for the first time can leave a failed preparation in the native
+application; the next five-loop call then reloads the application first (30–40 s,
+announced on stderr), with unchanged results.
+
+Interruptibility costs a few percent at every native checkpoint, so it is paid
+only where an interrupt can arrive: on Python's main thread (a script, a
+terminal, a marimo edit kernel) or with a progress callback. The engine's
+#raw("interrupt") argument selects it: #raw("\"fine\"") (the default, every
+checkpoint), #raw("\"coarse\"") (only Vakint's own checkpoints: per data file,
+program step and expression term, at no native cost) or #raw("\"off\"") (a
+Ctrl-C raises once the call returned). Application mode (the served gallery)
+runs kernels on threads and has no interrupt; there every long run is a
+cancellable background job, and the GIL is released so other sessions stay
+responsive. A host without the #raw("progress") keyword still runs every page;
+the monitor then appears only for background jobs.
 
 == Recorded evidence
 
@@ -231,7 +251,14 @@ always a cell's own output, behind a selector when a page offers several
 values, never inside tabs, accordions or tables: those unmount their content and
 would dispose the pager's widget model. Small values inside tabs and tables use
 the static native preview (#raw("Gallery.static_formula")), which keeps its
-omission notes. Interactive FeynKit drawings render in iframes, so redrawing
+omission notes. The pinned Symbolica pager shows a product too large for its
+budget as a single numbered marker (a five-loop retained result opens as
+#raw("[1] + [2]")): pages 03 and 05 therefore add a term browser
+(#raw("Gallery.term_selector") / #raw("term_view")) that opens one term at a
+time, its masters as readable labels, its prefactor and its coefficient in a
+pager of its own. Products never wrap in the pagers (they scroll sideways), so
+the graph page also lists the factors of a long tensor product one per line.
+Interactive FeynKit drawings render in iframes, so redrawing
 one never disturbs the notebook page. Light and dark styles follow the
 notebook's theme, not the operating system's. Never strip native omission
 markers to make a preview appear complete.

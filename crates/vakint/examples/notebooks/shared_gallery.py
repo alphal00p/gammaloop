@@ -145,6 +145,136 @@ class Gallery:
             return value.paged(page_size=page_size)
         return value.formatted(page_size=page_size)
 
+    @classmethod
+    def product_factors(cls, value, *, minimum=4):
+        """The factors of a value that is one long product, else None.
+
+        A product never wraps in the pagers (they page and wrap sums): its
+        factors listed one per line stay readable at any width."""
+        try:
+            from symbolica import AtomType
+
+            tensor = cls.is_tensor(value)
+            expression = value.to_expression() if tensor else value
+            if expression.get_type() != AtomType.Mul or len(expression) < minimum:
+                return None
+            factors = list(expression)
+        except (AttributeError, ImportError, TypeError, ValueError):
+            return None
+        if tensor:
+            # Back in tensor notation (named indices, slots) for display.
+            try:
+                return [type(value)(factor) for factor in factors]
+            except (TypeError, ValueError):
+                pass
+        return factors
+
+    @classmethod
+    def factor_list(cls, mo, factors):
+        """Static formulas, one factor per line (safe inside an accordion)."""
+        return mo.vstack([cls.static_formula(mo, factor) for factor in factors])
+
+    # -- One term of a large retained result ----------------------------------
+    _master_power = re.compile(r"\)\^(\d+)$")
+
+    @classmethod
+    def term_parts(cls, term):
+        """(masters, other factors, coefficient) of one product term of a
+        retained result: the formal master symbols, the small prefactors and
+        the largest sum factor (the master's coefficient)."""
+        from symbolica import AtomType
+
+        factors = list(term) if term.get_type() == AtomType.Mul else [term]
+        masters, others, coefficient = [], [], None
+        for factor in factors:
+            text = factor.to_canonical_string()
+            if "RustRedMaster(" in text and len(text) < 4096:
+                masters.append(factor)
+            elif factor.get_type() == AtomType.Add and (
+                coefficient is None or len(factor) > len(coefficient)
+            ):
+                if coefficient is not None:
+                    others.append(coefficient)
+                coefficient = factor
+            else:
+                others.append(factor)
+        return masters, others, coefficient
+
+    @classmethod
+    def term_label(cls, master):
+        text = master.to_canonical_string()
+        label = cls.master_label(text)
+        power = cls._master_power.search(text)
+        return f"({label})^{power.group(1)}" if power else label
+
+    @classmethod
+    def term_selector(cls, mo, value, *, limit=500):
+        """A dropdown over the top-level terms of a large sum (term -> index),
+        or None for a value that is not a sum of several terms.
+
+        The pinned Symbolica pager shows an oversized product as one numbered
+        marker; opening one term at a time (``term_view``) gives its masters,
+        prefactors and coefficient each their own view."""
+        from symbolica import AtomType
+
+        if value.get_type() != AtomType.Add or len(value) < 2:
+            return None
+        options = {}
+        for index, term in enumerate(value):
+            if index >= limit:
+                break
+            masters, _, coefficient = cls.term_parts(term)
+            label = f"Term {index + 1}: " + (
+                " × ".join(cls.term_label(master) for master in masters) or "no master"
+            )
+            if coefficient is not None:
+                label += f" · coefficient of {len(coefficient):,} terms"
+            options[label] = index
+        shown = f"the first {limit:,} of " if len(value) > limit else ""
+        return mo.ui.dropdown(
+            options,
+            value=next(iter(options)),
+            label=f"Open one term ({shown}{len(value):,})",
+            full_width=True,
+        )
+
+    @classmethod
+    def term_view(cls, mo, value, index, *, page_size=25):
+        """One top-level term of ``value``: its masters as labels, its small
+        prefactors as a static formula and its coefficient in the live pager
+        (a direct cell output, like ``formula``)."""
+        import functools
+        import operator
+
+        term = value[index]
+        masters, others, coefficient = cls.term_parts(term)
+        parts = [
+            cls.table(
+                mo,
+                [
+                    {
+                        "master": cls.term_label(master),
+                        "symbol": master.to_canonical_string(),
+                    }
+                    for master in masters
+                ],
+                caption=f"Term {index + 1} of {len(value):,}: its formal masters",
+            )
+            if masters
+            else mo.md(f"Term {index + 1} of {len(value):,} has no formal master.")
+        ]
+        if others:
+            parts += [
+                mo.md("**Prefactor**"),
+                cls.static_formula(mo, functools.reduce(operator.mul, others)),
+            ]
+        if coefficient is not None:
+            parts += [
+                mo.md(f"**Coefficient** ({len(coefficient):,} terms)"),
+                cls.formula(mo, coefficient, page_size=page_size),
+            ]
+        return mo.vstack(parts)
+
     @staticmethod
     def frame(mo, payload, *, height=400):
         """Isolated HTML (scripts, own styles) in an iframe that follows the
@@ -262,6 +392,7 @@ class Gallery:
           min-width:4.5rem; }
         .vg-table td.num { font-variant-numeric:tabular-nums; text-align:right;
           white-space:nowrap; }
+        .vg-table th.num { text-align:right; }
         .vg-table caption { caption-side:bottom; text-align:left; padding:8px 12px;
           color:var(--vg-muted); font-size:12px; }
         .vg-monitor { border:1px solid var(--vg-line); border-radius:15px;
@@ -290,8 +421,9 @@ class Gallery:
           gap:10px; margin-top:14px; }
         .vg-kpi { border-top:1px solid var(--vg-line); padding-top:8px; min-width:0; }
         .vg-kpi span { display:block; font-size:12px; color:var(--vg-muted); }
-        .vg-kpi strong { display:block; font-size:20px; font-weight:600;
-          letter-spacing:-.02em; overflow-wrap:anywhere; }
+        .vg-kpi strong { display:block; font-size:clamp(16px,1.6vw,20px);
+          font-weight:600; letter-spacing:-.02em; overflow-wrap:break-word;
+          font-variant-numeric:tabular-nums; }
         .vg-kpi small { display:block; font-size:12px; color:var(--vg-muted); }
         .vg-monitor-foot { margin-top:12px; font-size:12px; color:var(--vg-muted);
           line-height:1.6; overflow-wrap:anywhere; }
@@ -373,8 +505,12 @@ class Gallery:
         rows = list(rows)
         if columns is None:
             columns = list(rows[0]) if rows else []
-        head = "".join(f'<th scope="col">{html.escape(str(c))}</th>' for c in columns)
         number_cell = ' class="num"'
+        head = "".join(
+            f'<th scope="col"{number_cell if c in numeric else ""}>'
+            f"{html.escape(str(c))}</th>"
+            for c in columns
+        )
         body = "".join(
             "<tr>"
             + "".join(
@@ -569,6 +705,18 @@ class Gallery:
         if not isinstance(signature, str):
             return False
         return re.search(r"\bprogress\s*=", signature) is not None
+
+    @staticmethod
+    def interrupt_options(interrupt):
+        """``{"interrupt": interrupt}`` when this host's engine has the setting
+        (``Vakint(interrupt="fine" | "coarse" | "off")``), else ``{}``."""
+        if interrupt is None:
+            return {}
+        try:
+            from symbolica.community.hepkit.vakint import Vakint
+        except ImportError:
+            return {}
+        return {"interrupt": interrupt} if hasattr(Vakint, "interrupt") else {}
 
     @classmethod
     def progress_options(cls, method, progress):
@@ -1426,7 +1574,7 @@ class Gallery:
                 (
                     "Step cache",
                     f"{cls.compact(hits)} / {cls.compact(misses)}",
-                    "hits / misses"
+                    "hits / misses in the Ordered census"
                     + (f" · {hits / looked_up:.0%} hits" if looked_up else ""),
                 )
             )
@@ -1550,14 +1698,73 @@ class Gallery:
     @classmethod
     def kernel_progress(cls, mo, *, title=None):
         """A ``progress=`` callback that redraws this cell's output as the
-        monitor card, for in-kernel calls (edit mode)."""
+        monitor card, for in-kernel calls (edit mode). Its ``model`` attribute
+        keeps the last snapshot (the final one, after the call)."""
 
         def show(progress):
-            mo.output.replace(
-                cls.monitor_card(mo, cls.progress_model(progress), title=title)
-            )
+            show.model = cls.progress_model(progress)
+            mo.output.replace(cls.monitor_card(mo, show.model, title=title))
 
+        show.model = None
         return show
+
+    @classmethod
+    def kernel_outcome(
+        cls, mo, work, *, progress=None, interrupted=False, title="In this kernel"
+    ):
+        """The final card and a note for an in-kernel run, as the output of
+        the cell that ran it.
+
+        marimo runs no other cell after an Interrupt (not even the cells a
+        state change would re-run), so an interrupted run must show itself
+        here; ``progress`` is the run's ``kernel_progress`` callback."""
+        status = cls.job_status(work)
+        state = str(status.get("state") or ("cancelled" if interrupted else "failed"))
+        elapsed = cls._number(status.get("elapsed_seconds"))
+        model = getattr(progress, "model", None)
+        if model:
+            card = cls.monitor_card(
+                mo,
+                model,
+                state="interrupted" if interrupted else state,
+                title=title,
+                elapsed=elapsed,
+            )
+        else:
+            card = cls.job_monitor_card(mo, status, work, title=title)
+        model = model or {}
+        phase = cls._dict(model, "ordered", "phase")
+        kind = cls._dict(model, "stage").get("kind")
+        where = cls.stage_labels.get(kind) if isinstance(kind, str) else None
+        if kind == "native" and cls._number(phase.get("total")):
+            where = (
+                f"{where} · {str(phase.get('kind') or 'reduce').title()} "
+                f"{phase.get('index', 0)}/{phase['total']}"
+            )
+        taken = f" after {cls.duration(elapsed)}" if elapsed is not None else ""
+        if interrupted:
+            note = cls.note(
+                mo,
+                "Interrupted in this kernel",
+                f"Stopped{taken}{f' during {where}' if where else ''}. The kernel "
+                "and its engine stay usable: start the run again or pick another "
+                "case. marimo re-runs no other cell after an Interrupt, so "
+                "03 / progress and 04 / result below still show the run before "
+                "this one until the next run or page change.",
+            )
+        elif state == "complete":
+            note = cls.note(
+                mo,
+                "Finished in this kernel",
+                f"Complete{taken}. 03 / progress and 04 / result below show this run.",
+            )
+        else:
+            note = cls.note(
+                mo,
+                "The in-kernel run failed",
+                str(status.get("message") or "See the kernel console for the error."),
+            )
+        return mo.vstack([card, note])
 
     # -- Ladder reductions (3L, 4L) -----------------------------------------
     @staticmethod

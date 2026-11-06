@@ -758,12 +758,28 @@ class GalleryNativeFormulaTests(unittest.TestCase):
         formula = Mock(return_value="pager")
         for label, name in zip(views, names, strict=True):
             show(
-                Gallery=SimpleNamespace(formula=formula, note=lambda *_: "note"),
+                Gallery=SimpleNamespace(
+                    formula=formula,
+                    note=lambda *_: "note",
+                    product_factors=lambda value: None,
+                    factor_list=Gallery.factor_list,
+                ),
                 contraction_views=views,
                 mo=mo,
                 view_choice=SimpleNamespace(value=label),
             )
             self.assertIs(formula.call_args.args[1], values[name])
+
+    def test_long_products_also_list_their_factors(self):
+        try:
+            from symbolica import E
+        except ImportError:
+            self.skipTest("the native host is not installed")
+        product = E("a*b*(c+d)*f(x)*g(y)")
+        self.assertEqual(len(Gallery.product_factors(product)), 5)
+        self.assertIsNone(Gallery.product_factors(E("a*b")))
+        self.assertIsNone(Gallery.product_factors(E("a+b*c*d*e*f")))
+        self.assertIsNone(Gallery.product_factors(object()))
 
     def test_live_pagers_never_sit_inside_tabs_accordions_or_tables(self):
         # Those containers unmount their panels; the frontend then disposes a
@@ -2303,6 +2319,40 @@ class GalleryPresentationHelperTests(unittest.TestCase):
             ],
         )
 
+    def test_term_browser_splits_masters_prefactor_and_coefficient(self):
+        try:
+            from symbolica import E
+        except ImportError:
+            self.skipTest("the native host is not installed")
+        family = "e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4"
+        other = "56d4ac620f0309e551e825ce435d23ee4b58e887f2ee6390e2f8f4a8f3a1b2c3"
+        value = E(
+            f"vakint::RustRedMaster(vakint::rustred_family_{family},1)^2"
+            f"*vakint::RustRedMaster(vakint::rustred_family_{other},1,1,0)"
+            "*(1+x+x^2+x^3)*(y-2)^-1"
+            f"+3*vakint::RustRedMaster(vakint::rustred_family_{family},1)*(z+1)"
+        )
+        captured = {}
+
+        def dropdown(options, value=None, label=None, full_width=False):
+            captured.update(options=options, value=value, label=label)
+            return SimpleNamespace(value=options[value])
+
+        mo = fake_display_mo(ui=SimpleNamespace(dropdown=dropdown))
+        Gallery.term_selector(mo, value)
+        labels = list(captured["options"])
+        self.assertEqual(len(labels), 2)
+        self.assertIn("Open one term (2)", captured["label"])
+        big = next(label for label in labels if "×" in label)
+        self.assertIn("(1L · family e74e81b2 · powers (1))^2", big)
+        self.assertIn("2L · family 56d4ac62 · powers (1,1,0)", big)
+        self.assertIn("coefficient of 4 terms", big)
+        self.assertIsNone(Gallery.term_selector(mo, E("x")))
+        with patch.object(Gallery, "formula", return_value="live pager"):
+            parts = Gallery.term_view(mo, value, captured["options"][big])
+        self.assertEqual(parts[-1], "live pager")
+        self.assertIn("its formal masters", parts[0].text)
+
     def test_master_labels_read_loops_family_and_powers(self):
         family = "e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4"
         self.assertEqual(
@@ -2464,6 +2514,69 @@ class GalleryKernelRunTests(unittest.TestCase):
             with patch.object(reduce_worker, "run", return_value=0):
                 Gallery.reduce_in_kernel(work)
             self.assertEqual(gallery_jobs.status(work)["state"], "complete")
+
+    def test_interrupted_kernel_run_shows_its_final_card_in_its_own_cell(self):
+        # marimo re-runs no other cell after an Interrupt: the cell that ran
+        # the reduction must show the interrupted state itself.
+        source = (Gallery.directory / "05_ladder_reductions.py").read_text()
+        self.assertIn("Gallery.kernel_outcome(", source)
+        self.assertNotIn('set_shown_job(kernel_job)\n    mo.md("")', source)
+        mo = fake_display_mo(
+            output=SimpleNamespace(replace=lambda value: None),
+            callout=lambda text, kind=None: ("callout", text),
+        )
+        with (
+            tempfile.TemporaryDirectory() as root,
+            patch.dict(os.environ, {"VAKINT_GALLERY_WORK": root}, clear=False),
+        ):
+            work = Gallery.kernel_work("3L-zero-momentum", n_cores=1)
+            progress = Gallery.kernel_progress(mo, title="In this kernel")
+            progress(
+                {
+                    "status": "Running",
+                    "elapsed_seconds": 12.0,
+                    "stage": {"kind": "native", "id": "native"},
+                    "ordered": {"phase": {"index": 38, "total": 83, "kind": "apply"}},
+                }
+            )
+            (Path(work) / "status.json").write_text(
+                json.dumps(
+                    {"state": "cancelled", "kind": "kernel", "elapsed_seconds": 12.5}
+                )
+            )
+            card, note = Gallery.kernel_outcome(
+                mo, work, progress=progress, interrupted=True
+            )
+            self.assertIn("Interrupted", card.text)
+            self.assertIn('aria-valuenow="38"', card.text)
+            text = note.text
+            self.assertIn("Interrupted in this kernel", text)
+            self.assertIn("Native reduction · Apply 38/83", text)
+            self.assertIn("still show the run before this one", text)
+            (Path(work) / "status.json").write_text(
+                json.dumps(
+                    {"state": "complete", "kind": "kernel", "elapsed_seconds": 30}
+                )
+            )
+            _, note = Gallery.kernel_outcome(mo, work, progress=progress)
+            self.assertIn("Finished in this kernel", note.text)
+
+    def test_background_jobs_skip_in_call_interruption(self):
+        # Jobs stop by SIGTERM/SIGKILL of their process group, never Ctrl-C.
+        import reduce_worker
+
+        with tempfile.TemporaryDirectory() as root:
+            (Path(root) / "request.json").write_text(
+                json.dumps({"spec": {"case": "3L-zero-momentum"}})
+            )
+            with (
+                patch.object(sys, "argv", ["reduce_worker.py", root]),
+                patch.object(reduce_worker, "run", return_value=0) as run,
+            ):
+                self.assertEqual(reduce_worker.main(), 0)
+            self.assertEqual(run.call_args.args[1]["interrupt"], "off")
+        # In-kernel runs keep the default.
+        self.assertEqual(Gallery.interrupt_options(None), {})
 
     def test_worker_records_an_interrupt_before_reraising(self):
         import reduce_worker

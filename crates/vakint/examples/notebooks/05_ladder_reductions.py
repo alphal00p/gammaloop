@@ -245,15 +245,17 @@ def _(Gallery, kernel_button, mo, run_form, set_shown_job):
         )
     except (OSError, ValueError) as _error:
         mo.stop(True, mo.callout(str(_error), kind="warn"))
+    _progress = Gallery.kernel_progress(mo, title="In this kernel")
+    _interrupted = False
     try:
-        Gallery.reduce_in_kernel(
-            kernel_job, progress=Gallery.kernel_progress(mo, title="In this kernel")
-        )
+        Gallery.reduce_in_kernel(kernel_job, progress=_progress)
     except KeyboardInterrupt:
         # Recorded as cancelled; the kernel and its engine stay usable.
-        pass
+        _interrupted = True
     set_shown_job(kernel_job)
-    mo.md("")
+    # After an Interrupt marimo re-runs no other cell (this state change
+    # included): the run's final card and outcome stay in this cell.
+    Gallery.kernel_outcome(mo, kernel_job, progress=_progress, interrupted=_interrupted)
     return (kernel_job,)
 
 
@@ -481,10 +483,12 @@ def _(Gallery, ladder_result, mo, watched_job):
     _text = (
         Gallery.checked_job(watched_job) / ladder_result["retained"]["file"]
     ).read_text()
+    retained_result = None
     try:
         from symbolica import E as _E
 
-        _formula = Gallery.formula(mo, _E(_text))
+        retained_result = _E(_text)
+        _formula = Gallery.formula(mo, retained_result)
     except (ImportError, ValueError, TypeError):
         _formula = mo.ui.code_editor(_text[:20000], language="python", disabled=True)
     mo.vstack(
@@ -499,6 +503,22 @@ def _(Gallery, ladder_result, mo, watched_job):
             ),
         ]
     )
+    return (retained_result,)
+
+
+@app.cell
+def _(Gallery, mo, retained_result):
+    mo.stop(retained_result is None)
+    retained_term = Gallery.term_selector(mo, retained_result)
+    mo.stop(retained_term is None)
+    retained_term
+    return (retained_term,)
+
+
+@app.cell(hide_code=True)
+def _(Gallery, mo, retained_result, retained_term):
+    # One term at a time, each part in its own view (this cell's output).
+    Gallery.term_view(mo, retained_result, retained_term.value)
     return
 
 

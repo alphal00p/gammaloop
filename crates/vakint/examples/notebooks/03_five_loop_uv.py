@@ -173,25 +173,39 @@ def _(Gallery, mo):
 
 @app.cell(hide_code=True)
 def _(Gallery, mo):
-    mo.vstack(
-        [
-            Gallery.section(
-                mo,
-                "03 / measurements",
-                "Ordered reduction of the saved input",
-                "Verified scalar-input loading, external data and native ordered reduction are measured separately. Fresh scientific preparation is independent validation.",
-            ),
+    try:
+        _measured = Gallery.receipt("zero-momentum") is not None
+    except (OSError, ValueError):
+        _measured = True  # the card below reports the problem
+    _section = Gallery.section(
+        mo,
+        "03 / measurements",
+        "Ordered reduction of the saved input",
+        "Verified scalar-input loading, external data and native ordered reduction are measured separately. Fresh scientific preparation is independent validation.",
+    )
+    if _measured:
+        _body = [
             Gallery.evidence_card(
                 mo,
                 "zero-momentum",
                 "Complete zero-momentum physical reduction",
-                optional=True,
             ),
             mo.md(
                 "Final comparisons use three fresh processes per configuration with the same verified scalar input, medians and ranges, fixed workers/affinity, and exact result/guard checks. Original graph and numerator preparation are reported separately. Warm in-process reuse is reported separately."
             ),
         ]
-    )
+    else:
+        _body = [
+            Gallery.note(
+                mo,
+                "One recorded run, shown in full below",
+                "This evidence set has no multi-process timing comparison. Its "
+                "zero-momentum reduction of the saved input is section 06 / recorded "
+                "run: the native monitor at completion, the measured stages and the "
+                "exact retained result, recorded with the current 131-master basis.",
+            )
+        ]
+    mo.vstack([_section, *_body])
     return
 
 
@@ -425,8 +439,10 @@ def _(Gallery, mo):
                 f"Data {_data.get('version')} (manifest sha256 "
                 f"{str(_data.get('manifest_sha256'))[:16]}…), {_report.get('guards', {}).get('count', 0):,} "
                 "exported nonzero guards, "
-                f"{_cache.get('misses', 0):,} Ordered step-cache misses and "
-                f"{_cache.get('hits', 0):,} hits (a cold in-memory cache). The "
+                f"an Ordered step cache with {_cache.get('misses', 0):,} misses "
+                f"and {_cache.get('hits', 0):,} hits after the call (a cold "
+                "in-memory cache; the monitor's census above counts the Ordered "
+                "schedule's own lookups, up to its last phase). The "
                 "masters stay formal symbols; the result is the exact retained "
                 "linear combination, identical for every core count and Ordered "
                 "weight arithmetic. Recorded "
@@ -471,6 +487,22 @@ def _(Gallery, five_loop_fixture, inspect_saved, mo):
         ]
     )
     return (saved_result,)
+
+
+@app.cell
+def _(Gallery, mo, saved_result):
+    saved_term = Gallery.term_selector(mo, saved_result)
+    mo.stop(saved_term is None)
+    saved_term
+    return (saved_term,)
+
+
+@app.cell(hide_code=True)
+def _(Gallery, mo, saved_result, saved_term):
+    # One term at a time: its masters, prefactor and coefficient in its own
+    # pager (the full result's pager shows oversized products as markers).
+    Gallery.term_view(mo, saved_result, saved_term.value)
+    return
 
 
 @app.cell(hide_code=True)
