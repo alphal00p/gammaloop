@@ -362,7 +362,9 @@ const FIVE_LOOP_SUNSET: &str = "topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(1,2)
 /// Section 1, "Out of domain" (M1 review F1, missing test 8).
 mod out_of_domain {
     use symbolica::atom::Atom;
-    use vakint::{EvaluationOrder, VakintError, VakintSettings};
+    use vakint::{
+        EvaluationOrder, TensorReductionMethod, VakintError, VakintExpression, VakintSettings,
+    };
 
     use super::*;
 
@@ -435,6 +437,59 @@ mod out_of_domain {
             error.to_string().contains("p-integrals are massless"),
             "{error}"
         );
+    }
+
+    /// The three public steps by hand, as in examples/oneloop_evaluation.rs. The
+    /// numerator of `topo(UNKNOWN(...))` must not take the vacuum projection:
+    /// odd rank would vanish, and a silent zero is a wrong value (`k -> p-k`
+    /// gives p²/2 times the integral at rank 1).
+    #[test]
+    fn tensor_reduction_refuses_an_unknown_integral() {
+        for tensor_reduction_method in [
+            TensorReductionMethod::FeynKit,
+            TensorReductionMethod::AlphaLoop,
+        ] {
+            let settings = VakintSettings {
+                tensor_reduction_method,
+                ..VakintSettings::default()
+            };
+            for integral in [
+                "topo(prop(1,edge(1,2),k(1),muvsq,1)*prop(2,edge(2,1),k(1)-p(1),muvsq,1))",
+                "topo(prop(1,edge(1,2),k(1)+p(2),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))",
+                "topo(prop(1,edge(1,2),k(1),0,1/2)*prop(2,edge(2,1),k(1)-p(1),0,1))",
+                FIVE_LOOP_SUNSET,
+            ] {
+                for numerator in [
+                    "1",
+                    "dot(k(1),p(1))",
+                    "dot(k(1),p(1))^2",
+                    "dot(k(1),p(1))^3",
+                    "k(1,1)*p(1,1)",
+                ] {
+                    let input = parse(&format!("{numerator}*{integral}"));
+                    let canonical = VAKINT
+                        .to_canonical(&settings, input.as_view(), false)
+                        .unwrap();
+                    assert_out_of_domain_error(
+                        VAKINT.tensor_reduce(&settings, canonical.as_view()),
+                    );
+                }
+            }
+        }
+    }
+
+    /// The same steps on the term-level API, which keeps a zero coefficient
+    /// in front of the integral if the numerator is projected.
+    #[test]
+    fn expression_tensor_reduction_refuses_an_unknown_integral() {
+        let settings = VakintSettings::default();
+        let input = parse(&format!("dot(k(1),p(1))*{FIVE_LOOP_SUNSET}"));
+        let mut expression = VakintExpression::try_from(input.as_view()).unwrap();
+        expression
+            .canonicalize(&settings, &VAKINT.topologies, false)
+            .unwrap();
+        let error = expression.tensor_reduce(&VAKINT, &settings).unwrap_err();
+        assert_out_of_domain_error(Err(error));
     }
 
     /// A tree line leaves a negative power in the numerator of the unknown

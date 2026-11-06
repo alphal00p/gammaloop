@@ -344,6 +344,24 @@ mod identities {
         );
     }
 
+    /// The four-loop identity of the next test, with `external` in place of the
+    /// true coefficient 1/2 of its `q²` term.
+    fn four_loop_identity(external: &str) -> (String, String) {
+        let la4 = |changes: &[(usize, i64)]| top("P4L_LA4", "-p(1)", 11, changes);
+        (
+            format!(
+                "(dot(k(1),p(1))+dot(k(2),p(1))+dot(k(3),p(1))+dot(k(4),p(1)))*{}",
+                la4(&[])
+            ),
+            format!(
+                "1/2*{}+{external}*dot(p(1),p(1))*{}-1/2*{}",
+                la4(&[(9, 0)]),
+                la4(&[]),
+                la4(&[(11, 0)])
+            ),
+        )
+    }
+
     #[test]
     fn three_and_four_loops_with_the_external_momentum_reversed() {
         let no = |changes: &[(usize, i64)]| top("P3L_NO", "-p(1)", 8, changes);
@@ -356,19 +374,21 @@ mod identities {
                 no(&[(5, 0)])
             ),
         );
-        let la4 = |changes: &[(usize, i64)]| top("P4L_LA4", "-p(1)", 11, changes);
-        assert_p_identity(
-            &format!(
-                "(dot(k(1),p(1))+dot(k(2),p(1))+dot(k(3),p(1))+dot(k(4),p(1)))*{}",
-                la4(&[])
-            ),
-            &format!(
-                "1/2*{}+1/2*dot(p(1),p(1))*{}-1/2*{}",
-                la4(&[(9, 0)]),
-                la4(&[]),
-                la4(&[(11, 0)])
-            ),
-        );
+        let (lhs, rhs) = four_loop_identity("1/2");
+        assert_p_identity(&lhs, &rhs);
+    }
+
+    /// `assert_p_identity` must be able to fail at four loops: the integrals of
+    /// this identity are finite, and an expansion stopping at `ε^-1` gives 0 = 0.
+    #[test]
+    fn a_wrong_four_loop_identity_is_refuted() {
+        let (lhs, rhs) = four_loop_identity("17");
+        let Some((left, right)) = p_identity_sides(&lhs, &rhs, LoopNormalizationFactor::GScheme)
+        else {
+            eprintln!("FORM 5 is unavailable: skipped the wrong four-loop identity");
+            return;
+        };
+        assert!(!(left - right).expand().is_zero());
     }
 
     #[test]

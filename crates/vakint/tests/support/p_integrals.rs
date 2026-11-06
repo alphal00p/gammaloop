@@ -531,7 +531,8 @@ pub fn assert_p_unknown(input: &str, fragment: &str) {
 }
 
 /// `lhs` and `rhs` evaluate to exactly the same value with Forcer (symbolic
-/// masters, G-scheme, through `ε^1`): an analytic identity between
+/// masters, G-scheme, six Laurent terms: through `ε^(5-L)`, so `ε^1` at four
+/// loops), and that value is not zero: an analytic identity between
 /// p-integrals. Skipped without FORM 5.
 pub fn assert_p_identity(lhs: &str, rhs: &str) {
     assert_p_identity_with(lhs, rhs, LoopNormalizationFactor::GScheme);
@@ -539,15 +540,31 @@ pub fn assert_p_identity(lhs: &str, rhs: &str) {
 
 /// [`assert_p_identity`] in the loop normalization `normalization`.
 pub fn assert_p_identity_with(lhs: &str, rhs: &str, normalization: LoopNormalizationFactor) {
-    let Some(form) = forcer_form() else {
+    let Some((left, right)) = p_identity_sides(lhs, rhs, normalization) else {
         eprintln!("FORM 5 is unavailable: skipped the live Forcer identity {lhs} = {rhs}");
         return;
     };
-    let settings = forcer_settings(&form, RustRedMasterMode::Symbolic, normalization, 4);
-    let difference = (forcer_evaluate(&parse(lhs), &settings)
-        - forcer_evaluate(&parse(rhs), &settings))
-    .expand();
+    assert!(
+        !left.is_zero(),
+        "{lhs} vanishes at this truncation: the identity tests nothing"
+    );
+    let difference = (left - right).expand();
     assert!(difference.is_zero(), "{lhs} - ({rhs}) = {difference}");
+}
+
+/// Both sides of an identity at the truncation of [`assert_p_identity`], which
+/// reaches every order of a finite four-loop integral up to `ε^1`.
+pub fn p_identity_sides(
+    lhs: &str,
+    rhs: &str,
+    normalization: LoopNormalizationFactor,
+) -> Option<(Atom, Atom)> {
+    let form = forcer_form()?;
+    let settings = forcer_settings(&form, RustRedMasterMode::Symbolic, normalization, 6);
+    Some((
+        forcer_evaluate(&parse(lhs), &settings),
+        forcer_evaluate(&parse(rhs), &settings),
+    ))
 }
 
 /// A fake executable that prints one line, whatever its arguments, and does

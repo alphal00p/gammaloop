@@ -3365,6 +3365,14 @@ impl VakintTerm {
         vakint: &Vakint,
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
+        // No backend evaluates the unknown integral of an out-of-domain
+        // p-integral, and a vacuum projection of its numerator would be wrong
+        // (zero at odd rank): this is the first step that may see it.
+        if p_integral::PGraph::is_out_of_domain_unknown(self.integral.as_view()) {
+            return Err(VakintError::InvalidIntegralFormat(
+                topologies::OUT_OF_DOMAIN_P_INTEGRAL.to_owned(),
+            ));
+        }
         // A p-integral numerator is never projected: its loop momenta are
         // contracted with the external momentum. It only takes scalar form.
         if let Some(external) = self.propagator_external()? {
@@ -3529,13 +3537,6 @@ impl VakintTerm {
         vakint: &Vakint,
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
-        // No backend evaluates the unknown integral of an out-of-domain
-        // p-integral: its numerator (e.g. a tree factor) is never projected.
-        if p_integral::PGraph::is_out_of_domain_unknown(self.integral.as_view()) {
-            return Err(VakintError::InvalidIntegralFormat(
-                topologies::OUT_OF_DOMAIN_P_INTEGRAL.to_owned(),
-            ));
-        }
         self.stage_numerical_inputs(vakint, settings)?;
         let compact = (settings.rustred_artifact_path.is_some() || vakint.has_rustred_loop(5))
             && matches!(
