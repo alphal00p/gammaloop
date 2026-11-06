@@ -28,6 +28,12 @@ pub use momentum_mapping::MomentumMatchLimits;
 #[cfg(test)]
 pub(crate) use momentum_mapping::first_minimal_acceptance;
 
+/// The error of evaluating (or re-matching) the unknown integral of an
+/// out-of-domain p-integral: no backend evaluates it.
+pub(crate) const OUT_OF_DOMAIN_P_INTEGRAL: &str = "out-of-domain p-integral (docs/p_integrals.md, \
+     section 1, \"Out of domain\"): an unknown integral with an external momentum p(i), which no \
+     backend evaluates";
+
 pub enum TopologyContractions {
     Custom(Vec<Vec<usize>>),
     Automatic,
@@ -362,7 +368,7 @@ impl Topologies {
         allow_unknown_integrals: bool,
     ) -> Result<Option<ReplacementRules>, VakintError> {
         if p_integral::infer_kind(input)? == IntegralKind::Propagator {
-            return self.match_propagator(input);
+            return self.match_propagator(input, allow_unknown_integrals);
         }
         let match_started = std::time::Instant::now();
         // The optional five-loop parser must not narrow the legacy Unknown
@@ -423,12 +429,32 @@ impl Topologies {
     /// (docs/p_integrals.md, section 2). The input is normalized for matching
     /// only: callers apply the normalization factor to the numerator
     /// ([`crate::VakintTerm::normalize_propagator`]). A scaleless input has no
-    /// witness (`None`); a graph outside the registry is an error.
+    /// witness (`None`). An input outside the p-integral domain (a massive
+    /// line, a non-integer power, several external heads, more than four loops
+    /// or a graph outside the registry) is an unknown integral under
+    /// `allow_unknown_integrals` and an error otherwise; a malformed input is
+    /// always an error (section 1, "Out of domain").
     pub(crate) fn match_propagator(
         &self,
         input: AtomView,
+        allow_unknown_integrals: bool,
     ) -> Result<Option<ReplacementRules>, VakintError> {
-        let graph = match PGraph::parse(input)?.normalize()? {
+        let graph = match PGraph::parse_checked(input) {
+            Ok(graph) => graph,
+            Err(rejection) if rejection.is_out_of_domain() => {
+                return self.match_unknown_propagator(
+                    input,
+                    allow_unknown_integrals,
+                    rejection.into(),
+                );
+            }
+            Err(rejection) => return Err(rejection.into()),
+        };
+        // A registry match checks the routing through its change of loop
+        // momenta; a graph outside the registry is checked here, so that a
+        // malformed routing never becomes an unknown integral.
+        let unimodular = graph.check_unimodular();
+        let graph = match graph.normalize()? {
             Normalized::Zero => return Ok(None),
             Normalized::Graph { graph, .. } => graph,
         };
@@ -438,7 +464,8 @@ impl Topologies {
             ))
         };
         let Some(matched) = p_integral::match_graph(&graph)? else {
-            return Err(uncovered());
+            unimodular?;
+            return self.match_unknown_propagator(input, allow_unknown_integrals, uncovered());
         };
         let name = P_FAMILIES[matched.family].name;
         let topology = self
@@ -449,6 +476,29 @@ impl Topologies {
             })
             .ok_or_else(uncovered)?;
         p_integral::replacement_rules(topology, matched, &graph.external).map(Some)
+    }
+
+    /// An out-of-domain p-integral is the unknown integral of its long form
+    /// under `allow_unknown_integrals`, like any integral vakint does not know;
+    /// otherwise, or when it is no unknown integral either (a short form),
+    /// `rejection` is the error.
+    fn match_unknown_propagator(
+        &self,
+        input: AtomView,
+        allow_unknown_integrals: bool,
+        rejection: VakintError,
+    ) -> Result<Option<ReplacementRules>, VakintError> {
+        if allow_unknown_integrals {
+            for topology in &self.0 {
+                if let Topology::Unknown(_) = topology
+                    && let Some(replacement) =
+                        topology.match_topology_to_user_input_with(input, true)?
+                {
+                    return Ok(Some(replacement));
+                }
+            }
+        }
+        Err(rejection)
     }
 
     /// Scope-aware exact witness selection for long-form five-loop inputs.
@@ -946,6 +996,18 @@ impl Topology {
         &self,
         input: AtomView,
     ) -> Result<Option<ReplacementRules>, VakintError> {
+        self.match_topology_to_user_input_with(input, false)
+    }
+
+    /// [`Self::match_topology_to_user_input`]; with `external_momenta`, the
+    /// unknown integral also admits external heads `p(i)` in its momenta (an
+    /// out-of-domain p-integral, [`Topologies::match_propagator`]). Its loop
+    /// count is still the number of loop momenta `k(j)`.
+    fn match_topology_to_user_input_with(
+        &self,
+        input: AtomView,
+        external_momenta: bool,
+    ) -> Result<Option<ReplacementRules>, VakintError> {
         match self {
             Topology::Unknown(unknown_integral) => {
                 // println!(
@@ -1004,6 +1066,16 @@ impl Topology {
                         )?
                         .iter()
                         {
+                            if *mom_symbol == S.p {
+                                if external_momenta {
+                                    continue;
+                                }
+                                // The unknown integral of an out-of-domain
+                                // p-integral (`Topologies::match_propagator`).
+                                return Err(VakintError::InvalidIntegralFormat(
+                                    OUT_OF_DOMAIN_P_INTEGRAL.to_owned(),
+                                ));
+                            }
                             if *mom_symbol != S.k {
                                 return Err(VakintError::InvalidIntegralFormat(format!(
                                     "Unknown integrals must have only loop momenta with symbol {}: {}",
@@ -1031,6 +1103,10 @@ impl Topology {
                             "Unknown integrals must have loop momenta ids ranging from 1 to their maximal number of loop momenta, not {:?}",
                             sorted_loop_momenta_ids
                         )));
+                    }
+                    if external_momenta && sorted_loop_momenta_ids.is_empty() {
+                        // Only external momenta: no loop integral at all.
+                        return Ok(None);
                     }
                     let n_loops = *sorted_loop_momenta_ids.last().unwrap();
                     //println!("Found a match!");

@@ -21,7 +21,7 @@ use vakint::{
     Vakint, VakintDependency, VakintExpression, VakintSettings, p_integral, vakint_parse,
 };
 
-static VAKINT: LazyLock<Vakint> = LazyLock::new(|| Vakint::new().unwrap());
+pub static VAKINT: LazyLock<Vakint> = LazyLock::new(|| Vakint::new().unwrap());
 
 /// The scalar `phi` of the DOT tests: massless, vertices of valence 3 to 10.
 pub static PHI: LazyLock<Model> = LazyLock::new(|| {
@@ -63,9 +63,19 @@ pub fn assert_p_scaleless(input: &str) {
     );
 }
 
-/// `input` is rejected with an error mentioning `fragment`.
+/// `input` is rejected with an error mentioning `fragment` when unknown
+/// integrals are not allowed (an out-of-domain p-integral is otherwise an
+/// unknown integral, see [`assert_p_unknown`]).
 pub fn assert_p_error(input: &str, fragment: &str) {
-    match VAKINT.to_canonical(&VakintSettings::default(), parse(input).as_view(), false) {
+    let settings = VakintSettings {
+        allow_unknown_integrals: false,
+        ..VakintSettings::default()
+    };
+    assert_canonical_error(input, fragment, &settings);
+}
+
+fn assert_canonical_error(input: &str, fragment: &str, settings: &VakintSettings) {
+    match VAKINT.to_canonical(settings, parse(input).as_view(), false) {
         Ok(result) => panic!("{input} was accepted as {result}"),
         Err(error) => assert!(
             error.to_string().contains(fragment),
@@ -485,4 +495,110 @@ fn live_forcer_retain_settings(input: &Atom) -> Option<VakintSettings> {
 /// `ζ(n)`, as the finalized results write it.
 pub fn zeta(n: i64) -> Atom {
     symbolica::transcendental::zeta().call(Atom::num(n))
+}
+
+/// `input` is malformed: rejected with an error mentioning `fragment` with
+/// and without `allow_unknown_integrals` (section 1, "Out of domain").
+pub fn assert_p_malformed(input: &str, fragment: &str) {
+    assert_p_error(input, fragment);
+    assert_canonical_error(input, fragment, &VakintSettings::default());
+}
+
+/// `input` mentions an external momentum but is no p-integral vakint covers
+/// (section 1, "Out of domain"): without `allow_unknown_integrals` it is an
+/// error mentioning `fragment`; with it (the default) it canonicalizes to the
+/// unknown integral `topo(UNKNOWN(...))` of its long form, which is `input`
+/// itself, and evaluating it is the out-of-domain error, not a value.
+pub fn assert_p_unknown(input: &str, fragment: &str) {
+    assert_p_error(input, fragment);
+    let settings = VakintSettings::default();
+    assert!(settings.allow_unknown_integrals);
+    let atom = parse(input);
+    let unknown = VAKINT
+        .to_canonical(&settings, atom.as_view(), false)
+        .unwrap_or_else(|error| panic!("{input}: {error}"));
+    let expected = atom
+        .replace(parse("topo(x_)").to_pattern())
+        .with(parse("topo(UNKNOWN(x_))").to_pattern());
+    assert_eq!(unknown, expected, "{input}");
+    match VAKINT.evaluate(&settings, atom.as_view()) {
+        Ok(value) => panic!("{input} is no p-integral, yet it evaluated to {value}"),
+        Err(error) => assert!(
+            error.to_string().contains("out-of-domain p-integral"),
+            "{input}: evaluating gave '{error}', not the out-of-domain error"
+        ),
+    }
+}
+
+/// `lhs` and `rhs` evaluate to exactly the same value with Forcer (symbolic
+/// masters, G-scheme, six Laurent terms: through `ε^(5-L)`, so `ε^1` at four
+/// loops), and that value is not zero: an analytic identity between
+/// p-integrals. Skipped without FORM 5.
+pub fn assert_p_identity(lhs: &str, rhs: &str) {
+    assert_p_identity_with(lhs, rhs, LoopNormalizationFactor::GScheme);
+}
+
+/// [`assert_p_identity`] in the loop normalization `normalization`.
+pub fn assert_p_identity_with(lhs: &str, rhs: &str, normalization: LoopNormalizationFactor) {
+    let Some((left, right)) = p_identity_sides(lhs, rhs, normalization) else {
+        eprintln!("FORM 5 is unavailable: skipped the live Forcer identity {lhs} = {rhs}");
+        return;
+    };
+    assert!(
+        !left.is_zero(),
+        "{lhs} vanishes at this truncation: the identity tests nothing"
+    );
+    let difference = (left - right).expand();
+    assert!(difference.is_zero(), "{lhs} - ({rhs}) = {difference}");
+}
+
+/// Both sides of an identity at the truncation of [`assert_p_identity`], which
+/// reaches every order of a finite four-loop integral up to `ε^1`.
+pub fn p_identity_sides(
+    lhs: &str,
+    rhs: &str,
+    normalization: LoopNormalizationFactor,
+) -> Option<(Atom, Atom)> {
+    let form = forcer_form()?;
+    let settings = forcer_settings(&form, RustRedMasterMode::Symbolic, normalization, 6);
+    Some((
+        forcer_evaluate(&parse(lhs), &settings),
+        forcer_evaluate(&parse(rhs), &settings),
+    ))
+}
+
+/// A fake executable that prints one line, whatever its arguments, and does
+/// nothing else; it lives as long as this value.
+pub struct FakeExecutable {
+    _directory: tempfile::TempDir,
+    pub path: String,
+}
+
+fn fake_executable(name: &str, output: &str) -> FakeExecutable {
+    use std::io::Write;
+    use std::os::unix::fs::PermissionsExt;
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join(name);
+    {
+        let mut script = std::fs::File::create(&path).unwrap();
+        writeln!(script, "#!/bin/sh\necho \"{output}\"").unwrap();
+    }
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    FakeExecutable {
+        path: path.to_str().unwrap().to_owned(),
+        _directory: directory,
+    }
+}
+
+/// A fake FORM of `version`, e.g. "4.3.1" for a host without FORM 5.
+pub fn fake_form(version: &str) -> FakeExecutable {
+    fake_executable(
+        "form",
+        &format!("FORM {version} (vakint test fake) 64-bits"),
+    )
+}
+
+/// A fake python whose every run reports the pySecDec `version`.
+pub fn fake_python(version: &str) -> FakeExecutable {
+    fake_executable("python3", version)
 }

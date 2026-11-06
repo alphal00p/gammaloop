@@ -339,10 +339,315 @@ mod errors {
     #[test]
     fn five_loop_inputs_are_outside_the_registry() {
         assert_p_error(
-            "topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(1,2),k(2),0,1)*prop(3,edge(1,2),k(3),0,1)\
-             *prop(4,edge(1,2),k(4),0,1)*prop(5,edge(1,2),k(5),0,1)\
-             *prop(6,edge(2,1),k(1)+k(2)+k(3)+k(4)+k(5)-p(1),0,1))",
+            FIVE_LOOP_SUNSET,
             "p-integral not covered by the 1L-4L registry",
+        );
+    }
+
+    #[test]
+    fn a_routing_that_is_not_unimodular_is_rejected() {
+        // 2*k(1) would rescale the measure by 2^-d: never silently accepted.
+        assert_p_malformed(
+            "topo(prop(1,edge(1,2),2*k(1),0,1)*prop(2,edge(2,1),2*k(1)-p(1),0,1))",
+            "no unimodular change of loop momenta",
+        );
+    }
+}
+
+/// The five-loop sunset: a p-integral outside the 1L-4L registry.
+const FIVE_LOOP_SUNSET: &str = "topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(1,2),k(2),0,1)\
+    *prop(3,edge(1,2),k(3),0,1)*prop(4,edge(1,2),k(4),0,1)*prop(5,edge(1,2),k(5),0,1)\
+    *prop(6,edge(2,1),k(1)+k(2)+k(3)+k(4)+k(5)-p(1),0,1))";
+
+/// Section 1, "Out of domain" (M1 review F1, missing test 8).
+mod out_of_domain {
+    use symbolica::atom::Atom;
+    use vakint::{
+        EvaluationOrder, TensorReductionMethod, VakintError, VakintExpression, VakintSettings,
+    };
+
+    use super::*;
+
+    #[test]
+    fn out_of_domain_inputs_are_unknown_integrals() {
+        assert_p_unknown(
+            "topo(prop(1,edge(1,2),k(1),muvsq,1)*prop(2,edge(2,1),k(1)-p(1),muvsq,1))",
+            "p-integrals are massless; prop 1 has mass muvsq",
+        );
+        assert_p_unknown(
+            "dot(k(1),p(1))*topo(prop(1,edge(1,2),k(1),0,a)*prop(2,edge(2,1),k(1)-p(1),0,1))",
+            "powers must be integers; prop 1 has power a",
+        );
+        assert_p_unknown(
+            "topo(prop(1,edge(1,2),k(1),0,1/2)*prop(2,edge(2,1),k(1)-p(1),0,1))",
+            "powers must be integers",
+        );
+        assert_p_unknown(
+            "topo(prop(1,edge(1,2),k(1)+p(2),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))",
+            "a p-integral has one external momentum; found",
+        );
+        // Several heads conserve momentum when every vertex balance is free of
+        // k: here p(2)+3*p(1) enters at vertex 2 and leaves at vertex 1.
+        assert_p_unknown(
+            "topo(prop(1,edge(1,2),k(1)+p(2),0,1)*prop(2,edge(2,1),k(1)-3*p(1),0,1))",
+            "a p-integral has one external momentum; found",
+        );
+        assert_p_unknown(
+            FIVE_LOOP_SUNSET,
+            "p-integral not covered by the 1L-4L registry",
+        );
+    }
+
+    fn assert_out_of_domain_error(result: Result<Atom, VakintError>) {
+        match result {
+            Err(VakintError::InvalidIntegralFormat(message)) => {
+                assert!(message.contains("out-of-domain p-integral"), "{message}")
+            }
+            other => panic!("not the out-of-domain error: {other:?}"),
+        }
+    }
+
+    /// `evaluate_integral` does not canonicalize: a raw catalogue miss reaches
+    /// the evaluation of `Topology::Unknown`, whose only method is pySecDec.
+    /// Needs neither FORM nor pySecDec.
+    #[test]
+    fn evaluate_integral_refuses_a_raw_catalogue_miss_before_any_method() {
+        let python = fake_python("1.6.4");
+        let form = fake_form("5.0.0");
+        let sunset = parse(FIVE_LOOP_SUNSET);
+        for evaluation_order in [EvaluationOrder::pysecdec_only(None), EvaluationOrder::all()] {
+            let settings = VakintSettings {
+                evaluation_order,
+                python_exe_path: python.path.clone(),
+                form_exe_path: form.path.clone(),
+                ..VakintSettings::default()
+            };
+            assert_out_of_domain_error(VAKINT.evaluate_integral(&settings, sunset.as_view()));
+        }
+        assert_out_of_domain_error(
+            VAKINT.evaluate_integral(&VakintSettings::default(), sunset.as_view()),
+        );
+        // Raw input with a reason of its own: that reason (section 1).
+        let massive =
+            parse("topo(prop(1,edge(1,2),k(1),muvsq,1)*prop(2,edge(2,1),k(1)-p(1),muvsq,1))");
+        let error = VAKINT
+            .evaluate_integral(&VakintSettings::default(), massive.as_view())
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("p-integrals are massless"),
+            "{error}"
+        );
+    }
+
+    /// The three public steps by hand, as in examples/oneloop_evaluation.rs. The
+    /// numerator of `topo(UNKNOWN(...))` must not take the vacuum projection:
+    /// odd rank would vanish, and a silent zero is a wrong value (`k -> p-k`
+    /// gives p²/2 times the integral at rank 1).
+    #[test]
+    fn tensor_reduction_refuses_an_unknown_integral() {
+        for tensor_reduction_method in [
+            TensorReductionMethod::FeynKit,
+            TensorReductionMethod::AlphaLoop,
+        ] {
+            let settings = VakintSettings {
+                tensor_reduction_method,
+                ..VakintSettings::default()
+            };
+            for integral in [
+                "topo(prop(1,edge(1,2),k(1),muvsq,1)*prop(2,edge(2,1),k(1)-p(1),muvsq,1))",
+                "topo(prop(1,edge(1,2),k(1)+p(2),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))",
+                "topo(prop(1,edge(1,2),k(1),0,1/2)*prop(2,edge(2,1),k(1)-p(1),0,1))",
+                FIVE_LOOP_SUNSET,
+            ] {
+                for numerator in [
+                    "1",
+                    "dot(k(1),p(1))",
+                    "dot(k(1),p(1))^2",
+                    "dot(k(1),p(1))^3",
+                    "k(1,1)*p(1,1)",
+                ] {
+                    let input = parse(&format!("{numerator}*{integral}"));
+                    let canonical = VAKINT
+                        .to_canonical(&settings, input.as_view(), false)
+                        .unwrap();
+                    assert_out_of_domain_error(
+                        VAKINT.tensor_reduce(&settings, canonical.as_view()),
+                    );
+                }
+            }
+        }
+    }
+
+    /// The same steps on the term-level API, which keeps a zero coefficient
+    /// in front of the integral if the numerator is projected.
+    #[test]
+    fn expression_tensor_reduction_refuses_an_unknown_integral() {
+        let settings = VakintSettings::default();
+        let input = parse(&format!("dot(k(1),p(1))*{FIVE_LOOP_SUNSET}"));
+        let mut expression = VakintExpression::try_from(input.as_view()).unwrap();
+        expression
+            .canonicalize(&settings, &VAKINT.topologies, false)
+            .unwrap();
+        let error = expression.tensor_reduce(&VAKINT, &settings).unwrap_err();
+        assert_out_of_domain_error(Err(error));
+    }
+
+    /// A tree line leaves a negative power in the numerator of the unknown
+    /// integral: the tensor prepass must not report it first.
+    #[test]
+    fn a_tree_factor_of_an_unknown_integral_keeps_the_out_of_domain_error() {
+        let tree = parse(
+            &FIVE_LOOP_SUNSET.replace("-p(1),0,1))", "-p(1),0,1)*prop(7,edge(3,1),p(1),0,2))"),
+        );
+        assert_out_of_domain_error(VAKINT.evaluate(&VakintSettings::default(), tree.as_view()));
+    }
+
+    /// The UNKNOWN matcher needs the prop ids 1..N: merging a middle line in
+    /// the normalization (props 1 and 2 here) fails closed with its error.
+    #[test]
+    fn a_normalization_that_leaves_a_gap_in_the_prop_ids_is_an_error() {
+        let merged = parse(
+            "topo(prop(1,edge(1,3),k(1),0,1)*prop(2,edge(3,2),k(1),0,1)*prop(3,edge(1,2),k(2),0,1)\
+             *prop(4,edge(1,2),k(3),0,1)*prop(5,edge(1,2),k(4),0,1)*prop(6,edge(1,2),k(5),0,1)\
+             *prop(7,edge(2,1),k(1)+k(2)+k(3)+k(4)+k(5)-p(1),0,1))",
+        );
+        let settings = VakintSettings::default();
+        for result in [
+            VAKINT.to_canonical(&settings, merged.as_view(), false),
+            VAKINT.evaluate(&settings, merged.as_view()),
+        ] {
+            let error = result.unwrap_err().to_string();
+            assert!(
+                error.contains("UNKNOWN integrals must have propagator ids"),
+                "{error}"
+            );
+        }
+    }
+
+    #[test]
+    fn unknown_vacuum_integrals_are_unchanged() {
+        let massive_sunset = "topo(prop(1,edge(1,2),k(1),muvsq,1)*prop(2,edge(2,1),k(1),muvsq,1)\
+            *prop(3,edge(1,2),k(2),muvsq,1)*prop(4,edge(2,1),k(2),muvsq,1)*prop(5,edge(1,2),k(3),muvsq,1)\
+            *prop(6,edge(2,1),k(1)+k(2)+k(3),muvsq,1))";
+        assert_eq!(
+            canonical(&parse(massive_sunset)),
+            parse(&format!(
+                "topo(UNKNOWN({}))",
+                &massive_sunset[5..massive_sunset.len() - 1]
+            )),
+        );
+    }
+
+    #[test]
+    fn malformed_inputs_are_errors_under_any_setting() {
+        assert_p_malformed(
+            "topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-2*p(1),0,1))",
+            "momentum conservation",
+        );
+        assert_p_malformed(
+            "topo(prop(1,edge(1,2),k(1)+k(2),0,1)*prop(2,edge(2,1),k(1)+k(2)-p(1),0,1))",
+            "the routing does not match the graph's loop count",
+        );
+        assert_p_malformed(
+            "topo(prop(1,edge(1,2),k(1),0,1)*prop(1,edge(2,1),k(1)-p(1),0,1))",
+            "prop ids must be distinct",
+        );
+        assert_p_malformed(
+            "topo(prop(1,edge(1,-2),k(1),0,1)*prop(2,edge(-2,1),k(1)-p(1),0,1))",
+            "vertex ids must be nonnegative",
+        );
+        assert_p_malformed(
+            "topo(prop(1,edge(1,2),k(1)/2,0,1)*prop(2,edge(2,1),k(1)/2-p(1),0,1))",
+            "is not an integer combination of k(j) and p(i)",
+        );
+        assert_p_malformed(
+            &format!("dot(k(1),p(2))*{BUBBLE}"),
+            "tensor p-integrals are not supported yet",
+        );
+        // A short form is no unknown integral: out of domain, it stays an error.
+        assert_p_malformed("topo(P1L(p(1),1/2,1))", "powers must be integers");
+
+        // Malformed wins: an input that is out of domain AND malformed is an
+        // error under any setting, never an unknown integral.
+        // Massive line and repeated prop ids.
+        assert_p_malformed(
+            "topo(prop(1,edge(1,2),k(1),muvsq,1)*prop(1,edge(2,1),k(1)-p(1),0,1))",
+            "prop ids must be distinct",
+        );
+        // Massive line and two loop momenta on a one-cycle graph.
+        assert_p_malformed(
+            "topo(prop(1,edge(1,2),k(1)+k(2),muvsq,1)*prop(2,edge(2,1),k(1)+k(2)-p(1),0,1))",
+            "the routing does not match the graph's loop count",
+        );
+        // Non-integer power and a loop-count mismatch.
+        assert_p_malformed(
+            "topo(prop(1,edge(1,2),k(1)+k(2),0,1/2)*prop(2,edge(2,1),k(1)+k(2)-p(1),0,1))",
+            "the routing does not match the graph's loop count",
+        );
+        // Massive line and a routing of determinant 2.
+        assert_p_malformed(
+            "topo(prop(1,edge(1,2),2*k(1),muvsq,1)*prop(2,edge(2,1),2*k(1)-p(1),0,1))",
+            "no unimodular change of loop momenta",
+        );
+        // Two heads and a loop momentum that is not conserved.
+        assert_p_malformed(
+            "topo(prop(1,edge(1,2),k(1)+p(2),0,1)*prop(2,edge(2,1),2*k(1)-3*p(1),0,1))",
+            "momentum conservation",
+        );
+        // A graph outside the registry (five loops) with a routing of
+        // determinant 2.
+        assert_p_malformed(
+            "topo(prop(1,edge(1,2),2*k(1),0,1)*prop(2,edge(1,2),k(2),0,1)*prop(3,edge(1,2),k(3),0,1)\
+             *prop(4,edge(1,2),k(4),0,1)*prop(5,edge(1,2),k(5),0,1)\
+             *prop(6,edge(2,1),2*k(1)+k(2)+k(3)+k(4)+k(5)-p(1),0,1))",
+            "no unimodular change of loop momenta",
+        );
+    }
+}
+
+/// User numerators in the forms of section 1, item 7 (M1 review extras).
+mod numerators {
+    use super::*;
+
+    const KITE_SYMMETRIC: &str = "topo(prop(1,edge(1,3),k(1),0,1)*prop(2,edge(1,4),p(1)-k(1),0,1)\
+        *prop(3,edge(3,4),k(2),0,1)*prop(4,edge(3,2),k(1)-k(2),0,1)*prop(5,edge(4,2),p(1)-k(1)+k(2),0,1))";
+
+    #[test]
+    fn index_notation_is_a_scalar_product() {
+        assert_p_same_canonical(
+            &format!("k(1,mu)*p(1,mu)*{BUBBLE}"),
+            &format!("dot(k(1),p(1))*{BUBBLE}"),
+        );
+        assert_p_same_canonical(
+            &format!("k(1,mu)*p(1,mu)*k(2,nu)*k(1,nu)*{KITE}"),
+            &format!("dot(k(1),p(1))*dot(k(1),k(2))*{KITE}"),
+        );
+    }
+
+    #[test]
+    fn scalar_products_of_combinations_are_linear() {
+        for numerator in ["-dot(k(1),-p(1))", "1/2*dot(2*k(1),p(1))", "dot(p(1),k(1))"] {
+            assert_p_same_canonical(
+                &format!("{numerator}*{BUBBLE}"),
+                &format!("dot(k(1),p(1))*{BUBBLE}"),
+            );
+        }
+        assert_p_same_canonical(
+            &format!("dot(k(1)+k(2),p(1))*{KITE_SYMMETRIC}"),
+            &format!("(dot(k(1),p(1))+dot(k(2),p(1)))*{KITE_SYMMETRIC}"),
+        );
+    }
+
+    #[test]
+    fn a_scalar_product_of_a_sum_with_the_external_momentum_is_linear() {
+        assert_p_same_canonical(
+            &format!("dot(k(1)+p(1),p(1))*{BUBBLE}"),
+            &format!("(dot(k(1),p(1))+dot(p(1),p(1)))*{BUBBLE}"),
+        );
+        // Another external vector contracted with a loop momentum is a tensor.
+        assert_p_error(
+            &format!("dot(k(1)+p(2),p(2))*{BUBBLE}"),
+            "a loop momentum is contracted with p(2)",
         );
     }
 }

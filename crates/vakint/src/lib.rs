@@ -338,6 +338,20 @@ fn checked_form_version(form_exe_path: &str) -> Result<String, VakintError> {
     .map_err(VakintError::FormVersion)
 }
 
+/// [`p_integral::forcer::forcer_form_version`] of a FORM executable, probed
+/// once per process and path: whether Forcer can run with it.
+fn forcer_form_probe(form_exe_path: &str) -> Result<String, String> {
+    static PROBES: LazyLock<Mutex<HashMap<String, Result<String, String>>>> =
+        LazyLock::new(Default::default);
+    let mut probes = PROBES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    probes
+        .entry(form_exe_path.to_owned())
+        .or_insert_with(|| p_integral::forcer::forcer_form_version(form_exe_path))
+        .clone()
+}
+
 /// pySecDec version importable by a Python executable that meets
 /// [`MINIMAL_PYSECDEC_VERSION`].
 fn checked_pysecdec_version(python_exe_path: &str) -> Result<String, VakintError> {
@@ -2098,6 +2112,10 @@ impl EvaluationMethod {
                     .iter()
                     .any(|m| matches!(m, EvaluationMethod::Forcer(_)))
                     && p_integral::P_INTEGRAL_LOOP_COUNTS.contains(&topology.get_integral().n_loops)
+                    // A host without FORM 5 never runs Forcer code (the
+                    // settings validation requires FORM 5 only of an order
+                    // made of Forcer alone).
+                    && forcer_form_probe(&settings.form_exe_path).is_ok()
             }
         }
     }
@@ -2997,6 +3015,18 @@ impl VakintTerm {
                 self.integral.to_string(),
             ));
         };
+        // A raw p-integral outside the registry (`evaluate_integral` does not
+        // canonicalize it into the `topo(UNKNOWN(...))` the matcher refuses):
+        // pySecDec, the only method of an unknown integral, takes external
+        // momenta only in numerators (docs/p_integrals.md, section 1).
+        if matches!(integral_specs.canonical_topology, Topology::Unknown(_))
+            && p_integral::infer_kind(self.integral.as_view())?
+                == p_integral::IntegralKind::Propagator
+        {
+            return Err(VakintError::InvalidIntegralFormat(
+                topologies::OUT_OF_DOMAIN_P_INTEGRAL.to_owned(),
+            ));
+        }
 
         // Choose the witness before transporting the scalar numerator. A
         // finite saved union may admit only some exact family presentations;
@@ -3335,6 +3365,14 @@ impl VakintTerm {
         vakint: &Vakint,
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
+        // No backend evaluates the unknown integral of an out-of-domain
+        // p-integral, and a vacuum projection of its numerator would be wrong
+        // (zero at odd rank): this is the first step that may see it.
+        if p_integral::PGraph::is_out_of_domain_unknown(self.integral.as_view()) {
+            return Err(VakintError::InvalidIntegralFormat(
+                topologies::OUT_OF_DOMAIN_P_INTEGRAL.to_owned(),
+            ));
+        }
         // A p-integral numerator is never projected: its loop momenta are
         // contracted with the external momentum. It only takes scalar form.
         if let Some(external) = self.propagator_external()? {
@@ -4841,7 +4879,18 @@ impl VakintExpression {
     ) -> Result<(), VakintError> {
         for term in self.0.iter_mut() {
             resources::checkpoint()?;
-            if !term.normalize_propagator()? {
+            let normalized = match term.normalize_propagator() {
+                // An out-of-domain p-integral is matched unchanged, as an
+                // unknown integral (docs/p_integrals.md, section 1).
+                Err(_)
+                    if settings.allow_unknown_integrals
+                        && p_integral::PGraph::is_out_of_domain(term.integral.as_view()) =>
+                {
+                    true
+                }
+                normalized => normalized?,
+            };
+            if !normalized {
                 continue;
             }
             if let Some(replacement_rules) = match_input(term.integral.as_view())? {
@@ -5225,7 +5274,9 @@ impl Vakint {
         // p-integrals are identified by their own catalogue, before any
         // vacuum or five-loop matcher (docs/p_integrals.md, section 1).
         if p_integral::infer_kind(input)? == p_integral::IntegralKind::Propagator {
-            return self.topologies.match_propagator(input);
+            return self
+                .topologies
+                .match_propagator(input, settings.allow_unknown_integrals);
         }
         if let Some(matched) = self
             .topologies
@@ -5341,7 +5392,16 @@ Evaluated (n_loops=1, mu_r=1) :
                 version.green()
             );
         }
-        if !required_by(VakintDependency::Forcer).is_empty() {
+        // Forcer is optional in a mixed order: without FORM 5 it supports no
+        // integral (`EvaluationMethod::supports`), and a p-integral without a
+        // method reports `ForcerUnavailable`. An order of Forcer alone needs it.
+        let forcer_only = !settings.evaluation_order.0.is_empty()
+            && settings
+                .evaluation_order
+                .0
+                .iter()
+                .all(|method| matches!(method, EvaluationMethod::Forcer(_)));
+        if forcer_only {
             let version = VakintDependency::Forcer
                 .version(&settings.form_exe_path, &settings.python_exe_path)?;
             debug!(
@@ -8595,6 +8655,65 @@ mod tests {
                 ..settings
             })
             .unwrap();
+    }
+
+    /// A FORM executable that only reports `FORM {version}` (M1 review F3).
+    fn fake_form(version: &str) -> (tempfile::TempDir, String) {
+        use std::io::Write;
+        use std::os::unix::fs::PermissionsExt;
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("form");
+        {
+            let mut script = fs::File::create(&path).unwrap();
+            writeln!(
+                script,
+                "#!/bin/sh\necho \"FORM {version} (vakint test fake) 64-bits\""
+            )
+            .unwrap();
+        }
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+        let path = path.to_str().unwrap().to_owned();
+        (directory, path)
+    }
+
+    #[test]
+    fn forcer_needs_form_five_only_when_it_is_the_whole_order() {
+        let vakint = Vakint::new().unwrap();
+        let (_form4_directory, form4) = fake_form("4.3.1");
+        let settings = |evaluation_order| VakintSettings {
+            evaluation_order,
+            form_exe_path: form4.clone(),
+            ..Default::default()
+        };
+        let mut mixed = EvaluationOrder::all();
+        mixed
+            .0
+            .retain(|method| !matches!(method, EvaluationMethod::PySecDec(_)));
+        vakint.validate_settings(&settings(mixed)).unwrap();
+        let error = vakint
+            .validate_settings(&settings(EvaluationOrder::forcer_only()))
+            .unwrap_err();
+        assert!(
+            matches!(
+                &error,
+                VakintError::ForcerUnavailable { form_exe_path, reason }
+                    if *form_exe_path == form4 && reason == "is FORM 4.3.1"
+            ),
+            "{error}"
+        );
+
+        // The Forcer arm of `supports` probes FORM 5 itself, so a FORM 4 host
+        // never runs Forcer code; FORM 5 makes Forcer available again.
+        let family = &p_integral::P_FAMILIES[0];
+        let topology = topologies::Topology::Propagator(Integral::new_propagator(family).unwrap());
+        let forcer = EvaluationMethod::Forcer(ForcerOptions::default());
+        assert!(!forcer.supports(&settings(EvaluationOrder::all()), &topology));
+        let (_form5_directory, form5) = fake_form("5.0.0");
+        let form5_settings = VakintSettings {
+            form_exe_path: form5,
+            ..settings(EvaluationOrder::all())
+        };
+        assert!(forcer.supports(&form5_settings, &topology));
     }
 
     #[test]
