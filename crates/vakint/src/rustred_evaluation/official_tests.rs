@@ -678,7 +678,9 @@ fn official_transfer_options_have_no_default_limits() {
 
 /// Serves `assets`, one thread per connection; the first request for each archive sends its
 /// headers and half of the body, then stalls longer than the client's read-idle detector.
-fn start_stalling_server(assets: BTreeMap<String, Vec<u8>>) -> (String, Arc<AtomicBool>, thread::JoinHandle<()>) {
+fn start_stalling_server(
+    assets: BTreeMap<String, Vec<u8>>,
+) -> (String, Arc<AtomicBool>, thread::JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
     listener.set_nonblocking(true).unwrap();
@@ -700,24 +702,44 @@ fn start_stalling_server(assets: BTreeMap<String, Vec<u8>>) -> (String, Arc<Atom
                     let latest_manifest = latest_manifest.clone();
                     thread::spawn(move || {
                         stream.set_nonblocking(false).unwrap();
-                        stream.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+                        stream
+                            .set_read_timeout(Some(Duration::from_secs(2)))
+                            .unwrap();
                         let mut request = [0u8; 4096];
-                        let Ok(n) = stream.read(&mut request) else { return };
+                        let Ok(n) = stream.read(&mut request) else {
+                            return;
+                        };
                         let text = String::from_utf8_lossy(&request[..n]);
-                        let Some(path) = text.split_whitespace().nth(1).map(str::to_owned) else { return };
+                        let Some(path) = text.split_whitespace().nth(1).map(str::to_owned) else {
+                            return;
+                        };
                         if path == "/data-latest/manifest.json" {
-                            let _ = write!(stream, "HTTP/1.1 302 Found\r\nLocation: {latest_manifest}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                            let _ = write!(
+                                stream,
+                                "HTTP/1.1 302 Found\r\nLocation: {latest_manifest}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                            );
                             return;
                         }
                         match assets.get(&path) {
-                            Some(bytes) if path.ends_with(".tar.gz") && stalled.lock().unwrap().insert(path.clone()) => {
-                                let _ = write!(stream, "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", bytes.len());
+                            Some(bytes)
+                                if path.ends_with(".tar.gz")
+                                    && stalled.lock().unwrap().insert(path.clone()) =>
+                            {
+                                let _ = write!(
+                                    stream,
+                                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                                    bytes.len()
+                                );
                                 let _ = stream.write_all(&bytes[..bytes.len() / 2]);
                                 let _ = stream.flush();
                                 thread::sleep(Duration::from_millis(800));
                             }
                             Some(bytes) => {
-                                let _ = write!(stream, "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", bytes.len());
+                                let _ = write!(
+                                    stream,
+                                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                                    bytes.len()
+                                );
                                 let _ = stream.write_all(bytes);
                             }
                             None => {
@@ -726,7 +748,9 @@ fn start_stalling_server(assets: BTreeMap<String, Vec<u8>>) -> (String, Arc<Atom
                         }
                     });
                 }
-                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => thread::sleep(Duration::from_millis(5)),
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(5))
+                }
                 Err(error) => panic!("stalling fixture server: {error}"),
             }
         }
@@ -748,7 +772,9 @@ fn stalled_transfer_is_detected_by_read_idle_and_retried() {
         ..Default::default()
     };
     let mut engine = Vakint::new().unwrap();
-    let report = engine.load_official_external_data_from(2, &options, &url).unwrap();
+    let report = engine
+        .load_official_external_data_from(2, &options, &url)
+        .unwrap();
     assert!(report.loops.iter().all(|p| p.source == "downloaded"));
     // without retries the same stall is a transport error
     let again = tempfile::tempdir().unwrap();
@@ -759,7 +785,12 @@ fn stalled_transfer_is_detected_by_read_idle_and_retried() {
         transfer_retries: 0,
         ..Default::default()
     };
-    assert!(Vakint::new().unwrap().load_official_external_data_from(2, &no_retry, &url2).is_err());
+    assert!(
+        Vakint::new()
+            .unwrap()
+            .load_official_external_data_from(2, &no_retry, &url2)
+            .is_err()
+    );
     for (s, h) in [(stop, handle), (stop2, handle2)] {
         s.store(true, Ordering::Relaxed);
         h.join().unwrap();

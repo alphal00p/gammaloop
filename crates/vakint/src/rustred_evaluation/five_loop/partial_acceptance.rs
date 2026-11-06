@@ -9,7 +9,10 @@ fn engine() -> (Vakint, VakintSettings) {
     let manifest: serde_json::Value =
         serde_json::from_slice(&std::fs::read(path.join("5L/manifest.json")).unwrap()).unwrap();
     let declared = manifest["masters"].as_array().map_or(0, Vec::len);
-    assert!(declared > 0, "the authenticated 5L manifest declares no master");
+    assert!(
+        declared > 0,
+        "the authenticated 5L manifest declares no master"
+    );
     let mut engine = Vakint::new().unwrap();
     engine.load_external_data(path, 5).unwrap();
     assert_eq!(

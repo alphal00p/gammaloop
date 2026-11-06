@@ -557,7 +557,11 @@ impl Vakint {
             .cloned()
             .collect::<Vec<_>>();
         let preferred_terminals = !terminal_only.is_empty();
-        let heads = if preferred_terminals { terminal_only } else { heads };
+        let heads = if preferred_terminals {
+            terminal_only
+        } else {
+            heads
+        };
         let Some(minimum) = heads.iter().map(|(_, head)| head).min().cloned() else {
             log::debug!(target: "vakint::five_loop_match", "phase=witness_selection admitted=0 screened={} full_keys={} elapsed_seconds={:.6}", witnesses.len() - unknown.len(), keys.len(), started.elapsed().as_secs_f64());
             return Ok((None, None));

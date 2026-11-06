@@ -271,7 +271,10 @@ fn five_loop_monitor_preserves_full_results_and_final_substitution_errors() -> R
                 "{name}: {text}"
             );
         }
-        assert!(!text.contains("undeclared residual master"), "{name}: {text}");
+        assert!(
+            !text.contains("undeclared residual master"),
+            "{name}: {text}"
+        );
         let observed = engine
             .evaluate_with_monitor(&settings, input.as_view(), &options)
             .unwrap_err();

@@ -686,7 +686,10 @@ mod tests {
                 .collect::<BTreeSet<IntegralKey>>()
         };
         if let Some(master) = master {
-            assert!(terminals.contains(master), "{master:?} is not a remaining terminal");
+            assert!(
+                terminals.contains(master),
+                "{master:?} is not a remaining terminal"
+            );
         }
         let mut compared = false;
         {
@@ -701,29 +704,19 @@ mod tests {
                         let expected =
                             crate::topologies::first_minimal_acceptance(witnesses, |witness| {
                                 Ok(engine
-                                    .rustred_matched_input_key(
-                                        settings,
-                                        numerator,
-                                        witness,
-                                    )?
+                                    .rustred_matched_input_key(settings, numerator, witness)?
                                     .map(|key| {
-                                        let outside = !key.iter().all(|(key, _)| terminals.contains(key));
+                                        let outside =
+                                            !key.iter().all(|(key, _)| terminals.contains(key));
                                         (outside, key)
                                     }))
                             })?;
-                        let (selected, support) = engine.select_rustred_witness(
-                            settings,
-                            numerator,
-                            witnesses,
-                        )?;
+                        let (selected, support) =
+                            engine.select_rustred_witness(settings, numerator, witnesses)?;
                         assert_eq!(selected, expected, "numerator {numerator}");
                         if let Some(index) = selected {
                             let key = engine
-                                .rustred_matched_input_key(
-                                    settings,
-                                    numerator,
-                                    &witnesses[index],
-                                )?
+                                .rustred_matched_input_key(settings, numerator, &witnesses[index])?
                                 .unwrap();
                             let support = support.unwrap();
                             assert!(key.iter().map(|(key, _)| key).eq(support.iter()));

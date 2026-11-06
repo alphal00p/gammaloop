@@ -233,7 +233,11 @@ impl Vakint {
             } else {
                 &options.version
             };
-            download_manifest(&agent, &format!("{releases}/{tag}/manifest.json"), options.transfer_retries)?
+            download_manifest(
+                &agent,
+                &format!("{releases}/{tag}/manifest.json"),
+                options.transfer_retries,
+            )?
         };
         let manifest: ReleaseManifest = serde_json::from_slice(&bytes).map_err(data::failure)?;
         validate_manifest(&manifest, max_loop_count)?;
@@ -465,7 +469,10 @@ fn install_pack(
     let expected_bytes = pack
         .archive_bytes
         .ok_or_else(|| data::failure("archive size is absent"))?;
-    if options.max_archive_bytes.is_some_and(|cap| expected_bytes > cap) {
+    if options
+        .max_archive_bytes
+        .is_some_and(|cap| expected_bytes > cap)
+    {
         return Err(data::failure(
             "release archive exceeds configured size limit",
         ));
