@@ -87,7 +87,13 @@ existing checkout to override that location. That checkout must be the release t
 the vendored manifest declares (`v0.2.0` for this version): tests that request this
 explicit version reject a checkout declaring another identity, and the
 external-data `main` branch declares the next development version (`v0.2.1` after
-the v0.2.0 release).
+the v0.2.0 release). To run the tests against a checkout of another release (for
+example the next one before it is vendored), also set
+`VAKINT_TEST_EXTERNAL_DATA_VERSION` to the version that checkout declares. Tests
+whose expectations depend on the data (the Laurent orders a master ships, the
+first missing order, which five-loop masters carry coefficients, the master set,
+precision caps) read them off the loaded data, so the same tests pass on
+consecutive releases and re-vendoring a release needs no test change.
 Managed `.vakint-external-data` directories are ignored by Git.
 
 The scientific gates retain their explicit execution flags and FORM requirements.

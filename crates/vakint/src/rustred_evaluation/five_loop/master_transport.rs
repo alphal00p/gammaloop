@@ -1362,10 +1362,36 @@ mod tests {
         };
         let terminals = application.own_terminals().unwrap();
         let masters = vk_parse!("RustRedMaster(args__)").unwrap().to_pattern();
+        // The identity of a master the loaded package declares without any
+        // coefficient (every five-loop terminal up to data v0.2.0; none from
+        // v0.2.1 on), read off the loaded catalog.
+        let catalog = engine.rustred_data().unwrap();
+        let uncomputed_identity = |key: &IntegralKey| -> Option<String> {
+            let symbol = SavedApplication::symbolic_integral(
+                &fingerprint,
+                key,
+                vk_symbol!("RustRedMaster"),
+                &mut BTreeMap::new(),
+            );
+            catalog
+                .masters
+                .masters
+                .get(&symbol)
+                .filter(|master| master.coefficients.is_empty())
+                .map(|master| master.identity.clone())
+        };
         // One evaluation with a fresh observer: (value, native processed keys).
         // A public numerical result that needs master orders the package does
         // not ship fails closed naming the master: that error is the value.
-        let evaluate = |public: bool, input: &Atom| -> (Result<Atom, String>, Option<usize>) {
+        // So is the final-substitution error of a master the package declares
+        // without coefficients (`uncomputed`), which must name that master;
+        // any other error fails the test. Such a master may also evaluate:
+        // a declared product of lower-loop masters (T1^5 among the v0.2.0
+        // terminals) is substituted through its factors.
+        let evaluate = |public: bool,
+                        input: &Atom,
+                        uncomputed: Option<&str>|
+         -> (Result<Atom, String>, Option<usize>) {
             let mut callback = |_: &rustred::solver::CandidateRoutedApplicationEnvelope<'_>| {
                 Ok(rustred::solver::CandidateRoutedObserverControl::Continue)
             };
@@ -1382,6 +1408,15 @@ mod tests {
                 ) {
                     Ok(value) => Ok(value),
                     Err(VakintError::MissingMasterOrders(missing)) => Err(format!("{missing:?}")),
+                    Err(error)
+                        if uncomputed.is_some_and(|identity| {
+                            error.to_string().contains(&format!(
+                                "{identity}: declared terminal has no computed coefficients"
+                            ))
+                        }) =>
+                    {
+                        Err(error.to_string())
+                    }
                     Err(error) => panic!("public evaluation of {input}: {error}"),
                 }
             } else {
@@ -1419,11 +1454,12 @@ mod tests {
             if let Some(twist) = whitney_twists(&contracted).into_iter().next() {
                 forms.push(("twist", twist * &contracted_numerator));
             }
+            let uncomputed = uncomputed_identity(key);
             let mut expected: [Option<Result<Atom, String>>; 2] = [None, None];
             for (name, input) in &forms {
                 for public in [false, true] {
                     let _ = engine.clear_rustred_application_witness_cache();
-                    let (value, processed) = evaluate(public, input);
+                    let (value, processed) = evaluate(public, input, uncomputed.as_deref());
                     assert!(
                         processed.is_none_or(|processed| processed <= 2),
                         "master {:?} form {name} public={public}: {processed:?} processed keys",

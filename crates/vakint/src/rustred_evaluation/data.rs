@@ -1178,9 +1178,24 @@ mod tests {
         let symbol = metadata["master_id"].as_str().unwrap().parse().unwrap();
         let master = engine.get_master(&symbol, 20).unwrap();
         assert_eq!(master.loop_count(), 1);
+        // Every Laurent order the vendored manifest lists for the tadpole: -1..4
+        // up to data v0.2.0, -1..5 from v0.2.1 on (read off the snapshot, so
+        // re-vendoring a release needs no test change). The orders are
+        // contiguous from the leading pole and cover at least those of v0.2.0.
+        let listed: Vec<i64> =
+            serde_json::from_value(metadata["available_epsilon_powers"].clone()).unwrap();
+        assert!(
+            listed.starts_with(&[-1, 0, 1, 2, 3, 4])
+                && listed.windows(2).all(|pair| pair[1] == pair[0] + 1),
+            "vendored tadpole orders {listed:?}"
+        );
+        assert_eq!(
+            metadata["epsilon_range"],
+            serde_json::json!([listed[0], *listed.last().unwrap()])
+        );
         assert_eq!(
             master.coefficients().keys().copied().collect::<Vec<_>>(),
-            vec![-1, 0, 1, 2, 3, 4]
+            listed
         );
         assert_eq!(master.requested_decimal_precision(), 20);
         master.graph().validate().unwrap();
@@ -1240,8 +1255,22 @@ mod tests {
                 assert!(master.is_computed());
             } else {
                 assert!(!master.graph().numerator().expression().is_one());
-                assert!(!master.is_computed());
-                assert!(master.coefficients().is_empty());
+                // Up to v0.2.0 the five-loop masters are uncomputed terminals; from
+                // v0.2.1 on the manifest entry lists the master's Laurent orders.
+                // Either way the inspected master carries exactly the orders its
+                // loaded manifest entry lists.
+                let listed: Vec<i64> = metadata["available_epsilon_powers"]
+                    .as_array()
+                    .map_or_else(Vec::new, |orders| {
+                        orders.iter().map(|order| order.as_i64().unwrap()).collect()
+                    });
+                let computed = !listed.is_empty();
+                assert_eq!(master.is_computed(), computed);
+                assert_eq!(master.coefficients().is_empty(), !computed);
+                assert_eq!(
+                    master.coefficients().keys().copied().collect::<Vec<_>>(),
+                    listed
+                );
                 #[cfg(feature = "feynkit-ingress")]
                 {
                     use symbolica::atom::AtomCore;

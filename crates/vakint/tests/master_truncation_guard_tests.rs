@@ -122,33 +122,64 @@ fn rustred(mode: RustRedMasterMode) -> VakintSettings {
     rustred_only(mode, NO_FORM)
 }
 
+/// The last Laurent order `k` of the one-loop tadpole master in the data of
+/// the engine these settings evaluate with: `ε^4` up to data v0.2.0, `ε^5`
+/// from v0.2.1 on. It is read off the loaded data, so a release that extends
+/// the tadpole needs no test change; its orders must stay contiguous from
+/// `ε^-1` and cover at least those of v0.2.0.
+fn one_loop_tadpole_known_through(settings: &VakintSettings) -> i64 {
+    let vakint = test_utils::get_vakint(settings.clone()).vakint;
+    let masters: Vec<_> = vakint
+        .master_symbols()
+        .expect("the engine has RustRed data")
+        .iter()
+        .filter_map(|symbol| vakint.get_master(symbol, 16).ok())
+        .filter(|master| master.loop_count() == 1)
+        .collect();
+    assert_eq!(masters.len(), 1, "one one-loop master (the tadpole)");
+    let orders: Vec<i64> = masters[0].coefficients().keys().copied().collect();
+    assert!(
+        orders.starts_with(&[-1, 0, 1, 2, 3, 4])
+            && orders.windows(2).all(|pair| pair[1] == pair[0] + 1),
+        "one-loop tadpole orders {orders:?}"
+    );
+    *orders.last().unwrap()
+}
+
 #[test]
 fn rustred_one_loop_tadpole_symbolic() {
-    // The vendored tadpole is known through ε^4.
+    // The tadpole is known through ε^k: with the pole ε^-1, k + 1 terms from
+    // ε^-1 (through ε^(k-1)) need it through ε^k; one more needs ε^(k+1).
+    let settings = rustred(RustRedMasterMode::Symbolic);
+    let known_through = one_loop_tadpole_known_through(&settings);
     check(GuardCase {
         name: "RustRed 1L tadpole, symbolic masters",
-        settings: rustred(RustRedMasterMode::Symbolic),
+        settings,
         loops: 1,
         integral: ONE_LOOP_TADPOLE,
         pole: 1,
-        deepest_terms: 5,
+        deepest_terms: known_through + 1,
         master: "1-loop",
-        first_missing_order: 5,
+        first_missing_order: known_through + 1,
         exact: true,
     });
 }
 
 #[test]
 fn rustred_one_loop_tadpole_numerical() {
+    // With the pole ε^-2, k terms from ε^-1 (through ε^(k-2)) need the
+    // tadpole through ε^k; one more needs ε^(k+1).
+    let settings = rustred(RustRedMasterMode::Numerical);
+    let known_through = one_loop_tadpole_known_through(&settings);
     check(GuardCase {
         name: "RustRed 1L tadpole, numerical masters (default engine)",
-        settings: rustred(RustRedMasterMode::Numerical),
+        settings,
         loops: 1,
         integral: ONE_LOOP_TADPOLE,
         pole: 2,
-        deepest_terms: 4,
+        deepest_terms: known_through,
         master: "1-loop",
-        first_missing_order: 5,
+        first_missing_order: known_through + 1,
         exact: false,
     });
 }
