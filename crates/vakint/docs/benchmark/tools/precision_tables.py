@@ -739,7 +739,8 @@ def markdown(T):
             last = r['loop']
         out.append(f"| {r['loop']}L/{r['name']}{' (' + r['name_640'] + ')' if r.get('name_640') else ''} | "
                    + ' | '.join(cell_md(r['cells'][str(o)]) for o in o1) + ' |')
-    out += ['', '[p] X is set by a constant that rests on two profiles of one code beyond its independent confirmation: '
+    out += ['', '[p] Part of the X digits rests on a constant computed with two profiles of one code beyond its independent '
+            'confirmation (constant, its digits, its independent confirmation, orders affected): '
             + '; '.join(T['two_profile_constants']) + '.',
             '[n] vakint’s Numerical mode returns more digits for these orders: it uses the best payload of the master’s coefficient '
             'group (masters with the same exact basis expression), here a validated numerical value: '
@@ -768,6 +769,8 @@ def method_notes(T):
         f"any precision, read from inspection/constants.rs): {', '.join(B['variables'])}; the projections "
         f"{', '.join(B['projections'])} (HPL/GPL words); {'; '.join(B['functions'])}. Finite sources: the {len(fc)} records of "
         f"4L/constants.json ({lo}-{max(fc.values())} d) and numerical-only master coefficients.",
+        'Finite-digit periods (significant digits as vakint reads them): '
+        + ', '.join(f"{k.replace('vakint::', '')} {v}" for k, v in sorted(fc.items(), key=lambda kv: (kv[1], kv[0]))) + '.',
         'Table 1 classifies each stored order: an exact row without finite sources is S, with finite sources S*(min digits), a '
         'row without an exact form N(validated digits). Symbolic-mode class; numerical-only values come back with X-1 to X-3 '
         'tracked digits.',
