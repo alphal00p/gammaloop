@@ -72,7 +72,7 @@
       ..o2.map(o => table.cell(fill: pt-navy, text(size: 7.6pt, fill: white, weight: "bold", pt-eps(o)))),
     ),
     ..for r in t.table2 {
-      (table.cell(fill: rgb("eaf2fa"), text(size: 8.6pt, weight: "bold", fill: pt-navy)[#r.loop\L]),
+      (table.cell(fill: rgb("eaf2fa"), text(size: 8.6pt, weight: "bold", fill: pt-navy)[#r.loop\L#pt-marks(r, 6pt)]),
        ..o2.map(o => pt-cell2(r.cells.at(pt-key(o)))))
     },
   )
@@ -135,7 +135,7 @@
     text(size: 9pt)[Class of every Laurent coefficient, worst case X rounded down. *Precision table 1*: every master the data tree
       ships, at every order it holds. *Precision table 2*: the result of any single-scale vacuum input with $L$ loops (RustRed
       backend), worst case over the inputs; an order that needs master coefficients the data do not hold (spurious poles of
-      the reduction) is not available.],
+      the reduction, lower-loop factors of 5L products) is not available.],
     pt-legend)
   v(0.2em)
   text(9pt, weight: "bold", fill: pt-navy)[Precision table 1. Master coefficients]
@@ -156,8 +156,9 @@
   })
   v(0.6em)
   text(9pt, weight: "bold", fill: pt-navy)[Precision table 2. The $L$-loop result]
-  text(7.4pt, fill: luma(80))[ — class and digits reachable for every admitted input, per Laurent order of the result (letters:
-    notes below).]
+  text(7.4pt, fill: luma(80))[ — class and digits reachable, worst case over the admitted inputs, per Laurent order of the result,
+    with the spurious-pole orders the row notes state (measured at 1L-4L; proven on the held integrals and sampled outside them
+    at 5L; letters: notes below).]
   v(-0.3em)
   pt-table2(t)
   block(width: 100%, text(size: 6.9pt, font: pt-sans)[

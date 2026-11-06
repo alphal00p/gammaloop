@@ -2,8 +2,8 @@
 """Precision tables of vakint's RustRed results, generated from a vakint-external-data tree and nothing else.
 
   precision_tables.py --data-root ROOT --json OUT.json [--md OUT.md] [--status provisional|final] [--label TEXT]
-                      [--constants-rs FILE] [--pole-depth FILE]
-  precision_tables.py --data-root ROOT --verify TABLES.json [--constants-rs FILE] [--pole-depth FILE]
+                      [--vakint-src DIR] [--constants-rs FILE] [--pole-depth FILE]
+  precision_tables.py --data-root ROOT --verify TABLES.json [--vakint-src DIR] [--constants-rs FILE] [--pole-depth FILE]
 
 Table 1: every master of the tree (1L-5L) x every Laurent order the data hold; table 2: for each loop count L, every order
 eps^k of the result of an arbitrary L-loop single-scale vacuum input (RustRed backend), worst case over the inputs.
@@ -14,13 +14,18 @@ Rule (vakint inspection.rs PreparedExpression::available_precision): a coefficie
 significant_digits of its finite sources; none -> arbitrary precision. Finite sources = the records of the tree's
 constant_bindings (4L/constants.json) and numerical-only master coefficients (manifest significant_digits). Everything
 inspection/constants.rs builtin_definition() resolves is evaluated at the requested precision; that list is read from
---constants-rs (default: this crate's src/inspection/constants.rs) and an unknown symbol makes the generator fail.
+--constants-rs (default: this crate's src/inspection/constants.rs) and an unknown symbol makes the generator fail, as do a
+constants.json record named like a built-in (vakint resolves records first) and an HR/HI/GPL/Polylog projection outside
+vakint's evaluator limits (hpl.rs). The sha256 of the modelled vakint sources (ROUTE_SOURCES) enter the tables' sources.
 Table 2 (rustred_evaluation/masters.rs finalize): the order eps^k needs every master m through eps^(k + p_m), p_m = spurious-
 pole order of m's reduction coefficient; vakint tries the basis-alias route first (aliased masters rewritten onto their
 representatives, rebuilt here from the manifests' exact_basis_expression as masters.rs load_basis_aliases does) and falls back
 to the direct route; if neither has the orders it returns MissingMasterOrders (no value). p_m: 1L-4L from --pole-depth
 (measured, pinned to the reduction tables by digest; default docs/benchmark/data/pole-depth.json), 5L 0 (pole-free basis,
-read from 5L/provenance/refinement-layer.json). Worst case = any combination of masters can occur in an input.
+read from 5L/provenance/refinement-layer.json: proven on the held integrals only, the record must say so; pole-depth.json
+five_loop.open_checks names what is open). 5L results also hold products of 1L-4L masters (five_loop.rs: product terminals ->
+VacuumProductReducer): their factor masters are needed through eps^(k + 5 - L_f + p) (pole-depth.json five_loop_products,
+pinned to the 5L basis by sha256). Worst case = any combination of masters can occur in an input.
 --verify regenerates and compares the content hash with TABLES.json (exit 1 if they differ): stale tables are refused.
 """
 from __future__ import annotations
@@ -86,6 +91,126 @@ def read_builtins(path: Path):
             'source': str(path), 'sha256': sha256_file(path)}
 
 
+# The files whose code the tables model (their sha256 goes into the tables' sources, so a change makes them stale):
+# available_precision (inspection.rs), constant resolution order + coefficient groups (inspection/registry.rs), finalize /
+# load_basis_aliases (rustred_evaluation/masters.rs), the 5L product route (rustred_evaluation/five_loop.rs) and the
+# projection evaluator limits (hpl.rs).
+ROUTE_SOURCES = ('inspection.rs', 'inspection/registry.rs', 'rustred_evaluation/masters.rs', 'rustred_evaluation/five_loop.rs',
+                 'hpl.rs')
+
+# Projection evaluator limits (vakint hpl.rs projection_kernel + Symbolica transcendental/harmonic_polylog): HR/HI words over
+# {-1, 0, 1} of weight <= 6 at exp(+-i pi/3); GPLReal/GPLImag at endpoint 1, letters {0, 1, -1, (+-1 +- i sqrt3)/2}, weight <= 6,
+# first letter != 1, last letter != 0; PolylogReal/PolylogImag(n, z), n >= 1, z = (1 + i sqrt3)/2 (n <= 6) or z = i/sqrt3 (the
+# positive-imaginary representatives). Outside them vakint returns an error, so such a row is not S.
+HPL_ANCHORS = ('through weight six', 'sixth-root polylogarithm projections support orders one through six',
+               'GPL projection endpoint must be one', 'expected -1, 0, or 1', 'polylogarithm projection uses the positive-imaginary',
+               '"(1+3^(1/2)*𝑖)/2", "(1/3)^(1/2)*𝑖", "3^(1/2)*𝑖/3"')
+MAX_WEIGHT = 6
+SQ3 = 3 ** 0.5
+GPL_LETTERS = {0: 0, 1: 1, -1: -1, 'R1': complex(0.5, SQ3 / 2), 'R2': complex(-0.5, SQ3 / 2), 'R4': complex(-0.5, -SQ3 / 2),
+               'R5': complex(0.5, -SQ3 / 2)}
+HPL_POINTS = {1: complex(0.5, SQ3 / 2), -1: complex(0.5, -SQ3 / 2)}
+POLYLOG_POINTS = {'sixth root': (complex(0.5, SQ3 / 2), MAX_WEIGHT), 'i/sqrt3': (complex(0, 1 / SQ3), None)}
+
+
+def read_route_sources(src: Path):
+    out = {}
+    for f in ROUTE_SOURCES:
+        p = src / f
+        if not p.exists():
+            raise SystemExit(f'{p}: missing (the tables model this file; --vakint-src must be vakint\'s src directory)')
+        out[f] = sha256_file(p)
+    hpl = (src / 'hpl.rs').read_text()
+    missing = [a for a in HPL_ANCHORS if a not in hpl]
+    if missing:
+        raise SystemExit(f'{src / "hpl.rs"}: projection evaluator changed ({missing}); update the limits in precision_tables.py')
+    return out
+
+
+def cvalue(s, where):
+    """the exact complex number an argument spells (+ - * / ^, integers, 𝑖); None if it is not such a constant"""
+    import ast
+    t = s.strip().replace('𝑖', '1j').replace('^', '**')
+    try:
+        node = ast.parse(t, mode='eval').body
+    except SyntaxError:
+        return None
+
+    def ev(n):
+        if isinstance(n, ast.Constant) and isinstance(n.value, (int, complex)) and not isinstance(n.value, bool):
+            return n.value
+        if isinstance(n, ast.UnaryOp) and isinstance(n.op, (ast.USub, ast.UAdd)):
+            v = ev(n.operand)
+            return -v if isinstance(n.op, ast.USub) else v
+        if isinstance(n, ast.BinOp) and isinstance(n.op, (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Pow)):
+            a, b = ev(n.left), ev(n.right)
+            return {ast.Add: lambda: a + b, ast.Sub: lambda: a - b, ast.Mult: lambda: a * b, ast.Div: lambda: a / b,
+                    ast.Pow: lambda: a ** b}[type(n.op)]()
+        raise ValueError(f'{where}: {s!r} is not a numerical constant')
+    try:
+        return complex(ev(node))
+    except (ValueError, ZeroDivisionError):
+        return None
+
+
+def split_args(args):
+    """'(a,b,(c,d))' -> ['a', 'b', '(c,d)'] (top-level commas)"""
+    out, depth, cur = [], 0, ''
+    for ch in args[1:-1]:
+        if ch == ',' and depth == 0:
+            out.append(cur)
+            cur = ''
+            continue
+        depth += ch == '('
+        depth -= ch == ')'
+        cur += ch
+    return out + [cur]
+
+
+def check_projection(short, args, where):
+    """fail unless vakint's evaluator accepts this projection (HPL_ANCHORS / the limits above)"""
+    a = split_args(args)
+
+    def near(z, w):
+        return z is not None and abs(z - w) < 1e-12
+
+    def integer(s):
+        return RATIONAL.match(s) and '/' not in s
+
+    bad = None
+    if short in ('HR', 'HI'):
+        *word, point = a
+        sign = 1 if point.strip().split('::')[-1] == 'om1' else next((k for k, w in HPL_POINTS.items() if near(cvalue(point, where), w)), None)
+        if sign is None:
+            bad = f'point {point} is not exp(+-i pi/3)'
+        elif not all(integer(x) and int(x) in (-1, 0, 1) for x in word) or len(word) > MAX_WEIGHT:
+            bad = f'word {word} is not over {{-1, 0, 1}} with weight <= {MAX_WEIGHT}'
+    elif short in ('GPLReal', 'GPLImag'):
+        *letters, end = a
+        if not near(cvalue(end, where), 1):
+            bad = f'endpoint {end} is not 1'
+        else:
+            tags = [next((k for k, w in GPL_LETTERS.items() if near(cvalue(x, where), w)), None) for x in letters]
+            if None in tags:
+                bad = f'letters {letters} outside {{0, 1, -1, (+-1 +- i sqrt3)/2}}'
+            elif not (len(tags) <= MAX_WEIGHT and tags[:1] != [1] and tags[-1:] != [0]):
+                bad = f'word {tags}: weight <= {MAX_WEIGHT}, first letter != 1 and last letter != 0 required'
+    elif short in ('PolylogReal', 'PolylogImag'):
+        if len(a) != 2 or not integer(a[0]) or int(a[0]) < 1:
+            bad = 'needs (n >= 1, z)'
+        else:
+            z = cvalue(a[1], where)
+            hit = [(k, lim) for k, (w, lim) in POLYLOG_POINTS.items() if near(z, w)]
+            if not hit:
+                bad = f'argument {a[1]} is not (1 + i sqrt3)/2 or i/sqrt3 (positive-imaginary representatives)'
+            elif hit[0][1] is not None and int(a[0]) > hit[0][1]:
+                bad = f'order {a[0]} > {hit[0][1]} at the {hit[0][0]}'
+    else:
+        bad = 'unknown projection'
+    if bad:
+        raise SystemExit(f'{where}: vakint cannot evaluate {short}{args[:120]}: {bad}')
+
+
 # ------------------------------------------------------------------------------------------- expression scanning --
 
 IDENT = re.compile(r'(?<![A-Za-z0-9_:{}])((?:[A-Za-z_][A-Za-z0-9_]*::(?:\{\}::)?)*[A-Za-z_][A-Za-z0-9_]*)')
@@ -126,8 +251,9 @@ def finite_sources(expr, B, consts, where):
         short = name.split('::')[-1]
         if name.startswith('vakint::'):
             if args and short in B['projections']:
-                if IDENT.search(args[1:-1]):
+                if [x for x in IDENT.findall(args[1:-1]) if not (short in ('HR', 'HI') and x.split('::')[-1] == 'om1')]:
                     raise SystemExit(f'{where}: {name}{args[:80]} has symbolic arguments')
+                check_projection(short, args, where)
             elif not args and short in B['variables']:
                 pass
             else:
@@ -180,6 +306,15 @@ def load_tree(root: Path, B):
                     elif v.get('independent') == 'to prec_validated_digits_strict only':
                         labels[r['symbol']] = {'strict': v.get('prec_validated_digits_strict'),
                                                'independent': v.get('independent_method_digits'), 'method': v.get('independent_method')}
+    # vakint's registry (prepare_inner) resolves these records BEFORE builtin_definition: a record named like a built-in
+    # would be a finite source that the scan below takes for a built-in (S instead of S*)
+    for key in consts:
+        mm = re.fullmatch(r'vakint::([A-Za-z0-9_]+)(\(.*\))?', key)
+        if not mm:
+            raise SystemExit(f'constant record {key!r}: not a vakint:: symbol')
+        if (mm.group(1) in B['variables'] and not mm.group(2)) or mm.group(1) in B['projections']:
+            raise SystemExit(f'constant record {key!r} has the name of a vakint built-in; vakint resolves the record first '
+                             '(finite digits), the tables would count it as a built-in: rename the record or update precision_tables.py')
     masters = []
     for L in range(1, 6):
         man = json.loads((root / f'{L}L' / 'manifest.json').read_text())
@@ -299,9 +434,38 @@ def load_depths(root: Path, path: Path, masters, alias_map):
             and 'regular at d = 4' in (bc.get('design') or '')):
         raise SystemExit('5L/provenance/refinement-layer.json does not record a pole-free basis (basis_change.checks.g_pole)')
     proof = re.search(r'exact proof: (\d+) / (\d+) generators regular at d = 4', bc.get('design') or '')
-    five = {'tag': bc.get('tag'), 'g_pole_coefficients': gp.get('coefficients'),
-            'proof': f'{proof.group(1)} / {proof.group(2)} generators' if proof else None}
-    return depth, d, five
+    # the scope of the exact proof, as the tree states it (the held integrals; inputs outside them are only sampled)
+    fl = d.get('five_loop') or {}
+    scope = fl.get('proof_scope')
+    if not scope or scope not in (bc.get('design') or '') or not proof or proof.group(1) != proof.group(2):
+        raise SystemExit(f"5L/provenance/refinement-layer.json basis_change.design does not state the proof scope {scope!r} "
+                         f"(pole-depth five_loop.proof_scope) with a complete 'exact proof: N / N generators' count")
+    if not isinstance(fl.get('open_checks'), list):
+        raise SystemExit(f'{path}: five_loop.open_checks (what the 5L pole-free basis is not proven on) missing')
+    five = {'tag': bc.get('tag'), 'g_pole_coefficients': gp.get('coefficients'), 'g_pole_polar': gp.get('n_polar'),
+            'proof': f'{proof.group(1)} / {proof.group(2)} generators', 'generators': int(proof.group(1)), 'scope': scope,
+            'open_checks': fl['open_checks']}
+    # 5L results also hold products of 1L-4L masters (five_loop.rs: product terminals -> VacuumProductReducer)
+    fp = d.get('five_loop_products')
+    if not fp or fp.get('basis_sha256') != bc.get('basis_sha256'):
+        raise SystemExit(f"{path}: five_loop_products missing or recorded for another 5L basis (basis_sha256 "
+                         f"{(fp or {}).get('basis_sha256', '')[:16]} != the tree's {str(bc.get('basis_sha256'))[:16]})")
+    pu = json.loads((root / '5L' / 'producer-update.json').read_text())
+    tree_products = {mid for mid, v in pu['masters'].items() if v.get('product_master')}
+    rec_products = {x['master_id'] for x in fp['products']}
+    if tree_products != rec_products:
+        raise SystemExit(f'{path}: five_loop_products covers other product masters than 5L/producer-update.json '
+                         f'({len(rec_products ^ tree_products)} differ)')
+    by_id = {m['master_id']: m for m in masters}
+    factors = []
+    for mid, f in fp['factors'].items():
+        m = by_id.get(mid)
+        if m is None or m['loop'] != f['loop'] or m['name'] != f['name'] or not 1 <= f['loop'] <= 4 or f['p'] < 0:
+            raise SystemExit(f"{path}: product factor {f.get('loop')}L/{f.get('name')} is not a 1L-4L master of the tree")
+        factors.append({'m': m, 'p': f['p'], 'offset': 5 - f['loop'] + f['p'], 'products': f['products']})
+    five['products'] = {'n': len(rec_products), 'method': fp['method'], 'what': fp['what'],
+                        'factors': [f"{x['m']['loop']}L/{x['m']['name']} p {x['p']}" for x in factors]}
+    return depth, d, five, factors
 
 
 # ---------------------------------------------------------------------------------------------------- tables --
@@ -332,8 +496,22 @@ def worst_of(entries):
     return w, who
 
 
-def table2_cell(L, k, ms, by_id, alias_map, depth):
-    """worst case over inputs of the L-loop result at eps^k (see the module docstring)"""
+def table2_cell(L, k, ms, by_id, alias_map, depth, factors=()):
+    """worst case over inputs of the L-loop result at eps^k (see the module docstring); factors (5L): the lower-loop factor
+    masters of the 5L product terminals, each needed (on the alias route: its representatives) through eps^(k + offset)"""
+    fac_entries, fac_missing = [], []
+    for f in factors:
+        cells = []
+        for rid in alias_map.get(f['m']['master_id'], [f['m']['master_id']]):
+            n = needs(by_id[rid], k + f['offset'])
+            if n is None:
+                cells = None
+                break
+            cells += [(e[0], e[1], e[2], 'product') for e in n]
+        if cells is None:
+            fac_missing.append(f)
+        else:
+            fac_entries += cells
     info = []
     for m in ms:
         mid = m['master_id']
@@ -367,13 +545,17 @@ def table2_cell(L, k, ms, by_id, alias_map, depth):
     combo = [i for i in info if i['D'] is None and i not in alone] if breakers else []
     entries = [e for i in info if i['A'] is not None for e in i['A']]
     if breakers:
+        if factors:     # the direct route of the factor images (poles up to 2, LL) is not modelled: refuse rather than guess
+            raise SystemExit(f"{L}L eps^{k}: {', '.join(i['m']['name'] for i in breakers)} would send 5L results to the direct "
+                             'route, whose product-factor pole orders the tables do not model; update precision_tables.py')
         entries += [e for i in info if i['D'] is not None for e in i['D']]
+    entries += fac_entries
     w, who = worst_of([(m, j, c) for m, j, c, _ in entries]) if entries else (None, [])
     routes = {}
     for m, j, c, r in entries:
         routes.setdefault((m['master_id'], j), r)
     return {'missing': [i['m'] for i in alone], 'combo': [i['m'] for i in combo], 'breakers': [i['m'] for i in breakers],
-            'returns': bool(entries), 'worst': w,
+            'missing_factors': fac_missing, 'returns': bool(entries), 'worst': w,
             'who': [(m, j, c, routes.get((m['master_id'], j))) for m, j, c in who]}
 
 
@@ -382,7 +564,7 @@ def build(root: Path, B, depth_path: Path, status: str, label_text: str | None):
     by_id = {m['master_id']: m for m in masters}
     checks = tier_check(root, by_id)
     alias_map = aliases(masters)
-    depth, depth_doc, five = load_depths(root, depth_path, masters, alias_map)
+    depth, depth_doc, five, factors = load_depths(root, depth_path, masters, alias_map)
     all_orders = sorted({o for m in masters for o in m['orders']})
     orders = list(range(all_orders[0], all_orders[-1] + 1))
 
@@ -450,7 +632,8 @@ def build(root: Path, B, depth_path: Path, status: str, label_text: str | None):
     for L in range(1, 6):
         ms = [m for m in masters if m['loop'] == L]
         k_max[L] = max(o for m in ms for o in m['orders'])
-        t2.append((L, {k: table2_cell(L, k, ms, by_id, alias_map, depth) for k in range(-L, k_max[L] + 1)}))
+        t2.append((L, {k: table2_cell(L, k, ms, by_id, alias_map, depth, factors if L == 5 else ())
+                       for k in range(-L, k_max[L] + 1)}))
     orders2 = list(range(-5, max(k_max.values()) + 1))
 
     def note(text):
@@ -465,9 +648,36 @@ def build(root: Path, B, depth_path: Path, status: str, label_text: str | None):
                 names.append(s)
         return ', '.join(names[:limit]) + (f' and {len(names) - limit} more' if len(names) > limit else '')
 
+    pd_orders = {f'{L}L': sorted({x['direct'] for x in depth_doc['masters'].values() if x['loop'] == L}) for L in range(1, 5)}
+    row_note_lower = None
+    fac_text = ', '.join(f"{x['m']['loop']}L/{x['m']['name']}" + (f" (p = {x['p']})" if x['p'] else '') for x in factors)
     t2_rows = []
     for L, row in t2:
         cells = {}
+        # row notes: what the row's spurious-pole orders rest on (letters first, so they lead the row's notes)
+        if L < 5:
+            if row_note_lower is None:
+                row_note_lower = note(
+                    '1L-4L rows: the spurious-pole orders p of the reduction coefficients (direct route up to '
+                    + ', '.join(f'{a} {max(b)}' for a, b in pd_orders.items()) + ') are measured on every record of the shipped '
+                    'caches and on exact samples outside them, not proven. An input with a larger p at ε^k would need higher '
+                    'master orders: where they are not held it gets MissingMasterOrders (no value, never a wrong one); '
+                    'otherwise its value carries those orders’ digits, which vakint reports (X here would be too high).')
+            row_marks = [row_note_lower]
+        else:
+            row_marks = [note(
+                f"5L row, spurious poles: p = 0 for every 5L master (pole-free basis {five['tag']}). Regular at d = 4 is "
+                f"proven exactly on the {five['generators']} held-integral generators (the record: “{five['scope']}”); "
+                f"admitted inputs outside them are only sampled ({five['g_pole_coefficients']} coefficients, "
+                f"{five['g_pole_polar']} with a pole)"
+                + (''.join(f'; open: {x}' for x in five['open_checks'])) + '. An input with a spurious pole of order q at '
+                'ε^k would need ε^(k+q) of the 5L masters: no 5L master holds ε^1, so at ε^0 it gets MissingMasterOrders (no '
+                'value, never a wrong one); below ε^0 it returns a value with those orders’ digits, which vakint reports (X '
+                'here would be too high).'),
+                note(f"5L row, lower-loop products: vakint factorizes the {five['products']['n']} 5L product terminals "
+                     '(VacuumProductReducer), so a 5L result can hold products of 1L-4L masters. Included here: a factor '
+                     'master of L_f loops is needed (alias route: its representatives) through ε^(k+5-L_f+p), with p the '
+                     f"spurious-pole order of the factor images ({five['products']['method']}): {fac_text}.")]
         for k in orders2:
             if k < -L:
                 cells[str(k)] = {'class': None, 'na': 'below'}
@@ -481,10 +691,11 @@ def build(root: Path, B, depth_path: Path, status: str, label_text: str | None):
             if not c['returns'] and not any(k in x['orders'] for x in masters if x['loop'] == L):
                 cells[str(k)] = {'class': None, 'na': 'beyond'}
                 continue
-            partial = bool(c['missing'] or c['combo'] or w is None)
+            partial = bool(c['missing'] or c['combo'] or c['missing_factors'] or w is None)
             e = {'class': None if partial else w['class'], 'X': None if partial else w.get('X'), 'marks': []}
             binding = sorted({f"{m['loop']}L/{m['name']}" + (f" ({m['name_640']})" if m.get('name_640') else '') + f" ε^{j}"
-                              + (' (alias route)' if r == 'alias' else '') for m, j, cc, r in who})
+                              + (' (alias route)' if r == 'alias' else ' (product factor)' if r == 'product' else '')
+                              for m, j, cc, r in who})
             if partial:
                 e['na'] = 'partial'
                 e['returned'] = label(w)
@@ -496,6 +707,11 @@ def build(root: Path, B, depth_path: Path, status: str, label_text: str | None):
                 if c['combo']:
                     txt += (f"So do inputs that combine {masters_text(c['combo'])} with {masters_text(c['breakers'])} (whose alias "
                             f"route lacks orders, so vakint takes the direct route, which lacks the former's orders). ")
+                if c['missing_factors']:
+                    e['missing_product_factors'] = [f"{x['m']['loop']}L/{x['m']['name']}" for x in c['missing_factors']]
+                    txt += ('So do inputs reaching the 5L product masters '
+                            + '; '.join(f"{', '.join(x['products'][:4])} (factor {x['m']['loop']}L/{x['m']['name']} needed "
+                                        f"through ε^{k + x['offset']})" for x in c['missing_factors']) + '. ')
                 if w is not None:
                     txt += f"The other inputs return {label(w)}" + (f" (set by {', '.join(binding[:4])})" if w['class'] != 'S' else '') + '.'
                 else:
@@ -506,7 +722,8 @@ def build(root: Path, B, depth_path: Path, status: str, label_text: str | None):
                     e['returned'] = label(ow)
                 e['marks'].append(note(txt))
             elif w['class'] != 'S':
-                pole = [x for x in who if x[1] > k]
+                pole = [x for x in who if x[1] > k and x[3] != 'product']
+                prod = [x for x in who if x[3] == 'product']
                 why = f"set by {', '.join(binding[:4])}{' and more' if len(binding) > 4 else ''}"
                 if w['class'] == 'S*':
                     cs = sorted({s for m, j, cc, r in who for s, dg in (cc.get('constants') or {}).items() if dg == w['X']})
@@ -520,10 +737,12 @@ def build(root: Path, B, depth_path: Path, status: str, label_text: str | None):
                     why += (f"; spurious poles up to 1/ε^{max(j - k for m, j, cc, r in pole)} make ε^{k} need ε^{max(j for m, j, cc, r in pole)} "
                             "of these masters (the physical pole coefficients are polylogarithmic by the R-operation, so these "
                             "constants should cancel; the data do not guarantee it)")
+                if prod:
+                    why += '; a lower-loop factor of the 5L product masters (row note)'
                 e['binding'] = binding[:12]
                 e['marks'].append(note(f"{L}L ε^{k} {label(w)}: {why}."))
             cells[str(k)] = e
-        t2_rows.append({'loop': L, 'cells': cells, 'last_order': k_max[L]})
+        t2_rows.append({'loop': L, 'cells': cells, 'last_order': k_max[L], 'marks': row_marks})
 
     # ------------------------------------------------------------------------------------------------ notes --
     tp_list = []
@@ -558,6 +777,7 @@ def build(root: Path, B, depth_path: Path, status: str, label_text: str | None):
         'five_loop_values': five_loop_build(root),
         'version': json.loads(rm.read_text()).get('version'),
         'vakint_constants_rs_sha256': B['sha256'],
+        'vakint_route_sources_sha256': B['route_sources'],
         'pole_depth_sha256': sha256_file(depth_path),
     }
     for L in range(1, 6):
@@ -684,16 +904,25 @@ def identity_notes(root):
 
 
 def pslq_notes(root):
+    """5L exact (S / S*) orders that are numerical identifications: PSLQ forms and measured zeros (each must carry a PASS of
+    the 40-excess-digit bar in 5L/producer-update.json)"""
     p = root / '5L' / 'producer-update.json'
     d = json.loads(p.read_text())
-    n, exact = 0, 0
+    n, n_sstar, zeros, exact = 0, 0, 0, 0
     for m in (d['masters'].values() if isinstance(d['masters'], dict) else d['masters']):
         for o, v in (m.get('value_provenance') or {}).items():
             if v.get('tier') in ('S', 'S*'):
                 exact += 1
-                if (v.get('bar') or {}).get('kind') in ('pslq', 'symp-v4'):
-                    n += 1
-    return {'exact_orders': exact, 'pslq_orders': n}
+                bar = v.get('bar') or {}
+                if bar.get('kind') in ('pslq', 'symp-v4', 'measured-zero'):
+                    if bar.get('verdict') != 'PASS':
+                        raise SystemExit(f"5L/{m.get('staged_name')} ε^{o}: exact tier {v['tier']} without a PASS of the bar ({bar})")
+                    if bar['kind'] == 'measured-zero':
+                        zeros += 1
+                    else:
+                        n += 1
+                        n_sstar += v['tier'] == 'S*'
+    return {'exact_orders': exact, 'pslq_orders': n, 'pslq_sstar_orders': n_sstar, 'measured_zero_orders': zeros}
 
 
 # ---------------------------------------------------------------------------------------------------- markdown --
@@ -748,9 +977,12 @@ def markdown(T):
     out = [x.replace(' eps^', ' ε^') for x in out]
     o2 = T['orders_table2']
     out += ['## Table 2: L-loop result of any single-scale vacuum input (rows: L, columns: Laurent orders of the result)', '',
+            'Worst case over the admitted inputs, with the spurious-pole orders the row notes state (measured at 1L-4L; proven on '
+            'the held integrals and sampled outside them at 5L).', '',
             '| L | ' + ' | '.join(eps(o) for o in o2) + ' |', '|---|' + '---|' * len(o2)]
     for r in T['table2']:
-        out.append(f"| {r['loop']}L | " + ' | '.join(cell_md(r['cells'][str(o)]) for o in o2) + ' |')
+        rm = r.get('marks') or []
+        out.append(f"| {r['loop']}L{' [' + ','.join(rm) + ']' if rm else ''} | " + ' | '.join(cell_md(r['cells'][str(o)]) for o in o2) + ' |')
     out += [''] + [f"[{chr(ord('a') + i)}] {n}" for i, n in enumerate(T['notes_table2'])] + ['']
     out += ['## How the tables are made', ''] + [f'- {x}' for x in T['method']] + ['']
     return '\n'.join(out)
@@ -781,9 +1013,15 @@ def method_notes(T):
         f"Spurious-pole orders 1L-4L (direct route {', '.join(f'{L} {max(v['direct'])}' for L, v in pd['orders'].items())}; alias route "
         f"{', '.join(f'{L} {max(v['alias_representative'])}' for L, v in pd['orders'].items() if v['alias_representative'])}) are "
         "measured on every record of the shipped caches and on exact samples outside them (up to 6 dots and 3 numerators at 4L; "
-        "no growth with dots or numerators), not proven; they are pinned to the reduction tables by digest. 5L: pole-free basis "
-        f"({five.get('tag')}; exact proof on {five.get('proof')}, {five.get('g_pole_coefficients')} sampled coefficients without a pole), "
-        "p = 0 for every 5L master.",
+        "no growth with dots or numerators), not proven; they are pinned to the reduction tables by digest. 5L: p = 0 for every 5L "
+        f"master (pole-free basis {five['tag']}): regular at d = 4 proven exactly on the {five['generators']} held-integral generators "
+        f"(“{five['scope']}”); admitted inputs outside them are sampled ({five['g_pole_coefficients']} coefficients, "
+        f"{five['g_pole_polar']} with a pole)" + ''.join(f'; open: {x}' for x in five['open_checks']) + '. An input with an '
+        'unproven spurious pole would need higher 5L orders: at ε^0 none is held (MissingMasterOrders, never a wrong value); below '
+        'ε^0 the value carries those orders’ digits (reported by vakint).',
+        f"5L results can contain products of 1L-4L masters: vakint factorizes the {five['products']['n']} 5L product terminals "
+        '(VacuumProductReducer); table 2 includes their factor masters through ε^(k+5-L_f+p) on the alias route '
+        f"({five['products']['method']}).",
     ]
     if ids:
         parts = []
@@ -794,8 +1032,10 @@ def method_notes(T):
         notes.append('Some 1L-4L S rows (and the 5L product rows built on them) rest on numerical identities of the constant basis v4, '
                      'checked to thousands of digits but not proven: ' + '; '.join(parts) + '. Above those digits such an S is exact '
                      'only modulo the identity; vakint gives no warning for it.')
-    notes.append(f"5L S includes {T['pslq']['pslq_orders']} of {T['pslq']['exact_orders']} exact orders identified by PSLQ that pass "
-                 'the 40-excess-digit bar (numerical identification, not proofs).')
+    q = T['pslq']
+    notes.append(f"{q['pslq_orders']} of the {q['exact_orders']} exact (S/S*) 5L orders are PSLQ identifications ({q['pslq_sstar_orders']} "
+                 f"of them S*) and {q['measured_zero_orders']} are measured zeros, all passing the 40-excess-digit bar (numerical "
+                 'identifications, not proofs).')
     notes.append('Digits lost to cancellations in the reduction coefficients are tracked and reported by vakint (PrecisionWarning), not '
                  'included in X.')
     ch = T.get('checks') or {}
@@ -819,12 +1059,15 @@ def main(argv):
     ap.add_argument('--md', type=Path)
     ap.add_argument('--status', choices=['provisional', 'final'], default='provisional')
     ap.add_argument('--label')
-    ap.add_argument('--constants-rs', type=Path, default=CRATE / 'src' / 'inspection' / 'constants.rs')
+    ap.add_argument('--vakint-src', type=Path, default=CRATE / 'src',
+                    help="vakint's src directory: constants.rs + the files of ROUTE_SOURCES (default: this crate's)")
+    ap.add_argument('--constants-rs', type=Path, help='default: VAKINT_SRC/inspection/constants.rs')
     ap.add_argument('--pole-depth', type=Path, default=BENCH / 'data' / 'pole-depth.json')
     ap.add_argument('--verify', type=Path, help='compare a committed tables JSON with a regeneration from --data-root')
     a = ap.parse_args(argv)
     root = a.data_root.resolve()
-    B = read_builtins(a.constants_rs)
+    B = read_builtins(a.constants_rs or a.vakint_src / 'inspection' / 'constants.rs')
+    B['route_sources'] = read_route_sources(a.vakint_src)
     if a.verify:
         old = json.loads(a.verify.read_text())
         new = build(root, B, a.pole_depth, 'provisional', None)

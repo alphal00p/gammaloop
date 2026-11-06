@@ -957,7 +957,331 @@
  },
  "five_loop": {
   "depth": 0,
-  "rule": "BASIS-v2 (pole-free basis, option B): every reduction coefficient onto the 131 masters is regular at d = 4; the generator reads the proof record from the tree (5L/provenance/refinement-layer.json basis_change: design + checks.g_pole) and refuses a tree whose record does not state it"
+  "rule": "BASIS-v2 (pole-free basis, option B): the reduction coefficients onto the 131 masters are regular at d = 4, proven exactly on the held integrals and sampled outside them; the generator reads the proof record from the tree (5L/provenance/refinement-layer.json basis_change: design incl. its scope \"exact proof on all held integrals\" + checks.g_pole) and refuses a tree whose record does not state it",
+  "proof_scope": "exact proof on all held integrals",
+  "open_checks": [
+   "the 11-12-line top sector is not validated (no top-sector input reduced and checked; the validation run was stopped on 2026-11-04 without a result)"
+  ]
+ },
+ "five_loop_products": {
+  "what": "vakint five_loop.rs factorizes 5L product terminals with VacuumProductReducer: a 5L result can hold products of 1L-4L masters. Per factor master: p = largest spurious-pole order of its factor images; at eps^k it is needed through eps^(k + 5 - L_f + p) (masters.rs finalize; the other factors start at eps^-(5 - L_f) or later)",
+  "method": "measured, not proven: vakint-route factor images of the 19 kept product terminals (4L on the alias route: 435 images, all pole-free; the direct route reaches 2, e.g. P530) and exact factor images of the 2 new dotted products (p = 1 on 1L/P1, p = 1 on 2L/P2, p = 1 on 3L/P13)",
+  "basis_sha256": "5da52b655abdc9980cf1db99668ca94edd648aff440f5dd71db8e39d28f53b9c",
+  "products": [
+   {
+    "master_id": "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p0_p0_p0_p0_p1_p0_p0_p1_p1_p0_p0_p1_p0_p0_p1",
+    "name": "5L/P7 (P65)",
+    "source": "LL vakint-route factor images (alias route)"
+   },
+   {
+    "master_id": "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p0_p0_p1_p0_p0_p1_p0_p1_p1_p1_p0_p1_p0_p0_p1",
+    "name": "5L/P11 (P76)",
+    "source": "LL vakint-route factor images (alias route)"
+   },
+   {
+    "master_id": "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p0_p0_p1_p0_p0_p2_p0_p0_p0_p2_p0_p1_p1_p1_p1",
+    "name": "5L/P12",
+    "source": "BASIS-v2 exact factor images (new dotted product)"
+   },
+   {
+    "master_id": "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p0_p0_p1_p1_p0_p0_p2_p0_p2_p2_p1_p0_p0_p0_p0",
+    "name": "5L/P13",
+    "source": "BASIS-v2 exact factor images (new dotted product)"
+   },
+   {
+    "master_id": "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p0_p1_p0_p1_p0_p0_p1_p0_p1_p1_p1_p0_p0_p0_p0",
+    "name": "5L/P16 (P101)",
+    "source": "LL vakint-route factor images (alias route)"
+   },
+   {
+    "master_id": "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p0_p1_p1_p0_p0_p0_p1_p0_p1_p1_p0_p1_p0_p1_p1",
+    "name": "5L/P21 (P129)",
+    "source": "LL vakint-route factor images (alias route)"
+   },
+   {
+    "master_id": "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p0_p1_p1_p1_p0_p0_p1_p1_p1_p1_p0_p0_p0_p0_p1",
+    "name": "5L/P27 (P158)",
+    "source": "LL vakint-route factor images (alias route)"
+   },
+   {
+    "master_id": "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p0_p1_p1_p1_p0_p1_p0_p1_p1_p0_p0_p1_p0_p0_p1",
+    "name": "5L/P28 (P159)",
+    "source": "LL vakint-route factor images (alias route)"
+   },
+   {
+    "master_id": "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p0_p1_p1_p1_p1_p1_p0_p0_p1_p1_p0_p1_p0_p0_p1",
+    "name": "5L/P35 (P182)",
+    "source": "LL vakint-route factor images (alias route)"
+   },
+   {
+    "master_id": "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p0_p1_p0_p1_p0_p0_p0_p0_p1_p1_p0_p0_p0_p1",
+    "name": "5L/P47 (P352)",
+    "source": "LL vakint-route factor images (alias route)"
+   },
+   {
+    "master_id": "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p0_p1_p0_p1_p1_p0_p1_p1_p1_p0_p1_p0_p0_p1",
+    "name": "5L/P48 (P353)",
+    "source": "LL vakint-route factor images (alias route)"
+   },
+   {
+    "master_id": "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p0_p1_p1_p0_p1_p1_p0_p0_p1_p0_p1_p0_p0_p0",
+    "name": "5L/P49 (P356)",
+    "source": "LL vakint-route factor images (alias route)"
+   },
+   {
+    "master_id": "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p0_p3_p0_p1_p0_p0_p0_p0_p1_p1_p0_p0_p0_p1",
+    "name": "5L/P51 (P359)",
+    "source": "LL vakint-route factor images (alias route)"
+   },
+   {
+    "master_id": "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p0_p0_p0_p1_p1_p0_p1_p1_p0_p1_p0_p0_p1",
+    "name": "5L/P55 (P369)",
+    "source": "LL vakint-route factor images (alias route)"
+   },
+   {
+    "master_id": "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p0_p1_p0_p1_p1_p0_p1_p1_p0_p1_p0_p0_p1",
+    "name": "5L/P59 (P382)",
+    "source": "LL vakint-route factor images (alias route)"
+   },
+   {
+    "master_id": "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p1_p0_p1_p1_p1_p0_p1_p1_p0_p0_p0_p1_p1",
+    "name": "5L/P86 (P442)",
+    "source": "LL vakint-route factor images (alias route)"
+   },
+   {
+    "master_id": "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p1_p1_p0_p0_p0_p0_p0_p0_p1_p1_p1_p0_p0",
+    "name": "5L/P91 (P447)",
+    "source": "LL vakint-route factor images (alias route)"
+   },
+   {
+    "master_id": "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p1_p1_p0_p0_p1_p0_p0_p1_p0_p1_p0_p0_p1",
+    "name": "5L/P93 (P449)",
+    "source": "LL vakint-route factor images (alias route)"
+   },
+   {
+    "master_id": "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p1_p1_p0_p1_p1_p0_p1_p1_p0_p1_p0_p0_p1",
+    "name": "5L/P96 (P454)",
+    "source": "LL vakint-route factor images (alias route)"
+   },
+   {
+    "master_id": "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p2_p1_p0_p0_p0_p1_p1_p0_p1_p1_p0_p1_p0_p0_p1",
+    "name": "5L/P119 (P519)",
+    "source": "LL vakint-route factor images (alias route)"
+   },
+   {
+    "master_id": "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p2_p1_p0_p1_p0_p1_p1_p0_p1_p1_p0_p1_p0_p0_p1",
+    "name": "5L/P120 (P530)",
+    "source": "LL vakint-route factor images (alias route)"
+   }
+  ],
+  "factors": {
+   "L1_e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4_p1": {
+    "loop": 1,
+    "name": "P1",
+    "p": 1,
+    "products": [
+     "5L/P7 (P65)",
+     "5L/P11 (P76)",
+     "5L/P16 (P101)",
+     "5L/P21 (P129)",
+     "5L/P27 (P158)",
+     "5L/P35 (P182)",
+     "5L/P47 (P352)",
+     "5L/P49 (P356)",
+     "5L/P51 (P359)",
+     "5L/P55 (P369)",
+     "5L/P59 (P382)",
+     "5L/P86 (P442)",
+     "5L/P91 (P447)",
+     "5L/P93 (P449)",
+     "5L/P96 (P454)",
+     "5L/P119 (P519)",
+     "5L/P120 (P530)",
+     "5L/P12",
+     "5L/P13"
+    ]
+   },
+   "L2_ecdff6f39047e4dae21704b4de33a15ea53d9826e823496f7bdf62c1af498db1_p1_p1_p1": {
+    "loop": 2,
+    "name": "P2",
+    "p": 1,
+    "products": [
+     "5L/P11 (P76)",
+     "5L/P16 (P101)",
+     "5L/P28 (P159)",
+     "5L/P48 (P353)",
+     "5L/P12"
+    ]
+   },
+   "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p0": {
+    "loop": 3,
+    "name": "P13",
+    "p": 1,
+    "products": [
+     "5L/P12",
+     "5L/P13"
+    ]
+   },
+   "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p1": {
+    "loop": 3,
+    "name": "P14",
+    "p": 0,
+    "products": [
+     "5L/P28 (P159)",
+     "5L/P49 (P356)"
+    ]
+   },
+   "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p1": {
+    "loop": 3,
+    "name": "P38",
+    "p": 0,
+    "products": [
+     "5L/P27 (P158)",
+     "5L/P48 (P353)"
+    ]
+   },
+   "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p0_p1_p0_p1_p1_p1_p1_p0": {
+    "loop": 4,
+    "name": "P3",
+    "p": 0,
+    "products": [
+     "5L/P119 (P519)",
+     "5L/P120 (P530)"
+    ]
+   },
+   "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p0_p1_p1_p1_p1_p1_p0": {
+    "loop": 4,
+    "name": "P5",
+    "p": 0,
+    "products": [
+     "5L/P91 (P447)",
+     "5L/P119 (P519)",
+     "5L/P120 (P530)"
+    ]
+   },
+   "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p0_p0_p1_p1_p1_p0": {
+    "loop": 4,
+    "name": "P6",
+    "p": 0,
+    "products": [
+     "5L/P47 (P352)",
+     "5L/P51 (P359)",
+     "5L/P119 (P519)",
+     "5L/P120 (P530)"
+    ]
+   },
+   "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p0_p1_p1_p1_p1_p0": {
+    "loop": 4,
+    "name": "P7",
+    "p": 0,
+    "products": [
+     "5L/P119 (P519)",
+     "5L/P120 (P530)"
+    ]
+   },
+   "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p1_p1_p1_p1_p1_p0": {
+    "loop": 4,
+    "name": "P8",
+    "p": 0,
+    "products": [
+     "5L/P55 (P369)",
+     "5L/P119 (P519)",
+     "5L/P120 (P530)"
+    ]
+   },
+   "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p2_p1_p1_p1_p1_p1_p1_p0": {
+    "loop": 4,
+    "name": "P10",
+    "p": 0,
+    "products": [
+     "5L/P119 (P519)"
+    ]
+   },
+   "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p3_p1_p0_p0_p1_p1_p1_p0": {
+    "loop": 4,
+    "name": "P11",
+    "p": 0,
+    "products": [
+     "5L/P51 (P359)",
+     "5L/P119 (P519)",
+     "5L/P120 (P530)"
+    ]
+   },
+   "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p1_p0_p1_p1_p1_p1_p1_p1_p0": {
+    "loop": 4,
+    "name": "P13",
+    "p": 0,
+    "products": [
+     "5L/P21 (P129)"
+    ]
+   },
+   "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p1_p1_p1_p1_p1_p1_p1_p1_p0": {
+    "loop": 4,
+    "name": "P14",
+    "p": 0,
+    "products": [
+     "5L/P59 (P382)",
+     "5L/P120 (P530)"
+    ]
+   },
+   "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p2_p1_p0_p1_p1_p1_p1_p1_p0": {
+    "loop": 4,
+    "name": "P15",
+    "p": 0,
+    "products": [
+     "5L/P119 (P519)",
+     "5L/P120 (P530)"
+    ]
+   },
+   "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p2_p1_p1_p1_p1_p1_p1_p1_p0": {
+    "loop": 4,
+    "name": "P17",
+    "p": 0,
+    "products": [
+     "5L/P120 (P530)"
+    ]
+   },
+   "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p1_p1_p1_p1_p1_p1_p1_p1_p1_p0": {
+    "loop": 4,
+    "name": "P18",
+    "p": 0,
+    "products": [
+     "5L/P86 (P442)"
+    ]
+   },
+   "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p2_p1_p0_p1_p1_p1_p1_p1_p1_p0": {
+    "loop": 4,
+    "name": "P19",
+    "p": 0,
+    "products": [
+     "5L/P120 (P530)"
+    ]
+   },
+   "L4_bb95c283ed3c4ba9417f48ad48250f6b32944659c3bb2619f943de6a7b64ab76_p1_p0_p1_p1_p1_p1_p1_p1_p0_p0": {
+    "loop": 4,
+    "name": "P31",
+    "p": 0,
+    "products": [
+     "5L/P93 (P449)"
+    ]
+   },
+   "L4_bb95c283ed3c4ba9417f48ad48250f6b32944659c3bb2619f943de6a7b64ab76_p1_p1_p1_p1_p1_p1_p1_p1_p0_p0": {
+    "loop": 4,
+    "name": "P34",
+    "p": 0,
+    "products": [
+     "5L/P35 (P182)"
+    ]
+   },
+   "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p1_p1_p1_p1_p1_p1_p1_p1_p1_p0": {
+    "loop": 4,
+    "name": "P70",
+    "p": 0,
+    "products": [
+     "5L/P96 (P454)"
+    ]
+   }
+  }
  },
  "built_by": "basis-b/q4/tools/build_pole_depth.py (track T, tables-1106)"
 }
