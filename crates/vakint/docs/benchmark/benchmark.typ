@@ -12,11 +12,24 @@
 #let protocol = if selected == none { (:) } else { selected.protocol }
 #let same-source(run) = (
   selected != none
-    and ("gammaloop_sha", "rustred_sha", "build_profile").all(
+    and ("gammaloop_sha", "rustred_sha", "build_profile", "source_dirty").all(
       name => run.protocol.at(name) == protocol.at(name),
     )
 )
 #let measurements = results.runs.filter(same-source).map(run => run.measurements).flatten()
+
+// A filled exact file marks only the source it was computed on: gammaloop_sha
+// is the last commit outside docs/benchmark, rustred_sha the Cargo.lock pin.
+#let exact-marks = selected != none and exact.at("stub", default: false) != true
+#if exact-marks {
+  for name in ("gammaloop_sha", "rustred_sha") {
+    let (found, measured) = (exact.at(name, default: none), protocol.at(name))
+    assert(
+      found == measured,
+      message: "p_exact.json has " + name + " " + repr(found) + ", the selected run " + measured,
+    )
+  }
+}
 
 // The deterministic date of the document: the start of the selected run.
 #let stamp = protocol.at("started_utc", default: none)
@@ -77,9 +90,25 @@
     .map(m => m.at(field, default: none))
     .filter(is-num),
 )
-#let capped(cell, backend, threads, state) = samples(cell, backend, threads, state).any(
-  m => m.status == "capped",
-)
+// The cap a state went over, the longest when several ran; none if it did not.
+#let cap-of(cell, backend, threads, state) = {
+  let caps = samples(cell, backend, threads, state)
+    .filter(m => m.status == "capped")
+    .map(m => m.cap_seconds)
+  if caps.len() == 0 { none } else { calc.max(..caps) }
+}
+#let over-cap(seconds) = if seconds >= 60 {
+  "> " + str(int(calc.round(seconds / 60))) + " min"
+} else {
+  "> " + str(seconds) + " s"
+}
+// One repetition at four loops (Forcer only), the protocol's below.
+#let repetitions(loops) = if loops >= 4 { 1 } else { protocol.at("repetitions", default: 3) }
+// A dagger on a median over fewer repetitions than the protocol's.
+#let partial(cell, backend, threads, state, loops) = {
+  let done = samples(cell, backend, threads, state).filter(m => m.status == "ok").len()
+  if done > 0 and done < repetitions(loops) { "†" } else { "" }
+}
 
 #let ratio(a, b) = if is-num(a) and is-num(b) and b != 0 { a / b } else { none }
 
@@ -95,11 +124,11 @@
 
 // The mark of a grid cell, or of the physics cell of `loops` when `dots` is none.
 #let exact-mark(loops, dots, rank) = {
-  let found = exact.cells.find(c => if dots == none {
+  let found = if exact-marks { exact.cells.find(c => if dots == none {
     c.at("physics", default: none) not in (none, false) and c.L == loops
   } else {
     c.L == loops and c.at("dots", default: none) == dots and c.at("rank", default: none) == rank
-  })
+  }) }
   if found == none { [] } else if found.agree {
     text(fill: rgb("#1b7a3e"), size: 7pt)[#h(2pt)✓]
   } else {
@@ -107,17 +136,16 @@
   }
 }
 
-#let forcer-time(cell, threads) = {
-  let cold = seconds(cell, "forcer", threads, "cold")
-  if cold != none { cold } else { seconds(cell, "forcer", threads, "warm") }
-}
-#let forcer-text(cell, threads) = {
-  let value = forcer-time(cell, threads)
-  if value != none { fmt(value) } else if (
-    capped(cell, "forcer", threads, "cold") or capped(cell, "forcer", threads, "warm")
-  ) {
-    "> " + str(int(calc.round(protocol.at("cap_seconds", default: 1800) / 60))) + " min"
-  } else { "—" }
+// The Forcer state of the table: cold, against RustRed cold; warm at four
+// loops, the only state measured there.
+#let forcer-state(loops) = if loops >= 4 { "warm" } else { "cold" }
+#let forcer-time(cell, threads, loops) = seconds(cell, "forcer", threads, forcer-state(loops))
+#let timing-text(cell, backend, threads, state, loops) = {
+  let value = seconds(cell, backend, threads, state)
+  let cap = cap-of(cell, backend, threads, state)
+  if value != none {
+    fmt(value) + partial(cell, backend, threads, state, loops)
+  } else if cap != none { over-cap(cap) } else { "—" }
 }
 #let cell-count(cell, threads) = {
   let found = measurements.find(m => m.cell == cell)
@@ -128,28 +156,27 @@
 // exact mark and the integral count. Four loops are Forcer-only in v1.
 #let cmp-cell(cell, loops, threads, dots: none, rank: none) = {
   let own = seconds(cell, "rustred", threads, "cold")
-  let forcer = forcer-time(cell, threads)
-  let r = ratio(own, forcer)
+  let r = ratio(own, forcer-time(cell, threads, loops))
   let n = cell-count(cell, threads)
   table.cell(fill: if loops >= 4 { grey } else { ratio-fill(r) }, {
     set par(leading: 0.3em, justify: false)
     if dots == none { text(size: 6.5pt, weight: "bold")[#loops L #h(2pt)] }
     if loops >= 4 {
       text(size: 7pt, fill: luma(90))[n/a (M3)]
-    } else if own == none {
+    } else if own == none and cap-of(cell, "rustred", threads, "cold") == none {
       text(size: 7pt, fill: luma(90))[pending]
     } else {
-      text(weight: "bold", size: 8.2pt, fmt(own))
+      text(weight: "bold", size: 8.2pt, timing-text(cell, "rustred", threads, "cold", loops))
     }
     exact-mark(loops, dots, rank)
     linebreak()
-    text(size: 6.5pt, fill: luma(40))[F #forcer-text(cell, threads)]
+    text(size: 6.5pt, fill: luma(40))[F #timing-text(cell, "forcer", threads, forcer-state(loops), loops)]
     if r != none { text(size: 6.8pt, weight: "semibold")[#h(2pt)×#fmt-ratio(r)] }
     if own != none {
       linebreak()
       text(size: 5.6pt, fill: luma(45))[
-        ws #fmt(seconds(cell, "rustred", threads, "warm-same"))
-        #h(1pt) wc #fmt(seconds(cell, "rustred", threads, "warm-shared"))
+        ws #timing-text(cell, "rustred", threads, "warm-same", loops)
+        #h(1pt) wc #timing-text(cell, "rustred", threads, "warm-shared", loops)
       ]
     }
     if n != none {
@@ -200,7 +227,7 @@
   for dots in (0, 1, 2) {
     for rank in (4, 6, 8) {
       let cell = "L3_d" + str(dots) + "_r" + str(rank)
-      let r = ratio(seconds(cell, "rustred", 16, "cold"), forcer-time(cell, 16))
+      let r = ratio(seconds(cell, "rustred", 16, "cold"), forcer-time(cell, 16, 3))
       if r != none { values.push(r) }
     }
   }
@@ -223,7 +250,7 @@
   #v(-0.5em)
   #text(9pt, fill: luma(100))[
     #if date == none [no selected run] else { date.display("[year]-[month]-[day]") }
-    #if selected != none [· #protocol.host · gammaloop #protocol.gammaloop_sha.slice(0, 9) · rustred #protocol.rustred_sha.slice(0, 8)]
+    #if selected != none [· #protocol.host · gammaloop #protocol.gammaloop_sha.slice(0, 9)#if protocol.source_dirty [ (dirty)] · rustred #protocol.rustred_sha.slice(0, 8)]
   ]
 ]
 
@@ -233,7 +260,8 @@
   numerator of that rank. Bold: RustRed cold (seconds, median). F: Forcer. ×: the ratio RustRed cold
   over Forcer, cold against cold because neither replays results; green is RustRed faster.
   ws, wc: RustRed warm on its own cache, and warm on one cache shared along the cells of that loop
-  count. ✓: result exactly equal to Forcer's. n: integrals in the input. Grey: Forcer only in v1.
+  count. ✓: result exactly equal to Forcer's. n: integrals in the input. †: fewer repetitions than
+  the protocol. Grey: Forcer only in v1.
 ]
 
 #block(stroke: 0.6pt + luma(200), inset: 6pt, radius: 3pt, width: 100%)[
@@ -259,12 +287,21 @@
 
 // ------------------------------------------------------------ methodology --
 
+// A sum over a part of the measured cells would read as the whole: a cell
+// without the sub-line (no math span measured) leaves a dash.
 #let per-loops(backend, state, field) = (1, 2, 3, 4).map(loops => {
-  let cells = measurements.filter(m => m.loops == loops).map(m => m.cell).dedup()
+  let cells = (
+    measurements
+      .filter(m => (
+        m.loops == loops and m.backend == backend and m.threads == 1 and m.state == state and m.status == "ok"
+      ))
+      .map(m => m.cell)
+      .dedup()
+  )
   let values = cells
     .map(cell => seconds(cell, backend, 1, state, field: field))
     .filter(is-num)
-  if values.len() == 0 { [—] } else { [#fmt(values.sum())] }
+  if values.len() == 0 or values.len() < cells.len() { [—] } else { [#fmt(values.sum())] }
 })
 
 #block(breakable: false)[
@@ -295,11 +332,12 @@
   projector, external momentum kept.
 
   *Provenance.* #if selected == none [No selected run.] else [
-    Run #raw(selected.id), profile #protocol.build_profile,
+    Run #raw(selected.id), profile #protocol.build_profile#if protocol.source_dirty [, dirty tree],
     #raw(protocol.form_version.split("\n").first()), Forcer #protocol.forcer_commit.slice(0, 7),
     #protocol.cpu_model on #protocol.host,
     CPUs #protocol.cpus.pairs().map(pair => pair.at(0) + " thread: " + pair.at(1)).join("; "),
     binding #if protocol.numactl == none [none] else { raw(protocol.numactl) },
+    RustRed arithmetic #protocol.ordered_weight_arithmetic.pairs().map(pair => pair.at(0) + " thread: " + pair.at(1)).join("; "),
     #raw(str(measurements.len())) measurements in `data/p_results.json`.
   ]
 ]
