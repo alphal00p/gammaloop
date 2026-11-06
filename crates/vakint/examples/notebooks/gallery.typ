@@ -71,8 +71,14 @@ second, processed and frontier keys (with the peak), step-cache hits and misses
 and memory. Page 05 shows it for background jobs (from the job's
 #raw("monitor.json")) and for in-kernel runs; page 03 shows the recorded
 five-loop run's final card. During these calls Ctrl-C, or marimo's Interrupt in
-edit mode, stops the native work within a moment and leaves the engine usable;
-a cancelled load leaves the previous registry active. Application mode (the
+edit mode, stops the native work and leaves the engine usable; a cancelled load
+leaves the previous registry active. Reductions stop within a fraction of a
+second (measured on the five-loop zero-momentum benchmark: 0.44 s after a
+terminal Ctrl-C, 0.5 s after marimo's Interrupt, both about a minute in), except
+in two native stretches without checkpoints that finish first: the five-loop
+application load step of a 1L–5L load (up to about 30 s) and the modular lift
+after the Ordered schedule is done (the monitor then shows the schedule complete;
+about 20 s for that benchmark). Application mode (the
 served gallery) has no interrupt; there every long run is a cancellable
 background job. A host without the #raw("progress") keyword still runs every
 page; the monitor then appears only for background jobs.
