@@ -7151,30 +7151,21 @@ Evaluated (n_loops=1, mu_r=1) :
         // without their user data, normalization callbacks, and other registered metadata.
         for user_f in user_functions.iter() {
             let litteral_form_name = format!("[{}]", user_f.get_name());
-            if user_f.get_namespace() == NAMESPACE || user_f.get_namespace() == "symbolica" {
-                //            if (user_f.get_namespace() == NAMESPACE || user_f.get_namespace() == "symbolica") && user_f.get_attributes().is_empty() {
-                string_replacements.insert(
-                    user_f.get_stripped_name().into(),
-                    litteral_form_name.clone(),
-                );
-                // processed_str = processed_str.replace(user_f.get_stripped_name(), &litteral_form_name);
-            } else {
-                string_replacements.insert(get_full_name(user_f), litteral_form_name.clone());
-            }
+            // Match the same canonical spelling and namespace transform as
+            // the serialized expression. Symbolica constants and extension
+            // functions can retain qualified names, unlike its builtin heads.
+            string_replacements.insert(
+                undress_vakint_symbols(&get_full_name(user_f)),
+                litteral_form_name.clone(),
+            );
             form_header_functions.push(litteral_form_name);
         }
         for user_v in user_variables.iter() {
             let litteral_form_name = format!("[{}]", user_v.get_name());
-            if user_v.get_namespace() == NAMESPACE || user_v.get_namespace() == "symbolica" {
-                //            if (user_v.get_namespace() == NAMESPACE || user_v.get_namespace() == "symbolica") && user_v.get_attributes().is_empty() {
-                string_replacements.insert(
-                    user_v.get_stripped_name().into(),
-                    litteral_form_name.clone(),
-                );
-                // processed_str = processed_str.replace(user_v.get_stripped_name(), &litteral_form_name);
-            } else {
-                string_replacements.insert(get_full_name(user_v), litteral_form_name.clone());
-            }
+            string_replacements.insert(
+                undress_vakint_symbols(&get_full_name(user_v)),
+                litteral_form_name.clone(),
+            );
             form_header_symbols.push(litteral_form_name);
         }
         let mut form_header_additions = vec![];
@@ -8428,6 +8419,46 @@ mod tests {
                     .unwrap();
                 assert!(!serialized.contains('𝑖'), "{serialized}");
                 assert!(!serialized.contains("**"), "{serialized}");
+                let restored = vakint
+                    .process_form_output(
+                        &settings,
+                        serialized.clone(),
+                        indices,
+                        BTreeMap::default(),
+                    )
+                    .unwrap();
+                assert_eq!(restored, expression, "FORM input: {serialized}");
+            }
+        }
+    }
+
+    #[test]
+    fn form_serialization_preserves_qualified_symbolica_constants_and_functions() {
+        let vakint = Vakint::new().unwrap();
+        let settings = VakintSettings::default();
+        let euler_gamma = Atom::var(symbolica::transcendental::euler_gamma());
+        let scalar = symbolica::symbol!("symbolica::form_export_scalar"; Real);
+        let symmetric = symbolica::symbol!("symbolica::form_export_function"; Symmetric);
+        let x = vk_parse!("form_export_test::x").unwrap();
+        let epsilon = vk_parse!(&settings.epsilon_symbol).unwrap();
+        for expression in [
+            (&euler_gamma + 1) * &x / &epsilon,
+            euler_gamma.pow(2) + function!(Symbol::LOG, &x),
+            function!(symmetric, &euler_gamma, &x) * Atom::var(scalar),
+        ] {
+            for substitute_indices in [false, true] {
+                let (header, serialized, indices) = vakint
+                    .sanitize_user_expressions(
+                        &settings,
+                        expression.as_view(),
+                        substitute_indices,
+                        &[],
+                    )
+                    .unwrap();
+                assert!(header.contains("[symbolica::γ]"), "{header}");
+                assert!(serialized.contains("[symbolica::γ]"), "{serialized}");
+                assert!(!serialized.contains("::{}::"), "{serialized}");
+                assert!(!serialized.contains("symbolica::["), "{serialized}");
                 let restored = vakint
                     .process_form_output(
                         &settings,

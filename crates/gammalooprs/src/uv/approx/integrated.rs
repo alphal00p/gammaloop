@@ -4,6 +4,7 @@ use gammaloop_tracing_filter::debug_instrument;
 use idenso::{
     CookMode, CookSettings,
     dirac::GammaSimplifySettings,
+    shorthands::UndoShorthands,
     tensor::{AlgebraSettings, ContractSettings, SymbolicNetExt, SymbolicNetParse, SymbolicTensor},
 };
 
@@ -365,7 +366,7 @@ impl Integrated<'_> {
         Ok(res)
     }
 
-    fn dimensionally_regularized(numerator: &Atom) -> Atom {
+    pub(crate) fn dimensionally_regularized(numerator: &Atom) -> Atom {
         let minkowski = Minkowski {}.to_symbolic([GS.dim]).get_symbol().unwrap();
         let dimension = Atom::var(GS.dim);
         let regulated = Atom::num(4) - Atom::num(2) * Atom::var(GS.dim_epsilon);
@@ -381,7 +382,7 @@ impl Integrated<'_> {
         })
     }
 
-    fn restore_lorentz_dimensions(numerator: &Atom) -> Atom {
+    pub(crate) fn restore_lorentz_dimensions(numerator: &Atom) -> Atom {
         let mink = Minkowski {}.new_rep(GS.dim);
         let minkowski = mink.to_symbolic([]).get_symbol().unwrap();
         let regulated_dimension = Atom::num(4) - Atom::num(2) * Atom::var(GS.dim_epsilon);
@@ -393,7 +394,7 @@ impl Integrated<'_> {
             .with(function!(minkowski, GS.dim, W_.x___))
     }
 
-    fn restore_numerator(mut res: Atom, topology_order: usize) -> Atom {
+    pub(crate) fn restore_numerator(mut res: Atom, topology_order: usize) -> Atom {
         let mink = Minkowski {}.new_rep(GS.dim);
         res = Self::restore_lorentz_dimensions(&res);
         res = res
@@ -491,6 +492,10 @@ pub(crate) fn to_vakint_integrand<
 ) -> Result<VakintExpression> {
     let reduced_label = reduced.string_label();
     let dependent_subgraph_label = dependent_subgraph.string_label();
+    // Materialize before legacy sum-interface validation: a closed chain can
+    // contain an identically zero antisymmetric factor, which must disappear
+    // before its apparent open slots are compared with the other summands.
+    let integrand = integrand.undo_trace::<Aind>()?.undo_chain::<Aind>()?;
     let mut integrand_vakint = integrand
         .parse_to_symbolic_net::<Aind>(&ParseSettings {
             shorthand_parsing: ShorthandParsing::Expand {
@@ -1239,11 +1244,64 @@ impl VakintMomentumSolution {
 
 #[cfg(test)]
 mod tests {
-    use crate::initialisation::test_initialise;
+    use crate::{
+        finalized_runtime_dot, graph::parse::IntoFinalizedRuntimeGraph,
+        initialisation::test_initialise,
+    };
     use idenso::representations::Bispinor;
     use spenso::structure::slot::{DummyAind, ParseableAind};
 
     use super::*;
+
+    #[test]
+    fn vakint_bridge_materializes_zero_color_chains_before_parsing_sums() -> Result<()> {
+        test_initialise()?;
+        let graph: crate::graph::Graph = finalized_runtime_dot!(
+            digraph G {
+                graph [projector=1];
+                node [num=1];
+                A -> A [particle="scalar_1" num=1 id=0 lmb_id=0
+                    source="{ufo_order:0}" sink="{ufo_order:1}"];
+            }, "scalars"
+        )?;
+        // The last generator is f(a,b,b), so both apparent tensor summands
+        // vanish. Legacy parsing used to compare their exposed interfaces
+        // before opening the chain and discovering that zero.
+        let chain = parse!(
+            "spenso::chain(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(11,1)),spenso::f(spenso::in,spenso::out,spenso::coad(8,hedge(1,1))),spenso::f(spenso::in,spenso::out,spenso::coad(8,hedge(11,1))))"
+        );
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let metric = function!(
+            ETS.metric,
+            mink.to_symbolic([Aind::Hedge(0, 1).to_atom()]),
+            mink.to_symbolic([Aind::Hedge(1, 1).to_atom()])
+        );
+        let momentum = function!(GS.emr_mom, 0);
+        let vector = function!(GS.emr_mom, 0, mink.to_symbolic([]));
+        let denominator = function!(
+            GS.den,
+            0,
+            momentum,
+            Atom::var(GS.m_uv_expansion).pow(2),
+            mink.inner_product(&vector, &vector) - Atom::var(GS.m_uv_vacuum).pow(2)
+        );
+        let integrand = (Atom::i()
+            * chain
+            * metric
+            * (denominator.pow(-1) - Atom::var(GS.m_uv_expansion).pow(2) / denominator.pow(2)))
+        .expand();
+        assert!(!integrand.is_zero());
+        let result = to_vakint_integrand(
+            &integrand,
+            &graph.underlying,
+            &graph.full_filter(),
+            &graph.empty_subgraph::<SuBitGraph>(),
+            &VakintSettings::default(),
+            false,
+        )?;
+        assert!(result.0.iter().all(|term| term.numerator.is_zero()));
+        Ok(())
+    }
 
     #[test]
     fn projector_lorentz_metadata_is_constant_during_laurent_expansion() {

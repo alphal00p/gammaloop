@@ -141,6 +141,7 @@ pub mod hedge_poset;
 mod marker;
 mod orchestrator;
 pub mod renormalization;
+pub mod rstar;
 pub use renormalization::{RenormalizationPart, RenormalizationStats};
 pub mod settings;
 pub use settings::{

@@ -1342,6 +1342,32 @@ impl Forests {
         Ok(terms)
     }
 
+    /// Sum an original support's UV counterterm before enclosing tensor
+    /// projectors, overall factors, or external momentum substitutions act.
+    /// Each stored forest contribution already owns its subtraction signs.
+    pub(crate) fn counterterm_for_support(&self, support: &SuBitGraph) -> Result<Atom> {
+        let mut result = Atom::Zero;
+        let mut found = false;
+        for (node, _, operation) in self.graph.iter_nodes() {
+            if self.source_spinney(node).filter() != support {
+                continue;
+            }
+            found = true;
+            result += self
+                .compute_store
+                .require(operation)?
+                .integrated(operation)?
+                .physical_pole_atom();
+        }
+        if !found {
+            return Err(eyre!(
+                "UV forest has no counterterm for support {}",
+                support.string_label()
+            ));
+        }
+        Ok(result)
+    }
+
     pub(crate) fn renormalization_part_of_ends(
         &self,
         graph: &Graph,

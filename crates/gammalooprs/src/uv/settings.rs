@@ -453,6 +453,9 @@ impl VakintSettings {
                             expand_masters: self.fmft.expand_masters,
                             susbstitute_masters: self.fmft.susbstitute_masters,
                         }),
+                        "forcer" => EvaluationMethod::Forcer(vakint::ForcerOptions {
+                            master_mode: vakint::RustRedMasterMode::Symbolic,
+                        }),
                         "pysecdec" => EvaluationMethod::PySecDec(PySecDecOptions {
                             quiet: self.pysecdec.quiet,
                             relative_precision: self.pysecdec.relative_precision,
@@ -473,6 +476,7 @@ impl VakintSettings {
             integral_normalization_factor: match self.normalization.as_str() {
                 "MSbar" => vakint::LoopNormalizationFactor::MSbar,
                 "FMFTandMATAD" => vakint::LoopNormalizationFactor::FMFTandMATAD,
+                "GScheme" => vakint::LoopNormalizationFactor::GScheme,
                 "pySecDec" => vakint::LoopNormalizationFactor::pySecDec,
                 _ => vakint::LoopNormalizationFactor::Custom(self.normalization.clone()),
             },
@@ -488,7 +492,7 @@ impl Default for VakintSettings {
         Self {
             form_exe_path: "form".to_string(),
             python_exe_path: "python3".to_string(),
-            // Supported evaluation methods: "alphaloop", "matad", "fmft" and "pysecdec"
+            // Forcer can be selected explicitly for massless propagator integrals.
             evaluation_methods: vec![
                 "alphaloop".to_string(),
                 "matad".to_string(),

@@ -153,6 +153,7 @@
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
+      "feynkit-tensor",
       "gammaloop-tracing-filter",
       "gammaloop-workspace-hack",
       "idenso",
@@ -460,6 +461,7 @@
       "feynkit-graph": [],
       "feynkit-kinematics": [],
       "feynkit-model": [],
+      "feynkit-tensor": [],
       "gammaloop-tracing-filter": [
         "symbolica"
       ],
@@ -1500,6 +1502,7 @@
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
+      "feynkit-tensor",
       "gammaloop-tracing-filter",
       "gammaloop-workspace-hack",
       "idenso",
@@ -1814,6 +1817,7 @@
       "feynkit-graph": [],
       "feynkit-kinematics": [],
       "feynkit-model": [],
+      "feynkit-tensor": [],
       "gammaloop-tracing-filter": [
         "symbolica"
       ],
