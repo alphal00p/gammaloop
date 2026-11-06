@@ -37,7 +37,7 @@ fn charge(
     limit: Option<usize>,
     resource: &'static str,
 ) -> Result<(), VakintError> {
-    symbolica::utils::resources::checkpoint()?;
+    crate::execution::checkpoint()?;
     let requested = count.saturating_add(1);
     if let Some(limit) = limit
         && requested > limit
@@ -185,7 +185,7 @@ impl MomentumInput {
                     .map(|&slot| &target.propagators[permutation[slot]].momentum)
                     .collect::<Vec<_>>();
                 for signs in 0..orientations {
-                    symbolica::utils::resources::checkpoint()?;
+                    crate::execution::checkpoint()?;
                     let system = sources
                         .iter()
                         .zip(&images)
@@ -707,7 +707,7 @@ impl MatroidSearch<'_> {
     }
 
     fn assign(&mut self) -> Result<bool, VakintError> {
-        symbolica::utils::resources::checkpoint()?;
+        crate::execution::checkpoint()?;
         let position = self.images.len();
         if position == self.basis.len() {
             return self.complete();

@@ -863,6 +863,7 @@ impl Vakint {
             let identity = super::cache::saved_application_digest(&data, &path)?;
             log::debug!(target: "vakint::saved_application", "phase=native_load_begin");
             let route_addon = route_preparation_addon(&data, official_path.as_deref(), &path)?;
+            crate::execution::checkpoint().map_err(VakintError::from)?;
             let prepared = load_saved_application_with_route_addon::<15>(
                 &path,
                 options,
@@ -890,6 +891,7 @@ impl Vakint {
                 .into());
             }
             log::debug!(target: "vakint::saved_application", "phase=native_load_end elapsed_seconds={:.6}", started.elapsed().as_secs_f64());
+            crate::execution::checkpoint().map_err(VakintError::from)?;
             let application = Arc::new(SavedApplication::new(
                 prepared,
                 path.clone(),
@@ -1141,7 +1143,7 @@ impl Vakint {
             drop(expression);
             log::debug!(target: "vakint::saved_application", "phase=scalar_input_split elapsed_seconds={:.6}", split_started.elapsed().as_secs_f64());
             for mut term in terms {
-                symbolica::utils::resources::checkpoint()?;
+                crate::execution::checkpoint()?;
                 let matching_started = std::time::Instant::now();
                 MonitorContext::native_phase(observation.as_deref_mut(), "routing_verification", None);
                 // A term equal to a package master is rewritten as the master's

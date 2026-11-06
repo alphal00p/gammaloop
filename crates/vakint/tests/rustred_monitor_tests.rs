@@ -13,8 +13,9 @@ use feynkit_kinematics::Kinematics;
 use serde_json::Value;
 use symbolica::atom::Atom;
 use vakint::{
-    LoopNormalizationFactor, MasterSymbol, RustRedMasterMode, RustRedMonitorOptions, Vakint,
-    VakintExpression, VakintSettings, diagram_integral::DiagramIntegralOptions, vakint_parse,
+    LoopNormalizationFactor, MasterSymbol, RustRedMasterMode, RustRedMonitorOptions,
+    RustRedProgressSink, Vakint, VakintExpression, VakintSettings,
+    diagram_integral::DiagramIntegralOptions, vakint_parse,
 };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -106,6 +107,49 @@ fn ordinary_one_loop_monitor_defaults_are_off_and_path_alone_is_observational() 
             .collect::<std::io::Result<Vec<_>>>()?,
         vec![path]
     );
+    Ok(())
+}
+
+#[test]
+fn progress_sink_alone_enables_monitor_and_ends_with_final_model() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let engine = Vakint::new()?;
+    let settings = settings(RustRedMasterMode::Retain);
+    let input = vakint_parse!("topo(I1L(1,2))-(1-ep)*topo(I1L(1,1))")?;
+    let reference = engine.evaluate(&settings, input.as_view())?;
+    let sink = RustRedProgressSink::default();
+    let options = RustRedMonitorOptions {
+        // No terminal and no file: only the in-memory model.
+        progress_sink: Some(sink.clone()),
+        interval: Duration::ZERO,
+        ..Default::default()
+    };
+    assert!(options.enabled());
+    options.validate()?;
+    let cwd = std::env::current_dir()?;
+    let before = fs::read_dir(&cwd)?.count();
+    assert_eq!(
+        engine.evaluate_with_monitor(&settings, input.as_view(), &options)?,
+        reference
+    );
+    let (sequence, model) = sink.latest_since(0).expect("at least one model");
+    assert!(sequence >= 1);
+    // The final drain stores the finished request's model.
+    assert_eq!(model["status"], "Succeeded");
+    assert_eq!(model["api_status"], "Succeeded");
+    assert!(model["elapsed_seconds"].as_f64().is_some_and(|s| s >= 0.0));
+    assert!(sink.latest_since(sequence).is_none());
+    // A second call on the same sink continues its sequence.
+    assert_eq!(
+        engine.evaluate_integral_with_monitor(&settings, input.as_view(), &options)?,
+        engine.evaluate_integral(&settings, input.as_view())?
+    );
+    let (next, model) = sink.latest_since(sequence).expect("a new model");
+    assert!(next > sequence);
+    assert_eq!(model["status"], "Succeeded");
+    // Nothing was written: neither in the test directory nor the cwd.
+    assert_eq!(fs::read_dir(directory.path())?.count(), 0);
+    assert_eq!(fs::read_dir(&cwd)?.count(), before);
     Ok(())
 }
 
@@ -202,14 +246,13 @@ fn five_loop_monitor_preserves_full_results_and_final_substitution_errors() -> R
         .as_array()
         .ok_or("5L manifest has no masters")?
         .iter()
-        .filter(|master| {
+        .rfind(|master| {
             master["powers"].as_array().is_some_and(|powers| {
                 powers
                     .iter()
                     .all(|power| power.as_i64().is_some_and(|power| power >= 0))
             })
         })
-        .last()
         .ok_or("authenticated campaign declares no positive-power scalar master")?;
     let name = metadata["name"].as_str().ok_or("5L master has no name")?;
     let identity = metadata["master_id"]

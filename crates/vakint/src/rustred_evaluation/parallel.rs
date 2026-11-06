@@ -8,7 +8,8 @@ use symbolica::utils::resources::ResourceBudget;
 /// results in input order, so every caller-visible effect stays independent
 /// of scheduling. With `threads <= 1` or fewer than two items the map runs
 /// inline on the calling thread: no pool and no spawned thread. Workers inherit
-/// the caller's Symbolica resource budgets; a worker panic is re-raised here.
+/// the caller's Symbolica resource budgets and request scope
+/// ([`crate::Cancellation`]); a worker panic is re-raised here.
 pub(crate) fn map_ordered<T: Sync, R: Send>(
     threads: usize,
     items: &[T],
@@ -38,6 +39,7 @@ pub(crate) fn map_ordered_by_cost<T: Sync, R: Send>(
     let mut order = (0..items.len()).collect::<Vec<_>>();
     order.sort_by_key(|index| std::cmp::Reverse(cost(&items[*index])));
     let budget = ResourceBudget::capture_current();
+    let request = crate::Cancellation::current();
     let next = AtomicUsize::new(0);
     let mut results = (0..items.len()).map(|_| None).collect::<Vec<_>>();
     std::thread::scope(|scope| {
@@ -45,13 +47,19 @@ pub(crate) fn map_ordered_by_cost<T: Sync, R: Send>(
             .map(|_| {
                 scope.spawn(|| {
                     budget.run_captured(|| {
-                        let mut done = Vec::new();
-                        loop {
-                            let Some(&index) = order.get(next.fetch_add(1, Ordering::Relaxed))
-                            else {
-                                break done;
-                            };
-                            done.push((index, task(index, &items[index])));
+                        let work = || {
+                            let mut done = Vec::new();
+                            loop {
+                                let Some(&index) = order.get(next.fetch_add(1, Ordering::Relaxed))
+                                else {
+                                    break done;
+                                };
+                                done.push((index, task(index, &items[index])));
+                            }
+                        };
+                        match &request {
+                            Some(request) => request.run_coarse(work),
+                            None => work(),
                         }
                     })
                 })

@@ -14,7 +14,7 @@ use rustred::reduction::{Reducer, ReductionLimits, ReductionStatistics};
 use rustred::sector::{Mask, symmetry};
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::prelude::{Q, Z};
-use symbolica::utils::resources::{self, ResourceLimitError, ResourceLimits};
+use symbolica::utils::resources::{ResourceLimitError, ResourceLimits};
 
 use super::{artifact::shipped_family_for_loop_count, data::RustRedData};
 use crate::symbols::S;
@@ -60,7 +60,7 @@ fn error(value: impl std::error::Error + 'static) -> FactorProviderError {
 }
 
 fn share_family(family: &IntegralFamily) -> Result<Arc<IntegralFamily>, FactorProviderError> {
-    resources::checkpoint()?;
+    crate::execution::checkpoint()?;
     let shared = IntegralFamily::new_with_limits(
         family.name(),
         family.loop_momenta().to_vec(),
@@ -92,7 +92,7 @@ fn momentum_family(
     family: &IntegralFamily,
     slots: &[usize],
 ) -> Result<MomentumFamily, FactorProviderError> {
-    resources::checkpoint()?;
+    crate::execution::checkpoint()?;
     if family.external_count() != 0 {
         return Err("lower factor is not a vacuum family".into());
     }
@@ -124,7 +124,7 @@ fn momentum_family(
 }
 
 fn physical_family(momenta: &[Atom], loops: usize) -> Result<MomentumFamily, FactorProviderError> {
-    resources::checkpoint()?;
+    crate::execution::checkpoint()?;
     let (basis, kinematics) = kinematics(loops)?;
     let denominators = momenta
         .iter()
@@ -572,7 +572,7 @@ mod tests {
         assert!(!ShippedFactorProvider::error_is_missing_coverage(&refusal));
         // Inspect the original error after leaving the constrained scope; a
         // fresh global poll would succeed here and lose the actual cause.
-        assert!(resources::checkpoint().is_ok());
+        assert!(symbolica::utils::resources::checkpoint().is_ok());
         assert!(FactorProviderError::find_resource(&refusal).is_some());
         let recovered = provider
             .reduce(family, &target, Default::default())

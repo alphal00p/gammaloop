@@ -195,7 +195,7 @@ pub(super) fn validate_loop_directory(
 
 impl Source {
     fn read(&self, path: &str) -> Result<Vec<u8>, RustRedEvaluationError> {
-        resources::checkpoint()?;
+        crate::execution::checkpoint()?;
         let relative = relative_path(path)?;
         match self {
             Self::Override {
@@ -274,7 +274,7 @@ impl LoopData {
             if data.manifest.is_unused_at_runtime(path) {
                 continue;
             }
-            resources::checkpoint()?;
+            crate::execution::checkpoint()?;
             data.read(path)?;
         }
         let coverage: serde_json::Value =
@@ -365,7 +365,7 @@ impl RustRedData {
         manifest: &ReleaseManifest,
         max_loop_count: usize,
     ) -> Result<BTreeMap<usize, Arc<LoopData>>, RustRedEvaluationError> {
-        resources::checkpoint()?;
+        crate::execution::checkpoint()?;
         if manifest.schema != RELEASE_SCHEMA || !(1..=5).contains(&max_loop_count) {
             return Err(failure(
                 "unsupported external-data schema or loop count (expected 1 through 5)",
@@ -428,7 +428,7 @@ impl RustRedData {
             four_loop,
             masters,
         });
-        resources::checkpoint()?;
+        crate::execution::checkpoint()?;
         Ok(data)
     }
 
@@ -515,14 +515,14 @@ impl RustRedData {
     ) -> Result<Arc<Self>, RustRedEvaluationError> {
         // A constrained first caller must not poison offline construction for
         // every later engine. Only a fully validated snapshot is shared.
-        resources::checkpoint()?;
+        crate::execution::checkpoint()?;
         let data = cell.get_or_try_init(|| {
             let source = Source::Vendored;
             let manifest =
                 serde_json::from_slice(&source.read("manifest.json")?).map_err(failure)?;
             Self::load(source, manifest, 3)
         })?;
-        resources::checkpoint()?;
+        crate::execution::checkpoint()?;
         Ok(Arc::clone(data))
     }
 
@@ -681,7 +681,7 @@ impl Vakint {
                 ..Default::default()
             })?;
         }
-        resources::checkpoint()?;
+        crate::execution::checkpoint()?;
         *self = staged;
         // Programs whose rule tables changed are no longer reachable.
         self.detach_superseded_ordered_caches();

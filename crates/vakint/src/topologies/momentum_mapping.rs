@@ -292,7 +292,7 @@ impl MomentumInput {
             .ok_or_else(|| invalid("momentum-map orientation count overflow"))?;
         let mut verified = None;
         for signs in 0..attempts {
-            symbolica::utils::resources::checkpoint()?;
+            crate::execution::checkpoint()?;
             let system = sources
                 .iter()
                 .zip(&images)

@@ -141,6 +141,7 @@ impl FourLoopPrograms {
             .map(|(input, descriptor)| load(input, descriptor, data_version))
             .collect::<Result<Vec<_>, _>>()
             .map_err(super::data::failure)?;
+        crate::execution::checkpoint()?;
         Ok(Self {
             #[cfg(test)]
             inputs,
@@ -276,8 +277,12 @@ fn load(
     descriptor: &Descriptor,
     data_version: &str,
 ) -> Result<LoadedProgram, String> {
+    // A cancelled request stops between the load steps of a program.
+    let checkpoint = || crate::execution::checkpoint().map_err(|error| error.to_string());
+    checkpoint()?;
     let bytes = super::experimental::compressed::decode(&input.program, MAX_PROGRAM_BYTES)
         .map_err(|error| format!("decompress {}: {error}", input.label))?;
+    checkpoint()?;
     let limits = CandidateBundleLimits {
         max_bundle_bytes: MAX_PROGRAM_BYTES,
         max_collection_entries: 8_000_000,
@@ -290,18 +295,21 @@ fn load(
     if family.fingerprint() != descriptor.family_fingerprint {
         return Err("shipped program differs from its physical/auxiliary descriptor".into());
     }
+    checkpoint()?;
     let catalog = OfflineTerminalCatalog::decode_generated_compressed(
         &input.catalog,
         family.fingerprint(),
         family.denominator_count(),
         catalog_limits(),
     )?;
+    checkpoint()?;
     let mut native = NativeCandidate::from_reducer_with_terminal_normalization(
         Arc::new(family),
         descriptor.physical_momenta.clone(),
         reducer,
         &input.normalization,
     )?;
+    checkpoint()?;
     catalog.require_complete()?;
     catalog.require_exact_keys(native.output_terminals())?;
     native.preserve_unresolved()?;

@@ -574,6 +574,10 @@ fn install_pack(
             archive
                 .write_all(&buffer[..n])
                 .map_err(|error| Transfer::Final(data::failure(error)))?;
+            // A cancelled or over-budget request stops between chunks; the
+            // scratch directory keeps a partial archive out of the cache.
+            crate::execution::checkpoint()
+                .map_err(|error| Transfer::Final(data::failure(error)))?;
         }
         if total < expected_bytes {
             return Err(Transfer::Transport(data::failure(

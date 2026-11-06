@@ -26,8 +26,8 @@ pub mod utils;
 use ahash::RandomState;
 use colored::Colorize;
 pub use execution::{
-    DEFAULT_ORDERED_WEIGHT_ARITHMETIC, MAX_DEFAULT_N_CORES, OrderedWeightArithmetic,
-    default_n_cores,
+    CANCELLED_REQUEST_MESSAGE, Cancellation, DEFAULT_ORDERED_WEIGHT_ARITHMETIC,
+    MAX_DEFAULT_N_CORES, OrderedWeightArithmetic, default_n_cores,
 };
 use eyre::Result;
 use feynkit_tensor::TensorReducer;
@@ -66,7 +66,7 @@ pub use rustred_evaluation::five_loop::{RustRedSymbolicEvaluation, RustRedWitnes
 use rustred_evaluation::monitor::{CallerProgress, MonitorContext};
 pub use rustred_evaluation::monitor::{
     RustRedMonitorDisplay, RustRedMonitorOptions, RustRedMonitorScope, RustRedMonitorWork,
-    RustRedSnapshotViewer,
+    RustRedProgressSink, RustRedSnapshotViewer,
 };
 pub use rustred_evaluation::{
     DEFAULT_ORDERED_CACHE_MAX_RESIDENT_BYTES, OrderedCacheAutosave, OrderedCacheMode,
@@ -2450,9 +2450,9 @@ impl VakintSettings {
         operation: impl FnOnce() -> Result<T, VakintError>,
     ) -> Result<T, VakintError> {
         ResourceBudget::new(self.rustred_resources).run(|| {
-            resources::checkpoint()?;
+            crate::execution::checkpoint()?;
             let result = operation()?;
-            resources::checkpoint()?;
+            crate::execution::checkpoint()?;
             Ok(result)
         })
     }
@@ -4752,7 +4752,7 @@ impl VakintExpression {
         mut match_input: impl FnMut(AtomView) -> Result<Option<ReplacementRules>, VakintError>,
     ) -> Result<(), VakintError> {
         for term in self.0.iter_mut() {
-            resources::checkpoint()?;
+            crate::execution::checkpoint()?;
             if let Some(replacement_rules) = match_input(term.integral.as_view())? {
                 //println!("replacement_rules = {}", replacement_rules,);
                 term.canonicalize(settings, &replacement_rules, short_form)?;
@@ -4772,7 +4772,7 @@ impl VakintExpression {
     ) -> Result<(), VakintError> {
         settings.with_resource_budget(|| {
             for term in self.0.iter_mut() {
-                resources::checkpoint()?;
+                crate::execution::checkpoint()?;
                 term.tensor_reduce(vakint, settings)?;
             }
             Ok(())
@@ -4805,7 +4805,7 @@ impl VakintExpression {
                 Vec<rustred_evaluation::MatchedContribution>,
             >::new();
             for (source_id, term) in self.0.iter_mut().enumerate() {
-                resources::checkpoint()?;
+                crate::execution::checkpoint()?;
                 let matched =
                     term.prepare_integral_specs(vakint, settings, observation.as_deref_mut())?;
                 let method = vakint
@@ -7558,7 +7558,7 @@ Evaluated (n_loops=1, mu_r=1) :
             })?;
             MonitorContext::native_phase(observation.as_deref_mut(), "tensor_prepass", None);
             for term in &mut vakint_expr.0 {
-                resources::checkpoint()?;
+                crate::execution::checkpoint()?;
                 term.tensor_reduce_for_evaluation(self, settings)?;
             }
             vakint_expr.evaluate_integral_observed(
@@ -7613,10 +7613,35 @@ Evaluated (n_loops=1, mu_r=1) :
         settings: &VakintSettings,
         input: AtomView,
     ) -> Result<Atom, VakintError> {
-        self.autosave_ordered_cache(settings.with_resource_budget(|| {
+        self.autosave_ordered_cache(self.evaluate_integral_observed(settings, input, None, None))
+    }
+
+    /// [`Self::evaluate_integral`] with per-call diagnostics.
+    pub fn evaluate_integral_with_monitor(
+        &self,
+        settings: &VakintSettings,
+        input: AtomView,
+        monitor: &RustRedMonitorOptions,
+    ) -> Result<Atom, VakintError> {
+        self.autosave_ordered_cache(MonitorContext::run(monitor, |observation, progress| {
+            self.evaluate_integral_observed(settings, input, observation, progress)
+        }))
+    }
+
+    fn evaluate_integral_observed(
+        &self,
+        settings: &VakintSettings,
+        input: AtomView,
+        observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
+        progress: Option<&CallerProgress>,
+    ) -> Result<Atom, VakintError> {
+        if let Some(progress) = progress {
+            progress.configure(settings);
+        }
+        settings.with_resource_budget(|| {
             self.validate_settings(settings)?;
             let mut vakint_expr = VakintExpression::prepare_evaluation(input, self, settings)?;
-            vakint_expr.evaluate_integral(self, settings)?;
+            vakint_expr.evaluate_integral_observed(self, settings, observation, progress)?;
             let result: Atom = vakint_expr.into();
             truncation_guard::ensure_known_orders(
                 &result,
@@ -7626,7 +7651,7 @@ Evaluated (n_loops=1, mu_r=1) :
                 truncation_guard::plain_name,
             )?;
             Ok(result)
-        }))
+        })
     }
 }
 
