@@ -8,14 +8,16 @@
       the measured binary carries its build commit, was built clean (no modified path outside
       crates/vakint/docs), without debug assertions, and the repository HEAD differs from that commit only
       under crates/vakint/docs; the tools and cases that produced the results are those of the tree;
-      the data root's manifests are those that were measured.
+      the data root's manifests are those that were measured; OUT's precision tables (tables.json) are 'final'
+      and equal a regeneration from the data root (tools/precision_tables.py --verify).
   receipt.py write   --out OUT --data-root ROOT --pdf PDF --receipt FILE [--accept-pending FILE]
-      writes the receipt (identities of data, binary, build, tools, results, graphs and PDF).
+      writes the receipt (identities of data, binary, build, tools, results, graphs, precision tables and PDF).
   receipt.py check   --data-root DATA_TREE [--repo REPO]
-      for publish.sh: the committed receipt, suite.json, graphs.json and benchmark.pdf agree with each
-      other, with the data tree being published (manifest SHA-256 of the root and of every loop pack) and
-      with the repository (build commit an ancestor of HEAD, no later change outside crates/vakint/docs,
-      clean work tree). Exit 0 with 'benchmark receipt OK', else exit 1 with the reasons.
+      for publish.sh: the committed receipt, suite.json, graphs.json, tables.json, PRECISION-TABLES.md and
+      benchmark.pdf agree with each other, with the data tree being published (manifest SHA-256 of the root and of
+      every loop pack; the precision tables regenerated from it are identical) and with the repository (build
+      commit an ancestor of HEAD, no later change outside crates/vakint/docs, clean work tree). Exit 0 with
+      'benchmark receipt OK', else exit 1 with the reasons.
 """
 from __future__ import annotations
 
@@ -58,6 +60,24 @@ def manifests(root: Path):
 def cell_counts(results):
     cells = [(c["id"], k, v) for c in results["cases"] for k, v in c["cells"].items()]
     return {s: [f"{i} {k}" for i, k, v in cells if v["status"] == s] for s in ("ok", "pending", "failed", "n/a")}
+
+
+def tables_reasons(tables: Path, root: Path, tool_dir: Path = HERE):
+    """precision tables: final, and identical to a regeneration from the data root (never stale)"""
+    if not tables.exists():
+        return [f"no precision tables {tables} (make-benchmark.sh writes them)"]
+    reasons = []
+    try:
+        t = json.loads(tables.read_text())
+    except ValueError as e:
+        return [f"{tables} is not JSON ({e})"]
+    if t.get("status") != "final":
+        reasons.append(f"the precision tables are '{t.get('status')}', not 'final' (install from a clean git checkout of the data tree)")
+    r = subprocess.run([sys.executable, "-I", str(tool_dir / "precision_tables.py"), "--data-root", str(root), "--verify", str(tables)],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        reasons.append("precision tables: " + (r.stdout + r.stderr).strip().splitlines()[-1][:400])
+    return reasons
 
 
 def outside_docs(paths):
@@ -115,6 +135,7 @@ def gate(out: Path, root: Path, accept: Path | None):
     for level, digest in (ident.get("loop_manifest_sha256") or {}).items():
         if now.get(level) != digest:
             reasons.append(f"the data root's {level}/manifest.json differs from the measured one")
+    reasons += tables_reasons(out / "tables.json", root)
     return reasons, results, counts, exception
 
 
@@ -142,7 +163,7 @@ def main(argv):
             return 1
         ident = results["identity"]
         receipt = {
-            "schema": "vakint.benchmark-receipt.v2",
+            "schema": "vakint.benchmark-receipt.v3",
             "installed_utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
             "data_root": str(root), "data_git": ident.get("data_git"),
             "root_manifest_sha256": ident.get("root_manifest_sha256"),
@@ -155,6 +176,9 @@ def main(argv):
             "pending_cells": counts["pending"], "failed_cells": counts["failed"], "pending_exception": exception,
             "suite_sha256": sha256(BENCH / "data" / "suite.json"),
             "graphs_sha256": sha256(BENCH / "data" / "graphs.json"),
+            "tables_sha256": sha256(BENCH / "data" / "tables.json"),
+            "tables_content_sha256": json.loads((BENCH / "data" / "tables.json").read_text()).get("content_sha256"),
+            "tables_md_sha256": sha256(BENCH / "data" / "PRECISION-TABLES.md"),
             "pdf_sha256": sha256(a.pdf),
         }
         a.receipt.write_text(json.dumps(receipt, indent=1) + "\n")
@@ -175,9 +199,12 @@ def main(argv):
         reasons.append("pending cells without a user-approved exception")
     for key, path in (("suite_sha256", docs / "benchmark" / "data" / "suite.json"),
                       ("graphs_sha256", docs / "benchmark" / "data" / "graphs.json"),
+                      ("tables_sha256", docs / "benchmark" / "data" / "tables.json"),
+                      ("tables_md_sha256", docs / "benchmark" / "data" / "PRECISION-TABLES.md"),
                       ("pdf_sha256", docs / "benchmark.pdf")):
         if not path.exists() or sha256(path) != r.get(key):
             reasons.append(f"{path.relative_to(repo)} does not match the receipt")
+    reasons += tables_reasons(docs / "benchmark" / "data" / "tables.json", root, docs / "benchmark" / "tools")
     now = manifests(root)
     if now["root"] != r.get("root_manifest_sha256"):
         reasons.append("the data tree's manifest.json is not the one the benchmark measured")

@@ -1,9 +1,12 @@
 // Vakint reduction benchmark. Generated data only: regenerate with
 //   crates/vakint/docs/benchmark/make-benchmark.sh DATA_ROOT BENCHMARK_BINARY OUT_DIR [--install]
-// Inputs (typst --input): results=<results.json>, graphs=<graphs.json>, draft=true|false.
+// Inputs (typst --input): results=<results.json>, graphs=<graphs.json>, tables=<tables.json>, draft=true|false.
+// tables.json: benchmark/tools/precision_tables.py on the same data root (precision of masters and results).
 
+#import "precision_tables.typ": precision-section
 #let results = json(sys.inputs.at("results", default: "benchmark/data/suite.json"))
 #let graphs = json(sys.inputs.at("graphs", default: "benchmark/data/graphs.json"))
+#let tables = json(sys.inputs.at("tables", default: "benchmark/data/tables.json"))
 #let draft = sys.inputs.at("draft", default: if results.at("draft", default: false) { "true" } else { "false" }) == "true"
 
 #let navy = rgb("173f65")
@@ -151,7 +154,7 @@
   #v(0.2em)
   #text(22pt, weight: "bold", fill: navy)[Vakint reduction benchmark]
   #v(-0.35em)
-  #text(12pt, fill: luma(80))[RustRed versus alphaLoop, MATAD and FMFT · reduction graphs from one to five loops]
+  #text(12pt, fill: luma(80))[RustRed versus alphaLoop, MATAD and FMFT · reduction graphs from one to five loops · precision of the results]
   #v(0.15em)
   #text(9pt, fill: luma(110))[#day · #host.at("cpu_model", default: "") · #core-claim · vakint #ident.vakint_version]
 ]
@@ -431,3 +434,7 @@ graphs) are merged by their factors; numbers count masters (one to three loops: 
     [Rings: the #graphs.loops.at("5").stats.owner_programs owner sectors of the saved application (width grows with their rule tables).])
   #legend()
 ]
+
+// ------------------------------------------------------------- precision --
+
+#precision-section(tables)

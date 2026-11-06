@@ -7,12 +7,16 @@
 # DATA_ROOT         vakint-external-data checkout (1L-5L packs, with master values)
 # BENCHMARK_BINARY  the benchmark_suite example of this crate, built (with its build identity) by
 #                   docs/benchmark/build-benchmark-binary.sh BIN_DIR   (release profile, fat LTO)
-# OUT_DIR           measurements (resumable), results.json, graphs.json, benchmark.pdf, steps.json
+# OUT_DIR           measurements (resumable), results.json, graphs.json, tables.json, PRECISION-TABLES.md,
+#                   benchmark.pdf, steps.json
 # --install         only if tools/receipt.py gate passes (not a draft, no pending cell unless FILE is a
 #                   user-approved exception, clean identified release build of this tree, same tools, cases
-#                   and data): copy results/graphs to docs/benchmark/data/{suite,graphs}.json, the PDF to
+#                   and data, precision tables regenerated from this data root): copy results/graphs/tables to
+#                   docs/benchmark/data/{suite,graphs,tables}.json and PRECISION-TABLES.md, the PDF to
 #                   docs/benchmark.pdf, write docs/benchmark/data/receipt.json. publish.sh then runs
 #                   tools/receipt.py check --data-root <published data tree>.
+# Precision tables (tools/precision_tables.py, data root only): status 'final' with --install (needs a clean git
+# checkout of the data tree), else 'provisional'; PRECISION_TABLES_LABEL=<text> names the tree in their header.
 # --draft           DRAFT watermark (never installable)
 # Other options go to tools/run_benchmarks.py (--cpus, --skip-heavy, --heavy-only, --only, --cells, --repetitions,
 # --max-sibling-busy, --max-run-delay, --max-foreign-cpu, --contention-retries, --allow-shared-l3,
@@ -52,17 +56,24 @@ t=$EPOCHREALTIME
 python3 -I "$HERE/tools/reduction_graphs.py" "$ROOT" "$OUT/graphs.json"
 step graphs "$t"
 t=$EPOCHREALTIME
+TSTATUS=provisional; (( INSTALL )) && TSTATUS=final
+python3 -I "$HERE/tools/precision_tables.py" --data-root "$ROOT" --json "$OUT/tables.json" --md "$OUT/PRECISION-TABLES.md" \
+  --status $TSTATUS ${PRECISION_TABLES_LABEL:+--label "$PRECISION_TABLES_LABEL"}
+step tables "$t"
+t=$EPOCHREALTIME
 typst compile --root / --input results="$OUT/results.json" --input graphs="$OUT/graphs.json" \
-  --input draft=$DRAFT "$DOCS/benchmark.typ" "$OUT/benchmark.pdf"
+  --input tables="$OUT/tables.json" --input draft=$DRAFT "$DOCS/benchmark.typ" "$OUT/benchmark.pdf"
 step typst "$t"
 echo "wrote $OUT/benchmark.pdf"
 if (( INSTALL )); then
   python3 -I "$HERE/tools/receipt.py" gate --out "$OUT" --data-root "$ROOT" "${ACCEPT[@]}"
   cp "$OUT/results.json" "$HERE/data/suite.json"
   cp "$OUT/graphs.json" "$HERE/data/graphs.json"
+  cp "$OUT/tables.json" "$HERE/data/tables.json"
+  cp "$OUT/PRECISION-TABLES.md" "$HERE/data/PRECISION-TABLES.md"
   # Rebuild from the installed copies so the committed PDF is reproducible from the repository.
   (cd "$DOCS" && typst compile --input draft=$DRAFT benchmark.typ benchmark.pdf)
   python3 -I "$HERE/tools/receipt.py" write --out "$OUT" --data-root "$ROOT" --pdf "$DOCS/benchmark.pdf" \
     --receipt "$HERE/data/receipt.json" "${ACCEPT[@]}"
-  echo "installed docs/benchmark.pdf and docs/benchmark/data/{suite,graphs,receipt}.json"
+  echo "installed docs/benchmark.pdf and docs/benchmark/data/{suite,graphs,tables,receipt}.json, PRECISION-TABLES.md"
 fi

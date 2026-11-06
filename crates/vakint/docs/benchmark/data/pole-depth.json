@@ -1,0 +1,963 @@
+{
+ "schema": "vakint.pole-depth.v1",
+ "what": "largest spurious-pole order p of the reduction coefficients of each 1L-4L master (coefficient ~ eps^-p at d = 4): 'direct' = vakint's per-master route, 'alias_representative' = the representative's coefficient after vakint's basis-alias normalization (rustred_evaluation/masters.rs load_basis_aliases + finalize, the route vakint prefers when its data suffice); 'aliased_to' = the representatives an aliased master is rewritten onto",
+ "method": "measured (track LL, 2026-11-03): every record of the shipped 1L-4L caches (1L 5, 2L 77, 3L 2352, 4L 286527) and exact samples outside them (1L 45 keys, powers -4..40; 2L 1400, -6..12; 3L 1755 of 1760, incl. 160 with total positive power >= 16; 4L 1155 normalization rows, 435 product-factor images, 640 keys with up to 6 dots and 3 numerators); pole orders did not grow with dots or numerators in any sample; this is a measurement, not a proof",
+ "measured_on": {
+  "1L": {
+   "rules_rrbin_sha256": "f8a740e9707e4560b9c0ffdf7f2adba5220d3e21054c11ac0f0a4aab3031dc88"
+  },
+  "2L": {
+   "rules_rrbin_sha256": "778ab2e6ef9f4934cf8fd4e6aa45486bac21f8c508c0b21d1a00fdec3b532ac5"
+  },
+  "3L": {
+   "rules_rrbin_sha256": "383b2ebbc1124bef251f88df9c1c0d80cb180a14fe12cb5d5928933d926b8006"
+  },
+  "4L": {
+   "framed_program_sha256": {
+    "h": "06c7795fc0e69788316ab61535588b0835d65eb5f5f28571c17471771a60353f",
+    "fg": "4142b61825d1a7a829477fca21f406e2f37d9f714c1b7d5d5aa8179153077754",
+    "bmw": "516ab80ab90b888518fa63a175ce0b7e4246f8522051e92b46aebdb53e31c583",
+    "x": "744b6455813fa5d6a21d11a7b321b66554e67995b5634e3dc7f849dfb8e12096"
+   },
+   "framing": "sha256('vakint-native-candidate-and-normalization-v1\\0' || u64le(len) || gunzip(<n>.candidates.rrbin.gz) || u64le(len) || <n>.rrnorm.bin)"
+  }
+ },
+ "sources": {
+  "1L": {
+   "poles-cache-1L.json": "5 records",
+   "poles-sample-1L.json": "45 records"
+  },
+  "2L": {
+   "poles-cache-2L.json": "77 records",
+   "poles-sample-2L.json": "1400 records"
+  },
+  "3L": {
+   "apoles-cache-3L.json": "alias route: 2121 records with max pole 0, 231 records with max pole 1",
+   "apoles-sample-3L.json": "alias route: 1290 records with max pole 0, 465 records with max pole 1",
+   "poles-cache-3L.json": "2352 records",
+   "poles-sample-3L.json": "1755 records, 5 not reduced ({'reduction cache needs 16000162 retained coefficient terms, exceeding the configured limit 16000000': 1, 'reduction cache needs 16000288 retained coefficient terms, exceeding the configured limit 16000000': 1, 'reduction cache needs 16000260 retained coefficient terms, exceeding the configured limit 16000000': 1, 'reduction cache needs 16000016 retained coefficient terms, exceeding the configured limit 16000000': 1, 'reduction cache needs 16000482 retained coefficient terms, exceeding the configured limit 16000000': 1})"
+  },
+  "4L": {
+   "apoles-cache-4L.json": "alias route: 210531 records with max pole 0, 75996 records with max pole 1",
+   "apoles-fac-4L.json": "alias route: 435 records with max pole 0",
+   "apoles-sample-4L.json": "alias route: 183 records with max pole 0, 457 records with max pole 1",
+   "poles-cache-4L.json": "286527 records",
+   "poles-rows-4L.json": "1155 records",
+   "poles-sample-4L.json": "640 records"
+  }
+ },
+ "masters": {
+  "L1_e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4_p1": {
+   "loop": 1,
+   "name": "P1",
+   "direct": 0
+  },
+  "L2_ecdff6f39047e4dae21704b4de33a15ea53d9826e823496f7bdf62c1af498db1_p0_p1_p1": {
+   "loop": 2,
+   "name": "P1",
+   "direct": 0
+  },
+  "L2_ecdff6f39047e4dae21704b4de33a15ea53d9826e823496f7bdf62c1af498db1_p1_p1_p1": {
+   "loop": 2,
+   "name": "P2",
+   "direct": 0
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1": {
+   "loop": 3,
+   "name": "P1",
+   "direct": 1,
+   "alias_representative": 1
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p0_p1": {
+   "loop": 3,
+   "name": "P2",
+   "direct": 0,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p0": {
+   "loop": 3,
+   "name": "P3",
+   "direct": 1,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p1": {
+   "loop": 3,
+   "name": "P4",
+   "direct": 0,
+   "alias_representative": 0
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p0_p1_p1": {
+   "loop": 3,
+   "name": "P5",
+   "direct": 0,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p0_p1": {
+   "loop": 3,
+   "name": "P6",
+   "direct": 1,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p0": {
+   "loop": 3,
+   "name": "P7",
+   "direct": 1,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p1": {
+   "loop": 3,
+   "name": "P8",
+   "direct": 0,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p0": {
+   "loop": 3,
+   "name": "P9",
+   "direct": 1,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p1": {
+   "loop": 3,
+   "name": "P10",
+   "direct": 0,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p0": {
+   "loop": 3,
+   "name": "P11",
+   "direct": 1,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p1": {
+   "loop": 3,
+   "name": "P12",
+   "direct": 0,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p0": {
+   "loop": 3,
+   "name": "P13",
+   "direct": 1,
+   "alias_representative": 1
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p1": {
+   "loop": 3,
+   "name": "P14",
+   "direct": 0,
+   "alias_representative": 0
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p0_p1_p1": {
+   "loop": 3,
+   "name": "P15",
+   "direct": 1,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p0_p1": {
+   "loop": 3,
+   "name": "P16",
+   "direct": 1,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p0": {
+   "loop": 3,
+   "name": "P17",
+   "direct": 0,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p1": {
+   "loop": 3,
+   "name": "P18",
+   "direct": 0,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p0_p1": {
+   "loop": 3,
+   "name": "P19",
+   "direct": 1,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p0": {
+   "loop": 3,
+   "name": "P20",
+   "direct": 1,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p1": {
+   "loop": 3,
+   "name": "P21",
+   "direct": 1,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p0_p1": {
+   "loop": 3,
+   "name": "P22",
+   "direct": 0,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p0": {
+   "loop": 3,
+   "name": "P23",
+   "direct": 0,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p1": {
+   "loop": 3,
+   "name": "P24",
+   "direct": 0,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p0_p1": {
+   "loop": 3,
+   "name": "P25",
+   "direct": 1,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p1_p1": {
+   "loop": 3,
+   "name": "P26",
+   "direct": 0,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p0": {
+   "loop": 3,
+   "name": "P27",
+   "direct": 1,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p1": {
+   "loop": 3,
+   "name": "P28",
+   "direct": 1,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p0": {
+   "loop": 3,
+   "name": "P29",
+   "direct": 0,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p1": {
+   "loop": 3,
+   "name": "P30",
+   "direct": 0,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p0": {
+   "loop": 3,
+   "name": "P31",
+   "direct": 0,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p1": {
+   "loop": 3,
+   "name": "P32",
+   "direct": 0,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p0": {
+   "loop": 3,
+   "name": "P33",
+   "direct": 0,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p1": {
+   "loop": 3,
+   "name": "P34",
+   "direct": 0,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p0": {
+   "loop": 3,
+   "name": "P35",
+   "direct": 0,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p1": {
+   "loop": 3,
+   "name": "P36",
+   "direct": 0,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p0": {
+   "loop": 3,
+   "name": "P37",
+   "direct": 0,
+   "aliased_to": [
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p1"
+   ]
+  },
+  "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p1": {
+   "loop": 3,
+   "name": "P38",
+   "direct": 0,
+   "alias_representative": 0
+  },
+  "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p0_p0_p0_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P1",
+   "direct": 1,
+   "alias_representative": 1
+  },
+  "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p0_p0_p1_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P2",
+   "direct": 1,
+   "alias_representative": 1
+  },
+  "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p0_p1_p0_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P3",
+   "direct": 1,
+   "alias_representative": 1
+  },
+  "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p0_p1_p1_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P4",
+   "direct": 0,
+   "alias_representative": 0
+  },
+  "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p0_p1_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P5",
+   "direct": 1,
+   "alias_representative": 0
+  },
+  "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p0_p0_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P6",
+   "direct": 2,
+   "alias_representative": 1
+  },
+  "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p0_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P7",
+   "direct": 1,
+   "alias_representative": 1
+  },
+  "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p1_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P8",
+   "direct": 1,
+   "alias_representative": 0
+  },
+  "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p2_p1_p0_p0_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P9",
+   "direct": 2,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p0_p0_p1_p1_p1_p0"
+   ]
+  },
+  "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p2_p1_p1_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P10",
+   "direct": 1,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p3_p1_p0_p0_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p2_p1_p0_p1_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p0_p1_p0_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p0_p1_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p0_p0_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p0_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p3_p1_p0_p0_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P11",
+   "direct": 1,
+   "alias_representative": 1
+  },
+  "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p1_p0_p1_p0_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P12",
+   "direct": 0,
+   "alias_representative": 0
+  },
+  "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p1_p0_p1_p1_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P13",
+   "direct": 0,
+   "alias_representative": 0
+  },
+  "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p1_p1_p1_p1_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P14",
+   "direct": 0,
+   "alias_representative": 0
+  },
+  "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p2_p1_p0_p1_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P15",
+   "direct": 1,
+   "alias_representative": 0
+  },
+  "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p2_p1_p1_p1_p0_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P16",
+   "direct": 1,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p3_p1_p0_p0_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p2_p1_p0_p1_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p0_p1_p0_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p0_p1_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p0_p0_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p0_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p2_p1_p1_p1_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P17",
+   "direct": 0,
+   "alias_representative": 0
+  },
+  "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p1_p1_p1_p1_p1_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P18",
+   "direct": 0,
+   "alias_representative": 0
+  },
+  "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p2_p1_p0_p1_p1_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P19",
+   "direct": 0,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p1_p1_p1_p1_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p2_p1_p1_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bb95c283ed3c4ba9417f48ad48250f6b32944659c3bb2619f943de6a7b64ab76_p0_p0_p1_p0_p0_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P20",
+   "direct": 1,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p0_p0_p0_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bb95c283ed3c4ba9417f48ad48250f6b32944659c3bb2619f943de6a7b64ab76_p0_p0_p1_p0_p1_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P21",
+   "direct": 1,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p0_p0_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bb95c283ed3c4ba9417f48ad48250f6b32944659c3bb2619f943de6a7b64ab76_p0_p0_p1_p1_p0_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P22",
+   "direct": 1,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p0_p1_p0_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bb95c283ed3c4ba9417f48ad48250f6b32944659c3bb2619f943de6a7b64ab76_p0_p0_p1_p1_p1_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P23",
+   "direct": 0,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p0_p1_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bb95c283ed3c4ba9417f48ad48250f6b32944659c3bb2619f943de6a7b64ab76_p0_p1_p1_p0_p1_p0_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P24",
+   "direct": 1,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p0_p0_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bb95c283ed3c4ba9417f48ad48250f6b32944659c3bb2619f943de6a7b64ab76_p0_p1_p1_p0_p1_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P25",
+   "direct": 1,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p0_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bb95c283ed3c4ba9417f48ad48250f6b32944659c3bb2619f943de6a7b64ab76_p0_p1_p1_p1_p1_p1_p1_p0_p0_p0": {
+   "loop": 4,
+   "name": "P26",
+   "direct": 0,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p1_p0_p1_p0_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bb95c283ed3c4ba9417f48ad48250f6b32944659c3bb2619f943de6a7b64ab76_p0_p1_p1_p1_p1_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P27",
+   "direct": 0,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p1_p0_p1_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bb95c283ed3c4ba9417f48ad48250f6b32944659c3bb2619f943de6a7b64ab76_p0_p2_p1_p0_p1_p0_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P28",
+   "direct": 1,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p0_p0_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bb95c283ed3c4ba9417f48ad48250f6b32944659c3bb2619f943de6a7b64ab76_p0_p3_p1_p0_p1_p0_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P29",
+   "direct": 1,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p3_p1_p0_p0_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bb95c283ed3c4ba9417f48ad48250f6b32944659c3bb2619f943de6a7b64ab76_p1_p0_p1_p0_p1_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P30",
+   "direct": 0,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p0_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bb95c283ed3c4ba9417f48ad48250f6b32944659c3bb2619f943de6a7b64ab76_p1_p0_p1_p1_p1_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P31",
+   "direct": 0,
+   "alias_representative": 0
+  },
+  "L4_bb95c283ed3c4ba9417f48ad48250f6b32944659c3bb2619f943de6a7b64ab76_p1_p1_p1_p0_p1_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P32",
+   "direct": 0,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bb95c283ed3c4ba9417f48ad48250f6b32944659c3bb2619f943de6a7b64ab76_p1_p1_p1_p1_p0_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P33",
+   "direct": 0,
+   "alias_representative": 0
+  },
+  "L4_bb95c283ed3c4ba9417f48ad48250f6b32944659c3bb2619f943de6a7b64ab76_p1_p1_p1_p1_p1_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P34",
+   "direct": 0,
+   "alias_representative": 0
+  },
+  "L4_bb95c283ed3c4ba9417f48ad48250f6b32944659c3bb2619f943de6a7b64ab76_p2_p1_p1_p0_p1_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P35",
+   "direct": 0,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p3_p1_p0_p0_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p2_p1_p0_p1_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p0_p1_p0_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p0_p1_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p0_p0_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p0_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bce8ad63d8198605a16774264c9101933298bac9dcf7e7b1919a0c58b6558c7c_p0_p0_p0_p0_p1_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P36",
+   "direct": 1,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p0_p0_p0_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bce8ad63d8198605a16774264c9101933298bac9dcf7e7b1919a0c58b6558c7c_p0_p0_p0_p1_p1_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P37",
+   "direct": 1,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p0_p0_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bce8ad63d8198605a16774264c9101933298bac9dcf7e7b1919a0c58b6558c7c_p0_p0_p1_p0_p1_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P38",
+   "direct": 1,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p0_p1_p0_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bce8ad63d8198605a16774264c9101933298bac9dcf7e7b1919a0c58b6558c7c_p0_p0_p1_p1_p1_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P39",
+   "direct": 0,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p0_p1_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bce8ad63d8198605a16774264c9101933298bac9dcf7e7b1919a0c58b6558c7c_p0_p1_p0_p1_p1_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P40",
+   "direct": 1,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p0_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bce8ad63d8198605a16774264c9101933298bac9dcf7e7b1919a0c58b6558c7c_p0_p1_p1_p0_p0_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P41",
+   "direct": 2,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p0_p0_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bce8ad63d8198605a16774264c9101933298bac9dcf7e7b1919a0c58b6558c7c_p0_p1_p1_p0_p1_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P42",
+   "direct": 1,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p0_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bce8ad63d8198605a16774264c9101933298bac9dcf7e7b1919a0c58b6558c7c_p0_p1_p1_p1_p1_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P43",
+   "direct": 1,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bce8ad63d8198605a16774264c9101933298bac9dcf7e7b1919a0c58b6558c7c_p0_p2_p1_p0_p0_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P44",
+   "direct": 2,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p0_p0_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bce8ad63d8198605a16774264c9101933298bac9dcf7e7b1919a0c58b6558c7c_p0_p2_p1_p1_p1_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P45",
+   "direct": 1,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p3_p1_p0_p0_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p2_p1_p0_p1_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p0_p1_p0_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p0_p1_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p0_p0_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p0_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bce8ad63d8198605a16774264c9101933298bac9dcf7e7b1919a0c58b6558c7c_p0_p3_p1_p0_p0_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P46",
+   "direct": 1,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p3_p1_p0_p0_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bce8ad63d8198605a16774264c9101933298bac9dcf7e7b1919a0c58b6558c7c_p1_p0_p1_p0_p1_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P47",
+   "direct": 0,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p1_p0_p1_p0_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bce8ad63d8198605a16774264c9101933298bac9dcf7e7b1919a0c58b6558c7c_p1_p0_p1_p1_p1_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P48",
+   "direct": 0,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p1_p0_p1_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bce8ad63d8198605a16774264c9101933298bac9dcf7e7b1919a0c58b6558c7c_p1_p1_p1_p1_p1_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P49",
+   "direct": 0,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p1_p1_p1_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bce8ad63d8198605a16774264c9101933298bac9dcf7e7b1919a0c58b6558c7c_p2_p1_p0_p1_p1_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P50",
+   "direct": 1,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p2_p1_p0_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bce8ad63d8198605a16774264c9101933298bac9dcf7e7b1919a0c58b6558c7c_p2_p1_p1_p1_p0_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P51",
+   "direct": 0,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p3_p1_p0_p0_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p2_p1_p0_p1_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p0_p1_p0_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p0_p1_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p0_p0_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p0_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_bce8ad63d8198605a16774264c9101933298bac9dcf7e7b1919a0c58b6558c7c_p2_p1_p1_p1_p1_p1_p1_p1_p0_p0": {
+   "loop": 4,
+   "name": "P52",
+   "direct": 0,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p2_p1_p1_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p0_p0_p0_p0_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P53",
+   "direct": 1,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p0_p0_p0_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p0_p0_p0_p1_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P54",
+   "direct": 1,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p0_p0_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p0_p0_p1_p0_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P55",
+   "direct": 1,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p0_p1_p0_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p0_p0_p1_p1_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P56",
+   "direct": 0,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p0_p1_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p0_p1_p0_p1_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P57",
+   "direct": 1,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p0_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p0_p1_p1_p1_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P58",
+   "direct": 0,
+   "aliased_to": [
+    "L4_bb95c283ed3c4ba9417f48ad48250f6b32944659c3bb2619f943de6a7b64ab76_p1_p0_p1_p1_p1_p1_p1_p1_p0_p0"
+   ]
+  },
+  "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p1_p0_p0_p1_p1_p1_p0_p1_p0": {
+   "loop": 4,
+   "name": "P59",
+   "direct": 2,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p0_p0_p1_p1_p1_p0"
+   ]
+  },
+  "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p1_p0_p0_p1_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P60",
+   "direct": 1,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p0_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p1_p0_p1_p1_p0_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P61",
+   "direct": 0,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p1_p0_p1_p0_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p1_p0_p1_p1_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P62",
+   "direct": 0,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p1_p0_p1_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p1_p1_p0_p1_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P63",
+   "direct": 1,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p1_p1_p1_p0_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P64",
+   "direct": 0,
+   "aliased_to": [
+    "L4_bb95c283ed3c4ba9417f48ad48250f6b32944659c3bb2619f943de6a7b64ab76_p1_p1_p1_p1_p0_p1_p1_p1_p0_p0"
+   ]
+  },
+  "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p1_p1_p1_p1_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P65",
+   "direct": 0,
+   "aliased_to": [
+    "L4_bb95c283ed3c4ba9417f48ad48250f6b32944659c3bb2619f943de6a7b64ab76_p1_p1_p1_p1_p1_p1_p1_p1_p0_p0"
+   ]
+  },
+  "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p2_p0_p0_p1_p1_p1_p0_p1_p0": {
+   "loop": 4,
+   "name": "P66",
+   "direct": 2,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p0_p0_p1_p1_p1_p0"
+   ]
+  },
+  "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p2_p1_p0_p1_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P67",
+   "direct": 0,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p2_p1_p0_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p3_p0_p0_p1_p1_p1_p0_p1_p0": {
+   "loop": 4,
+   "name": "P68",
+   "direct": 1,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p3_p1_p0_p0_p1_p1_p1_p0"
+   ]
+  },
+  "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p1_p1_p0_p1_p1_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P69",
+   "direct": 0,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p1_p1_p1_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p1_p1_p1_p1_p1_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P70",
+   "direct": 0,
+   "alias_representative": 0
+  },
+  "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p2_p1_p0_p0_p1_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P71",
+   "direct": 1,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p3_p1_p0_p0_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p2_p1_p0_p1_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p0_p1_p0_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p0_p1_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p0_p0_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p0_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p2_p1_p0_p1_p1_p1_p0_p1_p1_p0": {
+   "loop": 4,
+   "name": "P72",
+   "direct": 1,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p3_p1_p0_p0_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p2_p1_p0_p1_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p0_p1_p0_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p0_p1_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p0_p0_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p0_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p0_p1_p1_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p2_p1_p0_p1_p1_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P73",
+   "direct": 0,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p1_p1_p1_p1_p1_p1_p1_p1_p0",
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p2_p1_p1_p1_p1_p1_p1_p1_p0"
+   ]
+  },
+  "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p2_p1_p1_p0_p1_p1_p1_p1_p1_p0": {
+   "loop": 4,
+   "name": "P74",
+   "direct": 0,
+   "aliased_to": [
+    "L4_693719b1bc3d2f1d4d32c9312df66ced667a542591a2ada6f6498844fc5d0de1_p0_p2_p1_p1_p1_p1_p1_p1_p1_p0"
+   ]
+  }
+ },
+ "five_loop": {
+  "depth": 0,
+  "rule": "BASIS-v2 (pole-free basis, option B): every reduction coefficient onto the 131 masters is regular at d = 4; the generator reads the proof record from the tree (5L/provenance/refinement-layer.json basis_change: design + checks.g_pole) and refuses a tree whose record does not state it"
+ },
+ "built_by": "basis-b/q4/tools/build_pole_depth.py (track T, tables-1106)"
+}
