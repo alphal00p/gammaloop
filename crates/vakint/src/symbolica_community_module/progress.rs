@@ -253,7 +253,10 @@ impl VakintProgress {
 
     /// The full monitor model (schema ``vakint.monitor.v2``, as in the
     /// ``model`` object of a ``progress_snapshot`` file). Calls without a
-    /// native monitor give the status, elapsed time and stage only.
+    /// native monitor give the status, elapsed time and stage only. The final
+    /// snapshot's ``"status"`` is the call's outcome: "Succeeded", "Failed"
+    /// or "Interrupted" (the last one is not a ``vakint.monitor.v2`` status:
+    /// the native monitor never sees the interruption).
     #[gen_stub(override_return_type(
         type_repr = "dict[str, typing.Any]",
         imports = ("typing")
@@ -367,6 +370,33 @@ impl Progress {
         !matches!(self.consumer, Consumer::None)
     }
 
+    /// Whether a callback consumes progress (its exception cancels the call).
+    pub(super) fn is_callback(&self) -> bool {
+        matches!(self.consumer, Consumer::Callback(_))
+    }
+
+    /// The call is being stopped: say so on the marimo indicator (a native
+    /// step without checkpoints may take seconds to finish). Callbacks get
+    /// the final "interrupted" snapshot only.
+    pub(super) fn stopping(&mut self, py: Python<'_>) {
+        let (completed, total) = self
+            .latest
+            .as_ref()
+            .and_then(ProgressMetrics::from_model)
+            .and_then(|metrics| metrics.phase)
+            .map_or((0, None), |(index, total)| (index.min(total), Some(total)));
+        if let Consumer::Marimo(Some(display)) = &mut self.consumer {
+            let _ = display.update(
+                py,
+                "Vakint · stopping",
+                "Interrupted: stopping at the next checkpoint (a native step without \
+                 checkpoints finishes first)",
+                completed,
+                total,
+            );
+        }
+    }
+
     /// The sink a monitored call publishes into, when progress is consumed.
     pub(super) fn native_sink(&mut self) -> Option<RustRedProgressSink> {
         if !self.is_active() {
@@ -468,7 +498,24 @@ impl Progress {
         }
         self.unshown = false;
         self.delivered = Some((Instant::now(), key));
-        self.show(py, metrics, model)
+        let shown = self.show(py, metrics, model);
+        match shown {
+            // A failing marimo indicator is a display problem, not a reason to
+            // stop the call: report it and stop showing (a KeyboardInterrupt
+            // raised while its Python code ran still propagates).
+            Err(error)
+                if matches!(self.consumer, Consumer::Marimo(_))
+                    && error.is_instance_of::<pyo3::exceptions::PyException>(py) =>
+            {
+                error.write_unraisable(py, None);
+                if let Consumer::Marimo(Some(display)) = &mut self.consumer {
+                    let _ = display.finish(py, None, "Vakint");
+                }
+                self.consumer = Consumer::None;
+                Ok(())
+            }
+            shown => shown,
+        }
     }
 
     /// Final snapshot and display cleanup. `error` is the call's error (the

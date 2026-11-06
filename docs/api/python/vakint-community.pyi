@@ -358,7 +358,13 @@ class Vakint:
     thread) and only the final progress snapshot is delivered. The
     ``progress`` keyword shows a status indicator in marimo notebooks ("auto",
     the default), passes ``VakintProgress`` snapshots to a callable, or is off
-    (None).
+    (None). A load publishes its data when it finishes; until then the engine
+    keeps answering (other threads, progress callbacks) with its previous data.
+    Interruptibility costs a few percent of native time and is installed only
+    where an interrupt can arrive (Python's main thread, a progress callback);
+    the ``interrupt`` argument selects "fine", "coarse" or "off". The native
+    work of such calls runs on a "vakint-request" thread, which stays idle
+    for the next call (one per concurrent caller, at most four).
     """
     @property
     def n_cores(self) -> builtins.int:
@@ -371,6 +377,12 @@ class Vakint:
         Selected Ordered weight arithmetic in RustRed's canonical text, e.g.
         "exact" or "modular_sampled"; "threads" appears only when the selection
         fixes the modular workers instead of following `n_cores`.
+        """
+    @property
+    def interrupt(self) -> builtins.str:
+        r"""
+        How long calls can be interrupted: "fine", "coarse" or "off" (the
+        `interrupt` constructor argument).
         """
     def load_external_data(self, path: builtins.str | os.PathLike | pathlib.Path, max_loop_count: builtins.int, *, progress: typing.Literal['auto'] | collections.abc.Callable[[VakintProgress], None] | None = 'auto') -> None:
         r"""
@@ -426,7 +438,7 @@ class Vakint:
             `VakintProgress` snapshots on the calling thread; an exception it raises
             cancels the call and is re-raised. None disables progress.
         """
-    def __new__(cls, run_time_decimal_precision: typing.Optional[builtins.int] = None, evaluation_order: typing.Optional[typing.Sequence[VakintEvaluationMethod]] = None, tensor_reduction_method: typing.Optional[builtins.str] = None, epsilon_symbol: typing.Optional[Expression] = None, mu_r_sq_symbol: typing.Optional[Expression] = None, form_exe_path: typing.Optional[builtins.str] = None, python_exe_path: typing.Optional[builtins.str] = None, verify_numerator_identification: typing.Optional[builtins.bool] = None, integral_normalization_factor: typing.Optional[builtins.str] = None, allow_unknown_integrals: typing.Optional[builtins.bool] = None, clean_tmp_dir: typing.Optional[builtins.bool] = None, number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None, use_dot_product_notation: typing.Optional[builtins.bool] = None, temporary_directory: typing.Optional[builtins.str] = None, rustred_artifact_path: typing.Optional[builtins.str] = None, rustred_cache_bytes: typing.Optional[builtins.int] = None, rustred_cache_terms: typing.Optional[builtins.int] = None, rustred_product_cache_bytes: typing.Optional[builtins.int] = None, rustred_product_cache_terms: typing.Optional[builtins.int] = None, rustred_scalar_max_work: typing.Optional[builtins.int] = None, max_process_rss_bytes: typing.Optional[builtins.int] = None, max_elapsed_seconds: typing.Optional[builtins.float] = None, n_cores: typing.Optional[builtins.int] = None, ordered_weight_arithmetic: typing.Optional[builtins.str] = None, ordered_cache: builtins.str = 'read-write', ordered_cache_directory: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, ordered_cache_ram_bytes: typing.Optional[builtins.int] = None, ordered_cache_autosave: builtins.str = 'after-evaluation') -> Vakint:
+    def __new__(cls, run_time_decimal_precision: typing.Optional[builtins.int] = None, evaluation_order: typing.Optional[typing.Sequence[VakintEvaluationMethod]] = None, tensor_reduction_method: typing.Optional[builtins.str] = None, epsilon_symbol: typing.Optional[Expression] = None, mu_r_sq_symbol: typing.Optional[Expression] = None, form_exe_path: typing.Optional[builtins.str] = None, python_exe_path: typing.Optional[builtins.str] = None, verify_numerator_identification: typing.Optional[builtins.bool] = None, integral_normalization_factor: typing.Optional[builtins.str] = None, allow_unknown_integrals: typing.Optional[builtins.bool] = None, clean_tmp_dir: typing.Optional[builtins.bool] = None, number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None, use_dot_product_notation: typing.Optional[builtins.bool] = None, temporary_directory: typing.Optional[builtins.str] = None, rustred_artifact_path: typing.Optional[builtins.str] = None, rustred_cache_bytes: typing.Optional[builtins.int] = None, rustred_cache_terms: typing.Optional[builtins.int] = None, rustred_product_cache_bytes: typing.Optional[builtins.int] = None, rustred_product_cache_terms: typing.Optional[builtins.int] = None, rustred_scalar_max_work: typing.Optional[builtins.int] = None, max_process_rss_bytes: typing.Optional[builtins.int] = None, max_elapsed_seconds: typing.Optional[builtins.float] = None, n_cores: typing.Optional[builtins.int] = None, ordered_weight_arithmetic: typing.Optional[builtins.str] = None, ordered_cache: builtins.str = 'read-write', ordered_cache_directory: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, ordered_cache_ram_bytes: typing.Optional[builtins.int] = None, ordered_cache_autosave: builtins.str = 'after-evaluation', interrupt: builtins.str = 'fine') -> Vakint:
         r"""
         Create a new Vakint instance, specifying details of the evaluation stack. Note that the same instance can be recycled across multiple evaluations.
         Note that the creation of a Vakint instance involves the processing and creation of the library of all known topologies, which can be time consuming.
@@ -559,6 +571,15 @@ class Vakint:
             When new records of a directory-backed read-write cache are written:
             "after-evaluation" (default), "on-drop" (when the engine is released)
             or "never" (only `save_ordered_cache`).
+        interrupt : str
+            How Ctrl-C (marimo: Interrupt) and a raising progress callback stop
+            a long call: "fine" (default) at every native resource checkpoint,
+            usually within a fraction of a second; "coarse" only at Vakint's own
+            checkpoints (per data file, program step and expression term), at
+            no cost to the native checkpoints, which "fine" makes a few percent
+            slower; "off" never during a call (a Ctrl-C raises once it returned).
+            Only a call on Python's main thread, or one with a progress callback,
+            pays for interruptibility: other threads cannot receive Ctrl-C.
         """
     def load_ordered_cache(self) -> dict:
         r"""
@@ -577,6 +598,8 @@ class Vakint:
 
         Shard files are content-addressed and the manifest is replaced
         atomically, so an interrupted save keeps the previous cache valid.
+        Like the loads, it runs under the engine's `max_elapsed_seconds` and
+        `max_process_rss_bytes` limits and stops at Vakint's checkpoints.
         """
     def ordered_cache_statistics(self) -> dict:
         r"""
@@ -1416,7 +1439,10 @@ class VakintProgress:
         r"""
         The full monitor model (schema ``vakint.monitor.v2``, as in the
         ``model`` object of a ``progress_snapshot`` file). Calls without a
-        native monitor give the status, elapsed time and stage only.
+        native monitor give the status, elapsed time and stage only. The final
+        snapshot's ``"status"`` is the call's outcome: "Succeeded", "Failed"
+        or "Interrupted" (the last one is not a ``vakint.monitor.v2`` status:
+        the native monitor never sees the interruption).
         """
     def __repr__(self) -> builtins.str: ...
 

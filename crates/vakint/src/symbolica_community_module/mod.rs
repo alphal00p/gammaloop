@@ -17,7 +17,8 @@ use std::time::Duration;
 
 use pyo3::types::{PyAnyMethods, PyDict, PyMapping, PyModule, PyModuleMethods, PyType};
 use pyo3::{
-    Bound, FromPyObject, PyAny, PyClass, PyErr, PyRef, Python, exceptions, pyclass, pymethods,
+    Bound, FromPyObject, IntoPyObject, PyAny, PyClass, PyErr, PyRef, Python, exceptions, pyclass,
+    pymethods,
 };
 use pyo3::{Py, PyResult};
 use symbolica::api::python::PythonExpression;
@@ -185,13 +186,41 @@ fn vakint_to_python_error(vakint_error: VakintError) -> PyErr {
 /// thread) and only the final progress snapshot is delivered. The
 /// ``progress`` keyword shows a status indicator in marimo notebooks ("auto",
 /// the default), passes ``VakintProgress`` snapshots to a callable, or is off
-/// (None).
+/// (None). A load publishes its data when it finishes; until then the engine
+/// keeps answering (other threads, progress callbacks) with its previous data.
+/// Interruptibility costs a few percent of native time and is installed only
+/// where an interrupt can arrive (Python's main thread, a progress callback);
+/// the ``interrupt`` argument selects "fine", "coarse" or "off". The native
+/// work of such calls runs on a "vakint-request" thread, which stays idle
+/// for the next call (one per concurrent caller, at most four).
 pub struct VakintWrapper {
     pub vakint: Vakint,
     pub settings: VakintSettings,
+    /// How long calls can be interrupted (the `interrupt` keyword).
+    interrupt: interrupt::InterruptMode,
 }
 
 impl VakintWrapper {
+    /// The runner settings of this engine's long calls.
+    fn runner(&self) -> interrupt::Options {
+        interrupt::Options {
+            limits: self.settings.rustred_resources,
+            mode: self.interrupt,
+        }
+    }
+
+    /// A load's staged engine, worker count and runner settings. The engine is
+    /// borrowed only here and for the final swap: while the load runs (GIL
+    /// released), other threads and progress callbacks use the current engine.
+    fn stage(slf: &Bound<'_, Self>) -> PyResult<(Vakint, usize, interrupt::Options)> {
+        let engine = slf.borrow();
+        Ok((
+            engine.staged_engine()?,
+            engine.settings.n_cores,
+            engine.runner(),
+        ))
+    }
+
     /// Stage publication separately from the current wrapper's mutable application slot.
     fn staged_engine(&self) -> PyResult<Vakint> {
         let loaded = self
@@ -856,12 +885,15 @@ impl VakintWrapper {
     #[pyo3(signature = (path, max_loop_count, *, progress = progress::ProgressArg::auto()))]
     #[pyo3(text_signature = "($self, path, max_loop_count, *, progress='auto')")]
     pub fn load_external_data(
-        &mut self,
+        slf: PyRef<'_, Self>,
         py: Python<'_>,
         path: std::path::PathBuf,
         max_loop_count: usize,
         progress: ProgressArg,
     ) -> PyResult<()> {
+        // Release the borrow: the engine is borrowed again only to stage and swap.
+        let Ok(slf) = slf.into_pyobject(py);
+        let slf = &slf;
         let progress = Progress::resolve(
             py,
             progress.get(),
@@ -869,31 +901,29 @@ impl VakintWrapper {
             format!("loading 1L-{max_loop_count}L external data"),
             Duration::from_secs(1),
         )?;
-        let mut staged = self.staged_engine()?;
-        let n_cores = self.settings.n_cores;
-        interrupt::run_load(py, self.settings.rustred_resources, progress, || {
+        let (mut staged, n_cores, runner) = Self::stage(slf)?;
+        interrupt::run_load(py, runner, progress, || {
             staged.load_external_data_on(path, max_loop_count, n_cores)
         })?;
-        self.vakint = staged;
+        slf.borrow_mut().vakint = staged;
         Ok(())
     }
 
     /// Load a local loop pack, or a sealed lower-loop native rules file.
     pub fn load_rustred_artifacts(
-        &mut self,
+        slf: PyRef<'_, Self>,
         py: Python<'_>,
         loop_count: usize,
         path: std::path::PathBuf,
     ) -> PyResult<()> {
-        let mut staged = self.staged_engine()?;
-        let n_cores = self.settings.n_cores;
-        interrupt::run_load(
-            py,
-            self.settings.rustred_resources,
-            Progress::none(),
-            || staged.load_rustred_artifacts_on(loop_count, path, n_cores),
-        )?;
-        self.vakint = staged;
+        // Release the borrow: the engine is borrowed again only to stage and swap.
+        let Ok(slf) = slf.into_pyobject(py);
+        let slf = &slf;
+        let (mut staged, n_cores, runner) = Self::stage(slf)?;
+        interrupt::run_load(py, runner, Progress::none(), || {
+            staged.load_rustred_artifacts_on(loop_count, path, n_cores)
+        })?;
+        slf.borrow_mut().vakint = staged;
         Ok(())
     }
 
@@ -928,7 +958,7 @@ impl VakintWrapper {
         text_signature = "($self, max_loop_count, version='latest', local_artifacts_path=None, refresh=False, *, progress='auto')"
     )]
     pub fn load_official_external_data<'py>(
-        &mut self,
+        slf: PyRef<'py, Self>,
         py: Python<'py>,
         max_loop_count: usize,
         version: &str,
@@ -936,6 +966,9 @@ impl VakintWrapper {
         refresh: bool,
         progress: ProgressArg,
     ) -> PyResult<Bound<'py, PyDict>> {
+        // Release the borrow: the engine is borrowed again only to stage and swap.
+        let Ok(slf) = slf.into_pyobject(py);
+        let slf = &slf;
         let progress = Progress::resolve(
             py,
             progress.get(),
@@ -943,18 +976,18 @@ impl VakintWrapper {
             format!("loading 1L-{max_loop_count}L external data"),
             Duration::from_secs(1),
         )?;
-        let mut staged = self.staged_engine()?;
+        let (mut staged, n_cores, runner) = Self::stage(slf)?;
         let options = crate::OfficialExternalDataOptions {
             version: version.to_owned(),
             local_artifacts_path,
             refresh,
-            n_cores: self.settings.n_cores,
+            n_cores,
             ..Default::default()
         };
-        let report = interrupt::run_load(py, self.settings.rustred_resources, progress, || {
+        let report = interrupt::run_load(py, runner, progress, || {
             staged.load_official_external_data(max_loop_count, &options)
         })?;
-        self.vakint = staged;
+        slf.borrow_mut().vakint = staged;
         let result = PyDict::new(py);
         result.set_item("version", report.version)?;
         result.set_item("path", report.path)?;
@@ -970,7 +1003,7 @@ impl VakintWrapper {
         Ok(result)
     }
 
-    #[pyo3(signature = (run_time_decimal_precision = None, evaluation_order = None, tensor_reduction_method = None, epsilon_symbol = None, mu_r_sq_symbol = None, form_exe_path = None, python_exe_path = None, verify_numerator_identification = None, integral_normalization_factor = None, allow_unknown_integrals = None, clean_tmp_dir = None, number_of_terms_in_epsilon_expansion = None, use_dot_product_notation = None, temporary_directory = None, rustred_artifact_path = None, rustred_cache_bytes = None, rustred_cache_terms = None, rustred_product_cache_bytes = None, rustred_product_cache_terms = None, rustred_scalar_max_work = None, max_process_rss_bytes = None, max_elapsed_seconds = None, n_cores = None, ordered_weight_arithmetic = None, ordered_cache = "read-write", ordered_cache_directory = None, ordered_cache_ram_bytes = None, ordered_cache_autosave = "after-evaluation"))]
+    #[pyo3(signature = (run_time_decimal_precision = None, evaluation_order = None, tensor_reduction_method = None, epsilon_symbol = None, mu_r_sq_symbol = None, form_exe_path = None, python_exe_path = None, verify_numerator_identification = None, integral_normalization_factor = None, allow_unknown_integrals = None, clean_tmp_dir = None, number_of_terms_in_epsilon_expansion = None, use_dot_product_notation = None, temporary_directory = None, rustred_artifact_path = None, rustred_cache_bytes = None, rustred_cache_terms = None, rustred_product_cache_bytes = None, rustred_product_cache_terms = None, rustred_scalar_max_work = None, max_process_rss_bytes = None, max_elapsed_seconds = None, n_cores = None, ordered_weight_arithmetic = None, ordered_cache = "read-write", ordered_cache_directory = None, ordered_cache_ram_bytes = None, ordered_cache_autosave = "after-evaluation", interrupt = "fine"))]
     #[allow(clippy::too_many_arguments, clippy::needless_update)]
     #[new]
     /// Create a new Vakint instance, specifying details of the evaluation stack. Note that the same instance can be recycled across multiple evaluations.
@@ -1104,6 +1137,15 @@ impl VakintWrapper {
     ///     When new records of a directory-backed read-write cache are written:
     ///     "after-evaluation" (default), "on-drop" (when the engine is released)
     ///     or "never" (only `save_ordered_cache`).
+    /// interrupt : str
+    ///     How Ctrl-C (marimo: Interrupt) and a raising progress callback stop
+    ///     a long call: "fine" (default) at every native resource checkpoint,
+    ///     usually within a fraction of a second; "coarse" only at Vakint's own
+    ///     checkpoints (per data file, program step and expression term), at
+    ///     no cost to the native checkpoints, which "fine" makes a few percent
+    ///     slower; "off" never during a call (a Ctrl-C raises once it returned).
+    ///     Only a call on Python's main thread, or one with a progress callback,
+    ///     pays for interruptibility: other threads cannot receive Ctrl-C.
     pub fn new(
         py: Python<'_>,
         run_time_decimal_precision: Option<u32>,
@@ -1134,8 +1176,10 @@ impl VakintWrapper {
         ordered_cache_directory: Option<PathBuf>,
         ordered_cache_ram_bytes: Option<usize>,
         ordered_cache_autosave: &str,
+        interrupt: &str,
     ) -> PyResult<VakintWrapper> {
         let rustred_resources = resources::limits(max_process_rss_bytes, max_elapsed_seconds)?;
+        let interrupt = interrupt::InterruptMode::parse(interrupt)?;
         let n_cores = n_cores.unwrap_or_else(crate::default_n_cores);
         crate::execution::validate_n_cores(n_cores)
             .map_err(|error| exceptions::PyValueError::new_err(error.to_string()))?;
@@ -1259,8 +1303,16 @@ impl VakintWrapper {
                 ..VakintSettings::default()
             }
         };
-        let vakint = interrupt::run_load(py, rustred_resources, Progress::none(), Vakint::new)?;
-        Ok(VakintWrapper { vakint, settings })
+        let runner = interrupt::Options {
+            limits: rustred_resources,
+            mode: interrupt,
+        };
+        let vakint = interrupt::run_load(py, runner, Progress::none(), Vakint::new)?;
+        Ok(VakintWrapper {
+            vakint,
+            settings,
+            interrupt,
+        })
     }
 
     /// Worker threads of this instance (the `n_cores` constructor argument).
@@ -1277,6 +1329,13 @@ impl VakintWrapper {
         self.settings.ordered_weight_arithmetic.to_string()
     }
 
+    /// How long calls can be interrupted: "fine", "coarse" or "off" (the
+    /// `interrupt` constructor argument).
+    #[getter]
+    pub fn interrupt(&self) -> &'static str {
+        self.interrupt.as_str()
+    }
+
     /// Attach the Ordered step caches of every loaded reduction program now,
     /// as evaluations would on first use, and return their statistics.
     ///
@@ -1285,12 +1344,9 @@ impl VakintWrapper {
     /// Raises if a directory holds a cache with another RustRed binding (cache
     /// schema or step-semantics version, family, variables or policy).
     pub fn load_ordered_cache<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        let statistics = interrupt::run_load(
-            py,
-            self.settings.rustred_resources,
-            Progress::none(),
-            || self.vakint.load_ordered_cache(&self.settings),
-        )?;
+        let statistics = interrupt::run_load(py, self.runner(), Progress::none(), || {
+            self.vakint.load_ordered_cache(&self.settings)
+        })?;
         cache::statistics(py, &statistics)
     }
 
@@ -1299,13 +1355,12 @@ impl VakintWrapper {
     ///
     /// Shard files are content-addressed and the manifest is replaced
     /// atomically, so an interrupted save keeps the previous cache valid.
+    /// Like the loads, it runs under the engine's `max_elapsed_seconds` and
+    /// `max_process_rss_bytes` limits and stops at Vakint's checkpoints.
     pub fn save_ordered_cache<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        let report = interrupt::run_load(
-            py,
-            self.settings.rustred_resources,
-            Progress::none(),
-            || self.vakint.save_ordered_cache(),
-        )?;
+        let report = interrupt::run_load(py, self.runner(), Progress::none(), || {
+            self.vakint.save_ordered_cache()
+        })?;
         cache::save_report(py, &report)
     }
 
@@ -1360,7 +1415,7 @@ impl VakintWrapper {
             ),
             Duration::from_secs(1),
         )?;
-        let report = interrupt::run(py, self.settings.rustred_resources, progress, || {
+        let report = interrupt::run(py, self.runner(), progress, || {
             self.vakint.warm_ordered_cache(
                 &self.settings,
                 integrals.iter().map(|integral| integral.expr.as_view()),
@@ -1371,17 +1426,22 @@ impl VakintWrapper {
 
     /// Explicitly load a local five-loop application package once.
     /// Also selects this package in the engine settings.
-    pub fn load_rustred_application(&mut self, py: Python<'_>, path: String) -> PyResult<()> {
-        let staged = self.staged_engine()?;
-        let mut settings = self.settings.clone();
-        let staged = interrupt::run_load(
-            py,
-            self.settings.rustred_resources,
-            Progress::none(),
-            || staged.with_rustred_application(&mut settings, path),
-        )?;
-        self.vakint = staged;
-        self.settings = settings;
+    pub fn load_rustred_application(
+        slf: PyRef<'_, Self>,
+        py: Python<'_>,
+        path: String,
+    ) -> PyResult<()> {
+        // Release the borrow: the engine is borrowed again only to stage and swap.
+        let Ok(slf) = slf.into_pyobject(py);
+        let slf = &slf;
+        let (staged, _, runner) = Self::stage(slf)?;
+        let mut settings = slf.borrow().settings.clone();
+        let staged = interrupt::run_load(py, runner, Progress::none(), || {
+            staged.with_rustred_application(&mut settings, path)
+        })?;
+        let mut engine = slf.borrow_mut();
+        engine.vakint = staged;
+        engine.settings = settings;
         Ok(())
     }
 
@@ -1421,7 +1481,7 @@ impl VakintWrapper {
             progress,
         )?;
         let input = integral_expression.expr.as_view();
-        let result = interrupt::run(py, self.settings.rustred_resources, progress, || {
+        let result = interrupt::run(py, self.runner(), progress, || {
             if monitor.enabled() {
                 self.vakint
                     .evaluate_rustred_symbolic_with_monitor(&self.settings, input, &monitor)
@@ -1454,12 +1514,9 @@ impl VakintWrapper {
         symbol: &ConstantSymbolWrapper,
         prec: u32,
     ) -> PyResult<VakintConstantWrapper> {
-        interrupt::run(
-            py,
-            self.settings.rustred_resources,
-            Progress::none(),
-            || self.vakint.get_constant(&symbol.value, prec),
-        )
+        interrupt::run(py, self.runner(), Progress::none(), || {
+            self.vakint.get_constant(&symbol.value, prec)
+        })
         .map(Into::into)
     }
 
@@ -1473,12 +1530,9 @@ impl VakintWrapper {
         symbol: &MasterSymbolWrapper,
         prec: u32,
     ) -> PyResult<VakintMasterWrapper> {
-        interrupt::run(
-            py,
-            self.settings.rustred_resources,
-            Progress::none(),
-            || self.vakint.get_master(&symbol.value, prec),
-        )
+        interrupt::run(py, self.runner(), Progress::none(), || {
+            self.vakint.get_master(&symbol.value, prec)
+        })
         .map(Into::into)
     }
 
@@ -1658,15 +1712,10 @@ impl VakintWrapper {
         short_form: Option<bool>,
     ) -> PyResult<PythonExpression> {
         let input = integral_expression.expr.as_view();
-        interrupt::run(
-            py,
-            self.settings.rustred_resources,
-            Progress::none(),
-            || {
-                self.vakint
-                    .to_canonical(&self.settings, input, short_form.unwrap_or(false))
-            },
-        )
+        interrupt::run(py, self.runner(), Progress::none(), || {
+            self.vakint
+                .to_canonical(&self.settings, input, short_form.unwrap_or(false))
+        })
         .map(Into::into)
     }
 
@@ -1698,12 +1747,9 @@ impl VakintWrapper {
         integral_expression: PythonExpression,
     ) -> PyResult<PythonExpression> {
         let input = integral_expression.expr.as_view();
-        interrupt::run(
-            py,
-            self.settings.rustred_resources,
-            Progress::none(),
-            || self.vakint.tensor_reduce(&self.settings, input),
-        )
+        interrupt::run(py, self.runner(), Progress::none(), || {
+            self.vakint.tensor_reduce(&self.settings, input)
+        })
         .map(Into::into)
     }
 
@@ -1750,7 +1796,7 @@ impl VakintWrapper {
     ) -> PyResult<PythonExpression> {
         let (monitor, progress) = monitored(py, "off", None, 1.0, progress)?;
         let input = integral_expression.expr.as_view();
-        interrupt::run(py, self.settings.rustred_resources, progress, || {
+        interrupt::run(py, self.runner(), progress, || {
             if monitor.enabled() {
                 self.vakint
                     .evaluate_integral_with_monitor(&self.settings, input, &monitor)
@@ -1825,7 +1871,7 @@ impl VakintWrapper {
             progress,
         )?;
         let input = integral_expression.expr.as_view();
-        interrupt::run(py, self.settings.rustred_resources, progress, || {
+        interrupt::run(py, self.runner(), progress, || {
             if monitor.enabled() {
                 self.vakint
                     .evaluate_with_monitor(&self.settings, input, &monitor)

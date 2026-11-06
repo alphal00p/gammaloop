@@ -8,6 +8,8 @@ second, and the same engine must afterwards return the recorded result.
 Classes:
 - ``LowerLoop``: the vendored 1L-3L data only (the gallery's 3L quadratic
   ladder input).
+- ``DeepInput``: deeply nested input evaluates on the request thread as on
+  the calling thread (child processes).
 - ``RestrictedSymbolica``: the same in a child process without a Symbolica
   license (one Symbolica thread: the work stays on the calling thread).
 - ``FourLoop``: ``VAKINT_TEST_EXTERNAL_DATA`` (a data checkout with 4L) and
@@ -308,6 +310,99 @@ class LowerLoop(unittest.TestCase):
             sampler.join()
         self.assertIn("vakint-monitor", seen)
 
+    def test_other_threads_run_on_the_caller_unless_progress_is_consumed(self):
+        # Python delivers no signal to this thread (as a marimo app kernel):
+        # without progress nothing can cancel, so no request thread starts.
+        obj = self.slow_engine()
+        outcome = {}
+
+        def call():
+            # The work's CPU time lands on this thread when it runs here.
+            cpu, wall = time.thread_time(), time.monotonic()
+            value = obj.evaluate(self.input, progress=None)
+            outcome["cpu"], outcome["wall"] = (
+                time.thread_time() - cpu,
+                time.monotonic() - wall,
+            )
+            outcome["sha"] = sha256(value.to_canonical_string())
+
+        worker = threading.Thread(target=call)
+        worker.start()
+        worker.join()
+        self.assertEqual(outcome["sha"], self.expected)
+        self.assertGreater(outcome["cpu"], 0.5 * outcome["wall"], outcome)
+        # On the main thread (a cancellable call) the work runs elsewhere.
+        cpu, wall = time.thread_time(), time.monotonic()
+        obj.evaluate(self.input, progress=None)
+        self.assertLess(time.thread_time() - cpu, 0.5 * (time.monotonic() - wall))
+        self.assertEqual(obj.interrupt, "fine")
+        # "off": not even the main thread installs a cancellation scope.
+        off = engine(3, n_cores=1, ordered_weight_arithmetic="exact", interrupt="off")
+        self.assertEqual(off.interrupt, "off")
+        value = off.evaluate(self.input, progress=None)
+        self.assertEqual(sha256(value.to_canonical_string()), self.expected)
+        with self.assertRaises(ValueError):
+            engine(3, interrupt="sometimes")
+
+
+DEEP_CHILD = """
+import json, sys
+sys.path.insert(0, sys.argv[1])
+import interrupt_smoke as t
+from symbolica import E, S
+mode, depth, interrupt = sys.argv[2], int(sys.argv[3]), sys.argv[4]
+obj = t.engine(1, n_cores=1, verify_numerator_identification=False, interrupt=interrupt)
+if mode == "sum":
+    muvsq = E("muvsq", default_namespace="vakint")
+    coefficient = E("dot(k(1),k(1))", default_namespace="vakint")
+    for _ in range(depth):
+        coefficient = 1 + muvsq * coefficient
+    expression = coefficient * E("topo(I1L(muvsq,4))", default_namespace="vakint")
+else:
+    g = S("deepinput::g")
+    coefficient = E("deepinput::x")
+    for _ in range(depth):
+        coefficient = g(coefficient)
+    expression = coefficient * E("topo(I1L(muvsq,2))", default_namespace="vakint")
+value = obj.evaluate(expression, progress=None)
+print(json.dumps({"sha": t.sha256(value.to_canonical_string())}))
+"""
+
+
+class DeepInput(unittest.TestCase):
+    """Deeply nested input that the calling thread's stack (8 MiB on Python's
+    main thread) evaluates also evaluates on the request thread: Symbolica's
+    normalization recurses through it. Each case runs in a child process, so a
+    stack overflow is a failure here rather than a dead test runner."""
+
+    def evaluate(self, mode, depth, interrupt):
+        import subprocess
+
+        child = subprocess.run(
+            [sys.executable, "-c", DEEP_CHILD, str(HERE), mode, str(depth), interrupt],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=900,
+        )
+        self.assertEqual(
+            child.returncode,
+            0,
+            f"{mode} depth {depth} ({interrupt}): rc {child.returncode}\n"
+            + child.stderr[-1500:],
+        )
+        return json.loads(child.stdout.strip().splitlines()[-1])["sha"]
+
+    def test_nested_numerator_and_function_coefficient(self):
+        # Before the request thread got the caller's stack, the nested sum
+        # crashed the process at depth 400 and the nested function at 4000.
+        for mode, depth in (("sum", 800), ("function", 4000)):
+            with self.subTest(mode=mode, depth=depth):
+                on_request_thread = self.evaluate(mode, depth, "fine")
+                on_caller = self.evaluate(mode, depth, "off")
+                self.assertEqual(on_request_thread, on_caller)
+                record(test=f"deep {mode} {depth}", ok=True)
+
 
 RESTRICTED_CHILD = """
 import json, sys, time
@@ -469,12 +564,31 @@ class FourLoop(unittest.TestCase):
         self.assertLess(latency, 5.0)
         self.assertEqual(snapshots[-1].status, "interrupted")
         self.assertEqual(snapshots[-1].stage, "data_load")
+        # Without a progress consumer the load stays on this thread and its
+        # own checkpoints consume the SIGINT: same stop, same exception.
+        outcome, latency, _ = interrupt_after(
+            3.0,
+            lambda: obj.load_official_external_data(
+                4, version="latest", local_artifacts_path=DATA, progress=None
+            ),
+        )
+        record(test="4L load sigint (no progress)", outcome=outcome, latency=latency)
+        self.assertEqual(outcome, "interrupted")
+        self.assertLess(latency, 5.0)
         # The engine kept its previous (vendored 1L-3L) data and loads again.
         three, _ = ladder_input("3L-quadratic", LADDER)
         self.assertNotEqual(obj.evaluate(three, progress=None), E("0"))
+        # A progress callback may use the engine while it loads (the load
+        # publishes its data only when it finishes).
+        seen_cores = []
         obj.load_official_external_data(
-            4, version="latest", local_artifacts_path=DATA, progress=None
+            4,
+            version="latest",
+            local_artifacts_path=DATA,
+            progress=lambda snapshot: seen_cores.append(obj.n_cores),
         )
+        self.assertTrue(seen_cores)
+        self.assertEqual(set(seen_cores), {max(CORES)})
         result = obj.evaluate(self.input, progress=None)
         self.assertEqual(sha256(result.to_canonical_string()), self.expected)
 

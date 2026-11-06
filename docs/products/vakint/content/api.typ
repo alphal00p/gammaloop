@@ -99,12 +99,19 @@ frontier, step-cache counters, memory; `to_dict()` is the same `vakint.monitor.v
 These calls run their native work with the GIL released. Ctrl-C (or marimo's Interrupt) stops
 it through a `Cancellation` (Rust: `vakint::Cancellation`): evaluations at their next resource
 checkpoint, usually within a fraction of a second, loads between data files and program load
-steps; the original `KeyboardInterrupt` is raised and the engine stays usable. Two native
-stretches have no checkpoint and finish first: the five-loop application load step of a 1L-5L
-load (up to about 30 s) and the modular lift after the Ordered schedule is done (about 20 s for
-the five-loop zero-momentum benchmark). Without a
-Symbolica license (one Symbolica thread) the work stays on the calling thread, still
-interruptible, and only the final progress snapshot is delivered.
+steps; the original `KeyboardInterrupt` is raised and the engine stays usable. Native stretches
+without a checkpoint finish first: the five-loop application load step of a 1L-5L load (up to
+about 30 s), the expansion step of a large Apply phase (6-9 s measured in phase 73 of 83 of the
+five-loop zero-momentum benchmark) and the modular lift after the Ordered schedule is done
+(about 20 s there). If an interrupt leaves a failed first-time owner preparation in the
+five-loop application, the next five-loop call reloads the application (30-40 s, announced on
+stderr). The cancellation scope costs a few percent at every native checkpoint; it is installed
+only on Python's main thread or with a progress callback (other threads receive no Ctrl-C), and
+`Vakint(interrupt=...)` selects `"fine"` (default), `"coarse"` (Vakint's own checkpoints only,
+free) or `"off"`. Loads publish the loaded data when they finish; meanwhile the engine answers
+with its previous data, also to progress callbacks and other threads. Without a Symbolica
+license (one Symbolica thread) the work stays on the calling thread, still interruptible, and
+only the final progress snapshot is delivered.
 
 The #link("reference/rust/")[Rust orientation] identifies the compiled crates, versions, and
 feature matrix and links directly to native Rustdoc. The generated
