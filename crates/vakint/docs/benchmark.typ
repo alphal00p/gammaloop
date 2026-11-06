@@ -433,9 +433,9 @@ graphs) are merged by their factors; numbers count masters (one to three loops: 
   [Rings: the FMFT family programs H, X, BMW, FG; irreducible topologies named by their FMFT master PR$k$.])
 
 #page(flipped: true, margin: (x: 12mm, y: 12mm))[
-  #fig-graph(5, draw-graph(graphs.loops.at("5"), width: 27cm, row: 2.15cm, labels: false, rx: 0.36cm, ry: 0.27cm, label-size: 6.6pt, edge-alpha: 120, edge-base: 0.25pt),
-    [Rings: the #graphs.loops.at("5").stats.owner_programs owner sectors of the saved application (width grows with their rule tables).])
   #legend()
+  #fig-graph(5, draw-graph(graphs.loops.at("5"), width: 27cm, row: 2.3cm, labels: false, rx: 0.36cm, ry: 0.27cm, label-size: 6.6pt, edge-alpha: 120, edge-base: 0.25pt),
+    [Rings: the #graphs.loops.at("5").stats.owner_programs owner sectors of the saved application (width grows with their rule tables).])
 ]
 
 // ------------------------------------------------------------- precision --
