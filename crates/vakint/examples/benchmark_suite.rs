@@ -38,12 +38,12 @@
 //! plain cargo build reports them as unknown and `make-benchmark.sh --install`
 //! refuses such a binary.
 use ::vakint;
-#[path = "../tests/fixtures/qcd_ladder/mod.rs"]
-#[allow(dead_code)]
-mod fixture;
 #[path = "external_data_acceptance/dot.rs"]
 #[allow(dead_code)]
 mod dot;
+#[path = "../tests/fixtures/qcd_ladder/mod.rs"]
+#[allow(dead_code)]
+mod fixture;
 
 use std::{
     collections::BTreeMap,
@@ -146,7 +146,9 @@ struct Args(BTreeMap<String, String>);
 
 impl Args {
     fn parse(mut raw: impl Iterator<Item = String>) -> Result<(String, Self)> {
-        let command = raw.next().ok_or("missing subcommand; see the module docs")?;
+        let command = raw
+            .next()
+            .ok_or("missing subcommand; see the module docs")?;
         let mut map = BTreeMap::new();
         while let Some(key) = raw.next() {
             let key = key
@@ -453,7 +455,9 @@ fn measure(args: &Args) -> Result<()> {
                 return Err("the warm-up integral must differ from the timed input".into());
             }
             Some(parse_atom(
-                record["input"].as_str().ok_or("warm-up record without input")?,
+                record["input"]
+                    .as_str()
+                    .ok_or("warm-up record without input")?,
             )?)
         }
         None => None,
@@ -463,9 +467,10 @@ fn measure(args: &Args) -> Result<()> {
         let started = Instant::now();
         #[cfg(feature = "experimental-rustred")]
         let (result, math) = {
-            let capture = vakint::rustred_evaluation::experimental::capture_reduction_timing(|| {
-                engine.evaluate(&settings, input.as_view())
-            });
+            let capture =
+                vakint::rustred_evaluation::experimental::capture_reduction_timing(|| {
+                    engine.evaluate(&settings, input.as_view())
+                });
             let t = capture.timing;
             (
                 capture.result,
@@ -591,6 +596,14 @@ fn measure(args: &Args) -> Result<()> {
             "cache": cache,
             "n_cores": n_cores,
             "ordered_weight_arithmetic": settings.ordered_weight_arithmetic.to_string(),
+            // vakint resolves the default selection to modular_sampled for five-loop requests
+            "effective_ordered_weight_arithmetic": if loops == 5
+                && settings.ordered_weight_arithmetic.is_default_selection()
+            {
+                "modular_sampled (vakint's five-loop default)".to_owned()
+            } else {
+                settings.ordered_weight_arithmetic.to_string()
+            },
             "epsilon_terms": terms,
             "normalization": "MSbar",
             "loader_seconds": loader_seconds,
@@ -656,7 +669,15 @@ fn main() -> Result<()> {
         "measure" => measure(&args),
         "identity" => identity(&args),
         "--help" | "-h" | "help" => {
-            println!("{}", SOURCE.lines().take_while(|l| l.starts_with("//!")).map(|l| l.trim_start_matches("//!").trim_start()).collect::<Vec<_>>().join("\n"));
+            println!(
+                "{}",
+                SOURCE
+                    .lines()
+                    .take_while(|l| l.starts_with("//!"))
+                    .map(|l| l.trim_start_matches("//!").trim_start())
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            );
             Ok(())
         }
         other => Err(format!("unknown subcommand {other}").into()),
