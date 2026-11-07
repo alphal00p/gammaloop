@@ -53,7 +53,7 @@
   if a >= 100 { fixed(x, 0) } else if a >= 10 { fixed(x, 1) } else if a >= 1 { fixed(x, 2) } else { fixed(x, 3) }
 }
 // Unit chosen for a duration, and the duration in that unit.
-#let unit-of(s) = if s < 1e-3 { (1e6, "µs") } else if s < 1 { (1e3, "ms") } else if s < 600 { (1, "s") } else if s < 36000 { (1 / 60, "min") } else { (1 / 3600, "h") }
+#let unit-of(s) = if s < 1e-3 { (1e6, "µs") } else if s < 1 { (1e3, "ms") } else if s < 600 { (1, "s") } else if s < 7200 { (1 / 60, "min") } else { (1 / 3600, "h") }
 #let dur(s) = {
   if not is-num(s) { return [—] }
   let (f, u) = unit-of(s)
@@ -77,18 +77,15 @@
 
 #let cell-of(case, key) = case.cells.at(key, default: (status: "pending"))
 #let med(c) = if c.status == "ok" { c.median } else { none }
-// Small note next to a value: the minimum of the runs, or the run/core count when it is not a repetition.
+// Small note next to a value: the minimum of the runs, or "1 run" when it is not a repetition.
 #let spread(c, fill) = {
   if c.status != "ok" { return none }
-  let nc = c.at("n_cores", default: 1)
-  let note = if c.n == 1 {
-    if nc > 1 [#nc cores · 1 run] else [1 run]
-  } else {
-    let m = [(#in-unit(c.min, c.median))]
-    if nc > 1 [#m #nc cores] else { m }
-  }
+  let note = if c.n == 1 [1 run] else [(#in-unit(c.min, c.median))]
   text(size: 5.6pt, weight: "regular", fill: second-ink(fill))[#h(2pt)#note]
 }
+// Multi-core cells (heavy five-loop reductions) name their core count on a line of their own.
+#let cores-of(c) = if c.status == "ok" { c.at("n_cores", default: 1) } else { 1 }
+#let cores-line(c, fill) = text(size: 6.1pt, fill: second-ink(fill))[on #cores-of(c) cores]
 #let blank = text(size: 6.9pt)[#sym.space.nobreak]
 
 // One comparison cell, three lines: RustRed median (min) / reference median (min) / ratio.
@@ -115,7 +112,9 @@
     else if b != none { text(size: 6.6pt, fill: ink2)[#label #dur(b)]; if ref-spread { spread(ref, fill) } }
     else { text(size: 6.6pt, fill: if ref.status == "failed" { rgb("b42318") } else { luma(110) })[#label #ref.status] }
     linebreak()
-    if a != none and b != none { text(size: 7pt, weight: "semibold", fill: ink, ratio-text(a / b)) } else { blank }
+    if a != none and b != none { text(size: 7pt, weight: "semibold", fill: ink, ratio-text(a / b)) }
+    else if cores-of(rr) > 1 { cores-line(rr, fill) } else { blank }
+    if a != none and b != none and cores-of(rr) > 1 { linebreak(); cores-line(rr, fill) }
     if extra != none { linebreak(); text(size: 6.1pt, fill: ink2, extra) }
   })
 }
@@ -297,7 +296,7 @@
     [Harness binary], raw(str(ident.executable_sha256)),
     [FORM], [#form],
     [Host], [#host.at("cpu_model", default: "—"), #host.at("logical_cpus", default: "—") logical CPUs; timed on CPUs #host.at("cpus_used", default: ()).map(str).join(", ") (#pl(cn.at("l3_domains", default: 0), "L3 domain"))],
-    [Contention], [#cn.at("samples", default: "—") samples, #cn.at("contended_samples", default: "—") still contended after re-measurement (thresholds: SMT sibling #pct(cn.at("thresholds", default: (:)).at("sibling_busy", default: none)), other tasks #pct(cn.at("thresholds", default: (:)).at("foreign_cpu", default: none)), call run-queue wait #pct(cn.at("thresholds", default: (:)).at("run_delay", default: none)) when other tasks ran on the timed CPU) · SMT sibling busy #pct(cn.at("sibling_busy_median", default: none)) median (max #pct(cn.at("sibling_busy_max", default: none))) · timed call waiting in the run queue #pct(cn.at("call_run_delay_median", default: none)) (max #pct(cn.at("call_run_delay_max", default: none))) · other tasks on the timed CPU #pct(cn.at("foreign_cpu_median", default: none)) (max #pct(cn.at("foreign_cpu_max", default: none))) · 1-min load ≤ #cn.at("load1_max", default: "—")],
+    [Contention], [#cn.at("samples", default: "—") samples, #cn.at("contended_samples", default: "—") still contended after re-measurement (multi-core samples are measured once; thresholds: SMT sibling #pct(cn.at("thresholds", default: (:)).at("sibling_busy", default: none)), other tasks #pct(cn.at("thresholds", default: (:)).at("foreign_cpu", default: none)), call run-queue wait #pct(cn.at("thresholds", default: (:)).at("run_delay", default: none)) when other tasks ran on the timed CPU) · SMT sibling busy #pct(cn.at("sibling_busy_median", default: none)) median (max #pct(cn.at("sibling_busy_max", default: none))) · timed call waiting in the run queue #pct(cn.at("call_run_delay_median", default: none)) (max #pct(cn.at("call_run_delay_max", default: none))) · other tasks on the timed CPU #pct(cn.at("foreign_cpu_median", default: none)) (max #pct(cn.at("foreign_cpu_max", default: none))) · 1-min load ≤ #cn.at("load1_max", default: "—")],
     [Regenerate], [#raw("crates/vakint/docs/benchmark/make-benchmark.sh DATA_ROOT BENCHMARK_BINARY OUT_DIR --install") (after a data release: #raw("DATA_ROOT - OUT_DIR --refresh-tables --install"), timings kept)],
     [Built], [#results.assembled_utc #if draft [· *DRAFT*: not the published data or build]],
   )
