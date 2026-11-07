@@ -2198,6 +2198,7 @@ impl VakintMomentumSolution {
 
 #[cfg(test)]
 mod tests {
+    use spenso::chain;
     use spenso::structure::abstract_index::AIND_SYMBOLS;
     use symbolica::symbol;
 
@@ -2907,6 +2908,78 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn projected_clifford_counterterms_remain_pure_poles_when_nested() -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let settings = VakintSettings::default().true_settings();
+        let integrated = Integrated::new(&vakint, &settings);
+        let prepare = |numerator: &Atom| -> Result<Atom> {
+            let backend = to_vakint_numerator(numerator)?;
+            integrated.simplify_projected_numerator(&backend, 0)
+        };
+        let epsilon = Atom::var(GS.dim_epsilon);
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let spin = Bispinor {}.new_rep(4);
+        let a = spin.to_symbolic([Aind::Hedge(3, 1).to_atom()]);
+        let b = spin.to_symbolic([Aind::Hedge(4, 1).to_atom()]);
+        let mu = mink.to_symbolic([Aind::new_dummy().to_atom()]);
+        let momentum = function!(GS.emr_mom, 7, mink.to_symbolic([]));
+        let gamma = |argument: &Atom| {
+            function!(
+                AGS.gamma,
+                SPENSO_TAG.chain_in,
+                SPENSO_TAG.chain_out,
+                argument
+            )
+        };
+        // Normalize only the notation of this one-gamma reference. It cannot
+        // produce a dimension factor or hide a contracted Clifford word.
+        let slash = prepare(&chain!(&a, &b, gamma(&momentum)))?;
+        for (word, leading, evanescent) in [
+            (
+                chain!(&a, &b, gamma(&mu), gamma(&mu), gamma(&momentum)),
+                4,
+                -2,
+            ),
+            (
+                chain!(&a, &b, gamma(&mu), gamma(&momentum), gamma(&mu)),
+                -2,
+                2,
+            ),
+        ] {
+            let projected = prepare(&word)?;
+            for pole_order in [1, 2] {
+                let child = truncate(&series(&(&projected / epsilon.pow(pole_order)), 1)?, false);
+                let mut expected = Atom::num(leading) * &slash / epsilon.pow(pole_order);
+                if pole_order == 2 {
+                    expected += Atom::num(evanescent) * &slash / &epsilon;
+                }
+                assert!(
+                    (&child - &expected).expand().is_zero(),
+                    "wrong pure-pole child for order {pole_order}: {child}; expected {expected}"
+                );
+                // Insert the already subtracted child into another simple
+                // divergence. No additional Clifford reduction is allowed here.
+                let parent = truncate(&series(&(child / &epsilon), 1)?, false);
+                assert!((parent - expected / &epsilon).expand().is_zero());
+            }
+            // Contracting only after the first K operation leaves an unwanted
+            // finite term in the child. The next divergence promotes it to a
+            // spurious simple pole: -2 slash(p)/epsilon or +2 slash(p)/epsilon.
+            let selected_first = truncate(&series(&(word / &epsilon), 1)?, false);
+            let contracted_late = prepare(&selected_first)?;
+            let wrong_parent = truncate(&series(&(contracted_late / &epsilon), 1)?, false);
+            let correct_parent = Atom::num(leading) * &slash / epsilon.pow(2);
+            assert!(
+                (wrong_parent - correct_parent - Atom::num(evanescent) * &slash / &epsilon)
+                    .expand()
+                    .is_zero()
+            );
+        }
+        Ok(())
     }
 
     #[test]
