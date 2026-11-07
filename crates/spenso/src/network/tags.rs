@@ -89,6 +89,12 @@ pub fn tensor_custom_print(
 
 pub struct SpensoTags {
     pub broadcast: String,
+    /// Variadic tensor words expose their operands' ports while retaining the head.
+    /// Native Symbolica attributes determine word normalization. Build words with
+    /// Idenso's typed constructor when operands have unresolved ports or may vanish.
+    /// Symbolic tensor networks retain the word. Component-shadow realization
+    /// requires a separate policy and is rejected by `NamedStructure`.
+    pub tensor_word: String,
     /// Marks rank-one tensor symbols whose final argument is the tensor slot.
     ///
     /// Symbols carrying this tag must not use representation slots in earlier
@@ -1959,6 +1965,7 @@ impl SpensoTags {
 
     fn new() -> Self {
         let broadcast = tag!("broadcast");
+        let tensor_word = tag!("tensor_word");
         let upper = tag!("upper");
         let lower = tag!("lower");
         let rank1 = tag!("rank1");
@@ -2047,6 +2054,7 @@ impl SpensoTags {
             self_dual_: symbol!("self_dual_", tags = [&representation, &self_dual]),
             dualizable_: symbol!("dualizable_", tags = [&representation, &dualizable]),
             broadcast,
+            tensor_word,
             upper,
             lower,
             rank1,
