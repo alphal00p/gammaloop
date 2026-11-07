@@ -803,6 +803,18 @@ impl<
             Err(LibraryError::InvalidKey)
         }
     }
+
+    /// Registered component data or a deliberately registered factory is the
+    /// explicit policy for selected-slot heads. Missing signatures still fail.
+    fn key_for_selected_slot_structure(
+        &self,
+        structure: &Canonicalized<S>,
+    ) -> Result<Self::Key, LibraryError<Self::Key>>
+    where
+        S: TensorStructure,
+    {
+        self.key_for_structure(structure)
+    }
 }
 
 impl<
@@ -1356,7 +1368,15 @@ mod metric_normalization_tests {
 #[cfg(test)]
 #[allow(clippy::type_complexity)]
 mod test {
+    use symbolica::atom::{NamespacedSymbol, UserData};
+    use symbolica::wrap_symbol;
     use symbolica::{function, parse};
+
+    use crate::iterators::IteratableTensor;
+    use crate::network::library::DummyLibrary;
+    use crate::network::tensor_symmetry::TensorSlotSymmetry;
+    use crate::shadowing::FactorProjector;
+    use crate::structure::slot::IsAbstractSlot;
 
     use crate::{
         network::{
@@ -1379,6 +1399,411 @@ mod test {
 
     const LOCAL_GAMMA: &str = "symbolic_lib_test_gamma";
     const LOCAL_P: &str = "symbolic_lib_test_p";
+
+    type SelectedComponents = ParamTensor<ShadowedStructure<AbstractIndex>>;
+    type SelectedLibrary = TensorLibrary<ParamTensor<ExplicitKey<AbstractIndex>>, AbstractIndex>;
+    type SelectedNetwork =
+        Network<NetworkStore<SelectedComponents, Atom>, ExplicitKey<AbstractIndex>, Symbol>;
+
+    fn selected_component_head(name: &str, kind: FactorProjector) -> Symbol {
+        TensorSlotSymmetry::new([(kind, vec![1, 3])])
+            .unwrap()
+            .register_symbol(
+                NamespacedSymbol::parse(name),
+                vec![],
+                vec!["selected_component_tests::physical".into()],
+                UserData::None,
+            )
+            .unwrap()
+    }
+
+    fn selected_component_leaf(name: Symbol, metadata: i64, labels: [usize; 3]) -> Atom {
+        function!(
+            name,
+            metadata,
+            Euclidean {}
+                .new_rep(2)
+                .to_symbolic([Atom::num(labels[0] as i64)]),
+            Minkowski {}
+                .new_rep(2)
+                .to_symbolic([Atom::num(labels[1] as i64)]),
+            Euclidean {}
+                .new_rep(2)
+                .to_symbolic([Atom::num(labels[2] as i64)])
+        )
+    }
+
+    fn selected_component_key(
+        name: Symbol,
+        metadata: i64,
+    ) -> Canonicalized<ExplicitKey<AbstractIndex>> {
+        ExplicitKey::from_iter(
+            [
+                Euclidean {}.new_rep(2).cast::<LibraryRep>(),
+                Minkowski {}.new_rep(2).cast::<LibraryRep>(),
+                Euclidean {}.new_rep(2).cast::<LibraryRep>(),
+            ],
+            name,
+            Some(vec![Atom::num(metadata)]),
+        )
+    }
+
+    #[test]
+    fn selected_slot_registered_components_keep_physical_head_metadata_and_axis_order() {
+        let head = selected_component_head(
+            "selected_component_tests::antisymmetric",
+            FactorProjector::Antisymmetric,
+        );
+        let tags = head.get_tags().to_vec();
+        let declaration = TensorSlotSymmetry::from_symbol(head).unwrap();
+        let mut library = SelectedLibrary::new();
+        let key = selected_component_key(head, 7);
+        library
+            .insert_explicit_sparse(
+                key.clone(),
+                [
+                    (vec![0, 0, 1], Atom::num(3)),
+                    (vec![0, 1, 1], Atom::num(5)),
+                    (vec![1, 0, 0], Atom::num(-3)),
+                    (vec![1, 1, 0], Atom::num(-5)),
+                ],
+                Atom::Zero,
+            )
+            .unwrap();
+        let labels = [7103, 7101, 7102];
+        let value = selected_component_leaf(head, 7, labels);
+        let mut network =
+            SelectedNetwork::try_from_view(value.as_view(), &library, &ParseSettings::default())
+                .unwrap();
+        let functions = ErroringLibrary::<Symbol>::new();
+        network
+            .execute::<Sequential, SmallestDegree, _, _, _>(&library, &functions)
+            .unwrap();
+        let ExecutionResult::Val(tensor) = network.result_tensor(&library).unwrap() else {
+            panic!("registered component tensor")
+        };
+        let axes = tensor
+            .external_structure_iter()
+            .map(|slot| {
+                labels
+                    .iter()
+                    .position(|label| slot.aind() == AbstractIndex::Normal(*label))
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(axes.len(), 3);
+        let mut checked = 0;
+        for (storage, actual) in tensor.iter_expanded() {
+            let mut physical = [0; 3];
+            for (axis, coordinate) in axes.iter().zip(storage.iter().copied()) {
+                physical[*axis] = coordinate;
+            }
+            let magnitude = if physical[1] == 0 { 3 } else { 5 };
+            let expected = match (physical[0], physical[2]) {
+                (0, 1) => magnitude,
+                (1, 0) => -magnitude,
+                _ => 0,
+            };
+            assert_eq!(actual, &Atom::num(expected), "physical axes {physical:?}");
+            checked += 1;
+        }
+        assert!(checked >= 4);
+        assert_eq!(head.get_tags(), tags);
+        assert_eq!(TensorSlotSymmetry::from_symbol(head).unwrap(), declaration);
+        assert_eq!(key.canonical().name(), Some(head));
+        assert_eq!(key.canonical().args(), Some(vec![Atom::num(7)]));
+        assert!(value.contains_symbol(head));
+    }
+
+    #[test]
+    fn selected_slot_registered_symmetric_factory_uses_the_original_signature() {
+        let head = selected_component_head(
+            "selected_component_tests::symmetric_factory",
+            FactorProjector::Symmetric,
+        );
+        let key = selected_component_key(head, 11);
+        let mut library = SelectedLibrary::new();
+        library.insert_generic(key.canonical().clone().into(), |key| {
+            ParamTensor::from_dense(key, vec![Atom::num(9); 8]).unwrap()
+        });
+        let value = selected_component_leaf(head, 11, [7201, 7202, 7203]);
+        let network =
+            SelectedNetwork::try_from_view(value.as_view(), &library, &ParseSettings::default())
+                .unwrap();
+        let ExecutionResult::Val(tensor) = network.result_tensor(&library).unwrap() else {
+            panic!("registered symmetric factory")
+        };
+        assert_eq!(tensor.order(), 3);
+        assert_eq!(tensor.iter_expanded().count(), 8);
+        assert!(
+            tensor
+                .iter_expanded()
+                .all(|(_, value)| value == Atom::num(9))
+        );
+    }
+
+    #[test]
+    fn selected_slot_registered_components_contract_with_registered_spectator_vectors() {
+        let head = selected_component_head(
+            "selected_component_tests::contracted",
+            FactorProjector::Antisymmetric,
+        );
+        let mut library = SelectedLibrary::new();
+        library
+            .insert_explicit_sparse(
+                selected_component_key(head, 23),
+                [
+                    (vec![0, 0, 1], Atom::num(3)),
+                    (vec![0, 1, 1], Atom::num(5)),
+                    (vec![1, 0, 0], Atom::num(-3)),
+                    (vec![1, 1, 0], Atom::num(-5)),
+                ],
+                Atom::Zero,
+            )
+            .unwrap();
+        let euclidean = Euclidean {}.new_rep(2).cast::<LibraryRep>();
+        let minkowski = Minkowski {}.new_rep(2).cast::<LibraryRep>();
+        let left = symbol!(
+            "selected_component_tests::contract_left",
+            tag = SPENSO_TAG.tensor
+        );
+        let right = symbol!(
+            "selected_component_tests::contract_right",
+            tag = SPENSO_TAG.tensor
+        );
+        let spectator = symbol!(
+            "selected_component_tests::contract_spectator",
+            tag = SPENSO_TAG.tensor
+        );
+        for (name, representation, values) in [
+            (left, euclidean, [2, 3]),
+            (right, euclidean, [5, 7]),
+            (spectator, minkowski, [11, 13]),
+        ] {
+            library
+                .insert_explicit_dense(
+                    ExplicitKey::from_iter([representation], name, None),
+                    values.into_iter().map(Atom::num).collect(),
+                )
+                .unwrap();
+        }
+        let expression = selected_component_leaf(head, 23, [7801, 7802, 7803])
+            * function!(left, euclidean.to_symbolic([Atom::num(7801)]))
+            * function!(right, euclidean.to_symbolic([Atom::num(7803)]))
+            * function!(spectator, minkowski.to_symbolic([Atom::num(7802)]));
+        let mut network = SelectedNetwork::try_from_view(
+            expression.as_view(),
+            &library,
+            &ParseSettings::default(),
+        )
+        .unwrap();
+        network
+            .execute::<Sequential, SmallestDegree, _, _, _>(
+                &library,
+                &ErroringLibrary::<Symbol>::new(),
+            )
+            .unwrap();
+        let ExecutionResult::Val(result) = network.result_tensor(&library).unwrap() else {
+            panic!("complete registered component contraction")
+        };
+        // (2*7 - 3*5) * (3*11 - 5*13) = 32. The second minus is the
+        // native Minkowski metric diag(1,-1), on the independent spectator.
+        assert_eq!(result.into_owned().scalar(), Some(Atom::num(32)));
+    }
+
+    #[test]
+    fn selected_slot_component_policy_keeps_direct_missing_mismatched_and_dummy_refusals() {
+        let head = selected_component_head(
+            "selected_component_tests::refusals",
+            FactorProjector::Antisymmetric,
+        );
+        let value = selected_component_leaf(head, 13, [7301, 7302, 7303]);
+        assert!(
+            value
+                .infer_structure::<ShadowedStructure<AbstractIndex>>()
+                .unwrap_err()
+                .to_string()
+                .contains("component-shadow realization")
+        );
+        let mut library = SelectedLibrary::new();
+        library
+            .insert_explicit_dense(selected_component_key(head, 14), vec![Atom::Zero; 8])
+            .unwrap();
+        for library in [&SelectedLibrary::new(), &library] {
+            let error =
+                SelectedNetwork::try_from_view(value.as_view(), library, &ParseSettings::default())
+                    .unwrap_err();
+            assert!(error.to_string().contains("component-shadow realization"));
+        }
+        let mut matching_metadata = SelectedLibrary::new();
+        matching_metadata
+            .insert_explicit_dense(selected_component_key(head, 13), vec![Atom::Zero; 8])
+            .unwrap();
+        let different_dimensions = function!(
+            head,
+            13,
+            Euclidean {}.new_rep(3).to_symbolic([Atom::num(7301)]),
+            Minkowski {}.new_rep(2).to_symbolic([Atom::num(7302)]),
+            Euclidean {}.new_rep(3).to_symbolic([Atom::num(7303)])
+        );
+        let error = SelectedNetwork::try_from_view(
+            different_dimensions.as_view(),
+            &matching_metadata,
+            &ParseSettings::default(),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("component-shadow realization"));
+        let dummy = DummyLibrary::<SelectedComponents, ExplicitKey<AbstractIndex>>::new();
+        let error =
+            SelectedNetwork::try_from_view(value.as_view(), &dummy, &ParseSettings::default())
+                .unwrap_err();
+        assert!(error.to_string().contains("component-shadow realization"));
+    }
+
+    #[test]
+    fn selected_slot_component_policy_does_not_follow_universal_ordinary_lookup() {
+        struct OrdinaryUniversal<'a>(&'a SelectedLibrary);
+        impl Library<ShadowedStructure<AbstractIndex>> for OrdinaryUniversal<'_> {
+            type Key = ExplicitKey<AbstractIndex>;
+            type Value = Canonicalized<ParamTensor<Self::Key>>;
+            fn key_for_structure(
+                &self,
+                structure: &Canonicalized<ShadowedStructure<AbstractIndex>>,
+            ) -> Result<Self::Key, LibraryError<Self::Key>> {
+                ExplicitKey::from_structure(structure).ok_or(LibraryError::InvalidKey)
+            }
+            fn get<'a>(
+                &'a self,
+                key: &Self::Key,
+            ) -> Result<Cow<'a, Self::Value>, LibraryError<Self::Key>> {
+                <SelectedLibrary as Library<ShadowedStructure<AbstractIndex>>>::get(self.0, key)
+            }
+        }
+        let head = selected_component_head(
+            "selected_component_tests::universal",
+            FactorProjector::Symmetric,
+        );
+        let mut library = SelectedLibrary::new();
+        library
+            .insert_explicit_dense(selected_component_key(head, 17), vec![Atom::num(1); 8])
+            .unwrap();
+        let ordinary = OrdinaryUniversal(&library);
+        let signature = ShadowedStructure::from_iter(
+            [
+                Euclidean {}
+                    .new_rep(2)
+                    .cast::<LibraryRep>()
+                    .slot(AbstractIndex::Normal(7401)),
+                Minkowski {}
+                    .new_rep(2)
+                    .cast::<LibraryRep>()
+                    .slot(AbstractIndex::Normal(7402)),
+                Euclidean {}
+                    .new_rep(2)
+                    .cast::<LibraryRep>()
+                    .slot(AbstractIndex::Normal(7403)),
+            ],
+            head,
+            Some(vec![Atom::num(17)]),
+        );
+        assert!(ordinary.key_for_structure(&signature).is_ok());
+        assert!(
+            ordinary
+                .key_for_selected_slot_structure(&signature)
+                .is_err()
+        );
+        let value = selected_component_leaf(head, 17, [7401, 7402, 7403]);
+        let error =
+            SelectedNetwork::try_from_view(value.as_view(), &ordinary, &ParseSettings::default())
+                .unwrap_err();
+        assert!(error.to_string().contains("component-shadow realization"));
+        let library_network =
+            SelectedNetwork::try_from_view(value.as_view(), &library, &ParseSettings::default());
+        assert!(library_network.is_ok());
+    }
+
+    #[test]
+    fn selected_slot_component_policy_preserves_validation_and_tensor_word_refusal() {
+        let head = selected_component_head(
+            "selected_component_tests::malformed",
+            FactorProjector::Antisymmetric,
+        );
+        let wrong_representation = function!(
+            head,
+            19,
+            Euclidean {}.new_rep(2).to_symbolic([Atom::num(7501)]),
+            Minkowski {}.new_rep(2).to_symbolic([Atom::num(7502)]),
+            Euclidean {}.new_rep(3).to_symbolic([Atom::num(7503)])
+        );
+        let mut library = SelectedLibrary::new();
+        library
+            .insert_explicit_dense(
+                ExplicitKey::from_iter(
+                    [
+                        Euclidean {}.new_rep(2).cast::<LibraryRep>(),
+                        Minkowski {}.new_rep(2).cast::<LibraryRep>(),
+                        Euclidean {}.new_rep(3).cast::<LibraryRep>(),
+                    ],
+                    head,
+                    Some(vec![Atom::num(19)]),
+                ),
+                vec![Atom::Zero; 12],
+            )
+            .unwrap();
+        assert!(
+            SelectedNetwork::try_from_view(
+                wrong_representation.as_view(),
+                &library,
+                &ParseSettings::default(),
+            )
+            .is_err()
+        );
+        let truncated = function!(
+            head,
+            19,
+            Euclidean {}.new_rep(2).to_symbolic([Atom::num(7501)])
+        );
+        assert!(
+            SelectedNetwork::try_from_view(
+                truncated.as_view(),
+                &library,
+                &ParseSettings::default(),
+            )
+            .is_err()
+        );
+        let word = TensorSlotSymmetry::new([(FactorProjector::Symmetric, vec![0, 1])])
+            .unwrap()
+            .register_symbol(
+                wrap_symbol!("selected_component_tests::word"),
+                vec![],
+                vec![SPENSO_TAG.tensor_word.clone()],
+                UserData::None,
+            )
+            .unwrap();
+        let value = function!(
+            word,
+            Euclidean {}.new_rep(2).to_symbolic([Atom::num(7601)]),
+            Euclidean {}.new_rep(2).to_symbolic([Atom::num(7602)])
+        );
+        library
+            .insert_explicit_dense(
+                ExplicitKey::from_iter(
+                    [Euclidean {}.new_rep(2).cast::<LibraryRep>(); 2],
+                    word,
+                    None,
+                ),
+                vec![Atom::num(1); 4],
+            )
+            .unwrap();
+        let error =
+            SelectedNetwork::try_from_view(value.as_view(), &library, &ParseSettings::default())
+                .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("tensor word component-shadow realization")
+        );
+    }
 
     #[test]
     fn registered_tagged_scalar_is_resolved_as_a_library_tensor() {
