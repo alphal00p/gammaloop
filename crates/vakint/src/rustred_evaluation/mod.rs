@@ -42,7 +42,7 @@ pub(crate) mod monitor;
 mod numerator;
 mod ordered;
 pub(crate) mod p_data;
-mod p_integral;
+pub(crate) mod p_integral;
 mod parallel;
 mod request_dump;
 #[cfg(test)]
@@ -65,7 +65,7 @@ use std::fmt;
 use symbolica::atom::{Atom, AtomView};
 use thiserror::Error;
 
-use crate::{ReplacementRules, Topology, Vakint, VakintError, VakintSettings};
+use crate::{EvaluationMethod, ReplacementRules, Topology, Vakint, VakintError, VakintSettings};
 
 use matching::MatchedScalarFamily;
 
@@ -279,6 +279,22 @@ pub(crate) fn has_data(vakint: &Vakint, settings: &VakintSettings, topology: &To
         5 => settings.rustred_artifact_path.is_some() || vakint.has_rustred_loop(5),
         _ => true,
     }
+}
+
+/// Whether `method` is RustRed for a p-integral that no p library of the
+/// engine covers. `Vakint::evaluation_method` never falls back to such a
+/// method: the p-integral keeps Forcer's error (`ForcerUnavailable` without
+/// FORM 5, else `NoEvaluationMethodFound`), as before the p backend existed
+/// (`docs/p_integrals.md`, section 5).
+pub(crate) fn p_integral_without_library(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    topology: &Topology,
+    method: &EvaluationMethod,
+) -> bool {
+    matches!(topology, Topology::Propagator(_))
+        && matches!(method, EvaluationMethod::RustRed(_))
+        && !has_data(vakint, settings, topology)
 }
 
 impl Vakint {

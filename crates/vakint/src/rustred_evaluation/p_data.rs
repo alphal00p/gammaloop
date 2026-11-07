@@ -20,6 +20,9 @@
 //! scope whose line slots are vakint's canonical lines, and terminals that map
 //! onto `1` or a tabulated Forcer master only. Nothing is ever recomputed from
 //! a digest; the cache identity is textual ([`p_cache_directory_name`]).
+//!
+//! RustRed accessors used beyond the frozen `PLibrary` interface (plan
+//! section 4): `terminals()` and `basis_map()` (the load-time terminal check).
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -70,6 +73,18 @@ impl PLibraryOrigin {
             Self::BuiltIn => "built-in",
         }
     }
+
+    /// Suffix of the cache directory name: an injected library is any program
+    /// a caller built, so its identity (scope and versions) does not tell it
+    /// from the shipped library of the same scope; its steps get their own
+    /// directory. Shipped (external-data or built-in) libraries of the same
+    /// identity are the same program and share one.
+    fn cache_suffix(self) -> Option<&'static str> {
+        match self {
+            Self::Injected => Some("injected"),
+            Self::ExternalData | Self::BuiltIn => None,
+        }
+    }
 }
 
 /// The top presentation of one vakint family in the library.
@@ -107,11 +122,15 @@ impl fmt::Debug for PLibraryHandle {
 /// `p-library-<a>-<b>_<v>_<v>...`: the cache directory of a library program,
 /// a textual rendering of [`PLibrary::identity`] (scope and the value of
 /// every `P_*` version constant) followed by RustRed's Ordered step-cache
-/// schema and step semantics, each value without its `rustred` prefix. No
+/// schema and step semantics, each value without its `rustred` prefix, and
+/// `_injected` for an injected library ([`PLibraryOrigin::cache_suffix`]). No
 /// digest: a version bump names a new directory. Values are made file-name
 /// safe; a name longer than 200 bytes is an error (fail closed rather than an
 /// unusable path).
-pub(crate) fn p_cache_directory_name(identity: &str) -> Result<String, RustRedEvaluationError> {
+pub(crate) fn p_cache_directory_name(
+    identity: &str,
+    origin: PLibraryOrigin,
+) -> Result<String, RustRedEvaluationError> {
     let malformed = || data_failure(format!("unexpected library identity {identity:?}"));
     let rest = identity
         .strip_prefix("p-library:scope=")
@@ -127,6 +146,7 @@ pub(crate) fn p_cache_directory_name(identity: &str) -> Result<String, RustRedEv
     }
     values.push(rustred::reduction::ORDERED_STEP_CACHE_SCHEMA);
     values.push(rustred::reduction::ORDERED_STEP_SEMANTICS);
+    values.extend(origin.cache_suffix());
     let safe = |text: &str| -> String {
         let text = text
             .strip_prefix("rustred.")
@@ -204,7 +224,7 @@ impl PLibraryHandle {
                 scope.end()
             ),
             origin.as_str(),
-            p_cache_directory_name(&identity)?,
+            p_cache_directory_name(&identity, origin)?,
             binding,
         );
         Ok(Self {
@@ -226,11 +246,9 @@ impl PLibraryHandle {
         let id = library
             .top_presentation(family.name)
             .ok_or_else(|| data_failure(format!("no top presentation {}", family.name)))?;
-        let presentation = library
-            .presentations()
-            .get(id.0 as usize)
-            .ok_or_else(|| data_failure(format!("{} names a missing presentation", family.name)))?;
-        check_top_presentation(presentation, id, family)
+        // A top id is one of the library's own presentations (`PLibrary` builds
+        // its tops from them).
+        check_top_presentation(library.presentation(id), id, family)
     }
 }
 
@@ -619,18 +637,16 @@ mod tests {
     }
 
     /// The cache directory renders the library identity textually, with
-    /// RustRed's step-cache versions, well below NAME_MAX.
+    /// RustRed's step-cache versions, well below NAME_MAX; an injected
+    /// library gets its own directory.
     #[test]
     fn the_cache_directory_is_a_textual_rendering_of_the_identity() {
         let library = reference();
         let identity = library.identity();
-        let name = p_cache_directory_name(&identity).unwrap();
+        let directory =
+            |identity: &str| p_cache_directory_name(identity, PLibraryOrigin::ExternalData);
+        let name = directory(&identity).unwrap();
         assert!(name.starts_with("p-library-1-1_p-owner-library-"), "{name}");
-        assert!(
-            name.len() <= MAX_CACHE_DIRECTORY_NAME,
-            "{} bytes",
-            name.len()
-        );
         for (_, value) in rustred::propagator::p_versions() {
             let value = value
                 .strip_prefix("rustred.")
@@ -643,24 +659,81 @@ mod tests {
             "_{}",
             rustred::reduction::ORDERED_STEP_SEMANTICS.trim_start_matches("rustred-")
         )));
+        assert_eq!(
+            p_cache_directory_name(&identity, PLibraryOrigin::BuiltIn).unwrap(),
+            name
+        );
+        let injected = p_cache_directory_name(&identity, PLibraryOrigin::Injected).unwrap();
+        assert_eq!(injected, format!("{name}_injected"));
         assert!(
-            name.chars()
+            injected.len() <= MAX_CACHE_DIRECTORY_NAME,
+            "{} bytes",
+            injected.len()
+        );
+        assert!(
+            injected
+                .chars()
                 .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '.' | '_'))
         );
         // A different scope or version is a different directory.
         let other = identity.replacen("scope=1-1", "scope=1-3", 1);
-        assert_ne!(p_cache_directory_name(&other).unwrap(), name);
+        assert_ne!(directory(&other).unwrap(), name);
         let bumped = identity.replacen("P_CENSUS_VERSION=1", "P_CENSUS_VERSION=2", 1);
         assert_ne!(bumped, identity);
-        assert_ne!(p_cache_directory_name(&bumped).unwrap(), name);
+        assert_ne!(directory(&bumped).unwrap(), name);
         for malformed in ["", "p-library:1-3", "p-library:scope=1-3:P_X"] {
-            assert!(p_cache_directory_name(malformed).is_err(), "{malformed}");
+            assert!(directory(malformed).is_err(), "{malformed}");
         }
         let long = format!("{identity},P_LONG={}", "x".repeat(200));
         assert!(matches!(
-            p_cache_directory_name(&long),
+            directory(&long),
             Err(RustRedEvaluationError::ExternalData { .. })
         ));
+    }
+
+    /// An injected library and a loaded one of the same identity never share
+    /// a step cache, on disk or in memory (one engine, one registry).
+    #[test]
+    fn an_injected_library_has_its_own_step_cache() {
+        let root = tempfile::tempdir().unwrap();
+        let settings = crate::VakintSettings {
+            ordered_cache: crate::OrderedCacheSettings::read_write(root.path()),
+            ..Default::default()
+        };
+        let engine = Vakint::new().unwrap();
+        let injected = PLibraryHandle::new(reference(), PLibraryOrigin::Injected).unwrap();
+        let loaded = PLibraryHandle::new(reference(), PLibraryOrigin::ExternalData).unwrap();
+        let caches = [&injected, &loaded].map(|handle| {
+            engine
+                .ordered_step_cache(&settings, &handle.cache)
+                .unwrap()
+                .unwrap()
+        });
+        assert!(!Arc::ptr_eq(&caches[0], &caches[1]));
+        let directories = engine
+            .ordered_cache_statistics()
+            .programs
+            .into_iter()
+            .map(|program| (program.data_version, program.directory.unwrap()))
+            .collect::<Vec<_>>();
+        let name = |handle: &PLibraryHandle| {
+            root.path()
+                .join(handle.cache.textual_tables.as_ref().unwrap())
+        };
+        assert_eq!(
+            directories,
+            [
+                ("external-data".to_owned(), name(&loaded)),
+                ("injected".to_owned(), name(&injected)),
+            ]
+        );
+        assert_eq!(
+            name(&injected).file_name().unwrap().to_str().unwrap(),
+            format!(
+                "{}_injected",
+                name(&loaded).file_name().unwrap().to_str().unwrap()
+            )
+        );
     }
 
     #[test]

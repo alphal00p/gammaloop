@@ -33,15 +33,21 @@ pub fn reference_p_engine() -> Vakint {
     rustred_p_engine(rustred::propagator::testing::one_loop_reference_library().unwrap())
 }
 
-/// RustRed alone in `mode` (no FORM is ever called), G-scheme, through `terms`
-/// Laurent terms, dot notation, one core, the default Ordered arithmetic.
-pub fn rustred_p_settings(mode: RustRedMasterMode, terms: i64) -> VakintSettings {
+/// RustRed alone in `mode` (no FORM is ever called), `normalization`, through
+/// `terms` Laurent terms, dot notation, one core, 40 digits, the default
+/// Ordered arithmetic. The one RustRed p settings helper of the vakint tests
+/// (M2-V5's `tests/support/p_backends.rs` re-exports it).
+pub fn rustred_p_settings(
+    mode: RustRedMasterMode,
+    normalization: LoopNormalizationFactor,
+    terms: i64,
+) -> VakintSettings {
     VakintSettings {
         evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
             RustRedEvaluationOptions { master_mode: mode },
         )]),
         form_exe_path: "/rustred-p-integrals-must-not-call-form".into(),
-        integral_normalization_factor: LoopNormalizationFactor::GScheme,
+        integral_normalization_factor: normalization,
         number_of_terms_in_epsilon_expansion: terms,
         run_time_decimal_precision: 40,
         use_dot_product_notation: true,

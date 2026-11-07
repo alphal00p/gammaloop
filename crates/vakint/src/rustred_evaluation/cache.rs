@@ -252,8 +252,10 @@ pub struct OrderedCacheProgramStatistics {
     /// reported only, not part of the cache identity).
     pub data_version: String,
     /// Hexadecimal identity of the program's rule tables (part of the cache
-    /// identity, see the module documentation); for the RustRed p library,
-    /// the textual rendering of its version constants (its directory name).
+    /// identity, see the module documentation). Zero for the RustRed p
+    /// library, a program identified by version constants only: its directory
+    /// name is their textual rendering (`p-library-<a>-<b>_...`, see
+    /// `directory`) instead of `<program>.<rule tables>.<stamp>`.
     pub rule_tables: String,
     /// Hexadecimal binding stamp of the cache.
     pub stamp: String,
@@ -424,9 +426,12 @@ impl OrderedCacheProgram {
         }
     }
 
-    /// Registry key: one cache per program, rule tables and binding stamp.
+    /// Registry key: one cache per program, rule tables and binding stamp. A
+    /// program of the textual tables variant is keyed by its whole directory
+    /// name (which tells an injected library from a loaded one).
     fn key(&self) -> ProgramKey {
-        (self.label.clone(), self.rule_tables, self.binding.stamp())
+        let label = self.textual_tables.as_ref().unwrap_or(&self.label);
+        (label.clone(), self.rule_tables, self.binding.stamp())
     }
 }
 
@@ -445,7 +450,6 @@ struct Attached {
     label: String,
     data_version: String,
     rule_tables: [u8; 32],
-    textual_tables: Option<String>,
     stamp: [u8; 32],
     configuration: Configuration,
     autosave: OrderedCacheAutosave,
@@ -494,10 +498,7 @@ impl Attached {
             loop_count: self.loop_count,
             program: self.label.clone(),
             data_version: self.data_version.clone(),
-            rule_tables: self
-                .textual_tables
-                .clone()
-                .unwrap_or_else(|| hex(&self.rule_tables)),
+            rule_tables: hex(&self.rule_tables),
             stamp: hex(&self.stamp),
             directory: self.configuration.directory.clone(),
             mode: self.mode(),
@@ -697,7 +698,6 @@ impl OrderedCacheRegistry {
                 label: program.label.clone(),
                 data_version: program.data_version.clone(),
                 rule_tables: program.rule_tables,
-                textual_tables: program.textual_tables.clone(),
                 stamp,
                 configuration,
                 autosave: settings.autosave,

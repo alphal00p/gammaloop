@@ -28,7 +28,11 @@ fn one_loop_battery() -> ForcerFixture {
 #[test]
 fn the_injected_reference_library_reproduces_the_one_loop_battery() {
     let engine = reference_p_engine();
-    let settings = rustred_p_settings(RustRedMasterMode::Symbolic, 4);
+    let settings = rustred_p_settings(
+        RustRedMasterMode::Symbolic,
+        LoopNormalizationFactor::GScheme,
+        4,
+    );
     let battery = one_loop_battery();
     assert_eq!(battery.cases.len(), 45);
     for case in &battery.cases {
@@ -69,7 +73,11 @@ fn the_default_order_splits_p_integrals_between_rustred_and_forcer() {
     let kite = parse("topo(P2L(p(1),1,1,1,1,1))");
     let vacuum = parse("topo(prop(1,edge(1,1),k(1),muvsq,2))");
     let engine = reference_p_engine();
-    let rustred_only = rustred_p_settings(RustRedMasterMode::Symbolic, 4);
+    let rustred_only = rustred_p_settings(
+        RustRedMasterMode::Symbolic,
+        LoopNormalizationFactor::GScheme,
+        4,
+    );
     let bubble_value = rustred_p_evaluate(&engine, &rustred_only, &bubble);
     assert!(
         (&bubble_value - forcer_evaluate(&bubble, &forcer))
@@ -84,4 +92,41 @@ fn the_default_order_splits_p_integrals_between_rustred_and_forcer() {
         (&mixed - &expected).expand().is_zero(),
         "{mixed}\n{expected}"
     );
+}
+
+/// Non-rational coefficients (`muvsq`, `ε`, `dot(p(1),p(1))`) in one batch,
+/// two of them at the same scale power, in every normalization: RustRed with
+/// the reference library equals a live Forcer exactly. Skipped without FORM 5.
+#[test]
+fn non_rational_coefficients_agree_with_a_live_forcer() {
+    let Some(form) = forcer_form() else {
+        eprintln!("FORM 5 is unavailable: skipped the non-rational coefficients");
+        return;
+    };
+    let input = parse(
+        "(muvsq+ε)*dot(k(1),p(1))*topo(P1L(p(1),1,2)) + muvsq^2*topo(P1L(p(1),2,1)) \
+         + dot(p(1),p(1))*dot(k(1),k(1))*topo(P1L(p(1),1,3)) \
+         + ε*dot(k(1),p(1))*topo(P1L(p(1),2,2)) + dot(p(1),p(1))*topo(P1L(p(1),2,2))",
+    );
+    let engine = reference_p_engine();
+    for normalization in [
+        LoopNormalizationFactor::GScheme,
+        LoopNormalizationFactor::MSbar,
+        LoopNormalizationFactor::pySecDec,
+    ] {
+        let rustred = rustred_p_settings(RustRedMasterMode::Symbolic, normalization.clone(), 4);
+        // The same settings, Forcer as the backend.
+        let forcer = vakint::VakintSettings {
+            evaluation_order: forcer_settings(&form, RustRedMasterMode::Symbolic, normalization, 4)
+                .evaluation_order,
+            form_exe_path: form.clone(),
+            ..rustred.clone()
+        };
+        let actual = rustred_p_evaluate(&engine, &rustred, &input);
+        let expected = forcer_evaluate(&input, &forcer);
+        assert!(
+            (&actual - &expected).expand().is_zero(),
+            "RustRed {actual}\nForcer {expected}"
+        );
+    }
 }

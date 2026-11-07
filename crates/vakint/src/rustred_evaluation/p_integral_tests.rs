@@ -6,7 +6,7 @@
 //! settings' arithmetic, the step cache, the direct entry points, the timing
 //! span and the dispatch without p data.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use rustred::propagator::library::{PBasis, PReduction, PTerm};
 use rustred::propagator::tag::GammaTag;
@@ -17,7 +17,7 @@ use crate::p_integral::compare::tag_basis_difference;
 use crate::p_integral::forcer::fixtures::{ForcerCase, ForcerFixture, registry_family};
 use crate::utils::vakint_macros::vk_parse;
 use crate::{
-    EvaluationMethod, EvaluationOrder, ForcerOptions, LoopNormalizationFactor,
+    EvaluationMethod, EvaluationOrder, ForcerOptions, LoopNormalizationFactor, OrderedCacheMode,
     OrderedCacheSettings, RustRedEvaluationOptions,
 };
 
@@ -335,24 +335,28 @@ fn mixed_heads_and_vacuum_are_split_into_channels() {
 
 /// The p backend takes the Ordered weight arithmetic from the settings
 /// (default `modular_polynomial`, the `Z_p(d)` replay; user directive
-/// 2026-11-07) and the exact arithmetic gives the same result.
+/// 2026-11-07): the request `reduce_requests` sends for a channel
+/// (`p_reduction_request`) carries it, with the settings' scheduler, uncovered
+/// keys rejected and the reduction onto the masters; the exact arithmetic
+/// gives the same result.
 #[test]
 fn the_settings_arithmetic_is_used_and_exact_agrees() {
     let modular = settings(RustRedMasterMode::Retain, None);
     let exact = settings(RustRedMasterMode::Retain, Some("exact"));
-    assert_eq!(
-        request_options(&modular).arithmetic,
-        modular.rustred_ordered_weight_arithmetic()
-    );
-    assert_eq!(
-        request_options(&modular).arithmetic.name(),
-        "modular_polynomial"
-    );
-    assert_eq!(request_options(&exact).arithmetic.name(), "exact");
-    assert_eq!(
-        request_options(&modular).scheduler,
-        crate::rustred_evaluation::ordered_scheduler(&modular)
-    );
+    for (settings, arithmetic) in [(&modular, "modular_polynomial"), (&exact, "exact")] {
+        let request = p_reduction_request(&request_options(settings), Vec::new(), None);
+        assert_eq!(request.arithmetic.name(), arithmetic);
+        assert_eq!(
+            request.arithmetic,
+            settings.rustred_ordered_weight_arithmetic()
+        );
+        assert_eq!(
+            request.scheduler,
+            crate::rustred_evaluation::ordered_scheduler(settings)
+        );
+        assert_eq!(request.uncovered, PUncoveredPolicy::Reject);
+        assert!(request.onto_masters && request.step_cache.is_none());
+    }
     let engine = engine();
     let fixture = battery();
     for name in ["bubble_32_n4", "bubble_13_n3", "bubble_22_n2"] {
@@ -363,6 +367,138 @@ fn the_settings_arithmetic_is_used_and_exact_agrees() {
             "{name}"
         );
     }
+}
+
+/// Non-rational coefficients (`muvsq`, `ε`) key the channels: parts of one
+/// scale power with different coefficients are reduced apart and each is
+/// multiplied by its own coefficient, so the reduced values are Forcer's
+/// frozen values times the coefficients, before and after the Symbolic
+/// finalize (review round 1, S2; the glue binary checks the reviewer's input
+/// against a live Forcer).
+#[test]
+fn non_rational_coefficients_key_the_channels() {
+    let engine = engine();
+    let fixture = battery();
+    let settings = settings(RustRedMasterMode::Symbolic, None);
+    let epsilon = epsilon(&settings);
+    // Two coefficients at w = 0 and two at w = -1, all at the head p(3).
+    let terms = [
+        ("muvsq+ε", "bubble_12_n1"), // dot(k(1),p(3)) P1L(1,2), w = 0
+        ("muvsq", "bubble_21_n1"),   // dot(k(1),p(3)) P1L(2,1), w = 0
+        ("ε", "bubble_22_n1"),       // dot(k(1),p(3)) P1L(2,2), w = -1
+        ("muvsq^2", "bubble_21_n0"), // P1L(2,1), w = -1
+    ];
+    let external = parse("p(3)");
+    let numerators = terms.map(|(coefficient, name)| {
+        parse(&format!(
+            "({coefficient})*({})",
+            case(&fixture, name).numerator
+        ))
+    });
+    let requests = terms
+        .iter()
+        .zip(&numerators)
+        .map(|((_, name), numerator)| {
+            let case = case(&fixture, name);
+            PropagatorRequest {
+                family: registry_family(&case.family).unwrap(),
+                powers: &case.powers,
+                canonical_numerator: numerator.as_view(),
+                external: external.clone(),
+            }
+        })
+        .collect::<Vec<_>>();
+    let values = reduce_requests(&engine, &settings, &requests, None).unwrap();
+    assert_eq!(values.keys().collect::<Vec<_>>(), [&(1, external.clone())]);
+    assert_eq!(
+        values[&(1, external.clone())].len(),
+        4,
+        "one value per channel"
+    );
+    let mut expected = BTreeMap::<i64, Atom>::new();
+    let mut finalized = Atom::Zero;
+    for (coefficient, name) in terms {
+        let mut frozen = case(&fixture, name).frozen(epsilon).unwrap();
+        for value in &mut frozen {
+            value.reduced = &value.reduced * parse(coefficient);
+            *expected.entry(value.scale_power).or_default() += &value.reduced;
+        }
+        finalized += simplify_real(
+            finalize::finalize(
+                &frozen,
+                1,
+                &external,
+                &settings,
+                RustRedMasterMode::Symbolic,
+                "Forcer",
+            )
+            .unwrap()
+            .as_view(),
+        );
+    }
+    expected.retain(|_, value| !value.expand().is_zero());
+    let rustred = by_scale_power(values.into_values().flatten());
+    assert_tag_basis_equal("coefficients", &rustred, &expected, epsilon);
+
+    let input = terms
+        .iter()
+        .map(|(coefficient, name)| {
+            let case = case(&fixture, name);
+            parse(&format!(
+                "({coefficient})*({})*topo(P1L(p(3),{}))",
+                case.numerator,
+                case.powers
+                    .iter()
+                    .map(i64::to_string)
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ))
+        })
+        .fold(Atom::Zero, |sum, term| sum + term);
+    let actual = engine.evaluate(&settings, input.as_view()).unwrap();
+    assert!(
+        (&actual - &finalized).expand().is_zero(),
+        "RustRed {actual} vs Forcer {finalized}"
+    );
+}
+
+/// A key the library cannot reduce names the vakint integrals of its
+/// channel (at most eight, then a count) next to RustRed's owner class and
+/// key; other RustRed errors map as for the vacuum programs.
+#[test]
+fn uncovered_keys_name_the_vakint_integrals() {
+    use rustred::propagator::OwnerClassId;
+
+    let integrals = (1..=10)
+        .map(|power| format!("P1L(1,{power})"))
+        .collect::<BTreeSet<_>>();
+    let uncovered = PError::Uncovered {
+        class: OwnerClassId(0x2a),
+        key: IntegralKey::try_new(vec![1, 2]).unwrap(),
+    };
+    let RustRedEvaluationError::Reduction { detail } = reduction_error(uncovered, &integrals)
+    else {
+        panic!("an uncovered key is a reduction error");
+    };
+    assert!(detail.contains("does not cover [1, 2]"), "{detail}");
+    assert!(detail.contains("P1L(1,1), P1L(1,10), P1L(1,2)"), "{detail}");
+    assert!(
+        detail.ends_with("2 more with the RustRed p library"),
+        "{detail}"
+    );
+    let missing = PError::MissingOwner {
+        class: OwnerClassId(7),
+        ledger: 3,
+    };
+    let one = BTreeSet::from(["P2L(1,1,1,1,1)".to_owned()]);
+    let error = reduction_error(missing, &one).to_string();
+    assert!(error.contains("ledger entry 3"), "{error}");
+    assert!(
+        error.contains("P2L(1,1,1,1,1) with the RustRed p library"),
+        "{error}"
+    );
+    let other = reduction_error(PError::MixedDimension, &one).to_string();
+    assert!(!other.contains("P2L"), "{other}");
 }
 
 /// The direct entry points (`EvaluationMethod::evaluate_integral` and
@@ -398,9 +534,10 @@ fn the_direct_entry_points_finalize_once() {
 }
 
 /// One step cache per library program, named by the textual rendering of the
-/// library identity: a read-write directory is written under that name and a
-/// second engine replays it read-only, recomputing nothing, with the same
-/// result.
+/// library identity (an injected library with its own suffix): a read-write
+/// directory is written under that name and a second engine attaches it
+/// read-only and replays it, recomputing nothing, with the same result; on an
+/// empty directory the same read-only engine misses.
 #[test]
 fn the_step_cache_directory_is_the_textual_library_identity() {
     let directory = tempfile::tempdir().unwrap();
@@ -413,6 +550,7 @@ fn the_step_cache_directory_is_the_textual_library_identity() {
     let handle = first.p_library().unwrap();
     let name = handle.cache.textual_tables.clone().unwrap();
     assert!(name.starts_with("p-library-1-1_"), "{name}");
+    assert!(name.ends_with("_injected"), "{name}");
     assert!(directory.path().join(&name).is_dir(), "{name}");
     let statistics = first.ordered_cache_statistics();
     let program = statistics
@@ -420,25 +558,42 @@ fn the_step_cache_directory_is_the_textual_library_identity() {
         .iter()
         .find(|program| program.program == "p-library-1-1")
         .unwrap();
-    assert_eq!(program.rule_tables, name);
+    // No rule-table digest: zero, still 64 hexadecimal digits.
+    assert_eq!(program.rule_tables, "0".repeat(64));
+    assert_eq!(program.directory, Some(directory.path().join(&name)));
     assert_eq!(program.data_version, "injected");
     assert!(program.native.inserts > 0);
-
-    let mut reading = writing.clone();
-    reading.ordered_cache = OrderedCacheSettings::read_only(directory.path());
-    let second = engine();
-    assert_eq!(second.evaluate(&reading, input.as_view()).unwrap(), cold);
-    // Nothing is recomputed: the steps (and the tail table RustRed keeps
-    // next to them) replay from the directory, while the cold run above
-    // computed and recorded its steps.
-    let replayed = second.ordered_cache_statistics();
-    assert_eq!((replayed.misses, replayed.inserts), (0, 0), "{replayed:?}");
     assert!(program.native.misses > 0);
     let files = std::fs::read_dir(directory.path().join(&name))
         .unwrap()
         .map(|entry| entry.unwrap().file_name().into_string().unwrap())
         .collect::<std::collections::BTreeSet<_>>();
     assert!(files.contains("ordered-step-cache.txt"), "{files:?}");
+
+    let read_only = |root: &std::path::Path| {
+        let mut reading = writing.clone();
+        reading.ordered_cache = OrderedCacheSettings::read_only(root);
+        let engine = engine();
+        assert_eq!(engine.evaluate(&reading, input.as_view()).unwrap(), cold);
+        let statistics = engine.ordered_cache_statistics();
+        let program = statistics
+            .programs
+            .iter()
+            .find(|program| program.program == "p-library-1-1")
+            .expect("the p program is attached");
+        assert_eq!(program.mode, OrderedCacheMode::ReadOnly);
+        assert_eq!(program.directory, Some(root.join(&name)));
+        (statistics.misses, statistics.inserts)
+    };
+    // Nothing is recomputed: the steps (and the tail table RustRed keeps
+    // next to them) replay from the directory.
+    assert_eq!(read_only(directory.path()), (0, 0));
+    let empty = tempfile::tempdir().unwrap();
+    let (misses, inserts) = read_only(empty.path());
+    assert!(
+        misses > 0 && inserts == 0,
+        "{misses} misses, {inserts} inserts"
+    );
     // Without a cache the result is the same.
     let mut off = writing;
     off.ordered_cache = OrderedCacheSettings::off();
@@ -489,6 +644,34 @@ fn rendering_fails_closed_outside_the_forcer_basis() {
     )
     .unwrap();
     assert_eq!(master, parse("3*PGamma(1)^2*PGamma(-2)^-1*PMaster(t105)"));
+    // The coefficients of one tag and master are combined into one rational
+    // function of ε: (d-2)/(d-4) + 1/(d-4) = (d-1)/(d-4) at d = 4-2ε.
+    let limits = ExactAlgebraLimits::default();
+    let d = context.parameter("d").unwrap();
+    let over = |numerator: &Coefficient| {
+        let denominator = context.try_sub(&d, &context.integer(4), limits).unwrap();
+        context.try_div(numerator, &denominator, limits).unwrap()
+    };
+    let unit = |coefficient: Coefficient| PTerm {
+        basis: PBasis::Unit,
+        tag: GammaTag::one(),
+        coefficient,
+    };
+    let split = PReduction {
+        dimension: 1,
+        terms: vec![
+            unit(over(
+                &context.try_sub(&d, &context.integer(2), limits).unwrap(),
+            )),
+            unit(over(&context.integer(1))),
+        ],
+        nonzero_conditions: Vec::new(),
+        statistics: Default::default(),
+    };
+    assert_eq!(
+        render(&handle, &split, epsilon).unwrap(),
+        parse("(3-2*ε)/(-2*ε)").together()
+    );
     for basis in [
         PBasis::Master("no7".into()),
         PBasis::Residual(rustred::propagator::PTerminalId(1)),
@@ -569,6 +752,41 @@ fn without_p_data_p_integrals_go_to_forcer() {
     assert!(matches!(
         injected.evaluation_method(&settings, &topology(&injected, kite)),
         Some(EvaluationMethod::Forcer(_))
+    ));
+}
+
+/// RustRed is never the fallback method of a p-integral without a p library
+/// (it stays the fallback that reports missing vacuum data): with RustRed
+/// alone and no FORM 5, the expression path reports `ForcerUnavailable` and
+/// the term path `NoEvaluationMethodFound`, as before the p backend existed.
+#[test]
+fn without_p_data_rustred_is_never_the_fallback_of_a_p_integral() {
+    let settings = settings(RustRedMasterMode::Symbolic, None);
+    let bare = Vakint::new().unwrap();
+    let input = parse("topo(P1L(p(1),1,1))");
+    let topology = bare
+        .match_topologies_for_settings(&settings, input.as_view())
+        .unwrap()
+        .unwrap()
+        .canonical_topology;
+    assert!(bare.evaluation_method(&settings, &topology).is_none());
+    assert!(matches!(
+        bare.evaluate(&settings, input.as_view()),
+        Err(VakintError::ForcerUnavailable { .. })
+    ));
+    let mut term = crate::VakintTerm {
+        integral: input,
+        numerator: Atom::num(1),
+        vectors: Vec::new(),
+    };
+    assert!(matches!(
+        term.evaluate_integral(&bare, &settings),
+        Err(VakintError::NoEvaluationMethodFound(..))
+    ));
+    let injected = engine();
+    assert!(matches!(
+        injected.evaluation_method(&settings, &topology),
+        Some(EvaluationMethod::RustRed(_))
     ));
 }
 

@@ -5005,17 +5005,6 @@ impl VakintExpression {
                 let propagator = matches!(matched.canonical_topology, Topology::Propagator(_));
                 let method = vakint
                     .evaluation_method(settings, &matched.canonical_topology)
-                    // RustRed is picked for a p-integral without a p library
-                    // only to report what is missing: then Forcer is the reason.
-                    .filter(|method| {
-                        !(propagator
-                            && matches!(method, EvaluationMethod::RustRed(_))
-                            && !rustred_evaluation::has_data(
-                                vakint,
-                                settings,
-                                &matched.canonical_topology,
-                            ))
-                    })
                     .ok_or_else(|| {
                         // Only Forcer evaluates p-integrals: say why it cannot.
                         if let Topology::Propagator(_) = &matched.canonical_topology
@@ -5452,7 +5441,11 @@ impl Vakint {
                 }
                 _ => true,
             })
-            .or(first)
+            // RustRed is the fallback that reports missing data, but never for
+            // a p-integral without a p library: Forcer's error says what is missing.
+            .or(first.filter(|method| {
+                !rustred_evaluation::p_integral_without_library(self, settings, topology, method)
+            }))
     }
 
     pub fn validate_settings(&self, settings: &VakintSettings) -> Result<(), VakintError> {

@@ -16,15 +16,26 @@
 //! `Σ coefficient(d = 4-2ε) · Π PGamma(m)^e · (1 | PMaster(name))` (convention
 //! C4) and finalized by the shared p-finalizer with the backend name `RustRed`
 //! (normalization, `(Q²)^w`, Laurent expansion and the `Oep` guard).
+//!
+//! Entry points (crate-visible): [`supports`] and [`has_p_data`] for the
+//! dispatch, [`evaluate_ordered_batch`] for a batch of matched contributions,
+//! and [`reduce_requests`], the request level below the finalizer (backend
+//! requests in, reduced values per scale power out), for crate tests that
+//! compare the RustRed p path with Forcer's frozen values per scale power
+//! (M2-V5 Tier A).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 use rustred::algebra::{Coefficient, CoefficientContext, ExactAlgebraLimits};
 use rustred::family::IntegralKey;
 use rustred::propagator::PresentationId;
+use rustred::propagator::error::PError;
 use rustred::propagator::library::{PBasis, PReduction, PReductionRequest, PUncoveredPolicy};
 use rustred::propagator::presentation::{AffineSlotForm, Presentation};
-use rustred::reduction::{OrderedSchedulerOptions, OrderedWeightArithmetic, ReductionLimits};
+use rustred::reduction::{
+    OrderedSchedulerOptions, OrderedStepCache, OrderedWeightArithmetic, ReductionLimits,
+};
 use symbolica::atom::{Atom, AtomCore, Symbol};
 use symbolica::domains::integer::Integer;
 use symbolica::domains::rational::Rational;
@@ -50,7 +61,7 @@ fn invalid(detail: impl Into<String>) -> RustRedEvaluationError {
 /// Whether the RustRed backend reduces this topology structurally: a matched
 /// p-integral of one to four loops. Whether a library is loaded for its loop
 /// count is [`has_p_data`].
-pub(super) fn supports(topology: &Topology) -> bool {
+pub(crate) fn supports(topology: &Topology) -> bool {
     let Topology::Propagator(integral) = topology else {
         return false;
     };
@@ -65,7 +76,7 @@ pub(super) fn supports(topology: &Topology) -> bool {
 /// Whether the engine's p library covers `loops`. A `p/` area of the loaded
 /// external data that cannot be resolved counts as present: its p-integrals
 /// then fail with that error instead of silently going to another backend.
-pub(super) fn has_p_data(vakint: &Vakint, loops: usize) -> bool {
+pub(crate) fn has_p_data(vakint: &Vakint, loops: usize) -> bool {
     match vakint.p_library_presence() {
         PDataPresence::None => false,
         PDataPresence::Scope(scope) => {
@@ -92,6 +103,26 @@ pub(super) fn request_options(settings: &VakintSettings) -> PRequestOptions {
     }
 }
 
+/// The request [`reduce_requests`] sends for one channel: `inputs` with the
+/// `options` of the settings, the library's step cache, uncovered keys
+/// rejected, reduced onto the masters (module documentation).
+fn p_reduction_request<'a>(
+    options: &PRequestOptions,
+    inputs: Vec<(PresentationId, IntegralKey, Coefficient)>,
+    step_cache: Option<Arc<OrderedStepCache>>,
+) -> PReductionRequest<'a> {
+    PReductionRequest {
+        inputs,
+        arithmetic: options.arithmetic,
+        scheduler: options.scheduler,
+        step_cache,
+        uncovered: PUncoveredPolicy::Reject,
+        onto_masters: true,
+        limits: options.limits,
+        inspector: None,
+    }
+}
+
 /// One reduction request: the inputs of one loop count, external head, scale
 /// power and non-rational coefficient.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -100,6 +131,44 @@ struct Channel {
     head: Atom,
     scale_power: i64,
     coefficient: Atom,
+}
+
+/// The lowered inputs of one channel and the vakint integrals they come from
+/// (`P1L(2,1)`: family and line powers), named when the library cannot reduce
+/// them.
+#[derive(Default)]
+struct ChannelInputs {
+    inputs: BTreeMap<(PresentationId, Vec<i64>), Rational>,
+    integrals: BTreeSet<String>,
+}
+
+/// At most this many vakint integrals are named in a reduction error.
+const NAMED_INTEGRALS: usize = 8;
+
+/// A failed p reduction. A key the library does not cover (`Uncovered`,
+/// `MissingOwner`) names the vakint integrals of the channel next to RustRed's
+/// owner class and key; any other error maps as for the vacuum programs.
+fn reduction_error(error: PError, integrals: &BTreeSet<String>) -> RustRedEvaluationError {
+    if !matches!(
+        error,
+        PError::Uncovered { .. } | PError::MissingOwner { .. }
+    ) {
+        return RustRedEvaluationError::from_native(error);
+    }
+    let mut named = integrals
+        .iter()
+        .take(NAMED_INTEGRALS)
+        .cloned()
+        .collect::<Vec<_>>();
+    if integrals.len() > NAMED_INTEGRALS {
+        named.push(format!("{} more", integrals.len() - NAMED_INTEGRALS));
+    }
+    RustRedEvaluationError::Reduction {
+        detail: format!(
+            "{error}, reducing the p-integrals {} with the RustRed p library",
+            named.join(", ")
+        ),
+    }
 }
 
 /// Exponents of the slots in a polynomial of affine slot forms.
@@ -234,9 +303,11 @@ fn coefficient(
 
 /// The reduction in vakint's basis (convention C4): every coefficient at
 /// `d = 4 - 2ε`, the tag as `Π PGamma(m)^e`, `PBasis::Unit` as `1` and
-/// `PBasis::Master(name)` as `PMaster(name)` for a tabulated Forcer master. A
-/// residual terminal or an unknown master fails closed, and so does a
-/// nonzero condition that vanishes identically at `d = 4 - 2ε`.
+/// `PBasis::Master(name)` as `PMaster(name)` for a tabulated Forcer master;
+/// the coefficient of each tag and master is one simplified rational function
+/// of `ε` (`together`). A residual terminal or an unknown master fails closed,
+/// and so does a nonzero condition that vanishes identically at
+/// `d = 4 - 2ε`.
 fn render(
     handle: &PLibraryHandle,
     reduction: &PReduction,
@@ -261,7 +332,7 @@ fn render(
         masters::p_master_names().map_err(|error| RustRedEvaluationError::MasterCapability {
             detail: error.to_string(),
         })?;
-    let mut reduced = Atom::Zero;
+    let mut coefficients = BTreeMap::<Atom, Atom>::new();
     for term in &reduction.terms {
         let basis = match &term.basis {
             PBasis::Unit => Atom::num(1),
@@ -291,13 +362,17 @@ fn render(
                 .call((i64::from(m),))
                 .pow(Atom::num(i64::from(e)));
         }
-        reduced += at_dimension(&term.coefficient) * tag * basis;
+        *coefficients.entry(tag * basis).or_default() += at_dimension(&term.coefficient);
     }
-    Ok(reduced)
+    Ok(coefficients
+        .into_iter()
+        .fold(Atom::Zero, |reduced, (monomial, coefficient)| {
+            reduced + coefficient.together() * monomial
+        }))
 }
 
 /// The lowered inputs of a batch, by channel.
-type Channels = BTreeMap<Channel, BTreeMap<(PresentationId, Vec<i64>), Rational>>;
+type Channels = BTreeMap<Channel, ChannelInputs>;
 
 /// Lower one backend request (`docs/p_integrals.md`, section 5) into
 /// `channels`; a scaleless request adds nothing.
@@ -318,9 +393,19 @@ fn add_request(
     let (head, _) = external_head(&request.external)?;
     let presentation = handle.library.presentation(top.presentation);
     let forms = forms.entry(top.presentation).or_default();
+    let integral = format!(
+        "{}({})",
+        request.family.name,
+        request
+            .powers
+            .iter()
+            .map(i64::to_string)
+            .collect::<Vec<_>>()
+            .join(",")
+    );
     for part in split {
         let lowered = lower_part(presentation, top, request.powers, &part.polynomial, forms)?;
-        let inputs = channels
+        let channel = channels
             .entry(Channel {
                 loops: request.family.loops,
                 head: head.clone(),
@@ -328,8 +413,10 @@ fn add_request(
                 coefficient: part.coefficient,
             })
             .or_default();
+        channel.integrals.insert(integral.clone());
         for (key, value) in lowered {
-            let entry = inputs
+            let entry = channel
+                .inputs
                 .entry((top.presentation, key))
                 .or_insert_with(Rational::zero);
             *entry += &value;
@@ -338,9 +425,13 @@ fn add_request(
     Ok(())
 }
 
-/// The reduced values of a batch of requests, by loop count and external
-/// head: one [`PReductionRequest`] per channel (module documentation).
-fn reduce_requests(
+/// The reduced values of a batch of backend requests (`docs/p_integrals.md`,
+/// section 5), by loop count and external head: one [`PReductionRequest`] per
+/// channel (module documentation), the values of one head NOT yet finalized
+/// (`reduced` per scale power, comparable with Forcer's `combine_parts` in
+/// the tag basis). The request-level entry of the RustRed p path below
+/// [`evaluate_ordered_batch`], for crate tests (M2-V5 Tier A).
+pub(crate) fn reduce_requests(
     vakint: &Vakint,
     settings: &VakintSettings,
     requests: &[PropagatorRequest],
@@ -363,7 +454,8 @@ fn reduce_requests(
     };
     let total = channels.len();
     let mut values = BTreeMap::<(usize, Atom), Vec<ReducedPropagatorValue>>::new();
-    for (index, (channel, inputs)) in channels.into_iter().enumerate() {
+    for (index, (channel, ChannelInputs { inputs, integrals })) in channels.into_iter().enumerate()
+    {
         if let Some(progress) = progress {
             progress.cohorts(index, total);
         }
@@ -386,17 +478,8 @@ fn reduce_requests(
         let reduction = {
             let _math = MathSpan::new();
             library
-                .reduce(PReductionRequest {
-                    inputs,
-                    arithmetic: options.arithmetic,
-                    scheduler: options.scheduler,
-                    step_cache: step_cache.clone(),
-                    uncovered: PUncoveredPolicy::Reject,
-                    onto_masters: true,
-                    limits: options.limits,
-                    inspector: None,
-                })
-                .map_err(RustRedEvaluationError::from_native)?
+                .reduce(p_reduction_request(&options, inputs, step_cache.clone()))
+                .map_err(|error| reduction_error(error, &integrals))?
         };
         if reduction.dimension != channel.loops as i64 {
             return Err(invalid(format!(
@@ -423,7 +506,7 @@ fn reduce_requests(
 /// Reduce and finalize a batch of matched p contributions in `mode` (module
 /// documentation). The result is final: the caller adds it to the expression
 /// without RustRed's vacuum master substitution.
-pub(super) fn evaluate_ordered_batch(
+pub(crate) fn evaluate_ordered_batch(
     vakint: &Vakint,
     settings: &VakintSettings,
     contributions: &[MatchedContribution],

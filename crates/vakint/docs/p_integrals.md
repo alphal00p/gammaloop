@@ -457,13 +457,17 @@ Output parsing:
 - `has_data` for a p-integral: the engine's RustRed p library (section 6) has a scope containing `L`. Without one
   the p-integral goes to the next method of the order, Forcer, exactly as 4L vacuum yields to FMFT. When no other
   method supports it either, the error stays `ForcerUnavailable` (no FORM 5) or `NoEvaluationMethodFound`: RustRed
-  is never chosen for a p-integral it has no library for.
+  is never chosen for a p-integral it has no library for (`Vakint::evaluation_method` falls back to RustRed only to
+  report missing vacuum data), on the expression path and the term path alike.
 - It returns the same `ReducedPropagatorValue`s as Forcer and uses the same finalizer; see section 6.
 
 ## 6. RustRed backend (M2: one RustRed p library program)
 
 Code: `src/rustred_evaluation/p_integral.rs` (dispatch, lowering, rendering), `src/rustred_evaluation/p_data.rs`
-(the library of an engine), RustRed's `rustred::propagator` (the library program, plan M2 sections 3-4).
+(the library of an engine), RustRed's `rustred::propagator` (the library program, plan M2 sections 3-4). Crate entry
+points of `rustred_evaluation::p_integral`: `supports` and `has_p_data` (dispatch), `evaluate_ordered_batch` (a batch
+of matched contributions, finalized) and `reduce_requests` (backend requests in, the reduced values per external head
+and scale power out, before the finalizer: the level at which tests compare with Forcer's `combine_parts`).
 
 The library program:
 - RustRed reduces p-integrals with ONE library program per release scope (a range of loop counts): one census of
@@ -488,9 +492,10 @@ The library program:
 - A `p/` area that is present but broken counts as data: its p-integrals fail closed with its error.
 
 Evaluation (`p_integral::evaluate_ordered_batch`):
-- The matched p contributions of one loop count and master mode form one ordered batch, separate from the vacuum
-  batches (batch key: loop count, master mode, kind). The direct entry points (`EvaluationMethod::evaluate_integral`,
-  `VakintTerm::evaluate_integral`) run the same path with one contribution.
+- The matched p contributions of one loop count and master mode form one ordered batch (key: loop count, master
+  mode), kept in a map of their own next to the vacuum batches, whose keys and order are unchanged; the p batches run
+  after the vacuum batches and are labelled `<L>L / <mode> / p` in the progress monitor. The direct entry points
+  (`EvaluationMethod::evaluate_integral`, `VakintTerm::evaluate_integral`) run the same path with one contribution.
 - Each contribution's backend request (section 5) is split by the shared `p_integral::parts` (the split Forcer
   renders): homogeneous parts with scale power `w`, the non-rational coefficient and a polynomial in the canonical
   scalar products `k(i)·k(j)` and `k(i)·Q`. A scaleless sector is an exact zero.
@@ -505,12 +510,14 @@ Evaluation (`p_integral::evaluate_ordered_batch`):
 - One `PReductionRequest` per channel: `arithmetic = settings.rustred_ordered_weight_arithmetic()` (default
   `modular_polynomial`, the `Z_p(d)` replay; `exact` gives the same result), `scheduler = ordered_scheduler(settings)`
   (`n_cores` threads), the library's step cache under the settings' `ordered_cache`, `uncovered = Reject`,
-  `onto_masters = true`, the native reduction limits. The request runs inside a reduction-math timing span.
+  `onto_masters = true`, the native reduction limits. The request runs inside a reduction-math timing span. A key
+  the library does not cover (`PError::Uncovered`, `MissingOwner`) fails closed with an error that names the vakint
+  integrals of the channel (family and line powers, e.g. `P2L(1,1,1,1,1)`) next to RustRed's owner class and key.
 - The result is `(εG(1,1))^-L Σ c·I_M(x)` at `Q² = 1` (plan convention C3), which is exactly `reduced =
   (-1)^(Σa+r)·C_G`: the part's Wick sign `(-1)^(Σa+r)` belongs to the Forcer path only and is never applied again.
   Terms are rendered as `Σ coefficient(d = 4-2ε) · Π PGamma(m)^e · (1 | PMaster(name))` (convention C4), where
-  `vakint::PGamma(m) = Γ(1+mε)`. A residual terminal, an untabulated master or a nonzero condition that vanishes at
-  `d = 4-2ε` fails closed.
+  `vakint::PGamma(m) = Γ(1+mε)`; the coefficient of each tag and master is one simplified rational function of `ε`.
+  A residual terminal, an untabulated master or a nonzero condition that vanishes at `d = 4-2ε` fails closed.
 - The values of each (loop count, external head) are finalized by the shared p-finalizer with the backend name
   `RustRed` (normalization, `(Q²)^w`, Laurent expansion and the `Oep` guard; Retain keeps `PGamma` and `PMaster`
   symbolic). The finalized batch joins the expression without RustRed's vacuum master substitution; Numerical mode
@@ -525,10 +532,14 @@ Step cache:
   with the value of every `P_*` version constant and of RustRed's `ORDERED_STEP_CACHE_SCHEMA` and
   `ORDERED_STEP_SEMANTICS`, each without its `rustred` prefix (`PLibrary::identity()` itself is about 490 bytes,
   above `NAME_MAX`). A version bump names a new directory; RustRed's binding stamp check still guards the files.
+  An injected library adds `_injected`: it is any program a caller built, so scope and versions do not tell it from
+  the shipped library of the same scope, and it never shares that library's directory or in-memory cache. External
+  data and the built-in library of one identity are the same program and share one directory.
 - The cache statistics report the program `p-library-<a>-<b>`, its origin (`injected`, `external-data`,
-  `built-in`) as data version, and the directory text as `rule_tables`. The p program never uses a shipped cache of
-  a vacuum loop pack, and is not part of `load_ordered_cache`, `shipped_ordered_caches` or `export_ordered_caches`
-  (vacuum programs only).
+  `built-in`) as data version, zero `rule_tables` (64 hexadecimal digits; the p program has no rule-table digest)
+  and, when the cache has a directory, `directory = <ordered_cache.directory>/<the textual name above>` instead of
+  `<program>.<rule tables>.<stamp>`. The p program never uses a shipped cache of a vacuum loop pack, and is not part
+  of `load_ordered_cache`, `shipped_ordered_caches` or `export_ordered_caches` (vacuum programs only).
 
 Not in M2: caller families (`register_family`, run-time key computation) and `LocusPolicy` plumbing (M3); the 4L
 library in vakint-external-data (M3/M4, through the Directory source above); phase-level progress of a p request
