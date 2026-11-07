@@ -235,6 +235,13 @@ impl TensorProofs {
         let checked = structure.ok().map(|structure| {
             InterfaceInference::merge_explicit_interface_sequence(slice::from_ref(structure))
                 .and_then(|external| {
+                    // Opaque scalar admission establishes an empty interface without
+                    // validating tensor-free payload syntax. Check the same contract.
+                    if external.canonical().is_scalar()
+                        && !InterfaceInference::contains_tensor_symbol(expression.as_view())
+                    {
+                        return Ok(());
+                    }
                     let policy = if external.logical_slots().iter().any(|slot| {
                         matches!(
                             slot.aind,
@@ -804,6 +811,22 @@ impl SymbolicTensor<PartialStructure> {
     }
 
     fn infer_with_contractions(atom: Atom) -> InferenceResult<(Self, bool)> {
+        // Tensor-free input has no tensor interface or index-use history.
+        // This does not certify normalization or any downstream algebra guarantee.
+        if !InterfaceInference::contains_tensor_symbol(atom.as_view()) {
+            return Ok((
+                Self::from_validated_parts(
+                    atom,
+                    PartialStructure::from_logical_slots([]),
+                    Arc::new(ExplicitIndexOccurrences::default()),
+                ),
+                false,
+            ));
+        }
+        Self::admit_with_contractions(atom)
+    }
+
+    fn admit_with_contractions(atom: Atom) -> InferenceResult<(Self, bool)> {
         let atom = DotNormalizer::nested_vectors(atom.as_view());
         let atom = InterfaceInference::lower_tensor_powers(atom.as_view())?.unwrap_or(atom);
         let mut inference = InterfaceInference {
@@ -3555,6 +3578,23 @@ impl InterfaceInference {
             )
     }
 
+    /// Scan all syntax, including scalar metadata and exponents. Tensor-free
+    /// input is opaque at admission; other tags and callbacks do not exclude it.
+    fn contains_tensor_symbol(value: AtomView<'_>) -> bool {
+        let mut found = false;
+        value.visitor(&mut |node| {
+            if !found {
+                found = match node {
+                    AtomView::Var(variable) => variable.get_symbol().has_tag(&SPENSO_TAG.tensor),
+                    AtomView::Fun(function) => function.get_symbol().has_tag(&SPENSO_TAG.tensor),
+                    _ => false,
+                };
+            }
+            !found
+        });
+        found
+    }
+
     fn is_unmaterialized_tensor_leaf(value: AtomView<'_>) -> bool {
         let AtomView::Fun(function) = value else {
             return false;
@@ -3845,6 +3885,7 @@ pub(crate) mod tests {
     mod auto_axis;
     mod builtin_words;
     mod replacement_observer;
+    mod scalar_admission;
 
     thread_local! {
         pub(in crate::tensor) static OCCURRENCE_FUNCTION_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };

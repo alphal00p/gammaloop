@@ -8627,14 +8627,27 @@ mod tests {
     }
 
     #[test]
-    fn malformed_dot_is_rejected_before_tensor_publication() {
+    fn malformed_dot_distinguishes_opaque_and_strict_intake() {
         Python::initialize();
         Python::attach(|py| {
             let malformed = FunctionBuilder::new(SPENSO_TAG.dot)
                 .add_arg(Atom::var(symbol!("malformed_dot_operand")))
                 .finish();
-            for interface in [None, Some(PartialStructure::from_logical_slots([]))] {
-                let error = TensorExpression::from_atom_interface(py, malformed.clone(), interface)
+            let scalar = TensorExpression::from_atom_interface(py, malformed.clone(), None)
+                .expect("tensor-free inference admits opaque scalar syntax");
+            assert!(scalar.borrow(py).interface().canonical().is_scalar());
+            assert_eq!(scalar.borrow(py).atom(), &malformed);
+            let vector = FunctionBuilder::new(SPENSO_TAG.tensor_symbol("malformed_dot_vector"))
+                .add_arg(Minkowski {}.new_rep(4).to_symbolic([Atom::num(98901)]))
+                .finish();
+            let tensor_malformed = FunctionBuilder::new(SPENSO_TAG.dot)
+                .add_arg(vector)
+                .finish();
+            for (atom, interface) in [
+                (malformed, Some(PartialStructure::from_logical_slots([]))),
+                (tensor_malformed, None),
+            ] {
+                let error = TensorExpression::from_atom_interface(py, atom, interface)
                     .expect_err("malformed dot notation must fail at intake");
                 assert!(error.is_instance_of::<PyValueError>(py));
                 assert!(

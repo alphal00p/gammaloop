@@ -1999,6 +1999,7 @@ mod tests {
         ExternalState, VertexId,
     };
     use spenso::structure::representation::{Minkowski, RepName};
+    use spenso::tensor_symbol;
 
     use super::*;
 
@@ -3120,13 +3121,14 @@ mod tests {
         assert!(expressions_equal(&left, &right).unwrap());
         assert!(expressions_equal(&test_atom("x+y"), &test_atom("y+x")).unwrap());
         assert!(!expressions_equal(&test_atom("(x+y)^2"), &test_atom("x^2+2*x*y+y^2"),).unwrap());
-        assert!(
-            expressions_equal(
-                &test_atom("v(spenso::mink(4,1))^3"),
-                &test_atom("v(spenso::mink(4,1))^3"),
-            )
-            .is_err()
-        );
+        let opaque = test_atom("v(spenso::mink(4,1))^3");
+        assert!(expressions_equal(&opaque, &opaque).unwrap());
+        // A tensor-tagged fixture keeps the index-multiplicity rejection covered.
+        let vector = FunctionBuilder::new(tensor_symbol!("grouping::scope_vector"))
+            .add_arg(Minkowski {}.new_rep(4).to_symbolic([Atom::num(1)]))
+            .finish();
+        let invalid = vector.pow(3);
+        assert!(expressions_equal(&invalid, &invalid).is_err());
     }
 
     #[test]

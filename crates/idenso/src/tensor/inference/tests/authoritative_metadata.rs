@@ -285,7 +285,12 @@ fn additive_branches_keep_maximum_public_multiplicity_in_both_operand_orders() {
     let slot = LibraryRep::from(Minkowski {})
         .new_rep(4)
         .slot::<AbstractIndex, _>(index);
-    let scalar = SymbolicTensor::infer(slot.to_atom()).unwrap();
+    // Explicit declared intake retains the slot-use history; tensor-free inference is opaque.
+    let scalar = SymbolicTensor::from_declared_parts(
+        slot.to_atom(),
+        PartialStructure::from_logical_slots([]),
+    )
+    .unwrap();
     let vector = SymbolicTensor::infer(function!(
         tensor_symbol!("authoritative_metadata::branch_vector"),
         slot.to_atom()
@@ -343,7 +348,11 @@ fn mapping_hidden_base_use_separates_it_from_the_free_dual_port() {
     let base_slot = base_three.slot::<AbstractIndex, _>(index);
     let mapped_base_slot = base_four.slot::<AbstractIndex, _>(index);
     let dual_slot = base_three.dual().slot::<AbstractIndex, _>(index);
-    let scalar_base = SymbolicTensor::infer(base_slot.to_atom()).unwrap();
+    let scalar_base = SymbolicTensor::from_declared_parts(
+        base_slot.to_atom(),
+        PartialStructure::from_logical_slots([]),
+    )
+    .unwrap();
     let head = tensor_symbol!("authoritative_metadata::hidden_base_dual");
     let free_dual = SymbolicTensor::infer(function!(head, dual_slot.to_atom())).unwrap();
     let compatible = SymbolicTensor::infer(function!(
@@ -351,7 +360,7 @@ fn mapping_hidden_base_use_separates_it_from_the_free_dual_port() {
         base_slot.to_atom()
     ))
     .unwrap();
-    // A bare base slot is scalar metadata; its dual is not the same fixture.
+    // Declared scalar intake retains the hidden base use; opaque inference does not.
     assert!(scalar_base.is_scalar());
     assert_eq!(
         scalar_base
