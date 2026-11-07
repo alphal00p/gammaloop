@@ -2,6 +2,12 @@ use std::path::Path;
 
 fn main() {
     embed_runtime_data();
+    // The Python module reports its optimization level (`_build`): the Python
+    // smoke tests relax their Ctrl-C latency limits for unoptimized code.
+    println!(
+        "cargo:rustc-env=VAKINT_BUILD_OPT_LEVEL={}",
+        std::env::var("OPT_LEVEL").unwrap_or_default()
+    );
     println!("cargo:rerun-if-env-changed=EXTRA_MACOS_LIBS_FOR_GNU_GCC");
 
     if cfg!(target_os = "macos") && std::env::var_os("EXTRA_MACOS_LIBS_FOR_GNU_GCC").is_some() {

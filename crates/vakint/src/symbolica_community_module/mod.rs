@@ -84,6 +84,18 @@ impl SymbolicaCommunityModule for VakintWrapper {
     }
 }
 
+/// `symbolica.community.hepkit.vakint._build` (private, not API): how this
+/// native module was compiled, for the Python smoke tests, whose Ctrl-C
+/// latency limits assume optimized code. `opt_level` is Cargo's `OPT_LEVEL`
+/// of the vakint crate ("0" in maturin's default dev profile).
+fn build_facts(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
+    use pyo3::types::PyDictMethods;
+    let facts = PyDict::new(py);
+    facts.set_item("opt_level", env!("VAKINT_BUILD_OPT_LEVEL"))?;
+    facts.set_item("debug_assertions", cfg!(debug_assertions))?;
+    Ok(facts)
+}
+
 trait ModuleInit: PyClass {
     fn init(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.add_class::<Self>()
@@ -103,6 +115,7 @@ macro_rules! define_vakint_python_surface {
                 "MissingMasterOrdersError",
                 m.py().get_type::<MissingMasterOrdersError>(),
             )?;
+            m.add("_build", build_facts(m.py())?)?;
             Ok(())
         }
 
@@ -1992,6 +2005,27 @@ mod tests {
                 panic!("constructor returned a non-RustRed evaluation method");
             };
             assert!(unsubstituted_options.master_mode == crate::RustRedMasterMode::Retain);
+        });
+    }
+
+    #[test]
+    fn module_reports_how_it_was_compiled() {
+        Python::initialize();
+        Python::attach(|py| {
+            let module = PyModule::new(py, "symbolica.community.hepkit.vakint").unwrap();
+            initialize_vakint(&module).unwrap();
+            let build = module.getattr("_build").unwrap();
+            let opt_level: String = build.get_item("opt_level").unwrap().extract().unwrap();
+            assert!(
+                ["0", "1", "2", "3", "s", "z"].contains(&opt_level.as_str()),
+                "{opt_level:?}"
+            );
+            let debug_assertions: bool = build
+                .get_item("debug_assertions")
+                .unwrap()
+                .extract()
+                .unwrap();
+            assert_eq!(debug_assertions, cfg!(debug_assertions));
         });
     }
 }

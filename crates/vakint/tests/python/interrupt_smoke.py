@@ -20,9 +20,16 @@ Classes:
   5L zero-momentum benchmark, interrupted during loading and reduction.
 
 ``VAKINT_INTERRUPT_TEST_REPORT`` names a JSON file for the measured latencies.
+
+The latency limits assume an optimized native module (``--release`` or
+``--profile ci-optim``). An unoptimized one (opt-level 0: maturin's default dev
+profile) runs several times slower between two checkpoints; its limits are
+relaxed by ``UNOPTIMIZED_LATENCY_FACTOR`` (a note says so). Everything else,
+the stack depth of ``DeepInput`` included, is checked unchanged.
 """
 
 import hashlib
+import importlib
 import json
 import os
 import resource
@@ -54,7 +61,50 @@ CORES = [
 # Latency budget of a Ctrl-C in a checkpointed stage; above HARD it fails.
 TARGET_SECONDS = 1.0
 HARD_SECONDS = 2.0
+# Coarse checkpoints of a data load (between data files and program steps).
+LOAD_SECONDS = 5.0
 MEASUREMENTS = []
+
+# How the native module was compiled (private ``_build``; absent in modules
+# older than this test: treated as optimized).
+NATIVE = importlib.import_module("symbolica.community.hepkit.vakint")
+BUILD = dict(getattr(NATIVE, "_build", None) or {})
+UNOPTIMIZED = str(BUILD.get("opt_level")) == "0"
+# Unoptimized code took about 7x as long as ci-optim's (a 4L load 66 s / 9 s,
+# a 4L evaluation 182 s / 25 s) and so as long between two checkpoints.
+UNOPTIMIZED_LATENCY_FACTOR = 8.0
+LATENCY_FACTOR = UNOPTIMIZED_LATENCY_FACTOR if UNOPTIMIZED else 1.0
+# Unoptimized frames are larger: evaluating DeepInput's nested sum (depth 800)
+# needed 24-32 MiB of stack and its nested function (depth 4000) 56-64 MiB in
+# an unoptimized build (both fit in 8 MiB optimized), and printing that result
+# on the caller exceeds 8 MiB too. DeepInput's calling thread then gets this
+# factor over its inherited limit (8 MiB -> 128 MiB); the native request
+# thread reserves 256 MiB in debug builds (64 MiB optimized).
+UNOPTIMIZED_STACK_FACTOR = 16
+if UNOPTIMIZED:
+    print(
+        "interrupt_smoke: the native module is UNOPTIMIZED (opt-level 0, e.g. "
+        f"maturin's default dev profile): Ctrl-C latency limits relaxed "
+        f"{UNOPTIMIZED_LATENCY_FACTOR:g}x; build with --release or --profile "
+        "ci-optim for the real limits",
+        file=sys.stderr,
+        flush=True,
+    )
+
+
+def assert_latency(test, latency, seconds, what):
+    """A Ctrl-C took less than ``seconds`` (relaxed for unoptimized code)."""
+    limit = seconds * LATENCY_FACTOR
+    note = (
+        f" (unoptimized module: {seconds:g} s x {LATENCY_FACTOR:g})"
+        if UNOPTIMIZED
+        else ""
+    )
+    test.assertLess(
+        latency,
+        limit,
+        f"{what}: Ctrl-C latency {latency:.2f} s, limit {limit:g} s{note}",
+    )
 
 
 def record(**fields):
@@ -206,7 +256,7 @@ class LowerLoop(unittest.TestCase):
         )
         record(test="3L sigint", outcome=outcome, latency=latency, duration=duration)
         self.assertEqual(outcome, "interrupted")
-        self.assertLess(latency, HARD_SECONDS)
+        assert_latency(self, latency, HARD_SECONDS, "3L sigint")
         again = obj.evaluate(self.input, progress=None)
         self.assertEqual(sha256(again.to_canonical_string()), self.expected)
 
@@ -266,7 +316,7 @@ class LowerLoop(unittest.TestCase):
         left = time.monotonic()
         self.assertEqual(len(calls), 2)
         record(test="3L callback stop", latency=left - calls[-1], total=left - started)
-        self.assertLess(left - calls[-1], HARD_SECONDS)
+        assert_latency(self, left - calls[-1], HARD_SECONDS, "3L callback stop")
         self.assertEqual(
             sha256(obj.evaluate(self.input, progress=None).to_canonical_string()),
             self.expected,
@@ -345,6 +395,15 @@ class LowerLoop(unittest.TestCase):
             engine(3, interrupt="sometimes")
 
 
+# Runs ARGV[2:] under a stack limit of ARGV[1] bytes, set before the exec: the
+# kernel lays out the new main thread's stack for it.
+WITH_STACK = """
+import os, resource, sys
+hard = resource.getrlimit(resource.RLIMIT_STACK)[1]
+resource.setrlimit(resource.RLIMIT_STACK, (int(sys.argv[1]), hard))
+os.execv(sys.argv[2], sys.argv[2:])
+"""
+
 DEEP_CHILD = """
 import json, sys
 sys.path.insert(0, sys.argv[1])
@@ -369,17 +428,43 @@ print(json.dumps({"sha": t.sha256(value.to_canonical_string())}))
 """
 
 
+def caller_stack_bytes():
+    """The calling thread's stack limit for DeepInput's children (0: the
+    inherited one): UNOPTIMIZED_STACK_FACTOR x the inherited limit for an
+    unoptimized module (see there)."""
+    soft, hard = resource.getrlimit(resource.RLIMIT_STACK)
+    if not UNOPTIMIZED or soft == resource.RLIM_INFINITY:
+        return 0
+    wanted = soft * UNOPTIMIZED_STACK_FACTOR
+    return wanted if hard == resource.RLIM_INFINITY else min(wanted, hard)
+
+
 class DeepInput(unittest.TestCase):
     """Deeply nested input that the calling thread's stack (8 MiB on Python's
-    main thread) evaluates also evaluates on the request thread: Symbolica's
-    normalization recurses through it. Each case runs in a child process, so a
-    stack overflow is a failure here rather than a dead test runner."""
+    main thread; 16x that for an unoptimized module) evaluates also evaluates on
+    the request thread: Symbolica's normalization recurses through it. Each
+    case runs in a child process, so a stack overflow is a failure here rather
+    than a dead test runner. Not relaxed for unoptimized modules: the same
+    depths, the request thread's own stack."""
 
     def evaluate(self, mode, depth, interrupt):
         import subprocess
 
+        stack = caller_stack_bytes()
+        limit = f"{stack >> 20} MiB" if stack else "inherited"
+        command = [
+            sys.executable,
+            "-c",
+            DEEP_CHILD,
+            str(HERE),
+            mode,
+            str(depth),
+            interrupt,
+        ]
+        if stack:
+            command = [sys.executable, "-c", WITH_STACK, str(stack)] + command
         child = subprocess.run(
-            [sys.executable, "-c", DEEP_CHILD, str(HERE), mode, str(depth), interrupt],
+            command,
             check=False,
             capture_output=True,
             text=True,
@@ -388,8 +473,8 @@ class DeepInput(unittest.TestCase):
         self.assertEqual(
             child.returncode,
             0,
-            f"{mode} depth {depth} ({interrupt}): rc {child.returncode}\n"
-            + child.stderr[-1500:],
+            f"{mode} depth {depth} ({interrupt}, caller stack {limit}): "
+            f"rc {child.returncode}\n" + child.stderr[-1500:],
         )
         return json.loads(child.stdout.strip().splitlines()[-1])["sha"]
 
@@ -461,7 +546,7 @@ class RestrictedSymbolica(unittest.TestCase):
         self.assertTrue(result["reference_ok"] and result["again_ok"], result)
         self.assertEqual(result["final_status"], "succeeded")
         self.assertEqual(result["outcome"], "interrupted", result)
-        self.assertLess(result["latency"], HARD_SECONDS)
+        assert_latency(self, result["latency"], HARD_SECONDS, "restricted 3L sigint")
 
 
 @unittest.skipUnless(
@@ -526,7 +611,9 @@ class FourLoop(unittest.TestCase):
                         latency=latency,
                     )
                     self.assertEqual(outcome, "interrupted")
-                    self.assertLess(latency, HARD_SECONDS)
+                    assert_latency(
+                        self, latency, HARD_SECONDS, f"4L sigint after {after} s"
+                    )
                     again = obj.evaluate(self.input, progress=None)
                     self.assertEqual(sha256(again.to_canonical_string()), self.expected)
                     deadline = time.monotonic() + 2.0
@@ -561,7 +648,7 @@ class FourLoop(unittest.TestCase):
         )
         self.assertEqual(outcome, "interrupted")
         # Coarse checkpoints: between data files and program load steps.
-        self.assertLess(latency, 5.0)
+        assert_latency(self, latency, LOAD_SECONDS, "4L load sigint")
         self.assertEqual(snapshots[-1].status, "interrupted")
         self.assertEqual(snapshots[-1].stage, "data_load")
         # Without a progress consumer the load stays on this thread and its
@@ -574,7 +661,7 @@ class FourLoop(unittest.TestCase):
         )
         record(test="4L load sigint (no progress)", outcome=outcome, latency=latency)
         self.assertEqual(outcome, "interrupted")
-        self.assertLess(latency, 5.0)
+        assert_latency(self, latency, LOAD_SECONDS, "4L load sigint (no progress)")
         # The engine kept its previous (vendored 1L-3L) data and loads again.
         three, _ = ladder_input("3L-quadratic", LADDER)
         self.assertNotEqual(obj.evaluate(three, progress=None), E("0"))
