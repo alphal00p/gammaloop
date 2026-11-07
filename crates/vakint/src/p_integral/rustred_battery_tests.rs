@@ -215,7 +215,12 @@ fn rustred_reduced(
 
 /// Check 1: RustRed's reduced values are Forcer's frozen ones, exactly in the
 /// tag basis, scale power by scale power; a case with a value is nonzero.
-fn assert_reduced_exactly(engine: &Vakint, settings: &VakintSettings, file: &str, case: &ForcerCase) {
+fn assert_reduced_exactly(
+    engine: &Vakint,
+    settings: &VakintSettings,
+    file: &str,
+    case: &ForcerCase,
+) {
     let name = format!("{file}: {}", case.name);
     let epsilon = epsilon(settings);
     let rustred =
@@ -307,7 +312,10 @@ fn assert_numerical(engine: &Vakint, loops: usize, file: &str, case: &ForcerCase
 /// is pinned: `battery + grid gate part + anchors`.
 fn assert_loop_count_matches_forcer(loops: usize, expected_cases: usize) {
     let engine = battery_engine();
-    assert!(has_p_data(&engine, loops), "no RustRed p library for {loops} loops");
+    assert!(
+        has_p_data(&engine, loops),
+        "no RustRed p library for {loops} loops"
+    );
     let cases = cases(loops);
     assert_eq!(cases.len(), expected_cases, "{loops}-loop cases");
     let retain = settings(RustRedMasterMode::Retain, loops, None);
@@ -397,7 +405,10 @@ fn rustred_covers_the_battery_loops_and_never_four_loops() {
             Err(VakintError::RustRedEvaluation(
                 RustRedEvaluationError::UnsupportedMatchedFamily { .. },
             )) => {}
-            other => panic!("{}: expected an unsupported family, got {other:?}", case.name),
+            other => panic!(
+                "{}: expected an unsupported family, got {other:?}",
+                case.name
+            ),
         }
     }
 }

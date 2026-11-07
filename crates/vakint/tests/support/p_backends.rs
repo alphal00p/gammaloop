@@ -121,16 +121,29 @@ pub fn live_forcer_value(
         .map_err(|error| format!("Forcer ({mode}): {error}"))
 }
 
-/// `value` at `p(i) = (0,0,0,1)` for the heads `p(1)..p(4)` and `mursq = 1`,
-/// at the 40 digits of the battery settings.
+/// `value` at `p(i) = (0,0,0,1)` for the heads `p(1)..p(4)`, `mursq = 1` and
+/// the vacuum mass of the mixed inputs `muvsq = 1`, at the 40 digits of the
+/// battery settings.
 pub fn at_unit_scale(value: &Atom) -> Result<NumericalEvaluationResult, VakintError> {
-    let settings = rustred_p_settings(RustRedMasterMode::Numerical, LoopNormalizationFactor::GScheme, 1);
+    let settings = rustred_p_settings(
+        RustRedMasterMode::Numerical,
+        LoopNormalizationFactor::GScheme,
+        1,
+    );
     let bits = settings.get_binary_precision();
     let float = |value: i64| Float::with_val(bits, value);
-    let params = HashMap::from_iter([(settings.mu_r_sq_symbol.clone(), float(1))]);
+    let params = HashMap::<String, Float, ahash::RandomState>::from_iter([
+        (settings.mu_r_sq_symbol.clone(), float(1)),
+        ("muvsq".to_owned(), float(1)),
+    ]);
     let externals = (1..=4)
-        .map(|head| (head, Momentum::Real((float(0), float(0), float(0), float(1)))))
-        .collect();
+        .map(|head| {
+            (
+                head,
+                Momentum::Real((float(0), float(0), float(0), float(1))),
+            )
+        })
+        .collect::<HashMap<usize, Momentum, ahash::RandomState>>();
     p_battery_engine()
         .numerical_evaluation(
             &settings,
@@ -167,7 +180,8 @@ pub fn values_agree(rustred: &Atom, forcer: &Atom, mode: RustRedMasterMode) -> R
         }
         RustRedMasterMode::Numerical => {
             let numbers = |value: &Atom| {
-                at_unit_scale(value).map_err(|error| format!("numerical evaluation of {value}: {error}"))
+                at_unit_scale(value)
+                    .map_err(|error| format!("numerical evaluation of {value}: {error}"))
             };
             let (rustred, forcer) = (numbers(rustred)?, numbers(forcer)?);
             let (equal, diagnostic) =
@@ -188,7 +202,9 @@ pub fn agreement(
     for mode in MODES {
         let expected = forcer(mode)?;
         if expected.is_zero() {
-            return Err(format!("Forcer gives 0 ({mode}): the agreement tests nothing"));
+            return Err(format!(
+                "Forcer gives 0 ({mode}): the agreement tests nothing"
+            ));
         }
         let actual = rustred_value(input, mode, terms)?;
         values_agree(&actual, &expected, mode).map_err(|difference| {
@@ -211,8 +227,10 @@ pub fn assert_p_backends_agree_atom(input: &Atom, terms: i64) {
         eprintln!("FORM 5 is unavailable: skipped the RustRed/Forcer agreement of {input}");
         return;
     };
-    agreement(input, terms, |mode| live_forcer_value(&form, input, mode, terms))
-        .unwrap_or_else(|difference| panic!("{input}:\n{difference}"));
+    agreement(input, terms, |mode| {
+        live_forcer_value(&form, input, mode, terms)
+    })
+    .unwrap_or_else(|difference| panic!("{input}:\n{difference}"));
 }
 
 /// The Laurent depth of [`assert_p_backends_agree_routed`].
@@ -240,8 +258,9 @@ pub fn assert_p_backends_agree_routed_atom(original: &Atom, seeds: std::ops::Ran
             let routed = rerouted(original, seed);
             let found = rustred_value(&routed, mode, ROUTED_TERMS)
                 .unwrap_or_else(|error| panic!("seed {seed}: {routed}: {error}"));
-            values_agree(&found, &expected, mode)
-                .unwrap_or_else(|difference| panic!("seed {seed} ({mode}): {routed}\n{difference}"));
+            values_agree(&found, &expected, mode).unwrap_or_else(|difference| {
+                panic!("seed {seed} ({mode}): {routed}\n{difference}")
+            });
         }
     }
 }
@@ -292,7 +311,10 @@ pub fn rerouted(input: &Atom, seed: u64) -> Atom {
         if i != j {
             let sign = if random.next(2) == 0 { 1 } else { -1 };
             let row = matrix[j].clone();
-            matrix[i].iter_mut().zip(row).for_each(|(a, b)| *a += sign * b);
+            matrix[i]
+                .iter_mut()
+                .zip(row)
+                .for_each(|(a, b)| *a += sign * b);
         } else {
             matrix[i].iter_mut().for_each(|a| *a = -*a);
         }
@@ -367,7 +389,10 @@ pub fn assert_p_backends_oep_boundary(input: &str, passing: i64) {
     for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Numerical] {
         let value = rustred_value(&atom, mode, passing)
             .unwrap_or_else(|error| panic!("{input} ({mode}, {passing} terms): {error}"));
-        assert!(!value.to_string().contains("Oep"), "{input} ({mode}): {value}");
+        assert!(
+            !value.to_string().contains("Oep"),
+            "{input} ({mode}): {value}"
+        );
         let settings = rustred_p_settings(mode, LoopNormalizationFactor::GScheme, passing + 1);
         match p_battery_engine().evaluate(&settings, atom.as_view()) {
             Err(VakintError::MissingMasterOrders(_)) => {}

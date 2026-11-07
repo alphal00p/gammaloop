@@ -34,14 +34,14 @@
 
 #![cfg(feature = "feynkit-ingress")]
 
-#[path = "support/p_integrals.rs"]
-mod p_integrals;
-#[path = "support/p_rustred.rs"]
-mod p_rustred;
 #[path = "support/p_backends.rs"]
 mod p_backends;
 #[path = "support/p_fixtures.rs"]
 mod p_fixtures;
+#[path = "support/p_integrals.rs"]
+mod p_integrals;
+#[path = "support/p_rustred.rs"]
+mod p_rustred;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -50,7 +50,7 @@ use p_backends::*;
 use p_fixtures::{benchmark_inputs, grid_fixture};
 use p_integrals::{forcer_form, parse};
 use serde_json::{Value, json};
-use symbolica::atom::{Atom, AtomCore};
+use symbolica::atom::Atom;
 use vakint::p_integral::forcer_fixtures::{BenchmarkCell, ForcerCase};
 use vakint::utils::simplify_real;
 use vakint::{LoopNormalizationFactor, RustRedMasterMode};
@@ -92,8 +92,9 @@ fn assert_grid_part(loops: usize, part: usize, parts: usize) {
     let terms = battery_terms(loops);
     for case in fixture.cases.iter().skip(part * GRID_PART).take(GRID_PART) {
         let input = case.expression().unwrap();
-        agreement(&input, terms, |mode| frozen_value(case, mode, terms))
-            .unwrap_or_else(|difference| panic!("p{loops}l_grid.json: {}: {difference}", case.name));
+        agreement(&input, terms, |mode| frozen_value(case, mode, terms)).unwrap_or_else(
+            |difference| panic!("p{loops}l_grid.json: {}: {difference}", case.name),
+        );
     }
 }
 
@@ -199,12 +200,18 @@ fn benchmark_cells(loops: usize) -> Vec<ExactCell> {
         .filter(|cell| cell.loops == loops)
         .collect::<Vec<_>>();
     assert_eq!(cells.len(), 15, "{loops}-loop benchmark cells");
-    cells.iter().map(|cell| benchmark_cell(cell, &grid)).collect()
+    cells
+        .iter()
+        .map(|cell| benchmark_cell(cell, &grid))
+        .collect()
 }
 
 fn assert_all_agree(cells: &[ExactCell]) {
     let failed = cells.iter().filter(|cell| !cell.agree).collect::<Vec<_>>();
-    assert!(failed.is_empty(), "disagreeing cells (details above): {failed:?}");
+    assert!(
+        failed.is_empty(),
+        "disagreeing cells (details above): {failed:?}"
+    );
 }
 
 #[test]
@@ -256,9 +263,11 @@ fn physics_cell(form: &str, loops: usize) -> ExactCell {
         .1;
     let terms = battery_terms(loops);
     let input = parse(&input);
-    let agree = agreement(&input, terms, |mode| live_forcer_value(form, &input, mode, terms))
-        .inspect_err(|difference| eprintln!("physics cell L{loops}: {difference}"))
-        .is_ok();
+    let agree = agreement(&input, terms, |mode| {
+        live_forcer_value(form, &input, mode, terms)
+    })
+    .inspect_err(|difference| eprintln!("physics cell L{loops}: {difference}"))
+    .is_ok();
     ExactCell {
         loops,
         grid: None,
@@ -308,12 +317,18 @@ fn git(root: &Path, arguments: &[&str]) -> String {
 fn sources() -> Sources {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let paths = [".", ":(exclude)crates/vakint/docs/benchmark"];
-    let status = git(&root, &[&["status", "--porcelain", "--"], &paths[..]].concat());
+    let status = git(
+        &root,
+        &[&["status", "--porcelain", "--"], &paths[..]].concat(),
+    );
     assert!(
         status.is_empty(),
         "the exact-agreement file marks a commit: commit or stash first\n{status}"
     );
-    let gammaloop_sha = git(&root, &[&["log", "-1", "--format=%H", "--"], &paths[..]].concat());
+    let gammaloop_sha = git(
+        &root,
+        &[&["log", "-1", "--format=%H", "--"], &paths[..]].concat(),
+    );
     let lock = std::fs::read_to_string(root.join("Cargo.lock")).unwrap();
     let rustred_sha = lock
         .lines()
@@ -371,13 +386,24 @@ fn the_exact_agreement_file_is_written_on_request() {
             rustred_sha: "b".repeat(40),
         };
         let cells = [
-            ExactCell { loops: 1, grid: Some((2, 8)), agree: true, terms: 5 },
-            ExactCell { loops: 3, grid: None, agree: false, terms: 9 },
+            ExactCell {
+                loops: 1,
+                grid: Some((2, 8)),
+                agree: true,
+                terms: 5,
+            },
+            ExactCell {
+                loops: 3,
+                grid: None,
+                agree: false,
+                terms: 9,
+            },
         ];
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("p_exact.json");
         write_document(&path, &exact_document(&fake, &cells));
-        let written: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let written: Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(
             written,
             json!({

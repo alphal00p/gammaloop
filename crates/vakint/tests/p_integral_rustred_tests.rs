@@ -11,16 +11,16 @@
 
 #![cfg(feature = "feynkit-ingress")]
 
+#[path = "support/p_backends.rs"]
+mod p_backends;
 #[path = "support/p_integrals.rs"]
 mod p_integrals;
 #[path = "support/p_rustred.rs"]
 mod p_rustred;
-#[path = "support/p_backends.rs"]
-mod p_backends;
 
 use p_backends::*;
 use p_integrals::{canonical, forcer_form, from_dot, parse};
-use symbolica::atom::{Atom, AtomCore};
+use symbolica::atom::Atom;
 use vakint::RustRedMasterMode;
 use vakint::p_integral::forcer_fixtures::nonzero_sectors;
 
@@ -63,7 +63,7 @@ fn odd_rank_bubbles_with_a_reversed_head_agree_with_forcer() {
     for input in [
         "dot(k(1),p(3))*topo(P1L(-p(3),1,1))",
         "dot(k(1),p(3))^3*topo(P1L(-p(3),2,1))",
-        "dot(k(1),p(3))*dot(k(1),k(1))*topo(P1L(-p(3),1,3))",
+        "dot(k(1),p(3))*dot(k(1),k(1))*topo(P1L(-p(3),2,3))",
     ] {
         assert_p_backends_agree(input, battery_terms(1));
     }
@@ -78,10 +78,7 @@ fn an_odd_bubble_carries_its_wick_sign_once() {
         eprintln!("FORM 5 is unavailable: skipped the Wick sign of the odd bubbles");
         return;
     };
-    for input in [
-        "dot(k(1),p(1))*topo(P1L(p(1),1,1))",
-        "topo(P1L(p(1),2,1))",
-    ] {
+    for input in ["dot(k(1),p(1))*topo(P1L(p(1),1,1))", "topo(P1L(p(1),2,1))"] {
         assert_p_backends_agree(input, battery_terms(1));
         assert_wick_sign_does_not_cancel(&form, input);
     }
@@ -130,16 +127,32 @@ fn a_rerouted_bubble_agrees_with_forcer() {
 }
 
 /// A one-loop p-integral involves no tabulated master, so no `Oep` guard
-/// fires however deep the expansion (M1 review, missing test 5, under
-/// RustRed): through `ε^14` both backends agree.
+/// fires at any depth (M1 review, missing test 5, under RustRed): through
+/// `ε^9`, past the three-loop boundary of
+/// [`the_three_loop_oep_guard_fails_closed_under_rustred`], both backends
+/// agree.
 #[test]
-fn a_one_loop_p_integral_expands_to_any_depth() {
+fn a_one_loop_p_integral_has_no_master_order_boundary() {
     let input = "dot(k(1),p(1))^3*topo(P1L(p(1),2,3))";
     for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Numerical] {
-        let value = rustred_value(&parse(input), mode, 16).unwrap();
+        let value = rustred_value(&parse(input), mode, ONE_LOOP_DEPTH).unwrap();
         assert!(!value.to_string().contains("Oep"), "{value}");
     }
-    assert_p_backends_agree(input, 16);
+    assert_p_backends_agree(input, ONE_LOOP_DEPTH);
+}
+
+/// Laurent terms of [`a_one_loop_p_integral_has_no_master_order_boundary`].
+const ONE_LOOP_DEPTH: i64 = 11;
+
+/// The `Oep` guard under RustRed at three loops (M1 review, missing test 5):
+/// `Master(no)` is tabulated through `ε^7` (`Masters.prc:354`, `ALARMno` at
+/// `ep^8`), so the NO top passes through 11 terms (`ε^-3..ε^7`) and one term
+/// more is `MissingMasterOrders` with RustRed and with Forcer. The boundary
+/// is pinned so that a guard firing too early fails too.
+#[test]
+#[ignore = "M2-V5 STAGE 2: needs the built-in 1L-3L p library (M2-V4)"]
+fn the_three_loop_oep_guard_fails_closed_under_rustred() {
+    assert_p_backends_oep_boundary("topo(P3L_NO(p(1),1,1,1,1,1,1,1,1))", 11);
 }
 
 /// Analytic identities with odd ranks and the external momentum reversed
@@ -320,7 +333,10 @@ fn odd_rank_two_and_three_loop_integrals_with_a_reversed_head_agree_with_forcer(
     for (input, loops) in [
         ("dot(k(1),p(3))*topo(P2L(-p(3),1,1,1,1,1))", 2),
         ("dot(k(2),p(3))^3*topo(P2L(-p(3),1,2,1,1,1))", 2),
-        ("dot(k(1),p(3))*dot(k(2),k(3))*topo(P3L_BE(-p(3),1,1,1,1,1,1,1,1))", 3),
+        (
+            "dot(k(1),p(3))*dot(k(2),k(3))*topo(P3L_BE(-p(3),1,1,1,1,1,1,1,1))",
+            3,
+        ),
     ] {
         assert_p_backends_agree(input, battery_terms(loops));
     }
@@ -369,7 +385,7 @@ fn rerouted_two_and_three_loop_integrals_agree_with_forcer() {
          *prop(3,edge(3,4),k(2),0,1)*prop(4,edge(3,2),k(1)-k(2),0,3)*prop(5,edge(4,2),p(1)-k(1)+k(2),0,1))",
         0..2,
     );
-    let be: Atom =
-        parse("dot(k(1),p(1))*dot(k(2),k(3))") * canonical(&parse("topo(P3L_BE(p(1),1,2,1,1,1,1,1,1))"));
+    let be: Atom = parse("dot(k(1),p(1))*dot(k(2),k(3))")
+        * canonical(&parse("topo(P3L_BE(p(1),1,2,1,1,1,1,1,1))"));
     assert_p_backends_agree_routed_atom(&be, 0..2);
 }
