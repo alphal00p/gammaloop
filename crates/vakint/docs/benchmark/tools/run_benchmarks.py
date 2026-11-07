@@ -455,6 +455,21 @@ def summarize_error(tail):
                 "text": f"vakint's precision guard rejects the backend's result: the {comp} part of the coefficient of "
                         f"{coeff} is {g(mid)} ± {g(err)}" + (" (consistent with zero, no reliable digit)" if zero else
                                                               " (no reliable digit)")}
+    if "MissingMasterOrder {" in last:
+        found = re.findall(r'MissingMasterOrder \{ master: "L(\d+)_[^"]*", first_missing_order: (-?\d+), last_needed_order: '
+                           r'(?:Some\((-?\d+)\)|None), first_affected_result_order: (-?\d+)', last)
+        if found:
+            by_loop = {}
+            for loops, first, last_needed, _ in found:
+                lo, hi = by_loop.get(loops, (None, None))
+                need = int(last_needed or first)
+                by_loop[loops] = (int(first) if lo is None else min(lo, int(first)), need if hi is None else max(hi, need))
+            affected = min(int(a) for *_, a in found)
+            need = ", ".join(f"{L}L to ε^{hi}" for L, (_, hi) in sorted(by_loop.items(), reverse=True))
+            return {"source": "vakint (fails closed)",
+                    "text": f"vakint fails closed (MissingMasterOrders): {len(found)} masters lack Laurent orders this result needs "
+                            f"(the reduction coefficients have poles at d = 4; deepest orders needed: {need}), so the result fails "
+                            f"from ε^{affected} on".replace("^-", "^−")}
     return {"source": "backend", "text": last[:240]}
 
 
@@ -513,6 +528,10 @@ def assemble(args, cases_doc, out, identity, pipeline):
                     full_records[cell[0]] = good[0]
             elif bad:
                 tail = bad[-1].get("error_tail", "")
+                h = bad[-1].get("harness") or {}
+                full_log = out / "logs" / case["id"] / f"{name}-r{h.get('repetition')}.log"
+                if full_log.exists():  # the whole error (a MissingMasterOrders list is longer than the stored tail)
+                    tail = full_log.read_text(errors="replace")
                 lines = [l for l in tail.splitlines() if l.strip()]
                 c = {"status": "failed", "error": lines[-1][:300] if lines else "no output", "n": len(bad),
                      "error_summary": summarize_error(tail)}
