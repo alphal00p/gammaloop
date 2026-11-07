@@ -5776,7 +5776,7 @@ dependencies = [
 [[package]]
 name = "rustred"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?rev=6e3a6f7e16984a685b343bd1cd8308d279f64bff#6e3a6f7e16984a685b343bd1cd8308d279f64bff"
+source = "git+https://github.com/alphal00p/rustred?rev=118664ae7ddd461b6be1a4cb3951024afaaa2c80#118664ae7ddd461b6be1a4cb3951024afaaa2c80"
 dependencies = [
  "bincode 2.0.1",
  "blake3",
@@ -5785,13 +5785,17 @@ dependencies = [
  "rand 0.9.4",
  "rayon",
  "rustred-order",
+ "rustred-topology",
+ "serde",
+ "serde_json",
+ "smallvec",
  "symbolica",
 ]
 
 [[package]]
 name = "rustred-app"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?rev=6e3a6f7e16984a685b343bd1cd8308d279f64bff#6e3a6f7e16984a685b343bd1cd8308d279f64bff"
+source = "git+https://github.com/alphal00p/rustred?rev=118664ae7ddd461b6be1a4cb3951024afaaa2c80#118664ae7ddd461b6be1a4cb3951024afaaa2c80"
 dependencies = [
  "bincode 2.0.1",
  "blake3",
@@ -5807,7 +5811,18 @@ dependencies = [
 [[package]]
 name = "rustred-order"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?rev=6e3a6f7e16984a685b343bd1cd8308d279f64bff#6e3a6f7e16984a685b343bd1cd8308d279f64bff"
+source = "git+https://github.com/alphal00p/rustred?rev=118664ae7ddd461b6be1a4cb3951024afaaa2c80#118664ae7ddd461b6be1a4cb3951024afaaa2c80"
+
+[[package]]
+name = "rustred-topology"
+version = "0.1.0"
+source = "git+https://github.com/alphal00p/rustred?rev=118664ae7ddd461b6be1a4cb3951024afaaa2c80#118664ae7ddd461b6be1a4cb3951024afaaa2c80"
+dependencies = [
+ "graphica",
+ "serde",
+ "serde_json",
+ "smallvec",
+]
 
 [[package]]
 name = "rustversion"
