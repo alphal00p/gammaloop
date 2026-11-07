@@ -2,8 +2,9 @@
 //! RustRed p backend against a live Forcer (FORM 5), through vakint's public
 //! API, exactly (`Retain` in the tag basis, `Symbolic`) and numerically
 //! (`Numerical`, 40 digits) (`support/p_backends.rs`). Without FORM 5 the live
-//! comparisons report a skip; the RustRed identities and reroutings need no
-//! FORM.
+//! comparisons report a skip, or fail with `VAKINT_REQUIRE_FORM5=1` (the gate
+//! environment); the RustRed identities, the reroutings and the fail-closed
+//! checks of the Forcer side need no FORM.
 //!
 //! STAGE 1 (until M2-V4 ships the built-in 1L-3L library) runs the one-loop
 //! tests against RustRed's one-loop reference library; the two- and
@@ -19,10 +20,10 @@ mod p_integrals;
 mod p_rustred;
 
 use p_backends::*;
-use p_integrals::{canonical, forcer_form, from_dot, parse};
+use p_integrals::{canonical, from_dot, parse};
 use symbolica::atom::Atom;
-use vakint::RustRedMasterMode;
 use vakint::p_integral::forcer_fixtures::nonzero_sectors;
+use vakint::{RustRedMasterMode, VakintError};
 
 /// The scalar numerators of rank 0 to 4 of the bubble grid, each with its own
 /// coefficient (distinct primes), summed into one input per pair of powers.
@@ -69,30 +70,86 @@ fn odd_rank_bubbles_with_a_reversed_head_agree_with_forcer() {
     }
 }
 
-/// The Wick sign `(-1)^(Σa+r)` is applied once (critique-phys SF3): for an
-/// odd rank (`Σa = 2`, `r = 1`) and an odd `Σa` (`(2,1)`, `r = 0`) RustRed
-/// agrees with Forcer, and not with Forcer's negative.
+/// The Wick sign `(-1)^(Σa+r)` is applied once (critique-phys SF3): RustRed
+/// agrees with Forcer for an odd rank (`Σa = 2`, `r = 1`) and an odd `Σa`
+/// (`(2,1)`, `r = 0`), where a sign applied twice or never gives minus
+/// Forcer's nonzero value. Tier A (`rustred_battery_tests.rs`) pins that the
+/// sign is visible: Forcer's frozen values with and without it differ.
 #[test]
 fn an_odd_bubble_carries_its_wick_sign_once() {
-    let Some(form) = forcer_form() else {
-        eprintln!("FORM 5 is unavailable: skipped the Wick sign of the odd bubbles");
-        return;
-    };
     for input in ["dot(k(1),p(1))*topo(P1L(p(1),1,1))", "topo(P1L(p(1),2,1))"] {
         assert_p_backends_agree(input, battery_terms(1));
-        assert_wick_sign_does_not_cancel(&form, input);
     }
 }
 
-/// RustRed's `Retain` value of `input` differs from minus Forcer's.
-fn assert_wick_sign_does_not_cancel(form: &str, input: &str) {
-    let input = parse(input);
-    let mode = RustRedMasterMode::Retain;
-    let rustred = rustred_value(&input, mode, battery_terms(1)).unwrap();
-    let forcer = live_forcer_value(form, &input, mode, battery_terms(1)).unwrap();
-    assert!(
-        values_agree(&rustred, &(-forcer), mode).is_err(),
-        "{input}: the sign must not cancel"
+/// A FORM that does not run Forcer.
+const BROKEN_FORM: &str = "/nonexistent/vakint-battery/form";
+
+/// The Forcer side fails closed (review round 1, MF1): with a FORM path that
+/// does not run Forcer, on the RustRed engine (whose p library evaluates
+/// these p-integrals), it is `ForcerUnavailable` in every mode, never a
+/// value, and an agreement against it is not decided. FORM-free.
+#[test]
+fn the_forcer_side_fails_closed_with_a_broken_form() {
+    let terms = battery_terms(1);
+    for input in [
+        "dot(k(1),p(1))*topo(P1L(p(1),1,1))",
+        "dot(k(1),p(1))^2*topo(P1L(p(1),2,1)) + topo(prop(1,edge(1,1),k(1),muvsq,2))",
+    ] {
+        let input = parse(input);
+        for mode in MODES {
+            let value = rustred_value(&input, mode, terms)
+                .unwrap_or_else(|error| panic!("the engine reduces {input}: {error}"));
+            assert!(!value.is_zero(), "{input} ({mode})");
+            match forcer_side_value(p_battery_engine(), BROKEN_FORM, &input, mode, terms) {
+                Err(VakintError::ForcerUnavailable { .. }) => {}
+                other => panic!("{input} ({mode}): expected ForcerUnavailable, got {other:?}"),
+            }
+        }
+        let broken = |mode| {
+            forcer_side_value(p_battery_engine(), BROKEN_FORM, &input, mode, terms)
+                .map_err(|error| error.to_string())
+        };
+        match agreement(&input, terms, broken) {
+            Err(Disagreement::Failed(_)) => {}
+            other => panic!("{input}: expected an undecided agreement, got {other:?}"),
+        }
+    }
+}
+
+/// The Forcer side splits a mixed input: the p-integral terms go to Forcer,
+/// the vacuum terms to RustRed; a term without an integral, a product of
+/// both kinds and an input without a p-integral are errors.
+#[test]
+fn the_forcer_side_splits_p_and_vacuum_terms() {
+    let bubble = parse("dot(k(1),p(1))*topo(P1L(p(1),2,1))");
+    let tadpole = parse("topo(prop(1,edge(1,1),k(1),muvsq,2))");
+    let (p_terms, vacuum_terms) = p_and_vacuum_terms(&(&bubble + &tadpole)).unwrap();
+    assert_eq!((p_terms, vacuum_terms), (bubble.clone(), tadpole.clone()));
+    assert_eq!(
+        p_and_vacuum_terms(&bubble).unwrap(),
+        (bubble.clone(), Atom::Zero)
+    );
+    for input in [&tadpole, &(&bubble + &Atom::num(1)), &(&bubble * &tadpole)] {
+        assert!(p_and_vacuum_terms(input).is_err(), "{input}");
+    }
+}
+
+/// With `VAKINT_REQUIRE_FORM5=1` a missing FORM 5 fails instead of skipping.
+#[test]
+#[should_panic(expected = "VAKINT_REQUIRE_FORM5=1 requires it")]
+fn a_missing_form5_fails_when_it_is_required() {
+    form_or_skip(None, true, "a comparison");
+}
+
+/// Without the requirement, a missing FORM 5 is a skip, and a found one is
+/// used.
+#[test]
+fn a_missing_form5_is_a_skip_unless_it_is_required() {
+    assert_eq!(form_or_skip(None, false, "a comparison"), None);
+    assert_eq!(
+        form_or_skip(Some("form".into()), true, "a comparison"),
+        Some("form".into())
     );
 }
 
@@ -284,21 +341,13 @@ fn the_kite_and_every_two_loop_sector_agree_with_forcer() {
     }
 }
 
-/// The kite (`Σa = 5`, odd) carries its Wick sign once (critique-phys SF3).
+/// The kite (`Σa = 5`, odd) carries its Wick sign once (critique-phys SF3):
+/// RustRed agrees with Forcer, whose nonzero value a doubled sign would
+/// negate (Tier A pins the Wick-visible cases of the frozen batteries).
 #[test]
 #[ignore = "M2-V5 STAGE 2: needs the built-in 1L-3L p library (M2-V4)"]
 fn the_kite_carries_its_wick_sign_once() {
-    let Some(form) = forcer_form() else {
-        eprintln!("FORM 5 is unavailable: skipped the Wick sign of the kite");
-        return;
-    };
-    let input = "topo(P2L(p(1),1,1,1,1,1))";
-    assert_p_backends_agree(input, battery_terms(2));
-    let atom = parse(input);
-    let mode = RustRedMasterMode::Retain;
-    let rustred = rustred_value(&atom, mode, battery_terms(2)).unwrap();
-    let forcer = live_forcer_value(&form, &atom, mode, battery_terms(2)).unwrap();
-    assert!(values_agree(&rustred, &(-forcer), mode).is_err());
+    assert_p_backends_agree("topo(P2L(p(1),1,1,1,1,1))", battery_terms(2));
 }
 
 /// The three-loop tops LA, BE and NO: plain, with a dot, and with numerators

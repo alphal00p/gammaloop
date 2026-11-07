@@ -14,7 +14,11 @@
 //! 2. symbolic: `Vakint::evaluate` with RustRed in `Symbolic` mode through
 //!    `ε^(L+2)` equals the frozen value finalized like a Forcer evaluation;
 //! 3. numerical: the same in `Numerical` mode at 40 digits, within `1e-30`
-//!    at `Q² = μ² = 1`.
+//!    at `p(i) = (0,0,0,1)` (`Q² = 1`) and `μ² = 2`, where the logarithms of
+//!    `μ²/Q²` count.
+//!
+//! The Wick sign `(-1)^(Σa+r)` of the Forcer path is pinned to be visible on
+//! the batteries ([`rustred_carries_the_wick_sign_of_odd_cases_once`]).
 //!
 //! All of it runs under the default Ordered arithmetic (`modular_polynomial`,
 //! the `Z_p(d)` replay vakint users get); the exact check of the frozen
@@ -31,22 +35,23 @@
 //! (`tests/p_integral_rustred_full.rs`); live FORM comparisons are Tier B
 //! (`tests/p_integral_rustred_tests.rs`).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::ops::RangeInclusive;
 
 use symbolica::atom::{Atom, AtomCore, Symbol};
-use symbolica::function;
+use symbolica::domains::float::Float;
 
 use super::compare::tag_basis_difference;
 use super::forcer::fixtures::{ForcerCase, ForcerFixture, registry_family};
+use super::forcer::{ForcerPart, combine_parts};
 use super::{PropagatorRequest, ReducedPropagatorValue};
 use crate::rustred_evaluation::p_integral::{has_p_data, reduce_requests};
 use crate::rustred_evaluation::{RustRedEvaluationError, RustRedMasterMode, combine_exact};
 use crate::utils::simplify_real;
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
 use crate::{
-    EvaluationMethod, EvaluationOrder, LoopNormalizationFactor, RustRedEvaluationOptions, Vakint,
-    VakintError, VakintSettings,
+    EvaluationMethod, EvaluationOrder, LoopNormalizationFactor, Momentum, RustRedEvaluationOptions,
+    Vakint, VakintError, VakintSettings,
 };
 
 /// The loop counts [`battery_engine`] reduces with RustRed (STAGE 1: the
@@ -213,6 +218,34 @@ fn rustred_reduced(
     Ok(by_scale_power(values.into_values().flatten()))
 }
 
+/// Whether two reduced values agree exactly: the same scale powers, and a
+/// zero difference in the tag basis at each; `Err` describes the first
+/// difference.
+fn reduced_agree(
+    actual: &BTreeMap<i64, Atom>,
+    expected: &BTreeMap<i64, Atom>,
+    epsilon: Symbol,
+) -> Result<(), String> {
+    if actual.keys().ne(expected.keys()) {
+        return Err(format!(
+            "scale powers {:?} vs {:?}",
+            actual.keys().collect::<Vec<_>>(),
+            expected.keys().collect::<Vec<_>>()
+        ));
+    }
+    for (w, value) in actual {
+        let difference = tag_basis_difference(value, &expected[w], epsilon)
+            .map_err(|error| format!("w = {w}: {error}"))?;
+        if !difference.is_empty() {
+            return Err(format!(
+                "w = {w}: {value} vs {}: {difference:?}",
+                expected[w]
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Check 1: RustRed's reduced values are Forcer's frozen ones, exactly in the
 /// tag basis, scale power by scale power; a case with a value is nonzero.
 fn assert_reduced_exactly(
@@ -227,20 +260,8 @@ fn assert_reduced_exactly(
         rustred_reduced(engine, settings, case).unwrap_or_else(|error| panic!("{name}: {error}"));
     let forcer = by_scale_power(case.frozen(epsilon).unwrap());
     assert_eq!(rustred.is_empty(), case.outputs.is_empty(), "{name}");
-    assert_eq!(
-        rustred.keys().collect::<Vec<_>>(),
-        forcer.keys().collect::<Vec<_>>(),
-        "{name}: scale powers"
-    );
-    for (w, value) in &rustred {
-        let difference = tag_basis_difference(value, &forcer[w], epsilon)
-            .unwrap_or_else(|error| panic!("{name}, w = {w}: {error}"));
-        assert!(
-            difference.is_empty(),
-            "{name}, w = {w}: RustRed {value} vs Forcer {}: {difference:?}",
-            forcer[w]
-        );
-    }
+    reduced_agree(&rustred, &forcer, epsilon)
+        .unwrap_or_else(|difference| panic!("{name}: RustRed vs Forcer: {difference}"));
 }
 
 /// Check 2: the case through `Vakint::evaluate` (matching, the p backend and
@@ -265,8 +286,31 @@ fn assert_symbolic(engine: &Vakint, loops: usize, file: &str, case: &ForcerCase)
     );
 }
 
-/// Check 3: the same in `Numerical` mode, both sides evaluated at
-/// `Q² = μ² = 1` to 40 digits and equal within `1e-30`.
+/// The point of check 3: `p(1..4) = (0,0,0,1)`, so `Q² = -p² = 1`, and
+/// `μ² = 2`, at the precision of `settings`.
+type NumericalPoint = (
+    HashMap<String, Float, ahash::RandomState>,
+    HashMap<usize, Momentum, ahash::RandomState>,
+);
+
+fn numerical_point(settings: &VakintSettings) -> NumericalPoint {
+    let bits = settings.get_binary_precision();
+    let float = |value: i64| Float::with_val(bits, value);
+    let params = HashMap::from_iter([(settings.mu_r_sq_symbol.clone(), float(2))]);
+    let externals = (1..=4)
+        .map(|head| {
+            (
+                head,
+                Momentum::Real((float(0), float(0), float(0), float(1))),
+            )
+        })
+        .collect();
+    (params, externals)
+}
+
+/// Check 3: the same in `Numerical` mode, both sides evaluated to 40 digits
+/// at [`numerical_point`] (the logarithms of `μ²/Q²` count) and equal within
+/// `1e-30`.
 fn assert_numerical(engine: &Vakint, loops: usize, file: &str, case: &ForcerCase) {
     let name = format!("{file}: {}", case.name);
     let settings = settings(RustRedMasterMode::Numerical, loops, None);
@@ -283,27 +327,20 @@ fn assert_numerical(engine: &Vakint, loops: usize, file: &str, case: &ForcerCase
             &settings,
         )
         .unwrap();
-    let at_unit_scale = |value: &Atom| {
-        let x = Atom::var(crate::symbols::S.x_);
-        let p = function!(crate::symbols::S.p, &x);
-        let unit = value
-            .replace(function!(crate::symbols::S.dot, &p, &p).to_pattern())
-            .with(Atom::num(-1).to_pattern())
-            .replace(function!(Symbol::LOG, &x).to_pattern())
-            .with(Atom::Zero.to_pattern())
-            .expand();
+    let (params, externals) = numerical_point(&settings);
+    let at_point = |value: &Atom| {
         engine
             .numerical_evaluation(
                 &settings,
-                unit.as_view(),
+                value.as_view(),
+                &params,
                 &Default::default(),
-                &Default::default(),
-                None,
+                Some(&externals),
             )
-            .unwrap_or_else(|error| panic!("{name}: {unit}: {error}"))
+            .unwrap_or_else(|error| panic!("{name}: {value}: {error}"))
             .0
     };
-    let (actual, expected) = (at_unit_scale(&actual), at_unit_scale(&expected));
+    let (actual, expected) = (at_point(&actual), at_point(&expected));
     let (equal, diagnostic) = actual.does_approx_match(&expected, None, 1e-30, 5.0);
     assert!(equal, "{name}: {diagnostic}");
 }
@@ -380,6 +417,60 @@ fn the_exact_arithmetic_reproduces_the_batteries_too() {
             .map(|fixture| fixture.cases)
             .sum::<usize>()
     );
+}
+
+/// The frozen battery cases per loop count whose Wick sign is visible:
+/// Forcer's frozen values with and without the sign differ.
+const WICK_VISIBLE_CASES: [usize; 3] = [17, 11, 10];
+
+/// The Wick sign `(-1)^(Σa+r)` belongs to the Forcer path (critique-phys SF3),
+/// and RustRed's value equals Forcer's with the sign applied exactly once.
+/// For every frozen battery case whose sign is visible (Forcer's frozen value
+/// with the sign, `ForcerCase::frozen`, differs from `combine_parts` with every
+/// sign `+1`, which is also the value with the sign applied twice), RustRed's
+/// reduced value is the one with the sign. The number of such cases is
+/// pinned per loop count, so that the batteries keep exercising the sign;
+/// RustRed is checked on [`BATTERY_LOOPS`].
+#[test]
+fn rustred_carries_the_wick_sign_of_odd_cases_once() {
+    let engine = battery_engine();
+    let mut visible = Vec::new();
+    for loops in 1..=3 {
+        let settings = settings(RustRedMasterMode::Retain, loops, None);
+        let epsilon = epsilon(&settings);
+        let fixture = &BATTERIES[loops - 1];
+        let mut count = 0;
+        for case in fixture.parse().cases {
+            let name = format!("{}: {}", fixture.file, case.name);
+            let Some(input) = case.input().unwrap() else {
+                continue;
+            };
+            let unsigned = input
+                .parts
+                .iter()
+                .map(|part| ForcerPart {
+                    sign: 1,
+                    ..part.clone()
+                })
+                .collect::<Vec<_>>();
+            let signed = by_scale_power(case.frozen(epsilon).unwrap());
+            let unsigned =
+                by_scale_power(combine_parts(&unsigned, &case.outputs, epsilon).unwrap());
+            if reduced_agree(&signed, &unsigned, epsilon).is_ok() {
+                continue;
+            }
+            count += 1;
+            if BATTERY_LOOPS.contains(&loops) {
+                let rustred = rustred_reduced(&engine, &settings, &case)
+                    .unwrap_or_else(|error| panic!("{name}: {error}"));
+                reduced_agree(&rustred, &signed, epsilon).unwrap_or_else(|difference| {
+                    panic!("{name}: RustRed vs Forcer with its Wick sign: {difference}")
+                });
+            }
+        }
+        visible.push(count);
+    }
+    assert_eq!(visible, WICK_VISIBLE_CASES, "Wick-visible battery cases");
 }
 
 /// The engine covers exactly [`BATTERY_LOOPS`]; four loops never reach

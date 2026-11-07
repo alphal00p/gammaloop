@@ -20,7 +20,13 @@
 //!
 //! The RustRed side is [`p_battery_engine`] with RustRed alone
 //! ([`rustred_p_settings`]); the Forcer side is a live Forcer (FORM 5, Tier
-//! B) or the frozen fixture outputs (Tier C).
+//! B) or the frozen fixture outputs (Tier C). A live Forcer side runs Forcer
+//! alone on the p-integrals ([`forcer_side_value`]): it fails closed, never
+//! handing them to RustRed, whatever p library the engine holds.
+//!
+//! Without FORM 5 the live comparisons report a skip on stderr, unless
+//! `VAKINT_REQUIRE_FORM5=1` ([`REQUIRE_FORM5`], the gate environment), which
+//! makes a missing FORM 5 a failure ([`live_form`]).
 //!
 //! STAGE 1 (until M2-V4 ships the built-in 1L-3L library): the RustRed engine
 //! holds RustRed's one-loop reference library, [`P_BATTERY_LOOPS`] is `1..=1`
@@ -33,6 +39,8 @@ use std::collections::HashMap;
 use std::ops::RangeInclusive;
 use std::sync::LazyLock;
 
+use std::fmt;
+
 use symbolica::atom::{Atom, AtomCore, AtomView};
 use symbolica::domains::float::Float;
 use symbolica::id::Replacement;
@@ -40,8 +48,8 @@ use vakint::p_integral::compare::tag_basis_difference;
 use vakint::symbols::S;
 use vakint::{
     EvaluationMethod, EvaluationOrder, ForcerOptions, LoopNormalizationFactor, Momentum,
-    NumericalEvaluationResult, RustRedEvaluationOptions, RustRedMasterMode, Vakint, VakintError,
-    VakintSettings, vakint_symbol,
+    NumericalEvaluationResult, RustRedMasterMode, Vakint, VakintError, VakintSettings,
+    vakint_symbol,
 };
 
 use super::p_integrals::{VAKINT, forcer_form, parse};
@@ -72,10 +80,11 @@ pub fn battery_terms(loops: usize) -> i64 {
     2 * loops as i64 + 3
 }
 
-/// The Forcer side of [`rustred_p_settings`]: the same settings with FORM at
-/// `form` and the order Forcer then RustRed, so that the p-integrals go to
-/// Forcer and the vacuum integrals of a mixed input to RustRed, as on the
-/// RustRed side.
+/// The Forcer side of [`rustred_p_settings`]: the same settings with Forcer
+/// alone, FORM at `form`. Never the order Forcer then RustRed: without a
+/// runnable FORM 5, Forcer supports nothing and an engine with a p library
+/// would hand the p-integrals to RustRed (review round 1, MF1); with Forcer
+/// alone, `validate_settings` and `evaluate` report `ForcerUnavailable`.
 pub fn forcer_side_settings(
     form: &str,
     mode: RustRedMasterMode,
@@ -83,13 +92,118 @@ pub fn forcer_side_settings(
     terms: i64,
 ) -> VakintSettings {
     VakintSettings {
-        evaluation_order: EvaluationOrder(vec![
-            EvaluationMethod::Forcer(ForcerOptions { master_mode: mode }),
-            EvaluationMethod::RustRed(RustRedEvaluationOptions { master_mode: mode }),
-        ]),
+        evaluation_order: EvaluationOrder(vec![EvaluationMethod::Forcer(ForcerOptions {
+            master_mode: mode,
+        })]),
         form_exe_path: form.into(),
         ..rustred_p_settings(mode, normalization, terms)
     }
+}
+
+/// The environment variable that makes FORM 5 required: with
+/// `VAKINT_REQUIRE_FORM5=1` a missing FORM 5 fails every live comparison
+/// (Tiers B and C, the exact-agreement file) instead of skipping it.
+pub const REQUIRE_FORM5: &str = "VAKINT_REQUIRE_FORM5";
+
+/// Whether [`REQUIRE_FORM5`] is set to `1` (`0` or unset: not required).
+pub fn form5_required() -> bool {
+    match std::env::var(REQUIRE_FORM5) {
+        Err(_) => false,
+        Ok(value) => match value.as_str() {
+            "1" => true,
+            "0" | "" => false,
+            other => panic!("{REQUIRE_FORM5}={other}: expected 1 or 0"),
+        },
+    }
+}
+
+/// FORM 5 for the live comparison `what` (`p_integrals::forcer_form`): a
+/// skip reported on stderr without it, a failure if FORM 5 is required
+/// ([`form5_required`]). A FORM that is found but does not run Forcer fails
+/// later, in [`forcer_side_value`].
+pub fn live_form(what: &str) -> Option<String> {
+    form_or_skip(forcer_form(), form5_required(), what)
+}
+
+/// [`live_form`] for a given lookup result and requirement.
+pub fn form_or_skip(form: Option<String>, required: bool, what: &str) -> Option<String> {
+    match form {
+        Some(form) => Some(form),
+        None if required => {
+            panic!("FORM 5 is unavailable, but {REQUIRE_FORM5}=1 requires it: {what}")
+        }
+        None => {
+            eprintln!("FORM 5 is unavailable: skipped {what}");
+            None
+        }
+    }
+}
+
+/// `input` split into its p-integral terms and its vacuum terms: the
+/// summands whose integrals `topo(...)` involve an external head `p(i)`, and
+/// those whose integrals involve none. A summand without an integral, or with
+/// both kinds, and an input without a p-integral, are errors.
+pub fn p_and_vacuum_terms(input: &Atom) -> Result<(Atom, Atom), String> {
+    let summands = match input.as_view() {
+        AtomView::Add(sum) => sum.iter().map(|term| term.to_owned()).collect(),
+        _ => vec![input.clone()],
+    };
+    let (mut p_terms, mut vacuum_terms) = (Atom::Zero, Atom::Zero);
+    for term in summands {
+        let (mut p_integrals, mut vacuum_integrals) = (0, 0);
+        term.visitor(&mut |part| {
+            if let AtomView::Fun(function) = part
+                && function.get_symbol() == S.topo
+            {
+                if part.contains_symbol(S.p) {
+                    p_integrals += 1;
+                } else {
+                    vacuum_integrals += 1;
+                }
+                return false;
+            }
+            true
+        });
+        match (p_integrals, vacuum_integrals) {
+            (0, 0) => return Err(format!("{term}: no integral topo(...)")),
+            (_, 0) => p_terms += term,
+            (0, _) => vacuum_terms += term,
+            _ => {
+                return Err(format!(
+                    "{term}: a p-integral and a vacuum integral in one term"
+                ));
+            }
+        }
+    }
+    if p_terms.is_zero() {
+        return Err(format!("{input}: no p-integral for Forcer"));
+    }
+    Ok((p_terms, vacuum_terms))
+}
+
+/// The Forcer side of an agreement on `engine` in `mode`, G-scheme, `terms`:
+/// the p-integral terms of `input` ([`p_and_vacuum_terms`]) with Forcer alone
+/// at `form` ([`forcer_side_settings`], validated first), plus its vacuum
+/// terms with RustRed's vacuum backend, as on the RustRed side. Fails
+/// closed: a FORM that does not run Forcer is `ForcerUnavailable`, never a
+/// value of another backend, whatever p library `engine` holds.
+pub fn forcer_side_value(
+    engine: &Vakint,
+    form: &str,
+    input: &Atom,
+    mode: RustRedMasterMode,
+    terms: i64,
+) -> Result<Atom, VakintError> {
+    let (p_terms, vacuum_terms) =
+        p_and_vacuum_terms(input).map_err(VakintError::InvalidGenericExpression)?;
+    let settings = forcer_side_settings(form, mode, LoopNormalizationFactor::GScheme, terms);
+    engine.validate_settings(&settings)?;
+    let mut value = engine.evaluate(&settings, p_terms.as_view())?;
+    if !vacuum_terms.is_zero() {
+        let vacuum = rustred_p_settings(mode, LoopNormalizationFactor::GScheme, terms);
+        value += engine.evaluate(&vacuum, vacuum_terms.as_view())?;
+    }
+    Ok(value)
 }
 
 /// The modes of an agreement, in the order they are checked.
@@ -107,18 +221,29 @@ pub fn rustred_value(input: &Atom, mode: RustRedMasterMode, terms: i64) -> Resul
         .map_err(|error| format!("RustRed ({mode}): {error}"))
 }
 
-/// The value of `input` with a live Forcer at `form` in `mode`, G-scheme,
-/// `terms`.
+/// [`forcer_side_value`] on the shared engine `VAKINT` (`Vakint::new()`).
 pub fn live_forcer_value(
     form: &str,
     input: &Atom,
     mode: RustRedMasterMode,
     terms: i64,
 ) -> Result<Atom, String> {
-    let settings = forcer_side_settings(form, mode, LoopNormalizationFactor::GScheme, terms);
+    forcer_side_value(&VAKINT, form, input, mode, terms)
+        .map_err(|error| format!("Forcer ({mode}, FORM {form}): {error}"))
+}
+
+/// FORM 5 at `form` runs Forcer on `VAKINT` (`validate_settings` of
+/// [`forcer_side_settings`]), checked before a long computation.
+pub fn assert_forcer_runs(form: &str) {
+    let settings = forcer_side_settings(
+        form,
+        RustRedMasterMode::Symbolic,
+        LoopNormalizationFactor::GScheme,
+        1,
+    );
     VAKINT
-        .evaluate(&settings, input.as_view())
-        .map_err(|error| format!("Forcer ({mode}): {error}"))
+        .validate_settings(&settings)
+        .unwrap_or_else(|error| panic!("Forcer does not run with FORM {form}: {error}"));
 }
 
 /// `value` at `p(i) = (0,0,0,1)` for the heads `p(1)..p(4)`, `mursq = 1` and
@@ -155,19 +280,44 @@ pub fn at_unit_scale(value: &Atom) -> Result<NumericalEvaluationResult, VakintEr
         .map(|(value, _)| value)
 }
 
+/// Why two values of one input do not agree.
+#[derive(Clone, Debug)]
+pub enum Disagreement {
+    /// A side, or the comparison, failed (an error, never a value), or the
+    /// agreement would test nothing: the values were not compared.
+    Failed(String),
+    /// Both values were computed and they differ.
+    Differs(String),
+}
+
+impl fmt::Display for Disagreement {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Disagreement::Failed(error) => write!(f, "not compared: {error}"),
+            Disagreement::Differs(difference) => write!(f, "{difference}"),
+        }
+    }
+}
+
 /// Whether `rustred` and `forcer`, two values of one input in `mode`, agree
 /// (module documentation); in `Numerical` mode `forcer` may be any exact or
-/// numerical form of the value. `Err` describes the first difference.
-pub fn values_agree(rustred: &Atom, forcer: &Atom, mode: RustRedMasterMode) -> Result<(), String> {
+/// numerical form of the value.
+pub fn values_agree(
+    rustred: &Atom,
+    forcer: &Atom,
+    mode: RustRedMasterMode,
+) -> Result<(), Disagreement> {
     match mode {
         RustRedMasterMode::Retain => {
             let epsilon = vakint_symbol!(&VakintSettings::default().epsilon_symbol);
             let difference = tag_basis_difference(rustred, forcer, epsilon)
-                .map_err(|error| format!("tag basis: {error}"))?;
+                .map_err(|error| Disagreement::Failed(format!("tag basis: {error}")))?;
             if difference.is_empty() {
                 Ok(())
             } else {
-                Err(format!("tag-basis difference {difference:?}"))
+                Err(Disagreement::Differs(format!(
+                    "tag-basis difference {difference:?}"
+                )))
             }
         }
         RustRedMasterMode::Symbolic => {
@@ -175,40 +325,52 @@ pub fn values_agree(rustred: &Atom, forcer: &Atom, mode: RustRedMasterMode) -> R
             if difference.is_zero() {
                 Ok(())
             } else {
-                Err(format!("symbolic difference {difference}"))
+                Err(Disagreement::Differs(format!(
+                    "symbolic difference {difference}"
+                )))
             }
         }
         RustRedMasterMode::Numerical => {
             let numbers = |value: &Atom| {
-                at_unit_scale(value)
-                    .map_err(|error| format!("numerical evaluation of {value}: {error}"))
+                at_unit_scale(value).map_err(|error| {
+                    Disagreement::Failed(format!("numerical evaluation of {value}: {error}"))
+                })
             };
             let (rustred, forcer) = (numbers(rustred)?, numbers(forcer)?);
             let (equal, diagnostic) =
                 rustred.does_approx_match(&forcer, None, NUMERICAL_TOLERANCE, 5.0);
-            if equal { Ok(()) } else { Err(diagnostic) }
+            if equal {
+                Ok(())
+            } else {
+                Err(Disagreement::Differs(diagnostic))
+            }
         }
     }
 }
 
 /// The agreement of `input` through `terms` Laurent terms, the Forcer side
 /// given by `forcer(mode)`: every mode of [`MODES`], and a nonzero value (an
-/// agreement of zeros tests nothing). `Err` names the mode and the difference.
+/// agreement of zeros tests nothing). A side that fails, or a Forcer value
+/// 0, is [`Disagreement::Failed`]; values that differ are
+/// [`Disagreement::Differs`]; both name the mode.
 pub fn agreement(
     input: &Atom,
     terms: i64,
     forcer: impl Fn(RustRedMasterMode) -> Result<Atom, String>,
-) -> Result<(), String> {
+) -> Result<(), Disagreement> {
     for mode in MODES {
-        let expected = forcer(mode)?;
+        let expected = forcer(mode).map_err(Disagreement::Failed)?;
         if expected.is_zero() {
-            return Err(format!(
+            return Err(Disagreement::Failed(format!(
                 "Forcer gives 0 ({mode}): the agreement tests nothing"
-            ));
+            )));
         }
-        let actual = rustred_value(input, mode, terms)?;
-        values_agree(&actual, &expected, mode).map_err(|difference| {
-            format!("{mode}: RustRed {actual}\nForcer {expected}\n{difference}")
+        let actual = rustred_value(input, mode, terms).map_err(Disagreement::Failed)?;
+        values_agree(&actual, &expected, mode).map_err(|disagreement| match disagreement {
+            Disagreement::Failed(error) => Disagreement::Failed(format!("{mode}: {error}")),
+            Disagreement::Differs(difference) => Disagreement::Differs(format!(
+                "{mode}: RustRed {actual}\nForcer {expected}\n{difference}"
+            )),
         })?;
     }
     Ok(())
@@ -216,15 +378,15 @@ pub fn agreement(
 
 /// `input` (a vakint expression with p-integrals, vacuum terms allowed)
 /// evaluates alike with RustRed and with a live Forcer through `terms`
-/// Laurent terms (module documentation). Skipped without FORM 5.
+/// Laurent terms (module documentation). Skipped without FORM 5 unless it is
+/// required ([`live_form`]).
 pub fn assert_p_backends_agree(input: &str, terms: i64) {
     assert_p_backends_agree_atom(&parse(input), terms);
 }
 
 /// [`assert_p_backends_agree`] for a parsed input.
 pub fn assert_p_backends_agree_atom(input: &Atom, terms: i64) {
-    let Some(form) = forcer_form() else {
-        eprintln!("FORM 5 is unavailable: skipped the RustRed/Forcer agreement of {input}");
+    let Some(form) = live_form(&format!("the RustRed/Forcer agreement of {input}")) else {
         return;
     };
     agreement(input, terms, |mode| {
@@ -256,6 +418,7 @@ pub fn assert_p_backends_agree_routed_atom(original: &Atom, seeds: std::ops::Ran
         assert!(!expected.is_zero(), "{input} ({mode}) vanishes");
         for seed in seeds.clone() {
             let routed = rerouted(original, seed);
+            assert_ne!(&routed, original, "seed {seed} does not reroute");
             let found = rustred_value(&routed, mode, ROUTED_TERMS)
                 .unwrap_or_else(|error| panic!("seed {seed}: {routed}: {error}"));
             values_agree(&found, &expected, mode).unwrap_or_else(|difference| {
@@ -294,8 +457,9 @@ fn heads_and_loops(input: &Atom) -> (Vec<Atom>, usize) {
 
 /// `input` (a long form with `L` loop momenta `k(1..=L)` and one external
 /// head) rerouted by `seed`: `k(i) -> Σ_j M_ij k(j) + c_i·p` for a random
-/// unimodular integer matrix `M` and `c_i` in `{-1, 0, 1}`, numerator and
-/// lines alike, and every line reversed with probability 1/2
+/// unimodular integer matrix `M` (row additions, then every row negated with
+/// probability 1/2, so that at one loop `M = ±1`) and `c_i` in `{-1, 0, 1}`,
+/// numerator and lines alike, and every line reversed with probability 1/2
 /// (`prop(n, edge(a,b), q, m, x) -> prop(n, edge(b,a), -q, m, x)`). The
 /// integral is unchanged.
 pub fn rerouted(input: &Atom, seed: u64) -> Atom {
@@ -315,8 +479,11 @@ pub fn rerouted(input: &Atom, seed: u64) -> Atom {
                 .iter_mut()
                 .zip(row)
                 .for_each(|(a, b)| *a += sign * b);
-        } else {
-            matrix[i].iter_mut().for_each(|a| *a = -*a);
+        }
+    }
+    for row in &mut matrix {
+        if random.next(2) == 1 {
+            row.iter_mut().for_each(|a| *a = -*a);
         }
     }
     let k = |axis: usize| S.k.call((axis as i64,));
@@ -383,7 +550,7 @@ pub fn assert_rustred_p_identity(lhs: &str, rhs: &str) {
 /// Forcer to the same value without an `Oep` tail, and one term more is a
 /// `MissingMasterOrders` error on both sides (the boundary is the masters'
 /// table, shared by both backends). The Forcer side is skipped without FORM
-/// 5; the RustRed side always runs.
+/// 5 unless it is required ([`live_form`]); the RustRed side always runs.
 pub fn assert_p_backends_oep_boundary(input: &str, passing: i64) {
     let atom = parse(input);
     for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Numerical] {
@@ -401,17 +568,14 @@ pub fn assert_p_backends_oep_boundary(input: &str, passing: i64) {
                 passing + 1
             ),
         }
-        let Some(form) = forcer_form() else {
-            eprintln!("FORM 5 is unavailable: skipped the Forcer side of the Oep boundary");
+        let Some(form) = live_form("the Forcer side of the Oep boundary") else {
             continue;
         };
         let forcer = live_forcer_value(&form, &atom, mode, passing)
             .unwrap_or_else(|error| panic!("{input}: {error}"));
         values_agree(&value, &forcer, mode)
             .unwrap_or_else(|difference| panic!("{input} ({mode}): {difference}"));
-        let settings =
-            forcer_side_settings(&form, mode, LoopNormalizationFactor::GScheme, passing + 1);
-        match VAKINT.evaluate(&settings, atom.as_view()) {
+        match forcer_side_value(&VAKINT, &form, &atom, mode, passing + 1) {
             Err(VakintError::MissingMasterOrders(_)) => {}
             other => panic!(
                 "{input} ({mode}) with Forcer through {} terms: expected a missing master order, got {other:?}",

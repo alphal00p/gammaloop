@@ -15,16 +15,21 @@
 //!   benchmark times) evaluated by RustRed against the sum of the frozen
 //!   Forcer outputs of its tops (`bench_<cell>_<family>` in the grids).
 //! - Physics cells: the 2L and 3L inputs of
-//!   `tests/fixtures/benchmark_p_physics.json` against a live Forcer (FORM 5).
+//!   `tests/fixtures/benchmark_p_physics.json` against a live Forcer (FORM 5;
+//!   skipped without it unless `VAKINT_REQUIRE_FORM5=1`).
 //! - With `VAKINT_P_EXACT_OUT=<path>` (never set by default),
 //!   [`the_exact_agreement_file_is_written_on_request`] computes every 1L-3L
 //!   cell and both physics cells and writes `<path>` (schema
 //!   `vakint.p-exact.v1`, read by `examples/benchmark_p_integrals` and
-//!   `docs/benchmark/benchmark.typ`); it refuses a dirty tree and writes
-//!   nothing unless every cell was computed. M2-T10c runs it with
-//!   `VAKINT_P_EXACT_OUT=crates/vakint/docs/benchmark/data/p_exact.json` at the
-//!   source of the measurement, e.g.
-//!   `cargo test --profile ci-optim -p vakint --features vakint/feynkit-ingress
+//!   `docs/benchmark/benchmark.typ`). A relative `<path>` is relative to the
+//!   repository root (test processes run in `crates/vakint`), and its
+//!   directory must exist. It refuses a dirty tree, needs a FORM 5 that runs
+//!   Forcer, and writes nothing unless every cell was computed (an error
+//!   aborts; a disagreement is written as `agree: false`, and the test then
+//!   fails). M2-T10c runs it at the source of the measurement, from the
+//!   repository root, e.g.
+//!   `VAKINT_P_EXACT_OUT=crates/vakint/docs/benchmark/data/p_exact.json
+//!   cargo test --profile ci-optim -p vakint --features vakint/feynkit-ingress
 //!   --test p_integral_rustred_full -- --exact the_exact_agreement_file_is_written_on_request`
 //!   (one process, no per-test time limit).
 //!
@@ -157,9 +162,22 @@ impl ExactCell {
     }
 }
 
+/// Whether a cell agrees: a disagreement of computed values is reported on
+/// stderr and recorded as `false`; a cell that was not computed (an error of
+/// either side, or a Forcer value 0) aborts, so that no file marks it.
+fn cell_agrees(cell: &str, agreement: Result<(), Disagreement>) -> bool {
+    match agreement {
+        Ok(()) => true,
+        Err(Disagreement::Differs(difference)) => {
+            eprintln!("{cell}: {difference}");
+            false
+        }
+        Err(Disagreement::Failed(error)) => panic!("{cell} was not computed: {error}"),
+    }
+}
+
 /// The agreement of a benchmark cell: its frozen input with RustRed against
-/// the frozen Forcer outputs of its tops. A disagreement is reported on
-/// stderr and recorded as `agree: false`.
+/// the frozen Forcer outputs of its tops ([`cell_agrees`]).
 fn benchmark_cell(cell: &BenchmarkCell, grid: &[ForcerCase]) -> ExactCell {
     let tops = cell
         .tops
@@ -180,9 +198,10 @@ fn benchmark_cell(cell: &BenchmarkCell, grid: &[ForcerCase]) -> ExactCell {
         .collect::<Vec<_>>();
     let terms = battery_terms(cell.loops);
     let input = parse(&cell.input);
-    let agree = agreement(&input, terms, |mode| frozen_sum(&tops, mode, terms))
-        .inspect_err(|difference| eprintln!("benchmark cell {}: {difference}", cell.name))
-        .is_ok();
+    let agree = cell_agrees(
+        &format!("benchmark cell {}", cell.name),
+        agreement(&input, terms, |mode| frozen_sum(&tops, mode, terms)),
+    );
     ExactCell {
         loops: cell.loops,
         grid: Some((cell.dots, cell.rank)),
@@ -254,7 +273,7 @@ fn physics_inputs() -> Vec<(usize, String)> {
 }
 
 /// The agreement of the physics cell of `loops` loops with a live Forcer at
-/// `form`.
+/// `form` ([`cell_agrees`]).
 fn physics_cell(form: &str, loops: usize) -> ExactCell {
     let input = physics_inputs()
         .into_iter()
@@ -263,11 +282,12 @@ fn physics_cell(form: &str, loops: usize) -> ExactCell {
         .1;
     let terms = battery_terms(loops);
     let input = parse(&input);
-    let agree = agreement(&input, terms, |mode| {
-        live_forcer_value(form, &input, mode, terms)
-    })
-    .inspect_err(|difference| eprintln!("physics cell L{loops}: {difference}"))
-    .is_ok();
+    let agree = cell_agrees(
+        &format!("physics cell L{loops}"),
+        agreement(&input, terms, |mode| {
+            live_forcer_value(form, &input, mode, terms)
+        }),
+    );
     ExactCell {
         loops,
         grid: None,
@@ -282,8 +302,7 @@ const PHYSICS_LOOPS: [usize; 2] = [2, 3];
 #[test]
 #[ignore = "M2-V5 STAGE 2: needs the built-in 1L-3L p library (M2-V4)"]
 fn the_physics_cells_agree_with_forcer() {
-    let Some(form) = forcer_form() else {
-        eprintln!("FORM 5 is unavailable: skipped the physics cells");
+    let Some(form) = live_form("the physics cells") else {
         return;
     };
     for loops in PHYSICS_LOOPS {
@@ -311,11 +330,43 @@ fn git(root: &Path, arguments: &[&str]) -> String {
     String::from_utf8(output.stdout).unwrap().trim().to_owned()
 }
 
+/// The root of the gammaloop repository (test processes run in
+/// `crates/vakint`).
+fn repository_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+/// `VAKINT_P_EXACT_OUT`, a relative path taken relative to
+/// [`repository_root`]; its directory must exist (checked before any cell
+/// is computed).
+fn exact_output(path: PathBuf) -> PathBuf {
+    let path = if path.is_relative() {
+        repository_root().join(path)
+    } else {
+        path
+    };
+    let directory = path.parent().filter(|parent| parent.is_dir());
+    assert!(
+        directory.is_some() && path.file_name().is_some(),
+        "VAKINT_P_EXACT_OUT={}: no such directory",
+        path.display()
+    );
+    path
+}
+
+/// A relative `VAKINT_P_EXACT_OUT` whose directory does not exist below the
+/// repository root is refused before any computation.
+#[test]
+#[should_panic(expected = "no such directory")]
+fn an_exact_output_without_its_directory_is_refused() {
+    exact_output(PathBuf::from("crates/vakint/crates/vakint/p_exact.json"));
+}
+
 /// The sources of this checkout; a tree with changes outside
 /// `crates/vakint/docs/benchmark` is refused (its result belongs to no
 /// commit).
 fn sources() -> Sources {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let root = repository_root();
     let paths = [".", ":(exclude)crates/vakint/docs/benchmark"];
     let status = git(
         &root,
@@ -373,14 +424,23 @@ fn write_document(path: &Path, document: &Value) {
 }
 
 /// Every 1L-3L benchmark cell (45) and both physics cells, computed and
-/// written to `VAKINT_P_EXACT_OUT` when it is set; nothing is written unless
-/// the engine covers 1L-3L, FORM 5 is there for the physics cells and the
-/// tree is clean. Disagreeing cells are written as `agree: false`, and the
-/// test then fails. Without the variable, only the document format is
-/// checked.
+/// written to `VAKINT_P_EXACT_OUT` ([`exact_output`]) when it is set;
+/// nothing is written unless the engine covers 1L-3L, FORM 5 runs Forcer for
+/// the physics cells, the tree is clean and every cell was computed.
+/// Disagreeing cells are written as `agree: false`, and the test then fails.
+/// Without the variable, only the document format and the output path rule
+/// are checked.
 #[test]
 fn the_exact_agreement_file_is_written_on_request() {
     let Some(path) = std::env::var_os("VAKINT_P_EXACT_OUT").map(PathBuf::from) else {
+        assert_eq!(
+            exact_output(PathBuf::from("crates/vakint/Cargo.toml")),
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../crates/vakint/Cargo.toml")
+        );
+        assert_eq!(
+            exact_output(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("p_exact.json")),
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("p_exact.json")
+        );
         let fake = Sources {
             gammaloop_sha: "a".repeat(40),
             rustred_sha: "b".repeat(40),
@@ -424,8 +484,10 @@ fn the_exact_agreement_file_is_written_on_request() {
         1..=3,
         "the exact-agreement file needs the 1L-3L library (M2-V5 STAGE 2)"
     );
+    let path = exact_output(path);
     let sources = sources();
     let form = forcer_form().expect("the physics cells of the exact-agreement file need FORM 5");
+    assert_forcer_runs(&form);
     let mut cells = Vec::new();
     for loops in 1..=3 {
         cells.extend(benchmark_cells(loops));
