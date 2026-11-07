@@ -333,6 +333,10 @@ mod syntax_macro_tests {
 
 #[derive(Error, Debug)]
 pub enum AdjointError {
+    #[error(
+        "tensor words require an explicit adjoint policy; adjoint their operands and choose their order through the typed word constructor"
+    )]
+    ImplicitTensorWordAdjoint,
     #[error(transparent)]
     Composition(#[from] tensor::composition::TensorCompositionError),
     #[error("Dummies already present:{0}")]
@@ -420,6 +424,21 @@ impl tensor::SymbolicTensor<PartialStructure> {
         source: AtomView<'_>,
         preserve_indices: bool,
     ) -> Result<(Atom, bool), AdjointError> {
+        let mut tensor_word = false;
+        source.visitor(&mut |value| {
+            if let AtomView::Fun(function) = value {
+                if function.get_symbol().is_scalar() {
+                    return false;
+                }
+                tensor_word |= function
+                    .get_symbol()
+                    .has_tag(&spenso::network::tags::SPENSO_TAG.tensor_word);
+            }
+            !tensor_word
+        });
+        if tensor_word {
+            return Err(AdjointError::ImplicitTensorWordAdjoint);
+        }
         let net = source
             .parse_to_symbolic_net::<Aind>(&ParseSettings {
                 shorthand_parsing: ShorthandParsing::Expand {
