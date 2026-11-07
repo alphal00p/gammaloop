@@ -2,12 +2,20 @@
 
 use eyre::{Result, WrapErr};
 use feynkit_tensor::TensorReducer;
-use idenso::{CookMode, CookSettings};
+use idenso::{
+    CookMode, CookSettings,
+    dirac::GammaSimplifySettings,
+    shorthands::UndoShorthands,
+    tensor::{AlgebraSettings, SymbolicNetExt, SymbolicNetParse},
+};
 use linnet::half_edge::involution::EdgeIndex;
-use spenso::structure::representation::{Minkowski, RepName};
+use spenso::{
+    network::parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing},
+    structure::representation::{Minkowski, RepName},
+};
 use symbolica::{atom::Atom, function};
 
-use crate::{utils::GS, uv::approx::integrated::Integrated};
+use crate::{numerator::aind::Aind, utils::GS, uv::approx::integrated::Integrated};
 
 /// Average hard loop directions while retaining their scalar integrals.
 ///
@@ -32,11 +40,41 @@ pub(super) fn project_hard_vacuum(expression: &Atom, hard_edges: &[EdgeIndex]) -
             &minkowski
         ))?;
     }
-    let source = reducer.admit(cooking.try_cook(expression.as_view())?)?;
+    // The hard simplifier can collect slash momenta inside Dirac chains.
+    // Expose them before counting tensor rank: k_mu slash(k) has rank two,
+    // although only one vector is visible outside its compact gamma tensor.
+    // Use the same native shorthand expansion as the vacuum-integral bridge.
+    let explicit = expression.undo_trace::<Aind>()?.undo_chain::<Aind>()?;
+    let explicit = explicit
+        .parse_to_symbolic_net::<Aind>(&ParseSettings {
+            shorthand_parsing: ShorthandParsing::Expand {
+                schoonschip: SchoonschipExpansionMode {
+                    inner_products: false,
+                    expand_inside_chains: true,
+                    expand_schoonship: true,
+                },
+                trace: true,
+                chain: true,
+            },
+            ..Default::default()
+        })?
+        .simple_execute::<()>()?;
+    let source = reducer.admit(cooking.try_cook(explicit.as_view())?)?;
     let reduced = reducer
         .reduce(&source)
         .wrap_err("could not project an R* hard Taylor coefficient onto vacuum covariants")?
         .into_expression()?;
+    // Finish scalar and Clifford contractions before separating the hard
+    // coefficient from its quotient insertion. In particular, gamma_mu
+    // gamma^mu must cancel the projector's 1/d here; leaving it inside the
+    // quotient would put that d on the wrong side of its Laurent projection.
+    let reduced = reduced
+        .simplify_algebra(&AlgebraSettings {
+            gamma: Some(GammaSimplifySettings::canonical()),
+            epsilon: true,
+            ..Default::default()
+        })?
+        .to_dots()?;
     let result = cooking.uncook(reduced.expression().as_view());
     // Rational projector coefficients must participate in subsequent Laurent
     // expansions. The old R helper preserves d in Lorentz slot metadata.
@@ -47,7 +85,7 @@ pub(super) fn project_hard_vacuum(expression: &Atom, hard_edges: &[EdgeIndex]) -
 mod tests {
     use super::*;
     use crate::{initialisation::test_initialise, numerator::aind::Aind};
-    use idenso::representations::ColorAdjoint;
+    use idenso::representations::{Bispinor, ColorAdjoint};
     use spenso::{
         network::{library::symbolic::ETS, tags::SPENSO_TAG},
         structure::slot::ParseableAind,
@@ -64,6 +102,97 @@ mod tests {
 
     fn dot(left: &Atom, right: &Atom) -> Atom {
         function!(SPENSO_TAG.dot, left, right)
+    }
+
+    #[test]
+    fn hard_clifford_contractions_precede_coefficient_separation() -> Result<()> {
+        test_initialise()?;
+        let hard_left = momentum(0);
+        let hard_right = momentum(1);
+        let soft = momentum(2);
+        let spin = Bispinor {}.new_rep(4);
+        let left = spin.to_symbolic([Aind::Hedge(8, 0).to_atom()]);
+        let right = spin.to_symbolic([Aind::Hedge(9, 0).to_atom()]);
+        let gamma = |argument: &Atom| {
+            function!(
+                idenso::dirac::AGS.gamma,
+                SPENSO_TAG.chain_in,
+                SPENSO_TAG.chain_out,
+                argument
+            )
+        };
+        let slash = spenso::chain!(&left, &right, gamma(&soft));
+        let dimension = Atom::num(4) - Atom::num(2) * Atom::var(GS.dim_epsilon);
+        let scalar = dot(&hard_left, &hard_right);
+        for (source, coefficient) in [
+            (
+                spenso::chain!(
+                    &left,
+                    &right,
+                    gamma(&hard_left),
+                    gamma(&hard_right),
+                    gamma(&soft)
+                ),
+                Atom::one(),
+            ),
+            (
+                spenso::chain!(
+                    &left,
+                    &right,
+                    gamma(&hard_left),
+                    gamma(&soft),
+                    gamma(&hard_right)
+                ),
+                Atom::num(2) / &dimension - 1,
+            ),
+        ] {
+            let actual = project_hard_vacuum(&source, &[EdgeIndex::from(0), EdgeIndex::from(1)])?;
+            let expected = &scalar * coefficient * &slash;
+            assert!(
+                (&actual - &expected).together().is_zero(),
+                "actual={actual}, expected={expected}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn hard_projection_counts_slash_momenta_inside_dirac_chains() -> Result<()> {
+        test_initialise()?;
+        let hard = momentum(0);
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let mu = mink.to_symbolic([Aind::Hedge(7, 0).to_atom()]);
+        let spin = Bispinor {}.new_rep(4);
+        let left = spin.to_symbolic([Aind::Hedge(8, 0).to_atom()]);
+        let right = spin.to_symbolic([Aind::Hedge(9, 0).to_atom()]);
+        let colour = ColorAdjoint {}.new_rep(8);
+        let a = colour.to_symbolic([Aind::Hedge(8, 1).to_atom()]);
+        let b = colour.to_symbolic([Aind::Hedge(9, 1).to_atom()]);
+        let attachment = function!(ETS.metric, a, b);
+        let slash = function!(idenso::dirac::AGS.gamma, &left, &right, &hard);
+        let chain = function!(
+            SPENSO_TAG.chain,
+            &left,
+            &right,
+            function!(
+                idenso::dirac::AGS.gamma,
+                SPENSO_TAG.chain_in,
+                SPENSO_TAG.chain_out,
+                &hard
+            )
+        );
+        let dimension = Atom::num(4) - Atom::num(2) * Atom::var(GS.dim_epsilon);
+        let expected = &attachment
+            * dot(&hard, &hard)
+            * function!(idenso::dirac::AGS.gamma, &left, &right, &mu)
+            / &dimension;
+        for compact in [slash, chain] {
+            let source = &attachment * function!(GS.emr_mom, 0, &mu) * compact;
+            let projected = project_hard_vacuum(&source, &[EdgeIndex::from(0)])?;
+            assert!(!projected.is_zero(), "an even hard tensor was discarded");
+            super::super::tests::assert_same_counterterm(&projected, &expected)?;
+        }
+        Ok(())
     }
 
     #[test]
@@ -125,5 +254,34 @@ mod tests {
         let reduced = project_hard_vacuum(&source, &[EdgeIndex::from(0), EdgeIndex::from(1)])?;
         assert!((reduced - expected).together().is_zero());
         Ok(())
+    }
+
+    #[test]
+    fn factored_hard_vector_sums_are_scalar_invariants_before_moment_separation() -> Result<()> {
+        test_initialise()?;
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let mu = mink.to_symbolic([Aind::Hedge(20, 0).to_atom()]);
+        let nu = mink.to_symbolic([Aind::Hedge(21, 0).to_atom()]);
+        let vector = |edge: usize, slot: &Atom| function!(GS.emr_mom, edge, slot);
+        let source = (vector(0, &mu) + vector(1, &mu))
+            * (vector(0, &nu) + vector(1, &nu))
+            * vector(4, &mu)
+            * vector(4, &nu);
+        let projected = project_hard_vacuum(&source, &[EdgeIndex::from(0), EdgeIndex::from(1)])?;
+        let moments = super::super::moments::hard_moments(&projected, &[EdgeIndex::from(4)])?;
+        let reconstructed = moments
+            .iter()
+            .fold(Atom::Zero, |sum, (coefficient, insertion)| {
+                sum + coefficient * insertion
+            });
+        let left = momentum(0);
+        let right = momentum(1);
+        let soft = momentum(4);
+        let dimension = Atom::num(4) - Atom::num(2) * Atom::var(GS.dim_epsilon);
+        let expected =
+            (dot(&left, &left) + Atom::num(2) * dot(&left, &right) + dot(&right, &right))
+                * dot(&soft, &soft)
+                / dimension;
+        super::super::tests::assert_same_counterterm(&reconstructed, &expected)
     }
 }

@@ -1,6 +1,9 @@
 //! Assemble the ordinary UV preparation and the UV form of the IR correction.
 
-use std::collections::BTreeMap;
+use std::{
+    collections::BTreeMap,
+    time::{Duration, Instant},
+};
 
 use eyre::{Result, WrapErr, ensure, eyre};
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
@@ -19,7 +22,8 @@ use crate::{
 
 use super::{
     CountertermCall, IrForestTerm, MassiveUvEvaluator, RStarPlan, UvPreparationTerm,
-    expression::RStarIntegrand, moments::hard_moments,
+    expression::{RStarIntegrand, RootProjector},
+    moments::hard_moments,
 };
 
 impl RStarPlan {
@@ -37,7 +41,41 @@ impl RStarPlan {
         vakint: &Vakint,
         uv_settings: &UVgenerationSettings,
     ) -> Result<Atom> {
-        Evaluation::new(self, graph, model, vakint, uv_settings)?.counterterm()
+        Evaluation::new(self, graph, model, vakint, uv_settings, None)?.counterterm()
+    }
+
+    /// Compute a root-projected local MS counterterm using the same R* forest.
+    ///
+    /// The linear projector acts on each complete outer Taylor polynomial,
+    /// before its remaining vacuum tensor reduction. It is never applied to
+    /// proper UV children or decorated IR quotient counterterms, whose open
+    /// tensor boundaries are retained. Its coefficients must be regular in
+    /// epsilon and it must not introduce loop momenta. Rational functions of
+    /// external momenta are allowed when their denominators are scalar and
+    /// independent of every loop momentum. These factors are spectators:
+    /// the root Taylor operation has already finished.
+    ///
+    /// Root normalization factors such as `1/(d-1)` participate in the final
+    /// Laurent projection. Scalar marker coefficients may carry several root
+    /// projection channels through a single evaluation. Graph-wide prefactors
+    /// remain excluded, as for [`Self::counterterm`].
+    pub fn projected_counterterm(
+        &self,
+        graph: &Graph,
+        model: &Model,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+        root_projector: &dyn Fn(&Atom) -> Result<Atom>,
+    ) -> Result<Atom> {
+        Evaluation::new(
+            self,
+            graph,
+            model,
+            vakint,
+            uv_settings,
+            Some(root_projector),
+        )?
+        .counterterm()
     }
 
     /// Reconstruct all poles of the bare, infrared-finite massless propagator
@@ -64,7 +102,7 @@ impl RStarPlan {
             graph,
             &graph.external_filter::<SuBitGraph>(),
         )?;
-        let mut evaluation = Evaluation::new(self, graph, model, vakint, uv_settings)?;
+        let mut evaluation = Evaluation::new(self, graph, model, vakint, uv_settings, None)?;
         let mut result = -evaluation.counterterm()?;
         for term in self
             .ordinary_uv
@@ -112,6 +150,11 @@ struct Evaluation<'a> {
     uv: MassiveUvEvaluator<'a>,
     quotient_counterterms: BTreeMap<(CountertermCall, Atom), Atom>,
     integration_id: usize,
+    root_projector: Option<&'a RootProjector<'a>>,
+    started: Instant,
+    proper_uv_elapsed: Duration,
+    quotient_elapsed: Duration,
+    integration_elapsed: Duration,
 }
 
 impl<'a> Evaluation<'a> {
@@ -121,7 +164,9 @@ impl<'a> Evaluation<'a> {
         model: &'a Model,
         vakint: &'a Vakint,
         uv_settings: &'a UVgenerationSettings,
+        root_projector: Option<&'a RootProjector<'a>>,
     ) -> Result<Self> {
+        let started = Instant::now();
         for (_, _, edge) in graph.iter_edges_of(&plan.support) {
             ensure!(
                 edge.data.mass_atom(model).is_zero(),
@@ -134,12 +179,14 @@ impl<'a> Evaluation<'a> {
             .ok_or_else(|| eyre!("Vakint epsilon must be a symbol"))?;
         let reference_mass_squared = symbol!("rstar_reference_mass_squared"; Scalar);
         let reference_mass = Atom::var(reference_mass_squared).sqrt();
+        let children_started = Instant::now();
         let children = if plan.counterterms.is_empty() {
             BTreeMap::new()
         } else {
             plan.evaluate_uv_children(graph, model, &reference_mass, vakint, uv_settings)
                 .wrap_err("while computing the proper UV counterterms with massive R")?
         };
+        let proper_uv_elapsed = children_started.elapsed();
         Ok(Self {
             plan,
             graph,
@@ -154,11 +201,17 @@ impl<'a> Evaluation<'a> {
             uv: MassiveUvEvaluator::new(graph, model, vakint, uv_settings),
             quotient_counterterms: BTreeMap::new(),
             integration_id: 0,
+            root_projector,
+            started,
+            proper_uv_elapsed,
+            quotient_elapsed: Duration::ZERO,
+            integration_elapsed: Duration::ZERO,
         })
     }
 
     fn counterterm(&mut self) -> Result<Atom> {
         if self.graph.compute_dod(&self.plan.support) < 0 {
+            self.log_timing();
             return Ok(Atom::Zero);
         }
         let mut prepared = Atom::Zero;
@@ -185,7 +238,14 @@ impl<'a> Evaluation<'a> {
                     .taylor(usize::try_from(correction.taylor_order)?)
                     .wrap_err("while Taylor-expanding the prepared hard component")?;
                 let covariant = hard.project_hard(&polynomial)?;
-                let moments = hard_moments(&covariant, hard.soft_edges())?;
+                let moments = hard_moments(&covariant, hard.soft_edges()).wrap_err_with(|| {
+                    format!(
+                        "while separating hard moments: hard={}, remaining={}, soft={:?}, covariant={covariant}",
+                        correction.hard.string_label(),
+                        term.remainder.remaining.string_label(),
+                        hard.soft_edges(),
+                    )
+                })?;
                 for forest in &correction.forest {
                     let mut expression = Atom::Zero;
                     for (coefficient, insertion) in &moments {
@@ -197,7 +257,32 @@ impl<'a> Evaluation<'a> {
                 }
             }
         }
-        Ok(-self.poles(&prepared)?)
+        let result = -self.poles(&prepared)?;
+        self.log_timing();
+        Ok(result)
+    }
+
+    fn log_timing(&self) {
+        let elapsed = self.started.elapsed();
+        let preparation = elapsed.saturating_sub(
+            self.proper_uv_elapsed + self.quotient_elapsed + self.integration_elapsed,
+        );
+        tracing::info!(
+            uv = true,
+            rstar = true,
+            timing = true,
+            stage = "rstar_counterterm_phase_timing",
+            graph = %self.graph.name,
+            root_projected = self.root_projector.is_some(),
+            total_ms = elapsed.as_millis() as u64,
+            proper_uv_ms = self.proper_uv_elapsed.as_millis() as u64,
+            ir_quotient_ms = self.quotient_elapsed.as_millis() as u64,
+            outer_integration_ms = self.integration_elapsed.as_millis() as u64,
+            preparation_ms = preparation.as_millis() as u64,
+            quotient_calls = self.quotient_counterterms.len(),
+            outer_integrations = self.integration_id,
+            "R* counterterm phase timings"
+        );
     }
 
     fn poles(&self, expression: &Atom) -> Result<Atom> {
@@ -233,6 +318,7 @@ impl<'a> Evaluation<'a> {
         if let Some(value) = self.quotient_counterterms.get(&key) {
             return Ok(value.clone());
         }
+        let started = Instant::now();
         let result = self
             .uv
             .counterterm(call, std::slice::from_ref(insertion))
@@ -242,6 +328,7 @@ impl<'a> Evaluation<'a> {
                     call.argument.remaining.string_label()
                 )
             })?;
+        self.quotient_elapsed += started.elapsed();
         self.quotient_counterterms.insert(key, result.clone());
         Ok(result)
     }
@@ -291,7 +378,8 @@ impl<'a> Evaluation<'a> {
             log.expression = expression,
             "Integrating a compensated R* remainder"
         );
-        remainder.integrate(
+        let started = Instant::now();
+        let result = remainder.integrate(
             expression,
             self.graph,
             usize::try_from(self.plan.taylor_order)?,
@@ -301,6 +389,9 @@ impl<'a> Evaluation<'a> {
             self.uv_settings,
             &settings,
             self.integration_id,
-        )
+            self.root_projector,
+        );
+        self.integration_elapsed += started.elapsed();
+        result
     }
 }

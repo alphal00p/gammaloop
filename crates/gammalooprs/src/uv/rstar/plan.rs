@@ -925,6 +925,70 @@ pub(super) mod tests {
     }
 
     #[test]
+    fn uv_spinneys_reject_a_convergent_component_despite_nonnegative_total_degree() -> Result<()> {
+        test_initialise()?;
+        // A quark bubble with nested gluon chords. The vertex-disjoint
+        // one-loop qqBB box and quark self-energy have degrees -1 and +1.
+        // Linear quark numerators retain precisely this power counting.
+        let graph = finalized_runtime_dot!(
+            digraph G {
+                graph [projector=1];
+                node [num=1];
+                edge [particle="g" num=1 dod=-2];
+                ext [style=invis];
+                ext -> v1 [id=0 sink="{ufo_order:2}"];
+                v0 -> ext [id=1 source="{ufo_order:2}"];
+                v1 -> v0 [id=2 particle="d" num="Q(2,spenso::cind(1))" dod=-1 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:1}"];
+                v0 -> v5 [id=3 particle="d" num="Q(3,spenso::cind(1))" dod=-1 source="{ufo_order:0}" sink="{ufo_order:1}"];
+                v4 -> v1 [id=4 particle="d" num="Q(4,spenso::cind(1))" dod=-1 source="{ufo_order:0}" sink="{ufo_order:1}"];
+                v2 -> v3 [id=5 particle="d" num="Q(5,spenso::cind(1))" dod=-1 lmb_id=1 source="{ufo_order:0}" sink="{ufo_order:1}"];
+                v2 -> v3 [id=6 source="{ufo_order:2}" sink="{ufo_order:2}"];
+                v5 -> v2 [id=7 particle="d" num="Q(7,spenso::cind(1))" dod=-1 source="{ufo_order:0}" sink="{ufo_order:1}"];
+                v3 -> v4 [id=8 particle="d" num="Q(8,spenso::cind(1))" dod=-1 lmb_id=2 source="{ufo_order:0}" sink="{ufo_order:1}"];
+                v4 -> v5 [id=9 source="{ufo_order:2}" sink="{ufo_order:2}"];
+            }, "sm"
+        )?;
+        let convergent = edges(&graph, &[2, 3, 4, 9]);
+        let divergent = edges(&graph, &[5, 6]);
+        let mixed = convergent.union(&divergent);
+        let support = edges(&graph, &[2, 3, 4, 5, 6, 7, 8, 9]);
+        assert_eq!(graph.compute_dod(&convergent), -1);
+        assert_eq!(graph.compute_dod(&divergent), 1);
+        assert_eq!(graph.compute_dod(&mixed), 0);
+        assert_eq!(graph.connected_components(&mixed).len(), 2);
+        let candidate = graph
+            .spinneys(&support)
+            .into_iter()
+            .find(|spinney| spinney.filter == mixed)
+            .expect("the summed degree admits the mixed cycle union before classification");
+        assert!(Spinney::new(candidate, &graph, &graph.loop_momentum_basis).is_none());
+
+        let model = load_generic_model("sm");
+        let plan = RStarPlan::new(&graph, &model, EdgeIndex::from(7), &Default::default())?;
+        assert!(
+            plan.catalogue
+                .iter()
+                .all(|spinney| spinney.filter() != &mixed)
+        );
+        assert!(
+            plan.counterterms
+                .iter()
+                .all(|call| { call.taylor_order >= 0 && call.argument.support != convergent })
+        );
+        assert!(
+            plan.counterterms
+                .iter()
+                .any(|call| call.argument.support == divergent)
+        );
+        assert!(
+            plan.counterterms
+                .iter()
+                .any(|call| { call.argument.support == edges(&graph, &[5, 6, 7, 8, 9]) })
+        );
+        Ok(())
+    }
+
+    #[test]
     fn disjoint_uv_children_keep_independent_projections() -> Result<()> {
         test_initialise()?;
         let graph = finalized_runtime_dot!(

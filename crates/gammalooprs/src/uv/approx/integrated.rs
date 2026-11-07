@@ -338,21 +338,7 @@ impl Integrated<'_> {
 
         res = Self::restore_numerator(res, current.topo_order());
 
-        let cooking = CookSettings::indices()
-            .with_mode(CookMode::ReversibleEncoding)
-            .with_representation_payloads(true, true);
-        let reduced = SymbolicTensor::infer_indexed(cooking.try_cook(res.as_view())?)?
-            .contract(ContractSettings {
-                rank_one: false,
-                collect_chains: false,
-                collect_traces: false,
-                ..Default::default()
-            })?
-            .to_dots()?;
-        res = Self::dimensionally_regularized(&cooking.uncook(reduced.expression().as_view()));
-        let collected = SymbolicTensor::infer_indexed(cooking.try_cook(res.as_view())?)?
-            .contract(ContractSettings::default())?;
-        res = cooking.uncook(collected.expression().as_view());
+        res = Self::reduce_integrated_numerator(&res)?;
         debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #collect;
             log.expr = res,
             "Integrated UV chain cleanup through native tensor contraction"
@@ -373,6 +359,16 @@ impl Integrated<'_> {
 
         // println!("\nIntegrated CT:\n{}\n", res);
         Ok(res)
+    }
+
+    fn reduce_integrated_numerator(numerator: &Atom) -> Result<Atom> {
+        // Vacuum tensor reduction can create contracted Clifford words even
+        // when the incoming numerator was already simplified. Reduce those
+        // words before taking Laurent coefficients: gamma_mu gamma^mu = d
+        // contributes evanescent terms to poles and finite counterterms.
+        // Open Lorentz-slot dimensions remain metadata; scalar dimensions
+        // produced by the Clifford reduction must become 4 - 2 epsilon.
+        Ok(Self::dimensionally_regularized(&simplify(numerator)?))
     }
 
     pub(crate) fn dimensionally_regularized(numerator: &Atom) -> Atom {
@@ -421,6 +417,14 @@ impl Integrated<'_> {
     pub(crate) fn restore_numerator(mut res: Atom, topology_order: usize) -> Atom {
         let mink = Minkowski {}.new_rep(GS.dim);
         res = Self::restore_lorentz_dimensions(&res);
+        // Native tensor reduction also puts these backend dummies inside
+        // represented gamma/metric slots. Restore their identity before
+        // handling momentum and metric heads, so every occurrence shares the
+        // same topology-local index without adding a second representation.
+        res = res
+            .replace(vakint::symbols::S.dot_dummy_ind(W_.j_))
+            .when(W_.j_.filter(|index| index.is_integer().is_true()))
+            .with(function!(GS.uvaind, topology_order, W_.j_));
         res = res
             .replace(parse_lit!(vakint::cl2))
             .with(parse_lit!(cl2))
@@ -433,17 +437,6 @@ impl Integrated<'_> {
         ] {
             res = res
                 .replace(function!(source, W_.i_, W_.j_))
-                .when(W_.j_.filter(|index| index.is_integer().is_true()))
-                .with(function!(
-                    source,
-                    W_.i_,
-                    mink.to_symbolic([function!(GS.uvaind, topology_order, W_.j_)])
-                ))
-                .replace(function!(
-                    source,
-                    W_.i_,
-                    vakint::symbols::S.dot_dummy_ind(W_.j_)
-                ))
                 .when(W_.j_.filter(|index| index.is_integer().is_true()))
                 .with(function!(
                     source,
@@ -476,14 +469,7 @@ impl Integrated<'_> {
                 return;
             }
             let slots = [metric.get(0), metric.get(1)].map(|slot| {
-                let raw_index = if let symbolica::atom::AtomView::Fun(index) = slot
-                    && index.get_symbol() == vakint::symbols::S.dot_dummy_ind
-                    && index.get_nargs() == 1
-                {
-                    index.get(0)
-                } else {
-                    slot
-                };
+                let raw_index = slot;
                 if raw_index.is_integer().is_true() {
                     mink.to_symbolic([function!(GS.uvaind, topology_order, raw_index)])
                 } else if Aind::try_from(raw_index).is_ok() {
@@ -1328,6 +1314,74 @@ mod tests {
     }
 
     #[test]
+    fn integrated_clifford_contractions_precede_laurent_projection() -> Result<()> {
+        test_initialise()?;
+        let epsilon = Atom::var(GS.dim_epsilon);
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let spin = Bispinor {}.new_rep(4);
+        let a = spin.to_symbolic([Aind::Hedge(3, 1).to_atom()]);
+        let b = spin.to_symbolic([Aind::Hedge(4, 1).to_atom()]);
+        let mu = mink.to_symbolic([Aind::new_dummy().to_atom()]);
+        let momentum = function!(GS.emr_mom, 7, mink.to_symbolic([]));
+        let gamma = |argument: &Atom| {
+            function!(
+                idenso::dirac::AGS.gamma,
+                SPENSO_TAG.chain_in,
+                SPENSO_TAG.chain_out,
+                argument
+            )
+        };
+        let slash = spenso::chain!(&a, &b, gamma(&momentum));
+        for (word, coefficient) in [
+            (
+                spenso::chain!(&a, &b, gamma(&mu), gamma(&mu), gamma(&momentum)),
+                Atom::var(GS.dim),
+            ),
+            (
+                spenso::chain!(&a, &b, gamma(&mu), gamma(&momentum), gamma(&mu)),
+                Atom::num(2) - Atom::var(GS.dim),
+            ),
+        ] {
+            for pole_order in [1, 2] {
+                let reduced = Integrated::reduce_integrated_numerator(
+                    &(word.clone() / epsilon.pow(pole_order)),
+                )?;
+                let expected = Integrated::dimensionally_regularized(
+                    &(&coefficient * &slash / epsilon.pow(pole_order)),
+                );
+                let expansion = series(&reduced, 1)?;
+                let expected_expansion = series(&expected, 1)?;
+                for finite in [false, true] {
+                    assert!(
+                        (truncate(&expansion, finite) - truncate(&expected_expansion, finite))
+                            .expand()
+                            .is_zero(),
+                        "finite={finite}, pole_order={pole_order}, reduced={reduced}, expected={expected}"
+                    );
+                }
+            }
+        }
+        // Projecting the unreduced Clifford word first, as the old integration
+        // path did, leaves a finite -2 slash(p) in a purported MS pole. Once
+        // inserted in a second logarithmically divergent loop, it changes the
+        // overall simple pole by -2 slash(p)/epsilon.
+        let unreduced = spenso::chain!(&a, &b, gamma(&mu), gamma(&mu), gamma(&momentum)) / &epsilon;
+        let projected_first = truncate(&series(&unreduced, 1)?, false);
+        let reduced_late = Integrated::reduce_integrated_numerator(&projected_first)?;
+        let correct_pole = Atom::num(4) * &slash / &epsilon;
+        let extra_parent_pole = truncate(
+            &series(&((reduced_late - correct_pole) / &epsilon), 1)?,
+            false,
+        );
+        assert!(
+            (extra_parent_pole + Atom::num(2) * slash / epsilon)
+                .expand()
+                .is_zero()
+        );
+        Ok(())
+    }
+
+    #[test]
     fn projector_lorentz_metadata_is_constant_during_laurent_expansion() {
         test_initialise().unwrap();
         let epsilon = Atom::var(GS.dim_epsilon);
@@ -1527,7 +1581,25 @@ mod tests {
                     function!(target, 2, mink.to_symbolic([function!(GS.uvaind, 19, 5)]))
                 );
             }
+            let wrapped_dummy = mink.to_symbolic([vakint::symbols::S.dot_dummy_ind(5)]);
+            assert_eq!(
+                Integrated::restore_numerator(function!(source, 2, wrapped_dummy), 19),
+                function!(target, 2, mink.to_symbolic([function!(GS.uvaind, 19, 5)]))
+            );
         }
+
+        let spinor = Bispinor {}.new_rep(4);
+        let a = spinor.to_symbolic([Atom::from(Aind::Hedge(1, 0))]);
+        let b = spinor.to_symbolic([Atom::from(Aind::Hedge(2, 0))]);
+        let backend_slot = mink.to_symbolic([vakint::symbols::S.dot_dummy_ind(3)]);
+        let restored_slot = mink.to_symbolic([function!(GS.uvaind, 19, 3)]);
+        assert_eq!(
+            Integrated::restore_numerator(
+                function!(idenso::dirac::AGS.gamma, &a, &b, backend_slot),
+                19
+            ),
+            function!(idenso::dirac::AGS.gamma, a, b, restored_slot)
+        );
 
         let source = Atom::from(Aind::Hedge(5, 0));
         let represented = other_dimension.to_symbolic([Atom::from(Aind::Hedge(7, 0))]);

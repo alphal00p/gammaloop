@@ -40,6 +40,8 @@ use crate::{
 
 use super::{GraphRegion, TaylorExpansion, integrate_single_mass, project::project_hard_vacuum};
 
+pub(super) type RootProjector<'a> = dyn Fn(&Atom) -> Result<Atom> + 'a;
+
 /// The original tensor slots and loop carriers survive all graph contractions.
 /// Only propagator endpoints are identified in the converter's graph.
 pub(super) struct RStarIntegrand {
@@ -246,6 +248,12 @@ impl RStarIntegrand {
             .wrap_err("could not reduce a physical propagator tensor")?
             .into_expression()?;
         numerator = Self::finish_tensor(cooking.uncook(reduced.expression().as_view()), unique_id)?;
+        // Tensor restoration can spell scalar products as g(p,k). Normalize
+        // them before mapping to Vakint's dot notation; represented metrics
+        // and inverse external invariants retain their tensor/scalar roles.
+        let scalar_products =
+            SymbolicTensor::infer_indexed(cooking.try_cook(numerator.as_view())?)?.to_dots()?;
+        numerator = cooking.uncook(scalar_products.expression().as_view());
 
         let mut routing = self
             .basis
@@ -321,18 +329,6 @@ impl RStarIntegrand {
         let integrated = vakint
             .evaluate_integral(&settings, input.as_view())
             .wrap_err("while integrating a physical UV spinney remainder")?;
-        // Physical quotients can contain inverse powers of p². Preserve this
-        // scalar invariant: expanding it into indexed vectors before taking
-        // its reciprocal would look like a negative power of an open tensor.
-        let external_head = function!(S.p, usize::from(external));
-        let external_vector = function!(S.p, usize::from(external), &minkowski);
-        let integrated = integrated
-            .replace(function!(S.dot, &external_head, &external_head))
-            .with(function!(
-                SPENSO_TAG.dot,
-                &external_vector,
-                &external_vector
-            ));
         Self::finish_tensor(integrated, unique_id)
     }
 
@@ -364,6 +360,7 @@ impl RStarIntegrand {
         uv_settings: &UVgenerationSettings,
         vakint_settings: &VakintSettings,
         unique_id: usize,
+        root_projector: Option<&RootProjector<'_>>,
     ) -> Result<Atom> {
         let root_external = root_graph.external_filter::<SuBitGraph>();
         let root_edges = root_graph
@@ -411,6 +408,18 @@ impl RStarIntegrand {
             taylor.compensate_mass(&scaled, reference_mass_squared, auxiliary_mass_squared);
         let expanded = Self::simplify(&taylor.evaluate(&compensated)?)
             .wrap_err("while simplifying the compensated R* outer Taylor polynomial")?;
+        // The root is the only boundary which may be projected here. Child
+        // and quotient pole maps are already complete, and no later pole map
+        // can multiply finite contraction terms by another insertion pole.
+        // Project after Taylor expansion so physical external momenta in a
+        // projector are spectators, rather than differentiated source labels.
+        let expanded = if let Some(projector) = root_projector {
+            let projected = projector(&expanded)
+                .wrap_err("while projecting the complete R* outer Taylor polynomial")?;
+            Integrated::dimensionally_regularized(&projected)
+        } else {
+            expanded
+        };
         if self.region.loops == 0 {
             return Self::finish_tensor(expanded, unique_id);
         }
@@ -428,6 +437,23 @@ impl RStarIntegrand {
 
     /// Use exactly the ordinary R operation's tensor and dimension restoration.
     pub fn finish_tensor(expression: Atom, unique_id: usize) -> Result<Atom> {
+        // Restore compact external scalar products before opening Vakint's
+        // remaining dot shorthand. Both physical quotients and normalized
+        // root projectors can contain reciprocals of these invariants;
+        // expanding them would create inverse indexed tensors. Mixed loop
+        // products and already indexed arguments retain the strict converter.
+        let minkowski = Minkowski {}.new_rep(GS.dim).to_symbolic([]);
+        let expression = expression
+            .replace(function!(
+                S.dot,
+                function!(S.p, W_.i_),
+                function!(S.p, W_.j_)
+            ))
+            .with(function!(
+                SPENSO_TAG.dot,
+                function!(S.p, W_.i_, &minkowski),
+                function!(S.p, W_.j_, &minkowski)
+            ));
         let indexed = Vakint::convert_from_dot_notation(expression.as_view());
         let restored = Integrated::restore_numerator(indexed, unique_id);
         let cooking = CookSettings::indices()
@@ -448,10 +474,17 @@ impl RStarIntegrand {
             .undo_trace()?
             .undo_chain()?
             .simplify_algebra(&AlgebraSettings {
+                gamma: Some(GammaSimplifySettings::canonical()),
+                epsilon: true,
                 color: Some(ColorSimplifySettings::default()),
                 ..Default::default()
             })?;
-        Ok(cooking.uncook(collected.expression().as_view()))
+        // Clifford contraction can create new scalar dimensions. Expand
+        // those before the caller takes poles or inserts this tensor in an
+        // enclosing graph; open representation dimensions remain metadata.
+        Ok(Integrated::dimensionally_regularized(
+            &cooking.uncook(collected.expression().as_view()),
+        ))
     }
 
     fn scale_edges(expression: &Atom, edges: &[EdgeIndex], parameter: Symbol) -> Atom {
@@ -497,6 +530,81 @@ mod tests {
         initialisation::test_initialise, utils::load_generic_model, uv::rstar::RStarPlan,
     };
     use vakint::symbols::S;
+
+    #[test]
+    fn finish_tensor_reduces_clifford_words_before_caller_poles() -> Result<()> {
+        use crate::numerator::aind::Aind;
+        use idenso::representations::Bispinor;
+        use spenso::structure::slot::{DummyAind, ParseableAind};
+
+        test_initialise()?;
+        let epsilon = Atom::var(GS.dim_epsilon);
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let spin = Bispinor {}.new_rep(4);
+        let a = spin.to_symbolic([Aind::Hedge(3, 1).to_atom()]);
+        let b = spin.to_symbolic([Aind::Hedge(4, 1).to_atom()]);
+        let mu = mink.to_symbolic([Aind::new_dummy().to_atom()]);
+        let momentum = function!(GS.emr_mom, 7, mink.to_symbolic([]));
+        let gamma = |argument: &Atom| {
+            function!(
+                idenso::dirac::AGS.gamma,
+                SPENSO_TAG.chain_in,
+                SPENSO_TAG.chain_out,
+                argument
+            )
+        };
+        let word = spenso::chain!(&a, &b, gamma(&mu), gamma(&momentum), gamma(&mu));
+        let source = word / epsilon.pow(2);
+        let actual = RStarIntegrand::finish_tensor(source, 9951)?
+            .series(GS.dim_epsilon, 0, -1)?
+            .to_atom();
+        let expected = (Atom::num(-2) + Atom::num(2) * &epsilon)
+            * function!(idenso::dirac::AGS.gamma, &a, &b, &momentum)
+            / epsilon.pow(2);
+        super::super::tests::assert_same_counterterm(&actual, &expected)?;
+        Ok(())
+    }
+
+    #[test]
+    fn finish_tensor_preserves_external_scalar_denominators() -> Result<()> {
+        use crate::uv::rstar::tests::assert_same_counterterm;
+
+        test_initialise()?;
+        let minkowski = Minkowski {}.new_rep(GS.dim);
+        let mu = minkowski.to_symbolic([Atom::var(symbol!("rstar_scalar_exit::mu"))]);
+        let nu = minkowski.to_symbolic([Atom::var(symbol!("rstar_scalar_exit::nu"))]);
+        let spectator = function!(ETS.metric, &mu, &nu);
+        let source = |a, b| function!(S.dot, function!(S.p, a), function!(S.p, b));
+        let restored = |a, b| {
+            function!(
+                SPENSO_TAG.dot,
+                function!(GS.emr_mom, a, minkowski.to_symbolic([])),
+                function!(GS.emr_mom, b, minkowski.to_symbolic([]))
+            )
+        };
+        // Cover a diagonal denominator, a mixed external invariant and a
+        // reciprocal polynomial, with a retained open tensor boundary.
+        for (input, expected) in [
+            (source(0, 0).pow(-1), restored(0, 0).pow(-1)),
+            (source(0, 1).pow(-2), restored(0, 1).pow(-2)),
+            (
+                (source(0, 0) + source(0, 1)).pow(-2),
+                (restored(0, 0) + restored(0, 1)).pow(-2),
+            ),
+        ] {
+            let actual = RStarIntegrand::finish_tensor(input * &spectator, 9911)?;
+            assert_same_counterterm(&actual, &(expected * &spectator))?;
+        }
+        // Scalar restoration must not conceal unsupported inverse tensors
+        // or an inverse product carrying unintegrated loop momentum.
+        for invalid in [
+            function!(S.p, 0, 77).pow(-1),
+            function!(S.dot, function!(S.k, 1), function!(S.p, 0)).pow(-1),
+        ] {
+            assert!(RStarIntegrand::finish_tensor(invalid, 9912).is_err());
+        }
+        Ok(())
+    }
 
     #[test]
     fn quadratic_gluon_hard_preparation_has_no_uv_pole_at_fixed_mass() -> Result<()> {
@@ -756,6 +864,33 @@ mod tests {
             (&actual - &expected).expand().is_zero(),
             "physical remainders must retain scale logarithms and positive orders promoted by poles: actual={actual}, expected={expected}"
         );
+        // A scalar loop-external product can be restored as a compact metric
+        // by finish_tensor. It must reach Forcer as a dot, while an open
+        // Lorentz metric and a reciprocal external invariant stay spectators.
+        let left = Minkowski {}
+            .new_rep(GS.dim)
+            .to_symbolic([Aind::Hedge(87, 0).to_atom()]);
+        let right = Minkowski {}
+            .new_rep(GS.dim)
+            .to_symbolic([Aind::Hedge(88, 0).to_atom()]);
+        let metric = function!(ETS.metric, &left, &right);
+        let loop_momentum = function!(
+            GS.emr_mom,
+            usize::from(input.basis.loop_edges.raw[0]),
+            Minkowski {}.new_rep(GS.dim).to_symbolic([])
+        );
+        let original = input.expression.clone();
+        input.expression *= function!(SPENSO_TAG.dot, &loop_momentum, &external)
+            / function!(SPENSO_TAG.dot, &external, &external)
+            * &metric;
+        let actual_scalar = input.integrate_physical(&vakint, &settings, &integration, 5433)?;
+        let actual_scalar = super::super::tests::canonical_tensor(&actual_scalar)?;
+        let expected_scalar = &expected * metric / Atom::num(2);
+        assert!(
+            (&actual_scalar - &expected_scalar).expand().is_zero(),
+            "physical scalar products and their tensor spectators must survive ingress: actual={actual_scalar}, expected={expected_scalar}"
+        );
+        input.expression = original;
         // A vacuum projector would wrongly discard this odd loop tensor.
         // With the physical external momentum, symmetry of the two lines
         // instead gives integral k^mu = p^mu/2 times the scalar bubble.

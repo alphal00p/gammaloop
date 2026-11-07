@@ -67,6 +67,17 @@ impl Spinney {
         dod: i32,
     ) -> Option<Self> {
         let components = g.as_ref().connected_components(&subgraph);
+        // A UV spinney is a product of counterterms for its connected
+        // components. A divergent component cannot compensate the negative
+        // degree of another component whose local UV counterterm vanishes.
+        if dod < 0
+            || (components.len() > 1
+                && components
+                    .iter()
+                    .any(|component| g.compute_dod(component) < 0))
+        {
+            return None;
+        }
         let max_comp_loop_count = components
             .iter()
             .map(|component| g.as_ref().cyclotomatic_number(component))
@@ -75,10 +86,6 @@ impl Spinney {
         let lmb = g
             .try_compatible_sub_lmb(&subgraph, g.dummy_less_full_crown(&subgraph), lmb)
             .ok()?;
-
-        if dod < 0 {
-            return None;
-        }
 
         debug!(
             dod = %dod,

@@ -38,6 +38,8 @@ mod vendored {
     include!(concat!(env!("OUT_DIR"), "/vakint_forcer_sources.rs"));
 }
 
+mod cache;
+
 /// Name of the directory shared by the processes of the user `owner`.
 fn shared_directory_name(owner: u32) -> String {
     format!("vakint-forcer-{}-{owner}", &FORCER_UPSTREAM_COMMIT[..7])
@@ -348,9 +350,10 @@ pub(crate) fn forcer_input(
         .collect::<Vec<_>>()
         .join("\n");
 
-    // One Forcer local per homogeneous part.
+    // Keep every homogeneous part independent, but reduce all channels in one
+    // Forcer expression: Forcer otherwise repeats its setup for each local.
     let mut parts = Vec::new();
-    let mut locals = Vec::new();
+    let mut polynomials = Vec::new();
     for (index, part) in split.parts.into_iter().enumerate() {
         let name = format!("F{}", index + 1);
         let terms = part
@@ -358,7 +361,7 @@ pub(crate) fn forcer_input(
             .iter()
             .map(|(value, monomial)| form_term(*value, &format!("({})", form_monomial(monomial))))
             .collect::<String>();
-        locals.push(format!("Local {name} = ({terms})*{topology};"));
+        polynomials.push(format!("({terms})"));
         parts.push(ForcerPart {
             name,
             scale_power: part.scale_power,
@@ -366,6 +369,46 @@ pub(crate) fn forcer_input(
             coefficient: part.coefficient,
         });
     }
+    let channels = (0..parts.len())
+        .map(|index| format!("vakintchannel{index}"))
+        .collect::<Vec<_>>();
+    let locals = if parts.is_empty() {
+        String::new()
+    } else if parts.len() == 1 {
+        format!("Local F1 = {}*{topology};", polynomials[0])
+    } else {
+        let tagged = polynomials
+            .iter()
+            .zip(&channels)
+            .map(|(polynomial, channel)| format!("{channel}*({polynomial})"))
+            .collect::<Vec<_>>()
+            .join("+");
+        format!(
+            "S {};\nLocal VakintChannels = ({tagged})*{topology};",
+            channels.join(",")
+        )
+    };
+    let mut writes = Vec::new();
+    if parts.len() > 1 {
+        // Scalar tags are bookkeeping only. Extract exact coefficients before
+        // attaching each part's Wick sign, scale power or spectator factor.
+        writes.push(format!(
+            "Bracket {};\n.sort\nDrop VakintChannels;",
+            channels.join(",")
+        ));
+        writes.extend(
+            parts
+                .iter()
+                .zip(&channels)
+                .map(|(part, channel)| format!("Local {} = VakintChannels[{channel}];", part.name)),
+        );
+        writes.push(".sort".into());
+    }
+    writes.extend(
+        parts
+            .iter()
+            .map(|part| format!("#write <{}.out> \"%E\", {}", part.name, part.name)),
+    );
     let template = Template::parse_template(TEMPLATES.get("run_forcer.txt").unwrap()).unwrap();
     let variables = HashMap::from([
         (
@@ -375,16 +418,9 @@ pub(crate) fn forcer_input(
                 .collect::<Vec<_>>()
                 .join(","),
         ),
-        ("locals".to_string(), locals.join("\n")),
+        ("locals".to_string(), locals),
         ("substitutions".to_string(), substitutions),
-        (
-            "writes".to_string(),
-            parts
-                .iter()
-                .map(|part| format!("#write <{}.out> \"%E\", {}", part.name, part.name))
-                .collect::<Vec<_>>()
-                .join("\n"),
-        ),
+        ("writes".to_string(), writes.join("\n")),
     ]);
     let program = template
         .render(&RenderOptions {
@@ -487,6 +523,20 @@ fn run_forcer(
 ) -> Result<Vec<String>, VakintError> {
     crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Form);
     crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Forcer);
+    static CACHE: LazyLock<cache::ForcerRunCache> = LazyLock::new(Default::default);
+    // Keeping backend artifacts explicitly requests a fresh run directory.
+    let key = settings
+        .clean_tmp_dir
+        .then(|| cache::ForcerRunKey::new(&form_command(settings), program, locals))
+        .flatten();
+    CACHE.run(key, || run_forcer_uncached(settings, program, locals))
+}
+
+fn run_forcer_uncached(
+    settings: &VakintSettings,
+    program: &str,
+    locals: &[&str],
+) -> Result<Vec<String>, VakintError> {
     let (run_directory, private_sources) = prepare_run_directory(settings)?;
     let results = run_forcer_in(settings, program, locals, &run_directory);
     match &results {

@@ -6,10 +6,12 @@
 //! negative powers join the numerator, every loop-momentum monomial is written
 //! in the canonical scalar products `k(i)·k(j)` and `k(i)·Q` (the user head is
 //! `σ·Q`), and the monomials are grouped by degree `r` and by the factor of
-//! their coefficient that is not a rational number. Each [`PPart`] is then
-//! reduced on its own: Forcer sets `Q·Q = 1`, so parts of different degree
-//! cannot share one computation, and a non-rational factor (`1+ε`, `mass²`)
-//! stays outside the reduction.
+//! their coefficient that is not a rational number. Each [`PPart`] retains
+//! its own scale power, Wick sign and non-rational coefficient (`1+ε`,
+//! `mass²`). Forcer sets `Q·Q = 1`, so parts of different degree must remain
+//! distinguishable: independent scalar tags let them share one expression
+//! and reduction call. The tags are extracted before each part's scale,
+//! sign and coefficient are restored.
 //!
 //! `None` means the sector is scaleless (an exact zero), decided here once for
 //! every backend: the scaleless rule of `docs/p_integrals.md` (section 1,

@@ -1,7 +1,8 @@
 //! Integration of the remaining, Taylor-expanded single-mass vacuum graphs.
 //!
 //! The existing vacuum tensor projector acts before the marked line is cut.
-//! Its external tensor coefficients stay outside the scalar p-integral call.
+//! Its external tensor coefficients accompany the scalar numerator through the
+//! exact p-integral reduction and the final Laurent expansion.
 
 use std::collections::BTreeSet;
 
@@ -68,7 +69,7 @@ pub fn integrate_single_mass(
                 .all(|line| { line.mass_squared.is_zero() || std::ptr::eq(line, massive[0]) }),
             "an R* remainder contains another massive propagator with nonpositive power"
         );
-        let cut = VacuumCut::new(&lines, massive[0])?;
+        let cut = VacuumCut::new(&lines, massive[0], &source.numerator)?;
         // A massive self-loop times a massless vacuum component is scaleless.
         if cut.scaleless {
             continue;
@@ -79,29 +80,21 @@ pub fn integrate_single_mass(
         // Lorentz representation metadata is constant during the following
         // Laurent expansion; only scalar evanescent coefficients may expand.
         term.numerator = Integrated::restore_lorentz_dimensions(&term.numerator);
-        let mut invariants = BTreeSet::new();
-        term.numerator.visitor(&mut |part| {
-            if let AtomView::Fun(function) = part
-                && function.get_symbol() == S.dot
-                && part.contains_symbol(S.k)
-            {
-                invariants.insert(part.to_owned());
-                return false;
-            }
-            true
-        });
-        let invariants = invariants.into_iter().collect::<Vec<_>>();
-        for (scalar, coefficient) in term.numerator.coefficient_list::<i16>(&invariants) {
-            ensure!(
-                !coefficient.contains_symbol(S.k),
-                "the vacuum tensor projector left an uncontracted loop momentum: {coefficient}"
-            );
-            let scalar = scalar.replace_multiple(&cut.routing).expand();
-            let scalar = scalar * &cut.integrand;
-            result += cut
-                .evaluate(vakint, settings, &scalar, &coefficient)
-                .wrap_err("while integrating an R* remainder through a massless p-integral")?;
+        if settings.verify_numerator_identification {
+            // Strict matching admits only authenticated scalar symbols. Keep
+            // arbitrary tensor spectators outside that check, as before.
+            result += cut.evaluate_split(vakint, settings, &term.numerator)?;
+            continue;
         }
+        // The p-integral owner separates homogeneous loop monomials from their
+        // tensor spectators. Keeping their coefficients here lets its Laurent
+        // expansion include insertion poles before truncating the full product.
+        let numerator = term.numerator.replace_multiple(&cut.routing).expand();
+        let input = numerator * &cut.integrand;
+        result += cut
+            .closure
+            .evaluate(vakint, settings, input.as_view())
+            .wrap_err("while integrating an R* remainder through a massless p-integral")?;
     }
     Ok(result.expand())
 }
@@ -166,6 +159,39 @@ struct VacuumCut {
 }
 
 impl VacuumCut {
+    fn evaluate_split(
+        &self,
+        vakint: &Vakint,
+        settings: &VakintSettings,
+        numerator: &Atom,
+    ) -> Result<Atom> {
+        let mut invariants = BTreeSet::new();
+        numerator.visitor(&mut |part| {
+            if let AtomView::Fun(function) = part
+                && function.get_symbol() == S.dot
+                && part.contains_symbol(S.k)
+            {
+                invariants.insert(part.to_owned());
+                return false;
+            }
+            true
+        });
+        let mut result = Atom::Zero;
+        for (scalar, coefficient) in
+            numerator.coefficient_list::<i16>(&invariants.into_iter().collect::<Vec<_>>())
+        {
+            ensure!(
+                !coefficient.contains_symbol(S.k),
+                "the vacuum tensor projector left an uncontracted loop momentum: {coefficient}"
+            );
+            let scalar = scalar.replace_multiple(&self.routing).expand() * &self.integrand;
+            result += self
+                .evaluate(vakint, settings, &scalar, &coefficient)
+                .wrap_err("while integrating an R* remainder through a massless p-integral")?;
+        }
+        Ok(result)
+    }
+
     fn evaluate(
         &self,
         vakint: &Vakint,
@@ -222,7 +248,7 @@ impl VacuumCut {
             .to_atom())
     }
 
-    fn new(lines: &[VacuumLine], massive: &VacuumLine) -> Result<Self> {
+    fn new(lines: &[VacuumLine], massive: &VacuumLine, numerator: &Atom) -> Result<Self> {
         let mut heads = BTreeSet::new();
         for line in lines {
             line.momentum.visitor(&mut |part| {
@@ -259,7 +285,23 @@ impl VacuumCut {
                     massive.momentum
                 )
             })?;
-        let hard = function!(S.p, 1);
+        // The closing momentum is integrated, whereas every pre-existing p(i)
+        // remains an external spectator, including indexed and compact forms.
+        let mut external_ids = BTreeSet::new();
+        numerator.visitor(&mut |part| {
+            if let AtomView::Fun(function) = part
+                && function.get_symbol() == S.p
+                && let Some(index) = function.iter().next()
+            {
+                external_ids.insert(index.to_owned());
+                return false;
+            }
+            true
+        });
+        let hard_index = (1_i64..)
+            .find(|index| !external_ids.contains(&Atom::num(*index)))
+            .expect("a finite numerator leaves unused momentum identifiers");
+        let hard = function!(S.p, hard_index);
         let mut routing = heads
             .iter()
             .filter(|head| *head != pivot)
@@ -317,6 +359,7 @@ mod tests {
     use std::sync::LazyLock;
 
     use super::*;
+    use symbolica::{coefficient::CoefficientView, prelude::RealLike};
     use vakint::{EvaluationOrder, ForcerOptions, LoopNormalizationFactor, VakintTerm};
 
     static VAKINT: LazyLock<Vakint> = LazyLock::new(|| Vakint::new().unwrap());
@@ -350,6 +393,146 @@ mod tests {
         assert!(
             (&actual - &expected).together().is_zero(),
             "actual: {actual}\nexpected: {expected}"
+        );
+    }
+
+    fn assert_numerically_equal(actual: Atom, expected: Atom) {
+        let difference = (actual - expected).expand();
+        let mut spectators = BTreeSet::new();
+        difference.visitor(&mut |part| {
+            if matches!(part, AtomView::Var(_) | AtomView::Fun(_)) {
+                spectators.insert(part.to_owned());
+                return false;
+            }
+            true
+        });
+        for (_, coefficient) in
+            difference.coefficient_list::<i16>(&spectators.into_iter().collect::<Vec<_>>())
+        {
+            if coefficient.is_zero() {
+                continue;
+            }
+            let AtomView::Num(number) = coefficient.as_view() else {
+                panic!("non-numeric residual coefficient: {coefficient}")
+            };
+            let CoefficientView::Float(real, imaginary) = number.get_coeff_view() else {
+                panic!("nonzero exact residual coefficient: {coefficient}")
+            };
+            // Default precision is thirty decimal digits. Summing before or
+            // after numerical materialization can differ in the last digits.
+            assert!(real.to_float().to_f64().abs() < 1e-24, "{difference}");
+            assert!(imaginary.to_float().to_f64().abs() < 1e-24, "{difference}");
+        }
+    }
+
+    // The former integration path, retained only as an independent ordering
+    // oracle: integrate each loop monomial before multiplying its spectator,
+    // explicitly promoting the integral depth for spectator poles.
+    fn split_reference(input: &VakintExpression, settings: &VakintSettings) -> Result<Atom> {
+        let mut tensor_settings = settings.clone();
+        tensor_settings.tensor_reduction_method = TensorReductionMethod::FeynKit;
+        tensor_settings.use_dot_product_notation = true;
+        let mut result = Atom::Zero;
+        for source in &input.0 {
+            if source.numerator.is_zero() {
+                continue;
+            }
+            if source.integral == Atom::one() {
+                result += &source.numerator;
+                continue;
+            }
+            let lines = VacuumLine::parse(&source.integral)?;
+            let Some(massive) = lines
+                .iter()
+                .find(|line| !line.mass_squared.is_zero() && line.power > 0)
+            else {
+                continue;
+            };
+            let cut = VacuumCut::new(&lines, massive, &source.numerator)?;
+            if cut.scaleless {
+                continue;
+            }
+            let mut term = source.clone();
+            term.tensor_reduce(&VAKINT, &tensor_settings)?;
+            term.numerator = Integrated::restore_lorentz_dimensions(&term.numerator);
+            result += cut.evaluate_split(&VAKINT, settings, &term.numerator)?;
+        }
+        Ok(result.expand())
+    }
+
+    #[test]
+    fn complete_numerator_matches_split_integration_with_tensor_spectators_and_poles() {
+        let topology = parse(
+            "topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-k(2),0,1)*prop(3,edge(2,1),k(2),1,2))",
+        );
+        let polynomial = parse(
+            "1/ε+dot(k(1),k(1))/(3-2*ε)+dot(k(1),k(2))/ε^2+dot(p(1),p(1))*dot(k(2),k(2))/(ε*(1-ε))",
+        );
+        let spectators = [
+            Atom::one(),
+            parse("g(71,72)"),
+            parse("spenso::gamma(spenso::bis(4,a),spenso::bis(4,b),spenso::mink(4,mu))"),
+            function!(idenso::color::CS.cas, 2, parse("spenso::coad(8)")).pow(2),
+        ];
+        for mode in [
+            RustRedMasterMode::Symbolic,
+            RustRedMasterMode::Retain,
+            RustRedMasterMode::Numerical,
+        ] {
+            let settings = VakintSettings {
+                number_of_terms_in_epsilon_expansion: 3,
+                evaluation_order: EvaluationOrder(vec![EvaluationMethod::Forcer(ForcerOptions {
+                    master_mode: mode,
+                })]),
+                ..settings()
+            };
+            for spectator in &spectators {
+                let input =
+                    VakintExpression::try_from(spectator * &polynomial * &topology).unwrap();
+                let actual = integrate_single_mass(&VAKINT, &settings, &input).unwrap();
+                assert!(!actual.contains_symbol(symbolica::atom::Symbol::DERIVATIVE));
+                let expected = split_reference(&input, &settings).unwrap();
+                if mode == RustRedMasterMode::Numerical {
+                    assert_numerically_equal(actual, expected);
+                } else {
+                    assert_equal(actual, expected);
+                }
+            }
+        }
+        let mut cancelled = VakintExpression::try_from(topology).unwrap();
+        cancelled.0[0].numerator = &polynomial - &polynomial;
+        assert!(
+            integrate_single_mass(&VAKINT, &settings(), &cancelled)
+                .unwrap()
+                .is_zero()
+        );
+    }
+
+    #[test]
+    fn cut_momentum_avoids_indexed_and_compact_external_identifiers() {
+        let topology = parse("topo(prop(1,edge(1,1),k(1),1,2))");
+        let lines = VacuumLine::parse(&topology).unwrap();
+        let numerator = parse(
+            "p(1,71)*p(2,spenso::mink(4,72))*spenso::dot(p(3,spenso::mink(4)),p(3,spenso::mink(4)))",
+        );
+        let cut = VacuumCut::new(&lines, &lines[0], &numerator).unwrap();
+        assert_eq!(cut.closure.momentum, parse("p(4)"));
+    }
+
+    #[test]
+    fn strict_numerator_verification_keeps_scalar_spectators_outside_matching() {
+        let input = VakintExpression::try_from(parse(
+            "c*(1/ε+dot(k(1),k(2))/(3-2*ε))*topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-k(2),0,1)*prop(3,edge(2,1),k(2),1,2))",
+        ))
+        .unwrap();
+        let expected = integrate_single_mass(&VAKINT, &settings(), &input).unwrap();
+        let strict = VakintSettings {
+            verify_numerator_identification: true,
+            ..settings()
+        };
+        assert_equal(
+            integrate_single_mass(&VAKINT, &strict, &input).unwrap(),
+            expected,
         );
     }
 

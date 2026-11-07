@@ -1,19 +1,31 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use eyre::{Result, eyre};
+use eyre::{Result, ensure, eyre};
 use feynkit_generator::{
     GenerationFilter, GenerationOptions, NumeratorGrouping, Process, VertexSelector,
 };
 use idenso::{
-    CookMode, CookSettings,
+    CookMode, CookSettings, IndexTooling,
     color::ColorSimplifySettings,
-    tensor::{AlgebraSettings, SymbolicTensor},
+    representations::ColorAdjoint,
+    tensor::{AlgebraContraction, AlgebraSettings, SymbolicTensor},
 };
 use linnet::half_edge::{
     NodeIndex,
     involution::{EdgeIndex, HedgePair},
 };
-use symbolica::atom::{Atom, AtomCore};
+use spenso::{
+    network::{library::symbolic::ETS, tags::SPENSO_TAG},
+    structure::{
+        abstract_index::AbstractIndex,
+        representation::{LibrarySlot, Minkowski, RepName},
+        slot::IsAbstractSlot,
+    },
+};
+use symbolica::{
+    atom::{Atom, AtomCore},
+    function,
+};
 use vakint::Vakint;
 
 use crate::{
@@ -26,7 +38,7 @@ use crate::{
     utils::{GS, load_generic_model},
     uv::{
         ApproximationType, RenormalizationPrescriptionSettings, UVgenerationSettings,
-        settings::VakintSettings as GammaVakintSettings,
+        approx::integrated::Integrated, settings::VakintSettings as GammaVakintSettings,
     },
 };
 
@@ -173,6 +185,86 @@ fn one_loop_cubic_gluon_tensor_matches_massive_r() -> Result<()> {
     let actual = plan.counterterm(&graph, &model, &vakint, &settings)?;
     let expected = massive_oracle(&plan, &graph, &model, &vakint, &settings)?;
     assert!(!canonical_tensor(&expected)?.is_zero());
+    assert_same_counterterm(&actual, &expected)
+}
+
+#[test]
+fn projected_counterterm_contracts_only_the_root_after_taylor() -> Result<()> {
+    test_initialise()?;
+    let model = load_generic_model("sm");
+    let graph = gluon_self_energy(&model, 2, 4, "V_36", |graph| parallel_pair(graph).is_some())?;
+    let settings = settings();
+    let vakint = Vakint::new()?;
+    let plan = RStarPlan::new(&graph, &model, parallel_pair(&graph).unwrap()[0], &settings)?;
+    assert!(!plan.counterterms.is_empty());
+    assert!(!plan.ir.is_empty());
+    let tensor = plan.counterterm(&graph, &model, &vakint, &settings)?;
+    assert!(!tensor.is_zero());
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let cooked = cooking.try_cook(tensor.as_view())?;
+    let ports = cooked
+        .list_dangling::<AbstractIndex>()?
+        .iter()
+        .map(|port| LibrarySlot::<AbstractIndex>::try_from(port.as_view()))
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let lorentz = ports
+        .iter()
+        .filter(|port| port.rep_name() == (Minkowski {}).into())
+        .collect::<Vec<_>>();
+    let color = ports
+        .iter()
+        .filter(|port| port.rep_name() == (ColorAdjoint {}).into())
+        .collect::<Vec<_>>();
+    assert_eq!(lorentz.len(), 2);
+    assert_eq!(color.len(), 2);
+    assert_eq!(ports.len(), 4);
+    let external = graph
+        .iter_edges()
+        .find_map(|(pair, edge, _)| (!pair.is_paired()).then_some(edge))
+        .unwrap();
+    let momentum = function!(
+        GS.emr_mom,
+        usize::from(external),
+        Minkowski {}.new_rep(GS.dim).to_symbolic([])
+    );
+    let p_squared = function!(SPENSO_TAG.dot, &momentum, &momentum);
+    let metric = ETS.metric(lorentz[0].to_atom(), lorentz[1].to_atom())
+        * ETS.metric(color[0].to_atom(), color[1].to_atom());
+    let normalization = p_squared * (Atom::var(GS.dim) - Atom::one());
+    // Fix the original root ports. Applying this closure to a child would
+    // leave unmatched ports. Its inverse p^2 is a scalar spectator of outer
+    // Taylor and vacuum tensor reduction, and its 1/(d-1) tests evanescent
+    // terms multiplying double poles. Keep the genuinely normalized map
+    // throughout integration to exercise both tensor-bridge directions.
+    let project = |expression: &Atom| -> Result<Atom> {
+        if expression.is_zero() {
+            return Ok(Atom::Zero);
+        }
+        let source = cooking.try_cook(expression.as_view())?;
+        let contracted = SymbolicTensor::infer_indexed(source * &metric)?
+            .undo_trace()?
+            .undo_chain()?
+            .simplify_algebra(&AlgebraSettings {
+                gamma: Some(Default::default()),
+                color: Some(ColorSimplifySettings::default()),
+                contract: AlgebraContraction::Dots,
+                ..Default::default()
+            })?;
+        ensure!(
+            contracted
+                .expression()
+                .list_dangling::<AbstractIndex>()?
+                .is_empty(),
+            "the projector was applied to a boundary other than the root"
+        );
+        Ok(cooking.uncook(contracted.expression().as_view()) / &normalization)
+    };
+    let actual = plan.projected_counterterm(&graph, &model, &vakint, &settings, &project)?;
+    let expected = Integrated::dimensionally_regularized(&project(&tensor)?)
+        .series(GS.dim_epsilon, 0, -1)?
+        .to_atom();
     assert_same_counterterm(&actual, &expected)
 }
 

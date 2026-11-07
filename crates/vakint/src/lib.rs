@@ -3625,8 +3625,9 @@ impl VakintTerm {
         // one power of the integrated momentum and must not be treated as an
         // opaque scalar factor.  Expand Vakint's dot shorthand before adding
         // Spenso slots, just as the AlphaLoop backend does before invoking
-        // FORM. Closed loop-loop products, in contrast, use the native compact
-        // invariant path and must not be reopened into a spurious tensor rank.
+        // FORM. Closed loop-loop products and pure external invariants, in
+        // contrast, are scalar coefficients and must not be reopened into
+        // spurious tensor ranks or negative powers of indexed vectors.
         Self::validate_spenso_loop_dots(self.numerator.as_view())?;
         // Close independent scalar contractions before the collector distributes
         // products of tensor sums. The checked reducer below still owns loop
@@ -3645,7 +3646,7 @@ impl VakintTerm {
                 **out = FunctionBuilder::new(S.dot).add_args(arguments).finish();
             }
         });
-        // Closed loop invariants are coefficients of the remaining tensor.
+        // Closed scalar invariants are coefficients of the remaining tensor.
         // Keep them opaque through collection: distributing their scalar powers
         // would introduce a projector expansion where no tensor rank remains.
         let mut coefficient_aliases = BTreeMap::<Atom, Atom>::new();
@@ -3662,15 +3663,39 @@ impl VakintTerm {
             let AtomView::Fun(function) = term else {
                 return;
             };
-            if function.get_symbol() != S.dot || function.get_nargs() != 2 {
+            if ![S.dot, SPENSO_TAG.dot].contains(&function.get_symbol())
+                || function.get_nargs() != 2
+            {
                 return;
             }
             let arguments = function.iter().collect::<Vec<_>>();
-            if !arguments.iter().all(|argument| {
+            let bare_vector = |argument: AtomView<'_>, head| {
                 matches!(argument, AtomView::Fun(vector)
-                    if vector.get_symbol() == S.k && vector.get_nargs() == 1
-                        && get_integer_from_atom(vector.iter().next().unwrap()).is_some())
-            }) {
+                    if vector.get_symbol() == head && vector.get_nargs() == 1
+                        && get_integer_from_atom(vector.get(0)).is_some())
+            };
+            let loop_invariant = function.get_symbol() == S.dot
+                && arguments.iter().all(|argument| bare_vector(*argument, S.k));
+            let representations = arguments
+                .iter()
+                .map(|argument| Self::compact_spenso_minkowski_vector_representation(*argument))
+                .collect::<Vec<_>>();
+            let external_invariant =
+                arguments
+                    .iter()
+                    .zip(&representations)
+                    .all(|(argument, representation)| {
+                        !Self::contains_function_head(*argument, S.k)
+                            && (representation.is_some()
+                                || (function.get_symbol() == S.dot && bare_vector(*argument, S.p)))
+                    })
+                    && match (representations[0], representations[1]) {
+                        (Some(left), Some(right)) => left == right,
+                        _ => true,
+                    };
+            // A mixed loop-external product still carries integrated tensor
+            // rank, and remains visible to the checked reducer below.
+            if !loop_invariant && !external_invariant {
                 return;
             }
             // One invariant gets one alias even when it occurs in thousands
@@ -6824,15 +6849,16 @@ Evaluated (n_loops=1, mu_r=1) :
 
     pub fn convert_to_dot_notation(atom: AtomView) -> Atom {
         let mut old_expr = atom.to_owned().expand();
-        // Native CAS functions are scalar even when they have two integer
-        // arguments: polygamma(1, 3)^2 is not a squared indexed vector.
+        // Declared scalar functions retain their arguments even when they
+        // resemble (vector id, index), as do native CAS scalar functions.
         let vector_head_condition = WildcardRestriction::Filter(Box::new(|matched| {
             let symbol = match matched {
                 Match::Single(AtomView::Var(variable)) => variable.get_symbol(),
                 Match::FunctionName(symbol) => *symbol,
                 _ => return false,
             };
-            !crate::hpl::is_projection_symbol(symbol)
+            !symbol.is_scalar()
+                && !crate::hpl::is_projection_symbol(symbol)
                 && (symbol.get_namespace() != "symbolica"
                     || !symbolica::state::State::is_builtin(symbol.get_stripped_name()))
         }));
@@ -8165,6 +8191,90 @@ mod tests {
                     assert_eq!(scalar_only.numerator, input);
                 }
             }
+        }
+    }
+
+    #[test]
+    fn dot_notation_preserves_declared_scalar_function_arguments() {
+        Vakint::initialize_vakint_symbols();
+        let scalar = symbolica::symbol!("vakint::scalar_dot_regression"; Scalar);
+        let first = function!(scalar, 2, 71);
+        let second = function!(scalar, 3, 71);
+        let casimir = function!(
+            idenso::color::CS.cas,
+            2,
+            vk_parse!("spenso::coad(8)").unwrap()
+        );
+        for input in [
+            first.clone().pow(2),
+            &first * &second,
+            function!(scalar, 2, vk_symbol!("mu")) * vk_parse!("g(mu,nu)*k(1,nu)").unwrap(),
+            casimir.clone().pow(2),
+        ] {
+            assert_eq!(Vakint::convert_to_dot_notation(input.as_view()), input);
+        }
+        let scalar = first * second * casimir.pow(2);
+        let input = &scalar * vk_parse!("k(1,73)^2").unwrap();
+        let expected = scalar * vk_parse!("dot(k(1),k(1))").unwrap();
+        assert_eq!(Vakint::convert_to_dot_notation(input.as_view()), expected);
+    }
+
+    #[test]
+    fn inverse_external_invariants_remain_scalar_in_vacuum_tensor_reduction() {
+        let engine = Vakint::new().unwrap();
+        let settings = VakintSettings {
+            use_dot_product_notation: true,
+            tensor_reduction_method: TensorReductionMethod::FeynKit,
+            ..Default::default()
+        };
+        let topology = vk_parse!("topo(I1L(muvsq,1))").unwrap();
+        let native_vector = function!(
+            symbolica::symbol!("gammalooprs::Q"),
+            7,
+            function!(
+                Minkowski::selfless_symbol(),
+                symbolica::symbol!("gammalooprs::dim")
+            )
+        );
+        let native_invariant = function!(SPENSO_TAG.dot, &native_vector, &native_vector);
+        let coefficients = [
+            vk_parse!("dot(p(1),p(1))^-1").unwrap(),
+            vk_parse!("dot(p(1),p(1))^-2").unwrap(),
+            vk_parse!("(dot(p(1),p(2))+alpha)^-1").unwrap(),
+            native_invariant.pow(-2),
+            function!(S.dot, &native_vector, &native_vector).pow(-2),
+        ];
+        for tensor in [Atom::one(), vk_parse!("k(1,71)*k(1,72)").unwrap()] {
+            let baseline = engine
+                .tensor_reduce(&settings, (&topology * &tensor).as_view())
+                .unwrap();
+            for coefficient in &coefficients {
+                let input = &topology * &tensor * coefficient;
+                let actual = engine.tensor_reduce(&settings, input.as_view()).unwrap();
+                let expected = &baseline * coefficient;
+                assert!(
+                    (actual - expected).expand().together().is_zero(),
+                    "external scalar coefficient changed under vacuum projection: {input}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn inverse_loop_dependent_contractions_and_indexed_vectors_stay_invalid() {
+        let engine = Vakint::new().unwrap();
+        let settings = VakintSettings {
+            use_dot_product_notation: true,
+            tensor_reduction_method: TensorReductionMethod::FeynKit,
+            ..Default::default()
+        };
+        let topology = vk_parse!("topo(I1L(muvsq,1))").unwrap();
+        for numerator in ["dot(k(1),p(1))^-1", "p(1,71)^-1", "k(1,71)^-1"] {
+            let input = &topology * vk_parse!(numerator).unwrap();
+            assert!(
+                engine.tensor_reduce(&settings, input.as_view()).is_err(),
+                "invalid tensor power was admitted: {input}"
+            );
         }
     }
 
