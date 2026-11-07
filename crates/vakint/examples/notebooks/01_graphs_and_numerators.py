@@ -8,7 +8,7 @@ __generated_with = "0.25.2"
 app = marimo.App(width="full", app_title="HEPKit · Graphs & numerators")
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _():
     from pathlib import Path
     from time import perf_counter
@@ -47,7 +47,7 @@ def _(Gallery, mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     graph_choice = mo.ui.dropdown(
         {
@@ -64,7 +64,7 @@ def _(mo):
     return (graph_choice,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(FeynmanDiagram, Gallery, Model, graph_choice):
     model = Model.qcd()
     if graph_choice.value == 1:
@@ -85,7 +85,6 @@ def _(FeynmanDiagram, Gallery, Model, graph_choice):
 def _(Gallery, diagram, mo):
     # The interactive FeynKit drawing runs its own script; inside an iframe it
     # never touches the notebook's DOM, so changing the topology redraws it.
-    _height = {1: 260, 2: 380, 3: 380}.get(diagram.loop_count, 480)
     mo.vstack(
         [
             Gallery.metrics(
@@ -96,7 +95,7 @@ def _(Gallery, diagram, mo):
                     (len(diagram.external_edges), "external gluons"),
                 ],
             ),
-            Gallery.frame(mo, diagram.render(momenta=True).to_html(), height=_height),
+            Gallery.diagram_frame(mo, diagram),
         ]
     )
     return
@@ -121,9 +120,8 @@ def _(Gallery, diagram, mo, topology):
                     for edge in diagram.internal_edges
                 ],
             ),
-            "Compact source DOT": mo.ui.code_editor(
-                topology, language="dot", disabled=True
-            ),
+            # Plain text: marimo's editor has no DOT grammar.
+            "Compact source DOT": Gallery.dot_source(mo, topology),
         }
     )
     return
@@ -140,7 +138,7 @@ def _(Gallery, mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(Gallery, graph_choice, mo):
     _interactive = graph_choice.value <= 4
     contract_button = mo.ui.run_button(
@@ -170,7 +168,7 @@ def _(Gallery, graph_choice, mo):
     return (contract_button,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     S,
     TensorExpression,

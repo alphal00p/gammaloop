@@ -36,7 +36,11 @@ To try the notebooks interactively, serve this directory with
 edits must not touch the checkout). The page navigation then opens each
 notebook file. Edit mode adds what application mode cannot offer: marimo's
 Interrupt button reaches the kernel, so in-kernel loads and reductions stop on
-request, and page 05 can reduce a 3L/4L case in the kernel itself.
+request, and page 05 can reduce a 3L/4L case in the kernel itself. Every cell
+hides its code, so a page reads as a sequence of outputs: the page links open
+each notebook in marimo's app view (#raw("/?file=…&view-as=present"), outputs
+only), and its toolbar switches to the code view, where each cell's code stays
+folded until a double-click (or the cell menu's "Show code") opens it.
 
 Opening a page does not load five-loop owners or start a physical reduction.
 The inspection app constructs the offline vendored 1L–3L engine. Its explicit
@@ -199,6 +203,24 @@ In marimo's edit mode the page also offers "Reduce in this kernel": the same
 worker code runs in the notebook kernel with the live monitor card, marimo's
 Interrupt stops it, and the result is shown like a finished job's (it is kept
 for the session only, with an in-memory step cache).
+
+The selected case's input graph is drawn natively, with the FeynKit view of
+page 01, and its DOT source (shown as plain text: marimo's code editor has no
+DOT grammar). The last panel, "Input graph → Laurent series", is where the
+pipeline ends: it takes a value for every parameter of the input (the common UV
+mass, the MSbar scale #raw("mursq") and the strong coupling G of the
+vertices' #raw("GC_11 = i·G"); exact decimals or fractions, so no parameter
+limits the precision), the requested decimal digits and the range of ε orders, and
+evaluates the whole input in the kernel: one Vakint evaluation with symbolic
+masters per input and order count (kept for the session), then
+#raw("numerical_evaluation") at the requested precision. It shows the graph, an
+arrow and the Laurent series with its numerical coefficients, each with the
+digits Vakint vouches for, its error radius and quality, plus Vakint's
+precision warnings. An order that needs master coefficients beyond the data
+fails closed (#raw("MissingMasterOrders")) and is listed with that reason,
+never as a number. The monitor card shows the data load and reduction, and
+marimo's Interrupt stops them in edit mode; application mode evaluates only the
+quick cases in its kernel.
 
 The page keeps showing its last run, finished or not, when a control changes;
 the URL carries #raw("?job=<id>"), so a reload shows the same run, and the

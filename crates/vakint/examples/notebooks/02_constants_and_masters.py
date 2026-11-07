@@ -8,7 +8,7 @@ __generated_with = "0.25.2"
 app = marimo.App(width="full", app_title="Vakint · Constants & masters")
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _():
     import marimo as mo
     from shared_gallery import Gallery
@@ -30,7 +30,7 @@ def _(Gallery, mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(Gallery, mo):
     _loops = (Gallery.catalogue_summary() or {}).get("loops", {})
 
@@ -98,7 +98,7 @@ def _(Gallery, mo):
     return catalogue_choice, load_catalogue
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(Gallery, catalogue_choice, load_catalogue, mo):
     engine = Gallery.engine()
     load_report = load_error = None
@@ -173,7 +173,7 @@ def _(Gallery, mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(constant_symbols, mo):
     _constant_options = [str(symbol.expression) for symbol in constant_symbols]
     _default = next(
@@ -194,7 +194,7 @@ def _(constant_symbols, mo):
     return constant_precision, constant_symbol
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(ConstantSymbol, constant_precision, constant_symbol, engine):
     constant = engine.get_constant(
         ConstantSymbol(constant_symbol.value), prec=int(constant_precision.value)
@@ -227,7 +227,7 @@ def _(Gallery, mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(master_options, mo):
     master_symbol = mo.ui.dropdown(
         master_options,
@@ -243,7 +243,7 @@ def _(master_options, mo):
     return master_precision, master_symbol
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(MasterSymbol, engine, master_precision, master_symbol):
     master = engine.get_master(
         MasterSymbol(master_symbol.value), prec=int(master_precision.value)
@@ -281,16 +281,15 @@ def _(Gallery, master, master_view, mo):
             mo, master.graph.render(momenta=True).to_html(), height=420
         )
     elif master_view.value == "Canonical DOT":
-        master_panel = mo.ui.code_editor(
-            master.graph.to_dot(), language="dot", disabled=True
-        )
+        # Plain text: marimo's editor has no DOT grammar.
+        master_panel = Gallery.dot_source(mo, master.graph.to_dot())
     else:
         master_panel = Gallery.frame(mo, master.to_html(), height=560)
     master_panel
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(master, mo):
     _orders = {
         f"ε^{power}": coefficient
@@ -348,7 +347,7 @@ def _(Gallery, mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(ConstantSymbol, Gallery, MasterSymbol, engine, mo):
     _errors = []
     for _kind, _call in [
@@ -371,7 +370,7 @@ def _(ConstantSymbol, Gallery, MasterSymbol, engine, mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(E, Gallery, engine, mo):
     cancellation, _statistical_error = engine.numerical_evaluation(
         E("x-y", default_namespace="vakint"), {"x": 1.0, "y": 1.0}

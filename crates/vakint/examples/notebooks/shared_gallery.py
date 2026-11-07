@@ -8,6 +8,7 @@ reduction; every heavy run is an explicit, bounded and cancellable job.
 
 from __future__ import annotations
 
+import decimal
 import hashlib
 import html
 import json
@@ -16,6 +17,7 @@ import re
 import sys
 import tempfile
 import time
+from fractions import Fraction
 from itertools import pairwise
 from pathlib import Path
 from typing import ClassVar
@@ -49,6 +51,13 @@ class Gallery:
         except (AttributeError, RuntimeError):
             return None
 
+    @staticmethod
+    def edit_link(source, **query):
+        """marimo edit server URL of a notebook file, opened in marimo's app
+        view (outputs only; its toolbar switches to the code view)."""
+        extra = "".join(f"&{key}={quote(str(value))}" for key, value in query.items())
+        return f"/?file={quote(source)}&view-as=present{extra}"
+
     @classmethod
     def header(cls, mo, page, title, subtitle):
         prefix = os.environ.get("VAKINT_GALLERY_URL_PREFIX", "").rstrip("/")
@@ -57,7 +66,7 @@ class Gallery:
         edit = cls.mode(mo) == "edit" and not prefix
 
         def link(key, source):
-            return f"/?file={quote(source)}" if edit else f"{prefix}/{key}/"
+            return cls.edit_link(source) if edit else f"{prefix}/{key}/"
 
         navigation = "".join(
             f'<a class="{"active" if key == page else ""}" '
@@ -429,6 +438,34 @@ class Gallery:
           line-height:1.6; overflow-wrap:anywhere; }
         .vakint-card { max-width:100%; overflow-x:auto; }
         .vakint-card pre,.vakint-card .value { max-height:18rem; overflow:auto; }
+        /* marimo's code view shows a cell whose code is hidden as a faded
+           one-line strip: fold it to a thin rule so that outputs follow each
+           other (hover opens the strip; a double-click or the cell menu's
+           "Show code" reveals the code). The app view shows no code at all. */
+        .marimo-cell [data-testid="cell-editor"].opacity-20 { height:8px !important;
+          min-height:0 !important; overflow:hidden; transition:height .12s; }
+        .marimo-cell [data-testid="cell-editor"].opacity-20:hover { height:2rem !important; }
+        /* Input graph -> Laurent series: the end of the pipeline at a glance. */
+        .vg-pipeline { display:grid; align-items:center; gap:14px 20px;
+          grid-template-columns:minmax(240px,5fr) auto minmax(300px,8fr);
+          border:1px solid var(--vg-line); border-radius:15px;
+          background:var(--vg-paper); padding:16px 20px; margin:1rem 0;
+          color:var(--vg-navy); }
+        .vg-pipe-graph { min-width:0; }
+        .vg-pipe-graph iframe { width:100%; border:0; }
+        .vg-pipe-arrow { display:flex; flex-direction:column; align-items:center;
+          gap:8px; color:var(--vg-teal); }
+        .vg-pipe-arrow b { font-size:46px; line-height:1; font-weight:400; }
+        .vg-pipe-arrow small { font-size:11px; line-height:1.45; max-width:9.5rem;
+          text-align:center; color:var(--vg-muted); }
+        .vg-pipe-series { min-width:0; overflow-x:auto; font-size:15px; }
+        .vg-pipe-series p { margin:.3rem 0; }
+        .vg-pipe-label { font:600 10px/1.6 ui-sans-serif,system-ui;
+          letter-spacing:.14em; text-transform:uppercase; color:var(--vg-teal); }
+        .vg-pipe-caption { font-size:12px; line-height:1.6; color:var(--vg-muted); }
+        .vg-table td code { font-size:12px; overflow-wrap:anywhere; }
+        @media(max-width:900px) { .vg-pipeline { grid-template-columns:1fr; }
+          .vg-pipe-arrow b { transform:rotate(90deg); } }
         @media(max-width:600px) { .vg-hero {padding:1.6rem;} .vg-nav a {flex:1 1 40%;}
           .vg-eyebrow span {display:block;margin:0;} }
         /* Dark rules follow the notebook's theme (marimo body class / Jupyter
@@ -1250,11 +1287,16 @@ class Gallery:
             return str(work)
         return None
 
-    @staticmethod
-    def job_link(mo, name, label="show"):
-        """A link that reopens the ladder page on job ``name`` (``?job=``)."""
+    @classmethod
+    def job_link(cls, mo, name, label="show"):
+        """A link that reopens the ladder page on job ``name`` (``?job=``).
+        marimo's edit server needs the notebook file in the URL as well."""
+        if cls.mode(mo) == "edit" and not os.environ.get("VAKINT_GALLERY_URL_PREFIX"):
+            target = cls.edit_link("05_ladder_reductions.py", job=name)
+        else:
+            target = f"?job={quote(name)}"
         return mo.Html(
-            f'<a href="?job={quote(name)}" target="_self">{html.escape(label)}</a>'
+            f'<a href="{html.escape(target)}" target="_self">{html.escape(label)}</a>'
         )
 
     @classmethod
@@ -1749,14 +1791,14 @@ class Gallery:
                 f"Stopped{taken}{f' during {where}' if where else ''}. The kernel "
                 "and its engine stay usable: start the run again or pick another "
                 "case. marimo re-runs no other cell after an Interrupt, so "
-                "03 / progress and 04 / result below still show the run before "
+                "04 / progress and 05 / result below still show the run before "
                 "this one until the next run or page change.",
             )
         elif state == "complete":
             note = cls.note(
                 mo,
                 "Finished in this kernel",
-                f"Complete{taken}. 03 / progress and 04 / result below show this run.",
+                f"Complete{taken}. 04 / progress and 05 / result below show this run.",
             )
         else:
             note = cls.note(
@@ -1789,6 +1831,42 @@ class Gallery:
             "}",
         ]
         return "\n".join(lines) + "\n"
+
+    # -- Graph drawings and DOT source ----------------------------------------
+    @staticmethod
+    def dot_source(mo, dot):
+        """Read-only DOT source as plain text. marimo's code editor has no DOT
+        grammar: declaring language="dot" shows "Language dot not supported"."""
+        return mo.ui.code_editor(dot, language="text", disabled=True)
+
+    @staticmethod
+    def diagram_height(loop_count):
+        return {1: 260, 2: 380, 3: 380}.get(int(loop_count), 480)
+
+    @classmethod
+    def diagram_frame(cls, mo, diagram, *, height=None):
+        """The interactive FeynKit drawing of a native diagram, with its loop
+        momenta, in a theme-following iframe (page 01's view). Its script
+        never touches the notebook's DOM, so a new selection simply redraws."""
+        return cls.frame(
+            mo,
+            diagram.render(momenta=True).to_html(),
+            height=height or cls.diagram_height(diagram.loop_count),
+        )
+
+    _ladder_diagrams: ClassVar[dict] = {}
+
+    @classmethod
+    def ladder_diagram(cls, loop_count):
+        """The native QCD ``FeynmanDiagram`` of ``ladder_dot(loop_count)``."""
+        loop_count = int(loop_count)
+        if loop_count not in cls._ladder_diagrams:
+            from symbolica.community.hepkit import FeynmanDiagram, Model
+
+            cls._ladder_diagrams[loop_count] = FeynmanDiagram.from_dot(
+                Model.qcd(), cls.ladder_dot(loop_count)
+            )
+        return cls._ladder_diagrams[loop_count]
 
     @classmethod
     def ladder_cases(cls):
@@ -1941,6 +2019,756 @@ class Gallery:
                 )
             )
         return str(work)
+
+    # -- Input graph -> Laurent series (this kernel) ---------------------------
+    laurent_max_digits = 500
+    laurent_highest_order = 2
+    # Without marimo's Interrupt (application mode) the page evaluates in its
+    # kernel only cases whose recorded data load and reduction take at most this.
+    laurent_app_mode_seconds = 15.0
+    # Engines kept per session; a 4L one holds the 4L pack (about 2.5 GB).
+    laurent_engine_slots = 2
+    # Known parameters: (plain label, LaTeX, meaning); others show their name.
+    laurent_labels: ClassVar[dict[str, tuple[str, str, str]]] = {
+        "vakint::mUV": (
+            "m_UV",
+            r"m_{\mathrm{UV}}",
+            "common UV mass of every vacuum propagator",
+        ),
+        "vakint::mursq": ("μ_R²", r"\mu_R^2", "MSbar renormalization scale squared"),
+        "UFO::G": (
+            "G",
+            "G",
+            "strong coupling of the UFO model; the QCD vertices carry GC_11 = i·G",
+        ),
+    }
+    _ladder_sources: ClassVar[dict] = {}
+    _laurent_symbolic: ClassVar[dict] = {}
+    _laurent_engines: ClassVar[list] = []
+    _number_words: ClassVar[dict[int, str]] = {
+        1: "one",
+        2: "two",
+        3: "three",
+        4: "four",
+        5: "five",
+    }
+
+    @classmethod
+    def ladder_source(cls, case):
+        """``case``'s prepared input with d = 4 − 2ε bound, verified like a run
+        (file, canonical text and bound input sha256); parsed once a session."""
+        if case not in cls._ladder_sources:
+            from symbolica import E
+
+            spec = cls.ladder_cases().get(case)
+            if spec is None:
+                raise ValueError(f"Unknown ladder case: {case}")
+            path = cls.ladder_input(case)
+            payload = path.read_bytes()
+            if hashlib.sha256(payload).hexdigest() != spec["input"]["sha256"]:
+                raise ValueError(f"{path.name}: sha256 differs from the recorded input")
+            source = E(payload.decode(), default_namespace="qcd_ladder")
+            canonical = source.to_canonical_string().encode()
+            if hashlib.sha256(canonical).hexdigest() != spec["input"]["sha256"]:
+                raise ValueError(
+                    "The parsed input does not reproduce its canonical text"
+                )
+            binding = spec["dimension_binding"]
+            bound = source.replace(E(binding["source"]), E(binding["target"]))
+            digest = hashlib.sha256(bound.to_canonical_string().encode()).hexdigest()
+            if digest != spec["evaluated_input_sha256"]:
+                raise ValueError(
+                    "The dimension-bound input differs from the recorded one"
+                )
+            cls._ladder_sources[case] = bound
+        return cls._ladder_sources[case]
+
+    @classmethod
+    def laurent_parameters(cls, case):
+        """Every parameter a numerical Laurent series of ``case`` needs, in
+        page order: the input's own symbols other than ε (a UFO coupling
+        replaced by the model parameters it is made of) and μ_R², which Vakint's
+        MSbar normalization adds. Dicts: name, key (for numerical_evaluation),
+        label, latex, meaning."""
+        from symbolica import E
+        from symbolica.community.hepkit import Model
+
+        model = Model.qcd()
+        names = set()
+        for symbol in cls.ladder_source(case).get_all_symbols(False):
+            name = symbol.get_name()
+            if name == "vakint::ε" or name.startswith("symbolica::"):
+                continue
+            if name.startswith("UFO::GC_"):
+                names.update(
+                    part.get_name()
+                    for part in model.expand_couplings(E(name)).get_all_symbols(False)
+                    if not part.get_name().startswith("symbolica::")
+                )
+            else:
+                names.add(name)
+        names.add("vakint::mursq")
+        known = list(cls.laurent_labels)
+        rows = []
+        for name in sorted(
+            names, key=lambda n: (known.index(n) if n in known else len(known), n)
+        ):
+            short = name.rsplit("::", 1)[-1]
+            label, latex, meaning = cls.laurent_labels.get(
+                name,
+                (
+                    short,
+                    r"\mathtt{" + short.replace("_", r"\_") + "}",
+                    "parameter of the input",
+                ),
+            )
+            rows.append(
+                {
+                    "name": name,
+                    "key": name.removeprefix("vakint::"),
+                    "label": label,
+                    "latex": latex,
+                    "meaning": meaning,
+                }
+            )
+        return rows
+
+    @staticmethod
+    def exact_number(text):
+        """An exact rational from a decimal or a fraction ("91.1876", "1/3",
+        "2.5e-3"), so that a parameter never limits the precision."""
+        text = str(text).strip()
+        try:
+            return Fraction(text)
+        except (ValueError, ZeroDivisionError):
+            raise ValueError(
+                f"“{text}” is not an exact decimal or fraction (e.g. 91.1876 or 1/3)"
+            ) from None
+
+    @staticmethod
+    def exact_expression(value):
+        """A Fraction as an exact Symbolica rational (substituted exactly by
+        ``numerical_evaluation``; a Python float would cap it at 53 bits)."""
+        from symbolica import E
+
+        return E(f"{value.numerator}/{value.denominator}")
+
+    @classmethod
+    def laurent_values(cls, parameters, values):
+        """``{name: Fraction}`` of every parameter from ``values`` ({name:
+        text}); ValueError names the first missing, malformed or non-positive
+        (masses, scales) one."""
+        exact = {}
+        for parameter in parameters:
+            text = (values or {}).get(parameter["name"])
+            if text is None or not str(text).strip():
+                raise ValueError(f"Set a value for {parameter['label']}")
+            try:
+                value = cls.exact_number(text)
+            except ValueError as error:
+                raise ValueError(f"{parameter['label']}: {error}") from None
+            if parameter["name"] in ("vakint::mUV", "vakint::mursq") and value <= 0:
+                raise ValueError(f"{parameter['label']} must be positive")
+            exact[parameter["name"]] = value
+        return exact
+
+    @classmethod
+    def laurent_in_page(cls, mo, case):
+        """Whether this page evaluates ``case`` in its kernel: always in edit
+        mode (marimo's Interrupt stops it there), otherwise only cases whose
+        recorded data load and reduction take at most laurent_app_mode_seconds."""
+        if cls.mode(mo) == "edit":
+            return True
+        recorded = cls.ladder_cases()[case]["recorded"]
+        seconds = (recorded.get("data_loading_seconds") or 0) + (
+            recorded.get("retained_reduction_seconds") or 0
+        )
+        return seconds <= cls.laurent_app_mode_seconds
+
+    @classmethod
+    def laurent_data_loops(cls, loops):
+        """Loops of the external data a case's engine loads, 0 for the
+        built-in registry: as for a run (4L always, 3L from a configured checkout)."""
+        return loops if loops >= 4 or cls.configured_checkout() else 0
+
+    @classmethod
+    def laurent_engine(cls, loops, *, precision, terms=None, progress=None):
+        """A symbolic-master MSbar engine slot for ``loops``-loop inputs (a
+        dict: data, digits, terms, engine, version): the most recent one
+        holding the same data with ``precision`` digits and ``terms`` ε orders
+        (None: any), else a new one (its data loaded with ``progress``). At
+        most ``laurent_engine_slots`` engines stay alive."""
+        data = cls.laurent_data_loops(loops)
+        for index in range(len(cls._laurent_engines) - 1, -1, -1):
+            slot = cls._laurent_engines[index]
+            if (
+                slot["data"] == data
+                and slot["digits"] == int(precision)
+                and terms in (None, slot["terms"])
+            ):
+                cls._laurent_engines.append(cls._laurent_engines.pop(index))
+                return slot
+        # Free a slot first: a 4L pack is large.
+        surplus = len(cls._laurent_engines) - cls.laurent_engine_slots + 1
+        del cls._laurent_engines[: max(0, surplus)]
+        count = int(terms or loops + 1)
+        engine = cls.engine(
+            precision=int(precision),
+            mode="symbolic",
+            normalization="MSbar",
+            use_dot_product_notation=True,
+            number_of_terms_in_epsilon_expansion=count,
+        )
+        version = "built-in 1L–3L registry"
+        if data:
+            report = cls.load_data(engine, data, progress=progress)
+            version = f"{data}L external data {report.get('version') or ''}".strip()
+        slot = {
+            "data": data,
+            "digits": int(precision),
+            "terms": count,
+            "engine": engine,
+            "version": version,
+        }
+        cls._laurent_engines.append(slot)
+        return slot
+
+    @staticmethod
+    def missing_orders(error):
+        """The content of a MissingMasterOrdersError as plain data."""
+        masters = [
+            {
+                "master": str(item[0]),
+                "first_missing": item[1],
+                "last_needed": item[2],
+                "first_affected": item[3],
+            }
+            for item in getattr(error, "masters", None) or []
+            if isinstance(item, (tuple, list)) and len(item) == 4
+        ]
+        affected = [
+            m["first_affected"] for m in masters if isinstance(m["first_affected"], int)
+        ]
+        return {
+            "message": str(error).removeprefix("Vakint error | "),
+            "backend": getattr(error, "backend", None),
+            "requested_order": getattr(error, "requested_order", None),
+            "masters": masters,
+            "first_affected": min(affected) if affected else None,
+        }
+
+    @classmethod
+    def missing_orders_text(cls, missing):
+        """What a fail-closed order lacks, e.g. "it needs ε² of 4 four-loop
+        masters, which RustRed, data v0.2.1 does not provide"."""
+        groups = {}
+        for master in missing.get("masters") or []:
+            loops = re.match(r"L(\d+)_", master["master"])
+            word = cls._number_words.get(int(loops.group(1))) if loops else None
+            key = (master["first_missing"], f"{word}-loop" if word else "")
+            groups[key] = groups.get(key, 0) + 1
+        if not groups:
+            return "it needs master Laurent coefficients beyond the available data"
+        parts = [
+            f"{cls.epsilon_text(order)} of {count} {kind + ' ' if kind else ''}"
+            f"master{'s' if count != 1 else ''}"
+            for (order, kind), count in sorted(groups.items())
+        ]
+        backend = missing.get("backend") or "the loaded data"
+        return f"it needs {', '.join(parts)}, which {backend} does not provide"
+
+    @classmethod
+    def laurent_symbolic(cls, case, terms, *, precision, progress=None):
+        """``((expression, missing), cached)``: ``case``'s whole input evaluated
+        by Vakint with symbolic masters (Ordered reduction; masters as exact
+        constants and data coefficients) through ``terms`` ε orders, couplings
+        expanded by the QCD model; or ``missing`` (MissingMasterOrders as
+        plain data) when Vakint fails closed. Kept per input and order count;
+        an interrupted evaluation keeps nothing."""
+        key = (case, int(terms))
+        if key in cls._laurent_symbolic:
+            return cls._laurent_symbolic[key], True
+        from symbolica.community.hepkit import Model
+        from symbolica.community.hepkit.vakint import MissingMasterOrdersError
+
+        loops = cls.ladder_cases()[case]["loop_count"]
+        source = cls.ladder_source(case)
+        engine = cls.laurent_engine(
+            loops, precision=precision, terms=int(terms), progress=progress
+        )["engine"]
+        try:
+            value = engine.evaluate(
+                source, **cls.progress_options(engine.evaluate, progress)
+            )
+            entry = (Model.qcd().expand_couplings(value), None)
+        except MissingMasterOrdersError as error:
+            entry = (None, cls.missing_orders(error))
+        cls._laurent_symbolic[key] = entry
+        return entry, False
+
+    @staticmethod
+    def laurent_row(power, coefficient):
+        """One Laurent coefficient as plain data: per component its decimal
+        text, the significant digits Vakint vouches for, exact zero, error
+        radius and error quality."""
+        value = coefficient.numerical_value
+        precision = coefficient.precision
+        row = {"power": int(power)}
+        for part, number, component in (
+            ("real", value.real, precision.real),
+            ("imaginary", value.imag, precision.imaginary),
+        ):
+            row[part] = {
+                "text": str(number),
+                "digits": component.significant_digits,
+                "exact_zero": bool(component.exact_zero),
+                "error": str(component.absolute_error),
+                "quality": component.quality.name,
+            }
+        return row
+
+    @staticmethod
+    def laurent_warnings(warnings):
+        """Vakint's precision warnings, one entry per message and sources with
+        the ε orders it concerns."""
+        grouped = {}
+        for warning in warnings:
+            sources = tuple(
+                (source.identity, source.available_decimal_precision)
+                for source in warning.sources
+            )
+            entry = grouped.setdefault(
+                (warning.message, sources),
+                {"message": warning.message, "sources": list(sources), "orders": []},
+            )
+            if warning.epsilon_power is not None:
+                entry["orders"].append(int(warning.epsilon_power))
+        return list(grouped.values())
+
+    @classmethod
+    def laurent_series(cls, case, values, *, digits, orders, progress=None):
+        """The numerical Laurent series of ``case``'s whole input with every
+        parameter set exactly (``values``: {name: text}), ``digits`` requested
+        decimal digits and the ε orders ``orders`` = (lowest, highest).
+
+        Vakint's own path: the symbolic-master evaluation (cached per input and
+        order count, see ``laurent_symbolic``), then ``numerical_evaluation``
+        at the requested precision with exact parameter values. Orders that
+        fail closed keep Vakint's MissingMasterOrders reason and the series
+        stops before them. Returns plain data for ``laurent_view``."""
+        spec = cls.ladder_cases().get(case)
+        if spec is None:
+            raise ValueError(f"Unknown ladder case: {case}")
+        loops = spec["loop_count"]
+        digits = int(digits)
+        if not 1 <= digits <= cls.laurent_max_digits:
+            raise ValueError(
+                f"Request between 1 and {cls.laurent_max_digits} decimal digits"
+            )
+        lowest, highest = (int(order) for order in orders)
+        lowest = max(lowest, -loops)
+        if highest < lowest:
+            raise ValueError(
+                f"The series starts at {cls.epsilon_text(-loops)}; choose a higher order"
+            )
+        parameters = cls.laurent_parameters(case)
+        exact = cls.laurent_values(parameters, values)
+        started = time.perf_counter()
+        (expression, missing), cached = cls.laurent_symbolic(
+            case, highest + loops + 1, precision=digits, progress=progress
+        )
+        through = highest
+        if missing is not None:
+            first = missing["first_affected"]
+            through = first - 1 if isinstance(first, int) else -loops - 1
+            if through >= -loops:
+                (expression, again), reused = cls.laurent_symbolic(
+                    case, through + loops + 1, precision=digits, progress=progress
+                )
+                cached = cached and reused
+                if again is not None:
+                    expression, missing = None, again
+        symbolic_seconds = time.perf_counter() - started
+        rows, warnings, symbols = [], [], []
+        numerical_seconds = 0.0
+        version = None
+        if expression is not None:
+            slot = cls.laurent_engine(loops, precision=digits, progress=progress)
+            version = slot["version"]
+            started = time.perf_counter()
+            result, _ = slot["engine"].numerical_evaluation(
+                expression,
+                {
+                    parameter["key"]: cls.exact_expression(exact[parameter["name"]])
+                    for parameter in parameters
+                },
+            )
+            numerical_seconds = time.perf_counter() - started
+            rows = [
+                cls.laurent_row(power, coefficient)
+                for power, coefficient in sorted(result.coefficients.items())
+            ]
+            warnings = cls.laurent_warnings(result.warnings)
+            names = {parameter["name"] for parameter in parameters} | {"vakint::ε"}
+            symbols = sorted(
+                {
+                    symbol.get_name()
+                    for symbol in expression.get_all_symbols(False)
+                    if symbol.get_name() not in names
+                }
+            )
+        return {
+            "case": case,
+            "label": spec["label"],
+            "loop_count": loops,
+            "digits": digits,
+            "orders": [lowest, highest],
+            "through": through,
+            "coefficients": rows,
+            "missing": missing,
+            "warnings": warnings,
+            "parameters": [
+                {**parameter, "value": str(values[parameter["name"]]).strip()}
+                for parameter in parameters
+            ],
+            "constants": symbols,
+            "data": version
+            or (missing or {}).get("backend")
+            or "the loaded master data",
+            "cached": cached,
+            "seconds": {
+                "symbolic": symbolic_seconds,
+                "numerical": numerical_seconds,
+            },
+        }
+
+    @staticmethod
+    def rounded_decimal(text, digits):
+        """``text`` (a decimal number) rounded half-even to ``digits``
+        significant digits: (sign, mantissa "d.ddd…", decimal exponent)."""
+        digits = max(1, int(digits))
+        value = decimal.Context(prec=digits).create_decimal(str(text).strip())
+        if not value.is_finite():
+            raise ValueError(f"Not a finite number: {text}")
+        if value.is_zero():
+            return "", "0", 0
+        sign, figures, exponent = value.as_tuple()
+        scientific = exponent + len(figures) - 1
+        figures = "".join(map(str, figures)).ljust(digits, "0")
+        mantissa = figures[0] + ("." + figures[1:] if digits > 1 else "")
+        return ("-" if sign else ""), mantissa, scientific
+
+    @classmethod
+    def shown_digits(cls, component, requested):
+        """Digits shown for a component: the requested ones, or fewer when
+        Vakint vouches for fewer."""
+        achieved = component.get("digits")
+        return (
+            int(requested)
+            if achieved is None
+            else max(1, min(int(requested), achieved))
+        )
+
+    @classmethod
+    def component_text(cls, component, requested):
+        """Plain text of a component: "0" for an exact zero, "0 ± r" for an
+        uncertain one, else the vouched-for digits in e-notation."""
+        if component["exact_zero"]:
+            return "0"
+        if component.get("digits") is None:
+            sign, mantissa, exponent = cls.rounded_decimal(component["error"], 3)
+            return f"0 ± {mantissa}e{exponent}"
+        sign, mantissa, exponent = cls.rounded_decimal(
+            component["text"], cls.shown_digits(component, requested)
+        )
+        return f"{sign}{mantissa}" + (f"e{exponent}" if exponent else "")
+
+    @staticmethod
+    def _grouped(mantissa):
+        head, _, tail = mantissa.partition(".")
+        if not tail:
+            return head
+        return head + "." + r"\,".join(tail[i : i + 5] for i in range(0, len(tail), 5))
+
+    @classmethod
+    def component_latex(cls, component, requested):
+        """(sign, LaTeX body) of a non-zero component, None for an exact zero."""
+        if component["exact_zero"]:
+            return None
+        if component.get("digits") is None:
+            _, mantissa, exponent = cls.rounded_decimal(component["error"], 3)
+            return "", r"0\pm " + mantissa + rf"\times10^{{{exponent}}}"
+        sign, mantissa, exponent = cls.rounded_decimal(
+            component["text"], cls.shown_digits(component, requested)
+        )
+        power = rf"\times10^{{{exponent}}}" if exponent else ""
+        return sign, cls._grouped(mantissa) + power
+
+    @classmethod
+    def coefficient_latex(cls, row, requested):
+        """A complex coefficient in LaTeX with an aligned sign column."""
+        real = cls.component_latex(row["real"], requested)
+        imaginary = cls.component_latex(row["imaginary"], requested)
+        if real is None and imaginary is None:
+            return r"\phantom{-}0"
+
+        def lead(sign):
+            return "-" if sign else r"\phantom{-}"
+
+        if imaginary is None:
+            return lead(real[0]) + real[1]
+        if real is None:
+            return lead(imaginary[0]) + imaginary[1] + r"\,i"
+        joint = " - " if imaginary[0] else " + "
+        return lead(real[0]) + real[1] + joint + imaginary[1] + r"\,i"
+
+    _superscripts = str.maketrans("-0123456789", "⁻⁰¹²³⁴⁵⁶⁷⁸⁹")
+
+    @classmethod
+    def epsilon_text(cls, power):
+        """ε with a superscript power for plain text: ε⁻³, ε⁰, ε¹."""
+        return "ε" + str(int(power)).translate(cls._superscripts)
+
+    @staticmethod
+    def epsilon_term(power):
+        if power == 0:
+            return "c_{0}"
+        if power == 1:
+            return r"c_{1}\,\varepsilon"
+        return rf"c_{{{power}}}\,\varepsilon^{{{power}}}"
+
+    @classmethod
+    def laurent_latex(cls, summary):
+        """The series of a ``laurent_series`` summary as KaTeX markdown: the
+        sum with its 𝒪(ε) tail, then every coefficient (aligned digits);
+        an order that fails closed shows that instead of a number."""
+        lowest, highest = summary["orders"]
+        through = summary["through"]
+        requested = summary["digits"]
+        shown = [
+            row
+            for row in summary["coefficients"]
+            if lowest <= row["power"] <= min(highest, through)
+        ]
+        failed = list(range(max(lowest, through + 1), highest + 1))
+        terms = [cls.epsilon_term(row["power"]) for row in shown]
+        if lowest > -summary["loop_count"]:
+            terms.insert(0, r"\cdots")
+        last = shown[-1]["power"] if shown else lowest - 1
+        tail = last + 1
+        terms.append(
+            r"\mathcal{O}(\varepsilon)"
+            if tail == 1
+            else rf"\mathcal{{O}}(\varepsilon^{{{tail}}})"
+        )
+        lines = [
+            rf"c_{{{row['power']}}} &= {cls.coefficient_latex(row, requested)}"
+            for row in shown
+        ] + [
+            rf"c_{{{power}}} &\quad \text{{fails closed: MissingMasterOrders}}"
+            for power in failed
+        ]
+        text = "$$\n\\mathcal{I}(\\varepsilon) = " + " + ".join(terms) + "\n$$\n"
+        if lines:
+            text += (
+                "\n$$\n\\begin{aligned}\n"
+                + " \\\\\n".join(lines)
+                + "\n\\end{aligned}\n$$\n"
+            )
+        return text
+
+    @classmethod
+    def laurent_view(cls, mo, summary, diagram):
+        """The end of the pipeline at a glance: the input graph, an arrow,
+        the Laurent series with numerical coefficients; then the coefficient
+        table with Vakint's precision, the fail-closed orders and warnings."""
+        requested = summary["digits"]
+        values = ", ".join(
+            f"{parameter['label']} = {parameter['value']}"
+            for parameter in summary["parameters"]
+        )
+        series = mo.md(cls.laurent_latex(summary))
+        frame = cls.diagram_frame(mo, diagram, height=340)
+        caption = (
+            "Feynman rules · Dirac and color algebra · Ordered IBP reduction · "
+            f"masters from the {summary['data']} · {requested}-digit evaluation"
+        )
+        pipeline = mo.Html(
+            '<div class="vg-pipeline"><div class="vg-pipe-graph">'
+            '<div class="vg-pipe-label">Input graph</div>'
+            + frame.text
+            + f'<div class="vg-pipe-caption">{html.escape(summary["label"])}</div>'
+            + '</div><div class="vg-pipe-arrow"><b>→</b>'
+            + f"<small>{html.escape(caption)}</small></div>"
+            + '<div class="vg-pipe-series"><div class="vg-pipe-label">'
+            + "Laurent series of the whole input</div>"
+            + series.text
+            + '<div class="vg-pipe-caption">MSbar, d = 4 − 2ε · at '
+            + f"{html.escape(values)}</div>"
+            + "</div></div>"
+        )
+        rows = summary["coefficients"]
+        lowest, highest = summary["orders"]
+        through = summary["through"]
+        shown = [r for r in rows if lowest <= r["power"] <= min(highest, through)]
+        achieved = [
+            component["digits"]
+            for row in shown
+            for component in (row["real"], row["imaginary"])
+            if component["digits"] is not None
+        ]
+
+        def code(text):
+            return mo.Html(f"<code>{html.escape(text)}</code>")
+
+        def vouched(component):
+            if component["exact_zero"]:
+                return "exact 0"
+            return "—" if component["digits"] is None else str(component["digits"])
+
+        table_rows = [
+            {
+                "ε power": row["power"],
+                "real part": code(cls.component_text(row["real"], requested)),
+                "imaginary part": code(cls.component_text(row["imaginary"], requested)),
+                "digits Vakint vouches for (re / im)": f"{vouched(row['real'])} / "
+                f"{vouched(row['imaginary'])}",
+                "error radius (re / im)": " / ".join(
+                    "0"
+                    if component["exact_zero"]
+                    else cls.component_text(
+                        {**component, "text": component["error"], "digits": 3},
+                        3,
+                    )
+                    for component in (row["real"], row["imaginary"])
+                ),
+                "error quality": " / ".join(
+                    sorted({row["real"]["quality"], row["imaginary"]["quality"]})
+                ),
+            }
+            for row in shown
+        ]
+        loops = summary["loop_count"]
+        seconds = summary["seconds"]["symbolic"] + summary["seconds"]["numerical"]
+        parts = [
+            pipeline,
+            cls.metrics(
+                mo,
+                [
+                    (requested, "requested decimal digits"),
+                    (
+                        min(achieved) if achieved else "—",
+                        "fewest digits Vakint vouches for (any shown coefficient)",
+                    ),
+                    (
+                        f"{cls.epsilon_text(-loops)} … {cls.epsilon_text(through)}"
+                        if through >= -loops
+                        else "none",
+                        "orders Vakint computes for this input",
+                    ),
+                    (
+                        cls.duration(seconds),
+                        "this evaluation"
+                        + (" (symbolic result reused)" if summary["cached"] else ""),
+                    ),
+                ],
+            ),
+            cls.table(
+                mo,
+                table_rows,
+                numeric=("ε power",),
+                caption="Each value shows the digits Vakint vouches for, at most the "
+                "requested ones. Bounded: a guaranteed error radius from tracked "
+                "arithmetic; Estimated: a propagated estimate.",
+            )
+            if table_rows
+            else cls.note(mo, "No order in the chosen range", "Widen the ε range."),
+        ]
+        missing = summary.get("missing")
+        if missing is not None:
+            first = through + 1
+            parts.append(
+                cls.note(
+                    mo,
+                    f"{cls.epsilon_text(first)} and higher fail closed",
+                    f"Vakint computes this input through {cls.epsilon_text(through)}. "
+                    f"For {cls.epsilon_text(first)} "
+                    f"{cls.missing_orders_text(missing)}. Vakint raises "
+                    "MissingMasterOrders instead of returning a number that would "
+                    "silently lack those terms.",
+                    pending=True,
+                )
+            )
+        warnings = summary.get("warnings") or []
+        if warnings:
+            parts.append(
+                cls.note(
+                    mo,
+                    f"Precision warnings from Vakint ({len(warnings)})",
+                    "\n".join(
+                        "• "
+                        + warning["message"]
+                        + (
+                            " ("
+                            + ", ".join(
+                                map(cls.epsilon_text, sorted(set(warning["orders"])))
+                            )
+                            + ")"
+                            if warning["orders"]
+                            else ""
+                        )
+                        + (
+                            "; sources: "
+                            + ", ".join(
+                                f"{identity} ({available} digits)"
+                                if available is not None
+                                else str(identity)
+                                for identity, available in warning["sources"]
+                            )
+                            if warning["sources"]
+                            else ""
+                        )
+                        for warning in warnings
+                    ),
+                    pending=True,
+                )
+            )
+        else:
+            parts.append(
+                cls.legend(
+                    mo,
+                    "Vakint reports no precision warning: exact parameter values "
+                    "and the data's master coefficients support every shown digit.",
+                )
+            )
+        details = {
+            "Parameters and constants of the evaluated series": cls.table(
+                mo,
+                [
+                    {
+                        "symbol": parameter["name"],
+                        "role": parameter["meaning"],
+                        "value": code(parameter["value"]),
+                    }
+                    for parameter in summary["parameters"]
+                ]
+                + [
+                    {
+                        "symbol": name if len(name) <= 40 else name[:36] + "…",
+                        "role": "constant, evaluated by Vakint from its data at the "
+                        "requested precision",
+                        "value": "—",
+                    }
+                    for name in summary["constants"]
+                ],
+            ),
+        }
+        if missing is not None:
+            details["Vakint's MissingMasterOrders message"] = mo.plain_text(
+                missing["message"]
+            )
+        parts.append(mo.accordion(details))
+        return mo.vstack(parts)
 
     # -- Script mode of the ladder page ---------------------------------------
     headless_options = ("case", "n-cores", "arithmetic", "max-seconds", "cancel-after")

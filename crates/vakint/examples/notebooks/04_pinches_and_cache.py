@@ -8,7 +8,7 @@ __generated_with = "0.25.2"
 app = marimo.App(width="full", app_title="Vakint · Pinches & closure")
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _():
     from time import perf_counter
 
@@ -67,7 +67,7 @@ def _(Gallery, mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     cancellation_count = mo.ui.slider(
         start=1,
@@ -97,7 +97,7 @@ def _(mo):
     return cancellation_count, closure_button, expand_numerator, remaining_power
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     E,
     FeynmanDiagram,

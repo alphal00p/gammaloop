@@ -1,10 +1,14 @@
 """Reduce the three- and four-loop QCD ladders in a cancellable background job.
 
-Interactive: choose a case and press "Reduce in the background"; Cancel stops it.
-The page keeps showing its last run (``?job=<id>`` in the URL survives a
-reload); "Recent jobs" reopens any finished run. In marimo's edit mode a case
-can also run in the notebook's own kernel, with the live monitor card;
-marimo's Interrupt button stops it there.
+Interactive: choose a case (its input graph is drawn natively) and press
+"Reduce in the background"; Cancel stops it. The page keeps showing its last
+run (``?job=<id>`` in the URL survives a reload); "Recent jobs" reopens any
+finished run. In marimo's edit mode a case can also run in the notebook's own
+kernel, with the live monitor card; marimo's Interrupt button stops it there.
+The last panel, "Input graph -> Laurent series", sets every parameter of the
+input, the requested digits and the epsilon orders, and evaluates the whole
+input in the kernel to its numerical Laurent coefficients (symbolic result
+cached per input; marimo's Interrupt stops it in edit mode).
 
 Script mode runs one case headlessly and waits for it, for example
 ``python 05_ladder_reductions.py --case 3L-zero-momentum --n-cores 2``
@@ -24,7 +28,7 @@ __generated_with = "0.25.2"
 app = marimo.App(width="full", app_title="Vakint · Reduce 3L & 4L")
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _():
     from pathlib import Path
 
@@ -42,7 +46,8 @@ def _(Gallery, mo):
         "Reduce three- and four-loop ladders",
         "The massless-quark QCD ladder self-energy with two or three gluon rungs, "
         "reduced end to end to retained masters with the Ordered engine. Each run "
-        "is a separate, bounded process that you can cancel at any time.",
+        "is a separate, bounded process that you can cancel at any time; the last "
+        "panel turns the input graph into its numerical Laurent series.",
     )
     return
 
@@ -108,7 +113,7 @@ def _(Gallery, mo):
     return (ladder_cases,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(Gallery, ladder_cases, mo):
     _labels = {
         case["label"]: key
@@ -120,12 +125,71 @@ def _(Gallery, ladder_cases, mo):
         for key, case in ladder_cases.items()
         if case["default"] and key in _labels.values()
     )
+    # One selection drives the graph preview, the runs and the Laurent panel.
+    case_choice = mo.ui.dropdown(_labels, value=_default, label="Case", full_width=True)
+    mo.vstack(
+        [
+            Gallery.section(
+                mo,
+                "02 / input",
+                "The input graph",
+                "The ladder self-energy of the selected case, drawn natively by "
+                "FeynKit from its DOT source with its loop momenta. Both "
+                "projections of an L-loop ladder start from this graph.",
+            ),
+            case_choice,
+        ]
+    )
+    return (case_choice,)
+
+
+@app.cell(hide_code=True)
+def _(Gallery, case_choice, ladder_cases, mo):
+    # Redrawn when the selection changes (page 01's FeynKit view).
+    _case = ladder_cases[case_choice.value]
+    input_diagram = Gallery.ladder_diagram(_case["loop_count"])
+    _projection = (
+        "the quadratic Taylor coefficient in the external momentum q, "
+        "transverse projection and angular average"
+        if _case["projection"] == "quadratic"
+        else "zero external momentum, unaveraged metric/color contraction"
+    )
+    mo.vstack(
+        [
+            Gallery.metrics(
+                mo,
+                [
+                    (input_diagram.loop_count, "independent loops"),
+                    (len(input_diagram.internal_edges), "internal particle lines"),
+                    (len(input_diagram.external_edges), "external gluons"),
+                    (_case["catalogue_masters"], "catalogue masters in its result"),
+                ],
+            ),
+            Gallery.diagram_frame(mo, input_diagram),
+            Gallery.legend(
+                mo,
+                f"Prepared input of this case: {_projection}; massless quark "
+                "lines, a common UV mass in the vacuum denominators.",
+            ),
+            mo.accordion(
+                {
+                    "Compact source DOT": Gallery.dot_source(
+                        mo, Gallery.ladder_dot(_case["loop_count"])
+                    )
+                }
+            ),
+        ]
+    )
+    return (input_diagram,)
+
+
+@app.cell(hide_code=True)
+def _(Gallery, mo):
     _cores = Gallery.max_cores()
     _deadline = Gallery.max_seconds()
     run_form = mo.md(
-        "{case}\n\n{arithmetic}\n\n{n_cores}\n\n{max_seconds}\n\n{ordered_cache}"
+        "{arithmetic}\n\n{n_cores}\n\n{max_seconds}\n\n{ordered_cache}"
     ).batch(
-        case=mo.ui.dropdown(_labels, value=_default, label="Case", full_width=True),
         arithmetic=mo.ui.dropdown(
             list(Gallery.arithmetics),
             value="modular_polynomial",
@@ -159,7 +223,9 @@ def _(Gallery, ladder_cases, mo):
     )
     mo.vstack(
         [
-            Gallery.section(mo, "02 / run", "Start a bounded background reduction"),
+            Gallery.section(
+                mo, "03 / run", "Reduce the selected case to retained masters"
+            ),
             run_form,
             mo.hstack(
                 [run_button] + ([kernel_button] if kernel_button is not None else []),
@@ -180,7 +246,7 @@ def _(Gallery, ladder_cases, mo):
     return kernel_button, run_button, run_form
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(Gallery, mo):
     get_finished_job, set_finished_job = mo.state(None)
     # The run this session shows: its last one, or ?job=<id> from the URL.
@@ -190,8 +256,8 @@ def _(Gallery, mo):
     return get_finished_job, get_shown_job, set_finished_job, set_shown_job
 
 
-@app.cell
-def _(Gallery, mo, run_button, run_form, set_shown_job):
+@app.cell(hide_code=True)
+def _(Gallery, case_choice, mo, run_button, run_form, set_shown_job):
     # Script mode runs exactly the case named on the command line; the report
     # cell below prints its outcome and sets the exit status.
     headless = mo.app_meta().mode == "script"
@@ -200,7 +266,11 @@ def _(Gallery, mo, run_button, run_form, set_shown_job):
         if headless:
             run_request = Gallery.headless_request(mo.cli_args(), run_form.value)
         elif run_button.value:
-            run_request = {**run_form.value, "cancel_after": None}
+            run_request = {
+                **run_form.value,
+                "case": case_choice.value,
+                "cancel_after": None,
+            }
         if run_request is not None:
             started_job = Gallery.start_reduction(
                 run_request["case"],
@@ -217,16 +287,17 @@ def _(Gallery, mo, run_button, run_form, set_shown_job):
         Gallery.headless_exit(run_request, start_error)
     if started_job is not None and not headless:
         set_shown_job(started_job)
-    mo.callout(start_error, kind="warn") if start_error else mo.md("")
+    # No output (no empty gap) unless the start was refused.
+    mo.callout(start_error, kind="warn") if start_error else None
     return headless, run_request, started_job
 
 
-@app.cell
-def _(Gallery, kernel_button, mo, run_form, set_shown_job):
+@app.cell(hide_code=True)
+def _(Gallery, case_choice, kernel_button, mo, run_form, set_shown_job):
     # In-kernel run (edit mode): the monitor card redraws this cell's output
     # about once a second; Interrupt stops the native call within a moment.
     mo.stop(kernel_button is None or not kernel_button.value)
-    _request = run_form.value
+    _request = {**run_form.value, "case": case_choice.value}
     if not Gallery.interruptible():
         mo.output.replace(
             Gallery.note(
@@ -259,7 +330,7 @@ def _(Gallery, kernel_button, mo, run_form, set_shown_job):
     return (kernel_job,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(Gallery, get_shown_job, headless, mo, set_shown_job, started_job):
     if headless:
         # A headless run watches, reports and cancels only its own job.
@@ -279,7 +350,7 @@ def _(Gallery, get_shown_job, headless, mo, set_shown_job, started_job):
     return (watched_job,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(Gallery, get_finished_job, mo, watched_job):
     mo.stop(
         watched_job is None,
@@ -342,7 +413,7 @@ def _(
     _parts = [
         Gallery.section(
             mo,
-            "03 / progress",
+            "04 / progress",
             "The in-kernel run" if _kernel else "The background run",
         ),
         Gallery.job_monitor_card(mo, job_status, watched_job),
@@ -446,7 +517,7 @@ def _(Gallery, Path, job_status, ladder_cases, mo, watched_job):
         [
             Gallery.section(
                 mo,
-                "04 / result",
+                "05 / result",
                 _case["label"],
                 f"sha256 {_retained['sha256']} · {_data_text}",
             ),
@@ -506,7 +577,7 @@ def _(Gallery, ladder_result, mo, watched_job):
     return (retained_result,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(Gallery, mo, retained_result):
     mo.stop(retained_result is None)
     retained_term = Gallery.term_selector(mo, retained_result)
@@ -519,6 +590,178 @@ def _(Gallery, mo, retained_result):
 def _(Gallery, mo, retained_result, retained_term):
     # One term at a time, each part in its own view (this cell's output).
     Gallery.term_view(mo, retained_result, retained_term.value)
+    return
+
+
+@app.cell(hide_code=True)
+def _(Gallery, case_choice, ladder_cases, mo):
+    # The panel's controls follow the selected case (a new case starts with
+    # fresh values and no result).
+    _case = ladder_cases[case_choice.value]
+    _loops = _case["loop_count"]
+    laurent_parameters = Gallery.laurent_parameters(case_choice.value)
+    _fields = {
+        f"p{_index}": mo.ui.text(
+            value="1",
+            label=f"${_parameter['latex']}$ · {_parameter['meaning']}",
+            full_width=True,
+        )
+        for _index, _parameter in enumerate(laurent_parameters)
+    }
+    _in_page = Gallery.laurent_in_page(mo, case_choice.value)
+    laurent_controls = mo.md(
+        "**Parameters**, exact decimals or fractions (e.g. `91.1876`, `1/3`)\n\n"
+        + "\n\n".join(f"{{{key}}}" for key in _fields)
+        + "\n\n**Accuracy and ε orders**\n\n{digits}\n\n{orders}"
+    ).batch(
+        digits=mo.ui.number(
+            start=1,
+            stop=Gallery.laurent_max_digits,
+            value=32,
+            step=1,
+            label="Requested decimal digits",
+        ),
+        orders=mo.ui.range_slider(
+            start=-_loops,
+            stop=Gallery.laurent_highest_order,
+            step=1,
+            value=[-_loops, 0],
+            show_value=True,
+            label="ε orders (lowest, highest)",
+        ),
+        **_fields,
+    )
+    laurent_button = mo.ui.run_button(
+        label="Evaluate the Laurent series",
+        kind="success",
+        disabled=not _in_page,
+    )
+    _orders_note = (
+        f"The series starts at {Gallery.epsilon_text(-_loops)}. Vakint returns "
+        "every order its master data supports; an order that needs master "
+        "coefficients beyond the data fails closed and is shown with Vakint's "
+        "MissingMasterOrders reason instead of a number. Exact parameter values "
+        "never limit the precision; this input has no external-momentum or other "
+        "numerator parameter left (q = 0, or its normalized q² coefficient), and "
+        "the constants of the result (π, Clausen values, master coefficients) "
+        "are evaluated by Vakint itself."
+    )
+    mo.vstack(
+        [
+            Gallery.section(
+                mo,
+                "06 / numbers",
+                "Input graph → Laurent series",
+                "What everything above boils down to: once every parameter has a "
+                "value, the input graph is a Laurent series in ε with numerical "
+                "coefficients. Vakint reduces the whole input with symbolic "
+                "masters (kept for this session per input and order count), "
+                "then evaluates it numerically at the requested precision in "
+                "this kernel.",
+            ),
+            laurent_controls,
+            laurent_button,
+            Gallery.note(mo, "Which orders", _orders_note),
+            *(
+                []
+                if _in_page
+                else [
+                    Gallery.note(
+                        mo,
+                        "Not evaluated in this application",
+                        "Without marimo's Interrupt (application mode) this page "
+                        "evaluates only the quick cases in its kernel. Open the "
+                        "notebook in marimo's edit mode for this case.",
+                        pending=True,
+                    )
+                ]
+            ),
+        ]
+    )
+    return laurent_button, laurent_controls, laurent_parameters
+
+
+@app.cell(hide_code=True)
+def _(case_choice, mo):
+    # The last series of this case; a new case starts without one.
+    case_choice.value
+    get_laurent, set_laurent = mo.state(None)
+    return get_laurent, set_laurent
+
+
+@app.cell(hide_code=True)
+def _(
+    Gallery,
+    case_choice,
+    laurent_button,
+    laurent_controls,
+    laurent_parameters,
+    mo,
+    set_laurent,
+):
+    # Runs on the button only. The monitor card redraws this cell's output
+    # while Vakint loads data and reduces; marimo's Interrupt stops it and this
+    # cell then shows the interrupted card itself (marimo re-runs no other
+    # cell after an Interrupt). A finished series is shown by the next cell.
+    mo.stop(not laurent_button.value)
+    _request = laurent_controls.value
+    _progress = Gallery.kernel_progress(mo, title="Input graph → Laurent series")
+    laurent = None
+    _outcome = None
+    try:
+        laurent = Gallery.laurent_series(
+            case_choice.value,
+            {
+                _parameter["name"]: _request[f"p{_index}"]
+                for _index, _parameter in enumerate(laurent_parameters)
+            },
+            digits=_request["digits"],
+            orders=_request["orders"],
+            progress=_progress,
+        )
+    except KeyboardInterrupt:
+        _outcome = mo.vstack(
+            [
+                Gallery.monitor_card(
+                    mo,
+                    _progress.model,
+                    state="interrupted",
+                    title="Input graph → Laurent series",
+                ),
+                Gallery.note(
+                    mo,
+                    "Interrupted in this kernel",
+                    "Nothing of this evaluation is kept; the kernel and its "
+                    "engines stay usable. Press the button again to restart it.",
+                ),
+            ]
+        )
+    except (OSError, ValueError, RuntimeError) as _error:
+        _outcome = Gallery.note(
+            mo, "The evaluation did not complete", str(_error)[-3000:], pending=True
+        )
+    if laurent is not None:
+        # The next cell shows the series; this cell keeps no progress card.
+        set_laurent(laurent)
+        mo.output.clear()
+    _outcome
+    return
+
+
+@app.cell(hide_code=True)
+def _(Gallery, get_laurent, input_diagram, mo):
+    # The last series stays while values change, until the next evaluation;
+    # its caption names the values it was computed for.
+    _laurent = get_laurent()
+    mo.stop(
+        _laurent is None,
+        Gallery.legend(
+            mo,
+            "Set the values and press “Evaluate the Laurent series”; nothing "
+            "runs before.",
+        ),
+    )
+    Gallery.laurent_view(mo, _laurent, input_diagram)
     return
 
 

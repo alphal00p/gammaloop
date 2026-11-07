@@ -13,7 +13,7 @@ __generated_with = "0.25.2"
 app = marimo.App(width="full", app_title="Vakint · Five-loop: explore")
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _():
     import marimo as mo
     from shared_gallery import Gallery
@@ -73,7 +73,7 @@ def _(Gallery, mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(FeynmanDiagram, Gallery, Model):
     qcd_model = Model.qcd()
     ladder = FeynmanDiagram.from_dot(qcd_model, Gallery.ladder_dot(5))
@@ -278,7 +278,7 @@ def _(Gallery, mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(Gallery, mo):
     if Gallery.five_loop_runs_enabled():
         run_benchmark = mo.ui.run_button(
@@ -310,7 +310,7 @@ def _(Gallery, mo):
     return (run_benchmark,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(Gallery, mo, run_benchmark):
     benchmark_job = None
     if run_benchmark is not None and run_benchmark.value:
@@ -324,7 +324,7 @@ def _(Gallery, mo, run_benchmark):
     return (benchmark_job,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(Gallery, benchmark_job, mo):
     cancel_benchmark = mo.ui.button(
         label="Cancel the five-loop run",
@@ -454,7 +454,7 @@ def _(Gallery, mo):
     return (five_loop_fixture,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(five_loop_fixture, mo):
     inspect_saved = mo.ui.run_button(
         label="Show the exact retained result (offline, no reduction)",
@@ -489,7 +489,7 @@ def _(Gallery, five_loop_fixture, inspect_saved, mo):
     return (saved_result,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(Gallery, mo, saved_result):
     saved_term = Gallery.term_selector(mo, saved_result)
     mo.stop(saved_term is None)
