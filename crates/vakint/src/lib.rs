@@ -27,8 +27,8 @@ pub mod utils;
 use ahash::RandomState;
 use colored::Colorize;
 pub use execution::{
-    DEFAULT_ORDERED_WEIGHT_ARITHMETIC, MAX_DEFAULT_N_CORES, OrderedWeightArithmetic,
-    default_n_cores,
+    CANCELLED_REQUEST_MESSAGE, Cancellation, DEFAULT_ORDERED_WEIGHT_ARITHMETIC,
+    MAX_DEFAULT_N_CORES, OrderedWeightArithmetic, default_n_cores,
 };
 use eyre::Result;
 use feynkit_tensor::TensorReducer;
@@ -68,7 +68,7 @@ pub use rustred_evaluation::five_loop::{RustRedSymbolicEvaluation, RustRedWitnes
 use rustred_evaluation::monitor::{CallerProgress, MonitorContext};
 pub use rustred_evaluation::monitor::{
     RustRedMonitorDisplay, RustRedMonitorOptions, RustRedMonitorScope, RustRedMonitorWork,
-    RustRedSnapshotViewer,
+    RustRedProgressSink, RustRedSnapshotViewer,
 };
 pub use rustred_evaluation::{
     DEFAULT_ORDERED_CACHE_MAX_RESIDENT_BYTES, OrderedCacheAutosave, OrderedCacheMode,
@@ -2539,9 +2539,9 @@ impl VakintSettings {
         operation: impl FnOnce() -> Result<T, VakintError>,
     ) -> Result<T, VakintError> {
         ResourceBudget::new(self.rustred_resources).run(|| {
-            resources::checkpoint()?;
+            crate::execution::checkpoint()?;
             let result = operation()?;
-            resources::checkpoint()?;
+            crate::execution::checkpoint()?;
             Ok(result)
         })
     }
@@ -2551,6 +2551,14 @@ impl VakintSettings {
     /// the selection fixes them.
     pub fn rustred_ordered_weight_arithmetic(&self) -> RustRedOrderedWeightArithmetic {
         self.ordered_weight_arithmetic.resolve(self.n_cores)
+    }
+
+    /// RustRed's Ordered weight arithmetic of a five-loop saved-application
+    /// request: [`Self::rustred_ordered_weight_arithmetic`], except that the
+    /// default selection runs `modular_sampled` on the same workers (see
+    /// [`OrderedWeightArithmetic::is_default_selection`]).
+    pub fn rustred_five_loop_ordered_weight_arithmetic(&self) -> RustRedOrderedWeightArithmetic {
+        rustred_evaluation::five_loop_ordered_weight_arithmetic(self)
     }
 
     /// Check the worker count, the Ordered weight arithmetic and the native
@@ -3006,6 +3014,13 @@ impl VakintTerm {
     ) -> Result<ReplacementRules, VakintError> {
         MonitorContext::native_phase(observation.as_deref_mut(), "topology_matching", None);
         self.stage_numerical_inputs(vakint, settings)?;
+        // A four-loop scalar integral equal to a shipped four-loop master is
+        // written in that master's own program form before matching.
+        vakint.transport_four_loop_master(
+            settings,
+            &mut self.integral,
+            self.numerator.as_view(),
+        )?;
         let mut integral_specs = if let Some(replacement_rules) =
             vakint.match_topologies_for_settings(settings, self.integral.as_view())?
         {
@@ -3039,9 +3054,22 @@ impl VakintTerm {
             matches!(integral_specs.canonical_topology, Topology::FiveLoop(_)) && scalar_rustred;
         if scalar_five_loop {
             MonitorContext::native_phase(observation, "routing_verification", None);
-            integral_specs = vakint
-                .match_rustred_input(settings, self.integral.as_view(), self.numerator.as_view())?
-                .unwrap_or(integral_specs);
+            // A term equal to a package master is rewritten as the master's own
+            // representation and keeps its identity witness (no walk).
+            integral_specs = match vakint.transport_rustred_master_term(
+                settings,
+                &mut self.integral,
+                &mut self.numerator,
+            )? {
+                Some(witness) => witness,
+                None => vakint
+                    .match_rustred_input(
+                        settings,
+                        self.integral.as_view(),
+                        self.numerator.as_view(),
+                    )?
+                    .unwrap_or(integral_specs),
+            };
         }
 
         integral_specs.apply_replacement_rules()?;
@@ -4903,7 +4931,7 @@ impl VakintExpression {
         mut match_input: impl FnMut(AtomView) -> Result<Option<ReplacementRules>, VakintError>,
     ) -> Result<(), VakintError> {
         for term in self.0.iter_mut() {
-            resources::checkpoint()?;
+            crate::execution::checkpoint()?;
             let normalized = match term.normalize_propagator() {
                 // An out-of-domain p-integral is matched unchanged, as an
                 // unknown integral (docs/p_integrals.md, section 1).
@@ -4939,7 +4967,7 @@ impl VakintExpression {
     ) -> Result<(), VakintError> {
         settings.with_resource_budget(|| {
             for term in self.0.iter_mut() {
-                resources::checkpoint()?;
+                crate::execution::checkpoint()?;
                 term.tensor_reduce(vakint, settings)?;
             }
             Ok(())
@@ -4972,7 +5000,7 @@ impl VakintExpression {
                 Vec<rustred_evaluation::MatchedContribution>,
             >::new();
             for (source_id, term) in self.0.iter_mut().enumerate() {
-                resources::checkpoint()?;
+                crate::execution::checkpoint()?;
                 if !term.normalize_propagator()? {
                     continue;
                 }
@@ -7728,12 +7756,34 @@ Evaluated (n_loops=1, mu_r=1) :
             self.validate_settings(settings)?;
             let mut vakint_expr = VakintExpression::prepare_evaluation(input, self, settings)?;
             MonitorContext::native_phase(observation.as_deref_mut(), "canonicalization", None);
+            // A four-loop scalar integral equal to a shipped four-loop master is
+            // written in its program's slot order before the legacy matcher,
+            // whose cost depends on the input's propagator order; a five-loop
+            // term equal to a package master is written as the master's own
+            // parent form before canonicalization can move it onto another
+            // (possibly 2-isomorphic) census embedding. Both only when RustRed
+            // evaluates that loop count.
+            let five_loop = rustred_evaluation::rustred_evaluates_loop(settings, 5);
+            for term in &mut vakint_expr.0 {
+                self.transport_four_loop_master(
+                    settings,
+                    &mut term.integral,
+                    term.numerator.as_view(),
+                )?;
+                if five_loop {
+                    self.transport_rustred_master_term(
+                        settings,
+                        &mut term.integral,
+                        &mut term.numerator,
+                    )?;
+                }
+            }
             vakint_expr.canonicalize_with(settings, false, |input| {
                 self.match_topologies_for_settings(settings, input)
             })?;
             MonitorContext::native_phase(observation.as_deref_mut(), "tensor_prepass", None);
             for term in &mut vakint_expr.0 {
-                resources::checkpoint()?;
+                crate::execution::checkpoint()?;
                 term.tensor_reduce_for_evaluation(self, settings)?;
             }
             vakint_expr.evaluate_integral_observed(
@@ -7788,10 +7838,35 @@ Evaluated (n_loops=1, mu_r=1) :
         settings: &VakintSettings,
         input: AtomView,
     ) -> Result<Atom, VakintError> {
-        self.autosave_ordered_cache(settings.with_resource_budget(|| {
+        self.autosave_ordered_cache(self.evaluate_integral_observed(settings, input, None, None))
+    }
+
+    /// [`Self::evaluate_integral`] with per-call diagnostics.
+    pub fn evaluate_integral_with_monitor(
+        &self,
+        settings: &VakintSettings,
+        input: AtomView,
+        monitor: &RustRedMonitorOptions,
+    ) -> Result<Atom, VakintError> {
+        self.autosave_ordered_cache(MonitorContext::run(monitor, |observation, progress| {
+            self.evaluate_integral_observed(settings, input, observation, progress)
+        }))
+    }
+
+    fn evaluate_integral_observed(
+        &self,
+        settings: &VakintSettings,
+        input: AtomView,
+        observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
+        progress: Option<&CallerProgress>,
+    ) -> Result<Atom, VakintError> {
+        if let Some(progress) = progress {
+            progress.configure(settings);
+        }
+        settings.with_resource_budget(|| {
             self.validate_settings(settings)?;
             let mut vakint_expr = VakintExpression::prepare_evaluation(input, self, settings)?;
-            vakint_expr.evaluate_integral(self, settings)?;
+            vakint_expr.evaluate_integral_observed(self, settings, observation, progress)?;
             let result: Atom = vakint_expr.into();
             truncation_guard::ensure_known_orders(
                 &result,
@@ -7801,7 +7876,7 @@ Evaluated (n_loops=1, mu_r=1) :
                 truncation_guard::plain_name,
             )?;
             Ok(result)
-        }))
+        })
     }
 }
 

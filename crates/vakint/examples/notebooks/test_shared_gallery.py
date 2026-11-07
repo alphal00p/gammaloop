@@ -13,6 +13,7 @@ import io
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -20,8 +21,10 @@ import tempfile
 import time
 import unittest
 import uuid
+from fractions import Fraction
 from pathlib import Path
 from types import MappingProxyType, SimpleNamespace
+from typing import ClassVar
 from unittest.mock import Mock, patch
 
 import benchmark_job
@@ -543,7 +546,7 @@ class GalleryReceiptTests(unittest.TestCase):
     def test_reused_input_null_preparation_is_not_a_current_timing(self):
         tables = []
 
-        def table(rows, **kwargs):
+        def table(_mo, rows, **kwargs):
             tables.append(rows)
             return rows
 
@@ -552,7 +555,6 @@ class GalleryReceiptTests(unittest.TestCase):
             vstack=lambda values: values,
             accordion=lambda values: values,
             json=lambda value: value,
-            ui=SimpleNamespace(table=table),
         )
         receipt = {
             "schema": "vakint.qcd-ladder.benchmark.v1",
@@ -568,6 +570,7 @@ class GalleryReceiptTests(unittest.TestCase):
         with (
             patch.object(Gallery, "receipt", return_value=receipt),
             patch.object(Gallery, "evidence_links", return_value="download"),
+            patch.object(Gallery, "table", side_effect=table),
         ):
             card = Gallery.evidence_card(mo, "synthetic", "Synthetic benchmark")
         self.assertIn("1.250", repr(card))
@@ -633,9 +636,13 @@ class GalleryClosurePresentationTests(unittest.TestCase):
         arguments.update(
             mo=mo,
             Gallery=SimpleNamespace(
-                metrics=lambda *_: "metrics", native_formula=Gallery.native_formula
+                metrics=lambda *_: "metrics",
+                native_formula=Gallery.native_formula,
+                legend=lambda *_: "legend",
+                execution_metrics=Gallery.execution_metrics,
             ),
             closure_seconds=0.1,
+            closure_execution="modular_polynomial · 4 cores",
         )
         formula_names = (
             "cancelling_numerator",
@@ -688,15 +695,28 @@ class GalleryNativeFormulaTests(unittest.TestCase):
                     Gallery.native_formula(mo, expression)
                 mo.Html.assert_not_called()
 
-    def test_all_four_tensor_panes_use_the_native_static_protocol(self):
-        path = Gallery.directory / "01_graphs_and_numerators.py"
+    @staticmethod
+    def page_cell(notebook, arguments):
+        path = Gallery.directory / notebook
         tree = ast.parse(path.read_text())
         cell = next(
             node
             for node in tree.body
             if isinstance(node, ast.FunctionDef)
-            and {arg.arg for arg in node.args.args}
-            == {
+            and {arg.arg for arg in node.args.args} == arguments
+        )
+        cell.decorator_list = []
+        namespace = {}
+        exec(  # noqa: S102 - Execute only this presentation cell with fake values.
+            compile(ast.Module(body=[cell], type_ignores=[]), str(path), "exec"),
+            namespace,
+        )
+        return namespace["_"]
+
+    def test_contraction_views_use_a_selector_and_one_live_pager(self):
+        select = self.page_cell(
+            "01_graphs_and_numerators.py",
+            {
                 "Gallery",
                 "contraction_seconds",
                 "mo",
@@ -704,41 +724,26 @@ class GalleryNativeFormulaTests(unittest.TestCase):
                 "projected",
                 "projector",
                 "reduced",
-            }
+            },
         )
-        cell.decorator_list = []
-        namespace = {}
-        exec(  # noqa: S102 - Execute only this presentation cell with fake native values.
-            compile(ast.Module(body=[cell], type_ignores=[]), str(path), "exec"),
-            namespace,
+        radio = Mock(
+            side_effect=lambda options, **kw: SimpleNamespace(
+                options=options, value=kw["value"]
+            )
         )
-        tabs = Mock(side_effect=lambda contents: SimpleNamespace(contents=contents))
         mo = SimpleNamespace(
-            Html=Mock(side_effect=lambda text: text),
-            vstack=lambda values: values,
-            ui=SimpleNamespace(tabs=tabs),
+            vstack=lambda values: values, ui=SimpleNamespace(radio=radio)
         )
         names = ("reduced", "projector", "numerator", "projected")
-        values = {
-            name: SimpleNamespace(
-                _repr_html_=Mock(return_value=f"<math><mi>{name}</mi></math>"),
-                _display_=Mock(side_effect=AssertionError("Interactive widget")),
-            )
-            for name in names
-        }
-        namespace["_"](
-            Gallery=SimpleNamespace(
-                native_formula=Gallery.native_formula,
-                metrics=lambda *_: "metrics",
-                note=lambda *_: "note",
-            ),
+        values = {name: SimpleNamespace(name=name) for name in names}
+        views, choice = select(
+            Gallery=SimpleNamespace(metrics=lambda *_: "metrics"),
             mo=mo,
             contraction_seconds=0.1,
             **values,
         )
-        contents = tabs.call_args.args[0]
         self.assertEqual(
-            list(contents),
+            list(views),
             [
                 "Scalar dot products",
                 "Projector",
@@ -746,13 +751,68 @@ class GalleryNativeFormulaTests(unittest.TestCase):
                 "Projected tensor",
             ],
         )
-        for name, payload in zip(names, contents.values(), strict=True):
-            values[name]._repr_html_.assert_called_once_with()
-            values[name]._display_.assert_not_called()
-            self.assertEqual(
-                payload,
-                f'<div class="vg-native-formula"><math><mi>{name}</mi></math></div>',
+        self.assertIs(views["Scalar dot products"], values["reduced"])
+        self.assertEqual(choice.value, "Scalar dot products")
+        show = self.page_cell(
+            "01_graphs_and_numerators.py",
+            {"Gallery", "contraction_views", "mo", "view_choice"},
+        )
+        formula = Mock(return_value="pager")
+        for label, name in zip(views, names, strict=True):
+            show(
+                Gallery=SimpleNamespace(
+                    formula=formula,
+                    note=lambda *_: "note",
+                    product_factors=lambda value: None,
+                    factor_list=Gallery.factor_list,
+                ),
+                contraction_views=views,
+                mo=mo,
+                view_choice=SimpleNamespace(value=label),
             )
+            self.assertIs(formula.call_args.args[1], values[name])
+
+    def test_long_products_also_list_their_factors(self):
+        try:
+            from symbolica import E
+        except ImportError:
+            self.skipTest("the native host is not installed")
+        product = E("a*b*(c+d)*f(x)*g(y)")
+        self.assertEqual(len(Gallery.product_factors(product)), 5)
+        self.assertIsNone(Gallery.product_factors(E("a*b")))
+        self.assertIsNone(Gallery.product_factors(E("a+b*c*d*e*f")))
+        self.assertIsNone(Gallery.product_factors(object()))
+
+    def test_live_pagers_never_sit_inside_tabs_accordions_or_tables(self):
+        # Those containers unmount their panels; the frontend then disposes a
+        # live pager's widget model ("Model not found" after a switch).
+        containers = {"tabs", "accordion", "table"}
+        live = {"formula", "formatted", "paged"}
+        for path in sorted(Gallery.directory.glob("0*.py")):
+            tree = ast.parse(path.read_text())
+            found = [
+                inner.lineno
+                for node in ast.walk(tree)
+                if isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in containers
+                for inner in ast.walk(node)
+                if isinstance(inner, ast.Call)
+                and isinstance(inner.func, ast.Attribute)
+                and inner.func.attr in live
+            ]
+            with self.subTest(page=path.name):
+                self.assertEqual(found, [])
+            uses = [
+                node
+                for node in ast.walk(tree)
+                if isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "formula"
+            ]
+            if path.name != "04_pinches_and_cache.py":
+                # Every other page shows at least one large value in the pager.
+                self.assertTrue(uses, path.name)
 
     def test_physical_run_cell_exposes_only_zero_momentum(self):
         tree = ast.parse((Gallery.directory / "03_five_loop_uv.py").read_text())
@@ -919,10 +979,53 @@ class GalleryEngineTests(unittest.TestCase):
             self.assertEqual(
                 arguments.kwargs["local_artifacts_path"], str(Path(cache).resolve())
             )
+            # No progress keyword unless the host's signature declares it.
+            self.assertNotIn("progress", arguments.kwargs)
             with patch.dict(
                 os.environ, {"VAKINT_GALLERY_ARTIFACTS": "/data/checkout"}, clear=True
             ):
                 self.assertEqual(Gallery.data_directory(), Path("/data/checkout"))
+
+    def test_loads_request_the_built_in_release_unless_configured(self):
+        engine = Mock()
+        with (
+            tempfile.TemporaryDirectory() as cache,
+            patch.object(Gallery, "builtin_data_version", return_value="v9.1"),
+        ):
+            for environment, version in (
+                ({"VAKINT_GALLERY_DATA_CACHE": cache}, "v9.1"),
+                ({"VAKINT_GALLERY_ARTIFACTS": cache}, "latest"),
+                (
+                    {
+                        "VAKINT_GALLERY_DATA_CACHE": cache,
+                        "VAKINT_GALLERY_DATA_VERSION": "v8",
+                    },
+                    "v8",
+                ),
+            ):
+                with self.subTest(environment=sorted(environment)):
+                    with patch.dict(os.environ, environment, clear=True):
+                        Gallery.load_data(engine, 4)
+                    self.assertEqual(
+                        engine.load_official_external_data.call_args.kwargs["version"],
+                        version,
+                    )
+
+    def test_progress_keyword_only_when_the_host_declares_it(self):
+        def method(*args, **kwargs):
+            return None
+
+        method.__text_signature__ = '($self, max_loop_count, *, progress="auto")'
+        self.assertTrue(Gallery.supports_progress(method))
+        callback = object()
+        self.assertEqual(
+            Gallery.progress_options(method, callback), {"progress": callback}
+        )
+        self.assertEqual(Gallery.progress_options(method, None), {})
+        method.__text_signature__ = '($self, max_loop_count, version="latest")'
+        self.assertFalse(Gallery.supports_progress(method))
+        self.assertEqual(Gallery.progress_options(method, callback), {})
+        self.assertFalse(Gallery.supports_progress(Mock()))
 
     def test_five_loop_catalogue_load_needs_the_operator_opt_in(self):
         engine = Mock()
@@ -1206,8 +1309,8 @@ class GalleryLadderTests(unittest.TestCase):
     """The 3L/4L cases: shipped inputs, bounded launches and recorded hashes."""
 
     # Retained-result sha256 prefixes of the rung fixtures (recorded with vakint
-    # data v0.1.2, reproduced with v0.2.0).
-    recorded = {
+    # data v0.1.2, reproduced with v0.2.0 and v0.2.1).
+    recorded: ClassVar[dict[str, str]] = {
         "3L-zero-momentum": "2f48233c",
         "3L-quadratic": "5acbeebe",
         "4L-zero-momentum": "b93080b3",
@@ -1412,10 +1515,9 @@ class GalleryLadderTests(unittest.TestCase):
         self.assertEqual(status["state"], "cancelled")
         self.assertTrue(status["interrupted"])
 
-    # The ladder page's default run form.
+    # The ladder page's default run form (the case is a separate selection).
     form = MappingProxyType(
         {
-            "case": "3L-zero-momentum",
             "arithmetic": "modular_polynomial",
             "n_cores": 2,
             "max_seconds": 600,
@@ -1622,31 +1724,31 @@ class GalleryLadderTests(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertIsNone(Gallery.ladder_job(value))
 
-    def test_progress_rows_summarize_the_native_snapshot(self):
-        status = {
-            "state": "running",
-            "elapsed_seconds": 12.5,
-            "stage": {"stage": "Ordered reduction"},
-            "resources": {"worker_rss_bytes": 2 * 1024**3},
-            "native_progress": {
-                "snapshot": {
-                    "monitor": {"phase": "ordered_reduction"},
-                    "ordered_reduction": {
-                        "completed_phases": 3,
-                        "total_phases": 9,
-                        "phase_kind": "Routing",
-                        "frontier_keys": 1234,
-                        "processed_keys": 5,
-                    },
-                }
-            },
-        }
-        rows = dict(Gallery.progress_rows(status))
-        self.assertEqual(rows["Stage"], "Ordered reduction")
-        self.assertEqual(rows["Ordered phases"], "3 / 9 (Routing)")
-        self.assertEqual(rows["Frontier keys"], "1,234")
-        self.assertEqual(rows["Worker RSS"], "2.00 GiB")
-        self.assertEqual(dict(Gallery.progress_rows({}))["State"], "unknown")
+    def test_job_status_carries_the_unbudgeted_native_model(self):
+        with tempfile.TemporaryDirectory() as root:
+            work = Path(root) / "3L-zero-momentum-1"
+            work.mkdir()
+            (work / "status.json").write_text(json.dumps({"state": "running"}))
+            model = {
+                "status": "Running",
+                "ordered": {
+                    "phase": {"index": 3, "total": 9, "kind": "apply"},
+                    # Wider than display_receipt's budget: never truncated here.
+                    "phases": [{"index": i, "keys": i} for i in range(500)],
+                },
+            }
+            (work / "monitor.json").write_text(
+                json.dumps({"monitor": {"schema": "vakint.monitor.v2", "model": model}})
+            )
+            with patch.dict(os.environ, {"VAKINT_GALLERY_WORK": root}):
+                live = Gallery.job_status(work)
+                self.assertEqual(live["monitor"]["ordered"]["phase"]["index"], 3)
+                self.assertEqual(len(live["monitor"]["ordered"]["phases"]), 500)
+                self.assertGreaterEqual(live["monitor"]["snapshot_age_seconds"], 0)
+                (work / "monitor.json").write_text(
+                    json.dumps({"monitor": {"schema": "other", "model": model}})
+                )
+                self.assertIsNone(Gallery.job_monitor(work))
 
 
 class GalleryExploreOnlyTests(unittest.TestCase):
@@ -1712,8 +1814,9 @@ class GalleryExploreOnlyTests(unittest.TestCase):
 
     def test_five_loop_page_offers_no_enabled_run_without_opt_in(self):
         source = (Gallery.directory / "03_five_loop_uv.py").read_text()
-        self.assertIn("disabled=not _enabled", source)
-        self.assertIn("Gallery.five_loop_runs_enabled()", source)
+        # Without the opt-in there is no run button at all, only a note.
+        self.assertIn("run_benchmark = None", source)
+        self.assertIn("if Gallery.five_loop_runs_enabled():", source)
         heavy = {
             "evaluate",
             "evaluate_integral",
@@ -1733,7 +1836,7 @@ class GalleryExploreOnlyTests(unittest.TestCase):
         self.assertEqual(calls, [])
 
     def test_ladder_page_starts_nothing_until_asked(self):
-        run, arguments = self.cell(
+        run, _arguments = self.cell(
             "05_ladder_reductions.py",
             lambda node: any(
                 isinstance(call, ast.Attribute) and call.attr == "start_reduction"
@@ -1741,30 +1844,40 @@ class GalleryExploreOnlyTests(unittest.TestCase):
             ),
         )
         gallery = SimpleNamespace(start_reduction=Mock(return_value="job"))
+        # The case comes from the page's one case selection (it also drives
+        # the graph preview and the Laurent panel), the rest from the form.
+        choice = SimpleNamespace(value="3L-zero-momentum")
         form = SimpleNamespace(
             value={
-                "case": "3L-zero-momentum",
                 "arithmetic": "exact",
                 "n_cores": 2,
                 "max_seconds": 60,
                 "ordered_cache": False,
             }
         )
+        shown = Mock()
         headless, request, started = run(
             Gallery=gallery,
+            case_choice=choice,
             mo=self.fake_mo(),
             run_button=SimpleNamespace(value=False),
             run_form=form,
+            set_shown_job=shown,
         )
         self.assertEqual((headless, request, started), (False, None, None))
         gallery.start_reduction.assert_not_called()
+        shown.assert_not_called()
         headless, request, started = run(
             Gallery=gallery,
+            case_choice=choice,
             mo=self.fake_mo(),
             run_button=SimpleNamespace(value=True),
             run_form=form,
+            set_shown_job=shown,
         )
         self.assertEqual(started, "job")
+        # The page now shows the run it just started.
+        shown.assert_called_once_with("job")
         self.assertIsNone(request["cancel_after"])
         gallery.start_reduction.assert_called_once_with(
             "3L-zero-momentum",
@@ -1819,9 +1932,11 @@ class GalleryExploreOnlyTests(unittest.TestCase):
             ):
                 run(
                     Gallery=gallery,
+                    case_choice=SimpleNamespace(value="4L-zero-momentum"),
                     mo=self.fake_mo("script", arguments),
                     run_button=SimpleNamespace(value=False),
                     run_form=form,
+                    set_shown_job=Mock(),
                 )
             self.assertEqual(stop.exception.code, 2)
             summary = json.loads(output.getvalue())
@@ -1848,7 +1963,11 @@ class GalleryExploreOnlyTests(unittest.TestCase):
 
     def test_ladder_page_keeps_showing_its_last_run(self):
         _, watch = self.ladder_cells()
-        gallery = SimpleNamespace(active_job=Mock(return_value=None))
+        gallery = SimpleNamespace(
+            active_job=Mock(return_value=None),
+            # Background jobs are reopened by name; in-kernel runs are not.
+            ladder_job=lambda name: None if name.startswith("kernel") else name,
+        )
         shown = {"job": None}
         query = {}
 
@@ -1882,6 +2001,13 @@ class GalleryExploreOnlyTests(unittest.TestCase):
         gallery.active_job.return_value = "/work/4L-zero-momentum-2"
         self.assertEqual(watched(None), "/work/4L-zero-momentum-2")
         self.assertEqual(shown["job"], "/work/4L-zero-momentum-2")
+        self.assertEqual(query, {"job": "4L-zero-momentum-2"})
+        # The latest run wins over an older started job (an in-kernel run set
+        # the shown run), and an in-kernel run never enters the URL.
+        shown["job"] = "/work/kernel/kernel-3L-1"
+        self.assertEqual(
+            watched("/work/3L-zero-momentum-1"), "/work/kernel/kernel-3L-1"
+        )
         self.assertEqual(query, {"job": "4L-zero-momentum-2"})
 
     def test_inspection_page_offers_the_five_loop_load_only_with_opt_in(self):
@@ -1952,6 +2078,1338 @@ class GalleryExploreOnlyTests(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as empty:
             self.assertIsNone(Gallery.five_loop_plan(empty))
+
+
+class FakeHtml:
+    """marimo's Html: ``text`` and a ``_mime_`` method."""
+
+    def __init__(self, text):
+        self.text = text
+
+    def _mime_(self):
+        return ("text/html", self.text)
+
+
+def fake_display_mo(**extra):
+    return SimpleNamespace(
+        Html=FakeHtml,
+        md=lambda text: ("md", text),
+        vstack=lambda values: values,
+        iframe=lambda payload, **kwargs: ("iframe", payload, kwargs),
+        **extra,
+    )
+
+
+class GalleryMonitorCardTests(unittest.TestCase):
+    """The simplified progress monitor (jobs, in-kernel calls, recorded runs)."""
+
+    def setUp(self):
+        self.mo = fake_display_mo()
+        self.recorded = json.loads(
+            (Gallery.directory / "data/five-loop-q0/monitor-model.json").read_text()
+        )
+
+    def card(self, model, **kwargs):
+        return Gallery.monitor_card(self.mo, model, **kwargs).text
+
+    def test_recorded_five_loop_model_shows_the_key_metrics(self):
+        text = self.card(self.recorded, title="Recorded")
+        self.assertIn("Succeeded", text)
+        self.assertIn('aria-valuenow="83"', text)
+        self.assertIn("Ordered schedule: 83 / 83 phases done", text)
+        # The run ended in its output stage, after the schedule completed.
+        self.assertIn("Recorded · Output · report serialization", text)
+        self.assertIn("6,304", text)  # request-average keys per second
+        self.assertIn("peak 174.9K", text)  # frontier peak
+        self.assertIn("0 / 361.4K", text)  # step cache hits / misses
+        self.assertIn("1,750 input keys", text)
+        self.assertIn("964.6K", text)  # processed keys
+        self.assertIn("peak 14.0 GiB", text)
+        self.assertIn("modular_polynomial · 4 cores", text)
+        self.assertIn("Stages: Data load 51.3 s", text)
+        self.assertIn("Native reduction 2:33", text)
+        self.assertNotIn("No update", text)
+
+    def test_running_partial_and_missing_models(self):
+        model = {
+            "status": "Running",
+            "elapsed_seconds": 154.0,
+            "stage": {"kind": "native", "id": "native"},
+            "ordered": {
+                "phase": {
+                    "index": 38,
+                    "total": 83,
+                    "kind": "apply",
+                    "support": 6,
+                    "owner": 1,
+                },
+                "recent_rate": {"keys": 63120, "seconds": 10.0},
+                "processed_keys": 12345,
+            },
+            "batch": {"completed": 0, "total": 1, "label": "5L / Retain"},
+        }
+        text = self.card(model)
+        self.assertIn("Native reduction · Apply phase · support 6 · owner 1", text)
+        self.assertIn("width:45.8%", text)
+        self.assertIn("6,312", text)  # keys per second
+        self.assertIn("2:34 elapsed", text)
+        self.assertIn("0 / 1", text)
+        self.assertNotIn("Step cache", text)  # absent parts are omitted
+        self.assertIn("Starting", self.card(None))
+        self.assertIn("Running", self.card(None))
+        stale = self.card({**model, "snapshot_age_seconds": 30.0})
+        self.assertIn("No update for 30.0 s", stale)
+        lift = self.card(
+            {**model, "ordered": {"phase": {"index": 83, "total": 83, "kind": "done"}}}
+        )
+        self.assertIn("report no live census", lift)
+        failed = self.card(model, state="cancelled")
+        self.assertIn("Cancelled", failed)
+        self.assertNotIn("report no live census", failed)
+
+    def test_job_card_uses_the_worker_stage_before_the_native_monitor(self):
+        status = {
+            "state": "running",
+            "elapsed_seconds": 7.5,
+            "stage": {"stage": "loading 4L external data"},
+            "resources": {
+                "worker_rss_bytes": 3 * 1024**3,
+                "worker_peak_rss_bytes": 4 * 1024**3,
+            },
+            "monitor": None,
+        }
+        text = Gallery.job_monitor_card(self.mo, status).text
+        self.assertIn("loading 4L external data", text)
+        # Between the supervisor's five-second status writes the clock runs on.
+        later = Gallery.job_monitor_card(
+            self.mo, {**status, "updated_unix_seconds": time.time() - 3}
+        ).text
+        self.assertRegex(later, r"10\.\d s elapsed")
+        self.assertIn("3.0 GiB", text)
+        self.assertIn("peak 4.0 GiB", text)
+        self.assertIn("7.5 s elapsed", text)
+        status["monitor"] = {
+            "stage": {"kind": "native"},
+            "ordered": {"phase": {"index": 1, "total": 2, "kind": "route"}},
+        }
+        text = Gallery.job_monitor_card(self.mo, status).text
+        self.assertIn("Native reduction · Route phase", text)
+        self.assertNotIn("loading 4L", text)
+        self.assertIn(
+            "&lt;b&gt;",
+            Gallery.monitor_card(
+                self.mo, {"stage": {"kind": "setup"}}, activity="<b>"
+            ).text,
+        )
+
+    def test_progress_snapshots_become_models(self):
+        native = SimpleNamespace(
+            status="interrupted",
+            to_dict=lambda: {"status": "Running", "elapsed_seconds": 2.0},
+        )
+        self.assertEqual(Gallery.progress_model(native)["status"], "interrupted")
+        load = SimpleNamespace(
+            status="running",
+            elapsed_seconds=3.0,
+            stage="data_load",
+            activity="loading 1L-4L external data",
+            rss_bytes=1024**3,
+            peak_rss_bytes=None,
+            to_dict=dict,
+        )
+        model = Gallery.progress_model(load)
+        self.assertEqual(model["stage"]["kind"], "data_load")
+        text = self.card(model)
+        self.assertIn("Data load · loading 1L-4L external data", text)
+        self.assertIn("1.0 GiB", text)
+        shown = []
+        mo = fake_display_mo(output=SimpleNamespace(replace=shown.append))
+        Gallery.kernel_progress(mo, title="In this kernel")(load)
+        self.assertIn("In this kernel · Data load", shown[0].text)
+
+
+class GalleryPresentationHelperTests(unittest.TestCase):
+    def test_static_formula_rewrites_only_the_live_route_sentence(self):
+        footer = (
+            "<p>Expression preview · items 1–25 of 31. Omitted subexpressions are "
+            "marked ⋯. Use .formatted(page_size=25) in a live notebook with "
+            "symbolica[notebook] to navigate.</p>"
+        )
+        value = SimpleNamespace(_repr_html_=lambda: "<math>x</math>" + footer)
+        text = Gallery.static_formula(
+            fake_display_mo(), value, note="See the pager."
+        ).text
+        self.assertIn("items 1–25 of 31", text)
+        self.assertIn("marked ⋯", text)
+        self.assertIn("See the pager.", text)
+        self.assertNotIn("symbolica[notebook]", text)
+        unchanged = Gallery.static_formula(fake_display_mo(), value).text
+        self.assertIn("symbolica[notebook]", unchanged)
+
+    def test_formula_is_live_when_display_packages_exist_else_static(self):
+        expression = SimpleNamespace(
+            formatted=Mock(return_value="live"),
+            _repr_html_=lambda: (
+                "<math>x</math><p>Use .formatted(page_size=25) in a live notebook with symbolica[notebook] to navigate.</p>"
+            ),
+        )
+        mo = fake_display_mo()
+        with patch.object(Gallery, "live_pager_available", return_value=True):
+            self.assertEqual(Gallery.formula(mo, expression), "live")
+        expression.formatted.assert_called_once_with(page_size=25)
+        with patch.object(Gallery, "live_pager_available", return_value=False):
+            text = Gallery.formula(mo, expression).text
+        self.assertIn("symbolica[notebook-display]", text)
+        self.assertIn("Live pager unavailable", text)
+
+        class TensorExpression:
+            def paged(self, page_size):
+                return ("tensor pager", page_size)
+
+            def to_expression(self):
+                return expression
+
+        with patch.object(Gallery, "live_pager_available", return_value=True):
+            self.assertEqual(
+                Gallery.formula(mo, TensorExpression(), page_size=10),
+                ("tensor pager", 10),
+            )
+        # Without Typst a tensor falls back to the MathML pager of its expression.
+        with patch.object(
+            Gallery, "live_pager_available", side_effect=lambda tensor=False: not tensor
+        ):
+            self.assertEqual(Gallery.formula(mo, TensorExpression()), "live")
+
+    def test_table_wraps_escapes_and_keeps_html_cells(self):
+        text = Gallery.table(
+            fake_display_mo(),
+            [
+                {
+                    "name": "<b>",
+                    "link": FakeHtml('<a href="?job=x">show</a>'),
+                    "n": 12345,
+                    "x": None,
+                }
+            ],
+            numeric=("n",),
+            caption="c",
+        ).text
+        self.assertIn("&lt;b&gt;", text)
+        self.assertIn('<a href="?job=x">show</a>', text)
+        self.assertIn('<td class="num">12,345</td>', text)
+        self.assertIn("<td>—</td>", text)
+        self.assertIn("<caption>c</caption>", text)
+
+    def test_number_formats(self):
+        self.assertEqual(Gallery.compact(1284), "1,284")
+        self.assertEqual(Gallery.compact(12_900), "12.9K")
+        self.assertEqual(Gallery.compact(3_400_000), "3.4M")
+        self.assertEqual(Gallery.duration(12.34), "12.3 s")
+        self.assertEqual(Gallery.duration(154), "2:34")
+        self.assertEqual(Gallery.duration(3723), "1:02:03")
+        self.assertEqual(Gallery.size_text(46_265_113), "46 MB")
+        self.assertEqual(Gallery.size_text(583_200_704), "583 MB")
+        self.assertIsNone(Gallery.size_text(None))
+        self.assertEqual(
+            Gallery.short_numbers(
+                "absolute uncertainty 4.4408920985006261616945266723632812500000...e-16 at 1/3"
+            ),
+            "absolute uncertainty 4.44e-16 at 1/3",
+        )
+        self.assertEqual(Gallery.short_numbers("2.5 and 1.25"), "2.5 and 1.25")
+        self.assertEqual(
+            Gallery.execution_metrics("modular_polynomial · 4 cores"),
+            [
+                ("modular_polynomial", "Ordered weight arithmetic"),
+                ("4", "worker cores"),
+            ],
+        )
+
+    def test_term_browser_splits_masters_prefactor_and_coefficient(self):
+        try:
+            from symbolica import E
+        except ImportError:
+            self.skipTest("the native host is not installed")
+        family = "e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4"
+        other = "56d4ac620f0309e551e825ce435d23ee4b58e887f2ee6390e2f8f4a8f3a1b2c3"
+        value = E(
+            f"vakint::RustRedMaster(vakint::rustred_family_{family},1)^2"
+            f"*vakint::RustRedMaster(vakint::rustred_family_{other},1,1,0)"
+            "*(1+x+x^2+x^3)*(y-2)^-1"
+            f"+3*vakint::RustRedMaster(vakint::rustred_family_{family},1)*(z+1)"
+        )
+        captured = {}
+
+        def dropdown(options, value=None, label=None, full_width=False):
+            captured.update(options=options, value=value, label=label)
+            return SimpleNamespace(value=options[value])
+
+        mo = fake_display_mo(ui=SimpleNamespace(dropdown=dropdown))
+        Gallery.term_selector(mo, value)
+        labels = list(captured["options"])
+        self.assertEqual(len(labels), 2)
+        self.assertIn("Open one term (2)", captured["label"])
+        big = next(label for label in labels if "×" in label)
+        self.assertIn("(1L · family e74e81b2 · powers (1))^2", big)
+        self.assertIn("2L · family 56d4ac62 · powers (1,1,0)", big)
+        self.assertIn("coefficient of 4 terms", big)
+        self.assertIsNone(Gallery.term_selector(mo, E("x")))
+        with patch.object(Gallery, "formula", return_value="live pager"):
+            parts = Gallery.term_view(mo, value, captured["options"][big])
+        self.assertEqual(parts[-1], "live pager")
+        self.assertIn("its formal masters", parts[0].text)
+
+    def test_master_labels_read_loops_family_and_powers(self):
+        family = "e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4"
+        self.assertEqual(
+            Gallery.master_label(f"RustRedMaster(rustred_family_{family},1)"),
+            "1L · family e74e81b2 · powers (1)",
+        )
+        self.assertEqual(
+            Gallery.master_label(f"RustRedMaster(rustred_family_{family},1,1,1,0,1,0)"),
+            "3L · family e74e81b2 · powers (1,1,1,0,1,0)",
+        )
+        five = ",".join(["-1", "1", "-1", "0"] + ["1"] * 11)
+        self.assertTrue(
+            Gallery.master_label(
+                f"RustRedMaster(rustred_family_{family},{five})"
+            ).startswith("5L · ")
+        )
+        self.assertEqual(Gallery.master_label("unparsed"), "unparsed")
+        symbols = [
+            SimpleNamespace(
+                expression=f"RustRedMaster(rustred_family_{family},1,1,1,0,1,0)"
+            ),
+            SimpleNamespace(expression=f"RustRedMaster(rustred_family_{family},1)"),
+        ]
+        options = Gallery.master_options(symbols)
+        self.assertEqual(next(iter(options)), "1L · family e74e81b2 · powers (1)")
+        self.assertEqual(
+            options["1L · family e74e81b2 · powers (1)"], str(symbols[1].expression)
+        )
+
+    def test_catalogue_summary_reads_counts_and_sizes_from_manifests(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            (root / "5L").mkdir()
+            (root / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "version": "v9",
+                        "loop_packs": [
+                            {"loop_count": 5, "manifest": "5L/manifest.json"}
+                        ],
+                    }
+                )
+            )
+            (root / "5L/manifest.json").write_text(
+                json.dumps(
+                    {
+                        "masters": [
+                            {"coefficients": [{"numerical": True}]},
+                            {"coefficients": [{"numerical": False}]},
+                            {"coefficients": []},
+                        ],
+                        "files": {"a": {"bytes": 1000}, "b": {"bytes": 2000}},
+                    }
+                )
+            )
+            summary = Gallery.catalogue_summary(root)
+            self.assertEqual(summary["version"], "v9")
+            five = summary["loops"][5]
+            self.assertEqual((five["masters"], five["computed"]), (3, 1))
+            self.assertEqual(
+                five["bytes"], 3000 + (root / "5L/manifest.json").stat().st_size
+            )
+        with tempfile.TemporaryDirectory() as empty:
+            self.assertIsNone(Gallery.catalogue_summary(empty))
+
+    def test_theme_follows_the_notebook_not_the_operating_system(self):
+        for css in (Gallery.styles(), Gallery.styles(frame=True)):
+            self.assertNotIn("prefers-color-scheme", css)
+            self.assertIn(".dark-theme", css)
+        # The Rust cards' own media query is overridden in both directions.
+        self.assertIn(":is(.light,.light-theme", Gallery.styles())
+        frame = Gallery.frame(fake_display_mo(), "<p>x</p>", height=300)
+        self.assertEqual(frame[2], {"height": "300px"})
+        self.assertIn("window.parent.document.body", frame[1])
+
+    def test_edit_mode_navigation_opens_notebook_files(self):
+        # The edit server opens each page in marimo's app view (outputs only).
+        for mode, link, job in (
+            (
+                "edit",
+                "/?file=02_constants_and_masters.py&amp;view-as=present",
+                "/?file=05_ladder_reductions.py&amp;view-as=present&amp;job=j%201",
+            ),
+            ("run", "/inspect/", "?job=j%201"),
+        ):
+            mo = fake_display_mo(app_meta=lambda mode=mode: SimpleNamespace(mode=mode))
+            with self.subTest(mode=mode), patch.dict(os.environ, {}, clear=True):
+                self.assertIn(
+                    f'href="{link}"', Gallery.header(mo, "graphs", "T", "S").text
+                )
+                self.assertIn(f'href="{job}"', Gallery.job_link(mo, "j 1").text)
+
+    def test_pages_hold_no_stale_catalogue_literals(self):
+        for path in sorted(Gallery.directory.glob("0*.py")):
+            source = path.read_text()
+            for literal in (
+                "640",
+                "140 MB",
+                "435 MB",
+                'uncomputed"',
+                'version="latest"',
+            ):
+                with self.subTest(page=path.name, literal=literal):
+                    self.assertNotIn(literal, source)
+
+    def test_reduce_worker_sets_no_in_process_time_budget(self):
+        tree = ast.parse((Gallery.directory / "reduce_worker.py").read_text())
+        keywords = {
+            keyword.arg
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            for keyword in node.keywords
+        }
+        self.assertNotIn("max_elapsed_seconds", keywords)
+
+
+class GalleryFiveLoopFixtureTests(unittest.TestCase):
+    def test_shipped_recorded_run_is_checked_and_current(self):
+        fixture = Gallery.five_loop_fixture()
+        report = fixture["report"]
+        self.assertEqual(
+            report["catalogue_closure"], {**report["catalogue_closure"], "closed": True}
+        )
+        self.assertEqual(report["data"]["version"], "v0.2.1")
+        self.assertNotIn("path", report["data"])
+        self.assertEqual(fixture["model"]["ordered"]["phase"]["total"], 83)
+        self.assertNotIn("worker_pid", fixture["model"]["details"])
+        path, digest = fixture["retained"]
+        self.assertEqual(digest, report["retained"]["sha256"])
+        self.assertEqual(
+            len(Gallery.checked_bytes(path, digest)), report["retained"]["bytes"]
+        )
+        with self.assertRaisesRegex(ValueError, "checksum"):
+            Gallery.checked_bytes(path, "0" * 64)
+
+
+class GalleryKernelRunTests(unittest.TestCase):
+    def test_kernel_button_only_in_edit_mode(self):
+        source = (Gallery.directory / "05_ladder_reductions.py").read_text()
+        self.assertIn('if Gallery.mode(mo) == "edit"', source)
+        self.assertIn("Gallery.reduce_in_kernel(", source)
+
+    def test_interrupted_kernel_run_is_recorded_and_reraised(self):
+        import reduce_worker
+
+        with (
+            tempfile.TemporaryDirectory() as root,
+            patch.dict(os.environ, {"VAKINT_GALLERY_WORK": root}, clear=False),
+        ):
+            work = Gallery.kernel_work("3L-zero-momentum", n_cores=1)
+            self.assertEqual(
+                json.loads((Path(work) / "request.json").read_text())["kind"], "kernel"
+            )
+            with (
+                patch.object(reduce_worker, "run", side_effect=KeyboardInterrupt),
+                self.assertRaises(KeyboardInterrupt),
+            ):
+                Gallery.reduce_in_kernel(work)
+            status = gallery_jobs.status(work)
+            self.assertEqual(status["state"], "cancelled")
+            self.assertTrue(status["interrupted"])
+            self.assertEqual(Gallery.job_status(work)["state"], "cancelled")
+            # In-kernel runs are per session: never listed with background jobs.
+            self.assertNotIn(work, Gallery.jobs())
+            with patch.object(reduce_worker, "run", return_value=0):
+                Gallery.reduce_in_kernel(work)
+            self.assertEqual(gallery_jobs.status(work)["state"], "complete")
+
+    def test_interrupted_kernel_run_shows_its_final_card_in_its_own_cell(self):
+        # marimo re-runs no other cell after an Interrupt: the cell that ran
+        # the reduction must show the interrupted state itself.
+        source = (Gallery.directory / "05_ladder_reductions.py").read_text()
+        self.assertIn("Gallery.kernel_outcome(", source)
+        self.assertNotIn('set_shown_job(kernel_job)\n    mo.md("")', source)
+        mo = fake_display_mo(
+            output=SimpleNamespace(replace=lambda value: None),
+            callout=lambda text, kind=None: ("callout", text),
+        )
+        with (
+            tempfile.TemporaryDirectory() as root,
+            patch.dict(os.environ, {"VAKINT_GALLERY_WORK": root}, clear=False),
+        ):
+            work = Gallery.kernel_work("3L-zero-momentum", n_cores=1)
+            progress = Gallery.kernel_progress(mo, title="In this kernel")
+            progress(
+                {
+                    "status": "Running",
+                    "elapsed_seconds": 12.0,
+                    "stage": {"kind": "native", "id": "native"},
+                    "ordered": {"phase": {"index": 38, "total": 83, "kind": "apply"}},
+                }
+            )
+            (Path(work) / "status.json").write_text(
+                json.dumps(
+                    {"state": "cancelled", "kind": "kernel", "elapsed_seconds": 12.5}
+                )
+            )
+            card, note = Gallery.kernel_outcome(
+                mo, work, progress=progress, interrupted=True
+            )
+            self.assertIn("Interrupted", card.text)
+            self.assertIn('aria-valuenow="38"', card.text)
+            text = note.text
+            self.assertIn("Interrupted in this kernel", text)
+            self.assertIn("Native reduction · Apply 38/83", text)
+            self.assertIn("still show the run before this one", text)
+            (Path(work) / "status.json").write_text(
+                json.dumps(
+                    {"state": "complete", "kind": "kernel", "elapsed_seconds": 30}
+                )
+            )
+            _, note = Gallery.kernel_outcome(mo, work, progress=progress)
+            self.assertIn("Finished in this kernel", note.text)
+
+    def test_background_jobs_skip_in_call_interruption(self):
+        # Jobs stop by SIGTERM/SIGKILL of their process group, never Ctrl-C.
+        import reduce_worker
+
+        with tempfile.TemporaryDirectory() as root:
+            (Path(root) / "request.json").write_text(
+                json.dumps({"spec": {"case": "3L-zero-momentum"}})
+            )
+            with (
+                patch.object(sys, "argv", ["reduce_worker.py", root]),
+                patch.object(reduce_worker, "run", return_value=0) as run,
+            ):
+                self.assertEqual(reduce_worker.main(), 0)
+            self.assertEqual(run.call_args.args[1]["interrupt"], "off")
+        # In-kernel runs keep the default.
+        self.assertEqual(Gallery.interrupt_options(None), {})
+
+    def test_worker_records_an_interrupt_before_reraising(self):
+        import reduce_worker
+
+        with tempfile.TemporaryDirectory() as root:
+            with (
+                patch.object(reduce_worker, "reduce", side_effect=KeyboardInterrupt),
+                self.assertRaises(KeyboardInterrupt),
+            ):
+                reduce_worker.run(root, {"case": "3L-zero-momentum"})
+            receipt = json.loads((Path(root) / "benchmark.json").read_text())
+            self.assertTrue(receipt["interrupted"])
+            self.assertEqual(receipt["error"], "Interrupted")
+
+
+class GalleryPageLayoutTests(unittest.TestCase):
+    """Pages read as a sequence of outputs; DOT shows as plain text."""
+
+    def cells(self, path):
+        tree = ast.parse(path.read_text())
+        return [
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef)
+            and any(
+                "app.cell" in ast.unparse(decorator)
+                for decorator in node.decorator_list
+            )
+        ]
+
+    def test_every_cell_hides_its_code(self):
+        # The code of every cell (setup cells included) is folded away; the
+        # reader expands it per cell. Output-less cells then take no space.
+        for path in sorted(Gallery.directory.glob("0*.py")):
+            cells = self.cells(path)
+            self.assertTrue(cells, path.name)
+            for cell in cells:
+                with self.subTest(page=path.name, line=cell.lineno):
+                    self.assertEqual(
+                        [ast.unparse(d) for d in cell.decorator_list],
+                        ["app.cell(hide_code=True)"],
+                    )
+
+    def test_dot_is_never_declared_as_a_code_language(self):
+        # marimo's editor has no DOT grammar ("Language dot not supported").
+        for path in [
+            *sorted(Gallery.directory.glob("0*.py")),
+            Gallery.directory / "shared_gallery.py",
+        ]:
+            tree = ast.parse(path.read_text())
+            languages = [
+                keyword.value.value
+                for node in ast.walk(tree)
+                if isinstance(node, ast.Call)
+                for keyword in node.keywords
+                if keyword.arg == "language" and isinstance(keyword.value, ast.Constant)
+            ]
+            with self.subTest(page=path.name):
+                self.assertNotIn("dot", [str(value).lower() for value in languages])
+                self.assertNotIn("```dot", path.read_text())
+        editor = Mock()
+        mo = SimpleNamespace(ui=SimpleNamespace(code_editor=editor))
+        Gallery.dot_source(mo, "digraph g { a -> b; }")
+        editor.assert_called_once_with(
+            "digraph g { a -> b; }", language="text", disabled=True
+        )
+        for page in (
+            "01_graphs_and_numerators.py",
+            "02_constants_and_masters.py",
+            "05_ladder_reductions.py",
+        ):
+            self.assertIn("Gallery.dot_source(", (Gallery.directory / page).read_text())
+
+    def test_the_ladder_page_draws_the_selected_input_graph(self):
+        page = Gallery.directory / "05_ladder_reductions.py"
+        cell = next(
+            node
+            for node in self.cells(page)
+            if any(
+                isinstance(target, ast.Name) and target.id == "input_diagram"
+                for assign in ast.walk(node)
+                if isinstance(assign, ast.Assign)
+                for target in assign.targets
+            )
+        )
+        self.assertIn("case_choice", {arg.arg for arg in cell.args.args})
+        cell.decorator_list = []
+        namespace = {}
+        exec(  # noqa: S102 - Execute only this cell with fake values.
+            compile(ast.Module(body=[cell], type_ignores=[]), str(page), "exec"),
+            namespace,
+        )
+        diagram = SimpleNamespace(
+            loop_count=4, internal_edges=[1] * 9, external_edges=[1, 2]
+        )
+        gallery = Mock()
+        gallery.ladder_diagram.return_value = diagram
+        mo = SimpleNamespace(
+            vstack=lambda parts: parts, accordion=lambda panels: panels
+        )
+        (shown,) = namespace["_"](
+            Gallery=gallery,
+            case_choice=SimpleNamespace(value="4L-zero-momentum"),
+            ladder_cases=Gallery.ladder_cases(),
+            mo=mo,
+        )
+        self.assertIs(shown, diagram)
+        gallery.ladder_diagram.assert_called_once_with(4)
+        # The same FeynKit view as page 01, and its DOT source as plain text.
+        gallery.diagram_frame.assert_called_once_with(mo, diagram)
+        gallery.dot_source.assert_called_once()
+        self.assertIn(
+            "Gallery.diagram_frame(mo, diagram)",
+            (Gallery.directory / "01_graphs_and_numerators.py").read_text(),
+        )
+
+    def test_diagram_frame_reuses_the_theme_following_frame(self):
+        drawing = Mock()
+        drawing.to_html.return_value = "<svg/>"
+        diagram = SimpleNamespace(loop_count=3, render=Mock(return_value=drawing))
+        with patch.object(Gallery, "frame", return_value="frame") as frame:
+            self.assertEqual(Gallery.diagram_frame("mo", diagram), "frame")
+            frame.assert_called_once_with("mo", "<svg/>", height=380)
+            Gallery.diagram_frame("mo", diagram, height=300)
+            self.assertEqual(frame.call_args.kwargs["height"], 300)
+        diagram.render.assert_called_with(momenta=True)
+
+
+def fake_component(text, digits, *, zero=False, error="1E-40", quality="Bounded"):
+    return {
+        "text": text,
+        "digits": digits,
+        "exact_zero": zero,
+        "error": error,
+        "quality": quality,
+    }
+
+
+class GalleryLaurentTests(unittest.TestCase):
+    """Input graph -> Laurent series: values, orders, digits, presentation."""
+
+    def setUp(self):
+        for name in ("_laurent_symbolic", "_laurent_engines"):
+            saved = getattr(Gallery, name)
+            setattr(Gallery, name, type(saved)())
+            self.addCleanup(setattr, Gallery, name, saved)
+
+    parameters: ClassVar[list] = [
+        {
+            "name": "vakint::mUV",
+            "key": "mUV",
+            "label": "m_UV",
+            "latex": "m",
+            "meaning": "mass",
+        },
+        {
+            "name": "vakint::mursq",
+            "key": "mursq",
+            "label": "μ_R²",
+            "latex": "mu",
+            "meaning": "scale",
+        },
+        {
+            "name": "UFO::G",
+            "key": "UFO::G",
+            "label": "G",
+            "latex": "G",
+            "meaning": "coupling",
+        },
+    ]
+
+    def test_parameter_values_are_exact_and_checked(self):
+        values = Gallery.laurent_values(
+            self.parameters,
+            {"vakint::mUV": "91.1876", "vakint::mursq": "1/3", "UFO::G": "-2.5e-1"},
+        )
+        self.assertEqual(values["vakint::mUV"], Fraction(911876, 10000))
+        self.assertEqual(values["vakint::mursq"], Fraction(1, 3))
+        self.assertEqual(values["UFO::G"], Fraction(-1, 4))
+        for broken, message in (
+            ({"vakint::mUV": "1", "vakint::mursq": "1"}, "Set a value for G"),
+            ({"vakint::mUV": "x", "vakint::mursq": "1", "UFO::G": "1"}, "m_UV"),
+            ({"vakint::mUV": "1/0", "vakint::mursq": "1", "UFO::G": "1"}, "m_UV"),
+            ({"vakint::mUV": "-1", "vakint::mursq": "1", "UFO::G": "1"}, "positive"),
+            ({"vakint::mUV": "1", "vakint::mursq": "0", "UFO::G": "1"}, "positive"),
+        ):
+            with (
+                self.subTest(values=broken),
+                self.assertRaisesRegex(ValueError, message),
+            ):
+                Gallery.laurent_values(self.parameters, broken)
+
+    def test_rounding_and_plain_text(self):
+        self.assertEqual(
+            Gallery.rounded_decimal("6.0194529704621081949643381650127629E-7", 5),
+            ("", "6.0195", -7),
+        )
+        self.assertEqual(
+            Gallery.rounded_decimal("-0.0000011286474319616452865558", 3),
+            ("-", "1.13", -6),
+        )
+        self.assertEqual(Gallery.rounded_decimal("1.5", 4), ("", "1.500", 0))
+        self.assertEqual(Gallery.rounded_decimal("0", 9), ("", "0", 0))
+        # Digits: the requested ones, fewer when Vakint vouches for fewer.
+        self.assertEqual(
+            Gallery.component_text(fake_component("1.23456789E-3", 61), 4), "1.235e-3"
+        )
+        self.assertEqual(
+            Gallery.component_text(fake_component("1.23456789E-3", 2), 30), "1.2e-3"
+        )
+        self.assertEqual(
+            Gallery.component_text(fake_component("0", None, zero=True), 30), "0"
+        )
+        # An uncertain zero shows its error radius, never invented digits.
+        self.assertEqual(
+            Gallery.component_text(
+                fake_component("1E-70", None, error="4.6365E-68"), 30
+            ),
+            "0 ± 4.64e-68",
+        )
+
+    def test_coefficients_in_latex_align_their_sign(self):
+        imaginary = {
+            "power": -3,
+            "real": fake_component("0", None, zero=True),
+            "imaginary": fake_component("6.0194529704621081949643E-7", 61),
+        }
+        self.assertEqual(
+            Gallery.coefficient_latex(imaginary, 12),
+            r"\phantom{-}6.01945\mkern3mu 29704\mkern3mu 6\times10^{-7}\,i",
+        )
+        # The headline keeps the leading digits of the full value, then "…".
+        self.assertEqual(
+            Gallery.coefficient_latex(imaginary, 12, 7),
+            r"\phantom{-}6.01945\mkern3mu 2\ldots\times10^{-7}\,i",
+        )
+        both = {
+            "power": 0,
+            "real": fake_component("-2.5", 40),
+            "imaginary": fake_component("-0.125", 40),
+        }
+        self.assertEqual(
+            Gallery.coefficient_latex(both, 3), r"-2.50 - 1.25\times10^{-1}\,i"
+        )
+
+    def summary(self, **extra):
+        rows = [
+            {
+                "power": power,
+                "real": fake_component("0", None, zero=True),
+                "imaginary": fake_component(f"{power + 5}.5E-7", 57),
+            }
+            for power in (-3, -2, -1, 0, 1)
+        ]
+        return {
+            "case": "3L-zero-momentum",
+            "label": "3L ladder · zero momentum",
+            "loop_count": 3,
+            "digits": 4,
+            "orders": [-3, 1],
+            "through": 1,
+            "coefficients": rows,
+            "missing": None,
+            "warnings": [],
+            "parameters": [{**p, "value": "1"} for p in self.parameters],
+            "constants": ["symbolica::𝜋", "vakint::cl4"],
+            "data": "3L external data v0.2.1",
+            "cached": False,
+            "seconds": {"symbolic": 0.4, "numerical": 0.05},
+            **extra,
+        }
+
+    def test_series_latex_lists_every_order_and_the_tail(self):
+        text = Gallery.laurent_latex(self.summary())
+        self.assertIn(
+            r"\mathcal{I}(\varepsilon) = c_{-3}\,\varepsilon^{-3}"
+            r" + c_{-2}\,\varepsilon^{-2}"
+            r" + c_{-1}\,\varepsilon^{-1} + c_{0} + c_{1}\,\varepsilon"
+            r" + \mathcal{O}(\varepsilon^{2})",
+            text,
+        )
+        self.assertIn(r"c_{-3} &= \phantom{-}2.500\times10^{-7}\,i", text)
+        self.assertIn(r"\begin{aligned}", text)
+        # A narrower range shows only its orders, with the lower ones elided.
+        text = Gallery.laurent_latex(self.summary(orders=[-1, 0]))
+        self.assertIn(
+            r"= \cdots + c_{-1}\,\varepsilon^{-1} + c_{0} + \mathcal{O}(\varepsilon)",
+            text,
+        )
+        self.assertNotIn("c_{-2} &=", text)
+
+    def missing(self):
+        return {
+            "message": "the result through 𝒪(ε^2) needs master Laurent coefficients",
+            "backend": "RustRed, data v0.2.1",
+            "requested_order": 2,
+            "masters": [
+                {
+                    "master": f"L3_{n}_p0 (3-loop, RustRedMaster(...))",
+                    "first_missing": 3,
+                    "last_needed": 3,
+                    "first_affected": 2,
+                }
+                for n in range(4)
+            ],
+            "first_affected": 2,
+        }
+
+    def test_fail_closed_orders_show_the_reason_not_a_number(self):
+        summary = self.summary(orders=[-3, 2], missing=self.missing())
+        text = Gallery.laurent_latex(summary)
+        self.assertIn(r"c_{2} &\quad \text{fails closed: MissingMasterOrders}", text)
+        self.assertIn(r"c_{1}\,\varepsilon + \mathcal{O}(\varepsilon^{2})", text)
+        self.assertEqual(
+            Gallery.missing_orders_text(summary["missing"]),
+            "it needs ε³ of 4 three-loop masters, which RustRed, data v0.2.1 "
+            "does not provide",
+        )
+        error = ValueError("Vakint error | the result through 𝒪(ε^2) needs …")
+        error.backend, error.requested_order = "RustRed, data v0.2.1", 2
+        error.masters = [
+            ("L4_x_p1 (4-loop, …)", 2, 3, 1),
+            ("L4_y_p1 (4-loop, …)", 3, 3, 2),
+        ]
+        missing = Gallery.missing_orders(error)
+        self.assertEqual(missing["first_affected"], 1)
+        self.assertTrue(missing["message"].startswith("the result through"))
+        self.assertEqual(
+            Gallery.missing_orders_text(missing),
+            "it needs ε² of 1 four-loop master, ε³ of 1 four-loop master, which "
+            "RustRed, data v0.2.1 does not provide",
+        )
+
+    def view_mo(self):
+        return SimpleNamespace(
+            Html=FakeHtml,
+            md=FakeHtml,
+            vstack=lambda parts: parts,
+            accordion=lambda panels: ("accordion", panels),
+            plain_text=lambda text: ("plain", text),
+            iframe=lambda payload, **kwargs: FakeHtml("<iframe srcdoc></iframe>"),
+        )
+
+    def test_view_puts_graph_arrow_and_series_side_by_side(self):
+        drawing = Mock()
+        drawing.to_html.return_value = "<svg/>"
+        diagram = SimpleNamespace(loop_count=3, render=Mock(return_value=drawing))
+        summary = self.summary(orders=[-3, 2], through=1, missing=self.missing())
+        summary["warnings"] = [
+            {
+                "message": "parameter G is limited",
+                "sources": [("UFO::{}::G", 15)],
+                "orders": [-3, -2],
+            }
+        ]
+        parts = Gallery.laurent_view(self.view_mo(), summary, diagram)
+        pipeline = parts[0].text
+        self.assertIn('class="vg-pipeline"', pipeline)
+        self.assertLess(pipeline.index("<iframe"), pipeline.index("→"))
+        self.assertLess(pipeline.index("→"), pipeline.index(r"\mathcal{I}"))
+        self.assertIn("d = 4 − 2ε · at m_UV = 1, μ_R² = 1, G = 1", pipeline)
+        texts = "".join(getattr(part, "text", "") for part in parts[1:])
+        self.assertIn("ε⁻³ … ε¹", texts)  # computed orders
+        self.assertIn("57", texts)  # fewest vouched digits
+        self.assertIn("ε² and higher fail closed", texts)
+        self.assertIn("MissingMasterOrders", texts)
+        self.assertIn("parameter G is limited (ε⁻³, ε⁻²)", texts)
+        accordion = parts[-1][1]
+        self.assertIn("Vakint's MissingMasterOrders message", accordion)
+
+    def test_series_reuses_the_symbolic_result_and_falls_back_before_missing_orders(
+        self,
+    ):
+        coefficient = SimpleNamespace(
+            numerical_value=SimpleNamespace(real="0", imag="1.25E-7"),
+            precision=SimpleNamespace(
+                real=SimpleNamespace(
+                    significant_digits=None,
+                    exact_zero=True,
+                    absolute_error="0",
+                    quality=SimpleNamespace(name="Bounded"),
+                ),
+                imaginary=SimpleNamespace(
+                    significant_digits=57,
+                    exact_zero=False,
+                    absolute_error="1E-64",
+                    quality=SimpleNamespace(name="Bounded"),
+                ),
+            ),
+        )
+        result = SimpleNamespace(
+            coefficients={power: coefficient for power in (-3, -2, -1, 0, 1)},
+            warnings=[],
+        )
+        expression = Mock()
+        expression.get_all_symbols.return_value = [
+            SimpleNamespace(get_name=lambda name=name: name)
+            for name in ("vakint::mUV", "vakint::ε", "vakint::cl4")
+        ]
+        engine = Mock()
+        engine.numerical_evaluation.return_value = (result, None)
+        symbolic = Mock(
+            side_effect=lambda case, terms, **_: (
+                ((None, self.missing()), False)
+                if terms == 6
+                else ((expression, None), terms == 5)
+            )
+        )
+
+        def numerical_engine(loops, **options):
+            # A new engine for these digits: its construction and data load
+            # are part of the evaluation's time.
+            options["timings"]["load"] += 8.25
+            return {"engine": engine, "version": "3L external data v0.2.1"}
+
+        with (
+            patch.object(Gallery, "laurent_parameters", return_value=self.parameters),
+            patch.object(Gallery, "laurent_symbolic", symbolic),
+            patch.object(Gallery, "laurent_engine", side_effect=numerical_engine),
+            patch.object(Gallery, "exact_expression", side_effect=str),
+        ):
+            summary = Gallery.laurent_series(
+                "3L-zero-momentum",
+                {"vakint::mUV": "2", "vakint::mursq": "1/3", "UFO::G": "1"},
+                digits=40,
+                orders=[-5, 2],
+            )
+        # ε^2 needs 6 terms and fails closed; the series stops at ε^1 (5 terms).
+        self.assertEqual([call.args[1] for call in symbolic.call_args_list], [6, 5])
+        self.assertEqual(summary["orders"], [-3, 2])
+        self.assertEqual(summary["through"], 1)
+        self.assertEqual(summary["missing"]["first_affected"], 2)
+        self.assertFalse(summary["cached"])
+        self.assertEqual(
+            engine.numerical_evaluation.call_args.args[1],
+            {"mUV": "2", "mursq": "1/3", "UFO::G": "1"},
+        )
+        self.assertEqual(
+            [row["power"] for row in summary["coefficients"]], [-3, -2, -1, 0, 1]
+        )
+        self.assertEqual(summary["coefficients"][0]["imaginary"]["digits"], 57)
+        self.assertEqual(summary["constants"], ["vakint::cl4"])
+        self.assertEqual(summary["data"], "3L external data v0.2.1")
+        self.assertEqual(summary["seconds"]["load"], 8.25)
+        self.assertEqual(
+            set(summary["seconds"]), {"total", "load", "symbolic", "numerical"}
+        )
+        for digits, orders in (
+            (0, [-3, 0]),
+            (Gallery.laurent_max_digits + 1, [-3, 0]),
+            (None, [-3, 0]),
+            (30, [0, -1]),
+            (30, None),
+        ):
+            with (
+                self.subTest(digits=digits, orders=orders),
+                self.assertRaises(ValueError),
+            ):
+                Gallery.laurent_series(
+                    "3L-zero-momentum", {}, digits=digits, orders=orders
+                )
+
+    def test_engines_are_reused_by_data_digits_and_orders(self):
+        made = []
+
+        def engine(**options):
+            made.append(options)
+            return SimpleNamespace(options=options)
+
+        with (
+            patch.object(Gallery, "engine", side_effect=engine),
+            patch.object(
+                Gallery, "load_data", return_value={"version": "v0.2.1"}
+            ) as load,
+            patch.dict(os.environ, {}, clear=True),
+        ):
+            first = Gallery.laurent_engine(4, precision=32, terms=5)
+            self.assertEqual(first["version"], "4L external data v0.2.1")
+            self.assertIs(Gallery.laurent_engine(4, precision=32), first)
+            self.assertIs(Gallery.laurent_engine(4, precision=32, terms=5), first)
+            Gallery.laurent_engine(3, precision=32, terms=4)
+            self.assertEqual(load.call_count, 1)  # 3L uses the built-in registry
+            Gallery.laurent_engine(4, precision=50)
+            self.assertEqual(load.call_count, 2)
+            self.assertLessEqual(
+                len(Gallery._laurent_engines), Gallery.laurent_engine_slots
+            )
+        self.assertEqual(made[0]["mode"], "symbolic")
+        self.assertEqual(made[0]["normalization"], "MSbar")
+        self.assertEqual(made[0]["number_of_terms_in_epsilon_expansion"], 5)
+
+    def test_application_mode_evaluates_only_quick_cases(self):
+        edit = SimpleNamespace(app_meta=lambda: SimpleNamespace(mode="edit"))
+        run = SimpleNamespace(app_meta=lambda: SimpleNamespace(mode="run"))
+        self.assertTrue(Gallery.laurent_in_page(edit, "4L-quadratic"))
+        self.assertFalse(Gallery.laurent_in_page(run, "4L-quadratic"))
+        for case in ("3L-zero-momentum", "3L-quadratic", "4L-zero-momentum"):
+            self.assertTrue(Gallery.laurent_in_page(run, case), case)
+
+    def page_cell(self, predicate):
+        page = Gallery.directory / "05_ladder_reductions.py"
+        tree = ast.parse(page.read_text())
+        cell = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and predicate(ast.unparse(node))
+        )
+        source = ast.unparse(cell)
+        cell.decorator_list = []
+        namespace = {}
+        exec(  # noqa: S102 - Execute only this cell with fake values.
+            compile(ast.Module(body=[cell], type_ignores=[]), str(page), "exec"),
+            namespace,
+        )
+        return namespace["_"], source
+
+    def test_the_panel_evaluates_nothing_until_asked(self):
+        run, source = self.page_cell(lambda text: "laurent_series(" in text)
+        # An Interrupt shows its own final card in this cell.
+        self.assertIn("state='interrupted'", source)
+
+        class Stop(Exception):
+            pass
+
+        def stop(condition, output=None):
+            if condition:
+                raise Stop(output)
+
+        forms = SimpleNamespace(
+            value={
+                "3L-zero-momentum": {
+                    "p0": "2",
+                    "p1": "1",
+                    "p2": "1/3",
+                    "digits": 40,
+                    "orders": [-3, 1],
+                },
+                "4L-zero-momentum": {"p0": "7", "digits": 9, "orders": [-4, 0]},
+            }
+        )
+        gallery, shown = Mock(), Mock()
+        gallery.laurent_request.side_effect = Gallery.laurent_request
+        self.enterContext(
+            patch.object(Gallery, "laurent_parameters", return_value=self.parameters)
+        )
+        arguments = {
+            "Gallery": gallery,
+            "case_choice": SimpleNamespace(value="3L-zero-momentum"),
+            "laurent_forms": forms,
+            "set_laurent": shown,
+        }
+        with self.assertRaises(Stop):
+            run(
+                laurent_button=SimpleNamespace(value=False),
+                mo=SimpleNamespace(stop=stop),
+                **arguments,
+            )
+        gallery.laurent_series.assert_not_called()
+        gallery.laurent_series.return_value = {"summary": True}
+        output = SimpleNamespace(clear=Mock())
+        run(
+            laurent_button=SimpleNamespace(value=True),
+            mo=SimpleNamespace(stop=stop, vstack=lambda parts: parts, output=output),
+            **arguments,
+        )
+        args, kwargs = gallery.laurent_series.call_args
+        # The selected case's own controls, never another case's.
+        self.assertEqual(args, ("3L-zero-momentum",))
+        self.assertEqual(
+            kwargs["values"],
+            {"vakint::mUV": "2", "vakint::mursq": "1", "UFO::G": "1/3"},
+        )
+        self.assertEqual((kwargs["digits"], kwargs["orders"]), (40, [-3, 1]))
+        shown.assert_called_once_with({"summary": True})
+        output.clear.assert_called_once()
+        # An interrupted evaluation keeps nothing.
+        shown.reset_mock()
+        gallery.laurent_series.side_effect = KeyboardInterrupt
+        run(
+            laurent_button=SimpleNamespace(value=True),
+            mo=SimpleNamespace(stop=stop, vstack=lambda parts: parts, output=output),
+            **arguments,
+        )
+        shown.assert_not_called()
+        self.assertEqual(gallery.monitor_card.call_args.kwargs["state"], "interrupted")
+        # The view shows the last series of the selected case.
+        view, _ = self.page_cell(lambda text: "laurent_view(" in text)
+        with self.assertRaises(Stop):
+            view(
+                Gallery=gallery,
+                get_laurent=lambda: None,
+                input_diagram="diagram",
+                mo=SimpleNamespace(stop=stop),
+            )
+        view(
+            Gallery=gallery,
+            get_laurent=lambda: {"summary": True},
+            input_diagram="diagram",
+            mo=SimpleNamespace(stop=stop),
+        )
+        self.assertEqual(
+            gallery.laurent_view.call_args.args[1:], ({"summary": True}, "diagram")
+        )
+
+    def test_exact_values_are_bounded_before_conversion(self):
+        limit = Gallery.laurent_exact_limit
+        self.assertEqual(Gallery.exact_number(f"1e{limit}"), Fraction(10**limit))
+        self.assertEqual(Gallery.exact_number("2.5E-3"), Fraction(1, 400))
+        started = time.perf_counter()
+        for text in (
+            f"1e{limit + 1}",
+            "1e5000",
+            "1e999999999",  # would build 10**999999999 without the check
+            "-3.2e-1_000_000",
+            "7" * (limit + 41),
+            f"{'9' * 1500}/{'7' * 1500}",
+        ):
+            with (
+                self.subTest(text=text[:30]),
+                self.assertRaisesRegex(ValueError, "too large"),
+            ):
+                Gallery.exact_number(text)
+        self.assertLess(time.perf_counter() - started, 1.0)
+        with self.assertRaisesRegex(ValueError, "not an exact decimal"):
+            Gallery.exact_number("1e")
+
+    def test_requested_digits_say_what_to_set(self):
+        self.assertEqual(Gallery.laurent_digits(32), 32)
+        self.assertEqual(Gallery.laurent_digits(32.0), 32)
+        self.assertEqual(Gallery.laurent_digits("500"), 500)
+        for digits in (None, "", True, 0, 32.5, Gallery.laurent_max_digits + 1, "x"):
+            with (
+                self.subTest(digits=digits),
+                self.assertRaisesRegex(ValueError, "Set the requested decimal digits"),
+            ):
+                Gallery.laurent_digits(digits)
+
+    def long_summary(self, digits=500, *, both=False):
+        """A 4L-like summary whose coefficients carry ``digits`` vouched digits
+        (real and imaginary parts when ``both``)."""
+        figures = str(3**2100)[: digits + 5]  # not periodic
+
+        def part(sign, power):
+            return fake_component(f"{sign}{figures[0]}.{figures[1:]}E{power}", digits)
+
+        rows = [
+            {
+                "power": power,
+                "real": part("", power - 3)
+                if both
+                else fake_component("0", None, zero=True),
+                "imaginary": part("-" if power % 2 else "", power - 7),
+            }
+            for power in range(-4, 3)
+        ]
+        return self.summary(
+            loop_count=4,
+            digits=digits,
+            orders=[-4, 2],
+            through=2,
+            coefficients=rows,
+        ), figures
+
+    def test_headline_keeps_the_leading_digits_and_lists_every_digit(self):
+        headline = Gallery.laurent_headline_digits
+        for both in (False, True):
+            summary, _ = self.long_summary(both=both)
+            text = Gallery.laurent_latex(summary)
+            # No \, macro between digits, and at most the headline digits.
+            self.assertIsNone(re.search(r"\\,\d", text))
+            for line in text.splitlines():
+                if line.startswith("c_{"):
+                    with self.subTest(both=both, line=line[:12]):
+                        digits = re.sub(
+                            r"\\mkern3mu |\\times10\^\{-?\d+\}|c_\{-?\d+\}", "", line
+                        )
+                        self.assertLessEqual(
+                            sum(ch.isdigit() for ch in digits), headline
+                        )
+                        self.assertIn(r"\ldots\times10^", line)
+            self.assertTrue(Gallery.headline_truncated(summary))
+            listed = Gallery.laurent_digits_view(self.view_mo(), summary).text
+            self.assertEqual(listed.count('class="vg-digit-row"'), 7)
+            # Every requested digit, decimals grouped by five, the power of
+            # ten and the i at the end of each value.
+            for row in summary["coefficients"]:
+                _, mantissa, exponent = Gallery.rounded_decimal(
+                    row["imaginary"]["text"], 500
+                )
+                decimals = mantissa[2:]
+                grouped = " ".join(
+                    decimals[i : i + 5] for i in range(0, len(decimals), 5)
+                )
+                power = str(exponent).translate(Gallery._superscripts)
+                self.assertIn(f"{mantissa[:2]}{grouped} × 10{power}", listed)
+            self.assertTrue(
+                all(
+                    value.endswith(" i")
+                    for value in re.findall(r"<code>([^<]*)</code>", listed)
+                )
+            )
+        # At or below the headline digits nothing is cut and no list is added.
+        summary, _ = self.long_summary(digits=headline)
+        self.assertFalse(Gallery.headline_truncated(summary))
+        self.assertNotIn(r"\ldots", Gallery.laurent_latex(summary))
+
+    def test_view_lists_long_coefficients_below_the_series(self):
+        drawing = Mock()
+        drawing.to_html.return_value = "<svg/>"
+        diagram = SimpleNamespace(loop_count=4, render=Mock(return_value=drawing))
+        summary, _ = self.long_summary()
+        summary["seconds"] = {
+            "total": 8.6,
+            "load": 8.3,
+            "symbolic": 0.2,
+            "numerical": 0.1,
+        }
+        summary["cached"] = True
+        parts = Gallery.laurent_view(self.view_mo(), summary, diagram)
+        self.assertIn("leading 32 digits of each coefficient", parts[0].text)
+        self.assertIn('class="vg-digits"', parts[1].text)
+        texts = "".join(getattr(part, "text", "") for part in parts[2:])
+        self.assertIn("8.6 s", texts)
+        self.assertIn("engine and data load 8.3 s; symbolic result reused", texts)
+        self.assertIn("rounded to 32 here", texts)
+        # The table rounds to the headline digits; the plain text keeps all.
+        first = summary["coefficients"][0]["imaginary"]
+        _, mantissa, _ = Gallery.rounded_decimal(first["text"], 500)
+        self.assertIn(Gallery.component_text(first, 32), texts)
+        self.assertNotIn(mantissa[:40], texts)
+        accordion = parts[-1][1]
+        plain = accordion["Coefficients as plain text (every shown digit)"][1]
+        self.assertEqual(plain.count("\n"), 6)
+        self.assertIn(mantissa, plain)
+
+    def test_katex_renders_every_headline(self):
+        """marimo's own KaTeX (its options, throwOnError) renders the headline
+        at the highest digits and every order, real and complex."""
+        node = shutil.which("node")
+        import marimo
+
+        assets = Path(marimo.__file__).parent / "_static" / "assets"
+        bundles = sorted(assets.glob("katex-*.js"), key=lambda p: p.stat().st_size)
+        if node is None or not bundles:
+            self.skipTest("node or marimo's KaTeX bundle is not available")
+        formulas = []
+        for both in (False, True):
+            summary, _ = self.long_summary(Gallery.laurent_max_digits, both=both)
+            formulas += re.findall(
+                r"\$\$\n(.*?)\n\$\$", Gallery.laurent_latex(summary), re.S
+            )
+        script = (
+            "import { readFileSync } from 'node:fs';"
+            f"const m = await import({json.dumps(bundles[-1].as_uri())});"
+            "const katex = Object.values(m).find(v => v && v.renderToString);"
+            "const out = JSON.parse(readFileSync(0, 'utf8')).map(t => {"
+            " try { katex.renderToString(t, {displayMode: true, globalGroup: true,"
+            " throwOnError: true, macros: {'\\\\mbox': '\\\\text{#1}'}});"
+            " return 'ok'; }"
+            " catch (e) { return String(e.message); } });"
+            "console.log(JSON.stringify(out));"
+        )
+        done = subprocess.run(
+            [node, "--input-type=module", "-e", script],
+            input=json.dumps(formulas),
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+        self.assertEqual(done.returncode, 0, done.stderr[-2000:])
+        self.assertEqual(json.loads(done.stdout), ["ok"] * len(formulas))
+
+    def test_forms_are_per_case_and_mapped_by_parameter(self):
+        import marimo as mo
+
+        with patch.object(Gallery, "laurent_parameters", return_value=self.parameters):
+            form = Gallery.laurent_form(mo, "4L-zero-momentum")
+            self.assertEqual(set(form.value), {"p0", "p1", "p2", "digits", "orders"})
+            self.assertEqual(form.value["orders"], [-4, 0])
+            self.assertEqual(form.value["digits"], 32)
+            self.assertEqual(
+                Gallery.laurent_form(mo, "3L-zero-momentum").value["orders"], [-3, 0]
+            )
+            request = Gallery.laurent_request(
+                "4L-zero-momentum",
+                {"p0": "91.1876", "p1": "1/3", "p2": "6/5", "digits": None},
+            )
+        self.assertEqual(
+            request,
+            {
+                "values": {
+                    "vakint::mUV": "91.1876",
+                    "vakint::mursq": "1/3",
+                    "UFO::G": "6/5",
+                },
+                "digits": None,
+                "orders": None,
+            },
+        )
+
+    def test_no_case_dependent_cell_creates_ui_elements(self):
+        """marimo replays the last value of an element id to a reconnecting
+        page; an element re-created when the case changes would show values
+        the kernel does not use. Controls are built once, per case."""
+        page = Gallery.directory / "05_ladder_reductions.py"
+        tree = ast.parse(page.read_text())
+        built = False
+        for node in tree.body:
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            source = ast.unparse(node)
+            arguments = {argument.arg for argument in node.args.args}
+            if "case_choice" in arguments:
+                with self.subTest(line=node.lineno):
+                    self.assertNotIn("mo.ui.", source)
+                    self.assertNotIn("laurent_form(", source)
+            if "laurent_form(" in source:
+                built = True
+                self.assertIn("mo.ui.dictionary(", source)
+        self.assertTrue(built)
 
 
 if __name__ == "__main__":

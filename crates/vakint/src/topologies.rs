@@ -24,6 +24,92 @@ pub(crate) mod five_loop;
 pub(crate) use catalogue::FiveLoopCatalogue;
 pub use catalogue::FiveLoopCatalogueStatistics;
 mod momentum_mapping;
+
+/// Canonical power-colored incidence graph of a long-form `topo(prop(...)*...)`
+/// input with `loop_count` loop momenta, or `None` when the input is not such a
+/// long form or a power is not a positive integer.
+pub(crate) fn power_colored_canonical_graph(
+    input: AtomView,
+    loop_count: usize,
+) -> Result<Option<symbolica::graph::Graph<u8, symbolica::graph::Empty>>, VakintError> {
+    match momentum_mapping::MomentumInput::from_expression(input, loop_count)? {
+        Some(source) => source.power_colored_canonical_graph(),
+        None => Ok(None),
+    }
+}
+
+/// The verified power-preserving unimodular loop-momentum maps from the long
+/// form `source` onto the long form `target`, offered to `accept` one at a time
+/// until it returns `true` (`Some(true)`); `None` when either input is not such
+/// a long form.
+pub(crate) fn find_power_preserving_momentum_map(
+    source: AtomView,
+    target: AtomView,
+    loop_count: usize,
+    accept: impl FnMut(&[Atom]) -> Result<bool, VakintError>,
+) -> Result<Option<bool>, VakintError> {
+    let (Some(source), Some(target)) = (
+        momentum_mapping::MomentumInput::from_expression(source, loop_count)?,
+        momentum_mapping::MomentumInput::from_expression(target, loop_count)?,
+    ) else {
+        return Ok(None);
+    };
+    source.find_power_preserving_map(&target, accept)
+}
+
+/// Every verified power-preserving unimodular loop-momentum map from the
+/// long form `source` onto the long form `target` (images of the source loop
+/// momenta in the target's), or `None` when either is not such a long form.
+/// Used by the tests; evaluation stops at the first accepted map
+/// ([`find_power_preserving_momentum_map`]).
+#[cfg(test)]
+pub(crate) fn power_preserving_momentum_maps(
+    source: AtomView,
+    target: AtomView,
+    loop_count: usize,
+) -> Result<Option<Vec<Vec<Atom>>>, VakintError> {
+    let (Some(source), Some(target)) = (
+        momentum_mapping::MomentumInput::from_expression(source, loop_count)?,
+        momentum_mapping::MomentumInput::from_expression(target, loop_count)?,
+    ) else {
+        return Ok(None);
+    };
+    source.power_preserving_maps(&target)
+}
+
+pub(crate) use momentum_mapping::{MatroidProfile, integer_line_vector, matroid_basis_counts};
+
+/// The power-colored line-matroid profile of a long-form input (see
+/// [`MatroidProfile`]), or `None` when it is not such a long form, a power is
+/// not a positive integer or a momentum coefficient is not an integer.
+pub(crate) fn power_colored_matroid_profile(
+    input: AtomView,
+    loop_count: usize,
+) -> Result<Option<MatroidProfile>, VakintError> {
+    Ok(
+        momentum_mapping::MomentumInput::from_expression(input, loop_count)?
+            .and_then(|source| source.power_colored_matroid_profile()),
+    )
+}
+
+/// The verified power-preserving maps between two long forms at the level of
+/// their line matroids (the incidence graphs may differ by Whitney twists),
+/// offered to `accept` one at a time until it returns `true` (`Some(true)`);
+/// `None` when either input is not such a long form.
+pub(crate) fn find_power_preserving_matroid_momentum_map(
+    source: AtomView,
+    target: AtomView,
+    loop_count: usize,
+    accept: impl FnMut(&[Atom]) -> Result<bool, VakintError>,
+) -> Result<Option<bool>, VakintError> {
+    let (Some(source), Some(target)) = (
+        momentum_mapping::MomentumInput::from_expression(source, loop_count)?,
+        momentum_mapping::MomentumInput::from_expression(target, loop_count)?,
+    ) else {
+        return Ok(None);
+    };
+    source.find_power_preserving_matroid_map(&target, accept)
+}
 pub use momentum_mapping::MomentumMatchLimits;
 #[cfg(test)]
 pub(crate) use momentum_mapping::first_minimal_acceptance;

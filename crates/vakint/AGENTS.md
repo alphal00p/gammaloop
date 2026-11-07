@@ -67,12 +67,23 @@ complete scalar input as `prepared-input.json` plus authenticated
 input/condition payloads; `--prepared-input PATH` shares it across fresh
 processes. Keep native preparation timing separate from reduction timing.
 
-The vacuum Typst benchmark report, its maintenance contract, the Python merge
-adapters and the provenance archives that used to live under `docs/benchmark/`
-were agent-generated evidence and are no longer part of the repository;
-`docs/benchmark/data/results.json` stays. The p-integral benchmark does live
-here, by the user's ruling: `docs/benchmark/benchmark.typ` and `benchmark.pdf`
-are built from `data/p_results.json` (written by
-`examples/benchmark_p_integrals.rs`, built by `just vakint-p-benchmark-build`,
-append-only, never hand-edited) and `data/p_exact.json` with
-`just vakint-p-benchmark-pdf`.
+`docs/benchmark.typ` / `docs/benchmark.pdf` (RustRed against alphaLoop, MATAD
+and FMFT, the reduction graphs, the precision tables) are generated, never
+hand-edited: `docs/benchmark/make-benchmark.sh DATA_ROOT BINARY OUT --install`
+measures with the `benchmark_suite` example built by
+`docs/benchmark/build-benchmark-binary.sh` and installs the PDF with
+`docs/benchmark/data/{suite,graphs,tables,receipt}.json`; after a data release,
+`make-benchmark.sh DATA_ROOT - OUT --refresh-tables --install` refreshes the
+precision tables and keeps the timings. `docs/benchmark/tools/receipt.py check
+--data-root TREE` verifies a checkout against the receipt. The earlier report,
+its merge adapters and provenance archives stay out of the repository.
+
+The earlier vacuum Typst benchmark report, its maintenance contract, the Python
+merge adapters and the provenance archives that used to live under
+`docs/benchmark/` were agent-generated evidence and are no longer part of the
+repository; `docs/benchmark/data/results.json` stays. The p-integral benchmark
+does live here, by the user's ruling, separate from the vacuum report above:
+`docs/benchmark/benchmark.typ` and `benchmark.pdf` are built from
+`data/p_results.json` (written by `examples/benchmark_p_integrals.rs`, built by
+`just vakint-p-benchmark-build`, append-only, never hand-edited) and
+`data/p_exact.json` with `just vakint-p-benchmark-pdf`.

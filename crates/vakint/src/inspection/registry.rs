@@ -768,7 +768,7 @@ impl MasterCatalog {
         }
         precision::attach_origins(&mut warnings, &prepared.origins, None, &provenance.version);
         for warning in &warnings {
-            log::warn!("{warning}");
+            crate::precision::log_once(warning);
         }
 
         Ok(VakintConstant {
@@ -845,7 +845,7 @@ impl MasterCatalog {
                 &self.provenance(master, Some(power)).version,
             );
             for warning in &warnings {
-                log::warn!("{warning}");
+                crate::precision::log_once(warning);
             }
 
             let symbolic_expression = match &coefficient.exact {

@@ -8,8 +8,17 @@ ship the Ordered step caches of every loop pack (the five-loop one trimmed to th
 size budget) and the five-loop route preparation add-on instead. A new managed
 installation of v0.2.0 or `data-latest` receives them, as does an existing one
 loaded with `version="v0.2.0"` or `refresh=True`; an existing `data-latest`
-installation keeps its cached release (for example v0.1.2) until it is refreshed
+installation (for example of v0.1.2) moves to the release `data-latest` names when
+it is next loaded with the release server reachable
 (see #link("docs/ordered_reduction.typ")[the ordered reduction notes]).
+v0.2.1 replaces the five-loop pack by a composed pack with 131 masters, chosen so
+that reduction coefficients carry no spurious poles at d = 4 (checked on the
+reductions listed in the release notes, not proven for every input), ships
+Laurent coefficients for them, and adds the one-loop tadpole's order eps^5. Its
+five-loop rule tables differ from v0.2.0, so it ships no five-loop Ordered cache
+(the 1L–4L caches and the route preparation add-on are unchanged). None was
+recorded for the new tables either: the v0.2.0 cache changed five-loop reduction
+times by at most about 10 %, and master inputs are now reduced without a walk.
 FORM reduction rules and their hard-coded master formulas remain in Vakint.
 
 == Explicit loading
@@ -60,8 +69,17 @@ unrelated valid `manifest.json` is preserved and does not block a managed instal
 empty loop-named directories alone do not identify an external-data checkout.
 
 Managed installations reuse validated files without downloading or extracting
-again. `refresh=True` checks the `data-latest` release alias; pinned versions remain
-immutable. A failed refresh reports an error and leaves the active engine intact.
+again. With `version="latest"` an existing installation checks the `data-latest`
+release alias on every load, once and without retry, bounded by 5 s to connect
+and 20 s in total (or the shorter `timeout` / `read_idle_timeout` of the options,
+which then bounds the whole check). When the alias names another release, that
+release is installed and activated as with `refresh=True` and becomes the cached
+`latest`; when the alias cannot be read or names no valid release, the cached
+release is used offline.
+`refresh=True` resolves the alias with the ordinary transfer options and reports a
+failure. Pinned versions remain immutable and are reused without network access.
+A failed refresh or a failed move to a new release reports an error and leaves the
+active engine and the cached `latest` release intact.
 Checksums, relative paths and schemas are checked before activation. Native
 program bindings are checked when their native payloads are activated. Loading a new snapshot replaces the prior external selection;
 old clones keep their existing immutable data and loaded applications.
@@ -84,10 +102,16 @@ missing packs into the test process's current directory; subsequent processes
 reuse the validated installation without network access. Cargo normally runs a
 test binary from its package directory. Set `VAKINT_TEST_EXTERNAL_DATA` to an
 existing checkout to override that location. That checkout must be the release tag
-the vendored manifest declares (`v0.2.0` for this version): tests that request this
+the vendored manifest declares (`v0.2.2` for this version): tests that request this
 explicit version reject a checkout declaring another identity, and the
-external-data `main` branch declares the next development version (`v0.2.1` after
-the v0.2.0 release).
+external-data `main` branch declares the next development version after a
+release. To run the tests against a checkout of another release (for
+example the next one before it is vendored), also set
+`VAKINT_TEST_EXTERNAL_DATA_VERSION` to the version that checkout declares. Tests
+whose expectations depend on the data (the Laurent orders a master ships, the
+first missing order, which five-loop masters carry coefficients, the master set,
+precision caps) read them off the loaded data, so the same tests pass on
+consecutive releases and re-vendoring a release needs no test change.
 Managed `.vakint-external-data` directories are ignored by Git.
 
 The scientific gates retain their explicit execution flags and FORM requirements.
@@ -252,14 +276,18 @@ guards, invalid transports and operational-limit failures remain errors.
 
 After cancellation, warnings list remaining undeclared masters and parent-topology
 DOT paths. Numerical evaluation reports these masters again, together with declared
-terminals lacking coefficients. The initial 5L release has 905 declared campaign
-terminals and no computed 5L coefficients; it does not certify a complete basis.
+terminals lacking coefficients. The initial 5L release had 905 declared campaign
+terminals and no computed 5L coefficients; up to v0.2.0 the five-loop pack declares
+640 uncomputed terminals. From v0.2.1 on it declares 131 masters with coefficients
+(exact where the release marks them symbolic, otherwise numerical with the digits
+each loop manifest entry states); a master order without a coefficient fails
+closed when a result needs it.
 
 == Maintaining the vendored snapshot
 
 Run `python3 tools/vendor_external_data.py /path/to/vakint-external-data` from the
 Vakint crate, with a checkout of the release tag to vendor (the snapshot is
-v0.2.0). The tool validates input hashes and copies all available 1L–3L
+v0.2.2). The tool validates input hashes and copies all available 1L–3L
 coefficients, graphs and programs byte for byte. It excludes caches by design:
 the depth-first caches of older releases and the shipped Ordered step caches,
 whose entries it removes from the copied loop manifests. Vakint uses shipped

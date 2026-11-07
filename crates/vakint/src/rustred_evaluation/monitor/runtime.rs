@@ -665,6 +665,9 @@ fn worker_with_publisher(
         ApiStatus::NotStarted
     };
     let file_enabled = options.progress_snapshot.is_some();
+    // Consumers that do not need the terminal: they keep the monitor running
+    // when the terminal display is unavailable or detached.
+    let headless_consumer = file_enabled || options.progress_sink.is_some();
     let mut stderr_json = false;
     #[cfg(feature = "progress-tui")]
     let mut terminal = if options.display == RustRedMonitorDisplay::Tui {
@@ -672,7 +675,7 @@ fn worker_with_publisher(
             Ok(terminal) => Some(terminal),
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
                 // Another UI owns this terminal; never write JSON into it.
-                if !file_enabled {
+                if !headless_consumer {
                     shared.active.store(false, Ordering::Relaxed);
                 }
                 None
@@ -680,7 +683,7 @@ fn worker_with_publisher(
             Err(_) => {
                 // No terminal (a notebook, a pipe, TERM=dumb): the display is
                 // off. A JSON stream would flood the caller's output instead.
-                if !file_enabled {
+                if !headless_consumer {
                     shared.active.store(false, Ordering::Relaxed);
                 }
                 None
@@ -690,7 +693,7 @@ fn worker_with_publisher(
         None
     };
     #[cfg(not(feature = "progress-tui"))]
-    if options.display == RustRedMonitorDisplay::Tui && !file_enabled {
+    if options.display == RustRedMonitorDisplay::Tui && !headless_consumer {
         shared.active.store(false, Ordering::Relaxed);
     }
     if options.display == RustRedMonitorDisplay::Json && !file_enabled {
@@ -784,7 +787,7 @@ fn worker_with_publisher(
                         if state.interrupted() {
                             super::tui::interrupt_foreground_group();
                         }
-                        if !file_enabled {
+                        if !headless_consumer {
                             shared.active.store(false, Ordering::Relaxed);
                         }
                     }
@@ -840,6 +843,9 @@ fn worker_with_publisher(
             monitor["last_cycle"] = serde_json::json!(last_cycle);
             monitor["last_node_completion"] = serde_json::json!(last_node_completion);
             monitor["global_remaining_work_certificate"] = false.into();
+            if let Some(sink) = &options.progress_sink {
+                sink.store(monitor["model"].clone());
+            }
             document["monitor"] = monitor;
             publisher.publish(document);
             last_publish = Some(Instant::now());

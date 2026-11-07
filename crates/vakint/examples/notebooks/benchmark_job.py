@@ -214,7 +214,9 @@ def main():
                 # supervisor is killed first.
                 pass_fds=(lock_fd,),
                 env=child_environment(request),
-                preexec_fn=child_setup(request, os.getpid()),
+                # preexec_fn is required for PR_SET_PDEATHSIG, which no other
+                # Popen option provides; the supervisor runs no other threads.
+                preexec_fn=child_setup(request, os.getpid()),  # noqa: PLW1509
             ) as process,
         ):
             running["process"] = process

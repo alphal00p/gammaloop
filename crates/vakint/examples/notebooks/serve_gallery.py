@@ -1,4 +1,9 @@
-"""Serve the five interactive apps behind a tailnet-only reverse proxy."""
+"""Serve the five interactive apps (marimo application mode).
+
+Binds 127.0.0.1:8417 by default, for a reverse proxy in front of it;
+VAKINT_GALLERY_HOST and VAKINT_GALLERY_PORT select another address (for example
+a tailnet-only interface) and port.
+"""
 
 import hashlib
 import os
@@ -62,6 +67,6 @@ def create_app():
 if __name__ == "__main__":
     uvicorn.run(
         create_app(),
-        host="127.0.0.1",
+        host=os.environ.get("VAKINT_GALLERY_HOST", "127.0.0.1"),
         port=int(os.environ.get("VAKINT_GALLERY_PORT", "8417")),
     )

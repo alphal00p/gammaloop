@@ -285,16 +285,22 @@
           "numerical": true,
           "significant_digits": 20000,
           "symbolic": true
+        },
+        {
+          "epsilon_power": 5,
+          "numerical": true,
+          "significant_digits": 20000,
+          "symbolic": true
         }
       ],
       "files": {
         "numerical.json": {
           "path": "masters/P1/numerical.json",
-          "sha256": "b54e96eaf3deed297169b16f34bcc28d9d32f6ea2344fd84457f27e21a32ea3d"
+          "sha256": "af7d5cc571d45cea400fdc55e4bed28fd731d1e8493ddac9aa339a4a440c3756"
         },
         "symbolic.json": {
           "path": "masters/P1/symbolic.json",
-          "sha256": "7ebbabf5c0e7a2bda90246a7e00ec2fe722a00ccbc572d7c0e0de41fd3161517"
+          "sha256": "b17919a22fc55d18d220b782ee9c40ab2132924e418742512be89909c095ad13"
         },
         "graph.dot": {
           "path": "masters/P1/graph.dot",
