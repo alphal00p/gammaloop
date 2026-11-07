@@ -4869,12 +4869,14 @@ impl VakintExpression {
                     "ordered_batch_preparation",
                     None,
                 );
+                let started = rustred_evaluation::phase_start();
                 let raw = vakint.rustred_reduce_ordered(
                     settings,
                     contributions,
                     observation.as_deref_mut(),
                     progress,
                 )?;
+                rustred_evaluation::log_phase("ordered_reduction", started);
                 {
                     let _math = MathSpan::new();
                     reductions
@@ -4900,11 +4902,14 @@ impl VakintExpression {
                 );
                 // Retention is combined by its catalogue owner. Substitution
                 // modes keep their existing precombination boundary.
+                let started = rustred_evaluation::phase_start();
                 let raw = if mode == RustRedMasterMode::Retain {
                     raw
                 } else {
                     rustred_evaluation::combine_exact(raw)
                 };
+                rustred_evaluation::log_phase("ordered_precombination", started);
+                let started = rustred_evaluation::phase_start();
                 let numerator = vakint.finalize_rustred(
                     raw,
                     settings,
@@ -4912,6 +4917,7 @@ impl VakintExpression {
                     mode,
                     observation.as_deref_mut(),
                 )?;
+                rustred_evaluation::log_phase("ordered_finalize", started);
                 if mode == RustRedMasterMode::Numerical {
                     numerical += numerator;
                     numerical_vectors.extend(vectors);
@@ -4929,12 +4935,15 @@ impl VakintExpression {
                     "numerical_materialization",
                     Some(numerical.as_view()),
                 );
+                let started = rustred_evaluation::phase_start();
+                let combined = rustred_evaluation::combine_exact(numerical);
+                rustred_evaluation::log_phase("numerical_combination", started);
+                let started = rustred_evaluation::phase_start();
+                let numerator = vakint.resolve_rustred_numerical(combined, settings)?;
+                rustred_evaluation::log_phase("numerical_materialization", started);
                 complete.push(VakintTerm {
                     integral: Atom::one(),
-                    numerator: vakint.resolve_rustred_numerical(
-                        rustred_evaluation::combine_exact(numerical),
-                        settings,
-                    )?,
+                    numerator,
                     vectors: numerical_vectors.into_iter().collect(),
                 });
             }

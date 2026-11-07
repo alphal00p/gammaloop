@@ -922,6 +922,7 @@ impl MasterCatalog {
         // frontend staged the original input. Bind those remaining literals
         // before rational algebra; an exact zero prefactor must not launch an
         // unbounded search for its first nonzero Laurent coefficient.
+        let started = super::phase_start();
         let raw = if mode == RustRedMasterMode::Numerical {
             crate::precision::legacy::stage_table(
                 vk_symbol!("rustred_input")
@@ -934,7 +935,10 @@ impl MasterCatalog {
         } else {
             raw
         };
+        super::log_phase("finalize_input_staging", started);
+        let started = super::phase_start();
         let direct = self.finalize_independent(raw.clone(), settings, loop_count, mode);
+        super::log_phase("finalize_direct", started);
         if matches!(&direct, Err(error) if !Self::lacks_master_data(error))
             || mode == RustRedMasterMode::Retain
             || self.basis_aliases.is_empty()
@@ -956,11 +960,16 @@ impl MasterCatalog {
                 Replacement::new(master.clone(), basis)
             })
             .collect();
+        let started = super::phase_start();
         let normalized = combine_exact(raw.replace_multiple(&replacements));
+        super::log_phase("finalize_alias_normalization", started);
         if normalized == raw {
             return direct;
         }
-        match self.finalize_independent(normalized, settings, loop_count, mode) {
+        let started = super::phase_start();
+        let aliased = self.finalize_independent(normalized, settings, loop_count, mode);
+        super::log_phase("finalize_aliased", started);
+        match aliased {
             Err(error) if Self::lacks_master_data(&error) => direct,
             result => result,
         }
@@ -1008,7 +1017,9 @@ impl MasterCatalog {
                 super::postprocessing_threads(settings),
             ));
         }
+        let started = super::phase_start();
         let raw = combine_exact(raw);
+        super::log_phase("independent_combination", started);
         self.require_coefficients(&raw, &BTreeMap::new())?;
         let epsilon = vk_symbol!(&settings.epsilon_symbol);
         let target = settings
@@ -1040,6 +1051,7 @@ impl MasterCatalog {
                 .into());
             }
         }
+        let started = super::phase_start();
         let symbols: Vec<_> = Self::referenced_masters(&raw).into_iter().collect();
         let terms = raw.coefficient_list::<i32>(&symbols);
         let mut required = BTreeMap::<Atom, i64>::new();
@@ -1087,6 +1099,8 @@ impl MasterCatalog {
             }
             known += monomial * coefficient;
         }
+        super::log_phase("independent_coefficients", started);
+        let started = super::phase_start();
         let mut exact_values = BTreeMap::new();
         for (symbol, last) in required {
             let master = &self.masters[&symbol];
@@ -1130,12 +1144,16 @@ impl MasterCatalog {
                 known = known.replace(source.to_pattern()).with(value.clone());
             }
         }
-        let mut result = combine_exact(
-            known
-                .series(epsilon, Atom::Zero.as_view(), Rational::from(target))
-                .map_err(failure)?
-                .to_atom(),
-        );
+        super::log_phase("independent_master_substitution", started);
+        let started = super::phase_start();
+        let series = known
+            .series(epsilon, Atom::Zero.as_view(), Rational::from(target))
+            .map_err(failure)?
+            .to_atom();
+        super::log_phase("independent_series", started);
+        let started = super::phase_start();
+        let mut result = combine_exact(series);
+        super::log_phase("independent_series_combination", started);
         // Keeping exact coefficient identities improves diagnostics, but an
         // unavailable order can multiply a provably zero combination of known
         // lower orders. Resolve that algebraic question before rejecting it.
@@ -1152,7 +1170,9 @@ impl MasterCatalog {
                 .into_iter()
                 .map(|(source, value)| Replacement::new(source, value))
                 .collect::<Vec<_>>();
+            let started = super::phase_start();
             result = combine_exact(result.replace_multiple(&replacements));
+            super::log_phase("independent_exact_value_retry", started);
         }
         crate::truncation_guard::ensure_known_orders(
             &result,
@@ -1163,7 +1183,9 @@ impl MasterCatalog {
         )?;
         self.check_coefficients(&result, mode == RustRedMasterMode::Numerical)?;
         if mode == RustRedMasterMode::Numerical {
+            let started = super::phase_start();
             result = self.resolve_numerical(result, settings)?;
+            super::log_phase("independent_numerical_resolution", started);
         }
         if mode == RustRedMasterMode::Symbolic {
             // An exact formula can still depend on snapshot-local finite

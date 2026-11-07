@@ -255,7 +255,10 @@ pub(crate) fn materialize(
         vk_symbol!(&settings.epsilon_symbol),
         "Input",
     )?;
+    let started = crate::rustred_evaluation::phase_start();
     let expression = combine_exact(Vakint::normalize_gamma_functions(expression.as_view()));
+    crate::rustred_evaluation::log_phase("materialize_combination", started);
+    let started = crate::rustred_evaluation::phase_start();
     let expression = if let Some(catalog) = catalog {
         catalog.resolve_numerical(expression, settings)?
     } else {
@@ -275,9 +278,11 @@ pub(crate) fn materialize(
         }
         expression
     };
+    crate::rustred_evaluation::log_phase("materialize_resolution", started);
     if expression.is_zero() {
         return Ok(Atom::Zero);
     }
+    let started = crate::rustred_evaluation::phase_start();
     let mut classification = NumericalParts {
         parameters,
         catalog,
@@ -313,6 +318,8 @@ pub(crate) fn materialize(
         variables.push(temporary);
     }
     let grouped = expression.replace_multiple(&replacements);
+    crate::rustred_evaluation::log_phase("materialize_classification", started);
+    let started = crate::rustred_evaluation::phase_start();
     let mut result = Atom::Zero;
     for (monomial, coefficient) in grouped.coefficient_list::<i32>(&variables) {
         let monomial = monomial.replace_multiple(&restore);
@@ -352,6 +359,7 @@ pub(crate) fn materialize(
             .map_err(|error| failure(format!("coefficient multiplying {monomial}: {error}")))?;
         result += coefficient * monomial;
     }
+    crate::rustred_evaluation::log_phase("materialize_evaluation", started);
     Ok(result)
 }
 
