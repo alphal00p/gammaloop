@@ -1044,13 +1044,24 @@ impl MasterCatalog {
         }
         // The direct pass and the alias pass are independent: with several
         // workers they run concurrently, and the direct result decides exactly
-        // as in the sequential order above.
+        // as in the sequential order above. They share the `n_cores` budget
+        // (results never depend on the worker count): the alias pass, which
+        // combines twice (its normalization and its catalogue pass), gets
+        // about two thirds of it.
+        let direct_threads = (threads / 3).max(1);
+        let budget = |threads: usize| VakintSettings {
+            n_cores: threads,
+            ..settings.clone()
+        };
+        let direct_settings = budget(direct_threads);
+        let aliased_settings = budget((threads - direct_threads).max(1));
         let mut outcomes = super::parallel::map_ordered(2, &[false, true], |_, aliased| {
             if *aliased {
-                self.finalize_aliased(&raw, settings, loop_count, mode)
+                self.finalize_aliased(&raw, &aliased_settings, loop_count, mode)
             } else {
                 let started = super::phase_start();
-                let direct = self.finalize_independent(raw.clone(), settings, loop_count, mode);
+                let direct =
+                    self.finalize_independent(raw.clone(), &direct_settings, loop_count, mode);
                 super::log_phase("finalize_direct", started);
                 Some(direct)
             }
