@@ -262,11 +262,11 @@ impl crate::FeynmanDiagram {
                     .with(Atom::Zero);
                 Ok(symbols.denominator(edge_id, &mass.pow(2), dimension))
             },
-            |edge_id, _| {
+            |edge_id, edge| {
                 edge_powers
                     .get(&crate::EdgeId(edge_id.0))
                     .copied()
-                    .unwrap_or(1)
+                    .unwrap_or(edge.propagator_power as isize)
             },
         )
     }
@@ -296,7 +296,7 @@ impl crate::FeynmanDiagram {
                         .numerator
                         .expression()
                         .edge_dod(crate::symbols::momentum(), edge_id.0)?,
-                ) - 2;
+                ) - 2 * i64::from(edge.data.propagator_power);
             }
         }
         i32::try_from(degree).map_err(|_| {

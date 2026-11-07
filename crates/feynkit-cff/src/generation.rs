@@ -193,6 +193,19 @@ impl FeynmanDiagramCffExt for FeynmanDiagram {
         subgraph: &S,
         options: CffOptions,
     ) -> Result<CffResult, CffError> {
+        for (pair, edge, data) in self.underlying().iter_edges_of(subgraph) {
+            if pair.is_paired()
+                && data.data.external.is_none()
+                && !data.data.is_dummy
+                && !options.contracted_edges().contains(&edge)
+                && data.data.propagator_power != 1
+            {
+                return Err(CffError::UnsupportedPropagatorPower {
+                    edge,
+                    power: data.data.propagator_power,
+                });
+            }
+        }
         let roles = self
             .underlying()
             .iter_edges()
@@ -1438,6 +1451,23 @@ mod tests {
         assert_eq!(result.report.candidate_orientations, 4);
         assert_eq!(result.report.acyclic_orientations, 2);
         assert_eq!(result.report.unfolded_terms, 2);
+    }
+
+    #[test]
+    fn diagram_generation_rejects_raised_powers_instead_of_integrating_unit_powers() {
+        let diagram = FeynmanDiagram::from_dot(
+            Model::phi3(),
+            r#"digraph master {
+                a -> b [particle="phi", power=2];
+                a -> b [particle="phi"];
+                b -> a [particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            diagram.build_cff(CffOptions::default()),
+            Err(CffError::UnsupportedPropagatorPower { power: 2, .. })
+        ));
     }
 
     #[test]
