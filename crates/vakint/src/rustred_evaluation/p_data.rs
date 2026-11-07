@@ -230,55 +230,64 @@ impl PLibraryHandle {
             .presentations()
             .get(id.0 as usize)
             .ok_or_else(|| data_failure(format!("{} names a missing presentation", family.name)))?;
-        let mismatch =
-            |detail: String| data_failure(format!("top {} of the library: {detail}", family.name));
-        if usize::from(presentation.loops) != family.loops {
-            return Err(mismatch(format!("{} loops", presentation.loops)));
-        }
-        let lines = parts::canonical_lines(family)
-            .map_err(|error| mismatch(format!("canonical lines: {error}")))?;
-        let arity = presentation.slots.len();
-        if arity != lines.len() + family.isps.len() {
-            return Err(mismatch(format!(
-                "{arity} slots for {} lines and {} ISPs",
-                lines.len(),
-                family.isps.len()
-            )));
-        }
-        for (index, slot) in presentation.slots.iter().enumerate() {
-            match (slot, lines.get(index)) {
-                (Slot::Line(line), Some(canonical)) => {
-                    let mut expected = canonical.loops.clone();
-                    expected.push(canonical.external);
-                    let negated = expected.iter().map(|c| -c).collect::<Vec<_>>();
-                    if line.eps_units != 0
-                        || (line.momentum != expected && line.momentum != negated)
-                    {
-                        return Err(mismatch(format!(
-                            "line slot {} is {:?} (eps units {}), vakint's line is {expected:?}",
-                            index + 1,
-                            line.momentum,
-                            line.eps_units
-                        )));
-                    }
-                }
-                (Slot::Isp(_), None) => {}
-                _ => {
+        check_top_presentation(presentation, id, family)
+    }
+}
+
+/// [`PLibraryHandle::check_top`] on one presentation `id` of `family`.
+pub(crate) fn check_top_presentation(
+    presentation: &rustred::propagator::presentation::Presentation,
+    id: PresentationId,
+    family: &crate::p_integral::PFamilyData,
+) -> Result<PTop, RustRedEvaluationError> {
+    let mismatch =
+        |detail: String| data_failure(format!("top {} of the library: {detail}", family.name));
+    if usize::from(presentation.loops) != family.loops {
+        return Err(mismatch(format!("{} loops", presentation.loops)));
+    }
+    let lines = parts::canonical_lines(family)
+        .map_err(|error| mismatch(format!("canonical lines: {error}")))?;
+    let arity = presentation.slots.len();
+    if arity != lines.len() + family.isps.len() {
+        return Err(mismatch(format!(
+            "{arity} slots for {} lines and {} ISPs",
+            lines.len(),
+            family.isps.len()
+        )));
+    }
+    for (index, slot) in presentation.slots.iter().enumerate() {
+        match (slot, lines.get(index)) {
+            (Slot::Line(line), Some(canonical)) => {
+                let mut expected = canonical.loops.clone();
+                expected.push(canonical.external);
+                let negated = expected.iter().map(|c| -c).collect::<Vec<_>>();
+                if line.eps_units != 0 || (line.momentum != expected && line.momentum != negated) {
                     return Err(mismatch(format!(
-                        "slot {} is not a {}",
+                        "line slot {} is {:?} (eps units {}), vakint's line is {expected:?}",
                         index + 1,
-                        if index < lines.len() { "line" } else { "ISP" }
+                        line.momentum,
+                        line.eps_units
                     )));
                 }
             }
+            (Slot::Isp(_), None) => {}
+            _ => {
+                return Err(mismatch(format!(
+                    "slot {} is not a {}",
+                    index + 1,
+                    if index < lines.len() { "line" } else { "ISP" }
+                )));
+            }
         }
-        Ok(PTop {
-            presentation: id,
-            line_count: lines.len(),
-            arity,
-        })
     }
+    Ok(PTop {
+        presentation: id,
+        line_count: lines.len(),
+        arity,
+    })
+}
 
+impl PLibraryHandle {
     /// Every terminal maps onto `1` or a tabulated Forcer master: without a
     /// basis map only the unit terminal may exist, and a residual never
     /// reaches vakint (convention C4).

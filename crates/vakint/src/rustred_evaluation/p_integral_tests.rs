@@ -571,3 +571,114 @@ fn without_p_data_p_integrals_go_to_forcer() {
         Some(EvaluationMethod::Forcer(_))
     ));
 }
+
+/// Every family of RustRed's families file has vakint's canonical lines as its
+/// line slots (all 16, one to four loops), and random numerator polynomials
+/// lower exactly onto lines and ISPs: at a random point of the scalar
+/// products, `Σ c Π (k·k, k·q)^e = Σ c' Π D_s^(-key_s)` (`q·q = -1`).
+#[test]
+fn numerators_lower_exactly_onto_the_slots_of_every_family() {
+    use crate::p_integral::P_FAMILIES;
+    use rustred::propagator::families::{P_FAMILIES_V1_JSON, load_p_families};
+    use rustred::propagator::presentation::Slot;
+
+    let (file, presentations) = load_p_families(P_FAMILIES_V1_JSON).unwrap();
+    assert_eq!(file.families.len(), P_FAMILIES.len());
+    let mut state = 0x2545_f491_4f6c_dd1d_u64;
+    let mut next = |bound: u64| {
+        state = state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        (state >> 33) % bound
+    };
+    for family in &P_FAMILIES {
+        let index = file
+            .families
+            .iter()
+            .position(|entry| entry.name == family.name)
+            .unwrap();
+        let presentation = &presentations[index];
+        let top =
+            super::super::p_data::check_top_presentation(presentation, presentation.id, family)
+                .unwrap_or_else(|error| panic!("{}: {error}", family.name));
+        let loops = family.loops;
+        let mut loop_loop = vec![vec![Rational::zero(); loops]; loops];
+        for i in 0..loops {
+            for j in i..loops {
+                let value = Rational::from((next(41) as i64 - 20, next(7) as i64 + 1));
+                loop_loop[i][j] = value.clone();
+                loop_loop[j][i] = value;
+            }
+        }
+        let loop_external = (0..loops)
+            .map(|_| Rational::from((next(41) as i64 - 20, next(5) as i64 + 1)))
+            .collect::<Vec<_>>();
+        let product = |a: &[i64], b: &[i64]| {
+            let mut value = Rational::from(-a[loops] * b[loops]);
+            for i in 0..loops {
+                value += &(&Rational::from(a[i] * b[loops] + a[loops] * b[i]) * &loop_external[i]);
+                for j in 0..loops {
+                    value += &(&Rational::from(a[i] * b[j]) * &loop_loop[i][j]);
+                }
+            }
+            value
+        };
+        let slots = presentation
+            .slots
+            .iter()
+            .map(|slot| match slot {
+                Slot::Line(line) => product(&line.momentum, &line.momentum),
+                Slot::Isp(isp) => product(&isp.left, &isp.right),
+            })
+            .collect::<Vec<_>>();
+        let dot_value = |dot: PDot| {
+            let (a, b) = dot_rows(dot, loops);
+            product(&a, &b)
+        };
+        let dots = (1..=loops)
+            .flat_map(|i| (i..=loops).map(move |j| PDot::Loops(i, j)))
+            .chain((1..=loops).map(PDot::External))
+            .collect::<Vec<_>>();
+        let polynomial = (0..4)
+            .map(|_| {
+                let factors = (0..next(4))
+                    .map(|_| (dots[next(dots.len() as u64) as usize], next(2) as i64 + 1))
+                    .collect::<Vec<_>>();
+                (
+                    Fraction::new(next(19) as i128 - 9, next(3) as i128 + 1),
+                    PMonomial(factors),
+                )
+            })
+            .collect::<Vec<_>>();
+        let mut direct = Rational::zero();
+        for (value, monomial) in &polynomial {
+            let mut term = fraction(*value);
+            for &(dot, exponent) in &monomial.0 {
+                for _ in 0..exponent {
+                    term = &term * &dot_value(dot);
+                }
+            }
+            direct += &term;
+        }
+        let lowered = lower_part(
+            presentation,
+            top,
+            &vec![0; top.line_count],
+            &polynomial,
+            &mut BTreeMap::new(),
+        )
+        .unwrap();
+        let mut via_slots = Rational::zero();
+        for (key, value) in &lowered {
+            let mut term = value.clone();
+            for (slot, &power) in key.iter().enumerate() {
+                assert!(power <= 0, "{}: {key:?}", family.name);
+                for _ in 0..-power {
+                    term = &term * &slots[slot];
+                }
+            }
+            via_slots += &term;
+        }
+        assert_eq!(direct, via_slots, "{}: {polynomial:?}", family.name);
+    }
+}
