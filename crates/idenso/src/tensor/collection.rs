@@ -223,10 +223,18 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                         InterfaceInference::merge_explicit_interface_sequence(&[interface])?,
                     )
                 }
-                NetworkNode::Leaf(NetworkLeaf::Scalar(index)) => (
-                    self.selected(network.store.get_scalar_ref(*index).as_atom_view()),
-                    PartialStructure::from_logical_slots([]),
-                ),
+                NetworkNode::Leaf(NetworkLeaf::Scalar(index)) => {
+                    let value = network.store.get_scalar_ref(*index).as_atom_view();
+                    // Shallow scalar storage can retain compact tensor syntax.
+                    // Observe its ports without materializing or normalizing it;
+                    // the storage variant does not prove a scalar interface.
+                    let interface = if InterfaceInference::has_structured_syntax(value) {
+                        InterfaceInference::replacement_interface(value)?
+                    } else {
+                        PartialStructure::from_logical_slots([])
+                    };
+                    (self.selected(value), interface)
+                }
                 NetworkNode::Op(operation) => {
                     let selected = children.iter().any(|child| owned[child]);
                     let child_interfaces = children
@@ -692,7 +700,10 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                     }
                     if matches!(network.graph.graph[base], NetworkNode::Leaf(_)) {
                         let base_value = self.emit(network, tree, base)?;
-                        if matches!(base_value.as_view(), AtomView::Add(_) | AtomView::Mul(_)) {
+                        if matches!(base_value.as_view(), AtomView::Add(_) | AtomView::Mul(_))
+                            || matches!(base_value.as_view(), AtomView::Fun(function)
+                                if function.get_symbol() == SPENSO_TAG.bracket)
+                        {
                             // Open the selected power before copying: internal
                             // dummy pairs belong to each copy, not its opaque leaf.
                             let value = self.emit(network, tree, node)?;
@@ -1435,17 +1446,19 @@ impl SymbolicTensor<PartialStructure> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bis;
     use crate::epsilon::EPSILON_SYMBOL;
     use crate::tensor::composition::TensorCompositionError;
     use crate::test_support;
-    use spenso::mink;
     use spenso::network::library::symbolic::ETS;
     use spenso::network::tags::SPENSO_TAG;
     use spenso::shadowing::SYM;
     use spenso::structure::representation::{Minkowski, RepName};
+    use spenso::{mink, tensor_symbol, vector_symbol};
     use std::slice;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use symbolica::atom::{FunctionBuilder, Symbol};
-    use symbolica::symbol;
+    use symbolica::{function, symbol};
 
     fn tensor(head: Symbol, slots: &[Atom]) -> Atom {
         FunctionBuilder::new(head).add_args(slots).finish()
@@ -2860,6 +2873,173 @@ mod tests {
         assert_eq!(rows.len(), 1);
         assert!(rows[0].0.expression.is_one());
         assert_eq!(rows[0].1, source);
+    }
+
+    #[test]
+    fn coefficient_list_preserves_compact_anonymous_tensor_interfaces() {
+        test_support::test_initialize();
+        let weight = Atom::var(symbol!("compact_collection_t"; Scalar)).pow(Atom::num((3, 2)));
+        for (name, representation) in [
+            ("compact_collection_spinor", bis!(4)),
+            ("compact_collection_vector", mink!(4)),
+        ] {
+            let value =
+                SymbolicTensor::infer(tensor(SPENSO_TAG.tensor_symbol(name), &[representation]))
+                    .unwrap();
+            assert_eq!(value.structure.open_positions(), vec![0]);
+            let source = SymbolicTensor::infer(&weight * &value.expression).unwrap();
+            let rows = source
+                .coefficient_list(TensorCollectFilter::<0>::Tensors)
+                .unwrap();
+            assert_eq!(rows.len(), 1);
+            assert_eq!(rows[0].0.expression, value.expression);
+            assert_eq!(rows[0].0.structure, value.structure);
+            assert_eq!(rows[0].1.expression, weight);
+            assert!(rows[0].1.is_scalar());
+            SymbolicTensor::validate_interface(&rows[0].0.expression, &rows[0].0.structure)
+                .unwrap();
+            assert_eq!(rows[0].0.outer(&rows[0].1).unwrap(), source);
+        }
+    }
+
+    #[test]
+    fn coefficient_list_retains_compact_vector_symbolic_dimensions() {
+        test_support::test_initialize();
+        let dimension = Atom::var(symbol!("compact_collection_D"; Scalar, Real, Positive));
+        let vector = SymbolicTensor::infer(tensor(
+            vector_symbol!("compact_collection_symbolic_vector"),
+            &[Minkowski {}.to_symbolic([dimension])],
+        ))
+        .unwrap();
+        assert_eq!(vector.structure.open_positions(), vec![0]);
+        let weight = Atom::var(symbol!("compact_collection_vector_t"; Scalar));
+        let source = SymbolicTensor::infer(&weight * &vector.expression).unwrap();
+        let rows = source
+            .coefficient_list(TensorCollectFilter::<0>::Tensors)
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].0.expression, vector.expression);
+        assert_eq!(rows[0].0.structure, vector.structure);
+        assert_eq!(rows[0].1.expression, weight);
+        assert!(rows[0].1.is_scalar());
+        assert_eq!(rows[0].0.outer(&rows[0].1).unwrap(), source);
+    }
+
+    #[test]
+    fn coefficient_list_retains_multiple_anonymous_ports_in_logical_order() {
+        test_support::test_initialize();
+        let a = tensor(tensor_symbol!("compact_collection_multi_a"), &[mink!(4)]);
+        let b = tensor(tensor_symbol!("compact_collection_multi_b"), &[bis!(4)]);
+        let c = tensor(tensor_symbol!("compact_collection_multi_c"), &[mink!(4)]);
+        let selected = SymbolicTensor::infer(&a * &b * &c).unwrap();
+        assert_eq!(selected.structure.open_positions(), vec![0, 1, 2]);
+        let weight = Atom::var(symbol!("compact_collection_multi_t"; Scalar));
+        let source = SymbolicTensor::infer(&weight * &selected.expression).unwrap();
+        let rows = source
+            .coefficient_list(TensorCollectFilter::<0>::Tensors)
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].0.expression, selected.expression);
+        assert_eq!(
+            rows[0].0.structure.logical_slots(),
+            selected.structure.logical_slots()
+        );
+        assert_eq!(rows[0].0.structure.open_positions(), vec![0, 1, 2]);
+        assert_eq!(rows[0].1.expression, weight);
+        assert!(rows[0].1.is_scalar());
+        assert_eq!(rows[0].0.outer(&rows[0].1).unwrap(), source);
+
+        let rows = source
+            .coefficient_list_with(|value| value == a.as_view())
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].0.expression, a);
+        assert_eq!(rows[0].0.structure.open_positions(), vec![0]);
+        let expected_coefficient = SymbolicTensor::infer(&weight * &b * &c).unwrap();
+        assert_eq!(rows[0].1.expression, expected_coefficient.expression);
+        assert_eq!(
+            rows[0].1.structure.logical_slots(),
+            expected_coefficient.structure.logical_slots()
+        );
+        assert_eq!(
+            rows[0].0.outer(&rows[0].1).unwrap().structure,
+            source.structure
+        );
+
+        // This middle-factor selection checks each row's own boundary and
+        // exact reconstruction in the original source frame. It does not
+        // assert an arbitrary permutation of unresolved tensor-product axes.
+        let rows = source
+            .coefficient_list_with(|value| value == b.as_view())
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].0.expression, b);
+        assert_eq!(rows[0].0.structure.open_positions(), vec![0]);
+        let expected_coefficient = SymbolicTensor::infer(&weight * &a * &c).unwrap();
+        assert_eq!(rows[0].1.expression, expected_coefficient.expression);
+        assert_eq!(
+            rows[0].1.structure.logical_slots(),
+            expected_coefficient.structure.logical_slots()
+        );
+        assert_eq!(rows[0].1.structure.open_positions(), vec![0, 1]);
+        let ports = rows[0].1.structure.logical_slots();
+        assert_eq!(ports[0].rep(), ports[1].rep());
+        assert_ne!(ports[0].aind, ports[1].aind);
+        let reassembled = &rows[0].0.expression * &rows[0].1.expression;
+        assert_eq!(reassembled, source.expression);
+        SymbolicTensor::from_declared_parts(reassembled, source.structure.clone()).unwrap();
+    }
+
+    #[test]
+    fn coefficient_list_preserves_anonymous_typed_zero_coefficients() {
+        test_support::test_initialize();
+        let value = SymbolicTensor::infer(tensor(
+            tensor_symbol!("compact_collection_zero"),
+            &[bis!(4), mink!(4)],
+        ))
+        .unwrap();
+        let zero =
+            SymbolicTensor::from_declared_parts(Atom::Zero, value.structure.clone()).unwrap();
+        let rows = zero
+            .coefficient_list(TensorCollectFilter::<0>::Tensors)
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].0.expression.is_one());
+        assert!(rows[0].0.is_scalar());
+        assert!(rows[0].1.expression.is_zero());
+        assert_eq!(rows[0].1.structure, zero.structure);
+        assert_eq!(rows[0].0.outer(&rows[0].1).unwrap(), zero);
+    }
+
+    #[test]
+    fn coefficient_list_observes_compact_ports_without_replaying_metadata_hooks() {
+        test_support::test_initialize();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = Arc::clone(&calls);
+        let metadata = symbol!("compact_collection_metadata"; Scalar;
+            norm = move |_, _| { seen.fetch_add(1, Ordering::Relaxed); });
+        let hidden = tensor(tensor_symbol!("compact_collection_hidden"), &[mink!(4)]);
+        let coefficient = function!(metadata, &hidden);
+        let selected = SymbolicTensor::infer(tensor(
+            tensor_symbol!("compact_collection_visible"),
+            &[bis!(4)],
+        ))
+        .unwrap();
+        let source = SymbolicTensor::infer(&selected.expression * &coefficient).unwrap();
+        let before = calls.load(Ordering::Relaxed);
+        let rows = source
+            .coefficient_list(TensorCollectFilter::<0>::Tensors)
+            .unwrap();
+        assert_eq!(calls.load(Ordering::Relaxed), before);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].0.expression, selected.expression);
+        assert_eq!(rows[0].0.structure, selected.structure);
+        assert_eq!(rows[0].1.expression, coefficient);
+        assert!(rows[0].1.is_scalar());
+        assert_eq!(
+            rows[0].0.outer(&rows[0].1).unwrap().structure,
+            source.structure
+        );
     }
 
     #[test]
