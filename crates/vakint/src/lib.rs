@@ -4901,12 +4901,17 @@ impl VakintExpression {
                     Some(raw.as_view()),
                 );
                 // Retention is combined by its catalogue owner. Substitution
-                // modes keep their existing precombination boundary.
+                // modes keep their precombination boundary, master by master
+                // (terminal products are independent indeterminates) instead
+                // of over one common denominator of the whole sum.
                 let started = rustred_evaluation::phase_start();
                 let raw = if mode == RustRedMasterMode::Retain {
                     raw
                 } else {
-                    rustred_evaluation::combine_exact(raw)
+                    rustred_evaluation::masters::MasterCatalog::combine_master_coefficients(
+                        raw,
+                        rustred_evaluation::postprocessing_threads(settings),
+                    )
                 };
                 rustred_evaluation::log_phase("ordered_precombination", started);
                 let started = rustred_evaluation::phase_start();

@@ -120,8 +120,97 @@ pub(crate) fn combine_exact(expression: Atom) -> Atom {
     if MasterCatalog::has_floating_coefficients(&expression) {
         expression
     } else {
-        together_over_shared_remainder(&expression).unwrap_or_else(|| expression.together())
+        together_over_shared_remainder(&expression)
+            .or_else(|| together_gaussian_laurent(&expression))
+            .unwrap_or_else(|| expression.together())
     }
+}
+
+/// `together` of an expanded Laurent polynomial with Gaussian rational
+/// coefficients, assembled without converting it term by term.
+///
+/// `together` converts a sum into a factorized rational polynomial one term
+/// at a time; every addition multiplies by the cofactors and tries to divide
+/// the growing numerator by each denominator factor. For the Laurent series
+/// of a five-loop result in its symbolic master coefficients (function
+/// indeterminates, so Symbolica's direct polynomial conversion does not
+/// apply) that is quadratic in the number of terms and takes hours.
+///
+/// With an imaginary coefficient, `together` works over Q(i), where its normal
+/// form normalizes neither the numerator nor the overall constants, and
+/// monomial denominator factors are already monic. Its result is therefore
+/// `expand(e·D)/D` for the least monomial `D` that clears every negative power:
+/// for each symbol of `D` some term of `e·D` is free of it, so nothing
+/// cancels. The value is assembled exactly as `together` assembles its normal
+/// form. Returns `None` unless the sum has an imaginary coefficient and every
+/// term is a product of exact numbers, symbols and function calls raised to
+/// integer powers, with negative powers on symbols only.
+fn together_gaussian_laurent(expanded: &Atom) -> Option<Atom> {
+    let AtomView::Add(sum) = expanded.as_view() else {
+        return None;
+    };
+    if !expanded.as_view().has_complex_coefficients() {
+        return None;
+    }
+    let mut clearing = BTreeMap::<Symbol, i64>::new();
+    for term in sum.iter() {
+        let factors: Vec<_> = match term {
+            AtomView::Mul(product) => product.iter().collect(),
+            view => vec![view],
+        };
+        for factor in factors {
+            match factor {
+                AtomView::Num(number) => {
+                    if !matches!(
+                        number.get_coeff_view(),
+                        CoefficientView::Natural(..) | CoefficientView::Large(..)
+                    ) {
+                        return None;
+                    }
+                }
+                AtomView::Var(_) | AtomView::Fun(_) => {}
+                AtomView::Pow(power) => {
+                    let (base, exponent) = power.get_base_exp();
+                    let exponent = get_integer_from_atom(exponent)?;
+                    if exponent == 0 || exponent.unsigned_abs() > u64::from(u32::MAX) {
+                        return None;
+                    }
+                    match base {
+                        AtomView::Var(variable) if exponent < 0 => {
+                            let power = clearing.entry(variable.get_symbol()).or_insert(0);
+                            *power = (*power).max(-exponent);
+                        }
+                        AtomView::Var(_) | AtomView::Fun(_) if exponent > 0 => {}
+                        _ => return None,
+                    }
+                }
+                AtomView::Add(_) | AtomView::Mul(_) => return None,
+            }
+        }
+    }
+    let numerator = if clearing.is_empty() {
+        expanded.clone()
+    } else {
+        let mut clearing_monomial = Atom::num(1);
+        for (symbol, power) in &clearing {
+            clearing_monomial *= Atom::var(*symbol).pow(Atom::num(*power));
+        }
+        Atom::add_many(sum.iter().map(|term| term.to_owned() * &clearing_monomial))
+    };
+    // `together_into` over Q(i): numer_coeff · numerator / (denom_coeff · ∏ factor^power)
+    // with both coefficients one.
+    let one = || {
+        Atom::num(symbolica::domains::float::Complex::new(
+            Rational::from(1),
+            Rational::from(0),
+        ))
+    };
+    let num = one() * numerator;
+    let mut den = one();
+    for (symbol, power) in clearing {
+        den *= Atom::var(symbol).pow(Atom::num(power));
+    }
+    Some(num / den)
 }
 
 /// `together` of an expanded sum whose terms differ only by rational multiples
@@ -782,7 +871,7 @@ impl MasterCatalog {
     /// Combine the scalar coefficient of every master product exactly, on up
     /// to `threads` workers. Coefficients are combined independently and
     /// summed in collection order, so the result is independent of `threads`.
-    fn combine_master_coefficients(raw: Atom, threads: usize) -> Atom {
+    pub(crate) fn combine_master_coefficients(raw: Atom, threads: usize) -> Atom {
         let raw = Self::expand_on(&raw, threads);
         // Keep the same whole-expression Float policy as combine_exact.
         if Self::has_floating_coefficients(&raw) {
@@ -961,7 +1050,13 @@ impl MasterCatalog {
             })
             .collect();
         let started = super::phase_start();
-        let normalized = combine_exact(raw.replace_multiple(&replacements));
+        // Master by master, as the direct path combines; a raw expression that
+        // its caller already combined this way and that holds no alias is
+        // returned unchanged, so the direct result stands.
+        let normalized = Self::combine_master_coefficients(
+            raw.replace_multiple(&replacements),
+            super::postprocessing_threads(settings),
+        );
         super::log_phase("finalize_alias_normalization", started);
         if normalized == raw {
             return direct;
@@ -1017,8 +1112,9 @@ impl MasterCatalog {
                 super::postprocessing_threads(settings),
             ));
         }
+        let threads = super::postprocessing_threads(settings);
         let started = super::phase_start();
-        let raw = combine_exact(raw);
+        let (raw, terms) = Self::independent_terms(raw, threads);
         super::log_phase("independent_combination", started);
         self.require_coefficients(&raw, &BTreeMap::new())?;
         let epsilon = vk_symbol!(&settings.epsilon_symbol);
@@ -1052,28 +1148,21 @@ impl MasterCatalog {
             }
         }
         let started = super::phase_start();
-        let symbols: Vec<_> = Self::referenced_masters(&raw).into_iter().collect();
-        let terms = raw.coefficient_list::<i32>(&symbols);
+        // The leading epsilon power of every coefficient, independently on up
+        // to `threads` workers; the loop below consumes them in term order, so
+        // its validation order and its errors are those of a sequential pass.
+        let valuations = super::parallel::map_ordered(threads, &terms, |_, (_, coefficient)| {
+            (!coefficient.is_zero()).then(|| Self::epsilon_valuation(coefficient, epsilon))
+        });
         let mut required = BTreeMap::<Atom, i64>::new();
         let mut known = Atom::Zero;
-        for (monomial, coefficient) in terms {
-            let coefficient = combine_exact(coefficient);
-            if coefficient.is_zero() {
+        for ((monomial, coefficient), valuation) in terms.into_iter().zip(valuations) {
+            let Some(valuation) = valuation else {
                 continue;
-            }
+            };
             let mut multiplicities = BTreeMap::new();
             Self::master_multiplicities(monomial.as_view(), &mut multiplicities)?;
-            let series = coefficient
-                .series(epsilon, Atom::Zero.as_view(), SeriesDepth::relative(1))
-                .map_err(failure)?;
-            let exponent = series.get_trailing_exponent();
-            if !exponent.is_integer() {
-                return Err(failure("fractional epsilon power in reduction coefficient").into());
-            }
-            let valuation = exponent
-                .numerator()
-                .to_i64()
-                .ok_or_else(|| failure("epsilon valuation exceeds integer range"))?;
+            let valuation = valuation?;
             let minimum = multiplicities
                 .iter()
                 .try_fold(0_i64, |sum, (symbol, power)| {
@@ -1194,6 +1283,73 @@ impl MasterCatalog {
             return self.bind_period_references(result);
         }
         Ok(result)
+    }
+
+    /// The master monomials of `raw` with their exactly combined scalar
+    /// coefficients (in collection order), and `raw` itself combined.
+    ///
+    /// This is the coefficient list of `combine_exact(raw)` with every
+    /// coefficient combined once more, computed per coefficient instead of
+    /// over one common denominator of the whole sum: terminal products are
+    /// independent indeterminates, so each coefficient's normal form is that
+    /// of its own value (over Q(i), as at five loops, `together` normalizes
+    /// neither the numerator nor the constants and keeps monic irreducible
+    /// denominators). The coefficients are combined on up to `threads`
+    /// workers and returned in collection order. Floating coefficients keep
+    /// the expanded sum, and coefficients that still reference masters keep
+    /// the whole-sum combination, as before.
+    fn independent_terms(raw: Atom, threads: usize) -> (Atom, Vec<(Atom, Atom)>) {
+        let expanded = Self::expand_on(&raw, threads);
+        let floating = Self::has_floating_coefficients(&expanded);
+        let symbols: Vec<_> = Self::referenced_masters(&expanded).into_iter().collect();
+        let terms = expanded.coefficient_list::<i32>(&symbols);
+        if !floating
+            && terms
+                .iter()
+                .any(|(_, coefficient)| !Self::referenced_masters(coefficient).is_empty())
+        {
+            let combined = combine_exact(expanded);
+            let symbols: Vec<_> = Self::referenced_masters(&combined).into_iter().collect();
+            let terms = combined
+                .coefficient_list::<i32>(&symbols)
+                .into_iter()
+                .map(|(monomial, coefficient)| (monomial, combine_exact(coefficient)))
+                .collect();
+            return (combined, terms);
+        }
+        let coefficients = super::parallel::map_ordered(threads, &terms, |_, (_, coefficient)| {
+            combine_exact(coefficient.clone())
+        });
+        let terms: Vec<_> = terms
+            .into_iter()
+            .zip(coefficients)
+            .map(|((monomial, _), coefficient)| (monomial, coefficient))
+            .collect();
+        let combined = if floating {
+            expanded
+        } else {
+            Atom::add_many(
+                terms
+                    .iter()
+                    .map(|(monomial, coefficient)| monomial * coefficient),
+            )
+        };
+        (combined, terms)
+    }
+
+    /// The trailing epsilon power of a nonzero reduction coefficient.
+    fn epsilon_valuation(coefficient: &Atom, epsilon: Symbol) -> Result<i64, VakintError> {
+        let series = coefficient
+            .series(epsilon, Atom::Zero.as_view(), SeriesDepth::relative(1))
+            .map_err(failure)?;
+        let exponent = series.get_trailing_exponent();
+        if !exponent.is_integer() {
+            return Err(failure("fractional epsilon power in reduction coefficient").into());
+        }
+        Ok(exponent
+            .numerator()
+            .to_i64()
+            .ok_or_else(|| failure("epsilon valuation exceeds integer range"))?)
     }
 
     fn master_multiplicities(
@@ -2839,5 +2995,92 @@ mod tests {
             )
             .is_ok()
         );
+    }
+}
+
+#[cfg(test)]
+mod laurent_together_tests {
+    use super::*;
+
+    /// Gaussian rational Laurent polynomials in symbols and opaque functions,
+    /// from a fixed linear congruential sequence.
+    fn generated(seed: u64, terms: usize) -> Atom {
+        let mut state = seed;
+        let mut next = move |modulus: u64| {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            (state >> 33) % modulus
+        };
+        let symbols = ["ep", "mUV", "x"];
+        let functions = [
+            "RustRedCoefficient(tag,RustRedMaster(fam,1,1),-2)",
+            "RustRedCoefficient(tag,RustRedMaster(fam,1,2),0)",
+            "log(𝜋)",
+            "f(1,2)",
+        ];
+        let mut sum = Atom::Zero;
+        for _ in 0..terms {
+            let re = next(41) as i64 - 20;
+            let im = next(41) as i64 - 20;
+            let den = next(9) as i64 + 1;
+            let mut term = vk_parse!(format!("({re}+{im}*𝑖)/{den}")).unwrap();
+            for symbol in symbols {
+                let power = next(7) as i64 - 3;
+                term *= vk_parse!(symbol).unwrap().pow(Atom::num(power));
+            }
+            for function in functions {
+                let power = next(4) as i64;
+                term *= vk_parse!(function).unwrap().pow(Atom::num(power));
+            }
+            sum += term;
+        }
+        sum.expand()
+    }
+
+    #[test]
+    fn gaussian_laurent_assembly_equals_symbolica_together() {
+        crate::Vakint::initialize_vakint_symbols();
+        let mut inputs: Vec<Atom> = [
+            "(3/4+2*𝑖)*ep^-3*f(1)+𝑖*ep^-1*f(2)*x^2+5*f(1)*f(2)*ep^2-7/3*𝑖*x^-2*ep^-1+11",
+            "𝑖*RustRedCoefficient(t,RustRedMaster(a,1),-2)*ep^-2+(1/2-𝑖/3)*RustRedCoefficient(t,RustRedMaster(a,1),-1)*ep^-1*mUV^-2+log(x)*EulerGamma*ep",
+            "𝑖*f(1)+f(2)^2*x+1",
+            "(123456789012345678901234567890/7+𝑖)*ep^-5*y^-1+2*ep^-4+𝑖*y*f(3)^3",
+            "𝑖*ep^-2*f(1)+ep^-2*f(2)",
+            "𝑖*ep^-2*f(1)+ep^-1*f(2)+ep^-2*f(2)",
+        ]
+        .into_iter()
+        .map(|input| vk_parse!(input).unwrap().expand())
+        .collect();
+        inputs.extend((0..12).map(|seed| generated(seed, 5 + 7 * seed as usize)));
+        for input in inputs {
+            let fast = together_gaussian_laurent(&input)
+                .unwrap_or_else(|| panic!("fast path declined {input}"));
+            assert_eq!(fast, input.together(), "{input}");
+            assert_eq!(combine_exact(input.clone()), input.together(), "{input}");
+        }
+    }
+
+    #[test]
+    fn gaussian_laurent_assembly_declines_other_shapes() {
+        crate::Vakint::initialize_vakint_symbols();
+        for input in [
+            // no imaginary coefficient: the integer normal form differs
+            "ep^-1*f(1)+ep^-2",
+            // polynomial and negative function denominators
+            "𝑖*(1+ep)^-1+ep",
+            "𝑖*f(1)^-1+ep",
+            // non-integer and symbolic exponents
+            "𝑖*x^(1/2)+x",
+            "𝑖*x^ep+1",
+            // a single term
+            "𝑖*ep^-2",
+        ] {
+            let expanded = vk_parse!(input).unwrap().expand();
+            assert!(together_gaussian_laurent(&expanded).is_none(), "{input}");
+            assert_eq!(combine_exact(expanded.clone()), {
+                together_over_shared_remainder(&expanded).unwrap_or_else(|| expanded.together())
+            });
+        }
     }
 }

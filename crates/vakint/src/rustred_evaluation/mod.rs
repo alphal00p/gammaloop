@@ -371,8 +371,13 @@ impl Vakint {
         } else {
             if !announced.is_empty() {
                 let started = phase_start();
-                data.masters
-                    .require_coefficients(&combine_exact(raw.clone()), &announced)?;
+                data.masters.require_coefficients(
+                    &masters::MasterCatalog::combine_master_coefficients(
+                        raw.clone(),
+                        postprocessing_threads(settings),
+                    ),
+                    &announced,
+                )?;
                 log_phase("finalize_announced_check", started);
             }
             data.masters.finalize(raw, settings, loop_count, mode)?
