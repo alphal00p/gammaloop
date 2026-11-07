@@ -15,6 +15,7 @@ use crate::{
         cuts::{CutSet, ResidueSelector},
     },
     integrands::process::ProcessIntegrand,
+    model::Model,
     processes::{DotExportSettings, ProcessCollection, process::Process},
     settings::global::GenerationSettings,
     uv::{
@@ -122,6 +123,7 @@ pub(crate) struct UVForestNodeExpression {
 impl Process {
     pub fn export_uv_forest_graph(
         &self,
+        model: &Model,
         integrand_name: &str,
         graph_id: usize,
         settings: &UVForestExportSettings,
@@ -215,6 +217,7 @@ impl Process {
                 let cut_structure = CutStructure::empty(&term.graph);
                 export_graph(
                     &term.graph,
+                    model,
                     cut_structure,
                     orientation,
                     generation_settings,
@@ -261,6 +264,7 @@ impl Process {
 
                 export_graph(
                     &term.graph,
+                    model,
                     cut_structure,
                     orientation,
                     generation_settings,
@@ -274,6 +278,7 @@ impl Process {
 
 fn export_graph(
     graph: &Graph,
+    model: &Model,
     cut_structure: CutStructure,
     orientation: Option<OrientationProjection<'_>>,
     generation_settings: &GenerationSettings,
@@ -301,6 +306,7 @@ fn export_graph(
                 forest_index,
                 &forest_name,
                 &mut graph,
+                model,
                 single_cut,
                 orientation,
                 generation_settings,
@@ -313,6 +319,7 @@ fn export_graph(
                 forest_index,
                 &forest_name,
                 &mut graph,
+                model,
                 single_cut,
                 orientation,
                 generation_settings,
@@ -337,6 +344,7 @@ fn export_legacy_forest(
     forest_index: usize,
     forest_name: &str,
     graph: &mut Graph,
+    model: &Model,
     cut_structure: CutStructure,
     orientation: Option<OrientationProjection<'_>>,
     generation_settings: &GenerationSettings,
@@ -345,7 +353,7 @@ fn export_legacy_forest(
     forest_dot: &mut String,
     node_terms: &mut Vec<UVForestNodeTerm>,
 ) -> Result<()> {
-    let cut_woods = CutWoods::new(cut_structure, graph, generation_settings)?;
+    let cut_woods = CutWoods::new(cut_structure, graph, model, generation_settings)?;
     let mut cut_forests = cut_woods.unfold(graph);
     let Some(forest) = cut_forests.forests.first_mut() else {
         return Err(eyre!("Legacy UV exporter produced no forest"));
@@ -406,6 +414,7 @@ fn export_hedge_poset_forest(
     forest_index: usize,
     forest_name: &str,
     graph: &mut Graph,
+    model: &Model,
     cut_structure: CutStructure,
     orientation: Option<OrientationProjection<'_>>,
     generation_settings: &GenerationSettings,
@@ -414,7 +423,7 @@ fn export_hedge_poset_forest(
     forest_dot: &mut String,
     node_terms: &mut Vec<UVForestNodeTerm>,
 ) -> Result<()> {
-    let wood = HedgePosetWood::new(cut_structure, graph, generation_settings)?;
+    let wood = HedgePosetWood::new(cut_structure, graph, model, generation_settings)?;
     let mut forests = wood.unfold();
     forest_dot.push_str(&name_dot_graph(forests.dot_serialize(), forest_name));
     forest_dot.push('\n');
@@ -425,23 +434,26 @@ fn export_hedge_poset_forest(
 
     let expressions = match &generation_settings.uv.final_integrand {
         FinalIntegrandDimension::FourD => {
-            forests.integrate(graph, crate::utils::vakint()?, &generation_settings.uv)?;
+            forests.integrate(
+                graph,
+                model,
+                crate::utils::vakint()?,
+                &generation_settings.uv,
+            )?;
             forests.export_4d_node_expressions(forest_index)?
         }
         FinalIntegrandDimension::ThreeD => {
             // A computed 3D export carries provenance from the direct
             // orientation-local CFF projections themselves. Do not construct
             // unrelated 4D atoms merely to annotate this diagnostic output.
-            forests.compute(
-                graph,
-                crate::utils::vakint()?,
-                orientation.ok_or_else(|| {
-                    eyre!("Computed UV forest export requires its stored production CFF expression")
-                })?,
-                &generation_settings.uv,
-                true,
-                &mut Local4dProjectionContext::default(),
-            )?;
+            let vakint = crate::utils::vakint()?;
+            let orientation = orientation.ok_or_else(|| {
+                eyre!("Computed UV forest export requires its stored production CFF expression")
+            })?;
+            let mut context = Local4dProjectionContext::default();
+            forests.prepare_four_d(graph, model, vakint, &generation_settings.uv, &mut context)?;
+            forests.compute(graph, orientation, &generation_settings.uv, &mut context)?;
+            drop(context);
             forests.export_node_expressions(forest_index, post_process)?
         }
     };
@@ -464,12 +476,15 @@ fn node_expression_to_dot(
         forest_name, term.node_index, term.term_index
     );
     let mut dot_graph = graph
-        .with_global_numerator_only(graph_name, term.numerator.clone())
+        .with_global_numerator_only(
+            graph_name,
+            crate::numerator::AppliedFeynmanRule::new(term.numerator.clone())?.expr,
+        )
         .to_dot_graph_with_settings(&DotExportSettings {
             split_xs_by_initial_states: true,
             output_full_numerator: false,
             ..DotExportSettings::default()
-        });
+        })?;
     dot_graph
         .global_data
         .statements
@@ -566,6 +581,8 @@ fn residue_suffix(index: CutCFFIndex) -> String {
 
 #[cfg(test)]
 mod tests {
+    use crate::{graph::FeynmanGraph, model::ModelGammaLoopExt};
+    use feynkit_generator::GenerationType;
     use std::sync::{Arc, Once, OnceLock};
 
     use linnet::parser::DotGraph;
@@ -581,8 +598,8 @@ mod tests {
     };
     use crate::{
         cff::CutCFFIndex,
-        dot,
-        graph::{FeynmanGraph, Graph, parse::IntoGraph},
+        finalized_runtime_dot,
+        graph::Graph,
         initialisation::test_initialise,
         settings::global::GenerationSettings,
         utils::GS,
@@ -646,17 +663,19 @@ mod tests {
     #[test]
     fn computed_node_full_numerator_is_a_spenso_aware_typst_fragment() {
         EXPORT_TEST_INIT.call_once(|| test_initialise().unwrap());
-        let graph: Graph = dot!(digraph G {
-                ext [style=invis]
-                node [num=1]
-                ext -> A
-                C -> A
-                A -> D
-                D -> B
-                B -> C
-                C -> D
-                B -> ext
-            }, SM_MODEL.get_or_init(|| crate::utils::load_generic_model("sm")))
+        let graph: Graph = finalized_runtime_dot!(digraph G {
+            graph [projector=1]
+            ext [style=invis]
+            node [num=1]
+            edge [mass=0 num=1]
+            ext -> A [sink="{ufo_order:0}"]
+            C -> A [lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:1}"]
+            A -> D [source="{ufo_order:2}" sink="{ufo_order:0}"]
+            D -> B [source="{ufo_order:1}" sink="{ufo_order:0}"]
+            B -> C [source="{ufo_order:1}" sink="{ufo_order:1}"]
+            C -> D [lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"]
+            B -> ext [source="{ufo_order:2}"]
+        })
         .unwrap();
         let term = UVForestNodeExpression {
             forest_index: 0,
@@ -678,14 +697,15 @@ mod tests {
     #[test]
     fn computed_node_full_numerator_distinguishes_physical_and_uv_mass_denominators() {
         EXPORT_TEST_INIT.call_once(|| test_initialise().unwrap());
-        let graph: Graph = dot!(digraph G {
+        let graph: Graph =
+            finalized_runtime_dot!(digraph G { graph [projector=1]  edge [mass=0 num=1]
                 ext [style=invis]
                 node [num=1]
-                ext -> A
-                A -> A
-                A -> ext
+                ext -> A [sink="{ufo_order:0}"]
+                A -> A [source="{ufo_order:1}" sink="{ufo_order:2}" lmb_id=0]
+                A -> ext [source="{ufo_order:3}"]
             }, SM_MODEL.get_or_init(|| crate::utils::load_generic_model("sm")))
-        .unwrap();
+            .unwrap();
         let momentum_squared = Atom::var(symbol!("inspect_momentum_squared"));
         let physical_mass = Atom::var(symbol!("inspect_physical_mass"));
         let uv_expansion_mass = Atom::var(GS.m_uv_expansion);
@@ -740,8 +760,11 @@ mod tests {
     #[test]
     fn computed_hedge_4d_export_has_one_all_none_term_per_node() {
         EXPORT_TEST_INIT.call_once(|| test_initialise().unwrap());
-        let graph: Graph = include_str!("../../../../tests/resources/graphs/scalar_bubble.dot")
-            .into_graph(SCALAR_MODEL.get_or_init(|| crate::utils::load_generic_model("scalars")))
+        let graph: Graph =
+            crate::graph::parse::IntoFinalizedRuntimeGraph::into_finalized_runtime_graph(
+                include_str!("../../../../tests/resources/graphs/scalar_bubble.dot"),
+                SCALAR_MODEL.get_or_init(|| crate::utils::load_generic_model("scalars")),
+            )
             .unwrap();
         let generation_settings = GenerationSettings {
             uv: UVgenerationSettings {
@@ -754,6 +777,7 @@ mod tests {
         };
         let export = export_graph(
             &graph,
+            &graph.model,
             CutStructure::empty(&graph),
             None,
             &generation_settings,
@@ -785,8 +809,11 @@ mod tests {
     #[test]
     fn computed_hedge_3d_export_retains_direct_projection_provenance() {
         EXPORT_TEST_INIT.call_once(|| test_initialise().unwrap());
-        let mut graph: Graph = include_str!("../../../../tests/resources/graphs/scalar_bubble.dot")
-            .into_graph(SCALAR_MODEL.get_or_init(|| crate::utils::load_generic_model("scalars")))
+        let mut graph: Graph =
+            crate::graph::parse::IntoFinalizedRuntimeGraph::into_finalized_runtime_graph(
+                include_str!("../../../../tests/resources/graphs/scalar_bubble.dot"),
+                SCALAR_MODEL.get_or_init(|| crate::utils::load_generic_model("scalars")),
+            )
             .unwrap();
         let generation_settings = GenerationSettings {
             uv: UVgenerationSettings {
@@ -816,6 +843,7 @@ mod tests {
         );
         let export = export_graph(
             &graph,
+            &graph.model,
             CutStructure::empty(&graph),
             Some(orientation),
             &generation_settings,
@@ -881,8 +909,11 @@ mod tests {
     #[test]
     fn computed_legacy_4d_export_is_rejected_contextually() {
         EXPORT_TEST_INIT.call_once(|| test_initialise().unwrap());
-        let graph: Graph = include_str!("../../../../tests/resources/graphs/scalar_bubble.dot")
-            .into_graph(SCALAR_MODEL.get_or_init(|| crate::utils::load_generic_model("scalars")))
+        let graph: Graph =
+            crate::graph::parse::IntoFinalizedRuntimeGraph::into_finalized_runtime_graph(
+                include_str!("../../../../tests/resources/graphs/scalar_bubble.dot"),
+                SCALAR_MODEL.get_or_init(|| crate::utils::load_generic_model("scalars")),
+            )
             .unwrap();
         let generation_settings = GenerationSettings {
             uv: UVgenerationSettings {
@@ -894,6 +925,7 @@ mod tests {
         };
         let error = export_graph(
             &graph,
+            &graph.model,
             CutStructure::empty(&graph),
             None,
             &generation_settings,
@@ -914,14 +946,15 @@ mod tests {
     #[test]
     fn computed_hedge_provenance_survives_json_and_dot_round_trip() {
         EXPORT_TEST_INIT.call_once(|| test_initialise().unwrap());
-        let graph: Graph = dot!(digraph G {
+        let graph: Graph =
+            finalized_runtime_dot!(digraph G { graph [projector=1]  edge [mass=0 num=1]
                 ext [style=invis]
                 node [num=1]
-                ext -> A
-                A -> A
-                A -> ext
+                ext -> A [sink="{ufo_order:0}"]
+                A -> A [source="{ufo_order:1}" sink="{ufo_order:2}" lmb_id=0]
+                A -> ext [source="{ufo_order:3}"]
             }, SM_MODEL.get_or_init(|| crate::utils::load_generic_model("sm")))
-        .unwrap();
+            .unwrap();
         let provenance = Arc::new(UVForestProvenance {
             node: UVForestNodeProvenance {
                 parent_keys: vec!["parent:{1}".to_string()],
@@ -994,7 +1027,6 @@ mod tests {
     #[test]
     fn computed_exports_match_physical_production_normalization() -> color_eyre::Result<()> {
         use crate::{
-            feyngen::GenerationType,
             processes::{Process, ProcessCollection, ProcessDefinition},
             settings::{GlobalSettings, RuntimeSettings},
             utils::{W_, load_generic_model},
@@ -1029,10 +1061,13 @@ mod tests {
                     for _ in 0..multiplicity {
                         source.push_str("left -> right [particle=scalar_0];");
                     }
-                    source.push('}');
+                    source.push_str(&format!(
+                        "final_state={:?};}}",
+                        vec!["scalar_0"; multiplicity].join(",")
+                    ));
                     (GenerationType::CrossSection, source)
                 };
-                let graphs = Graph::from_string(&source, &model)?;
+                let graphs = Graph::import_dot(&source, &model)?;
                 let definition = ProcessDefinition::from_graph_list(&graphs, kind, &model)?;
                 let mut process = Process::from_graph_list(
                     "export_phase".into(),
@@ -1079,6 +1114,7 @@ mod tests {
                     }
                 };
                 let exported = process.export_uv_forest_graph(
+                    &model,
                     "default",
                     0,
                     &UVForestExportSettings { computed: true },
@@ -1094,14 +1130,15 @@ mod tests {
                     .collect::<Vec<_>>();
                 let mut actual = Atom::Zero;
                 for term in &exported.node_terms {
-                    for parsed in Graph::from_string(&term.dot, &model)? {
+                    for parsed in Graph::from_finalized_runtime_string(&term.dot, &model)? {
                         actual += UvMarker::new(&settings.generation.uv).finish(
-                            &parsed
-                                .global_prefactor
-                                .num
-                                .replace_multiple(&split)
-                                .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
-                                .with(W_.d_),
+                            &feynkit_graph::NumeratorInterface::export(
+                                &parsed.global_prefactor.num,
+                            )
+                            .0
+                            .replace_multiple(&split)
+                            .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
+                            .with(W_.d_),
                         );
                     }
                 }
@@ -1136,8 +1173,10 @@ mod tests {
                     }
                 }
                 if multiplicity != 0 {
-                    let [coupling, expression] = model.get_coupling("SCALAR_COUPLING").rep_rule();
-                    let lambda: Atom = model.get_parameter("lam").name.into();
+                    let record = model.get_coupling("SCALAR_COUPLING");
+                    let coupling = Atom::from(crate::model::UFOSymbol::from(record.name.as_str()));
+                    let expression = record.expression.clone();
+                    let lambda = Atom::from(crate::model::UFOSymbol::from("lam"));
                     // The runtime tree-denominator function is the identity;
                     // these contact Born graphs have an empty product inside it.
                     let mut physical = actual
@@ -1174,11 +1213,11 @@ mod tests {
     fn computed_export_retains_nonempty_forests_in_all_routes_and_orchestrators()
     -> color_eyre::Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph computed_direct_forest {
+        let mut graph: Graph = finalized_runtime_dot!(digraph computed_direct_forest { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0]
-            a -> b [id=1]
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
         })?;
         let mut generation = GenerationSettings::default();
         assert!(generation.uv.subtract_uv);
@@ -1213,6 +1252,7 @@ mod tests {
                 );
                 let exported = export_graph(
                     &graph,
+                    &graph.model,
                     CutStructure::empty(&graph),
                     Some(projection),
                     &generation,
@@ -1239,6 +1279,7 @@ mod tests {
 
                 let topology = export_graph(
                     &graph,
+                    &graph.model,
                     CutStructure::empty(&graph),
                     None,
                     &generation,

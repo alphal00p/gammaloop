@@ -5,18 +5,20 @@ edition = "2024"
 description = "A spenso tensor library for high energy physics"
 
 [dependencies]
-idenso = { workspace = true, features = ["reference-cases"] }
-spenso = { workspace = true, features = ["symbolica"] }
+idenso = { workspace = true }
+spenso = { workspace = true, features = ["shadowing"] }
+spenso-macros = { workspace = true }
 symbolica = { workspace = true }
 
-gammaloop-workspace-hack = { version = "0.1", path = "../gammaloop-workspace-hack", optional = true }
+ahash = { workspace = true, features = ["serde"] }
+xpct = "0.5.1"
 
 [features]
 default = ["native"]
-native = ["idenso/native", "dep:gammaloop-workspace-hack"]
-wasm = ["idenso/wasm"]
+native = ["idenso/native", "spenso/native"]
+wasm = ["idenso/wasm", "spenso/wasm"]
 
 [dev-dependencies]
-ahash = { workspace = true, features = ["serde"] }
-insta = { workspace = true }
-tabled = { workspace = true, features = ["derive"] }
+idenso = { workspace = true, features = ["reference-cases"] }
+insta = { workspace = true, features = ["json", "ron", "toml", "yaml"] }
+tabled = { workspace = true }

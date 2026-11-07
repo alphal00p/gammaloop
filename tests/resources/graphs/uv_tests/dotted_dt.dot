@@ -1,22 +1,20 @@
-digraph dotted_dt {
-    edge [num="1"];
+digraph dotted_dt{
+  num = "1";
+  overall_factor = "1";
+  overall_factor_evaluated = "1";
+  projector = "1";
+  0[dod="0" int_id="V_3_SCALAR_111" num="UFO::SCALAR_COUPLING"];
+  1[dod="0" int_id="V_3_SCALAR_111" num="UFO::SCALAR_COUPLING"];
+  2[dod="0" int_id="V_3_SCALAR_111" num="UFO::SCALAR_COUPLING"];
+  3[dod="0" int_id="V_3_SCALAR_111" num="UFO::SCALAR_COUPLING"];
 
-    ext [style=invis];
-    ext -> 0:0 [dir=none id=0 particle="scalar_1"];
-
-    2:1 -> ext [dir=none id=1 particle="scalar_1"];
-    0:2 -> 1:3 [
-        id=2
-        dir=none
-        particle="scalar_1"
-        num="1𝑖 * Q(2,spenso::mink(4,edge(2,1)))* Q(0,spenso::mink(4,edge(2,1)))"
-    ];
-    1:4 -> 2:5 [
-        id=3
-        particle="scalar_1"
-        num="1𝑖 * Q(3,spenso::mink(4,edge(3,1)))* Q(0,spenso::mink(4,edge(3,1)))"
-    ];
-    2 -> 3 [id=4 particle="scalar_1"];
-    3 -> 0 [id=5 particle="scalar_1"];
-    1 -> 3 [id=6 particle="scalar_1"];
+  ext0	 [style=invis];
+  ext0	-> 0:0	 [id=0 dir=none sink="{ufo_order:0}" dod="-2" lmb_rep="P(0,a___)" name="e0" num="1" particle="scalar_1"];
+  ext1	 [style=invis];
+  2:1	-> ext1	 [id=1 dir=none source="{ufo_order:0}" dod="-2" lmb_rep="P(0,a___)" name="e1" num="1" particle="scalar_1"];
+  0:2	-> 1:3	 [id=2 dir=none source="{ufo_order:1}" sink="{ufo_order:0}"  dod="-1" lmb_rep="K(0,a___)+K(1,a___)" name="e2" num="1𝑖*Q(0,spenso::mink(4,edge(2,1)))*Q(2,spenso::mink(4,edge(2,1)))" particle="scalar_1"];
+  1:4	-> 2:5	 [id=3 dir=none source="{ufo_order:1}" sink="{ufo_order:1}"  dod="-1" lmb_id="0" lmb_rep="K(0,a___)" name="e3" num="1𝑖*Q(0,spenso::mink(4,edge(3,1)))*Q(3,spenso::mink(4,edge(3,1)))" particle="scalar_1"];
+  2:8	-> 3:9	 [id=4 dir=none source="{ufo_order:2}" sink="{ufo_order:1}"  dod="-2" lmb_rep="-1*P(0,a___)+K(0,a___)" name="e4" num="1" particle="scalar_1"];
+  3:10	-> 0:11	 [id=5 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod="-2" lmb_rep="-1*P(0,a___)+K(0,a___)+K(1,a___)" name="e5" num="1" particle="scalar_1"];
+  1:6	-> 3:7	 [id=6 dir=none source="{ufo_order:2}" sink="{ufo_order:0}"  dod="-2" lmb_id="1" lmb_rep="K(1,a___)" name="e6" num="1" particle="scalar_1"];
 }

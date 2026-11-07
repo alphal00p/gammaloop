@@ -91,7 +91,8 @@ impl FermiSurfaceSector {
                 .iter_edges()
                 .find(|(_, edge, _)| *edge == edge_id)
                 .ok_or_else(|| eyre!("Unknown thermal distribution edge {edge_id}"))?;
-            Ok(edge.data.is_fermion() && edge.data.chemical_potential_atom().is_some())
+            Ok(edge.data.is_fermion(&graph.model)
+                && edge.data.chemical_potential_atom(&graph.model).is_some())
         };
         let calls = Self::calls(expression)?;
         let mut expression = expression.unwrap_function(GS.thermal_weight_wrapper);
@@ -240,10 +241,7 @@ mod tests {
     use symbolica::{function, symbol};
 
     use super::*;
-    use crate::{
-        dot, graph::parse::IntoGraph, initialisation::test_initialise,
-        integrands::process::fermi_surface::routing,
-    };
+    use crate::{initialisation::test_initialise, integrands::process::fermi_surface::routing};
 
     #[test]
     fn fermi_sector_extraction_preserves_factorized_coefficients_and_regular_terms() -> Result<()> {
@@ -351,13 +349,24 @@ mod tests {
     #[test]
     fn fermi_sector_extraction_drops_boson_derivatives() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph boson_cycle {
-            node [num=1]
-            edge [num=1 particle="W+"]
-            A -> B [id=0 lmb_id=0]
-            B -> A [id=1]
+        let graph: Graph = crate::graph::Graph::unit_numerator_fixtures(
+            stringify!(digraph boson_cycle {
+                node [num=1]
+                edge [num=1 particle="W+"]
+                A -> B [id=0 lmb_id=0]
+                B -> A [id=1]
+            }),
+            &crate::utils::load_generic_model("sm"),
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
         })?;
-        assert!(graph[EdgeIndex(0)].chemical_potential_atom().is_some());
+        assert!(
+            graph[EdgeIndex(0)]
+                .chemical_potential_atom(&graph.model)
+                .is_some()
+        );
         let step = ThermalDistributionCall::atom(1, 0, 0, 1, 1);
         let expression = ThermalDistributionCall::atom(0, 2, 0, 1, 1) * &step + &step;
         let (bulk, sectors) = FermiSurfaceSector::extract(&graph, &expression)?;
@@ -370,13 +379,21 @@ mod tests {
     fn fermi_sectors_treat_literal_zero_chemical_potential_as_absent() -> Result<()> {
         let mut graph = routing::test_graph()?;
         let edge = EdgeIndex(1);
-        let mut particle = graph[edge].particle().unwrap();
-        for chemical_potential in [
-            None,
-            Some(crate::model::ParameterName(crate::model::UFOSymbol::zero())),
-        ] {
-            std::sync::Arc::make_mut(&mut particle.0).chemical_potential = chemical_potential;
-            graph.underlying[edge].particle = particle.clone().into();
+        let particle_name = graph
+            .model
+            .particle_by_id(graph[edge].particle().unwrap())
+            .unwrap()
+            .name
+            .clone();
+        for chemical_potential in [None, Some("ZERO")] {
+            let mut definition: serde_json::Value = serde_json::from_str(&graph.model.to_json()?)?;
+            for particle in definition["particles"].as_array_mut().unwrap() {
+                if particle["name"] == particle_name {
+                    particle["chemical_potential"] = serde_json::json!(chemical_potential);
+                }
+            }
+            graph.model =
+                std::sync::Arc::new(crate::model::Model::from_json(&definition.to_string())?);
             for derivative_order in [1, 3] {
                 let expression =
                     ThermalDistributionCall::atom(1, derivative_order, 0, 1, 1) + Atom::num(7);

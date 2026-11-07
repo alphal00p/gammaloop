@@ -12,13 +12,13 @@
   hasUfoWheel = builtins.hasAttr system ufoWheelTags;
   # Compile the integration crate once; groups select disjoint test binaries.
   testFeatures."gammaloop-integration-tests" = ["python-api-tests"];
-  testFeatures."gammaloop-api" = if hasUfoWheel then ["ufo-import"] else [];
+  testFeatures."gammaloop-api" = if hasUfoWheel then ["ufo_support"] else [];
   # Isolated CFF tests must retain their numerical evaluation oracles.
   testFeatures."three-dimensional-reps" = ["eval"];
   groups = [
     {
       name = "feynkit";
-      packages = ["feynkit-kinematics" "feynkit-model" "feynkit-ufo"];
+      packages = ["feynkit" "feynkit-amplitude" "feynkit-cff" "feynkit-generator" "feynkit-graph" "feynkit-kinematics" "feynkit-model" "feynkit-tensor" "feynkit-ufo"];
     }
     {
       name = "core";

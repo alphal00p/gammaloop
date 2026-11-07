@@ -62,7 +62,7 @@
   cargoVendorDir = craneLib.vendorCargoDeps {
     cargoLock = (workspaceRoot + "/Cargo.lock");
     overrideVendorGitCheckout = packages: drv:
-      if lib.any (package: package.name == "symbolica-typst-atom-payload") packages
+      if lib.any (package: package.name == "symbolica-typst-plugin") packages
       then
         drv.overrideAttrs (_: {
           # Fetch the exact Cargo.lock revision even if upstream branches move;
@@ -422,7 +422,6 @@
     ];
     "alphal00p-docs-catalogs" = documentationCatalogAnnotatedItemSourcePaths;
     "alphal00p-docs-examples" = [
-      "crates/linnet-py/pyproject.toml"
       "docs/api/python"
       "docs/examples.toml"
       "docs/products"
@@ -482,6 +481,15 @@
   };
 
   workspacePackageExtraSourceRoots.compileTimeTest = {
+    "spynso3" = [
+      "crates/spynso3/tests/evaluator_horner.py"
+      "crates/spynso3/tests/installed_symbolic_preview.py"
+      "crates/spynso3/tests/installed_tensor_paging.py"
+    ];
+    "idenso" = [
+      "crates/idenso/tests/fixtures/aa_aa_2l_gl16_odd_trace_term.sym"
+      "crates/idenso/tests/fixtures/d11_contracted_temporal_chain.sym"
+    ];
     "linnet-py" = [
       "crates/linnet-py/tests/test_svg_interaction.py"
       "crates/linnet-py/tests/rendering_metrics.py"
@@ -495,10 +503,19 @@
       "crates/linnest/layout/native/fixtures"
       "crates/linnest/src/ec_seed/fixtures"
     ];
+    "feynkit-amplitude" = ["crates/feynkit-model/tests/fixtures"];
+    "feynkit-tensor" = ["crates/feynkit-model/tests/fixtures"];
+    "feynkit-cff" = ["crates/feynkit-model/tests/fixtures"];
+    "feynkit-graph" = ["crates/feynkit-model/tests/fixtures"];
+    "feynkit-generator" = [
+      "crates/feynkit-model/tests/fixtures"
+      "crates/feynkit-generator/tests/fixtures"
+    ];
     "feynkit-model" = [
       "crates/feynkit-model/tests/fixtures"
       "assets/models/json/sm/sm.json"
     ];
+    "vakint" = ["crates/vakint/python/symbolica/community/hepkit/vakint/__init__.py"];
     "alphal00p-docs-macros" = ["crates/alphal00p-docs-macros/tests/ui"];
     "alphal00p-docs-python-exporter" = [
       "docs/api/python"
@@ -519,16 +536,22 @@
       "tests/resources/graphs"
       "examples/cli/epem_a_ttxh/NNLO/graphs/GL638.dot"
     ];
-    gammalooprs = [
+    "gammalooprs" = [
       "tests/resources/graphs"
       "crates/gammalooprs/tests/resources/uv_parametric_numerator"
       "examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL256.dot"
       "examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL262.dot"
+      "tests/resources/algebra"
+      "crates/feynkit-model/tests/fixtures"
+      "crates/gammalooprs/src/graph/parse/finalized_reference.json"
+      "crates/gammalooprs/tests/fixtures/renormalization"
+      "crates/gammalooprs/tests/resources/uv_fixed_basis"
     ];
     "gammaloop-integration-tests" = [
       "tests/resources/graphs"
       "tests/tests/snapshots/test_evaluation_api__gl20_multichannel_local_inspect_events.snap"
       "crates/feynkit-model/tests/fixtures"
+      "crates/gammalooprs/tests/fixtures/renormalization"
       "tests/resources/graphs/scalar/dod2_bubble.dot"
       "tests/resources/graphs/gamma_star_ddbar_top_bubble.dot"
       "tests/resources/graphs/benchmark_epem_a_tth_NNLO_graph.dot"
@@ -536,6 +559,7 @@
   };
 
   workspacePackageExtraSourceRoots.runtimeTest = {
+    "spynso3" = ["crates/spynso3/tests/browser_math_font.py"];
     "linnet-render-py" = ["crates/linnet-render-py/tests"];
     "alphal00p-docs-builder" = [
       "assets/embedded/drawing/templates"
@@ -559,6 +583,9 @@
       "flake.nix"
       "scripts/render-docs-svg-assets.sh"
       "tests/resources/graphs"
+      "crates/linnet-render-py/fonts/STIX-Two-OFL.txt"
+      "crates/linnet-render-py/fonts/STIXTwoMath-Regular.woff2"
+      "examples/notebooks"
     ];
     "alphal00p-docs-catalogs" = [
       "docs/api/python"
@@ -587,10 +614,8 @@
   };
 
   workspacePackageExtraSourceRoots.ownTest = {
-    gammalooprs = [
-      "crates/gammalooprs/src/feyngen/test.rs"
+    "gammalooprs" = [
       "crates/gammalooprs/src/graph/parse/tests.rs"
-      "crates/gammalooprs/src/model/test_polarization_sums.rs"
       "crates/gammalooprs/src/numerator/spensotests.rs"
       "crates/gammalooprs/src/numerator/tests.rs"
       "crates/gammalooprs/src/utils/test_utils.rs"
@@ -610,7 +635,7 @@
       "crates/linnet/src/half_edge/tests.rs"
       "crates/linnet/src/union_find/test.rs"
     ];
-    spenso = [
+    "spenso" = [
       "crates/spenso/src/data/tests.rs"
       "crates/spenso/src/iterators/tests"
       "crates/spenso/src/network/parsing/test.rs"
@@ -618,7 +643,6 @@
       "crates/spenso/src/network/test.rs"
       "crates/spenso/src/network/tests.rs"
       "crates/spenso/src/shadowing/tests.rs"
-      "crates/spenso/src/tests.rs"
     ];
   };
 
@@ -842,11 +866,11 @@
   craneCiExtraFeatureSets = {
     "gammaloop-workspace-hack" = ["symbolica/tracing_max_level_info"];
     "gammaloop-tracing-filter" = ["clap" "symbolica" "python"];
-    "gammaloop-api" = ["python-stubs"];
-    gammalooprs = ["python-stubs"];
+    "gammaloop-api" = ["python_stubgen"];
+    gammalooprs = ["python_stubgen"];
     idenso = ["reference-cases"];
     linnet = ["drawing" "symbolica"];
-    spenso = ["symbolica" "python-stubs"];
+    spenso = ["shadowing" "python_stubgen"];
   };
 
   workspaceIncomingNormalDependencyFeaturesFor = dependency:
@@ -1249,14 +1273,14 @@
       ++ lib.optional (featureArgs != "") featureArgs
     );
   cranePythonExtraFeatureSets = {
-    "gammaloop-api" = ["abi3" "extension-module"];
+    "gammaloop-api" = ["python_abi" "pyo3-extension-module"];
   };
   cranePythonFeaturesFor = package:
     sortedUnique (
       # Stub generation needs the native Python API, not the extension's
       # minimum stable ABI. Forwarded dependency features activate it too.
       lib.filter (feature:
-        !builtins.any (part: builtins.elem part ["python-stubs" "pyo3-stub-gen"])
+        !builtins.any (part: builtins.elem part ["python_stubgen" "pyo3-stub-gen"])
           (lib.splitString "/" feature))
       (craneCiFeaturesFor package)
       ++ (cranePythonExtraFeatureSets.${package} or [])
@@ -1728,7 +1752,7 @@
 
     # Check the actual normal/build dependency closure, including weak ABI
     # modifiers. Shared Python CI features must not enter the standalone CLI.
-    for features in cli cli,abi3; do
+    for features in cli cli,python_abi; do
       cargo tree --locked --offline -p gammaloop-api \
         --no-default-features --features "$features" \
         --target ${nextestTargetTriple} --edges normal,build \

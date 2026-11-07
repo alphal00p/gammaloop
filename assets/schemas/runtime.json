@@ -475,7 +475,7 @@
           "$ref": "#/$defs/EvaluatorMethod"
         },
         "generate_events": {
-          "description": "Return generated events in addition to accumulating integration statistics.",
+          "description": "Request diagnostic events even without configured observables.\nObservable evaluation always retains the complete per-sample contribution.",
           "type": "boolean"
         },
         "integral_unit": {

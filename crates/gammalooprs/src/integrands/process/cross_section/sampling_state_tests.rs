@@ -12,6 +12,7 @@
 //! test. This gate neither saves the state nor regenerates a failed draw.
 
 use super::{EsurfaceRay, SamplingCatalogueEntry};
+use crate::model::ModelGammaLoopExt;
 use crate::{
     GammaLoopContextContainer,
     graph::FeynmanGraph,
@@ -145,7 +146,7 @@ fn native_sampling_saved_state_boundary() -> Result<()> {
     initialise()?;
     // Preserve State::load's owner ordering, especially model parameter values
     // and custom UFO symbol printers before the Symbolica ID remapping.
-    let mut model = Model::from_file(state.join("model.json"))?;
+    let mut model = Model::from_path(state.join("model.json"))?;
     model.apply_param_card(&InputParamCard::from_file(
         state.join("model_parameters.json"),
     )?)?;

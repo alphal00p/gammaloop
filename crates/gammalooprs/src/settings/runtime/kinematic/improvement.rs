@@ -21,7 +21,7 @@ use symbolica::{domains::float::Real, numerical_integration::MonteCarloRng};
 use tracing::{debug, warn};
 use typed_index_collections::TiVec;
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct PhaseSpaceImprovementSettings {
@@ -50,7 +50,7 @@ impl Default for PhaseSpaceImprovementSettings {
     }
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub enum ImprovementMode {
@@ -688,8 +688,8 @@ mod tests {
     use typed_index_collections::TiVec;
 
     use crate::{
-        DependentMomentaConstructor, dot,
-        graph::{FeynmanGraph, Graph, parse::IntoGraph},
+        DependentMomentaConstructor,
+        graph::{FeynmanGraph, Graph},
         initialisation::test_initialise,
         model::Model,
         momentum::sample::ExternalIndex,
@@ -969,95 +969,74 @@ mod tests {
     #[test]
     fn test_photon_box() {
         test_initialise().unwrap();
-
-        let photon_box: Graph = dot!(
-            digraph photon_box {
+        let sm = load_generic_model("sm");
+        let mut graphs = Graph::import_dot(
+            "digraph photon_box {
                 ext [style=invis];
-                ext -> v1:0 [particle = "a", id=0];
-                ext -> v2:1 [particle = "a", id=1];
-                v3:2 -> ext [particle = "a", id=2];
-                v4:3 -> ext [particle = "a", id=3];
-                v1 -> v2 [particle = "t", id=4];
-                v2 -> v3 [particle = "t", id=5];
-                v3 -> v4 [particle = "t", id=6];
-                v4 -> v1 [particle = "t", id=7];
-            },
-            "sm"
+                ext -> v1:0 [particle=a,id=0]; ext -> v2:1 [particle=a,id=1];
+                v3:2 -> ext [particle=a,id=2]; v4:3 -> ext [particle=a,id=3];
+                v1 -> v2 [particle=t,id=4]; v2 -> v3 [particle=t,id=5];
+                v3 -> v4 [particle=t,id=6]; v4 -> v1 [particle=t,id=7];
+            }",
+            &sm,
         )
         .unwrap();
-
-        let sm = load_generic_model("sm");
-        let e_cm = F(500.0);
-
-        let photon_box_res = test_default_momenta_graph(&photon_box, &sm, &e_cm);
-        if let Some(err) = photon_box_res.err() {
-            panic!("Error in photon box test: {:?}", err);
-        }
+        assert_eq!(graphs.len(), 1);
+        let graph = graphs.pop().unwrap();
+        test_default_momenta_graph(&graph, &sm, &F(500.0)).unwrap();
     }
 
     #[test]
     fn test_aa_tt() {
         test_initialise().unwrap();
         let sm = load_generic_model("sm");
-        let e_cm = F(600.0);
-
-        let mut aa_tt = Graph::from_dot(
-            linnet::dot!(
-                digraph aa_tt {
-                    ext [style=invis];
-                    ext -> v1:0 [particle = "a", id=0];
-                    ext -> v2:1 [particle = "a", id=1];
-                    v1:2 -> ext [particle = "t", id=2];
-                    v2:3 -> ext [particle = "t~", id=3];
-                    v2 -> v1 [particle = "t", id=4];
-                }
-            )
-            .unwrap(),
+        let mut graphs = Graph::import_dot(
+            r#"digraph aa_tt {
+                ext [style=invis];
+                ext -> v1:0 [particle=a,id=0]; ext -> v2:1 [particle=a,id=1];
+                v1:2 -> ext [particle=t,id=2]; v2:3 -> ext [particle="t~",id=3];
+                v2 -> v1 [particle=t,id=4];
+            }"#,
             &sm,
         )
         .unwrap();
-        // Contract the external color pair before applying the same scalar
-        // numerator validation used by normal graph import.
-        aa_tt.global_prefactor.num *=
-            aa_tt.underlying[Hedge(2)].color_kronekers(&aa_tt.underlying[Hedge(3)]);
-        aa_tt.validate_full_numerator_tensor_network().unwrap();
-
-        let aa_tt_res = test_default_momenta_graph(&aa_tt, &sm, &e_cm);
-        if let Some(err) = aa_tt_res.err() {
-            panic!("Error in aa_tt test: {:?}", err);
-        }
+        assert_eq!(graphs.len(), 1);
+        let mut graph = graphs.pop().unwrap();
+        let color = crate::numerator::AppliedFeynmanRule::new(
+            graph.underlying[Hedge(2)].color_kronekers(&graph.underlying[Hedge(3)]),
+        )
+        .unwrap()
+        .expr;
+        graph.global_prefactor.num = graph.global_prefactor.num.multiply(color).unwrap();
+        graph.validate_full_numerator_tensor_network().unwrap();
+        test_default_momenta_graph(&graph, &sm, &F(600.0)).unwrap();
     }
 
     #[test]
     fn test_gt_gt() {
         test_initialise().unwrap();
         let sm = load_generic_model("sm");
-        let e_cm = F(700.0);
-
-        let mut gt_gt = Graph::from_dot(
-            linnet::dot!(
-                digraph gt_gt {
-                    ext [style=invis];
-                    ext -> v1:0 [particle = "g", id=0];
-                    ext -> v1:1 [particle = "t", id=1];
-                    v2:2 -> ext [particle = "g", id=2];
-                    v2:3 -> ext [particle = "t", id=3];
-                    v1 -> v2 [particle = "t", id=4];
-                }
-            )
-            .unwrap(),
+        let mut graphs = Graph::import_dot(
+            "digraph gt_gt {
+                ext [style=invis];
+                ext -> v1:0 [particle=g,id=0]; ext -> v1:1 [particle=t,id=1];
+                v2:2 -> ext [particle=g,id=2]; v2:3 -> ext [particle=t,id=3];
+                v1 -> v2 [particle=t,id=4];
+            }",
             &sm,
         )
         .unwrap();
+        assert_eq!(graphs.len(), 1);
+        let mut graph = graphs.pop().unwrap();
         for (source, sink) in [(0, 2), (1, 3)] {
-            gt_gt.global_prefactor.num *=
-                gt_gt.underlying[Hedge(source)].color_kronekers(&gt_gt.underlying[Hedge(sink)]);
+            let color = crate::numerator::AppliedFeynmanRule::new(
+                graph.underlying[Hedge(source)].color_kronekers(&graph.underlying[Hedge(sink)]),
+            )
+            .unwrap()
+            .expr;
+            graph.global_prefactor.num = graph.global_prefactor.num.multiply(color).unwrap();
         }
-        gt_gt.validate_full_numerator_tensor_network().unwrap();
-
-        let gt_gt_res = test_default_momenta_graph(&gt_gt, &sm, &e_cm);
-        if let Some(err) = gt_gt_res.err() {
-            panic!("Error in gt_gt test: {:?}", err);
-        }
+        graph.validate_full_numerator_tensor_network().unwrap();
+        test_default_momenta_graph(&graph, &sm, &F(700.0)).unwrap();
     }
 }

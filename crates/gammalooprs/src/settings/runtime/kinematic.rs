@@ -25,7 +25,7 @@ use crate::{
 };
 use color_eyre::{Result, Section};
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Serialize, Encode, Decode, PartialEq, JsonSchema)]
 #[trait_decode(trait= GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]
@@ -60,10 +60,10 @@ impl<'de> Deserialize<'de> for KinematicsSettings {
 }
 
 impl KinematicsSettings {
-    pub fn random(graph: &Graph, seed: u64) -> Self {
+    pub fn random(graph: &Graph, model: &crate::model::Model, seed: u64) -> Self {
         Self {
             e_cm: 64.,
-            externals: graph.random_externals(seed),
+            externals: graph.random_externals(model, seed),
         }
     }
 }

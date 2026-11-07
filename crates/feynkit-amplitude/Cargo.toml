@@ -1,0 +1,21 @@
+[package]
+name = "feynkit-amplitude"
+version = "0.1.0"
+edition.workspace = true
+description = "Symbolic amplitudes, physical conjugation and external-state sums"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/alphal00p/gammaloop"
+
+[dependencies]
+feynkit-graph = { version = "0.1.0", path = "../feynkit-graph", default-features = false }
+feynkit-model = { version = "0.1.0", path = "../feynkit-model", default-features = false }
+idenso.workspace = true
+linnet.workspace = true
+spenso = { workspace = true, features = ["shadowing"] }
+symbolica.workspace = true
+thiserror.workspace = true
+
+[features]
+default = ["native"]
+native = ["feynkit-graph/native", "idenso/native"]
+wasm = ["feynkit-graph/wasm", "idenso/wasm"]

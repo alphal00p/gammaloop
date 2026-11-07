@@ -15,8 +15,8 @@ typed identifiers, and validated topology—carry across them.
 ])
 
 #boundary("Python", [
-  Use `linnet_py` for DOT-backed graph inspection and algorithms from Python. The binding is
-  currently a source-built developer preview rather than a published wheel.
+  Use `symbolica.community.graph` for DOT-backed graph inspection and algorithms from Python.
+  Install the complete Symbolica Community assembly or this checkout's combined notebook host.
 
   #link("quickstart/python/")[Use Linnet from Python →]
 ])

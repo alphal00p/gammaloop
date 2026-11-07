@@ -216,11 +216,11 @@ where
         }
     }
 }
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 use crate::tensors::parametric::{MixedTensor, ParamTensor};
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 use symbolica::atom::Atom;
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<S: TensorStructure + Clone> FallibleSub<ParamTensor<S>> for ParamTensor<S> {
     type Output = ParamTensor<S>;
     fn sub_fallible(&self, rhs: &ParamTensor<S>) -> Option<Self::Output> {
@@ -229,7 +229,7 @@ impl<S: TensorStructure + Clone> FallibleSub<ParamTensor<S>> for ParamTensor<S> 
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<I, T> FallibleSub<MixedTensor<T, I>> for MixedTensor<T, I>
 where
     I: TensorStructure + Clone,

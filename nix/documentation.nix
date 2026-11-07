@@ -237,9 +237,22 @@ let
     product: product.rust_components or [ ]
   ) documentationRegistry.product;
   documentationCatalogFeatures = "gammaloop-reference,vakint-reference";
-  documentationPythonExporterBuildCommands = lib.concatMapStringsSep "\n" (product: ''
-    cargoWithProfile build --locked -p alphal00p-docs-python-exporter --features ${lib.escapeShellArg product.id}
-  '') documentationRegistry.product;
+  # Products can share a Python owner (Idenso uses Spenso's binding module).
+  # Prebuild the exporter's actual feature contexts once each.
+  documentationPythonExporterBuildCommands =
+    lib.concatMapStringsSep "\n"
+      (feature: ''
+        cargoWithProfile build --locked -p alphal00p-docs-python-exporter --features ${lib.escapeShellArg feature}
+      '')
+      (
+        builtins.attrNames (
+          builtins.removeAttrs
+            (builtins.fromTOML (
+              builtins.readFile (workspaceRoot + "/crates/alphal00p-docs-python-exporter/Cargo.toml")
+            )).features
+            [ "default" ]
+        )
+      );
   documentationRustdocBuildCommands = lib.concatMapStringsSep "\n" (
     component:
     let
@@ -387,7 +400,6 @@ let
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop -- gammaloop-python docs/api/python/gammaloop-python.pyi --check
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features linnet -- linnet-graph docs/api/python/linnet-graph.pyi --check
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features spenso -- spynso3 docs/api/python/spynso3.pyi --check
-    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features idenso -- idenso-community docs/api/python/idenso-community.pyi --check
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features vakint -- vakint-community docs/api/python/vakint-community.pyi --check
     cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop
     cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features linnet

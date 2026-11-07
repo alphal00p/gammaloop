@@ -34,7 +34,7 @@ _sync-drawing-assets:
 
 # Build gammaloop Python CLI with UFO support and dev-optim profile
 build-cli: _sync-drawing-assets
-    cargo build -p gammaloop-api --bin gammaloop --features ufo-import --profile dev-optim
+    cargo build -p gammaloop-api --bin gammaloop --features ufo_support --profile dev-optim
 
 # Build gammaloop CLI without Python (no pyo3)
 build-cli-no-pyo3: _sync-drawing-assets
@@ -42,47 +42,47 @@ build-cli-no-pyo3: _sync-drawing-assets
 
 # Build gammaloop Python CLI with UFO support and stable ABI (dev-optim profile)
 build-cli-abi: _sync-drawing-assets
-    cargo build -p gammaloop-api --bin gammaloop --features ufo-import,abi3 --profile dev-optim
+    cargo build -p gammaloop-api --bin gammaloop --features ufo_support,python_abi --profile dev-optim
 
 # Build gammaloop Python CLI in release mode
 build-cli-release: _sync-drawing-assets
-    cargo build -p gammaloop-api --bin gammaloop --features ufo-import --release
+    cargo build -p gammaloop-api --bin gammaloop --features ufo_support --release
 
 # Build gammaloop Python CLI in release mode with stable ABI
 build-cli-release-abi: _sync-drawing-assets
-    cargo build -p gammaloop-api --bin gammaloop --features ufo-import,abi3 --release
+    cargo build -p gammaloop-api --bin gammaloop --features ufo_support,python_abi --release
 
 # Build gammaloop Python API with UFO support and dev-optim profile
 build-api: _sync-drawing-assets
-    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module --profile=dev-optim
+    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=pyo3-extension-module --profile=dev-optim
 
 # Build gammaloop Python API with UFO support and stable ABI (dev-optim profile)
 build-api-abi: _sync-drawing-assets
-    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module,abi3 --profile=dev-optim
+    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=pyo3-extension-module,python_abi --profile=dev-optim
 
 # Build gammaloop Python API with UFO support and dev-optim profile
 build-api-wheel: _sync-drawing-assets
-    maturin build -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module --profile=dev-optim
+    maturin build -m crates/gammaloop-api/Cargo.toml --no-default-features --features=pyo3-extension-module --profile=dev-optim
 
 # Build gammaloop Python API with UFO support and stable ABI (dev-optim profile)
 build-api-abi-wheel: _sync-drawing-assets
-    maturin build -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module,abi3 --profile=dev-optim
+    maturin build -m crates/gammaloop-api/Cargo.toml --no-default-features --features=pyo3-extension-module,python_abi --profile=dev-optim
 
 # Build gammaloop Python API with UFO support and release profile
 build-api-release: _sync-drawing-assets
-    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module --profile=release
+    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=pyo3-extension-module --profile=release
 
 # Build gammaloop Python API with UFO support and stable ABI (release profile)
 build-api-abi-release: _sync-drawing-assets
-    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module,abi3 --profile=release
+    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=pyo3-extension-module,python_abi --profile=release
 
 # Build gammaloop Python API wheel with UFO support and release profile
 build-api-release-wheel: _sync-drawing-assets
-    maturin build -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module --profile=release
+    maturin build -m crates/gammaloop-api/Cargo.toml --no-default-features --features=pyo3-extension-module --profile=release
 
 # Build gammaloop Python API wheel with UFO support and stable ABI (release profile)
 build-api-abi-release-wheel: _sync-drawing-assets
-    maturin build -m crates/gammaloop-api/Cargo.toml --no-default-features --features=extension-module,abi3 --profile=release
+    maturin build -m crates/gammaloop-api/Cargo.toml --no-default-features --features=pyo3-extension-module,python_abi --profile=release
 
 # Build all workspace packages
 build-all:
@@ -108,7 +108,25 @@ check-symbolica-feature-isolation:
         exit 1
       fi
     done
-    for lock in "$root/Cargo.lock" "$root/tydenso/Cargo.lock"; do
+    symbolica_source="$(sed -n '/^name = "symbolica"$/,/^\[\[package\]\]/s/^source = "\(.*\)"$/\1/p' "$root/Cargo.lock")"
+    if ! [[ "$symbolica_source" =~ ^git\+https://github\.com/symbolica-dev/symbolica\?branch=community#[0-9a-f]{40}$ ]]; then
+      echo "the root lock must select one Symbolica revision from the official community branch" >&2
+      exit 1
+    fi
+    for lock in "$root/Cargo.lock"; do
+      for package in symbolica numerica graphica; do
+        source="$symbolica_source"
+        version="3.0.1"
+        expected="$(printf 'version = "%s"\nsource = "%s"\n' "$version" "$source")"
+        resolved="$(sed -n "/^name = \"$package\"$/,/^\[\[package\]\]/p" "$lock" | grep -E '^(version|source) = ')"
+        if [ "$resolved" != "$expected" ]; then
+          echo "$lock must resolve exactly one $package at $version from $source; found ${resolved:-none}" >&2
+          exit 1
+        fi
+      done
+    done
+
+    for lock in "$root/tydenso/Cargo.lock"; do
       for specification in symbolica:3.0.1 numerica:3.0.1 graphica:3.0.0; do
         package="${specification%:*}"
         version="${specification#*:}"
@@ -232,7 +250,6 @@ docs-check:
     cargo run --locked -p alphal00p-docs-python-exporter --features gammaloop -- gammaloop-python docs/api/python/gammaloop-python.pyi --check
     cargo run --locked -p alphal00p-docs-python-exporter --features linnet -- linnet-graph docs/api/python/linnet-graph.pyi --check
     cargo run --locked -p alphal00p-docs-python-exporter --features spenso -- spynso3 docs/api/python/spynso3.pyi --check
-    cargo run --locked -p alphal00p-docs-python-exporter --features idenso -- idenso-community docs/api/python/idenso-community.pyi --check
     cargo run --locked -p alphal00p-docs-python-exporter --features vakint -- vakint-community docs/api/python/vakint-community.pyi --check
     cargo test --locked -p alphal00p-docs-python-exporter
     cargo test --locked -p alphal00p-docs-python-exporter --features gammaloop gammaloop_runtime_surface_and_signatures_match_the_docs_stub
@@ -374,4 +391,4 @@ dev-release: build-release-all
 
 # Run gammaloop
 run *ARGS:
-    cargo run -p gammaloop-api --bin gammaloop --features ufo-import --profile dev-optim -- {{ ARGS }}
+    cargo run -p gammaloop-api --bin gammaloop --features ufo_support --profile dev-optim -- {{ ARGS }}

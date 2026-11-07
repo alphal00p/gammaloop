@@ -1,4 +1,5 @@
 use crate::integrands::process::EvaluationTarget;
+use feynkit_generator::GenerationType;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
@@ -10,12 +11,10 @@ use std::{
 use crate::{
     GammaLoopContextContainer,
     cff::CutCFFIndex,
-    feyngen::GenerationType,
     graph::{
         Graph,
         autogen::Autogen,
         feynman_graph::FeynmanGraph,
-        parse::IntoGraph,
         threshold_counterterms::{
             THRESHOLD_COUNTERTERM_SCHEMA_VERSION, ThresholdCountertermCut,
             ThresholdCountertermMultiplier, ThresholdCountertermSpec,
@@ -34,7 +33,7 @@ use crate::{
         },
     },
     settings::{GlobalSettings, RuntimeSettings, global::GenerationSettings},
-    utils::F,
+    utils::{F, test_utils::ModelFixtureExt},
 };
 use linnet::half_edge::involution::EdgeIndex;
 use spenso::algebra::complex::Complex;
@@ -123,8 +122,7 @@ fn preprocess_graph(
     )
     .unwrap();
     let mut cross_section =
-        CrossSection::from_graph_list("raised_cross_section".to_string(), vec![graph], model)
-            .unwrap();
+        CrossSection::from_graph_list("raised_cross_section".to_string(), vec![graph]).unwrap();
     cross_section
         .preprocess(
             model,
@@ -148,17 +146,19 @@ fn ltd_cross_section_rejects_runtime_coincident_poles_after_reload() -> eyre::Re
     test_initialise()?;
     for representations in [vec![Ltd, Cff], vec![Cff, Ltd]] {
         for shared_mass_parameter in [false, true] {
-            let mut model = Model::from_str(SCALARS_2P_3P_MODEL.to_string(), "json")?;
-            model.get_parameter_mut("mass_scalar_1")?.value = Some(Complex::new_re(F(1.0)));
-            model.get_parameter_mut("mass_scalar_2")?.value = Some(Complex::new_re(F(2.0)));
+            let mut model = Model::from_json(SCALARS_2P_3P_MODEL)?;
+            model.set_fixture_values([("mass_scalar_1", Complex::new_re(F(1.0)))])?;
+            model.set_fixture_values([("mass_scalar_2", Complex::new_re(F(2.0)))])?;
             let mut graph_text =
-                include_str!("../../../../tests/resources/graphs/bubble_dot_1t1b.dot")
-                    .replace("pdg=1001", "particle=scalar_1");
+                include_str!("../../../../tests/resources/graphs/bubble_dot_1t1b_compact.dot")
+                    .to_owned();
             if !shared_mass_parameter {
                 graph_text =
                     graph_text.replace("v2 -> v4 [id=2]", "v2 -> v4 [id=2, particle=scalar_2]");
             }
-            let graph = graph_text.as_str().into_graph(&model)?;
+            let mut graphs = Graph::import_dot(&graph_text, &model)?;
+            assert_eq!(graphs.len(), 1);
+            let graph = graphs.remove(0);
             let mut generation = generation_settings();
             generation.three_dimensional_representations = representations.clone();
             generation.uv.local_uv_cts_from_expanded_4d_integrands = true;
@@ -170,11 +170,8 @@ fn ltd_cross_section_rejects_runtime_coincident_poles_after_reload() -> eyre::Re
             runtime.stability.rotation_axis.clear();
             runtime.stability.levels = vec![StabilityLevelSetting::default_double()];
             let mut cross_section = preprocess_graph(graph, &model, &generation, &runtime);
-            let definition = ProcessDefinition::from_graph_list(
-                std::slice::from_ref(&cross_section.supergraphs[0].graph),
-                GenerationType::CrossSection,
-                &model,
-            )?;
+            let definition =
+                ProcessDefinition::from_cross_section_graphs(&cross_section.supergraphs, &model)?;
             cross_section.build_integrand(
                 &model,
                 &definition,
@@ -235,8 +232,7 @@ fn ltd_cross_section_rejects_runtime_coincident_poles_after_reload() -> eyre::Re
                     assert!(error.to_string().contains("LTD supports only vacuum"));
                 }
                 for mass in [1.0, -1.0] {
-                    model.get_parameter_mut("mass_scalar_2")?.value =
-                        Some(Complex::new_re(F(mass)));
+                    model.set_fixture_values([("mass_scalar_2", Complex::new_re(F(mass)))])?;
                     for selection in [None, Some(Cff), Some(Ltd)] {
                         integrand.get_mut_settings().stability.levels =
                             vec![StabilityLevelSetting {
@@ -291,7 +287,7 @@ fn ltd_cross_section_rejects_runtime_coincident_poles_after_reload() -> eyre::Re
                         );
                     }
                 }
-                model.get_parameter_mut("mass_scalar_2")?.value = Some(Complex::new_re(F(2.0)));
+                model.set_fixture_values([("mass_scalar_2", Complex::new_re(F(2.0)))])?;
                 integrand.warm_up(&model)?;
             }
         }
@@ -567,8 +563,13 @@ fn raised_cross_section_rejects_different_groups_for_one_merged_variant() {
         .stack_size(64 * 1024 * 1024)
         .spawn(|| {
             test_initialise().unwrap();
-            let model = Model::from_str(SCALARS_2P_3P_MODEL.to_string(), "json").unwrap();
-            let mut graph: Graph = TRIPLE_DOTTED_BUBBLE.into_graph(&model).unwrap();
+            let model = Model::from_json(SCALARS_2P_3P_MODEL).unwrap();
+            let mut graph: Graph = crate::graph::Graph::import_dot(TRIPLE_DOTTED_BUBBLE, &model)
+                .map(|mut graphs| {
+                    assert_eq!(graphs.len(), 1);
+                    graphs.remove(0)
+                })
+                .unwrap();
             let generation = generation_settings();
             let runtime = runtime_settings();
             let baseline = preprocess_graph(graph.clone(), &model, &generation, &runtime);
@@ -606,12 +607,9 @@ fn raised_cross_section_rejects_different_groups_for_one_merged_variant() {
                 &model,
             )
             .unwrap();
-            let mut cross_section = CrossSection::from_graph_list(
-                "raised_group_conflict".to_string(),
-                vec![graph],
-                &model,
-            )
-            .unwrap();
+            let mut cross_section =
+                CrossSection::from_graph_list("raised_group_conflict".to_string(), vec![graph])
+                    .unwrap();
             let error = cross_section
                 .preprocess(
                     &model,
@@ -648,8 +646,13 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
         .stack_size(64 * 1024 * 1024)
         .spawn(|| {
             test_initialise().unwrap();
-            let model = Model::from_str(SCALARS_2P_3P_MODEL.to_string(), "json").unwrap();
-            let graph: Graph = TRIPLE_DOTTED_BUBBLE.into_graph(&model).unwrap();
+            let model = Model::from_json(SCALARS_2P_3P_MODEL).unwrap();
+            let graph: Graph = crate::graph::Graph::import_dot(TRIPLE_DOTTED_BUBBLE, &model)
+                .map(|mut graphs| {
+                    assert_eq!(graphs.len(), 1);
+                    graphs.remove(0)
+                })
+                .unwrap();
             let generation = generation_settings();
             assert!(
                 generation.force_cuts.is_empty(),
@@ -757,9 +760,8 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
             cross_section
                 .build_integrand(
                     &model,
-                    &ProcessDefinition::from_graph_list(
-                        std::slice::from_ref(&cross_section.supergraphs[0].graph),
-                        GenerationType::CrossSection,
+                    &ProcessDefinition::from_cross_section_graphs(
+                        &cross_section.supergraphs,
                         &model,
                     )
                     .unwrap(),
@@ -1115,26 +1117,32 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
             use crate::settings::runtime::{ParameterizationSettings, SamplingChannelDefinition};
 
             test_initialise().unwrap();
-            let model = Model::from_str(SCALARS_2P_3P_MODEL.to_string(), "json").unwrap();
+            let model = Model::from_json(SCALARS_2P_3P_MODEL).unwrap();
             for (pdg, mass) in [(1001, 1.0), (1000, 0.0)] {
-                let graph: Graph = r#"digraph cut_sampling_bubble {
-                num=1; edge [pdg=PDG]; node [num=1];
+                let graph: Graph = crate::graph::Graph::import_dot(
+                    r#"digraph cut_sampling_bubble {
+                num=1; final_state="SCALAR,SCALAR"; edge [pdg=PDG]; node [num=1];
                 ext [style=invis, is_cut=0];
                 ext -> a [id=0];
                 a -> b [id=1, lmb_id=0];
                 a -> b [id=2];
                 b -> ext [id=3];
             }"#
-                .replace("PDG", &pdg.to_string())
-                .as_str()
-                .into_graph(&model)
+                    .replace("PDG", &pdg.to_string())
+                    .replace("SCALAR", &format!("scalar_{}", pdg - 1000))
+                    .as_str(),
+                    &model,
+                )
+                .map(|mut graphs| {
+                    assert_eq!(graphs.len(), 1);
+                    graphs.remove(0)
+                })
                 .unwrap();
                 let generation = generation_settings();
                 let runtime = runtime_settings();
                 let mut cross_section = preprocess_graph(graph, &model, &generation, &runtime);
-                let definition = ProcessDefinition::from_graph_list(
-                    std::slice::from_ref(&cross_section.supergraphs[0].graph),
-                    GenerationType::CrossSection,
+                let definition = ProcessDefinition::from_cross_section_graphs(
+                    &cross_section.supergraphs,
                     &model,
                 )
                 .unwrap();
@@ -1683,16 +1691,12 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
             use typed_index_collections::TiVec;
 
             test_initialise().unwrap();
-            let model = Model::from_str(SCALARS_2P_3P_MODEL.to_string(), "json").unwrap();
-            let graph = TRIPLE_DOTTED_BUBBLE.into_graph(&model).unwrap();
+            let model = Model::from_json(SCALARS_2P_3P_MODEL).unwrap();
+            let graph = crate::graph::Graph::import_dot(TRIPLE_DOTTED_BUBBLE, &model).map(|mut graphs| { assert_eq!(graphs.len(),1); graphs.remove(0) }).unwrap();
             let generation = generation_settings();
             let runtime = runtime_settings();
             let mut cross_section = preprocess_graph(graph, &model, &generation, &runtime);
-            let definition = ProcessDefinition::from_graph_list(
-                std::slice::from_ref(&cross_section.supergraphs[0].graph),
-                GenerationType::CrossSection,
-                &model,
-            )
+            let definition = ProcessDefinition::from_cross_section_graphs(&cross_section.supergraphs, &model)
             .unwrap();
             cross_section
                 .build_integrand(
@@ -2465,12 +2469,12 @@ fn hosted_joint_kite_preserves_original_equations_and_physical_sum() {
             use typed_index_collections::TiVec;
 
             test_initialise()?;
-            let mut model = Model::from_str(SCALARS_2P_3P_MODEL.to_string(), "json")?;
-            model.get_parameter_mut("mass_scalar_2")?.value = Some(Complex::new_re(F(3.0)));
+            let mut model = Model::from_json(SCALARS_2P_3P_MODEL)?;
+            crate::utils::test_utils::ModelFixtureExt::set_fixture_values(&mut model, [("mass_scalar_2", Complex::new(F(3.0), F(0.0)))])?;
             // Reuse the existing kite as a forward graph. Heavy fixed cut lines
             // permit two light varying energies on each side of their threshold.
             let mut graph_text = include_str!("../../../../tests/resources/graphs/massive_kite.dot")
-                .replace("massive_kite", "hosted_joint_kite")
+                .replace("massive_kite {", "hosted_joint_kite { final_state=\"scalar_1,scalar_1|scalar_2,scalar_2|scalar_1,scalar_1,scalar_2\";")
                 .replace("    ext_out [style=invis];\n", "")
                 .replace("ext_out", "ext_in")
                 .replace("ext_in [style=invis]", "ext_in [style=invis, is_cut=0]")
@@ -2484,7 +2488,7 @@ fn hosted_joint_kite_preserves_original_equations_and_physical_sum() {
                     &format!("id={original}, name=original_{original},"),
                 );
             }
-            let graph = graph_text.as_str().into_graph(&model)?;
+            let graph = crate::graph::Graph::import_dot(graph_text.as_str(), &model).map(|mut graphs| { assert_eq!(graphs.len(),1); graphs.remove(0) })?;
             let mut generation = generation_settings();
             generation.override_lmb_heuristics = true;
             let mut runtime = runtime_settings();
@@ -2495,11 +2499,7 @@ fn hosted_joint_kite_preserves_original_equations_and_physical_sum() {
             ))?;
             let mut cross_section = preprocess_graph(graph, &model, &generation, &runtime);
             assert_every_discovered_cut_is_grouped(&cross_section);
-            let definition = ProcessDefinition::from_graph_list(
-                std::slice::from_ref(&cross_section.supergraphs[0].graph),
-                GenerationType::CrossSection,
-                &model,
-            )?;
+            let definition = ProcessDefinition::from_cross_section_graphs(&cross_section.supergraphs, &model)?;
             cross_section.build_integrand(
                 &model,
                 &definition,

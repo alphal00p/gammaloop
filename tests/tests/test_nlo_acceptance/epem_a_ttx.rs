@@ -129,7 +129,7 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_ro
             .collect::<BTreeSet<_>>();
         assert_eq!(
             masters,
-            BTreeSet::from(["GL0".to_string(), "GL2".to_string()]),
+            BTreeSet::from(["GL0".to_string(), "GL1".to_string()]),
             "the {process} acceptance must contain exactly the self-energy and vertex supergraphs",
         );
     }
@@ -228,7 +228,7 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_ro
             .collect::<BTreeSet<_>>();
         assert_eq!(
             masters,
-            BTreeSet::from(["GL0".to_string(), "GL2".to_string()]),
+            BTreeSet::from(["GL0".to_string(), "GL1".to_string()]),
             "the local-only {process} acceptance must contain exactly the self-energy and vertex supergraphs",
         );
     }
@@ -299,7 +299,7 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_ro
                 .iter()
                 .map(|graph| graph.graph_name.clone())
                 .collect::<BTreeSet<_>>(),
-            BTreeSet::from(["GL0".to_string(), "GL2".to_string()]),
+            BTreeSet::from(["GL0".to_string(), "GL1".to_string()]),
             "the {process} default divergent-only profile must cover both NLO supergraphs",
         );
         let profile_signatures = analysis
@@ -395,7 +395,7 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_ro
             17.0, -31.0, 43.0, -29.0, 53.0, 71.0, 17.0, -31.0, 43.0, -29.0, 53.0, 71.0,
         ],
     )?;
-    let graph_names = ["GL0", "GL2"];
+    let graph_names = ["GL0", "GL1"];
     // Retaining one eighth of ArbPrec's requested precision permits substantial
     // expression-dependent loss while still testing the precision-increase path.
     let tolerance = F(ArbPrec::default().epsilon()).sqrt().sqrt().sqrt();

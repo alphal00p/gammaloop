@@ -1,13 +1,22 @@
 //! Emit one pyo3-stub-gen inventory as a deterministic checked-in stub.
 
-use std::{env, error::Error, fs, path::PathBuf};
+use std::env;
+use std::error::Error;
+use std::fs;
+use std::path::{Path, PathBuf};
 
-#[cfg(any(feature = "gammaloop", feature = "idenso", feature = "vakint"))]
-use pyo3::types::{PyAnyMethods as _, PyDictMethods as _, PyModuleMethods as _};
 #[cfg(any(
     feature = "gammaloop",
-    feature = "idenso",
+    feature = "vakint",
+    feature = "linnet"
+))]
+use pyo3::types::{PyAnyMethods as _, PyDictMethods as _, PyModuleMethods as _};
+#[cfg(feature = "linnet")]
+use pyo3::types::{PyStringMethods as _, PyTypeMethods as _};
+#[cfg(any(
+    feature = "gammaloop",
     feature = "spenso",
+    feature = "linnet",
     feature = "vakint"
 ))]
 use std::collections::BTreeSet;
@@ -36,17 +45,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         .modules
         .get(module_name)
         .ok_or_else(|| format!("{component} inventory has no module {module_name}"))?;
-    #[cfg(feature = "gammaloop")]
-    if component == "gammaloop-python" {
-        validate_gammaloop_stub_surface(module)?;
+    #[cfg(any(feature = "gammaloop", feature = "linnet"))]
+    if matches!(
+        component.as_str(),
+        "gammaloop-python" | "linnet-graph"
+    ) {
+        validate_runtime_stub_surface(module_name, module)?;
     }
     #[cfg(feature = "spenso")]
     if component == "spynso3" {
         validate_spenso_stub_surface(module)?;
-    }
-    #[cfg(feature = "idenso")]
-    if component == "idenso-community" {
-        validate_idenso_stub_surface(module)?;
     }
     #[cfg(feature = "vakint")]
     if component == "vakint-community" {
@@ -57,14 +65,28 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let rendered = render(&component, module)?;
     let mut normalized = rendered
+        .trim_end()
         .lines()
         .map(str::trim_end)
         .collect::<Vec<_>>()
         .join("\n");
     normalized.push('\n');
     let mut outputs = vec![output];
-    if component == "linnet-graph" {
-        outputs.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../linnet-py/python/symbolica/community/graph/__init__.pyi"));
+    // Nextest owns relocated test roots; standalone exporters can select the same source tree.
+    let root = match env::var_os("NEXTEST_WORKSPACE_ROOT")
+        .or_else(|| env::var_os("GAMMALOOP_WORKSPACE_ROOT"))
+    {
+        Some(root) => PathBuf::from(root),
+        None => Path::new(env!("CARGO_MANIFEST_DIR"))
+            .ancestors()
+            .nth(2)
+            .ok_or("documentation exporter is not inside a workspace")?
+            .to_path_buf(),
+    };
+    match component.as_str() {
+        "linnet-graph" => outputs
+            .push(root.join("crates/linnet-py/python/symbolica/community/graph/__init__.pyi")),
+        _ => {}
     }
     outputs.sort();
     outputs.dedup();
@@ -72,8 +94,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         if check {
             let checked_in = fs::read_to_string(&output)?;
             if checked_in != normalized {
-                let hint = if component == "linnet-graph" {
-                    "regenerate the shared Linnet package/docs surface"
+                let hint = if matches!(
+                    component.as_str(),
+                    "linnet-graph" | "spynso3"
+                ) {
+                    "regenerate the shared package/docs surface"
                 } else {
                     "regenerate the checked-in snapshot"
                 };
@@ -93,21 +118,67 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-#[cfg(feature = "gammaloop")]
-fn validate_gammaloop_stub_surface(
+#[cfg(any(feature = "gammaloop", feature = "linnet"))]
+fn validate_runtime_stub_surface(
+    module_name: &str,
     module: &pyo3_stub_gen::generate::Module,
 ) -> Result<(), Box<dyn Error>> {
     let runtime = pyo3::Python::attach(|py| {
-        let module = pyo3::types::PyModule::new(py, "gammaloop._gammaloop")?;
-        gammaloop_api::python::register_python_api_for_docs(&module)?;
+        let module = match module_name {
+            #[cfg(feature = "linnet")]
+            "symbolica.community.graph" => {
+                let module = pyo3::types::PyModule::new(py, module_name)?;
+                linnet_py::register(&module)?;
+                module
+            }
+            #[cfg(feature = "gammaloop")]
+            "gammaloop._gammaloop" => {
+                let module = pyo3::types::PyModule::new(py, module_name)?;
+                gammaloop_api::python::register_python_api_for_docs(&module)?;
+                module
+            }
+            _ => unreachable!("component has no runtime stub validator"),
+        };
         public_module_names(&module)
     })?;
     let stub = stub_names(module);
+    #[cfg(feature = "linnet")]
+    let stub = if module_name == "symbolica.community.graph" {
+        // Macro-generated classes need the same name normalization as the shipped stub.
+        pyo3::Python::attach(|py| -> pyo3::PyResult<BTreeSet<String>> {
+            let source = linnet_py::canonical_stub(module)
+                .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))?;
+            let ast = py.import("ast")?;
+            let mut names = BTreeSet::new();
+            for node in ast
+                .call_method1("parse", (source,))?
+                .getattr("body")?
+                .try_iter()?
+            {
+                let node = node?;
+                let kind = node.get_type().name()?;
+                if matches!(kind.to_str()?, "ClassDef" | "FunctionDef") {
+                    let name: String = node.getattr("name")?.extract()?;
+                    if !name.starts_with('_') {
+                        names.insert(name);
+                    }
+                } else if kind.to_str()? == "AnnAssign" {
+                    let name: String = node.getattr("target")?.getattr("id")?.extract()?;
+                    if !name.starts_with('_') {
+                        names.insert(name);
+                    }
+                }
+            }
+            Ok(names)
+        })?
+    } else {
+        stub
+    };
     if stub == runtime {
         return Ok(());
     }
     Err(format!(
-        "GammaLoop StubInfo does not match runtime registration: missing {:?}; unreachable {:?}",
+        "{module_name} StubInfo does not match runtime registration: missing {:?}; unreachable {:?}",
         runtime.difference(&stub).collect::<Vec<_>>(),
         stub.difference(&runtime).collect::<Vec<_>>()
     )
@@ -119,6 +190,8 @@ fn render(
     module: &pyo3_stub_gen::generate::Module,
 ) -> Result<String, Box<dyn Error>> {
     match component {
+        #[cfg(feature = "spenso")]
+        "spynso3" => Ok(spynso3::SpensoModule::stub_source(module)),
         #[cfg(feature = "linnet")]
         "linnet-graph" => Ok(linnet_py::canonical_stub(module)?),
         _ => Ok(module.to_string()),
@@ -154,24 +227,6 @@ fn validate_spenso_stub_surface(
     .into())
 }
 
-#[cfg(feature = "idenso")]
-fn validate_idenso_stub_surface(
-    module: &pyo3_stub_gen::generate::Module,
-) -> Result<(), Box<dyn Error>> {
-    use symbolica::api::python::SymbolicaCommunityModule;
-
-    let expected = idenso::python::PYTHON_STUB_SURFACE
-        .iter()
-        .map(|name| (*name).to_owned())
-        .collect::<BTreeSet<_>>();
-    let runtime = pyo3::Python::attach(|py| {
-        let module = pyo3::types::PyModule::new(py, "symbolica.community.idenso")?;
-        idenso::python::IdensoModule::register_module(&module)?;
-        public_module_names(&module)
-    })?;
-    validate_exact_surface("Idenso", &expected, &stub_names(module), &runtime)
-}
-
 #[cfg(feature = "vakint")]
 fn validate_vakint_stub_surface(
     module: &pyo3_stub_gen::generate::Module,
@@ -183,7 +238,7 @@ fn validate_vakint_stub_surface(
         .map(|name| (*name).to_owned())
         .collect::<BTreeSet<_>>();
     let runtime = pyo3::Python::attach(|py| {
-        let module = pyo3::types::PyModule::new(py, "symbolica.community.vakint")?;
+        let module = pyo3::types::PyModule::new(py, "symbolica.community.hepkit.vakint")?;
         vakint::symbolica_community_module::VakintWrapper::register_module(&module)?;
         public_module_names(&module)
     })?;
@@ -192,8 +247,8 @@ fn validate_vakint_stub_surface(
 
 #[cfg(any(
     feature = "gammaloop",
-    feature = "idenso",
     feature = "spenso",
+    feature = "linnet",
     feature = "vakint"
 ))]
 fn stub_names(module: &pyo3_stub_gen::generate::Module) -> BTreeSet<String> {
@@ -203,11 +258,28 @@ fn stub_names(module: &pyo3_stub_gen::generate::Module) -> BTreeSet<String> {
         .map(|class| class.name.to_owned())
         .chain(module.enum_.values().map(|enum_| enum_.name.to_owned()))
         .chain(module.function.keys().map(|name| (*name).to_owned()))
-        .chain(module.variables.keys().map(|name| (*name).to_owned()))
+        .chain(
+            module
+                .variables
+                .values()
+                // Private typing helpers describe annotations, not runtime exports.
+                .filter(|variable| {
+                    !(variable.name.starts_with('_')
+                        && matches!(
+                            variable.type_.name.as_str(),
+                            "typing.TypeAlias" | "typing.TypeVar"
+                        ))
+                })
+                .map(|variable| variable.name.to_owned()),
+        )
         .collect()
 }
 
-#[cfg(any(feature = "gammaloop", feature = "idenso", feature = "vakint"))]
+#[cfg(any(
+    feature = "gammaloop",
+    feature = "vakint",
+    feature = "linnet"
+))]
 fn public_module_names(
     module: &pyo3::Bound<'_, pyo3::types::PyModule>,
 ) -> pyo3::PyResult<BTreeSet<String>> {
@@ -220,7 +292,7 @@ fn public_module_names(
         .collect()
 }
 
-#[cfg(any(feature = "idenso", feature = "vakint"))]
+#[cfg(feature = "vakint")]
 fn validate_exact_surface(
     product: &str,
     expected: &BTreeSet<String>,
@@ -280,11 +352,9 @@ fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Bo
         #[cfg(feature = "linnet")]
         "linnet-graph" => Ok(("symbolica.community.graph", linnet_py::stub_info()?)),
         #[cfg(feature = "spenso")]
-        "spynso3" => Ok(("symbolica.community.spenso", spynso3::stub_info()?)),
-        #[cfg(feature = "idenso")]
-        "idenso-community" => Ok(("symbolica.community.idenso", idenso::stub_info()?)),
+        "spynso3" => Ok(("symbolica.community.tensor", spynso3::stub_info()?)),
         #[cfg(feature = "vakint")]
-        "vakint-community" => Ok(("symbolica.community.vakint", vakint::stub_info()?)),
+        "vakint-community" => Ok(("symbolica.community.hepkit.vakint", vakint::stub_info()?)),
         _ => Err(format!(
             "component {component} is not enabled; select its matching Cargo feature"
         )
@@ -292,10 +362,9 @@ fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Bo
     };
     let (module_name, stub_info) = gathered?;
     #[cfg(any(
-        feature = "gammaloop",
         feature = "linnet",
         feature = "spenso",
-        feature = "idenso",
+        feature = "gammaloop",
         feature = "vakint"
     ))]
     let stub_info = scope_symbolica_floats(stub_info);
@@ -303,10 +372,9 @@ fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Bo
 }
 
 #[cfg(any(
-    feature = "gammaloop",
     feature = "linnet",
     feature = "spenso",
-    feature = "idenso",
+    feature = "gammaloop",
     feature = "vakint"
 ))]
 fn scope_symbolica_floats(mut stub_info: pyo3_stub_gen::StubInfo) -> pyo3_stub_gen::StubInfo {
@@ -315,6 +383,7 @@ fn scope_symbolica_floats(mut stub_info: pyo3_stub_gen::StubInfo) -> pyo3_stub_g
 
     // Numerica leaves these two classes unscoped in its stub inventory.
     // They belong to Symbolica, even when another product gathers first.
+    // Their metadata may be enabled alongside GammaLoop's standalone f64 API.
     let float_types = [
         TypeId::of::<PythonFloat>(),
         TypeId::of::<PythonComplexFloat>(),
@@ -611,11 +680,33 @@ def validate(runtime_module, stub_source):
             .modules
             .get(module_name)
             .expect("GammaLoop extension module");
-        super::validate_gammaloop_stub_surface(module)
+        let symbolica_module = stub_info
+            .modules
+            .get("symbolica")
+            .expect("Symbolica owns its numeric type definitions");
+        for (type_id, name) in [
+            (
+                std::any::TypeId::of::<symbolica::domains::float::PythonFloat>(),
+                "Float",
+            ),
+            (
+                std::any::TypeId::of::<symbolica::domains::float::PythonComplexFloat>(),
+                "ComplexFloat",
+            ),
+        ] {
+            assert!(!module.class.contains_key(&type_id));
+            assert_eq!(
+                symbolica_module.class.get(&type_id).map(|class| class.name),
+                Some(name),
+                "numeric definitions must remain available from their owning module"
+            );
+        }
+        super::validate_runtime_stub_surface(module_name, module)
             .expect("StubInfo and runtime registration match");
 
         let mut rendered = module
             .to_string()
+            .trim_end()
             .lines()
             .map(str::trim_end)
             .collect::<Vec<_>>()
@@ -689,8 +780,52 @@ def validate(runtime_module, stub_source):
         assert!(rendered.contains("class TensorFunctionLibrary:"));
         assert!(!rendered.contains("LibraryTensor"));
         assert!(!rendered.contains("TensorIndices"));
-        assert!(!rendered.contains("TensorStructure"));
+        assert!(rendered.contains("class TensorStructure:"));
+        assert!(rendered.contains("class RepresentationName:"));
         assert!(!rendered.contains("TensorNamespace"));
+    }
+
+    #[cfg(feature = "spenso")]
+    #[test]
+    fn spenso_stub_distinguishes_typing_aliases_from_runtime_variables() {
+        let (module_name, mut stub_info) = super::gather("spynso3").expect("Spenso StubInfo");
+        let module = stub_info
+            .modules
+            .get_mut(module_name)
+            .expect("Spenso community module");
+        assert!(
+            module
+                .to_string()
+                .contains("_ScalarInput: typing.TypeAlias")
+        );
+        super::validate_spenso_stub_surface(module)
+            .expect("typing aliases are not runtime exports");
+
+        module.variables.insert(
+            "_unexpected_runtime_value",
+            pyo3_stub_gen::generate::VariableDef {
+                name: "_unexpected_runtime_value",
+                type_: pyo3_stub_gen::TypeInfo::builtin("int"),
+                default: None,
+            },
+        );
+        let error = super::validate_spenso_stub_surface(module).unwrap_err();
+        assert!(error.to_string().contains("_unexpected_runtime_value"));
+    }
+
+    #[cfg(feature = "spenso")]
+    #[test]
+    fn spenso_stub_preserves_expression_inheritance() {
+        let (module_name, stub_info) = super::gather("spynso3").expect("Spenso StubInfo");
+        let module = stub_info
+            .modules
+            .get(module_name)
+            .expect("Spenso community module");
+        assert!(
+            module
+                .to_string()
+                .contains("class TensorExpression(Expression):")
+        );
     }
 
     #[cfg(feature = "spenso")]
@@ -705,16 +840,26 @@ def validate(runtime_module, stub_source):
 
         for signature in [
             "def __new__(cls, expr: typing.Any, library: typing.Optional[TensorLibrary] = None) -> TensorNetwork:",
-            "def __call__(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorExpression:",
-            "def index(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorExpression:",
-            "def __call__(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorNetwork:",
-            "def index(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorNetwork:",
+            "def __call__(self, *indices: _IndexInput, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorExpression:",
+            "def index(self, *indices: _IndexInput, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorExpression:",
+            "def __call__(self, *indices: _IndexInput, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorNetwork:",
+            "def index(self, *indices: _IndexInput, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorNetwork:",
         ] {
             assert!(rendered.contains(signature), "missing `{signature}`");
         }
+        assert!(rendered.contains("def __new__(cls, expression: TensorExpression | _ScalarInput, *, structure: typing.Optional[TensorStructure] = None, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorExpression:"));
+        for retired in [
+            "CookSettings",
+            "CookMode",
+            "CookSourceFilter",
+            "CookTagFilter",
+            "cook_indices",
+        ] {
+            assert!(!rendered.contains(retired), "retired Python API {retired}");
+        }
         assert!(rendered.contains(
-            "Single : Select one smallest-degree rewrite per step; without `n_steps`, continue until no work remains"
+            "Single: typing.ClassVar[ExecutionMode]\n    r\"\"\"\n    Select one smallest-degree rewrite per step; without `n_steps`, continue until no work remains\n    \"\"\""
         ));
-        assert!(!rendered.contains("Single : Execute one contraction at a time"));
+        assert!(!rendered.contains("Execute one contraction at a time"));
     }
 }

@@ -103,6 +103,7 @@ cargo run
   workflow to the complete Rust reference.
 ])
 
-The docs harness compiles this source against the current workspace. Running it additionally
-requires the native toolchain and a Symbolica license mode appropriate for the user.
+Build and run this program locally in the repository Nix shell with an appropriate
+`SYMBOLICA_LICENSE`. It requires the native GammaLoop toolchain and cannot run in the browser.
+A cold build and process generation take substantially longer than reopening the saved state.
 ]
