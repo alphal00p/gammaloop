@@ -195,7 +195,7 @@ pub(super) fn validate_loop_directory(
 
 impl Source {
     fn read(&self, path: &str) -> Result<Vec<u8>, RustRedEvaluationError> {
-        resources::checkpoint()?;
+        crate::execution::checkpoint()?;
         let relative = relative_path(path)?;
         match self {
             Self::Override {
@@ -274,7 +274,7 @@ impl LoopData {
             if data.manifest.is_unused_at_runtime(path) {
                 continue;
             }
-            resources::checkpoint()?;
+            crate::execution::checkpoint()?;
             data.read(path)?;
         }
         let coverage: serde_json::Value =
@@ -365,7 +365,7 @@ impl RustRedData {
         manifest: &ReleaseManifest,
         max_loop_count: usize,
     ) -> Result<BTreeMap<usize, Arc<LoopData>>, RustRedEvaluationError> {
-        resources::checkpoint()?;
+        crate::execution::checkpoint()?;
         if manifest.schema != RELEASE_SCHEMA || !(1..=5).contains(&max_loop_count) {
             return Err(failure(
                 "unsupported external-data schema or loop count (expected 1 through 5)",
@@ -428,7 +428,7 @@ impl RustRedData {
             four_loop,
             masters,
         });
-        resources::checkpoint()?;
+        crate::execution::checkpoint()?;
         Ok(data)
     }
 
@@ -515,14 +515,14 @@ impl RustRedData {
     ) -> Result<Arc<Self>, RustRedEvaluationError> {
         // A constrained first caller must not poison offline construction for
         // every later engine. Only a fully validated snapshot is shared.
-        resources::checkpoint()?;
+        crate::execution::checkpoint()?;
         let data = cell.get_or_try_init(|| {
             let source = Source::Vendored;
             let manifest =
                 serde_json::from_slice(&source.read("manifest.json")?).map_err(failure)?;
             Self::load(source, manifest, 3)
         })?;
-        resources::checkpoint()?;
+        crate::execution::checkpoint()?;
         Ok(Arc::clone(data))
     }
 
@@ -681,7 +681,7 @@ impl Vakint {
                 ..Default::default()
             })?;
         }
-        resources::checkpoint()?;
+        crate::execution::checkpoint()?;
         *self = staged;
         // Programs whose rule tables changed are no longer reachable.
         self.detach_superseded_ordered_caches();
@@ -1178,9 +1178,24 @@ mod tests {
         let symbol = metadata["master_id"].as_str().unwrap().parse().unwrap();
         let master = engine.get_master(&symbol, 20).unwrap();
         assert_eq!(master.loop_count(), 1);
+        // Every Laurent order the vendored manifest lists for the tadpole: -1..4
+        // up to data v0.2.0, -1..5 from v0.2.1 on (read off the snapshot, so
+        // re-vendoring a release needs no test change). The orders are
+        // contiguous from the leading pole and cover at least those of v0.2.0.
+        let listed: Vec<i64> =
+            serde_json::from_value(metadata["available_epsilon_powers"].clone()).unwrap();
+        assert!(
+            listed.starts_with(&[-1, 0, 1, 2, 3, 4])
+                && listed.windows(2).all(|pair| pair[1] == pair[0] + 1),
+            "vendored tadpole orders {listed:?}"
+        );
+        assert_eq!(
+            metadata["epsilon_range"],
+            serde_json::json!([listed[0], *listed.last().unwrap()])
+        );
         assert_eq!(
             master.coefficients().keys().copied().collect::<Vec<_>>(),
-            vec![-1, 0, 1, 2, 3, 4]
+            listed
         );
         assert_eq!(master.requested_decimal_precision(), 20);
         master.graph().validate().unwrap();
@@ -1240,8 +1255,22 @@ mod tests {
                 assert!(master.is_computed());
             } else {
                 assert!(!master.graph().numerator().expression().is_one());
-                assert!(!master.is_computed());
-                assert!(master.coefficients().is_empty());
+                // Up to v0.2.0 the five-loop masters are uncomputed terminals; from
+                // v0.2.1 on the manifest entry lists the master's Laurent orders.
+                // Either way the inspected master carries exactly the orders its
+                // loaded manifest entry lists.
+                let listed: Vec<i64> = metadata["available_epsilon_powers"]
+                    .as_array()
+                    .map_or_else(Vec::new, |orders| {
+                        orders.iter().map(|order| order.as_i64().unwrap()).collect()
+                    });
+                let computed = !listed.is_empty();
+                assert_eq!(master.is_computed(), computed);
+                assert_eq!(master.coefficients().is_empty(), !computed);
+                assert_eq!(
+                    master.coefficients().keys().copied().collect::<Vec<_>>(),
+                    listed
+                );
                 #[cfg(feature = "feynkit-ingress")]
                 {
                     use symbolica::atom::AtomCore;
@@ -1270,7 +1299,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "requires the authenticated 640-master 5L pack; no IBP application is loaded"]
+    #[ignore = "requires an authenticated 5L external-data pack; no IBP application is loaded"]
     fn authentic_five_loop_declared_terminals_remain_uncomputed() {
         Vakint::initialize_vakint_symbols();
         let source = Source::Directory(
@@ -1289,26 +1318,53 @@ mod tests {
         // Authenticate the real 5L pack and its payloads without constructing
         // an IBP application, attaching caches, or loading lower-loop packs.
         let data = Arc::new(LoopData::load(source, pack, &release.version).unwrap());
-        assert_eq!(data.manifest.masters.len(), 640);
+        // Every declared terminal is either uncomputed (the 640 terminals of
+        // the v0.2.0 campaign) or a known master with published coefficients.
+        assert!(!data.manifest.masters.is_empty());
         for terminal in &data.manifest.masters {
-            assert_eq!(terminal["kind"], "uncomputed-terminal");
-            assert_eq!(terminal["status"], "not_computed");
-            assert!(terminal["coefficients"].as_array().unwrap().is_empty());
-            assert!(
+            let uncomputed = terminal["status"] == "not_computed";
+            if uncomputed {
+                assert_eq!(terminal["kind"], "uncomputed-terminal");
+            } else {
+                assert_eq!(terminal["status"], "accepted");
+                assert_eq!(terminal["kind"], "known-master");
+            }
+            assert_eq!(
+                terminal["coefficients"].as_array().unwrap().is_empty(),
+                uncomputed
+            );
+            assert_eq!(
                 terminal["available_epsilon_powers"]
                     .as_array()
                     .unwrap()
-                    .is_empty()
+                    .is_empty(),
+                uncomputed
             );
         }
-        let terminal = &data.manifest.masters[0];
+        // The first uncomputed terminal, else the first declared one; the
+        // declared-terminal errors below need an uncomputed terminal.
+        let uncomputed = data
+            .manifest
+            .masters
+            .iter()
+            .find(|terminal| terminal["status"] == "not_computed");
+        let terminal = uncomputed.unwrap_or(&data.manifest.masters[0]);
         let identity = terminal["master_id"].as_str().unwrap();
-        assert_eq!(
-            identity,
-            "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_m4_p1_p1_p0_p0_p1_p1_p1_m4_p1_p1_p0_p1_m1_p0"
-        );
         let powers: Vec<i64> = serde_json::from_value(terminal["powers"].clone()).unwrap();
-        assert_eq!(powers, [-4, 1, 1, 0, 0, 1, 1, 1, -4, 1, 1, 0, 1, -1, 0]);
+        // The signed-index identity encodes the indices (m = minus, p = plus).
+        let indices = powers
+            .iter()
+            .map(|power| {
+                if *power < 0 {
+                    format!("m{}", -power)
+                } else {
+                    format!("p{power}")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("_");
+        assert!(identity.starts_with("L5_"), "{identity}");
+        assert!(identity.ends_with(&format!("_{indices}")), "{identity}");
         let family = data
             .manifest
             .families
@@ -1334,30 +1390,35 @@ mod tests {
             .finalize(master.clone(), &settings, 5, RustRedMasterMode::Retain)
             .unwrap();
         assert_eq!(retained, master);
-        let direct_error = catalog
-            .finalize(master.clone(), &settings, 5, RustRedMasterMode::Numerical)
-            .unwrap_err()
-            .to_string();
-        let symbolic_error = catalog
-            .finalize(master.clone(), &settings, 5, RustRedMasterMode::Symbolic)
-            .unwrap_err()
-            .to_string();
-        let retained_error = catalog
-            .resolve_numerical(retained, &settings)
-            .unwrap_err()
-            .to_string();
-        for error in [&direct_error, &symbolic_error, &retained_error] {
-            assert!(error.contains(identity), "{error}");
-            assert!(
-                error.contains("declared terminal has no computed coefficients"),
-                "{error}"
-            );
-            assert!(error.contains(&release.version), "{error}");
-            assert!(error.contains(graph.to_str().unwrap()), "{error}");
-            assert!(!error.contains("undeclared residual master"), "{error}");
+        let mut direct_error = String::new();
+        let mut retained_error = String::new();
+        if uncomputed.is_some() {
+            direct_error = catalog
+                .finalize(master.clone(), &settings, 5, RustRedMasterMode::Numerical)
+                .unwrap_err()
+                .to_string();
+            let symbolic_error = catalog
+                .finalize(master.clone(), &settings, 5, RustRedMasterMode::Symbolic)
+                .unwrap_err()
+                .to_string();
+            retained_error = catalog
+                .resolve_numerical(retained, &settings)
+                .unwrap_err()
+                .to_string();
+            for error in [&direct_error, &symbolic_error, &retained_error] {
+                assert!(error.contains(identity), "{error}");
+                assert!(
+                    error.contains("declared terminal has no computed coefficients"),
+                    "{error}"
+                );
+                assert!(error.contains(&release.version), "{error}");
+                assert!(error.contains(graph.to_str().unwrap()), "{error}");
+                assert!(!error.contains("undeclared residual master"), "{error}");
+            }
         }
-        // The common-family graph is a powered P640 representative, not a
-        // certified parent for an arbitrary residual in that family. Reuse the
+        // The common-family graph is a powered representative (P640 of the
+        // v0.2.0 campaign), not a certified parent for an arbitrary residual
+        // in that family. Reuse the
         // authenticated metadata's maximal-parent references without inferring
         // another routing from positive slots alone.
         let parent_references = data
@@ -1383,10 +1444,15 @@ mod tests {
             .path(family["graph"].as_str().unwrap())
             .unwrap()
             .unwrap();
-        assert_eq!(
-            fs::read(&family_graph).unwrap(),
-            data.read("masters/P640/graph.dot").unwrap()
-        );
+        let family_bytes = fs::read(&family_graph).unwrap();
+        assert!(data.manifest.masters.iter().any(|declared| {
+            data.read(&format!(
+                "{}/graph.dot",
+                declared["directory"].as_str().unwrap()
+            ))
+            .unwrap()
+                == family_bytes
+        }));
         let mut dotted_powers = powers.clone();
         dotted_powers[1] += 1;
         let unknown = catalog.symbol(family["fingerprint"].as_str().unwrap(), &dotted_powers);

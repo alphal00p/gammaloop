@@ -6,6 +6,7 @@
 mod alternatives;
 pub use alternatives::MomentumMatchLimits;
 pub(crate) use alternatives::first_minimal_acceptance;
+pub(crate) use alternatives::{MatroidProfile, integer_line_vector, matroid_basis_counts};
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -291,7 +292,7 @@ impl MomentumInput {
             .ok_or_else(|| invalid("momentum-map orientation count overflow"))?;
         let mut verified = None;
         for signs in 0..attempts {
-            symbolica::utils::resources::checkpoint()?;
+            crate::execution::checkpoint()?;
             let system = sources
                 .iter()
                 .zip(&images)

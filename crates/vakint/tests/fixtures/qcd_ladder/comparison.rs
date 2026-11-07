@@ -654,7 +654,7 @@ fn run_scoped(
     };
     let mut report = serde_json::json!({"schema":"vakint.ordered-rung-comparison.v1",
         "loop_count":prepared.loop_count,"gluon_rungs":prepared.loop_count-1,"projection":prepared.projection,
-        "strategy":"Ordered","ordered_weight_arithmetic":options.arithmetic.to_string(),
+        "strategy":"Ordered","ordered_weight_arithmetic":if prepared.loop_count==5 {settings.rustred_five_loop_ordered_weight_arithmetic().to_string()} else {options.arithmetic.to_string()},
         "persistent_cache":persistent_cache,"intrinsic_memoization":false,
         "intrinsic_memoization_scope":"Ordered has no completed-result memo; checked opaque factorization may use a fresh isolated internal memo",
         "cache_policy":{"prepared_cache_loaded":shipped_cache_loaded,"previous_run_cache_restored":previous_run_cache_restored,
@@ -666,7 +666,7 @@ fn run_scoped(
             "scope":"single owner preparation worker required for native timing subtraction"},
         "execution":{"n_cores":settings.n_cores,
             "ordered_weight_arithmetic":settings.ordered_weight_arithmetic.to_string(),
-            "native_ordered_weight_arithmetic":format!("{:#}",settings.rustred_ordered_weight_arithmetic()),
+            "native_ordered_weight_arithmetic":format!("{:#}",if prepared.loop_count==5 {settings.rustred_five_loop_ordered_weight_arithmetic()} else {settings.rustred_ordered_weight_arithmetic()}),
             "scheduler_threads":settings.n_cores,
             "scope":"identical results for every core count and arithmetic; n_cores sets the scheduler (4L/5L), modular, frontend, post-processing and route-verification workers; with more than one scheduler thread the 5L reduction_math_seconds is not reported"},
         "input_sha256":sha256(prepared.input.to_canonical_string().as_bytes()),

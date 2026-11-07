@@ -643,7 +643,7 @@ impl MonitorModel {
 }
 
 /// Compact human-readable formatting shared by the renderers.
-#[cfg(any(feature = "progress-tui", test))]
+#[cfg(any(feature = "progress-tui", feature = "symbolica_community_module", test))]
 pub(super) mod format {
     /// `9999`, `92.1k`, `26.2M`, `1.3G`.
     pub(in super::super) fn count(value: u64) -> String {
@@ -700,6 +700,7 @@ pub(super) mod format {
         }
     }
 
+    #[cfg_attr(not(any(feature = "progress-tui", test)), allow(dead_code))]
     pub(in super::super) fn percent(part: u64, whole: u64) -> Option<String> {
         (whole > 0).then(|| format!("{:.1}%", 100.0 * part as f64 / whole as f64))
     }

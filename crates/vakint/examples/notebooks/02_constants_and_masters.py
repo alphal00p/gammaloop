@@ -8,7 +8,7 @@ __generated_with = "0.25.2"
 app = marimo.App(width="full", app_title="Vakint · Constants & masters")
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _():
     import marimo as mo
     from shared_gallery import Gallery
@@ -30,30 +30,55 @@ def _(Gallery, mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(Gallery, mo):
-    _four = "1L–4L · adds the 4L pack (about 140 MB, seconds)"
+    _loops = (Gallery.catalogue_summary() or {}).get("loops", {})
+
+    def _option(loop, cost):
+        _size = Gallery.size_text(_loops.get(loop, {}).get("bytes"))
+        _masters = _loops.get(loop, {}).get("masters")
+        _facts = ", ".join(
+            fact
+            for fact in (
+                f"{_masters} masters" if _masters else None,
+                f"{_size} unpacked" if _size else None,
+                cost,
+            )
+            if fact
+        )
+        return f"1L–{loop}L · adds the {loop}L pack ({_facts})"
+
+    _four = _option(4, "about 10 s")
     _options = {_four: 4}
     if Gallery.five_loop_load_enabled():
-        _options[
-            "1L–5L · adds the 5L pack (about 435 MB more; minutes, several GB, "
-            "cannot be cancelled)"
-        ] = 5
+        _options[_option(5, "about a minute and over 10 GB of memory")] = 5
     catalogue_choice = mo.ui.radio(
         _options, value=_four, label="Official catalogue to load"
     )
     load_catalogue = mo.ui.run_button(label="Load this catalogue", kind="success")
+    _interrupt = (
+        " In a marimo edit session the Interrupt button (Ctrl-C in a terminal) "
+        "stops a load; the previous registry then stays active."
+        if Gallery.interruptible()
+        else ""
+    )
+    # Directory names only: the page never shows the server's paths.
+    _source = (
+        "the operator's external-data checkout "
+        f"({Gallery.data_directory().name}; validated locally, never downloaded)"
+        if Gallery.configured_checkout()
+        else "the official release packs, installed once into the download "
+        f"cache ({Gallery.data_directory().name}), never into the server's "
+        "working directory"
+    )
     mo.vstack(
         [
             Gallery.note(
                 mo,
                 "Offline by default",
                 "The built-in 1L–3L registry is ready immediately. Loading is "
-                "explicit and runs in this page: a configured checkout "
-                "(VAKINT_GALLERY_ARTIFACTS) is validated locally; otherwise the "
-                "official packs install once into the gallery's data cache, "
-                f"{Gallery.data_directory()}, never into the server's working "
-                "directory. Loading reads data only; it reduces nothing.",
+                f"explicit and runs in this page. It reads {_source}. Loading reads "
+                "data only; it reduces nothing." + _interrupt,
             ),
             catalogue_choice,
             load_catalogue,
@@ -62,10 +87,10 @@ def _(Gallery, mo):
             else Gallery.note(
                 mo,
                 "No five-loop catalogue on this server",
-                "Loading the 5L pack runs inside this page for minutes, holds "
-                "several GB for the session and cannot be cancelled, so the "
-                "operator enables it with VAKINT_GALLERY_ALLOW_5L=1. The "
-                "five-loop page explores the 5L plan and saved result without it.",
+                "Loading the 5L pack runs inside this page for about a minute and "
+                "holds over 10 GB for the session, so the operator enables it with "
+                "VAKINT_GALLERY_ALLOW_5L=1. The five-loop page explores the 5L plan "
+                "and a recorded run without it.",
                 pending=True,
             ),
         ]
@@ -73,31 +98,59 @@ def _(Gallery, mo):
     return catalogue_choice, load_catalogue
 
 
-@app.cell
-def _(Gallery, catalogue_choice, load_catalogue):
+@app.cell(hide_code=True)
+def _(Gallery, catalogue_choice, load_catalogue, mo):
     engine = Gallery.engine()
-    load_report = None
+    load_report = load_error = None
     if load_catalogue.value:
-        load_report = Gallery.load_data(engine, int(catalogue_choice.value))
+        # A live status line shows while the native load runs (the host's
+        # default progress="auto" uses marimo's own status spinner). A failed or
+        # interrupted load leaves the engine's previous registry active.
+        try:
+            load_report = Gallery.load_data(engine, int(catalogue_choice.value))
+        except (OSError, ValueError, RuntimeError) as _error:
+            load_error = str(_error)
     constant_symbols = engine.constant_symbols()
     master_symbols = engine.master_symbols()
-    return constant_symbols, engine, load_report, master_symbols
+    master_options = Gallery.master_options(master_symbols)
+    return (
+        constant_symbols,
+        engine,
+        load_error,
+        load_report,
+        master_options,
+        master_symbols,
+    )
 
 
 @app.cell(hide_code=True)
-def _(Gallery, constant_symbols, load_report, master_symbols, mo):
+def _(Gallery, constant_symbols, load_error, load_report, master_symbols, mo):
+    _loops = sorted(item["loop_count"] for item in (load_report or {}).get("loops", []))
     mo.vstack(
         [
+            mo.callout(
+                f"Loading failed: {load_error}. The built-in 1L–3L registry stays "
+                "active. An operator selects another release with "
+                "VAKINT_GALLERY_DATA_VERSION or a local checkout with "
+                "VAKINT_GALLERY_ARTIFACTS.",
+                kind="warn",
+            )
+            if load_error
+            else mo.md(""),
             Gallery.metrics(
                 mo,
                 [
                     (len(constant_symbols), "registered constant identities"),
                     (len(master_symbols), "loaded master identities"),
                     (
-                        f"1L–{max(item['loop_count'] for item in load_report['loops'])}L"
-                        if load_report
-                        else "1L–3L",
+                        f"1L–{max(_loops)}L" if _loops else "1L–3L",
                         "active catalogue",
+                    ),
+                    (
+                        load_report["version"]
+                        if load_report
+                        else Gallery.builtin_data_version() or "built-in",
+                        "external-data release",
                     ),
                 ],
             ),
@@ -120,44 +173,47 @@ def _(Gallery, mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(constant_symbols, mo):
     _constant_options = [str(symbol.expression) for symbol in constant_symbols]
     _default = next(
         (label for label in _constant_options if label.endswith("z3")),
         next(iter(_constant_options)),
     )
-    constant_request = (
-        mo.md("{symbol}\n\n{precision}")
-        .batch(
-            symbol=mo.ui.dropdown(
-                _constant_options,
-                value=_default,
-                searchable=True,
-                full_width=True,
-                label="Constant identity",
-            ),
-            precision=mo.ui.number(
-                start=2, stop=21000, value=32, step=1, label="Requested decimal digits"
-            ),
-        )
-        .form(submit_button_label="Inspect constant", show_clear_button=False)
+    constant_symbol = mo.ui.dropdown(
+        _constant_options,
+        value=_default,
+        searchable=True,
+        full_width=True,
+        label="Constant identity",
     )
-    constant_request
-    return (constant_request,)
+    constant_precision = mo.ui.number(
+        start=2, stop=21000, value=32, step=1, label="Requested decimal digits"
+    )
+    mo.hstack([constant_symbol, constant_precision], widths=[3, 1], align="end")
+    return constant_precision, constant_symbol
 
 
-@app.cell
-def _(ConstantSymbol, constant_request, engine):
-    _request = constant_request.value or {
-        "symbol": "z3",
-        "precision": 32,
-    }
+@app.cell(hide_code=True)
+def _(ConstantSymbol, constant_precision, constant_symbol, engine):
     constant = engine.get_constant(
-        ConstantSymbol(_request["symbol"]), prec=int(_request["precision"])
+        ConstantSymbol(constant_symbol.value), prec=int(constant_precision.value)
     )
     constant
     return (constant,)
+
+
+@app.cell(hide_code=True)
+def _(Gallery, constant, mo):
+    # The exact definition in the live pager, as this cell's own output.
+    mo.stop(constant.definition is None)
+    mo.vstack(
+        [
+            mo.md("**Exact definition**"),
+            Gallery.formula(mo, constant.definition),
+        ]
+    )
+    return
 
 
 @app.cell(hide_code=True)
@@ -171,37 +227,26 @@ def _(Gallery, mo):
     return
 
 
-@app.cell
-def _(master_symbols, mo):
-    _master_options = [str(symbol.expression) for symbol in master_symbols]
-    master_request = (
-        mo.md("{symbol}\n\n{precision}")
-        .batch(
-            symbol=mo.ui.dropdown(
-                _master_options,
-                value=next(iter(_master_options)),
-                searchable=True,
-                full_width=True,
-                label="Qualified master identity",
-            ),
-            precision=mo.ui.number(
-                start=2, stop=21000, value=32, step=1, label="Requested decimal digits"
-            ),
-        )
-        .form(submit_button_label="Inspect master", show_clear_button=False)
+@app.cell(hide_code=True)
+def _(master_options, mo):
+    master_symbol = mo.ui.dropdown(
+        master_options,
+        value=next(iter(master_options)),
+        searchable=True,
+        full_width=True,
+        label="Master identity (loops · family · propagator powers)",
     )
-    master_request
-    return (master_request,)
+    master_precision = mo.ui.number(
+        start=2, stop=21000, value=32, step=1, label="Requested decimal digits"
+    )
+    mo.hstack([master_symbol, master_precision], widths=[3, 1], align="end")
+    return master_precision, master_symbol
 
 
-@app.cell
-def _(MasterSymbol, engine, master_request, master_symbols):
-    _request = master_request.value or {
-        "symbol": str(master_symbols[0].expression),
-        "precision": 32,
-    }
+@app.cell(hide_code=True)
+def _(MasterSymbol, engine, master_precision, master_symbol):
     master = engine.get_master(
-        MasterSymbol(_request["symbol"]), prec=int(_request["precision"])
+        MasterSymbol(master_symbol.value), prec=int(master_precision.value)
     )
     return (master,)
 
@@ -232,14 +277,44 @@ def _(Gallery, master, mo):
 @app.cell(hide_code=True)
 def _(Gallery, master, master_view, mo):
     if master_view.value == "Native graph":
-        master_panel = mo.as_html(master.graph.render(momenta=True))
-    elif master_view.value == "Canonical DOT":
-        master_panel = mo.ui.code_editor(
-            master.graph.to_dot(), language="dot", disabled=True
+        master_panel = Gallery.frame(
+            mo, master.graph.render(momenta=True).to_html(), height=420
         )
+    elif master_view.value == "Canonical DOT":
+        # Plain text: marimo's editor has no DOT grammar.
+        master_panel = Gallery.dot_source(mo, master.graph.to_dot())
     else:
-        master_panel = mo.iframe(Gallery.math_font_css() + master.to_html())
+        master_panel = Gallery.frame(mo, master.to_html(), height=560)
     master_panel
+    return
+
+
+@app.cell(hide_code=True)
+def _(master, mo):
+    _orders = {
+        f"ε^{power}": coefficient
+        for power, coefficient in sorted(master.coefficients.items())
+        if coefficient.symbolic_expression.expression is not None
+    }
+    mo.stop(not _orders)
+    master_order = mo.ui.radio(
+        list(_orders),
+        # The finite part when recorded, else the most singular order.
+        value="ε^0" if "ε^0" in _orders else next(iter(_orders)),
+        inline=True,
+        label="Exact coefficient of",
+    )
+    master_orders = _orders
+    master_order
+    return master_order, master_orders
+
+
+@app.cell(hide_code=True)
+def _(Gallery, master_order, master_orders, mo):
+    # Exact Laurent coefficients in the live pager (this cell's own output).
+    Gallery.formula(
+        mo, master_orders[master_order.value].symbolic_expression.expression
+    )
     return
 
 
@@ -272,8 +347,8 @@ def _(Gallery, mo):
     return
 
 
-@app.cell
-def _(ConstantSymbol, MasterSymbol, engine, mo):
+@app.cell(hide_code=True)
+def _(ConstantSymbol, Gallery, MasterSymbol, engine, mo):
     _errors = []
     for _kind, _call in [
         (
@@ -291,12 +366,12 @@ def _(ConstantSymbol, MasterSymbol, engine, mo):
             _errors.append({"request": _kind, "graceful error": str(_error)})
         else:
             raise AssertionError(f"{_kind} unexpectedly resolved")
-    mo.ui.table(_errors, selection=None, show_download=False)
+    Gallery.table(mo, _errors)
     return
 
 
-@app.cell
-def _(E, engine, mo):
+@app.cell(hide_code=True)
+def _(E, Gallery, engine, mo):
     cancellation, _statistical_error = engine.numerical_evaluation(
         E("x-y", default_namespace="vakint"), {"x": 1.0, "y": 1.0}
     )
@@ -308,7 +383,12 @@ def _(E, engine, mo):
         raise AssertionError(
             "An uncertain zero unexpectedly became an exact expression"
         )
-    mo.vstack([mo.as_html(cancellation), mo.callout(conversion_message, kind="warn")])
+    mo.vstack(
+        [
+            mo.as_html(cancellation),
+            mo.callout(Gallery.short_numbers(conversion_message), kind="warn"),
+        ]
+    )
     return cancellation, conversion_message
 
 

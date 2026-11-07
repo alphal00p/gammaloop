@@ -251,17 +251,31 @@ fn transported_closed_factor_endpoints_keep_typed_scope_refusals() {
 #[test]
 fn cross_integral_cancellation_precedes_master_coefficient_availability() {
     let engine = Vakint::new().unwrap();
+    // The last Laurent order of the vendored tadpole (ep^4 up to data v0.2.0,
+    // ep^5 from v0.2.1 on), read off the snapshot.
+    let known_through =
+        engine.rustred_data().unwrap().loops[&1].manifest.masters[0]["available_epsilon_powers"]
+            .as_array()
+            .and_then(|orders| orders.last())
+            .and_then(serde_json::Value::as_i64)
+            .expect("the vendored tadpole lists its Laurent orders");
+    assert!(
+        known_through >= 4,
+        "vendored tadpole through ep^{known_through}"
+    );
     let mut config = settings(RustRedMasterMode::Numerical);
     config.epsilon_symbol = "ep".into();
-    config.number_of_terms_in_epsilon_expansion = 8;
-    // Each term alone needs coefficients above the vendored ep^4 data, but
-    // the exact IBP identity makes the combined result zero at every order.
+    // Terms from ep^-1 through at least ep^6, and always one order beyond the
+    // vendored data: each term alone needs a coefficient above it, but the
+    // exact IBP identity makes the combined result zero at every order.
+    config.number_of_terms_in_epsilon_expansion = std::cmp::max(8, known_through + 3);
     let unavailable = engine
         .evaluate_integral(&config, vakint_parse!("topo(I1L(1,1))").unwrap().as_view())
         .unwrap_err();
     let unavailable = crate::truncation_guard::expect_missing_orders(unavailable);
     assert_eq!(
-        unavailable.masters[0].first_missing_order, 5,
+        unavailable.masters[0].first_missing_order,
+        known_through + 1,
         "{unavailable}"
     );
     let input = vakint_parse!("topo(I1L(1,2))-(1-ep)*topo(I1L(1,1))").unwrap();

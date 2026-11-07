@@ -46,7 +46,7 @@ fn incomplete_checkouts_fail_without_network_or_local_mutation() {
     let releases = format!("http://{}", listener.local_addr().unwrap());
     let options = OfficialExternalDataOptions {
         local_artifacts_path: Some(directory.path().to_owned()),
-        timeout: Duration::from_millis(100),
+        timeout: Some(Duration::from_millis(100)),
         ..Default::default()
     };
     let mut engine = Vakint::new().unwrap();
@@ -235,7 +235,7 @@ fn unrelated_manifest_and_empty_loop_directory_allow_managed_installation() {
             1,
             &OfficialExternalDataOptions {
                 local_artifacts_path: Some(destination.path().to_owned()),
-                timeout: Duration::from_secs(3),
+                timeout: Some(Duration::from_secs(3)),
                 ..Default::default()
             },
             &server.url,
@@ -269,7 +269,7 @@ fn official_download_follows_redirect_then_reuses_offline_without_extraction() {
     let destination = tempfile::tempdir().unwrap();
     let options = OfficialExternalDataOptions {
         local_artifacts_path: Some(destination.path().to_owned()),
-        timeout: Duration::from_secs(3),
+        timeout: Some(Duration::from_secs(3)),
         ..Default::default()
     };
     let mut engine = Vakint::new().unwrap();
@@ -319,7 +319,7 @@ fn fixture_release_bypasses_stale_latest_and_reuses_immutable_data_offline() {
     let options = OfficialExternalDataOptions {
         version: required.clone(),
         local_artifacts_path: Some(destination.path().to_owned()),
-        timeout: Duration::from_secs(3),
+        timeout: Some(Duration::from_secs(3)),
         ..Default::default()
     };
     let mut engine = Vakint::new().unwrap();
@@ -377,7 +377,7 @@ fn extraction_refuses_links_wrong_loop_and_resource_overflow() {
                 destination.path(),
                 1,
                 &OfficialExternalDataOptions {
-                    max_extracted_bytes: max_bytes,
+                    max_extracted_bytes: Some(max_bytes),
                     ..Default::default()
                 }
             )
@@ -412,7 +412,7 @@ fn interrupted_pack_installation_is_transactional_and_resumes_completed_packs() 
     let destination = tempfile::tempdir().unwrap();
     let options = OfficialExternalDataOptions {
         local_artifacts_path: Some(destination.path().to_owned()),
-        timeout: Duration::from_secs(3),
+        timeout: Some(Duration::from_secs(3)),
         ..Default::default()
     };
     let mut engine = Vakint::new().unwrap();
@@ -448,14 +448,13 @@ fn interrupted_pack_installation_is_transactional_and_resumes_completed_packs() 
 #[test]
 fn refresh_switches_all_requested_loops_together_and_preserves_the_old_installation() {
     let source = fixture();
-    let mut manifest = fixture_manifest(source.path());
-    let original_version = manifest.version.clone();
+    let original_version = fixture_manifest(source.path()).version;
     let refreshed_version = format!("{original_version}-refresh");
     let first = Server::start(release_assets(source.path()));
     let destination = tempfile::tempdir().unwrap();
     let options = OfficialExternalDataOptions {
         local_artifacts_path: Some(destination.path().to_owned()),
-        timeout: Duration::from_secs(3),
+        timeout: Some(Duration::from_secs(3)),
         ..Default::default()
     };
     let mut engine = Vakint::new().unwrap();
@@ -463,28 +462,12 @@ fn refresh_switches_all_requested_loops_together_and_preserves_the_old_installat
         .load_official_external_data_from(2, &options, &first.url)
         .unwrap();
     assert_eq!(old.version, original_version);
-    manifest.version = refreshed_version.clone();
-    for pack in &mut manifest.loop_packs {
-        let path = source.path().join(&pack.manifest);
-        let mut payload: serde_json::Value =
-            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-        payload["version"] = serde_json::json!(manifest.version);
-        let bytes = serde_json::to_vec(&payload).unwrap();
-        pack.manifest_sha256 = format!("{:x}", Sha256::digest(&bytes));
-        pack.archive = format!(
-            "vakint-external-data-{}-{}L.tar.gz",
-            manifest.version, pack.loop_count
-        );
-        fs::write(path, bytes).unwrap();
-    }
-    fs::write(
-        source.path().join("manifest.json"),
-        serde_json::to_vec(&manifest).unwrap(),
-    )
-    .unwrap();
+    retag_release(source.path(), &refreshed_version);
     let newer = Server::start(release_assets(source.path()));
+    // Offline the existing installation keeps its cached release (with the release
+    // server reachable it would follow data-latest: see the test below).
     let unchanged = engine
-        .load_official_external_data_from(2, &options, &newer.url)
+        .load_official_external_data_from(2, &options, "http://127.0.0.1:1")
         .unwrap();
     assert_eq!(unchanged.version, original_version);
     assert_eq!(unchanged.path, old.path);
@@ -530,6 +513,171 @@ fn refresh_switches_all_requested_loops_together_and_preserves_the_old_installat
     assert!(pinned.loops.iter().all(|pack| pack.source == "reused"));
 }
 
+/// Re-declare the release in `root` as `version` (its root and loop-pack manifests and
+/// the archive names), as the next published release would be.
+fn retag_release(root: &Path, version: &str) {
+    let mut manifest = fixture_manifest(root);
+    manifest.version = version.to_owned();
+    for pack in &mut manifest.loop_packs {
+        let path = root.join(&pack.manifest);
+        let mut payload: serde_json::Value =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        payload["version"] = serde_json::json!(manifest.version);
+        let bytes = serde_json::to_vec(&payload).unwrap();
+        pack.manifest_sha256 = format!("{:x}", Sha256::digest(&bytes));
+        pack.archive = format!(
+            "vakint-external-data-{}-{}L.tar.gz",
+            manifest.version, pack.loop_count
+        );
+        fs::write(path, bytes).unwrap();
+    }
+    fs::write(
+        root.join("manifest.json"),
+        serde_json::to_vec(&manifest).unwrap(),
+    )
+    .unwrap();
+}
+
+#[test]
+fn cached_latest_follows_a_moved_data_latest_and_falls_back_offline() {
+    let source = fixture();
+    let original_version = fixture_manifest(source.path()).version;
+    let moved_version = format!("{original_version}-next");
+    let first = Server::start(release_assets(source.path()));
+    let destination = tempfile::tempdir().unwrap();
+    let installations = destination.path().join(".vakint-external-data");
+    let marker = installations.join("latest");
+    let options = OfficialExternalDataOptions {
+        local_artifacts_path: Some(destination.path().to_owned()),
+        timeout: Some(Duration::from_secs(3)),
+        ..Default::default()
+    };
+    let mut engine = Vakint::new().unwrap();
+    let old = engine
+        .load_official_external_data_from(2, &options, &first.url)
+        .unwrap();
+    assert_eq!(old.version, original_version);
+    assert_eq!(fs::read_to_string(&marker).unwrap(), original_version);
+    // data-latest still names the cached release: reused, nothing downloaded
+    let same = engine
+        .load_official_external_data_from(2, &options, &first.url)
+        .unwrap();
+    assert_eq!(same.path, old.path);
+    assert!(same.loops.iter().all(|pack| pack.source == "reused"));
+    drop(first);
+
+    // A new release is published and data-latest moves to it: the next ordinary
+    // load (no refresh) installs and activates it and moves the marker.
+    retag_release(source.path(), &moved_version);
+    let moved = Server::start(release_assets(source.path()));
+    let followed = engine
+        .load_official_external_data_from(2, &options, &moved.url)
+        .unwrap();
+    assert_eq!(followed.version, moved_version);
+    assert_eq!(followed.path, installations.join(&moved_version));
+    assert!(
+        followed
+            .loops
+            .iter()
+            .all(|pack| pack.source == "downloaded")
+    );
+    assert_eq!(fs::read_to_string(&marker).unwrap(), moved_version);
+    let active = engine.rustred_data().unwrap();
+    assert!((1..=2).all(|count| active.loops[&count].manifest.version == moved_version));
+    assert!(old.path.join("1L/ibps/rules.rrbin").is_file());
+    drop(moved);
+
+    // A data-latest manifest that is no valid release is not followed.
+    let broken = Server::start(BTreeMap::from([(
+        "/broken/manifest.json".to_owned(),
+        b"{}".to_vec(),
+    )]));
+    let kept = engine
+        .load_official_external_data_from(2, &options, &broken.url)
+        .unwrap();
+    assert_eq!(kept.version, moved_version);
+    assert!(kept.loops.iter().all(|pack| pack.source == "reused"));
+    drop(broken);
+    // Offline: the cached release, without network.
+    let offline = engine
+        .load_official_external_data_from(2, &options, "http://127.0.0.1:1")
+        .unwrap();
+    assert_eq!(offline.version, moved_version);
+    assert_eq!(offline.path, followed.path);
+    assert!(offline.loops.iter().all(|pack| pack.source == "reused"));
+    // An explicit version stays pinned and leaves the marker alone.
+    let pinned = engine
+        .load_official_external_data_from(
+            2,
+            &OfficialExternalDataOptions {
+                version: original_version.clone(),
+                ..options
+            },
+            "http://127.0.0.1:1",
+        )
+        .unwrap();
+    assert_eq!(pinned.version, original_version);
+    assert_eq!(pinned.path, old.path);
+    assert_eq!(fs::read_to_string(&marker).unwrap(), moved_version);
+}
+
+#[test]
+fn data_latest_check_is_one_bounded_attempt() {
+    let source = fixture();
+    let version = fixture_manifest(source.path()).version;
+    let server = Server::start(release_assets(source.path()));
+    let destination = tempfile::tempdir().unwrap();
+    let mut options = OfficialExternalDataOptions {
+        local_artifacts_path: Some(destination.path().to_owned()),
+        timeout: Some(Duration::from_secs(3)),
+        ..Default::default()
+    };
+    let mut engine = Vakint::new().unwrap();
+    engine
+        .load_official_external_data_from(1, &options, &server.url)
+        .unwrap();
+    drop(server);
+    // A release server that accepts connections and never answers.
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    listener.set_nonblocking(true).unwrap();
+    let stop = Arc::new(AtomicBool::new(false));
+    let accepted = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let handle = {
+        let (stop, accepted) = (Arc::clone(&stop), Arc::clone(&accepted));
+        thread::spawn(move || {
+            let mut open = Vec::new();
+            while !stop.load(Ordering::Relaxed) {
+                match listener.accept() {
+                    Ok((stream, _)) => {
+                        accepted.fetch_add(1, Ordering::Relaxed);
+                        open.push(stream);
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        thread::sleep(Duration::from_millis(5))
+                    }
+                    Err(error) => panic!("silent fixture server: {error}"),
+                }
+            }
+        })
+    };
+    // The read-idle bound limits the whole check; the retry counter does not apply.
+    options.read_idle_timeout = Some(Duration::from_millis(300));
+    options.transfer_retries = 5;
+    let started = std::time::Instant::now();
+    let report = engine
+        .load_official_external_data_from(1, &options, &url)
+        .unwrap();
+    let elapsed = started.elapsed();
+    thread::sleep(Duration::from_millis(50));
+    stop.store(true, Ordering::Relaxed);
+    handle.join().unwrap();
+    assert_eq!(report.version, version);
+    assert_eq!(report.loops[0].source, "reused");
+    assert_eq!(accepted.load(Ordering::Relaxed), 1, "one attempt, no retry");
+    assert!(elapsed < Duration::from_secs(3), "check took {elapsed:?}");
+}
+
 #[test]
 fn extraction_bounds_extension_metadata_before_tar_yields_file_entries() {
     let gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
@@ -552,7 +700,7 @@ fn extraction_bounds_extension_metadata_before_tar_yields_file_entries() {
             destination.path(),
             1,
             &OfficialExternalDataOptions {
-                max_extracted_bytes: 8 * 1024,
+                max_extracted_bytes: Some(8 * 1024),
                 ..Default::default()
             }
         )
@@ -660,4 +808,139 @@ fn advertised_prepared_caches_are_ignored_through_five_loops() {
         .unwrap();
     assert_eq!(report.loops.len(), 5);
     assert!(engine.loaded_application().is_ok());
+}
+
+#[test]
+fn official_transfer_options_have_no_default_limits() {
+    // No arbitrary limits by default: no request timeout, no archive, extraction or
+    // entry cap (were 3600 s, 2 GiB, 8 GiB and 250000 entries).
+    let options = OfficialExternalDataOptions::default();
+    assert_eq!(options.timeout, None);
+    // progress-based detector and retry counter instead of a whole-transfer timeout
+    assert_eq!(options.read_idle_timeout, Some(Duration::from_secs(300)));
+    assert_eq!(options.transfer_retries, 5);
+    assert_eq!(options.max_archive_bytes, None);
+    assert_eq!(options.max_extracted_bytes, None);
+    assert_eq!(options.max_entries, None);
+}
+
+/// Serves `assets`, one thread per connection; the first request for each archive sends its
+/// headers and half of the body, then stalls longer than the client's read-idle detector.
+fn start_stalling_server(
+    assets: BTreeMap<String, Vec<u8>>,
+) -> (String, Arc<AtomicBool>, thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    listener.set_nonblocking(true).unwrap();
+    let stop = Arc::new(AtomicBool::new(false));
+    let stopped = Arc::clone(&stop);
+    // like Server::start: the default version "latest" asks for /data-latest/manifest.json, answered by a redirect
+    let latest_manifest = assets
+        .keys()
+        .rfind(|path| path.ends_with("/manifest.json"))
+        .unwrap()
+        .clone();
+    let assets = Arc::new(assets);
+    let stalled = Arc::new(std::sync::Mutex::new(std::collections::BTreeSet::new()));
+    let handle = thread::spawn(move || {
+        while !stopped.load(Ordering::Relaxed) {
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    let (assets, stalled) = (Arc::clone(&assets), Arc::clone(&stalled));
+                    let latest_manifest = latest_manifest.clone();
+                    thread::spawn(move || {
+                        stream.set_nonblocking(false).unwrap();
+                        stream
+                            .set_read_timeout(Some(Duration::from_secs(2)))
+                            .unwrap();
+                        let mut request = [0u8; 4096];
+                        let Ok(n) = stream.read(&mut request) else {
+                            return;
+                        };
+                        let text = String::from_utf8_lossy(&request[..n]);
+                        let Some(path) = text.split_whitespace().nth(1).map(str::to_owned) else {
+                            return;
+                        };
+                        if path == "/data-latest/manifest.json" {
+                            let _ = write!(
+                                stream,
+                                "HTTP/1.1 302 Found\r\nLocation: {latest_manifest}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                            );
+                            return;
+                        }
+                        match assets.get(&path) {
+                            Some(bytes)
+                                if path.ends_with(".tar.gz")
+                                    && stalled.lock().unwrap().insert(path.clone()) =>
+                            {
+                                let _ = write!(
+                                    stream,
+                                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                                    bytes.len()
+                                );
+                                let _ = stream.write_all(&bytes[..bytes.len() / 2]);
+                                let _ = stream.flush();
+                                thread::sleep(Duration::from_millis(800));
+                            }
+                            Some(bytes) => {
+                                let _ = write!(
+                                    stream,
+                                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                                    bytes.len()
+                                );
+                                let _ = stream.write_all(bytes);
+                            }
+                            None => {
+                                let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                            }
+                        }
+                    });
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(5))
+                }
+                Err(error) => panic!("stalling fixture server: {error}"),
+            }
+        }
+    });
+    (url, stop, handle)
+}
+
+#[test]
+fn stalled_transfer_is_detected_by_read_idle_and_retried() {
+    // NL2: no whole-transfer deadline; a body that stops arriving trips the read-idle detector
+    // and the transfer is retried (the second request of each archive is served in full).
+    let source = fixture();
+    let (url, stop, handle) = start_stalling_server(release_assets(source.path()));
+    let destination = tempfile::tempdir().unwrap();
+    let options = OfficialExternalDataOptions {
+        local_artifacts_path: Some(destination.path().to_owned()),
+        read_idle_timeout: Some(Duration::from_millis(200)),
+        transfer_retries: 2,
+        ..Default::default()
+    };
+    let mut engine = Vakint::new().unwrap();
+    let report = engine
+        .load_official_external_data_from(2, &options, &url)
+        .unwrap();
+    assert!(report.loops.iter().all(|p| p.source == "downloaded"));
+    // without retries the same stall is a transport error
+    let again = tempfile::tempdir().unwrap();
+    let (url2, stop2, handle2) = start_stalling_server(release_assets(source.path()));
+    let no_retry = OfficialExternalDataOptions {
+        local_artifacts_path: Some(again.path().to_owned()),
+        read_idle_timeout: Some(Duration::from_millis(200)),
+        transfer_retries: 0,
+        ..Default::default()
+    };
+    assert!(
+        Vakint::new()
+            .unwrap()
+            .load_official_external_data_from(2, &no_retry, &url2)
+            .is_err()
+    );
+    for (s, h) in [(stop, handle), (stop2, handle2)] {
+        s.store(true, Ordering::Relaxed);
+        h.join().unwrap();
+    }
 }

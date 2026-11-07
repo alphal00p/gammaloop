@@ -345,7 +345,7 @@ pub(crate) fn materialize(
             }),
         );
         for warning in warnings {
-            log::warn!("{warning}; symbolic factor {monomial}");
+            super::log_once(&format!("{warning}; symbolic factor {monomial}"));
         }
         let coefficient = value
             .to_atom()

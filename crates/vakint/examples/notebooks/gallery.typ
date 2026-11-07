@@ -3,60 +3,124 @@
 These five Marimo applications share the native HEPKit, tensor, graph and
 Symbolica types from one coherent host. They demonstrate graph dressing and
 efficient gamma/color contractions, precision-aware constant/master inspection,
-an explore-only view of the zero-momentum four-rung (five-loop) vacuum fixture,
-exact numerator/pinch closure, and end-to-end Ordered reductions of the three-
-and four-loop ladders in cancellable background jobs.
+an explore-only view of the zero-momentum four-rung (five-loop) vacuum fixture
+with a recorded run, exact numerator/pinch closure, and end-to-end Ordered
+reductions of the three- and four-loop ladders in cancellable background jobs
+(or, in marimo's edit mode, in the notebook kernel with a live monitor).
 The source follows the native workflow of the
 #link("https://www.hepkit.org/gallery/notebooks/four_loop_numerator.py")[HEPKit numerator tutorial].
 
 == Run the gallery
 
 Use the Python environment containing the coordinated Community host, Marimo
-0.25.2, Uvicorn and the host's native display dependencies. Do not install a
-second Symbolica wheel into that environment. From this directory run:
+0.25.2 (tested version), Uvicorn and the host's display extra
+(#raw("pip install \"symbolica[notebook-display]\"") for a published wheel; the
+notebook host declares the same #raw("notebook-display") extra: #raw("anywidget")
+and #raw("typst")). Without them every expression falls back to a static preview
+that says what to install. Do not install a second Symbolica wheel into that
+environment. From this directory run:
 
 #raw("python serve_gallery.py", block: true)
 
 The server binds only to #raw("127.0.0.1:8417"). Configure
-#raw("VAKINT_GALLERY_PORT") to select another local port. A persistent user
-service and tailnet-only HTTPS proxy can expose that port; the notebook process
-does not change the tailnet or existing services itself. The five routes are
-#raw("/graphs/"), #raw("/inspect/"), #raw("/five-loop/"), #raw("/closure/") and
-#raw("/reduce/").
+#raw("VAKINT_GALLERY_PORT") to select another port and #raw("VAKINT_GALLERY_HOST")
+to bind another address (for example a tailnet-only interface). A reverse proxy
+(such as a tailnet-only HTTPS mapping that an administrator adds) can expose
+that port; the notebook process never changes the tailnet or existing services
+itself. The five routes are #raw("/graphs/"), #raw("/inspect/"),
+#raw("/five-loop/"), #raw("/closure/") and #raw("/reduce/").
 The server uses application mode, with source editing disabled.
 
-The dedicated tailnet deployment is
-#link("https://itphlies.tailb3264.ts.net:8453/")[itphlies.tailb3264.ts.net:8453].
-Its user service is #raw("vakint-five-loop-gallery.service"); restart or stop it
-with #raw("systemctl --user restart vakint-five-loop-gallery.service") or
-#raw("systemctl --user stop vakint-five-loop-gallery.service"). Keep the final
-deployment's sealed operations receipt for its interpreter, logs and rollback
-configuration. Restarting the app does not reconfigure Tailscale.
+To try the notebooks interactively, serve this directory with
+#raw("marimo edit --token-password-file FILE") (a copy of the sources if browser
+edits must not touch the checkout). The page navigation then opens each
+notebook file. Edit mode adds what application mode cannot offer: marimo's
+Interrupt button reaches the kernel, so in-kernel loads and reductions stop on
+request, and page 05 can reduce a 3L/4L case in the kernel itself. Every cell
+hides its code, so a page reads as a sequence of outputs: the page links open
+each notebook in marimo's app view (#raw("/?file=…&view-as=present"), outputs
+only), and its toolbar switches to the code view, where each cell's code stays
+folded until a double-click (or the cell menu's "Show code") opens it.
 
 Opening a page does not load five-loop owners or start a physical reduction.
 The inspection app constructs the offline vendored 1L–3L engine. Its explicit
-load button (1L–4L) validates #raw("VAKINT_GALLERY_ARTIFACTS") when
-set; otherwise the official latest packs install once into
+load button (1L–4L) validates #raw("VAKINT_GALLERY_ARTIFACTS") when set and
+uses that checkout as it is; otherwise the official packs of the release that
+the wheel's built-in registry comes from install once into
 #raw("VAKINT_GALLERY_DATA_CACHE") (default: the user cache directory,
-#raw("~/.cache/vakint-gallery")), never into the server's working directory. A loaded engine
-is reused for that session's subsequent lookups. The 1L–5L catalogue is offered
-only when the operator sets #raw("VAKINT_GALLERY_ALLOW_5L=1"): its load runs in
-the page kernel for minutes, holds several GB per session and cannot be
-cancelled. Every master remains a native
+#raw("~/.cache/vakint-gallery")), never into the server's working directory.
+#raw("VAKINT_GALLERY_DATA_VERSION") selects another release (or
+#raw("latest")). A loaded engine is reused for that session's subsequent
+lookups. The 1L–5L catalogue is offered only when the operator sets
+#raw("VAKINT_GALLERY_ALLOW_5L=1"): its load runs in the page kernel for about a
+minute and holds over 10 GB per session. Master counts, computed masters and
+pack sizes on the pages are read from the configured or installed data
+manifests, never written into the pages. Every master remains a native
 snapshot-bound inspection object, and #raw("master.graph") is an ordinary
-HEPKit graph. The 5L catalogue contains declared, uncomputed terminals with empty
-coefficient maps, never fabricated zeros.
+HEPKit graph; master selectors show the loop count, family and propagator
+powers of each master. A master without numerical Laurent data shows an empty
+coefficient map, never fabricated zeros.
+
+== Live progress and interruption
+
+The host's long Vakint calls #raw("evaluate"), #raw("evaluate_integral"),
+#raw("evaluate_rustred_symbolic"), #raw("warm_ordered_cache"),
+#raw("load_official_external_data") and #raw("load_external_data") take a
+#raw("progress") keyword (the other loads, such as #raw("load_rustred_application")
+and #raw("load_ordered_cache"), have none): #raw("\"auto\"") (the default) shows
+marimo's own status spinner or progress bar in a notebook and costs nothing
+elsewhere; a callable receives an immutable #raw("VakintProgress") snapshot
+about once a second. The gallery's monitor card renders the same most important
+metrics as the terminal dashboard: state and elapsed time, stage, batch, the
+Ordered schedule position (phase n of N, a position, not a share of the time),
+keys per second, processed and frontier keys (with the peak), step-cache hits
+and misses and memory. Page 05 shows it for background jobs (from the job's
+#raw("monitor.json")) and for in-kernel runs; page 03 shows the recorded
+five-loop run's final card.
+
+During these calls Ctrl-C, or marimo's Interrupt in edit mode, stops the native
+work and leaves the engine usable; a cancelled load leaves the previous
+registry active. An interrupted in-kernel run on page 05 keeps its final card
+(badge "Interrupted") in its own cell: marimo re-runs no other cell after an
+Interrupt. Reductions stop within a fraction of a second (measured on the
+five-loop zero-momentum benchmark: 0.44 s after a terminal Ctrl-C, 0.5 s after
+marimo's Interrupt, both about a minute in), except in native stretches without
+checkpoints that finish first: the five-loop application load step of a 1L–5L
+load (up to about 30 s), the expansion step of a large Apply phase (6–9 s
+measured in phase 73 of 83 of that benchmark) and the modular lift after the
+Ordered schedule is done (the monitor then shows the schedule complete; about
+20 s for that benchmark). Meanwhile marimo's status indicator says
+"Vakint · stopping". An interrupt that lands while a five-loop owner is being
+prepared for the first time can leave a failed preparation in the native
+application; the next five-loop call then reloads the application first (30–40 s,
+announced on stderr), with unchanged results.
+
+Interruptibility costs a few percent at every native checkpoint, so it is paid
+only where an interrupt can arrive: on Python's main thread (a script, a
+terminal, a marimo edit kernel) or with a progress callback. The engine's
+#raw("interrupt") argument selects it: #raw("\"fine\"") (the default, every
+checkpoint), #raw("\"coarse\"") (only Vakint's own checkpoints: per data file,
+program step and expression term, at no native cost) or #raw("\"off\"") (a
+Ctrl-C raises once the call returned). Application mode (the served gallery)
+runs kernels on threads and has no interrupt; there every long run is a
+cancellable background job, and the GIL is released so other sessions stay
+responsive. A host without the #raw("progress") keyword still runs every page;
+the monitor then appears only for background jobs.
 
 == Recorded evidence
 
 Each optional producer receipt is listed in #raw("data/manifest.json") with its
-relative path and SHA-256. #raw("VAKINT_GALLERY_EVIDENCE") can select another
+relative path and SHA-256. #raw("five-loop-q0") is the recorded current-basis
+five-loop zero-momentum run (report, final native monitor model and the 0.9 MB
+exact retained result; the 122 MB guard file is not shipped, only its count and
+SHA-256). #raw("VAKINT_GALLERY_EVIDENCE") can select another
 directory containing the same manifest. The app checks the bytes before display
 and rejects traversal or corruption. Receipt names are #raw("campaign"),
-#raw("zero-momentum"), #raw("closure"), #raw("cache-build"),
-#raw("held-out") and #raw("warning-controls"). The last records a real tuning
-case which triggered a lowered-entry coverage advisory and still reduced to
-declared catalogue masters. Its provisional owner mapping does not establish
+#raw("zero-momentum"), #raw("five-loop-q0"), #raw("closure"),
+#raw("cache-build"), #raw("held-out") and #raw("warning-controls"). The last
+records a real tuning case (recorded with data v0.1.2, as its card says) which
+triggered a lowered-entry coverage advisory and still reduced to declared
+catalogue masters. Its provisional owner mapping does not establish
 global physical coverage, a speedup, or an example of unknown residuals.
 An absent receipt makes no timing or successful-reduction
 claim: the five-loop and closure pages omit cards whose receipt is absent.
@@ -130,7 +194,38 @@ sha256 with the recorded fixture (identical for every arithmetic and core
 count). The 4L cases first load the 4L external-data pack. The 4L quadratic
 input (1.7 MB, about 25 s of reduction) is not shipped; a server provides it
 with #raw("VAKINT_GALLERY_LADDER_INPUTS"). An optional persistent Ordered step
-cache under the work root makes reruns warm.
+cache under the work root makes reruns warm. The worker sets no in-process
+time budget (the supervisor enforces the deadline): an active Symbolica budget
+reads the clock at every resource checkpoint and makes the 4L data load about
+2.5 times slower.
+
+In marimo's edit mode the page also offers "Reduce in this kernel": the same
+worker code runs in the notebook kernel with the live monitor card, marimo's
+Interrupt stops it, and the result is shown like a finished job's (it is kept
+for the session only, with an in-memory step cache).
+
+The selected case's input graph is drawn natively, with the FeynKit view of
+page 01, and its DOT source (shown as plain text: marimo's code editor has no
+DOT grammar). The last panel, "Input graph → Laurent series", is where the
+pipeline ends: it takes a value for every parameter of the input (the common UV
+mass, the MSbar scale #raw("mursq") and the strong coupling G of the
+vertices' #raw("GC_11 = i·G"); exact decimals or fractions, so no parameter
+limits the precision), the requested decimal digits and the range of ε orders, and
+evaluates the whole input in the kernel: one Vakint evaluation with symbolic
+masters per input and order count (kept for the session), then
+#raw("numerical_evaluation") at the requested precision. It shows the graph, an
+arrow and the Laurent series with its numerical coefficients (at most 32 digits
+each, so that every line stays readable; more requested digits are listed in
+full right below it, and as copyable plain text), each with the digits Vakint
+vouches for, its error radius and quality, plus Vakint's precision warnings.
+Each case keeps its own values while another case is selected, and a page that
+reconnects shows the values the kernel evaluates with. The evaluation time
+covers the whole evaluation, including a new engine and its data load (a new
+precision needs one). An order that needs master coefficients beyond the data
+fails closed (#raw("MissingMasterOrders")) and is listed with that reason,
+never as a number. The monitor card shows the data load and reduction, and
+marimo's Interrupt stops them in edit mode; application mode evaluates only the
+quick cases in its kernel.
 
 The page keeps showing its last run, finished or not, when a control changes;
 the URL carries #raw("?job=<id>"), so a reload shows the same run, and the
@@ -156,9 +251,11 @@ headless run watches and cancels only the job it started itself.
 
 The five-loop page shows the fixture's definition, the Ordered reduction plan
 (owners and supports, read from #raw("5L/ibps/selection.json") of a configured
-or installed 5L pack; no IBP payload is decoded) and the saved exact
-zero-momentum result (#raw("examples/data/five_loop_q0"), checked against its
-recorded sha256). It never starts a five-loop reduction by default. An operator
+or installed 5L pack; no IBP payload is decoded) and the recorded run of the
+zero-momentum input in the current 131-master basis
+(#raw("data/five-loop-q0"): final monitor card, timings, and the exact retained
+result in the live pager, each checked against its recorded sha256). It never
+starts a five-loop reduction by default. An operator
 can enable one zero-momentum run by setting #raw("VAKINT_GALLERY_ALLOW_5L=1")
 and configuring the compiled #raw("VAKINT_GALLERY_BENCHMARK") executable
 (#raw("five_loop_qcd_ladder")), the #raw("VAKINT_GALLERY_ARTIFACTS") checkout,
@@ -173,13 +270,25 @@ the three- and four-loop ladders (well under a second each); the five-loop
 numerator (about 16 s that the page kernel could not interrupt) is shown as
 geometry only.
 
-The ten small teaching formulae use their objects' existing native HTML protocol
-through the shared gallery presentation method. This retains native MathML and
-any bounded-preview omission notes without a view-owned widget model. The
-underlying tensor/Expression objects, native gamma/color/dot contraction, and
-interactive FeynKit graphs are unchanged. Verify every default teaching formula
-is complete, and both directions of every formula-tab switch work, in the actual
-browser. Never strip native omission markers to make a preview appear complete.
+Large expressions (the contraction views, master and constant definitions,
+retained results) use Symbolica's live pager (#raw("Gallery.formula")): pages,
+page size, numbered omission markers that open in place, and #raw("+") /
+#raw("-") / #raw("0") zoom; tensors use the HEPKit tensor pager. A live pager is
+always a cell's own output, behind a selector when a page offers several
+values, never inside tabs, accordions or tables: those unmount their content and
+would dispose the pager's widget model. Small values inside tabs and tables use
+the static native preview (#raw("Gallery.static_formula")), which keeps its
+omission notes. The pinned Symbolica pager shows a product too large for its
+budget as a single numbered marker (a five-loop retained result opens as
+#raw("[1] + [2]")): pages 03 and 05 therefore add a term browser
+(#raw("Gallery.term_selector") / #raw("term_view")) that opens one term at a
+time, its masters as readable labels, its prefactor and its coefficient in a
+pager of its own. Products never wrap in the pagers (they scroll sideways), so
+the graph page also lists the factors of a long tensor product one per line.
+Interactive FeynKit drawings render in iframes, so redrawing
+one never disturbs the notebook page. Light and dark styles follow the
+notebook's theme, not the operating system's. Never strip native omission
+markers to make a preview appear complete.
 
 == Validation
 

@@ -34,6 +34,7 @@ pub use shipped_cache::{
 mod factor_projection;
 mod factor_provider;
 pub(crate) mod five_loop;
+pub(crate) use five_loop::rustred_evaluates_loop;
 mod four_loop;
 mod mass_channels;
 mod matching;
@@ -43,7 +44,7 @@ mod numerator;
 mod ordered;
 pub(crate) mod p_data;
 pub(crate) mod p_integral;
-mod parallel;
+pub(crate) mod parallel;
 mod request_dump;
 #[cfg(test)]
 mod terminal;
@@ -255,11 +256,39 @@ pub(crate) fn application_options(
     rustred_app::SavedApplicationOptions {
         reduction_strategy: rustred::reduction::ReductionStrategy::Ordered,
         unresolved_policy: rustred::solver::UnresolvedPolicy::Preserve,
-        ordered_weight_arithmetic: settings.rustred_ordered_weight_arithmetic(),
+        ordered_weight_arithmetic: five_loop_ordered_weight_arithmetic(settings),
         ordered_scheduler: ordered_scheduler(settings),
         preparation_workers: settings.n_cores,
         ..settings.rustred_application_options
     }
+}
+
+/// Ordered weight arithmetic of five-loop saved-application requests.
+///
+/// RustRed composes the raw terminals of a modular request with the package's
+/// published terminal rows modulo every prime, before the rational
+/// reconstruction (compose before lift), so only the coefficients on the
+/// masters are reconstructed. Their degree in `d` is far below the degree of
+/// the raw terminal coefficients: `modular_sampled` replays the recorded walk
+/// at as many points as that degree needs, while `modular_polynomial` carries
+/// weights of the raw-terminal size through every replay. With the default
+/// selection ([`crate::OrderedWeightArithmetic::is_default_selection`]),
+/// five-loop requests therefore use `modular_sampled` on the same workers; an
+/// explicit selection, including an explicit `modular_polynomial`, is kept.
+/// Every arithmetic returns the same exact result.
+pub(crate) fn five_loop_ordered_weight_arithmetic(
+    settings: &VakintSettings,
+) -> crate::RustRedOrderedWeightArithmetic {
+    let selection = settings.ordered_weight_arithmetic;
+    if !selection.is_default_selection() {
+        return settings.rustred_ordered_weight_arithmetic();
+    }
+    let sampled = crate::OrderedWeightArithmetic::modular_sampled();
+    match selection.threads() {
+        Some(threads) => sampled.with_threads(threads),
+        None => sampled,
+    }
+    .resolve(settings.n_cores)
 }
 
 /// Whether the data needed to reduce a supported topology is loaded. One to
@@ -463,5 +492,54 @@ mod selection_tests {
             bare.evaluation_method(&with_matad, &three_loop),
             Some(EvaluationMethod::RustRed(_))
         ));
+    }
+}
+
+#[cfg(test)]
+mod five_loop_arithmetic_tests {
+    use super::five_loop_ordered_weight_arithmetic;
+    use crate::{OrderedWeightArithmetic, VakintSettings};
+
+    /// Only the default selection switches five-loop requests to
+    /// `modular_sampled` (on `n_cores` workers, or on the workers it fixes);
+    /// an explicit selection is kept, also an explicit `modular_polynomial`.
+    #[test]
+    fn five_loop_requests_use_modular_sampled_only_for_the_default_selection() {
+        let base = VakintSettings {
+            n_cores: 3,
+            ..Default::default()
+        };
+        let resolved = five_loop_ordered_weight_arithmetic(&base);
+        assert_eq!(
+            (resolved.name(), resolved.threads()),
+            ("modular_sampled", 3)
+        );
+        let fixed = VakintSettings {
+            ordered_weight_arithmetic: OrderedWeightArithmetic::default().with_threads(2),
+            ..base.clone()
+        };
+        let resolved = five_loop_ordered_weight_arithmetic(&fixed);
+        assert_eq!(
+            (resolved.name(), resolved.threads()),
+            ("modular_sampled", 2)
+        );
+        for explicit in [
+            OrderedWeightArithmetic::modular_polynomial(),
+            "modular_polynomial".parse().unwrap(),
+            OrderedWeightArithmetic::exact(),
+        ] {
+            let settings = VakintSettings {
+                ordered_weight_arithmetic: explicit,
+                ..base.clone()
+            };
+            assert_eq!(
+                five_loop_ordered_weight_arithmetic(&settings),
+                settings.rustred_ordered_weight_arithmetic()
+            );
+            assert_ne!(
+                five_loop_ordered_weight_arithmetic(&settings).name(),
+                "modular_sampled"
+            );
+        }
     }
 }

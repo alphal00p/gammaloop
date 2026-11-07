@@ -13,8 +13,9 @@ use feynkit_kinematics::Kinematics;
 use serde_json::Value;
 use symbolica::atom::Atom;
 use vakint::{
-    LoopNormalizationFactor, MasterSymbol, RustRedMasterMode, RustRedMonitorOptions, Vakint,
-    VakintExpression, VakintSettings, diagram_integral::DiagramIntegralOptions, vakint_parse,
+    LoopNormalizationFactor, MasterSymbol, RustRedMasterMode, RustRedMonitorOptions,
+    RustRedProgressSink, Vakint, VakintExpression, VakintSettings,
+    diagram_integral::DiagramIntegralOptions, vakint_parse,
 };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -110,6 +111,49 @@ fn ordinary_one_loop_monitor_defaults_are_off_and_path_alone_is_observational() 
 }
 
 #[test]
+fn progress_sink_alone_enables_monitor_and_ends_with_final_model() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let engine = Vakint::new()?;
+    let settings = settings(RustRedMasterMode::Retain);
+    let input = vakint_parse!("topo(I1L(1,2))-(1-ep)*topo(I1L(1,1))")?;
+    let reference = engine.evaluate(&settings, input.as_view())?;
+    let sink = RustRedProgressSink::default();
+    let options = RustRedMonitorOptions {
+        // No terminal and no file: only the in-memory model.
+        progress_sink: Some(sink.clone()),
+        interval: Duration::ZERO,
+        ..Default::default()
+    };
+    assert!(options.enabled());
+    options.validate()?;
+    let cwd = std::env::current_dir()?;
+    let before = fs::read_dir(&cwd)?.count();
+    assert_eq!(
+        engine.evaluate_with_monitor(&settings, input.as_view(), &options)?,
+        reference
+    );
+    let (sequence, model) = sink.latest_since(0).expect("at least one model");
+    assert!(sequence >= 1);
+    // The final drain stores the finished request's model.
+    assert_eq!(model["status"], "Succeeded");
+    assert_eq!(model["api_status"], "Succeeded");
+    assert!(model["elapsed_seconds"].as_f64().is_some_and(|s| s >= 0.0));
+    assert!(sink.latest_since(sequence).is_none());
+    // A second call on the same sink continues its sequence.
+    assert_eq!(
+        engine.evaluate_integral_with_monitor(&settings, input.as_view(), &options)?,
+        engine.evaluate_integral(&settings, input.as_view())?
+    );
+    let (next, model) = sink.latest_since(sequence).expect("a new model");
+    assert!(next > sequence);
+    assert_eq!(model["status"], "Succeeded");
+    // Nothing was written: neither in the test directory nor the cwd.
+    assert_eq!(fs::read_dir(directory.path())?.count(), 0);
+    assert_eq!(fs::read_dir(&cwd)?.count(), before);
+    Ok(())
+}
+
+#[test]
 fn snapshot_publication_fault_does_not_replace_the_native_result() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let occupied = directory.path().join("occupied");
@@ -189,28 +233,50 @@ fn five_loop_monitor_preserves_full_results_and_final_substitution_errors() -> R
     assert!(!reference.families.is_empty());
     assert_eq!(latest(&path, "succeeded")?["core"]["status"], "succeeded");
 
-    // Inspect an already declared, positive-power scalar master. Its stored
-    // graph/routing/powers supply the public ingress; no new reduction search or
-    // replacement master fixture is introduced to provoke an error.
+    // Inspect an already declared, positive-power scalar master: the last one
+    // the authenticated 5L manifest declares (P131 of the v0.2.1 pack, P640 of
+    // the 640-terminal v0.2.0 campaign). Its stored graph/routing/powers supply
+    // the public ingress; no new reduction search or replacement master
+    // fixture is introduced to provoke an error. A terminal without
+    // coefficients must fail its final substitution as a declared terminal; a
+    // computed one must fail closed when the request needs one Laurent order
+    // beyond its last published coefficient.
     let manifest: Value = serde_json::from_slice(&fs::read(report.path.join("5L/manifest.json"))?)?;
     let metadata = manifest["masters"]
         .as_array()
         .ok_or("5L manifest has no masters")?
         .iter()
-        .find(|master| master["name"] == "P640")
-        .ok_or("authenticated campaign lacks P640")?;
-    let powers: Vec<i64> = serde_json::from_value(metadata["powers"].clone())?;
-    assert_eq!(powers, [4, 2, 1, 0, 1, 1, 1, 0, 0, 2, 1, 1, 1, 1, 1]);
-    assert_eq!(metadata["status"], "not_computed");
-    let symbol: MasterSymbol = metadata["master_id"]
+        .rfind(|master| {
+            master["powers"].as_array().is_some_and(|powers| {
+                powers
+                    .iter()
+                    .all(|power| power.as_i64().is_some_and(|power| power >= 0))
+            })
+        })
+        .ok_or("authenticated campaign declares no positive-power scalar master")?;
+    let name = metadata["name"].as_str().ok_or("5L master has no name")?;
+    let identity = metadata["master_id"]
         .as_str()
-        .ok_or("P640 has no native identity")?
-        .parse()?;
+        .ok_or("5L master has no native identity")?;
+    let computed = match metadata["status"].as_str() {
+        Some("not_computed") => false,
+        Some("accepted") => true,
+        status => return Err(format!("{name}: unexpected master status {status:?}").into()),
+    };
+    eprintln!("selected 5L master {name} ({identity}), computed: {computed}");
+    let symbol: MasterSymbol = identity.parse()?;
     let master = engine.get_master(&symbol, 16)?;
     assert_eq!(master.loop_count(), 5);
-    assert!(!master.is_computed());
-    assert!(master.coefficients().is_empty());
+    assert_eq!(master.is_computed(), computed, "{name}");
+    assert_eq!(master.coefficients().is_empty(), !computed, "{name}");
     assert!(master.graph().numerator().expression().is_one());
+    // Depth whose last requested order is one beyond the last coefficient:
+    // the target order is number_of_terms_in_epsilon_expansion - loops - 1.
+    let depth = master
+        .coefficients()
+        .keys()
+        .next_back()
+        .map(|last| last + 1 + 5 + 1);
     let dimension = Atom::var(feynkit_graph::symbols::dimension());
     let kinematics = Kinematics::in_dimension(&dimension)?;
     let family = master.graph().integral_family(&kinematics, &[])?;
@@ -220,6 +286,16 @@ fn five_loop_monitor_preserves_full_results_and_final_substitution_errors() -> R
         master.graph().numerator().expression(),
         &DiagramIntegralOptions::default(),
     )?);
+    // A request made of package masters only is its own reduction: it is
+    // built without the native request (master transport), so that snapshot
+    // must claim no native core. To keep a request whose native reduction
+    // succeeds before its final substitution fails, the same master is also
+    // requested next to the positive-line fixture above. That request as a
+    // whole runs a native reduction: the fixture's terms still need the
+    // native walk (their ordered phases were checked above), while the
+    // master itself may still be reduced directly when it falls in a
+    // (mass, spectator, exponent) channel of its own.
+    let beside_native = input.clone() + &fixture.cancelled;
     for (mode, phase) in [
         (RustRedMasterMode::Symbolic, "symbolic_master_substitution"),
         (
@@ -227,27 +303,61 @@ fn five_loop_monitor_preserves_full_results_and_final_substitution_errors() -> R
             "numerical_master_substitution",
         ),
     ] {
-        let settings = self::settings(mode);
-        let reference = engine.evaluate(&settings, input.as_view()).unwrap_err();
-        assert!(
-            reference
-                .to_string()
-                .contains("declared terminal has no computed coefficients")
-        );
-        assert!(!reference.to_string().contains("undeclared residual master"));
-        let observed = engine
-            .evaluate_with_monitor(&settings, input.as_view(), &options)
-            .unwrap_err();
-        assert_eq!(
-            std::mem::discriminant(&observed),
-            std::mem::discriminant(&reference)
-        );
-        assert_eq!(observed.to_string(), reference.to_string());
-        let request = latest(&path, "failed")?;
-        assert_eq!(request["caller_phase"], phase);
-        // Native reduction succeeded; the whole request failed later. Core
-        // success must never overwrite this final caller-owned error status.
-        assert_eq!(request["core"]["status"], "succeeded");
+        let mut settings = self::settings(mode);
+        if let Some(depth) = depth {
+            settings.number_of_terms_in_epsilon_expansion = depth;
+        }
+        for (request_input, native) in [(&input, false), (&beside_native, true)] {
+            let reference = engine
+                .evaluate(&settings, request_input.as_view())
+                .unwrap_err();
+            let text = reference.to_string();
+            if computed {
+                assert!(
+                    matches!(reference, vakint::VakintError::MissingMasterOrders(_)),
+                    "{name}: {text}"
+                );
+                assert!(
+                    text.contains("beyond the available expansion depth"),
+                    "{name}: {text}"
+                );
+                assert!(text.contains(identity), "{name}: {text}");
+            } else {
+                assert!(
+                    text.contains("declared terminal has no computed coefficients"),
+                    "{name}: {text}"
+                );
+            }
+            assert!(
+                !text.contains("undeclared residual master"),
+                "{name}: {text}"
+            );
+            let observed = engine
+                .evaluate_with_monitor(&settings, request_input.as_view(), &options)
+                .unwrap_err();
+            assert_eq!(
+                std::mem::discriminant(&observed),
+                std::mem::discriminant(&reference)
+            );
+            assert_eq!(observed.to_string(), reference.to_string());
+            let request = latest(&path, "failed")?;
+            assert_eq!(request["caller_phase"], phase);
+            if native {
+                // The request's native reduction (at least the fixture's)
+                // succeeded; the whole request failed later. Core success
+                // must never overwrite this final caller-owned error status.
+                assert_eq!(request["core"]["status"], "succeeded", "{name}");
+            } else {
+                // No native request ran: the failed status is the caller's own.
+                // This deliberately pins the direct path for a request made of
+                // the package's own masters only (built without the native
+                // request, so no core snapshot is recorded). If that path ever
+                // gains a native request, this assertion fails by design: that
+                // is a behaviour change of master transport, not a monitor
+                // regression.
+                assert_eq!(request["core"], Value::Null, "{name}");
+            }
+        }
     }
     Ok(())
 }
