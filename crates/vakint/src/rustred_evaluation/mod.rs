@@ -13,6 +13,7 @@ pub(crate) mod data;
 pub(crate) mod masters;
 pub(crate) use experimental::timing::MathSpan;
 pub(crate) use masters::combine_exact;
+pub(crate) use parallel::map_ordered;
 #[cfg(all(unix, not(target_arch = "wasm32")))]
 mod official;
 #[cfg(all(unix, not(target_arch = "wasm32")))]

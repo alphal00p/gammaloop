@@ -220,6 +220,17 @@ fn prepare_coefficient(
     Err(failure("constant definitions did not reach a fixed point"))
 }
 
+/// One prepared coefficient of [`materialize`]: an exact rational, or its
+/// tracked value with the warnings and origins of its evaluation.
+enum Evaluated {
+    Exact(Atom),
+    Numerical {
+        value: super::NumericalCoefficient,
+        warnings: Vec<super::PrecisionWarning>,
+        origins: Vec<super::PrecisionSource>,
+    },
+}
+
 fn epsilon_power(monomial: AtomView, epsilon: Symbol) -> Option<i64> {
     match monomial {
         AtomView::Var(variable) if variable.get_symbol() == epsilon => Some(1),
@@ -320,32 +331,57 @@ pub(crate) fn materialize(
     let grouped = expression.replace_multiple(&replacements);
     crate::rustred_evaluation::log_phase("materialize_classification", started);
     let started = crate::rustred_evaluation::phase_start();
+    let terms = grouped.coefficient_list::<i32>(&variables);
+    // Every coefficient is prepared and evaluated independently, on up to
+    // `n_cores` workers; the loop below consumes them in collection order, so
+    // warnings, errors and the result are those of a sequential pass.
+    let evaluated = crate::rustred_evaluation::map_ordered(
+        crate::rustred_evaluation::postprocessing_threads(settings),
+        &terms,
+        |_, (_, coefficient)| -> Result<Evaluated, VakintError> {
+            let prepared = prepare_coefficient(coefficient.clone(), catalog, parameters)?;
+            // A resolved rational is already an exact numerical coefficient.
+            // Retain it across partial evaluation boundaries (for example nested
+            // forest integrations); only final numerical evaluation needs a Float.
+            // Staged Float literals and finite sources cannot enter this branch.
+            if let AtomView::Num(number) = prepared.expression.as_view()
+                && matches!(
+                    number.get_coeff_view(),
+                    CoefficientView::Natural(..) | CoefficientView::Large(..)
+                )
+            {
+                return Ok(Evaluated::Exact(prepared.expression));
+            }
+            let (value, warnings) = evaluate_coefficient(
+                prepared.expression.as_view(),
+                &prepared.sources,
+                parameters,
+                settings,
+            )?;
+            Ok(Evaluated::Numerical {
+                value,
+                warnings,
+                origins: prepared.origins,
+            })
+        },
+    );
     let mut result = Atom::Zero;
-    for (monomial, coefficient) in grouped.coefficient_list::<i32>(&variables) {
+    for ((monomial, _), evaluated) in terms.into_iter().zip(evaluated) {
         let monomial = monomial.replace_multiple(&restore);
-        let prepared = prepare_coefficient(coefficient, catalog, parameters)?;
-        // A resolved rational is already an exact numerical coefficient.
-        // Retain it across partial evaluation boundaries (for example nested
-        // forest integrations); only final numerical evaluation needs a Float.
-        // Staged Float literals and finite sources cannot enter this branch.
-        if let AtomView::Num(number) = prepared.expression.as_view()
-            && matches!(
-                number.get_coeff_view(),
-                CoefficientView::Natural(..) | CoefficientView::Large(..)
-            )
-        {
-            result += prepared.expression * monomial;
-            continue;
-        }
-        let (value, mut warnings) = evaluate_coefficient(
-            prepared.expression.as_view(),
-            &prepared.sources,
-            parameters,
-            settings,
-        )?;
+        let (value, mut warnings, origins) = match evaluated? {
+            Evaluated::Exact(value) => {
+                result += value * monomial;
+                continue;
+            }
+            Evaluated::Numerical {
+                value,
+                warnings,
+                origins,
+            } => (value, warnings, origins),
+        };
         attach_origins(
             &mut warnings,
-            &prepared.origins,
+            &origins,
             epsilon_power(monomial.as_view(), vk_symbol!(&settings.epsilon_symbol)),
             catalog.map_or("built-in definitions and declared parameters", |catalog| {
                 catalog.version.as_str()

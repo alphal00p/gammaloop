@@ -1025,20 +1025,67 @@ impl MasterCatalog {
             raw
         };
         super::log_phase("finalize_input_staging", started);
-        let started = super::phase_start();
-        let direct = self.finalize_independent(raw.clone(), settings, loop_count, mode);
-        super::log_phase("finalize_direct", started);
-        if matches!(&direct, Err(error) if !Self::lacks_master_data(error))
-            || mode == RustRedMasterMode::Retain
-            || self.basis_aliases.is_empty()
-        {
+        let threads = super::postprocessing_threads(settings);
+        if threads <= 1 || mode == RustRedMasterMode::Retain || self.basis_aliases.is_empty() {
+            let started = super::phase_start();
+            let direct = self.finalize_independent(raw.clone(), settings, loop_count, mode);
+            super::log_phase("finalize_direct", started);
+            if matches!(&direct, Err(error) if !Self::lacks_master_data(error))
+                || mode == RustRedMasterMode::Retain
+                || self.basis_aliases.is_empty()
+            {
+                return direct;
+            }
+            return match self.finalize_aliased(&raw, settings, loop_count, mode) {
+                None => direct,
+                Some(Err(error)) if Self::lacks_master_data(&error) => direct,
+                Some(result) => result,
+            };
+        }
+        // The direct pass and the alias pass are independent: with several
+        // workers they run concurrently, and the direct result decides exactly
+        // as in the sequential order above.
+        let mut outcomes = super::parallel::map_ordered(2, &[false, true], |_, aliased| {
+            if *aliased {
+                self.finalize_aliased(&raw, settings, loop_count, mode)
+            } else {
+                let started = super::phase_start();
+                let direct = self.finalize_independent(raw.clone(), settings, loop_count, mode);
+                super::log_phase("finalize_direct", started);
+                Some(direct)
+            }
+        });
+        let aliased = outcomes.pop().expect("alias pass");
+        let direct = outcomes
+            .pop()
+            .flatten()
+            .expect("the direct pass always runs");
+        if matches!(&direct, Err(error) if !Self::lacks_master_data(error)) {
             return direct;
         }
-        // Prefer authenticated exact relations even when independently rounded
-        // coefficient rows are available: a large prefactor must not amplify
-        // their rounding differences in a mathematically zero combination.
-        // Keep direct data as a fallback when an alias has additional orders.
-        // Corruption, parsing and algebra errors are never hidden by this path.
+        match aliased {
+            None => direct,
+            Some(Err(error)) if Self::lacks_master_data(&error) => direct,
+            Some(result) => result,
+        }
+    }
+
+    /// The catalogue pass after the authenticated basis aliases replaced
+    /// their masters, or `None` when no alias occurs in `raw`.
+    ///
+    /// Prefer authenticated exact relations even when independently rounded
+    /// coefficient rows are available: a large prefactor must not amplify
+    /// their rounding differences in a mathematically zero combination.
+    /// [`Self::finalize`] keeps direct data as a fallback when an alias has
+    /// additional orders. Corruption, parsing and algebra errors are never
+    /// hidden by this path.
+    fn finalize_aliased(
+        &self,
+        raw: &Atom,
+        settings: &VakintSettings,
+        loop_count: usize,
+        mode: RustRedMasterMode,
+    ) -> Option<Result<Atom, VakintError>> {
         let replacements: Vec<_> = self
             .basis_aliases
             .iter()
@@ -1058,16 +1105,13 @@ impl MasterCatalog {
             super::postprocessing_threads(settings),
         );
         super::log_phase("finalize_alias_normalization", started);
-        if normalized == raw {
-            return direct;
+        if &normalized == raw {
+            return None;
         }
         let started = super::phase_start();
         let aliased = self.finalize_independent(normalized, settings, loop_count, mode);
         super::log_phase("finalize_aliased", started);
-        match aliased {
-            Err(error) if Self::lacks_master_data(&error) => direct,
-            result => result,
-        }
+        Some(aliased)
     }
 
     /// Missing master data, as opposed to corruption, parsing or algebra errors.
