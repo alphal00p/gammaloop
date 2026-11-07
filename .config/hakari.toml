@@ -75,6 +75,7 @@ workspace-members = [
     "feynkit-model",
     "feynkit-tensor",
     "feynkit-ufo",
+    "gammaloop-statistics",
     "gammaloop-tracing-filter-macros",
     "kurvst",
     "linnet",

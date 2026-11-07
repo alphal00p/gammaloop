@@ -2318,6 +2318,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "gammaloop-statistics"
+version = "0.1.0"
+dependencies = [
+ "numerica",
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "gammaloop-tracing-filter"
 version = "0.1.0"
 dependencies = [
@@ -2372,12 +2383,14 @@ dependencies = [
  "num-integer",
  "num-traits",
  "numerica",
+ "once_cell",
  "proc-macro2",
  "quote",
  "rand 0.8.6",
  "regex",
  "regex-automata",
  "regex-syntax",
+ "rug",
  "rust-embed-utils",
  "rustix 1.1.4",
  "serde",
@@ -2427,6 +2440,7 @@ dependencies = [
  "feynkit-graph",
  "feynkit-kinematics",
  "feynkit-model",
+ "gammaloop-statistics",
  "gammaloop-tracing-filter",
  "gammaloop-workspace-hack",
  "idenso",
