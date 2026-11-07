@@ -1333,15 +1333,9 @@ fn imaginary_zero_is_negligible_only_below_the_requested_precision_of_its_terms(
     // 3e-11 terms, exported as zero, with a note and no shortfall.
     let (accepted, warnings) = evaluate(60, 32);
     assert!(accepted.imaginary_negligible_zero(), "{accepted:?}");
-    let scale = accepted.imaginary_term_scale.as_ref().unwrap();
-    assert!(
-        *scale > Rational::from((3, 100_000_000_000i64)),
-        "{scale:?}"
-    );
-    assert!(
-        *scale < Rational::from((4, 100_000_000_000i64)),
-        "{scale:?}"
-    );
+    let scale = accepted.imaginary_term_scale.as_deref().unwrap();
+    assert!(*scale > (3i64, 100_000_000_000i64), "{scale:?}");
+    assert!(*scale < (4i64, 100_000_000_000i64), "{scale:?}");
     assert_eq!(accepted.to_atom().unwrap(), Atom::Zero);
     let note = zero_consistent_imaginary_warning(&warnings).expect("a zero note");
     assert!(

@@ -85,8 +85,9 @@ pub struct NumericalCoefficient {
     /// For an imaginary component [consistent with
     /// zero](Self::imaginary_consistent_with_zero) evaluated from an
     /// expression: the largest imaginary contribution of one of its terms
-    /// (see [`imaginary_term_scale`]). `None` for every other coefficient.
-    imaginary_term_scale: Option<Rational>,
+    /// (see [`imaginary_term_scale`]). `None` for every other coefficient
+    /// (boxed: it is rare and keeps the common coefficient small).
+    imaginary_term_scale: Option<Box<Rational>>,
 }
 
 impl NumericalCoefficient {
@@ -968,8 +969,11 @@ pub(crate) fn evaluate_coefficient_with_working_precision(
         })?;
     let mut coefficient = NumericalCoefficient::from_tracked(value, requested);
     if coefficient.imaginary_consistent_with_zero() {
-        coefficient.imaginary_term_scale =
-            Some(imaginary_term_scale(normalized.as_view(), &inputs, bits)?);
+        coefficient.imaginary_term_scale = Some(Box::new(imaginary_term_scale(
+            normalized.as_view(),
+            &inputs,
+            bits,
+        )?));
     }
     // A negligible imaginary zero is reported on its own below, so this
     // shortfall then describes the real component in full. An imaginary zero
