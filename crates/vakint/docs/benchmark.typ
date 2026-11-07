@@ -262,7 +262,7 @@
 #let failed = results.cases.map(c => c.cells.pairs().filter(p => p.at(1).status == "failed").map(p => (c, p.at(0), p.at(1)))).flatten().chunks(3)
 #let pending = results.cases.map(c => (c, c.cells.pairs().filter(p => p.at(1).status == "pending").map(p => cell-label.at(p.at(0), default: p.at(0))))).filter(p => p.at(1).len() > 0)
 #if failed.len() > 0 {
-  block(fill: rgb("fdecea"), inset: 7pt, radius: 3pt, width: 100%, text(size: 7.6pt)[
+  block(fill: rgb("fdecea"), inset: 6pt, radius: 3pt, width: 100%, text(size: 7.3pt)[
     *Failed calls.*
     #for (c, k, v) in failed {
       let s = v.at("error_summary", default: (text: v.at("error", default: "")))
@@ -278,7 +278,8 @@
 #block(width: 100%, inset: (x: 0pt, y: 4pt))[
   #text(9pt, weight: "bold", fill: navy)[Provenance]
 #{
-  set text(8pt)
+  set text(7.6pt)
+  set par(justify: false)
   let src = ident.at("source", default: (:))
   let dg = ident.at("data_git", default: none)
   let cn = results.at("contention", default: (:))
@@ -295,9 +296,9 @@
     } · profile #src.at("profile", default: "—")],
     [Harness binary], raw(str(ident.executable_sha256)),
     [FORM], [#form],
-    [Host], [#host.at("cpu_model", default: "—"), #host.at("logical_cpus", default: "—") logical CPUs; timed on CPUs #host.at("cpus_used", default: ()).map(str).join(", ") (#pl(cn.at("l3_domains", default: 0), "L3 domain"))],
+    [Host], [#host.at("cpu_model", default: "—"), #host.at("logical_cpus", default: "—") logical CPUs, shared; timed on #pl(host.at("cpus_used", default: ()).len(), "pinned CPU") in #pl(cn.at("l3_domains", default: 0), "L3 domain") (listed in suite.json)],
     [Contention], [#cn.at("samples", default: "—") samples, #cn.at("contended_samples", default: "—") still contended after re-measurement (multi-core samples are measured once; thresholds: SMT sibling #pct(cn.at("thresholds", default: (:)).at("sibling_busy", default: none)), other tasks #pct(cn.at("thresholds", default: (:)).at("foreign_cpu", default: none)), call run-queue wait #pct(cn.at("thresholds", default: (:)).at("run_delay", default: none)) when other tasks ran on the timed CPU) · SMT sibling busy #pct(cn.at("sibling_busy_median", default: none)) median (max #pct(cn.at("sibling_busy_max", default: none))) · timed call waiting in the run queue #pct(cn.at("call_run_delay_median", default: none)) (max #pct(cn.at("call_run_delay_max", default: none))) · other tasks on the timed CPU #pct(cn.at("foreign_cpu_median", default: none)) (max #pct(cn.at("foreign_cpu_max", default: none))) · 1-min load ≤ #cn.at("load1_max", default: "—")],
-    [Regenerate], [#raw("crates/vakint/docs/benchmark/make-benchmark.sh DATA_ROOT BENCHMARK_BINARY OUT_DIR --install") (after a data release: #raw("DATA_ROOT - OUT_DIR --refresh-tables --install"), timings kept)],
+    [Regenerate], [#raw("crates/vakint/docs/benchmark/make-benchmark.sh DATA_ROOT BINARY OUT --install"); after a data release #raw("DATA_ROOT - OUT --refresh-tables --install") (timings kept)],
     [Built], [#results.assembled_utc #if draft [· *DRAFT*: not the published data or build]],
   )
 }
@@ -305,6 +306,7 @@
 
 // ---------------------------------------------------------------- graphs --
 
+#pagebreak(weak: true)
 = Reduction graphs <graphs>
 
 Nodes are the vacuum topologies of the shipped reduction, on the row of their number of lines; an edge removes one
