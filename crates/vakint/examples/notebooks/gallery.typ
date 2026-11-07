@@ -214,9 +214,14 @@ limits the precision), the requested decimal digits and the range of ε orders, 
 evaluates the whole input in the kernel: one Vakint evaluation with symbolic
 masters per input and order count (kept for the session), then
 #raw("numerical_evaluation") at the requested precision. It shows the graph, an
-arrow and the Laurent series with its numerical coefficients, each with the
-digits Vakint vouches for, its error radius and quality, plus Vakint's
-precision warnings. An order that needs master coefficients beyond the data
+arrow and the Laurent series with its numerical coefficients (at most 32 digits
+each, so that every line stays readable; more requested digits are listed in
+full right below it, and as copyable plain text), each with the digits Vakint
+vouches for, its error radius and quality, plus Vakint's precision warnings.
+Each case keeps its own values while another case is selected, and a page that
+reconnects shows the values the kernel evaluates with. The evaluation time
+covers the whole evaluation, including a new engine and its data load (a new
+precision needs one). An order that needs master coefficients beyond the data
 fails closed (#raw("MissingMasterOrders")) and is listed with that reason,
 never as a number. The monitor card shows the data load and reduction, and
 marimo's Interrupt stops them in edit mode; application mode evaluates only the

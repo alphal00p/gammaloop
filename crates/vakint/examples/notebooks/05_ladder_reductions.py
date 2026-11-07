@@ -594,48 +594,41 @@ def _(Gallery, mo, retained_result, retained_term):
 
 
 @app.cell(hide_code=True)
-def _(Gallery, case_choice, ladder_cases, mo):
-    # The panel's controls follow the selected case (a new case starts with
-    # fresh values and no result).
-    _case = ladder_cases[case_choice.value]
-    _loops = _case["loop_count"]
-    laurent_parameters = Gallery.laurent_parameters(case_choice.value)
-    _fields = {
-        f"p{_index}": mo.ui.text(
-            value="1",
-            label=f"${_parameter['latex']}$ · {_parameter['meaning']}",
-            full_width=True,
-        )
-        for _index, _parameter in enumerate(laurent_parameters)
-    }
-    _in_page = Gallery.laurent_in_page(mo, case_choice.value)
-    laurent_controls = mo.md(
-        "**Parameters**, exact decimals or fractions (e.g. `91.1876`, `1/3`)\n\n"
-        + "\n\n".join(f"{{{key}}}" for key in _fields)
-        + "\n\n**Accuracy and ε orders**\n\n{digits}\n\n{orders}"
-    ).batch(
-        digits=mo.ui.number(
-            start=1,
-            stop=Gallery.laurent_max_digits,
-            value=32,
-            step=1,
-            label="Requested decimal digits",
-        ),
-        orders=mo.ui.range_slider(
-            start=-_loops,
-            stop=Gallery.laurent_highest_order,
-            step=1,
-            value=[-_loops, 0],
-            show_value=True,
-            label="ε orders (lowest, highest)",
-        ),
-        **_fields,
+def _(Gallery, ladder_cases, mo):
+    # Every case's controls, built once (this cell never re-runs): marimo
+    # replays the last value of each element id to a page that reconnects,
+    # and a re-created element would take the same id with a fresh value, so
+    # the page would show values the kernel does not use. Each case keeps its
+    # own values while another one is selected.
+    laurent_forms = mo.ui.dictionary(
+        {
+            key: Gallery.laurent_form(mo, key)
+            for key in ladder_cases
+            if Gallery.ladder_case_available(key)
+        }
     )
     laurent_button = mo.ui.run_button(
-        label="Evaluate the Laurent series",
-        kind="success",
-        disabled=not _in_page,
+        label="Evaluate the Laurent series", kind="success"
     )
+    laurent_button_off = mo.ui.run_button(
+        label="Evaluate the Laurent series", kind="success", disabled=True
+    )
+    return laurent_button, laurent_button_off, laurent_forms
+
+
+@app.cell(hide_code=True)
+def _(
+    Gallery,
+    case_choice,
+    ladder_cases,
+    laurent_button,
+    laurent_button_off,
+    laurent_forms,
+    mo,
+):
+    # The selected case's controls (shown, never re-created here).
+    _loops = ladder_cases[case_choice.value]["loop_count"]
+    _in_page = Gallery.laurent_in_page(mo, case_choice.value)
     _orders_note = (
         f"The series starts at {Gallery.epsilon_text(-_loops)}. Vakint returns "
         "every order its master data supports; an order that needs master "
@@ -659,8 +652,8 @@ def _(Gallery, case_choice, ladder_cases, mo):
                 "then evaluates it numerically at the requested precision in "
                 "this kernel.",
             ),
-            laurent_controls,
-            laurent_button,
+            laurent_forms[case_choice.value],
+            laurent_button if _in_page else laurent_button_off,
             Gallery.note(mo, "Which orders", _orders_note),
             *(
                 []
@@ -678,7 +671,7 @@ def _(Gallery, case_choice, ladder_cases, mo):
             ),
         ]
     )
-    return laurent_button, laurent_controls, laurent_parameters
+    return
 
 
 @app.cell(hide_code=True)
@@ -690,34 +683,23 @@ def _(case_choice, mo):
 
 
 @app.cell(hide_code=True)
-def _(
-    Gallery,
-    case_choice,
-    laurent_button,
-    laurent_controls,
-    laurent_parameters,
-    mo,
-    set_laurent,
-):
+def _(Gallery, case_choice, laurent_button, laurent_forms, mo, set_laurent):
     # Runs on the button only. The monitor card redraws this cell's output
     # while Vakint loads data and reduces; marimo's Interrupt stops it and this
     # cell then shows the interrupted card itself (marimo re-runs no other
     # cell after an Interrupt). A finished series is shown by the next cell.
     mo.stop(not laurent_button.value)
-    _request = laurent_controls.value
     _progress = Gallery.kernel_progress(mo, title="Input graph → Laurent series")
     laurent = None
     _outcome = None
     try:
+        # The values of the selected case's controls, read when the button runs.
         laurent = Gallery.laurent_series(
             case_choice.value,
-            {
-                _parameter["name"]: _request[f"p{_index}"]
-                for _index, _parameter in enumerate(laurent_parameters)
-            },
-            digits=_request["digits"],
-            orders=_request["orders"],
             progress=_progress,
+            **Gallery.laurent_request(
+                case_choice.value, laurent_forms.value.get(case_choice.value)
+            ),
         )
     except KeyboardInterrupt:
         _outcome = mo.vstack(

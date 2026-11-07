@@ -442,12 +442,14 @@ class Gallery:
            one-line strip: fold it to a thin rule so that outputs follow each
            other (hover opens the strip; a double-click or the cell menu's
            "Show code" reveals the code). The app view shows no code at all. */
-        .marimo-cell [data-testid="cell-editor"].opacity-20 { height:8px !important;
+        .marimo-cell [data-testid="cell-editor"].opacity-20,
+        .marimo-cell .cm.opacity-20.h-8 { height:8px !important;
           min-height:0 !important; overflow:hidden; transition:height .12s; }
-        .marimo-cell [data-testid="cell-editor"].opacity-20:hover { height:2rem !important; }
+        .marimo-cell [data-testid="cell-editor"].opacity-20:hover,
+        .marimo-cell .cm.opacity-20.h-8:hover { height:2rem !important; }
         /* Input graph -> Laurent series: the end of the pipeline at a glance. */
         .vg-pipeline { display:grid; align-items:center; gap:14px 20px;
-          grid-template-columns:minmax(240px,5fr) auto minmax(300px,8fr);
+          grid-template-columns:minmax(220px,4fr) auto minmax(380px,9fr);
           border:1px solid var(--vg-line); border-radius:15px;
           background:var(--vg-paper); padding:16px 20px; margin:1rem 0;
           color:var(--vg-navy); }
@@ -462,9 +464,24 @@ class Gallery:
         .vg-pipe-series p { margin:.3rem 0; }
         .vg-pipe-label { font:600 10px/1.6 ui-sans-serif,system-ui;
           letter-spacing:.14em; text-transform:uppercase; color:var(--vg-teal); }
-        .vg-pipe-caption { font-size:12px; line-height:1.6; color:var(--vg-muted); }
+        .vg-pipe-caption { font-size:12px; line-height:1.6; color:var(--vg-muted);
+          overflow-wrap:anywhere; }
+        .vg-digits { border:1px solid var(--vg-line); border-radius:15px;
+          background:var(--vg-paper); padding:14px 20px; margin:0 0 1rem;
+          color:var(--vg-navy); }
+        .vg-digit-row { display:grid; grid-template-columns:4.2rem minmax(0,1fr);
+          gap:12px; padding:7px 0; border-top:1px solid var(--vg-line); }
+        .vg-digits .vg-pipe-label + .vg-digit-row { border-top:0; }
+        .vg-digit-k { font-style:italic; font-size:14px; white-space:nowrap;
+          text-align:right; }
+        .vg-digit-row code { background:none; padding:0; font-size:12.5px;
+          line-height:1.65; white-space:normal; overflow-wrap:anywhere;
+          font-variant-numeric:tabular-nums; color:inherit; }
         .vg-table td code { font-size:12px; overflow-wrap:anywhere; }
-        @media(max-width:900px) { .vg-pipeline { grid-template-columns:1fr; }
+        /* One column when the card itself is narrow (sidebar open, small
+           window): the series keeps the width its headline digits need. */
+        .vg-pipe-wrap { container-type:inline-size; }
+        @container (max-width:900px) { .vg-pipeline { grid-template-columns:1fr; }
           .vg-pipe-arrow b { transform:rotate(90deg); } }
         @media(max-width:600px) { .vg-hero {padding:1.6rem;} .vg-nav a {flex:1 1 40%;}
           .vg-eyebrow span {display:block;margin:0;} }
@@ -2023,6 +2040,11 @@ class Gallery:
     # -- Input graph -> Laurent series (this kernel) ---------------------------
     laurent_max_digits = 500
     laurent_highest_order = 2
+    # Digits per coefficient in the headline series (it stays one readable
+    # line); more requested digits are listed in full below it.
+    laurent_headline_digits = 32
+    # Exact parameter values: at most this many digits and |exponent|.
+    laurent_exact_limit = 1000
     # Without marimo's Interrupt (application mode) the page evaluates in its
     # kernel only cases whose recorded data load and reduction take at most this.
     laurent_app_mode_seconds = 15.0
@@ -2133,17 +2155,42 @@ class Gallery:
             )
         return rows
 
-    @staticmethod
-    def exact_number(text):
+    _exponent = re.compile(r"[eE]\s*([+-]?[\d_]+)\s*$")
+
+    @classmethod
+    def exact_number(cls, text):
         """An exact rational from a decimal or a fraction ("91.1876", "1/3",
-        "2.5e-3"), so that a parameter never limits the precision."""
+        "2.5e-3"), so that a parameter never limits the precision. At most
+        ``laurent_exact_limit`` digits and |exponent| (checked before the
+        conversion, which would otherwise build the full power of ten)."""
         text = str(text).strip()
+        limit = cls.laurent_exact_limit
+        too_large = ValueError(
+            f"“{text[:40]}{'…' if len(text) > 40 else ''}” is too large: use at "
+            f"most {limit} digits and an exponent between −{limit} and {limit}"
+        )
+        if len(text) > limit + 40:
+            raise too_large
+        exponent = cls._exponent.search(text)
         try:
-            return Fraction(text)
+            power = abs(int(exponent.group(1))) if exponent else 0
+        except ValueError:
+            power = 0  # malformed: Fraction reports it below
+        if power > limit:
+            raise too_large
+        try:
+            value = Fraction(text)
         except (ValueError, ZeroDivisionError):
             raise ValueError(
                 f"“{text}” is not an exact decimal or fraction (e.g. 91.1876 or 1/3)"
             ) from None
+        # About 3.33 bits per decimal digit (a margin on top of the limit).
+        bits = int(limit * 3.33) + 8
+        if max(abs(value.numerator).bit_length(), value.denominator.bit_length()) > (
+            2 * bits
+        ):
+            raise too_large
+        return value
 
     @staticmethod
     def exact_expression(value):
@@ -2186,18 +2233,97 @@ class Gallery:
         return seconds <= cls.laurent_app_mode_seconds
 
     @classmethod
+    def laurent_form(cls, mo, case):
+        """The Laurent panel's controls for ``case`` (a marimo batch): one exact
+        text field per parameter (``p0``, ``p1``, … in ``laurent_parameters``
+        order), the requested digits and the ε range [−L, highest order].
+
+        The page builds one per case, once, in a cell that never re-runs:
+        marimo replays the last value of each element id to a page that
+        reconnects, and an element re-created by a re-run takes the same id
+        with its fresh value, so the page would show values the kernel does
+        not use."""
+        loops = cls.ladder_cases()[case]["loop_count"]
+        fields = {
+            f"p{index}": mo.ui.text(
+                value="1",
+                label=f"${parameter['latex']}$ · {parameter['meaning']}",
+                full_width=True,
+            )
+            for index, parameter in enumerate(cls.laurent_parameters(case))
+        }
+        return mo.md(
+            "**Parameters**, exact decimals or fractions (e.g. `91.1876`, `1/3`)\n\n"
+            + "\n\n".join(f"{{{key}}}" for key in fields)
+            + "\n\n**Accuracy and ε orders**\n\n{digits}\n\n{orders}"
+        ).batch(
+            digits=mo.ui.number(
+                start=1,
+                stop=cls.laurent_max_digits,
+                value=32,
+                step=1,
+                label="Requested decimal digits",
+            ),
+            orders=mo.ui.range_slider(
+                start=-loops,
+                stop=cls.laurent_highest_order,
+                step=1,
+                value=[-loops, 0],
+                show_value=True,
+                label="ε orders (lowest, highest)",
+            ),
+            **fields,
+        )
+
+    @classmethod
+    def laurent_request(cls, case, value):
+        """``laurent_series`` keyword arguments (values, digits, orders) from
+        the value of ``case``'s ``laurent_form``."""
+        value = value or {}
+        return {
+            "values": {
+                parameter["name"]: value.get(f"p{index}")
+                for index, parameter in enumerate(cls.laurent_parameters(case))
+            },
+            "digits": value.get("digits"),
+            "orders": value.get("orders"),
+        }
+
+    @classmethod
+    def laurent_digits(cls, digits):
+        """The requested decimal digits as an int from 1 to laurent_max_digits;
+        otherwise a ValueError that says what to set (an empty field is None)."""
+        message = (
+            "Set the requested decimal digits: a whole number from 1 to "
+            f"{cls.laurent_max_digits}"
+        )
+        if digits is None or isinstance(digits, bool):
+            raise ValueError(message)
+        try:
+            number = Fraction(str(digits).strip())
+        except (ValueError, ZeroDivisionError):
+            raise ValueError(message) from None
+        if number.denominator != 1 or not 1 <= number <= cls.laurent_max_digits:
+            raise ValueError(message)
+        return int(number)
+
+    @classmethod
     def laurent_data_loops(cls, loops):
         """Loops of the external data a case's engine loads, 0 for the
         built-in registry: as for a run (4L always, 3L from a configured checkout)."""
         return loops if loops >= 4 or cls.configured_checkout() else 0
 
     @classmethod
-    def laurent_engine(cls, loops, *, precision, terms=None, progress=None):
+    def laurent_engine(
+        cls, loops, *, precision, terms=None, progress=None, timings=None
+    ):
         """A symbolic-master MSbar engine slot for ``loops``-loop inputs (a
         dict: data, digits, terms, engine, version): the most recent one
         holding the same data with ``precision`` digits and ``terms`` ε orders
-        (None: any), else a new one (its data loaded with ``progress``). At
-        most ``laurent_engine_slots`` engines stay alive."""
+        (None: any), else a new one (its data loaded with ``progress``; the
+        seconds of the construction and data load are added to
+        ``timings["load"]``). At most ``laurent_engine_slots`` engines stay
+        alive."""
         data = cls.laurent_data_loops(loops)
         for index in range(len(cls._laurent_engines) - 1, -1, -1):
             slot = cls._laurent_engines[index]
@@ -2212,6 +2338,7 @@ class Gallery:
         surplus = len(cls._laurent_engines) - cls.laurent_engine_slots + 1
         del cls._laurent_engines[: max(0, surplus)]
         count = int(terms or loops + 1)
+        started = time.perf_counter()
         engine = cls.engine(
             precision=int(precision),
             mode="symbolic",
@@ -2223,6 +2350,8 @@ class Gallery:
         if data:
             report = cls.load_data(engine, data, progress=progress)
             version = f"{data}L external data {report.get('version') or ''}".strip()
+        if timings is not None:
+            timings["load"] = timings.get("load", 0.0) + time.perf_counter() - started
         slot = {
             "data": data,
             "digits": int(precision),
@@ -2278,13 +2407,14 @@ class Gallery:
         return f"it needs {', '.join(parts)}, which {backend} does not provide"
 
     @classmethod
-    def laurent_symbolic(cls, case, terms, *, precision, progress=None):
+    def laurent_symbolic(cls, case, terms, *, precision, progress=None, timings=None):
         """``((expression, missing), cached)``: ``case``'s whole input evaluated
         by Vakint with symbolic masters (Ordered reduction; masters as exact
         constants and data coefficients) through ``terms`` ε orders, couplings
         expanded by the QCD model; or ``missing`` (MissingMasterOrders as
         plain data) when Vakint fails closed. Kept per input and order count;
-        an interrupted evaluation keeps nothing."""
+        an interrupted evaluation keeps nothing. ``timings`` as for
+        ``laurent_engine``."""
         key = (case, int(terms))
         if key in cls._laurent_symbolic:
             return cls._laurent_symbolic[key], True
@@ -2294,7 +2424,11 @@ class Gallery:
         loops = cls.ladder_cases()[case]["loop_count"]
         source = cls.ladder_source(case)
         engine = cls.laurent_engine(
-            loops, precision=precision, terms=int(terms), progress=progress
+            loops,
+            precision=precision,
+            terms=int(terms),
+            progress=progress,
+            timings=timings,
         )["engine"]
         try:
             value = engine.evaluate(
@@ -2360,12 +2494,11 @@ class Gallery:
         if spec is None:
             raise ValueError(f"Unknown ladder case: {case}")
         loops = spec["loop_count"]
-        digits = int(digits)
-        if not 1 <= digits <= cls.laurent_max_digits:
-            raise ValueError(
-                f"Request between 1 and {cls.laurent_max_digits} decimal digits"
-            )
-        lowest, highest = (int(order) for order in orders)
+        digits = cls.laurent_digits(digits)
+        try:
+            lowest, highest = (int(order) for order in orders)
+        except (TypeError, ValueError):
+            raise ValueError("Choose the ε orders (lowest, highest)") from None
         lowest = max(lowest, -loops)
         if highest < lowest:
             raise ValueError(
@@ -2373,9 +2506,16 @@ class Gallery:
             )
         parameters = cls.laurent_parameters(case)
         exact = cls.laurent_values(parameters, values)
-        started = time.perf_counter()
+        # Wall time of the whole evaluation; "load" collects the engine
+        # constructions and data loads inside it.
+        timings = {"load": 0.0}
+        began = time.perf_counter()
         (expression, missing), cached = cls.laurent_symbolic(
-            case, highest + loops + 1, precision=digits, progress=progress
+            case,
+            highest + loops + 1,
+            precision=digits,
+            progress=progress,
+            timings=timings,
         )
         through = highest
         if missing is not None:
@@ -2383,17 +2523,22 @@ class Gallery:
             through = first - 1 if isinstance(first, int) else -loops - 1
             if through >= -loops:
                 (expression, again), reused = cls.laurent_symbolic(
-                    case, through + loops + 1, precision=digits, progress=progress
+                    case,
+                    through + loops + 1,
+                    precision=digits,
+                    progress=progress,
+                    timings=timings,
                 )
                 cached = cached and reused
                 if again is not None:
                     expression, missing = None, again
-        symbolic_seconds = time.perf_counter() - started
         rows, warnings, symbols = [], [], []
         numerical_seconds = 0.0
         version = None
         if expression is not None:
-            slot = cls.laurent_engine(loops, precision=digits, progress=progress)
+            slot = cls.laurent_engine(
+                loops, precision=digits, progress=progress, timings=timings
+            )
             version = slot["version"]
             started = time.perf_counter()
             result, _ = slot["engine"].numerical_evaluation(
@@ -2417,6 +2562,7 @@ class Gallery:
                     if symbol.get_name() not in names
                 }
             )
+        total_seconds = time.perf_counter() - began
         return {
             "case": case,
             "label": spec["label"],
@@ -2437,7 +2583,11 @@ class Gallery:
             or "the loaded master data",
             "cached": cached,
             "seconds": {
-                "symbolic": symbolic_seconds,
+                "total": total_seconds,
+                "load": timings["load"],
+                "symbolic": max(
+                    0.0, total_seconds - timings["load"] - numerical_seconds
+                ),
                 "numerical": numerical_seconds,
             },
         }
@@ -2484,31 +2634,50 @@ class Gallery:
         return f"{sign}{mantissa}" + (f"e{exponent}" if exponent else "")
 
     @staticmethod
-    def _grouped(mantissa):
+    def _grouped(mantissa, separator=r"\mkern3mu ", more=""):
+        """``mantissa`` ("d.ddd…") with its decimals in groups of five. The
+        LaTeX separator is a primitive kern, not a macro such as a thin space: KaTeX
+        counts macro expansions (at most 1000 per formula)."""
         head, _, tail = mantissa.partition(".")
         if not tail:
-            return head
-        return head + "." + r"\,".join(tail[i : i + 5] for i in range(0, len(tail), 5))
+            return head + more
+        groups = [tail[i : i + 5] for i in range(0, len(tail), 5)]
+        return head + "." + separator.join(groups) + more
 
     @classmethod
-    def component_latex(cls, component, requested):
-        """(sign, LaTeX body) of a non-zero component, None for an exact zero."""
+    def component_latex(cls, component, requested, limit=None):
+        """(sign, LaTeX body) of a non-zero component, None for an exact zero.
+        At most ``limit`` digits (the headline): the leading digits of the
+        full value, then an ellipsis when more are requested and vouched for."""
         if component["exact_zero"]:
             return None
         if component.get("digits") is None:
             _, mantissa, exponent = cls.rounded_decimal(component["error"], 3)
             return "", r"0\pm " + mantissa + rf"\times10^{{{exponent}}}"
-        sign, mantissa, exponent = cls.rounded_decimal(
-            component["text"], cls.shown_digits(component, requested)
-        )
+        wanted = cls.shown_digits(component, requested)
+        sign, mantissa, exponent = cls.rounded_decimal(component["text"], wanted)
+        more = ""
+        if limit is not None and wanted > max(2, int(limit)):
+            mantissa, more = mantissa[: max(2, int(limit)) + 1], r"\ldots"
         power = rf"\times10^{{{exponent}}}" if exponent else ""
-        return sign, cls._grouped(mantissa) + power
+        return sign, cls._grouped(mantissa, more=more) + power
+
+    @staticmethod
+    def component_limit(row, limit):
+        """Headline digits per component of ``row``: ``limit``, halved when
+        both parts are non-zero (the line then carries two numbers)."""
+        if limit is None:
+            return None
+        both = not (row["real"]["exact_zero"] or row["imaginary"]["exact_zero"])
+        return max(2, int(limit) // 2) if both else int(limit)
 
     @classmethod
-    def coefficient_latex(cls, row, requested):
-        """A complex coefficient in LaTeX with an aligned sign column."""
-        real = cls.component_latex(row["real"], requested)
-        imaginary = cls.component_latex(row["imaginary"], requested)
+    def coefficient_latex(cls, row, requested, limit=None):
+        """A complex coefficient in LaTeX with an aligned sign column; at most
+        ``limit`` digits per number (see ``component_limit``)."""
+        limit = cls.component_limit(row, limit)
+        real = cls.component_latex(row["real"], requested, limit)
+        imaginary = cls.component_latex(row["imaginary"], requested, limit)
         if real is None and imaginary is None:
             return r"\phantom{-}0"
 
@@ -2521,6 +2690,75 @@ class Gallery:
             return lead(imaginary[0]) + imaginary[1] + r"\,i"
         joint = " - " if imaginary[0] else " + "
         return lead(real[0]) + real[1] + joint + imaginary[1] + r"\,i"
+
+    @classmethod
+    def headline_truncated(cls, summary):
+        """Whether the headline series shows fewer digits than the table of
+        every requested digit (some coefficient longer than its headline)."""
+        requested = summary["digits"]
+        for row in cls.shown_rows(summary):
+            limit = cls.component_limit(row, cls.laurent_headline_digits)
+            for component in (row["real"], row["imaginary"]):
+                if (
+                    not component["exact_zero"]
+                    and component.get("digits") is not None
+                    and cls.shown_digits(component, requested) > limit
+                ):
+                    return True
+        return False
+
+    @classmethod
+    def shown_rows(cls, summary):
+        """The coefficients of ``summary`` inside its ε range, below the
+        first order that fails closed."""
+        lowest, highest = summary["orders"]
+        top = min(highest, summary["through"])
+        return [row for row in summary["coefficients"] if lowest <= row["power"] <= top]
+
+    @classmethod
+    def component_digits(cls, component, requested):
+        """Plain text of a component with every shown digit, decimals in
+        groups of five and the power of ten in superscript (wraps between
+        groups): "−6.01945 29704 … × 10⁻⁷"; "0" for an exact zero."""
+        if component["exact_zero"]:
+            return "0"
+        if component.get("digits") is None:
+            _, mantissa, exponent = cls.rounded_decimal(component["error"], 3)
+            return f"0 ± {mantissa} × 10{str(exponent).translate(cls._superscripts)}"
+        sign, mantissa, exponent = cls.rounded_decimal(
+            component["text"], cls.shown_digits(component, requested)
+        )
+        power = f" × 10{str(exponent).translate(cls._superscripts)}" if exponent else ""
+        return ("−" if sign else "") + cls._grouped(mantissa, separator=" ") + power
+
+    @classmethod
+    def coefficient_digits(cls, row, requested):
+        """A complex coefficient for the list of every requested digit."""
+        real, imaginary = row["real"], row["imaginary"]
+        if imaginary["exact_zero"]:
+            return cls.component_digits(real, requested)
+        part = cls.component_digits(imaginary, requested)
+        if real["exact_zero"]:
+            return part + " i"
+        joint = " − " if part.startswith("−") else " + "
+        return (
+            cls.component_digits(real, requested)
+            + joint
+            + "("
+            + part.removeprefix("−")
+            + ") i"
+        )
+
+    @classmethod
+    def laurent_plain(cls, summary):
+        """The shown coefficients as copyable plain text, one per line, every
+        shown digit in e-notation: "c[-3] = 0 + 6.0194…e-7*I"."""
+        requested = summary["digits"]
+        return "\n".join(
+            f"c[{row['power']}] = {cls.component_text(row['real'], requested)}"
+            f" + ({cls.component_text(row['imaginary'], requested)})*I"
+            for row in cls.shown_rows(summary)
+        )
 
     _superscripts = str.maketrans("-0123456789", "⁻⁰¹²³⁴⁵⁶⁷⁸⁹")
 
@@ -2540,16 +2778,15 @@ class Gallery:
     @classmethod
     def laurent_latex(cls, summary):
         """The series of a ``laurent_series`` summary as KaTeX markdown: the
-        sum with its 𝒪(ε) tail, then every coefficient (aligned digits);
-        an order that fails closed shows that instead of a number."""
+        sum with its 𝒪(ε) tail, then every coefficient (aligned digits, at
+        most ``laurent_headline_digits`` each, so that a line stays readable
+        and KaTeX stays far below its expansion limit); an order that fails
+        closed shows that instead of a number."""
         lowest, highest = summary["orders"]
         through = summary["through"]
         requested = summary["digits"]
-        shown = [
-            row
-            for row in summary["coefficients"]
-            if lowest <= row["power"] <= min(highest, through)
-        ]
+        limit = cls.laurent_headline_digits
+        shown = cls.shown_rows(summary)
         failed = list(range(max(lowest, through + 1), highest + 1))
         terms = [cls.epsilon_term(row["power"]) for row in shown]
         if lowest > -summary["loop_count"]:
@@ -2562,7 +2799,7 @@ class Gallery:
             else rf"\mathcal{{O}}(\varepsilon^{{{tail}}})"
         )
         lines = [
-            rf"c_{{{row['power']}}} &= {cls.coefficient_latex(row, requested)}"
+            rf"c_{{{row['power']}}} &= {cls.coefficient_latex(row, requested, limit)}"
             for row in shown
         ] + [
             rf"c_{{{power}}} &\quad \text{{fails closed: MissingMasterOrders}}"
@@ -2578,11 +2815,36 @@ class Gallery:
         return text
 
     @classmethod
+    def laurent_digits_view(cls, mo, summary):
+        """Every requested digit of the shown coefficients (as many as Vakint
+        vouches for), one coefficient per row, wrapping between groups of five
+        decimals; the power of ten and the i stay at the end of the value."""
+        requested = summary["digits"]
+        rows = "".join(
+            '<div class="vg-digit-row"><span class="vg-digit-k">c<sub>'
+            + html.escape(str(row["power"]).replace("-", "−"))
+            + "</sub> =</span><code>"
+            + html.escape(cls.coefficient_digits(row, requested))
+            + "</code></div>"
+            for row in cls.shown_rows(summary)
+        )
+        return mo.Html(
+            '<div class="vg-digits"><div class="vg-pipe-label">Every requested '
+            f"digit · {requested} digits, as many as Vakint vouches for</div>"
+            + rows
+            + "</div>"
+        )
+
+    @classmethod
     def laurent_view(cls, mo, summary, diagram):
         """The end of the pipeline at a glance: the input graph, an arrow,
-        the Laurent series with numerical coefficients; then the coefficient
-        table with Vakint's precision, the fail-closed orders and warnings."""
+        the Laurent series with numerical coefficients (headline digits);
+        every requested digit below it when the headline is shorter; then the
+        coefficient table with Vakint's precision, the fail-closed orders and
+        warnings."""
         requested = summary["digits"]
+        headline = cls.laurent_headline_digits
+        truncated = cls.headline_truncated(summary)
         values = ", ".join(
             f"{parameter['label']} = {parameter['value']}"
             for parameter in summary["parameters"]
@@ -2594,7 +2856,8 @@ class Gallery:
             f"masters from the {summary['data']} · {requested}-digit evaluation"
         )
         pipeline = mo.Html(
-            '<div class="vg-pipeline"><div class="vg-pipe-graph">'
+            '<div class="vg-pipe-wrap"><div class="vg-pipeline">'
+            '<div class="vg-pipe-graph">'
             '<div class="vg-pipe-label">Input graph</div>'
             + frame.text
             + f'<div class="vg-pipe-caption">{html.escape(summary["label"])}</div>'
@@ -2604,13 +2867,18 @@ class Gallery:
             + "Laurent series of the whole input</div>"
             + series.text
             + '<div class="vg-pipe-caption">MSbar, d = 4 − 2ε · at '
-            + f"{html.escape(values)}</div>"
-            + "</div></div>"
+            + html.escape(values)
+            + (
+                f" · leading {headline} digits of each coefficient; all "
+                f"{requested} requested digits below"
+                if truncated
+                else ""
+            )
+            + "</div></div></div></div>"
         )
-        rows = summary["coefficients"]
-        lowest, highest = summary["orders"]
+        shown = cls.shown_rows(summary)
+        loops = summary["loop_count"]
         through = summary["through"]
-        shown = [r for r in rows if lowest <= r["power"] <= min(highest, through)]
         achieved = [
             component["digits"]
             for row in shown
@@ -2626,11 +2894,16 @@ class Gallery:
                 return "exact 0"
             return "—" if component["digits"] is None else str(component["digits"])
 
+        # The table rounds long values to the headline digits; the list
+        # above it then carries every requested digit.
+        table_digits = min(requested, headline)
         table_rows = [
             {
                 "ε power": row["power"],
-                "real part": code(cls.component_text(row["real"], requested)),
-                "imaginary part": code(cls.component_text(row["imaginary"], requested)),
+                "real part": code(cls.component_text(row["real"], table_digits)),
+                "imaginary part": code(
+                    cls.component_text(row["imaginary"], table_digits)
+                ),
                 "digits Vakint vouches for (re / im)": f"{vouched(row['real'])} / "
                 f"{vouched(row['imaginary'])}",
                 "error radius (re / im)": " / ".join(
@@ -2648,10 +2921,18 @@ class Gallery:
             }
             for row in shown
         ]
-        loops = summary["loop_count"]
-        seconds = summary["seconds"]["symbolic"] + summary["seconds"]["numerical"]
+        seconds = summary["seconds"]
+        total = seconds.get(
+            "total", seconds.get("symbolic", 0.0) + seconds.get("numerical", 0.0)
+        )
+        notes = []
+        if seconds.get("load", 0.0) >= 0.05:
+            notes.append(f"engine and data load {cls.duration(seconds['load'])}")
+        if summary["cached"]:
+            notes.append("symbolic result reused")
         parts = [
             pipeline,
+            *([cls.laurent_digits_view(mo, summary)] if truncated else []),
             cls.metrics(
                 mo,
                 [
@@ -2667,9 +2948,9 @@ class Gallery:
                         "orders Vakint computes for this input",
                     ),
                     (
-                        cls.duration(seconds),
-                        "this evaluation"
-                        + (" (symbolic result reused)" if summary["cached"] else ""),
+                        cls.duration(total),
+                        "this evaluation, all of it"
+                        + (f" ({'; '.join(notes)})" if notes else ""),
                     ),
                 ],
             ),
@@ -2678,8 +2959,14 @@ class Gallery:
                 table_rows,
                 numeric=("ε power",),
                 caption="Each value shows the digits Vakint vouches for, at most the "
-                "requested ones. Bounded: a guaranteed error radius from tracked "
-                "arithmetic; Estimated: a propagated estimate.",
+                + (
+                    f"requested ones (rounded to {headline} here; every requested "
+                    "digit is listed above). "
+                    if requested > headline
+                    else "requested ones. "
+                )
+                + "Bounded: a guaranteed error radius from tracked arithmetic; "
+                "Estimated: a propagated estimate.",
             )
             if table_rows
             else cls.note(mo, "No order in the chosen range", "Widen the ε range."),
@@ -2763,6 +3050,10 @@ class Gallery:
                 ],
             ),
         }
+        if shown:
+            details["Coefficients as plain text (every shown digit)"] = mo.plain_text(
+                cls.laurent_plain(summary)
+            )
         if missing is not None:
             details["Vakint's MissingMasterOrders message"] = mo.plain_text(
                 missing["message"]

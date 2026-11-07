@@ -13,6 +13,7 @@ import io
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -2817,7 +2818,12 @@ class GalleryLaurentTests(unittest.TestCase):
         }
         self.assertEqual(
             Gallery.coefficient_latex(imaginary, 12),
-            r"\phantom{-}6.01945\,29704\,6\times10^{-7}\,i",
+            r"\phantom{-}6.01945\mkern3mu 29704\mkern3mu 6\times10^{-7}\,i",
+        )
+        # The headline keeps the leading digits of the full value, then "…".
+        self.assertEqual(
+            Gallery.coefficient_latex(imaginary, 12, 7),
+            r"\phantom{-}6.01945\mkern3mu 2\ldots\times10^{-7}\,i",
         )
         both = {
             "power": 0,
@@ -2991,14 +2997,17 @@ class GalleryLaurentTests(unittest.TestCase):
                 else ((expression, None), terms == 5)
             )
         )
+
+        def numerical_engine(loops, **options):
+            # A new engine for these digits: its construction and data load
+            # are part of the evaluation's time.
+            options["timings"]["load"] += 8.25
+            return {"engine": engine, "version": "3L external data v0.2.1"}
+
         with (
             patch.object(Gallery, "laurent_parameters", return_value=self.parameters),
             patch.object(Gallery, "laurent_symbolic", symbolic),
-            patch.object(
-                Gallery,
-                "laurent_engine",
-                return_value={"engine": engine, "version": "3L external data v0.2.1"},
-            ),
+            patch.object(Gallery, "laurent_engine", side_effect=numerical_engine),
             patch.object(Gallery, "exact_expression", side_effect=str),
         ):
             summary = Gallery.laurent_series(
@@ -3023,10 +3032,16 @@ class GalleryLaurentTests(unittest.TestCase):
         self.assertEqual(summary["coefficients"][0]["imaginary"]["digits"], 57)
         self.assertEqual(summary["constants"], ["vakint::cl4"])
         self.assertEqual(summary["data"], "3L external data v0.2.1")
+        self.assertEqual(summary["seconds"]["load"], 8.25)
+        self.assertEqual(
+            set(summary["seconds"]), {"total", "load", "symbolic", "numerical"}
+        )
         for digits, orders in (
             (0, [-3, 0]),
             (Gallery.laurent_max_digits + 1, [-3, 0]),
+            (None, [-3, 0]),
             (30, [0, -1]),
+            (30, None),
         ):
             with (
                 self.subTest(digits=digits, orders=orders),
@@ -3102,15 +3117,27 @@ class GalleryLaurentTests(unittest.TestCase):
             if condition:
                 raise Stop(output)
 
-        controls = SimpleNamespace(
-            value={"p0": "2", "p1": "1", "p2": "1/3", "digits": 40, "orders": [-3, 1]}
+        forms = SimpleNamespace(
+            value={
+                "3L-zero-momentum": {
+                    "p0": "2",
+                    "p1": "1",
+                    "p2": "1/3",
+                    "digits": 40,
+                    "orders": [-3, 1],
+                },
+                "4L-zero-momentum": {"p0": "7", "digits": 9, "orders": [-4, 0]},
+            }
         )
         gallery, shown = Mock(), Mock()
+        gallery.laurent_request.side_effect = Gallery.laurent_request
+        self.enterContext(
+            patch.object(Gallery, "laurent_parameters", return_value=self.parameters)
+        )
         arguments = {
             "Gallery": gallery,
             "case_choice": SimpleNamespace(value="3L-zero-momentum"),
-            "laurent_controls": controls,
-            "laurent_parameters": self.parameters,
+            "laurent_forms": forms,
             "set_laurent": shown,
         }
         with self.assertRaises(Stop):
@@ -3128,8 +3155,11 @@ class GalleryLaurentTests(unittest.TestCase):
             **arguments,
         )
         args, kwargs = gallery.laurent_series.call_args
+        # The selected case's own controls, never another case's.
+        self.assertEqual(args, ("3L-zero-momentum",))
         self.assertEqual(
-            args[1], {"vakint::mUV": "2", "vakint::mursq": "1", "UFO::G": "1/3"}
+            kwargs["values"],
+            {"vakint::mUV": "2", "vakint::mursq": "1", "UFO::G": "1/3"},
         )
         self.assertEqual((kwargs["digits"], kwargs["orders"]), (40, [-3, 1]))
         shown.assert_called_once_with({"summary": True})
@@ -3162,6 +3192,224 @@ class GalleryLaurentTests(unittest.TestCase):
         self.assertEqual(
             gallery.laurent_view.call_args.args[1:], ({"summary": True}, "diagram")
         )
+
+    def test_exact_values_are_bounded_before_conversion(self):
+        limit = Gallery.laurent_exact_limit
+        self.assertEqual(Gallery.exact_number(f"1e{limit}"), Fraction(10**limit))
+        self.assertEqual(Gallery.exact_number("2.5E-3"), Fraction(1, 400))
+        started = time.perf_counter()
+        for text in (
+            f"1e{limit + 1}",
+            "1e5000",
+            "1e999999999",  # would build 10**999999999 without the check
+            "-3.2e-1_000_000",
+            "7" * (limit + 41),
+            f"{'9' * 1500}/{'7' * 1500}",
+        ):
+            with (
+                self.subTest(text=text[:30]),
+                self.assertRaisesRegex(ValueError, "too large"),
+            ):
+                Gallery.exact_number(text)
+        self.assertLess(time.perf_counter() - started, 1.0)
+        with self.assertRaisesRegex(ValueError, "not an exact decimal"):
+            Gallery.exact_number("1e")
+
+    def test_requested_digits_say_what_to_set(self):
+        self.assertEqual(Gallery.laurent_digits(32), 32)
+        self.assertEqual(Gallery.laurent_digits(32.0), 32)
+        self.assertEqual(Gallery.laurent_digits("500"), 500)
+        for digits in (None, "", True, 0, 32.5, Gallery.laurent_max_digits + 1, "x"):
+            with (
+                self.subTest(digits=digits),
+                self.assertRaisesRegex(ValueError, "Set the requested decimal digits"),
+            ):
+                Gallery.laurent_digits(digits)
+
+    def long_summary(self, digits=500, *, both=False):
+        """A 4L-like summary whose coefficients carry ``digits`` vouched digits
+        (real and imaginary parts when ``both``)."""
+        figures = str(3**2100)[: digits + 5]  # not periodic
+
+        def part(sign, power):
+            return fake_component(f"{sign}{figures[0]}.{figures[1:]}E{power}", digits)
+
+        rows = [
+            {
+                "power": power,
+                "real": part("", power - 3)
+                if both
+                else fake_component("0", None, zero=True),
+                "imaginary": part("-" if power % 2 else "", power - 7),
+            }
+            for power in range(-4, 3)
+        ]
+        return self.summary(
+            loop_count=4,
+            digits=digits,
+            orders=[-4, 2],
+            through=2,
+            coefficients=rows,
+        ), figures
+
+    def test_headline_keeps_the_leading_digits_and_lists_every_digit(self):
+        headline = Gallery.laurent_headline_digits
+        for both in (False, True):
+            summary, _ = self.long_summary(both=both)
+            text = Gallery.laurent_latex(summary)
+            # No \, macro between digits, and at most the headline digits.
+            self.assertIsNone(re.search(r"\\,\d", text))
+            for line in text.splitlines():
+                if line.startswith("c_{"):
+                    with self.subTest(both=both, line=line[:12]):
+                        digits = re.sub(
+                            r"\\mkern3mu |\\times10\^\{-?\d+\}|c_\{-?\d+\}", "", line
+                        )
+                        self.assertLessEqual(
+                            sum(ch.isdigit() for ch in digits), headline
+                        )
+                        self.assertIn(r"\ldots\times10^", line)
+            self.assertTrue(Gallery.headline_truncated(summary))
+            listed = Gallery.laurent_digits_view(self.view_mo(), summary).text
+            self.assertEqual(listed.count('class="vg-digit-row"'), 7)
+            # Every requested digit, decimals grouped by five, the power of
+            # ten and the i at the end of each value.
+            for row in summary["coefficients"]:
+                _, mantissa, exponent = Gallery.rounded_decimal(
+                    row["imaginary"]["text"], 500
+                )
+                decimals = mantissa[2:]
+                grouped = " ".join(
+                    decimals[i : i + 5] for i in range(0, len(decimals), 5)
+                )
+                power = str(exponent).translate(Gallery._superscripts)
+                self.assertIn(f"{mantissa[:2]}{grouped} × 10{power}", listed)
+            self.assertTrue(
+                all(
+                    value.endswith(" i")
+                    for value in re.findall(r"<code>([^<]*)</code>", listed)
+                )
+            )
+        # At or below the headline digits nothing is cut and no list is added.
+        summary, _ = self.long_summary(digits=headline)
+        self.assertFalse(Gallery.headline_truncated(summary))
+        self.assertNotIn(r"\ldots", Gallery.laurent_latex(summary))
+
+    def test_view_lists_long_coefficients_below_the_series(self):
+        drawing = Mock()
+        drawing.to_html.return_value = "<svg/>"
+        diagram = SimpleNamespace(loop_count=4, render=Mock(return_value=drawing))
+        summary, _ = self.long_summary()
+        summary["seconds"] = {
+            "total": 8.6,
+            "load": 8.3,
+            "symbolic": 0.2,
+            "numerical": 0.1,
+        }
+        summary["cached"] = True
+        parts = Gallery.laurent_view(self.view_mo(), summary, diagram)
+        self.assertIn("leading 32 digits of each coefficient", parts[0].text)
+        self.assertIn('class="vg-digits"', parts[1].text)
+        texts = "".join(getattr(part, "text", "") for part in parts[2:])
+        self.assertIn("8.6 s", texts)
+        self.assertIn("engine and data load 8.3 s; symbolic result reused", texts)
+        self.assertIn("rounded to 32 here", texts)
+        # The table rounds to the headline digits; the plain text keeps all.
+        first = summary["coefficients"][0]["imaginary"]
+        _, mantissa, _ = Gallery.rounded_decimal(first["text"], 500)
+        self.assertIn(Gallery.component_text(first, 32), texts)
+        self.assertNotIn(mantissa[:40], texts)
+        accordion = parts[-1][1]
+        plain = accordion["Coefficients as plain text (every shown digit)"][1]
+        self.assertEqual(plain.count("\n"), 6)
+        self.assertIn(mantissa, plain)
+
+    def test_katex_renders_every_headline(self):
+        """marimo's own KaTeX (its options, throwOnError) renders the headline
+        at the highest digits and every order, real and complex."""
+        node = shutil.which("node")
+        import marimo
+
+        assets = Path(marimo.__file__).parent / "_static" / "assets"
+        bundles = sorted(assets.glob("katex-*.js"), key=lambda p: p.stat().st_size)
+        if node is None or not bundles:
+            self.skipTest("node or marimo's KaTeX bundle is not available")
+        formulas = []
+        for both in (False, True):
+            summary, _ = self.long_summary(Gallery.laurent_max_digits, both=both)
+            formulas += re.findall(
+                r"\$\$\n(.*?)\n\$\$", Gallery.laurent_latex(summary), re.S
+            )
+        script = (
+            "import { readFileSync } from 'node:fs';"
+            f"const m = await import({json.dumps(bundles[-1].as_uri())});"
+            "const katex = Object.values(m).find(v => v && v.renderToString);"
+            "const out = JSON.parse(readFileSync(0, 'utf8')).map(t => {"
+            " try { katex.renderToString(t, {displayMode: true, globalGroup: true,"
+            " throwOnError: true, macros: {'\\\\mbox': '\\\\text{#1}'}});"
+            " return 'ok'; }"
+            " catch (e) { return String(e.message); } });"
+            "console.log(JSON.stringify(out));"
+        )
+        done = subprocess.run(
+            [node, "--input-type=module", "-e", script],
+            input=json.dumps(formulas),
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+        self.assertEqual(done.returncode, 0, done.stderr[-2000:])
+        self.assertEqual(json.loads(done.stdout), ["ok"] * len(formulas))
+
+    def test_forms_are_per_case_and_mapped_by_parameter(self):
+        import marimo as mo
+
+        with patch.object(Gallery, "laurent_parameters", return_value=self.parameters):
+            form = Gallery.laurent_form(mo, "4L-zero-momentum")
+            self.assertEqual(set(form.value), {"p0", "p1", "p2", "digits", "orders"})
+            self.assertEqual(form.value["orders"], [-4, 0])
+            self.assertEqual(form.value["digits"], 32)
+            self.assertEqual(
+                Gallery.laurent_form(mo, "3L-zero-momentum").value["orders"], [-3, 0]
+            )
+            request = Gallery.laurent_request(
+                "4L-zero-momentum",
+                {"p0": "91.1876", "p1": "1/3", "p2": "6/5", "digits": None},
+            )
+        self.assertEqual(
+            request,
+            {
+                "values": {
+                    "vakint::mUV": "91.1876",
+                    "vakint::mursq": "1/3",
+                    "UFO::G": "6/5",
+                },
+                "digits": None,
+                "orders": None,
+            },
+        )
+
+    def test_no_case_dependent_cell_creates_ui_elements(self):
+        """marimo replays the last value of an element id to a reconnecting
+        page; an element re-created when the case changes would show values
+        the kernel does not use. Controls are built once, per case."""
+        page = Gallery.directory / "05_ladder_reductions.py"
+        tree = ast.parse(page.read_text())
+        built = False
+        for node in tree.body:
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            source = ast.unparse(node)
+            arguments = {argument.arg for argument in node.args.args}
+            if "case_choice" in arguments:
+                with self.subTest(line=node.lineno):
+                    self.assertNotIn("mo.ui.", source)
+                    self.assertNotIn("laurent_form(", source)
+            if "laurent_form(" in source:
+                built = True
+                self.assertIn("mo.ui.dictionary(", source)
+        self.assertTrue(built)
 
 
 if __name__ == "__main__":
