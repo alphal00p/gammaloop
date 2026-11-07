@@ -134,13 +134,39 @@ impl NumericalCoefficient {
     }
 
     /// Export only when both components have a representable accuracy.
+    ///
+    /// An imaginary component that is [consistent with
+    /// zero](Self::imaginary_consistent_with_zero) is exported as an exact
+    /// zero; [`evaluate_coefficient`] records a warning with its midpoint and
+    /// uncertainty. The real component is never treated this way.
     pub fn to_atom(&self) -> Result<Atom, VakintError> {
         self.check_export()?;
-        let value = self
-            .as_tracked()
+        let mut value = self.as_tracked();
+        if self.imaginary_consistent_with_zero() {
+            value.ball.im = RealBall::exact(Float::new(value.ball.im.center.prec()));
+        }
+        let value = value
             .to_float_with_max_precision(self.maximum_export_bits)
             .map_err(VakintError::NumericalPrecision)?;
         Ok(Atom::num(value))
+    }
+
+    /// Whether the imaginary component is an uncertain zero: not an exact
+    /// zero, without a reliable significant decimal digit, and with a finite
+    /// tracked enclosure that contains zero. An imaginary component whose
+    /// enclosure excludes zero is never in this class, however few digits
+    /// it has.
+    pub fn imaginary_consistent_with_zero(&self) -> bool {
+        let imaginary = self.precision.imaginary();
+        if imaginary.exact_zero()
+            || imaginary
+                .significant_digits()
+                .is_some_and(|digits| digits >= 1)
+        {
+            return false;
+        }
+        let ball = RealBall::new(self.value.im.clone(), imaginary.absolute_error().clone());
+        ball.is_finite() && ball.contains(&Float::new(self.value.im.prec()))
     }
 
     /// Real constants and canonical master coefficients have an exact imaginary zero.
@@ -173,6 +199,7 @@ impl NumericalCoefficient {
                 && !component
                     .significant_digits()
                     .is_some_and(|digits| digits >= 1)
+                && !(name == "imaginary" && self.imaginary_consistent_with_zero())
             {
                 return Err(VakintError::NumericalPrecision(format!(
                     "{name} component has no reliable significant decimal digit; midpoint {}, absolute uncertainty {}",
@@ -778,14 +805,32 @@ pub(crate) fn evaluate_coefficient_with_working_precision(
             ))
         })?;
     let coefficient = NumericalCoefficient::from_tracked(value, requested);
+    // An imaginary component consistent with zero is reported on its own
+    // below, so this shortfall always describes the real component in full.
+    let zero_imaginary = coefficient.imaginary_consistent_with_zero();
     let achieved = [
-        coefficient.precision.real(),
-        coefficient.precision.imaginary(),
+        Some(coefficient.precision.real()),
+        (!zero_imaginary).then(|| coefficient.precision.imaginary()),
     ]
     .into_iter()
+    .flatten()
     .filter(|part| !part.exact_zero())
     .map(|part| part.significant_digits().unwrap_or(0))
     .min();
+    if zero_imaginary {
+        warnings.push(PrecisionWarning {
+            epsilon_power: None,
+            requested_decimal_precision: requested,
+            achieved_decimal_precision: None,
+            sources: used_sources.clone(),
+            data_version: versions.iter().cloned().collect::<Vec<_>>().join(", "),
+            message: format!(
+                "imaginary part consistent with zero within its tracked error (midpoint {}, absolute uncertainty {}); exported as an exact zero",
+                coefficient.value.im,
+                coefficient.precision.imaginary().absolute_error(),
+            ),
+        });
+    }
     if achieved.is_some_and(|digits| digits < requested) {
         if used_sources.is_empty() {
             used_sources.push(PrecisionSource {

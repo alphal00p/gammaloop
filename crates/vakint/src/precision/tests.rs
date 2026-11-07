@@ -1,4 +1,5 @@
 use super::*;
+use symbolica::domains::rational::Rational;
 
 fn settings(digits: u32) -> VakintSettings {
     VakintSettings {
@@ -948,4 +949,208 @@ fn tracked_imaginary_alias_does_not_retry_a_limited_tracked_callback() {
             .iter()
             .any(|warning| warning.achieved_decimal_precision.is_some())
     );
+}
+
+fn zero_consistent_imaginary_warning(warnings: &[PrecisionWarning]) -> Option<&PrecisionWarning> {
+    warnings.iter().find(|warning| {
+        warning
+            .message
+            .starts_with("imaginary part consistent with zero within its tracked error")
+    })
+}
+
+#[test]
+fn imaginary_part_consistent_with_zero_is_exported_as_zero_with_a_warning() {
+    Vakint::initialize_vakint_symbols();
+    let sources = BTreeMap::from([
+        source("precision_im_left", "1", 50),
+        source("precision_im_right", "1", 50),
+    ]);
+    for (input, real) in [
+        (
+            "𝑖*(precision_im_left-precision_im_right)",
+            Rational::from(0),
+        ),
+        (
+            "𝑖*(precision_im_left-precision_im_right)+3/4",
+            Rational::from((3, 4)),
+        ),
+    ] {
+        let expression = vk_parse!(input).unwrap();
+        let (coefficient, warnings) = evaluate_coefficient(
+            expression.as_view(),
+            &sources,
+            &HashMap::new(),
+            &settings(40),
+        )
+        .unwrap();
+        // The precision record keeps the uncertain zero and its error.
+        assert!(coefficient.value().im.is_zero(), "{input}");
+        assert!(!coefficient.precision().imaginary().exact_zero(), "{input}");
+        assert!(
+            !coefficient
+                .precision()
+                .imaginary()
+                .absolute_error()
+                .is_zero(),
+            "{input}"
+        );
+        assert!(coefficient.imaginary_consistent_with_zero(), "{input}");
+        let warning = zero_consistent_imaginary_warning(&warnings)
+            .unwrap_or_else(|| panic!("{input}: no zero-consistent warning in {warnings:?}"));
+        assert!(warning.message.contains("absolute uncertainty"), "{input}");
+        assert!(
+            warning
+                .sources
+                .iter()
+                .any(|source| source.identity == "precision_im_left"),
+            "{input}"
+        );
+        // The real component is exact: no shortfall is reported for it.
+        assert!(
+            warnings
+                .iter()
+                .all(|warning| warning.achieved_decimal_precision.is_none()),
+            "{input}: {warnings:?}"
+        );
+        let exported = coefficient.to_atom().unwrap();
+        if real.is_zero() {
+            assert_eq!(exported, Atom::Zero, "{input}");
+        } else {
+            let value = exported
+                .evaluate_with_prec(&ahash::HashMap::<Atom, Complex<Float>>::default(), 128)
+                .unwrap();
+            assert_eq!(value.re.to_rational(), real, "{input}");
+            assert!(value.im.is_zero(), "{input}");
+        }
+    }
+    // Independent finite literals inside an unexpanded polynomial cancel
+    // only up to their errors: the same uncertain imaginary zero through the
+    // public series path, with the warning attached to its order.
+    let result = NumericalEvaluationResult::from_atom(
+        vk_parse!("𝑖*((1.25`30+z3)^2-z3^2-1.5625`30-2.5`30*z3)*ep^-1+2")
+            .unwrap()
+            .as_view(),
+        vk_symbol!("ep"),
+        &settings(20),
+    )
+    .unwrap();
+    assert!(result.coefficients()[&-1].imaginary_consistent_with_zero());
+    assert!(
+        zero_consistent_imaginary_warning(result.warnings())
+            .is_some_and(|warning| { warning.epsilon_power == Some(-1) })
+    );
+    let exported = result.to_atom(vk_symbol!("ep")).unwrap();
+    assert!(!exported.contains_symbol(vk_symbol!("ep")), "{exported}");
+}
+
+#[test]
+fn imaginary_part_without_a_digit_that_excludes_zero_is_still_rejected() {
+    Vakint::initialize_vakint_symbols();
+    // Two with three binary digits: its enclosure excludes zero, but it has
+    // no reliable decimal digit. It is nonzero and must not become zero.
+    let weak =
+        NumericalCoefficient::from_value(Complex::new(Float::new(3), Float::with_val(3, 2)), 16);
+    assert!(!weak.precision().imaginary().exact_zero());
+    assert!(
+        weak.precision()
+            .imaginary()
+            .significant_digits()
+            .is_none_or(|digits| digits == 0)
+    );
+    assert!(!weak.imaginary_consistent_with_zero());
+    let error = weak.to_atom().unwrap_err().to_string();
+    assert!(
+        error.contains("imaginary component has no reliable"),
+        "{error}"
+    );
+    // A determined nonzero imaginary part is exported unchanged.
+    let determined = NumericalCoefficient::from_value(
+        Complex::new(Float::new(200), Float::parse("2.5", Some(200)).unwrap()),
+        40,
+    );
+    assert!(!determined.imaginary_consistent_with_zero());
+    let value = determined
+        .to_atom()
+        .unwrap()
+        .evaluate_with_prec(&ahash::HashMap::<Atom, Complex<Float>>::default(), 128)
+        .unwrap();
+    assert_eq!(value.im.to_rational(), Rational::from((5, 2)));
+    // Two independent estimates that differ by more than their errors:
+    // 1.5 to two digits minus 1 leaves 0.5 with an error of a few hundredths.
+    let sources = BTreeMap::from([
+        source("precision_im_high", "1.5", 2),
+        source("precision_im_low", "1", 50),
+    ]);
+    let (separated, warnings) = evaluate_coefficient(
+        vk_parse!("𝑖*(precision_im_high-precision_im_low)")
+            .unwrap()
+            .as_view(),
+        &sources,
+        &HashMap::new(),
+        &settings(30),
+    )
+    .unwrap();
+    assert!(!separated.imaginary_consistent_with_zero(), "{separated:?}");
+    assert!(zero_consistent_imaginary_warning(&warnings).is_none());
+    if separated
+        .precision()
+        .imaginary()
+        .significant_digits()
+        .is_none_or(|digits| digits == 0)
+    {
+        assert!(separated.to_atom().is_err());
+    }
+}
+
+#[test]
+fn real_part_digit_loss_is_still_reported_beside_a_zero_consistent_imaginary_part() {
+    Vakint::initialize_vakint_symbols();
+    let sources = BTreeMap::from([
+        source("precision_real_lossy", "2.5", 10),
+        source("precision_zero_a", "1", 50),
+        source("precision_zero_b", "1", 50),
+    ]);
+    let evaluate = |input: &str| {
+        evaluate_coefficient(
+            vk_parse!(input).unwrap().as_view(),
+            &sources,
+            &HashMap::new(),
+            &settings(40),
+        )
+        .unwrap()
+    };
+    // Partial loss in the real part: reported with the real part's digits,
+    // not with the zero digits of the uncertain imaginary zero.
+    let (lossy, warnings) = evaluate("precision_real_lossy+𝑖*(precision_zero_a-precision_zero_b)");
+    assert!(lossy.imaginary_consistent_with_zero());
+    assert!(zero_consistent_imaginary_warning(&warnings).is_some());
+    let achieved = warnings
+        .iter()
+        .find_map(|warning| warning.achieved_decimal_precision)
+        .expect("the real part's shortfall is reported");
+    let real_digits = lossy.precision().real().significant_digits().unwrap();
+    assert_eq!(achieved, real_digits);
+    assert!((1..40).contains(&achieved), "{achieved}");
+    let value = lossy
+        .to_atom()
+        .unwrap()
+        .evaluate_with_prec(&ahash::HashMap::<Atom, Complex<Float>>::default(), 128)
+        .unwrap();
+    assert!(value.im.is_zero());
+    assert!((value.re.to_rational() - Rational::from((5, 2))).abs() < Rational::from((1, 1000)));
+    // No reliable digit in the real part is still an error, whatever the
+    // imaginary part: the relaxation never applies to the real component.
+    let (lost, warnings) =
+        evaluate("(precision_zero_a-precision_zero_b)+𝑖*(precision_zero_a-precision_zero_b)");
+    assert!(lost.imaginary_consistent_with_zero());
+    assert!(
+        warnings
+            .iter()
+            .any(|warning| warning.achieved_decimal_precision == Some(0))
+    );
+    let error = lost.to_atom().unwrap_err().to_string();
+    assert!(error.contains("real component has no reliable"), "{error}");
+    let (lost_real, _) = evaluate("precision_zero_a-precision_zero_b");
+    assert!(lost_real.to_atom().is_err());
 }

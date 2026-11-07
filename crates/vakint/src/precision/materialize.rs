@@ -464,6 +464,33 @@ mod tests {
     }
 
     #[test]
+    fn uncertain_imaginary_zero_is_exported_as_zero_and_real_loss_still_fails() {
+        let settings = settings();
+        let parameters: HashMap<Atom, Complex<Float>> = ["a", "b"]
+            .map(|name| {
+                (
+                    Atom::var(vk_symbol!(name)),
+                    Complex::new(Float::with_val(128, 1), Float::new(128)),
+                )
+            })
+            .into_iter()
+            .collect();
+        // The full-call boundary: an imaginary part consistent with zero no
+        // longer fails the export; the other factor keeps its exact value.
+        let source = vk_parse!("𝑖*(a-b)*x+2*y").unwrap();
+        let result = materialize(source.as_view(), &settings, &parameters, None).unwrap();
+        assert!(!result.contains_symbol(vk_symbol!("x")), "{result}");
+        assert_eq!(result, vk_parse!("2*y").unwrap());
+        // An uncertain real zero in the same coefficient is still rejected.
+        let source = vk_parse!("(1+𝑖)*(a-b)*x").unwrap();
+        let error = materialize(source.as_view(), &settings, &parameters, None).unwrap_err();
+        assert!(
+            error.to_string().contains("real component has no reliable"),
+            "{error}"
+        );
+    }
+
+    #[test]
     fn unbound_master_references_are_not_treated_as_spectators() {
         let settings = settings();
         let source = vk_parse!("x*RustRedMaster(family,1)").unwrap();

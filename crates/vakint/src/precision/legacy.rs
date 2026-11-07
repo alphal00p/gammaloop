@@ -710,7 +710,16 @@ mod tests {
             assert_eq!(small.value().im.to_rational(), center);
             let binary_radius = &center * &Rational::from((1, 2)).pow(u64::from(bits - 1));
             assert!(small.precision().imaginary().absolute_error().to_rational() >= binary_radius);
-            assert!(small.to_atom().is_err());
+            if bits == 1 {
+                // A one-bit enclosure reaches zero: the imaginary part is
+                // consistent with zero and is exported as an exact zero.
+                assert!(small.imaginary_consistent_with_zero());
+                assert_eq!(small.to_atom().unwrap(), Atom::Zero);
+            } else {
+                // Two to four bits exclude zero: still no decimal digit.
+                assert!(!small.imaginary_consistent_with_zero());
+                assert!(small.to_atom().is_err());
+            }
             assert!(
                 warnings
                     .iter()
@@ -733,10 +742,18 @@ mod tests {
                         .to_rational()
             );
 
-            let (cancelled, _) = evaluate(&(&left - right));
+            let (cancelled, warnings) = evaluate(&(&left - right));
             assert!(cancelled.value().im.is_zero());
             assert!(!cancelled.precision().imaginary().exact_zero());
-            assert!(cancelled.to_atom().is_err());
+            // Independent sources leave an uncertain imaginary zero: exported
+            // as zero, with its tracked uncertainty in a warning.
+            assert!(cancelled.imaginary_consistent_with_zero());
+            assert_eq!(cancelled.to_atom().unwrap(), Atom::Zero);
+            assert!(warnings.iter().any(|warning| {
+                warning
+                    .message
+                    .starts_with("imaginary part consistent with zero")
+            }));
             let identical_source = left.clone();
             let (exact_zero, warnings) = evaluate(&(left - identical_source));
             assert_eq!(exact_zero.to_atom().unwrap(), Atom::Zero);
