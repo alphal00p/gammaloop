@@ -535,6 +535,52 @@ mod tests {
     }
 
     #[test]
+    fn coefficients_materialize_identically_for_every_worker_count() {
+        let source =
+            vk_parse!("(z3+Zeta(3))*ep^-2*x+Zeta(5)*ep^-1*x+(1/3+z3)*y+7*x*y+𝑖*Zeta(3)^2*ep*x^2")
+                .unwrap();
+        let outcome = |n_cores| {
+            let request = VakintSettings {
+                n_cores,
+                ..settings()
+            };
+            materialize(source.as_view(), &request, &HashMap::new(), None)
+                .map(|value| value.to_canonical_string())
+                .map_err(|error| error.to_string())
+        };
+        let sequential = outcome(1);
+        assert!(sequential.is_ok(), "{sequential:?}");
+        for n_cores in [2, 4, 8] {
+            assert_eq!(outcome(n_cores), sequential);
+        }
+        // The first failing coefficient in collection order decides the
+        // error, whatever the worker count.
+        let parameters: HashMap<Atom, Complex<Float>> = ["a", "b"]
+            .map(|name| {
+                (
+                    Atom::var(vk_symbol!(name)),
+                    Complex::new(Float::with_val(128, 1), Float::new(128)),
+                )
+            })
+            .into_iter()
+            .collect();
+        let failing = vk_parse!("(a-b)*x+(a-b)*y+z3*w").unwrap();
+        let errors: Vec<_> = [1, 4]
+            .into_iter()
+            .map(|n_cores| {
+                let request = VakintSettings {
+                    n_cores,
+                    ..settings()
+                };
+                materialize(failing.as_view(), &request, &parameters, None)
+                    .unwrap_err()
+                    .to_string()
+            })
+            .collect();
+        assert_eq!(errors[0], errors[1]);
+    }
+
+    #[test]
     fn unbound_master_references_are_not_treated_as_spectators() {
         let settings = settings();
         let source = vk_parse!("x*RustRedMaster(family,1)").unwrap();

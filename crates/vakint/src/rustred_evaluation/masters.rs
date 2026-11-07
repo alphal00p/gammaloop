@@ -2585,6 +2585,77 @@ mod tests {
     }
 
     #[test]
+    fn alias_and_direct_passes_agree_for_every_worker_count() {
+        let (mut catalog, master) = catalog(Some("2"), 80);
+        let alias = catalog.symbol("test-family", &[2]);
+        catalog.masters.insert(
+            alias.clone(),
+            Master {
+                identity: "test-alias".into(),
+                loop_count: 1,
+                graph: "test-parent.dot".into(),
+                metadata: serde_json::Value::Null,
+                data: None,
+                coefficients: BTreeMap::from([
+                    (
+                        -1,
+                        Coefficient {
+                            exact: Some("3".into()),
+                            numerical: Some("3".into()),
+                            significant_digits: Some(80),
+                            absolute_error: None,
+                            error_is_bounded: false,
+                        },
+                    ),
+                    (
+                        0,
+                        Coefficient {
+                            exact: Some("2".into()),
+                            numerical: Some("2".into()),
+                            significant_digits: Some(80),
+                            absolute_error: None,
+                            error_is_bounded: false,
+                        },
+                    ),
+                ]),
+            },
+        );
+        catalog.load_basis_aliases(vec![
+            (1, master.clone(), vk_parse!("test_basis").unwrap()),
+            (1, alias.clone(), vk_parse!("(3-4*ep)*test_basis").unwrap()),
+        ]);
+        let raws = [
+            (alias.clone() - vk_parse!("3-4*ep").unwrap() * &master) / vk_parse!("ep").unwrap(),
+            alias.clone() / vk_parse!("ep").unwrap(),
+            alias.clone() * vk_parse!("2+ep").unwrap() + master.clone(),
+            master.clone(),
+            alias.clone(),
+        ];
+        let outcome = |raw: &Atom, mode, n_cores| {
+            let request = VakintSettings {
+                n_cores,
+                ..settings(80, 2)
+            };
+            match catalog.finalize(raw.clone(), &request, 1, mode) {
+                Ok(value) => format!("ok {}", value.to_canonical_string()),
+                Err(error) => format!("error {error}"),
+            }
+        };
+        for raw in &raws {
+            for mode in [
+                RustRedMasterMode::Retain,
+                RustRedMasterMode::Symbolic,
+                RustRedMasterMode::Numerical,
+            ] {
+                let sequential = outcome(raw, mode, 1);
+                for n_cores in [2, 4] {
+                    assert_eq!(outcome(raw, mode, n_cores), sequential, "{raw} {mode:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
     fn declared_basis_relations_cancel_missing_orders_without_discarding_richer_alias_data() {
         let (mut catalog, master) = catalog(Some("2"), 80);
         let alias = catalog.symbol("test-family", &[2]);
