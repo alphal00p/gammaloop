@@ -960,7 +960,7 @@
   "rule": "BASIS-v2 (pole-free basis, option B): the reduction coefficients onto the 131 masters are regular at d = 4, proven exactly on the held integrals and sampled outside them; the generator reads the proof record from the tree (5L/provenance/refinement-layer.json basis_change: design incl. its scope \"exact proof on all held integrals\" + checks.g_pole) and refuses a tree whose record does not state it",
   "proof_scope": "exact proof on all held integrals",
   "open_checks": [
-   "the 11-12-line top sector is not validated (no top-sector input reduced and checked; the validation run was stopped on 2026-11-04 without a result)"
+   "the 11-12-line top sector is not pole-free: the measured top-sector input P105 + one dot (five_loop_measured_inputs) has p = 1 on 59 5L masters and p up to 3 on lower-loop product factors; other top-sector inputs are not validated"
   ]
  },
  "five_loop_products": {
@@ -1283,5 +1283,600 @@
    }
   }
  },
- "built_by": "basis-b/q4/tools/build_pole_depth.py (track T, tables-1106)"
+ "built_by": "basis-b/q4/tools/build_pole_depth.py (track T, tables-1106)",
+ "five_loop_measured_inputs": [
+  {
+   "case": "5L-P105-dot",
+   "input": "5L/P105 with one dot (powers 2,1,1,1,1,1,1,1,1,1,0,1,0,0,1): the 12-line top sector 5L·12b",
+   "short": "P105 + dot",
+   "source": "benchmark full call (docs/benchmark case 5L-P105-dot, RustRed Numerical mode, data v0.2.1) started 2026-11-07T03:32:53Z, 19263 s: MissingMasterOrders at the requested order ε^0",
+   "log_sha256": "624ed0c00d15242aba81a8546916dc23dab491b4d614a087f5b98fd61cc59e77",
+   "executable_sha256": "951c0005eac190989c9e3abc1a8b966beb72f199704ad6e2627f335376145a69",
+   "root_manifest_sha256": "87715e98cd999ca0b8042ba96154eec39d4151fc777e84d0f0686e1a122f63f5",
+   "basis_sha256": "5da52b655abdc9980cf1db99668ca94edd648aff440f5dd71db8e39d28f53b9c",
+   "requested_order": 0,
+   "what": "MissingMasterOrders lists the masters whose needed orders the data do not hold: every 5L master with p >= 1 (no 5L master holds eps^1), and the lower-loop product factors whose needed orders exceed the held ones (lower bound: a factor with p >= 1 whose orders are held is not listed). p = last_needed_order - requested_order - (5 - L).",
+   "masters": {
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_m1_p1_p1_p0_p0_p1_p1_p1_p0_p1_p1_p0_p1_p0_p0": {
+     "loop": 5,
+     "name": "P2",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_m1_p1_p1_p0_p1_p1_p1_p1_p1_p1_p0_p1_p0_p0_p1": {
+     "loop": 5,
+     "name": "P3",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_m1_p1_p1_p1_p0_p1_p1_p1_p0_p1_p1_p1_p0_p0_p0": {
+     "loop": 5,
+     "name": "P4",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_m1_p3_p1_p1_p0_p1_p1_p1_p0_p1_p1_p1_p0_p0_p0": {
+     "loop": 5,
+     "name": "P5",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p0_m1_p1_p0_p0_m1_p1_p0_p0_p1_p0_p1_p1_p1_p1": {
+     "loop": 5,
+     "name": "P6",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p0_p0_p0_p0_p1_p1_p0_p0_p1_p0_p0_p1_p0_p1_p1": {
+     "loop": 5,
+     "name": "P8",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p0_p0_p0_p0_p3_p1_p0_p0_p1_p0_p0_p1_p0_p1_p1": {
+     "loop": 5,
+     "name": "P9",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p0_p0_p1_p0_p0_p0_p1_p0_p0_p1_p0_p1_p1_p1_p1": {
+     "loop": 5,
+     "name": "P10",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p0_p1_p0_p1_p1_p1_p0_p1_p1_p0_p0_p0_p0_p0_p1": {
+     "loop": 5,
+     "name": "P17",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p0_p1_p1_m1_p1_p2_p1_p1_p1_p1_p0_p1_p0_p0_p1": {
+     "loop": 5,
+     "name": "P20",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p0_p1_p1_m2_p1_p2_p1_p1_p1_p1_p0_p1_p0_p0_p1": {
+     "loop": 5,
+     "name": "P18",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p0_p1_p1_p0_p0_p1_p0_p0_p0_p1_p0_p1_p1_p1_p1": {
+     "loop": 5,
+     "name": "P22",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p0_p1_p1_p0_p0_p1_p1_p1_p0_p1_p1_p0_p1_p0_p0": {
+     "loop": 5,
+     "name": "P23",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p0_p1_p1_p0_p1_p1_p1_p1_p1_p1_p0_p1_p0_p0_p1": {
+     "loop": 5,
+     "name": "P25",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p0_p1_p1_p1_p0_p1_p1_p1_p0_p1_p1_p1_p0_p0_p0": {
+     "loop": 5,
+     "name": "P29",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p0_p1_p1_p1_p1_p0_p1_p1_p1_p0_p0_p1_p0_p0_p1": {
+     "loop": 5,
+     "name": "P33",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p0_p1_p3_p1_p0_p1_p1_p1_p0_p1_p1_p1_p0_p0_p0": {
+     "loop": 5,
+     "name": "P36",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p0_p2_p0_p2_p3_p1_p0_p1_p1_p0_p0_p0_p0_p0_p1": {
+     "loop": 5,
+     "name": "P38",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p0_p2_p1_p1_p0_p1_p1_p1_p0_p1_p1_p1_p0_p0_p0": {
+     "loop": 5,
+     "name": "P40",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p0_p3_p0_p1_p1_p1_p0_p1_p1_p0_p0_p0_p0_p0_p1": {
+     "loop": 5,
+     "name": "P43",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p0_p3_p1_p0_p0_p1_p1_p1_p0_p1_p1_p0_p1_p0_p0": {
+     "loop": 5,
+     "name": "P44",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p0_p3_p1_p0_p1_p1_p1_p1_p1_p1_p0_p1_p0_p0_p1": {
+     "loop": 5,
+     "name": "P45",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p0_p3_p1_p1_p0_p1_p1_p1_p0_p1_p1_p1_p0_p0_p0": {
+     "loop": 5,
+     "name": "P46",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p0_p1_p1_p1_p1_p1_p0_p1_p1_p0_p1_p0_p0_p1": {
+     "loop": 5,
+     "name": "P50",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_m1_p1_p1_p0_p1_p1_p1_p1_p0_p1_p0_p0_p1": {
+     "loop": 5,
+     "name": "P52",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p0_m1_p1_p0_p1_p0_p1_p1_p0_p1_p0_p1_p1": {
+     "loop": 5,
+     "name": "P53",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p0_p0_p0_p1_p0_p1_p1_p1_p0_p1_p0_p1_p1": {
+     "loop": 5,
+     "name": "P54",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p0_p0_p1_p0_p1_p0_p1_p1_p0_p1_p0_p1_p1": {
+     "loop": 5,
+     "name": "P57",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p0_p0_p2_p0_p1_p0_p1_p1_p0_p1_p0_p1_p1": {
+     "loop": 5,
+     "name": "P58",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p0_p1_p1_p0_p1_p1_p1_p1_p0_p1_p0_p0_p1": {
+     "loop": 5,
+     "name": "P61",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p0_p1_p2_p0_p1_p1_p1_p1_p0_p1_p0_p0_p1": {
+     "loop": 5,
+     "name": "P64",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p0_p2_p1_p0_p1_p1_p1_p1_p0_p1_p0_p0_p1": {
+     "loop": 5,
+     "name": "P65",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p1_p0_p0_p0_p1_p0_p0_p0_p1_p1_p1_p0_p1": {
+     "loop": 5,
+     "name": "P69",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p1_p0_p0_p0_p1_p0_p0_p1_p1_p1_p0_p0_p1": {
+     "loop": 5,
+     "name": "P70",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p1_p0_p0_p1_p0_m1_p0_p0_p0_p1_p1_p2_p2": {
+     "loop": 5,
+     "name": "P72",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p1_p0_p0_p1_p1_m1_p0_p1_p1_p1_p0_p0_p1": {
+     "loop": 5,
+     "name": "P73",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p1_p0_p0_p1_p1_p0_p0_p1_p0_p1_p1_p0_p1": {
+     "loop": 5,
+     "name": "P74",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p1_p0_p0_p1_p1_p0_p0_p1_p1_p0_p1_p1_p0": {
+     "loop": 5,
+     "name": "P75",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p1_p0_p0_p1_p1_p0_p0_p1_p1_p1_p0_p0_p1": {
+     "loop": 5,
+     "name": "P76",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p1_p0_p0_p1_p1_p0_p0_p1_p1_p2_p0_p0_p1": {
+     "loop": 5,
+     "name": "P78",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p1_p0_p0_p2_p0_p0_p0_p0_p0_p1_p1_p2_p1": {
+     "loop": 5,
+     "name": "P81",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p1_p0_p1_p0_p1_p0_p0_p1_p0_p0_p1_p0_p1": {
+     "loop": 5,
+     "name": "P82",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p1_p0_p1_p1_p0_p1_p1_p1_p0_p1_p0_p0_p1": {
+     "loop": 5,
+     "name": "P84",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p1_p1_p0_p0_p1_p1_p1_p1_p0_p1_p0_p0_p1": {
+     "loop": 5,
+     "name": "P94",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p1_p1_p0_p1_p0_p1_p0_p0_p1_p1_p1_p0_p0": {
+     "loop": 5,
+     "name": "P95",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p1_p1_p0_p1_p1_p1_p1_p1_p1_p1_p1_p0_p0": {
+     "loop": 5,
+     "name": "P99",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p2_p0_p0_p1_p1_p0_p0_p1_p1_p1_p0_p0_p1": {
+     "loop": 5,
+     "name": "P106",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p1_p2_p1_p0_p0_p1_p1_p1_p1_p0_p1_p0_p0_p1": {
+     "loop": 5,
+     "name": "P108",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p2_p0_p0_p1_p0_p1_p0_p1_p1_p0_p1_p0_p1_p1": {
+     "loop": 5,
+     "name": "P110",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p2_p0_p0_p2_p0_p1_p0_p1_p1_p0_p1_p0_p1_p1": {
+     "loop": 5,
+     "name": "P111",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p2_p0_p0_p2_p0_p1_p0_p2_p1_p0_p1_p0_p1_p1": {
+     "loop": 5,
+     "name": "P112",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p2_p1_p0_p0_p1_p0_p0_p0_p0_p0_p1_p1_p2_p1": {
+     "loop": 5,
+     "name": "P113",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p2_p1_p1_p0_p0_p0_p1_p1_p1_p1_p1_p1_p0_p0": {
+     "loop": 5,
+     "name": "P116",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p2_p1_p1_p0_p1_p0_p1_p0_p0_p2_p1_p1_p0_p0": {
+     "loop": 5,
+     "name": "P117",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p1_p2_p2_p0_p0_p1_p1_p0_p0_p1_p1_p1_p0_p0_p1": {
+     "loop": 5,
+     "name": "P118",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p2_p1_p1_p0_p0_p0_p1_p0_p0_p0_p1_p1_p1_p0_p1": {
+     "loop": 5,
+     "name": "P121",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p2_p1_p1_p0_p0_p1_p1_p0_p0_p1_p0_p1_p1_p0_p1": {
+     "loop": 5,
+     "name": "P122",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p2_p1_p1_p1_p0_p1_p0_p1_p0_p0_p1_p1_p1_p0_p0": {
+     "loop": 5,
+     "name": "P127",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    },
+    "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_p3_p1_p1_p1_p0_p1_p1_p1_p1_p1_p1_p1_p1_p0_p0": {
+     "loop": 5,
+     "name": "P131",
+     "p": 1,
+     "first_missing_order": 1,
+     "last_needed_order": 1,
+     "first_affected_result_order": 0
+    }
+   },
+   "factors": {
+    "L1_e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4_p1": {
+     "loop": 1,
+     "name": "P1",
+     "p": 2,
+     "first_missing_order": 6,
+     "last_needed_order": 6,
+     "first_affected_result_order": 0
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p1": {
+     "loop": 3,
+     "name": "P38",
+     "p": 1,
+     "first_missing_order": 3,
+     "last_needed_order": 3,
+     "first_affected_result_order": 0
+    },
+    "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p0_p1_p0_p1_p1_p1_p1_p1_p0": {
+     "loop": 4,
+     "name": "P57",
+     "p": 1,
+     "first_missing_order": 2,
+     "last_needed_order": 2,
+     "first_affected_result_order": 0
+    },
+    "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p1_p0_p0_p1_p1_p1_p0_p1_p0": {
+     "loop": 4,
+     "name": "P59",
+     "p": 3,
+     "first_missing_order": 2,
+     "last_needed_order": 4,
+     "first_affected_result_order": -2
+    },
+    "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p1_p0_p0_p1_p1_p1_p1_p1_p0": {
+     "loop": 4,
+     "name": "P60",
+     "p": 1,
+     "first_missing_order": 2,
+     "last_needed_order": 2,
+     "first_affected_result_order": 0
+    },
+    "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p1_p0_p1_p1_p1_p1_p1_p1_p0": {
+     "loop": 4,
+     "name": "P62",
+     "p": 1,
+     "first_missing_order": 2,
+     "last_needed_order": 2,
+     "first_affected_result_order": 0
+    },
+    "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p1_p1_p0_p1_p1_p1_p1_p1_p0": {
+     "loop": 4,
+     "name": "P63",
+     "p": 1,
+     "first_missing_order": 2,
+     "last_needed_order": 2,
+     "first_affected_result_order": 0
+    },
+    "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p1_p1_p1_p1_p1_p1_p1_p1_p0": {
+     "loop": 4,
+     "name": "P65",
+     "p": 1,
+     "first_missing_order": 2,
+     "last_needed_order": 2,
+     "first_affected_result_order": 0
+    },
+    "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p2_p0_p0_p1_p1_p1_p0_p1_p0": {
+     "loop": 4,
+     "name": "P66",
+     "p": 3,
+     "first_missing_order": 2,
+     "last_needed_order": 4,
+     "first_affected_result_order": -2
+    },
+    "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p2_p1_p0_p1_p1_p1_p1_p1_p0": {
+     "loop": 4,
+     "name": "P67",
+     "p": 1,
+     "first_missing_order": 2,
+     "last_needed_order": 2,
+     "first_affected_result_order": 0
+    },
+    "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p0_p3_p0_p0_p1_p1_p1_p0_p1_p0": {
+     "loop": 4,
+     "name": "P68",
+     "p": 1,
+     "first_missing_order": 2,
+     "last_needed_order": 2,
+     "first_affected_result_order": 0
+    },
+    "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p2_p1_p0_p0_p1_p1_p1_p1_p1_p0": {
+     "loop": 4,
+     "name": "P71",
+     "p": 1,
+     "first_missing_order": 2,
+     "last_needed_order": 2,
+     "first_affected_result_order": 0
+    },
+    "L4_eb225daea1ddc8a4d61675a26b9b487f90278190fe874e314b7253aee632a5e7_p2_p1_p1_p0_p1_p1_p1_p1_p1_p0": {
+     "loop": 4,
+     "name": "P74",
+     "p": 1,
+     "first_missing_order": 2,
+     "last_needed_order": 2,
+     "first_affected_result_order": 0
+    }
+   },
+   "recorded_by": "basis-b/bench/final/fix/measured_input.py (bench-final-1106 FIX, 2026-11-07) from the full-call log"
+  }
+ ]
 }

@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import hashlib
+import importlib.util
 import json
 import math
 import os
@@ -113,6 +114,56 @@ def schedstat(cpus):
     except OSError:
         pass
     return out
+
+
+def proc_cpu_seconds(pid):
+    """CPU seconds of process PID with its threads and reaped children (/proc/PID/stat utime + stime + cutime + cstime)."""
+    try:
+        f = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+        return sum(int(x) for x in f[11:15]) / os.sysconf("SC_CLK_TCK")
+    except (OSError, IndexError, ValueError):
+        return None
+
+
+class CallWindow:
+    """Multi-core samples: polls the timed CPUs' run time (/proc/schedstat), the measured process's CPU time and this
+    poller's own CPU time every 0.25 s, plus whether the output file exists (the harness writes it right after the timed
+    call, which is the last call of the process). foreign() = other tasks' share of the timed CPUs during the window
+    [output written - call_seconds, output written], i.e. during the timed call, not during the single-threaded data load."""
+
+    def __init__(self, pid, cpus, done_path):
+        self.pid, self.cpus, self.done_path, self.rows = pid, set(cpus), done_path, []
+        self.stop = threading.Event()
+        self.thread = threading.Thread(target=self.loop, daemon=True)
+        self.thread.start()
+
+    def loop(self):
+        while not self.stop.is_set():
+            q = schedstat(self.cpus)
+            own = proc_cpu_seconds(self.pid)
+            self.rows.append((time.time(), sum(v[0] for v in q.values()) * 1e-9, own, time.thread_time(),
+                              self.done_path.exists()))
+            self.stop.wait(0.25)
+
+    def finish(self):
+        self.stop.set()
+        self.thread.join()
+
+    def foreign(self, call_seconds):
+        rows = [r for r in self.rows if r[2] is not None]
+        end = next((r for r in rows if r[4]), None)
+        if end is None or not call_seconds:
+            return None
+        before = [r for r in rows if r[0] <= end[0] - call_seconds]
+        if not before:
+            return None
+        start = before[-1]
+        dt = end[0] - start[0]
+        if dt <= 0:
+            return None
+        other = (end[1] - start[1]) - (end[2] - start[2]) - (end[3] - start[3])
+        return {"foreign_cpu_fraction": round(max(0.0, other) / dt, 5), "window_seconds": round(dt, 3),
+                "polls": len(rows)}
 
 
 def cpu_times(cpus):
@@ -243,25 +294,38 @@ SELF_WAIT_FOREIGN = 0.002
 def contention_score(args, meta):
     """Reasons a sample counts as contended (empty: clean). The CPU-level run-queue delay is recorded but is no criterion:
     it includes a backend's own processes waiting for each other (vakint and its FORM child, ~3 % on an idle CPU); the
-    timed call's run-queue wait counts only when other tasks ran on the timed CPU (SELF_WAIT_FOREIGN)."""
+    timed call's run-queue wait counts only when other tasks ran on the timed CPU (SELF_WAIT_FOREIGN).
+    Multi-core samples: the foreign CPU time and the threads' run-queue wait are per timed CPU (the recorded fractions
+    are sums over the timed CPUs / threads, divided here by their number), so that the thresholds mean the same share
+    of a CPU for one core and for eight; the foreign CPU time is the one during the timed call where it was recorded
+    (call_window), else over the whole process."""
     why = []
+    n = max(1, len(meta.get("timed_cpus") or ()))
     busy = [v for v in (meta.get("sibling_busy_fraction") or {}).values() if v is not None]
     if busy and max(busy) > args.max_sibling_busy:
         why.append(f"SMT sibling {max(busy):.0%} busy")
     foreign = meta.get("foreign_cpu_fraction")
+    window = meta.get("call_window") or {}
+    during = n > 1 and window.get("foreign_cpu_fraction") is not None
+    if during:  # multi-core: during the timed call (the process's single-threaded phases leave CPUs to other tasks)
+        foreign = window["foreign_cpu_fraction"]
+    foreign = None if foreign is None else foreign / n
     if (foreign or 0) > args.max_foreign_cpu:
-        why.append(f"other tasks ran {meta['foreign_cpu_fraction']:.1%} of the wall time on the timed CPU")
+        why.append(f"other tasks ran {foreign:.1%} of the wall time on the timed CPU" if n == 1 else
+                   f"other tasks used {foreign:.1%} of each of the {n} timed CPUs"
+                   + (" during the timed call" if during else ""))
     call = meta.get("call_run_delay_fraction")
+    call = None if call is None else call / n
     if call is not None and call > args.max_run_delay and (foreign is None or foreign >= SELF_WAIT_FOREIGN):
-        why.append(f"timed call waited {call:.1%} in the run queue")
+        why.append(f"timed call waited {call:.1%} in the run queue" + ("" if n == 1 else " per thread"))
     return why
 
 
 def measure(args, case, cell, rep, cpu, out, input_file):
-    """One sample; measured again (up to --contention-retries times, not for multi-core heavy samples)
-    while it was contended, keeping the earlier attempts' times and reasons in the record."""
+    """One sample; measured again (up to --contention-retries times, multi-core heavy samples up to
+    --heavy-contention-retries times) while it was contended, keeping the earlier attempts' times and reasons."""
     attempts = []
-    retries = 0 if sample_n_cores(args, case, cell[0]) > 1 else args.contention_retries
+    retries = args.heavy_contention_retries if sample_n_cores(args, case, cell[0]) > 1 else args.contention_retries
     for attempt in range(retries + 1):
         meta = measure_once(args, case, cell, rep, cpu, out, input_file, attempts)
         if meta is None or meta["exit_code"] != 0:
@@ -317,7 +381,10 @@ def measure_once(args, case, cell, rep, cpu, out, input_file, attempts):
     q0 = schedstat(set(timed))
     started, start_utc = time.time(), now()
     proc = subprocess.Popen(cmd, stdout=log_file, stderr=subprocess.STDOUT, env=env)
+    window = CallWindow(proc.pid, timed, work) if n_cores > 1 else None
     _, status, ru = os.wait4(proc.pid, 0)
+    if window:
+        window.finish()
     proc.returncode = os.waitstatus_to_exitcode(status)
     wall = time.time() - started
     q1 = schedstat(set(timed))
@@ -348,6 +415,8 @@ def measure_once(args, case, cell, rep, cpu, out, input_file, attempts):
     if returncode == 0 and work.exists():
         rec = json.loads(work.read_text())
         meta["call_run_delay_fraction"] = (rec.get("call_usage") or {}).get("run_delay_fraction")
+        if window:  # other tasks on the timed CPUs during the timed call (sum over the CPUs, as foreign_cpu_fraction)
+            meta["call_window"] = window.foreign(rec.get("call_seconds"))
         meta["contention"] = contention_score(args, meta)
         meta["contended"] = bool(meta["contention"])
         rec["harness"] = meta
@@ -473,7 +542,31 @@ def summarize_error(tail):
     return {"source": "backend", "text": last[:240]}
 
 
+def source_equivalent(repo, build_commit):
+    """Receipt rule 1 on the tools checkout: the oldest commit of HEAD's first-parent line whose source outside the neutral
+    paths equals the measured build's (a reader can resolve it when the build commit itself was rebased away)."""
+    if not build_commit:
+        return None
+    spec = importlib.util.spec_from_file_location("bench_receipt", HERE / "receipt.py")
+    rc = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rc)
+    want = rc.source_digest(repo, build_commit)
+    if want is None:
+        return None
+    found = None
+    for c in (rc.git(repo, "rev-list", "--first-parent", "-300", "HEAD") or "").split():
+        if rc.source_digest(repo, c) != want:
+            break
+        found = c
+    return {"commit": found, "source_digest": want,
+            "build_in_history": rc.git(repo, "merge-base", "--is-ancestor", build_commit, "HEAD") is not None}
+
+
 def assemble(args, cases_doc, out, identity, pipeline):
+    """OUT/annotations.json (optional): {"cells": {"<case> <cell>": "<why the cell was not timed in an idle window>"}},
+    e.g. a long single run that overlapped other work; the PDF marks such cells like contended ones."""
+    ann_path = out / "annotations.json"
+    annotations = json.loads(ann_path.read_text()).get("cells", {}) if ann_path.exists() else {}
     cases = []
     stale_total = 0
     one_time = {}  # loops -> backend -> lists
@@ -509,7 +602,14 @@ def assemble(args, cases_doc, out, identity, pipeline):
                         slot["loader"] += [r["loader_seconds"] for r in good]
                 why = [contention_score(args, r["harness"]) for r in good]
                 c["contended"] = sum(1 for w in why if w)
-                c["contention"] = sorted({x for w in why for x in w})[:6]
+                # the reported median rests on a contended sample (odd n: the middle one; even n: either middle one)
+                vals = sorted((r["call_seconds"], bool(w)) for r, w in zip(good, why))
+                mids = vals[len(vals) // 2:len(vals) // 2 + 1] if len(vals) % 2 else vals[len(vals) // 2 - 1:len(vals) // 2 + 1]
+                c["median_contended"] = any(w for _, w in mids)
+                c["contention"] = sorted({x for r, w in zip(good, why) for x in w
+                                          if (r["call_seconds"], True) in mids or not c["median_contended"]})[:6]
+                if f"{case['id']} {name}" in annotations:
+                    c["overlap"] = annotations[f"{case['id']} {name}"]
                 math_s = [r["reduction_capture"]["reduction_math_seconds"] for r in good
                           if isinstance(r.get("reduction_capture"), dict) and r["reduction_capture"].get("reduction_math_seconds")]
                 if math_s:
@@ -519,6 +619,8 @@ def assemble(args, cases_doc, out, identity, pipeline):
                 c["output_sha256"] = sorted({r["output_sha256"] for r in good})
                 c["n_cores"] = max(r.get("n_cores") or 1 for r in good)
                 c["cpus"] = sorted({x for r in good for x in r["harness"].get("timed_cpus", [r["harness"]["cpu"]])})
+                c["l3_domains_per_sample"] = max(len({l3_domain(x) for x in r["harness"].get("timed_cpus", [r["harness"]["cpu"]])})
+                                                 for r in good)
                 c["sibling_busy_max"] = max((v for r in good for v in r["harness"]["sibling_busy_fraction"].values()
                                              if v is not None), default=None)
                 c["load1_max"] = max(r["harness"]["load1_start"] for r in good)
@@ -567,12 +669,13 @@ def assemble(args, cases_doc, out, identity, pipeline):
         if h.get("l3_domain"):
             l3.add(h["l3_domain"])
         sib += [v for v in (h.get("sibling_busy_fraction") or {}).values() if v is not None]
+        n_t = max(1, len(h.get("timed_cpus") or ()))  # per timed CPU (contention_score)
         if h.get("cpu_run_delay_fraction") is not None:
-            delays.append(h["cpu_run_delay_fraction"])
+            delays.append(h["cpu_run_delay_fraction"] / n_t)
         if h.get("foreign_cpu_fraction") is not None:
-            foreign.append(h["foreign_cpu_fraction"])
+            foreign.append(h["foreign_cpu_fraction"] / n_t)
         if h.get("call_run_delay_fraction") is not None:
-            calls.append(h["call_run_delay_fraction"])
+            calls.append(h["call_run_delay_fraction"] / n_t)
         if h.get("load1_start") is not None:
             loads.append(h["load1_start"])
 
@@ -675,6 +778,8 @@ def main():
     ap.add_argument("--max-foreign-cpu", type=float, default=0.03,
                     help="re-measure a sample when other tasks used more than this fraction of the timed CPU")
     ap.add_argument("--contention-retries", type=int, default=2)
+    ap.add_argument("--heavy-contention-retries", type=int, default=0,
+                    help="re-measure a contended multi-core sample this many times (default 0: they are long)")
     ap.add_argument("--allow-shared-l3", action="store_true", help="allow concurrent workers that share an L3 cache")
     ap.add_argument("--draft", action="store_true")
     args = ap.parse_args()
@@ -708,6 +813,7 @@ def main():
     # the measured build (embedded at build time), not the checkout these tools run from
     identity["source"] = identity.get("build") or {}
     identity["tools_checkout"] = git_info(CRATE)
+    identity["source_equivalent"] = source_equivalent(CRATE, identity["source"].get("commit"))
     identity["data_git"] = git_info(args.data_root)
     identity["cases_sha256"] = sha256(args.cases)
     identity["tools_sha256"] = {p.name: sha256(p) for p in sorted(HERE.glob("*.py"))}

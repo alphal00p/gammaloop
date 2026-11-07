@@ -23,7 +23,9 @@ representatives, rebuilt here from the manifests' exact_basis_expression as mast
 to the direct route; if neither has the orders it returns MissingMasterOrders (no value). p_m: 1L-4L from --pole-depth
 (measured, pinned to the reduction tables by digest; default docs/benchmark/data/pole-depth.json), 5L 0 (pole-free basis,
 read from 5L/provenance/refinement-layer.json: proven on the held integrals only, the record must say so; pole-depth.json
-five_loop.open_checks names what is open). 5L results also hold products of 1L-4L masters (five_loop.rs: product terminals ->
+five_loop.open_checks names what is open), except for the measured 5L inputs of pole-depth.json five_loop_measured_inputs
+(per listed master its measured p; such an input's orders are folded into the 5L row: where it lacks orders the cell is
+'not available for every input', where it needs worse orders the cell takes them). 5L results also hold products of 1L-4L masters (five_loop.rs: product terminals ->
 VacuumProductReducer): their factor masters are needed through eps^(k + 5 - L_f + p) (pole-depth.json five_loop_products,
 pinned to the 5L basis by sha256). Worst case = any combination of masters can occur in an input.
 --verify regenerates and compares the content hash with TABLES.json (exit 1 if they differ): stale tables are refused.
@@ -465,7 +467,29 @@ def load_depths(root: Path, path: Path, masters, alias_map):
         factors.append({'m': m, 'p': f['p'], 'offset': 5 - f['loop'] + f['p'], 'products': f['products']})
     five['products'] = {'n': len(rec_products), 'method': fp['method'], 'what': fp['what'],
                         'factors': [f"{x['m']['loop']}L/{x['m']['name']} p {x['p']}" for x in factors]}
-    return depth, d, five, factors
+    # measured 5L inputs whose reduction coefficients have spurious poles (e.g. the top sector: pole-free basis not proven there)
+    measured = []
+    for mi in d.get('five_loop_measured_inputs') or []:
+        if mi.get('basis_sha256') != bc.get('basis_sha256'):
+            raise SystemExit(f"{path}: five_loop_measured_inputs {mi.get('case')} recorded for another 5L basis")
+        ms5, fs = [], []
+        for mid, e in sorted(mi['masters'].items()):
+            m = by_id.get(mid)
+            if m is None or m['loop'] != 5 or e['loop'] != 5 or m['name'] != e['name'] or e['p'] < 0:
+                raise SystemExit(f"{path}: measured input {mi['case']}: {e.get('name')} is not a 5L master of the tree")
+            ms5.append((m, e['p']))
+        for mid, e in sorted(mi['factors'].items()):
+            m = by_id.get(mid)
+            if m is None or m['loop'] != e['loop'] or m['name'] != e['name'] or not 1 <= e['loop'] <= 4 or e['p'] < 0:
+                raise SystemExit(f"{path}: measured input {mi['case']}: factor {e.get('loop')}L/{e.get('name')} is not a 1L-4L "
+                                 'master of the tree')
+            fs.append((m, 5 - e['loop'] + e['p'], e['p']))
+        measured.append({'case': mi['case'], 'input': mi['input'], 'source': mi['source'], 'masters': ms5, 'factors': fs,
+                         'short': mi.get('short', mi['case'])})
+    five['measured'] = [{'case': x['case'], 'input': x['input'], 'source': x['source'], 'short': x['short'],
+                         'masters_by_p': {str(p): sum(1 for _, q in x['masters'] if q == p) for p in sorted({q for _, q in x['masters']})},
+                         'factors': [f"{m['loop']}L/{m['name']} p {p}" for m, _, p in x['factors']]} for x in measured]
+    return depth, d, five, factors, measured
 
 
 # ---------------------------------------------------------------------------------------------------- tables --
@@ -564,7 +588,7 @@ def build(root: Path, B, depth_path: Path, status: str, label_text: str | None):
     by_id = {m['master_id']: m for m in masters}
     checks = tier_check(root, by_id)
     alias_map = aliases(masters)
-    depth, depth_doc, five, factors = load_depths(root, depth_path, masters, alias_map)
+    depth, depth_doc, five, factors, measured = load_depths(root, depth_path, masters, alias_map)
     all_orders = sorted({o for m in masters for o in m['orders']})
     orders = list(range(all_orders[0], all_orders[-1] + 1))
 
@@ -627,7 +651,7 @@ def build(root: Path, B, depth_path: Path, status: str, label_text: str | None):
 
     # ------------------------------------------------------------------------------------------------ table 2 --
     # columns: up to the highest order any L-loop master holds (that master itself, as an input, returns it)
-    t2, notes2 = [], []
+    t2, notes2, notes2_short = [], [], []
     k_max = {}
     for L in range(1, 6):
         ms = [m for m in masters if m['loop'] == L]
@@ -636,9 +660,38 @@ def build(root: Path, B, depth_path: Path, status: str, label_text: str | None):
                        for k in range(-L, k_max[L] + 1)}))
     orders2 = list(range(-5, max(k_max.values()) + 1))
 
-    def note(text):
+    def note(text, short=None):
         notes2.append(text)
+        notes2_short.append(short or text)
         return chr(ord('a') + len(notes2) - 1)
+
+    def measured_state(k):
+        """per measured 5L input: (input, orders it lacks at eps^k, master cells it needs at eps^k)"""
+        out = []
+        for mi in measured:
+            miss, ent = [], []
+            for m, p in mi['masters']:
+                n = needs(m, k + p)
+                if n is None:
+                    miss.append((m, k + p, p))
+                else:
+                    ent += [(e[0], e[1], e[2], p) for e in n]
+            for m, off, p in mi['factors']:
+                n = needs(m, k + off)
+                if n is None:
+                    miss.append((m, k + off, p))
+                else:
+                    ent += [(e[0], e[1], e[2], p) for e in n]
+            out.append((mi, miss, ent))
+        return out
+
+    def short_list(items, limit=3):
+        names = []
+        for x in items:
+            s = f"{x['loop']}L/{x['name']}"
+            if s not in names:
+                names.append(s)
+        return ', '.join(names[:limit]) + (f' +{len(names) - limit}' if len(names) > limit else '')
 
     def masters_text(items, limit=6):
         names = []
@@ -662,22 +715,46 @@ def build(root: Path, B, depth_path: Path, status: str, label_text: str | None):
                     + ', '.join(f'{a} {max(b)}' for a, b in pd_orders.items()) + ') are measured on every record of the shipped '
                     'caches and on exact samples outside them, not proven. An input with a larger p at ε^k would need higher '
                     'master orders: where they are not held it gets MissingMasterOrders (no value, never a wrong one); '
-                    'otherwise its value carries those orders’ digits, which vakint reports (X here would be too high).')
+                    'otherwise its value carries those orders’ digits, which vakint reports (X here would be too high).',
+                    '1L-4L: spurious-pole orders p measured on the shipped caches and samples (direct route up to '
+                    + ', '.join(f'{a} {max(b)}' for a, b in pd_orders.items()) + '), not proven.')
             row_marks = [row_note_lower]
         else:
+            mtext, mshort = '', ''
+            for mi in measured:
+                deep = max((p for _, _, p in mi['factors']), default=0)
+                mtext += (f" The top sector is not pole-free: the measured input {mi['input']} ({mi['source']}) has p = "
+                          + ', '.join(f"{p} on {sum(1 for _, q in mi['masters'] if q == p)} 5L masters"
+                                      for p in sorted({q for _, q in mi['masters']}))
+                          + f" and p up to {deep} on its lower-loop product factors ("
+                          + ', '.join(f"{m['loop']}L/{m['name']} p = {p}" for m, _, p in mi['factors'] if p == deep)
+                          + '); its orders are folded into this row. Other top-sector inputs are not validated: their '
+                          'spurious poles may be deeper, so for them the row is no bound.')
+                mshort += (f" Not so in the top sector: the measured input {mi['short']} has p = 1 on "
+                           f"{sum(1 for _, q in mi['masters'] if q >= 1)} 5L masters and up to p = {deep} on its 4L product "
+                           'factors; other top-sector inputs are not validated.')
             row_marks = [note(
-                f"5L row, spurious poles: p = 0 for every 5L master (pole-free basis {five['tag']}). Regular at d = 4 is "
+                f"5L row, spurious poles: p = 0 for the 5L masters (pole-free basis {five['tag']}). Regular at d = 4 is "
                 f"proven exactly on the {five['generators']} held-integral generators (the record: “{five['scope']}”); "
                 f"admitted inputs outside them are only sampled ({five['g_pole_coefficients']} coefficients, "
-                f"{five['g_pole_polar']} with a pole)"
-                + (''.join(f'; open: {x}' for x in five['open_checks'])) + '. An input with a spurious pole of order q at '
-                'ε^k would need ε^(k+q) of the 5L masters: no 5L master holds ε^1, so at ε^0 it gets MissingMasterOrders (no '
-                'value, never a wrong one); below ε^0 it returns a value with those orders’ digits, which vakint reports (X '
-                'here would be too high).'),
+                f"{five['g_pole_polar']} with a pole)."
+                + mtext + ' An input with a spurious pole of order q at '
+                'ε^k needs ε^(k+q) of the 5L masters: no 5L master holds ε^1, so at ε^0 (or below, for q > 1 or deep factor '
+                'poles) it gets MissingMasterOrders (no value, never a wrong one); otherwise it returns a value with those '
+                'orders’ digits, which vakint reports.',
+                f"5L: p = 0 (pole-free basis {five['tag']}), proven on the {five['generators']} held integrals and sampled "
+                f"outside them.{mshort}" if not measured else
+                f"5L: p = 0 (pole-free basis {five['tag']}) proven on the {five['generators']} held integrals and sampled "
+                f"outside them.{mshort}"),
                 note(f"5L row, lower-loop products: vakint factorizes the {five['products']['n']} 5L product terminals "
                      '(VacuumProductReducer), so a 5L result can hold products of 1L-4L masters. Included here: a factor '
                      'master of L_f loops is needed (alias route: its representatives) through ε^(k+5-L_f+p), with p the '
-                     f"spurious-pole order of the factor images ({five['products']['method']}): {fac_text}.")]
+                     f"spurious-pole order of the factor images ({five['products']['method']}): {fac_text}"
+                     + (''.join(f"; the measured input {mi['short']} reaches further factor masters with deeper poles: "
+                                + ', '.join(f"{m['loop']}L/{m['name']} (p = {p})" for m, _, p in mi['factors'])
+                                for mi in measured)) + '.',
+                     '5L results hold products of 1L-4L masters: a factor of L_f loops is needed through ε^(k+5−L_f+p) '
+                     '(p measured on the factor images).')]
         for k in orders2:
             if k < -L:
                 cells[str(k)] = {'class': None, 'na': 'below'}
@@ -691,8 +768,18 @@ def build(root: Path, B, depth_path: Path, status: str, label_text: str | None):
             if not c['returns'] and not any(k in x['orders'] for x in masters if x['loop'] == L):
                 cells[str(k)] = {'class': None, 'na': 'beyond'}
                 continue
-            partial = bool(c['missing'] or c['combo'] or c['missing_factors'] or w is None)
-            e = {'class': None if partial else w['class'], 'X': None if partial else w.get('X'), 'marks': []}
+            ms_state = measured_state(k) if L == 5 else []
+            m_missing = [(mi, miss) for mi, miss, ent in ms_state if miss]
+            m_entries = [x for mi, miss, ent in ms_state if not miss for x in ent]
+            partial = bool(c['missing'] or c['combo'] or c['missing_factors'] or w is None or m_missing)
+            m_worse = None
+            if not partial and m_entries:
+                w2, who2 = worst_of([(m, j, cc) for m, j, cc, _ in m_entries])
+                if rank(w2) > rank(w):
+                    pm = {(m['master_id'], j): p for m, j, cc, p in m_entries}
+                    m_worse = (w2, [(m, j, cc, pm[(m['master_id'], j)]) for m, j, cc in who2])
+            wc = m_worse[0] if m_worse else w
+            e = {'class': None if partial else wc['class'], 'X': None if partial else wc.get('X'), 'marks': []}
             binding = sorted({f"{m['loop']}L/{m['name']}" + (f" ({m['name_640']})" if m.get('name_640') else '') + f" ε^{j}"
                               + (' (alias route)' if r == 'alias' else ' (product factor)' if r == 'product' else '')
                               for m, j, cc, r in who})
@@ -702,25 +789,56 @@ def build(root: Path, B, depth_path: Path, status: str, label_text: str | None):
                 e['missing_masters'] = [f"{x['loop']}L/{x['name']}" for x in c['missing']]
                 e['missing_in_combination'] = [f"{x['loop']}L/{x['name']}" for x in c['combo']]
                 txt = f"{L}L ε^{k}: not available for every input. "
+                stxt = f"{L}L ε^{k}: "
+                for mi, miss in m_missing:
+                    n5 = sum(1 for m, j, p in miss if m['loop'] == 5)
+                    fl = [(m, j, p) for m, j, p in miss if m['loop'] < 5]
+                    txt += (f"The measured top-sector input {mi['short']} gets MissingMasterOrders (it needs "
+                            + (f"ε^{max(j for m, j, p in miss if m['loop'] == 5)} of {n5} 5L masters" if n5 else '')
+                            + (' and ' if n5 and fl else '')
+                            + (', '.join(f"ε^{j} of {m['loop']}L/{m['name']}" for m, j, p in fl[:4])
+                               + (f' and {len(fl) - 4} more factors' if len(fl) > 4 else '') if fl else '')
+                            + '; vakint fails closed). ')
+                    stxt += f"{mi['short']} gets MissingMasterOrders; "
+                    e['missing_measured_inputs'] = e.get('missing_measured_inputs', []) + [mi['case']]
                 if c['missing']:
                     txt += f"Inputs reaching {masters_text(c['missing'])} get MissingMasterOrders (no value; vakint fails closed). "
+                    stxt += f"inputs reaching {short_list(c['missing'])} get MissingMasterOrders; "
                 if c['combo']:
                     txt += (f"So do inputs that combine {masters_text(c['combo'])} with {masters_text(c['breakers'])} (whose alias "
                             f"route lacks orders, so vakint takes the direct route, which lacks the former's orders). ")
+                    stxt += f"so do {short_list(c['combo'])} combined with {short_list(c['breakers'], 2)}; "
                 if c['missing_factors']:
                     e['missing_product_factors'] = [f"{x['m']['loop']}L/{x['m']['name']}" for x in c['missing_factors']]
                     txt += ('So do inputs reaching the 5L product masters '
                             + '; '.join(f"{', '.join(x['products'][:4])} (factor {x['m']['loop']}L/{x['m']['name']} needed "
                                         f"through ε^{k + x['offset']})" for x in c['missing_factors']) + '. ')
+                    stxt += 'so do some 5L product masters; '
                 if w is not None:
                     txt += f"The other inputs return {label(w)}" + (f" (set by {', '.join(binding[:4])})" if w['class'] != 'S' else '') + '.'
+                    stxt += f"others {label(w)}" + (f" ({', '.join(b.split(' (')[0] if '(P' not in b else b for b in binding[:2])})"
+                                                    if w['class'] != 'S' else '') + '.'
                 else:
                     own = [(x, x['orders'][k]) for x in ms if k in x['orders']]
                     ow, _ = worst_of([(x, j, x['orders'][j]) for x, _ in own for j in x['orders'] if j <= k])
                     txt += (f"Only inputs whose reduction coefficients have lower spurious-pole orders return it, e.g. the "
                             f"{len(own)} masters that hold ε^{k} ({masters_text([x for x, _ in own], 4)}) themselves: {label(ow)}.")
+                    stxt += f"only inputs with lower spurious poles, e.g. {short_list([x for x, _ in own], 3)}: {label(ow)}."
                     e['returned'] = label(ow)
-                e['marks'].append(note(txt))
+                e['marks'].append(note(txt, stxt))
+            elif m_worse:
+                w2, who2 = m_worse
+                b2 = sorted({f"{m['loop']}L/{m['name']}" + (f" ({m['name_640']})" if m.get('name_640') else '') + f" ε^{j} (p = {p})"
+                             for m, j, cc, p in who2})
+                e['binding'] = b2[:12]
+                e['others'] = label(w)
+                mi = measured[0]
+                txt = (f"{L}L ε^{k} {label(w2)}: set by the measured top-sector input {mi['short']}: its spurious poles make ε^{k} need "
+                       f"{', '.join(b2[:4])}{' and more' if len(b2) > 4 else ''}. The other inputs return {label(w)}"
+                       + (f" (set by {', '.join(binding[:4])})" if w['class'] != 'S' else '') + '.')
+                stxt = (f"{L}L ε^{k} {label(w2)}: {mi['short']} needs {', '.join(x.replace(' (p = 1)', '') for x in b2[:2])}"
+                        f"{' and more' if len(b2) > 2 else ''}; others {label(w)}.")
+                e['marks'].append(note(txt, stxt))
             elif w['class'] != 'S':
                 pole = [x for x in who if x[1] > k and x[3] != 'product']
                 prod = [x for x in who if x[3] == 'product']
@@ -740,7 +858,15 @@ def build(root: Path, B, depth_path: Path, status: str, label_text: str | None):
                 if prod:
                     why += '; a lower-loop factor of the 5L product masters (row note)'
                 e['binding'] = binding[:12]
-                e['marks'].append(note(f"{L}L ε^{k} {label(w)}: {why}."))
+                short = f"{L}L ε^{k} {label(w)}: " + (', '.join(sorted({s.replace('vakint::', '') for m, j, cc, r in who
+                                                                         for s, dg in (cc.get('constants') or {}).items()
+                                                                         if dg == w['X']}))
+                                                     + (f" via 1/ε^{max(j - k for m, j, cc, r in pole)} poles" if pole else '')
+                                                     + (' (two profiles of one code)' if w['class'] == 'S*' and
+                                                        any(two_profile(cc) for m, j, cc, r in who) else '')
+                                                     if w['class'] == 'S*' else
+                                                     ', '.join(binding[:3]) + (' and more' if len(binding) > 3 else '')) + '.'
+                e['marks'].append(note(f"{L}L ε^{k} {label(w)}: {why}.", short))
             cells[str(k)] = e
         t2_rows.append({'loop': L, 'cells': cells, 'last_order': k_max[L], 'marks': row_marks})
 
@@ -786,7 +912,7 @@ def build(root: Path, B, depth_path: Path, status: str, label_text: str | None):
             sources['constants_sha256'][f'{L}L'] = cb['sha256']
     content = {
         'schema': SCHEMA, 'sources': sources, 'orders_table1': orders, 'orders_table2': orders2,
-        'table1': t1, 'table2': t2_rows, 'notes_table2': notes2,
+        'table1': t1, 'table2': t2_rows, 'notes_table2': notes2, 'notes_table2_short': notes2_short,
         'two_profile_constants': tp_list, 'numerical_mode_more_digits': [list(x) for x in nm_users],
         'counts_table1': counts, 'worst_table1': {f'{a} {b}': v for (a, b), v in sorted(sstar_min.items())},
         'rule': {'builtins': {k: B[k] for k in ('variables', 'projections', 'functions')},
@@ -977,8 +1103,9 @@ def markdown(T):
     out = [x.replace(' eps^', ' ε^') for x in out]
     o2 = T['orders_table2']
     out += ['## Table 2: L-loop result of any single-scale vacuum input (rows: L, columns: Laurent orders of the result)', '',
-            'Worst case over the admitted inputs, with the spurious-pole orders the row notes state (measured at 1L-4L; proven on '
-            'the held integrals and sampled outside them at 5L).', '',
+            'Worst case over the admitted inputs, with the spurious-pole orders the row notes state (measured at 1L-4L; at 5L proven '
+            'on the held integrals and sampled outside them, not pole-free in the top sector: the measured top-sector input is '
+            'folded in, other top-sector inputs are not validated).', '',
             '| L | ' + ' | '.join(eps(o) for o in o2) + ' |', '|---|' + '---|' * len(o2)]
     for r in T['table2']:
         rm = r.get('marks') or []
@@ -1013,12 +1140,15 @@ def method_notes(T):
         f"Spurious-pole orders 1L-4L (direct route {', '.join(f'{L} {max(v['direct'])}' for L, v in pd['orders'].items())}; alias route "
         f"{', '.join(f'{L} {max(v['alias_representative'])}' for L, v in pd['orders'].items() if v['alias_representative'])}) are "
         "measured on every record of the shipped caches and on exact samples outside them (up to 6 dots and 3 numerators at 4L; "
-        "no growth with dots or numerators), not proven; they are pinned to the reduction tables by digest. 5L: p = 0 for every 5L "
-        f"master (pole-free basis {five['tag']}): regular at d = 4 proven exactly on the {five['generators']} held-integral generators "
+        "no growth with dots or numerators), not proven; they are pinned to the reduction tables by digest. 5L: p = 0 for the 5L "
+        f"masters (pole-free basis {five['tag']}): regular at d = 4 proven exactly on the {five['generators']} held-integral generators "
         f"(“{five['scope']}”); admitted inputs outside them are sampled ({five['g_pole_coefficients']} coefficients, "
-        f"{five['g_pole_polar']} with a pole)" + ''.join(f'; open: {x}' for x in five['open_checks']) + '. An input with an '
-        'unproven spurious pole would need higher 5L orders: at ε^0 none is held (MissingMasterOrders, never a wrong value); below '
-        'ε^0 the value carries those orders’ digits (reported by vakint).',
+        f"{five['g_pole_polar']} with a pole)" + ''.join(f'; open: {x}' for x in five['open_checks'])
+        + ''.join(f"; measured: {x['input']} ({x['source']}): p = "
+                  + ', '.join(f'{p} on {n} 5L masters' for p, n in x['masters_by_p'].items())
+                  + f", lower-loop factors {', '.join(x['factors'])}" for x in five.get('measured') or [])
+        + '. An input with a spurious pole needs higher 5L orders: at ε^0 none is held (MissingMasterOrders, never a wrong value); '
+        'below ε^0 the value carries those orders’ digits (reported by vakint).',
         f"5L results can contain products of 1L-4L masters: vakint factorizes the {five['products']['n']} 5L product terminals "
         '(VacuumProductReducer); table 2 includes their factor masters through ε^(k+5-L_f+p) on the alias route '
         f"({five['products']['method']}).",

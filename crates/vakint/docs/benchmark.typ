@@ -76,11 +76,15 @@
 #let second-ink(fill) = if fill != none and lum(fill) < 0.72 { ink } else { luma(85) }
 
 #let cell-of(case, key) = case.cells.at(key, default: (status: "pending"))
+// † a cell not timed in an idle window: its median rests on a sample still contended after re-measurement, or an
+// annotated overlap (a contended sample that is not the median is only counted in the provenance block)
+#let unidle(c) = c.status == "ok" and (c.at("median_contended", default: c.at("contended", default: 0) > 0) or c.at("overlap", default: none) != none)
+#let dagger(c) = if unidle(c) { super(text(weight: "regular", fill: rgb("b42318"))[#sym.dagger]) }
 #let med(c) = if c.status == "ok" { c.median } else { none }
 // Small note next to a value: the minimum of the runs, or "1 run" when it is not a repetition.
 #let spread(c, fill) = {
   if c.status != "ok" { return none }
-  let note = if c.n == 1 [1 run] else [(#in-unit(c.min, c.median))]
+  let note = if c.n == 1 [1~run] else [(#in-unit(c.min, c.median))]
   text(size: 5.6pt, weight: "regular", fill: second-ink(fill))[#h(2pt)#note]
 }
 // Multi-core cells (heavy five-loop reductions) name their core count on a line of their own.
@@ -104,12 +108,12 @@
   let ink2 = second-ink(fill)
   table.cell(fill: fill, {
     set par(leading: 0.34em, justify: false)
-    if a != none { text(weight: "bold", size: 8.4pt, fill: ink, dur(a)); spread(rr, fill) } else {
+    if a != none { text(weight: "bold", size: 8.4pt, fill: ink, dur(a)); dagger(rr); spread(rr, fill) } else {
       text(size: 7.6pt, fill: if rr.status == "failed" { rgb("b42318") } else { muted }, rr.status)
     }
     linebreak()
     if ref.status == "n/a" { text(size: 6.3pt, fill: luma(120), alone-note) }
-    else if b != none { text(size: 6.6pt, fill: ink2)[#label #dur(b)]; if ref-spread { spread(ref, fill) } }
+    else if b != none { text(size: 6.6pt, fill: ink2)[#label #dur(b)#dagger(ref)]; if ref-spread { spread(ref, fill) } }
     else { text(size: 6.6pt, fill: if ref.status == "failed" { rgb("b42318") } else { luma(110) })[#label #ref.status] }
     linebreak()
     if a != none and b != none { text(size: 7pt, weight: "semibold", fill: ink, ratio-text(a / b)) }
@@ -188,7 +192,7 @@
   header-style(table(
     columns: (1fr, 1.1cm, 2.32cm, 2.32cm, 2.32cm, 2.32cm, 2.32cm, 1.25cm),
     align: (x, y) => if x == 0 { left + horizon } else { center + horizon },
-    inset: (x: 4pt, y: 4pt),
+    inset: (x: 4pt, y: 3.3pt),
     stroke: (x, y) => (top: if y <= 1 { none } else { 0.4pt + luma(225) },
                        left: if x >= 2 and y > 0 { 0.4pt + luma(225) } else { none }),
     fill: (x, y) => if y == 0 { navy } else { none },
@@ -225,6 +229,17 @@
   #linebreak()
   #box(width: 9cm)[×1/64 #h(1fr) ×1/8 #h(1fr) ×1 #h(1fr) ×8 #h(1fr) ×64]
 ]
+
+#let marked = results.cases.map(c => c.cells.pairs().filter(p => unidle(p.at(1))).map(p => (c, p.at(0), p.at(1)))).flatten().chunks(3)
+#if marked.len() > 0 {
+  block(width: 100%, inset: (x: 2pt, y: 3pt), text(size: 6.9pt, fill: luma(60))[
+    #text(fill: rgb("b42318"))[#sym.dagger] *Median not timed in an idle window* (the other cells' medians were, some after
+    re-measurement):
+    #marked.map(((c, k, v)) => [#c.loops\L #c.title · #cell-label.at(k, default: k): #{
+      let why = (v.at("overlap", default: none),) + v.at("contention", default: ())
+      why.filter(x => x != none).join("; ")
+    }]).join("; ").])
+}
 
 // One-time cost per process (excluded from every cell).
 #let once = results.at("one_time_per_process", default: (:))
@@ -278,28 +293,38 @@
 #block(width: 100%, inset: (x: 0pt, y: 4pt))[
   #text(9pt, weight: "bold", fill: navy)[Provenance]
 #{
-  set text(7.6pt)
+  set text(7.2pt)
   set par(justify: false)
   let src = ident.at("source", default: (:))
   let dg = ident.at("data_git", default: none)
   let cn = results.at("contention", default: (:))
   let pct(x) = if x == none { [—] } else [#calc.round(x * 100, digits: 1)%]
   let form = host.at("form_version", default: "—").replace(regex("\(\w{3}\s+\d+\s+\d{4},?\s*\)?"), "").replace(regex("\s+\(\s*\)"), "").trim()
-  table(columns: (auto, 1fr), stroke: none, inset: (x: 3pt, y: 2pt),
-    [Data], if dg != none and dg.at("commit", default: none) != none [
+  table(columns: (auto, 1fr), stroke: none, inset: (x: 3pt, y: 1.6pt),
+    [Data (timings)], [#if dg != none and dg.at("commit", default: none) != none [
       vakint-external-data #raw(str(dg.at("describe", default: dg.commit))) · commit #raw(dg.commit.slice(0, 12))#if dg.at("dirty_files", default: 0) > 0 [ (+#pl(dg.dirty_files, "modified file"))]
-    ] else [snapshot (no git checkout): #raw(str(ident.data_root))],
-    [Data manifest], raw(str(ident.at("root_manifest_sha256", default: "—"))),
-    [Vakint], [#ident.vakint_version · built from #raw(str(src.at("commit", default: "unknown")).slice(0, calc.min(12, str(src.at("commit", default: "unknown")).len())))#{
+    ] else [snapshot (no git checkout): #raw(str(ident.data_root))] · root manifest #raw(str(ident.at("root_manifest_sha256", default: "—")).slice(0, 16))],
+    ..{
+      let tg = tables.at("data_git", default: none)
+      if tg != none and (dg == none or tg.commit != dg.at("commit", default: none)) {
+        ([Data (tables)], [#{ let l = tables.at("label", default: none); if l != none [#l] else [commit #raw(tg.commit.slice(0, 12))] }:
+          precision tables regenerated from this later release, whose reduction payloads equal the timed tree's (receipt rule 2)])
+      } else { () }
+    },
+    [Vakint], [#ident.vakint_version · #src.at("profile", default: "—") build of #raw(str(src.at("commit", default: "unknown")).slice(0, calc.min(12, str(src.at("commit", default: "unknown")).len())))#{
       let d = src.at("dirty_paths", default: none)
       if d == none [ (build identity unknown)] else if d > 0 [ (+#pl(d, "modified path"))] else [ (clean)]
-    } · profile #src.at("profile", default: "—")],
-    [Harness binary], raw(str(ident.executable_sha256)),
-    [FORM], [#form],
-    [Host], [#host.at("cpu_model", default: "—"), #host.at("logical_cpus", default: "—") logical CPUs, shared; timed on #pl(host.at("cpus_used", default: ()).len(), "pinned CPU") in #pl(cn.at("l3_domains", default: 0), "L3 domain") (listed in suite.json)],
-    [Contention], [#cn.at("samples", default: "—") samples, #cn.at("contended_samples", default: "—") still contended after re-measurement (multi-core samples are measured once; thresholds: SMT sibling #pct(cn.at("thresholds", default: (:)).at("sibling_busy", default: none)), other tasks #pct(cn.at("thresholds", default: (:)).at("foreign_cpu", default: none)), call run-queue wait #pct(cn.at("thresholds", default: (:)).at("run_delay", default: none)) when other tasks ran on the timed CPU) · SMT sibling busy #pct(cn.at("sibling_busy_median", default: none)) median (max #pct(cn.at("sibling_busy_max", default: none))) · timed call waiting in the run queue #pct(cn.at("call_run_delay_median", default: none)) (max #pct(cn.at("call_run_delay_max", default: none))) · other tasks on the timed CPU #pct(cn.at("foreign_cpu_median", default: none)) (max #pct(cn.at("foreign_cpu_max", default: none))) · 1-min load ≤ #cn.at("load1_max", default: "—")],
-    [Regenerate], [#raw("crates/vakint/docs/benchmark/make-benchmark.sh DATA_ROOT BINARY OUT --install"); after a data release #raw("DATA_ROOT - OUT --refresh-tables --install") (timings kept)],
-    [Built], [#results.assembled_utc #if draft [· *DRAFT*: not the published data or build]],
+    }#{
+      let se = ident.at("source_equivalent", default: none)
+      if se != none and se.commit != none and not se.build_in_history [ before the rebase onto the data pin; same source
+        as #raw(se.commit.slice(0, 12)) on this branch outside docs and vendored data (receipt rule 1)]
+    } · harness #raw(str(ident.executable_sha256).slice(0, 16)) · #form],
+    [Host], [#host.at("cpu_model", default: "—"), #host.at("logical_cpus", default: "—") logical CPUs, shared; timed on #pl(host.at("cpus_used", default: ()).len(), "pinned CPU") in #pl(cn.at("l3_domains", default: 0), "L3 domain") (listed in suite.json)#{
+      let multi = results.cases.map(c => c.cells.pairs().filter(p => p.at(0).starts-with("rustred.reduction") and p.at(1).status == "ok" and p.at(1).at("n_cores", default: 1) > 1).map(p => p.at(1))).flatten()
+      if multi.len() > 0 and multi.all(v => v.at("l3_domains_per_sample", default: 0) == 1) [; multi-core reductions on the cores of one L3 domain]
+    }],
+    [Contention], [#cn.at("samples", default: "—") samples, #cn.at("contended_samples", default: "—") still contended after re-measurement (#sym.dagger; thresholds per timed CPU: SMT sibling #pct(cn.at("thresholds", default: (:)).at("sibling_busy", default: none)) busy, other tasks #pct(cn.at("thresholds", default: (:)).at("foreign_cpu", default: none)), call run-queue wait #pct(cn.at("thresholds", default: (:)).at("run_delay", default: none)) when other tasks ran) · medians (max): SMT sibling busy #pct(cn.at("sibling_busy_median", default: none)) (#pct(cn.at("sibling_busy_max", default: none))), timed call in the run queue #pct(cn.at("call_run_delay_median", default: none)) (#pct(cn.at("call_run_delay_max", default: none))), other tasks per timed CPU #pct(cn.at("foreign_cpu_median", default: none)) (#pct(cn.at("foreign_cpu_max", default: none))) · 1-min load ≤ #cn.at("load1_max", default: "—")],
+    [Regenerate], [#raw("crates/vakint/docs/benchmark/make-benchmark.sh DATA_ROOT BINARY OUT --install"); after a data release #raw("DATA_ROOT - OUT --refresh-tables --install") (timings kept) · assembled #results.assembled_utc #if draft [· *DRAFT*: not the published data or build]],
   )
 }
 ]
@@ -346,7 +371,9 @@ graphs) are merged by their factors; numbers count masters (one to three loops: 
 }
 #legend(columns: 3)
 
-#let draw-graph(g, width: 17cm, row: 1.25cm, labels: true, rx: 0.62cm, ry: 0.27cm, label-size: 6.8pt, edge-alpha: 150, edge-base: 0.35pt, max-unit: 3.2cm) = {
+// tiered: strong edges leave a sector that owns a rule program towards a topology with masters or products (the
+// transitions the rule programs reduce along), the others are drawn faint underneath.
+#let draw-graph(g, width: 17cm, row: 1.25cm, labels: true, rx: 0.62cm, ry: 0.27cm, label-size: 6.8pt, edge-alpha: 150, edge-base: 0.35pt, max-unit: 3.2cm, name-of: n => n.name, tiered: false, count-size: 6pt, fit-chars: none) = {
   let nodes = g.nodes
   let layers = g.layers
   let span = calc.max(g.span, 1)
@@ -371,22 +398,24 @@ graphs) are merged by their factors; numbers count masters (one to three loops: 
       place(dx: 0pt, dy: ry + 0.15cm + int(layer) * row - 0.18cm,
         text(size: 6.8pt, font: sans, fill: luma(120))[#pl(lines, "line")])
     }
-    // edges first, coloured by the class of the topology they reach; long edges fainter
+    // edges first, coloured by the class of the topology they reach; long edges fainter; tiered: faint ones underneath
+    let strong(e) = not tiered or (by-id.at(e.from).owner_bytes > 0 and node-class(by-id.at(e.to)) != "away")
     let edges = g.arrows.map(e => {
       let (x1, _) = pos.at(e.from)
       let (x2, _) = pos.at(e.to)
       (e, calc.abs((x2 - x1) / w))
-    }).sorted(key: p => -p.at(1))
+    }).sorted(key: p => (if strong(p.at(0)) { 1 } else { 0 }, -p.at(1)))
     for (e, d) in edges {
       let (x1, y1) = pos.at(e.from)
       let (x2, y2) = pos.at(e.to)
       let y1b = y1 + ry
       let y2t = y2 - ry
       let dy = (y2t - y1b) * 0.5
-      let wdt = edge-base + 0.45pt * calc.log(e.lines, base: 2)
+      let s = strong(e)
+      let wdt = if s { edge-base + 0.45pt * calc.log(e.lines, base: 2) } else { 0.3pt }
       let a = int(edge-alpha * calc.clamp(1.15 - 2.2 * d, 0.3, 1))
       place(curve(
-        stroke: (paint: edge-paint(by-id.at(e.to), a), thickness: wdt, cap: "round"),
+        stroke: (paint: if s { edge-paint(by-id.at(e.to), a) } else { rgb(140, 150, 165, 38) }, thickness: wdt, cap: "round"),
         curve.move((x1, y1b)),
         curve.cubic((x1, y1b + dy), (x2, y2t - dy), (x2, y2t)),
       ))
@@ -403,11 +432,13 @@ graphs) are merged by their factors; numbers count masters (one to three loops: 
       place(dx: x - rx, dy: y - ry, ellipse(width: 2 * rx, height: 2 * ry, fill: fill, stroke: node-stroke(n)))
       let m = n.masters.len()
       let on-dark = fill == c-master
-      let label = if labels { n.name } else if m > 0 { str(m) } else { "" }
+      let label = if labels { name-of(n) } else if m > 0 { str(m) } else { "" }
+      // fit-chars: names longer than this shrink to fit their node (the narrow nodes of the 5L graph)
+      let fit = if labels and fit-chars != none and label.clusters().len() > fit-chars { calc.max(0.68, fit-chars / label.clusters().len()) } else { 1 }
       place(dx: x - rx, dy: y - ry, box(width: 2 * rx, height: 2 * ry, align(center + horizon,
-        text(size: label-size, font: sans, fill: if on-dark { white } else { ink }, weight: if labels { "regular" } else { "bold" })[#label])))
+        text(size: label-size * fit, font: sans, fill: if on-dark { white } else { ink }, weight: if labels { "regular" } else { "bold" })[#label])))
       if labels and m > 0 {
-        place(dx: x + rx * 0.62, dy: y - ry - 0.22cm, text(size: 6pt, font: sans, weight: "bold",
+        place(dx: x + rx * 0.62, dy: y - ry - 0.22cm, text(size: count-size, font: sans, weight: "bold",
           fill: if n.product { c-product-line } else { c-master-line })[#m])
       }
     }
@@ -433,10 +464,19 @@ graphs) are merged by their factors; numbers count masters (one to three loops: 
 #fig-graph(4, draw-graph(graphs.loops.at("4"), width: 17.8cm, row: 2.1cm, rx: 0.82cm, ry: 0.34cm, label-size: 7.4pt),
   [Rings: the FMFT family programs H, X, BMW, FG; irreducible topologies named by their FMFT master PR$k$.])
 
+#let bench-nodes(L) = results.cases.filter(c => c.loops == L and c.at("input", default: (:)).at("master", default: none) != none).map(c => {
+  let n = graphs.loops.at(str(L)).nodes.filter(n => c.input.master in n.masters)
+  if n.len() > 0 { c.input.master + " in " + n.at(0).name.replace(str(L) + "L·", "") }
+}).filter(x => x != none).dedup()
 #page(flipped: true, margin: (x: 12mm, y: 12mm))[
   #legend()
-  #fig-graph(5, draw-graph(graphs.loops.at("5"), width: 27cm, row: 2.3cm, labels: false, rx: 0.36cm, ry: 0.27cm, label-size: 6.6pt, edge-alpha: 120, edge-base: 0.25pt),
-    [Rings: the #graphs.loops.at("5").stats.owner_programs owner sectors of the saved application (width grows with their rule tables).])
+  #align(center, text(7.2pt, font: sans, fill: luma(60))[
+    #box(baseline: -2pt, line(length: 16pt, stroke: 1pt + rgb(42, 157, 143, 160))) transition out of a sector with a rule
+    program, towards masters or products #h(12pt)
+    #box(baseline: -2pt, line(length: 16pt, stroke: 0.5pt + rgb(140, 150, 165, 110))) other transitions])
+  #fig-graph(5, draw-graph(graphs.loops.at("5"), width: 27cm, row: 2.12cm, labels: true, rx: 0.44cm, ry: 0.25cm, label-size: 5.4pt, edge-alpha: 135, edge-base: 0.3pt, name-of: n => n.name.replace("5L·", ""), tiered: true, count-size: 5.6pt, fit-chars: 5),
+    [Rings: the #graphs.loops.at("5").stats.owner_programs owner sectors of the saved application (width grows with their rule
+      tables); names: lines and a letter. Benchmark masters: #bench-nodes(5).join(", ").])
 ]
 
 // ------------------------------------------------------------- precision --

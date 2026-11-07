@@ -44,6 +44,8 @@
     text(size: 9.2pt, weight: "bold", fill: s.ink, if c.class == "S" [S] else [#c.class])
     if c.class != "S" { linebreak(); text(size: 7.4pt, weight: "semibold", fill: s.ink)[#str(c.X) digits] }
     pt-marks(c, 6pt)
+    // set by a measured input with spurious poles: what the other inputs return
+    if c.at("others", default: none) != none { linebreak(); text(size: 5.6pt, fill: s.ink)[others: #c.others] }
   })
 }
 
@@ -157,19 +159,32 @@
   v(0.6em)
   text(9pt, weight: "bold", fill: pt-navy)[Precision table 2. The $L$-loop result]
   text(7.4pt, fill: luma(80))[ — class and digits reachable, worst case over the admitted inputs, per Laurent order of the result,
-    with the spurious-pole orders the row notes state (measured at 1L-4L; proven on the held integrals and sampled outside them
-    at 5L; letters: notes below).]
+    with the spurious-pole orders the row notes state (measured at 1L-4L; at 5L proven on the held integrals and sampled outside
+    them, but not in the top sector: a measured top-sector input is folded in, note k; letters: notes below).]
   v(-0.3em)
   pt-table2(t)
+  // one line per letter (the full notes, the method, the finite-digit periods and the identities behind S are in
+  // docs/benchmark/data/PRECISION-TABLES.md, generated with these tables)
+  let notes = t.at("notes_table2_short", default: t.notes_table2)
+  // two balanced columns (by text length); ε^k written as a superscript
+  let total = notes.map(n => n.len()).sum()
+  let acc = 0
+  let split = notes.len()
+  for (i, n) in notes.enumerate() { if acc >= total / 2 and split == notes.len() { split = i }; acc += n.len() }
+  let note-line(i, n) = [#text(weight: "bold")[#str.from-unicode(97 + i)] #n]
   block(width: 100%, text(size: 6.9pt, font: pt-sans)[
-    #set par(justify: false, leading: 0.42em, spacing: 0.45em)
-    #for (i, n) in t.notes_table2.enumerate() [
-      #text(weight: "bold")[#str.from-unicode(97 + i)] #n \
-    ]
+    #set par(justify: false, leading: 0.42em, spacing: 0.5em)
+    #show regex("\^\(?[-−+0-9a-zA-Z_]+\)?"): it => super(it.text.slice(1).trim("(").trim(")"))
+    #grid(columns: (1fr, 1fr), column-gutter: 7mm,
+      stack(spacing: 0.42em, ..notes.slice(0, split).enumerate().map(((i, n)) => note-line(i, n))),
+      stack(spacing: 0.42em, ..notes.slice(split).enumerate().map(((i, n)) => note-line(i + split, n))))
   ])
-  block(width: 100%, above: 0.8em, text(size: 7pt)[
-    #text(9pt, weight: "bold", fill: pt-navy)[How the precision tables are made]
-    #set par(justify: true, leading: 0.46em, spacing: 0.48em)
-    #for n in t.method [- #n]
+  block(width: 100%, above: 0.7em, text(size: 6.9pt, font: pt-sans)[
+    #set par(justify: false, leading: 0.42em)
+    #text(weight: "bold", fill: pt-navy)[Method.] A coefficient is limited by its fewest-digit finite source (4L constants,
+    numerical master values); the result at $epsilon^k$ needs every master $m$ through $epsilon^(k+p_m)$ ($p_m$: spurious-pole
+    order of its reduction coefficient), on vakint's basis-alias route first, else the direct route; a needed order the data do
+    not hold gives MissingMasterOrders (no value, never a wrong one). RustRed backend only. Full notes, method, finite-digit
+    periods, the numerical identities behind some S and the PSLQ identifications: #raw("crates/vakint/docs/benchmark/data/PRECISION-TABLES.md").
   ])
 })
