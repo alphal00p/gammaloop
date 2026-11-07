@@ -11,8 +11,11 @@
 //!
 //! Env: `VAKINT_TEST_EXTERNAL_DATA` (data root), `VAKINT_PROFILE_INPUT` (input
 //! record), `VAKINT_PROFILE_OUT` (JSON report), optional
-//! `VAKINT_PROFILE_MODE` (`numerical` (default), `symbolic` or `retain`) and
-//! `VAKINT_N_CORES` (default 8).
+//! `VAKINT_PROFILE_MODE` (`numerical` (default), `symbolic` or `retain`),
+//! `VAKINT_N_CORES` (default 8) and `VAKINT_PROFILE_BACKEND` (`rustred`
+//! (default) or `matad`: the harness's MATAD full call, with the FORM
+//! executable `VAKINT_PROFILE_FORM`, default `form`, and its work files beside
+//! the report).
 
 use std::time::Instant;
 
@@ -21,8 +24,8 @@ use sha2::{Digest, Sha256};
 use symbolica::atom::{Atom, AtomCore};
 
 use crate::{
-    EvaluationMethod, EvaluationOrder, LoopNormalizationFactor, RustRedEvaluationOptions,
-    RustRedMasterMode, Vakint, VakintSettings,
+    EvaluationMethod, EvaluationOrder, LoopNormalizationFactor, MATADOptions,
+    RustRedEvaluationOptions, RustRedMasterMode, Vakint, VakintSettings,
     utils::vakint_macros::{vk_parse, vk_symbol},
 };
 
@@ -46,14 +49,24 @@ fn public_evaluation_postprocessing_profile() {
     let n_cores = std::env::var("VAKINT_N_CORES")
         .ok()
         .map_or(8, |value| value.parse().unwrap());
+    let matad = std::env::var("VAKINT_PROFILE_BACKEND").as_deref() == Ok("matad");
     let mut settings = VakintSettings {
-        evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
-            RustRedEvaluationOptions { master_mode: mode },
-        )]),
+        evaluation_order: if matad {
+            EvaluationOrder::matad_only(Some(MATADOptions::default()))
+        } else {
+            EvaluationOrder(vec![EvaluationMethod::RustRed(RustRedEvaluationOptions {
+                master_mode: mode,
+            })])
+        },
         integral_normalization_factor: LoopNormalizationFactor::MSbar,
         number_of_terms_in_epsilon_expansion: loops as i64 + 1,
         use_dot_product_notation: true,
-        form_exe_path: "/profile-rustred-must-not-use-form".into(),
+        form_exe_path: if matad {
+            std::env::var("VAKINT_PROFILE_FORM").unwrap_or_else(|_| "form".into())
+        } else {
+            "/profile-rustred-must-not-use-form".into()
+        },
+        temporary_directory: matad.then(|| format!("{}.work", required("VAKINT_PROFILE_OUT"))),
         run_time_decimal_precision: 32,
         ..Default::default()
     };
@@ -71,6 +84,7 @@ fn public_evaluation_postprocessing_profile() {
         "input_sha256": record["input_sha256"],
         "loop_count": loops,
         "mode": format!("{mode:?}"),
+        "backend": if matad { "matad" } else { "rustred" },
         "n_cores": n_cores,
         "loading_seconds": loading,
         "call_seconds": seconds,
