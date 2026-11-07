@@ -41,6 +41,8 @@ mod materialize;
 pub(crate) mod monitor;
 mod numerator;
 mod ordered;
+pub(crate) mod p_data;
+mod p_integral;
 mod parallel;
 mod request_dump;
 #[cfg(test)]
@@ -238,6 +240,7 @@ pub(crate) fn supports(
     MatchedScalarFamily::try_from_topology(topology).is_ok()
         || four_loop::supports(topology)
         || five_loop::supports(topology)
+        || p_integral::supports(topology)
 }
 
 /// Native application options of one request. Vakint always reduces with
@@ -261,8 +264,13 @@ pub(crate) fn application_options(
 
 /// Whether the data needed to reduce a supported topology is loaded. One to
 /// three loops use the vendored artifacts; four and five loops need external
-/// data or, at five loops, a configured application package.
+/// data or, at five loops, a configured application package. A p-integral
+/// needs a p library whose scope contains its loop count (`p_data`); without
+/// one it goes to Forcer.
 pub(crate) fn has_data(vakint: &Vakint, settings: &VakintSettings, topology: &Topology) -> bool {
+    if let Topology::Propagator(integral) = topology {
+        return p_integral::has_p_data(vakint, integral.n_loops);
+    }
     match topology.get_integral().n_loops {
         4 => vakint
             .rustred_data

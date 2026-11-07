@@ -2233,6 +2233,17 @@ impl EvaluationMethod {
             EvaluationMethod::PySecDec(opts) => {
                 vakint.pysecdec_evaluate(settings, numerator, integral_specs, opts, source_id)
             }
+            // A p-integral is one contribution of the p backend's batch, finalized there.
+            EvaluationMethod::RustRed(opts) if integral_specs.propagator.is_some() => vakint
+                .rustred_evaluate_p_ordered(
+                    settings,
+                    vec![rustred_evaluation::MatchedContribution {
+                        numerator: numerator.to_owned(),
+                        matched: integral_specs.clone(),
+                    }],
+                    opts.master_mode,
+                    None,
+                ),
             EvaluationMethod::RustRed(opts) => {
                 vakint.rustred_evaluate(settings, numerator, integral_specs, opts)
             }
@@ -2889,6 +2900,9 @@ pub struct Vakint {
     rustred_data: Option<Arc<rustred_evaluation::data::RustRedData>>,
     /// Ordered step caches of the loaded programs, shared by clones.
     ordered_cache: Arc<rustred_evaluation::cache::OrderedCacheRegistry>,
+    /// A RustRed p library injected into this engine (`inject_p_library`);
+    /// otherwise external or built-in p data are used (`rustred_evaluation::p_data`).
+    p_library: Option<Arc<rustred_evaluation::p_data::PLibraryHandle>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -3079,7 +3093,8 @@ impl VakintTerm {
             ));
         };
         let (evaluated_integral, stage) = match evaluation_approach {
-            EvaluationMethod::RustRed(options) => (
+            // A p-integral is finalized by the p backend (the `_` arm).
+            EvaluationMethod::RustRed(options) if integral_specs.propagator.is_none() => (
                 vakint.rustred_reduce_observed(
                     settings,
                     self.numerator.as_view(),
@@ -4967,8 +4982,10 @@ impl VakintExpression {
             let mut numerical = Atom::Zero;
             let mut numerical_vectors = std::collections::BTreeSet::new();
             let mut reductions = BTreeMap::new();
+            // Batches by loop count, master mode and kind (`true`: p-integrals,
+            // reduced and finalized by the p backend).
             let mut ordered = BTreeMap::<
-                (usize, RustRedMasterMode),
+                (usize, RustRedMasterMode, bool),
                 Vec<rustred_evaluation::MatchedContribution>,
             >::new();
             for (source_id, term) in self.0.iter_mut().enumerate() {
@@ -4978,8 +4995,20 @@ impl VakintExpression {
                 }
                 let matched =
                     term.prepare_integral_specs(vakint, settings, observation.as_deref_mut())?;
+                let propagator = matches!(matched.canonical_topology, Topology::Propagator(_));
                 let method = vakint
                     .evaluation_method(settings, &matched.canonical_topology)
+                    // RustRed is picked for a p-integral without a p library
+                    // only to report what is missing: then Forcer is the reason.
+                    .filter(|method| {
+                        !(propagator
+                            && matches!(method, EvaluationMethod::RustRed(_))
+                            && !rustred_evaluation::has_data(
+                                vakint,
+                                settings,
+                                &matched.canonical_topology,
+                            ))
+                    })
                     .ok_or_else(|| {
                         // Only Forcer evaluates p-integrals: say why it cannot.
                         if let Topology::Propagator(_) = &matched.canonical_topology
@@ -5002,6 +5031,7 @@ impl VakintExpression {
                     let key = (
                         matched.canonical_topology.get_integral().n_loops,
                         options.master_mode,
+                        propagator,
                     );
                     ordered
                         .entry(key)
@@ -5038,23 +5068,28 @@ impl VakintExpression {
             let batch_total = ordered.len();
             for (batch_index, (key, contributions)) in ordered.into_iter().enumerate() {
                 if let Some(progress) = progress {
-                    progress.ordered_batch(
-                        batch_index,
-                        batch_total,
-                        &format!("{}L / {:?}", key.0, key.1),
-                    );
+                    let scope = if key.2 {
+                        format!("{}L / {:?} / p", key.0, key.1)
+                    } else {
+                        format!("{}L / {:?}", key.0, key.1)
+                    };
+                    progress.ordered_batch(batch_index, batch_total, &scope);
                 }
                 MonitorContext::native_phase(
                     observation.as_deref_mut(),
                     "ordered_batch_preparation",
                     None,
                 );
-                let raw = vakint.rustred_reduce_ordered(
-                    settings,
-                    contributions,
-                    observation.as_deref_mut(),
-                    progress,
-                )?;
+                let raw = if key.2 {
+                    vakint.rustred_evaluate_p_ordered(settings, contributions, key.1, progress)?
+                } else {
+                    vakint.rustred_reduce_ordered(
+                        settings,
+                        contributions,
+                        observation.as_deref_mut(),
+                        progress,
+                    )?
+                };
                 {
                     let _math = MathSpan::new();
                     reductions
@@ -5068,30 +5103,35 @@ impl VakintExpression {
             {
                 progress.ordered_batch(batch_total, batch_total, "all ordered batches");
             }
-            for ((loop_count, mode), (raw, vectors)) in reductions {
-                MonitorContext::native_phase(
-                    observation.as_deref_mut(),
-                    match mode {
-                        RustRedMasterMode::Retain => "retained_master_combination",
-                        RustRedMasterMode::Symbolic => "symbolic_master_substitution",
-                        RustRedMasterMode::Numerical => "numerical_master_substitution",
-                    },
-                    Some(raw.as_view()),
-                );
-                // Retention is combined by its catalogue owner. Substitution
-                // modes keep their existing precombination boundary.
-                let raw = if mode == RustRedMasterMode::Retain {
+            for ((loop_count, mode, propagator), (raw, vectors)) in reductions {
+                // The p backend returns finalized values.
+                let numerator = if propagator {
                     raw
                 } else {
-                    rustred_evaluation::combine_exact(raw)
+                    MonitorContext::native_phase(
+                        observation.as_deref_mut(),
+                        match mode {
+                            RustRedMasterMode::Retain => "retained_master_combination",
+                            RustRedMasterMode::Symbolic => "symbolic_master_substitution",
+                            RustRedMasterMode::Numerical => "numerical_master_substitution",
+                        },
+                        Some(raw.as_view()),
+                    );
+                    // Retention is combined by its catalogue owner. Substitution
+                    // modes keep their existing precombination boundary.
+                    let raw = if mode == RustRedMasterMode::Retain {
+                        raw
+                    } else {
+                        rustred_evaluation::combine_exact(raw)
+                    };
+                    vakint.finalize_rustred(
+                        raw,
+                        settings,
+                        loop_count,
+                        mode,
+                        observation.as_deref_mut(),
+                    )?
                 };
-                let numerator = vakint.finalize_rustred(
-                    raw,
-                    settings,
-                    loop_count,
-                    mode,
-                    observation.as_deref_mut(),
-                )?;
                 if mode == RustRedMasterMode::Numerical {
                     numerical += numerator;
                     numerical_vectors.extend(vectors);
@@ -5284,6 +5324,7 @@ impl Vakint {
             rustred_application: Arc::default(),
             rustred_data: None,
             ordered_cache: Arc::default(),
+            p_library: None,
         })
     }
 

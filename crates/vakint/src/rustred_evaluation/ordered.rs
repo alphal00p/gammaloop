@@ -7,8 +7,11 @@
 use rustred::solver::CandidateRoutedApplicationObserver;
 use symbolica::atom::Atom;
 
-use super::{MatchedContribution, RustRedEvaluationError, four_loop, materialize};
-use crate::{Vakint, VakintError, VakintSettings};
+use super::{
+    MatchedContribution, RustRedEvaluationError, RustRedMasterMode, four_loop, materialize,
+    p_integral,
+};
+use crate::{Topology, Vakint, VakintError, VakintSettings};
 
 impl Vakint {
     pub(crate) fn rustred_reduce_ordered(
@@ -32,6 +35,19 @@ impl Vakint {
         }) {
             return Err(RustRedEvaluationError::InvalidMatchedFamily {
                 detail: "one ordered family batch contains different loop counts".into(),
+            }
+            .into());
+        }
+        // A p-integral batch is reduced and finalized by the p backend
+        // (`rustred_evaluate_p_ordered`), never by the vacuum programs.
+        if contributions.iter().any(|contribution| {
+            matches!(
+                contribution.matched.canonical_topology,
+                Topology::Propagator(_)
+            )
+        }) {
+            return Err(RustRedEvaluationError::InvalidMatchedFamily {
+                detail: "p-integral contributions in a vacuum ordered batch".into(),
             }
             .into());
         }
@@ -76,6 +92,40 @@ impl Vakint {
             }
             .into()),
         }
+    }
+
+    /// The p branch of the ordered handoff: reduce a batch of matched
+    /// p-integral contributions of one loop count with the engine's RustRed p
+    /// library and finalize it in `mode` with the shared p-finalizer (the
+    /// result is final, see `p_integral::evaluate_ordered_batch`).
+    pub(crate) fn rustred_evaluate_p_ordered(
+        &self,
+        settings: &VakintSettings,
+        contributions: Vec<MatchedContribution>,
+        mode: RustRedMasterMode,
+        progress: Option<&super::monitor::CallerProgress>,
+    ) -> Result<Atom, VakintError> {
+        let Some(first) = contributions.first() else {
+            return Ok(Atom::Zero);
+        };
+        let loop_count = first.matched.canonical_topology.get_integral().n_loops;
+        if contributions.iter().any(|contribution| {
+            !matches!(
+                contribution.matched.canonical_topology,
+                Topology::Propagator(ref integral) if integral.n_loops == loop_count
+            )
+        }) {
+            return Err(RustRedEvaluationError::InvalidMatchedFamily {
+                detail: "one p-integral batch contains vacuum integrals or different loop counts"
+                    .into(),
+            }
+            .into());
+        }
+        crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::RustRed);
+        log::debug!(target: "vakint::ordered_reduction",
+            "ordered p reduction: {} matched {loop_count}L contributions",
+            contributions.len());
+        p_integral::evaluate_ordered_batch(self, settings, &contributions, mode, progress)
     }
 }
 
