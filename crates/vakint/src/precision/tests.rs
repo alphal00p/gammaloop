@@ -996,9 +996,19 @@ fn imaginary_part_consistent_with_zero_is_exported_as_zero_with_a_warning() {
             "{input}"
         );
         assert!(coefficient.imaginary_consistent_with_zero(), "{input}");
+        // 50-digit sources at 40 requested digits: the uncertainty is
+        // negligible against the unit terms it comes from.
+        assert!(coefficient.imaginary_negligible_zero(), "{input}");
         let warning = zero_consistent_imaginary_warning(&warnings)
             .unwrap_or_else(|| panic!("{input}: no zero-consistent warning in {warnings:?}"));
         assert!(warning.message.contains("absolute uncertainty"), "{input}");
+        assert!(
+            warning.message.contains(
+                "negligible at the requested 40 digits against its largest term contribution"
+            ),
+            "{input}: {}",
+            warning.message
+        );
         assert!(
             warning
                 .sources
@@ -1036,6 +1046,7 @@ fn imaginary_part_consistent_with_zero_is_exported_as_zero_with_a_warning() {
     )
     .unwrap();
     assert!(result.coefficients()[&-1].imaginary_consistent_with_zero());
+    assert!(result.coefficients()[&-1].imaginary_negligible_zero());
     assert!(
         zero_consistent_imaginary_warning(result.warnings())
             .is_some_and(|warning| { warning.epsilon_power == Some(-1) })
@@ -1092,15 +1103,30 @@ fn imaginary_part_without_a_digit_that_excludes_zero_is_still_rejected() {
     )
     .unwrap();
     assert!(!separated.imaginary_consistent_with_zero(), "{separated:?}");
+    assert!(!separated.imaginary_negligible_zero(), "{separated:?}");
     assert!(zero_consistent_imaginary_warning(&warnings).is_none());
-    if separated
-        .precision()
-        .imaginary()
-        .significant_digits()
-        .is_none_or(|digits| digits == 0)
-    {
-        assert!(separated.to_atom().is_err());
-    }
+    // The two-digit source leaves 0.5 with an uncertainty of several
+    // hundredths: no decimal digit, but an enclosure that excludes zero.
+    assert!(
+        separated
+            .precision()
+            .imaginary()
+            .significant_digits()
+            .is_none_or(|digits| digits == 0),
+        "{separated:?}"
+    );
+    let error = separated.to_atom().unwrap_err().to_string();
+    assert!(
+        error.contains("imaginary component has no reliable"),
+        "{error}"
+    );
+    assert!(!error.contains("consistent with zero"), "{error}");
+    assert!(
+        warnings
+            .iter()
+            .any(|warning| warning.achieved_decimal_precision == Some(0)),
+        "{warnings:?}"
+    );
 }
 
 #[test]
@@ -1124,6 +1150,7 @@ fn real_part_digit_loss_is_still_reported_beside_a_zero_consistent_imaginary_par
     // not with the zero digits of the uncertain imaginary zero.
     let (lossy, warnings) = evaluate("precision_real_lossy+𝑖*(precision_zero_a-precision_zero_b)");
     assert!(lossy.imaginary_consistent_with_zero());
+    assert!(lossy.imaginary_negligible_zero());
     assert!(zero_consistent_imaginary_warning(&warnings).is_some());
     let achieved = warnings
         .iter()
@@ -1154,4 +1181,204 @@ fn real_part_digit_loss_is_still_reported_beside_a_zero_consistent_imaginary_par
     assert!(error.contains("real component has no reliable"), "{error}");
     let (lost_real, _) = evaluate("precision_zero_a-precision_zero_b");
     assert!(lost_real.to_atom().is_err());
+}
+
+/// An imaginary part whose enclosure contains zero, but whose uncertainty is
+/// not negligible at the requested precision against the terms it comes from:
+/// a possibly nonzero value. Its export fails, and its evaluation reports the
+/// shortfall with zero digits.
+fn assert_wide_imaginary_zero_is_rejected(
+    label: &str,
+    coefficient: &NumericalCoefficient,
+    warnings: &[PrecisionWarning],
+) {
+    assert!(
+        coefficient.imaginary_consistent_with_zero(),
+        "{label}: {coefficient:?}"
+    );
+    assert!(
+        !coefficient.imaginary_negligible_zero(),
+        "{label}: {coefficient:?}"
+    );
+    assert!(
+        zero_consistent_imaginary_warning(warnings).is_none(),
+        "{label}: {warnings:?}"
+    );
+    assert!(
+        warnings
+            .iter()
+            .any(|warning| warning.achieved_decimal_precision == Some(0)),
+        "{label}: {warnings:?}"
+    );
+    let error = coefficient.to_atom().unwrap_err().to_string();
+    assert!(
+        error.contains("imaginary component has no reliable"),
+        "{label}: {error}"
+    );
+    assert!(
+        error.contains("consistent with zero, but not negligible at the requested"),
+        "{label}: {error}"
+    );
+}
+
+#[test]
+fn wide_imaginary_enclosure_that_contains_zero_is_still_rejected() {
+    Vakint::initialize_vakint_symbols();
+    let sources = BTreeMap::from([
+        // Genuinely different values, each known to two digits.
+        source("precision_wide_a", "1.0", 2),
+        source("precision_wide_b", "0.97", 2),
+        // 5L-like magnitudes: three- and four-digit masters that differ by
+        // 5e-14, like the low-digit published 5L eps^0 entries.
+        source("precision_wide_m1", "3.07e-11", 3),
+        source("precision_wide_m2", "3.065e-11", 4),
+        source("precision_wide_one", "1", 50),
+    ]);
+    for (label, input) in [
+        // (A) purely imaginary, true value 0.03 i, enclosure 0.03 +- 0.11.
+        ("A", "𝑖*(precision_wide_a-precision_wide_b)"),
+        // (B) an exact real part beside the same imaginary enclosure.
+        (
+            "B",
+            "precision_wide_one+𝑖*(precision_wide_a-precision_wide_b)",
+        ),
+        // (C) 5L-like purely imaginary coefficient, true value 5e-14 i.
+        ("C", "𝑖*(precision_wide_m1-precision_wide_m2)"),
+        // (E) the dropped imaginary part would be three times the real part.
+        (
+            "E",
+            "1/100*precision_wide_one+𝑖*(precision_wide_a-precision_wide_b)",
+        ),
+    ] {
+        let (coefficient, warnings) = evaluate_coefficient(
+            vk_parse!(input).unwrap().as_view(),
+            &sources,
+            &HashMap::new(),
+            &settings(32),
+        )
+        .unwrap();
+        assert_wide_imaginary_zero_is_rejected(label, &coefficient, &warnings);
+    }
+    // The same through the public series path. Two-digit binary literals
+    // leave 0.03 +- 0.008: no digit, an enclosure that excludes zero.
+    let result = NumericalEvaluationResult::from_atom(
+        vk_parse!("𝑖*(1.0`2-0.97`2)*ep^-1+2").unwrap().as_view(),
+        vk_symbol!("ep"),
+        &settings(20),
+    )
+    .unwrap();
+    assert!(!result.coefficients()[&-1].imaginary_consistent_with_zero());
+    let error = result.to_atom(vk_symbol!("ep")).unwrap_err().to_string();
+    assert!(
+        error.contains("coefficient epsilon^-1")
+            && error.contains("imaginary component has no reliable")
+            && !error.contains("consistent with zero"),
+        "{error}"
+    );
+    // Three-digit literals that cancel exactly in value leave an uncertain
+    // zero as wide as their own rounding: consistent with zero, not
+    // negligible at 20 digits against the terms of order one.
+    let result = NumericalEvaluationResult::from_atom(
+        vk_parse!("𝑖*((1.25`3+z3)^2-z3^2-1.5625`3-2.5`3*z3)*ep^-1+2")
+            .unwrap()
+            .as_view(),
+        vk_symbol!("ep"),
+        &settings(20),
+    )
+    .unwrap();
+    assert!(result.coefficients()[&-1].imaginary_consistent_with_zero());
+    assert!(!result.coefficients()[&-1].imaginary_negligible_zero());
+    assert!(zero_consistent_imaginary_warning(result.warnings()).is_none());
+    let error = result.to_atom(vk_symbol!("ep")).unwrap_err().to_string();
+    assert!(
+        error.contains("coefficient epsilon^-1") && error.contains("not negligible"),
+        "{error}"
+    );
+    // A coefficient without an evaluated term scale (declared values) is
+    // never relaxed: an uncertain zero imported as such fails its export.
+    let imported = NumericalEvaluationResult::from_values(
+        vec![
+            (0, Complex::new(Float::new(64), Float::with_val(64, 1))),
+            (0, Complex::new(Float::new(64), Float::with_val(64, -1))),
+        ],
+        16,
+    );
+    let coefficient = &imported.coefficients()[&0];
+    assert!(coefficient.imaginary_consistent_with_zero());
+    assert!(!coefficient.imaginary_negligible_zero());
+    assert!(coefficient.to_atom().is_err());
+}
+
+#[test]
+fn imaginary_zero_is_negligible_only_below_the_requested_precision_of_its_terms() {
+    Vakint::initialize_vakint_symbols();
+    let evaluate = |digits: u32, requested: u32| {
+        // The 5L P63 + dot eps^-1 magnitude: two independently rounded
+        // copies of the same value cancel to an uncertain imaginary zero.
+        let sources = BTreeMap::from([
+            source("precision_scale_left", "3.0702369106699746e-11", digits),
+            source("precision_scale_right", "3.0702369106699746e-11", digits),
+        ]);
+        evaluate_coefficient(
+            vk_parse!("𝑖*(precision_scale_left-precision_scale_right)")
+                .unwrap()
+                .as_view(),
+            &sources,
+            &HashMap::new(),
+            &settings(requested),
+        )
+        .unwrap()
+    };
+    // Sources well beyond the request: the zero is negligible against the
+    // 3e-11 terms, exported as zero, with a note and no shortfall.
+    let (accepted, warnings) = evaluate(60, 32);
+    assert!(accepted.imaginary_negligible_zero(), "{accepted:?}");
+    let scale = accepted.imaginary_term_scale.as_ref().unwrap();
+    assert!(
+        *scale > Rational::from((3, 100_000_000_000i64)),
+        "{scale:?}"
+    );
+    assert!(
+        *scale < Rational::from((4, 100_000_000_000i64)),
+        "{scale:?}"
+    );
+    assert_eq!(accepted.to_atom().unwrap(), Atom::Zero);
+    let note = zero_consistent_imaginary_warning(&warnings).expect("a zero note");
+    assert!(
+        note.message
+            .contains("negligible at the requested 32 digits"),
+        "{}",
+        note.message
+    );
+    assert!(
+        note.sources
+            .iter()
+            .any(|source| source.identity == "precision_scale_left")
+    );
+    assert!(
+        warnings
+            .iter()
+            .all(|warning| warning.achieved_decimal_precision.is_none()),
+        "{warnings:?}"
+    );
+    // Sources below the request: the same cancellation only resolves the
+    // zero to their own digits, which is not negligible at 32 digits.
+    let (short, warnings) = evaluate(20, 32);
+    assert_wide_imaginary_zero_is_rejected("20 of 32 digits", &short, &warnings);
+    // At a request the sources support, the same zero is negligible again,
+    // and a presentation cap keeps that verdict.
+    let (supported, _) = evaluate(20, 16);
+    assert!(supported.imaginary_negligible_zero(), "{supported:?}");
+    assert!(
+        supported
+            .capped_decimal_precision(8)
+            .imaginary_negligible_zero()
+    );
+    assert_eq!(supported.to_atom().unwrap(), Atom::Zero);
+    // A presentation cap never lowers the bar below what was evaluated.
+    assert!(
+        !short
+            .capped_decimal_precision(40)
+            .imaginary_negligible_zero()
+    );
 }

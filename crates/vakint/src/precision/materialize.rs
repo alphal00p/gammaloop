@@ -510,24 +510,38 @@ mod tests {
     #[test]
     fn uncertain_imaginary_zero_is_exported_as_zero_and_real_loss_still_fails() {
         let settings = settings();
-        let parameters: HashMap<Atom, Complex<Float>> = ["a", "b"]
-            .map(|name| {
-                (
-                    Atom::var(vk_symbol!(name)),
-                    Complex::new(Float::with_val(128, 1), Float::new(128)),
-                )
-            })
-            .into_iter()
-            .collect();
-        // The full-call boundary: an imaginary part consistent with zero no
-        // longer fails the export; the other factor keeps its exact value.
+        let parameters = |bits: u32| -> HashMap<Atom, Complex<Float>> {
+            ["a", "b"]
+                .map(|name| {
+                    (
+                        Atom::var(vk_symbol!(name)),
+                        Complex::new(Float::with_val(bits, 1), Float::new(bits)),
+                    )
+                })
+                .into_iter()
+                .collect()
+        };
+        // The full-call boundary: an imaginary part consistent with zero and
+        // negligible at the 40 requested digits (77-digit inputs) no longer
+        // fails the export; the other factor keeps its exact value.
+        let precise = parameters(256);
         let source = vk_parse!("𝑖*(a-b)*x+2*y").unwrap();
-        let result = materialize(source.as_view(), &settings, &parameters, None).unwrap();
+        let result = materialize(source.as_view(), &settings, &precise, None).unwrap();
         assert!(!result.contains_symbol(vk_symbol!("x")), "{result}");
         assert_eq!(result, vk_parse!("2*y").unwrap());
+        // 38-digit inputs only resolve the same zero below the request: it is
+        // not negligible and the export still fails.
+        let error = materialize(source.as_view(), &settings, &parameters(128), None).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("imaginary component has no reliable")
+                && error.to_string().contains("not negligible"),
+            "{error}"
+        );
         // An uncertain real zero in the same coefficient is still rejected.
         let source = vk_parse!("(1+𝑖)*(a-b)*x").unwrap();
-        let error = materialize(source.as_view(), &settings, &parameters, None).unwrap_err();
+        let error = materialize(source.as_view(), &settings, &precise, None).unwrap_err();
         assert!(
             error.to_string().contains("real component has no reliable"),
             "{error}"

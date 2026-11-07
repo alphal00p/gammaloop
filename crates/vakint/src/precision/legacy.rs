@@ -710,16 +710,16 @@ mod tests {
             assert_eq!(small.value().im.to_rational(), center);
             let binary_radius = &center * &Rational::from((1, 2)).pow(u64::from(bits - 1));
             assert!(small.precision().imaginary().absolute_error().to_rational() >= binary_radius);
-            if bits == 1 {
-                // A one-bit enclosure reaches zero: the imaginary part is
-                // consistent with zero and is exported as an exact zero.
-                assert!(small.imaginary_consistent_with_zero());
-                assert_eq!(small.to_atom().unwrap(), Atom::Zero);
-            } else {
-                // Two to four bits exclude zero: still no decimal digit.
-                assert!(!small.imaginary_consistent_with_zero());
-                assert!(small.to_atom().is_err());
-            }
+            // A one-bit enclosure reaches zero, two to four bits exclude it.
+            // Either way the uncertainty is as large as the value itself, so
+            // the imaginary part is never negligible and has no decimal digit.
+            assert_eq!(small.imaginary_consistent_with_zero(), bits == 1);
+            assert!(!small.imaginary_negligible_zero());
+            let error = small.to_atom().unwrap_err().to_string();
+            assert!(
+                error.contains("imaginary component has no reliable"),
+                "{error}"
+            );
             assert!(
                 warnings
                     .iter()
@@ -745,15 +745,22 @@ mod tests {
             let (cancelled, warnings) = evaluate(&(&left - right));
             assert!(cancelled.value().im.is_zero());
             assert!(!cancelled.precision().imaginary().exact_zero());
-            // Independent sources leave an uncertain imaginary zero: exported
-            // as zero, with its tracked uncertainty in a warning.
+            // Independent one- to four-bit sources leave an uncertain
+            // imaginary zero as wide as the cancelled terms: not negligible,
+            // so it fails the export and is reported with zero digits.
             assert!(cancelled.imaginary_consistent_with_zero());
-            assert_eq!(cancelled.to_atom().unwrap(), Atom::Zero);
-            assert!(warnings.iter().any(|warning| {
+            assert!(!cancelled.imaginary_negligible_zero());
+            assert!(cancelled.to_atom().is_err());
+            assert!(!warnings.iter().any(|warning| {
                 warning
                     .message
                     .starts_with("imaginary part consistent with zero")
             }));
+            assert!(
+                warnings
+                    .iter()
+                    .any(|warning| warning.achieved_decimal_precision == Some(0))
+            );
             let identical_source = left.clone();
             let (exact_zero, warnings) = evaluate(&(left - identical_source));
             assert_eq!(exact_zero.to_atom().unwrap(), Atom::Zero);
