@@ -636,47 +636,50 @@ pub(crate) fn to_vakint_integrand<
         "Vakint trace after denominator-to-propagator conversion"
     );
 
-    let mut first: Option<NodeIndex> = None;
-
     debug_tags!(#uv, #integrated, #vakint, #graph, #dump;
         reduced = %graph.dot(dependent_subgraph),
         "Shrinking subgraph for vakint"
     );
-    // shrink vertices of the subgraph
-    for (id, _crown, _data) in graph.iter_nodes_of(dependent_subgraph) {
-        debug_tags!(#uv, #integrated, #vakint, #graph, #inspect;
-            id = %id,
-            "Shrinking Node"
-        );
+    // Each disconnected counterterm has its own contracted vertex. Identifying
+    // distinct children with each other would create extra quotient cycles
+    // without corresponding independent momentum coordinates.
+    for component in graph.connected_components(dependent_subgraph) {
+        let mut first: Option<NodeIndex> = None;
+        for (id, _crown, _data) in graph.iter_nodes_of(&component) {
+            debug_tags!(#uv, #integrated, #vakint, #graph, #inspect;
+                id = %id,
+                "Shrinking Node"
+            );
 
-        if let Some(first) = first {
-            integrand_vakint = integrand_vakint
-                .replace(function!(
-                    vk_prop,
-                    W_.x_,
-                    function!(vk_edge, id.0, W_.y_),
-                    W_.x___
-                ))
-                .with(function!(
-                    vk_prop,
-                    W_.x_,
-                    function!(vk_edge, first.0, W_.y_),
-                    W_.x___
-                ))
-                .replace(function!(
-                    vk_prop,
-                    W_.x_,
-                    function!(vk_edge, W_.y_, id.0),
-                    W_.x___
-                ))
-                .with(function!(
-                    vk_prop,
-                    W_.x_,
-                    function!(vk_edge, W_.y_, first.0),
-                    W_.x___
-                ))
-        } else {
-            first = Some(id);
+            if let Some(first) = first {
+                integrand_vakint = integrand_vakint
+                    .replace(function!(
+                        vk_prop,
+                        W_.x_,
+                        function!(vk_edge, id.0, W_.y_),
+                        W_.x___
+                    ))
+                    .with(function!(
+                        vk_prop,
+                        W_.x_,
+                        function!(vk_edge, first.0, W_.y_),
+                        W_.x___
+                    ))
+                    .replace(function!(
+                        vk_prop,
+                        W_.x_,
+                        function!(vk_edge, W_.y_, id.0),
+                        W_.x___
+                    ))
+                    .with(function!(
+                        vk_prop,
+                        W_.x_,
+                        function!(vk_edge, W_.y_, first.0),
+                        W_.x___
+                    ))
+            } else {
+                first = Some(id);
+            }
         }
     }
     debug_tags!(#uv, #integrated, #vakint, #trace;
@@ -1259,9 +1262,125 @@ mod tests {
         initialisation::test_initialise,
     };
     use idenso::representations::Bispinor;
+    use linnet::half_edge::involution::EdgeIndex;
     use spenso::structure::slot::{DummyAind, ParseableAind};
 
     use super::*;
+
+    #[test]
+    fn vakint_bridge_contracts_disconnected_children_separately() -> Result<()> {
+        test_initialise()?;
+        let scalar: crate::graph::Graph = finalized_runtime_dot!(
+            digraph G {
+                graph [projector=1];
+                node [num=1];
+                A -> A [particle="scalar_1" num=1 id=0 lmb_id=0
+                    source="{ufo_order:0}" sink="{ufo_order:1}"];
+            }, "scalars"
+        )?;
+        let edge_data = scalar.underlying[EdgeIndex(0)].clone();
+        // A three-loop parent with two disjoint bubble children. Contracting
+        // both bubbles leaves one cycle; identifying their distinct vertices
+        // with each other incorrectly turns the connector into another loop.
+        let endpoints = [
+            (0, 5),
+            (0, 6),
+            (1, 3),
+            (1, 5),
+            (1, 5),
+            (2, 3),
+            (2, 3),
+            (2, 4),
+            (4, 6),
+        ];
+        for reverse_order in [false, true] {
+            for reverse_edges in [false, true] {
+                let mut builder = HedgeGraphBuilder::new();
+                let mut nodes = (0..7).map(|_| builder.add_node(())).collect::<Vec<_>>();
+                let mut ordered_edges = endpoints.into_iter().enumerate().collect::<Vec<_>>();
+                if reverse_order {
+                    nodes.reverse();
+                    ordered_edges.rotate_left(3);
+                }
+                let mut edge_ids = [0; 9];
+                for (edge, (original, (mut source, mut sink))) in
+                    ordered_edges.into_iter().enumerate()
+                {
+                    edge_ids[original] = edge;
+                    if reverse_edges {
+                        std::mem::swap(&mut source, &mut sink);
+                    }
+                    builder.add_edge(nodes[source], nodes[sink], edge_data.clone(), false);
+                }
+                let graph: HedgeGraph<crate::graph::Edge, ()> = builder.build();
+                let mut children: SuBitGraph = graph.empty_subgraph();
+                for edge in [3, 4, 5, 6] {
+                    children.add(graph[&EdgeIndex(edge_ids[edge])].1);
+                }
+                assert_eq!(graph.connected_components(&children).len(), 2);
+                let momentum = function!(GS.emr_mom, 3);
+                for substitute_masses in [true, false] {
+                    // Distinct masses prevent equal-denominator fusion from hiding
+                    // the spurious loop created by a global child contraction.
+                    let mut input = Atom::one();
+                    let mut expected = Atom::one();
+                    let loop_momentum = function!(vakint::symbols::S.k, 0);
+                    for (edge, sign) in [(0, 1), (1, -1), (2, 1), (7, 1), (8, 1)] {
+                        let sign = if reverse_edges { -sign } else { sign };
+                        let mass = Atom::num(edge + 1);
+                        input /=
+                            function!(GS.den, edge_ids[edge], Atom::num(sign) * &momentum, &mass);
+                        let mass_squared = if substitute_masses {
+                            Atom::var(GS.m_uv_vacuum).pow(2)
+                        } else {
+                            mass.pow(2)
+                        };
+                        expected /=
+                            function!(vakint::symbols::S.dot, &loop_momentum, &loop_momentum)
+                                - mass_squared;
+                    }
+                    let converted = to_vakint_integrand(
+                        &input,
+                        &graph,
+                        &graph.full_filter(),
+                        &children,
+                        &VakintSettings {
+                            additional_normalization: "1".into(),
+                            ..Default::default()
+                        },
+                        substitute_masses,
+                    )
+                    .wrap_err_with(|| {
+                        format!(
+                            "reversed order: {reverse_order}, reversed edges: {reverse_edges}, \
+                         mass substitution: {substitute_masses}"
+                        )
+                    })?;
+                    let actual = Atom::from(converted)
+                        .replace(function!(vakint::symbols::S.topo, W_.x_))
+                        .with(W_.x_)
+                        .replace(function!(
+                            vakint::symbols::S.prop,
+                            W_.a_,
+                            W_.b_,
+                            W_.mom_,
+                            W_.mass_,
+                            W_.e_
+                        ))
+                        .with(
+                            (function!(vakint::symbols::S.dot, W_.mom_, W_.mom_)
+                                - Atom::var(W_.mass_))
+                            .pow(-Atom::var(W_.e_)),
+                        );
+                    assert!(
+                        (actual - expected).expand().is_zero(),
+                        "the quotient must retain one loop and all five propagator powers"
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn vakint_bridge_materializes_zero_color_chains_before_parsing_sums() -> Result<()> {
