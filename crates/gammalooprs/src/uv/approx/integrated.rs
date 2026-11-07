@@ -4,6 +4,7 @@ use gammaloop_tracing_filter::debug_instrument;
 use idenso::{
     CookMode, CookSettings,
     dirac::GammaSimplifySettings,
+    shorthands::UndoShorthands,
     tensor::{AlgebraSettings, ContractSettings, SymbolicNetExt, SymbolicNetParse, SymbolicTensor},
 };
 
@@ -19,10 +20,10 @@ use spenso::{
         parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing},
         tags::SPENSO_TAG,
     },
-    structure::representation::{Minkowski, RepName},
+    structure::representation::{BaseRepName, Minkowski, RepName},
 };
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder},
     domains::atom::AtomField,
     function,
     id::Replacement,
@@ -296,12 +297,21 @@ impl Integrated<'_> {
                 "Vakint term after canonicalization"
             );
         }
+        // GammaLoop's source dimension denotes the regulated Lorentz space.
+        // Declare that identification before tensor reduction: opaque source
+        // tensors keep their input slots, and RustRed correctly refuses to
+        // infer this relation during scalar admission. Scalar d coefficients
+        // remain available for the existing post-integration contraction.
+        let minkowski = Minkowski::selfless_symbol();
+        let dimension = Atom::num(4) - Atom::num(2) * Atom::var(GS.dim_epsilon);
+        for term in &mut integrand_vakint.0 {
+            term.numerator = term
+                .numerator
+                .replace(function!(minkowski, GS.dim, W_.x___))
+                .with(function!(minkowski, &dimension, W_.x___));
+        }
         integrand_vakint.tensor_reduce(self.vakint, self.vakint_settings)?;
-        for (term_index, t) in integrand_vakint.0.iter_mut().enumerate() {
-            // Projector slots and retained source slots share one native
-            // Lorentz representation. Restore that metadata before the
-            // backend's Laurent expansion, keeping scalar epsilon factors.
-            t.numerator = Self::restore_lorentz_dimensions(&t.numerator);
+        for (term_index, t) in integrand_vakint.0.iter().enumerate() {
             debug_tags!(#uv,#integrated,#vakint,#trace,#tensor_reduce;
                 term_index = %term_index,
                 log.integral = t.integral,
@@ -328,21 +338,7 @@ impl Integrated<'_> {
 
         res = Self::restore_numerator(res, current.topo_order());
 
-        let cooking = CookSettings::indices()
-            .with_mode(CookMode::ReversibleEncoding)
-            .with_representation_payloads(true, true);
-        let reduced = SymbolicTensor::infer_indexed(cooking.try_cook(res.as_view())?)?
-            .contract(ContractSettings {
-                rank_one: false,
-                collect_chains: false,
-                collect_traces: false,
-                ..Default::default()
-            })?
-            .to_dots()?;
-        res = Self::dimensionally_regularized(&cooking.uncook(reduced.expression().as_view()));
-        let collected = SymbolicTensor::infer_indexed(cooking.try_cook(res.as_view())?)?
-            .contract(ContractSettings::default())?;
-        res = cooking.uncook(collected.expression().as_view());
+        res = Self::reduce_integrated_numerator(&res)?;
         debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #collect;
             log.expr = res,
             "Integrated UV chain cleanup through native tensor contraction"
@@ -365,7 +361,17 @@ impl Integrated<'_> {
         Ok(res)
     }
 
-    fn dimensionally_regularized(numerator: &Atom) -> Atom {
+    fn reduce_integrated_numerator(numerator: &Atom) -> Result<Atom> {
+        // Vacuum tensor reduction can create contracted Clifford words even
+        // when the incoming numerator was already simplified. Reduce those
+        // words before taking Laurent coefficients: gamma_mu gamma^mu = d
+        // contributes evanescent terms to poles and finite counterterms.
+        // Open Lorentz-slot dimensions remain metadata; scalar dimensions
+        // produced by the Clifford reduction must become 4 - 2 epsilon.
+        Ok(Self::dimensionally_regularized(&simplify(numerator)?))
+    }
+
+    pub(crate) fn dimensionally_regularized(numerator: &Atom) -> Atom {
         let minkowski = Minkowski {}.to_symbolic([GS.dim]).get_symbol().unwrap();
         let dimension = Atom::var(GS.dim);
         let regulated = Atom::num(4) - Atom::num(2) * Atom::var(GS.dim_epsilon);
@@ -381,21 +387,44 @@ impl Integrated<'_> {
         })
     }
 
-    fn restore_lorentz_dimensions(numerator: &Atom) -> Atom {
+    pub(crate) fn restore_lorentz_dimensions(numerator: &Atom) -> Atom {
         let mink = Minkowski {}.new_rep(GS.dim);
         let minkowski = mink.to_symbolic([]).get_symbol().unwrap();
         let regulated_dimension = Atom::num(4) - Atom::num(2) * Atom::var(GS.dim_epsilon);
         // The projector works in 4-2*epsilon while opaque source slots retain
         // d. These are the same Lorentz representation; unify only metadata,
         // leaving every scalar evanescent coefficient for the later expansion.
-        numerator
-            .replace(function!(minkowski, &regulated_dimension, W_.x___))
-            .with(function!(minkowski, GS.dim, W_.x___))
+        // Backend d/epsilon substitutions can return an unexpanded but equal
+        // dimension such as 4-(4-(4-2*epsilon)).
+        numerator.replace_map(|view, _, out| {
+            let AtomView::Fun(representation) = view else {
+                return;
+            };
+            if representation.get_symbol() == minkowski
+                && representation.get_nargs() > 0
+                && (representation.get(0).to_owned() - &regulated_dimension)
+                    .expand()
+                    .is_zero()
+            {
+                **out = FunctionBuilder::new(minkowski)
+                    .add_arg(GS.dim)
+                    .add_args(representation.iter().skip(1))
+                    .finish();
+            }
+        })
     }
 
-    fn restore_numerator(mut res: Atom, topology_order: usize) -> Atom {
+    pub(crate) fn restore_numerator(mut res: Atom, topology_order: usize) -> Atom {
         let mink = Minkowski {}.new_rep(GS.dim);
         res = Self::restore_lorentz_dimensions(&res);
+        // Native tensor reduction also puts these backend dummies inside
+        // represented gamma/metric slots. Restore their identity before
+        // handling momentum and metric heads, so every occurrence shares the
+        // same topology-local index without adding a second representation.
+        res = res
+            .replace(vakint::symbols::S.dot_dummy_ind(W_.j_))
+            .when(W_.j_.filter(|index| index.is_integer().is_true()))
+            .with(function!(GS.uvaind, topology_order, W_.j_));
         res = res
             .replace(parse_lit!(vakint::cl2))
             .with(parse_lit!(cl2))
@@ -408,17 +437,6 @@ impl Integrated<'_> {
         ] {
             res = res
                 .replace(function!(source, W_.i_, W_.j_))
-                .when(W_.j_.filter(|index| index.is_integer().is_true()))
-                .with(function!(
-                    source,
-                    W_.i_,
-                    mink.to_symbolic([function!(GS.uvaind, topology_order, W_.j_)])
-                ))
-                .replace(function!(
-                    source,
-                    W_.i_,
-                    vakint::symbols::S.dot_dummy_ind(W_.j_)
-                ))
                 .when(W_.j_.filter(|index| index.is_integer().is_true()))
                 .with(function!(
                     source,
@@ -451,14 +469,7 @@ impl Integrated<'_> {
                 return;
             }
             let slots = [metric.get(0), metric.get(1)].map(|slot| {
-                let raw_index = if let symbolica::atom::AtomView::Fun(index) = slot
-                    && index.get_symbol() == vakint::symbols::S.dot_dummy_ind
-                    && index.get_nargs() == 1
-                {
-                    index.get(0)
-                } else {
-                    slot
-                };
+                let raw_index = slot;
                 if raw_index.is_integer().is_true() {
                     mink.to_symbolic([function!(GS.uvaind, topology_order, raw_index)])
                 } else if Aind::try_from(raw_index).is_ok() {
@@ -491,6 +502,10 @@ pub(crate) fn to_vakint_integrand<
 ) -> Result<VakintExpression> {
     let reduced_label = reduced.string_label();
     let dependent_subgraph_label = dependent_subgraph.string_label();
+    // Materialize before legacy sum-interface validation: a closed chain can
+    // contain an identically zero antisymmetric factor, which must disappear
+    // before its apparent open slots are compared with the other summands.
+    let integrand = integrand.undo_trace::<Aind>()?.undo_chain::<Aind>()?;
     let mut integrand_vakint = integrand
         .parse_to_symbolic_net::<Aind>(&ParseSettings {
             shorthand_parsing: ShorthandParsing::Expand {
@@ -621,47 +636,50 @@ pub(crate) fn to_vakint_integrand<
         "Vakint trace after denominator-to-propagator conversion"
     );
 
-    let mut first: Option<NodeIndex> = None;
-
     debug_tags!(#uv, #integrated, #vakint, #graph, #dump;
         reduced = %graph.dot(dependent_subgraph),
         "Shrinking subgraph for vakint"
     );
-    // shrink vertices of the subgraph
-    for (id, _crown, _data) in graph.iter_nodes_of(dependent_subgraph) {
-        debug_tags!(#uv, #integrated, #vakint, #graph, #inspect;
-            id = %id,
-            "Shrinking Node"
-        );
+    // Each disconnected counterterm has its own contracted vertex. Identifying
+    // distinct children with each other would create extra quotient cycles
+    // without corresponding independent momentum coordinates.
+    for component in graph.connected_components(dependent_subgraph) {
+        let mut first: Option<NodeIndex> = None;
+        for (id, _crown, _data) in graph.iter_nodes_of(&component) {
+            debug_tags!(#uv, #integrated, #vakint, #graph, #inspect;
+                id = %id,
+                "Shrinking Node"
+            );
 
-        if let Some(first) = first {
-            integrand_vakint = integrand_vakint
-                .replace(function!(
-                    vk_prop,
-                    W_.x_,
-                    function!(vk_edge, id.0, W_.y_),
-                    W_.x___
-                ))
-                .with(function!(
-                    vk_prop,
-                    W_.x_,
-                    function!(vk_edge, first.0, W_.y_),
-                    W_.x___
-                ))
-                .replace(function!(
-                    vk_prop,
-                    W_.x_,
-                    function!(vk_edge, W_.y_, id.0),
-                    W_.x___
-                ))
-                .with(function!(
-                    vk_prop,
-                    W_.x_,
-                    function!(vk_edge, W_.y_, first.0),
-                    W_.x___
-                ))
-        } else {
-            first = Some(id);
+            if let Some(first) = first {
+                integrand_vakint = integrand_vakint
+                    .replace(function!(
+                        vk_prop,
+                        W_.x_,
+                        function!(vk_edge, id.0, W_.y_),
+                        W_.x___
+                    ))
+                    .with(function!(
+                        vk_prop,
+                        W_.x_,
+                        function!(vk_edge, first.0, W_.y_),
+                        W_.x___
+                    ))
+                    .replace(function!(
+                        vk_prop,
+                        W_.x_,
+                        function!(vk_edge, W_.y_, id.0),
+                        W_.x___
+                    ))
+                    .with(function!(
+                        vk_prop,
+                        W_.x_,
+                        function!(vk_edge, W_.y_, first.0),
+                        W_.x___
+                    ))
+            } else {
+                first = Some(id);
+            }
         }
     }
     debug_tags!(#uv, #integrated, #vakint, #trace;
@@ -1239,11 +1257,248 @@ impl VakintMomentumSolution {
 
 #[cfg(test)]
 mod tests {
-    use crate::initialisation::test_initialise;
+    use crate::{
+        finalized_runtime_dot, graph::parse::IntoFinalizedRuntimeGraph,
+        initialisation::test_initialise,
+    };
     use idenso::representations::Bispinor;
+    use linnet::half_edge::involution::EdgeIndex;
     use spenso::structure::slot::{DummyAind, ParseableAind};
 
     use super::*;
+
+    #[test]
+    fn vakint_bridge_contracts_disconnected_children_separately() -> Result<()> {
+        test_initialise()?;
+        let scalar: crate::graph::Graph = finalized_runtime_dot!(
+            digraph G {
+                graph [projector=1];
+                node [num=1];
+                A -> A [particle="scalar_1" num=1 id=0 lmb_id=0
+                    source="{ufo_order:0}" sink="{ufo_order:1}"];
+            }, "scalars"
+        )?;
+        let edge_data = scalar.underlying[EdgeIndex(0)].clone();
+        // A three-loop parent with two disjoint bubble children. Contracting
+        // both bubbles leaves one cycle; identifying their distinct vertices
+        // with each other incorrectly turns the connector into another loop.
+        let endpoints = [
+            (0, 5),
+            (0, 6),
+            (1, 3),
+            (1, 5),
+            (1, 5),
+            (2, 3),
+            (2, 3),
+            (2, 4),
+            (4, 6),
+        ];
+        for reverse_order in [false, true] {
+            for reverse_edges in [false, true] {
+                let mut builder = HedgeGraphBuilder::new();
+                let mut nodes = (0..7).map(|_| builder.add_node(())).collect::<Vec<_>>();
+                let mut ordered_edges = endpoints.into_iter().enumerate().collect::<Vec<_>>();
+                if reverse_order {
+                    nodes.reverse();
+                    ordered_edges.rotate_left(3);
+                }
+                let mut edge_ids = [0; 9];
+                for (edge, (original, (mut source, mut sink))) in
+                    ordered_edges.into_iter().enumerate()
+                {
+                    edge_ids[original] = edge;
+                    if reverse_edges {
+                        std::mem::swap(&mut source, &mut sink);
+                    }
+                    builder.add_edge(nodes[source], nodes[sink], edge_data.clone(), false);
+                }
+                let graph: HedgeGraph<crate::graph::Edge, ()> = builder.build();
+                let mut children: SuBitGraph = graph.empty_subgraph();
+                for edge in [3, 4, 5, 6] {
+                    children.add(graph[&EdgeIndex(edge_ids[edge])].1);
+                }
+                assert_eq!(graph.connected_components(&children).len(), 2);
+                let momentum = function!(GS.emr_mom, 3);
+                for substitute_masses in [true, false] {
+                    // Distinct masses prevent equal-denominator fusion from hiding
+                    // the spurious loop created by a global child contraction.
+                    let mut input = Atom::one();
+                    let mut expected = Atom::one();
+                    let loop_momentum = function!(vakint::symbols::S.k, 0);
+                    for (edge, sign) in [(0, 1), (1, -1), (2, 1), (7, 1), (8, 1)] {
+                        let sign = if reverse_edges { -sign } else { sign };
+                        let mass = Atom::num(edge + 1);
+                        input /=
+                            function!(GS.den, edge_ids[edge], Atom::num(sign) * &momentum, &mass);
+                        let mass_squared = if substitute_masses {
+                            Atom::var(GS.m_uv_vacuum).pow(2)
+                        } else {
+                            mass.pow(2)
+                        };
+                        expected /=
+                            function!(vakint::symbols::S.dot, &loop_momentum, &loop_momentum)
+                                - mass_squared;
+                    }
+                    let converted = to_vakint_integrand(
+                        &input,
+                        &graph,
+                        &graph.full_filter(),
+                        &children,
+                        &VakintSettings {
+                            additional_normalization: "1".into(),
+                            ..Default::default()
+                        },
+                        substitute_masses,
+                    )
+                    .wrap_err_with(|| {
+                        format!(
+                            "reversed order: {reverse_order}, reversed edges: {reverse_edges}, \
+                         mass substitution: {substitute_masses}"
+                        )
+                    })?;
+                    let actual = Atom::from(converted)
+                        .replace(function!(vakint::symbols::S.topo, W_.x_))
+                        .with(W_.x_)
+                        .replace(function!(
+                            vakint::symbols::S.prop,
+                            W_.a_,
+                            W_.b_,
+                            W_.mom_,
+                            W_.mass_,
+                            W_.e_
+                        ))
+                        .with(
+                            (function!(vakint::symbols::S.dot, W_.mom_, W_.mom_)
+                                - Atom::var(W_.mass_))
+                            .pow(-Atom::var(W_.e_)),
+                        );
+                    assert!(
+                        (actual - expected).expand().is_zero(),
+                        "the quotient must retain one loop and all five propagator powers"
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn vakint_bridge_materializes_zero_color_chains_before_parsing_sums() -> Result<()> {
+        test_initialise()?;
+        let graph: crate::graph::Graph = finalized_runtime_dot!(
+            digraph G {
+                graph [projector=1];
+                node [num=1];
+                A -> A [particle="scalar_1" num=1 id=0 lmb_id=0
+                    source="{ufo_order:0}" sink="{ufo_order:1}"];
+            }, "scalars"
+        )?;
+        // The last generator is f(a,b,b), so both apparent tensor summands
+        // vanish. Legacy parsing used to compare their exposed interfaces
+        // before opening the chain and discovering that zero.
+        let chain = parse!(
+            "spenso::chain(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(11,1)),spenso::f(spenso::in,spenso::out,spenso::coad(8,hedge(1,1))),spenso::f(spenso::in,spenso::out,spenso::coad(8,hedge(11,1))))"
+        );
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let metric = function!(
+            ETS.metric,
+            mink.to_symbolic([Aind::Hedge(0, 1).to_atom()]),
+            mink.to_symbolic([Aind::Hedge(1, 1).to_atom()])
+        );
+        let momentum = function!(GS.emr_mom, 0);
+        let vector = function!(GS.emr_mom, 0, mink.to_symbolic([]));
+        let denominator = function!(
+            GS.den,
+            0,
+            momentum,
+            Atom::var(GS.m_uv_expansion).pow(2),
+            mink.inner_product(&vector, &vector) - Atom::var(GS.m_uv_vacuum).pow(2)
+        );
+        let integrand = (Atom::i()
+            * chain
+            * metric
+            * (denominator.pow(-1) - Atom::var(GS.m_uv_expansion).pow(2) / denominator.pow(2)))
+        .expand();
+        assert!(!integrand.is_zero());
+        let result = to_vakint_integrand(
+            &integrand,
+            &graph.underlying,
+            &graph.full_filter(),
+            &graph.empty_subgraph::<SuBitGraph>(),
+            &VakintSettings::default(),
+            false,
+        )?;
+        assert!(result.0.iter().all(|term| term.numerator.is_zero()));
+        Ok(())
+    }
+
+    #[test]
+    fn integrated_clifford_contractions_precede_laurent_projection() -> Result<()> {
+        test_initialise()?;
+        let epsilon = Atom::var(GS.dim_epsilon);
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let spin = Bispinor {}.new_rep(4);
+        let a = spin.to_symbolic([Aind::Hedge(3, 1).to_atom()]);
+        let b = spin.to_symbolic([Aind::Hedge(4, 1).to_atom()]);
+        let mu = mink.to_symbolic([Aind::new_dummy().to_atom()]);
+        let momentum = function!(GS.emr_mom, 7, mink.to_symbolic([]));
+        let gamma = |argument: &Atom| {
+            function!(
+                idenso::dirac::AGS.gamma,
+                SPENSO_TAG.chain_in,
+                SPENSO_TAG.chain_out,
+                argument
+            )
+        };
+        let slash = spenso::chain!(&a, &b, gamma(&momentum));
+        for (word, coefficient) in [
+            (
+                spenso::chain!(&a, &b, gamma(&mu), gamma(&mu), gamma(&momentum)),
+                Atom::var(GS.dim),
+            ),
+            (
+                spenso::chain!(&a, &b, gamma(&mu), gamma(&momentum), gamma(&mu)),
+                Atom::num(2) - Atom::var(GS.dim),
+            ),
+        ] {
+            for pole_order in [1, 2] {
+                let reduced = Integrated::reduce_integrated_numerator(
+                    &(word.clone() / epsilon.pow(pole_order)),
+                )?;
+                let expected = Integrated::dimensionally_regularized(
+                    &(&coefficient * &slash / epsilon.pow(pole_order)),
+                );
+                let expansion = series(&reduced, 1)?;
+                let expected_expansion = series(&expected, 1)?;
+                for finite in [false, true] {
+                    assert!(
+                        (truncate(&expansion, finite) - truncate(&expected_expansion, finite))
+                            .expand()
+                            .is_zero(),
+                        "finite={finite}, pole_order={pole_order}, reduced={reduced}, expected={expected}"
+                    );
+                }
+            }
+        }
+        // Projecting the unreduced Clifford word first, as the old integration
+        // path did, leaves a finite -2 slash(p) in a purported MS pole. Once
+        // inserted in a second logarithmically divergent loop, it changes the
+        // overall simple pole by -2 slash(p)/epsilon.
+        let unreduced = spenso::chain!(&a, &b, gamma(&mu), gamma(&mu), gamma(&momentum)) / &epsilon;
+        let projected_first = truncate(&series(&unreduced, 1)?, false);
+        let reduced_late = Integrated::reduce_integrated_numerator(&projected_first)?;
+        let correct_pole = Atom::num(4) * &slash / &epsilon;
+        let extra_parent_pole = truncate(
+            &series(&((reduced_late - correct_pole) / &epsilon), 1)?,
+            false,
+        );
+        assert!(
+            (extra_parent_pole + Atom::num(2) * slash / epsilon)
+                .expand()
+                .is_zero()
+        );
+        Ok(())
+    }
 
     #[test]
     fn projector_lorentz_metadata_is_constant_during_laurent_expansion() {
@@ -1275,6 +1530,16 @@ mod tests {
             Integrated::restore_lorentz_dimensions(&normalized),
             normalized,
             "metadata restoration is idempotent"
+        );
+        let regulated_dimension = Atom::num(4) - Atom::num(2) * &epsilon;
+        let unexpanded_dimension = Atom::num(4) - (Atom::num(4) - &regulated_dimension);
+        let unexpanded = source
+            .replace(regulated_dimension.to_pattern())
+            .with(unexpanded_dimension);
+        assert_eq!(
+            Integrated::restore_lorentz_dimensions(&unexpanded),
+            normalized,
+            "backend dimension substitutions need algebraic comparison"
         );
         let expanded = series(&normalized, 1).unwrap().to_atom();
         assert!(!expanded.contains_symbol(symbolica::atom::Symbol::DERIVATIVE));
@@ -1435,7 +1700,25 @@ mod tests {
                     function!(target, 2, mink.to_symbolic([function!(GS.uvaind, 19, 5)]))
                 );
             }
+            let wrapped_dummy = mink.to_symbolic([vakint::symbols::S.dot_dummy_ind(5)]);
+            assert_eq!(
+                Integrated::restore_numerator(function!(source, 2, wrapped_dummy), 19),
+                function!(target, 2, mink.to_symbolic([function!(GS.uvaind, 19, 5)]))
+            );
         }
+
+        let spinor = Bispinor {}.new_rep(4);
+        let a = spinor.to_symbolic([Atom::from(Aind::Hedge(1, 0))]);
+        let b = spinor.to_symbolic([Atom::from(Aind::Hedge(2, 0))]);
+        let backend_slot = mink.to_symbolic([vakint::symbols::S.dot_dummy_ind(3)]);
+        let restored_slot = mink.to_symbolic([function!(GS.uvaind, 19, 3)]);
+        assert_eq!(
+            Integrated::restore_numerator(
+                function!(idenso::dirac::AGS.gamma, &a, &b, backend_slot),
+                19
+            ),
+            function!(idenso::dirac::AGS.gamma, a, b, restored_slot)
+        );
 
         let source = Atom::from(Aind::Hedge(5, 0));
         let represented = other_dimension.to_symbolic([Atom::from(Aind::Hedge(7, 0))]);

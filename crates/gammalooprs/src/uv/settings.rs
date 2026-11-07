@@ -453,6 +453,12 @@ impl VakintSettings {
                             expand_masters: self.fmft.expand_masters,
                             susbstitute_masters: self.fmft.susbstitute_masters,
                         }),
+                        "rustred" => EvaluationMethod::RustRed(vakint::RustRedEvaluationOptions {
+                            master_mode: vakint::RustRedMasterMode::Symbolic,
+                        }),
+                        "forcer" => EvaluationMethod::Forcer(vakint::ForcerOptions {
+                            master_mode: vakint::RustRedMasterMode::Symbolic,
+                        }),
                         "pysecdec" => EvaluationMethod::PySecDec(PySecDecOptions {
                             quiet: self.pysecdec.quiet,
                             relative_precision: self.pysecdec.relative_precision,
@@ -473,6 +479,7 @@ impl VakintSettings {
             integral_normalization_factor: match self.normalization.as_str() {
                 "MSbar" => vakint::LoopNormalizationFactor::MSbar,
                 "FMFTandMATAD" => vakint::LoopNormalizationFactor::FMFTandMATAD,
+                "GScheme" => vakint::LoopNormalizationFactor::GScheme,
                 "pySecDec" => vakint::LoopNormalizationFactor::pySecDec,
                 _ => vakint::LoopNormalizationFactor::Custom(self.normalization.clone()),
             },
@@ -488,7 +495,7 @@ impl Default for VakintSettings {
         Self {
             form_exe_path: "form".to_string(),
             python_exe_path: "python3".to_string(),
-            // Supported evaluation methods: "alphaloop", "matad", "fmft" and "pysecdec"
+            // Forcer can be selected explicitly for massless propagator integrals.
             evaluation_methods: vec![
                 "alphaloop".to_string(),
                 "matad".to_string(),
@@ -669,6 +676,23 @@ mod tests {
         assert_eq!(
             settings.true_settings().tensor_reduction_method,
             TensorReductionMethod::FeynKit
+        );
+    }
+
+    #[test]
+    fn vakint_rustred_option_uses_exact_symbolic_masters() {
+        let settings: VakintSettings =
+            toml::from_str("evaluation_methods = [\"rustred\", \"forcer\"]").unwrap();
+        let mapped = settings.true_settings();
+        assert!(matches!(
+            mapped.evaluation_order.0[0],
+            vakint::EvaluationMethod::RustRed(vakint::RustRedEvaluationOptions {
+                master_mode: vakint::RustRedMasterMode::Symbolic,
+            })
+        ));
+        assert_eq!(
+            toml::from_str::<VakintSettings>(&toml::to_string(&settings).unwrap()).unwrap(),
+            settings
         );
     }
 

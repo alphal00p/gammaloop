@@ -627,6 +627,106 @@ fn tform_workers_reproduce_the_frozen_output() {
 }
 
 #[test]
+fn tagged_homogeneous_channels_match_independent_reductions() {
+    let Some(form) = forcer_test_form() else {
+        eprintln!("FORM 5 is unavailable: skipped the tagged-channel run");
+        return;
+    };
+    let family = family("P2L");
+    let powers = [1, 1, 1, 1, 1];
+    let external = parse("-p(3)");
+    let numerators = [
+        parse("1"),
+        parse("(alpha+ε)*dot(k(1),p(3))"),
+        parse("2*dot(k(1),k(2))^2"),
+        parse("beta*dot(k(2),k(2))"),
+    ];
+    let numerator = Atom::add_many(&numerators);
+    let input = forcer_input(family, &powers, numerator.as_view(), &external)
+        .unwrap()
+        .unwrap();
+    assert!(input.parts.len() >= 3);
+    assert!(input.program.contains("Local VakintChannels ="));
+    assert_eq!(input.program.matches("#call Forcer()").count(), 1);
+
+    let mut expected = BTreeMap::<i64, Atom>::new();
+    for numerator in numerators {
+        for value in reduce_p(
+            family,
+            &powers,
+            numerator.as_view(),
+            &external,
+            &settings(&form),
+        )
+        .unwrap()
+        {
+            *expected.entry(value.scale_power).or_default() += value.reduced;
+        }
+    }
+    for cores in [1, 2] {
+        let settings = VakintSettings {
+            n_cores: cores,
+            ..settings(&form)
+        };
+        let actual = reduce_p(family, &powers, numerator.as_view(), &external, &settings).unwrap();
+        assert_eq!(actual.len(), expected.len());
+        for value in actual {
+            assert!(
+                (value.reduced - &expected[&value.scale_power])
+                    .expand()
+                    .together()
+                    .is_zero(),
+                "tagged channel changed scale {} with {cores} workers",
+                value.scale_power
+            );
+        }
+    }
+}
+
+#[test]
+fn tagged_four_loop_channels_reproduce_frozen_outputs() {
+    let Some(form) = forcer_test_form() else {
+        eprintln!("FORM 5 is unavailable: skipped the four-loop tagged-channel run");
+        return;
+    };
+    let battery = Battery::parse(include_str!(
+        "../../../tests/fixtures/forcer/p4l_battery.json"
+    ))
+    .unwrap();
+    let mut numerator = Atom::Zero;
+    let mut expected = BTreeMap::<i64, Atom>::new();
+    let mut selected = None;
+    for (name, coefficient) in [("la4_top", parse("1")), ("la4_isp", parse("1+ε"))] {
+        let case = battery.cases.iter().find(|case| case.name == name).unwrap();
+        numerator += &coefficient * parse(&case.numerator);
+        for value in frozen(case) {
+            *expected.entry(value.scale_power).or_default() += &coefficient * value.reduced;
+        }
+        selected = Some(case);
+    }
+    let case = selected.unwrap();
+    let actual = reduce_p(
+        family(&case.family),
+        &case.powers,
+        numerator.as_view(),
+        &parse(&case.external),
+        &settings(&form),
+    )
+    .unwrap();
+    assert_eq!(actual.len(), expected.len());
+    for value in actual {
+        assert!(
+            (value.reduced - &expected[&value.scale_power])
+                .expand()
+                .together()
+                .is_zero(),
+            "tagged four-loop channel changed scale {}",
+            value.scale_power
+        );
+    }
+}
+
+#[test]
 fn canonical_kite_becomes_the_forcer_graph() {
     let input = forcer_input(
         family("P2L"),
@@ -671,6 +771,9 @@ fn forcer_vertices(input: &ForcerInput) -> Vec<Vec<String>> {
     let vertex = Regex::new(r"vx\([^)]*\)").unwrap();
     input
         .program
+        .split_once("#call Forcer()")
+        .expect("a Forcer program must call Forcer")
+        .0
         .lines()
         .filter(|line| line.starts_with("Local "))
         .map(|local| {
@@ -1141,13 +1244,12 @@ fn profile_four_loop_finalize() {
 
 const BENCHMARK_INPUTS: &str = include_str!("../../../tests/fixtures/benchmark_p_integrals.json");
 
-/// `blake3` of the Forcer programs of every fixture case (name, program),
-/// recorded before the shared numerator split moved to `parts.rs`: the
-/// programs Forcer receives stay byte-identical. The grid and anchor digests
-/// are taken over their definitions (`grid_cases`, `anchor_cases`), which
-/// `tests/p_integral_forcer_fixtures.rs` ties to the files; the three grid
-/// digests were re-recorded when 29 rank-2 sectors got a nonzero numerator
-/// (`RANK_TWO_STEPS`), a change of the definitions, not of the rendering.
+/// `blake3` of the Forcer programs of every fixture case (name, program).
+/// The two- and three-loop battery digests include the tagged-channel
+/// rendering; all other cases still render as before the shared numerator
+/// split moved to `parts.rs`. The grid and anchor digests are taken over
+/// their definitions (`grid_cases`, `anchor_cases`), which
+/// `tests/p_integral_forcer_fixtures.rs` ties to the files.
 const PROGRAM_DIGESTS: [(&str, &str); 8] = [
     (
         "p1l_battery.json",
@@ -1155,11 +1257,11 @@ const PROGRAM_DIGESTS: [(&str, &str); 8] = [
     ),
     (
         "p2l_battery.json",
-        "0a9bc25fbe24811ff7b83370ff68bd8c7922c73ea7dd57b64f48ef178b2d506e",
+        "45ae11c400c0c50914c74116cc8791b2061962e3a518dfeec075b4b508db53da",
     ),
     (
         "p3l_battery.json",
-        "2b0acde15a0c7d062e34f9df09238b52d4b97e3716faf043cf64663bb97a6527",
+        "a0ffe7cdef48253703f950afa73e4875cdcf324fefbdc26e6eccdae192a99ed1",
     ),
     (
         "p4l_battery.json",

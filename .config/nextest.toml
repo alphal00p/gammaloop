@@ -21,6 +21,20 @@ status-level = "fail"
 final-status-level = "fail"
 
 [[profile.default.overrides]]
+# The four-loop graph exercises three-loop propagator reductions for each mark.
+filter = "test(/^uv::rstar::matter_tests::four_loop_/)"
+slow-timeout = { period = "60s", terminate-after = 10 }
+retries = 0
+test-group = "rstar-tensor-comparisons"
+
+[[profile.default.overrides]]
+# Exact R* gauge-theory comparisons vary the marked line and use a massive-R oracle.
+filter = "test(/^uv::rstar::tests::.*gluon/) or test(/^uv::rstar::matter_tests::/)"
+slow-timeout = { period = "60s", terminate-after = 5 }
+retries = 0
+test-group = "rstar-tensor-comparisons"
+
+[[profile.default.overrides]]
 # Enable physical rung comparisons only after the complete 1L–4L case qualifies
 # below fifteen minutes. Ignored five-loop controls use separate supervision.
 filter = "binary(ordered_reduction_rungs) and not test(/^five_loop_/)"
@@ -177,6 +191,8 @@ retries = 0
 test-group = "five-loop-reduction"
 
 [test-groups]
+# Avoid contention between the exact tensor counterterm comparisons.
+rstar-tensor-comparisons = { max-threads = 1 }
 # Keep five-loop native programs from competing for memory and their time budget.
 five-loop-reduction = { max-threads = 1 }
 # Keep qualified physical engine comparisons from competing with each other.

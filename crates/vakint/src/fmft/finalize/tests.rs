@@ -191,6 +191,94 @@ fn native_pr_retains_symbolic_basis_when_substitution_is_disabled() {
 }
 
 #[test]
+fn native_pr_symbolic_poles_retain_canonical_exact_zeta() {
+    let result = finalizer(4, 20_000)
+        .finalize_native_reduced_masters(
+            vk_parse!("PR11").unwrap(),
+            &Atom::num(1),
+            &FMFTOptions {
+                expand_masters: true,
+                susbstitute_masters: false,
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        result,
+        vk_parse!("5*symbolica::zeta(5)/ε").unwrap(),
+        "symbolic output must cancel exact Forcer pole coefficients"
+    );
+}
+
+#[test]
+fn native_pr_symbolic_poles_match_exact_lower_loop_masters() {
+    let fmft = finalizer(4, 32);
+    let actual = fmft
+        .finalize_native_reduced_masters(
+            vk_parse!("PR13").unwrap(),
+            &Atom::num(1),
+            &FMFTOptions {
+                expand_masters: true,
+                susbstitute_masters: false,
+            },
+        )
+        .unwrap();
+    // PR13 factorizes into the three-loop miD6 master and a one-loop
+    // tadpole, with the sign appropriate to the FMFT master convention.
+    let expected = crate::matad::MATAD::with_settings(fmft.settings.clone())
+        .finalize_reduced_masters(
+            vk_parse!("miD6*Gam(1,1)/(ep*(1-ep))").unwrap(),
+            4,
+            None,
+            &Atom::num(1),
+            &crate::MATADOptions {
+                direct_numerical_substition: false,
+                substitute_hpls: false,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert!(
+        (actual - expected).expand().is_zero(),
+        "FMFT's D6 and MATAD's exact finite miD6 coefficient must cancel"
+    );
+}
+
+#[test]
+fn native_pr_laurent_expansion_preserves_open_metric_and_scalar_evanescences() {
+    use spenso::{
+        network::library::symbolic::ETS,
+        structure::representation::{BaseRepName, Minkowski, initialize},
+    };
+
+    let mut fmft = finalizer(5, 32);
+    fmft.settings.epsilon_symbol = "eps_metric".into();
+    initialize();
+    let dimension = vk_parse!("d").unwrap();
+    let slot = |index| Minkowski::selfless_symbol().call((&dimension, index));
+    let metric = ETS.metric(slot(vk_symbol!("open_mu")), slot(vk_symbol!("open_nu")));
+    let input = &metric * vk_parse!("PR11*(1+ep)/(4-2*ep)").unwrap();
+    let result = fmft
+        .finalize_native_reduced_masters(
+            input,
+            &Atom::num(1),
+            &FMFTOptions {
+                expand_masters: true,
+                susbstitute_masters: false,
+            },
+        )
+        .unwrap();
+    let metric = metric
+        .replace(dimension.to_pattern())
+        .with(vk_parse!("4-2*eps_metric").unwrap());
+    let expected = metric
+        * vk_parse!("5*symbolica::zeta(5)/(4*eps_metric)+15/8*symbolica::zeta(5)+PR11ep0/4")
+            .unwrap();
+    assert!(!result.contains_symbol(Symbol::DERIVATIVE));
+    assert!(!result.contains_symbol(vk_symbol!("ep")));
+    assert!((result - expected).expand().is_zero());
+}
+
+#[test]
 fn native_pr_preserves_mass_and_custom_epsilon_conventions() {
     let mut fmft = finalizer(5, 32);
     fmft.settings.epsilon_symbol = "eps_test".into();

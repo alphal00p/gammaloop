@@ -2283,11 +2283,12 @@ impl FeynmanDiagram {
                 })
             })?;
 
+        let mut parse_expression = Self::expression_parser();
         let mut builder = Self::builder(Arc::clone(&model), name)
             .symmetry_factor(symmetry_factor)
-            .overall_factor(Self::parse_expression("overall factor", overall_factor)?)
+            .overall_factor(parse_expression("overall factor", overall_factor)?)
             .numerator(NumeratorInterface::admit(
-                Self::parse_expression("numerator", numerator)?,
+                parse_expression("numerator", numerator)?,
                 parsed
                     .global_data
                     .statements
@@ -2296,7 +2297,7 @@ impl FeynmanDiagram {
                     .transpose()?,
             )?)
             .numerator_prefactor(NumeratorInterface::admit(
-                Self::parse_expression("numerator prefactor", numerator_prefactor)?,
+                parse_expression("numerator prefactor", numerator_prefactor)?,
                 parsed
                     .global_data
                     .statements
@@ -2305,7 +2306,7 @@ impl FeynmanDiagram {
                     .transpose()?,
             )?)
             .projector(NumeratorInterface::admit(
-                Self::parse_expression("projector", projector)?,
+                parse_expression("projector", projector)?,
                 parsed
                     .global_data
                     .statements
@@ -2347,7 +2348,7 @@ impl FeynmanDiagram {
                 name: vertex_name,
                 interaction,
                 numerator: NumeratorInterface::admit(
-                    Self::parse_expression(
+                    parse_expression(
                         "vertex numerator",
                         data.statements
                             .get("numerator")
@@ -2465,7 +2466,7 @@ impl FeynmanDiagram {
                 particle: model.particle_id_at(particle_id)?,
                 directed: data.orientation != Orientation::Undirected,
                 numerator: NumeratorInterface::admit(
-                    Self::parse_expression(
+                    parse_expression(
                         "edge numerator",
                         data.data
                             .statements
@@ -2847,27 +2848,34 @@ impl FeynmanDiagram {
     }
 
     fn parse_expression(field: &'static str, expression: String) -> Result<Atom, DiagramError> {
+        Self::expression_parser()(field, expression)
+    }
+
+    fn expression_parser() -> impl FnMut(&'static str, String) -> Result<Atom, DiagramError> {
         // Canonical strings include attributes and tags, but not Symbolica user data.
         // Reuse exact registered declarations so Spenso representation metadata survives.
+        // Share this map within an import, but refresh it for each new import.
         let mut symbols = State::symbol_iter()
             .filter(|(symbol, _)| !matches!(symbol.get_data(), UserData::None))
             .map(|(symbol, _)| (Atom::var(symbol).to_canonical_string().into(), symbol))
             .collect();
-        let namespace = with_default_namespace!(&expression, "feynkit_graph");
-        Workspace::get_local()
-            .with(|workspace| {
-                Token::parse_with_atom_info(
-                    &expression,
-                    ParseSettings::default(),
-                    Some((&namespace, &mut symbols, workspace)),
-                )?
-                .to_atom(&namespace, &mut symbols, workspace)
-            })
-            .map_err(|message| DiagramError::SymbolicParse {
-                field,
-                expression,
-                message,
-            })
+        move |field, expression| {
+            let namespace = with_default_namespace!(&expression, "feynkit_graph");
+            Workspace::get_local()
+                .with(|workspace| {
+                    Token::parse_with_atom_info(
+                        &expression,
+                        ParseSettings::default(),
+                        Some((&namespace, &mut symbols, workspace)),
+                    )?
+                    .to_atom(&namespace, &mut symbols, workspace)
+                })
+                .map_err(|message| DiagramError::SymbolicParse {
+                    field,
+                    expression,
+                    message,
+                })
+        }
     }
 }
 
@@ -4287,6 +4295,82 @@ mod tests {
     }
 
     #[test]
+    fn dot_import_refreshes_registered_user_data() {
+        use symbolica::atom::{NamespacedSymbol, SymbolBuilder};
+
+        let diagram = one_loop();
+        FeynmanDiagram::from_dot(diagram.model_arc(), &diagram.to_dot().unwrap()).unwrap();
+        // A later import must see declarations registered after the first import.
+        let symbol = SymbolBuilder::new(NamespacedSymbol::parse(
+            "feynkit_graph_tests::dot_registered_after_import",
+        ))
+        .with_user_data(UserData::String("retained DOT metadata".to_owned()))
+        .build()
+        .unwrap();
+        let expression = Atom::var(symbol);
+        let fragment = SymbolicTensor::infer(expression.clone()).unwrap();
+        let vertex = diagram.vertices().next().unwrap().0;
+        let edge = diagram
+            .edges()
+            .find(|(_, _, edge)| edge.external.is_none())
+            .unwrap()
+            .0;
+        let diagram = diagram
+            .with_numerator_fragments([(vertex, fragment.clone())], [(edge, fragment.clone())])
+            .unwrap()
+            .with_numerator_prefactor(fragment.clone())
+            .with_projector(fragment)
+            .with_overall_factor(expression);
+        let restored =
+            FeynmanDiagram::from_dot(diagram.model_arc(), &diagram.to_dot().unwrap()).unwrap();
+        assert_eq!(restored.overall_factor(), diagram.overall_factor());
+        assert!(restored.numerator().same_value(diagram.numerator()));
+        assert!(
+            restored
+                .numerator_prefactor()
+                .same_value(diagram.numerator_prefactor())
+        );
+        assert!(restored.projector().same_value(diagram.projector()));
+        for ((_, restored), (_, original)) in restored.vertices().zip(diagram.vertices()) {
+            assert!(restored.numerator.same_value(&original.numerator));
+        }
+        for ((_, _, restored), (_, _, original)) in restored.edges().zip(diagram.edges()) {
+            assert!(restored.numerator.same_value(&original.numerator));
+        }
+    }
+
+    #[test]
+    fn dot_import_reuses_new_symbols_across_fields() {
+        let expression = Atom::var(symbolica::symbol!("feynkit_graph_tests::dot_source_symbol"));
+        let fragment = SymbolicTensor::infer(expression.clone()).unwrap();
+        let diagram = one_loop()
+            .with_numerator(fragment.clone())
+            .unwrap()
+            .with_numerator_prefactor(fragment.clone())
+            .with_projector(fragment)
+            .with_overall_factor(expression);
+        let dot = diagram
+            .to_dot()
+            .unwrap()
+            .replace("dot_source_symbol", "dot_first_parsed_symbol");
+        let restored = FeynmanDiagram::from_dot(diagram.model_arc(), &dot).unwrap();
+        let expected = Atom::parse(
+            "dot_first_parsed_symbol",
+            "feynkit_graph_tests",
+            ParseSettings::default(),
+        )
+        .unwrap();
+        assert_eq!(restored.overall_factor(), &expected);
+        assert_eq!(restored.numerator().expression(), &expected);
+        assert_eq!(restored.numerator_prefactor().expression(), &expected);
+        assert_eq!(restored.projector().expression(), &expected);
+        assert_eq!(
+            restored.vertices().next().unwrap().1.numerator.expression(),
+            &expected
+        );
+    }
+
+    #[test]
     fn dot_set_round_trip() {
         let first = cut_scalar_line().with_name("first");
         let second = cut_scalar_line().with_name("second");
@@ -4348,12 +4432,14 @@ mod tests {
         let diagram = one_loop()
             .with_numerator(zero.clone())
             .unwrap()
+            .with_numerator_prefactor(matrix.clone())
             .with_projector(matrix.clone());
         for restored in [
             FeynmanDiagram::from_json(diagram.model_arc(), &diagram.to_json().unwrap()).unwrap(),
             FeynmanDiagram::from_dot(diagram.model_arc(), &diagram.to_dot().unwrap()).unwrap(),
         ] {
             assert!(restored.numerator().same_value(&zero));
+            assert!(restored.numerator_prefactor().same_value(&matrix));
             assert!(restored.projector().same_value(&matrix));
             assert_eq!(
                 restored.numerator().structure().logical_slots(),
