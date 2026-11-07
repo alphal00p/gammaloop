@@ -5,6 +5,8 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::fmt::Debug;
 use std::hash::Hash;
+#[cfg(feature = "symbolica")]
+use std::iter;
 use std::ops::AddAssign;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
@@ -15,7 +17,7 @@ use symbolica::{
     atom::Symbol,
     atom::{Atom, AtomCore, AtomView},
     printer::{PrintState, PrintUserData},
-    symbol, try_parse,
+    symbol, try_parse, try_symbol,
 };
 
 #[cfg(feature = "symbolica")]
@@ -25,11 +27,11 @@ use nu_ansi_term::Color::DarkGray;
 use symbolica::coefficient::CoefficientView;
 
 #[cfg(feature = "symbolica")]
-use crate::network::tags::SPENSO_TAG;
+use crate::network::tags::{SPENSO_TAG, mathml};
 #[cfg(feature = "symbolica")]
 use crate::shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings};
 #[cfg(feature = "symbolica")]
-use crate::structure::slot::ParseableAind;
+use crate::structure::slot::{ParseableAind, SlotMatcher};
 use crate::utils::{to_subscript, to_superscript};
 #[cfg(feature = "symbolica")]
 use symbolica_utils::SerializableSymbol;
@@ -38,6 +40,14 @@ use thiserror::Error;
 
 use super::slot::AbsInd;
 use super::slot::DummyAind;
+
+#[cfg(feature = "symbolica")]
+mod scoped;
+#[cfg(feature = "symbolica")]
+pub use scoped::ScopedIndex;
+
+/// Marks generated dummy symbols whose visible names may use an index palette.
+pub const DUMMY_INDEX_TAG: &str = "spenso::dummy-index";
 
 pub const ABSTRACTIND: &str = "aind";
 
@@ -57,6 +67,7 @@ pub struct AindSymbols {
     pub dind: Symbol,
     pub selfdualind: Symbol,
     pub openind: Symbol,
+    pub scope: Symbol,
     pub cind: Symbol,
     pub find: Symbol,
 }
@@ -153,6 +164,99 @@ mod test {
     }
 
     #[test]
+    fn numeric_indices_round_trip_without_narrowing() {
+        for (index, written) in [
+            (AbstractIndex::Normal(0), "0".to_owned()),
+            (AbstractIndex::Normal(7), "7".to_owned()),
+            (AbstractIndex::Normal(usize::MAX), usize::MAX.to_string()),
+            (
+                AbstractIndex::Dualize(usize::MAX),
+                format!("-{}", usize::MAX),
+            ),
+            (AbstractIndex::from(isize::MIN), isize::MIN.to_string()),
+            (AbstractIndex::from(i32::MIN), i32::MIN.to_string()),
+            (AbstractIndex::Double(u16::MAX, 2), "65535/2".to_owned()),
+            (AbstractIndex::Double(1, u16::MAX), "1/65535".to_owned()),
+        ] {
+            let atom = try_parse!(&written).unwrap();
+            assert_eq!(index.to_atom(), atom, "serialization of {written}");
+            assert_eq!(AbstractIndex::try_from(atom.as_view()).unwrap(), index);
+        }
+        assert_eq!(
+            AbstractIndex::Added(usize::MAX).to_atom(),
+            try_parse!(&usize::MAX.to_string()).unwrap()
+        );
+        if usize::BITS > 32 {
+            let large = try_parse!("4294967303").unwrap();
+            assert_ne!(
+                AbstractIndex::try_from(large.as_view()).unwrap(),
+                AbstractIndex::Normal(7)
+            );
+        }
+    }
+
+    #[test]
+    fn numeric_indices_reject_unrepresentable_values() {
+        let beyond_range = Atom::num(usize::MAX) + Atom::one();
+        for atom in [
+            beyond_range.clone(),
+            -beyond_range,
+            Atom::num((65_537, 2)),
+            Atom::num((1, 65_536)),
+            Atom::num((-1, 2)),
+            Atom::one() + Atom::i(),
+            Atom::num(usize::MAX) + Atom::i(),
+        ] {
+            assert!(
+                AbstractIndex::try_from(atom.as_view()).is_err(),
+                "accepted an inexact index: {atom}"
+            );
+        }
+    }
+
+    #[test]
+    fn named_indices_preserve_identity_and_reject_malformed_calls() {
+        let source = symbol!("index_test::source", tags = [SPENSO_TAG.index.clone()]);
+        let sink = symbol!("index_test::sink", tags = [SPENSO_TAG.index.clone()]);
+        let indices = [
+            AbstractIndex::Named(source.into(), 7, 0),
+            AbstractIndex::Named(sink.into(), 7, 0),
+            AbstractIndex::Named(source.into(), 7, 1),
+            AbstractIndex::Named(source.into(), usize::MAX, usize::MAX),
+        ];
+        assert_eq!(HashSet::from(indices).len(), indices.len());
+        for index in indices {
+            assert_eq!(
+                AbstractIndex::try_from(index.to_atom().as_view()).unwrap(),
+                index
+            );
+        }
+        for atom in [
+            function!(source),
+            function!(source, -1),
+            function!(source, (1, 2)),
+            function!(source, 7, (1, 2)),
+            function!(source, 7, -1),
+            function!(source, 7, 0, 1),
+            function!(symbol!("index_test::untagged"), 7, 0),
+        ] {
+            assert!(AbstractIndex::try_from(atom.as_view()).is_err());
+        }
+    }
+
+    #[test]
+    fn named_local_zero_has_one_canonical_argument() {
+        let head = symbol!("index_test::local_zero", tags = [SPENSO_TAG.index.clone()]);
+        let short = function!(head, 17);
+        let long = function!(head, 17, 0);
+        let index = AbstractIndex::Named(head.into(), 17, 0);
+        assert_eq!(AbstractIndex::try_from(short.as_view()).unwrap(), index);
+        assert_eq!(AbstractIndex::try_from(long.as_view()).unwrap(), index);
+        assert_eq!(index.to_atom(), short);
+        assert_eq!(index.to_string(), short.to_string());
+    }
+
+    #[test]
     fn open_index_atom_round_trips() {
         let index = AbstractIndex::Open { owner: 17, axis: 3 };
         let atom = index.to_atom();
@@ -197,6 +301,85 @@ mod test {
             AbstractIndex::try_from(atom.as_view()),
             Err(AbstractIndexError::NotIndex(_))
         ));
+    }
+
+    #[test]
+    fn wrapping_indices_preserves_open_axis_markers() {
+        use crate::structure::{
+            representation::{Euclidean, RepName},
+            slot::IsAbstractSlot,
+        };
+        let rep = Euclidean {}.new_rep(2);
+        let owner = AbstractIndex::fresh_open_owner();
+        let open = rep
+            .slot::<AbstractIndex, _>(AbstractIndex::Open { owner, axis: 1 })
+            .to_atom();
+        let explicit = rep
+            .slot::<AbstractIndex, _>(AbstractIndex::Normal(74801))
+            .to_atom();
+        let scope = symbol!("scope_tests::auto_axis_scope");
+        let value = function!(
+            crate::tensor_symbol!("scope_tests::mixed_axes"),
+            &open,
+            &explicit
+        );
+        let expected = function!(
+            crate::tensor_symbol!("scope_tests::mixed_axes"),
+            &open,
+            rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(74801).scoped(scope))
+                .to_atom()
+        );
+        let wrapped = AbstractIndex::wrap_expression(value.as_view(), scope, |_| true);
+        assert_eq!(wrapped, expected);
+        assert_eq!(
+            AbstractIndex::wrap_expression(wrapped.as_view(), scope, |_| true),
+            wrapped
+        );
+    }
+
+    #[test]
+    fn scoped_index_symbol_uses_initialized_bundle() {
+        // Trigger the registered extension initializer before consulting its
+        // public cached accessor. Symbolica's builtin-name set only covers its
+        // own namespace, so query the registered extension symbol directly.
+        let _ = symbolica::state::State::is_builtin("sin");
+        let registered = Symbol::get_symbol(symbolica::wrap_symbol!("spenso::index_scope"))
+            .expect("the extension initializer registers the scope symbol");
+        let scope_symbol = AbstractIndex::scope_symbol();
+        assert_eq!(scope_symbol, registered);
+        assert_eq!(scope_symbol, AIND_SYMBOLS.scope);
+        assert!(scope_symbol.has_tag(&SPENSO_TAG.index));
+        let index = AbstractIndex::Normal(7).scoped(symbol!("scope_bundle_test"));
+        let atom = index.to_atom();
+        assert_eq!(atom.as_view().get_symbol(), Some(scope_symbol));
+        assert_eq!(AbstractIndex::try_from(atom.as_view()).unwrap(), index);
+    }
+
+    #[test]
+    fn scoped_indices_retain_identity_and_round_trip() {
+        let hedge = symbol!("scope_tests::hedge", tags = [SPENSO_TAG.index.clone()]);
+        let bra = symbol!("scope_tests::bra");
+        let outer = symbol!("scope_tests::outer");
+        for base in [
+            AbstractIndex::Normal(3),
+            AbstractIndex::from(symbol!("mu")),
+            AbstractIndex::Named(hedge.into(), 7, 1),
+            AbstractIndex::Open { owner: 2, axis: 1 },
+        ] {
+            let scoped = base.scoped(bra);
+            assert_ne!(base, scoped);
+            assert_eq!(scoped.scoped(bra), scoped);
+            assert_ne!(scoped.scoped(outer), scoped);
+            assert_ne!(scoped.scoped(outer), base.scoped(outer).scoped(bra));
+            for value in [scoped, scoped.scoped(outer)] {
+                assert_eq!(
+                    AbstractIndex::try_from(value.to_atom().as_view()).unwrap(),
+                    value
+                );
+                let json = serde_json::to_string(&value).unwrap();
+                assert_eq!(serde_json::from_str::<AbstractIndex>(&json).unwrap(), value);
+            }
+        }
     }
 }
 
@@ -323,7 +506,10 @@ let args = arg.pos().map(to-eq).join("")
                 }
             },
             tag = SPENSO_TAG.lower,
-            print = |a, opt, _state| {
+            print = |a, opt, state| {
+                if opt.mode.is_mathml() {
+                    return mathml::render(a, opt, state, &|_, _| None);
+                }
                 if matches!(
                     opt.custom_print_mode.get("typst"),
                     Some(PrintUserData::Integer(1))
@@ -367,6 +553,7 @@ let args = arg.pos().map(to-eq).join("")
             }
         ),
         openind: symbol!(OPENIND),
+        scope: symbol!("spenso::index_scope", tags = [SPENSO_TAG.index.clone()]),
         selfdualind: symbol!(
             SELFDUALIND,
             norm = |view, out| {
@@ -381,6 +568,7 @@ let args = arg.pos().map(to-eq).join("")
 }
 
 static DUMMYCOUNTER: AtomicUsize = AtomicUsize::new(0);
+static OPEN_OWNER: AtomicUsize = AtomicUsize::new(0);
 /// A type that represents the name of an index in a tensor.
 #[derive(
     Debug,
@@ -417,9 +605,56 @@ pub enum AbstractIndex {
         owner: usize,
         axis: usize,
     },
+    /// A tagged index call with a natural owner and local index, preserving its head.
+    /// Local zero is written as `head(owner)`; `head(owner, 0)` parses identically.
+    #[cfg(feature = "symbolica")]
+    Named(SerializableSymbol, usize, usize),
+    /// An index in an independent copy of a tensor, retaining its original identity.
+    #[cfg(feature = "symbolica")]
+    Scoped(ScopedIndex),
 }
 
 impl AbsInd for AbstractIndex {}
+
+impl AbstractIndex {
+    /// Allocate an occurrence identity shared by symbolic and concrete open ports.
+    pub fn fresh_open_owner() -> usize {
+        OPEN_OWNER.fetch_add(1, Ordering::Relaxed)
+    }
+
+    /// Put this index in a named scope. Reapplying the outer scope is idempotent.
+    #[cfg(feature = "symbolica")]
+    pub fn scoped(self, scope: Symbol) -> Self {
+        if let Self::Scoped(index) = self
+            && index.scope() == scope
+        {
+            return self;
+        }
+        Self::Scoped(ScopedIndex::new(scope, self))
+    }
+
+    #[cfg(feature = "symbolica")]
+    pub fn scope_symbol() -> Symbol {
+        AIND_SYMBOLS.scope
+    }
+
+    /// Scope explicit tensor slots, leaving scalar function arguments opaque.
+    #[cfg(feature = "symbolica")]
+    pub fn wrap_expression(
+        expression: AtomView<'_>,
+        scope: Symbol,
+        mut select: impl FnMut(&super::representation::LibrarySlot<Self>) -> bool,
+    ) -> Atom {
+        SlotMatcher::default().map_expression_indices(expression, |slot| {
+            // AUTO markers identify unresolved axes, not explicit names.
+            if matches!(slot.aind, Self::Open { .. }) || !select(slot) {
+                None
+            } else {
+                Some(slot.aind.scoped(scope))
+            }
+        })
+    }
+}
 
 impl DummyAind for AbstractIndex {
     fn new_dummy() -> Self {
@@ -450,62 +685,22 @@ impl From<Symbol> for AbstractIndex {
 impl std::ops::Add<AbstractIndex> for AbstractIndex {
     type Output = AbstractIndex;
     fn add(self, rhs: AbstractIndex) -> Self::Output {
-        match self {
-            AbstractIndex::Normal(l) => match rhs {
-                AbstractIndex::Normal(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Dualize(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Added(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Dummy(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Double(_, _) => panic!("cannot add double"),
-                #[cfg(feature = "symbolica")]
-                AbstractIndex::Symbol(r) => AbstractIndex::Added(l + r.get_id() as usize),
-                AbstractIndex::Open { .. } => panic!("cannot add open index"),
-            },
-            AbstractIndex::Dualize(l) => match rhs {
-                AbstractIndex::Normal(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Dualize(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Added(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Dummy(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Double(_, _) => panic!("cannot add double"),
-                #[cfg(feature = "symbolica")]
-                AbstractIndex::Symbol(r) => AbstractIndex::Added(l + r.get_id() as usize),
-                AbstractIndex::Open { .. } => panic!("cannot add open index"),
-            },
-            AbstractIndex::Added(l) => match rhs {
-                AbstractIndex::Normal(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Dualize(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Added(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Dummy(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Double(_, _) => panic!("cannot add double"),
-                #[cfg(feature = "symbolica")]
-                AbstractIndex::Symbol(r) => AbstractIndex::Added(l + r.get_id() as usize),
-                AbstractIndex::Open { .. } => panic!("cannot add open index"),
-            },
-            AbstractIndex::Dummy(l) => match rhs {
-                AbstractIndex::Normal(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Dualize(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Added(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Dummy(r) => AbstractIndex::Added(l + r),
-                AbstractIndex::Double(_, _) => panic!("cannot add double"),
-                #[cfg(feature = "symbolica")]
-                AbstractIndex::Symbol(r) => AbstractIndex::Added(l + r.get_id() as usize),
-                AbstractIndex::Open { .. } => panic!("cannot add open index"),
-            },
-            AbstractIndex::Double(_, _) => panic!("cannot add double"),
-
+        match (self, rhs) {
+            (AbstractIndex::Double(..), _) | (_, AbstractIndex::Double(..)) => {
+                panic!("cannot add double")
+            }
+            (AbstractIndex::Open { .. }, _) | (_, AbstractIndex::Open { .. }) => {
+                panic!("cannot add open index")
+            }
             #[cfg(feature = "symbolica")]
-            AbstractIndex::Symbol(l) => match rhs {
-                AbstractIndex::Normal(r) => AbstractIndex::Added(l.get_id() as usize + r),
-                AbstractIndex::Dualize(r) => AbstractIndex::Added(l.get_id() as usize + r),
-                AbstractIndex::Added(r) => AbstractIndex::Added(l.get_id() as usize + r),
-                AbstractIndex::Dummy(r) => AbstractIndex::Added(l.get_id() as usize + r),
-                AbstractIndex::Double(_, _) => panic!("cannot add double"),
-                AbstractIndex::Symbol(r) => {
-                    AbstractIndex::Added(l.get_id() as usize + r.get_id() as usize)
-                }
-                AbstractIndex::Open { .. } => panic!("cannot add open index"),
-            },
-            AbstractIndex::Open { .. } => panic!("cannot add open index"),
+            (AbstractIndex::Named(..), _) | (_, AbstractIndex::Named(..)) => {
+                panic!("cannot add named index")
+            }
+            #[cfg(feature = "symbolica")]
+            (AbstractIndex::Scoped(..), _) | (_, AbstractIndex::Scoped(..)) => {
+                panic!("cannot add scoped index")
+            }
+            (left, right) => AbstractIndex::Added(usize::from(left) + usize::from(right)),
         }
     }
 }
@@ -576,6 +771,12 @@ impl std::fmt::Display for AbstractIndex {
                     write!(f, "{}", v)
                 }
             }
+            #[cfg(feature = "symbolica")]
+            AbstractIndex::Named(name, owner, 0) => write!(f, "{name}({owner})"),
+            #[cfg(feature = "symbolica")]
+            AbstractIndex::Named(name, owner, local) => write!(f, "{name}({owner},{local})"),
+            #[cfg(feature = "symbolica")]
+            AbstractIndex::Scoped(index) => write!(f, "{}({})", index.scope(), index.index()),
             AbstractIndex::Open { owner, axis } => write!(f, "open({owner},{axis})"),
         }
     }
@@ -587,16 +788,43 @@ impl From<usize> for AbstractIndex {
     }
 }
 
+/// The tagged symbol of generated dummy `counter`, normally `d_counter`.
+///
+/// Symbolica rejects a definition whose tags differ from an existing symbol of
+/// the same name. Text parsed without the tag, such as a plainly printed
+/// `spenso::d_3`, defines such a written symbol; it keeps its name and the
+/// generated dummy takes the first free spelling `d_counter_k`, so it never
+/// aliases a written index.
+#[cfg(feature = "symbolica")]
+fn dummy_symbol(counter: usize) -> Symbol {
+    let name = format!("d_{counter}");
+    iter::once(name.clone())
+        .chain((1..).map(|k| format!("{name}_{k}")))
+        .find_map(|spelling| try_symbol!(spelling.as_str(), tag = DUMMY_INDEX_TAG).ok())
+        .expect("an unbounded sequence of spellings contains an undefined one")
+}
+
 #[cfg(feature = "symbolica")]
 impl From<AbstractIndex> for Atom {
     fn from(value: AbstractIndex) -> Self {
         match value {
             AbstractIndex::Double(i, j) => Atom::num((i as i64, j as i64)),
-            AbstractIndex::Normal(v) => Atom::num(v as i64),
-            AbstractIndex::Dualize(v) => Atom::num(-(v as i64)),
-            AbstractIndex::Added(v) => Atom::num(v as i64),
-            AbstractIndex::Dummy(v) => Atom::var(symbol!(format!("d_{}", v))),
+            AbstractIndex::Normal(v) => Atom::num(v),
+            AbstractIndex::Dualize(v) => -Atom::num(v),
+            AbstractIndex::Added(v) => Atom::num(v),
+            AbstractIndex::Dummy(v) => Atom::var(dummy_symbol(v)),
             AbstractIndex::Symbol(v) => Atom::var(v.into()),
+            AbstractIndex::Named(name, owner, 0) => {
+                symbolica::function!(Symbol::from(name), Atom::num(owner))
+            }
+            AbstractIndex::Named(name, owner, local) => {
+                symbolica::function!(Symbol::from(name), Atom::num(owner), Atom::num(local))
+            }
+            AbstractIndex::Scoped(index) => symbolica::function!(
+                AbstractIndex::scope_symbol(),
+                index.scope(),
+                Atom::from(index.index())
+            ),
             AbstractIndex::Open { owner, axis } => {
                 symbolica::function!(AIND_SYMBOLS.openind, Atom::num(owner), Atom::num(axis))
             }
@@ -633,6 +861,10 @@ impl From<AbstractIndex> for usize {
             AbstractIndex::Dummy(v) => v,
             #[cfg(feature = "symbolica")]
             AbstractIndex::Symbol(v) => v.get_id() as usize,
+            #[cfg(feature = "symbolica")]
+            AbstractIndex::Named(..) => panic!("a named index has no numeric identity"),
+            #[cfg(feature = "symbolica")]
+            AbstractIndex::Scoped(..) => panic!("a scoped index has no numeric identity"),
             AbstractIndex::Open { axis, .. } => axis,
         }
     }
@@ -641,7 +873,7 @@ impl From<AbstractIndex> for usize {
 impl From<isize> for AbstractIndex {
     fn from(value: isize) -> Self {
         if value < 0 {
-            AbstractIndex::Dualize(-value as usize)
+            AbstractIndex::Dualize(value.unsigned_abs())
         } else {
             AbstractIndex::Normal(value as usize)
         }
@@ -651,14 +883,14 @@ impl From<isize> for AbstractIndex {
 impl From<i32> for AbstractIndex {
     fn from(value: i32) -> Self {
         if value < 0 {
-            AbstractIndex::Dualize(-value as usize)
+            AbstractIndex::Dualize(value.unsigned_abs() as usize)
         } else {
             AbstractIndex::Normal(value as usize)
         }
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Clone, Debug, Error, PartialEq, Eq, Hash)]
 pub enum AbstractIndexError {
     #[error("Argument is not a natural number")]
     NotNatural,
@@ -674,14 +906,45 @@ impl TryFrom<AtomView<'_>> for AbstractIndex {
 
     fn try_from(view: AtomView<'_>) -> Result<Self, Self::Error> {
         match view {
-            AtomView::Num(n) => match n.get_coeff_view() {
-                CoefficientView::Natural(n, 1, _, _) => Ok(AbstractIndex::from(n as i32)),
-                CoefficientView::Natural(n, d, _, _) => {
-                    Ok(AbstractIndex::Double(n as u16, d as u16))
+            AtomView::Num(number) => {
+                let invalid = || AbstractIndexError::NotIndex(view.to_string());
+                match number.get_coeff_view() {
+                    CoefficientView::Natural(n, 1, 0, _) => {
+                        let magnitude = usize::try_from(n.unsigned_abs()).map_err(|_| invalid())?;
+                        Ok(if n < 0 {
+                            Self::Dualize(magnitude)
+                        } else {
+                            Self::Normal(magnitude)
+                        })
+                    }
+                    CoefficientView::Natural(n, d, 0, _) => Ok(Self::Double(
+                        u16::try_from(n).map_err(|_| invalid())?,
+                        u16::try_from(d).map_err(|_| invalid())?,
+                    )),
+                    CoefficientView::Large(real, imaginary) if imaginary.is_zero() => {
+                        let rational = real.to_rat();
+                        if !rational.is_integer() {
+                            return Err(invalid());
+                        }
+                        let magnitude =
+                            usize::try_from(rational.numerator().abs()).map_err(|_| invalid())?;
+                        Ok(if rational.numerator().is_negative() {
+                            Self::Dualize(magnitude)
+                        } else {
+                            Self::Normal(magnitude)
+                        })
+                    }
+                    _ => Err(AbstractIndexError::NotNatural),
                 }
-                _ => Err(AbstractIndexError::NotNatural),
-            },
+            }
             AtomView::Var(v) => Ok(AbstractIndex::Symbol(v.get_symbol().into())),
+            AtomView::Fun(function) if function.get_symbol() == Self::scope_symbol() => {
+                let args = function.iter().collect::<Vec<_>>();
+                let [AtomView::Var(scope), index] = args.as_slice() else {
+                    return Err(AbstractIndexError::NotIndex(view.to_string()));
+                };
+                Ok(Self::try_from(*index)?.scoped(scope.get_symbol()))
+            }
             AtomView::Fun(function) if function.get_symbol() == AIND_SYMBOLS.openind => {
                 let args = function.iter().collect::<Vec<_>>();
                 let [owner, axis] = args.as_slice() else {
@@ -693,6 +956,24 @@ impl TryFrom<AtomView<'_>> for AbstractIndex {
                     axis: usize::try_from(*axis)
                         .map_err(|_| AbstractIndexError::NotIndex(view.to_string()))?,
                 })
+            }
+            AtomView::Fun(function) if function.get_symbol().has_tag(&SPENSO_TAG.index) => {
+                let args = function.iter().collect::<Vec<_>>();
+                let (owner, local) = match args.as_slice() {
+                    [owner] => (*owner, 0),
+                    [owner, local] => (
+                        *owner,
+                        usize::try_from(*local)
+                            .map_err(|_| AbstractIndexError::NotIndex(view.to_string()))?,
+                    ),
+                    _ => return Err(AbstractIndexError::NotIndex(view.to_string())),
+                };
+                Ok(AbstractIndex::Named(
+                    function.get_symbol().into(),
+                    usize::try_from(owner)
+                        .map_err(|_| AbstractIndexError::NotIndex(view.to_string()))?,
+                    local,
+                ))
             }
             _ => Err(AbstractIndexError::NotIndex(view.to_string())),
         }

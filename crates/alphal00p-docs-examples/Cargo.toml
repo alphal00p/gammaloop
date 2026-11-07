@@ -7,9 +7,17 @@ build = "build.rs"
 
 [dev-dependencies]
 eyre.workspace = true
+feynkit.workspace = true
+feynkit-model.workspace = true
+feynkit-ufo.workspace = true
+feynkit-kinematics.workspace = true
+feynkit-graph.workspace = true
+feynkit-generator.workspace = true
+feynkit-cff.workspace = true
+feynkit-tensor.workspace = true
 gammaloop-api = { path = "../gammaloop-api", default-features = false, features = ["cli"] }
 gammalooprs = { path = "../gammalooprs", default-features = false }
-idenso = { workspace = true, features = ["reference-cases"] }
+idenso = { workspace = true, features = ["bincode", "reference-cases"] }
 linnet = { path = "../linnet", default-features = false, features = ["bincode", "drawing", "serde", "symbolica"] }
 ndarray.workspace = true
 spenso = { workspace = true, features = ["symbolica"] }

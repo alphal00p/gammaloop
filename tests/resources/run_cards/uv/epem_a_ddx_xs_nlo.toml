@@ -21,7 +21,7 @@ summed_function_map = false
 # cpe_iterations = 0
 
 [cli_settings.global.generation.orientation_pattern]
-pat = "(+,+,+,+,0,-,0,+,+)"
+pat = "(+,+,-,-,0,+,0,-,+)"
 
 # Otherwise leave them enabled with
 [cli_settings.global.generation.threshold_subtraction]
@@ -69,7 +69,7 @@ commands = [
       --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
       --symmetrize-left-right-states false
       -p epem_a_ddx -i NLO
-      --select-graphs GL0
+      --select-graphs GL1
       """,
   "save standalone --json",
 ]

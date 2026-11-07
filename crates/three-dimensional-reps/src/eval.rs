@@ -4096,6 +4096,11 @@ mod thermal_reference_tests {
                 let evaluator = ExpressionEvaluator::new(&parsed, expression, &input);
                 let energies = &evaluator.internal_energies;
                 let source_conversion = generated.source_conversion();
+                // Keep one surface catalogue while selecting individual terms.
+                // Cloning the whole representation for every variant makes this
+                // oracle quadratic in the generated representation size.
+                let mut branch = expression.clone();
+                branch.orientations.clear();
                 for vacuum_limit in [true, false] {
                     if !vacuum_limit && medium_mode != MediumMode::ThermodynamicEquilibrium {
                         continue;

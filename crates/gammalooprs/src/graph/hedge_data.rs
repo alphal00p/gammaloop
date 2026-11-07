@@ -1,3 +1,4 @@
+#[cfg(test)]
 use itertools::Itertools;
 use linnet::{
     half_edge::involution::{Flow, Hedge},
@@ -6,12 +7,14 @@ use linnet::{
 use serde::{Deserialize, Serialize};
 use spenso::structure::{
     Canonicalized, OrderedStructure, TensorStructure,
-    representation::{LibraryRep, LibrarySlot},
+    representation::{LibraryRep, LibrarySlot, RepName},
     slot::IsAbstractSlot,
 };
+use std::collections::{BTreeMap, BTreeSet};
+use symbolica::atom::AtomCore;
 use symbolica::atom::{Atom, FunctionBuilder};
 
-use crate::{graph::edge::PossibleParticle, numerator::aind::Aind};
+use crate::{graph::edge::PossibleParticle, model::Model, numerator::aind::Aind};
 
 use super::{Autogen, parse::ParseGraph};
 
@@ -40,63 +43,113 @@ pub struct NumIndices {
     pub spin_indices: HedgeIndices,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) enum NumeratorIndexSource {
+    /// FeynKit localizes positive UFO indices starting at one.
+    Feynkit,
+    /// A finalized artifact owns its literal represented indices.
+    Literal,
+}
+
 impl NumIndices {
-    fn from_particle(particle: &PossibleParticle, flow: Flow, h: Hedge) -> Self {
-        let creps = particle.color_reps(flow);
-        let sreps = particle.spin_reps();
-
-        let mut init = 0;
-        let mut last = None;
-        let color_structure: Canonicalized<_> = creps
-            .external_reps_iter()
-            .map(|r| {
-                if let Some(l) = last {
-                    if l != r {
-                        last = Some(r);
-                        init = 0;
-                    } else {
-                        init += 1;
-                    }
-                } else {
-                    last = Some(r);
-                    init = 0;
+    fn from_particle(
+        particle: &PossibleParticle,
+        model: &Model,
+        flow: Flow,
+        h: Hedge,
+        source: NumeratorIndexSource,
+        labels: &BTreeMap<(usize, LibraryRep), BTreeSet<u16>>,
+    ) -> Result<Self> {
+        let creps = particle.color_reps(model, flow);
+        let sreps = particle.spin_reps(model);
+        let structure = |representations: Vec<
+            spenso::structure::representation::Representation<LibraryRep>,
+        >|
+         -> Result<OrderedStructure<LibraryRep, Aind>> {
+            let mut counts = BTreeMap::new();
+            for representation in &representations {
+                *counts.entry(representation.rep.base()).or_insert(0usize) += 1;
+            }
+            let mut ordinals = BTreeMap::new();
+            let mut slots = Vec::new();
+            for representation in representations {
+                let family = representation.rep.base();
+                let ordinal = ordinals.entry(family).or_insert(0usize);
+                let local = match source {
+                    NumeratorIndexSource::Feynkit => Some(u16::try_from(*ordinal + 1)?),
+                    NumeratorIndexSource::Literal => match labels.get(&(h.0, family)) {
+                        None => None,
+                        Some(indices) => {
+                            eyre::ensure!(
+                                indices.len() == counts[&family],
+                                "ambiguous literal tensor interface at half-edge {} for {}: expected {} index labels, found {:?}",
+                                h.0,
+                                family,
+                                counts[&family],
+                                indices
+                            );
+                            indices.iter().nth(*ordinal).copied()
+                        }
+                    },
+                };
+                if let Some(local) = local {
+                    slots.push(representation.slot(Aind::Hedge(u16::try_from(h.0)?, local)));
                 }
-                r.slot(Aind::Hedge(h.0 as u16, init))
-            })
-            .collect();
-
-        let spin_structure: Canonicalized<_> = sreps
-            .external_reps_iter()
-            .map(|r| {
-                if let Some(l) = last {
-                    if l != r {
-                        last = Some(r);
-                        init = 0;
-                    } else {
-                        init += 1;
-                    }
-                } else {
-                    last = Some(r);
-                    init = 0;
-                }
-                r.slot(Aind::Hedge(h.0 as u16, init))
-            })
-            .collect();
-
-        NumIndices {
-            color_indices: HedgeIndices::new(color_structure.into_canonical()),
-            spin_indices: HedgeIndices::new(spin_structure.into_canonical()),
-        }
+                *ordinal += 1;
+            }
+            let structure: Canonicalized<_> = slots.into_iter().collect();
+            Ok(structure.into_canonical())
+        };
+        Ok(NumIndices {
+            color_indices: HedgeIndices::new(structure(creps.external_reps_iter().collect())?),
+            spin_indices: HedgeIndices::new(structure(sreps.external_reps_iter().collect())?),
+        })
     }
 
     pub(crate) fn parse<'a>(
         graph: &'a ParseGraph,
-    ) -> impl FnMut(Hedge, &'a ParseHedgeData) -> Self {
-        |h, _| {
+        model: &'a Model,
+        source: NumeratorIndexSource,
+    ) -> impl FnMut(Hedge, &'a ParseHedgeData) -> Result<Self> {
+        let mut labels = BTreeMap::<(usize, LibraryRep), BTreeSet<u16>>::new();
+        if matches!(source, NumeratorIndexSource::Literal) {
+            // Each label explicitly identifies its physical half-edge and
+            // representation. No momentum inference or expression expansion
+            // participates in this interface certificate.
+            let mut inspect = |atom: &Atom| {
+                atom.visitor(&mut |part| {
+                    if let Ok(slot) = LibrarySlot::<Aind>::try_from(part)
+                        && let Aind::Hedge(hedge, local) = slot.aind
+                    {
+                        labels
+                            .entry((usize::from(hedge), slot.rep().rep.base()))
+                            .or_default()
+                            .insert(local);
+                        return false;
+                    }
+                    true
+                });
+            };
+            for (_, _, vertex) in graph.iter_nodes() {
+                if let Some(atom) = &vertex.num {
+                    inspect(atom);
+                }
+            }
+            for (_, _, edge) in graph.iter_edges() {
+                if let Some(atom) = &edge.data.num {
+                    inspect(atom);
+                }
+            }
+            inspect(&graph.global_data.num);
+            inspect(&graph.global_data.overall_factor);
+            if let Some(atom) = &graph.global_data.projectors {
+                inspect(atom);
+            }
+        }
+        move |h, _| {
             let eid = graph[&h];
             let flow = graph.flow(h);
-
-            Self::from_particle(&graph[eid].particle, flow, h)
+            Self::from_particle(&graph[eid].particle, model, flow, h, source, &labels)
         }
     }
 }
@@ -109,11 +162,26 @@ pub struct HedgeData {
 }
 
 impl HedgeData {
-    pub(crate) fn edge_color_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
+    #[cfg(test)]
+    pub(crate) fn edge_color_slots(&self) -> impl Iterator<Item = LibrarySlot<Aind>> + '_ {
         self.num_indices
             .color_indices
             .edge_indices
             .external_structure_iter()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn color_kronekers(&self, other: &Self) -> Atom {
+        self.edge_color_slots()
+            .zip_eq(other.edge_color_slots())
+            .map(|(left, right)| {
+                assert!(
+                    left.rep().matches(&right.rep()),
+                    "color representations must match"
+                );
+                right.rep().id(left.aind, right.aind)
+            })
+            .product()
     }
 
     pub(crate) fn edge_spin_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
@@ -128,19 +196,6 @@ impl HedgeData {
             builder = builder.add_arg(s.to_atom())
         }
         builder.finish()
-    }
-
-    pub(crate) fn color_kronekers(&self, other: &Self) -> Atom {
-        let mut color = Atom::num(1);
-        for (i, j) in self.edge_color_slots().zip_eq(other.edge_color_slots()) {
-            if i.rep().matches(&j.rep()) {
-                color *= j.rep().id(i.aind, j.aind);
-            } else {
-                panic!("Should be the same rep found:{} and {}", i, j)
-            }
-        }
-
-        color
     }
 }
 
@@ -171,26 +226,20 @@ impl From<&HedgeData> for DotHedgeData {
         let payload = ParseHedgeData {
             ufo_order: (!value.ufo_order.autogenerated).then_some(value.ufo_order.value),
         };
-
-        let statement = if payload.ufo_order.is_none() {
-            None
-        } else {
-            Some(json5::to_string(&payload).expect("serializing hedge payload should not fail"))
-        };
-
-        DotHedgeData::from(statement)
+        (&payload).into()
     }
 }
 
 impl From<&ParseHedgeData> for DotHedgeData {
     fn from(value: &ParseHedgeData) -> Self {
-        let statement = if value.ufo_order.is_none() {
-            None
-        } else {
-            Some(json5::to_string(value).expect("serializing hedge payload should not fail"))
+        let Some(order) = value.ufo_order else {
+            return DotHedgeData::default();
         };
 
-        DotHedgeData::from(statement)
+        // Linnet quotes hedge statements when writing `source=`/`sink=`. Keep
+        // the compact JSON5 payload unquoted here so serialized finalized
+        // artifacts can be parsed again without relying on inference.
+        DotHedgeData::default().with_statement(format!("{{ufo_order:{order}}}"))
     }
 }
 
@@ -216,6 +265,6 @@ mod tests {
         let serialized: DotHedgeData = (&parsed).into();
         let statement = serialized.statement.expect("statement should be present");
 
-        assert!(statement.contains("ufo_order"));
+        assert_eq!(statement, "{ufo_order:1}");
     }
 }

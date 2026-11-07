@@ -1,4 +1,5 @@
 digraph GL650 {
+    final_state = "H,t,t~|H,t,t~,g|H,t,t~,g,g|H,t,t~,d,d~|H,t,t~,ghG,ghG~";
     num = "1";
     overall_factor = "NumeratorDependentGrouping(650,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1))+NumeratorDependentGrouping(651,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1))";
     overall_factor_evaluated = "-2";

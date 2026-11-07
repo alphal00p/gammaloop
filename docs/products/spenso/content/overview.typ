@@ -1,7 +1,11 @@
 #import "../../shared.typ": callout, boundary, developer-link, product-link
 
 #let overview = [
-= Overview
+#context if target() == "html" {
+  html.elem("span", attrs: (id: "overview"))[]
+} else {
+  heading(level: 1)[Overview]
+}
 
 Spenso represents and evaluates tensors with abstract indices. It separates a tensor's
 structure—representations, slots, dimensions, names, and index order—from its stored data.
@@ -69,7 +73,11 @@ useful for typed tensors and contractions without that layer.
 
 Spenso uses #product-link("linnet", label: "Linnet") for the underlying network graph.
 #product-link("idenso", label: "Idenso") is the symbolic-identity layer for Spenso-formatted
-Symbolica expressions. #product-link("gammaloop", label: "GammaLoop") consumes these components
+Symbolica expressions. In Python, `spynso3` exposes these identities as `TensorExpression`
+methods and exports their settings from the same `symbolica.community.tensor` module.
+FeynKit supplies vacuum tensor
+projection with explicit integrated-momentum selectors.
+#product-link("gammaloop", label: "GammaLoop") consumes these components
 inside a broader collider workflow.
 
 The #link("reference/interfaces/")[interface guide], native Rustdoc, and generated Python

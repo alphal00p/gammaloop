@@ -4,13 +4,15 @@ use color_eyre::Result;
 use eyre::{eyre, Context};
 use gammalooprs::{
     cff::esurface::EsurfaceExistenceStatus,
-    graph::{threshold_counterterms::ThresholdCountertermVariant, FeynmanGraph, Graph},
+    graph::{
+        threshold_counterterms::ThresholdCountertermVariant, FeynmanGraph, FinalizedCut, Graph,
+    },
     integrands::process::{ActiveF64Backend, LmbMultiChannelingSetup, ParamBuilder},
     model::Model,
     processes::{
-        Amplitude, CrossSection, CrossSectionCut, CutId, ProcessCollection,
-        ThresholdCountertermAssociation, ThresholdCountertermMetadataRegistry,
-        ThresholdCountertermMultiplierMetadata, ThresholdCountertermStatus,
+        Amplitude, CrossSection, CutId, ProcessCollection, ThresholdCountertermAssociation,
+        ThresholdCountertermMetadataRegistry, ThresholdCountertermMultiplierMetadata,
+        ThresholdCountertermStatus,
     },
     settings::{global::FrozenCompilationMode, runtime::ParameterizationSettings, RuntimeSettings},
     utils::F,
@@ -215,7 +217,7 @@ impl IntegrandCutThresholdInfo {
     fn from_association(
         association: &ThresholdCountertermAssociation,
         graph: &Graph,
-        cut: &CrossSectionCut,
+        cut: &FinalizedCut,
         model: &Model,
         param_builder: &ParamBuilder,
         settings: &RuntimeSettings,
@@ -284,7 +286,7 @@ impl IntegrandCutInfo {
     fn from_cross_section_cut(
         graph_term: &gammalooprs::integrands::process::cross_section::CrossSectionGraphTerm,
         cut_id: CutId,
-        cut: &CrossSectionCut,
+        cut: &FinalizedCut,
         raising_power: usize,
         model: &Model,
         param_builder: &ParamBuilder,
@@ -377,7 +379,7 @@ pub struct IntegrandInfo {
     pub generation_compilation: FrozenCompilationMode,
     /// Floating-point evaluator backend currently active for the integrand.
     pub active_f64_backend: ActiveF64Backend,
-    /// Number of amplitude graphs or cross-section supergraphs.
+    /// Number of graph terms in the generated integrand.
     pub graph_count: usize,
     /// Number of graph groups in the generated integrand.
     pub graph_group_count: usize,
@@ -455,8 +457,8 @@ pub(crate) fn collect_integrand_info(
                 generated_representations: integrand.data.three_d_representations.clone(),
                 generation_compilation,
                 active_f64_backend,
-                graph_count: cross_section.supergraphs.len(),
-                graph_group_count: cross_section.graph_group_structure.len(),
+                graph_count: integrand.data.graph_terms.len(),
+                graph_group_count: integrand.data.graph_group_structure.len(),
                 record_size_bytes: integrand_record_size_from_cross_section(cross_section)?,
                 graph_groups: cross_section_graph_groups(integrand, cross_section, &model)?,
             })
@@ -485,7 +487,7 @@ fn orientation_edge_ids(orientation: &EdgeVec<Orientation>) -> Vec<usize> {
     orientation.iter().map(|(edge_id, _)| edge_id.0).collect()
 }
 
-fn cut_edge_ids(graph: &Graph, cut: &CrossSectionCut) -> Vec<usize> {
+fn cut_edge_ids(graph: &Graph, cut: &FinalizedCut) -> Vec<usize> {
     cut.cut
         .iter_edges(&graph.underlying)
         .map(|(_, edge)| {
@@ -753,6 +755,33 @@ fn cross_section_graph_groups(
     cross_section: &CrossSection,
     model: &Model,
 ) -> Result<Vec<IntegrandGraphGroupInfo>> {
+    if integrand.data.source_graph_ids.len() != integrand.data.graph_terms.len() {
+        return Err(eyre!(
+            "Cross-section source projection has a different length from its runtime terms"
+        ));
+    }
+    let source_graphs = integrand
+        .data
+        .source_graph_ids
+        .iter()
+        .zip(&integrand.data.graph_terms)
+        .map(|(&source_id, term)| {
+            let source = cross_section.supergraphs.get(source_id).ok_or_else(|| {
+                eyre!(
+                    "Runtime graph '{}' refers to missing stored graph {source_id}",
+                    term.graph.name
+                )
+            })?;
+            if source.graph.name != term.graph.name {
+                return Err(eyre!(
+                    "Runtime graph '{}' refers to stored graph '{}' at index {source_id}",
+                    term.graph.name,
+                    source.graph.name
+                ));
+            }
+            Ok(source)
+        })
+        .collect::<Result<Vec<_>>>()?;
     let parameterization_settings = integrand
         .settings
         .sampling
@@ -826,6 +855,7 @@ fn cross_section_graph_groups(
                     .into_iter()
                     .map(|graph_id| {
                         let graph_term = &integrand.data.graph_terms[graph_id];
+                        let stored = source_graphs[graph_id];
                         IntegrandGraphInfo {
                             graph_id,
                             name: graph_term.graph.name.clone(),
@@ -835,13 +865,11 @@ fn cross_section_graph_groups(
                                 .three_d_representations
                                 .iter()
                                 .filter_map(|representation| {
-                                    cross_section.supergraphs[graph_id]
-                                        .derived_data
-                                        .expressions
-                                        .get(representation)
-                                        .map(|source| {
+                                    stored.derived_data.expressions.get(representation).map(
+                                        |source| {
                                             (*representation, source.expression.orientations.len())
-                                        })
+                                        },
+                                    )
                                 })
                                 .collect(),
                             threshold_counterterm_directives:

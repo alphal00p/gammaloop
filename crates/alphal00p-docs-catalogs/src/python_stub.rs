@@ -16,7 +16,7 @@ pub(crate) struct PythonDeclaration {
 pub(crate) fn python_declarations(source: &str) -> Result<Vec<PythonDeclaration>> {
     let lines = source.lines().collect::<Vec<_>>();
     let exports = python_exports(&lines);
-    let mut declarations = vec![];
+    let mut declarations: Vec<PythonDeclaration> = vec![];
     for (index, line) in lines.iter().enumerate() {
         if indentation(line) != 0 {
             continue;
@@ -54,14 +54,47 @@ pub(crate) fn python_declarations(source: &str) -> Result<Vec<PythonDeclaration>
             } else {
                 vec![]
             };
-            declarations.push(PythonDeclaration {
+            let is_overload = lines[..index]
+                .iter()
+                .rev()
+                .take_while(|line| line.trim().starts_with('@') || line.trim().is_empty())
+                .any(|line| matches!(line.trim(), "@overload" | "@typing.overload"));
+            let mut declaration = PythonDeclaration {
                 name,
                 signature: python_display_signature(&signature),
                 docs,
                 kind,
                 line: index as u32 + 1,
                 members,
-            });
+            };
+            if is_overload {
+                let mut overload = DocMember::new(&declaration.name, DocMemberKind::Overload);
+                overload.signature = Some(declaration.signature.clone());
+                overload.members = python_parameters(&signature, &declaration.docs);
+                if !declaration.docs.is_empty() {
+                    overload.docs =
+                        Some(DocText::new(DocFormat::PythonDocstring, &declaration.docs));
+                }
+                declaration.members.push(overload);
+            }
+            if let Some(callable) = declarations.iter_mut().find(|callable| {
+                callable.name == declaration.name
+                    && callable.kind == declaration.kind
+                    && callable
+                        .members
+                        .iter()
+                        .any(|member| member.kind == DocMemberKind::Overload)
+            }) {
+                if !is_overload {
+                    callable.signature = declaration.signature;
+                }
+                if callable.docs.is_empty() || (!is_overload && !declaration.docs.is_empty()) {
+                    callable.docs = declaration.docs;
+                }
+                callable.members.extend(declaration.members);
+            } else {
+                declarations.push(declaration);
+            }
             continue;
         }
 
@@ -659,12 +692,10 @@ fn split_top_level_once(source: &str, delimiter: char) -> Option<(&str, &str)> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
-
     use alphal00p_docs_schema::{ApiLanguage, DocItemKind, DocMemberKind};
 
     use super::*;
-    use crate::{CatalogRequest, export_catalog, first_sentence};
+    use crate::{CatalogRequest, export_catalog, first_sentence, tests};
 
     #[test]
     fn parses_python_exports_in_declared_order() {
@@ -937,6 +968,34 @@ class Engine:
     }
 
     #[test]
+    fn coalesces_module_overloads_with_docs_on_a_later_signature() {
+        let declarations = python_declarations(
+            r#"__all__ = ["run"]
+@typing.overload
+def run(value: int) -> int: ...
+@overload
+def run(value: str, strict: bool = False) -> str:
+    """Run a value."""
+"#,
+        )
+        .unwrap();
+        assert_eq!(declarations.len(), 1);
+        let run = &declarations[0];
+        assert_eq!(run.docs, "Run a value.");
+        assert_eq!(run.members.len(), 2);
+        assert!(
+            run.members
+                .iter()
+                .all(|member| member.kind == DocMemberKind::Overload)
+        );
+        assert_eq!(
+            run.members[0].signature.as_deref(),
+            Some("def run(value: int) -> int:")
+        );
+        assert_eq!(run.members[1].members[1].default.as_deref(), Some("False"));
+    }
+
+    #[test]
     fn display_signatures_hide_stub_generator_qualification() {
         let declarations = python_declarations(
             "class Result:\n    pass\n\nclass Engine:\n    def run(self, values: typing.Sequence[builtins.float]) -> typing.Optional[Result]: ...\n",
@@ -1002,16 +1061,12 @@ class Engine:
 
     #[test]
     fn existing_snapshots_generate_deterministic_nested_catalogs() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .ancestors()
-            .nth(2)
-            .unwrap();
+        let root = tests::workspace_root();
         let components = [
             ("gammaloop-python", "gammaloop._gammaloop"),
             ("linnet-graph", "symbolica.community.graph"),
-            ("spynso3", "symbolica.community.spenso"),
-            ("idenso-community", "symbolica.community.idenso"),
-            ("vakint-community", "symbolica.community.vakint"),
+            ("spynso3", "symbolica.community.tensor"),
+            ("vakint-community", "symbolica.community.hepkit.vakint"),
         ];
         let mut catalogs = BTreeMap::new();
         for (component, module) in components {
@@ -1029,8 +1084,8 @@ class Engine:
             let stub = root
                 .join("docs/api/python")
                 .join(format!("{component}.pyi"));
-            let first = export_catalog(&request, root, Some(&stub)).unwrap();
-            let second = export_catalog(&request, root, Some(&stub)).unwrap();
+            let first = export_catalog(&request, &root, Some(&stub)).unwrap();
+            let second = export_catalog(&request, &root, Some(&stub)).unwrap();
             assert_eq!(
                 serde_json::to_vec(&first).unwrap(),
                 serde_json::to_vec(&second).unwrap()
@@ -1127,7 +1182,7 @@ class Engine:
                 .iter()
                 .map(|member| member.name.as_str())
                 .collect::<Vec<_>>(),
-            ["Auto", "Serial", "Parallel"]
+            ["Auto", "Serial", "Parallel", "__int__"]
         );
     }
 }

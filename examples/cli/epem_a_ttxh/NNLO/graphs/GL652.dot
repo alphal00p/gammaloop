@@ -1,4 +1,5 @@
 digraph GL652{
+    final_state = "H,t,t~|H,t,t~,g|H,t,t~,g,g|H,t,t~,d,d~|H,t,t~,ghG,ghG~";
     // The two virtual cuts have distinct intrinsic one-loop cycles; the
     // three-gluon-free five-particle cut is a tree. Keep each full side
     // space and validate both single-soft and double-soft cancellation.

@@ -121,6 +121,14 @@ dependencies = [
  "alphal00p-docs-catalogs",
  "alphal00p-docs-schema",
  "eyre",
+ "feynkit",
+ "feynkit-cff",
+ "feynkit-generator",
+ "feynkit-graph",
+ "feynkit-kinematics",
+ "feynkit-model",
+ "feynkit-tensor",
+ "feynkit-ufo",
  "gammaloop-api",
  "gammalooprs",
  "idenso",
@@ -153,7 +161,6 @@ name = "alphal00p-docs-python-exporter"
 version = "0.1.0"
 dependencies = [
  "gammaloop-api",
- "idenso",
  "linnet-py",
  "pyo3",
  "pyo3-stub-gen",
@@ -396,6 +403,12 @@ name = "base62"
 version = "2.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cd637ac531c60eb7fbc4684dc061c2d7d90d73d758181aa02eeff0464b9eee4b"
+
+[[package]]
+name = "base64"
+version = "0.21.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d297deb1925b89f2ccc13d7635fa0714f12c87adce1c75356b39ca9b7178567"
 
 [[package]]
 name = "base64"
@@ -1063,6 +1076,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "corosensei"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6886a0c0f263965933c438626e7179139a62b978a33aa18281cbf0cd5a975f34"
+dependencies = [
+ "autocfg",
+ "cfg-if",
+ "libc",
+ "scopeguard",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
 name = "cpufeatures"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1669,6 +1695,91 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b97b65636e5b9ef369943878ac74335ba1c55c1cb6adbf1e2c293c624248d693"
 
 [[package]]
+name = "feynkit"
+version = "0.1.0"
+dependencies = [
+ "feynkit-amplitude",
+ "feynkit-cff",
+ "feynkit-generator",
+ "feynkit-graph",
+ "feynkit-kinematics",
+ "feynkit-model",
+ "feynkit-tensor",
+ "feynkit-ufo",
+]
+
+[[package]]
+name = "feynkit-amplitude"
+version = "0.1.0"
+dependencies = [
+ "feynkit-graph",
+ "feynkit-model",
+ "idenso",
+ "linnet",
+ "spenso",
+ "symbolica",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "feynkit-cff"
+version = "0.1.0"
+dependencies = [
+ "bincode 2.0.1",
+ "feynkit-graph",
+ "feynkit-model",
+ "linnet",
+ "serde",
+ "serde_json",
+ "spenso",
+ "symbolica",
+ "symbolica-notation",
+ "thiserror 2.0.18",
+ "three-dimensional-reps",
+ "typed-index-collections",
+]
+
+[[package]]
+name = "feynkit-generator"
+version = "0.1.0"
+dependencies = [
+ "bincode 2.0.1",
+ "bincode-trait-derive",
+ "feynkit-amplitude",
+ "feynkit-graph",
+ "feynkit-model",
+ "idenso",
+ "linnet",
+ "rayon",
+ "serde",
+ "serde_json",
+ "spenso",
+ "spenso-hep-lib",
+ "symbolica",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "feynkit-graph"
+version = "0.1.0"
+dependencies = [
+ "feynkit-kinematics",
+ "feynkit-model",
+ "idenso",
+ "itertools 0.14.0",
+ "linnest",
+ "linnet",
+ "nu-ansi-term",
+ "serde",
+ "serde_json",
+ "spenso",
+ "symbolica",
+ "symbolica-notation",
+ "symbolica-utils",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "feynkit-kinematics"
 version = "0.1.0"
 dependencies = [
@@ -1693,8 +1804,22 @@ dependencies = [
  "serde",
  "serde_json",
  "symbolica",
+ "symbolica-notation",
  "thiserror 2.0.18",
  "vectorize",
+]
+
+[[package]]
+name = "feynkit-tensor"
+version = "0.1.0"
+dependencies = [
+ "feynkit-graph",
+ "feynkit-model",
+ "idenso",
+ "linnet",
+ "spenso",
+ "symbolica",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -1908,6 +2033,10 @@ dependencies = [
  "crossterm",
  "dirs",
  "eyre",
+ "feynkit-cff",
+ "feynkit-generator",
+ "feynkit-graph",
+ "feynkit-ufo",
  "figment",
  "gammaloop-tracing-filter",
  "gammaloop-workspace-hack",
@@ -1960,9 +2089,13 @@ dependencies = [
  "color-eyre",
  "colored",
  "eyre",
+ "feynkit-generator",
+ "feynkit-graph",
+ "feynkit-model",
  "gammaloop-api",
  "gammaloop-workspace-hack",
  "gammalooprs",
+ "idenso",
  "insta",
  "itertools 0.14.0",
  "linnet",
@@ -2026,7 +2159,6 @@ dependencies = [
  "derive_more",
  "derive_more-impl",
  "either",
- "figment",
  "hashbrown 0.17.1",
  "indenter",
  "indexmap",
@@ -2034,7 +2166,6 @@ dependencies = [
  "log",
  "matrixmultiply",
  "memchr",
- "miniz_oxide 0.8.9",
  "num-bigint",
  "num-complex",
  "num-integer",
@@ -2080,6 +2211,12 @@ dependencies = [
  "dyn-clone",
  "enum_dispatch",
  "eyre",
+ "feynkit-amplitude",
+ "feynkit-cff",
+ "feynkit-generator",
+ "feynkit-graph",
+ "feynkit-kinematics",
+ "feynkit-model",
  "gammaloop-tracing-filter",
  "gammaloop-workspace-hack",
  "idenso",
@@ -2109,6 +2246,7 @@ dependencies = [
  "spenso",
  "spenso-hep-lib",
  "symbolica",
+ "symbolica-notation",
  "symbolica-utils",
  "tabled",
  "thiserror 2.0.18",
@@ -2240,9 +2378,8 @@ dependencies = [
 
 [[package]]
 name = "graphica"
-version = "3.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "afa7211a7cfdba21893f634868e19459e5d1882e5957f98d7c084875a6e70ab6"
+version = "3.0.1"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=community#8eb7c3729d6abefc916decc1bdf0c06536f8af80"
 dependencies = [
  "ahash 0.8.12",
  "dyn-clone",
@@ -2448,7 +2585,7 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7434c89e920d84e077214a29e69b462a6518754610f732f1124af3948410cb8c"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "hayro-interpret",
  "image",
  "kurbo",
@@ -2774,6 +2911,8 @@ checksum = "3d3067d79b975e8844ca9eb072e16b31c3c1c36928edf9c6789548c524d0d954"
 name = "idenso"
 version = "0.3.0"
 dependencies = [
+ "ahash 0.8.12",
+ "base64 0.22.1",
  "bincode 2.0.1",
  "bincode-trait-derive",
  "blake3",
@@ -2785,11 +2924,10 @@ dependencies = [
  "itertools 0.14.0",
  "linnet",
  "nu-ansi-term",
- "pyo3",
- "pyo3-stub-gen",
  "spenso",
  "spenso-macros",
  "symbolica",
+ "symbolica-notation",
  "symbolica-utils",
  "thiserror 2.0.18",
 ]
@@ -2952,7 +3090,7 @@ checksum = "7b4a6248eb93a4401ed2f37dfe8ea592d3cf05b7cf4f8efa867b6895af7e094e"
 dependencies = [
  "console",
  "once_cell",
- "ron",
+ "ron 0.12.1",
  "serde",
  "similar",
  "tempfile",
@@ -2982,9 +3120,9 @@ dependencies = [
 
 [[package]]
 name = "is-macro"
-version = "0.3.8"
+version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8267aa6001e25494f3015f9663bbd88a18240c74483afa5f0934a1b3e4c388e9"
+checksum = "1d57a3e447e24c22647738e4607f1df1e0ec6f72e16182c4cd199f647cdfb0e4"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -3129,7 +3267,7 @@ version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "27da593198b20eeba65caeb73c2bbeec3e53ab08fa549898312ce81c4fce5e33"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "bumpalo",
  "comemo",
  "flate2",
@@ -3410,9 +3548,9 @@ checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 
 [[package]]
 name = "lru"
-version = "0.18.5"
+version = "0.18.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef9ac18847474e638e3702b76c65d4eb93428471a74778ef0f1be711717f89b5"
+checksum = "ff9840bcc50b71349309900da0ce7279aa336ae71d73250b07998932c7d97c25"
 dependencies = [
  "hashbrown 0.17.1",
 ]
@@ -3817,8 +3955,7 @@ dependencies = [
 [[package]]
 name = "numerica"
 version = "3.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "836accdb415b7667573bd12676e0b2eb4440e3f60b110038d96a9086f5651c15"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=community#8eb7c3729d6abefc916decc1bdf0c06536f8af80"
 dependencies = [
  "ahash 0.8.12",
  "astro-float",
@@ -4270,7 +4407,7 @@ version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da1d65da6dd5d1e44199ac0f58712d241c0f439f80adea8924d832384087f85"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "indexmap",
  "quick-xml 0.41.0",
  "serde",
@@ -4467,6 +4604,7 @@ version = "0.28.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "91fd8e38a3b50ed1167fb981cd6fd60147e091784c427b8f7183a7ee32c31c12"
 dependencies = [
+ "anyhow",
  "eyre",
  "inventory",
  "libc",
@@ -4981,6 +5119,18 @@ name = "roman-numerals-rs"
 version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c85cd47a33a4510b1424fe796498e174c6a9cf94e606460ef022a19f3e4ff85e"
+
+[[package]]
+name = "ron"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b91f7eff05f748767f183df4320a63d6936e9c6107d97c9e6bdd9784f4289c94"
+dependencies = [
+ "base64 0.21.7",
+ "bitflags 2.13.2",
+ "serde",
+ "serde_derive",
+]
 
 [[package]]
 name = "ron"
@@ -5583,10 +5733,13 @@ dependencies = [
  "rand 0.9.4",
  "rayon",
  "ref-ops",
+ "ron 0.8.1",
  "serde",
+ "serde_json",
  "spenso-macros",
  "symbolica",
- "symbolica-typst-atom-payload",
+ "symbolica-notation",
+ "symbolica-typst-plugin",
  "symbolica-utils",
  "tabled",
  "thiserror 2.0.18",
@@ -5598,7 +5751,6 @@ name = "spenso-hep-lib"
 version = "0.1.7"
 dependencies = [
  "ahash 0.8.12",
- "gammaloop-workspace-hack",
  "idenso",
  "insta",
  "spenso",
@@ -5628,13 +5780,19 @@ dependencies = [
  "ahash 0.8.12",
  "eyre",
  "idenso",
+ "linnest",
+ "linnet",
+ "linnet-render-py",
  "pyo3",
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",
+ "serde_json",
  "spenso",
  "spenso-hep-lib",
+ "spenso-macros",
  "symbolica",
- "symbolica-typst-atom-payload",
+ "symbolica-notation",
+ "symbolica-typst-plugin",
  "tabled",
  "thiserror 2.0.18",
 ]
@@ -5793,8 +5951,7 @@ dependencies = [
 [[package]]
 name = "symbolica"
 version = "3.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0965398bbe5063c00b3a0d078d7d3dc57b61819b97e960b73e9a7e9602662795"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=community#8eb7c3729d6abefc916decc1bdf0c06536f8af80"
 dependencies = [
  "ahash 0.8.12",
  "append-only-vec",
@@ -5829,6 +5986,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "wide 1.7.0",
+ "xmlparser",
 ]
 
 [[package]]
@@ -5851,9 +6009,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "symbolica-typst-atom-payload"
+name = "symbolica-typst-plugin"
 version = "0.1.0"
-source = "git+https://github.com/symbolica-dev/symbolica-typst-plugin?rev=7f869adc14dcf2758bab16aaa25e06eb10ffbfad#7f869adc14dcf2758bab16aaa25e06eb10ffbfad"
+source = "git+https://github.com/symbolica-dev/symbolica-typst-plugin?rev=57b7455b37c30f4f87353c0073e49f5225e937ab#57b7455b37c30f4f87353c0073e49f5225e937ab"
 dependencies = [
  "blake3",
  "ciborium",
@@ -5873,12 +6031,13 @@ dependencies = [
 
 [[package]]
 name = "symjit"
-version = "2.27.0"
+version = "2.27.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f06329022a5123536f7fd50eb01b3e885dfafe3983f90a0d7b17408f4d0469ea"
+checksum = "9d5297d2ef25e396f984747fd0e480aaabb08e40e424f9cd07811efc6b20c140"
 dependencies = [
  "ahash 0.8.12",
  "anyhow",
+ "corosensei",
  "hashbrown 0.16.1",
  "hugepage-rs",
  "lazy_static",
@@ -6109,7 +6268,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4676b37242ccbd1aabf56edb093a4827dc49086c0ffd764a5705899e0f35f8f7"
 dependencies = [
  "anyhow",
- "base64",
+ "base64 0.22.1",
  "bitflags 2.13.2",
  "fancy-regex 0.11.0",
  "filedescriptor",
@@ -6959,7 +7118,7 @@ version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5df6dc785695aae085678bd6657aa04a1d26058a76ed042e738658078bca681e"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "comemo",
  "ecow",
  "flate2",
@@ -7289,7 +7448,7 @@ version = "2.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02d1a66277ed75f640d608235660df48c8e3c19f3b4edb6a263315626cc3c01d"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "flate2",
  "log",
  "native-tls",
@@ -7318,7 +7477,7 @@ version = "0.47.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d46cf96c5f498d36b7a9693bc6a7075c0bb9303189d61b2249b0dc3d309c07de"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "data-url",
  "flate2",
  "fontdb",
@@ -7377,11 +7536,15 @@ dependencies = [
  "ahash 0.8.12",
  "colored",
  "eyre",
+ "feynkit-tensor",
+ "idenso",
  "log",
  "pyo3",
  "pyo3-stub-gen",
  "regex",
  "rug",
+ "spenso",
+ "spenso-macros",
  "symbolica",
  "thiserror 2.0.18",
  "tracing-subscriber",
@@ -8250,6 +8413,12 @@ dependencies = [
  "libc",
  "rustix",
 ]
+
+[[package]]
+name = "xmlparser"
+version = "0.13.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "66fee0b777b0f5ac1c69bb06d361268faafa61cd4682ae064a171c16c433e9e4"
 
 [[package]]
 name = "xmlwriter"

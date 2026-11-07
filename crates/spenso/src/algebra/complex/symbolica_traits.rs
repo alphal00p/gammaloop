@@ -273,6 +273,12 @@ where
         self.im.set_from(&other.im);
     }
 
+    #[inline]
+    fn set_precision(&mut self, precision: u32) {
+        self.re.set_precision(precision);
+        self.im.set_precision(precision);
+    }
+
     #[inline(always)]
     fn is_fully_zero(&self) -> bool {
         self.re.is_fully_zero() && self.im.is_fully_zero()
@@ -342,12 +348,6 @@ where
     #[inline(always)]
     fn get_precision(&self) -> u32 {
         self.re.get_precision().min(self.im.get_precision())
-    }
-
-    #[inline(always)]
-    fn set_precision(&mut self, precision: u32) {
-        self.re.set_precision(precision);
-        self.im.set_precision(precision);
     }
 
     #[inline(always)]

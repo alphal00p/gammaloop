@@ -1421,6 +1421,25 @@ impl Integrate {
                     })?
                     .0;
 
+                // Reverting to the workspace settings keeps the current model
+                // overrides; check every reverted slot before reverting any.
+                for (slot, workspace_settings) in selected_slots.iter().zip(&workspace_settings) {
+                    let mut reverted = workspace_settings.clone();
+                    reverted.model = state
+                        .process_list
+                        .get_integrand(slot.process_id, &slot.slot_meta.integrand_name)?
+                        .require_generated()?
+                        .get_settings()
+                        .model
+                        .clone();
+                    state.ensure_generation_point_kept(
+                        slot.process_id,
+                        &slot.slot_meta.integrand_name,
+                        &state.model,
+                        &state.model_parameters,
+                        &reverted,
+                    )?;
+                }
                 for ((slot, target), workspace_settings) in selected_slots
                     .iter()
                     .zip(requested.targets.iter())
@@ -1519,8 +1538,8 @@ impl Integrate {
 
                 gloop_integrand.warm_up(model)?;
                 let full_group_count = gloop_integrand.graph_group_count();
-                let mut integration_view =
-                    gloop_integrand.clone_with_selected_graph_groups(&selected_graph_names)?;
+                let mut integration_view = gloop_integrand
+                    .clone_with_selected_graph_groups(model, &selected_graph_names)?;
                 info!(
                     "Runtime graph-group subset for {}: {} of {} groups [{}]",
                     slot.slot_meta.key().green().bold(),

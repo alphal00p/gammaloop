@@ -428,9 +428,10 @@ fn aa_aa_integrated_graph_histogram_bins() -> Result<()> {
         let ee = cli.state.model.get_parameter("ee");
         let alpha = cli.state.model.get_parameter("aEW");
         let inverse_alpha = cli.state.model.get_parameter("aEWM1");
-        let ee_symbol: Atom = ee.name.into();
-        let alpha_symbol: Atom = alpha.name.into();
-        let inverse_alpha_symbol: Atom = inverse_alpha.name.into();
+        let ee_symbol: Atom = gammalooprs::model::UFOSymbol::from(&ee.name).into();
+        let alpha_symbol: Atom = gammalooprs::model::UFOSymbol::from(&alpha.name).into();
+        let inverse_alpha_symbol: Atom =
+            gammalooprs::model::UFOSymbol::from(&inverse_alpha.name).into();
         // Four photon-top vertices give exactly GC_2^4 =
         // 256*pi^2/(81*aEWM1^2), with no residual coupling phase.
         let coupling = cli

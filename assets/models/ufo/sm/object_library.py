@@ -170,7 +170,7 @@ class Parameter(UFOBaseClass):
 
     require_args=['name', 'nature', 'type', 'value', 'texname']
 
-    def __init__(self, name, nature, type, value, texname, lhablock=None, lhacode=None):
+    def __init__(self, name, nature, type, value, texname, lhablock=None, lhacode=None, mathmlname=None):
 
         args = (name,nature,type,value,texname)
 
@@ -183,6 +183,7 @@ class Parameter(UFOBaseClass):
 
         if (lhablock is None or lhacode is None)  and nature == 'external':
             raise Exception('Need LHA information for external parameter "%s".' % name)
+        self.mathmlname = mathmlname
         self.lhablock = lhablock
         self.lhacode = lhacode
 

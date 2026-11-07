@@ -1,0 +1,751 @@
+use super::*;
+use crate::test_support;
+use spenso::tensor_symbol;
+use symbolica::{function, symbol};
+
+#[test]
+fn expansion_keeps_coalesced_oriented_tensor_copies() {
+    test_support::test_initialize();
+    let slot = LibraryRep::from(ColorFundamental {})
+        .new_rep(3)
+        .slot::<AbstractIndex, _>(AbstractIndex::Normal(99489));
+    let vector = SymbolicTensor::infer(function!(
+        tensor_symbol!("authoritative_metadata::expanded_copy"),
+        slot.to_atom()
+    ))
+    .unwrap();
+    let x = Atom::var(symbol!("authoritative_metadata::expanded_x"));
+    let y = Atom::var(symbol!("authoritative_metadata::expanded_y"));
+    let coefficient = SymbolicTensor::infer(&x + &y).unwrap();
+    let weighted = vector
+        .multiply(&vector)
+        .unwrap()
+        .multiply(&coefficient)
+        .unwrap();
+    assert_eq!(weighted.rank(), 2);
+    let expected = weighted.expression.expand();
+    OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
+    SCOPE_VALIDATIONS.with(|count| count.set(0));
+    INFERENCE_CALLS.with(|count| count.set(0));
+    let expanded = weighted.expanded(None, false).unwrap();
+    assert_eq!(expanded.expression, expected);
+    assert_eq!(expanded.structure, weighted.structure);
+    assert_eq!(
+        expanded.explicit_index_occurrences().unwrap().count(slot),
+        2
+    );
+    assert!(matches!(
+        expanded.multiply(&vector),
+        Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
+    ));
+    assert_eq!(OCCURRENCE_FUNCTION_VISITS.with(|count| count.get()), 0);
+    assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
+    assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+}
+
+#[test]
+fn zero_algebra_maps_hidden_pair_before_later_explicit_collisions() {
+    test_support::test_initialize();
+    let index = AbstractIndex::Normal(99471);
+    let minkowski = LibraryRep::from(Minkowski {});
+    let physical = minkowski.new_rep(4).slot::<AbstractIndex, _>(index);
+    let extended = minkowski.new_rep(6).slot::<AbstractIndex, _>(index);
+    // Ordinary tensor heads keep the admitted pair in product notation.
+    let source = SymbolicTensor::infer(
+        function!(
+            tensor_symbol!("authoritative_metadata::hidden_a"),
+            physical.to_atom()
+        ) * function!(
+            tensor_symbol!("authoritative_metadata::hidden_b"),
+            physical.to_atom()
+        ),
+    )
+    .unwrap();
+    let physical_leaf = SymbolicTensor::infer(function!(
+        tensor_symbol!("authoritative_metadata::physical_leaf"),
+        physical.to_atom()
+    ))
+    .unwrap();
+    let extended_leaf = SymbolicTensor::infer(function!(
+        tensor_symbol!("authoritative_metadata::extended_leaf"),
+        extended.to_atom()
+    ))
+    .unwrap();
+    assert!(source.is_scalar());
+    assert_eq!(
+        source.explicit_index_occurrences().unwrap().count(physical),
+        2
+    );
+    physical_leaf.explicit_index_occurrences().unwrap();
+    extended_leaf.explicit_index_occurrences().unwrap();
+    OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
+    SCOPE_VALIDATIONS.with(|count| count.set(0));
+    INFERENCE_CALLS.with(|count| count.set(0));
+
+    let zero = source.with_algebra_result(Atom::Zero).unwrap();
+    assert!(zero.is_zero());
+    assert!(zero.is_scalar());
+    assert_eq!(
+        zero.explicit_index_occurrences().unwrap().count(physical),
+        2
+    );
+    assert!(matches!(
+        zero.multiply(&physical_leaf),
+        Err(TensorCompositionError::InvalidExplicitMultiplicity { index: found, occurrences: 3 })
+            if found == index
+    ));
+
+    let mapped = zero.with_lorentz_dimension(Dimension::Concrete(6)).unwrap();
+    assert!(mapped.is_zero());
+    assert!(mapped.is_scalar());
+    assert_eq!(
+        mapped.explicit_index_occurrences().unwrap().count(extended),
+        2
+    );
+    assert_eq!(
+        mapped.explicit_index_occurrences().unwrap().count(physical),
+        0
+    );
+    assert!(matches!(
+        mapped.multiply(&extended_leaf),
+        Err(TensorCompositionError::InvalidExplicitMultiplicity { index: found, occurrences: 3 })
+            if found == index
+    ));
+    let distinct_dimension = mapped.multiply(&physical_leaf).unwrap();
+    assert!(distinct_dimension.is_zero());
+    assert_eq!(
+        distinct_dimension.structure.logical_slots(),
+        [physical.rep().slot(PartialIndex::Explicit(index))]
+    );
+    let occurrences = distinct_dimension.explicit_index_occurrences().unwrap();
+    assert_eq!(occurrences.count(extended), 2);
+    assert_eq!(occurrences.count(physical), 1);
+    assert_eq!(OCCURRENCE_FUNCTION_VISITS.with(|count| count.get()), 0);
+    assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
+    assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+}
+
+#[test]
+fn dual_free_dimension_mapping_preserves_orientation_and_later_collision_history() {
+    test_support::test_initialize();
+    let index = AbstractIndex::Normal(99473);
+    let dual_three = LibraryRep::from(ColorAntiFundamental {}).new_rep(3);
+    let dual_four = LibraryRep::from(ColorAntiFundamental {}).new_rep(4);
+    let source_slot = dual_three.slot::<AbstractIndex, _>(index);
+    let mapped_slot = dual_four.slot::<AbstractIndex, _>(index);
+    let partner_slot = dual_four.dual().slot::<AbstractIndex, _>(index);
+    let head = tensor_symbol!("authoritative_metadata::dual_free");
+    let source = SymbolicTensor::infer(function!(head, source_slot.to_atom())).unwrap();
+    let partner = SymbolicTensor::infer(function!(
+        tensor_symbol!("authoritative_metadata::base_partner"),
+        partner_slot.to_atom()
+    ))
+    .unwrap();
+    assert_eq!(
+        source
+            .explicit_index_occurrences()
+            .unwrap()
+            .count(source_slot),
+        1
+    );
+    partner.explicit_index_occurrences().unwrap();
+    OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
+    SCOPE_VALIDATIONS.with(|count| count.set(0));
+    INFERENCE_CALLS.with(|count| count.set(0));
+
+    let mut calls = Vec::new();
+    let mapped = source
+        .map_representation_dimensions(|representation, dimension| {
+            calls.push((representation, dimension.to_owned()));
+            if representation == dual_three.rep && dimension == Atom::num(3).as_view() {
+                Atom::num(4)
+            } else {
+                dimension.to_owned()
+            }
+        })
+        .unwrap();
+    // The base orientation is absent from this source. Mapping its singleton
+    // must neither introduce that callback nor retain dimension three.
+    assert_eq!(calls, [(dual_three.rep, Atom::num(3))]);
+    assert_eq!(mapped.expression(), &function!(head, mapped_slot.to_atom()));
+    assert_eq!(
+        mapped.structure.logical_slots(),
+        [dual_four.slot(PartialIndex::Explicit(index))]
+    );
+    let occurrences = mapped.explicit_index_occurrences().unwrap();
+    assert_eq!(occurrences.count(source_slot), 0);
+    assert_eq!(occurrences.count(mapped_slot), 1);
+    assert_eq!(occurrences.count(partner_slot), 1);
+    assert_eq!(
+        occurrences.entries().collect::<Vec<_>>(),
+        [(mapped_slot, 1)]
+    );
+
+    let pair = mapped.multiply(&partner).unwrap();
+    assert!(pair.is_scalar());
+    assert_eq!(
+        pair.explicit_index_occurrences()
+            .unwrap()
+            .count(mapped_slot),
+        2
+    );
+    assert!(matches!(
+        pair.multiply(&mapped),
+        Err(TensorCompositionError::InvalidExplicitMultiplicity { index: found, occurrences: 3 })
+            if found == index
+    ));
+    assert_eq!(OCCURRENCE_FUNCTION_VISITS.with(|count| count.get()), 0);
+    assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
+    assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+}
+
+#[test]
+fn admitted_arithmetic_owns_canonical_named_ports_and_composes_without_observation() {
+    test_support::test_initialize();
+    let minkowski = LibraryRep::from(Minkowski {}).new_rep(4);
+    let indices = [99479, 99477].map(AbstractIndex::Normal);
+    let slots = indices.map(|index| minkowski.slot(index));
+    let ports = indices.map(|index| minkowski.slot(PartialIndex::Explicit(index)));
+    // Include a callback-sensitive leaf and a logical order different from the
+    // other operand's order. Admission owns both before the counters are reset.
+    let a = SymbolicTensor::from_declared_parts(
+        FunctionBuilder::new(tensor_symbol!(
+            "authoritative_metadata::arithmetic_a",
+            norm = |_, _| {}
+        ))
+        .add_args(ports.map(composition::port_atom))
+        .finish(),
+        PartialStructure::from_logical_slots(ports),
+    )
+    .unwrap();
+    let b = SymbolicTensor::from_declared_parts(
+        FunctionBuilder::new(tensor_symbol!("authoritative_metadata::arithmetic_b"))
+            .add_args(ports.into_iter().rev().map(composition::port_atom))
+            .finish(),
+        PartialStructure::from_logical_slots(ports.into_iter().rev()),
+    )
+    .unwrap();
+    let scalar =
+        SymbolicTensor::infer(Atom::var(symbol!("authoritative_metadata::weight"))).unwrap();
+    let scalar_zero = SymbolicTensor::infer(Atom::Zero).unwrap();
+    let probe = SymbolicTensor::infer(function!(
+        tensor_symbol!("authoritative_metadata::arithmetic_probe"),
+        slots[0].to_atom()
+    ))
+    .unwrap();
+    for source in [&a, &b, &scalar, &scalar_zero, &probe] {
+        source.explicit_index_occurrences().unwrap();
+    }
+    OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
+    SCOPE_VALIDATIONS.with(|count| count.set(0));
+    INFERENCE_CALLS.with(|count| count.set(0));
+
+    let sum = a.try_add(&b).unwrap();
+    let difference = a.try_sub(&b).unwrap();
+    let negated = -sum.clone();
+    let weighted = sum.multiply(&scalar).unwrap();
+    let cancelled = a.try_sub(&a).unwrap();
+    let scaled_zero = sum.multiply(&scalar_zero).unwrap();
+    assert!(cancelled.is_zero());
+    assert!(scaled_zero.is_zero());
+    for result in [sum, difference, negated, weighted, cancelled, scaled_zero] {
+        assert_eq!(result.structure.logical_slots(), [ports[1], ports[0]]);
+        let occurrences = result.explicit_index_occurrences().unwrap();
+        assert_eq!(occurrences.entries().count(), 2);
+        for slot in slots {
+            assert_eq!(occurrences.count(slot), 1);
+        }
+
+        // The retained public port must contract once, including for a zero,
+        // and that pair must reject a third use in a later composition.
+        let contracted = result.multiply(&probe).unwrap();
+        assert_eq!(contracted.structure.logical_slots(), [ports[1]]);
+        assert_eq!(
+            contracted
+                .explicit_index_occurrences()
+                .unwrap()
+                .count(slots[0]),
+            2
+        );
+        assert!(matches!(
+            contracted.multiply(&probe),
+            Err(TensorCompositionError::InvalidExplicitMultiplicity { index: found, occurrences: 3 })
+                if found == indices[0]
+        ));
+    }
+    assert_eq!(OCCURRENCE_FUNCTION_VISITS.with(|count| count.get()), 0);
+    assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
+    assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+}
+
+#[test]
+fn additive_branches_keep_maximum_public_multiplicity_in_both_operand_orders() {
+    test_support::test_initialize();
+    let index = AbstractIndex::Normal(99481);
+    let slot = LibraryRep::from(Minkowski {})
+        .new_rep(4)
+        .slot::<AbstractIndex, _>(index);
+    // Explicit declared intake retains the slot-use history; tensor-free inference is opaque.
+    let scalar = SymbolicTensor::from_declared_parts(
+        slot.to_atom(),
+        PartialStructure::from_logical_slots([]),
+    )
+    .unwrap();
+    let vector = SymbolicTensor::infer(function!(
+        tensor_symbol!("authoritative_metadata::branch_vector"),
+        slot.to_atom()
+    ))
+    .unwrap();
+    let extra = SymbolicTensor::infer(function!(
+        tensor_symbol!("authoritative_metadata::branch_extra"),
+        slot.to_atom()
+    ))
+    .unwrap();
+    assert!(scalar.is_scalar());
+    assert_eq!(scalar.explicit_index_occurrences().unwrap().count(slot), 1);
+    assert_eq!(vector.explicit_index_occurrences().unwrap().count(slot), 1);
+    extra.explicit_index_occurrences().unwrap();
+    OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
+    SCOPE_VALIDATIONS.with(|count| count.set(0));
+    INFERENCE_CALLS.with(|count| count.set(0));
+
+    let branch = scalar.multiply(&vector).unwrap();
+    let interface = [slot.rep().slot(PartialIndex::Explicit(index))];
+    assert_eq!(branch.structure.logical_slots(), interface);
+    assert_eq!(branch.explicit_index_occurrences().unwrap().count(slot), 2);
+    for result in [
+        vector.try_add(&branch).unwrap(),
+        branch.try_add(&vector).unwrap(),
+        vector.try_sub(&branch).unwrap(),
+        branch.try_sub(&vector).unwrap(),
+    ] {
+        assert_eq!(result.structure.logical_slots(), interface);
+        assert_eq!(
+            result
+                .explicit_index_occurrences()
+                .unwrap()
+                .entries()
+                .collect::<Vec<_>>(),
+            [(slot, 2)]
+        );
+        assert!(matches!(
+            result.multiply(&extra),
+            Err(TensorCompositionError::InvalidExplicitMultiplicity { index: found, occurrences: 3 })
+                if found == index
+        ));
+    }
+    assert_eq!(OCCURRENCE_FUNCTION_VISITS.with(|count| count.get()), 0);
+    assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
+    assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+}
+
+#[test]
+fn mapping_hidden_base_use_separates_it_from_the_free_dual_port() {
+    test_support::test_initialize();
+    let index = AbstractIndex::Normal(99483);
+    let base_three = LibraryRep::from(ColorFundamental {}).new_rep(3);
+    let base_four = LibraryRep::from(ColorFundamental {}).new_rep(4);
+    let base_slot = base_three.slot::<AbstractIndex, _>(index);
+    let mapped_base_slot = base_four.slot::<AbstractIndex, _>(index);
+    let dual_slot = base_three.dual().slot::<AbstractIndex, _>(index);
+    let scalar_base = SymbolicTensor::from_declared_parts(
+        base_slot.to_atom(),
+        PartialStructure::from_logical_slots([]),
+    )
+    .unwrap();
+    let head = tensor_symbol!("authoritative_metadata::hidden_base_dual");
+    let free_dual = SymbolicTensor::infer(function!(head, dual_slot.to_atom())).unwrap();
+    let compatible = SymbolicTensor::infer(function!(
+        tensor_symbol!("authoritative_metadata::hidden_base_compatible"),
+        base_slot.to_atom()
+    ))
+    .unwrap();
+    // Declared scalar intake retains the hidden base use; opaque inference does not.
+    assert!(scalar_base.is_scalar());
+    assert_eq!(
+        scalar_base
+            .explicit_index_occurrences()
+            .unwrap()
+            .count(base_slot),
+        1
+    );
+    free_dual.explicit_index_occurrences().unwrap();
+    compatible.explicit_index_occurrences().unwrap();
+    OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
+    SCOPE_VALIDATIONS.with(|count| count.set(0));
+    INFERENCE_CALLS.with(|count| count.set(0));
+
+    let source = free_dual.multiply(&scalar_base).unwrap();
+    let interface = [dual_slot.rep().slot(PartialIndex::Explicit(index))];
+    assert_eq!(source.structure.logical_slots(), interface);
+    assert_eq!(
+        source
+            .explicit_index_occurrences()
+            .unwrap()
+            .oriented_entries()
+            .collect::<Vec<_>>(),
+        [(dual_slot, 2, 1, 1)]
+    );
+    let mapped = source
+        .map_representation_dimensions(|representation, dimension| {
+            if representation == base_three.rep && dimension == Atom::num(3).as_view() {
+                Atom::num(4)
+            } else {
+                dimension.to_owned()
+            }
+        })
+        .unwrap();
+    assert_eq!(mapped.structure.logical_slots(), interface);
+    assert_eq!(
+        mapped.expression(),
+        &(function!(head, dual_slot.to_atom()) * mapped_base_slot.to_atom())
+    );
+    let occurrences = mapped.explicit_index_occurrences().unwrap();
+    assert_eq!(occurrences.count(base_slot), 1);
+    assert_eq!(occurrences.count(mapped_base_slot), 1);
+    assert_eq!(
+        occurrences.oriented_entries().collect::<Vec<_>>(),
+        [(dual_slot, 1, 0, 1), (mapped_base_slot, 1, 1, 0)]
+    );
+
+    // The old dimension now has only the free dual use, so a new base use
+    // contracts it instead of encountering a spurious third occurrence.
+    let contracted = mapped.multiply(&compatible).unwrap();
+    assert!(contracted.is_scalar());
+    let occurrences = contracted.explicit_index_occurrences().unwrap();
+    assert_eq!(occurrences.count(base_slot), 2);
+    assert_eq!(occurrences.count(mapped_base_slot), 1);
+    assert_eq!(OCCURRENCE_FUNCTION_VISITS.with(|count| count.get()), 0);
+    assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
+    assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+
+    // Protect the exact external variance, rather than hiding the opposite
+    // orientation's use merely because it shares this collision key.
+    let scope = symbol!("authoritative_metadata::hidden_base_scope");
+    let scoped_slot = base_three.slot::<AbstractIndex, _>(index.scoped(scope));
+    let scoped = source.wrap_indices(scope, true).unwrap();
+    assert_eq!(scoped.structure.logical_slots(), interface);
+    assert_eq!(
+        scoped
+            .explicit_index_occurrences()
+            .unwrap()
+            .count(base_slot),
+        1
+    );
+    assert_eq!(
+        scoped
+            .explicit_index_occurrences()
+            .unwrap()
+            .count(scoped_slot),
+        1
+    );
+    assert_eq!(
+        scoped.expression(),
+        &(function!(head, dual_slot.to_atom()) * scoped_slot.to_atom())
+    );
+    let probe = SymbolicTensor::infer(function!(
+        tensor_symbol!("authoritative_metadata::scoped_base_probe"),
+        scoped_slot.to_atom()
+    ))
+    .unwrap();
+    let twice = scoped.multiply(&probe).unwrap();
+    assert!(matches!(twice.multiply(&probe),
+        Err(TensorCompositionError::InvalidExplicitMultiplicity { index: found, occurrences: 3 })
+            if found == index.scoped(scope)
+    ));
+}
+
+#[test]
+fn dummy_scoping_moves_a_pair_closed_inside_a_sum_together() {
+    test_support::test_initialize();
+    let scope = symbol!("authoritative_metadata::closed_sum_scope");
+    let rep = LibraryRep::from(ColorFundamental {}).new_rep(3);
+    let index = AbstractIndex::Normal(99493);
+    let scoped_index = index.scoped(scope);
+    let base = rep.slot::<AbstractIndex, _>(index);
+    let dual = rep.dual().slot::<AbstractIndex, _>(index);
+    let spectator = rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(99494));
+    let leaf = |name: &str, slot: Slot<LibraryRep, AbstractIndex>| {
+        function!(
+            SPENSO_TAG.tensor_symbol(&format!("authoritative_metadata::closed_sum_{name}")),
+            slot.to_atom()
+        )
+    };
+    let x = Atom::var(symbol!("authoritative_metadata::closed_sum_x"));
+    let y = Atom::var(symbol!("authoritative_metadata::closed_sum_y"));
+    // `a(ī)·b(i)` contracts inside its sum, whose free neighbour `v` reuses the name.
+    let closed = |index: AbstractIndex, free: Slot<LibraryRep, AbstractIndex>| {
+        &y + leaf("a", free.rep().dual().slot(index)) * leaf("b", free.rep().slot(index))
+    };
+    let cases = [
+        (
+            (&x + closed(index, base)) * leaf("v", base),
+            (&x + closed(scoped_index, base)) * leaf("v", base),
+            vec![base],
+        ),
+        (
+            (&x + closed(index, dual)) * leaf("v", dual),
+            (&x + closed(scoped_index, dual)) * leaf("v", dual),
+            vec![dual],
+        ),
+        (
+            (&x * leaf("c", spectator) + closed(index, base) * leaf("d", spectator))
+                * leaf("v", base),
+            (&x * leaf("c", spectator) + closed(scoped_index, base) * leaf("d", spectator))
+                * leaf("v", base),
+            vec![base, spectator],
+        ),
+    ];
+    for (source, expected, ports) in cases {
+        let source = SymbolicTensor::infer(source).unwrap();
+        assert!(!source.is_scalar());
+        assert_eq!(source.rank(), ports.len());
+        let scoped = source.wrap_indices(scope, true).unwrap();
+        // Both members of the closed pair are scoped; the free ports are not.
+        assert_eq!(scoped.expression(), &expected);
+        assert_eq!(scoped.structure, source.structure);
+        assert!(!scoped.is_scalar());
+        assert_eq!(scoped.rank(), ports.len());
+        let interface = scoped
+            .structure
+            .logical_slots()
+            .into_iter()
+            .map(|slot| match slot.aind {
+                PartialIndex::Explicit(index) => slot.rep().slot::<AbstractIndex, _>(index),
+                PartialIndex::Open(_) => panic!("closed-sum fixture has only explicit ports"),
+            })
+            .collect::<HashSet<_>>();
+        assert_eq!(interface, ports.into_iter().collect::<HashSet<_>>());
+        assert_eq!(
+            SymbolicTensor::infer(expected).unwrap().structure,
+            scoped.structure
+        );
+    }
+    // The scoped sum on its own remains a scalar.
+    assert!(
+        SymbolicTensor::infer(closed(scoped_index, base))
+            .unwrap()
+            .is_scalar()
+    );
+}
+
+#[test]
+fn dummy_scoping_moves_a_pair_closed_inside_a_scalar_power_together() {
+    test_support::test_initialize();
+    let scope = symbol!("authoritative_metadata::closed_power_scope");
+    let rep = LibraryRep::from(ColorFundamental {}).new_rep(3);
+    let index = AbstractIndex::Normal(99495);
+    let scoped_index = index.scoped(scope);
+    let leaf = |name: &str, slot: Slot<LibraryRep, AbstractIndex>| {
+        SymbolicTensor::infer(function!(
+            SPENSO_TAG.tensor_symbol(&format!("authoritative_metadata::closed_power_{name}")),
+            slot.to_atom()
+        ))
+        .unwrap()
+    };
+    let closed_scope = |value: &SymbolicTensor<PartialStructure>| {
+        SymbolicTensor::<PartialStructure>::is_closed_scalar_power(
+            value.expression().as_view(),
+            &mut SlotMatcher::default(),
+        )
+    };
+    // `bracket(a(ī)·b(i))^n` closes its pair, while `v` carries a free port of that name.
+    let power = |index: AbstractIndex, free: Representation<LibraryRep>, exponent: i64| {
+        let pair = leaf("a", free.dual().slot(index))
+            .multiply(&leaf("b", free.slot(index)))
+            .unwrap();
+        assert!(pair.is_scalar());
+        pair.pow(&SymbolicTensor::infer(Atom::num(exponent)).unwrap())
+            .unwrap()
+    };
+    for free in [rep, rep.dual()] {
+        let v = leaf("v", free.slot(index));
+        let interface =
+            [free.slot::<PartialIndex<AbstractIndex>, _>(PartialIndex::Explicit(index))];
+        for exponent in [2, 3] {
+            let closed = power(index, free, exponent);
+            let scoped_closed = power(scoped_index, free, exponent);
+            for scalar in [&closed, &scoped_closed] {
+                assert!(scalar.is_scalar());
+                assert_eq!(scalar.rank(), 0);
+                let AtomView::Pow(power) = scalar.expression().as_view() else {
+                    panic!("closed pair power is not a power: {}", scalar.expression());
+                };
+                assert!(matches!(
+                    power.get_base_exp().0,
+                    AtomView::Fun(base) if base.get_symbol() == SPENSO_TAG.bracket
+                ));
+                assert!(closed_scope(scalar));
+            }
+            let source = closed.multiply(&v).unwrap();
+            let expected = scoped_closed.multiply(&v).unwrap();
+            assert!(!source.is_scalar());
+            assert_eq!(source.rank(), 1);
+            assert_eq!(source.structure.logical_slots(), interface);
+            let scoped = source.wrap_indices(scope, true).unwrap();
+            // Both members of the closed pair are scoped; the free port is not.
+            assert_eq!(scoped.expression(), expected.expression());
+            assert_eq!(scoped.structure, source.structure);
+            assert!(!scoped.is_scalar());
+            assert_eq!(scoped.rank(), 1);
+            assert_eq!(scoped.structure.logical_slots(), interface);
+            assert_eq!(
+                SymbolicTensor::infer(expected.expression().clone())
+                    .unwrap()
+                    .structure,
+                scoped.structure
+            );
+        }
+    }
+
+    // A tensor-valued power base repeats its ports into the surrounding
+    // product, so it is no closed scope and keeps the exact-variance rule.
+    let mu = LibraryRep::from(Minkowski {})
+        .new_rep(4)
+        .slot::<AbstractIndex, _>(AbstractIndex::Normal(99496));
+    let tensor_power = leaf("t", mu)
+        .pow(&SymbolicTensor::infer(Atom::num(2)).unwrap())
+        .unwrap();
+    assert!(matches!(
+        tensor_power.expression().as_view(),
+        AtomView::Pow(_)
+    ));
+    assert!(!closed_scope(&tensor_power));
+    let free = rep.slot::<AbstractIndex, _>(index);
+    let v = leaf("v", free);
+    let source = tensor_power.multiply(&v).unwrap();
+    assert!(!source.is_scalar());
+    assert_eq!(source.rank(), 1);
+    let scoped = source.wrap_indices(scope, true).unwrap();
+    let exact_variance =
+        AbstractIndex::wrap_expression(source.expression().as_view(), scope, |slot| *slot != free);
+    assert_eq!(scoped.expression(), &exact_variance);
+    assert_eq!(
+        scoped.expression(),
+        &(leaf("t", mu.rep().slot(mu.aind().scoped(scope)))
+            .expression()
+            .pow(Atom::num(2))
+            * v.expression())
+    );
+    assert_eq!(scoped.structure, source.structure);
+    assert_eq!(scoped.rank(), 1);
+    assert_eq!(
+        scoped.structure.logical_slots(),
+        [free
+            .rep()
+            .slot::<PartialIndex<AbstractIndex>, _>(PartialIndex::Explicit(index))]
+    );
+}
+
+#[test]
+fn intake_installs_hidden_history_before_zero_product_finishing() {
+    test_support::test_initialize();
+    let slot = LibraryRep::from(Minkowski {})
+        .new_rep(4)
+        .slot::<AbstractIndex, _>(AbstractIndex::Normal(99591));
+    let left = function!(tensor_symbol!("publication::left"), slot.to_atom());
+    let right = function!(tensor_symbol!("publication::right"), slot.to_atom());
+    let expression = FunctionBuilder::new(SPENSO_TAG.bracket)
+        .add_arg(Atom::Zero)
+        .add_arg(left)
+        .add_arg(right)
+        .finish();
+    let value = SymbolicTensor::new(expression, PartialStructure::from_logical_slots([])).unwrap();
+    assert!(value.is_zero());
+    assert_eq!(value.explicit_index_occurrences().unwrap().count(slot), 2);
+    let probe = SymbolicTensor::infer(function!(
+        tensor_symbol!("publication::probe"),
+        slot.to_atom()
+    ))
+    .unwrap();
+    assert!(matches!(
+        value.multiply(&probe),
+        Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
+    ));
+}
+
+#[test]
+fn publication_borrows_supplied_history_without_observing_the_payload() {
+    test_support::test_initialize();
+    let slot = LibraryRep::from(Minkowski {})
+        .new_rep(4)
+        .slot::<AbstractIndex, _>(AbstractIndex::Normal(99593));
+    let mut history = ExplicitIndexOccurrences::default();
+    history.add(slot, 2);
+    let history = Arc::new(history);
+    let value = SymbolicTensor::from_validated_parts(
+        Atom::Zero,
+        PartialStructure::from_logical_slots([]),
+        Arc::clone(&history),
+    );
+    let scalar = SymbolicTensor::infer(Atom::num(3)).unwrap();
+    OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
+    SCOPE_VALIDATIONS.with(|count| count.set(0));
+    INFERENCE_CALLS.with(|count| count.set(0));
+    assert_eq!(value.explicit_index_occurrences().unwrap().count(slot), 2);
+    assert!(Arc::ptr_eq(
+        value.proofs.occurrences.get().unwrap(),
+        &history
+    ));
+    let result = SymbolicTensor::multiply_many([&value, &scalar]).unwrap();
+    assert_eq!(result.explicit_index_occurrences().unwrap().count(slot), 2);
+    let mut unpublished = value;
+    unpublished.proofs = TensorProofs::default();
+    assert!(unpublished.explicit_index_occurrences().is_err());
+    assert_eq!(OCCURRENCE_FUNCTION_VISITS.with(|count| count.get()), 0);
+    assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
+    assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+}
+
+#[test]
+fn checked_constructors_preserve_two_declared_zero_ports_with_the_same_index() {
+    test_support::test_initialize();
+    let slot = LibraryRep::from(Minkowski {})
+        .new_rep(4)
+        .slot(PartialIndex::Explicit(AbstractIndex::Normal(99597)));
+    let structure = PartialStructure::from_logical_slots([slot, slot]);
+    for value in [
+        SymbolicTensor::new(Atom::Zero, structure.clone()).unwrap(),
+        SymbolicTensor::from_produced_parts(Atom::Zero, structure.clone()).unwrap(),
+    ] {
+        assert_eq!(value.rank(), 2);
+        assert_eq!(value.structure.logical_slots(), [slot, slot]);
+        assert_eq!(
+            value
+                .explicit_index_occurrences()
+                .unwrap()
+                .count(slot.rep().slot(AbstractIndex::Normal(99597))),
+            2
+        );
+        let product = SymbolicTensor::multiply_many([&value]).unwrap();
+        assert_eq!(product.rank(), 2);
+        assert_eq!(product.structure.logical_slots(), [slot, slot]);
+    }
+}
+
+#[test]
+fn dummy_scoping_without_nested_scopes_adds_no_callback_replay() {
+    test_support::test_initialize();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    let head = spenso::vector_symbol!(
+        "scope_wrap_callback",
+        norm = move |_, _| {
+            observed.fetch_add(1, Ordering::Relaxed);
+        }
+    );
+    let source = SymbolicTensor::infer(function!(head, spenso::mink!(4, 99965))).unwrap();
+    calls.store(0, Ordering::Relaxed);
+    let wrapped = source
+        .wrap_indices(symbol!("scope_wrap_callback_scope"), true)
+        .unwrap();
+    assert_eq!(wrapped.expression, source.expression);
+    assert_eq!(wrapped.structure, source.structure);
+    // The original flat wrapper calls this normalizer once. Scope discovery
+    // must not add another call when no nested binding scope exists.
+    assert!(
+        calls.load(Ordering::Relaxed) <= 1,
+        "calls={}",
+        calls.load(Ordering::Relaxed)
+    );
+}

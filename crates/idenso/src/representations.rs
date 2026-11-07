@@ -8,7 +8,7 @@ use spenso::{
 use spenso_macros::SimpleRepresentation;
 use symbolica::atom::Atom;
 
-use super::{color::CS, dirac::AGS, rep_symbols::RS, shorthands::metric::MS};
+use super::{color::CS, dirac::AGS, rep_symbols::RS};
 
 #[rustfmt::skip]
 #[derive(SimpleRepresentation)]
@@ -23,10 +23,11 @@ use super::{color::CS, dirac::AGS, rep_symbols::RS, shorthands::metric::MS};
     Ord,
     Default,
 )]
-#[derive(
-    bincode_trait_derive::Encode,
-    bincode_trait_derive::Decode,
-    bincode_trait_derive::BorrowDecodeFromDecode,
+#[cfg_attr(
+    feature = "bincode",
+    derive(bincode_trait_derive::Encode),
+    derive(bincode_trait_derive::Decode),
+    derive(bincode_trait_derive::BorrowDecodeFromDecode),
 )]
 #[representation(name = "spf", dual_name = "SpinAntiFundamental")] // Specify the dual name
 pub struct SpinFundamental {}
@@ -44,10 +45,11 @@ pub struct SpinFundamental {}
     Ord,
     Default,
 )]
-#[derive(
-    bincode_trait_derive::Encode,
-    bincode_trait_derive::Decode,
-    bincode_trait_derive::BorrowDecodeFromDecode,
+#[cfg_attr(
+    feature = "bincode",
+    derive(bincode_trait_derive::Encode),
+    derive(bincode_trait_derive::Decode),
+    derive(bincode_trait_derive::BorrowDecodeFromDecode),
 )]
 #[representation(name = "cof", dual_name = "ColorAntiFundamental")] // Specify the dual name
 pub struct ColorFundamental {}
@@ -65,10 +67,11 @@ pub struct ColorFundamental {}
     Ord,
     Default,
 )]
-#[derive(
-    bincode_trait_derive::Encode,
-    bincode_trait_derive::Decode,
-    bincode_trait_derive::BorrowDecodeFromDecode,
+#[cfg_attr(
+    feature = "bincode",
+    derive(bincode_trait_derive::Encode),
+    derive(bincode_trait_derive::Decode),
+    derive(bincode_trait_derive::BorrowDecodeFromDecode),
 )]
 #[representation(name = "cos", dual_name = "ColorAntiSextet")] // Specify the dual name
 pub struct ColorSextet {}
@@ -86,10 +89,11 @@ pub struct ColorSextet {}
     Ord,
     Default,
 )]
-#[derive(
-    bincode_trait_derive::Encode,
-    bincode_trait_derive::Decode,
-    bincode_trait_derive::BorrowDecodeFromDecode,
+#[cfg_attr(
+    feature = "bincode",
+    derive(bincode_trait_derive::Encode),
+    derive(bincode_trait_derive::Decode),
+    derive(bincode_trait_derive::BorrowDecodeFromDecode),
 )]
 #[representation(name = "bis", self_dual)] // Specify the dual name
 pub struct Bispinor {}
@@ -107,10 +111,11 @@ pub struct Bispinor {}
     Ord,
     Default,
 )]
-#[derive(
-    bincode_trait_derive::Encode,
-    bincode_trait_derive::Decode,
-    bincode_trait_derive::BorrowDecodeFromDecode,
+#[cfg_attr(
+    feature = "bincode",
+    derive(bincode_trait_derive::Encode),
+    derive(bincode_trait_derive::Decode),
+    derive(bincode_trait_derive::BorrowDecodeFromDecode),
 )]
 #[representation(name = "coad", self_dual)] // Specify the dual name
 pub struct ColorAdjoint {}
@@ -130,7 +135,6 @@ pub fn initialize() {
     let _ = ColorFundamental {}.to_symbolic([Atom::Zero]);
     let _ = ColorSextet {}.to_symbolic([Atom::Zero]);
     let _ = RS.a_;
-    let _ = MS.dummy;
     let _ = AGS.gamma;
     let _ = *crate::epsilon::EPSILON_SYMBOL;
     let _ = ETS.metric;

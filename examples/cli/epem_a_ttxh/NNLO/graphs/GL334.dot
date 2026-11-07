@@ -1,4 +1,5 @@
 digraph GL334{
+    final_state = "H,t,t~|H,t,t~,g|H,t,t~,g,g|H,t,t~,d,d~|H,t,t~,ghG,ghG~";
     // Shared and native variants preserve soft and hard cancellations.
     threshold_counterterms = "
 schema_version = 1

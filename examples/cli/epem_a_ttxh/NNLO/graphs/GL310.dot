@@ -1,4 +1,5 @@
 digraph GL310{
+    final_state = "H,t,t~|H,t,t~,g|H,t,t~,g,g|H,t,t~,d,d~|H,t,t~,ghG,ghG~";
     // Unspecified associations retain maximal defaults.
     threshold_counterterms = "
 schema_version = 1

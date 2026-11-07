@@ -19,6 +19,7 @@ use clap::Args;
 use color_eyre::{Result, Section};
 use colored::Colorize;
 use eyre::{eyre, Context};
+use feynkit_generator::GenerationType;
 use gammalooprs::{
     processes::{Amplitude, CrossSection},
     utils::serde_utils::IsDefault,
@@ -35,12 +36,15 @@ use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 use gammalooprs::{
     clear_interrupt_request,
-    feyngen::GenerationType,
     graph::Graph,
     initialisation::initialise,
     integrands::process::ProcessIntegrand,
     is_interrupt_requested,
-    model::{InputParamCard, Model, SerializableInputParamCard, UFOSymbol},
+    model::{
+        InputParamCard, Model, ModelGammaLoopExt, ParameterNature, SerializableInputParamCard,
+        UFOSymbol,
+    },
+    momentum::ExternalMomenta,
     processes::{
         begin_phase, merge_generated_graph_reports, DotExportSettings, GeneratedGraphReport,
         GenerationProcessKind, GenerationProgressMode, GenerationProgressModeGuard,
@@ -50,7 +54,12 @@ use gammalooprs::{
         ProcessCollection, ProcessDefinition, ProcessList, ProcessLoadSelection,
     },
     settings::{
-        global::GenerationSettings, runtime::LockedRuntimeSettings, GlobalSettings, RuntimeSettings,
+        global::GenerationSettings,
+        runtime::{
+            kinematic::{Externals, KinematicsSettings},
+            LockedRuntimeSettings,
+        },
+        GlobalSettings, RuntimeSettings,
     },
     utils::{
         serde_utils::{get_schema_folder, SmartSerde},
@@ -93,6 +102,174 @@ pub struct IntegrandGenerationSummaryKey {
 pub struct IntegrandGenerationSummary {
     pub peak_ram_bytes: u64,
     pub reports: Vec<GeneratedGraphReport>,
+    /// The point this generation ran at. Absent in summaries saved before it
+    /// was recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generation_point: Option<GenerationPoint>,
+}
+
+/// The model values and kinematics a generated integrand was generated at.
+///
+/// Generation with `generation.threshold_subtraction.check_esurface_at_generation`
+/// classifies threshold existence with these values and omits the counterterms
+/// proven absent, so such an integrand stays valid only at exactly this point.
+/// Whether it did is recorded with the integrand, so the record travels with
+/// copies into other processes.
+///
+/// The values are the integrand's effective numeric inputs: every parameter
+/// of the model it evaluates with (the session model with the session card
+/// and the integrand's settings overlay applied) that is not derived from
+/// others, i.e. every external parameter and every internal parameter
+/// without an expression (a numeric constant), so values from the card, from
+/// the overlay and from the model's own defaults all count. Parameters with
+/// an expression and all couplings (whose expression is mandatory) are not
+/// recorded: they follow from the inputs through expressions that belong to
+/// the structure fingerprint every held graph is checked against.
+///
+/// Every `f64` is stored as its bit pattern (`0x` and 16 hex digits), so the
+/// record survives saving bit-exactly and comparison is exact. Signed zeros
+/// are distinct inputs: comparing bits can only refuse a change, never accept
+/// one, so treating `-0.0` and `+0.0` as different is the conservative rule.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GenerationPoint {
+    /// Whether the generation decided on these values, in which case the
+    /// integrand must stay at this point.
+    pub depends_on_model_values: bool,
+    /// Effective input parameter values (real, imaginary); `None` for an
+    /// input parameter without a value.
+    pub input_parameters: BTreeMap<String, Option<[String; 2]>>,
+    /// The physical point of the integrand's stored kinematic settings right
+    /// after generation.
+    pub kinematics: GenerationKinematics,
+}
+
+impl GenerationPoint {
+    /// The point of an integrand evaluating with `effective_model` and `settings`.
+    fn new(
+        effective_model: &Model,
+        settings: &RuntimeSettings,
+        depends_on_model_values: bool,
+    ) -> Result<Self> {
+        Ok(Self {
+            depends_on_model_values,
+            input_parameters: effective_model
+                .parameters()
+                .iter()
+                .filter(|parameter| {
+                    parameter.nature == ParameterNature::External || parameter.expression.is_none()
+                })
+                .map(|parameter| {
+                    (
+                        parameter.name.clone(),
+                        parameter
+                            .value
+                            .map(|value| [exact_f64(value.re), exact_f64(value.im)]),
+                    )
+                })
+                .collect(),
+            kinematics: GenerationKinematics::new(&settings.kinematics),
+        })
+    }
+
+    /// The first exact difference in values or kinematics from `other`, if any.
+    fn difference(&self, other: &Self) -> Option<String> {
+        if self
+            .input_parameters
+            .keys()
+            .ne(other.input_parameters.keys())
+        {
+            return Some("the set of input model parameters".to_owned());
+        }
+        for ((name, value), other_value) in self
+            .input_parameters
+            .iter()
+            .zip(other.input_parameters.values())
+        {
+            if value != other_value {
+                return Some(format!(
+                    "model parameter '{name}' ({} at generation, now {})",
+                    display_exact_value(value.as_ref()),
+                    display_exact_value(other_value.as_ref())
+                ));
+            }
+        }
+        (self.kinematics != other.kinematics).then(|| "the kinematic settings".to_owned())
+    }
+}
+
+/// The exact, persistable form of `value`: its bit pattern in hexadecimal.
+fn exact_f64(value: f64) -> String {
+    format!("{:#018x}", value.to_bits())
+}
+
+fn display_exact_value(value: Option<&[String; 2]>) -> String {
+    let decode = |bits: &str| {
+        u64::from_str_radix(bits.trim_start_matches("0x"), 16)
+            .map(|bits| format!("{:?}", f64::from_bits(bits)))
+            .unwrap_or_else(|_| bits.to_owned())
+    };
+    value.map_or_else(
+        || "no value".to_owned(),
+        |value| format!("{} + {}i", decode(&value[0]), decode(&value[1])),
+    )
+}
+
+/// The generation-relevant kinematics of an integrand, encoded field by field.
+///
+/// Threshold classification reads the centre-of-mass energy and the external
+/// momenta; generation also reads the helicities (polarization sums), and the
+/// phase-space improvement settings change the evaluated momenta. Each field
+/// is encoded explicitly, floats as [`exact_f64`] bit patterns, so the
+/// encoding does not depend on display-default serialization flags or on the
+/// transient momentum caches. Non-finite floats are encoded like any other
+/// bit pattern and so round-trip exactly; distinct NaN payloads are distinct.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GenerationKinematics {
+    /// `kinematics.e_cm`.
+    pub e_cm: String,
+    /// Each external momentum's components (E, px, py, pz), or `None` for the
+    /// dependent one, in process order.
+    pub momenta: Vec<Option<[String; 4]>>,
+    /// Each external helicity (`Debug` form), in process order.
+    pub helicities: Vec<String>,
+    /// The phase-space improvement mode (`Debug` form).
+    pub improvement_mode: String,
+    /// The maximal deformation of an improved point, if checked.
+    pub large_deformation_check: Option<String>,
+    /// Whether a large deformation only warns.
+    pub only_warn_on_large_deformation: bool,
+}
+
+impl GenerationKinematics {
+    fn new(kinematics: &KinematicsSettings) -> Self {
+        let Externals::Constant {
+            momenta,
+            helicities,
+            improvement_settings,
+            ..
+        } = &kinematics.externals;
+        Self {
+            e_cm: exact_f64(kinematics.e_cm),
+            momenta: momenta
+                .iter()
+                .map(|momentum| match momentum {
+                    ExternalMomenta::Dependent(_) => None,
+                    ExternalMomenta::Independent(components) => {
+                        Some(components.map(|component| exact_f64(component.0)))
+                    }
+                })
+                .collect(),
+            helicities: helicities
+                .iter()
+                .map(|helicity| format!("{helicity:?}"))
+                .collect(),
+            improvement_mode: format!("{:?}", improvement_settings.mode),
+            large_deformation_check: improvement_settings
+                .large_deformation_check
+                .map(|bound| exact_f64(bound.0)),
+            only_warn_on_large_deformation: improvement_settings.only_warn_on_large_deformation,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -182,6 +359,13 @@ enum IntegrandCopyPayload {
 }
 
 impl IntegrandCopyPayload {
+    fn is_generated(&self) -> bool {
+        match self {
+            Self::Amplitude(amplitude) => amplitude.integrand.is_some(),
+            Self::CrossSection(cross_section) => cross_section.integrand.is_some(),
+        }
+    }
+
     fn rename(&mut self, new_name: &str) {
         match self {
             Self::Amplitude(amplitude) => {
@@ -1659,7 +1843,21 @@ const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 // regenerated rather than decoded as the new expression type.
 // Local UV forest contributions remain compatible with this layout because
 // they are combined into one persisted integrand before evaluator construction.
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 20;
+// Version 18 combines the canonical FeynKit model and current compact runtime layout.
+// Older states from either development branch must be regenerated.
+// Version 19 retains tensor interfaces in runtime graph fragments and numerator
+// definitions. Older positional archives must be regenerated.
+// Version 20 also retains the graph's global numerator and projector interfaces.
+// Version 21 stores fully indexed tensor interfaces without PartialIndex wire tags.
+// Older positional archives must be regenerated; unresolved ports are not assigned indices.
+// Version 22 combines indexed FeynKit tensors with ordered CFF/LTD runtime payloads.
+// Main version20 and published FeynKit version21 have incompatible layouts and
+// must be rejected before model parsing, symbolic import or process decoding.
+// Version 23 persists each graph's model as a structural fingerprint and rebinds
+// graphs to the state's model.json instead of embedding a model copy per graph.
+// It also keeps full finalized cuts beside selected cuts and maps compact integrand
+// terms to their stored source graphs. Older positional archives must be regenerated.
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 23;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -2037,9 +2235,8 @@ fn load_integrand_generation_summaries(
 }
 
 impl State {
-    fn overridable_model_parameter_names(&self) -> Vec<String> {
-        let mut names = self
-            .model_parameters
+    fn overridable_model_parameter_names(card: &InputParamCard<F<f64>>) -> Vec<String> {
+        let mut names = card
             .keys()
             .map(|symbol| symbol.to_string())
             .collect::<Vec<_>>();
@@ -2048,11 +2245,12 @@ impl State {
     }
 
     fn resolve_overridable_model_parameter_type(
-        &self,
+        model: &Model,
+        card: &InputParamCard<F<f64>>,
         parameter_name: &str,
     ) -> Result<gammalooprs::model::ParameterType> {
-        let possibilities = self.overridable_model_parameter_names();
-        let parameter_type = external_model_parameter_type(&self.model, parameter_name)
+        let possibilities = Self::overridable_model_parameter_names(card);
+        let parameter_type = external_model_parameter_type(model, parameter_name)
             .ok_or_else(|| eyre!("No model parameter named '{parameter_name}'"))
             .with_note(|| {
                 format!(
@@ -2062,7 +2260,7 @@ impl State {
             })?;
 
         let symbol = UFOSymbol::from(parameter_name);
-        if !self.model_parameters.contains_key(&symbol) {
+        if !card.contains_key(&symbol) {
             return Err(eyre!(
                 "Model parameter '{parameter_name}' cannot be overridden because it is not present in the shared top-level model_parameters.json"
             ))
@@ -2116,9 +2314,130 @@ impl State {
         }
     }
 
+    /// Replace the session model by the one at `path`, with its own values as
+    /// the parameter card.
     pub fn import_model(&mut self, path: impl AsRef<Path>) -> Result<()> {
-        self.model = Model::from_file(path)?;
+        Model::with_parameter_display_transaction(|| {
+            let model = Model::from_path(path)?;
+            let card = model.default_param_card();
+            self.replace_model(model, card)
+        })
+    }
+
+    /// Replace the session model and its parameter card, and rebind every held
+    /// graph to the new model so that graphs and session read the same values.
+    ///
+    /// The card is authoritative: `card` is applied to `model` before anything
+    /// else, so the stored model, the card and every graph agree, also after
+    /// saving and loading. All checks run on that candidate before the state
+    /// changes, so on error the state is unchanged:
+    /// - held graphs index the model's records, so a model with different
+    ///   records is refused while any process holds graphs;
+    /// - for a generated integrand whose generation decided on model values
+    ///   (see [`GenerationPoint::depends_on_model_values`]), the point it
+    ///   resolves to must stay at its generation point (see [`Self::ensure_generation_point_kept`]);
+    /// - every generated integrand must resolve its settings overlay against
+    ///   the new card, and the resulting model must supply every model value
+    ///   its parameter builders read.
+    ///
+    /// The integrands' runtime caches are invalidated, so their next warm-up
+    /// uses the new values.
+    /// Model construction also registers standalone display labels. When an
+    /// application constructs a candidate that this method can reject, enclose
+    /// both operations in [Model::with_parameter_display_transaction].
+    /// File imports and CLI model imports already provide this scope.
+    ///
+    pub fn replace_model(&mut self, model: Model, card: InputParamCard<F<f64>>) -> Result<()> {
+        Model::with_parameter_display_transaction(|| {
+            let mut candidate = model;
+            let checked = self
+                .process_list
+                .ensure_graphs_bound_to(&candidate)
+                .and_then(|()| {
+                    candidate.apply_param_card(&card)?;
+                    self.ensure_model_replaceable(&candidate, &card)
+                });
+            if let Err(error) = checked {
+                return Err(error.wrap_err(format!(
+                    "Model '{}' was not applied; the state is unchanged",
+                    candidate.name()
+                )));
+            }
+            self.model = candidate;
+            self.model_parameters = card;
+            self.process_list
+                .rebind_graph_models(&Arc::new(self.model.clone()));
+            Ok(())
+        })
+    }
+
+    /// The value checks of [`Self::replace_model`] for a candidate model and
+    /// card with the records of the held graphs.
+    fn ensure_model_replaceable(&self, model: &Model, card: &InputParamCard<F<f64>>) -> Result<()> {
+        for (process_id, process) in self.process_list.processes.iter().enumerate() {
+            let folder = &process.definition.folder_name;
+            let integrands: Vec<(&String, &ProcessIntegrand)> = match &process.collection {
+                ProcessCollection::Amplitudes(amplitudes) => amplitudes
+                    .iter()
+                    .filter_map(|(name, amplitude)| Some((name, amplitude.integrand.as_ref()?)))
+                    .collect(),
+                ProcessCollection::CrossSections(cross_sections) => cross_sections
+                    .iter()
+                    .filter_map(|(name, cross_section)| {
+                        Some((name, cross_section.integrand.as_ref()?))
+                    })
+                    .collect(),
+            };
+            for (name, integrand) in integrands {
+                // The model every evaluation of this integrand warms up with.
+                let effective = Self::effective_model(model, card, integrand.get_settings())
+                    .wrap_err_with(|| {
+                        format!(
+                            "integrand '{name}' of process '{folder}' has model settings that the \
+                             new parameter card cannot resolve; reset them with `set model -p \
+                             name:{folder} -i {name} defaults` first"
+                        )
+                    })?;
+                self.ensure_effective_point_kept(
+                    process_id,
+                    name,
+                    &effective,
+                    integrand.get_settings(),
+                )?;
+                integrand
+                    .graphs()
+                    .into_iter()
+                    .try_for_each(|graph| {
+                        graph
+                            .param_builder
+                            .ensure_model_values(&effective)
+                            .wrap_err_with(|| format!("graph '{}'", graph.name))
+                    })
+                    .wrap_err_with(|| {
+                        format!("integrand '{name}' of process '{folder}' cannot use the new model")
+                    })?;
+            }
+        }
         Ok(())
+    }
+
+    /// Check, before anything is written, that a save can be loaded back:
+    /// saved graphs persist only their model's identity and rebind to the saved
+    /// model.json. This is an identity check only, so a state of ungenerated
+    /// graphs needs no numerical model values.
+    pub fn ensure_graphs_match_model(&self) -> Result<()> {
+        self.process_list
+            .ensure_graphs_bound_to(&self.model)
+            .wrap_err("State was not saved: its graphs do not match its model")
+    }
+
+    /// The model handle that graphs imported now share with the held graphs.
+    pub fn shared_graph_model(&self) -> Arc<Model> {
+        self.process_list
+            .shared_graph_model()
+            .filter(|model| model.fingerprint() == self.model.fingerprint())
+            .cloned()
+            .unwrap_or_else(|| Arc::new(self.model.clone()))
     }
 
     fn matching_process_ids(&self, process: Option<&ProcessRef>) -> Result<Vec<usize>> {
@@ -2330,8 +2649,9 @@ impl State {
         let mut payload =
             self.cloned_integrand_payload(source_process_id, &source_integrand_name)?;
         payload.rename(output_integrand_name);
-        self.insert_integrand_copy(
+        let insertion = self.insert_integrand_copy(
             source_process_id,
+            &source_integrand_name,
             output_process_name,
             output_integrand_name,
             payload,
@@ -2340,7 +2660,71 @@ impl State {
             None,
             false,
         )?;
+        self.copy_generation_summary(
+            source_process_id,
+            &source_integrand_name,
+            insertion.process_id,
+            &insertion.integrand_name,
+        );
         Ok(())
+    }
+
+    /// Give a copied integrand the generation summary of its source, with the
+    /// source's exact generation point: the copy was generated there too.
+    /// Reports of graphs the copy no longer holds are dropped.
+    fn copy_generation_summary(
+        &mut self,
+        source_process_id: usize,
+        source_integrand_name: &str,
+        process_id: usize,
+        integrand_name: &str,
+    ) {
+        let key = IntegrandGenerationSummaryKey {
+            process_id,
+            integrand_name: integrand_name.to_string(),
+        };
+        let generated = self
+            .process_list
+            .get_integrand(process_id, integrand_name)
+            .is_ok_and(|resolved| resolved.integrand.is_some());
+        let source = self
+            .generation_summary(source_process_id, source_integrand_name)
+            .cloned();
+        let Some(mut summary) = source.filter(|_| generated) else {
+            self.generation_summaries.remove(&key);
+            return;
+        };
+        let graph_names: BTreeSet<String> =
+            match &self.process_list.processes[process_id].collection {
+                ProcessCollection::Amplitudes(amplitudes) => amplitudes
+                    .get(integrand_name)
+                    .map(|amplitude| {
+                        amplitude
+                            .graphs
+                            .iter()
+                            .map(|graph| graph.graph.name.clone())
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                ProcessCollection::CrossSections(cross_sections) => cross_sections
+                    .get(integrand_name)
+                    .map(|cross_section| {
+                        cross_section
+                            .supergraphs
+                            .iter()
+                            .map(|graph| graph.graph.name.clone())
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+            };
+        summary
+            .reports
+            .retain(|report| graph_names.contains(&report.graph_name));
+        for report in &mut summary.reports {
+            report.process_id = process_id;
+            report.integrand_name = integrand_name.to_string();
+        }
+        self.generation_summaries.insert(key, summary);
     }
 
     pub fn select_integrand_graph_groups(
@@ -2381,7 +2765,7 @@ impl State {
                             process_name
                         )
                     })?;
-                    let plan = amplitude.plan_graph_group_selection(selection)?;
+                    let plan = amplitude.plan_graph_group_selection(selection, &self.model)?;
                     amplitude.validate_graph_group_selection_plan(&plan)?;
                     (process_name, plan, amplitude.integrand.is_some())
                 }
@@ -2564,6 +2948,7 @@ impl State {
 
         let insertion = self.insert_integrand_copy(
             source.process_id,
+            &source.integrand_name,
             output_process_name,
             output_integrand_name,
             payload,
@@ -2572,6 +2957,12 @@ impl State {
             Some(state_folder),
             read_only_state,
         )?;
+        self.copy_generation_summary(
+            source.process_id,
+            &source.integrand_name,
+            insertion.process_id,
+            &insertion.integrand_name,
+        );
 
         Ok(SelectedGraphGroups {
             source_process_id: source.process_id,
@@ -2614,6 +3005,7 @@ impl State {
     fn insert_integrand_copy(
         &mut self,
         source_process_id: usize,
+        source_integrand_name: &str,
         output_process_name: &str,
         output_integrand_name: &str,
         payload: IntegrandCopyPayload,
@@ -2660,6 +3052,34 @@ impl State {
                     replaced_existing_target: true,
                     removed_target_artifacts,
                 });
+            }
+
+            // A process decides from its own generation history whether its
+            // generated integrands depend on model values when their summary
+            // is missing, so a value-dependent integrand may not join a
+            // process whose history records value-independent generation.
+            let destination = &self.process_list.processes[destination_process_id];
+            if payload.is_generated()
+                && self.integrand_depends_on_model_values(source_process_id, source_integrand_name)
+                && destination
+                    .settings_history
+                    .as_ref()
+                    .is_some_and(|history| {
+                        !history
+                            .generation
+                            .threshold_subtraction
+                            .check_esurface_at_generation
+                    })
+            {
+                return Err(eyre!(
+                    "Cannot copy integrand '{source_integrand_name}' into process \
+                     '{output_process_name}': its generation decided on the generation-time model \
+                     values (generation.threshold_subtraction.check_esurface_at_generation, or no \
+                     recorded generation settings), but process '{output_process_name}' was \
+                     generated without that setting, so the dependence would rest on the copy's \
+                     optional generation summary alone; copy it into a new process or into a \
+                     process generated with the same setting"
+                ));
             }
 
             let target_exists = self.process_list.processes[destination_process_id]
@@ -2767,10 +3187,22 @@ impl State {
         &self,
         settings: &RuntimeSettings,
     ) -> Result<InputParamCard<F<f64>>> {
-        let mut card = self.model_parameters.clone();
+        Self::effective_model_parameter_card(&self.model, &self.model_parameters, settings)
+    }
+
+    /// The card that `settings` resolve to: `card` with the settings' model
+    /// overlay applied, validated against `model`.
+    fn effective_model_parameter_card(
+        model: &Model,
+        card: &InputParamCard<F<f64>>,
+        settings: &RuntimeSettings,
+    ) -> Result<InputParamCard<F<f64>>> {
+        let shared_card = card;
+        let mut card = shared_card.clone();
 
         for (parameter_name, value) in &settings.model.external_parameters {
-            let parameter_type = self.resolve_overridable_model_parameter_type(parameter_name)?;
+            let parameter_type =
+                Self::resolve_overridable_model_parameter_type(model, shared_card, parameter_name)?;
             let value = Complex::new(value.0, value.1);
             validate_model_parameter_type(parameter_name, parameter_type, &value)?;
 
@@ -2811,9 +3243,19 @@ impl State {
     }
 
     pub fn resolve_model_for_settings(&self, settings: &RuntimeSettings) -> Result<Model> {
-        let mut model = self.model.clone();
-        self.resolve_effective_model_parameter_card_for_settings(settings)?
-            .apply_to_model(&mut model)?;
+        Self::effective_model(&self.model, &self.model_parameters, settings)
+    }
+
+    /// The model an integrand with `settings` evaluates with: `model` with
+    /// `card` and the settings' model overlay applied.
+    fn effective_model(
+        model: &Model,
+        card: &InputParamCard<F<f64>>,
+        settings: &RuntimeSettings,
+    ) -> Result<Model> {
+        let card = Self::effective_model_parameter_card(model, card, settings)?;
+        let mut model = model.clone();
+        model.apply_param_card(&card)?;
         Ok(model)
     }
 
@@ -2836,6 +3278,7 @@ impl State {
         global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
     ) -> Result<GenerationReports> {
+        self.ensure_generation_consumes_the_effective_model(global_settings, runtime_default)?;
         self.run_generation_with_monitor(global_settings, move |state, generation_pool| {
             let mut reports = state.process_list.preprocess(
                 &state.model,
@@ -2878,6 +3321,7 @@ impl State {
         process_id: usize,
         integrand_name: Option<String>,
     ) -> Result<GenerationReports> {
+        self.ensure_generation_consumes_the_effective_model(global_settings, runtime_default)?;
         self.run_generation_with_monitor(global_settings, move |state, generation_pool| {
             let p = &mut state.process_list.processes[process_id];
             let process_name = p.definition.folder_name.clone();
@@ -3041,13 +3485,18 @@ impl State {
         let peak_ram_bytes = monitor.finish();
         clear_interrupt_request();
 
-        generation_result.map(|reports| GenerationReports {
-            reports,
+        let reports = GenerationReports {
+            reports: generation_result
+                .inspect_err(|_| self.refresh_dependent_generation_points())?,
             resources: GenerationResourceSummary {
                 peak_ram_bytes,
                 generation_cores,
             },
-        })
+        };
+        // Every generation records its integrands' summaries with their
+        // generation points, whichever entry point requested it.
+        self.record_generation_summary(&reports.reports, reports.resources);
+        Ok(reports)
     }
 
     pub fn compile_integrands(
@@ -3114,14 +3563,238 @@ impl State {
         }
 
         for (key, reports) in reports_by_integrand {
+            let generation_point = self.current_generation_point(&key);
             self.generation_summaries.insert(
                 key,
                 IntegrandGenerationSummary {
                     peak_ram_bytes: resources.peak_ram_bytes,
                     reports,
+                    generation_point,
                 },
             );
         }
+    }
+
+    /// Keep generation points sound after a generation that returned an error.
+    ///
+    /// A generation that fails part-way may already have installed some
+    /// integrands and updated their process' generation settings, while their
+    /// summaries still describe the previous build, or no build. Every
+    /// generated integrand of a process that is now value-dependent is
+    /// recorded at its current point, also when it has no summary yet. Without
+    /// that record, a later failed preprocessing could overwrite the process'
+    /// settings and drop the fallback guard while the payload stays installed.
+    /// An integrand installed by this generation gets the point it was built
+    /// at; an earlier payload is held at its own values, which can only refuse
+    /// more. Integrands of processes that are not value-dependent keep their
+    /// records; a dependent one among them can only refuse more. The previous
+    /// statistics of a summary are kept; a new summary has none.
+    fn refresh_dependent_generation_points(&mut self) {
+        for (process_id, process) in self.process_list.processes.iter().enumerate() {
+            if !process.generation_depends_on_model_values() {
+                continue;
+            }
+            for integrand_name in process.get_integrand_names() {
+                let key = IntegrandGenerationSummaryKey {
+                    process_id,
+                    integrand_name: integrand_name.to_owned(),
+                };
+                if let Some(point) = self.current_generation_point(&key) {
+                    self.generation_summaries
+                        .entry(key)
+                        .or_insert_with(|| IntegrandGenerationSummary {
+                            peak_ram_bytes: 0,
+                            reports: Vec::new(),
+                            generation_point: None,
+                        })
+                        .generation_point = Some(point);
+                }
+            }
+        }
+    }
+
+    /// The point a just-generated integrand was generated at: its effective
+    /// input parameters and stored kinematics, and whether its process'
+    /// generation decided on them. Value-dependent generation is refused
+    /// unless the effective model equals the model it consumes (see
+    /// [`Self::ensure_generation_consumes_the_effective_model`]), so these are
+    /// exactly the values its decisions used.
+    fn current_generation_point(
+        &self,
+        key: &IntegrandGenerationSummaryKey,
+    ) -> Option<GenerationPoint> {
+        let integrand = self
+            .process_list
+            .get_integrand(key.process_id, &key.integrand_name)
+            .ok()?
+            .require_generated()
+            .ok()?;
+        let settings = integrand.get_settings();
+        let effective =
+            Self::effective_model(&self.model, &self.model_parameters, settings).ok()?;
+        let depends =
+            self.process_list.processes[key.process_id].generation_depends_on_model_values();
+        GenerationPoint::new(&effective, settings, depends).ok()
+    }
+
+    /// Refuse value-dependent generation whose integrands would evaluate with
+    /// other model values than the ones generation consumes. Generation
+    /// consumes the session model itself, while the generated integrands
+    /// evaluate with the session card and the runtime defaults' model overlay
+    /// applied; with `check_esurface_at_generation` threshold decisions would
+    /// then be made at values the integrand never uses. Without the check,
+    /// generation is unchanged.
+    fn ensure_generation_consumes_the_effective_model(
+        &self,
+        global_settings: &GlobalSettings,
+        runtime_default: LockedRuntimeSettings,
+    ) -> Result<()> {
+        if !global_settings
+            .generation
+            .threshold_subtraction
+            .check_esurface_at_generation
+        {
+            return Ok(());
+        }
+        let settings = RuntimeSettings::from(runtime_default);
+        let effective = Self::effective_model(&self.model, &self.model_parameters, &settings)?;
+        let consumed = GenerationPoint::new(&self.model, &settings, true)?;
+        let evaluated = GenerationPoint::new(&effective, &settings, true)?;
+        match consumed.difference(&evaluated) {
+            None => Ok(()),
+            Some(difference) => Err(eyre!(
+                "generation.threshold_subtraction.check_esurface_at_generation decides which \
+                 threshold counterterms exist with the session model, but {difference} differs \
+                 in the model the generated integrands would evaluate with (the session card \
+                 with the runtime model overlay applied); clear the runtime model overlay or \
+                 apply the card with `set model`, then generate"
+            )),
+        }
+    }
+
+    /// The recorded generation point of a generated integrand, if any.
+    fn recorded_generation_point(
+        &self,
+        process_id: usize,
+        integrand_name: &str,
+    ) -> Option<&GenerationPoint> {
+        self.generation_summary(process_id, integrand_name)
+            .and_then(|summary| summary.generation_point.as_ref())
+    }
+
+    /// Whether a generated integrand must stay at its generation point: as
+    /// recorded with its point, or, without a record, conservatively from
+    /// its process (see [`Process::generation_depends_on_model_values`]).
+    fn integrand_depends_on_model_values(&self, process_id: usize, integrand_name: &str) -> bool {
+        self.recorded_generation_point(process_id, integrand_name)
+            .map_or_else(
+                || self.process_list.processes[process_id].generation_depends_on_model_values(),
+                |point| point.depends_on_model_values,
+            )
+    }
+
+    /// Refuse a model, card or settings change that moves a value-dependent
+    /// generated integrand (see [`GenerationPoint::depends_on_model_values`])
+    /// away from the point it was generated at. `model`, `card` and `settings`
+    /// are the candidate session model, session card and integrand settings;
+    /// the integrand resolves its overlay against them as every evaluation
+    /// does, and its complete effective input parameters and kinematics
+    /// must equal the recorded ones exactly.
+    ///
+    /// Without a record (an integrand copied without its summary), the
+    /// reference is the current point, so any change is refused. Loading a
+    /// state refuses such integrands outright, since the loaded values cannot
+    /// be verified.
+    pub fn ensure_generation_point_kept(
+        &self,
+        process_id: usize,
+        integrand_name: &str,
+        model: &Model,
+        card: &InputParamCard<F<f64>>,
+        settings: &RuntimeSettings,
+    ) -> Result<()> {
+        if !self.integrand_depends_on_model_values(process_id, integrand_name) {
+            return Ok(());
+        }
+        self.ensure_effective_point_kept(
+            process_id,
+            integrand_name,
+            &Self::effective_model(model, card, settings)?,
+            settings,
+        )
+    }
+
+    /// [`Self::ensure_generation_point_kept`] for an already resolved
+    /// effective model of the integrand.
+    fn ensure_effective_point_kept(
+        &self,
+        process_id: usize,
+        integrand_name: &str,
+        effective_model: &Model,
+        settings: &RuntimeSettings,
+    ) -> Result<()> {
+        if !self.integrand_depends_on_model_values(process_id, integrand_name) {
+            return Ok(());
+        }
+        let candidate = GenerationPoint::new(effective_model, settings, true)?;
+        let reference = match self.recorded_generation_point(process_id, integrand_name) {
+            Some(point) => point.clone(),
+            None => {
+                let current = self
+                    .process_list
+                    .get_integrand(process_id, integrand_name)?
+                    .require_generated()?
+                    .get_settings();
+                GenerationPoint::new(&self.resolve_model_for_settings(current)?, current, true)?
+            }
+        };
+        let Some(difference) = reference.difference(&candidate) else {
+            return Ok(());
+        };
+        let folder = &self.process_list.processes[process_id]
+            .definition
+            .folder_name;
+        Err(eyre!(
+            "integrand '{integrand_name}' of process '{folder}' was generated with the model values \
+             and kinematics deciding which threshold counterterms exist \
+             (generation.threshold_subtraction.check_esurface_at_generation, or no recorded \
+             generation settings), and {difference} would differ from that generation point; \
+             remove it with `remove processes -p name:{folder}` and regenerate it at the new point"
+        ))
+    }
+
+    /// Check a loaded state: every value-dependent generated integrand must
+    /// have a recorded generation point, and its current settings with the
+    /// session model and card must be exactly at that point. Without a record
+    /// the state cannot be verified as unchanged, so it is refused.
+    fn ensure_generation_points_kept(&self) -> Result<()> {
+        for (process_id, process) in self.process_list.processes.iter().enumerate() {
+            let folder = &process.definition.folder_name;
+            for name in process.collection.get_integrand_names() {
+                let resolved = self.process_list.get_integrand(process_id, name)?;
+                if let Some(settings) = resolved.get_settings() {
+                    if self.recorded_generation_point(process_id, name).is_none()
+                        && process.generation_depends_on_model_values()
+                    {
+                        return Err(eyre!(
+                            "integrand '{name}' of process '{folder}' was generated with model \
+                             values and kinematics deciding which threshold counterterms exist, \
+                             but its generation point was not recorded, so the loaded model \
+                             values and kinematics cannot be verified as unchanged; regenerate \
+                             it, loading the other processes with `--processes` if needed"
+                        ));
+                    }
+                    self.ensure_generation_point_kept(
+                        process_id,
+                        name,
+                        &self.model,
+                        &self.model_parameters,
+                        settings,
+                    )?;
+                }
+            }
+        }
+        Ok(())
     }
 
     fn remove_generation_summaries_for_process(&mut self, process_id: usize) {
@@ -3157,7 +3830,27 @@ impl State {
         Ok(())
     }
 
-    pub fn import_graphs(&mut self, graphs: Vec<Graph>, options: GraphImportOptions) -> Result<()> {
+    pub fn import_graphs(
+        &mut self,
+        mut graphs: Vec<Graph>,
+        options: GraphImportOptions,
+    ) -> Result<()> {
+        // Everything below indexes the graphs' typed identifiers against
+        // `self.model`; bind them to the shared session model first.
+        let model = self.shared_graph_model();
+        for graph in &graphs {
+            graph.ensure_bound_to(&model).wrap_err_with(|| {
+                format!(
+                    "Cannot import graph '{}' into a state using model '{}'; import the model \
+                     the graph was built with first",
+                    graph.name,
+                    model.name()
+                )
+            })?;
+        }
+        for graph in &mut graphs {
+            graph.rebind_model(&model);
+        }
         let GraphImportOptions {
             process_name,
             process_id,
@@ -3207,6 +3900,17 @@ impl State {
                 let mut process_definition = match process_definition.clone() {
                     Some(definition) => definition,
                     None => {
+                        // Final states are inferred from physical cuts only, so
+                        // they are undetermined when every graph is selection-only.
+                        let all_selection_only = graphs
+                            .iter()
+                            .all(|graph| !graph.finalized_spectator_cuts.is_empty());
+                        if let Some(graph) = graphs.first().filter(|_| all_selection_only) {
+                            return Err(eyre!(
+                                "An explicit --process-spec is required to import graphs that are all selection-only, such as '{}': no physical cut determines the final state. Integrand construction is unsupported for these graphs",
+                                graph.name
+                            ));
+                        }
                         ProcessDefinition::from_graph_list(&graphs, generation_type, &self.model)?
                     }
                 };
@@ -3272,7 +3976,6 @@ impl State {
                         .add_cross_section(CrossSection::from_graph_list(
                             integrand_name.clone(),
                             graphs,
-                            &self.model,
                         )?)
                 }
             }
@@ -3298,7 +4001,7 @@ impl State {
         let _ = initialise();
 
         Self {
-            model: Model::default(),
+            model: Model::empty("ModelNotLoaded"),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),
             generation_summaries: BTreeMap::new(),
@@ -3309,7 +4012,7 @@ impl State {
         init_test_tracing();
 
         Self {
-            model: Model::default(),
+            model: Model::empty("ModelNotLoaded"),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),
             generation_summaries: BTreeMap::new(),
@@ -3320,7 +4023,7 @@ impl State {
         init_bench_tracing();
 
         Self {
-            model: Model::default(),
+            model: Model::empty("ModelNotLoaded"),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),
             generation_summaries: BTreeMap::new(),
@@ -3357,69 +4060,82 @@ impl State {
         trace_logs_filename: Option<String>,
         selection: Option<&ProcessLoadSelection>,
     ) -> Result<Self> {
-        // let root_folder = root_folder.join("gammaloop_state");
-        let manifest = load_state_manifest(&save_path)?;
-        validate_state_layout(&manifest, &save_path)?;
-        // Install GammaLoop's subscriber before importing Symbolica state. Symbolica warnings
-        // initialize its fallback subscriber on first use, which would otherwise claim the global
-        // tracing dispatch and escape ANSI styling in all subsequent GammaLoop output.
-        let mut loaded_state = State::new(&save_path, trace_logs_filename);
-        debug!("Loading state manifest version {}", manifest.version);
+        Model::with_parameter_display_transaction(|| {
+            // let root_folder = root_folder.join("gammaloop_state");
+            let manifest = load_state_manifest(&save_path)?;
+            validate_state_layout(&manifest, &save_path)?;
+            // Install GammaLoop's subscriber before importing Symbolica state. Symbolica warnings
+            // initialize its fallback subscriber on first use, which would otherwise claim the global
+            // tracing dispatch and escape ANSI styling in all subsequent GammaLoop output.
+            let mut loaded_state = State::new(&save_path, trace_logs_filename);
+            debug!("Loading state manifest version {}", manifest.version);
 
-        // Restore even symbols absent from the restricted model before parsing expressions
-        // or importing the archive: Symbolica cannot attach callbacks to a plain symbol later.
-        for name in &manifest.ufo_print_symbols {
-            let _ = UFOSymbol::from(name);
-        }
-        for label in &manifest.linnet_subgraph_print_labels {
-            let _ = SuBitGraph::symbol_from_label(label.clone());
-        }
+            // Restore even symbols absent from the restricted model before parsing expressions
+            // or importing the archive: Symbolica cannot attach callbacks to a plain symbol later.
+            for name in &manifest.ufo_print_symbols {
+                let _ = UFOSymbol::from(name);
+            }
+            for label in &manifest.linnet_subgraph_print_labels {
+                let _ = SuBitGraph::symbol_from_label(label.clone());
+            }
 
-        // Load the model before importing Symbolica state so UFO symbols retain their custom print
-        // callbacks; the import then remaps serialized symbol ids onto those definitions.
-        let mut model = if let Some(model_path) = &model_path {
-            info!("Loading model from {}", model_path.display());
-            Model::from_file(model_path)?
-        } else {
-            let model_dir = save_path.join("model.json");
-            info!(
-                "Loading model from default location: {}",
-                model_dir.display()
-            );
-            Model::from_file(model_dir)?
-        };
+            // Load the model before importing Symbolica state so UFO symbols retain their custom print
+            // callbacks; the import then remaps serialized symbol ids onto those definitions.
+            let mut model = if let Some(model_path) = &model_path {
+                info!("Loading model from {}", model_path.display());
+                Model::from_path(model_path)?
+            } else {
+                let model_dir = save_path.join("model.json");
+                info!(
+                    "Loading model from default location: {}",
+                    model_dir.display()
+                );
+                Model::from_path(model_dir)?
+            };
 
-        debug!("Loaded model: {}", model.name);
+            debug!("Loaded model: {}", model.name());
 
-        let input_param_card = if save_path.join("model_parameters.json").exists() {
-            let a = InputParamCard::from_file(save_path.join("model_parameters.json"))?;
+            let input_param_card = if save_path.join("model_parameters.json").exists() {
+                let a = InputParamCard::from_file(save_path.join("model_parameters.json"))?;
 
-            let _ = model.apply_param_card(&a);
-            a
-        } else {
-            InputParamCard::default_from_model(&model)
-        };
+                model.apply_param_card(&a).wrap_err_with(|| {
+                    format!(
+                        "Saved parameter card {} cannot be applied to the saved model",
+                        save_path.join("model_parameters.json").display()
+                    )
+                })?;
+                a
+            } else {
+                model.default_param_card()
+            };
 
-        let symbolica_state = symbolica::state::State::import(
-            &mut fs::File::open(save_path.join("symbolica_state.bin"))
-                .context("Trying to open symbolica state binary")?,
-            None,
-        )?;
+            let symbolica_state = symbolica::state::State::import(
+                &mut fs::File::open(save_path.join("symbolica_state.bin"))
+                    .context("Trying to open symbolica state binary")?,
+                None,
+            )?;
 
-        let context: GammaLoopContextContainer<'_> = GammaLoopContextContainer {
-            state_map: &symbolica_state,
-            model: &model,
-        };
+            // Every decoded graph binds to this one shared model.
+            let model = Arc::new(model);
+            let context: GammaLoopContextContainer<'_> = GammaLoopContextContainer {
+                state_map: &symbolica_state,
+                model: &model,
+            };
 
-        let process_list = ProcessList::load_with_selection(&save_path, context, selection)
-            .context("Trying to load processList")?;
+            let process_list = ProcessList::load_with_selection(&save_path, context, selection)
+                .context("Trying to load processList")?;
 
-        loaded_state.process_list = process_list;
-        loaded_state.model = model;
-        loaded_state.model_parameters = input_param_card;
-        loaded_state.generation_summaries =
-            load_integrand_generation_summaries(&save_path, &loaded_state.process_list)?;
-        Ok(loaded_state)
+            loaded_state.process_list = process_list;
+            loaded_state.model = Arc::unwrap_or_clone(model);
+            loaded_state.model_parameters = input_param_card;
+            loaded_state.generation_summaries =
+                load_integrand_generation_summaries(&save_path, &loaded_state.process_list)?;
+            // A card edited on disk must not silently move value-dependent integrands.
+            loaded_state
+                .ensure_generation_points_kept()
+                .wrap_err("State was not loaded: it no longer matches its generation point")?;
+            Ok(loaded_state)
+        })
     }
 
     pub fn activate_loaded_integrand_backends(
@@ -3491,6 +4207,8 @@ impl State {
         override_state_file: bool,
         strict: bool,
     ) -> Result<()> {
+        self.ensure_graphs_match_model()?;
+
         // let root_folder = root_folder.join("gammaloop_state");
 
         // check if the export root exists, if not create it, if it does return error
@@ -3547,8 +4265,7 @@ impl State {
         // let binary = bincode::encode_to_vec(&self.integrands, bincode::config::standard())?;
         // fs::write(root_folder.join("process_list.bin"), binary)?;?
         self.model
-            .to_serializable()
-            .to_file(selected_root_folder.join("model.json"), override_state_file)?;
+            .write_json(selected_root_folder.join("model.json"))?;
         self.model_parameters.to_file(
             selected_root_folder.join("model_parameters.json"),
             override_state_file,
@@ -3562,31 +4279,41 @@ impl State {
 mod tests {
     use std::{fs, process::Command};
 
+    use crate::{OneShot, StateLoadOption, DEFAULT_RUNTIME_SETTINGS_FILENAME, LOG_TEST_MUTEX};
     use gammalooprs::{
         graph::Graph,
         initialisation::test_initialise,
         integrands::process::{ActiveF64Backend, GaussianReferenceFunction},
-        model::InputParamCard,
+        model::ModelGammaLoopExt,
         momentum::{Dep, ExternalMomenta, Helicity},
         processes::{
-            process::ProcessCollection, RaisedPropagatorScope, RaisedPropagatorSignature,
-            SelectionPolarity,
+            process::ProcessCollection, GenerationProcessKind, GenerationProgressObserver,
+            GenerationProgressObserverGuard, GenerationProgressPhase, RaisedPropagatorScope,
+            RaisedPropagatorSignature, SelectionPolarity,
         },
+        request_interrupt,
         settings::global::{CompilationMode, FrozenCompilationMode},
         settings::{
             runtime::kinematic::{improvement::PhaseSpaceImprovementSettings, Externals},
             KinematicsSettings, RuntimeSettings,
         },
-        utils::{load_generic_model, serde_utils::SHOWDEFAULTS},
+        utils::{
+            load_generic_model,
+            serde_utils::{ShowDefaultsGuard, SHOWDEFAULTS},
+        },
     };
+    use serde_json::Value as JsonValue;
     use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
-    use symbolica::atom::{Atom, AtomCore};
+    use symbolica::atom::{Atom, AtomCore, NamespacedSymbol, Symbol};
+    use symbolica::numerical_integration::Sample;
+    use symbolica::printer::PrintOptions;
     use tempfile::tempdir;
 
     use crate::commands::{
         display::Display,
+        generate::ProcessArgs,
         save::SaveState,
-        set::{ProcessSetArgs, Set, SetArgs},
+        set::{KvPair, ModelSetValue, ProcessSetArgs, Set, SetArgs},
     };
 
     use super::*;
@@ -3686,8 +4413,9 @@ mod tests {
                     }
                 }
                 let mut model = state.model.clone();
-                model.get_parameter_mut("aS").unwrap().value = Some(Complex::new_re(F(1.0)));
-                model.recompute_dependents().unwrap();
+                let mut card = model.default_param_card();
+                card.insert("aS".into(), Complex::new_re(F(1.0)));
+                model.apply_param_card(&card).unwrap();
                 params.update_model_values(&model).unwrap();
                 let coupling = model.get_coupling("GC_12");
                 let position = params.pairs.model_parameters.value_range.start
@@ -3696,12 +4424,14 @@ mod tests {
                         .model_parameters
                         .params
                         .iter()
-                        .position(|param| *param == Atom::from(coupling.name))
+                        .position(|param| {
+                            *param == Atom::from(UFOSymbol::from(coupling.name.as_str()))
+                        })
                         .unwrap();
                 for (value_index, values) in params.values.iter().enumerate() {
                     assert_eq!(
                         values[position * (value_index + 1)],
-                        coupling.value.unwrap().map(F)
+                        Complex::new(F(coupling.value.unwrap().re), F(coupling.value.unwrap().im))
                     );
                 }
                 for name in ["G", "orphan_ufo_printer"] {
@@ -3731,9 +4461,14 @@ mod tests {
         // Force a different registration order from the alphabetical manifest replay.
         let _ = UFOSymbol::from("GC_12");
         state.model = load_generic_model("sm");
-        state.model_parameters = InputParamCard::default_from_model(&state.model);
-        let mut graphs = Graph::from_string(
-            "digraph model_values { node [num=1]; edge [num=1, mass=0]; A -> A; }",
+        state.model_parameters = state.model.default_param_card();
+        let mut graphs = Graph::from_finalized_runtime_string(
+            r#"digraph model_values {
+                num=1; overall_factor=1; overall_factor_evaluated=1; projector=1;
+                A [num=1];
+                A:0 -> A:1 [particle="a", num=1, mass=0, id=0, lmb_id=0,
+                    lmb_rep="K(0,a___)", source="{ufo_order:0}", sink="{ufo_order:1}"];
+            }"#,
             &state.model,
         )
         .unwrap();
@@ -3759,6 +4494,7 @@ mod tests {
         }
         state.save(temp.path(), true, false).unwrap();
         let manifest = load_state_manifest(temp.path()).unwrap();
+        assert_eq!(manifest.version, 23);
         assert!(manifest
             .ufo_print_symbols
             .contains(&"orphan_ufo_printer".to_owned()));
@@ -3796,11 +4532,11 @@ mod tests {
         test_initialise().expect("test initialisation should succeed");
         let mut state = State::new_test();
         state.model = load_generic_model("scalars");
-        state.model_parameters = InputParamCard::default_from_model(&state.model);
+        state.model_parameters = state.model.default_param_card();
 
         let graph_path =
             crate::test_workspace_root().join("tests/resources/graphs/scalar_bubble.dot");
-        let graphs = Graph::from_path(&graph_path, &state.model)
+        let graphs = Graph::from_finalized_runtime_path(&graph_path, &state.model)
             .expect("scalar bubble graph fixture should load");
 
         state
@@ -3837,23 +4573,27 @@ mod tests {
         };
 
         test_initialise()?;
-        for (folder, source) in [
+        for (folder, source, model) in [
             (
                 "amplitudes",
                 include_str!("../../../tests/resources/graphs/scalar_bubble.dot"),
+                load_generic_model("scalars"),
             ),
             (
                 "cross_sections",
                 include_str!(
                     "../../../tests/resources/graphs/mass_approach_scalar_self_energy.dot"
                 ),
+                Model::from_json(include_str!(
+                    "../../../assets/models/json/scalars/scalars_2p_3p.json"
+                ))?,
             ),
         ] {
             let temp = tempdir()?;
             let mut state = State::new_test();
-            state.model = load_generic_model("scalars");
-            state.model_parameters = InputParamCard::default_from_model(&state.model);
-            let mut graphs = Graph::from_string(source, &state.model)?;
+            state.model = model;
+            state.model_parameters = state.model.default_param_card();
+            let mut graphs = Graph::import_dot(source, &state.model)?;
             graphs.truncate(1);
             let graph_name = graphs[0].name.clone();
             for name in ["first", "second"] {
@@ -3969,6 +4709,7 @@ mod tests {
                 for computed in [false, true] {
                     let output = temp.path().join(format!("export-{loaded}-{computed}"));
                     state.process_list.export_uv_forests(
+                        &state.model,
                         &output,
                         0,
                         "first",
@@ -3989,7 +4730,9 @@ mod tests {
                                 let node = node?;
                                 let dot = fs::read_to_string(node.path())?;
                                 assert!(dot.contains("forest_residue_index"));
-                                for graph in Graph::from_string(&dot, &state.model)? {
+                                for graph in
+                                    Graph::from_finalized_runtime_string(&dot, &state.model)?
+                                {
                                     exported_graph = true;
                                     expression += graph.full_numerator_atom();
                                 }
@@ -4314,11 +5057,11 @@ mod tests {
         test_initialise().expect("test initialisation should succeed");
         let mut state = State::new_test();
         state.model = load_generic_model("scalars");
-        state.model_parameters = InputParamCard::default_from_model(&state.model);
+        state.model_parameters = state.model.default_param_card();
 
         let graph_path =
             crate::test_workspace_root().join("tests/resources/graphs/scalar_bubble.dot");
-        let graphs = Graph::from_path(&graph_path, &state.model)
+        let graphs = Graph::from_finalized_runtime_path(&graph_path, &state.model)
             .expect("scalar bubble graph fixture should load");
         state
             .import_graphs(
@@ -4456,6 +5199,7 @@ mod tests {
             IntegrandGenerationSummary {
                 peak_ram_bytes: 1,
                 reports: Vec::new(),
+                generation_point: None,
             },
         );
 
@@ -5078,6 +5822,37 @@ commands = ["quit -n"]
     }
 
     #[test]
+    fn state_load_rejects_previous_branch_layouts_before_deserialization() {
+        for version in [20, 21, 22] {
+            let temp = tempdir().unwrap();
+            fs::write(
+                temp.path().join(STATE_MANIFEST_FILE),
+                format!("version = {version}\n"),
+            )
+            .unwrap();
+            // Every payload is deliberately unreadable. The version guard must
+            // win before model parsing, symbolic import or positional decoding.
+            fs::write(temp.path().join("model.json"), b"invalid model").unwrap();
+            fs::write(temp.path().join("symbolica_state.bin"), b"invalid archive").unwrap();
+            fs::create_dir(temp.path().join("processes")).unwrap();
+            fs::write(
+                temp.path().join("processes/processes.bin"),
+                b"invalid processes",
+            )
+            .unwrap();
+
+            let error = match State::load(temp.path().to_path_buf(), None, None) {
+                Ok(_) => panic!("previous branch layout {version} must be rejected"),
+                Err(error) => error,
+            };
+            let message = error.to_string();
+            assert!(message.contains(&format!("State version {version}")));
+            assert!(message.contains("supported version 23"));
+            assert!(message.contains("regenerate the saved state"));
+        }
+    }
+
+    #[test]
     fn state_manifest_requires_an_explicit_version() {
         let temp = tempdir().unwrap();
         fs::write(temp.path().join(STATE_MANIFEST_FILE), "").unwrap();
@@ -5088,16 +5863,22 @@ commands = ["quit -n"]
 
     #[test]
     fn state_save_rejects_legacy_target_before_writing() {
-        let temp = tempdir().unwrap();
-        let symbolica_state = temp.path().join("symbolica_state.bin");
-        fs::write(temp.path().join(STATE_MANIFEST_FILE), "version = 1\n").unwrap();
-        fs::write(&symbolica_state, b"legacy sentinel").unwrap();
-        let mut state = State::new_test();
+        for version in [1, 20, 21, 22] {
+            let temp = tempdir().unwrap();
+            let symbolica_state = temp.path().join("symbolica_state.bin");
+            fs::write(
+                temp.path().join(STATE_MANIFEST_FILE),
+                format!("version = {version}\n"),
+            )
+            .unwrap();
+            fs::write(&symbolica_state, b"legacy sentinel").unwrap();
+            let mut state = State::new_test();
 
-        let err = state.save(temp.path(), true, false).unwrap_err();
-        assert!(err.to_string().contains("cannot be migrated"));
-        assert_eq!(fs::read(symbolica_state).unwrap(), b"legacy sentinel");
-        assert!(!temp.path().join("model.json").exists());
+            let err = state.save(temp.path(), true, false).unwrap_err();
+            assert!(err.to_string().contains("cannot be migrated"));
+            assert_eq!(fs::read(symbolica_state).unwrap(), b"legacy sentinel");
+            assert!(!temp.path().join("model.json").exists());
+        }
     }
 
     #[test]
@@ -5115,6 +5896,24 @@ commands = ["quit -n"]
 
         let err = load_state_manifest(temp.path()).unwrap_err();
         assert!(format!("{err}").contains("newer than this binary supports"));
+    }
+
+    #[test]
+    fn state_manifest_rejects_pre_feynkit_unification_versions() {
+        let temp = tempdir().unwrap();
+        let legacy_manifest = StateManifest {
+            version: 1,
+            ufo_print_symbols: Vec::new(),
+            linnet_subgraph_print_labels: Vec::new(),
+        };
+        fs::write(
+            temp.path().join(STATE_MANIFEST_FILE),
+            toml::to_string_pretty(&legacy_manifest).unwrap(),
+        )
+        .unwrap();
+
+        let err = load_state_manifest(temp.path()).unwrap_err();
+        assert!(format!("{err}").contains("regenerate the saved state"));
     }
 
     #[test]
@@ -5206,11 +6005,15 @@ commands = ["quit -n"]
         let bubble = build_generated_scalar_bubble_state_with_external_backend();
         let mut kite = State::new_test();
         kite.model = load_generic_model("scalars");
-        kite.model.get_parameter_mut("mass_scalar_1")?.value = Some(Complex::new_re(F(1.0)));
-        kite.model_parameters = InputParamCard::default_from_model(&kite.model);
+        kite.model_parameters = kite.model.default_param_card();
+        kite.model_parameters
+            .insert("mass_scalar_1".into(), Complex::new_re(F(1.0)));
+        kite.model.apply_param_card(&kite.model_parameters)?;
         kite.import_graphs(
-            Graph::from_path(
-                crate::test_workspace_root().join("tests/resources/graphs/massive_kite.dot"),
+            Graph::import_dot(
+                &std::fs::read_to_string(
+                    crate::test_workspace_root().join("tests/resources/graphs/massive_kite.dot"),
+                )?,
                 &kite.model,
             )?,
             GraphImportOptions {
@@ -5281,10 +6084,11 @@ rotation_axis = [{type = "x"}, {type = "y"}]
         // proposals; the broad components give the shifted Gaussian full support.
         let mut cut = State::new_test();
         cut.model = kite.model.clone();
-        cut.model_parameters = InputParamCard::default_from_model(&cut.model);
+        cut.model_parameters = cut.model.default_param_card();
         cut.import_graphs(
-            Graph::from_string(
+            Graph::import_dot(
                 r#"digraph sampling_cut_bubble {
+                    final_state="scalar_1,scalar_1";
                     num=1; edge [pdg=1001]; node [num=1];
                     ext [style=invis, is_cut=0];
                     ext -> a [id=0];
@@ -5725,6 +6529,1400 @@ radial_profile = { kind = "lu_h", approximation = "log_logistic", scale = 2.0, s
         Ok(())
     }
 
+    /// Every model handle held by graphs of the state: see
+    /// [`ProcessList::process_graphs`] for the holders.
+    fn held_graph_models(state: &State) -> Vec<Arc<Model>> {
+        state
+            .process_list
+            .processes
+            .iter()
+            .flat_map(ProcessList::process_graphs)
+            .map(|graph| Arc::clone(&graph.model))
+            .collect()
+    }
+
+    fn assert_graphs_share_session_model(state: &State) {
+        let shared = state.shared_graph_model();
+        let models = held_graph_models(state);
+        assert!(models.len() >= 4, "{} graph handles", models.len());
+        for model in models {
+            assert!(Arc::ptr_eq(&model, &shared), "graphs must share one model");
+            assert_eq!(model.fingerprint(), state.model.fingerprint());
+        }
+    }
+
+    fn card_entries(state: &State) -> BTreeMap<String, Complex<F<f64>>> {
+        state
+            .model_parameters
+            .iter()
+            .map(|(name, value)| (name.to_string(), *value))
+            .collect()
+    }
+
+    fn card_with(state: &State, name: &str, value: f64) -> InputParamCard<F<f64>> {
+        let mut card = state.model_parameters.clone();
+        card.insert(UFOSymbol::from(name), Complex::new_re(F(value)));
+        card
+    }
+
+    fn model_value(model: &Model, name: &str) -> f64 {
+        model.parameter(name).unwrap().value.unwrap().re
+    }
+
+    fn evaluate_first_sample(state: &mut State, name: &str) -> Result<Complex<F<f64>>> {
+        let model = state.resolve_model_for_integrand(0, name)?;
+        let integrand = state.process_list.get_integrand_mut(0, name)?;
+        integrand.warm_up(&model)?;
+        let result = integrand.evaluate_samples_raw(
+            EvaluationTarget::Physical(&model),
+            &[Sample::Continuous(F(1.0), vec![F(0.27), F(0.36), F(0.71)])],
+            0,
+            false,
+            false,
+            Complex::new_zero(),
+        )?;
+        Ok(result.samples[0].integrand_result)
+    }
+
+    fn close(a: &Complex<F<f64>>, b: &Complex<F<f64>>) -> bool {
+        let scale = a.re.0.abs().max(a.im.0.abs()).max(1e-300);
+        ((a.re.0 - b.re.0).abs() + (a.im.0 - b.im.0).abs()) / scale < 1e-12
+    }
+
+    fn cheap_generation_settings(check_esurface_at_generation: bool) -> Result<GlobalSettings> {
+        let mut global: GlobalSettings = toml::from_str(
+            r#"
+[n_cores]
+generate = 1
+[generation.uv]
+subtract_uv = false
+generate_integrated = false
+[generation.evaluator]
+compile = false
+summed = false
+iterative_orientation_optimization = false
+"#,
+        )?;
+        let thresholds = &mut global.generation.threshold_subtraction;
+        thresholds.enable_thresholds = true;
+        thresholds.check_esurface_at_generation = check_esurface_at_generation;
+        Ok(global)
+    }
+
+    fn import_into(state: &mut State, graphs: Vec<Graph>, process: &str, name: &str) -> Result<()> {
+        state.import_graphs(
+            graphs,
+            GraphImportOptions {
+                process_name: Some(process.into()),
+                process_id: None,
+                process_definition: None,
+                integrand_name: Some(name.into()),
+                overwrite: false,
+                append: false,
+            },
+        )
+    }
+
+    /// The scalar bubble generated twice, as integrands "plain" and
+    /// "overlaid"; the latter overrides `mass_scalar_1` in its settings.
+    fn generated_scalar_bubble_pair() -> Result<(State, f64)> {
+        test_initialise()?;
+        let mut state = State::new_test();
+        state.model = load_generic_model("scalars");
+        state.model_parameters = state.model.default_param_card();
+        let graphs = Graph::from_finalized_runtime_path(
+            crate::test_workspace_root().join("tests/resources/graphs/scalar_bubble.dot"),
+            &state.model,
+        )?;
+        for name in ["plain", "overlaid"] {
+            import_into(&mut state, graphs.clone(), "scalar_bubble", name)?;
+        }
+        let runtime: RuntimeSettings = toml::from_str(
+            r#"
+[kinematics]
+e_cm = 2.0
+[kinematics.externals]
+type = "constant"
+[kinematics.externals.data]
+momenta = [[0.5, 0.2, 0.3, 0.1], "dependent"]
+helicities = [0, 0]
+"#,
+        )?;
+        state.generate_integrands(&cheap_generation_settings(false)?, (&runtime).into())?;
+        assert_graphs_share_session_model(&state);
+
+        let overlay_mass = state.model_parameters[&UFOSymbol::from("mass_scalar_1")]
+            .re
+            .0
+            + 0.25;
+        state
+            .process_list
+            .get_integrand_mut(0, "overlaid")?
+            .get_mut_settings()
+            .model
+            .external_parameters
+            .insert("mass_scalar_1".into(), (F(overlay_mass), F(0.0)));
+        Ok((state, overlay_mass))
+    }
+
+    #[test]
+    fn numeric_model_replacement_rebinds_graphs_and_preserves_overlays() -> Result<()> {
+        let _guard = crate::LOG_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let temp = tempdir()?;
+        let (mut state, overlay_mass) = generated_scalar_bubble_pair()?;
+        let mass = UFOSymbol::from("mass_scalar_1");
+        let plain_before = evaluate_first_sample(&mut state, "plain")?;
+        let overlaid_before = evaluate_first_sample(&mut state, "overlaid")?;
+        assert!(
+            !close(&plain_before, &overlaid_before),
+            "the overlay must matter"
+        );
+
+        // Import the same records with a genuinely different mass.
+        let new_mass = state.model_parameters[&mass].re.0 + 0.5;
+        let mut changed = state.model.clone();
+        changed.apply_param_card(&card_with(&state, "mass_scalar_1", new_mass))?;
+        assert_eq!(
+            changed.structure_fingerprint(),
+            state.model.structure_fingerprint()
+        );
+        let model_path = temp.path().join("scalars_heavier.json");
+        fs::write(&model_path, changed.to_json()?)?;
+        let previous = state.shared_graph_model();
+        state.import_model(&model_path)?;
+
+        assert_eq!(state.model_parameters[&mass].re.0, new_mass);
+        assert_eq!(model_value(&state.model, "mass_scalar_1"), new_mass);
+        assert_graphs_share_session_model(&state);
+        assert_eq!(
+            Arc::strong_count(&previous),
+            1,
+            "no graph holder may keep the replaced model"
+        );
+        assert_eq!(
+            state
+                .process_list
+                .get_integrand_mut(0, "overlaid")?
+                .get_settings()
+                .model
+                .external_parameters["mass_scalar_1"],
+            (F(overlay_mass), F(0.0))
+        );
+        let plain_after = evaluate_first_sample(&mut state, "plain")?;
+        let overlaid_after = evaluate_first_sample(&mut state, "overlaid")?;
+        assert!(
+            !close(&plain_after, &plain_before),
+            "the new mass must be used"
+        );
+        assert!(
+            close(&overlaid_after, &overlaid_before),
+            "the per-integrand overlay must still win"
+        );
+
+        let folder = temp.path().join("state");
+        state.save(&folder, true, false)?;
+        let mut loaded = State::load(folder, None, None)?;
+        loaded.activate_loaded_integrand_backends(false)?;
+        assert_eq!(loaded.model_parameters[&mass].re.0, new_mass);
+        assert_graphs_share_session_model(&loaded);
+        assert!(close(
+            &evaluate_first_sample(&mut loaded, "plain")?,
+            &plain_after
+        ));
+        assert!(close(
+            &evaluate_first_sample(&mut loaded, "overlaid")?,
+            &overlaid_after
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn replace_model_applies_the_card_to_the_model_it_stores() -> Result<()> {
+        let _guard = crate::LOG_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let temp = tempdir()?;
+        let (mut state, _) = generated_scalar_bubble_pair()?;
+        let before = evaluate_first_sample(&mut state, "plain")?;
+        let new_mass = model_value(&state.model, "mass_scalar_1") + 0.5;
+        let card = card_with(&state, "mass_scalar_1", new_mass);
+        let mut expected = state.model.clone();
+        expected.apply_param_card(&card)?;
+        let previous = state.shared_graph_model();
+        let stored_kinematics = |state: &mut State| -> Result<GenerationKinematics> {
+            Ok(GenerationKinematics::new(
+                &state
+                    .process_list
+                    .get_integrand_mut(0, "plain")?
+                    .get_settings()
+                    .kinematics,
+            ))
+        };
+        let kinematics_before = stored_kinematics(&mut state)?;
+
+        // The old model with a new card: the card wins.
+        state.replace_model(state.model.clone(), card)?;
+        // The generated physical point stays explicit; no defaults are recomputed
+        // from the new masses.
+        assert_eq!(stored_kinematics(&mut state)?, kinematics_before);
+        assert_eq!(model_value(&state.model, "mass_scalar_1"), new_mass);
+        assert_eq!(state.model.fingerprint(), expected.fingerprint());
+        assert_eq!(
+            state.model_parameters[&UFOSymbol::from("mass_scalar_1")]
+                .re
+                .0,
+            new_mass
+        );
+        assert_graphs_share_session_model(&state);
+        assert_eq!(Arc::strong_count(&previous), 1);
+        let after = evaluate_first_sample(&mut state, "plain")?;
+        assert!(!close(&after, &before), "the new card value must be used");
+
+        let folder = temp.path().join("state");
+        state.save(&folder, true, false)?;
+        let mut loaded = State::load(folder, None, None)?;
+        loaded.activate_loaded_integrand_backends(false)?;
+        // Saved cards and models round-trip every f64 bit-exactly (see
+        // `saved_parameter_cards_round_trip_every_f64_bit_exactly`), so the
+        // stored model, the card and the kinematics all come back identical.
+        assert_eq!(loaded.model.fingerprint(), state.model.fingerprint());
+        assert_eq!(model_value(&loaded.model, "mass_scalar_1"), new_mass);
+        assert_eq!(card_entries(&loaded), card_entries(&state));
+        assert_graphs_share_session_model(&loaded);
+        assert!(close(&evaluate_first_sample(&mut loaded, "plain")?, &after));
+        assert_eq!(stored_kinematics(&mut loaded)?, kinematics_before);
+        Ok(())
+    }
+
+    #[test]
+    fn grouped_threshold_amplitude_keeps_every_holder_on_the_session_model() -> Result<()> {
+        let _guard = crate::LOG_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        test_initialise()?;
+        let temp = tempdir()?;
+        let mut state = State::new_test();
+        state.model = load_generic_model("scalars");
+        state.model_parameters = state.model.default_param_card();
+        let mut graphs = Vec::new();
+        for (name, group, loop_edge) in [
+            ("grouped_master", "group_id=0 is_group_master=true", 0),
+            ("grouped_member", "group_id=0", 1),
+        ] {
+            let (first, second) = if loop_edge == 0 {
+                ("", " lmb_id=0")
+            } else {
+                (" lmb_id=0", "")
+            };
+            graphs.extend(Graph::import_dot(
+                &format!(
+                    "digraph {name} {{
+                        graph [{group}]
+                        edge [particle=scalar_0]
+                        node [num=1]
+                        e [style=invis]
+                        e -> A:0 [id=3 particle=scalar_2]
+                        B:1 -> e [id=2 particle=scalar_2]
+                        A -> B [id=1{first}]
+                        A -> B [id=0{second}]
+                    }}"
+                ),
+                &state.model,
+            )?);
+        }
+        import_into(&mut state, graphs, "grouped", "default")?;
+        let runtime: RuntimeSettings = toml::from_str(
+            r#"
+[kinematics]
+e_cm = 4.0
+[kinematics.externals]
+type = "constant"
+[kinematics.externals.data]
+momenta = [[4.0, 0.0, 0.0, 0.0], "dependent"]
+helicities = [0, 0]
+"#,
+        )?;
+        state.generate_integrands(&cheap_generation_settings(false)?, (&runtime).into())?;
+        let ProcessCollection::Amplitudes(amplitudes) = &state.process_list.processes[0].collection
+        else {
+            unreachable!("grouped bubbles are amplitudes")
+        };
+        assert!(
+            amplitudes["default"]
+                .graphs
+                .iter()
+                .any(|graph| graph.derived_data.multi_channeling_setup.is_some()),
+            "the derived multi-channeling holders must be exercised"
+        );
+        assert_graphs_share_session_model(&state);
+
+        let previous = state.shared_graph_model();
+        let new_mass = model_value(&state.model, "mass_scalar_1") + 0.5;
+        state.replace_model(
+            state.model.clone(),
+            card_with(&state, "mass_scalar_1", new_mass),
+        )?;
+        assert_graphs_share_session_model(&state);
+        assert_eq!(Arc::strong_count(&previous), 1);
+
+        let folder = temp.path().join("state");
+        state.save(&folder, true, false)?;
+        let loaded = State::load(folder, None, None)?;
+        assert_graphs_share_session_model(&loaded);
+        assert_eq!(model_value(&loaded.model, "mass_scalar_1"), new_mass);
+        Ok(())
+    }
+
+    /// The two-loop scalar self-energy cross section imported, ungenerated,
+    /// as integrand "default" of each of `processes`.
+    fn threshold_cross_section_state(processes: &[&str]) -> Result<State> {
+        test_initialise()?;
+        let mut state = State::new_test();
+        state.model = Model::from_json(include_str!(
+            "../../../assets/models/json/scalars/scalars_2p_3p.json"
+        ))?;
+        state.model_parameters = state.model.default_param_card();
+        let mut graphs = Graph::import_dot(
+            include_str!("../../../tests/resources/graphs/mass_approach_scalar_self_energy.dot"),
+            &state.model,
+        )?;
+        graphs.truncate(1);
+        for process in processes {
+            import_into(&mut state, graphs.clone(), process, "default")?;
+        }
+        Ok(state)
+    }
+
+    /// The two-loop scalar self-energy cross section, generated with
+    /// thresholds and the given generation-time existence check.
+    fn generated_threshold_cross_section(check_esurface_at_generation: bool) -> Result<State> {
+        let mut state = threshold_cross_section_state(&["self_energy"])?;
+        state.generate_integrands(
+            &cheap_generation_settings(check_esurface_at_generation)?,
+            (&RuntimeSettings::default()).into(),
+        )?;
+        let point = state
+            .recorded_generation_point(0, "default")
+            .expect("State generation records the generation point");
+        assert_eq!(point.depends_on_model_values, check_esurface_at_generation);
+        assert_graphs_share_session_model(&state);
+        Ok(state)
+    }
+
+    /// A generation which fails after installing some integrands must not
+    /// leave them with the generation point of their previous build. The
+    /// interrupt flag is process-global; nextest runs each test in its own
+    /// process.
+    #[test]
+    fn interrupted_rebuild_cannot_keep_a_stale_generation_point() -> Result<()> {
+        struct InterruptAfterBackend;
+        impl GenerationProgressObserver for InterruptAfterBackend {
+            fn backend_finished(&self, _: GenerationProcessKind, _: &str, _: Duration) {
+                request_interrupt();
+            }
+        }
+
+        let mut state = threshold_cross_section_state(&["first", "second"])?;
+        let mut runtime = RuntimeSettings::default();
+        state.generate_integrands(&cheap_generation_settings(false)?, (&runtime).into())?;
+        let original_energy = runtime.kinematics.e_cm;
+        assert!(
+            !state
+                .recorded_generation_point(0, "default")
+                .expect("generation records the point")
+                .depends_on_model_values
+        );
+        runtime.kinematics.e_cm += 0.25;
+        let observer = GenerationProgressObserverGuard::set(Arc::new(InterruptAfterBackend));
+        let result =
+            state.generate_integrands(&cheap_generation_settings(true)?, (&runtime).into());
+        drop(observer);
+        let problem = result.expect_err("the second build is interrupted");
+        assert!(format!("{problem:?}").contains("interrupted"));
+
+        // The first integrand was rebuilt, with the check, at the new energy;
+        // the second keeps its previous payload.
+        let energy_of = |state: &State, process_id| -> Result<f64> {
+            Ok(state
+                .process_list
+                .get_integrand(process_id, "default")?
+                .require_generated()?
+                .get_settings()
+                .kinematics
+                .e_cm)
+        };
+        assert_eq!(energy_of(&state, 0)?, runtime.kinematics.e_cm);
+        assert_eq!(energy_of(&state, 1)?, original_energy);
+        let point = state
+            .recorded_generation_point(0, "default")
+            .expect("a rebuilt integrand keeps a generation point");
+        assert!(point.depends_on_model_values);
+        assert_eq!(point.kinematics.e_cm, exact_f64(runtime.kinematics.e_cm));
+        assert_eq!(
+            point,
+            &state
+                .current_generation_point(&IntegrandGenerationSummaryKey {
+                    process_id: 0,
+                    integrand_name: "default".to_string(),
+                })
+                .expect("a generated integrand has a point"),
+        );
+
+        // The previous payload is held at its own point, conservatively.
+        let second = state
+            .recorded_generation_point(1, "default")
+            .expect("the previous payload keeps a generation point");
+        assert!(second.depends_on_model_values);
+        assert_eq!(second.kinematics.e_cm, exact_f64(original_energy));
+
+        // The mass change of the generation-point test is refused, and the
+        // state is unchanged.
+        let heavy = 10.0 * model_value(&state.model, "mass_scalar_1");
+        let card = card_with(&state, "mass_scalar_1", heavy);
+        assert!(state.replace_model(state.model.clone(), card).is_err());
+        assert_ne!(model_value(&state.model, "mass_scalar_1"), heavy);
+        Ok(())
+    }
+
+    // Nextest isolates the process-global progress observer and interrupt flag.
+    #[test]
+    fn first_checked_install_keeps_its_point_after_a_later_failed_preprocess() -> Result<()> {
+        struct InterruptAfterBackend;
+        impl GenerationProgressObserver for InterruptAfterBackend {
+            fn backend_finished(&self, _: GenerationProcessKind, _: &str, _: Duration) {
+                request_interrupt();
+            }
+        }
+
+        struct InterruptSecondPreprocess;
+        impl GenerationProgressObserver for InterruptSecondPreprocess {
+            fn begin_phase(
+                &self,
+                phase: GenerationProgressPhase,
+                _: GenerationProcessKind,
+                process: &str,
+                _: &str,
+                _: usize,
+                _: Option<usize>,
+            ) {
+                if phase == GenerationProgressPhase::GraphPreprocessing && process == "second" {
+                    request_interrupt();
+                }
+            }
+        }
+
+        let mut state = threshold_cross_section_state(&["first", "second"])?;
+        let mut runtime = RuntimeSettings::default();
+        let energy = runtime.kinematics.e_cm;
+        let observer = GenerationProgressObserverGuard::set(Arc::new(InterruptAfterBackend));
+        let result =
+            state.generate_integrands(&cheap_generation_settings(true)?, (&runtime).into());
+        drop(observer);
+        assert!(format!(
+            "{:?}",
+            result.expect_err("the second build was interrupted")
+        )
+        .contains("interrupted"));
+        assert!(state
+            .process_list
+            .get_integrand(1, "default")?
+            .integrand
+            .is_none());
+
+        // Preprocessing first completes with the check disabled. The second
+        // process interrupts before any unchecked replacement can be built.
+        runtime.kinematics.e_cm += 0.25;
+        let observer = GenerationProgressObserverGuard::set(Arc::new(InterruptSecondPreprocess));
+        let result =
+            state.generate_integrands(&cheap_generation_settings(false)?, (&runtime).into());
+        drop(observer);
+        assert!(
+            format!("{:?}", result.expect_err("preprocessing was interrupted"))
+                .contains("interrupted")
+        );
+        assert!(!state.process_list.processes[0].generation_depends_on_model_values());
+        let first = state
+            .process_list
+            .get_integrand(0, "default")?
+            .require_generated()?;
+        assert_eq!(first.get_settings().kinematics.e_cm, energy);
+
+        let base_mass = model_value(&state.model, "mass_scalar_1");
+        let card = card_with(&state, "mass_scalar_1", 10.0 * base_mass);
+        let error = state
+            .replace_model(state.model.clone(), card)
+            .expect_err("the first payload still uses the checked generation point");
+        let message = format!("{error:?}");
+        assert!(message.contains("mass_scalar_1"), "{message}");
+        assert!(message.contains("generation point"), "{message}");
+        assert_eq!(model_value(&state.model, "mass_scalar_1"), base_mass);
+
+        let point = state
+            .recorded_generation_point(0, "default")
+            .expect("the partially completed batch recorded its checked payload");
+        assert!(point.depends_on_model_values);
+        assert_eq!(point.kinematics.e_cm, exact_f64(energy));
+
+        let temp = tempdir()?;
+        let folder = temp.path().join("state");
+        state.save(&folder, true, false)?;
+        let loaded = State::load(folder, None, None)?;
+        assert_eq!(
+            loaded.recorded_generation_point(0, "default"),
+            state.recorded_generation_point(0, "default")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn duplicates_keep_the_original_generation_point() -> Result<()> {
+        let _guard = crate::LOG_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let temp = tempdir()?;
+        let mut state = generated_threshold_cross_section(true)?;
+        state.duplicate_integrand(
+            Some(&ProcessRef::Name("self_energy".into())),
+            Some(&"default".to_string()),
+            "self_energy_copy",
+            "copy",
+        )?;
+        let original = state.recorded_generation_point(0, "default").cloned();
+        assert!(original.is_some());
+        assert_eq!(
+            state.recorded_generation_point(1, "copy").cloned(),
+            original
+        );
+
+        let folder = temp.path().join("state");
+        state.save(&folder, true, false)?;
+        let loaded = State::load(folder.clone(), None, None)?;
+        assert_eq!(
+            loaded.recorded_generation_point(0, "default").cloned(),
+            original
+        );
+        assert_eq!(
+            loaded.recorded_generation_point(1, "copy").cloned(),
+            original
+        );
+
+        // A changed point is refused for the duplicate as for the original.
+        let heavy = 10.0 * model_value(&loaded.model, "mass_scalar_1");
+        let card = card_with(&loaded, "mass_scalar_1", heavy);
+        for (process_id, name) in [(0, "default"), (1, "copy")] {
+            let settings = loaded
+                .process_list
+                .get_integrand(process_id, name)?
+                .require_generated()?
+                .get_settings();
+            let error = loaded
+                .ensure_generation_point_kept(process_id, name, &loaded.model, &card, settings)
+                .expect_err("the duplicate was generated at the original point");
+            assert!(
+                format!("{error:?}").contains("regenerate"),
+                "{name}: {error:?}"
+            );
+        }
+        card.to_file(folder.join("model_parameters.json"), true)?;
+        assert!(load_error(&folder).contains("no longer matches its generation point"));
+        Ok(())
+    }
+
+    #[test]
+    fn value_dependent_copies_only_join_value_dependent_processes() -> Result<()> {
+        let _guard = crate::LOG_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let temp = tempdir()?;
+        let mut state = threshold_cross_section_state(&["independent", "dependent"])?;
+        let runtime = RuntimeSettings::default();
+        for (process_id, check_esurface_at_generation) in [(0, false), (1, true)] {
+            state.generate_integrand(
+                &cheap_generation_settings(check_esurface_at_generation)?,
+                (&runtime).into(),
+                process_id,
+                None,
+            )?;
+        }
+        let dependent = ProcessRef::Name("dependent".into());
+        let source = "default".to_string();
+
+        // Into the process whose history records value-independent
+        // generation, the copy is refused before anything changes.
+        let names_before = |state: &State| -> Vec<Vec<String>> {
+            state
+                .process_list
+                .processes
+                .iter()
+                .map(|process| {
+                    process
+                        .collection
+                        .get_integrand_names()
+                        .into_iter()
+                        .map(str::to_owned)
+                        .collect()
+                })
+                .collect()
+        };
+        let before = names_before(&state);
+        let summaries_before = state.generation_summaries.len();
+        let error = state
+            .duplicate_integrand(Some(&dependent), Some(&source), "independent", "copy")
+            .expect_err("the copy would lose its dependence without its summary");
+        assert!(
+            format!("{error:?}").contains("Cannot copy integrand"),
+            "{error:?}"
+        );
+        assert_eq!(names_before(&state), before);
+        assert_eq!(state.generation_summaries.len(), summaries_before);
+
+        // Into the dependent process itself and into a new process (which
+        // inherits the source's history), the copy is accepted.
+        state.duplicate_integrand(Some(&dependent), Some(&source), "dependent", "copy")?;
+        state.duplicate_integrand(Some(&dependent), Some(&source), "dependent_copy", "copy")?;
+        assert!(state
+            .recorded_generation_point(1, "copy")
+            .is_some_and(|point| point.depends_on_model_values));
+        assert!(state
+            .recorded_generation_point(2, "copy")
+            .is_some_and(|point| point.depends_on_model_values));
+
+        // Without its summary on disk, each copy is refused at load because
+        // its process still records value-dependent generation.
+        let folder = temp.path().join("state");
+        state.save(&folder, true, false)?;
+        State::load(folder.clone(), None, None)?;
+        for process_id in [1, 2] {
+            fs::remove_file(integrand_generation_summary_path(
+                &folder,
+                &state.process_list.processes[process_id],
+                "copy",
+            ))?;
+            let error = load_error(&folder);
+            assert!(
+                error.contains("generation point was not recorded"),
+                "{error}"
+            );
+            assert!(error.contains("'copy'"), "{error}");
+            // Restore it for the next copy.
+            state.save(&folder, true, false)?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn constant_internal_parameters_are_generation_inputs() -> Result<()> {
+        let _guard = crate::LOG_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        test_initialise()?;
+        // The scalars model with `mass_scalar_1` turned into an internal
+        // numeric constant (a value without an expression), scaled by `scale`.
+        let constant_mass_model = |scale: f64| -> Result<Model> {
+            let mut definition: JsonValue =
+                serde_json::from_str(&load_generic_model("scalars").to_json()?)?;
+            let mass = definition["parameters"]
+                .as_array_mut()
+                .and_then(|parameters| {
+                    parameters
+                        .iter_mut()
+                        .find(|parameter| parameter["name"] == "mass_scalar_1")
+                })
+                .ok_or_else(|| eyre!("the scalars model defines mass_scalar_1"))?;
+            mass["nature"] = "internal".into();
+            mass["expression"] = JsonValue::Null;
+            let value = mass["value"][0]
+                .as_f64()
+                .ok_or_else(|| eyre!("mass_scalar_1 has a real value"))?;
+            mass["value"][0] = (value * scale + (scale - 1.0)).into();
+            Ok(Model::from_json(&serde_json::to_string(&definition)?)?)
+        };
+        let mut state = State::new_test();
+        state.model = constant_mass_model(1.0)?;
+        state.model_parameters = state.model.default_param_card();
+        assert!(!state
+            .model_parameters
+            .contains_key(&UFOSymbol::from("mass_scalar_1")));
+        let graphs = Graph::from_finalized_runtime_path(
+            crate::test_workspace_root().join("tests/resources/graphs/scalar_bubble.dot"),
+            &state.model,
+        )?;
+        import_into(&mut state, graphs, "bubble", "default")?;
+        let runtime: RuntimeSettings = toml::from_str(
+            r#"
+[kinematics]
+e_cm = 2.0
+[kinematics.externals]
+type = "constant"
+[kinematics.externals.data]
+momenta = [[0.5, 0.2, 0.3, 0.1], "dependent"]
+helicities = [0, 0]
+"#,
+        )?;
+        state.generate_integrands(&cheap_generation_settings(true)?, (&runtime).into())?;
+        assert!(state
+            .recorded_generation_point(0, "default")
+            .is_some_and(|point| point.input_parameters.contains_key("mass_scalar_1")));
+
+        // Unchanged: accepted. A changed constant of the same structure: refused.
+        state.replace_model(constant_mass_model(1.0)?, state.model_parameters.clone())?;
+        let heavier = constant_mass_model(10.0)?;
+        assert_eq!(
+            heavier.structure_fingerprint(),
+            state.model.structure_fingerprint()
+        );
+        let error = state
+            .replace_model(heavier, state.model_parameters.clone())
+            .expect_err("the constant mass decided the generation");
+        let error = format!("{error:?}");
+        assert!(error.contains("mass_scalar_1"), "{error}");
+        assert!(error.contains("regenerate"), "{error}");
+
+        // The same constant change as a model override at load is refused too.
+        let temp = tempdir()?;
+        let folder = temp.path().join("state");
+        state.save(&folder, true, false)?;
+        let override_path = temp.path().join("heavier.json");
+        fs::write(&override_path, constant_mass_model(10.0)?.to_json()?)?;
+        let error = match State::load(folder, Some(override_path), None) {
+            Ok(_) => panic!("a changed constant mass must not load silently"),
+            Err(error) => format!("{error:?}"),
+        };
+        assert!(
+            error.contains("no longer matches its generation point"),
+            "{error}"
+        );
+        assert!(error.contains("mass_scalar_1"), "{error}");
+        Ok(())
+    }
+
+    #[test]
+    fn effective_external_values_count_however_the_card_is_written() -> Result<()> {
+        let _guard = crate::LOG_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let mut state = threshold_cross_section_state(&["self_energy"])?;
+        // Generate with an empty card: the model's own values are the point.
+        state.model_parameters = InputParamCard::new();
+        state.generate_integrands(
+            &cheap_generation_settings(true)?,
+            (&RuntimeSettings::default()).into(),
+        )?;
+        let mass = model_value(&state.model, "mass_scalar_1");
+
+        // A same-structure model with another external mass and again an
+        // empty card is a different point.
+        let mut heavier = state.model.clone();
+        heavier.apply_param_card(&card_with(&state, "mass_scalar_1", 10.0 * mass))?;
+        let _error = state
+            .replace_model(heavier, InputParamCard::new())
+            .expect_err("the effective mass changes");
+        assert_eq!(model_value(&state.model, "mass_scalar_1"), mass);
+
+        // The unchanged model, with an empty or a complete card, is the same point.
+        state.replace_model(state.model.clone(), InputParamCard::new())?;
+        state.replace_model(state.model.clone(), state.model.default_param_card())?;
+        assert_eq!(model_value(&state.model, "mass_scalar_1"), mass);
+        Ok(())
+    }
+
+    #[test]
+    fn generation_time_threshold_checks_refuse_a_runtime_model_overlay() -> Result<()> {
+        let _guard = crate::LOG_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        for check_esurface_at_generation in [true, false] {
+            let mut state = threshold_cross_section_state(&["self_energy"])?;
+            let mut runtime = RuntimeSettings::default();
+            let overlay = 2.0 * model_value(&state.model, "mass_scalar_1");
+            runtime
+                .model
+                .external_parameters
+                .insert("mass_scalar_1".into(), (F(overlay), F(0.0)));
+            let result = state.generate_integrands(
+                &cheap_generation_settings(check_esurface_at_generation)?,
+                (&runtime).into(),
+            );
+            let generated = state
+                .process_list
+                .get_integrand(0, "default")?
+                .integrand
+                .is_some();
+            if check_esurface_at_generation {
+                let error = format!(
+                    "{:?}",
+                    result.expect_err("decisions would use the raw mass")
+                );
+                assert!(error.contains("runtime model overlay"), "{error}");
+                assert!(!generated, "nothing may be built");
+                assert!(state.generation_summary(0, "default").is_none());
+            } else {
+                result?;
+                assert!(generated);
+                assert_eq!(
+                    state
+                        .process_list
+                        .get_integrand(0, "default")?
+                        .require_generated()?
+                        .get_settings()
+                        .model
+                        .external_parameters["mass_scalar_1"],
+                    (F(overlay), F(0.0))
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn generation_kinematics_ignore_display_defaults_and_caches() -> Result<()> {
+        let mut kinematics = RuntimeSettings::default().kinematics;
+        // The value whose display serialization is skipped by default.
+        kinematics.e_cm = 64.0;
+        let point = GenerationKinematics::new(&kinematics);
+        {
+            let _show_defaults = ShowDefaultsGuard::new(true);
+            assert_eq!(GenerationKinematics::new(&kinematics), point);
+        }
+        let mut cached = kinematics.clone();
+        let Externals::Constant { f_64_cache, .. } = &mut cached.externals;
+        *f_64_cache = Some(Default::default());
+        assert_ne!(cached, kinematics, "the transient cache is populated");
+        assert_eq!(GenerationKinematics::new(&cached), point);
+
+        // Non-finite values are encoded by their bits and round-trip exactly.
+        let mut points = Vec::new();
+        for e_cm in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, 64.0] {
+            kinematics.e_cm = e_cm;
+            let encoded = GenerationKinematics::new(&kinematics);
+            let reloaded: GenerationKinematics =
+                serde_json::from_str(&serde_json::to_string(&encoded)?)?;
+            assert_eq!(reloaded, encoded);
+            points.push(encoded);
+        }
+        for (index, point) in points.iter().enumerate() {
+            for other in &points[index + 1..] {
+                assert_ne!(point, other);
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn a_model_override_at_load_is_compared_by_effective_values() -> Result<()> {
+        let _guard = crate::LOG_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let temp = tempdir()?;
+        let mut state = threshold_cross_section_state(&["self_energy"])?;
+        // An empty card: the masses come from the model alone.
+        state.model_parameters = InputParamCard::new();
+        state.generate_integrands(
+            &cheap_generation_settings(true)?,
+            (&RuntimeSettings::default()).into(),
+        )?;
+        let folder = temp.path().join("state");
+        state.save(&folder, true, false)?;
+        let unchanged = temp.path().join("unchanged.json");
+        fs::write(&unchanged, state.model.to_json()?)?;
+        State::load(folder.clone(), Some(unchanged), None)?;
+
+        let mut heavier = state.model.clone();
+        heavier.apply_param_card(&card_with(
+            &state,
+            "mass_scalar_1",
+            10.0 * model_value(&state.model, "mass_scalar_1"),
+        ))?;
+        let override_path = temp.path().join("heavier.json");
+        fs::write(&override_path, heavier.to_json()?)?;
+        let error = match State::load(folder, Some(override_path), None) {
+            Ok(_) => panic!("a changed model default must not load silently"),
+            Err(error) => format!("{error:?}"),
+        };
+        assert!(
+            error.contains("no longer matches its generation point"),
+            "{error}"
+        );
+        assert!(error.contains("mass_scalar_1"), "{error}");
+        Ok(())
+    }
+
+    #[test]
+    fn value_changes_require_regeneration_after_generation_time_threshold_checks() -> Result<()> {
+        let _guard = crate::LOG_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let mut state = generated_threshold_cross_section(true)?;
+        let model_before = state.model.fingerprint();
+        let card_before = card_entries(&state);
+        let handle_before = state.shared_graph_model();
+        let handles_before = Arc::strong_count(&handle_before);
+        // A tenfold mass closes the thresholds classified at generation.
+        let heavy = 10.0 * model_value(&state.model, "mass_scalar_1");
+        let error = state
+            .replace_model(
+                state.model.clone(),
+                card_with(&state, "mass_scalar_1", heavy),
+            )
+            .expect_err("generation decided on the old masses");
+        let error = format!("{error:?}");
+        assert!(error.contains("regenerate"), "{error}");
+        assert!(
+            error.contains("remove processes -p name:self_energy"),
+            "{error}"
+        );
+        assert!(error.contains("the state is unchanged"), "{error}");
+        assert_eq!(state.model.fingerprint(), model_before);
+        assert_eq!(card_entries(&state), card_before);
+        assert!(Arc::ptr_eq(&state.shared_graph_model(), &handle_before));
+        assert_eq!(Arc::strong_count(&handle_before), handles_before);
+        assert_graphs_share_session_model(&state);
+
+        // Without the generation-time check, the same change only refreshes values.
+        let temp = tempdir()?;
+        let mut state = generated_threshold_cross_section(false)?;
+        let previous = state.shared_graph_model();
+        let heavy = 10.0 * model_value(&state.model, "mass_scalar_1");
+        state.replace_model(
+            state.model.clone(),
+            card_with(&state, "mass_scalar_1", heavy),
+        )?;
+        assert_eq!(model_value(&state.model, "mass_scalar_1"), heavy);
+        assert_graphs_share_session_model(&state);
+        assert_eq!(Arc::strong_count(&previous), 1);
+        let folder = temp.path().join("state");
+        state.save(&folder, true, false)?;
+        let loaded = State::load(folder, None, None)?;
+        assert_graphs_share_session_model(&loaded);
+        assert_eq!(model_value(&loaded.model, "mass_scalar_1"), heavy);
+        Ok(())
+    }
+
+    #[test]
+    fn save_refuses_graphs_of_another_model_before_writing() -> Result<()> {
+        test_initialise()?;
+        let temp = tempdir()?;
+        let mut state = State::new_test();
+        state.model = load_generic_model("scalars");
+        state.model_parameters = state.model.default_param_card();
+        let graphs = Graph::from_finalized_runtime_path(
+            crate::test_workspace_root().join("tests/resources/graphs/scalar_bubble.dot"),
+            &state.model,
+        )?;
+        import_into(&mut state, graphs, "bubble", "default")?;
+
+        // Ungenerated graphs save without any numerical requirement.
+        state.save(&temp.path().join("graphs_only"), true, false)?;
+
+        // A programmatic client replaces the public model field directly.
+        state.model = state.model.with_restriction(Some("other".into()))?;
+        let target = temp.path().join("never_written");
+        let error = state.save(&target, true, false).unwrap_err();
+        assert!(
+            format!("{error:?}").contains("do not match its model"),
+            "{error:?}"
+        );
+        assert!(!target.exists(), "nothing may be written");
+        Ok(())
+    }
+
+    #[test]
+    fn failed_saved_model_load_preserves_committed_parameter_displays() -> Result<()> {
+        test_initialise()?;
+        let temporary = tempdir()?;
+        let name = "state_load_display_transaction_marker";
+        let mut definition = serde_json::to_value(Model::empty("display-load"))?;
+        definition["parameters"] = serde_json::json!([{
+            "name": name,
+            "nature": "external",
+            "parameter_type": "real",
+            "value": [1.0, 0.0],
+            "texname": "loaded_before_latex",
+            "typstname": "loaded_before_typst",
+            "mathmlname": "<mi>loaded_before_mathml</mi>"
+        }]);
+        let mut state = State::new_test();
+        state.model = Model::from_json(&definition.to_string())?;
+        state.model_parameters = state.model.default_param_card();
+        let folder = temporary.path().join("state");
+        state.save(&folder, true, false)?;
+        let atom = Atom::var(
+            Symbol::get_symbol(NamespacedSymbol::parse(&format!("UFO::{name}"))).unwrap(),
+        );
+        let expression = &atom * &atom;
+        let printed = || {
+            [
+                PrintOptions::latex(),
+                PrintOptions::typst(),
+                PrintOptions::mathml(),
+            ]
+            .map(|options| expression.printer(options).to_string())
+        };
+        let previous_display = printed();
+        definition["parameters"][0]["texname"] = "loaded_after_latex".into();
+        definition["parameters"][0]["typstname"] = "loaded_after_typst".into();
+        definition["parameters"][0]["mathmlname"] = "<mi>loaded_after_mathml</mi>".into();
+        fs::write(folder.join("model.json"), definition.to_string())?;
+
+        let mut rejected = state.model_parameters.clone();
+        rejected.insert(
+            UFOSymbol::from("not_a_display_model_parameter"),
+            Complex::new_re(F(1.0)),
+        );
+        rejected.to_file(folder.join("model_parameters.json"), true)?;
+        let error = State::load(folder.clone(), None, None)
+            .err()
+            .expect("the invalid card must reject this load");
+        assert!(format!("{error:?}").contains("cannot be applied to the saved model"));
+        assert_eq!(printed(), previous_display);
+
+        state
+            .model_parameters
+            .to_file(folder.join("model_parameters.json"), true)?;
+        let restored = State::load(folder.clone(), None, None)?;
+        assert_eq!(restored.model.name(), state.model.name());
+        assert!(printed()[2].contains("loaded_after_mathml"));
+        assert_ne!(printed(), previous_display);
+
+        // A session can still fail after its State loads: its saved settings
+        // and boot commands are validated by the enclosing application boundary.
+        let committed_display = printed();
+        definition["parameters"][0]["mathmlname"] = "<mi>session_after_mathml</mi>".into();
+        fs::write(folder.join("model.json"), definition.to_string())?;
+        let runtime_file = folder.join(DEFAULT_RUNTIME_SETTINGS_FILENAME);
+        fs::write(&runtime_file, "[invalid")?;
+        let _log_lock = LOG_TEST_MUTEX.lock().unwrap();
+        assert!(OneShot::new_test(folder.clone()).load().is_err());
+        assert_eq!(printed(), committed_display);
+        assert!(StateLoadOption::read_only(folder.clone()).load().is_err());
+        assert_eq!(printed(), committed_display);
+        fs::remove_file(runtime_file)?;
+        StateLoadOption::read_only(folder).load()?;
+        assert!(printed()[2].contains("session_after_mathml"));
+        Ok(())
+    }
+
+    #[test]
+    fn load_reports_a_parameter_card_that_does_not_apply() -> Result<()> {
+        test_initialise()?;
+        let temp = tempdir()?;
+        let mut state = State::new_test();
+        state.model = load_generic_model("scalars");
+        state.model_parameters = state.model.default_param_card();
+        let folder = temp.path().join("state");
+        state.save(&folder, true, false)?;
+        let mut card = state.model.default_param_card();
+        card.insert(
+            UFOSymbol::from("not_a_model_parameter"),
+            Complex::new_re(F(1.0)),
+        );
+        card.to_file(folder.join("model_parameters.json"), true)?;
+        let error = match State::load(folder, None, None) {
+            Ok(_) => panic!("an inapplicable parameter card must not load"),
+            Err(error) => format!("{error:?}"),
+        };
+        assert!(
+            error.contains("cannot be applied to the saved model"),
+            "{error}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn targeted_overlays_and_kinematics_keep_value_dependent_generation_points() -> Result<()> {
+        let _guard = crate::LOG_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        for check_esurface_at_generation in [true, false] {
+            let mut state = generated_threshold_cross_section(check_esurface_at_generation)?;
+            let mut cli_settings = CLISettings::default();
+            let mut default_runtime_settings = RuntimeSettings::default();
+            let target = ProcessArgs {
+                process: Some(ProcessRef::Name("self_energy".into())),
+                integrand_name: Some("default".into()),
+            };
+            let settings = |state: &mut State| -> Result<RuntimeSettings> {
+                Ok(state
+                    .process_list
+                    .get_integrand_mut(0, "default")?
+                    .get_settings()
+                    .clone())
+            };
+            let before = settings(&mut state)?;
+            let heavy = 10.0 * model_value(&state.model, "mass_scalar_1");
+            let overlay = Set::Model {
+                target: target.clone(),
+                values: vec![ModelSetValue::Assignment(KvPair {
+                    key: "mass_scalar_1".into(),
+                    value: heavy.to_string(),
+                })],
+            }
+            .run(&mut state, &mut cli_settings, &mut default_runtime_settings);
+            let after_overlay = settings(&mut state)?;
+            let e_cm = 2.0
+                * state
+                    .process_list
+                    .get_integrand_mut(0, "default")?
+                    .get_settings()
+                    .kinematics
+                    .e_cm
+                + 1.0;
+            let kinematics = Set::Process {
+                input: ProcessSetArgs::Kv {
+                    pairs: vec![KvPair {
+                        key: "kinematics.e_cm".into(),
+                        value: e_cm.to_string(),
+                    }],
+                },
+                process: target,
+            }
+            .run(&mut state, &mut cli_settings, &mut default_runtime_settings);
+            if check_esurface_at_generation {
+                for (change, result) in [("overlay", overlay), ("kinematics", kinematics)] {
+                    let error = format!(
+                        "{:?}",
+                        result.expect_err("generation decided at the generation point")
+                    );
+                    assert!(error.contains("regenerate"), "{change}: {error}");
+                    assert!(error.contains("generation point"), "{change}: {error}");
+                }
+                assert_eq!(after_overlay, before);
+                assert_eq!(settings(&mut state)?, before);
+            } else {
+                overlay?;
+                kinematics?;
+                assert_ne!(after_overlay, before);
+                assert_ne!(settings(&mut state)?, after_overlay);
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn load_reports_a_card_edited_away_from_the_generation_point() -> Result<()> {
+        let _guard = crate::LOG_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let temp = tempdir()?;
+        let mut state = generated_threshold_cross_section(true)?;
+        let folder = temp.path().join("state");
+        state.save(&folder, true, false)?;
+
+        // Unedited, the saved state is exactly at its generation point.
+        let loaded = State::load(folder.clone(), None, None)?;
+        assert_eq!(card_bits(&loaded), card_bits(&state));
+        let settings = loaded
+            .process_list
+            .get_integrand(0, "default")?
+            .require_generated()?
+            .get_settings();
+        loaded.ensure_generation_point_kept(
+            0,
+            "default",
+            &loaded.model,
+            &loaded.model_parameters,
+            settings,
+        )?;
+
+        // A tenfold mass crosses the thresholds classified at generation.
+        let heavy = 10.0 * model_value(&state.model, "mass_scalar_1");
+        card_with(&state, "mass_scalar_1", heavy)
+            .to_file(folder.join("model_parameters.json"), true)?;
+        let error = load_error(&folder);
+        assert!(
+            error.contains("no longer matches its generation point"),
+            "{error}"
+        );
+        assert!(error.contains("mass_scalar_1"), "{error}");
+        assert!(error.contains("regenerate"), "{error}");
+
+        // Without the record the edit cannot be detected, so the load is
+        // refused whether or not the card was edited.
+        strip_generation_point(&folder, &state)?;
+        for edited in [true, false] {
+            let value = if edited {
+                heavy
+            } else {
+                model_value(&state.model, "mass_scalar_1")
+            };
+            card_with(&state, "mass_scalar_1", value)
+                .to_file(folder.join("model_parameters.json"), true)?;
+            let error = load_error(&folder);
+            assert!(
+                error.contains("generation point was not recorded"),
+                "edited: {edited}: {error}"
+            );
+            assert!(error.contains("regenerate"), "edited: {edited}: {error}");
+        }
+        Ok(())
+    }
+
+    fn card_bits(state: &State) -> BTreeMap<String, [u64; 2]> {
+        state
+            .model_parameters
+            .iter()
+            .map(|(name, value)| {
+                (
+                    name.to_string(),
+                    [value.re.0.to_bits(), value.im.0.to_bits()],
+                )
+            })
+            .collect()
+    }
+
+    fn load_error(folder: &Path) -> String {
+        match State::load(folder.to_path_buf(), None, None) {
+            Ok(_) => panic!("the state must not load"),
+            Err(error) => format!("{error:?}"),
+        }
+    }
+
+    /// Remove the recorded generation point of integrand "default" of
+    /// process 0 from a saved state, as in a state saved before it existed.
+    fn strip_generation_point(folder: &Path, state: &State) -> Result<()> {
+        let path =
+            integrand_generation_summary_path(folder, &state.process_list.processes[0], "default");
+        let mut summary: JsonValue = serde_json::from_str(&fs::read_to_string(&path)?)?;
+        summary
+            .as_object_mut()
+            .ok_or_else(|| eyre!("a generation summary is a JSON object"))?
+            .remove("generation_point")
+            .ok_or_else(|| eyre!("the generation point was recorded"))?;
+        fs::write(&path, serde_json::to_string_pretty(&summary)?)?;
+        Ok(())
+    }
+
+    #[test]
+    fn graph_only_and_value_independent_states_load_without_generation_points() -> Result<()> {
+        let _guard = crate::LOG_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let temp = tempdir()?;
+
+        // Generated without generation-time threshold checks: no record needed.
+        let mut state = generated_threshold_cross_section(false)?;
+        let folder = temp.path().join("independent");
+        state.save(&folder, true, false)?;
+        strip_generation_point(&folder, &state)?;
+        let heavy = 10.0 * model_value(&state.model, "mass_scalar_1");
+        card_with(&state, "mass_scalar_1", heavy)
+            .to_file(folder.join("model_parameters.json"), true)?;
+        let loaded = State::load(folder, None, None)?;
+        assert_eq!(model_value(&loaded.model, "mass_scalar_1"), heavy);
+
+        // Graphs that were never generated carry no generation decisions.
+        let mut graphs_only = State::new_test();
+        graphs_only.model = load_generic_model("scalars");
+        graphs_only.model_parameters = graphs_only.model.default_param_card();
+        let graphs = Graph::from_finalized_runtime_path(
+            crate::test_workspace_root().join("tests/resources/graphs/scalar_bubble.dot"),
+            &graphs_only.model,
+        )?;
+        import_into(&mut graphs_only, graphs, "bubble", "default")?;
+        let folder = temp.path().join("graphs_only");
+        graphs_only.save(&folder, true, false)?;
+        let heavier = model_value(&graphs_only.model, "mass_scalar_1") + 1.0;
+        card_with(&graphs_only, "mass_scalar_1", heavier)
+            .to_file(folder.join("model_parameters.json"), true)?;
+        let loaded = State::load(folder, None, None)?;
+        assert_eq!(model_value(&loaded.model, "mass_scalar_1"), heavier);
+        Ok(())
+    }
+
+    #[test]
+    fn next_representable_changes_leave_value_dependent_generation_points() -> Result<()> {
+        let _guard = crate::LOG_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let mut state = generated_threshold_cross_section(true)?;
+        let settings = state
+            .process_list
+            .get_integrand(0, "default")?
+            .require_generated()?
+            .get_settings()
+            .clone();
+        let check = |state: &State, card: &InputParamCard<F<f64>>, settings: &RuntimeSettings| {
+            state.ensure_generation_point_kept(0, "default", &state.model, card, settings)
+        };
+        check(&state, &state.model_parameters, &settings)?;
+
+        let mass = model_value(&state.model, "mass_scalar_1");
+        for neighbour in [mass.next_up(), mass.next_down()] {
+            let card = card_with(&state, "mass_scalar_1", neighbour);
+            let error = format!("{:?}", check(&state, &card, &settings).unwrap_err());
+            assert!(error.contains("mass_scalar_1"), "{error}");
+            assert!(error.contains("regenerate"), "{error}");
+        }
+        let card_before = card_bits(&state);
+        let _error = state
+            .replace_model(
+                state.model.clone(),
+                card_with(&state, "mass_scalar_1", mass.next_up()),
+            )
+            .expect_err("one ulp of a classified mass is a different generation point");
+        assert_eq!(card_bits(&state), card_before);
+
+        let mut nudged = settings.clone();
+        nudged.kinematics.e_cm = nudged.kinematics.e_cm.next_up();
+        let error = format!(
+            "{:?}",
+            check(&state, &state.model_parameters, &nudged).unwrap_err()
+        );
+        assert!(error.contains("kinematic settings"), "{error}");
+
+        // Signed zeros are distinct inputs.
+        let with_mass = |value: f64| -> Result<GenerationPoint> {
+            let mut model = state.model.clone();
+            model.apply_param_card(&card_with(&state, "mass_scalar_1", value))?;
+            GenerationPoint::new(&model, &settings, true)
+        };
+        let positive = with_mass(0.0)?;
+        let negative = with_mass(-0.0)?;
+        assert!(positive.difference(&negative).is_some());
+        assert!(positive.difference(&positive.clone()).is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn saved_parameter_cards_round_trip_every_f64_bit_exactly() -> Result<()> {
+        test_initialise()?;
+        let temp = tempdir()?;
+        let values = [
+            0.1_f64.next_up(),
+            1.0 / 3.0,
+            123_456.0 + 1.0 / 7.0,
+            f64::MIN_POSITIVE / 3.0,
+            f64::from_bits(1),
+            f64::MAX,
+            -0.0,
+            0.0,
+            -2.5e-310,
+        ];
+        let mut card = InputParamCard::<F<f64>>::new();
+        for (index, value) in values.iter().enumerate() {
+            card.insert(
+                UFOSymbol::from(format!("round_trip_{index}").as_str()),
+                Complex::new(F(*value), F(-*value)),
+            );
+        }
+        let path = temp.path().join("model_parameters.json");
+        card.to_file(&path, true)?;
+        let reloaded = InputParamCard::<F<f64>>::from_file(&path)?;
+        for (name, value) in card.iter() {
+            let other = reloaded
+                .get(name)
+                .ok_or_else(|| eyre!("{name} was not reloaded"))?;
+            assert_eq!(
+                [value.re.0.to_bits(), value.im.0.to_bits()],
+                [other.re.0.to_bits(), other.im.0.to_bits()],
+                "{name}"
+            );
+        }
+        Ok(())
+    }
+
     #[test]
     fn summed_sampling_matches_explicit_canonical_channels() -> Result<()> {
         use gammalooprs::{
@@ -6041,7 +8239,7 @@ rotation_axis = [{type = "x"}, {type = "y"}]
     fn resolve_effective_model_parameter_card_overlays_runtime_model_settings() {
         let mut state = State::new_test();
         state.model = load_generic_model("scalars");
-        state.model_parameters = InputParamCard::default_from_model(&state.model);
+        state.model_parameters = state.model.default_param_card();
 
         let mut settings = RuntimeSettings::default();
         settings
@@ -6067,7 +8265,7 @@ rotation_axis = [{type = "x"}, {type = "y"}]
     fn resolve_effective_model_parameter_card_rejects_non_overridable_parameters() {
         let mut state = State::new_test();
         state.model = load_generic_model("scalars");
-        state.model_parameters = InputParamCard::default_from_model(&state.model);
+        state.model_parameters = state.model.default_param_card();
         state
             .model_parameters
             .remove(&UFOSymbol::from("mass_scalar_2"));

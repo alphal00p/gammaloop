@@ -9538,7 +9538,7 @@
           "value_names": [
             "N_CUT_SPECTATORS"
           ],
-          "help": "Inclusive minimum and maximum number of spectators crossing a cross-section cut",
+          "help": "Inclusive minimum and maximum number of spectators on each side of a cross-section cut.\n\nA spectator is an initial-state leg crossed by the cut. A graph selected only through such a cut is stored as a selection-only diagram: it can be listed and exported, but no integrand can be generated from it.",
           "required": false,
           "positional": false,
           "index": null,
@@ -9574,7 +9574,7 @@
           "value_names": [
             "ALLOW_SYMMETRIZATION_OF_EXTERNAL_FERMIONS_IN_AMPLITUDES"
           ],
-          "help": "Permit external fermion permutations when identifying equivalent amplitudes",
+          "help": "Permit permutations of external fermions and ghosts when identifying equivalent amplitudes",
           "required": false,
           "positional": false,
           "index": null,
@@ -9673,7 +9673,7 @@
           "value_names": [
             "SYMMETRIZE_LEFT_RIGHT_STATES"
           ],
-          "help": "Identify cross-section graphs under CP-based left/right exchange; requires CP symmetry",
+          "help": "Identify graphs under left/right exchange; cross sections require CP symmetry.\n\nCross sections identify graphs under CP-based exchange of their two forward sides. For amplitudes, the option sets unspecified initial- and final-state symmetrization to true and rejects an explicit false. Identical bosons, and fermions and ghosts only with the external-fermion option, are then permuted within and across the two states, an outgoing leg counting as its incoming antiparticle. Where separate side symmetrization admits the same legs with the same sign convention, this crossing identification keeps the sum of combinatorial graph weights; it does not equate amplitudes at a fixed point.",
           "required": false,
           "positional": false,
           "index": null,
@@ -9721,10 +9721,39 @@
           "defaults": [],
           "possible_values": [
             "no_grouping",
-            "only_detect_zeroes",
             "group_identical_graphs_up_to_sign",
             "group_identical_graphs_up_to_scalar_rescaling"
           ]
+        },
+        {
+          "id": "filter_zero_color",
+          "long": "filter-zero-color",
+          "short": null,
+          "aliases": [],
+          "action": "set_true",
+          "arity": {
+            "min": 0,
+            "max": 0
+          },
+          "takes_values": false,
+          "value_required": false,
+          "value_names": [],
+          "help": "Remove diagrams whose numerators vanish under color algebra before grouping",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [
+            "false"
+          ],
+          "possible_values": []
         },
         {
           "id": "numerical_samples_seed",
@@ -9771,7 +9800,7 @@
           "value_names": [
             "NUMBER_OF_SAMPLES_FOR_NUMERATOR_COMPARISONS"
           ],
-          "help": "Number of phase-space samples used to decide whether two numerators are equivalent",
+          "help": "Number of phase-space samples used to decide whether two numerators are equivalent (default 5). Scalar rescaling requires at least two: with one sample any two nonzero numerators look proportional. Sign and identical grouping accept one with a warning",
           "required": false,
           "positional": false,
           "index": null,
@@ -9867,7 +9896,7 @@
           "value_names": [
             "COMPARE_CANONIZED_NUMERATOR"
           ],
-          "help": "Compare canonicalized numerators in addition to graph topology when grouping",
+          "help": "Compare canonicalized numerators in addition to graph topology when grouping. Pairs that this comparison does not match are still compared at the numerical samples",
           "required": false,
           "positional": false,
           "index": null,
@@ -10096,38 +10125,6 @@
           "value_terminator": null,
           "conflicts_with": [],
           "defaults": [],
-          "possible_values": []
-        },
-        {
-          "id": "max_multiplicity_for_fast_cut_filter",
-          "long": "max-multiplicity-for-fast-cut-filter",
-          "short": "M",
-          "aliases": [],
-          "action": "set",
-          "arity": {
-            "min": 1,
-            "max": 1
-          },
-          "takes_values": true,
-          "value_required": true,
-          "value_names": [
-            "MAX_MULTIPLICITY_FOR_FAST_CUT_FILTER"
-          ],
-          "help": "Fast cut filter switch multiplicity",
-          "required": false,
-          "positional": false,
-          "index": null,
-          "hidden": false,
-          "global": false,
-          "inherited": false,
-          "exclusive": false,
-          "require_equals": false,
-          "value_delimiter": null,
-          "value_terminator": null,
-          "conflicts_with": [],
-          "defaults": [
-            "6"
-          ],
           "possible_values": []
         },
         {
@@ -11089,7 +11086,7 @@
           "value_names": [
             "N_CUT_SPECTATORS"
           ],
-          "help": "Inclusive minimum and maximum number of spectators crossing a cross-section cut",
+          "help": "Inclusive minimum and maximum number of spectators on each side of a cross-section cut.\n\nA spectator is an initial-state leg crossed by the cut. A graph selected only through such a cut is stored as a selection-only diagram: it can be listed and exported, but no integrand can be generated from it.",
           "required": false,
           "positional": false,
           "index": null,
@@ -11125,7 +11122,7 @@
           "value_names": [
             "ALLOW_SYMMETRIZATION_OF_EXTERNAL_FERMIONS_IN_AMPLITUDES"
           ],
-          "help": "Permit external fermion permutations when identifying equivalent amplitudes",
+          "help": "Permit permutations of external fermions and ghosts when identifying equivalent amplitudes",
           "required": false,
           "positional": false,
           "index": null,
@@ -11224,7 +11221,7 @@
           "value_names": [
             "SYMMETRIZE_LEFT_RIGHT_STATES"
           ],
-          "help": "Identify cross-section graphs under CP-based left/right exchange; requires CP symmetry",
+          "help": "Identify graphs under left/right exchange; cross sections require CP symmetry.\n\nCross sections identify graphs under CP-based exchange of their two forward sides. For amplitudes, the option sets unspecified initial- and final-state symmetrization to true and rejects an explicit false. Identical bosons, and fermions and ghosts only with the external-fermion option, are then permuted within and across the two states, an outgoing leg counting as its incoming antiparticle. Where separate side symmetrization admits the same legs with the same sign convention, this crossing identification keeps the sum of combinatorial graph weights; it does not equate amplitudes at a fixed point.",
           "required": false,
           "positional": false,
           "index": null,
@@ -11272,10 +11269,39 @@
           "defaults": [],
           "possible_values": [
             "no_grouping",
-            "only_detect_zeroes",
             "group_identical_graphs_up_to_sign",
             "group_identical_graphs_up_to_scalar_rescaling"
           ]
+        },
+        {
+          "id": "filter_zero_color",
+          "long": "filter-zero-color",
+          "short": null,
+          "aliases": [],
+          "action": "set_true",
+          "arity": {
+            "min": 0,
+            "max": 0
+          },
+          "takes_values": false,
+          "value_required": false,
+          "value_names": [],
+          "help": "Remove diagrams whose numerators vanish under color algebra before grouping",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [
+            "false"
+          ],
+          "possible_values": []
         },
         {
           "id": "numerical_samples_seed",
@@ -11322,7 +11348,7 @@
           "value_names": [
             "NUMBER_OF_SAMPLES_FOR_NUMERATOR_COMPARISONS"
           ],
-          "help": "Number of phase-space samples used to decide whether two numerators are equivalent",
+          "help": "Number of phase-space samples used to decide whether two numerators are equivalent (default 5). Scalar rescaling requires at least two: with one sample any two nonzero numerators look proportional. Sign and identical grouping accept one with a warning",
           "required": false,
           "positional": false,
           "index": null,
@@ -11418,7 +11444,7 @@
           "value_names": [
             "COMPARE_CANONIZED_NUMERATOR"
           ],
-          "help": "Compare canonicalized numerators in addition to graph topology when grouping",
+          "help": "Compare canonicalized numerators in addition to graph topology when grouping. Pairs that this comparison does not match are still compared at the numerical samples",
           "required": false,
           "positional": false,
           "index": null,
@@ -11647,38 +11673,6 @@
           "value_terminator": null,
           "conflicts_with": [],
           "defaults": [],
-          "possible_values": []
-        },
-        {
-          "id": "max_multiplicity_for_fast_cut_filter",
-          "long": "max-multiplicity-for-fast-cut-filter",
-          "short": "M",
-          "aliases": [],
-          "action": "set",
-          "arity": {
-            "min": 1,
-            "max": 1
-          },
-          "takes_values": true,
-          "value_required": true,
-          "value_names": [
-            "MAX_MULTIPLICITY_FOR_FAST_CUT_FILTER"
-          ],
-          "help": "Fast cut filter switch multiplicity",
-          "required": false,
-          "positional": false,
-          "index": null,
-          "hidden": false,
-          "global": false,
-          "inherited": false,
-          "exclusive": false,
-          "require_equals": false,
-          "value_delimiter": null,
-          "value_terminator": null,
-          "conflicts_with": [],
-          "defaults": [
-            "6"
-          ],
           "possible_values": []
         },
         {
@@ -17992,7 +17986,7 @@
     {
       "path": "cli.global.generation.force_cuts",
       "value_type": "array<array<string>>",
-      "description": "Explicit particle-name sets forced to define graph cuts.",
+      "description": "Edge-name sets (`eN`) selecting the Cutkosky cuts used when integrands are built.\nGeneration and stored cut inventories ignore it; graphs without a selected cut\ncontribute zero.",
       "required": false,
       "default": [],
       "possible_values": []
@@ -18460,6 +18454,17 @@
       "required": false,
       "default": null,
       "possible_values": []
+    },
+    {
+      "path": "cli.global.generation.uv.vakint.tensor_reduction_method",
+      "value_type": "string",
+      "description": "Numerator tensor reduction: native FeynKit by default, or the FORM-based AlphaLoop projector.",
+      "required": false,
+      "default": "feynkit",
+      "possible_values": [
+        "alphaloop",
+        "feynkit"
+      ]
     },
     {
       "path": "cli.global.generation.vector_polarization_sum_gauge",

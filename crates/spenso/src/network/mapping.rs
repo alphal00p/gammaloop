@@ -71,7 +71,8 @@ use crate::{
     parametric::atomcore::ReplaceBuilderGeneric,
     parametric::{
         AtomViewOrConcrete, CompiledEvalTensor, EvalTensor, EvalTreeTensor, MixedTensor,
-        ParamTensor, SerializableCompiledCode, SerializableCompiledEvaluator, SerializableExportedCode,
+        ParamTensor, SerializableCompiledCode, SerializableCompiledEvaluator,
+        SerializableExportedCode,
     },
     shadowing::{ShadowMapping, Shadowable},
     structure::{StructureContract, ToSymbolic},

@@ -1,4 +1,5 @@
 digraph GL443{
+    final_state = "H,t,t~|H,t,t~,g|H,t,t~,g,g|H,t,t~,d,d~|H,t,t~,ghG,ghG~";
     // Keep each complete cut-side loop space. Equal defining edges and signed
     // cycles share centers across cuts; the fixed parent complements may differ.
     threshold_counterterms = "

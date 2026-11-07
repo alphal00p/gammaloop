@@ -10,6 +10,7 @@ name = "tydenso_plugin"
 crate-type = ["cdylib"]
 
 [dependencies]
+symbolica-notation.workspace = true
 blake3 = "1.8.3"
 ciborium = "0.2.2"
 getrandom = "0.3"
@@ -17,5 +18,5 @@ getrandom-02 = { package = "getrandom", version = "0.2", default-features = fals
 idenso.workspace = true
 spenso.workspace = true
 symbolica.workspace = true
-symbolica-typst-atom-payload.workspace = true
+symbolica-typst-plugin.workspace = true
 wasm-minimal-protocol = "0.1"

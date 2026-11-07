@@ -320,7 +320,7 @@
           "$ref": "#/$defs/FeyGenSettings"
         },
         "force_cuts": {
-          "description": "Explicit particle-name sets forced to define graph cuts.",
+          "description": "Edge-name sets (`eN`) selecting the Cutkosky cuts used when integrands are built.\nGeneration and stored cut inventories ignore it; graphs without a selected cut\ncontribute zero.",
           "type": "array",
           "items": {
             "type": "array",
@@ -769,9 +769,28 @@
             "string",
             "null"
           ]
+        },
+        "tensor_reduction_method": {
+          "description": "Numerator tensor reduction: native FeynKit by default, or the FORM-based AlphaLoop projector.",
+          "$ref": "#/$defs/VakintTensorReductionMethod"
         }
       },
       "additionalProperties": false
+    },
+    "VakintTensorReductionMethod": {
+      "description": "Numerator tensor-reduction backend used by Vakint.",
+      "oneOf": [
+        {
+          "description": "Historical FORM implementation shipped with AlphaLoop.",
+          "type": "string",
+          "const": "alphaloop"
+        },
+        {
+          "description": "Native, FORM-less FeynKit tensor projector.",
+          "type": "string",
+          "const": "feynkit"
+        }
+      ]
     },
     "VectorPolarizationSumGauge": {
       "type": "string",

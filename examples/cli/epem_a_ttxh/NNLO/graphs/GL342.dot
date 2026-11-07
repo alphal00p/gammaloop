@@ -1,4 +1,5 @@
 digraph GL342 {
+    final_state = "H,t,t~|H,t,t~,g|H,t,t~,g,g|H,t,t~,d,d~|H,t,t~,ghG,ghG~";
     num = "1";
     overall_factor = "NumeratorDependentGrouping(342,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1))+NumeratorDependentGrouping(343,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1))";
     overall_factor_evaluated = "2";

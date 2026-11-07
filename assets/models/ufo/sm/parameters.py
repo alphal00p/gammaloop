@@ -13,6 +13,7 @@ ZERO = Parameter(name='ZERO',
                  nature='internal',
                  type='real',
                  value=0.0,
+                 mathmlname='<mn>0</mn>',
                  texname='0')
 
 # User-defined parameters.
@@ -28,6 +29,7 @@ Gf = Parameter(name='Gf',
                nature='external',
                type='real',
                value=0.0000116639,
+               mathmlname='<msub><mi>G</mi><mi>f</mi></msub>',
                texname='G_f',
                lhablock='SMINPUTS',
                lhacode=[2])
@@ -36,6 +38,7 @@ aS = Parameter(name='aS',
                nature='external',
                type='real',
                value=0.118,
+               mathmlname='<msub><mi>α</mi><mi>s</mi></msub>',
                texname='\\alpha _s',
                lhablock='SMINPUTS',
                lhacode=[3])
@@ -154,6 +157,7 @@ MZ = Parameter(name='MZ',
                nature='external',
                type='real',
                value=91.188,
+               mathmlname='<msub><mi>m</mi><mi>Z</mi></msub>',
                texname='\\text{MZ}',
                lhablock='MASS',
                lhacode=[23])
@@ -190,6 +194,7 @@ MC = Parameter(name='MC',
                nature='external',
                type='real',
                value=1.27,
+               mathmlname='<msub><mi>m</mi><mi>c</mi></msub>',
                texname='\\text{MC}',
                lhablock='MASS',
                lhacode=[4])
@@ -198,6 +203,7 @@ MT = Parameter(name='MT',
                nature='external',
                type='real',
                value=173.,
+               mathmlname='<msub><mi>m</mi><mi>t</mi></msub>',
                texname='\\text{MT}',
                lhablock='MASS',
                lhacode=[6])
@@ -206,6 +212,7 @@ MB = Parameter(name='MB',
                nature='external',
                type='real',
                value=4.7,
+               mathmlname='<msub><mi>m</mi><mi>b</mi></msub>',
                texname='\\text{MB}',
                lhablock='MASS',
                lhacode=[5])
@@ -214,6 +221,7 @@ MH = Parameter(name='MH',
                nature='external',
                type='real',
                value=125.,
+               mathmlname='<msub><mi>m</mi><mi>H</mi></msub>',
                texname='\\text{MH}',
                lhablock='MASS',
                lhacode=[25])
@@ -222,6 +230,7 @@ Me = Parameter(name='Me',
                nature='external',
                type='real',
                value=0.000511,
+               mathmlname='<msub><mi>m</mi><mi>e</mi></msub>',
                texname='\\text{Me}',
                lhablock='MASS',
                lhacode=[11])
@@ -230,6 +239,7 @@ MM = Parameter(name='MM',
                nature='external',
                type='real',
                value=0.10566,
+               mathmlname='<msub><mi>m</mi><mi>μ</mi></msub>',
                texname='\\text{MM}',
                lhablock='MASS',
                lhacode=[13])
@@ -238,6 +248,7 @@ MTA = Parameter(name='MTA',
                 nature='external',
                 type='real',
                 value=1.777,
+                mathmlname='<msub><mi>m</mi><mi>τ</mi></msub>',
                 texname='\\text{MTA}',
                 lhablock='MASS',
                 lhacode=[15])
@@ -380,6 +391,7 @@ aEW = Parameter(name='aEW',
                 nature='internal',
                 type='real',
                 value='1/aEWM1',
+                mathmlname='<msub><mi>α</mi><mi>EW</mi></msub>',
                 texname='\\alpha _{\\text{EW}}')
 
 G = Parameter(name='G',
@@ -392,12 +404,14 @@ MW = Parameter(name='MW',
                nature='internal',
                type='real',
                value='cmath.sqrt(MZ**2/2. + cmath.sqrt(MZ**4/4. - (aEW*cmath.pi*MZ**2)/(Gf*cmath.sqrt(2))))',
+               mathmlname='<msub><mi>m</mi><mi>W</mi></msub>',
                texname='M_W')
 
 ee = Parameter(name='ee',
                nature='internal',
                type='real',
                value='2*cmath.sqrt(aEW)*cmath.sqrt(cmath.pi)',
+               mathmlname='<mi>e</mi>',
                texname='e')
 
 sw2 = Parameter(name='sw2',
@@ -410,24 +424,28 @@ cw = Parameter(name='cw',
                nature='internal',
                type='real',
                value='cmath.sqrt(1 - sw2)',
+               mathmlname='<msub><mi>c</mi><mi>w</mi></msub>',
                texname='c_w')
 
 sw = Parameter(name='sw',
                nature='internal',
                type='real',
                value='cmath.sqrt(sw2)',
+               mathmlname='<msub><mi>s</mi><mi>w</mi></msub>',
                texname='s_w')
 
 g1 = Parameter(name='g1',
                nature='internal',
                type='real',
                value='ee/cw',
+               mathmlname='<msub><mi>g</mi><mn>1</mn></msub>',
                texname='g_1')
 
 gw = Parameter(name='gw',
                nature='internal',
                type='real',
                value='ee/sw',
+               mathmlname='<msub><mi>g</mi><mi>w</mi></msub>',
                texname='g_w')
 
 vev = Parameter(name='vev',
@@ -506,6 +524,7 @@ muH = Parameter(name='muH',
                 nature='internal',
                 type='real',
                 value='cmath.sqrt(lam*vev**2)',
+                mathmlname='<mi>μ</mi>',
                 texname='\\mu')
 
 I1x31 = Parameter(name='I1x31',

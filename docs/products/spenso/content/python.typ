@@ -1,4 +1,4 @@
-#import "../../shared.typ": boundary, callout, source-link
+#import "../../shared.typ": boundary, callout, source-link, product-link
 
 #let python = [
 = Python tensor workflows
@@ -7,10 +7,45 @@ Spenso's Python interface is a native adapter over the same tensor structures, l
 network executor as the Rust crates. Use the generated reference for exact signatures and this
 guide for the object boundaries and execution sequence that those signatures do not explain.
 
+== Compute a scalar product
+
+Once the tensor module is available, this example computes the squared Euclidean
+length of a vector. A representation defines its three component positions;
+`Tensor.dense` supplies their values. Matching index labels request contraction.
+
+// docs-example: compile
+```python
+from symbolica.community import tensor as sp
+
+space = sp.Representation.euc(3)
+p = sp.TensorName.vector("quickstart::p")(space)
+vector = sp.Tensor.dense(p, [1.0, 2.0, 3.0])
+
+network = vector("i") * vector("i")
+result = network.to_tensor()
+assert result.scalar() == 14.0
+```
+
+The product creates a computation; `to_tensor()` executes a copy and returns its
+component data. Use `result[:]` for the flat components of a tensor with free
+indices, or `result.scalar()` when no free indices remain. Call `network.execute()`
+when you want to update the network itself and inspect its progress.
+
+For symbolic calculations, work with `p` before supplying component values.
+Multiplication automatically uses dot notation for two vector heads declared with
+`TensorName.vector()`. A generic tensor or composite expression with one free
+axis keeps its indexed contraction instead; `contract()` packs compatible vector
+contractions into Schoonschip notation. Choose `dot()` explicitly or use
+`to_dots()` to convert a compact scalar metric contraction.
+For reusable numerical definitions, register `vector` in a `TensorLibrary` and
+pass that library when evaluating an expression. Each method's reference entry
+includes a runnable example followed by its parameter descriptions. The same
+documentation is available in Python with `help(sp.Tensor.dense)`.
+
 == Availability and version boundary
 
 #boundary("A Symbolica community module", [
-  Import Spenso as `symbolica.community.spenso`; there is no standalone `spenso` wheel. The
+  Import Spenso as `symbolica.community.tensor`; there is no standalone `spenso` wheel. The
   published Symbolica wheel bundles this community module. Its Symbolica version determines
   which Spenso API it contains. A source checkout or generated `.pyi` file does not add the
   native module to an existing Python environment.
@@ -21,7 +56,7 @@ Install the current assembly and check the environment before building a workflo
 // docs-example: syntax
 ```sh
 python -m pip install --upgrade symbolica
-python -c "import symbolica.community.spenso as spenso; print(spenso.__name__)"
+python -c "import symbolica.community.tensor as spenso; print(spenso.__name__)"
 ```
 
 Source embedders can build a custom
@@ -31,14 +66,22 @@ compatibility fact than the version of an unrelated local Rust checkout.
 
 Spenso, Idenso, and Symbolica core share one native library, one Symbolica kernel, and one
 Python `Expression` type. The community assembly registers `SpensoModule` as
-`symbolica.community.spenso_native`; its public wrapper imports the native exports and calls
+`symbolica.community.tensor_native`; its public wrapper imports the native exports and calls
 the host-provided `initialize_module`. That initializer must remain in the export list.
+`SpensoModule::get_name()` returns `tensor`; package the public wrapper under
+`python/symbolica/community/tensor/`. Python classes and generated stubs use
+`symbolica.community.tensor`, while Rust crate names and symbolic `spenso::` names remain unchanged.
+Include the generated `__init__.pyi` beside that wrapper and a `py.typed` marker in
+the `tensor` package so editors and type checkers can discover the public API.
+The Spenso documentation exporter writes and checks the same stub in
+`docs/api/python/spynso3.pyi` and the notebook host's `tensor` package.
 Do not link Spynso into `gammaloop._gammaloop` or distribute it as a second native extension.
 
 GammaLoop owns the Spynso source and bundled Tydenso `render.typ` and `notation.typ` assets;
 Symbolica Community owns the wheel. Their native dependencies must resolve one Symbolica
-source revision. The `gammaloop[typst-display]` extra adds only the optional renderer, not
-another Spynso binary.
+source revision. HTML uses direct MathML without a Typst compiler. Source-only
+Typst projects remain available, and vector exports use optional Python typst-py
+(distribution `typst`).
 
 === Pyodide builds
 
@@ -71,6 +114,37 @@ rejects native arithmetic or workspace-hack dependencies in its portable graph.
 
 == Choose the right object
 
+Tensor factories, patterns, and name accessors use `dirac_gamma`, `color_f`, and
+`color_t`: for example, `TensorExpression.dirac_gamma(4)`,
+`TensorPattern.color_f(8, a_, b_, c_)`, and `TensorName.color_t()`.
+The registered Symbolica heads remain `spenso::gamma`, `spenso::f`, and
+`spenso::t`, including in saved expressions and printed mathematics.
+
+The tensor package owns the full tensor vocabulary formerly exposed through
+`hep.Symbols`. Use `TensorExpression.gamma0(d)`, `.charge_conjugation(d)`, and
+`.levi_civita(rep, rank=4)` for open tensors with distinct ports; corresponding
+`TensorPattern` and `TensorName` accessors support rewriting and head inspection.
+Identical arguments to an antisymmetric head still vanish. The named expression
+factories express distinct unresolved ports without changing that normalization.
+
+Use `TensorPattern.dot/chain/trace` for compact syntax with wildcard operands or
+factor sequences, and `PortPattern.chain_in/chain_out` for forward or reversed
+contextual matrix channels. `TensorPattern.casimir/dynkin_index` also accept
+arbitrary representation patterns. `Nc() -> Expression` constructs the canonical real
+colour constant on demand, including its default numerical value 3. Importing the native
+module therefore leaves time to call Symbolica's `set_license_key` before symbolic work.
+
+`FactorProjector.symmetric`, `.antisymmetric`, and `.cyclic` group compatible
+matrix factors for `chain` or `trace`. For example,
+`chain(left, right, A, FactorProjector.antisymmetric(B, C), D)` projects just
+the middle pair. Nested projector groups are supported; pass a precomposed
+chain's individual factors separately. Symbolic groups stay compact and yield
+`TensorExpression`; groups containing component tensors retain their data and
+yield `TensorNetwork`. `expr.expand_projectors()` explicitly expands normalized
+factor permutations while retaining the tensor interface and unrelated
+factorization. The weights are `1/n!` for symmetric/antisymmetric permutations
+and `1/n` for cyclic rotations.
+
 - `Representation` and `Slot` define dimensions, duality, and abstract indices.
 - `TensorExpression` carries a symbolic expression and its ordered tensor interface. A
   `Slot` supplies an explicit index; a `Representation` leaves a port open for later indexing.
@@ -89,15 +163,72 @@ The generated #link("reference/python/spynso3/Representation/")[`Representation`
 versioned contracts. Do not infer index compatibility from two equal dimensions: names,
 representations, and duality remain part of the value.
 
-== Construct and inspect concrete data
+== Metrics and oriented identities
 
-This complete source creates a named rank-two tensor, verifies one component, and converts its
-storage in place. The documentation harness compiles the Python source without importing the
-native module.
+`TensorExpression.g(left, right)` accepts a `Representation` or `Slot` for either
+port. Slots supply their indices directly; representations leave ports unresolved.
+Omitting `right` leaves the second port unresolved in the first port's representation.
+For example, `TensorExpression.g(r("i"), r("j"))` constructs the indexed metric,
+and `TensorExpression.g(r("i"), r)` leaves one index to fill. Its ports follow the
+specified logical order. The representations must identify the same space and
+have exactly equal dimensions; either port may carry its dual orientation.
+For a fundamental color identity, pair the fundamental space with its dual:
 
 // docs-example: compile
 ```python
-from symbolica.community.spenso import Representation, Tensor, TensorName
+from symbolica import E
+from symbolica.community.tensor import Representation, TensorExpression
+
+fund = Representation.cof(3)
+identity = TensorExpression.g(fund, fund.dual())
+indexed_identity = TensorExpression.g(fund("i"), fund.dual()("j"))
+assert identity("i", "i").contract().to_expression() == E("3")
+```
+
+The same constructor supports symbolic dimensions. Distinct symbolic dimensions
+are rejected, even when no numerical values have been assigned.
+
+== Generated symbolic components
+
+A named tensor with concrete dimensions needs no manually supplied component array.
+If the library has no entry for it, network parsing generates symbolic components.
+`TensorExpression.components(library=None)` exposes those same values in flat logical
+row-major order, independent of the abstract index labels used in a contraction.
+
+// docs-example: compile
+```python
+from symbolica.community.tensor import Representation, TensorName
+
+spinor = Representation.bis(4)
+J = TensorName("J")(spinor)
+parameters = J.components()
+assert len(parameters) == 4
+assert J("s").components() == parameters
+```
+
+The values are the actual component expressions used by the parser, such as
+`J(cind(0))`; use them directly as evaluator parameters or substitution keys.
+The accessor executes a temporary network through the normal parser and executor.
+For compound expressions it returns the contracted result; for a scalar it returns
+a one-element list. It neither changes the expression nor registers generated tensors.
+All enumerated dimensions must be concrete.
+
+A supplied `TensorLibrary` is used for parsing, execution, and result extraction.
+Registered tensors contribute their stored values instead of generated symbols.
+The default is the ordinary HEP library; `TensorLibrary.hep_lib_atom()` selects
+its atom-valued variant. Component values retain the same Python types as
+`TensorNetwork.result_tensor()`: expressions, floats, or complex numbers.
+
+== Construct and inspect concrete data
+
+This complete source creates a named rank-two tensor, verifies one component, and converts its
+storage in place. Use Run example to execute it in your browser. To run the same source locally,
+install a Symbolica community build containing `symbolica.community.tensor`; installing or
+building that native module takes longer than this small component calculation.
+
+// docs-example: compile
+```python
+from symbolica.community.tensor import Representation, Tensor, TensorName
 
 rep = Representation.euc(2)
 i = rep("i")
@@ -107,13 +238,15 @@ matrix = Tensor.dense(structure, [1.0, 0.0, 0.0, 1.0])
 
 assert len(matrix) == 4
 assert matrix[0, 0] == 1.0
-matrix.to_sparse()
+matrix = matrix.to_sparse()
 assert matrix[1, 1] == 1.0
 ```
 
 `Tensor.dense` requires row-major data whose length is the product of the structure dimensions.
 `Tensor.sparse` instead needs the element type and starts empty. `to_dense()` and `to_sparse()`
-mutate the storage representation; they do not change slots or re-index the tensor. See the
+return independent tensors with the requested storage representation. Assign the result to
+keep it; the original tensor retains its storage and values. They do not change slots or
+re-index the tensor. See the
 #link("reference/python/spynso3/Tensor/#exports-tensor-dense-associatedfunction")[dense constructor] and
 #link("reference/python/spynso3/Tensor/#exports-tensor-to-sparse-method")[conversion contract].
 
@@ -124,6 +257,120 @@ mutate the storage representation; they do not change slots or re-index the tens
   structural mismatch.
 ])
 
+== Transforming expressions and axes
+
+`replace(TensorRule(...))` applies checked whole-tensor replacement rules. The same method
+accepts Symbolica's `replace(pattern, rhs, ...)` form, including callbacks and traversal
+options. `replace_multiple`, `map`, and `derivative` also return tensors and check that the
+result preserves the ordered interface. Derivatives of scalar coefficients retain typed
+zeros; formal derivatives of unknown tensor functions require component differentiation
+with `Tensor.map_components` or a tensor-name derivative callback.
+
+Inherited operations such as `coefficient` and `terms` return ordinary `Expression`
+values, which carry no tensor interface metadata. Tensor expressions are accepted directly
+by Symbolica functions and matching APIs. Use `to_expression()` when deliberately selecting
+the base expression behavior, for example to make a rewrite that changes tensor rank.
+To rebuild a tensor after a structure-preserving raw operation, pass
+`structure=original.structure` to the `TensorExpression` constructor; the constructor checks
+the declared interface.
+
+All three tensor forms expose `structure`, `axes`, `rank`, `shape`, and `is_scalar`.
+The immutable `structure` is the canonical signature of the free axes; `axes` and
+`shape` follow the current component or port order.
+`index(...)` (also `obj(...)`) fills only unresolved ports. `reindex(...)` assigns every
+external port and permits intentional contractions; `AUTO` leaves a port unchanged.
+`rename_indices({...})` performs simultaneous substitutions on external indices and
+rejects contractions or capture of internal dummy indices. Use immutable `Slot` keys
+when the same label occurs in multiple representations. Tensor and network operations
+keep their actual stored values; they do not resolve a fresh copy from a library.
+
+`permute_axes([2, 0, 1])` reorders the public axes. On a concrete tensor it transposes
+the data; on an expression or network it changes the external interface consistently.
+Unresolved expression/network ports acquire fresh labels to keep their occurrences
+distinct. Use `reindex(...)` afterwards to choose displayed labels.
+
+Nested index payloads use `intern="indices"` for reversible encoding or
+`intern="flattened"` for readable flattened names. Both modes affect only indices,
+leaving tensor heads, scalar arguments, and dimensions intact. The default `intern=None`
+leaves indices unchanged. Constructors, calls, `index`, `reindex`, and `rename_indices`
+accept the same literal choices.
+
+== Component operations
+
+`tensor.dtype` is the actual component class: `float`, `complex`, or Symbolica's
+`Expression`. `tensor.storage` is `"dense"` or `"sparse"`. `copy()` and Python's
+`copy.copy()` duplicate concrete storage or network state.
+
+Integer access uses flat logical row-major order, including negative indices.
+Coordinate tuples follow `axes`. A flat slice returns a flat list;
+coordinate slices such as `tensor[:, -1]` or `tensor[::-1, :]` return nested lists
+for the selected axes. Assignment accepts an integer or full integer coordinates,
+including negative indices. Slice assignment and ellipsis indexing are not supported.
+
+`map_components(callback, dtype=None)` returns a new tensor. By default the output
+keeps the input component type; specify `dtype=Expression`, `float`, or `complex`
+to convert it. A sparse tensor's implicit zero is mapped once. If that result is
+nonzero, storage becomes dense so subsequent contractions include those entries.
+Callbacks should depend only on the component value; traversal order is unspecified.
+
+`Tensor.from_numpy(expression, array)` checks the complete logical shape and copies
+real numeric data into float64 storage or complex data into complex128 storage.
+`tensor.to_numpy()` returns an independent array in logical axis order, including
+for noncontiguous input arrays or permuted tensors. NumPy is imported only when these
+methods are called. Finite numeric Expression literals are rounded to float64.
+If a converted value has a nonzero imaginary part, the array uses complex128.
+Other symbolic expressions require evaluation before NumPy export.
+
+== Execution and simplification
+
+`expression.to_tensor(library=...)` parses, executes, and returns concrete component
+storage in one call. `network.to_tensor(...)` executes a copy, preserving the source
+network's current progress. Both accept a `function_library` for broadcast callbacks.
+Use the existing mutating `execute(...)` and `result_tensor(...)` methods when progress
+should remain in the network.
+
+`network.status` returns an immutable `ExecutionStatus`: remaining nodes, operation
+nodes, internal contraction edges, currently ready operation labels, and `complete`.
+These are graph counts, not cost estimates. `network.step(...)` returns a copy after
+one native Single step, including the executor's normal preprocessing. Self traces
+can therefore run before a reported ready operation. Repeat `step`, inspect or display
+the returned network, or execute it to completion.
+
+`expression.contract(...)` performs structural contractions and optional
+chain or trace collection without evaluating algebraic identities. Independently,
+`expression.simplify_algebra(...)` selects gamma, color, and epsilon families
+with their existing dimension and gamma5 conventions. Python enables gamma and
+colour by default, while epsilon is opt-in;
+`simplify_algebra(gamma=True, color=True, epsilon=True)` selects all three. Each identity includes its necessary local
+contractions. No nested contraction settings or implicit global expansion is involved.
+The default `collect_coefficients=True` combines generated coefficients in
+contracted Dirac traces and their bound vector factors, revealing cancellations
+and applying `expand_num()` numerical distribution inside those generated
+coefficients while preserving unrelated input sums and scalar prefactors. Set it to `False`
+to retain nested identity output; free traces remain factorized in either mode.
+Other identity kernels keep their existing coefficient normalization.
+The result is a `TensorExpression` and reports `Complete`, `Deferred`, or `Capped` through
+`reduction_status`. A `max_steps_per_domain` budget caps work while retaining the exact
+remaining expression. Explicit `expand()` requests polynomial materialization.
+The default budget is `None` (unlimited). The
+#product-link("idenso", page: "reference/interfaces/", label: "Idenso reduction guide")
+explains contraction modes, distribution permissions, representation filters and
+family-specific output settings with typed examples.
+
+== Numerical evaluation
+
+Interpreted and compiled tensor evaluators share `parameters`, `input_size`,
+`output_shape`, `supports_real`, `evaluate`, and `evaluate_complex`. Parameters are
+reported in the original order. Both evaluators reject any batch row with the wrong
+length before entering a native evaluation kernel. An empty batch produces no tensors;
+a constant tensor takes one empty row per requested evaluation.
+
+Compilation generates a complex kernel and, when the exact coefficients permit it,
+a separate real kernel. Real evaluation rejects complex coefficients; use
+`evaluate_complex` to retain them. Every result keeps the original logical axes and
+tensor identity. Compilation creates the requested source/library files plus real
+companions when applicable.
+
 == Typed tensor factories and patterns
 
 Calling a user-defined `TensorName` places scalar key arguments before structural ports.
@@ -133,20 +380,24 @@ they are not scalar arguments and do not add fields to tensor-library keys.
 
 // docs-example: compile
 ```python
-from symbolica.community.spenso import _, TensorExpression
+from symbolica.community.tensor import _, TensorExpression
 
-gamma = TensorExpression.gamma(4)
+gamma = TensorExpression.dirac_gamma(4)
 gamma_ijmu = gamma("i", "j", "mu")
 line = gamma(_, _, "mu") * gamma(_, _, "nu")
 dirac_trace = line.trace()
 
-generator = TensorExpression.t(8, 3)
+generator = TensorExpression.color_t(8, 3)
 T_aij = generator("a", "i", "j")
 ```
 
 Gamma's public argument order is its stored interface: bispinor-in, bispinor-out, then
 Minkowski. `_` (also exported as `AUTO`) leaves a local port unresolved; it is not a shared
 Einstein index. Calling a partially indexed expression assigns only its remaining open ports.
+Unresolved axes display as hollow squares; several unresolved axes on one tensor carry
+zero-based axis numbers. Scalar parameters do not count as axes, and matching square
+numbers on different tensors do not imply contraction. Hover over a square in HTML output
+to see its axis and representation. Assigned indices retain their usual alphabet notation.
 Raw predefined `TensorName` accessors expose heads for inspection and matching, not concrete
 construction.
 
@@ -155,10 +406,10 @@ Patterns retain ordinary Symbolica wildcard behavior, including wildcard dimensi
 // docs-example: compile
 ```python
 from symbolica import S
-from symbolica.community.spenso import TensorPattern
+from symbolica.community.tensor import TensorPattern
 
 D_, i_, j_, mu_ = S("D_", "i_", "j_", "mu_")
-gamma_pattern = TensorPattern.gamma(D_, i_, j_, mu_)
+gamma_pattern = TensorPattern.dirac_gamma(D_, i_, j_, mu_)
 ```
 
 `TensorPattern` shortcuts follow the same index order as concrete factories. General patterns
@@ -167,6 +418,75 @@ place scalar `args` before structural `ports`; `PortPattern.exact`, `.any`, `.se
 strings ending in one underscore; dimensions, indices, and scalar arguments are numbers or
 Symbolica expressions. Patterns can be passed directly to Symbolica replacement operations.
 
+== Dirac adjoints and external-leg labels
+
+`TensorExpression.dirac_adjoint()` uses Idenso's conjugation rules and the
+registered gamma-zero factors at open bispinor ports. Its default matrix
+convention exchanges the two endpoint labels of each open chain. When squaring
+an amplitude whose diagrams pair external fermions differently, use
+`dirac_adjoint(preserve_indices=True)` to keep every label attached to the same
+physical leg. This convention distributes over the whole amplitude, so callers
+do not need to find and exchange endpoints separately in each channel.
+
+// docs-example: compile
+```python
+from symbolica import E
+from symbolica.community.tensor import TensorExpression
+
+gamma = TensorExpression.dirac_gamma(4)
+direct = gamma("i", "j", "mu").to_expression() * gamma("k", "l", "mu").to_expression()
+crossed = gamma("i", "l", "nu").to_expression() * gamma("k", "j", "nu").to_expression()
+amplitude = TensorExpression((1 + 2 * E("1𝑖")) * direct + (3 - E("1𝑖")) * crossed)
+adjoint = amplitude.dirac_adjoint(preserve_indices=True)
+restored = adjoint.dirac_adjoint(preserve_indices=True)
+assert restored.axes == amplitude.axes
+assert (
+    restored.canonize().to_expression() - amplitude.canonize().to_expression()
+).expand() == E("0")
+```
+
+Canonicalization compares the exact tensor normal forms, including dummy-index renaming
+and equivalent explicit-matrix/chain notation. It preserves the open physical-leg labels;
+the separate axes assertion also checks their ordered interface. Polynomial expansion alone
+does not identify those tensor representations.
+
+Both conventions conjugate scalar coefficients and retain the required boundary
+factors. The physical-leg convention distributes those factors across sums
+before canceling them. The default keeps its existing factored output. To form
+a squared amplitude, distinguish the adjoint's indices with `wrap_indices` and
+supply the appropriate shared completeness tensors. `tensor.wrap_indices(S("bra"))`
+returns a `TensorExpression` with native scoped indices, preserving both its
+logical interface and internal contractions. The original and scoped indices
+remain distinct until a completeness tensor connects them. Alphabet display
+uses the same base letters with primes for the scoped copy; raw display retains
+`spenso::index_scope(scope, index)`. Repeating the same outer scope is idempotent,
+and different scopes can nest. No index cooking is required. Keeping labels attached to
+legs does not itself perform a spin sum. The new keyword requires a community
+assembly built with this Spynso version; changing a stub file does not update
+the native extension.
+
+Gamma simplification also respects matrix orientation. In a compact chain,
+`gamma(in,out,...)` is an ordinary matrix and `gamma(out,in,...)` is transposed.
+Reversed gamma, gamma-zero, gamma-five and chiral-projector factors remain
+explicit instead of entering forward-matrix Clifford or projector rules.
+Ordinary subwords can still simplify, but mixed ordinary/transposed words are
+not treated as if all their factors had the same orientation. Canonical chain
+ordering does not supply a general transpose algebra. A supported explicit
+four-dimensional `spenso::charge_conjugation` sandwich is an exception: Idenso
+transposes each known gamma, gamma-zero, gamma-five or projector factor with
+the sign fixed by $C = -i γ^2 γ^0$. Factor order is preserved and scalar
+coefficients are not conjugated. Gamma/slash arguments of symbolic dimension
+remain opaque. The same chain collector joins common starts or ends only in
+self-dual spaces, reversing one word and exchanging its `in`/`out` markers.
+
+Numerical evaluation with the shared HEP matrix data remains a separate way to
+check such expressions. An installed-host comparison validates all sixteen
+matrix components of a mixed ordinary/transposed product against that data.
+The new `installed_charge_conjugation.py` regression additionally compares C
+sandwiches with independent products of those Weyl matrices. Its initial
+symbolic identities pass in the rebuilt host; full installed-host validation
+awaits fixture setup corrections.
+
 == Register data and execute a network
 
 A symbolic network resolves named tensors through a library. Register the data first, construct
@@ -174,7 +494,7 @@ the expression with the same name and compatible slots, then execute and request
 
 // docs-example: compile
 ```python
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     ExecutionMode,
     Representation,
     Tensor,
@@ -195,6 +515,41 @@ result = network.result_tensor(library=library)
 assert len(result) == 4
 ```
 
+The library also acts as a mapping from full unresolved signatures to stored
+component data. `library[structure]` returns a `Tensor`; its `expression()` method
+returns the symbolic reference. Keys include scalar arguments and ordered
+representations, so tensors such as `A(x, 7, rep)` and `A(x, 8, rep)` can coexist.
+`library["A"]` or `library[A]` (with `A` a `TensorName`) is a convenience when the
+name identifies exactly one stored signature; ambiguous or absent names raise
+`KeyError`.
+
+// docs-example: compile
+```python
+stored = library[structure]
+reference = stored.expression()
+signatures = library.keys()
+assert structure in library
+assert library.get("missing_tensor") is None
+for signature, tensor in library.items():
+    print(signature, tensor.structure.shape)
+```
+
+`keys()`, `values()` and `items()` return snapshot lists in matching order;
+iteration yields signatures and `len(library)` counts stored tensors. Returned
+tensors are independent copies: register an edited tensor again to replace the
+stored data. Dimension-dependent factories, such as metrics, can be accessed
+with an exact concrete signature but do not appear among stored entries.
+
+`key in library` checks whether lookup can resolve the signature, including
+dimension-dependent factories, without constructing component data.
+`library.get(key, default=None)` returns an independent tensor or the supplied
+default when the signature is absent. Both accept the same keys as indexing;
+ambiguous names and invalid keys still raise errors. In particular, a factory
+signature can be in an otherwise empty library while `len(library)` remains zero.
+
+
+
+
 `ExecutionMode.Single` selects the smallest-degree single-rewrite strategy, but execution still
 continues while work remains unless it is bounded; use `n_steps=1` to inspect exactly one step.
 `Scalar` processes scalar work while retaining tensor structure, and `All` attempts the complete
@@ -213,57 +568,44 @@ and #link("reference/python/spynso3/ExecutionMode/")[`ExecutionMode`].
 
 == Mathematical display
 
-`TensorExpression`, `Tensor`, and `TensorNetwork` share semantic display methods.
-`DisplaySettings` controls the ports, Schoonschip, and call layouts, dimensions, parentheses,
-commas, symbol scripts, and index/factor spacing. Positional calls such as `to_typst(True)`
-and `formatted(True)` still request dimensions.
+`TensorExpression`, `Tensor`, and `TensorNetwork` provide text and mathematical
+representations. Use `DisplaySettings` to choose an index style or show dimensions.
+`to_html()` renders expressions as MathML. SVG rendering uses the optional Typst
+compiler. Use `to_typst_project()` or `to_svg()` for custom Typst notation.
 
 // docs-example: compile
 ```python
-from symbolica.community.spenso import DisplaySettings, TensorExpression
+from symbolica.community.tensor import DisplaySettings, TensorExpression
 
 trace = TensorExpression.gamma5(4).trace()
-source = trace.to_typst(
-    settings=DisplaySettings(show_dimensions=True, parentheses=False)
-)
+html = trace.to_html(settings=DisplaySettings.schoonschip())
 ```
 
-`to_typst` and `format_tensor` emit source using the ports layout. Schoonschip, call, and
-custom-spacing settings require Tydenso's Typst notation layer; use HTML, SVG, or notebook
-display for those settings. Source-only methods reject unsupported settings rather than
-silently ignoring them.
+== Citation tracking
 
-Install the optional compiler to render HTML and SVG:
+After a calculation, `symbolica.get_citations()` returns citation objects with
+references, explanations in `reasons`, and bibliography entries from
+`citation.to_bibtex()`. Spenso is authored by Lucien Huber; Idenso is authored by
+Lucien Huber and Ben Ruijl.
 
-// docs-example: syntax
-```sh
-pip install 'gammaloop[typst-display]'
-```
+Successful tensor operations cite Spenso. Symbolic contraction, algebra
+simplification, canonicalization, Dirac adjoints, and index/notation rewrites add
+Idenso. Every Idenso citation also credits Spenso for the tensor-expression
+structure and display that define tensors in Symbolica. Component-network
+execution and numerical evaluation add their own reasons to the Spenso citation.
 
-// docs-example: compile
-```python
-from symbolica.community.spenso import DisplaySettings, TensorExpression
+Dirac gamma algebra also cites
+#link("https://arxiv.org/abs/2601.19982")[FORM Version 5.0] by J. Davies,
+T. Kaneko, C. Marinissen, T. Ueda, and J. A. M. Vermaseren, and
+#link("https://arxiv.org/abs/1707.06453")[FORM version 4.2] by B. Ruijl,
+T. Ueda, and J. A. M. Vermaseren, as the basis for Idenso's Dirac gamma algebra
+rules. Color algebra cites
+#link("https://arxiv.org/abs/hep-ph/9802376")[Group theory factors for Feynman diagrams]
+by T. van Ritbergen, A. N. Schellekens, and J. A. M. Vermaseren as the basis for
+Idenso's color algebra rules, through `color.h`.
 
-trace = TensorExpression.gamma5(4).trace()
-compact = DisplaySettings.schoonschip()
-html = trace.to_html(settings=compact)
-svg = trace.to_svg(settings=compact)
-rich = trace.formatted(settings=compact)
-```
-
-Python uses the bundled Typst render/notation assets directly, without calling the Tydenso
-Wasm plugin. Explicit `to_html` and `to_svg` calls raise an install-guidance `ImportError`
-when the compiler is absent. Notebook `_repr_html_` and `formatted()` fall back to existing
-LaTeX or text. `TensorNetwork.__str__` remains Graphviz DOT; `to_dot()` makes that intention
-explicit. These display methods do not replace Symbolica's inherited `to_latex` API.
-
-Idenso transformations still return ordinary Symbolica expressions. Module-level
-`spenso.formatted(expression)` or `spenso.as_tensor(expression)` provides tensor-aware display.
-HTML, SVG, and rich-display functions accept `notation_source` as a trusted, complete
-replacement for the bundled `notation.typ`, not a style fragment. Typst executes that source;
-it must implement the expected notation interface and must not come from untrusted input.
-Display customization stays outside Atom payloads; portable representation and math-label
-declarations continue to travel with the expressions.
+Citations accumulate during a session. Repeated operations keep a single entry
+for each contribution.
 
 == Repeated symbolic evaluation
 

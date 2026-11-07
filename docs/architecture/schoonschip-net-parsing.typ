@@ -77,7 +77,7 @@ shorthand such as dot products, traces, chains, and Schoonschip vector
 slots becomes a symbolic tensor leaf with inferred structure. That keeps
 graph construction structural; algebraic meaning is assigned later by
 the contraction code in
-#link("../../crates/idenso/src/shorthands/schoonschip/contraction.rs")[contraction.rs];.
+#link("../../crates/idenso/src/shorthands/schoonschip/slot_contraction.rs")[slot_contraction.rs];.
 
 == Settings
 <settings>

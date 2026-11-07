@@ -1,16 +1,27 @@
 # Spenso Python adapter
 
-`spynso3` registers Spenso's native Python interface as
-`symbolica.community.spenso`. It is an adapter crate for the Symbolica community
+`spynso3` registers the unified Spenso and Idenso Python interface as
+`symbolica.community.tensor`. It is an adapter crate for the Symbolica community
 module assembly, not a standalone `spenso` Python distribution.
 
 The canonical user guide is the rendered
 [Spenso Python workflow](https://alphal00p.github.io/gammaloop/products/spenso/latest/guides/python/).
 It covers tensor construction, reusable libraries, network execution, rich
 display, symbolic evaluation, parallelism, failure boundaries, and links to the generated API.
+Idenso's algebra operations are methods on `TensorExpression`, with their settings
+and exceptions exported from the same module.
 Exact signatures and defaults are in the
 [generated Python reference](https://alphal00p.github.io/gammaloop/products/spenso/latest/reference/python/spynso3/);
 the checked [`spynso3.pyi`](../../docs/api/python/spynso3.pyi) remains a tooling artifact.
+
+Notebook output uses Symbolica's MIME/Marimo contract: static HTML is always
+available, and installing `anywidget` adds live display. `TensorNetwork.to_svg()`
+exports tensor notation through optional typst-py; use `network.render().to_svg()`
+for a network diagram. Browser measurement is explicit, while default static
+exports use the view's snapshot policy. Font resources come from `symbolica.data`
+and `symbolica-fonts`, independently of the optional compiler.
+See the [Python display migration notes](../../docs/products/feynkit/content/community-host.typ)
+for notation registration, resource discovery, and removed display hooks.
 
 ## Availability
 
@@ -18,7 +29,7 @@ An installed Symbolica package exposes Spenso only when its assembly includes
 this community module. Verify the actual environment with:
 
 ```bash
-python -c "import symbolica.community.spenso as spenso; print(spenso.__name__)"
+python -c "import symbolica.community.tensor as spenso; print(spenso.__name__)"
 ```
 
 For a custom build, add this crate to the

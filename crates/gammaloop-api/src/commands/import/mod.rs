@@ -1,13 +1,16 @@
 use std::{
-    env,
+    env, fs,
     path::{Path, PathBuf},
 };
 
 use clap::Subcommand;
+#[cfg(test)]
+use feynkit_graph::FeynmanDiagram;
 use gammalooprs::graph::Graph;
 use model::ImportModel;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tracing::info;
 
 use crate::{
@@ -108,7 +111,8 @@ impl Import {
                 };
 
                 info!("Loading graphs from {}", source.display_name());
-                let graphs = source.load(&state.model)?;
+                // One model handle for every source file, shared with the graphs already held.
+                let graphs = source.load(&state.shared_graph_model())?;
                 let generation_type = State::infer_graph_list_generation_type(&graphs)?;
                 let process_definition = process_spec
                     .as_deref()
@@ -132,6 +136,47 @@ impl Import {
             }
             Import::Model(im) => im.run(state),
         }
+    }
+
+    fn load_graphs(path: &Path, model: &Arc<gammalooprs::model::Model>) -> Result<Vec<Graph>> {
+        if path.is_dir() {
+            let mut files = fs::read_dir(path)
+                .with_context(|| format!("Could not read graph directory '{}'.", path.display()))?
+                .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+                .filter(|path| path.extension().is_some_and(|extension| extension == "dot"))
+                .collect::<Vec<_>>();
+            files.sort();
+            if files.is_empty() {
+                return Err(eyre!(
+                    "No .dot files found in directory: {}",
+                    path.display()
+                ));
+            }
+            return files
+                .iter()
+                .map(|path| Self::load_graph_file(path, model))
+                .collect::<Result<Vec<_>>>()
+                .map(|sets| sets.into_iter().flatten().collect());
+        }
+        Self::load_graph_file(path, model)
+    }
+
+    fn load_graph_file(path: &Path, model: &Arc<gammalooprs::model::Model>) -> Result<Vec<Graph>> {
+        let input = fs::read_to_string(path)
+            .with_context(|| format!("Could not read graph file '{}'.", path.display()))?;
+        Self::load_graph_string(&input, model)
+            .with_context(|| format!("Could not import graphs from '{}'.", path.display()))
+    }
+
+    fn load_graph_string(
+        input: &str,
+        model: &Arc<gammalooprs::model::Model>,
+    ) -> Result<Vec<Graph>> {
+        let graphs = Graph::import_dot_shared(input, model)?;
+        if graphs.is_empty() {
+            return Err(eyre!("No diagrams found."));
+        }
+        Ok(graphs)
     }
 
     fn resolve_graph_import_path(path: &Path, state_folder: &Path) -> Result<PathBuf> {
@@ -204,7 +249,9 @@ impl Import {
     }
 }
 
-enum GraphImportSource {
+/// Graph input shared by the CLI and Python imports. Loading accepts canonical,
+/// runtime and compact DOT through [`Graph::import_dot`].
+pub(crate) enum GraphImportSource {
     Path(PathBuf),
     String(String),
 }
@@ -235,7 +282,7 @@ impl GraphImportSource {
         )?))
     }
 
-    fn default_process_name(&self) -> Result<String> {
+    pub(crate) fn default_process_name(&self) -> Result<String> {
         match self {
             Self::Path(path) => path
                 .file_stem()
@@ -257,10 +304,151 @@ impl GraphImportSource {
         }
     }
 
-    fn load(self, model: &gammalooprs::model::Model) -> Result<Vec<Graph>> {
+    pub(crate) fn load(self, model: &Arc<gammalooprs::model::Model>) -> Result<Vec<Graph>> {
         match self {
-            Self::Path(path) => Graph::from_path(&path, model),
-            Self::String(dot_string) => Graph::from_string(dot_string, model),
+            Self::Path(path) => Import::load_graphs(&path, model),
+            Self::String(dot_string) => Import::load_graph_string(&dot_string, model),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use feynkit_generator::{GenerationOptions, Process};
+    use gammalooprs::processes::ProcessCollection;
+
+    use super::*;
+
+    #[test]
+    fn imports_canonical_feynkit_dot_sets_with_typed_cuts() -> Result<()> {
+        let model = gammalooprs::model::Model::from_json(include_str!(
+            "../../../../../assets/models/json/scalars/scalars_2p_3p.json"
+        ))?;
+        let generated = Process::new(["scalar_1"], ["scalar_1", "scalar_1"])
+            .generate_cross_section(
+                Arc::new(model.clone()),
+                &GenerationOptions::default()
+                    .with_loop_count(1, 1)?
+                    .threads(1)
+                    .max_vertices(4),
+            )?;
+        assert!(!generated.diagrams.is_empty());
+        let dot = generated
+            .diagrams
+            .iter()
+            .map(FeynmanDiagram::to_dot)
+            .collect::<Result<Vec<_>, _>>()?
+            .join("\n");
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("canonical.dot");
+        fs::write(&path, &dot)?;
+
+        let shared_model = Arc::new(model);
+        let from_path = GraphImportSource::Path(path).load(&shared_model)?;
+        let from_string = GraphImportSource::String(dot).load(&shared_model)?;
+
+        for imported in [from_path, from_string] {
+            assert_eq!(imported.len(), generated.diagrams.len());
+            assert!(imported
+                .iter()
+                .all(|graph| !graph.finalized_cuts.is_empty()));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn graph_import_source_accepts_compact_amplitude_dot() -> Result<()> {
+        let model = gammalooprs::model::Model::from_json(include_str!(
+            "../../../../../assets/models/json/scalars/scalars_2p_3p.json"
+        ))?;
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("scalar_box_compact.dot");
+        fs::write(&path, COMPACT_SCALAR_BOX)?;
+
+        let source = GraphImportSource::Path(path);
+        assert_eq!(source.default_process_name()?, "scalar_box_compact");
+        let shared_model = Arc::new(model);
+        let from_path = source.load(&shared_model)?;
+        let from_string =
+            GraphImportSource::String(COMPACT_SCALAR_BOX.to_owned()).load(&shared_model)?;
+
+        for imported in [from_path, from_string] {
+            assert_eq!(imported.len(), 1);
+            assert_eq!(imported[0].name, "scalar_box");
+        }
+        Ok(())
+    }
+
+    const COMPACT_SCALAR_BOX: &str =
+        include_str!("../../../../../tests/resources/graphs/scalar_box_scalar_compact.dot");
+    #[test]
+    fn directory_import_shares_one_model_across_files_and_reload() -> Result<()> {
+        gammalooprs::initialisation::test_initialise()?;
+        let temp = tempfile::tempdir()?;
+        let mut state = State::new_test();
+        let mut cli_settings = CLISettings::default();
+        cli_settings.state.folder = temp.path().join("state");
+        ImportModel {
+            path: "scalars".into(),
+            simplify_model: true,
+        }
+        .run(&mut state)?;
+        let directory = temp.path().join("graphs");
+        fs::create_dir(&directory)?;
+        let source = fs::read_to_string(
+            crate::test_workspace_root().join("tests/resources/graphs/scalar_bubble.dot"),
+        )?;
+        for name in ["bubble_a", "bubble_b"] {
+            fs::write(
+                directory.join(format!("{name}.dot")),
+                source.replacen("digraph bubble", &format!("digraph {name}"), 1),
+            )?;
+        }
+        Import::Graphs {
+            source: Some(directory.display().to_string()),
+            inline_dot: None,
+            process_spec: None,
+            process: Some(ProcessRef::Name("bubbles".into())),
+            integrand_name: Some("default".into()),
+            overwrite: false,
+            append: false,
+        }
+        .run(&mut state, &cli_settings)?;
+
+        let models = |state: &State| {
+            let ProcessCollection::Amplitudes(amplitudes) =
+                &state.process_list.processes[0].collection
+            else {
+                unreachable!("bubble graphs are amplitudes")
+            };
+            amplitudes["default"]
+                .graphs
+                .iter()
+                .map(|graph| (graph.graph.name.clone(), Arc::clone(&graph.graph.model)))
+                .collect::<Vec<_>>()
+        };
+        let imported = models(&state);
+        assert_eq!(
+            imported
+                .iter()
+                .map(|(name, _)| name.as_str())
+                .collect::<Vec<_>>(),
+            ["bubble_a", "bubble_b"]
+        );
+        assert!(
+            Arc::ptr_eq(&imported[0].1, &imported[1].1),
+            "graphs from two files of one directory must share one model"
+        );
+
+        state.save(&cli_settings.state.folder, true, false)?;
+        let loaded = State::load(cli_settings.state.folder.clone(), None, None)?;
+        let reloaded = models(&loaded);
+        assert_eq!(reloaded.len(), 2);
+        assert!(
+            Arc::ptr_eq(&reloaded[0].1, &reloaded[1].1),
+            "reloaded graphs must share one model"
+        );
+        assert_eq!(reloaded[0].1.fingerprint(), loaded.model.fingerprint());
+        Ok(())
     }
 }
