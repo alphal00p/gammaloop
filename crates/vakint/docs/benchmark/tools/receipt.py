@@ -25,7 +25,7 @@
 Rules (receipt schema v4: timings measured once on the release line, later data releases refresh the tables):
   1. Source. The timings stay valid while the repository differs from the measured build only in paths that do
      not enter the timed calls (NEUTRAL_PATHS): crates/vakint/docs/**, crates/vakint/external_data.typ,
-     nix/rust-workspace.nix and the vendored snapshot crates/vakint/data/** except its reduction payloads
+     crates/vakint/AGENTS.md, nix/rust-workspace.nix and the vendored snapshot crates/vakint/data/** except its reduction payloads
      crates/vakint/data/<L>L/ibps/** (every timed call loads all loop packs from --data-root, so the vendored
      snapshot is not read; a pin commit that changes the vendored IBP payloads still refuses). Checked by the
      source digest (SHA-256 of `git ls-tree -r` without the neutral paths) of the build commit, recorded in the
@@ -55,7 +55,7 @@ DOCS = BENCH.parent              # crates/vakint/docs
 DOCS_PREFIX = "crates/vakint/docs/"
 RECEIPT_SCHEMA = "vakint.benchmark-receipt.v4"
 # Rule 1: repository paths that do not enter a timed call (see the module docs).
-NEUTRAL_PATHS = re.compile(r"^(crates/vakint/docs/.+|crates/vakint/external_data\.typ|nix/rust-workspace\.nix"
+NEUTRAL_PATHS = re.compile(r"^(crates/vakint/docs/.+|crates/vakint/external_data\.typ|crates/vakint/AGENTS\.md|nix/rust-workspace\.nix"
                            r"|crates/vakint/data/(?![0-9]+L/ibps/).+)$")
 # Rule 2: files of a loop pack that are master values or documentation, not reduction payloads.
 VALUE_FILES = re.compile(r"^(masters/[^/]+/(numerical|symbolic)\.json|constants\.json|coefficient-supplement\.json"
