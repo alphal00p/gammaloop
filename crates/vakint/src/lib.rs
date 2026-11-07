@@ -2233,6 +2233,17 @@ impl EvaluationMethod {
             EvaluationMethod::PySecDec(opts) => {
                 vakint.pysecdec_evaluate(settings, numerator, integral_specs, opts, source_id)
             }
+            // A p-integral is one contribution of the p backend's batch, finalized there.
+            EvaluationMethod::RustRed(opts) if integral_specs.propagator.is_some() => vakint
+                .rustred_evaluate_p_ordered(
+                    settings,
+                    vec![rustred_evaluation::MatchedContribution {
+                        numerator: numerator.to_owned(),
+                        matched: integral_specs.clone(),
+                    }],
+                    opts.master_mode,
+                    None,
+                ),
             EvaluationMethod::RustRed(opts) => {
                 vakint.rustred_evaluate(settings, numerator, integral_specs, opts)
             }
@@ -2897,6 +2908,9 @@ pub struct Vakint {
     rustred_data: Option<Arc<rustred_evaluation::data::RustRedData>>,
     /// Ordered step caches of the loaded programs, shared by clones.
     ordered_cache: Arc<rustred_evaluation::cache::OrderedCacheRegistry>,
+    /// A RustRed p library injected into this engine (`inject_p_library`);
+    /// otherwise external or built-in p data are used (`rustred_evaluation::p_data`).
+    p_library: Option<Arc<rustred_evaluation::p_data::PLibraryHandle>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -3107,7 +3121,8 @@ impl VakintTerm {
             ));
         };
         let (evaluated_integral, stage) = match evaluation_approach {
-            EvaluationMethod::RustRed(options) => (
+            // A p-integral is finalized by the p backend (the `_` arm).
+            EvaluationMethod::RustRed(options) if integral_specs.propagator.is_none() => (
                 vakint.rustred_reduce_observed(
                     settings,
                     self.numerator.as_view(),
@@ -4999,6 +5014,15 @@ impl VakintExpression {
                 (usize, RustRedMasterMode),
                 Vec<rustred_evaluation::MatchedContribution>,
             >::new();
+            // p-integral batches by loop count and master mode, with their
+            // vectors: reduced and finalized by the RustRed p backend.
+            let mut p_ordered = BTreeMap::<
+                (usize, RustRedMasterMode),
+                (
+                    Vec<rustred_evaluation::MatchedContribution>,
+                    std::collections::BTreeSet<(String, i64)>,
+                ),
+            >::new();
             for (source_id, term) in self.0.iter_mut().enumerate() {
                 crate::execution::checkpoint()?;
                 if !term.normalize_propagator()? {
@@ -5006,6 +5030,7 @@ impl VakintExpression {
                 }
                 let matched =
                     term.prepare_integral_specs(vakint, settings, observation.as_deref_mut())?;
+                let propagator = matches!(matched.canonical_topology, Topology::Propagator(_));
                 let method = vakint
                     .evaluation_method(settings, &matched.canonical_topology)
                     .ok_or_else(|| {
@@ -5026,6 +5051,20 @@ impl VakintExpression {
                                 - 1,
                         )
                     })?;
+                if propagator && let EvaluationMethod::RustRed(options) = method {
+                    let (contributions, vectors) = p_ordered
+                        .entry((
+                            matched.canonical_topology.get_integral().n_loops,
+                            options.master_mode,
+                        ))
+                        .or_default();
+                    vectors.extend(term.vectors.iter().cloned());
+                    contributions.push(rustred_evaluation::MatchedContribution {
+                        numerator: term.numerator.clone(),
+                        matched,
+                    });
+                    continue;
+                }
                 if let EvaluationMethod::RustRed(options) = method {
                     let key = (
                         matched.canonical_topology.get_integral().n_loops,
@@ -5063,7 +5102,7 @@ impl VakintExpression {
                     complete.push(term.clone());
                 }
             }
-            let batch_total = ordered.len();
+            let batch_total = ordered.len() + p_ordered.len();
             for (batch_index, (key, contributions)) in ordered.into_iter().enumerate() {
                 if let Some(progress) = progress {
                     progress.ordered_batch(
@@ -5089,6 +5128,36 @@ impl VakintExpression {
                         .get_mut(&key)
                         .expect("ordered group retains its metadata")
                         .0 += raw;
+                }
+            }
+            // The p batches return finalized values (no vacuum master substitution).
+            let p_first = batch_total - p_ordered.len();
+            for (index, ((loop_count, mode), (contributions, vectors))) in
+                p_ordered.into_iter().enumerate()
+            {
+                if let Some(progress) = progress {
+                    progress.ordered_batch(
+                        p_first + index,
+                        batch_total,
+                        &format!("{loop_count}L / {mode:?} / p"),
+                    );
+                }
+                MonitorContext::native_phase(
+                    observation.as_deref_mut(),
+                    "ordered_batch_preparation",
+                    None,
+                );
+                let numerator =
+                    vakint.rustred_evaluate_p_ordered(settings, contributions, mode, progress)?;
+                if mode == RustRedMasterMode::Numerical {
+                    numerical += numerator;
+                    numerical_vectors.extend(vectors);
+                } else if !numerator.is_zero() {
+                    complete.push(VakintTerm {
+                        integral: Atom::num(1),
+                        numerator,
+                        vectors: vectors.into_iter().collect(),
+                    });
                 }
             }
             if batch_total != 0
@@ -5312,6 +5381,7 @@ impl Vakint {
             rustred_application: Arc::default(),
             rustred_data: None,
             ordered_cache: Arc::default(),
+            p_library: None,
         })
     }
 
@@ -5399,7 +5469,11 @@ impl Vakint {
                 }
                 _ => true,
             })
-            .or(first)
+            // RustRed is the fallback that reports missing data, but never for
+            // a p-integral without a p library: Forcer's error says what is missing.
+            .or(first.filter(|method| {
+                !rustred_evaluation::p_integral_without_library(self, settings, topology, method)
+            }))
     }
 
     pub fn validate_settings(&self, settings: &VakintSettings) -> Result<(), VakintError> {

@@ -252,7 +252,10 @@ pub struct OrderedCacheProgramStatistics {
     /// reported only, not part of the cache identity).
     pub data_version: String,
     /// Hexadecimal identity of the program's rule tables (part of the cache
-    /// identity, see the module documentation).
+    /// identity, see the module documentation). Zero for the RustRed p
+    /// library, a program identified by version constants only: its directory
+    /// name is their textual rendering (`p-library-<a>-<b>_...`, see
+    /// `directory`) instead of `<program>.<rule tables>.<stamp>`.
     pub rule_tables: String,
     /// Hexadecimal binding stamp of the cache.
     pub stamp: String,
@@ -332,6 +335,12 @@ pub(crate) struct OrderedCacheProgram {
     /// `application.json`, which pins every payload, with the pack's families
     /// and masters).
     pub rule_tables: [u8; 32],
+    /// The textual tables variant: a program identified by version constants
+    /// only (the RustRed p library, [`super::p_data::p_cache_directory_name`])
+    /// has no rule-table digest (`rule_tables` is zero) and this text is its
+    /// whole directory name. Such a program never uses a shipped cache of a
+    /// vacuum loop pack.
+    pub textual_tables: Option<String>,
     pub binding: OrderedStepCacheBinding,
 }
 
@@ -393,13 +402,36 @@ impl OrderedCacheProgram {
             ),
             data_version: file_name_safe(data_version, false),
             rule_tables,
+            textual_tables: None,
             binding,
         }
     }
 
-    /// Registry key: one cache per program, rule tables and binding stamp.
+    /// A program of the textual tables variant (see `textual_tables`): the
+    /// label is kept as given (file-name safe), the directory is `directory`.
+    pub(crate) fn textual(
+        loop_count: usize,
+        label: &str,
+        data_version: &str,
+        directory: String,
+        binding: OrderedStepCacheBinding,
+    ) -> Self {
+        Self {
+            loop_count,
+            label: file_name_safe(label, true),
+            data_version: file_name_safe(data_version, false),
+            rule_tables: [0; 32],
+            textual_tables: Some(directory),
+            binding,
+        }
+    }
+
+    /// Registry key: one cache per program, rule tables and binding stamp. A
+    /// program of the textual tables variant is keyed by its whole directory
+    /// name (which tells an injected library from a loaded one).
     fn key(&self) -> ProgramKey {
-        (self.label.clone(), self.rule_tables, self.binding.stamp())
+        let label = self.textual_tables.as_ref().unwrap_or(&self.label);
+        (label.clone(), self.rule_tables, self.binding.stamp())
     }
 }
 
@@ -561,7 +593,9 @@ impl OrderedCacheRegistry {
             return Ok(None);
         }
         let shipped = match data {
-            Some(data) if settings.shipped => self.shipped(data, program)?,
+            Some(data) if settings.shipped && program.textual_tables.is_none() => {
+                self.shipped(data, program)?
+            }
             _ => ShippedOrderedCache::None,
         };
         let key = program.key();
@@ -805,8 +839,12 @@ impl Drop for OrderedCacheRegistry {
 
 /// `<label>.<first 16 hex digits of the rule tables>.<first 16 hex digits of
 /// the stamp>`: the program's directory in a cache directory and in a loop
-/// pack's shipped `ordered-cache/`.
+/// pack's shipped `ordered-cache/`. A program of the textual tables variant
+/// uses its text instead.
 pub(super) fn program_directory_name(program: &OrderedCacheProgram) -> String {
+    if let Some(directory) = &program.textual_tables {
+        return directory.clone();
+    }
     format!(
         "{}.{}.{}",
         program.label,
@@ -919,7 +957,9 @@ impl Vakint {
     /// data were replaced. Nothing is detached if the programs cannot be
     /// listed.
     pub(super) fn detach_superseded_ordered_caches(&self) {
-        if let Ok(programs) = self.ordered_cache_programs() {
+        if let Ok(mut programs) = self.ordered_cache_programs() {
+            // An injected p library outlives data changes.
+            programs.extend(self.p_library.as_ref().map(|handle| handle.cache.clone()));
             self.ordered_cache.detach_except(&programs);
         }
     }
