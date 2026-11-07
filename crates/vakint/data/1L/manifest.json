@@ -1,6 +1,6 @@
 {
   "schema": "vakint.external-data.loop.v1",
-  "version": "v0.2.0",
+  "version": "v0.2.2",
   "loop_count": 1,
   "dimension": "4-2*epsilon",
   "normalization": "FMFTandMATAD",
@@ -45,7 +45,7 @@
       "alias": "K1",
       "epsilon_range": [
         -1,
-        4
+        5
       ],
       "exact_basis_expression": "-Gam(1,1)/(ep*(ep-1))",
       "family_sha256": "e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4",
@@ -67,7 +67,8 @@
         1,
         2,
         3,
-        4
+        4,
+        5
       ],
       "graph_definition": {
         "dimension": "4-2*epsilon",
@@ -117,11 +118,11 @@
       "files": {
         "numerical.json": {
           "path": "masters/P1/numerical.json",
-          "sha256": "b54e96eaf3deed297169b16f34bcc28d9d32f6ea2344fd84457f27e21a32ea3d"
+          "sha256": "af7d5cc571d45cea400fdc55e4bed28fd731d1e8493ddac9aa339a4a440c3756"
         },
         "symbolic.json": {
           "path": "masters/P1/symbolic.json",
-          "sha256": "7ebbabf5c0e7a2bda90246a7e00ec2fe722a00ccbc572d7c0e0de41fd3161517"
+          "sha256": "b17919a22fc55d18d220b782ee9c40ab2132924e418742512be89909c095ad13"
         },
         "graph.dot": {
           "path": "masters/P1/graph.dot",
@@ -141,7 +142,8 @@
         1,
         2,
         3,
-        4
+        4,
+        5
       ],
       "producer_update": "producer-update.json",
       "coefficients": [
@@ -177,6 +179,12 @@
         },
         {
           "epsilon_power": 4,
+          "symbolic": true,
+          "numerical": true,
+          "significant_digits": 20000
+        },
+        {
+          "epsilon_power": 5,
           "symbolic": true,
           "numerical": true,
           "significant_digits": 20000
@@ -221,20 +229,20 @@
       "bytes": 815
     },
     "masters/P1/numerical.json": {
-      "sha256": "b54e96eaf3deed297169b16f34bcc28d9d32f6ea2344fd84457f27e21a32ea3d",
-      "bytes": 120166
+      "sha256": "af7d5cc571d45cea400fdc55e4bed28fd731d1e8493ddac9aa339a4a440c3756",
+      "bytes": 140193
     },
     "masters/P1/symbolic.json": {
-      "sha256": "7ebbabf5c0e7a2bda90246a7e00ec2fe722a00ccbc572d7c0e0de41fd3161517",
-      "bytes": 349
+      "sha256": "b17919a22fc55d18d220b782ee9c40ab2132924e418742512be89909c095ad13",
+      "bytes": 523
     },
     "model.json": {
       "sha256": "d7e113a7e3fb019045e4c1436e03eeb3b49da85de1234f7ed1e110416079215e",
       "bytes": 3477
     },
     "producer-update.json": {
-      "sha256": "c2a7a05a917ac68ad65d214907ac7cd6930e7b5b7112e0f1fbd663f85c578a2f",
-      "bytes": 20543
+      "sha256": "bf6e626204446c7a7144188c816495bce575e00422c87e06e953d25bd80e2e12",
+      "bytes": 20689
     }
   },
   "producer_update": "producer-update.json"

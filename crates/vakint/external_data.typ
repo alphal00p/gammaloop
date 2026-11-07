@@ -11,6 +11,14 @@ loaded with `version="v0.2.0"` or `refresh=True`; an existing `data-latest`
 installation (for example of v0.1.2) moves to the release `data-latest` names when
 it is next loaded with the release server reachable
 (see #link("docs/ordered_reduction.typ")[the ordered reduction notes]).
+v0.2.1 replaces the five-loop pack by a composed pack with 131 masters, chosen so
+that reduction coefficients carry no spurious poles at d = 4 (checked on the
+reductions listed in the release notes, not proven for every input), ships
+Laurent coefficients for them, and adds the one-loop tadpole's order eps^5. Its
+five-loop rule tables differ from v0.2.0, so it ships no five-loop Ordered cache
+(the 1L–4L caches and the route preparation add-on are unchanged). None was
+recorded for the new tables either: the v0.2.0 cache changed five-loop reduction
+times by at most about 10 %, and master inputs are now reduced without a walk.
 FORM reduction rules and their hard-coded master formulas remain in Vakint.
 
 == Explicit loading
@@ -94,10 +102,10 @@ missing packs into the test process's current directory; subsequent processes
 reuse the validated installation without network access. Cargo normally runs a
 test binary from its package directory. Set `VAKINT_TEST_EXTERNAL_DATA` to an
 existing checkout to override that location. That checkout must be the release tag
-the vendored manifest declares (`v0.2.0` for this version): tests that request this
+the vendored manifest declares (`v0.2.2` for this version): tests that request this
 explicit version reject a checkout declaring another identity, and the
-external-data `main` branch declares the next development version (`v0.2.1` after
-the v0.2.0 release). To run the tests against a checkout of another release (for
+external-data `main` branch declares the next development version after a
+release. To run the tests against a checkout of another release (for
 example the next one before it is vendored), also set
 `VAKINT_TEST_EXTERNAL_DATA_VERSION` to the version that checkout declares. Tests
 whose expectations depend on the data (the Laurent orders a master ships, the
@@ -268,14 +276,18 @@ guards, invalid transports and operational-limit failures remain errors.
 
 After cancellation, warnings list remaining undeclared masters and parent-topology
 DOT paths. Numerical evaluation reports these masters again, together with declared
-terminals lacking coefficients. The initial 5L release has 905 declared campaign
-terminals and no computed 5L coefficients; it does not certify a complete basis.
+terminals lacking coefficients. The initial 5L release had 905 declared campaign
+terminals and no computed 5L coefficients; up to v0.2.0 the five-loop pack declares
+640 uncomputed terminals. From v0.2.1 on it declares 131 masters with coefficients
+(exact where the release marks them symbolic, otherwise numerical with the digits
+each loop manifest entry states); a master order without a coefficient fails
+closed when a result needs it.
 
 == Maintaining the vendored snapshot
 
 Run `python3 tools/vendor_external_data.py /path/to/vakint-external-data` from the
 Vakint crate, with a checkout of the release tag to vendor (the snapshot is
-v0.2.0). The tool validates input hashes and copies all available 1L–3L
+v0.2.2). The tool validates input hashes and copies all available 1L–3L
 coefficients, graphs and programs byte for byte. It excludes caches by design:
 the depth-first caches of older releases and the shipped Ordered step caches,
 whose entries it removes from the copied loop manifests. Vakint uses shipped
