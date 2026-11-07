@@ -171,15 +171,19 @@ fn lower_part(
     for (value, monomial) in polynomial {
         let mut product = BTreeMap::from([(vec![0u32; top.arity], fraction(*value))]);
         for &(dot, exponent) in &monomial.0 {
-            if !forms.contains_key(&dot) {
-                let (a, b) = dot_rows(dot, loops);
-                let form = presentation
-                    .express_scalar_product(&a, &b)
-                    .map_err(|error| invalid(format!("{dot:?}: {error}")))?;
-                forms.insert(dot, form);
-            }
+            let form = match forms.entry(dot) {
+                std::collections::btree_map::Entry::Occupied(entry) => entry.into_mut(),
+                std::collections::btree_map::Entry::Vacant(entry) => {
+                    let (a, b) = dot_rows(dot, loops);
+                    entry.insert(
+                        presentation
+                            .express_scalar_product(&a, &b)
+                            .map_err(|error| invalid(format!("{dot:?}: {error}")))?,
+                    )
+                }
+            };
             for _ in 0..exponent {
-                product = multiply(&product, &forms[&dot]);
+                product = multiply(&product, form);
             }
         }
         for (monomial, coefficient) in product {
@@ -394,6 +398,13 @@ fn reduce_requests(
                 })
                 .map_err(RustRedEvaluationError::from_native)?
         };
+        if reduction.dimension != channel.loops as i64 {
+            return Err(invalid(format!(
+                "a {}-loop request returned a reduction of dimension {}",
+                channel.loops, reduction.dimension
+            ))
+            .into());
+        }
         let reduced = render(&handle, &reduction, epsilon)? * &channel.coefficient;
         values
             .entry((channel.loops, channel.head))

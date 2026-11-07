@@ -292,7 +292,7 @@ fn mixed_heads_and_vacuum_are_split_into_channels() {
             .collect::<std::collections::BTreeSet<_>>(),
         [(1, parse("p(1)")), (1, parse("p(3)"))]
             .into_iter()
-            .collect()
+            .collect::<std::collections::BTreeSet<_>>()
     );
     // Rank 1 and rank 2 at Σa = 4 and 3: scale powers -1 and 1 for p(3).
     let mut p3_powers = values[&(1, parse("p(3)"))]
@@ -602,23 +602,20 @@ fn numerators_lower_exactly_onto_the_slots_of_every_family() {
             super::super::p_data::check_top_presentation(presentation, presentation.id, family)
                 .unwrap_or_else(|error| panic!("{}: {error}", family.name));
         let loops = family.loops;
-        let mut loop_loop = vec![vec![Rational::zero(); loops]; loops];
-        for i in 0..loops {
-            for j in i..loops {
-                let value = Rational::from((next(41) as i64 - 20, next(7) as i64 + 1));
-                loop_loop[i][j] = value.clone();
-                loop_loop[j][i] = value;
-            }
-        }
+        // k_i·k_j for i <= j at `upper[i * loops + j]`, and k_i·q.
+        let upper = (0..loops * loops)
+            .map(|_| Rational::from((next(41) as i64 - 20, next(7) as i64 + 1)))
+            .collect::<Vec<_>>();
+        let loop_loop = |i: usize, j: usize| &upper[i.min(j) * loops + i.max(j)];
         let loop_external = (0..loops)
             .map(|_| Rational::from((next(41) as i64 - 20, next(5) as i64 + 1)))
             .collect::<Vec<_>>();
         let product = |a: &[i64], b: &[i64]| {
             let mut value = Rational::from(-a[loops] * b[loops]);
-            for i in 0..loops {
-                value += &(&Rational::from(a[i] * b[loops] + a[loops] * b[i]) * &loop_external[i]);
-                for j in 0..loops {
-                    value += &(&Rational::from(a[i] * b[j]) * &loop_loop[i][j]);
+            for (i, (a_i, external)) in a[..loops].iter().zip(&loop_external).enumerate() {
+                value += &(&Rational::from(a_i * b[loops] + a[loops] * b[i]) * external);
+                for (j, b_j) in b[..loops].iter().enumerate() {
+                    value += &(&Rational::from(a_i * b_j) * loop_loop(i, j));
                 }
             }
             value

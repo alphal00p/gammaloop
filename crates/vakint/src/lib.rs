@@ -4982,11 +4982,18 @@ impl VakintExpression {
             let mut numerical = Atom::Zero;
             let mut numerical_vectors = std::collections::BTreeSet::new();
             let mut reductions = BTreeMap::new();
-            // Batches by loop count, master mode and kind (`true`: p-integrals,
-            // reduced and finalized by the p backend).
             let mut ordered = BTreeMap::<
-                (usize, RustRedMasterMode, bool),
+                (usize, RustRedMasterMode),
                 Vec<rustred_evaluation::MatchedContribution>,
+            >::new();
+            // p-integral batches by loop count and master mode, with their
+            // vectors: reduced and finalized by the RustRed p backend.
+            let mut p_ordered = BTreeMap::<
+                (usize, RustRedMasterMode),
+                (
+                    Vec<rustred_evaluation::MatchedContribution>,
+                    std::collections::BTreeSet<(String, i64)>,
+                ),
             >::new();
             for (source_id, term) in self.0.iter_mut().enumerate() {
                 resources::checkpoint()?;
@@ -5027,11 +5034,24 @@ impl VakintExpression {
                                 - 1,
                         )
                     })?;
+                if propagator && let EvaluationMethod::RustRed(options) = method {
+                    let (contributions, vectors) = p_ordered
+                        .entry((
+                            matched.canonical_topology.get_integral().n_loops,
+                            options.master_mode,
+                        ))
+                        .or_default();
+                    vectors.extend(term.vectors.iter().cloned());
+                    contributions.push(rustred_evaluation::MatchedContribution {
+                        numerator: term.numerator.clone(),
+                        matched,
+                    });
+                    continue;
+                }
                 if let EvaluationMethod::RustRed(options) = method {
                     let key = (
                         matched.canonical_topology.get_integral().n_loops,
                         options.master_mode,
-                        propagator,
                     );
                     ordered
                         .entry(key)
@@ -5065,31 +5085,26 @@ impl VakintExpression {
                     complete.push(term.clone());
                 }
             }
-            let batch_total = ordered.len();
+            let batch_total = ordered.len() + p_ordered.len();
             for (batch_index, (key, contributions)) in ordered.into_iter().enumerate() {
                 if let Some(progress) = progress {
-                    let scope = if key.2 {
-                        format!("{}L / {:?} / p", key.0, key.1)
-                    } else {
-                        format!("{}L / {:?}", key.0, key.1)
-                    };
-                    progress.ordered_batch(batch_index, batch_total, &scope);
+                    progress.ordered_batch(
+                        batch_index,
+                        batch_total,
+                        &format!("{}L / {:?}", key.0, key.1),
+                    );
                 }
                 MonitorContext::native_phase(
                     observation.as_deref_mut(),
                     "ordered_batch_preparation",
                     None,
                 );
-                let raw = if key.2 {
-                    vakint.rustred_evaluate_p_ordered(settings, contributions, key.1, progress)?
-                } else {
-                    vakint.rustred_reduce_ordered(
-                        settings,
-                        contributions,
-                        observation.as_deref_mut(),
-                        progress,
-                    )?
-                };
+                let raw = vakint.rustred_reduce_ordered(
+                    settings,
+                    contributions,
+                    observation.as_deref_mut(),
+                    progress,
+                )?;
                 {
                     let _math = MathSpan::new();
                     reductions
@@ -5098,40 +5113,65 @@ impl VakintExpression {
                         .0 += raw;
                 }
             }
+            // The p batches return finalized values (no vacuum master substitution).
+            let p_first = batch_total - p_ordered.len();
+            for (index, ((loop_count, mode), (contributions, vectors))) in
+                p_ordered.into_iter().enumerate()
+            {
+                if let Some(progress) = progress {
+                    progress.ordered_batch(
+                        p_first + index,
+                        batch_total,
+                        &format!("{loop_count}L / {mode:?} / p"),
+                    );
+                }
+                MonitorContext::native_phase(
+                    observation.as_deref_mut(),
+                    "ordered_batch_preparation",
+                    None,
+                );
+                let numerator =
+                    vakint.rustred_evaluate_p_ordered(settings, contributions, mode, progress)?;
+                if mode == RustRedMasterMode::Numerical {
+                    numerical += numerator;
+                    numerical_vectors.extend(vectors);
+                } else if !numerator.is_zero() {
+                    complete.push(VakintTerm {
+                        integral: Atom::num(1),
+                        numerator,
+                        vectors: vectors.into_iter().collect(),
+                    });
+                }
+            }
             if batch_total != 0
                 && let Some(progress) = progress
             {
                 progress.ordered_batch(batch_total, batch_total, "all ordered batches");
             }
-            for ((loop_count, mode, propagator), (raw, vectors)) in reductions {
-                // The p backend returns finalized values.
-                let numerator = if propagator {
+            for ((loop_count, mode), (raw, vectors)) in reductions {
+                MonitorContext::native_phase(
+                    observation.as_deref_mut(),
+                    match mode {
+                        RustRedMasterMode::Retain => "retained_master_combination",
+                        RustRedMasterMode::Symbolic => "symbolic_master_substitution",
+                        RustRedMasterMode::Numerical => "numerical_master_substitution",
+                    },
+                    Some(raw.as_view()),
+                );
+                // Retention is combined by its catalogue owner. Substitution
+                // modes keep their existing precombination boundary.
+                let raw = if mode == RustRedMasterMode::Retain {
                     raw
                 } else {
-                    MonitorContext::native_phase(
-                        observation.as_deref_mut(),
-                        match mode {
-                            RustRedMasterMode::Retain => "retained_master_combination",
-                            RustRedMasterMode::Symbolic => "symbolic_master_substitution",
-                            RustRedMasterMode::Numerical => "numerical_master_substitution",
-                        },
-                        Some(raw.as_view()),
-                    );
-                    // Retention is combined by its catalogue owner. Substitution
-                    // modes keep their existing precombination boundary.
-                    let raw = if mode == RustRedMasterMode::Retain {
-                        raw
-                    } else {
-                        rustred_evaluation::combine_exact(raw)
-                    };
-                    vakint.finalize_rustred(
-                        raw,
-                        settings,
-                        loop_count,
-                        mode,
-                        observation.as_deref_mut(),
-                    )?
+                    rustred_evaluation::combine_exact(raw)
                 };
+                let numerator = vakint.finalize_rustred(
+                    raw,
+                    settings,
+                    loop_count,
+                    mode,
+                    observation.as_deref_mut(),
+                )?;
                 if mode == RustRedMasterMode::Numerical {
                     numerical += numerator;
                     numerical_vectors.extend(vectors);
