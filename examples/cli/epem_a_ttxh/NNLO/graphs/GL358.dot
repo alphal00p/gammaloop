@@ -1,4 +1,5 @@
 digraph GL358{
+    final_state = "H,t,t~|H,t,t~,g|H,t,t~,g,g|H,t,t~,d,d~|H,t,t~,ghG,ghG~";
     // Share the e13 one-loop cycle across soft-related cuts; its zero origin
     // certifies thin fibers. Native two-loop charts retain hard dual cancellation.
     threshold_counterterms = "

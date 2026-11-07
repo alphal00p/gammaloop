@@ -1,31 +1,106 @@
 mod test_utils;
-use test_utils::{compare_output, get_vakint};
-use vakint::VakintSettings;
+use symbolica::atom::AtomCore;
+use test_utils::{TestVakint, compare_output, get_vakint};
 use vakint::vakint_parse;
+use vakint::{TensorReductionMethod, Vakint, VakintSettings};
+
+const ONE_LOOP_TOPOLOGY: &str = "I1L(muvsq,1)";
+const TWO_LOOP_TOPOLOGY: &str = "I2L(mUVsq,1,2,1)";
+
+// Open rank-two and scalar terms have different Lorentz domains and must
+// be projected independently. Odd vacuum rank still vanishes as intended.
+const REDUCTION_1L_A: &[(&str, &str)] = &[
+    ("k(1,1)*k(1,2)", "-(2*ε-4)^-1*dot(k(1),k(1))*g(1,2)"),
+    ("k(1,3)*p(1,3)", "0"),
+];
+
+// Internal scalar powers are already contracted; their indices cannot be
+// reused as the free slots of a metric in the same product.
+const REDUCTION_1L_B: &[(&str, &str)] = &[
+    ("dot(k(1),k(1))^2*g(1,2)", "dot(k(1),k(1))^2*g(1,2)"),
+    (
+        "k(1,1)*k(1,2)*p(2,1)*p(3,2)",
+        "-(2*ε-4)^-1*dot(p(2),p(3))*dot(k(1),k(1))",
+    ),
+];
+
+const REDUCTION_2L_A: &[(&str, &str)] = &[
+    (
+        "dot(k(1),k(1))*dot(k(2),k(2))*g(1,2)",
+        "dot(k(1),k(1))*dot(k(2),k(2))*g(1,2)",
+    ),
+    ("k(2,3)*p(1,3)", "0"),
+    (
+        "k(1,1)*k(2,2)*p(2,1)*p(3,2)",
+        "-(2*ε-4)^-1*dot(p(2),p(3))*dot(k(1),k(2))",
+    ),
+];
+
+fn assert_exact_reductions(vakint: &TestVakint, topology: &str, cases: &[(&str, &str)]) {
+    for (numerator, expected) in cases {
+        let integral = vakint_parse!(format!("({numerator})*topo({topology})")).unwrap();
+        _ = compare_output(
+            vakint
+                .tensor_reduce(integral.as_view())
+                .as_ref()
+                .map(|a| a.as_view()),
+            vakint_parse!(format!("({expected})*topo({topology})")).unwrap(),
+        );
+    }
+}
+
+/// The default FeynKit backend need not reproduce FORM's term layout, but it
+/// must reproduce the pinned AlphaLoop outputs algebraically, without FORM.
+fn assert_feynkit_matches_pinned_reductions(topology: &str, cases: &[(&str, &str)]) {
+    let vakint = get_vakint(VakintSettings {
+        allow_unknown_integrals: false,
+        use_dot_product_notation: true,
+        form_exe_path: "/definitely/not/a/form/executable".into(),
+        ..VakintSettings::default()
+    });
+    assert_eq!(
+        vakint.settings.tensor_reduction_method,
+        TensorReductionMethod::FeynKit
+    );
+    for (numerator, expected) in cases {
+        let integral = vakint_parse!(format!("({numerator})*topo({topology})")).unwrap();
+        let expected = vakint_parse!(format!("({expected})*topo({topology})")).unwrap();
+        let actual = vakint.tensor_reduce(integral.as_view()).unwrap();
+        let actual = Vakint::convert_to_dot_notation(&vakint.settings, actual.as_view()).unwrap();
+        let difference = (&actual - &expected).together().cancel();
+        assert!(
+            difference.is_zero(),
+            "FeynKit differs from the pinned AlphaLoop reduction of {numerator}:\nFeynKit: {actual}\nAlphaLoop: {expected}\nDifference: {difference}"
+        );
+    }
+}
+
+#[test]
+fn feynkit_tensor_reduction_matches_pinned_1l_a() {
+    assert_feynkit_matches_pinned_reductions(ONE_LOOP_TOPOLOGY, REDUCTION_1L_A);
+}
+
+#[test]
+fn feynkit_tensor_reduction_matches_pinned_1l_b() {
+    assert_feynkit_matches_pinned_reductions(ONE_LOOP_TOPOLOGY, REDUCTION_1L_B);
+}
+
+#[test]
+fn feynkit_tensor_reduction_matches_pinned_2l_a() {
+    assert_feynkit_matches_pinned_reductions(TWO_LOOP_TOPOLOGY, REDUCTION_2L_A);
+}
 
 #[test]
 fn test_reduction_1l_a() {
     let vakint = get_vakint(VakintSettings {
         allow_unknown_integrals: false,
         use_dot_product_notation: true,
+        // Preserve these historical exact-output tests as coverage of the FORM backend.
+        tensor_reduction_method: TensorReductionMethod::AlphaLoop,
         ..VakintSettings::default()
     });
 
-    // Open rank-two and scalar terms have different Lorentz domains and must
-    // be projected independently. Odd vacuum rank still vanishes as intended.
-    for (numerator, expected) in [
-        ("k(1,1)*k(1,2)", "-(2*ε-4)^-1*dot(k(1),k(1))*g(1,2)"),
-        ("k(1,3)*p(1,3)", "0"),
-    ] {
-        let integral = vakint_parse!(format!("({numerator})*topo(I1L(muvsq,1))")).unwrap();
-        _ = compare_output(
-            vakint
-                .tensor_reduce(integral.as_view())
-                .as_ref()
-                .map(|a| a.as_view()),
-            vakint_parse!(format!("({expected})*topo(I1L(muvsq,1))")).unwrap(),
-        );
-    }
+    assert_exact_reductions(&vakint, ONE_LOOP_TOPOLOGY, REDUCTION_1L_A);
     let malformed = vakint_parse!("(k(1,1)*k(1,2)+k(1,3)*p(1,3))*topo(I1L(muvsq,1))").unwrap();
     assert!(matches!(
         vakint.tensor_reduce(malformed.as_view()),
@@ -38,27 +113,11 @@ fn test_reduction_1l_b() {
     let vakint = get_vakint(VakintSettings {
         allow_unknown_integrals: false,
         use_dot_product_notation: true,
+        tensor_reduction_method: TensorReductionMethod::AlphaLoop,
         ..VakintSettings::default()
     });
 
-    // Internal scalar powers are already contracted; their indices cannot be
-    // reused as the free slots of a metric in the same product.
-    for (numerator, expected) in [
-        ("dot(k(1),k(1))^2*g(1,2)", "dot(k(1),k(1))^2*g(1,2)"),
-        (
-            "k(1,1)*k(1,2)*p(2,1)*p(3,2)",
-            "-(2*ε-4)^-1*dot(p(2),p(3))*dot(k(1),k(1))",
-        ),
-    ] {
-        let integral = vakint_parse!(format!("({numerator})*topo(I1L(muvsq,1))")).unwrap();
-        _ = compare_output(
-            vakint
-                .tensor_reduce(integral.as_view())
-                .as_ref()
-                .map(|a| a.as_view()),
-            vakint_parse!(format!("({expected})*topo(I1L(muvsq,1))")).unwrap(),
-        );
-    }
+    assert_exact_reductions(&vakint, ONE_LOOP_TOPOLOGY, REDUCTION_1L_B);
 }
 
 #[test]
@@ -66,29 +125,11 @@ fn test_reduction_2l_a() {
     let vakint = get_vakint(VakintSettings {
         allow_unknown_integrals: false,
         use_dot_product_notation: true,
+        tensor_reduction_method: TensorReductionMethod::AlphaLoop,
         ..VakintSettings::default()
     });
 
-    for (numerator, expected) in [
-        (
-            "dot(k(1),k(1))*dot(k(2),k(2))*g(1,2)",
-            "dot(k(1),k(1))*dot(k(2),k(2))*g(1,2)",
-        ),
-        ("k(2,3)*p(1,3)", "0"),
-        (
-            "k(1,1)*k(2,2)*p(2,1)*p(3,2)",
-            "-(2*ε-4)^-1*dot(p(2),p(3))*dot(k(1),k(2))",
-        ),
-    ] {
-        let integral = vakint_parse!(format!("({numerator})*topo(I2L(mUVsq,1,2,1))")).unwrap();
-        _ = compare_output(
-            vakint
-                .tensor_reduce(integral.as_view())
-                .as_ref()
-                .map(|a| a.as_view()),
-            vakint_parse!(format!("({expected})*topo(I2L(mUVsq,1,2,1))")).unwrap(),
-        );
-    }
+    assert_exact_reductions(&vakint, TWO_LOOP_TOPOLOGY, REDUCTION_2L_A);
 }
 
 #[allow(dead_code)]
@@ -262,6 +303,69 @@ fn dot_conversion_preserves_existing_indices() {
 }
 
 #[test]
+fn dot_conversion_reserves_numeric_and_represented_source_slots() {
+    use vakint::Vakint;
+
+    let _ = &*vakint::symbols::S;
+    for source_slot in ["2", "spenso::mink(D,2)"] {
+        let source = vakint_parse!(format!("(a+b)^7*dot(p(3),k(1))*k(1,{source_slot})")).unwrap();
+        let converted = Vakint::convert_from_dot_notation(source.as_view());
+        let expected = vakint_parse!(format!(
+            "(a+b)^7*p(3,dot_dummy_ind(3))*k(1,dot_dummy_ind(3))*k(1,{source_slot})"
+        ))
+        .unwrap();
+        assert_eq!(converted, expected);
+        assert_eq!(
+            Vakint::convert_from_dot_notation(converted.as_view()),
+            converted
+        );
+    }
+}
+
+#[test]
+fn dot_conversion_binds_native_vector_representations() {
+    use vakint::Vakint;
+
+    let _ = &*vakint::symbols::S;
+    for vector in [
+        "spenso::δ(spenso::cind(1),spenso::mink(D))",
+        "v(5,spenso::mink(D))",
+    ] {
+        let source = vakint_parse!(format!("(a+b)^7*dot({vector},p(3))")).unwrap();
+        let indexed_vector = vector.replace("spenso::mink(D)", "spenso::mink(D,dot_dummy_ind(2))");
+        let expected =
+            vakint_parse!(format!("(a+b)^7*{indexed_vector}*p(3,dot_dummy_ind(2))")).unwrap();
+        let converted = Vakint::convert_from_dot_notation(source.as_view());
+        assert_eq!(converted, expected);
+        assert_eq!(
+            Vakint::convert_from_dot_notation(converted.as_view()),
+            converted
+        );
+    }
+}
+
+#[test]
+fn dot_conversion_retains_independent_scopes_in_factored_products() {
+    use symbolica::atom::AtomCore;
+    use vakint::Vakint;
+
+    let _ = vakint::symbols::S.dot;
+    let spectator = vakint_parse!("(alpha+beta)^11").unwrap();
+    let source = &spectator
+        * vakint_parse!("(dot(k(1),p(1))+dot(k(1),p(2)))^3*(dot(k(2),p(1))+dot(k(2),p(2)))^2")
+            .unwrap();
+    let converted = Vakint::convert_from_dot_notation(source.as_view());
+    assert!(converted.contains(&spectator));
+    assert_eq!(
+        Vakint::convert_from_dot_notation(converted.as_view()),
+        converted
+    );
+    let restored =
+        Vakint::convert_to_dot_notation(&VakintSettings::default(), converted.as_view()).unwrap();
+    assert_eq!(restored, source);
+}
+
+#[test]
 fn dot_conversion_preserves_reciprocal_powers() {
     use symbolica::atom::AtomCore;
     use vakint::Vakint;
@@ -425,7 +529,9 @@ fn tensor_reduction_preserves_symbolica_user_namespaces() {
             expected.to_canonical_string(),
         );
         assert!(
-            reduced.collect_factors() == expected.collect_factors(),
+            // Normalize the scalar epsilon denominator's sign; the exact
+            // namespace identity was independently checked above.
+            (reduced.clone() - &expected).together().is_zero(),
             "namespace round trip changed {coefficient}: actual={}, expected={}",
             reduced.to_canonical_string(),
             expected.to_canonical_string(),
@@ -468,12 +574,17 @@ fn whole_numerator_and_tensor_projection_preserve_structured_open_slots() {
             "{mode}: actual={actual}; expected={expected}"
         );
     }
-    let malformed = vakint_parse!("k(1,mu)^2*p(1,mu)*topo(I1L(muvsq,1))").unwrap();
+    // A tensor square closes its own pair of ports. Three distinct vectors
+    // instead expose the invalid three-way Einstein index intended here.
+    let malformed = vakint_parse!("k(1,mu)*p(1,mu)*p(2,mu)*topo(I1L(muvsq,1))").unwrap();
     for project_onto_tensor_integrals in [true, false] {
         vakint.settings.project_onto_tensor_integrals = project_onto_tensor_integrals;
-        assert!(matches!(
-            vakint.tensor_reduce(malformed.as_view()),
-            Err(vakint::VakintError::InvalidNumerator(_))
-        ));
+        let result = vakint.tensor_reduce(malformed.as_view());
+        assert!(
+            matches!(result, Err(vakint::VakintError::FeynKitTensorReduction(
+                feynkit_tensor::TensorReductionError::AmbiguousIndex { ref index, integrated: 1, outside: 2 }
+            )) if index == &vakint_parse!("mu").unwrap()),
+            "projection={project_onto_tensor_integrals}: {result:?}"
+        );
     }
 }

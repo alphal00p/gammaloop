@@ -7,6 +7,37 @@ and this project adheres to #link("https://semver.org/spec/v2.0.0.html")[Semanti
 
 == Unreleased
 
+- MathML output loads the full STIX Two Math font from a pinned CDN URL when
+  it is not installed locally. Expressions share the font download and contain
+  no embedded font bytes.
+- `symbolica.community.tensor.load_math_font()` returns a style element with
+  the bundled font for offline notebooks and standalone HTML exports. Display
+  it once before expressions in the same HTML document:
+
+  ```python
+  from IPython.display import HTML, display
+  from symbolica.community import tensor as spenso
+
+  display(HTML(spenso.load_math_font()))
+  ```
+
+  Keep this setup output when saving a notebook. Isolated output frames require
+  their own setup; normal online output needs no setup cell.
+
+- `TensorNetwork.trace` and `set_port_indices` raise `ValueError` when the two
+  ports they would contract both lie below the same power or function: the
+  network cannot express that contraction without materializing the
+  operation. A port whose partner lies outside the power or function is
+  contracted with the operation's result.
+- `TensorNetwork(expression)` admits a plain expression with compact,
+  index-free ports, such as `A(euc(2), euc(2))**3`, as `TensorExpression`
+  does: it has the same axes and components, or the same `ValueError`.
+  Previously the network kept it as an opaque rank-0 scalar.
+- `Tensor.to_numpy()` accepts finite numeric Expression literals, including
+  exact results of contracting numeric data. Other Expressions, such as `𝜋`,
+  still raise `TypeError` without being evaluated; literals outside the
+  float64 range raise `ValueError`.
+
 == #link("https://github.com/alphal00p/spenso/compare/spynso3-v0.1.1...spynso3-v0.1.2")[0.1.2] - 2026-01-14
 
 === Other

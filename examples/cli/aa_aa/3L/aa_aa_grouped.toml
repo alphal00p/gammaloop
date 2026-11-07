@@ -62,7 +62,7 @@ commands = [
   "remove processes -p aa_aa",
   """generate amp a a > a a | a t t~ g ghG ghG~ QCD==4 QED==4 [{3}]
         --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
-        --number-of-samples-for-numerator-comparisons 1
+        --number-of-samples-for-numerator-comparisons 5
         --fully-numerical-substitution-when-comparing-numerators=true
         --compare-canonized-numerator=false
         --symmetrize-initial-states=true --symmetrize-final-states=true

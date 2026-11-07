@@ -9,8 +9,8 @@ use crate::{
         surface::HybridSurfaceID,
     },
     graph::{
-        ExternalConnection, FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis,
-        parse::complete_group_parsing,
+        ExternalConnection, FeynmanGraph, FinalizedCut, Graph, GraphGroup, GroupId, LmbIndex,
+        LoopMomentumBasis, parse::complete_group_parsing,
     },
     integrands::{
         HasIntegrand,
@@ -35,7 +35,7 @@ use crate::{
             },
         },
     },
-    model::Model,
+    model::{Model, ParticleIdGammaLoopExt},
     momentum::{
         FourMomentum, Rotatable, Rotation, RotationMethod, ThreeMomentum,
         sample::{
@@ -48,7 +48,7 @@ use crate::{
         GenericThresholdCountertermEventInfo,
     },
     processes::{
-        self, CrossSectionCut, CrossSectionGraph, CutGroupData, CutGroupId, CutId,
+        self, CrossSectionGraph, CutGroupData, CutGroupId, CutId,
         CutThresholdCountertermAssociations, GraphGenerationStats, GraphGroupSelectionPlan,
         IteratedCtCollection, LUCounterTermData, LUThresholdHelperOutputs,
         ThresholdCountertermMetadataRegistry, ThresholdCountertermVariantId,
@@ -153,6 +153,8 @@ pub struct CrossSectionIntegrandData {
     // pub polarizations: Vec<Polarizations>,
     pub rotations: Option<Vec<Rotation>>,
     pub graph_terms: Vec<CrossSectionGraphTerm>,
+    /// Stored supergraph index of each compact runtime term.
+    pub source_graph_ids: Vec<usize>,
     pub n_incoming: usize,
     pub external_connections: Vec<ExternalConnection>,
     pub graph_group_structure: TiVec<GroupId, GraphGroup>,
@@ -241,6 +243,11 @@ impl CrossSectionIntegrand {
                 base_external_cache_id: self.data.base_external_cache_id,
                 rotations: self.data.rotations.clone(),
                 graph_terms,
+                source_graph_ids: old_graph_to_new_group
+                    .iter()
+                    .zip(&self.data.source_graph_ids)
+                    .filter_map(|(selected, source_id)| selected.map(|_| *source_id))
+                    .collect(),
                 n_incoming: self.data.n_incoming,
                 external_connections: self.data.external_connections.clone(),
                 graph_group_structure,
@@ -630,7 +637,7 @@ pub struct CrossSectionGraphTerm {
         BTreeMap<RepresentationMode, TiVec<CutGroupId, BTreeMap<CutCFFIndex, EvaluatorStack>>>,
     pub graph: Graph,
     pub cut_esurface: TiVec<CutId, Esurface>,
-    pub cuts: TiVec<CutId, CrossSectionCut>,
+    pub cuts: TiVec<CutId, FinalizedCut>,
     pub covariant_cut_representatives: BTreeMap<isize, isize>,
     pub topological_threshold_esurfaces: TiVec<TopologicalThresholdId, Esurface>,
     pub cut_threshold_associations: TiVec<CutId, CutThresholdCountertermAssociations>,
@@ -1609,7 +1616,7 @@ impl CrossSectionGraphTerm {
         t_scaling_solution: &NewtonIterationResult<T>,
         momentum_sample: &MomentumSample<T>,
         cut_id: CutId,
-        cut: &CrossSectionCut,
+        cut: &FinalizedCut,
     ) -> Result<GenericEvent<T>> {
         let rescaled_momenta =
             momentum_sample.rescaled_loop_momenta(&t_scaling_solution.solution, Subspace::None);
@@ -1663,7 +1670,14 @@ impl CrossSectionGraphTerm {
                 edge_data
                     .data
                     .particle()
-                    .map(|particle| (edge_index, particle.pdg_code))
+                    .map(|particle| {
+                        let pdg = particle
+                            .resolve(event_context.model)
+                            .pdg_code
+                            .try_into()
+                            .expect("PDG code must fit in an isize");
+                        (edge_index, pdg)
+                    })
                     .ok_or_else(|| {
                         eyre!(
                             "Initial-state cut edge {edge_index:?} in graph {} has no particle specifier",
@@ -1708,19 +1722,25 @@ impl CrossSectionGraphTerm {
                     momentum_sample.external_moms(),
                 );
 
-            let edge_pdg = d.data.particle().map(|p| p.pdg_code).ok_or_else(|| {
+            let particle = d.data.particle().ok_or_else(|| {
                 eyre!("Cut legs in Local Unitarity must have a particle specifier.")
             })?;
+            let edge_pdg: isize = particle
+                .resolve(event_context.model)
+                .pdg_code
+                .try_into()
+                .expect("PDG code must fit in an isize");
 
             let cut_pdg = match cut_flow {
                 Flow::Source => edge_pdg,
                 Flow::Sink => {
                     edge_spatial_momentum = -edge_spatial_momentum;
-                    event_context
-                        .model
-                        .get_particle_from_pdg(edge_pdg)
-                        .get_anti_particle(event_context.model)
+                    particle
+                        .antiparticle(event_context.model)
+                        .resolve(event_context.model)
                         .pdg_code
+                        .try_into()
+                        .expect("PDG code must fit in an isize")
                 }
             };
 
@@ -2593,13 +2613,14 @@ impl GraphTerm for CrossSectionGraphTerm {
         let pols = self.graph.param_builder.pairs.polarizations_values(
             &self.graph,
             &externals,
+            &[],
             settings.kinematics.externals.get_helicities(),
-        );
+        )?;
         self.graph.param_builder.pairs.warn_zero_polarizations(
             &self.graph,
             &externals,
             settings.kinematics.externals.get_helicities(),
-        );
+        )?;
 
         for (value_index, values) in self.graph.param_builder.values.iter_mut().enumerate() {
             let multiplicative_offset = value_index + 1;
@@ -3488,19 +3509,17 @@ impl GraphTerm for CrossSectionGraphTerm {
                 self.graph.initial_state_cut.iter_edges(&self.graph).count(),
             );
         let flux_factor = if context.settings.general.disable_flux_factor {
-            F::from_f64(1.0)
+            momentum_sample.one()
         } else {
             match momentum_sample.external_moms().len() {
                 1 => {
-                    momentum_sample.one()
-                        / (F::from_f64(2.0)
-                            * &momentum_sample
-                                .external_moms()
-                                .first()
-                                .as_ref()
-                                .unwrap()
-                                .temporal
-                                .value)
+                    let energy = momentum_sample.external_moms()[ExternalIndex::from(0)]
+                        .temporal
+                        .value
+                        .clone();
+                    let flux = feynkit_kinematics::InitialStateFlux::Decay { energy }
+                        .denominator(|value| value.sqrt());
+                    momentum_sample.one() / flux
                 }
                 2 => {
                     let mom_1 = &(momentum_sample.external_moms()[ExternalIndex::from(0)]);
@@ -3509,18 +3528,24 @@ impl GraphTerm for CrossSectionGraphTerm {
                         .graph
                         .initial_state_cut
                         .iter_edges(&self.graph)
-                        .map(|(_, e)| {
-                            e.data
-                                .mass
+                        .map(|(_, e)| match &e.data.mass {
+                            crate::graph::edge::EdgeMass::Zero => {
+                                Complex::new_re(momentum_sample.zero())
+                            }
+                            mass => mass
                                 .value(context.model, &self.param_builder)
-                                .unwrap()
+                                .expect("initial-state mass has a validated model value"),
                         })
                         .fold(Complex::new_re(momentum_sample.one()), |acc, mass| {
                             acc * &mass * &mass
                         })
                         .re;
 
-                    let f = F::from_f64(4.0) * (mom_1.dot(mom_2).square() - mass_factor).sqrt();
+                    let f = feynkit_kinematics::InitialStateFlux::Scattering {
+                        momentum_dot: mom_1.dot(mom_2),
+                        mass_squared_product: mass_factor,
+                    }
+                    .denominator(|value| value.sqrt());
 
                     momentum_sample.one() / f
                         * barn_conversion_factor(resolved_integral_unit, momentum_sample.one())

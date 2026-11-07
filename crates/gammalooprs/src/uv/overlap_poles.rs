@@ -2,6 +2,7 @@
 //! Never resolve retained graph numerators into the complete forest expression.
 
 use super::*;
+use crate::uv::approx::projected_4d::Local4dProjectionContext;
 use crate::{
     graph::FeynmanGraph,
     uv::{Integrands, approx::direct_3d::physical_full_h_fixture},
@@ -77,7 +78,13 @@ impl PhysicalOverlapInput {
             &generation.orientation_pattern,
             true,
         );
-        let mut forests = Wood::new(CutStructure::empty(&graph), &graph, &generation)?.unfold();
+        let mut forests = Wood::new(
+            CutStructure::empty(&graph),
+            &graph,
+            &graph.model,
+            &generation,
+        )?
+        .unfold();
         let [(compatible, cutset)] = forests.cuts.as_slice() else {
             return Err(eyre!("the overlap fixture must have one empty cut"));
         };
@@ -162,14 +169,17 @@ impl PhysicalOverlapInput {
             file.generation_settings = ?generation,
             "Generate the complete FullH signed forest; retain all numerator definitions"
         );
-        forests.compute(
-            &mut graph,
+        let model = graph.model.clone();
+        let mut context = Local4dProjectionContext::default();
+        forests.prepare_four_d(
+            &graph,
+            &model,
             crate::utils::vakint()?,
-            orientation,
             &generation.uv,
-            true,
-            &mut crate::uv::approx::projected_4d::Local4dProjectionContext::default(),
+            &mut context,
         )?;
+        forests.compute(&mut graph, orientation, &generation.uv, &mut context)?;
+        drop(context);
         let mut nodes = Vec::with_capacity(inventory.len());
         for (node, steps, forest_sign) in inventory {
             let operation = &forests.graph[node];
@@ -181,7 +191,21 @@ impl PhysicalOverlapInput {
             // FinalIntegrands::iter/export would resolve every numerator; do not use them.
             let integrands = computed
                 .final_integrands
-                .map_expressions(|atom| Ok(atom.collect_color()))?
+                .map_expressions(|atom| {
+                    let color = spenso::shadowing::TensorCollectFilter::Reps([
+                        idenso::representations::ColorAdjoint {}.into(),
+                        idenso::representations::ColorFundamental {}.into(),
+                        idenso::representations::ColorSextet {}.into(),
+                    ]);
+                    let cooking = idenso::CookSettings::indices()
+                        .with_mode(idenso::CookMode::ReversibleEncoding)
+                        .with_representation_payloads(true, true);
+                    let collected = idenso::tensor::SymbolicTensor::infer_indexed(
+                        cooking.try_cook(atom.as_view())?,
+                    )?
+                    .collect(color)?;
+                    Ok(cooking.uncook(collected.expression().as_view()))
+                })?
                 .into_integrands();
             assert_eq!(integrands.iter().count(), 1);
             assert!(
@@ -274,7 +298,9 @@ impl PhysicalOverlapInput {
                 .replace(function!(GS.den, W_.a_, W_.b_, W_.c_, W_.d_))
                 .with(W_.d_))
         };
-        integrands.fallible_map(finish)?.map_numerators(finish)
+        integrands.fallible_map(finish)?.map_numerators(|tensor| {
+            Ok(tensor.with_checked_expression(finish(tensor.expression())?)?)
+        })
     }
 }
 

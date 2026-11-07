@@ -1,0 +1,375 @@
+use std::collections::BTreeMap;
+
+use feynkit_kinematics::Kinematics;
+use spenso::structure::representation::{Minkowski, RepName};
+use symbolica::atom::{Atom, AtomCore, AtomView};
+use symbolica::id::Pattern;
+
+use super::{IntegralFamily, IntegralFamilyError};
+use crate::{DiagramError, EdgeId, FeynmanDiagram, symbols};
+
+impl IntegralFamily {
+    /// Complete the diagram's internal propagators with auxiliary scalar products.
+    ///
+    /// Propagators retain their edge order and stored momentum routing, as in
+    /// [`FeynmanDiagram::integral_family`]. Preferred independent dot products
+    /// are tried in order; redundant entries are skipped and automatic scalar
+    /// products fill any remaining directions. Pass an empty slice to choose
+    /// the completion automatically. Dependent propagators must be extracted
+    /// and partial-fractioned separately before completing their families.
+    pub fn from_diagram(
+        diagram: &FeynmanDiagram,
+        kinematics: &Kinematics,
+        independent_dot_products: &[Atom],
+    ) -> Result<Self, DiagramError> {
+        diagram.integral_family(kinematics, independent_dot_products)
+    }
+}
+
+impl FeynmanDiagram {
+    /// Complete the graph propagators with preferred or automatic scalar products.
+    ///
+    /// Physical propagators retain their edge order. Candidates are tried in
+    /// order, skipping redundant entries; automatic products fill any remaining
+    /// directions. Pass an empty slice for automatic completion. Dependent
+    /// propagators must be extracted with [`Self::propagator_family`] and
+    /// partial-fractioned before completing the resulting families.
+    pub fn integral_family(
+        &self,
+        kinematics: &Kinematics,
+        independent_dot_products: &[Atom],
+    ) -> Result<IntegralFamily, DiagramError> {
+        let family = self.propagator_family(kinematics)?;
+        Ok(family.complete(independent_dot_products)?)
+    }
+
+    /// Build an integral family from the diagram's internal quadratic propagators.
+    ///
+    /// Denominators follow ascending internal edge IDs, retaining repeated
+    /// propagators and bridges. The stored loop routing supplies momentum names;
+    /// dependent external coordinates are eliminated by that same routing.
+    /// External carriers and dummy edges are excluded by the shared denominator
+    /// builder. Symbolic masses follow its conventions, including UFO ZERO.
+    /// Widths, prescriptions and custom UFO denominator formulas are not inferred.
+    /// Tree diagrams have no loop-integral family and return an error.
+    /// Use [`IntegralFamily::from_diagram`] to append auxiliary scalar products
+    /// and obtain a complete independent denominator basis.
+    pub fn propagator_family(
+        &self,
+        kinematics: &Kinematics,
+    ) -> Result<IntegralFamily, DiagramError> {
+        let denominators = self
+            .ordered_propagators(kinematics)?
+            .into_iter()
+            .map(|(_, denominator)| denominator)
+            .collect();
+        let basis = self.loop_momentum_basis();
+        let loops = (0..basis.loop_edges.len())
+            .map(|i| symbols::loop_momentum().call(i))
+            .collect();
+        let externals = basis
+            .external_edges
+            .iter()
+            .enumerate()
+            .filter(|(_, edge)| !basis.dependent_externals.contains(edge))
+            .map(|(i, _)| symbols::external_momentum().call(i))
+            .collect();
+        Ok(IntegralFamily::new(
+            loops,
+            externals,
+            denominators,
+            kinematics,
+        )?)
+    }
+
+    /// Extract internal quadratic propagators together with their source edge IDs.
+    ///
+    /// Entries follow ascending edge IDs and use the same routing, masses and
+    /// exclusions as [`Self::propagator_family`]. Repeated propagators and
+    /// bridges retain separate entries, allowing consumers to preserve graph
+    /// provenance without reconstructing denominator-selection rules.
+    pub fn ordered_propagators(
+        &self,
+        kinematics: &Kinematics,
+    ) -> Result<Vec<(EdgeId, Atom)>, DiagramError> {
+        let basis = self.loop_momentum_basis();
+        if basis.loop_edges.is_empty() {
+            return Err(IntegralFamilyError::NoLoops.into());
+        }
+        let loops = (0..basis.loop_edges.len())
+            .map(|i| symbols::loop_momentum().call(i))
+            .collect::<Vec<_>>();
+        let externals = basis
+            .external_edges
+            .iter()
+            .enumerate()
+            .filter(|(_, edge)| !basis.dependent_externals.contains(edge))
+            .map(|(i, _)| symbols::external_momentum().call(i))
+            .collect::<Vec<_>>();
+        let kin = kinematics
+            .clone()
+            .with_momenta(loops.iter().chain(&externals).cloned())
+            .map_err(IntegralFamilyError::from)?;
+        let annotated = self.denominator_of_in_dimension(
+            &self.internal_subgraph(),
+            &BTreeMap::new(),
+            kin.dimension(),
+        )?;
+        let factors = match annotated.as_view() {
+            AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+            factor => vec![factor],
+        };
+        let rep = Minkowski {}.new_rep(kin.dimension());
+        let mut denominators = BTreeMap::new();
+        for factor in factors {
+            let AtomView::Fun(propagator) = factor else {
+                return Err(DiagramError::Invariant {
+                    operation: "extracting an integral family",
+                    message: "expected a tagged propagator from the shared denominator builder"
+                        .into(),
+                });
+            };
+            let arguments = propagator.iter().map(|a| a.to_owned()).collect::<Vec<_>>();
+            if propagator.get_symbol() != symbols::denominator() || arguments.len() != 4 {
+                return Err(DiagramError::Invariant {
+                    operation: "extracting an integral family",
+                    message: "expected a four-argument propagator annotation".into(),
+                });
+            }
+            let edge = usize::try_from(arguments[0].as_view()).map_err(|error| {
+                DiagramError::Invariant {
+                    operation: "extracting an integral family",
+                    message: format!("invalid propagator edge ID: {error}"),
+                }
+            })?;
+            let momentum = basis.route_expression(&arguments[1]);
+            let square = kin
+                .scalar_product(&momentum, &momentum)
+                .map_err(IntegralFamilyError::from)?;
+            // Replace only the quadratic scalar product in the shared formula,
+            // so propagator construction and model mass conventions stay owned
+            // by denominator_of_in_dimension rather than a second implementation.
+            let original_square = rep.inner_product(&arguments[1], &arguments[1]);
+            let denominator = arguments[3]
+                .replace(Pattern::Literal(original_square))
+                .with(Pattern::Literal(square));
+            denominators.insert(EdgeId(edge), denominator);
+        }
+        Ok(denominators.into_iter().collect())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use feynkit_model::Model;
+
+    #[test]
+    fn ordered_propagators_retain_edge_provenance() {
+        let diagram = FeynmanDiagram::from_dot(
+            Model::phi3(),
+            r#"digraph bubble {
+                incoming [style=invis]; outgoing [style=invis];
+                incoming -> a [id=0, particle="phi"];
+                b -> outgoing [id=1, particle="phi"];
+                a -> b [id=2, particle="phi", lmb_id=0];
+                b -> a [id=3, particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        let kinematics = Kinematics::new();
+        let entries = diagram.ordered_propagators(&kinematics).unwrap();
+        assert_eq!(
+            entries.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+            vec![EdgeId(2), EdgeId(3)]
+        );
+        let loop_momentum = symbols::loop_momentum().call(0);
+        let mass = Atom::var(symbolica::symbol!("UFO::mass"));
+        assert_eq!(
+            entries[0].1,
+            kinematics
+                .scalar_product(&loop_momentum, &loop_momentum)
+                .unwrap()
+                - mass.pow(2)
+        );
+        let family = diagram.propagator_family(&kinematics).unwrap();
+        assert_eq!(
+            entries
+                .into_iter()
+                .map(|(_, value)| value)
+                .collect::<Vec<_>>(),
+            family.denominators()
+        );
+    }
+
+    #[test]
+    fn propagator_kinematics_use_literal_symbols() {
+        let diagram = FeynmanDiagram::from_dot(
+            Model::phi3(),
+            r#"digraph bubble {
+                ext [style=invis];
+                ext -> a [particle="phi"];
+                a -> b [particle="phi", lmb_id=0];
+                a -> b [particle="phi"];
+                b -> ext [particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        // Trailing underscores are legal scalar and tensor-dimension names,
+        // not a request to interpret the replacement as a wildcard pattern.
+        let dimension = symbolica::symbol!("propagator_dimension_").to_atom();
+        let invariant = symbolica::symbol!("propagator_invariant_").to_atom();
+        let unconstrained = diagram
+            .propagator_family(&Kinematics::in_dimension(&dimension).unwrap())
+            .unwrap();
+        let external = &unconstrained.external_momenta()[0];
+        let kinematics = Kinematics::in_dimension(&dimension)
+            .unwrap()
+            .with_mass_squared(external, invariant.clone())
+            .unwrap();
+        let family = diagram.propagator_family(&kinematics).unwrap();
+        assert_eq!(family.denominators().len(), 2);
+        assert_eq!(family.kinematics().dimension(), kinematics.dimension());
+        assert!(family.denominators().iter().any(|d| d.contains(&invariant)));
+        let completed = diagram.integral_family(&kinematics, &[]).unwrap();
+        assert!(completed.is_complete() && completed.is_independent());
+        assert_eq!(completed.denominators(), family.denominators());
+    }
+
+    #[test]
+    fn propagator_extraction_treats_wildcard_dimensions_as_literal_data() {
+        let diagram = FeynmanDiagram::from_dot(
+            Model::phi4(),
+            r#"digraph {
+                a -> a [particle="phi", lmb_id=0];
+                a -> a [particle="phi", lmb_id=1];
+            }"#,
+        )
+        .unwrap();
+        let dimension = Atom::var(symbolica::symbol!("feynkit_graph_test::dimension_"));
+        let kinematics = Kinematics::in_dimension(&dimension).unwrap();
+        let family = diagram.propagator_family(&kinematics).unwrap();
+        let mass = Atom::var(symbolica::symbol!("UFO::mass"));
+        let expected = (0..2)
+            .map(|index| {
+                let momentum = symbols::loop_momentum().call(index);
+                family
+                    .kinematics()
+                    .scalar_product(&momentum, &momentum)
+                    .unwrap()
+                    - mass.pow(2)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(family.denominators(), expected);
+        assert!(family.is_independent());
+    }
+
+    #[test]
+    fn propagator_extraction_keeps_underscore_named_invariants_literal() {
+        let diagram = FeynmanDiagram::from_dot(
+            Model::phi3(),
+            r#"digraph {
+                incoming [style=invis]; outgoing [style=invis];
+                incoming -> a [id=0, particle="phi"];
+                b -> outgoing [id=1, particle="phi"];
+                a -> b [id=2, particle="phi", lmb_id=0];
+                b -> a [id=3, particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        let invariant = symbolica::symbol!("feynkit_graph_test::invariant_");
+        let kinematics = Kinematics::new()
+            .with_mass_squared(&symbols::external_momentum().call(1), Atom::var(invariant))
+            .unwrap();
+        let family = diagram.propagator_family(&kinematics).unwrap();
+        assert_eq!(family.denominators().len(), 2);
+        assert!(family.is_complete());
+        assert_eq!(
+            family
+                .denominators()
+                .iter()
+                .filter(|denominator| denominator.get_all_symbols(false).contains(&invariant))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn dependent_graph_propagators_remain_available_for_partial_fractioning() {
+        let diagram = FeynmanDiagram::from_dot(
+            Model::phi4(),
+            r#"digraph tadpole_insertion {
+                ext [style=invis];
+                ext -> a [particle="phi"];
+                a -> ext [particle="phi"];
+                a -> b [particle="phi"];
+                a -> b [particle="phi"];
+                b -> b [particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        let kin = Kinematics::new();
+        let raw = diagram.propagator_family(&kin).unwrap();
+        assert_eq!(raw.denominators().len(), 3);
+        assert!(!raw.is_independent());
+        assert!(matches!(
+            diagram.integral_family(&kin, &[]),
+            Err(DiagramError::IntegralFamily(
+                IntegralFamilyError::Dependent { .. }
+            ))
+        ));
+    }
+
+    #[test]
+    fn diagram_family_completes_sunrise_with_preferred_products() {
+        let diagram = FeynmanDiagram::from_dot(
+            Model::phi4(),
+            r#"digraph sunrise {
+                ext [style=invis];
+                ext -> a [particle="phi"];
+                a -> b [particle="phi", lmb_id=0];
+                a -> b [particle="phi", lmb_id=1];
+                a -> b [particle="phi"];
+                b -> ext [particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        let kin = Kinematics::new();
+        let raw = diagram.propagator_family(&kin).unwrap();
+        assert_eq!(raw.denominators().len(), 3);
+        assert_eq!(raw.scalar_products().len(), 5);
+        assert!(!raw.is_complete());
+        let automatic = diagram.integral_family(&kin, &[]).unwrap();
+        assert!(automatic.is_complete() && automatic.is_independent());
+        assert_eq!(&automatic.denominators()[..3], raw.denominators());
+
+        let products = raw
+            .loop_momenta()
+            .iter()
+            .map(|k| {
+                raw.kinematics()
+                    .scalar_product(k, &raw.external_momenta()[0])
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+        let preferred = diagram.integral_family(&kin, &products).unwrap();
+        let constructed = IntegralFamily::from_diagram(&diagram, &kin, &products).unwrap();
+        assert_eq!(preferred.denominators(), constructed.denominators());
+        assert_eq!(&preferred.denominators()[..3], raw.denominators());
+        assert_eq!(&preferred.denominators()[3..], products);
+        assert!(preferred.is_complete() && preferred.is_independent());
+        let partial = IntegralFamily::from_diagram(
+            &diagram,
+            &kin,
+            &[raw.denominators()[0].clone(), products[1].clone()],
+        )
+        .unwrap();
+        assert_eq!(partial.denominators()[3], products[1]);
+        assert!(partial.is_complete() && partial.is_independent());
+
+        // Validate even candidates after the basis is already complete.
+        let mut invalid = products;
+        invalid.push(invalid[0].pow(2));
+        assert!(IntegralFamily::from_diagram(&diagram, &kin, &invalid).is_err());
+    }
+}

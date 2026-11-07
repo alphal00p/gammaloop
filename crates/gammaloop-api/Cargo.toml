@@ -34,10 +34,14 @@ console = "0.16.3"
 crossterm = "0.29"
 dirs = { workspace = true }
 eyre = { workspace = true }
+feynkit-cff = { workspace = true }
+feynkit-generator = { workspace = true }
+feynkit-graph = { workspace = true }
 figment = { version = "0.10.19", features = ["json"] }
 gammaloop-tracing-filter = { workspace = true, features = ["clap"] }
 gammalooprs = { workspace = true }
 three-dimensional-reps = { workspace = true, features = ["display", "cli"] }
+feynkit-ufo = { workspace = true, optional = true }
 idenso = { workspace = true, features = ["native"] }
 include_dir = { workspace = true }
 indicatif = { workspace = true }
@@ -79,7 +83,7 @@ features = [
 # PyO3: optional for embedding. Auto-init at runtime.
 [dependencies.pyo3]
 workspace = true
-# The abi3 feature changes compatibility without activating Python support.
+# Stable ABI features are now feature-gated via abi3 feature
 features = ["auto-initialize", "eyre"]
 optional = true
 
@@ -130,11 +134,14 @@ walkdir = { workspace = true }
 # Keep Python optional unless explicitly enabled.
 default = ["cli"]
 cli = ["dep:clap_complete", "dep:clap_complete_nushell", "dep:reedline"]
+no_pyo3 = []
 extension-module = [
   "python",
+  "dep:pyo3",
+  "gammalooprs/extension-module",
   "pyo3/extension-module"
 ]
-abi3 = ["pyo3?/abi3-py37"]
+abi3 = ["pyo3?/abi3", "pyo3?/abi3-py37"]
 python = [
   "dep:pyo3-stub-gen-derive",
   "dep:numpy",
@@ -148,4 +155,4 @@ python-stubs = [
   "gammalooprs/python-stubs",
   "python",
 ]
-ufo-import = ["dep:pyo3"]
+ufo-import = ["dep:feynkit-ufo", "dep:pyo3", "pyo3/auto-initialize"]

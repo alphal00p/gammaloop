@@ -19,7 +19,7 @@ trait. This can be done manually or through a [`Network`](network::Network) with
 a selected contraction strategy.
 
 [`DataTensor`](tensors::data::DataTensor) stores either dense or sparse data.
-With the `symbolica` feature, [`MixedTensor`](tensors::parametric::MixedTensor)
+With the `shadowing` feature, [`MixedTensor`](tensors::parametric::MixedTensor)
 stores heterogeneous numeric and parametric tensors.
 
 */

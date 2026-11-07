@@ -1,5 +1,12 @@
 use super::utils::*;
 use super::*;
+use gammaloop_api::StateLoadOption;
+use gammaloop_api::state::{CommandHistory, State};
+use std::env;
+use std::fs;
+use std::process::Command;
+
+use toml::Value as TomlValue;
 
 fn configure_differential_leading_jet_observable(
     cli: &mut gammaloop_integration_tests::CLIState,
@@ -246,9 +253,35 @@ mod failing {
 
 #[test]
 fn lu_differential_json_observables_resume_from_workspace() -> Result<()> {
+    const RESUME_CHILD_STATE: &str = "GAMMALOOP_DIFFERENTIAL_RESUME_CHILD_STATE";
+    const TEST_NAME: &str = "differential::lu_differential_json_observables_resume_from_workspace";
+    if let Some(state_path) = env::var_os(RESUME_CHILD_STATE) {
+        let state_path = PathBuf::from(state_path);
+        let mut loaded = StateLoadOption {
+            state_folder: Some(state_path.clone()),
+            ..Default::default()
+        }
+        .load()?;
+        assert!(
+            loaded.state_load_summary.is_some(),
+            "child must load the saved state"
+        );
+        // Use the same startup and parsed command session as the CLI. A fresh
+        // process must pass the workspace guard without regenerating integrands.
+        let command = CommandHistory::from_raw_string(&format!(
+            "integrate -i default -c 1 -w '{}'",
+            state_path.join("resume_workspace").display(),
+        ))?;
+        loaded.cli_session().execute_command(command)?;
+        return Ok(());
+    }
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut cli =
         setup_sm_differential_lu_cli("lu_differential_json_observables_resume_from_workspace")?;
+    // Carry nonzero weights through the full-state and workspace round trips.
+    cli.run_command(
+        r#"set process kv kinematics.externals='{"type":"constant","data":{"momenta":[[32.0,0.0,0.0,32.0],[32.0,0.0,0.0,-32.0]],"helicities":[1,-1]}}'"#,
+    )?;
     configure_differential_leading_jet_observable(&mut cli)?;
     configure_differential_leading_jet_selector(&mut cli)?;
     cli.run_command(
@@ -288,6 +321,36 @@ fn lu_differential_json_observables_resume_from_workspace() -> Result<()> {
         std::fs::read(gammalooprs::integrate::workspace_state_path(&workspace))?;
     let before_resume =
         gammalooprs::observables::ObservableSnapshotBundle::from_json_file(&final_file)?;
+    assert!(before_resume.histograms.values().any(|histogram| {
+        histogram
+            .bins
+            .iter()
+            .chain([&histogram.underflow_bin, &histogram.overflow_bin])
+            .any(|bin| bin.sum_weights_squared > 0.0)
+    }));
+
+    let integrand_fingerprint = |state: &State| {
+        state
+            .process_list
+            .get_integrand(process_id, &slot_meta.integrand_name)?
+            .require_generated()?
+            .resume_fingerprint()
+    };
+    let fingerprint_before_save = integrand_fingerprint(&cli.state)?;
+
+    // Resume the completed workspace through a real format-23 full-state round
+    // trip, preserving the existing event/statistics and checkpoint assertions.
+    cli.state
+        .save(&cli.cli_settings.state.folder, true, false)?;
+    assert_eq!(integrand_fingerprint(&cli.state)?, fingerprint_before_save);
+    let manifest: TomlValue = toml::from_str(&fs::read_to_string(
+        cli.cli_settings.state.folder.join("state_manifest.toml"),
+    )?)?;
+    assert_eq!(manifest["version"].as_integer(), Some(23));
+    cli.state = State::load(cli.cli_settings.state.folder.clone(), None, None)?;
+    assert_eq!(integrand_fingerprint(&cli.state)?, fingerprint_before_save);
+    cli.state.activate_loaded_integrand_backends(false)?;
+    assert_eq!(integrand_fingerprint(&cli.state)?, fingerprint_before_save);
 
     Integrate {
         process: vec![],
@@ -299,6 +362,18 @@ fn lu_differential_json_observables_resume_from_workspace() -> Result<()> {
         ..Default::default()
     }
     .run(&mut cli.state, &cli.cli_settings)?;
+
+    let output = Command::new(env::current_exe()?)
+        .args(["--exact", TEST_NAME, "--nocapture"])
+        .env(RESUME_CHILD_STATE, &cli.cli_settings.state.folder)
+        .output()?;
+    assert!(
+        output.status.success(),
+        "fresh-process workspace resume failed: {}\nstdout:\n{}\nstderr:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
 
     let after_resume =
         gammalooprs::observables::ObservableSnapshotBundle::from_json_file(&final_file)?;

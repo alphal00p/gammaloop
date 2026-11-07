@@ -3,12 +3,11 @@
 #let linnet-releases = [
 = Linnet versions
 
-This page renders the canonical
-#source-link("crates/linnet/CHANGELOG.typ", label: "Linnet changelog source") as part of the
-Linnet website, navigation, and search.
+Release notes: #source-link("crates/linnet/CHANGELOG.typ", label: "Linnet changelog source").
 
 #[
   #show heading.where(level: 1): it => none
+  #show "All notable changes to this project will be documented in this file.": none
   #include "/crates/linnet/CHANGELOG.typ"
 ]
 ]

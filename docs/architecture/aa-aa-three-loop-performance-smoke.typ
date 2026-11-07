@@ -201,6 +201,11 @@ The grouped card is `examples/cli/aa_aa/3L/aa_aa_grouped.toml`. The default symb
 --compare-canonized-numerator=false
 ```
 
+The grouped card now compares five fully numerical samples. A fully numerical sample of
+a projected numerator is a single number, so with one sample scalar rescaling accepts any two
+nonzero numerators that share a topology bucket and stores their quotient at that point as the
+group ratio. The capture below used one sample.
+
 === Grouped Diagram Generation
 
 At capture time, the grouped feyngen pass completed and saved reusable DOT/state artifacts. Only

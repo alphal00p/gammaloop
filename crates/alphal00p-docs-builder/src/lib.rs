@@ -3440,10 +3440,9 @@ impl SiteBuilder {
         let source = fs::read_to_string(&path)?;
         let mut body = extract_html_body(&source)?.to_owned();
         body = body.replace("<nav><a href=\"../../\">Documentation home</a></nav>", "");
+        promote_heading_hierarchy(&mut body);
         if page.route.is_empty() {
             body = format!("{}{body}", product_hero(product));
-        } else {
-            promote_heading_hierarchy(&mut body);
         }
         let docs_root = page_root_prefix(&page.route);
         body = rewrite_page_links(&body, &docs_root)?;
@@ -6940,7 +6939,7 @@ fn render_api_overloads(
         if let Some(docs) = &overload.docs {
             body.push_str(&render_doc_text_omitting_parameters(
                 docs,
-                6,
+                (overload_heading + 1).clamp(5, 6),
                 overload
                     .members
                     .iter()
@@ -7296,19 +7295,33 @@ fn render_python_example(content: &[&str]) -> String {
     }
 
     if content
-        .first()
-        .is_some_and(|line| line.trim_start().starts_with(">>>"))
+        .iter()
+        .any(|line| line.trim_start().starts_with(">>>"))
     {
-        let source = content
-            .iter()
-            .filter_map(|line| {
-                let line = line.trim_start();
-                line.strip_prefix(">>>")
-                    .or_else(|| line.strip_prefix("..."))
-                    .map(|line| line.strip_prefix(' ').unwrap_or(line))
+        return content
+            .split(|line| line.trim().is_empty())
+            .map(|paragraph| {
+                let code_start = paragraph
+                    .iter()
+                    .position(|line| line.trim_start().starts_with(">>>"));
+                let Some(code_start) = code_start else {
+                    return render_prose_blocks(paragraph, DocFormat::PythonDocstring);
+                };
+                let mut rendered =
+                    render_prose_blocks(&paragraph[..code_start], DocFormat::PythonDocstring);
+                let source = paragraph[code_start..]
+                    .iter()
+                    .filter_map(|line| {
+                        let line = line.trim_start();
+                        line.strip_prefix(">>>")
+                            .or_else(|| line.strip_prefix("..."))
+                            .map(|line| line.strip_prefix(' ').unwrap_or(line))
+                    })
+                    .collect::<Vec<_>>();
+                rendered.push_str(&render_code(&source));
+                rendered
             })
-            .collect::<Vec<_>>();
-        return render_code(&source);
+            .collect();
     }
     if let Some(code_start) = content
         .iter()
@@ -7318,7 +7331,7 @@ fn render_python_example(content: &[&str]) -> String {
         rendered.push_str(&render_code(&content[code_start..]));
         return rendered;
     }
-    render_code(content)
+    render_prose_blocks(content, DocFormat::PythonDocstring)
 }
 
 fn render_doc_text(docs: &alphal00p_docs_schema::DocText, heading_level: usize) -> String {
@@ -7343,7 +7356,16 @@ fn render_doc_text_omitting_parameters(
         );
     }
 
-    let render_paragraphs = |lines: &[&str]| render_prose_blocks(lines, docs.format);
+    let render_paragraphs = |lines: &[&str]| {
+        if lines
+            .iter()
+            .any(|line| line.trim_start().starts_with(">>>"))
+        {
+            render_python_example(lines)
+        } else {
+            render_prose_blocks(lines, docs.format)
+        }
+    };
 
     let lines = docs.body.lines().collect::<Vec<_>>();
     let mut sections = vec![];
@@ -10270,7 +10292,7 @@ mod tests {
             (None, None),
         );
 
-        assert_eq!(module, "symbolica.community.spenso");
+        assert_eq!(module, "symbolica.community.tensor");
         assert_ne!(module, catalog.component.package);
         assert_eq!(item.required_features.as_slice(), ["python-stubs"]);
         assert!(rendered.contains(&format!("<p><code>{module}</code> · version")));
@@ -10444,6 +10466,21 @@ mod tests {
         ));
         assert!(!rendered.contains("&gt;&gt;&gt;"));
         assert!(!rendered.contains("\n3</code>"));
+    }
+
+    #[test]
+    fn python_doctests_without_an_examples_heading_render_as_source() {
+        let rendered = render_doc_text(
+            &alphal00p_docs_schema::DocText::new(
+                DocFormat::PythonDocstring,
+                "Call with a value:\n\n>>> value = 2\n>>> value * value\n4",
+            ),
+            3,
+        );
+
+        assert!(rendered.contains("<p>Call with a value:</p>"));
+        assert!(rendered.contains("<code data-lang=\"python\">value = 2\nvalue * value</code>"));
+        assert!(!rendered.contains("&gt;&gt;&gt;"));
     }
 
     #[test]
@@ -11873,6 +11910,56 @@ mod tests {
             python_item_disambiguated_segment(&function, &function.name),
             "edge-function"
         );
+    }
+
+    #[test]
+    fn python_overload_doc_sections_follow_their_parent_heading() {
+        use alphal00p_docs_schema::DocText;
+
+        let mut overload = DocMember::new("choose", DocMemberKind::Overload);
+        overload.signature = Some("def choose(value: int) -> int:".to_owned());
+        overload.docs = Some(DocText::new(
+            DocFormat::PythonDocstring,
+            "Choose one value.\n\nParameters\n----------\nvalue : int\n    Input value.\n\nReturns\n-------\nint\n    Selected value.\n\nNotes\n-----\nKeep `value` unchanged.\n\nExamples\n--------\n```python\n# This stays source.\nvalue = 1 < 2\n```",
+        ));
+        let mut parameter = DocMember::new("value", DocMemberKind::Parameter);
+        parameter.signature = Some("int".to_owned());
+        parameter.docs = Some(DocText::new(DocFormat::PythonDocstring, "Input value."));
+        overload.members.push(parameter);
+        let headings = Regex::new(r"<h([1-6])>").unwrap();
+
+        // Free functions and nested methods have different overload parents.
+        for (parent_level, expected_levels, section_level) in
+            [(2, [3, 4, 5, 5, 5, 5], 5), (3, [4, 5, 6, 6, 6, 6], 6)]
+        {
+            let mut rendered = String::new();
+            render_api_overloads(
+                std::slice::from_ref(&overload),
+                "choose",
+                parent_level,
+                &BTreeMap::new(),
+                &mut rendered,
+            );
+            let actual_levels = headings
+                .captures_iter(&rendered)
+                .map(|capture| capture[1].parse::<usize>().unwrap())
+                .collect::<Vec<_>>();
+            assert_eq!(actual_levels, expected_levels);
+            for title in ["Returns", "Notes", "Examples", "Parameters"] {
+                assert!(
+                    rendered.contains(&format!("<h{section_level}>{title}</h{section_level}>"))
+                );
+            }
+            assert_eq!(rendered.matches(">Parameters</h").count(), 1);
+            assert!(rendered.contains("choose(value: int)"));
+            assert!(rendered.contains("<p>Choose one value.</p>"));
+            assert!(rendered.contains("Selected value."));
+            assert!(rendered.contains("Input value."));
+            assert!(rendered.contains("Keep <code>value</code> unchanged."));
+            assert!(rendered.contains(
+                "<pre><code data-lang=\"python\"># This stays source.\nvalue = 1 &lt; 2</code></pre>"
+            ));
+        }
     }
 
     #[test]

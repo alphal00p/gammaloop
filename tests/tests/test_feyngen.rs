@@ -1,10 +1,17 @@
 use color_eyre::{Result, eyre::eyre};
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Debug;
 use std::fs;
+use std::iter::once;
 
-use gammaloop_api::state::SyncSettings;
-use gammalooprs::feyngen::diagram_generator::evaluate_overall_factor;
-use gammalooprs::feyngen::diagram_generator::evaluate_sign_origin;
+use feynkit_graph::NumeratorInterface;
+use feynkit_graph::expressions::evaluate_overall_factor;
+use gammaloop_api::commands::inspect::Inspect;
+use gammaloop_api::state::{GraphImportOptions, ProcessRef, SyncSettings};
+use gammalooprs::graph::{FinalizedCut, FinalizedTopologyThresholdCandidate, Graph};
+use gammalooprs::integrands::process::ProcessIntegrand;
 use gammalooprs::integrands::process::amplitude::load::StandaloneEvaluatorArchive;
+use gammalooprs::integrands::process::cross_section::CrossSectionIntegrand;
 use gammalooprs::integrands::process::cross_section::load::StandaloneCrossSectionArchive;
 use gammalooprs::processes::{
     CycleSignature, GraphGroupSelectionSpec, GraphSelectionSignatureInventory, ProcessCollection,
@@ -12,12 +19,20 @@ use gammalooprs::processes::{
     SelectionPolarity, StandaloneDataFormat, StandaloneExportMode, StandaloneExportSettings,
     VertexSignature,
 };
+use gammalooprs::uv::uv_graph::UVE;
+use idenso::{CookMode, CookSettings};
+use linnet::half_edge::involution::{Flow, HedgePair};
+use symbolica::graph::Graph as ColoredGraph;
 
-use gammaloop_integration_tests::{CLIState, get_test_cli, get_tests_workspace_path, run_commands};
+use gammaloop_integration_tests::{
+    CLIState, SERIAL_TEST_LOCK, clean_test, get_test_cli, get_tests_workspace_path, run_commands,
+};
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, AtomView},
     domains::float::Complex,
+    function,
     printer::CanonicalOrderingSettings,
+    symbol,
 };
 use tracing::debug;
 
@@ -34,6 +49,47 @@ const DDX_AMPLITUDE_SELECTION_OPTIONS: &str =
 const DDXG_RAISED_CUT_PROCESS_NAME: &str = "epem_ddxg_raised_cuts";
 const DDXG_RAISED_CUT_INTEGRAND_NAME: &str = "LO";
 const DDXG_RAISED_CUT_ONLY_DIAGRAMS_COMMAND: &str = "generate xs e+ e- > d d~ | e- a d g QED^2==4 [{{2}} QCD] --numerator-grouping group_identical_graphs_up_to_sign -p epem_ddxg_raised_cuts -i LO --only-diagrams";
+
+fn evaluate_sign_origin(factor: AtomView<'_>) -> Atom {
+    let mut result = factor.to_owned();
+    for head in [
+        "AutG",
+        "CouplingsMultiplicity",
+        "InternalFermionLoopSign",
+        "ExternalFermionOrderingSign",
+        "AntiFermionSpinSumSign",
+        "NumeratorIndependentSymmetryGrouping",
+    ] {
+        for symbol in [
+            symbol!(head),
+            symbol!(&format!("feynkit_generator_factor::{head}")),
+        ] {
+            result = result
+                .replace(function!(symbol, Atom::var(symbol!("x_"))).to_pattern())
+                .with(Atom::var(symbol!("x_")).to_pattern());
+        }
+    }
+    for head in [
+        symbol!("NumeratorDependentGrouping"),
+        symbol!("feynkit_generator::NumeratorDependentGrouping"),
+        symbol!("feynkit_generator_factor::NumeratorDependentGrouping"),
+    ] {
+        result = result
+            .replace(function!(
+                head,
+                Atom::var(symbol!("GraphId_")),
+                Atom::var(symbol!("ratio_")),
+                Atom::var(symbol!("GraphSymmetryFactor_"))
+            ))
+            .with(function!(
+                symbol!("Group"),
+                Atom::var(symbol!("GraphId_")),
+                Atom::var(symbol!("ratio_")),
+                Atom::var(symbol!("GraphSymmetryFactor_"))
+            ));
+    }
+    result.expand()
+}
 
 fn count_graphs_in_processes(cli: &CLIState) -> (usize, Atom) {
     assert_eq!(cli.state.process_list.processes.len(), 1);
@@ -457,10 +513,14 @@ fn tth_master_vertex_signature_specs(
                 .underlying
                 .iter_nodes()
                 .filter_map(|(_, _, vertex)| {
-                    vertex
-                        .vertex_rule
-                        .as_ref()
-                        .map(|vertex_rule| vertex_rule.name.to_string())
+                    vertex.vertex_rule.as_ref().map(|vertex_rule| {
+                        cli.state
+                            .model
+                            .vertex_rule_by_id(*vertex_rule)
+                            .expect("runtime graph vertex rule must belong to its model")
+                            .name
+                            .clone()
+                    })
                 })
                 .collect::<Vec<_>>();
             vertex_rule_names.sort();
@@ -477,6 +537,7 @@ fn tth_master_vertex_signature_specs(
 fn tth_signature_inventory(cli: &CLIState) -> GraphSelectionSignatureInventory {
     let cross_section = tth_cross_section(cli);
     GraphSelectionSignatureInventory::from_master_graphs(
+        &cli.state.model,
         cross_section.graph_group_structure.iter().map(|group| {
             let master_graph_id = group
                 .into_iter()
@@ -618,11 +679,13 @@ fn feyngen_str(
                 .include_namespace(false)
                 .include_attributes(false),
         ),
-        evaluate_overall_factor(overall_factor_sum.as_view()).to_canonically_ordered_string(
-            CanonicalOrderingSettings::new()
-                .include_namespace(false)
-                .include_attributes(false),
-        )
+        evaluate_overall_factor(overall_factor_sum.as_view())
+            .expand()
+            .to_canonically_ordered_string(
+                CanonicalOrderingSettings::new()
+                    .include_namespace(false)
+                    .include_attributes(false),
+            )
     ))
 }
 
@@ -639,20 +702,208 @@ fn closed_ghost_loops_preserve_statistics_weights() -> Result<()> {
     // The ghost bubble has one closed Grassmann minus and the external
     // fermion-ordering minus. Grouping the identical u/d bubbles keeps ratio1.
     assert_snapshot!(
-        feyngen_str(&mut cli, "amp", "d d~ > u u~ | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes", false)?,
+        feyngen_str(&mut cli, "amp", "d d~ > u u~ | u d g ghg a QED==0 [QCD=1] --filter-zero-color --numerator-grouping no_grouping", false)?,
         @"10 | -7/2 = -7/2"
     );
     assert_snapshot!(
         feyngen_str(&mut cli, "amp", "d d~ > u u~ | u d g ghg a QED==0 [QCD=1] --numerator-grouping group_identical_graphs_up_to_sign", false)?,
-        @"9 | -11/2+Group(0,1,1)+Group(7,1,1) = -7/2"
+        @"9 | -11/2+Group(5,1,1)+Group(9,1,1) = -7/2"
     );
     // Each ghost-bubble supergraph has a closed ghost loop and a closed
     // quark loop, so their two Grassmann signs multiply to +1.
     assert_snapshot!(
         feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{3}} QCD=2] --symmetrize-left-right-states true --symmetric-left-right-polarizations true", false)?,
-        @"16 | -3/2+Group(0,1,1)+Group(1,1,1)+Group(10,1,-2)+Group(11,1,-2)+Group(12,1,-1)+Group(13,1,-1)+Group(14,1,-1)+Group(15,1,-1)+Group(16,1,-1)+Group(17,1,-1)+Group(18,1,-1)+Group(19,1,-1)+Group(23,1,-1)+Group(24,1,-1)+Group(3,1,-1)+Group(4,1,1)+Group(5,1,1)+Group(6,1,-1)+Group(8,1,-1/2)+Group(9,1,-1/2) = -29/2"
+        @"16 | -3/2+Group(1,1,1)+Group(11,1,-1)+Group(12,1,-1)+Group(18,1,-2)+Group(19,1,-2)+Group(2,1,1)+Group(20,1,-1)+Group(21,1,-1)+Group(22,1,-1)+Group(23,1,1)+Group(24,1,-1)+Group(25,1,1)+Group(26,1,-1)+Group(27,1,-1)+Group(4,1,-1/2)+Group(5,1,-1/2)+Group(6,1,-1)+Group(7,1,-1)+Group(8,1,-1)+Group(9,1,-1) = -29/2"
     );
     gammaloop_integration_tests::clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+fn grouping_compares_numerators_only_under_equal_propagator_routing() -> Result<()> {
+    let _serial_guard = SERIAL_TEST_LOCK.lock();
+    let test_name = "grouping_compares_numerators_only_under_equal_propagator_routing";
+    let mut cli = get_test_cli(
+        Some("sm_load.toml".into()),
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+    // The two orientations of a charged G+/W+ loop have equal integrands under
+    // the loop-momentum relabelling that preserves their propagators. Compared
+    // at loop-basis positions carrying H and G+ propagators instead, their
+    // numerators look opposite and the pair was removed as cancelling. No
+    // graph here is zero and every true ratio is 1, so each grouped total must
+    // equal the ungrouped 175/6.
+    let process = "{} > {} | H W+ W- G+ G- [{3}] --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1 --numerical-samples-seed 3";
+    let total = |summary: &str| summary.rsplit(" = ").next().unwrap_or_default().to_owned();
+    let ungrouped = feyngen_str(
+        &mut cli,
+        "amp",
+        &format!("{process} --numerator-grouping no_grouping"),
+        false,
+    )?;
+    assert_eq!(total(&ungrouped), "175/6", "{ungrouped}");
+    for grouping in [
+        "group_identical_graphs_up_to_sign",
+        "group_identical_graphs_up_to_scalar_rescaling",
+    ] {
+        let grouped = feyngen_str(
+            &mut cli,
+            "amp",
+            &format!("{process} --numerator-grouping {grouping}"),
+            false,
+        )?;
+        assert_eq!(total(&grouped), "175/6", "{grouping}: {grouped}");
+    }
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+fn scalar_rescaling_cancels_the_charge_conjugate_pairs_that_sign_grouping_cancels() -> Result<()> {
+    let _serial_guard = SERIAL_TEST_LOCK.lock();
+    let test_name =
+        "scalar_rescaling_cancels_the_charge_conjugate_pairs_that_sign_grouping_cancels";
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+    cli.run_command("import model sm.json")?;
+    // A d- and a u-quark triangle with couplings photon-gluon-gluon each
+    // cancel against their reversed copy by charge conjugation (Furry): the
+    // two numerators are opposite at every sample. A rescaling by -1 is a
+    // scalar rescaling, so both modes drop the same four graphs of the 58.
+    let process = "d u u~ > d a | u d g a QED==1 [{1}]";
+    for grouping in [
+        "group_identical_graphs_up_to_sign",
+        "group_identical_graphs_up_to_scalar_rescaling",
+    ] {
+        let (count, factor) = generate_graphs_and_count(
+            &mut cli,
+            "amp",
+            &format!("{process} --numerator-grouping {grouping}"),
+            false,
+        )?;
+        assert_eq!(count, 50, "{grouping}");
+        assert_eq!(
+            evaluate_overall_factor(factor.as_view()).expand(),
+            Atom::num(36),
+            "{grouping}"
+        );
+    }
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+fn left_right_amplitude_symmetrization_permutes_bosons_across_states() -> Result<()> {
+    let _serial_guard = SERIAL_TEST_LOCK.lock();
+    let test_name = "left_right_amplitude_symmetrization_permutes_bosons_across_states";
+    let mut cli = get_test_cli(
+        Some("sm_load.toml".into()),
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+    // Tree-level g g > g g: the s, t and u channels and the contact graph,
+    // each of unit weight when every leg is labelled.
+    let process = "g g > g g | g QED==0 [{0}]";
+    assert_snapshot!(
+        feyngen_str(&mut cli, "amp", &format!("{process} --numerator-grouping no_grouping"), false)?,
+        @"4 | 4 = 4"
+    );
+    // Initial- and final-state permutations merge only the t and u channels.
+    assert_snapshot!(
+        feyngen_str(&mut cli, "amp", &format!("{process} --symmetrize-initial-states true --symmetrize-final-states true --numerator-grouping no_grouping"), false)?,
+        @"3 | 4 = 4"
+    );
+    // As on main, left/right symmetrization of an amplitude also permutes the
+    // gluons across the two states, merging all three exchange channels. It
+    // implies both state options and keeps the total.
+    assert_snapshot!(
+        feyngen_str(&mut cli, "amp", &format!("{process} --symmetrize-left-right-states true --numerator-grouping no_grouping"), false)?,
+        @"2 | 4 = 4"
+    );
+    assert_snapshot!(
+        feyngen_str(&mut cli, "amp", &format!("{process} --symmetrize-left-right-states true --numerator-grouping group_identical_graphs_up_to_sign"), false)?,
+        @"2 | 4 = 4"
+    );
+    // The two labelled ghost-chain pairings carry opposite signs.
+    let ghosts = "ghG ghG~ > ghG ghG~ | g ghG QED==0 [{0}] --symmetrize-left-right-states true --numerator-grouping no_grouping";
+    assert_snapshot!(feyngen_str(&mut cli, "amp", ghosts, false)?, @"2 | 0 = 0");
+    assert_snapshot!(
+        feyngen_str(&mut cli, "amp", &format!("{ghosts} --allow-symmetrization-of-external-fermions-in-amplitudes true"), false)?,
+        @"1 | 2 = 2"
+    );
+    let one_sided = feyngen_str(
+        &mut cli,
+        "amp",
+        &format!("{process} --symmetrize-left-right-states true --symmetrize-final-states false"),
+        false,
+    )
+    .unwrap_err();
+    assert!(
+        format!("{one_sided:?}").contains("requires initial- and final-state symmetrization"),
+        "{one_sided:?}"
+    );
+    // Cross sections keep their CP-based left/right identification.
+    let (count, factor) = generate_graphs_and_count(
+        &mut cli,
+        "xs",
+        "a > d d~ g [{{2}}] | d g a --symmetrize-left-right-states true",
+        false,
+    )?;
+    assert_eq!(count, 2);
+    assert_eq!(
+        evaluate_overall_factor(factor.as_view()).expand(),
+        Atom::num(-3)
+    );
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+fn amplitude_ghost_symmetrization_needs_the_external_fermion_opt_in() -> Result<()> {
+    let _serial_guard = SERIAL_TEST_LOCK.lock();
+    let test_name = "amplitude_ghost_symmetrization_needs_the_external_fermion_opt_in";
+    let mut cli = get_test_cli(
+        Some("sm_load.toml".into()),
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+    // Two tree-level attachments of opposite Grassmann sign. As on main,
+    // identical external ghosts are permuted only with the external-fermion
+    // opt-in, which also drops the external ordering sign.
+    let process = "ghG ghG > ghG ghG | g ghG QED==0 [{0}] --numerator-grouping no_grouping";
+    let opt_in = "--allow-symmetrization-of-external-fermions-in-amplitudes true";
+    let sides = "--symmetrize-initial-states true --symmetrize-final-states true";
+    let left_right = "--symmetrize-left-right-states true";
+    assert_snapshot!(feyngen_str(&mut cli, "amp", process, false)?, @"2 | 0 = 0");
+    assert_snapshot!(
+        feyngen_str(&mut cli, "amp", &format!("{process} {opt_in}"), false)?,
+        @"2 | 0 = 0"
+    );
+    assert_snapshot!(
+        feyngen_str(&mut cli, "amp", &format!("{process} {sides}"), false)?,
+        @"2 | 0 = 0"
+    );
+    assert_snapshot!(
+        feyngen_str(&mut cli, "amp", &format!("{process} {sides} {opt_in}"), false)?,
+        @"1 | 2 = 2"
+    );
+    assert_snapshot!(
+        feyngen_str(&mut cli, "amp", &format!("{process} {left_right}"), false)?,
+        @"2 | 0 = 0"
+    );
+    assert_snapshot!(
+        feyngen_str(&mut cli, "amp", &format!("{process} {left_right} {opt_in}"), false)?,
+        @"1 | 2 = 2"
+    );
+    clean_test(&cli.cli_settings.state.folder);
     Ok(())
 }
 
@@ -732,6 +983,133 @@ fn numerator_grouping_preserves_values_across_worker_counts() -> Result<()> {
     Ok(())
 }
 
+/// A grouped master evaluates as its group weight times its own graph. Its
+/// basis may be requested, but the weight is proved in the default routing:
+/// pinning the master must change neither the weight nor the relation. A
+/// request for an absorbed member or for an unknown graph is an error.
+#[test]
+fn requested_master_basis_keeps_grouped_weight() -> Result<()> {
+    let _serial_guard = SERIAL_TEST_LOCK.lock();
+    let test_name = "requested_master_basis_keeps_grouped_weight";
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+    run_commands(
+        &mut cli,
+        &[
+            "import model sm-default.json",
+            "set global kv global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.compile=false global.generation.evaluator.summed=false global.generation.uv.subtract_uv=false global.generation.uv.generate_integrated=false global.generation.threshold_subtraction.enable_thresholds=false global.generation.tropical_subgraph_table.disable_tropical_generation=true",
+            r#"set default-runtime kv kinematics.externals='{"type":"constant","data":{"momenta":[[0.0,0.0,0.0,1.0],"dependent"],"helicities":[1,1]}}'"#,
+            r#"set default-runtime kv general.evaluator_method="SingleParametric" general.enable_cache=false general.generate_events=false subtraction.disable_threshold_subtraction=true"#,
+        ],
+    )?;
+    // The transverse photon self-energy projector closes the Lorentz indices.
+    // GL0 groups the two b-loop orientations; edges 3 and 6 are a non-default
+    // basis of GL0, which the comparison must not use for its partner.
+    let process = "a > a | a b g ghg QCD==2 QED==2 [{2}] --global-prefactor-projector '(1/(3*(gammalooprs::Q(0,spenso::mink(4,1))*gammalooprs::Q(0,spenso::mink(4,1)))))*(spenso::g(spenso::mink(4,gammalooprs::hedge(0)),spenso::mink(4,gammalooprs::hedge(1))) - gammalooprs::Q(0,spenso::mink(4,gammalooprs::hedge(0)))*gammalooprs::Q(0,spenso::mink(4,gammalooprs::hedge(1)))/(gammalooprs::Q(0,spenso::mink(4,1))*gammalooprs::Q(0,spenso::mink(4,1))))'";
+    let points = [
+        vec![0.31, 0.17, 0.43, 0.26, -0.52, 0.11],
+        vec![-0.23, 0.41, 0.12, 0.37, 0.19, -0.44],
+    ];
+    // Values of GL0, grouped and ungrouped, for each requested basis and point.
+    let mut values = BTreeMap::new();
+    for (routing, bases) in [("default", ""), ("pinned", "--loop-momentum-bases GL0=3,6")] {
+        for (process_name, grouping) in [
+            ("grouped", "group_identical_graphs_up_to_scalar_rescaling"),
+            ("ungrouped", "no_grouping"),
+        ] {
+            let name = format!("{process_name}_{routing}");
+            cli.run_command(&format!(
+                "generate amp {process} --numerator-grouping {grouping} {bases} -p {name} -i 2L"
+            ))?;
+            for (index, point) in points.iter().enumerate() {
+                let (_, value) = Inspect {
+                    process: Some(ProcessRef::Unqualified(name.clone())),
+                    integrand_name: Some("2L".into()),
+                    point: point.clone(),
+                    momentum_space: true,
+                    graph_id: Some(0),
+                    ..Default::default()
+                }
+                .run(&mut cli.state)?;
+                assert!(value.re.is_finite() && value.im.is_finite() && value.norm_squared() > 0.0);
+                values.insert(
+                    (routing, process_name, index),
+                    Complex::new(value.re, value.im),
+                );
+            }
+        }
+    }
+    let modulus = |value: Complex<f64>| value.norm_squared().sqrt();
+    let weight = |routing, index| {
+        values[&(routing, "grouped", index)] / values[&(routing, "ungrouped", index)]
+    };
+    let reference = weight("default", 0);
+    assert!(
+        modulus(reference - Complex::new(1.0, 0.0)) > 0.5,
+        "GL0 must be a grouped master, weight {reference}"
+    );
+    for index in 0..points.len() {
+        // The request changes the routing of GL0 itself ...
+        let ungrouped_change =
+            values[&("pinned", "ungrouped", index)] - values[&("default", "ungrouped", index)];
+        assert!(
+            modulus(ungrouped_change) > 1.0e-6 * modulus(values[&("default", "ungrouped", index)])
+        );
+        // ... but not the scalar weight that multiplies it in the grouped sum.
+        for routing in ["default", "pinned"] {
+            let actual = weight(routing, index);
+            assert!(
+                modulus(actual - reference) <= 1.0e-10 * modulus(reference),
+                "{routing} basis, point {index}: weight {actual}, default {reference}"
+            );
+        }
+    }
+    // Generation-only requests with five fully numerical samples: the master's
+    // request keeps the same groups and ratios, while requests that cannot be
+    // honoured fail instead of being ignored.
+    let generation = |bases: &str| {
+        format!(
+            "{process} --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --number-of-samples-for-numerator-comparisons 5 --fully-numerical-substitution-when-comparing-numerators=true {bases}"
+        )
+    };
+    let default_groups = feyngen_str(&mut cli, "amp", &generation(""), false)?;
+    assert!(default_groups.starts_with("2 | "), "{default_groups}");
+    assert_eq!(
+        feyngen_str(
+            &mut cli,
+            "amp",
+            &generation("--loop-momentum-bases GL0=3,6"),
+            false
+        )?,
+        default_groups
+    );
+    for (bases, expected) in [
+        (
+            "GL2=2,6",
+            "requested for GL2, which numerator grouping merged into master GL0",
+        ),
+        ("GL999=3,6", "loop-momentum basis target \"GL999\""),
+    ] {
+        let error = feyngen_str(
+            &mut cli,
+            "amp",
+            &generation(&format!("--loop-momentum-bases {bases}")),
+            false,
+        )
+        .unwrap_err();
+        assert!(
+            format!("{error:?}").contains(expected),
+            "{bases}: {error:?}"
+        );
+    }
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
 #[test]
 fn scalar_lu_generation_with_e2e_hack_compiles() -> Result<()> {
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
@@ -748,6 +1126,83 @@ fn scalar_lu_generation_with_e2e_hack_compiles() -> Result<()> {
         cli.run_command("generate")?;
         Ok(())
     })()
+}
+
+#[test]
+fn default_cross_section_dot_export_reimports_with_cut_inventories() -> Result<()> {
+    let _serial_guard = SERIAL_TEST_LOCK.lock();
+    let test_name = "default_cross_section_dot_export_reimports_with_cut_inventories";
+    let workspace = get_tests_workspace_path().join(test_name);
+    let export_dir = workspace.join("dot_export");
+    let mut cli = get_test_cli(
+        Some("scalars_load.toml".into()),
+        workspace.join("state"),
+        Some(test_name.to_string()),
+        true,
+    )?;
+    let inventories = |cli: &CLIState, process_name: &str| -> Vec<(String, usize, usize)> {
+        let process = cli
+            .state
+            .process_list
+            .processes
+            .iter()
+            .find(|process| process.definition.folder_name == process_name)
+            .expect("process should exist");
+        let ProcessCollection::CrossSections(cross_sections) = &process.collection else {
+            panic!("{process_name} should be a cross-section process");
+        };
+        let mut inventories = cross_sections["lo"]
+            .supergraphs
+            .iter()
+            .map(|graph| {
+                (
+                    graph.graph.name.clone(),
+                    graph.cuts.len(),
+                    graph.topology_threshold_candidates.len(),
+                )
+            })
+            .collect::<Vec<_>>();
+        inventories.sort();
+        inventories
+    };
+
+    cli.run_command("generate xs scalar_1 > scalar_2 scalar_2 -p original -i lo --only-diagrams")?;
+    let generated = inventories(&cli, "original");
+    assert!(generated.iter().all(|(_, cuts, _)| *cuts > 0));
+
+    for (export_flags, process_name) in [("", "reimported"), ("-c", "reimported_combined")] {
+        let export_dir = export_dir.join(process_name);
+        cli.run_command(&format!("save dot {} {export_flags}", export_dir.display()))?;
+        cli.run_command(&format!(
+            "import graphs '{}' -p {process_name} -i lo",
+            export_dir
+                .join("processes/cross_sections/original/lo")
+                .display()
+        ))?;
+        assert_eq!(inventories(&cli, process_name), generated);
+    }
+
+    // Splitting by initial states stays an explicit drawing export; import
+    // refuses its runtime DOT instead of silently dropping the cuts.
+    let split_dir = workspace.join("split_dot_export");
+    cli.run_command(&format!(
+        "save dot {} --split-xs-by-initial-states",
+        split_dir.display()
+    ))?;
+    let split_error = cli
+        .run_command(&format!(
+            "import graphs '{}' -p split_reimported -i lo",
+            split_dir
+                .join("processes/cross_sections/original/lo")
+                .display()
+        ))
+        .unwrap_err();
+    assert!(
+        format!("{split_error:?}").contains("does not carry canonical physical cuts"),
+        "{split_error:?}"
+    );
+    clean_test(&workspace);
+    Ok(())
 }
 
 #[test]
@@ -1289,7 +1744,7 @@ fn cp_fix_from_symbolica()->Result<()>{
 
     // Group IDs here use the explicitly requested CP canonicalization;
     // default forward-side generation has a different label assignment.
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --filter-zero-flow-edges false --fully-numerical-substitution-when-comparing-numerators false --compare-canonized-numerator true",false)?,@"10 | -7+Group(10,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1)+Group(11,1,-1)+Group(12,1,-1)+Group(5,1,-1)+Group(6,1,-1)+Group(7,1,-1)+Group(8,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1)+Group(9,12*G^2*ee^(-2),-1) = -12+-12*G^2*ee^(-2)+-9*G^2*Nc*ee^(-2)+9*G^2*Nc^(-1)*ee^(-2)");//good
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --filter-zero-flow-edges false --fully-numerical-substitution-when-comparing-numerators false --compare-canonized-numerator true",false)?,@"10 | -7+Group(10,1,-1)+Group(2,1,-1)+Group(3,1,-1)+Group(4,1,-1)+Group(5,(-1*G^2+G^2*Nc^2)*9/2*Nc^(-1)*ee^(-2),-1)+Group(6,(-1*G^2+G^2*Nc^2)*9/2*Nc^(-1)*ee^(-2),-1)+Group(7,(-1*G^2+G^2*Nc^2)*9/2*Nc^(-1)*ee^(-2),-1)+Group(9,1,-1) = -12+-27/2*G^2*Nc*ee^(-2)+27/2*G^2*Nc^(-1)*ee^(-2)");//good
     Ok(())
 }
 
@@ -1310,7 +1765,7 @@ fn test_generate_sm_full_a_ddx() -> Result<()> {
             generate_graphs_and_count(
                 &mut cli,
                 "xs",
-                "a > d d~ [{{2}}] --numerator-grouping only_detect_zeroes",
+                "a > d d~ [{{2}}] --filter-zero-color --numerator-grouping no_grouping",
                 false
             )?
             .1
@@ -1356,7 +1811,7 @@ fn test_vacuum_amplitude_kaapo() -> Result<()> {
     let _ = generate_graphs_and_count(
         &mut cli,
         "amp",
-        "{} > {} | g d d~ ghG ghG~ [{4}] --numerator-grouping only_detect_zeroes --number-of-factorized-loop-subtopologies 1 1000 --filter-snails false --filter-selfenergies false --filter-tadpoles false --max-n-bridges 0",
+        "{} > {} | g d d~ ghG ghG~ [{4}] --filter-zero-color --numerator-grouping no_grouping --number-of-factorized-loop-subtopologies 1 1000 --filter-snails false --filter-selfenergies false --filter-tadpoles false --max-n-bridges 0",
         false,
     )?;
     let ProcessCollection::Amplitudes(amplitudes) = &cli.state.process_list.processes[0].collection
@@ -1372,10 +1827,11 @@ fn test_vacuum_amplitude_kaapo() -> Result<()> {
         let graph = &amplitude_graph.graph;
         let fermions: SuBitGraph = graph
             .underlying
-            .from_filter(|edge| edge.particle.is_fermion());
-        let ghosts: SuBitGraph = graph
-            .underlying
-            .from_filter(|edge| edge.particle.is_anticommutating() && !edge.particle.is_fermion());
+            .from_filter(|edge| edge.particle.is_fermion(&graph.model));
+        let ghosts: SuBitGraph = graph.underlying.from_filter(|edge| {
+            edge.particle.is_anticommutating(&graph.model)
+                && !edge.particle.is_fermion(&graph.model)
+        });
         // These QCD species form disjoint closed chains, so cycle rank counts loops.
         for subset in [&fermions, &ghosts] {
             for (_, neighbors, _) in graph.underlying.iter_nodes_of(subset) {
@@ -1396,7 +1852,7 @@ fn test_vacuum_amplitude_kaapo() -> Result<()> {
         bucket.0 += 1;
         bucket.1 += &weight;
         // Undo only the new ghost statistics sign and restore the old F >= 1 filter.
-        // OnlyDetectZeroes does not merge nonzero numerators; UUV1 signs cannot alter zeros.
+        // Color filtering does not merge nonzero numerators; UUV1 signs cannot alter zeros.
         if f > 0 {
             old_count += 1;
             old_sum += weight * Atom::num(-1).pow(g as i64);
@@ -1428,33 +1884,33 @@ fn test_generate_sm_a_ddx() -> Result<()> {
 
     // Only d, g and a as particle contents
     // Test the validity of multiple final-state specifications for cross-section generation
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > {d d~, g g} [{{1}}] | d g a --numerator-grouping only_detect_zeroes",false)?,@"1 | -1 = -1");//good
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ g [{{2}}] | d g a --numerator-grouping only_detect_zeroes",false)?,@"3 | -3 = -3");//good
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ g [{{2}}] | d g a --symmetrize-left-right-states true",false)?,@"2 | -1+Group(0,1,-1)+Group(1,1,-1) = -3");//good
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > {d d~, g g} [{{1}}] | d g a --filter-zero-color --numerator-grouping no_grouping",false)?,@"1 | -1 = -1");//good
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ g [{{2}}] | d g a --filter-zero-color --numerator-grouping no_grouping",false)?,@"3 | -3 = -3");//good
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ g [{{2}}] | d g a --symmetrize-left-right-states true",false)?,@"2 | -1+Group(1,1,-1)+Group(2,1,-1) = -3");//good
     // A physical Z request requires its complete covariant cut multiplet.
-    let incomplete_z = feyngen_str(&mut cli, "xs", "a > d d~ z [{{2}}] | d g a --numerator-grouping only_detect_zeroes",false).unwrap_err().to_string();
+    let incomplete_z = feyngen_str(&mut cli, "xs", "a > d d~ z [{{2}}] | d g a --filter-zero-color --numerator-grouping no_grouping",false).unwrap_err().to_string();
     assert!(incomplete_z.contains("covariant cut multiplet of physical PDG 23"));
     assert!(incomplete_z.contains("complete vector/Goldstone/ghost sector"));
     // An excluded scalar final state still produces no graphs.
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ H [{{2}}] | d g a --numerator-grouping only_detect_zeroes",false)?,@"0 | 0 = 0");
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ H [{{2}}] | d g a --filter-zero-color --numerator-grouping no_grouping",false)?,@"0 | 0 = 0");
 
 
     // Full particle contents
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{1}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true",false)?,@"1 | -1 = -1");//good
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states false --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators false",false)?,@"12 | -9+Group(10,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1)+Group(5,1,-1)+Group(6,1,-1)+Group(7,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1)+Group(8,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1)+Group(9,1,-1) = -12+-27/2*G^2*Nc*ee^(-2)+27/2*G^2*Nc^(-1)*ee^(-2)");//not same (12 vs 10)
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators true",false)?,@"12 | -9+Group(10,12*G^2*ee^(-2),-1)+Group(5,1,-1)+Group(6,1,-1)+Group(7,1,-1)+Group(8,12*G^2*ee^(-2),-1)+Group(9,12*G^2*ee^(-2),-1) = -12+-36*G^2*ee^(-2)");//not same (12 vs 10)
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --compare-canonized-numerator false --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators false",false)?,@"10 | -7+Group(10,12*G^2*ee^(-2),-1)+Group(11,1,-1)+Group(12,1,-1)+Group(5,1,-1)+Group(6,1,-1)+Group(7,1,-1)+Group(8,12*G^2*ee^(-2),-1)+Group(9,12*G^2*ee^(-2),-1) = -12+-36*G^2*ee^(-2)");//good
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --compare-canonized-numerator false --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators true",false)?,@"12 | -9+Group(11,1,-1)+Group(12,1,-1)+Group(5,1,-1)+Group(6,1,-1)+Group(8,1,-1)+Group(9,1,-1) = -15");//not same (12 vs 10)
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states false --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators false",false)?,@"12 | -9+Group(2,1,-1)+Group(3,1,-1)+Group(4,1,-1)+Group(5,(-1*G^2+G^2*Nc^2)*9/2*Nc^(-1)*ee^(-2),-1)+Group(6,(-1*G^2+G^2*Nc^2)*9/2*Nc^(-1)*ee^(-2),-1)+Group(7,(-1*G^2+G^2*Nc^2)*9/2*Nc^(-1)*ee^(-2),-1) = -12+-27/2*G^2*Nc*ee^(-2)+27/2*G^2*Nc^(-1)*ee^(-2)");//not same (12 vs 10)
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators true",false)?,@"10 | -7+Group(10,1,-1)+Group(2,1,-1)+Group(3,1,-1)+Group(4,1,-1)+Group(5,12*G^2*ee^(-2),-1)+Group(6,12*G^2*ee^(-2),-1)+Group(7,12*G^2*ee^(-2),-1)+Group(9,1,-1) = -12+-36*G^2*ee^(-2)");// symmetric canonical and sampled comparisons agree
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --compare-canonized-numerator false --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators false",false)?,@"10 | -7+Group(10,1,-1)+Group(2,1,-1)+Group(3,1,-1)+Group(4,1,-1)+Group(5,12*G^2*ee^(-2),-1)+Group(6,12*G^2*ee^(-2),-1)+Group(7,12*G^2*ee^(-2),-1)+Group(9,1,-1) = -12+-36*G^2*ee^(-2)");//good
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --compare-canonized-numerator false --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators true",false)?,@"12 | -9+Group(10,1,-1)+Group(3,1,-1)+Group(4,1,-1)+Group(6,1,-1)+Group(7,1,-1)+Group(9,1,-1) = -15");//not same (12 vs 10)
 
     // Only 1-flavour pure QCD corrections
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{1}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true",false)?,@"1 | -1 = -1");//good
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{2}} QCD=1] --symmetrize-left-right-states true --symmetric-left-right-polarizations true",false)?,@"2 | -1+Group(0,1,-1)+Group(1,1,-1) = -3");//good
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{2}} QCD=1] --symmetrize-left-right-states true --symmetric-left-right-polarizations true",false)?,@"2 | -1+Group(1,1,-1)+Group(2,1,-1) = -3");//good
     // Each of the three ghost-bubble graphs has one closed ghost loop and
     // one closed quark loop: their two Grassmann signs multiply to +1.
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{3}} QCD=2] --symmetrize-left-right-states true --symmetric-left-right-polarizations true",false)?,@"16 | -3/2+Group(0,1,1)+Group(1,1,1)+Group(10,1,-2)+Group(11,1,-2)+Group(12,1,-1)+Group(13,1,-1)+Group(14,1,-1)+Group(15,1,-1)+Group(16,1,-1)+Group(17,1,-1)+Group(18,1,-1)+Group(19,1,-1)+Group(23,1,-1)+Group(24,1,-1)+Group(3,1,-1)+Group(4,1,1)+Group(5,1,1)+Group(6,1,-1)+Group(8,1,-1/2)+Group(9,1,-1/2) = -29/2");//good
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{3}} QCD=2] --symmetrize-left-right-states true --symmetric-left-right-polarizations true",false)?,@"16 | -3/2+Group(1,1,1)+Group(11,1,-1)+Group(12,1,-1)+Group(18,1,-2)+Group(19,1,-2)+Group(2,1,1)+Group(20,1,-1)+Group(21,1,-1)+Group(22,1,-1)+Group(23,1,1)+Group(24,1,-1)+Group(25,1,1)+Group(26,1,-1)+Group(27,1,-1)+Group(4,1,-1/2)+Group(5,1,-1/2)+Group(6,1,-1)+Group(7,1,-1)+Group(8,1,-1)+Group(9,1,-1) = -29/2");//good
     // Neutral adjoint ghost CP retains derivative flow; directed AutG
     // and every closed Grassmann circuit fix these certified class weights.
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{4}} QCD=3] --symmetrize-left-right-states true --symmetric-left-right-polarizations true",true)?,@"161 | -20/3+Group(0,1,1)+Group(1,1,1)+Group(10,1,-1)+Group(100,1,-1)+Group(103,1,1)+Group(104,1,1)+Group(107,1,1)+Group(108,1,1)+Group(11,1,-1)+Group(110,1,-1/4)+Group(111,1,-1/4)+Group(112,1,-1)+Group(113,1,-1)+Group(114,1,-1/2)+Group(115,1,-1/2)+Group(116,1,-1/2)+Group(117,1,-1/2)+Group(118,1,-1/4)+Group(119,1,-1/4)+Group(12,1,1)+Group(120,1,-1/6)+Group(121,1,-1/6)+Group(122,1,-1)+Group(123,1,-1)+Group(124,1,-1)+Group(125,1,-1)+Group(126,1,-2)+Group(127,1,-2)+Group(128,1,1)+Group(129,2/7,1)+Group(13,1,1)+Group(130,2/7,1)+Group(131,1,1)+Group(132,1,1)+Group(133,2/7,1)+Group(134,1,-1)+Group(135,1,-1)+Group(136,2/7,1)+Group(137,1,1)+Group(138,1,-1)+Group(139,1,-1)+Group(14,1,1)+Group(140,1,-1/2)+Group(141,1,-1/2)+Group(142,1,1)+Group(143,1,1)+Group(144,1,1)+Group(145,1,1)+Group(146,1,1)+Group(147,1,1)+Group(148,1,-1/2)+Group(149,1,-1/2)+Group(15,1,1)+Group(150,1,-1)+Group(151,1,-1)+Group(152,1,-1)+Group(153,1,-1)+Group(154,1,-1/2)+Group(155,1,-1/2)+Group(156,1,-1)+Group(157,1,-1)+Group(158,1,-1/2)+Group(159,1,-1/2)+Group(16,1,2)+Group(160,1,-1)+Group(161,1,-1)+Group(164,1,-2)+Group(165,1,-2)+Group(166,1,-1)+Group(167,1,-1)+Group(168,1,-1)+Group(169,1,-1)+Group(17,1,2)+Group(170,1,-1)+Group(171,1,-1)+Group(172,1,-2)+Group(173,1,-2)+Group(174,1,-2)+Group(175,1,-2)+Group(176,1,-2)+Group(177,1,-2)+Group(178,1,-2)+Group(179,1,-2)+Group(18,1,2)+Group(180,1,-2)+Group(181,1,-2)+Group(182,1,-1)+Group(183,1,-1)+Group(184,1,-2)+Group(185,1,-2)+Group(186,1,1)+Group(187,1,1)+Group(188,1,1)+Group(189,1,1)+Group(19,1,2)+Group(190,1,1)+Group(191,1,1)+Group(192,1,-1/2)+Group(193,1,-1/2)+Group(194,1,-1)+Group(195,1,-1)+Group(196,1,-1)+Group(197,1,-1)+Group(198,1,-1)+Group(199,1,-1)+Group(2,1,2)+Group(20,1,2)+Group(200,1,-1)+Group(201,1,-1)+Group(207,1,-1)+Group(208,1,-1)+Group(209,1,-1)+Group(21,1,2)+Group(210,1,-1)+Group(213,1,-1)+Group(214,1,-1)+Group(215,1,-1)+Group(216,1,-1)+Group(219,1,-2)+Group(22,1,1/2)+Group(220,1,-2)+Group(221,1,-2)+Group(222,1,-2)+Group(223,1,1)+Group(224,-7/2,1)+Group(225,1,-2)+Group(226,1,-2)+Group(227,1,-2)+Group(228,1,-2)+Group(229,1,-1)+Group(23,1,1/2)+Group(230,1,-1)+Group(231,1,-1)+Group(232,1,-1)+Group(233,1,-1/2)+Group(234,1,-1/2)+Group(235,1,-1)+Group(236,1,-1)+Group(237,1,-1/2)+Group(238,1,-1/2)+Group(24,1,2)+Group(243,1,-2)+Group(244,1,-2)+Group(245,1,-2)+Group(246,1,-2)+Group(25,1,2)+Group(251,1,-2)+Group(252,1,-2)+Group(253,1,-2)+Group(254,1,-2)+Group(255,1,-1/2)+Group(256,1,-1/2)+Group(257,1,-1)+Group(258,1,-1)+Group(259,1,-1)+Group(26,1,1)+Group(260,1,-1)+Group(265,1,-1/2)+Group(266,1,-1/2)+Group(27,1,1)+Group(271,1,1)+Group(272,1,1)+Group(274,1,-1)+Group(275,1,-1)+Group(276,1,-1)+Group(277,1,-1)+Group(278,1,-2)+Group(279,1,-2)+Group(28,1,1)+Group(280,1,-2)+Group(281,1,-2)+Group(282,1,-2)+Group(283,1,-2)+Group(284,1,-2)+Group(285,1,-2)+Group(286,1,-2)+Group(287,1,-2)+Group(288,1,-2)+Group(289,1,-2)+Group(29,1,1)+Group(290,1,-2)+Group(291,1,-2)+Group(292,1,-1)+Group(293,1,-1)+Group(298,1,-2)+Group(299,1,-2)+Group(3,1,2)+Group(30,1,1)+Group(300,1,-1)+Group(301,1,-1)+Group(303,1,2)+Group(304,1,2)+Group(305,1,2)+Group(306,1,2)+Group(307,1,1)+Group(308,1,1)+Group(309,1,2)+Group(31,1,1)+Group(310,1,2)+Group(311,1,2)+Group(312,1,2)+Group(313,1,-1)+Group(314,1,-1)+Group(315,1,-1)+Group(316,1,-1)+Group(317,1,-1)+Group(318,1,-1)+Group(32,1,2)+Group(323,1,-1/2)+Group(324,1,-1/2)+Group(325,1,-1/2)+Group(326,1,-1/2)+Group(327,1,1)+Group(328,-2/7,1)+Group(329,-2/7,1)+Group(33,1,2)+Group(330,1,1)+Group(331,1,-1)+Group(332,1,-1)+Group(333,1,-1)+Group(334,1,-1)+Group(335,1,-1)+Group(336,1,-1)+Group(342,1,-2)+Group(343,1,-2)+Group(344,1,-2)+Group(345,1,-2)+Group(346,1,-2)+Group(347,1,-2)+Group(352,1,-1)+Group(353,1,-1)+Group(354,1,-2)+Group(355,1,-2)+Group(38,1,1)+Group(39,1,1)+Group(4,1,1)+Group(40,1,1)+Group(41,1,1)+Group(42,1,1)+Group(43,1,1)+Group(45,1,2)+Group(46,1,2)+Group(47,1,2)+Group(48,1,2)+Group(49,1,2)+Group(5,1,1)+Group(50,1,2)+Group(51,1,1)+Group(52,1,1)+Group(53,1,2)+Group(54,1,2)+Group(55,1,1)+Group(56,1,1)+Group(57,1,1)+Group(58,1,1)+Group(6,1,1)+Group(60,1,-1)+Group(61,1,-1)+Group(63,1,-1)+Group(64,1,1)+Group(65,1,1)+Group(66,1,-1)+Group(67,1,-1/2)+Group(68,1,-1/2)+Group(69,1,-1)+Group(7,1,1)+Group(70,1,-1)+Group(71,1,2)+Group(72,1,2)+Group(73,1,1)+Group(74,1,1)+Group(75,1,1)+Group(76,1,1)+Group(77,1,1)+Group(78,1,1)+Group(79,1,2)+Group(8,1,-2)+Group(80,1,2)+Group(81,1,1/2)+Group(82,1,1/2)+Group(83,1,1)+Group(84,1,1)+Group(85,1,-1)+Group(86,1,1)+Group(87,1,1)+Group(88,1,-1)+Group(89,1,1)+Group(9,1,-2)+Group(90,1,1)+Group(91,1,-1)+Group(96,1,-1)+Group(97,1,-1)+Group(98,1,1)+Group(99,1,1) = -1287/14");//less 158 vs 166 (lorentz cancellations)
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{4}} QCD=3] --symmetrize-left-right-states true --symmetric-left-right-polarizations true",true)?,@"161 | -26/3+Group(1,1,1)+Group(10,1,1)+Group(100,1,-1/2)+Group(101,1,-1/2)+Group(102,1,-1/2)+Group(103,1,-1/2)+Group(104,1,-1/2)+Group(105,1,-1/2)+Group(106,1,-1)+Group(107,1,-1)+Group(108,1,-1/2)+Group(109,1,-1/2)+Group(11,1,1)+Group(113,1,-1)+Group(114,1,-1)+Group(119,1,1/2)+Group(12,1,2)+Group(120,1,1/2)+Group(123,1,-1)+Group(124,1,-1)+Group(125,1,-1)+Group(126,1,-1)+Group(127,1,-1/2)+Group(128,1,-1/2)+Group(129,1,-1)+Group(13,1,2)+Group(130,1,-1)+Group(131,1,-1/2)+Group(132,1,-1/2)+Group(133,1,1)+Group(134,1,1)+Group(135,1,1)+Group(136,1,1)+Group(137,1,-1)+Group(138,1,-1)+Group(139,1,-1/2)+Group(14,1,2)+Group(140,1,-1/2)+Group(141,1,-1)+Group(142,1,-1)+Group(143,1,-1/2)+Group(144,1,-1/2)+Group(145,1,-1)+Group(146,1,-1)+Group(147,1,-2)+Group(148,1,-2)+Group(149,1,-2)+Group(15,1,2)+Group(150,1,-2)+Group(151,1,-1)+Group(152,1,-1)+Group(153,1,-2)+Group(154,1,-2)+Group(155,1,-2)+Group(156,1,-2)+Group(157,1,-1)+Group(158,1,-1)+Group(159,1,-2)+Group(16,1,2)+Group(160,1,-2)+Group(161,1,-2)+Group(162,1,-2)+Group(163,1,2)+Group(164,1,2)+Group(165,1,-1)+Group(166,1,-1)+Group(167,1,1)+Group(168,1,1)+Group(169,1,-1)+Group(17,1,2)+Group(170,1,-1)+Group(171,1,-2)+Group(172,1,-2)+Group(173,1,-2)+Group(174,1,-2)+Group(179,1,1)+Group(180,1,1)+Group(185,1,-2)+Group(186,1,-2)+Group(187,1,-1)+Group(188,1,-1)+Group(189,1,-2)+Group(19,1,1/2)+Group(190,1,-2)+Group(191,1,1)+Group(192,1,1)+Group(193,1,2)+Group(194,1,2)+Group(195,1,-2)+Group(196,1,-2)+Group(197,1,1)+Group(198,1,1)+Group(199,1,1)+Group(2,1,1)+Group(20,1,1/2)+Group(200,1,1)+Group(201,1,-1)+Group(202,1,-1)+Group(203,1,-2)+Group(204,1,-2)+Group(206,1,-1/6)+Group(207,1,-1/6)+Group(209,1,-1)+Group(21,1,1)+Group(210,1,-1)+Group(212,1,-1)+Group(213,1,-1)+Group(215,1,-1)+Group(216,1,-1)+Group(217,1,-1)+Group(218,1,-1)+Group(219,1,1)+Group(22,1,1)+Group(220,-2/7,1)+Group(221,-2/7,1)+Group(222,1,1)+Group(223,1,-1)+Group(224,1,-2)+Group(225,1,-2)+Group(226,1,-1)+Group(227,1,1)+Group(228,-7/2,1)+Group(23,1,1)+Group(230,1,-1)+Group(231,1,-1)+Group(232,1,1)+Group(233,1,1)+Group(234,1,-2)+Group(235,1,-2)+Group(236,1,-1)+Group(237,1,-1)+Group(238,1,-1)+Group(239,1,1)+Group(24,1,1)+Group(240,7/2,1)+Group(241,1,-1)+Group(242,1,1)+Group(243,7/2,1)+Group(244,1,-2)+Group(245,1,-2)+Group(246,1,-2)+Group(247,1,-2)+Group(248,1,1)+Group(249,1,1)+Group(25,1,2)+Group(250,1,1)+Group(251,1,1)+Group(252,1,-2)+Group(253,1,-2)+Group(254,1,-1)+Group(255,1,-1)+Group(256,1,2)+Group(257,1,2)+Group(259,1,-2)+Group(26,1,2)+Group(260,1,-2)+Group(261,1,1)+Group(262,1,1)+Group(268,1,-1)+Group(269,1,-1)+Group(27,1,1)+Group(270,1,-2)+Group(271,1,-2)+Group(272,1,-1)+Group(273,1,-1)+Group(274,1,1)+Group(275,1,1)+Group(276,1,-2)+Group(277,1,-2)+Group(279,1,-1)+Group(28,1,1)+Group(280,1,-1)+Group(29,1,1)+Group(290,1,1)+Group(291,1,1)+Group(30,1,1)+Group(301,1,-1)+Group(302,1,-1)+Group(303,1,-2)+Group(304,1,-2)+Group(305,1,2)+Group(306,1,-2)+Group(307,1,-2)+Group(308,1,2)+Group(309,1,-2)+Group(31,1,2)+Group(310,1,-1)+Group(311,1,-2)+Group(312,1,-1)+Group(313,1,-1)+Group(314,1,-1)+Group(315,1,1)+Group(316,7/2,1)+Group(317,1,-2)+Group(318,1,-2)+Group(319,1,1)+Group(32,1,2)+Group(320,7/2,1)+Group(321,1,-1)+Group(322,1,-1)+Group(323,1,-1)+Group(324,1,-1)+Group(325,1,1)+Group(326,1,1)+Group(327,1,-2)+Group(328,1,2)+Group(329,1,-2)+Group(33,1,1)+Group(330,1,2)+Group(331,1,-2)+Group(332,1,-2)+Group(333,1,1)+Group(334,1,-1)+Group(335,1,1)+Group(336,1,-1)+Group(337,1,1)+Group(338,1,1)+Group(339,1,1)+Group(34,1,1)+Group(340,1,-1)+Group(341,1,1)+Group(342,1,1)+Group(343,1,1)+Group(344,1,-1)+Group(345,1,-1)+Group(346,1,-1)+Group(347,1,-1)+Group(348,1,-1)+Group(349,1,-2)+Group(35,1,1)+Group(350,1,2)+Group(351,1,-2)+Group(352,1,2)+Group(353,1,-1)+Group(354,1,-1)+Group(36,1,1)+Group(37,1,1)+Group(38,1,1)+Group(39,1,1)+Group(4,1,1)+Group(40,1,1)+Group(41,1,2)+Group(42,1,2)+Group(43,1,1)+Group(44,1,1)+Group(49,1,-1)+Group(5,1,1)+Group(50,1,-1)+Group(51,1,2)+Group(52,1,2)+Group(53,1,1)+Group(54,1,1)+Group(55,1,2)+Group(56,1,2)+Group(57,1,1)+Group(58,1,1)+Group(59,1,-2)+Group(6,1,2)+Group(60,1,-2)+Group(61,1,2)+Group(62,1,2)+Group(66,1,-1/2)+Group(67,1,-1/2)+Group(68,1,-1/2)+Group(69,1,-1/2)+Group(7,1,2)+Group(70,1,-1/4)+Group(71,1,-1/4)+Group(72,1,-1)+Group(73,1,-1)+Group(74,1,-1)+Group(75,1,-1)+Group(76,1,-1/2)+Group(77,1,-1/2)+Group(78,1,-1)+Group(79,1,-1)+Group(8,1,-1)+Group(80,1,-1/2)+Group(81,1,-1/2)+Group(82,1,-1)+Group(83,1,-1)+Group(85,1,-1/2)+Group(86,1,-1/2)+Group(87,1,-1/4)+Group(88,1,-1/4)+Group(89,1,-1)+Group(9,1,-1)+Group(90,1,-1)+Group(94,1,-1/2)+Group(95,1,-1/2)+Group(98,1,-2)+Group(99,1,-2) = -1107/14");//less 158 vs 166 (lorentz cancellations)
 
 
     Ok(())
@@ -1468,19 +1924,19 @@ fn test_generate_amplitude_1l_sm_jets() -> Result<()> {
     //cli.run_command(&format!("set global kv global.n_cores.feyngen=16"))?;
 
     // Targets confirmed by MadGraph
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > d d~ | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"20 | 0 = 0");
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > d d~ g | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"192 | 0 = 0");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > d d~ | u d g ghg a QED==0 [QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"20 | 0 = 0");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > d d~ g | u d g ghg a QED==0 [QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"192 | 0 = 0");
     // Include the Grassmann minus from every closed ghost circuit.
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > g g g | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"384 | -100 = -100");
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "g g > g g g | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"1139 | -765/2 = -765/2");
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > d d~ g g | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"2284 | 0 = 0");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > g g g | u d g ghg a QED==0 [QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"384 | -100 = -100");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "g g > g g g | u d g ghg a QED==0 [QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"1139 | -765/2 = -765/2");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > d d~ g g | u d g ghg a QED==0 [QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"2284 | 0 = 0");
     // Closed ghosts contribute the same Grassmann-loop minus as quarks;
     // the ghost bubble has positive weight after external fermion ordering.
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > u u~ | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"10 | -7/2 = -7/2");
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > u u~ g | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"96 | -87/2 = -87/2");
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > u u~ g g | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"1142 | -504 = -504");
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > u u~ d d~ | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"414 | 0 = 0");
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > d d~ d d~ | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"1242 | 0 = 0");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > u u~ | u d g ghg a QED==0 [QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"10 | -7/2 = -7/2");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > u u~ g | u d g ghg a QED==0 [QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"96 | -87/2 = -87/2");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > u u~ g g | u d g ghg a QED==0 [QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"1142 | -504 = -504");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > u u~ d d~ | u d g ghg a QED==0 [QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"414 | 0 = 0");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > d d~ d d~ | u d g ghg a QED==0 [QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"1242 | 0 = 0");
 
     Ok(())
 }
@@ -1493,21 +1949,21 @@ fn test_generate_amplitude_1l_sm_jets_with_grouping() -> Result<()> {
     // cli.run_command(&format!("set global kv global.n_cores.feyngen=16"))?;
 
     // Targets confirmed by MadGraph
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > d d~ | u d g ghg a QED==0 [QCD=1] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"18 | Group(0,1,-1)+Group(1,1,1)+Group(4,1,-1)+Group(5,1,1) = 0");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > d d~ | u d g ghg a QED==0 [QCD=1] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"18 | Group(16,1,-1)+Group(17,1,1)+Group(18,1,-1)+Group(19,1,1) = 0");
     // The ghost bubble has one closed Grassmann loop and the common
     // external fermion-ordering minus, giving a positive statistics weight.
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > u u~ | u d g ghg a QED==0 [QCD=1] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"9 | -11/2+Group(0,1,1)+Group(7,1,1) = -7/2");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > u u~ | u d g ghg a QED==0 [QCD=1] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"9 | -11/2+Group(5,1,1)+Group(9,1,1) = -7/2");
 
     // The eight flavor pairs keep ratio1; closed ghost loops change
     // only the singleton statistics sum.
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > u u~ g | u d g ghg a QED==0 [QCD=1] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"88 | -119/2+Group(0,1,1)+Group(1,1,1)+Group(14,1,1)+Group(15,1,1)+Group(34,1,1)+Group(35,1,1)+Group(44,1,1)+Group(45,1,1)+Group(56,1,1)+Group(57,1,1)+Group(68,1,1)+Group(69,1,1)+Group(76,1,1)+Group(85,1,1)+Group(86,1,1)+Group(95,1,1) = -87/2");
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > d d~ g | u d g ghg a QED==0 [QCD=1] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"176 | Group(0,1,1)+Group(1,1,-1)+Group(105,1,1)+Group(106,1,-1)+Group(119,1,1)+Group(120,1,-1)+Group(130,1,1)+Group(131,1,-1)+Group(144,1,1)+Group(145,1,-1)+Group(152,1,-1)+Group(153,1,1)+Group(166,1,-1)+Group(167,1,1)+Group(172,1,-1)+Group(173,1,1)+Group(186,1,-1)+Group(187,1,1)+Group(2,1,-1)+Group(24,1,1)+Group(25,1,-1)+Group(26,1,-1)+Group(27,1,1)+Group(3,1,1)+Group(4,1,-1)+Group(5,1,-1)+Group(6,1,1)+Group(68,1,-1)+Group(69,1,-1)+Group(7,1,1)+Group(70,1,1)+Group(71,1,1) = 0");
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > g g g | u d g ghg a QED==0 [QCD=1] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"341 | -186+Group(0,1,1)+Group(1,1,1)+Group(10,1,1)+Group(11,1,1)+Group(12,1,1)+Group(13,1,1)+Group(130,1,1)+Group(131,1,1)+Group(14,1,1)+Group(140,1,1)+Group(141,1,1)+Group(15,1,1)+Group(150,1,1)+Group(151,1,1)+Group(154,1,1)+Group(155,1,1)+Group(158,1,1)+Group(159,1,1)+Group(16,1,1)+Group(167,1,1)+Group(168,1,1)+Group(17,1,1)+Group(171,1,1)+Group(172,1,1)+Group(175,1,1)+Group(176,1,1)+Group(179,1,1)+Group(18,1,1)+Group(180,1,1)+Group(19,1,1)+Group(2,1,1)+Group(20,1,1)+Group(21,1,1)+Group(22,1,1)+Group(226,1,1)+Group(227,1,1)+Group(228,1,1)+Group(23,1,1)+Group(24,1,1)+Group(242,1,1)+Group(249,1,1)+Group(250,1,1)+Group(253,1,1)+Group(254,1,1)+Group(255,1,1)+Group(269,1,1)+Group(276,1,1)+Group(277,1,1)+Group(280,1,1)+Group(281,1,1)+Group(282,1,1)+Group(292,1,1)+Group(299,1,1)+Group(3,1,1)+Group(300,1,1)+Group(303,1,1)+Group(304,1,1)+Group(305,1,1)+Group(315,1,1)+Group(322,1,1)+Group(323,1,1)+Group(330,1,1)+Group(331,1,1)+Group(332,1,1)+Group(342,1,1)+Group(349,1,1)+Group(350,1,1)+Group(357,1,1)+Group(358,1,1)+Group(359,1,1)+Group(369,1,1)+Group(376,1,1)+Group(377,1,1)+Group(4,1,1)+Group(5,1,1)+Group(6,1,1)+Group(7,1,1)+Group(8,1,1)+Group(84,1,1)+Group(85,1,1)+Group(86,1,1)+Group(87,1,1)+Group(88,1,1)+Group(89,1,1)+Group(9,1,1)+Group(90,1,1) = -100");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > u u~ g | u d g ghg a QED==0 [QCD=1] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"88 | -119/2+Group(28,1,1)+Group(29,1,1)+Group(48,1,1)+Group(49,1,1)+Group(57,1,1)+Group(59,1,1)+Group(60,1,1)+Group(62,1,1)+Group(71,1,1)+Group(73,1,1)+Group(82,1,1)+Group(83,1,1)+Group(88,1,1)+Group(91,1,1)+Group(94,1,1)+Group(95,1,1) = -87/2");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > d d~ g | u d g ghg a QED==0 [QCD=1] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"176 | Group(150,1,-1)+Group(151,1,1)+Group(157,1,1)+Group(158,1,-1)+Group(159,1,1)+Group(164,1,1)+Group(171,1,-1)+Group(172,1,-1)+Group(173,1,1)+Group(175,1,-1)+Group(176,1,1)+Group(178,1,-1)+Group(180,1,-1)+Group(181,1,1)+Group(182,1,1)+Group(183,1,-1)+Group(184,1,1)+Group(185,1,1)+Group(186,1,-1)+Group(187,1,-1)+Group(188,1,-1)+Group(189,1,-1)+Group(190,1,1)+Group(191,1,1)+Group(88,1,-1)+Group(89,1,1)+Group(91,1,-1)+Group(92,1,1)+Group(96,1,-1)+Group(97,1,1)+Group(98,1,-1)+Group(99,1,1) = 0");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > g g g | u d g ghg a QED==0 [QCD=1] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"341 | -186+Group(111,1,1)+Group(115,1,1)+Group(117,1,1)+Group(121,1,1)+Group(129,1,1)+Group(132,1,1)+Group(155,1,1)+Group(156,1,1)+Group(157,1,1)+Group(158,1,1)+Group(159,1,1)+Group(160,1,1)+Group(193,1,1)+Group(194,1,1)+Group(196,1,1)+Group(198,1,1)+Group(205,1,1)+Group(206,1,1)+Group(208,1,1)+Group(210,1,1)+Group(220,1,1)+Group(222,1,1)+Group(243,1,1)+Group(244,1,1)+Group(246,1,1)+Group(249,1,1)+Group(251,1,1)+Group(254,1,1)+Group(256,1,1)+Group(258,1,1)+Group(267,1,1)+Group(268,1,1)+Group(269,1,1)+Group(270,1,1)+Group(271,1,1)+Group(272,1,1)+Group(273,1,1)+Group(274,1,1)+Group(275,1,1)+Group(276,1,1)+Group(277,1,1)+Group(278,1,1)+Group(279,1,1)+Group(280,1,1)+Group(281,1,1)+Group(282,1,1)+Group(283,1,1)+Group(284,1,1)+Group(289,1,1)+Group(299,1,1)+Group(306,1,1)+Group(308,1,1)+Group(312,1,1)+Group(315,1,1)+Group(318,1,1)+Group(320,1,1)+Group(327,1,1)+Group(330,1,1)+Group(336,1,1)+Group(337,1,1)+Group(339,1,1)+Group(340,1,1)+Group(342,1,1)+Group(343,1,1)+Group(345,1,1)+Group(347,1,1)+Group(354,1,1)+Group(357,1,1)+Group(366,1,1)+Group(367,1,1)+Group(368,1,1)+Group(369,1,1)+Group(370,1,1)+Group(371,1,1)+Group(372,1,1)+Group(373,1,1)+Group(374,1,1)+Group(375,1,1)+Group(376,1,1)+Group(377,1,1)+Group(378,1,1)+Group(379,1,1)+Group(380,1,1)+Group(381,1,1)+Group(382,1,1)+Group(383,1,1) = -100");
     assert_snapshot!(feyngen_str(&mut cli, "amp", "g g > g g g | g ghg a QED==0 [QCD=1] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"671 | 171/2 = 171/2");
     // For fun, symmetrize it all
     assert_snapshot!(feyngen_str(&mut cli, "amp", "g g > g g g | g ghg a QED==0 [QCD=1] --symmetrize-initial-states true --symmetrize-final-states true --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"109 | 171/2 = 171/2");
     assert_snapshot!(feyngen_str(&mut cli, "amp", "g g > g g g | g ghg a QED==0 [QCD=1] --symmetrize-left-right-states true --symmetrize-initial-states true --symmetrize-final-states true --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"25 | 171/2 = 171/2");
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "g g > g g g | u d g ghg a QED==0 [QCD=1] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"905 | 171/2+Group(0,1,-1)+Group(1,1,-1)+Group(10,1,-1)+Group(100,1,-1)+Group(1000,1,-1)+Group(1001,1,-1)+Group(1002,1,-1)+Group(1003,1,-1)+Group(1004,1,-1)+Group(1005,1,-1)+Group(1006,1,-1)+Group(1007,1,-1)+Group(1008,1,-1)+Group(1009,1,-1)+Group(101,1,-1)+Group(1010,1,-1)+Group(1011,1,-1)+Group(1012,1,-1)+Group(1013,1,-1)+Group(1014,1,-1)+Group(1015,1,-1)+Group(1016,1,-1)+Group(1017,1,-1)+Group(1018,1,-1)+Group(1019,1,-1)+Group(102,1,-1)+Group(1020,1,-1)+Group(1021,1,-1)+Group(1022,1,-1)+Group(1023,1,-1)+Group(1024,1,-1)+Group(1025,1,-1)+Group(1026,1,-1)+Group(1027,1,-1)+Group(1028,1,-1)+Group(1029,1,-1)+Group(103,1,-1)+Group(1030,1,-1)+Group(1031,1,-1)+Group(1032,1,-1)+Group(1033,1,-1)+Group(1034,1,-1)+Group(1035,1,-1)+Group(1036,1,-1)+Group(1037,1,-1)+Group(1038,1,-1)+Group(1039,1,-1)+Group(104,1,-1)+Group(1040,1,-1)+Group(1041,1,-1)+Group(1042,1,-1)+Group(1043,1,-1)+Group(1044,1,-1)+Group(1045,1,-1)+Group(1046,1,-1)+Group(1047,1,-1)+Group(1048,1,-1)+Group(1049,1,-1)+Group(105,1,-1)+Group(1050,1,-1)+Group(1051,1,-1)+Group(1052,1,-1)+Group(1053,1,-1)+Group(1054,1,-1)+Group(1055,1,-1)+Group(1056,1,-1)+Group(1057,1,-1)+Group(1058,1,-1)+Group(1059,1,-1)+Group(106,1,-1)+Group(1060,1,-1)+Group(1061,1,-1)+Group(1062,1,-1)+Group(1063,1,-1)+Group(1064,1,-1)+Group(1065,1,-1)+Group(1066,1,-1)+Group(1067,1,-1)+Group(1068,1,-1)+Group(1069,1,-1)+Group(107,1,-1)+Group(1070,1,-1)+Group(1071,1,-1)+Group(1072,1,-1)+Group(1073,1,-1)+Group(1074,1,-1)+Group(1075,1,-1)+Group(1076,1,-1)+Group(1077,1,-1)+Group(1078,1,-1)+Group(1079,1,-1)+Group(108,1,-1)+Group(1080,1,-1)+Group(1081,1,-1)+Group(1082,1,-1)+Group(1083,1,-1)+Group(1084,1,-1)+Group(1085,1,-1)+Group(1086,1,-1)+Group(1087,1,-1)+Group(1088,1,-1)+Group(1089,1,-1)+Group(109,1,-1)+Group(1090,1,-1)+Group(1091,1,-1)+Group(1092,1,-1)+Group(1093,1,-1)+Group(1094,1,-1)+Group(1095,1,-1)+Group(1096,1,-1)+Group(1097,1,-1)+Group(1098,1,-1)+Group(1099,1,-1)+Group(11,1,-1)+Group(110,1,-1)+Group(1100,1,-1)+Group(1101,1,-1)+Group(1102,1,-1)+Group(1103,1,-1)+Group(1104,1,-1)+Group(1105,1,-1)+Group(1106,1,-1)+Group(1107,1,-1)+Group(1108,1,-1)+Group(1109,1,-1)+Group(111,1,-1)+Group(1110,1,-1)+Group(1111,1,-1)+Group(1112,1,-1)+Group(1113,1,-1)+Group(1114,1,-1)+Group(1115,1,-1)+Group(1116,1,-1)+Group(1117,1,-1)+Group(1118,1,-1)+Group(1119,1,-1)+Group(112,1,-1)+Group(1120,1,-1)+Group(1121,1,-1)+Group(1122,1,-1)+Group(1123,1,-1)+Group(1124,1,-1)+Group(1125,1,-1)+Group(1126,1,-1)+Group(1127,1,-1)+Group(1128,1,-1)+Group(1129,1,-1)+Group(113,1,-1)+Group(1130,1,-1)+Group(1131,1,-1)+Group(1132,1,-1)+Group(1133,1,-1)+Group(1134,1,-1)+Group(1135,1,-1)+Group(1136,1,-1)+Group(1137,1,-1)+Group(1138,1,-1)+Group(114,1,-1)+Group(115,1,-1)+Group(116,1,-1)+Group(117,1,-1)+Group(118,1,-1)+Group(119,1,-1)+Group(12,1,-1)+Group(120,1,-1)+Group(121,1,-1)+Group(122,1,-1)+Group(123,1,-1)+Group(124,1,-1)+Group(125,1,-1)+Group(126,1,-1)+Group(127,1,-1)+Group(128,1,-1)+Group(129,1,-1)+Group(13,1,-1)+Group(130,1,-1)+Group(131,1,-1)+Group(132,1,-1)+Group(133,1,-1)+Group(134,1,-1)+Group(135,1,-1)+Group(136,1,-1)+Group(137,1,-1)+Group(138,1,-1)+Group(139,1,-1)+Group(14,1,-1)+Group(140,1,-1)+Group(141,1,-1)+Group(142,1,-1)+Group(143,1,-1)+Group(144,1,-1)+Group(145,1,-1)+Group(146,1,-1)+Group(147,1,-1)+Group(148,1,-1)+Group(149,1,-1)+Group(15,1,-1)+Group(150,1,-1)+Group(151,1,-1)+Group(152,1,-1)+Group(153,1,-1)+Group(154,1,-1)+Group(155,1,-1)+Group(156,1,-1)+Group(157,1,-1)+Group(158,1,-1)+Group(159,1,-1)+Group(16,1,-1)+Group(160,1,-1)+Group(161,1,-1)+Group(162,1,-1)+Group(163,1,-1)+Group(164,1,-1)+Group(165,1,-1)+Group(166,1,-1)+Group(167,1,-1)+Group(168,1,-1)+Group(169,1,-1)+Group(17,1,-1)+Group(170,1,-1)+Group(171,1,-1)+Group(172,1,-1)+Group(173,1,-1)+Group(174,1,-1)+Group(175,1,-1)+Group(176,1,-1)+Group(177,1,-1)+Group(178,1,-1)+Group(179,1,-1)+Group(18,1,-1)+Group(180,1,-1)+Group(181,1,-1)+Group(182,1,-1)+Group(183,1,-1)+Group(184,1,-1)+Group(185,1,-1)+Group(186,1,-1)+Group(187,1,-1)+Group(188,1,-1)+Group(189,1,-1)+Group(19,1,-1)+Group(190,1,-1)+Group(191,1,-1)+Group(192,1,-1)+Group(193,1,-1)+Group(194,1,-1)+Group(195,1,-1)+Group(196,1,-1)+Group(197,1,-1)+Group(198,1,-1)+Group(199,1,-1)+Group(2,1,-1)+Group(20,1,-1)+Group(200,1,-1)+Group(201,1,-1)+Group(202,1,-1)+Group(203,1,-1)+Group(204,1,-1)+Group(205,1,-1)+Group(206,1,-1)+Group(207,1,-1)+Group(208,1,-1)+Group(209,1,-1)+Group(21,1,-1)+Group(210,1,-1)+Group(211,1,-1)+Group(212,1,-1)+Group(213,1,-1)+Group(214,1,-1)+Group(215,1,-1)+Group(216,1,-1)+Group(217,1,-1)+Group(218,1,-1)+Group(219,1,-1)+Group(22,1,-1)+Group(220,1,-1)+Group(221,1,-1)+Group(222,1,-1)+Group(223,1,-1)+Group(224,1,-1)+Group(225,1,-1)+Group(226,1,-1)+Group(227,1,-1)+Group(228,1,-1)+Group(229,1,-1)+Group(23,1,-1)+Group(230,1,-1)+Group(231,1,-1)+Group(232,1,-1)+Group(233,1,-1)+Group(24,1,-1)+Group(25,1,-1)+Group(26,1,-1)+Group(27,1,-1)+Group(28,1,-1)+Group(29,1,-1)+Group(3,1,-1)+Group(30,1,-1)+Group(31,1,-1)+Group(32,1,-1)+Group(33,1,-1)+Group(34,1,-1)+Group(35,1,-1)+Group(36,1,-1)+Group(37,1,-1)+Group(38,1,-1)+Group(39,1,-1)+Group(4,1,-1)+Group(40,1,-1)+Group(41,1,-1)+Group(42,1,-1)+Group(43,1,-1)+Group(44,1,-1)+Group(45,1,-1)+Group(46,1,-1)+Group(47,1,-1)+Group(48,1,-1)+Group(49,1,-1)+Group(5,1,-1)+Group(50,1,-1)+Group(51,1,-1)+Group(52,1,-1)+Group(53,1,-1)+Group(54,1,-1)+Group(55,1,-1)+Group(56,1,-1)+Group(57,1,-1)+Group(58,1,-1)+Group(59,1,-1)+Group(6,1,-1)+Group(60,1,-1)+Group(61,1,-1)+Group(62,1,-1)+Group(63,1,-1)+Group(64,1,-1)+Group(65,1,-1)+Group(66,1,-1)+Group(67,1,-1)+Group(68,1,-1)+Group(69,1,-1)+Group(7,1,-1)+Group(70,1,-1)+Group(71,1,-1)+Group(72,1,-1)+Group(73,1,-1)+Group(74,1,-1)+Group(75,1,-1)+Group(76,1,-1)+Group(77,1,-1)+Group(78,1,-1)+Group(79,1,-1)+Group(8,1,-1)+Group(80,1,-1)+Group(81,1,-1)+Group(82,1,-1)+Group(83,1,-1)+Group(84,1,-1)+Group(85,1,-1)+Group(86,1,-1)+Group(87,1,-1)+Group(88,1,-1)+Group(89,1,-1)+Group(9,1,-1)+Group(90,1,-1)+Group(905,1,-1)+Group(906,1,-1)+Group(907,1,-1)+Group(908,1,-1)+Group(909,1,-1)+Group(91,1,-1)+Group(910,1,-1)+Group(911,1,-1)+Group(912,1,-1)+Group(913,1,-1)+Group(914,1,-1)+Group(915,1,-1)+Group(916,1,-1)+Group(917,1,-1)+Group(918,1,-1)+Group(919,1,-1)+Group(92,1,-1)+Group(920,1,-1)+Group(921,1,-1)+Group(922,1,-1)+Group(923,1,-1)+Group(924,1,-1)+Group(925,1,-1)+Group(926,1,-1)+Group(927,1,-1)+Group(928,1,-1)+Group(929,1,-1)+Group(93,1,-1)+Group(930,1,-1)+Group(931,1,-1)+Group(932,1,-1)+Group(933,1,-1)+Group(934,1,-1)+Group(935,1,-1)+Group(936,1,-1)+Group(937,1,-1)+Group(938,1,-1)+Group(939,1,-1)+Group(94,1,-1)+Group(940,1,-1)+Group(941,1,-1)+Group(942,1,-1)+Group(943,1,-1)+Group(944,1,-1)+Group(945,1,-1)+Group(946,1,-1)+Group(947,1,-1)+Group(948,1,-1)+Group(949,1,-1)+Group(95,1,-1)+Group(950,1,-1)+Group(951,1,-1)+Group(952,1,-1)+Group(953,1,-1)+Group(954,1,-1)+Group(955,1,-1)+Group(956,1,-1)+Group(957,1,-1)+Group(958,1,-1)+Group(959,1,-1)+Group(96,1,-1)+Group(960,1,-1)+Group(961,1,-1)+Group(962,1,-1)+Group(963,1,-1)+Group(964,1,-1)+Group(965,1,-1)+Group(966,1,-1)+Group(967,1,-1)+Group(968,1,-1)+Group(969,1,-1)+Group(97,1,-1)+Group(970,1,-1)+Group(971,1,-1)+Group(972,1,-1)+Group(973,1,-1)+Group(974,1,-1)+Group(975,1,-1)+Group(976,1,-1)+Group(977,1,-1)+Group(978,1,-1)+Group(979,1,-1)+Group(98,1,-1)+Group(980,1,-1)+Group(981,1,-1)+Group(982,1,-1)+Group(983,1,-1)+Group(984,1,-1)+Group(985,1,-1)+Group(986,1,-1)+Group(987,1,-1)+Group(988,1,-1)+Group(989,1,-1)+Group(99,1,-1)+Group(990,1,-1)+Group(991,1,-1)+Group(992,1,-1)+Group(993,1,-1)+Group(994,1,-1)+Group(995,1,-1)+Group(996,1,-1)+Group(997,1,-1)+Group(998,1,-1)+Group(999,1,-1) = -765/2");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "g g > g g g | u d g ghg a QED==0 [QCD=1] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"905 | 171/2+Group(1000,1,-1)+Group(1001,1,-1)+Group(1002,1,-1)+Group(1003,1,-1)+Group(1004,1,-1)+Group(1005,1,-1)+Group(1006,1,-1)+Group(1007,1,-1)+Group(1008,1,-1)+Group(1009,1,-1)+Group(1010,1,-1)+Group(1011,1,-1)+Group(1012,1,-1)+Group(1013,1,-1)+Group(1014,1,-1)+Group(1015,1,-1)+Group(1016,1,-1)+Group(1017,1,-1)+Group(1018,1,-1)+Group(1019,1,-1)+Group(1020,1,-1)+Group(1021,1,-1)+Group(1022,1,-1)+Group(1023,1,-1)+Group(1024,1,-1)+Group(1025,1,-1)+Group(1026,1,-1)+Group(1027,1,-1)+Group(1028,1,-1)+Group(1029,1,-1)+Group(1030,1,-1)+Group(1031,1,-1)+Group(1032,1,-1)+Group(1033,1,-1)+Group(1034,1,-1)+Group(1035,1,-1)+Group(1036,1,-1)+Group(1037,1,-1)+Group(1038,1,-1)+Group(1039,1,-1)+Group(1040,1,-1)+Group(1041,1,-1)+Group(1042,1,-1)+Group(1043,1,-1)+Group(1044,1,-1)+Group(1045,1,-1)+Group(1046,1,-1)+Group(1047,1,-1)+Group(1048,1,-1)+Group(1049,1,-1)+Group(1050,1,-1)+Group(1051,1,-1)+Group(1052,1,-1)+Group(1053,1,-1)+Group(1054,1,-1)+Group(1055,1,-1)+Group(1056,1,-1)+Group(1057,1,-1)+Group(1058,1,-1)+Group(1059,1,-1)+Group(1060,1,-1)+Group(1061,1,-1)+Group(1062,1,-1)+Group(1063,1,-1)+Group(1064,1,-1)+Group(1065,1,-1)+Group(1066,1,-1)+Group(1067,1,-1)+Group(1068,1,-1)+Group(1069,1,-1)+Group(1070,1,-1)+Group(1071,1,-1)+Group(1072,1,-1)+Group(1073,1,-1)+Group(1074,1,-1)+Group(1075,1,-1)+Group(1076,1,-1)+Group(1077,1,-1)+Group(1078,1,-1)+Group(1079,1,-1)+Group(1080,1,-1)+Group(1081,1,-1)+Group(1082,1,-1)+Group(1083,1,-1)+Group(1084,1,-1)+Group(1085,1,-1)+Group(1086,1,-1)+Group(1087,1,-1)+Group(1088,1,-1)+Group(1089,1,-1)+Group(1090,1,-1)+Group(1091,1,-1)+Group(1092,1,-1)+Group(1093,1,-1)+Group(1094,1,-1)+Group(1095,1,-1)+Group(1096,1,-1)+Group(1097,1,-1)+Group(1098,1,-1)+Group(1099,1,-1)+Group(1100,1,-1)+Group(1101,1,-1)+Group(1102,1,-1)+Group(1103,1,-1)+Group(1104,1,-1)+Group(1105,1,-1)+Group(1106,1,-1)+Group(1107,1,-1)+Group(1108,1,-1)+Group(1109,1,-1)+Group(1110,1,-1)+Group(1111,1,-1)+Group(1112,1,-1)+Group(1113,1,-1)+Group(1114,1,-1)+Group(1115,1,-1)+Group(1116,1,-1)+Group(1117,1,-1)+Group(1118,1,-1)+Group(1119,1,-1)+Group(1120,1,-1)+Group(1121,1,-1)+Group(1122,1,-1)+Group(1123,1,-1)+Group(1124,1,-1)+Group(1125,1,-1)+Group(1126,1,-1)+Group(1127,1,-1)+Group(1128,1,-1)+Group(1129,1,-1)+Group(1130,1,-1)+Group(1131,1,-1)+Group(1132,1,-1)+Group(1133,1,-1)+Group(1134,1,-1)+Group(1135,1,-1)+Group(1136,1,-1)+Group(1137,1,-1)+Group(1138,1,-1)+Group(596,1,-1)+Group(597,1,-1)+Group(598,1,-1)+Group(599,1,-1)+Group(600,1,-1)+Group(601,1,-1)+Group(602,1,-1)+Group(603,1,-1)+Group(604,1,-1)+Group(605,1,-1)+Group(606,1,-1)+Group(607,1,-1)+Group(608,1,-1)+Group(609,1,-1)+Group(610,1,-1)+Group(611,1,-1)+Group(612,1,-1)+Group(613,1,-1)+Group(614,1,-1)+Group(615,1,-1)+Group(616,1,-1)+Group(617,1,-1)+Group(618,1,-1)+Group(619,1,-1)+Group(620,1,-1)+Group(621,1,-1)+Group(622,1,-1)+Group(623,1,-1)+Group(624,1,-1)+Group(625,1,-1)+Group(626,1,-1)+Group(627,1,-1)+Group(628,1,-1)+Group(629,1,-1)+Group(630,1,-1)+Group(631,1,-1)+Group(632,1,-1)+Group(633,1,-1)+Group(634,1,-1)+Group(635,1,-1)+Group(636,1,-1)+Group(637,1,-1)+Group(638,1,-1)+Group(639,1,-1)+Group(640,1,-1)+Group(641,1,-1)+Group(642,1,-1)+Group(643,1,-1)+Group(644,1,-1)+Group(645,1,-1)+Group(646,1,-1)+Group(647,1,-1)+Group(648,1,-1)+Group(649,1,-1)+Group(650,1,-1)+Group(651,1,-1)+Group(652,1,-1)+Group(653,1,-1)+Group(654,1,-1)+Group(655,1,-1)+Group(656,1,-1)+Group(657,1,-1)+Group(658,1,-1)+Group(659,1,-1)+Group(660,1,-1)+Group(661,1,-1)+Group(662,1,-1)+Group(663,1,-1)+Group(664,1,-1)+Group(665,1,-1)+Group(666,1,-1)+Group(667,1,-1)+Group(668,1,-1)+Group(669,1,-1)+Group(670,1,-1)+Group(671,1,-1)+Group(672,1,-1)+Group(673,1,-1)+Group(674,1,-1)+Group(675,1,-1)+Group(676,1,-1)+Group(677,1,-1)+Group(678,1,-1)+Group(679,1,-1)+Group(680,1,-1)+Group(681,1,-1)+Group(682,1,-1)+Group(683,1,-1)+Group(684,1,-1)+Group(685,1,-1)+Group(686,1,-1)+Group(687,1,-1)+Group(688,1,-1)+Group(689,1,-1)+Group(690,1,-1)+Group(691,1,-1)+Group(692,1,-1)+Group(693,1,-1)+Group(694,1,-1)+Group(695,1,-1)+Group(696,1,-1)+Group(697,1,-1)+Group(698,1,-1)+Group(699,1,-1)+Group(700,1,-1)+Group(701,1,-1)+Group(702,1,-1)+Group(703,1,-1)+Group(704,1,-1)+Group(705,1,-1)+Group(706,1,-1)+Group(707,1,-1)+Group(708,1,-1)+Group(709,1,-1)+Group(710,1,-1)+Group(711,1,-1)+Group(712,1,-1)+Group(713,1,-1)+Group(714,1,-1)+Group(715,1,-1)+Group(716,1,-1)+Group(717,1,-1)+Group(718,1,-1)+Group(719,1,-1)+Group(720,1,-1)+Group(721,1,-1)+Group(722,1,-1)+Group(723,1,-1)+Group(724,1,-1)+Group(725,1,-1)+Group(726,1,-1)+Group(727,1,-1)+Group(728,1,-1)+Group(729,1,-1)+Group(730,1,-1)+Group(731,1,-1)+Group(732,1,-1)+Group(733,1,-1)+Group(734,1,-1)+Group(735,1,-1)+Group(736,1,-1)+Group(737,1,-1)+Group(738,1,-1)+Group(739,1,-1)+Group(740,1,-1)+Group(741,1,-1)+Group(742,1,-1)+Group(743,1,-1)+Group(744,1,-1)+Group(745,1,-1)+Group(746,1,-1)+Group(747,1,-1)+Group(748,1,-1)+Group(749,1,-1)+Group(750,1,-1)+Group(751,1,-1)+Group(752,1,-1)+Group(753,1,-1)+Group(754,1,-1)+Group(755,1,-1)+Group(756,1,-1)+Group(757,1,-1)+Group(758,1,-1)+Group(759,1,-1)+Group(760,1,-1)+Group(761,1,-1)+Group(762,1,-1)+Group(763,1,-1)+Group(764,1,-1)+Group(765,1,-1)+Group(766,1,-1)+Group(767,1,-1)+Group(768,1,-1)+Group(769,1,-1)+Group(770,1,-1)+Group(771,1,-1)+Group(772,1,-1)+Group(773,1,-1)+Group(774,1,-1)+Group(775,1,-1)+Group(776,1,-1)+Group(777,1,-1)+Group(778,1,-1)+Group(779,1,-1)+Group(780,1,-1)+Group(781,1,-1)+Group(782,1,-1)+Group(783,1,-1)+Group(784,1,-1)+Group(785,1,-1)+Group(786,1,-1)+Group(787,1,-1)+Group(788,1,-1)+Group(789,1,-1)+Group(790,1,-1)+Group(791,1,-1)+Group(792,1,-1)+Group(793,1,-1)+Group(794,1,-1)+Group(795,1,-1)+Group(796,1,-1)+Group(797,1,-1)+Group(798,1,-1)+Group(799,1,-1)+Group(800,1,-1)+Group(801,1,-1)+Group(802,1,-1)+Group(803,1,-1)+Group(804,1,-1)+Group(805,1,-1)+Group(806,1,-1)+Group(807,1,-1)+Group(808,1,-1)+Group(809,1,-1)+Group(810,1,-1)+Group(811,1,-1)+Group(812,1,-1)+Group(813,1,-1)+Group(814,1,-1)+Group(815,1,-1)+Group(816,1,-1)+Group(817,1,-1)+Group(818,1,-1)+Group(819,1,-1)+Group(820,1,-1)+Group(821,1,-1)+Group(822,1,-1)+Group(823,1,-1)+Group(824,1,-1)+Group(825,1,-1)+Group(826,1,-1)+Group(827,1,-1)+Group(828,1,-1)+Group(829,1,-1)+Group(830,1,-1)+Group(831,1,-1)+Group(832,1,-1)+Group(833,1,-1)+Group(834,1,-1)+Group(835,1,-1)+Group(911,1,-1)+Group(912,1,-1)+Group(913,1,-1)+Group(914,1,-1)+Group(915,1,-1)+Group(916,1,-1)+Group(917,1,-1)+Group(918,1,-1)+Group(919,1,-1)+Group(920,1,-1)+Group(921,1,-1)+Group(922,1,-1)+Group(923,1,-1)+Group(924,1,-1)+Group(925,1,-1)+Group(926,1,-1)+Group(927,1,-1)+Group(928,1,-1)+Group(929,1,-1)+Group(930,1,-1)+Group(931,1,-1)+Group(932,1,-1)+Group(933,1,-1)+Group(934,1,-1)+Group(935,1,-1)+Group(936,1,-1)+Group(937,1,-1)+Group(938,1,-1)+Group(939,1,-1)+Group(940,1,-1)+Group(941,1,-1)+Group(942,1,-1)+Group(943,1,-1)+Group(944,1,-1)+Group(945,1,-1)+Group(946,1,-1)+Group(947,1,-1)+Group(948,1,-1)+Group(949,1,-1)+Group(950,1,-1)+Group(951,1,-1)+Group(952,1,-1)+Group(953,1,-1)+Group(954,1,-1)+Group(955,1,-1)+Group(956,1,-1)+Group(957,1,-1)+Group(958,1,-1)+Group(959,1,-1)+Group(960,1,-1)+Group(961,1,-1)+Group(962,1,-1)+Group(963,1,-1)+Group(964,1,-1)+Group(965,1,-1)+Group(966,1,-1)+Group(967,1,-1)+Group(968,1,-1)+Group(969,1,-1)+Group(970,1,-1)+Group(971,1,-1)+Group(972,1,-1)+Group(973,1,-1)+Group(974,1,-1)+Group(975,1,-1)+Group(976,1,-1)+Group(977,1,-1)+Group(978,1,-1)+Group(979,1,-1)+Group(980,1,-1)+Group(981,1,-1)+Group(982,1,-1)+Group(983,1,-1)+Group(984,1,-1)+Group(985,1,-1)+Group(986,1,-1)+Group(987,1,-1)+Group(988,1,-1)+Group(989,1,-1)+Group(990,1,-1)+Group(991,1,-1)+Group(992,1,-1)+Group(993,1,-1)+Group(994,1,-1)+Group(995,1,-1)+Group(996,1,-1)+Group(997,1,-1)+Group(998,1,-1)+Group(999,1,-1) = -765/2");
 
     Ok(())
 }
@@ -1519,14 +1975,14 @@ fn test_dis_isr() -> Result<()> {
     // cli.run_command(&format!("set global kv global.n_cores.feyngen=4"))?;
 
     // 2>N amplitude, no symmetrization
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d > e- d | e- a d g ghg QED==2 [{0}] --numerator-grouping only_detect_zeroes",false)?,@"1 | -1 = -1");
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d > e- d | e- a d g ghg QED==2 [{1}] --numerator-grouping only_detect_zeroes",false)?,@"1 | -1 = -1");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d > e- d | e- a d g ghg QED==2 [{0}] --filter-zero-color --numerator-grouping no_grouping",false)?,@"1 | -1 = -1");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d > e- d | e- a d g ghg QED==2 [{1}] --filter-zero-color --numerator-grouping no_grouping",false)?,@"1 | -1 = -1");
     // One closed ghost loop has sign -1: with external ordering -1 and
     // AutG=1 its weight is +1, giving -9/2 after the nine color zeros.
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d > e- d | e- a d g ghg QED==2 [{2}] --numerator-grouping only_detect_zeroes",true)?,@"13 | -9/2 = -9/2");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d > e- d | e- a d g ghg QED==2 [{2}] --filter-zero-color --numerator-grouping no_grouping",true)?,@"13 | -9/2 = -9/2");
     // The 241 nonzero color networks sum to -56/3 with a minus for
     // every closed Grassmann circuit, including ghosts.
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d > e- d | e- a d g ghg QED==2 [{3}] --numerator-grouping only_detect_zeroes",false)?,@"241 | -56/3 = -56/3");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d > e- d | e- a d g ghg QED==2 [{3}] --filter-zero-color --numerator-grouping no_grouping",false)?,@"241 | -56/3 = -56/3");
 
     // 2>N amplitude, with symmetrization
     assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d > e- d | e- a d g ghg QED==2 [{0}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"1 | -1 = -1");
@@ -1536,36 +1992,36 @@ fn test_dis_isr() -> Result<()> {
     assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d > e- d | e- a d g ghg QED==2 [{2}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"11 | -13/2 = -13/2");
     // Closed ghost loops change the singleton sum; the six reversal
     // classes retain their exact color/Dirac ratios and unit raw weights.
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d > e- d | e- a d g ghg QED==2 [{3}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"191 | -170/3+Group(102,1,1)+Group(103,-2/7,1)+Group(104,1,1)+Group(105,-7/2,1)+Group(162,1,1)+Group(163,7/2,1)+Group(164,1,1)+Group(165,2/7,1)+Group(172,1,1)+Group(173,1,1)+Group(315,1,1)+Group(316,-2/7,1) = -1049/21");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d > e- d | e- a d g ghg QED==2 [{3}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"191 | -170/3+Group(254,1,1)+Group(255,-2/7,1)+Group(275,1,1)+Group(276,1,1)+Group(289,-7/2,1)+Group(290,-2/7,1)+Group(334,1,1)+Group(337,2/7,1)+Group(362,1,1)+Group(364,1,1)+Group(374,1,1)+Group(375,2/7,1) = -319/6");
 
     // 3>N no symmetrization
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d g > e- d | e- a d g ghg QED==2 [{0}] --numerator-grouping only_detect_zeroes",false)?,@"2 | -2 = -2");
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d g > e- d | e- a d g ghg QED==2 [{1}] --numerator-grouping only_detect_zeroes",false)?,@"13 | -9 = -9");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d g > e- d | e- a d g ghg QED==2 [{0}] --filter-zero-color --numerator-grouping no_grouping",false)?,@"2 | -2 = -2");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d g > e- d | e- a d g ghg QED==2 [{1}] --filter-zero-color --numerator-grouping no_grouping",false)?,@"13 | -9 = -9");
     // The 22 surviving odd-ghost graphs have total weight +18.
     // Omitting their ghost-loop sign gives the historical -169/2.
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d g > e- d | e- a d g ghg QED==2 [{2}] --numerator-grouping only_detect_zeroes",false)?,@"225 | -97/2 = -97/2");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d g > e- d | e- a d g ghg QED==2 [{2}] --filter-zero-color --numerator-grouping no_grouping",false)?,@"225 | -97/2 = -97/2");
 
     // 3>N with symmetrization
     assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d g > e- d | e- a d g ghg QED==2 [{0}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"2 | -2 = -2");
     assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d g > e- d | e- a d g ghg QED==2 [{1}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"11 | -11 = -11");
     // Closed ghost-loop signs shift the singleton sum by +40. All twelve
     // grouped members retain their independently verified exact ratios.
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d g > e- d | e- a d g ghg QED==2 [{2}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"181 | -179/2+Group(195,1,1)+Group(196,2/7,1)+Group(198,1,1)+Group(199,7/2,1)+Group(206,1,1)+Group(207,-7/2,1)+Group(211,1,1)+Group(212,-2/7,1)+Group(74,1,1)+Group(75,7/2,1)+Group(80,1,1)+Group(81,-2/7,1) = -562/7");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d g > e- d | e- a d g ghg QED==2 [{2}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"181 | -179/2+Group(167,1,1)+Group(169,2/7,1)+Group(179,1,1)+Group(182,7/2,1)+Group(188,1,1)+Group(190,-7/2,1)+Group(208,1,1)+Group(219,1,1)+Group(236,1,1)+Group(241,7/2,1)+Group(251,-7/2,1)+Group(253,-2/7,1) = -167/2");
 
     // 4>N no symmetrization
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d u u~ > e- d | e- a d u g ghg QED==2 [{0}] --numerator-grouping only_detect_zeroes",false)?,@"4 | 4 = 4");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d u u~ > e- d | e- a d u g ghg QED==2 [{0}] --filter-zero-color --numerator-grouping no_grouping",false)?,@"4 | 4 = 4");
     // Four surviving closed ghost loops each contribute -1, shifting the old total by -8.
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d u u~ > e- d | e- a d u g ghg QED==2 [{1}] --numerator-grouping only_detect_zeroes",false)?,@"62 | 28 = 28");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d u u~ > e- d | e- a d u g ghg QED==2 [{1}] --filter-zero-color --numerator-grouping no_grouping",false)?,@"62 | 28 = 28");
     // The 170 surviving odd-ghost graphs have total weight -118.
     // Omitting their ghost-loop sign gives the historical 1298/3.
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d u u~ > e- d | e- a d u g ghg QED==2 [{2}] --numerator-grouping only_detect_zeroes",false)?,@"1428 | 590/3 = 590/3");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d u u~ > e- d | e- a d u g ghg QED==2 [{2}] --filter-zero-color --numerator-grouping no_grouping",false)?,@"1428 | 590/3 = 590/3");
 
     // 4>N with symmetrization
     assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d u u~ > e- d | e- a d u g ghg QED==2 [{0}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"4 | 4 = 4");
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d u u~ > e- d | e- a d u g ghg QED==2 [{1}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"54 | 40+Group(15,1,-1)+Group(16,1,-1)+Group(18,1,-1)+Group(19,1,-1)+Group(58,1,-1)+Group(59,1,-1)+Group(61,1,-1)+Group(62,1,-1) = 32");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d u u~ > e- d | e- a d u g ghg QED==2 [{1}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"54 | 40+Group(22,1,-1)+Group(25,1,-1)+Group(43,1,-1)+Group(45,1,-1)+Group(47,1,-1)+Group(49,1,-1)+Group(59,1,-1)+Group(64,1,-1) = 32");
     // Complete color/Wick classes predict 1087 groups after 33 cancellations.
     // All 354 ratios are preserved; quark-plus-ghost members have positive signs.
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d u u~ > e- d | e- a d u g ghg QED==2 [{2}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"1087 | 1700/3+Group(100,1,-1)+Group(101,-2/7,-1)+Group(1019,1,-1)+Group(102,1,-1)+Group(1020,1,-1)+Group(1021,1,-1)+Group(103,-2/7,-1)+Group(1065,-1/2,-1)+Group(1066,7/4,-1)+Group(1071,-1/2,-1)+Group(1073,7/4,-1)+Group(1081,1,-1)+Group(1082,1,-1)+Group(1083,1,-1)+Group(1111,-1/2,-1)+Group(1112,1/7,-1)+Group(1113,-1/2,-1)+Group(1114,1/7,-1)+Group(1126,1,-1)+Group(1127,1,-1)+Group(1128,1,-1)+Group(1129,1,-1)+Group(1136,1,-1)+Group(1137,1,-1)+Group(1138,1,-1)+Group(1139,1,-1)+Group(1140,1,-1)+Group(1141,1,-1)+Group(1142,1,-1)+Group(1156,1,-1)+Group(1157,7/2,-1)+Group(1206,1,-1)+Group(1207,1,-1)+Group(1208,1,-1)+Group(1210,1,-1)+Group(1212,1,-1)+Group(1214,1,-1)+Group(1216,1,-1)+Group(1217,1,-1)+Group(1218,1,1)+Group(1219,1,1)+Group(1220,1,1)+Group(1221,1,1)+Group(1222,1,-1)+Group(1223,1,-1)+Group(1224,1,-1)+Group(1225,1,-1)+Group(1226,1,-1)+Group(1227,1,-1)+Group(1297,1,-1)+Group(1326,-1/2,-1)+Group(1327,7/4,-1)+Group(1328,-1/2,-1)+Group(1330,7/4,-1)+Group(1348,1,-1)+Group(137,1,-1)+Group(138,1,-1)+Group(139,1,-1)+Group(1393,1,-1/2)+Group(1394,1,-1)+Group(1395,1,-1/2)+Group(1396,1,-1)+Group(1397,1,-1)+Group(1398,1,-1)+Group(1399,1,-1)+Group(140,1,-1)+Group(1400,1,-1)+Group(1401,1,-1)+Group(1402,1,-1)+Group(1403,1,-1)+Group(1404,1,-1)+Group(1405,1,-1)+Group(1406,1,-1)+Group(1407,1,-1)+Group(1408,1,-1)+Group(141,1,-1)+Group(1410,1,-1)+Group(1411,1,-1/2)+Group(1412,1,-1)+Group(1413,1,-1)+Group(1415,1,-1)+Group(1416,1,-1/2)+Group(1419,1,-1)+Group(142,1,-1)+Group(1420,1,-1)+Group(1421,1,-1)+Group(1422,1,-1/2)+Group(1423,1,-1)+Group(1424,1,-1/2)+Group(1425,1,-1)+Group(1426,1,-1)+Group(1427,1,-1)+Group(1428,1,-1)+Group(1429,1,-1)+Group(143,1,-1)+Group(1430,1,-1)+Group(1431,1,-1)+Group(1433,1,-1)+Group(1435,1,-1)+Group(1436,1,-1)+Group(1439,1,-1)+Group(144,1,-1)+Group(1440,1,-1)+Group(1441,1,-1)+Group(1442,1,-1)+Group(1443,1,-1)+Group(1444,1,-1/2)+Group(1445,1,-1)+Group(1446,1,-1)+Group(1447,1,-1)+Group(1448,1,-1/2)+Group(145,1,-1)+Group(146,1,-1)+Group(147,1,-1)+Group(1495,-1/2,-1)+Group(1510,1,-1)+Group(1511,1,-1)+Group(1513,7/2,-1)+Group(1514,1,-1)+Group(1515,1,-1)+Group(1517,7/2,-1)+Group(1518,1,-1)+Group(1519,2/7,-1)+Group(1520,1,-1)+Group(1521,7/2,-1)+Group(1522,1,-1)+Group(1525,1,-1)+Group(1528,1,-1)+Group(1529,7/2,-1)+Group(1530,1,-1)+Group(1531,1,-1)+Group(1532,7/2,-1)+Group(1533,1,-1)+Group(1536,1,-1)+Group(1537,2/7,-1)+Group(1538,1,-1)+Group(1539,7/2,-1)+Group(1542,1,-1)+Group(1543,1,-1)+Group(1562,1,-1)+Group(1563,1,-1)+Group(1564,1,-1)+Group(1565,1,-1)+Group(1566,1,-1)+Group(1567,1,-1)+Group(1568,1,-1)+Group(1569,1,-1)+Group(1607,-1/2,-1)+Group(1608,-1/2,-1)+Group(161,1,-1)+Group(162,7/2,-1)+Group(1648,1,-1)+Group(1649,1,-1)+Group(1650,1,-1)+Group(1651,1,-1)+Group(1661,1,-1)+Group(1662,1,-1)+Group(1663,1,-1)+Group(1664,1,-1)+Group(1665,1,-1)+Group(1666,1,-1)+Group(1667,1,-1)+Group(1668,1,-1)+Group(1669,1,1)+Group(1670,1,1)+Group(1671,1,1)+Group(1672,1,1)+Group(1673,1,-1)+Group(1674,1,-1)+Group(1675,1,-1)+Group(1676,1,-1)+Group(1677,1,-1)+Group(1678,1,-1)+Group(169,1,-1)+Group(170,1,-1)+Group(171,1,-1)+Group(172,1,-1)+Group(173,1,-1)+Group(174,1,-1)+Group(175,1,-1)+Group(178,1,-1)+Group(179,1,-1)+Group(180,1,-1)+Group(181,1,-1)+Group(184,1,-1)+Group(185,7/2,-1)+Group(243,1,-1)+Group(245,-7/2,-1)+Group(246,1,-1)+Group(247,-7/2,-1)+Group(265,1,-1)+Group(266,1,-1)+Group(321,1,-1/2)+Group(322,1,-1)+Group(323,1,-1/2)+Group(324,1,-1)+Group(325,1,-1)+Group(327,1,-1)+Group(329,1,-1)+Group(330,1,-1)+Group(331,1,-1)+Group(332,1,-1)+Group(333,1,-1)+Group(334,1,-1)+Group(335,1,-1)+Group(336,1,-1)+Group(339,1,-1)+Group(340,1,-1)+Group(341,1,-1)+Group(342,1,-1/2)+Group(343,1,-1)+Group(344,1,-1)+Group(345,1,-1)+Group(346,1,-1/2)+Group(347,1,-1)+Group(348,1,-1)+Group(349,1,-1)+Group(350,1,-1/2)+Group(351,1,-1)+Group(352,1,-1/2)+Group(353,1,-1)+Group(354,1,-1)+Group(355,1,-1)+Group(356,1,-1)+Group(357,1,-1)+Group(358,1,-1)+Group(359,1,-1)+Group(360,1,-1)+Group(361,1,-1)+Group(362,1,-1)+Group(363,1,-1)+Group(364,1,-1)+Group(365,1,-1)+Group(366,1,-1)+Group(368,1,-1)+Group(369,1,-1/2)+Group(370,1,-1)+Group(371,1,-1)+Group(373,1,-1)+Group(374,1,-1/2)+Group(379,1,-1)+Group(394,1,-1)+Group(395,1,-1)+Group(396,7/2,-1)+Group(397,1,-1)+Group(398,1,-1)+Group(399,7/2,-1)+Group(402,1,-1)+Group(403,2/7,-1)+Group(404,1,-1)+Group(405,7/2,-1)+Group(408,1,-1)+Group(409,1,-1)+Group(410,1,-1)+Group(412,7/2,-1)+Group(413,1,-1)+Group(414,1,-1)+Group(416,7/2,-1)+Group(417,1,-1)+Group(418,1,-1)+Group(419,2/7,-1)+Group(420,1,-1)+Group(421,7/2,-1)+Group(424,1,-1)+Group(427,1,-1)+Group(446,1,-1)+Group(447,1,-1)+Group(448,1,-1)+Group(449,1,-1)+Group(450,1,-1)+Group(451,1,-1)+Group(452,1,-1)+Group(453,1,-1)+Group(531,1,-1)+Group(532,1,-1)+Group(566,1,-1)+Group(567,1,-1)+Group(568,1,-1)+Group(569,1,-1)+Group(589,1,-1)+Group(59,1,-1)+Group(590,1,-1)+Group(591,1,1)+Group(592,1,1)+Group(593,1,1)+Group(594,1,1)+Group(595,1,-1)+Group(596,1,-1)+Group(597,1,-1)+Group(598,1,-1)+Group(599,1,-1)+Group(600,1,-1)+Group(601,1,-1)+Group(602,1,-1)+Group(603,1,-1)+Group(604,1,-1)+Group(605,1,-1)+Group(606,1,-1)+Group(61,-7/2,-1)+Group(62,1,-1)+Group(63,-7/2,-1)+Group(658,1,-1)+Group(659,1,-1)+Group(660,1,1)+Group(661,1,1)+Group(662,1,1)+Group(663,1,1)+Group(664,1,-1)+Group(665,1,-1)+Group(666,1,-1)+Group(667,1,-1)+Group(668,1,-1)+Group(669,1,-1)+Group(672,1,-1)+Group(673,1,-1)+Group(674,1,-1)+Group(676,1,-1)+Group(678,1,-1)+Group(680,1,-1)+Group(71,1,-1)+Group(72,1,-1)+Group(73,1,-1)+Group(80,1,-1)+Group(806,1,1)+Group(807,1,1)+Group(808,1,1)+Group(809,1,1)+Group(81,1,-1)+Group(810,1,1)+Group(811,1,1)+Group(812,1,1)+Group(813,1,1)+Group(82,1,-1)+Group(884,1,1)+Group(885,1,1)+Group(886,1,1)+Group(887,1,1)+Group(888,1,1)+Group(889,1,1)+Group(890,1,1)+Group(891,1,1)+Group(958,1,-1)+Group(959,1,-1)+Group(960,1,-1)+Group(961,1,-1)+Group(968,1,-1)+Group(969,1,-1)+Group(970,1,-1)+Group(971,1,-1)+Group(972,1,-1)+Group(973,1,-1)+Group(974,1,-1)+Group(977,1,-1)+Group(978,7/2,-1) = 11773/42");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d u u~ > e- d | e- a d u g ghg QED==2 [{2}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"1087 | 1700/3+Group(100,1,1)+Group(1000,1,-1)+Group(1002,1,-1)+Group(1004,1,-1)+Group(1007,1,-1)+Group(1036,1,-1)+Group(1037,1,-1)+Group(1038,1,-1)+Group(1039,1,-1)+Group(1046,1,-1)+Group(1050,7/2,-1)+Group(1054,1,-1)+Group(1055,1,-1)+Group(1056,1,-1)+Group(1057,1,-1)+Group(1066,1,-1)+Group(1067,7/2,-1)+Group(1070,1,-1)+Group(1071,1,-1)+Group(1072,1,-1)+Group(1073,1,-1)+Group(108,1,1)+Group(1080,1,-1)+Group(1083,7/2,-1)+Group(1109,1,-1)+Group(1111,-7/2,-1)+Group(1118,1,-1)+Group(1120,-2/7,-1)+Group(1127,1,-1)+Group(1129,-7/2,-1)+Group(1137,1,-1)+Group(1139,1,-1)+Group(1144,1,-1)+Group(1146,1,-1)+Group(1149,1,-1)+Group(1153,1,-1)+Group(1155,1,-1)+Group(1159,1,-1)+Group(116,1,1)+Group(1160,1,-1)+Group(1161,1,1)+Group(1162,1,-1)+Group(1163,1,1)+Group(1165,1,-1)+Group(1169,1,-1)+Group(1170,1,-1)+Group(1172,1,-1)+Group(1174,1,1)+Group(1177,1,-1)+Group(1178,1,-1)+Group(1179,1,1)+Group(1193,1,-1)+Group(1202,1,-1)+Group(1205,1,-1)+Group(1212,1,-1)+Group(1217,1,-1)+Group(1221,1,-1)+Group(1223,1,-1)+Group(1227,1,-1)+Group(1230,1,-1)+Group(1232,1,-1)+Group(1234,1,-1)+Group(1235,1,-1)+Group(1237,2/7,-1)+Group(1239,1,-1)+Group(1244,1,-1)+Group(1246,1,-1)+Group(1248,1,-1)+Group(1249,1,-1)+Group(1251,7/2,-1)+Group(1253,1,-1)+Group(1258,1,-1)+Group(1260,1,-1)+Group(1262,1,-1)+Group(1263,1,-1)+Group(1265,7/2,-1)+Group(1267,1,-1)+Group(1287,1,-1)+Group(1288,1,-1)+Group(1289,1,-1)+Group(1290,7/2,-1)+Group(1294,1,-1)+Group(1295,1,-1)+Group(1296,1,-1)+Group(1297,1,1)+Group(1301,1,-1)+Group(1302,1,-1)+Group(1303,1,-1)+Group(1304,7/2,-1)+Group(1308,1,-1)+Group(1309,1,-1)+Group(1310,1,-1)+Group(1311,1,1)+Group(1313,1,-1)+Group(1315,1,-1)+Group(1317,1,-1)+Group(1318,1,-1)+Group(1319,1,1)+Group(1320,1,-1)+Group(1321,7/2,-1)+Group(1325,1,-1)+Group(1327,1,-1)+Group(1329,1,-1)+Group(1331,1,-1)+Group(1332,1,-1)+Group(1333,1,1)+Group(1334,1,-1)+Group(1335,7/2,-1)+Group(1339,1,-1)+Group(1342,1,-1)+Group(1343,1,-1)+Group(1344,1,-1)+Group(1345,1,-1)+Group(1350,1,-1)+Group(1353,2/7,-1)+Group(1360,1,-1)+Group(1361,1,-1)+Group(1363,1,-1)+Group(1364,1,-1)+Group(1366,1,-1)+Group(1367,1,-1)+Group(1369,1,-1)+Group(1370,1,-1)+Group(1384,1,-1)+Group(1385,1,-1)+Group(1393,7/2,-1)+Group(1394,7/2,-1)+Group(1397,1,-1)+Group(1402,1,-1)+Group(1403,1,1)+Group(1404,1,-1)+Group(1408,1,-1)+Group(1409,1,-1)+Group(141,1,1)+Group(1410,1,-1)+Group(1411,1,1)+Group(1420,1,-1)+Group(1421,1,-1)+Group(1423,1,-1)+Group(143,1,1)+Group(1442,1,-1)+Group(1443,1,1)+Group(1445,1,-1)+Group(1448,1,-1)+Group(145,1,1)+Group(1450,1,-1)+Group(1459,1,-1)+Group(1465,1,-1)+Group(1467,1,-1)+Group(1469,1,-1)+Group(147,1,1)+Group(1470,1,-1)+Group(1471,1,1)+Group(1472,1,-1)+Group(1474,1,-1)+Group(1479,1,-1)+Group(1480,1,-1)+Group(1482,1,-1)+Group(1483,7/2,-1)+Group(1485,1,-1)+Group(1489,1,-1)+Group(149,1,1)+Group(1507,1,-1)+Group(151,1,1)+Group(1515,1,-1)+Group(1519,1,-1)+Group(1520,1,-1)+Group(1521,1,-1)+Group(1523,7/2,-1)+Group(1527,4/7,-1)+Group(1529,7,-1)+Group(153,1,1)+Group(1531,-2,-1)+Group(1534,7,-1)+Group(1536,-2,-1)+Group(1537,-2,-1)+Group(1538,1,-1)+Group(1541,1,-1)+Group(155,1,1)+Group(1559,1,-1)+Group(1561,1,-1)+Group(1573,1,-1)+Group(1576,1,-1)+Group(1578,1,-1)+Group(1582,2/7,-1)+Group(1583,1,-1)+Group(1584,1,-1)+Group(1585,1,-1)+Group(1586,1,-1)+Group(1587,1,1)+Group(1591,1,-1)+Group(1596,-2,-1)+Group(1597,7,-1)+Group(1603,1,-1)+Group(1610,4/7,-1)+Group(1613,1,-1)+Group(1615,7,-1)+Group(1624,-2,-1)+Group(1626,-2,-1)+Group(1627,1,-1)+Group(1631,1,-1)+Group(1636,1,-1)+Group(1638,1,-1)+Group(1639,1,-1)+Group(1641,7/2,-1)+Group(1643,1,-1)+Group(1645,1,-1)+Group(1646,1,-1)+Group(1648,1,-1)+Group(1649,1,1)+Group(1650,1,-1)+Group(1652,1,-1)+Group(1655,7/2,-1)+Group(1657,1,-1)+Group(1679,1,-1)+Group(1695,1,-1)+Group(1709,1,-1)+Group(173,1,1)+Group(177,1,1)+Group(181,1,1)+Group(195,1,1)+Group(274,1,-1/2)+Group(276,1,-1/2)+Group(280,1,-1)+Group(288,1,-1/2)+Group(296,1,-1/2)+Group(310,1,-1)+Group(349,1,-1/2)+Group(351,1,-1/2)+Group(355,1,-1)+Group(357,1,-1/2)+Group(359,1,-1/2)+Group(363,1,-1)+Group(365,1,-1/2)+Group(367,1,-1/2)+Group(371,1,-1)+Group(373,1,-1/2)+Group(375,1,-1/2)+Group(379,1,-1)+Group(409,1,-1/2)+Group(413,1,-1/2)+Group(417,1,-1)+Group(421,1,-1/2)+Group(435,1,-1/2)+Group(450,1,-1)+Group(494,1,-1)+Group(496,1,-1)+Group(498,1,-1)+Group(500,1,-1)+Group(502,1,-1)+Group(519,1,-1)+Group(520,1,-1)+Group(528,1,-1)+Group(532,1,-1)+Group(535,1,-1)+Group(536,1,-1)+Group(545,1,-1)+Group(548,1,-1)+Group(559,1,-1)+Group(561,1,-1)+Group(576,1,-1)+Group(579,1,-1)+Group(581,1,-1)+Group(603,1,-1)+Group(608,1,-1)+Group(612,1,-1)+Group(626,1,-1)+Group(630,1,-1)+Group(634,1,-1)+Group(636,1,-1)+Group(640,1,-1)+Group(645,1,-1)+Group(651,1,-1)+Group(658,1,-1)+Group(659,1,-1)+Group(670,1,-1)+Group(671,1,-1)+Group(672,1,-1)+Group(673,1,-1)+Group(674,1,-1)+Group(681,1,-1)+Group(682,1,-1)+Group(683,1,-1)+Group(684,1,-1)+Group(685,1,-1)+Group(689,1,-1)+Group(690,1,-1)+Group(692,1,-1)+Group(693,1,-1)+Group(696,1,-1)+Group(700,1,-1)+Group(701,1,-1)+Group(703,1,-1)+Group(704,1,-1)+Group(707,1,-1)+Group(716,1,-1)+Group(718,1,-1)+Group(719,1,-1)+Group(739,1,-1)+Group(741,1,-1)+Group(742,1,-1)+Group(744,1,-1)+Group(748,1,-1)+Group(749,1,-1)+Group(752,1,-1)+Group(755,1,-1)+Group(759,1,-1)+Group(770,1,-1)+Group(783,1,-1)+Group(797,1,-1)+Group(805,1,-1)+Group(807,1,-1)+Group(809,1,-1)+Group(814,1,-1)+Group(816,1,-1)+Group(822,1,-1)+Group(823,1,-1)+Group(832,-2,-1)+Group(835,1,-1)+Group(844,1,-1)+Group(846,1,-1)+Group(867,1,-1)+Group(868,1,-1)+Group(876,-2,-1)+Group(880,1,-1)+Group(892,1,-1)+Group(909,-2,-1)+Group(918,1,-1)+Group(919,1,-1)+Group(920,1,-1)+Group(921,2/7,-1)+Group(924,1,-1)+Group(927,1,-1)+Group(928,1,-1)+Group(929,1,-1)+Group(930,1,-1)+Group(931,1,1)+Group(935,1,-1)+Group(937,1,-1)+Group(940,1,-1)+Group(941,1,-1)+Group(942,1,-1)+Group(943,1,1)+Group(944,1,-1)+Group(945,7/2,-1)+Group(947,1,-1)+Group(951,1,-1)+Group(973,1,-1)+Group(974,-7/2,-1)+Group(979,1,-1)+Group(98,1,1)+Group(980,-2/7,-1)+Group(981,1,-1)+Group(982,-7/2,-1) = 5711/21");
 
     Ok(())
 }
@@ -1664,7 +2120,7 @@ mod failing {
 
         // A first process
         assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ / z QED^2==4 [{{1}} QCD] --numerator-grouping no_grouping",false)?,@"1 | -1 = -1");//good
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ | e- a d g QED^2==4 [{{2}} QCD] --numerator-grouping only_detect_zeroes",false)?,@"3 | -3 = -3");//good
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ | e- a d g QED^2==4 [{{2}} QCD] --filter-zero-color --numerator-grouping no_grouping",false)?,@"3 | -3 = -3");//good
         assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ | e- a d g QED^2==4 [{{2}} QCD] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"2 | -1+Group(0,1,-1)+Group(1,1,-1) = -3");//good
         assert_snapshot!(feyngen_str(&mut cli, "amp", "e+ e- > d d~ / z QED==2 [{1}] --filter-selfenergies true",false)?,@"1 | 1 = 1");//good
         assert_snapshot!(feyngen_str(&mut cli, "amp", "e+ e- > d d~ / z QED==2 [{1}] --filter-selfenergies false",false)?,@"3 | 3 = 3");//good
@@ -1708,8 +2164,8 @@ mod failing {
         let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
         cli.run_command("import model sm.json")?;
 
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "h > g g | h g b t ghg [{3}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping only_detect_zeroes",false)?,@"1194 | -1260 = -1260");//good
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "h > g g g | h g b t ghg [{3}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping only_detect_zeroes",false)?,@"7018 | -12747 = -12747");//sum is larger and there are more graphs.. this is questionable
+        assert_snapshot!(feyngen_str(&mut cli, "amp", "h > g g | h g b t ghg [{3}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --filter-zero-color --numerator-grouping no_grouping",false)?,@"1194 | -1260 = -1260");//good
+        assert_snapshot!(feyngen_str(&mut cli, "amp", "h > g g g | h g b t ghg [{3}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --filter-zero-color --numerator-grouping no_grouping",false)?,@"7018 | -12747 = -12747");//sum is larger and there are more graphs.. this is questionable
 
         Ok(())
     }
@@ -1721,10 +2177,10 @@ mod failing {
         cli.run_command("import model sm.json")?;
 
         // Cross sections
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d a ghg g QED^2==2 [{{2}}] --numerator-grouping only_detect_zeroes",false)?,@"3 | -3 = -3");
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "a > b b~ h | d b h a ghg g QED^2==4 [{{2}}] --numerator-grouping only_detect_zeroes",false)?,@"3 | -3 = -3");
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "a > b b~ h | d b h a ghg g QED^2==4 [{{3}} QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"30 | -30 = -30");
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "a > b b~ h | d b h a ghg g QED^2==4 [{{4}} QCD=2] --numerator-grouping only_detect_zeroes",false)?,@"594 | -261 = -261");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d a ghg g QED^2==2 [{{2}}] --filter-zero-color --numerator-grouping no_grouping",false)?,@"3 | -3 = -3");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "a > b b~ h | d b h a ghg g QED^2==4 [{{2}}] --filter-zero-color --numerator-grouping no_grouping",false)?,@"3 | -3 = -3");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "a > b b~ h | d b h a ghg g QED^2==4 [{{3}} QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"30 | -30 = -30");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "a > b b~ h | d b h a ghg g QED^2==4 [{{4}} QCD=2] --filter-zero-color --numerator-grouping no_grouping",false)?,@"594 | -261 = -261");
 
         // Enable left-right-symmetry and grouping
         assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d a ghg g QED^2==2 [{{2}}] --symmetrize-left-right-states true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"2 | -1+Group(0,1,-1)+Group(1,1,-1) = -3");
@@ -1743,10 +2199,10 @@ mod failing {
         let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
         cli.run_command("import model sm.json")?;
 
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "a a > t t~ | a t g b ghg QED==2 [{0} QCD=0] --numerator-grouping only_detect_zeroes",false)?,@"2 | 2 = 2");
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "a a > t t~ | a t g b ghg QED==2 [{1} QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"8 | 8 = 8");
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "a a > t t~ | a t g b ghg QED==2 [{2} QCD=2] --numerator-grouping only_detect_zeroes",false)?,@"152 | 28 = 28");
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "a a > t t~ | a t g b ghg QED==2 [{3} QCD=3] --numerator-grouping only_detect_zeroes",false)?,@"3608 | -104/3 = -104/3");
+        assert_snapshot!(feyngen_str(&mut cli, "amp", "a a > t t~ | a t g b ghg QED==2 [{0} QCD=0] --filter-zero-color --numerator-grouping no_grouping",false)?,@"2 | 2 = 2");
+        assert_snapshot!(feyngen_str(&mut cli, "amp", "a a > t t~ | a t g b ghg QED==2 [{1} QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"8 | 8 = 8");
+        assert_snapshot!(feyngen_str(&mut cli, "amp", "a a > t t~ | a t g b ghg QED==2 [{2} QCD=2] --filter-zero-color --numerator-grouping no_grouping",false)?,@"144 | 20 = 20");
+        assert_snapshot!(feyngen_str(&mut cli, "amp", "a a > t t~ | a t g b ghg QED==2 [{3} QCD=3] --filter-zero-color --numerator-grouping no_grouping",false)?,@"3424 | -884/3 = -884/3");
         assert_snapshot!(feyngen_str(&mut cli, "amp", "a a > t t~ | a t g b ghg QED==2 [{0} QCD=0] --symmetrize-initial-states true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"1 | 2 = 2");
         assert_snapshot!(feyngen_str(&mut cli, "amp", "a a > t t~ | a t g b ghg QED==2 [{1} QCD=1] --symmetrize-initial-states true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"4 | 8 = 8");
         // Six additional cancellations imply that the total overall factor is different
@@ -1762,9 +2218,9 @@ mod failing {
         let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
         cli.run_command("import model sm.json")?;
 
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{1}} QCD=0] --numerator-grouping only_detect_zeroes --max-multiplicity-for-fast-cut-filter 0",false)?,@"4 | -4 = -4");
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{2}} QCD=1] --numerator-grouping only_detect_zeroes --max-multiplicity-for-fast-cut-filter 0",false)?,@"40 | -40 = -40");
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{3}} QCD=2] --numerator-grouping only_detect_zeroes --max-multiplicity-for-fast-cut-filter 0",false)?,@"874 | -266 = -266");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{1}} QCD=0] --filter-zero-color --numerator-grouping no_grouping",false)?,@"4 | -4 = -4");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{2}} QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"40 | -40 = -40");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{3}} QCD=2] --filter-zero-color --numerator-grouping no_grouping",false)?,@"874 | -266 = -266");
 
         Ok(())
     }
@@ -1785,14 +2241,22 @@ fn unrestricted_sm_light_quarks_preserve_two_loop_inventory() -> Result<()> {
     // 4513/24. Removing the 36 color-zero graphs leaves 563 with weight 2003/12.
     // Keep this unrestricted-model check separate from the legacy grouping fixture.
     for (grouping, expected_count, expected_weight) in [
-        ("no_grouping", 599, Atom::num((4513, 24))),
-        ("only_detect_zeroes", 563, Atom::num((2003, 12))),
+        (
+            "--numerator-grouping no_grouping",
+            599,
+            Atom::num((4513, 24)),
+        ),
+        (
+            "--numerator-grouping no_grouping --filter-zero-color",
+            563,
+            Atom::num((2003, 12)),
+        ),
     ] {
         let (count, weight) = generate_graphs_and_count(
             &mut cli,
             "amp",
             &format!(
-                "{{}} > {{}} [{{2}}] --numerator-grouping {grouping} --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1"
+                "{{}} > {{}} [{{2}}] {grouping} --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1"
             ),
             false,
         )?;
@@ -1816,27 +2280,27 @@ fn test_vacuum_amplitude_generation_full_sm_two_loop() -> Result<()> {
     // Including all graphs
     // The restricted 513/477 graph inventory gives 1469/12 after
     // closed Grassmann signs and directed self-loop symmetries.
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping only_detect_zeroes --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1 --filter-zero-flow-edges false --filter-selfenergies false --filter-tadpoles false --filter-snails false",false)?,@"477 | 1469/12 = 1469/12");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1 --filter-zero-flow-edges false --filter-selfenergies false --filter-tadpoles false --filter-snails false",false)?,@"477 | 1469/12 = 1469/12");
 
     // Compare various numerator comparison options below:
     // a) Symbolic tensor canonization with numerical color dimensions.
     // Directed loops have no end-flip symmetry; closed ghost chains carry a minus.
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1 --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators true",false)?,@"300 | 431/12+Group(100,1,-1)+Group(101,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(103,1,-1)+Group(104,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(106,1,-1)+Group(107,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(109,1,-1)+Group(110,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(112,1,-1)+Group(113,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(118,1,-1/2)+Group(131,1,-1/2)+Group(142,1,-1/2)+Group(147,3*G^2*ee^(-2),-1/2)+Group(155,3*G^2*ee^(-2),-1/2)+Group(162,3*G^2*ee^(-2),-1/2)+Group(182,1,1)+Group(183,1,1)+Group(194,1,1)+Group(195,1,1)+Group(203,1,1)+Group(204,1,1)+Group(205,1,1)+Group(206,1,1)+Group(207,1,1)+Group(215,1,1)+Group(216,1,1)+Group(217,1,1)+Group(222,1,1)+Group(223,1,1)+Group(229,1,1)+Group(230,1,1)+Group(231,1,1)+Group(236,1,1)+Group(237,1,1)+Group(239,1,-1)+Group(240,1,1/2)+Group(241,1,1)+Group(242,1,1)+Group(243,1,1)+Group(244,1,1)+Group(245,1,-1/2)+Group(246,1,1/2)+Group(247,1,1)+Group(248,1,1)+Group(249,1,1)+Group(250,1,-1/2)+Group(251,1,1/2)+Group(252,1,1)+Group(253,1,1)+Group(254,1,-1/2)+Group(258,1,-1/2)+Group(259,1,1)+Group(260,1,1/2)+Group(261,1,1)+Group(262,1,1)+Group(263,1,-1)+Group(264,1,-1/2)+Group(265,1,-1/2)+Group(266,1,-1)+Group(267,1,-1/2)+Group(276,1,-1/2)+Group(288,1,-1/2)+Group(290,1,-1)+Group(291,1,-1)+Group(292,1,-1)+Group(295,1,-1/2)+Group(296,1,1)+Group(297,1,1/2)+Group(298,1,1)+Group(299,1,-1)+Group(300,1,-1/2)+Group(301,1,-1/2)+Group(302,1,-1)+Group(303,1,-1/2)+Group(311,1,-1/2)+Group(32,1,1)+Group(322,1,-1/2)+Group(323,(-1/4*sw^2+1/4*cw^2)^(-1)*-1/4*sw^2+(-1/4*sw^2+1/4*cw^2)^(-1)*1/4*cw^2,-1)+Group(324,1,-1)+Group(33,1,1)+Group(363,1,-1)+Group(364,1,-1)+Group(365,1,-1)+Group(367,1,-1)+Group(368,1,-1)+Group(374,1,-1)+Group(375,1,-1)+Group(376,1,-1)+Group(379,1,-1)+Group(380,1,-1)+Group(397,1/4,-1/2)+Group(399,1/4,-1/2)+Group(413,1,-1/2)+Group(417,3*G^2*ee^(-2),-1/2)+Group(42,1,1)+Group(420,3*G^2*ee^(-2),-1/2)+Group(429,12*G^2*ee^(-2),-1/2)+Group(43,1,1)+Group(444,1,1)+Group(445,1,1)+Group(454,1,1/2)+Group(455,1,1)+Group(456,1,-1/2)+Group(464,1,1/2)+Group(465,1,-1/2)+Group(472,1,1)+Group(473,1,1)+Group(474,1,1)+Group(479,1,1)+Group(480,1,1)+Group(487,1,-1/2)+Group(488,1,-1/2)+Group(52,1,1)+Group(53,1,1)+Group(54,1,1)+Group(55,1,1)+Group(56,1,1)+Group(63,1,1)+Group(64,1,1)+Group(65,1,1)+Group(70,1,1)+Group(71,1,1)+Group(76,1,1)+Group(77,1,1)+Group(78,1,1)+Group(83,1,1)+Group(84,1,1) = (-1/4*sw^2+1/4*cw^2)^(-1)*-1/4*cw^2+(-1/4*sw^2+1/4*cw^2)^(-1)*1/4*sw^2+(conj(CKM1x1))^(-1)*-1*CKM1x1^(-1)*CKM1x2*conj(CKM1x2)+(conj(CKM2x1))^(-1)*-1*CKM2x1^(-1)*CKM2x2*conj(CKM2x2)+(conj(CKM3x1))^(-1)*-1*CKM3x1^(-1)*CKM3x2*conj(CKM3x2)+-1*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22+-1*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32+-27/2*G^2*ee^(-2)+191/3");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1 --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators true",false)?,@"300 | 431/12+Group(10,1,-1/2)+Group(100,1,-1/2)+Group(11,1,-1/2)+Group(116,1,-1)+Group(117,1,-1)+Group(119,1,-1/2)+Group(126,1,1/2)+Group(127,1,-1/2)+Group(128,1,1)+Group(129,1,-1)+Group(130,1,-1/2)+Group(131,1,1)+Group(132,1,1)+Group(133,1,1)+Group(134,1,1)+Group(135,1,1)+Group(136,1,1)+Group(138,1,-1/2)+Group(150,1,-1/2)+Group(165,1,-1)+Group(166,1,-1)+Group(225,1,-1)+Group(226,1,-1)+Group(234,1,-1)+Group(235,1,-1)+Group(236,1,-1)+Group(24,1,-1)+Group(241,1,-1)+Group(242,1,-1)+Group(25,1,-1)+Group(250,1,-1)+Group(251,1,-1)+Group(252,1,-1)+Group(267,1,-1/2)+Group(277,1,-1/2)+Group(286,1,-1/2)+Group(294,12*G^2*ee^(-2),-1/2)+Group(301,12*G^2*ee^(-2),-1/2)+Group(307,12*G^2*ee^(-2),-1/2)+Group(325,1,1/2)+Group(326,1,-1/2)+Group(327,1,1)+Group(328,1,1)+Group(329,1,1)+Group(330,1,1)+Group(331,1,1)+Group(332,1,1)+Group(333,1,1)+Group(334,1,1)+Group(335,1,1)+Group(336,1,1)+Group(337,1,1)+Group(338,1,1/2)+Group(339,1,-1/2)+Group(340,1,1)+Group(341,1,1)+Group(342,1,1)+Group(343,1,1)+Group(344,1,1)+Group(345,1,1)+Group(346,1,1)+Group(347,1,1)+Group(348,1,1)+Group(349,1,1)+Group(358,1,1)+Group(359,1,1)+Group(360,1,1)+Group(361,1,-1)+Group(362,1,-1)+Group(363,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(364,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(368,1,-1)+Group(369,1,-1)+Group(37,1,-1/2)+Group(370,1,-1)+Group(371,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(372,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(373,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(38,1,-1/2)+Group(432,1,1)+Group(433,1,1)+Group(434,1,1)+Group(441,1,1)+Group(442,1,1)+Group(443,1,1)+Group(449,1,1)+Group(450,1,1)+Group(451,1,1)+Group(459,4,-1/2)+Group(463,1,-1/2)+Group(466,1,-1/2)+Group(468,12*G^2*ee^(-2),-1/2)+Group(472,3*G^2*ee^(-2),-1/2)+Group(475,3*G^2*ee^(-2),-1/2)+Group(490,1,1)+Group(491,1,1)+Group(492,1,1)+Group(496,1,1)+Group(497,1,1)+Group(498,1,1)+Group(501,1,1)+Group(502,1,1)+Group(503,1,1)+Group(504,1,1/2)+Group(505,1,-1/2)+Group(506,1,1)+Group(507,1,1)+Group(508,1,1/2)+Group(509,1,-1/2)+Group(510,1,1)+Group(511,1,1/2)+Group(512,1,-1/2)+Group(63,1,-1)+Group(64,1,-1)+Group(66,1,-1/2)+Group(74,1,1/2)+Group(75,1,-1/2)+Group(76,1,1)+Group(77,1,1)+Group(78,1,-1)+Group(79,1,-1/2)+Group(80,1,1)+Group(81,1,1)+Group(82,1,1)+Group(83,1,1)+Group(84,1,1)+Group(85,1,1)+Group(87,1,-1/2) = (conj(CKM1x1))^(-1)*-1*CKM1x1^(-1)*CKM1x2*conj(CKM1x2)+(conj(CKM2x1))^(-1)*-1*CKM2x1^(-1)*CKM2x2*conj(CKM2x2)+(conj(CKM3x1))^(-1)*-1*CKM3x1^(-1)*CKM3x2*conj(CKM3x2)+-1*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22+-1*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32+-27*G^2*ee^(-2)+725/12");
     // b) The same exact tensor comparison retains formal Nc. Its six
     // QCD/electroweak ratios specialize to the preceding values at Nc=3.
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1 --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators false",false)?,@"300 | 431/12+Group(100,1,-1)+Group(101,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(103,1,-1)+Group(104,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(106,1,-1)+Group(107,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(109,1,-1)+Group(110,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(112,1,-1)+Group(113,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(118,1,-1/2)+Group(131,1,-1/2)+Group(142,1,-1/2)+Group(147,-9/8*G^2*Nc^(-1)*ee^(-2)+9/8*G^2*Nc*ee^(-2),-1/2)+Group(155,-9/8*G^2*Nc^(-1)*ee^(-2)+9/8*G^2*Nc*ee^(-2),-1/2)+Group(162,-9/8*G^2*Nc^(-1)*ee^(-2)+9/8*G^2*Nc*ee^(-2),-1/2)+Group(182,1,1)+Group(183,1,1)+Group(194,1,1)+Group(195,1,1)+Group(203,1,1)+Group(204,1,1)+Group(205,1,1)+Group(206,1,1)+Group(207,1,1)+Group(215,1,1)+Group(216,1,1)+Group(217,1,1)+Group(222,1,1)+Group(223,1,1)+Group(229,1,1)+Group(230,1,1)+Group(231,1,1)+Group(236,1,1)+Group(237,1,1)+Group(239,1,-1)+Group(240,1,1/2)+Group(241,1,1)+Group(242,1,1)+Group(243,1,1)+Group(244,1,1)+Group(245,1,-1/2)+Group(246,1,1/2)+Group(247,1,1)+Group(248,1,1)+Group(249,1,1)+Group(250,1,-1/2)+Group(251,1,1/2)+Group(252,1,1)+Group(253,1,1)+Group(254,1,-1/2)+Group(258,1,-1/2)+Group(259,1,1)+Group(260,1,1/2)+Group(261,1,1)+Group(262,1,1)+Group(263,1,-1)+Group(264,1,-1/2)+Group(265,1,-1/2)+Group(266,1,-1)+Group(267,1,-1/2)+Group(276,1,-1/2)+Group(288,1,-1/2)+Group(290,1,-1)+Group(291,1,-1)+Group(292,1,-1)+Group(295,1,-1/2)+Group(296,1,1)+Group(297,1,1/2)+Group(298,1,1)+Group(299,1,-1)+Group(300,1,-1/2)+Group(301,1,-1/2)+Group(302,1,-1)+Group(303,1,-1/2)+Group(311,1,-1/2)+Group(32,1,1)+Group(322,1,-1/2)+Group(323,(-1/4*sw^2+1/4*cw^2)^(-1)*-1/4*sw^2+(-1/4*sw^2+1/4*cw^2)^(-1)*1/4*cw^2,-1)+Group(324,1,-1)+Group(33,1,1)+Group(363,1,-1)+Group(364,1,-1)+Group(365,1,-1)+Group(367,1,-1)+Group(368,1,-1)+Group(374,1,-1)+Group(375,1,-1)+Group(376,1,-1)+Group(379,1,-1)+Group(380,1,-1)+Group(397,1/4,-1/2)+Group(399,1/4,-1/2)+Group(413,1,-1/2)+Group(417,-9/8*G^2*Nc^(-1)*ee^(-2)+9/8*G^2*Nc*ee^(-2),-1/2)+Group(42,1,1)+Group(420,-9/8*G^2*Nc^(-1)*ee^(-2)+9/8*G^2*Nc*ee^(-2),-1/2)+Group(429,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1/2)+Group(43,1,1)+Group(444,1,1)+Group(445,1,1)+Group(454,1,1/2)+Group(455,1,1)+Group(456,1,-1/2)+Group(464,1,1/2)+Group(465,1,-1/2)+Group(472,1,1)+Group(473,1,1)+Group(474,1,1)+Group(479,1,1)+Group(480,1,1)+Group(487,1,-1/2)+Group(488,1,-1/2)+Group(52,1,1)+Group(53,1,1)+Group(54,1,1)+Group(55,1,1)+Group(56,1,1)+Group(63,1,1)+Group(64,1,1)+Group(65,1,1)+Group(70,1,1)+Group(71,1,1)+Group(76,1,1)+Group(77,1,1)+Group(78,1,1)+Group(83,1,1)+Group(84,1,1) = (-1/4*sw^2+1/4*cw^2)^(-1)*-1/4*cw^2+(-1/4*sw^2+1/4*cw^2)^(-1)*1/4*sw^2+(conj(CKM1x1))^(-1)*-1*CKM1x1^(-1)*CKM1x2*conj(CKM1x2)+(conj(CKM2x1))^(-1)*-1*CKM2x1^(-1)*CKM2x2*conj(CKM2x2)+(conj(CKM3x1))^(-1)*-1*CKM3x1^(-1)*CKM3x2*conj(CKM3x2)+-1*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22+-1*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32+-81/16*G^2*Nc*ee^(-2)+191/3+81/16*G^2*Nc^(-1)*ee^(-2)");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1 --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators false",false)?,@"300 | 431/12+Group(10,1,-1/2)+Group(100,1,-1/2)+Group(11,1,-1/2)+Group(116,1,-1)+Group(117,1,-1)+Group(119,1,-1/2)+Group(126,1,1/2)+Group(127,1,-1/2)+Group(128,1,1)+Group(129,1,-1)+Group(130,1,-1/2)+Group(131,1,1)+Group(132,1,1)+Group(133,1,1)+Group(134,1,1)+Group(135,1,1)+Group(136,1,1)+Group(138,1,-1/2)+Group(150,1,-1/2)+Group(165,1,-1)+Group(166,1,-1)+Group(225,1,-1)+Group(226,1,-1)+Group(234,1,-1)+Group(235,1,-1)+Group(236,1,-1)+Group(24,1,-1)+Group(241,1,-1)+Group(242,1,-1)+Group(25,1,-1)+Group(250,1,-1)+Group(251,1,-1)+Group(252,1,-1)+Group(267,1,-1/2)+Group(277,1,-1/2)+Group(286,1,-1/2)+Group(294,(-1*G^2+G^2*Nc^2)*9/2*Nc^(-1)*ee^(-2),-1/2)+Group(301,(-1*G^2+G^2*Nc^2)*9/2*Nc^(-1)*ee^(-2),-1/2)+Group(307,(-1*G^2+G^2*Nc^2)*9/2*Nc^(-1)*ee^(-2),-1/2)+Group(325,1,1/2)+Group(326,1,-1/2)+Group(327,1,1)+Group(328,1,1)+Group(329,1,1)+Group(330,1,1)+Group(331,1,1)+Group(332,1,1)+Group(333,1,1)+Group(334,1,1)+Group(335,1,1)+Group(336,1,1)+Group(337,1,1)+Group(338,1,1/2)+Group(339,1,-1/2)+Group(340,1,1)+Group(341,1,1)+Group(342,1,1)+Group(343,1,1)+Group(344,1,1)+Group(345,1,1)+Group(346,1,1)+Group(347,1,1)+Group(348,1,1)+Group(349,1,1)+Group(358,1,1)+Group(359,1,1)+Group(360,1,1)+Group(361,1,-1)+Group(362,1,-1)+Group(363,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(364,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(368,1,-1)+Group(369,1,-1)+Group(37,1,-1/2)+Group(370,1,-1)+Group(371,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(372,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(373,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(38,1,-1/2)+Group(432,1,1)+Group(433,1,1)+Group(434,1,1)+Group(441,1,1)+Group(442,1,1)+Group(443,1,1)+Group(449,1,1)+Group(450,1,1)+Group(451,1,1)+Group(459,4,-1/2)+Group(463,1,-1/2)+Group(466,1,-1/2)+Group(468,(-1*G^2+G^2*Nc^2)*9/2*Nc^(-1)*ee^(-2),-1/2)+Group(472,(-1*G^2+G^2*Nc^2)*9/8*Nc^(-1)*ee^(-2),-1/2)+Group(475,(-1*G^2+G^2*Nc^2)*9/8*Nc^(-1)*ee^(-2),-1/2)+Group(490,1,1)+Group(491,1,1)+Group(492,1,1)+Group(496,1,1)+Group(497,1,1)+Group(498,1,1)+Group(501,1,1)+Group(502,1,1)+Group(503,1,1)+Group(504,1,1/2)+Group(505,1,-1/2)+Group(506,1,1)+Group(507,1,1)+Group(508,1,1/2)+Group(509,1,-1/2)+Group(510,1,1)+Group(511,1,1/2)+Group(512,1,-1/2)+Group(63,1,-1)+Group(64,1,-1)+Group(66,1,-1/2)+Group(74,1,1/2)+Group(75,1,-1/2)+Group(76,1,1)+Group(77,1,1)+Group(78,1,-1)+Group(79,1,-1/2)+Group(80,1,1)+Group(81,1,1)+Group(82,1,1)+Group(83,1,1)+Group(84,1,1)+Group(85,1,1)+Group(87,1,-1/2) = (conj(CKM1x1))^(-1)*-1*CKM1x1^(-1)*CKM1x2*conj(CKM1x2)+(conj(CKM2x1))^(-1)*-1*CKM2x1^(-1)*CKM2x2*conj(CKM2x2)+(conj(CKM3x1))^(-1)*-1*CKM3x1^(-1)*CKM3x2*conj(CKM3x2)+-1*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22+-1*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32+-81/8*G^2*Nc*ee^(-2)+725/12+81/8*G^2*Nc^(-1)*ee^(-2)");
 
     // Preserve the sampled comparison modes and their original budgets.
     // Exact scalar-weight cancellation removes 39 zero classes in the
     // two formal-color modes below, leaving 247 graphs in each.
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1 --compare-canonized-numerator false --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators false",false)?,@"247 | 167/12+Group(100,1,-1)+Group(101,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(103,1,-1)+Group(104,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(106,1,-1)+Group(107,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(109,1,-1)+Group(110,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(112,1,-1)+Group(113,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(118,1,-1/2)+Group(131,1,-1/2)+Group(142,1,-1/2)+Group(147,3*G^2*ee^(-2),-1/2)+Group(155,3*G^2*ee^(-2),-1/2)+Group(162,3*G^2*ee^(-2),-1/2)+Group(182,1,1)+Group(183,1,1)+Group(194,1,1)+Group(195,1,1)+Group(208,1,-1/2)+Group(239,1,-1)+Group(245,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(250,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(254,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(258,1,-1/2)+Group(259,1,1)+Group(260,1,1/2)+Group(261,1,1)+Group(262,1,1)+Group(263,1,-1)+Group(264,1,-1/2)+Group(265,1,-1/2)+Group(266,1,-1)+Group(267,1,-1/2)+Group(276,1,-1/2)+Group(288,1,-1/2)+Group(290,1,-1)+Group(291,1,-1)+Group(292,1,-1)+Group(295,1,-1/2)+Group(296,1,1)+Group(297,1,1/2)+Group(298,1,1)+Group(299,1,-1)+Group(300,1,-1/2)+Group(301,1,-1/2)+Group(302,1,-1)+Group(303,1,-1/2)+Group(311,1,-1/2)+Group(32,1,1)+Group(322,1,-1/2)+Group(323,1,-1)+Group(324,1,-1)+Group(33,1,1)+Group(397,1/4,-1/2)+Group(399,1/4,-1/2)+Group(413,1,-1/2)+Group(417,3*G^2*ee^(-2),-1/2)+Group(42,1,1)+Group(420,3*G^2*ee^(-2),-1/2)+Group(429,12*G^2*ee^(-2),-1/2)+Group(43,1,1)+Group(444,1,1)+Group(445,1,1)+Group(456,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*5/9*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*cw^2*sw^(-2),-1/2)+Group(465,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*5/9*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*cw^2*sw^(-2),-1/2)+Group(487,1,-1/2)+Group(488,1,-1/2) = (-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*-19/18*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*-3/2*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*-5/3+(conj(CKM1x1))^(-1)*-1*CKM1x1^(-1)*CKM1x2*conj(CKM1x2)+(conj(CKM2x1))^(-1)*-1*CKM2x1^(-1)*CKM2x2*conj(CKM2x2)+(conj(CKM3x1))^(-1)*-1*CKM3x1^(-1)*CKM3x2*conj(CKM3x2)+-1*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22+-1*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32+-27/2*G^2*ee^(-2)+31/6");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1 --compare-canonized-numerator false --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators false",false)?,@"247 | 167/12+Group(10,1,-1/2)+Group(100,1,-1/2)+Group(11,1,-1/2)+Group(116,1,-1)+Group(117,1,-1)+Group(119,1,-1/2)+Group(126,1,1/2)+Group(127,1,-1/2)+Group(128,1,1)+Group(129,1,-1)+Group(130,1,-1/2)+Group(131,1,1)+Group(132,1,1)+Group(133,1,1)+Group(134,1,1)+Group(135,1,1)+Group(136,1,1)+Group(138,1,-1/2)+Group(150,1,-1/2)+Group(165,1,-1)+Group(166,1,-1)+Group(24,1,-1)+Group(25,1,-1)+Group(267,1,-1/2)+Group(277,1,-1/2)+Group(286,1,-1/2)+Group(294,12*G^2*ee^(-2),-1/2)+Group(301,12*G^2*ee^(-2),-1/2)+Group(307,12*G^2*ee^(-2),-1/2)+Group(326,1,-1/2)+Group(339,1,-1/2)+Group(361,1,-1)+Group(362,1,-1)+Group(363,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(364,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(368,1,-1)+Group(369,1,-1)+Group(37,1,-1/2)+Group(370,1,-1)+Group(371,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(372,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(373,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(38,1,-1/2)+Group(459,4,-1/2)+Group(463,1,-1/2)+Group(466,1,-1/2)+Group(468,12*G^2*ee^(-2),-1/2)+Group(472,3*G^2*ee^(-2),-1/2)+Group(475,3*G^2*ee^(-2),-1/2)+Group(487,(-6*cw^2*sw^2+17*sw^4+9*cw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1),-1/2)+Group(505,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,-1/2)+Group(509,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,-1/2)+Group(512,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,-1/2)+Group(63,1,-1)+Group(64,1,-1)+Group(66,1,-1/2)+Group(74,1,1/2)+Group(75,1,-1/2)+Group(76,1,1)+Group(77,1,1)+Group(78,1,-1)+Group(79,1,-1/2)+Group(80,1,1)+Group(81,1,1)+Group(82,1,1)+Group(83,1,1)+Group(84,1,1)+Group(85,1,1)+Group(87,1,-1/2) = (5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*-13*sw^4+(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*-6*cw^2*sw^2+(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*-9*cw^4+(conj(CKM1x1))^(-1)*-1*CKM1x1^(-1)*CKM1x2*conj(CKM1x2)+(conj(CKM2x1))^(-1)*-1*CKM2x1^(-1)*CKM2x2*conj(CKM2x2)+(conj(CKM3x1))^(-1)*-1*CKM3x1^(-1)*CKM3x2*conj(CKM3x2)+-1*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22+-1*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32+-27*G^2*ee^(-2)+29/12");
 
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1 --compare-canonized-numerator false --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators true",false)?,@"288 | 59/12+Group(118,1,-1/2)+Group(147,1,-1/2)+Group(182,1,1)+Group(183,1,1)+Group(194,1,1)+Group(195,1,1)+Group(203,1,1)+Group(204,1,1)+Group(205,1,1)+Group(206,1,1)+Group(207,1,1)+Group(215,1,1)+Group(216,1,1)+Group(217,1,1)+Group(222,1,1)+Group(223,1,1)+Group(229,1,1)+Group(230,1,1)+Group(231,1,1)+Group(236,1,1)+Group(237,1,1)+Group(239,1,-1)+Group(240,1,1/2)+Group(241,1,1)+Group(242,1,1)+Group(243,1,1)+Group(244,1,1)+Group(245,1,-1/2)+Group(246,1,1/2)+Group(247,1,1)+Group(248,1,1)+Group(249,1,1)+Group(250,1,-1/2)+Group(251,1,1/2)+Group(252,1,1)+Group(253,1,1)+Group(254,1,-1/2)+Group(258,1,-1/2)+Group(259,1,1)+Group(260,1,1/2)+Group(261,1,1)+Group(262,1,1)+Group(263,1,-1)+Group(264,1,-1/2)+Group(265,1,-1/2)+Group(266,1,-1)+Group(267,1,-1/2)+Group(276,1,-1/2)+Group(288,1,-1/2)+Group(290,1,-1)+Group(291,1,-1)+Group(292,1,-1)+Group(295,1,-1/2)+Group(296,1,1)+Group(297,1,1/2)+Group(298,1,1)+Group(299,1,-1)+Group(300,1,-1/2)+Group(301,1,-1/2)+Group(302,1,-1)+Group(303,1,-1/2)+Group(311,1,-1/2)+Group(32,1,1)+Group(322,1,-1/2)+Group(323,1,-1)+Group(324,1,-1)+Group(33,1,1)+Group(363,1,-1)+Group(364,1,-1)+Group(365,1,-1)+Group(367,1,-1)+Group(368,1,-1)+Group(374,1,-1)+Group(375,1,-1)+Group(376,1,-1)+Group(379,1,-1)+Group(380,1,-1)+Group(397,1/4,-1/2)+Group(399,1/4,-1/2)+Group(417,1,-1/2)+Group(42,1,1)+Group(420,1,-1/2)+Group(43,1,1)+Group(444,1,1)+Group(445,1,1)+Group(454,1,1/2)+Group(455,1,1)+Group(456,1,-1/2)+Group(464,1,1/2)+Group(465,1,-1/2)+Group(472,1,1)+Group(473,1,1)+Group(474,1,1)+Group(479,1,1)+Group(480,1,1)+Group(487,1,-1/2)+Group(488,1,-1/2)+Group(52,1,1)+Group(53,1,1)+Group(54,1,1)+Group(55,1,1)+Group(56,1,1)+Group(63,1,1)+Group(64,1,1)+Group(65,1,1)+Group(70,1,1)+Group(71,1,1)+Group(76,1,1)+Group(77,1,1)+Group(78,1,1)+Group(83,1,1)+Group(84,1,1) = 110/3");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1 --compare-canonized-numerator false --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators true",false)?,@"288 | 59/12+Group(10,1,-1/2)+Group(100,1,-1/2)+Group(11,1,-1/2)+Group(116,1,-1)+Group(117,1,-1)+Group(119,1,-1/2)+Group(126,1,1/2)+Group(127,1,-1/2)+Group(128,1,1)+Group(129,1,-1)+Group(130,1,-1/2)+Group(131,1,1)+Group(132,1,1)+Group(133,1,1)+Group(134,1,1)+Group(135,1,1)+Group(136,1,1)+Group(138,1,-1/2)+Group(150,1,-1/2)+Group(165,1,-1)+Group(166,1,-1)+Group(225,1,-1)+Group(226,1,-1)+Group(234,1,-1)+Group(235,1,-1)+Group(236,1,-1)+Group(24,1,-1)+Group(241,1,-1)+Group(242,1,-1)+Group(25,1,-1)+Group(250,1,-1)+Group(251,1,-1)+Group(252,1,-1)+Group(267,1,-1/2)+Group(277,1,-1/2)+Group(294,1,-1/2)+Group(301,1,-1/2)+Group(325,1,1/2)+Group(326,1,-1/2)+Group(327,1,1)+Group(328,1,1)+Group(329,1,1)+Group(330,1,1)+Group(331,1,1)+Group(332,1,1)+Group(333,1,1)+Group(334,1,1)+Group(335,1,1)+Group(336,1,1)+Group(337,1,1)+Group(338,1,1/2)+Group(339,1,-1/2)+Group(340,1,1)+Group(341,1,1)+Group(342,1,1)+Group(343,1,1)+Group(344,1,1)+Group(345,1,1)+Group(346,1,1)+Group(347,1,1)+Group(348,1,1)+Group(349,1,1)+Group(358,1,1)+Group(359,1,1)+Group(360,1,1)+Group(37,1,-1/2)+Group(38,1,-1/2)+Group(432,1,1)+Group(433,1,1)+Group(434,1,1)+Group(441,1,1)+Group(442,1,1)+Group(443,1,1)+Group(449,1,1)+Group(450,1,1)+Group(451,1,1)+Group(459,4,-1/2)+Group(468,1,-1/2)+Group(490,1,1)+Group(491,1,1)+Group(492,1,1)+Group(496,1,1)+Group(497,1,1)+Group(498,1,1)+Group(501,1,1)+Group(502,1,1)+Group(503,1,1)+Group(504,1,1/2)+Group(505,1,-1/2)+Group(506,1,1)+Group(507,1,1)+Group(508,1,1/2)+Group(509,1,-1/2)+Group(510,1,1)+Group(511,1,1/2)+Group(512,1,-1/2)+Group(63,1,-1)+Group(64,1,-1)+Group(66,1,-1/2)+Group(74,1,1/2)+Group(75,1,-1/2)+Group(76,1,1)+Group(77,1,1)+Group(78,1,-1)+Group(79,1,-1/2)+Group(80,1,1)+Group(81,1,1)+Group(82,1,1)+Group(83,1,1)+Group(84,1,1)+Group(85,1,1)+Group(87,1,-1/2) = 413/12");
 
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1",false)?,@"247 | 167/12+Group(100,1,-1)+Group(101,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(103,1,-1)+Group(104,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(106,1,-1)+Group(107,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(109,1,-1)+Group(110,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(112,1,-1)+Group(113,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(118,1,-1/2)+Group(131,1,-1/2)+Group(142,1,-1/2)+Group(147,3*G^2*ee^(-2),-1/2)+Group(155,3*G^2*ee^(-2),-1/2)+Group(162,3*G^2*ee^(-2),-1/2)+Group(182,1,1)+Group(183,1,1)+Group(194,1,1)+Group(195,1,1)+Group(208,1,-1/2)+Group(239,1,-1)+Group(245,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(250,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(254,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(258,1,-1/2)+Group(259,1,1)+Group(260,1,1/2)+Group(261,1,1)+Group(262,1,1)+Group(263,1,-1)+Group(264,1,-1/2)+Group(265,1,-1/2)+Group(266,1,-1)+Group(267,1,-1/2)+Group(276,1,-1/2)+Group(288,1,-1/2)+Group(290,1,-1)+Group(291,1,-1)+Group(292,1,-1)+Group(295,1,-1/2)+Group(296,1,1)+Group(297,1,1/2)+Group(298,1,1)+Group(299,1,-1)+Group(300,1,-1/2)+Group(301,1,-1/2)+Group(302,1,-1)+Group(303,1,-1/2)+Group(311,1,-1/2)+Group(32,1,1)+Group(322,1,-1/2)+Group(323,1,-1)+Group(324,1,-1)+Group(33,1,1)+Group(397,1/4,-1/2)+Group(399,1/4,-1/2)+Group(413,1,-1/2)+Group(417,3*G^2*ee^(-2),-1/2)+Group(42,1,1)+Group(420,3*G^2*ee^(-2),-1/2)+Group(429,12*G^2*ee^(-2),-1/2)+Group(43,1,1)+Group(444,1,1)+Group(445,1,1)+Group(456,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*5/9*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*cw^2*sw^(-2),-1/2)+Group(465,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*5/9*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*cw^2*sw^(-2),-1/2)+Group(487,1,-1/2)+Group(488,1,-1/2) = (-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*-19/18*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*-3/2*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*-5/3+(conj(CKM1x1))^(-1)*-1*CKM1x1^(-1)*CKM1x2*conj(CKM1x2)+(conj(CKM2x1))^(-1)*-1*CKM2x1^(-1)*CKM2x2*conj(CKM2x2)+(conj(CKM3x1))^(-1)*-1*CKM3x1^(-1)*CKM3x2*conj(CKM3x2)+-1*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22+-1*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32+-27/2*G^2*ee^(-2)+31/6");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1",false)?,@"247 | 167/12+Group(10,1,-1/2)+Group(100,1,-1/2)+Group(11,1,-1/2)+Group(116,1,-1)+Group(117,1,-1)+Group(119,1,-1/2)+Group(126,1,1/2)+Group(127,1,-1/2)+Group(128,1,1)+Group(129,1,-1)+Group(130,1,-1/2)+Group(131,1,1)+Group(132,1,1)+Group(133,1,1)+Group(134,1,1)+Group(135,1,1)+Group(136,1,1)+Group(138,1,-1/2)+Group(150,1,-1/2)+Group(165,1,-1)+Group(166,1,-1)+Group(24,1,-1)+Group(25,1,-1)+Group(267,1,-1/2)+Group(277,1,-1/2)+Group(286,1,-1/2)+Group(294,12*G^2*ee^(-2),-1/2)+Group(301,12*G^2*ee^(-2),-1/2)+Group(307,12*G^2*ee^(-2),-1/2)+Group(326,1,-1/2)+Group(339,1,-1/2)+Group(361,1,-1)+Group(362,1,-1)+Group(363,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(364,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(368,1,-1)+Group(369,1,-1)+Group(37,1,-1/2)+Group(370,1,-1)+Group(371,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(372,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(373,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(38,1,-1/2)+Group(459,4,-1/2)+Group(463,1,-1/2)+Group(466,1,-1/2)+Group(468,12*G^2*ee^(-2),-1/2)+Group(472,3*G^2*ee^(-2),-1/2)+Group(475,3*G^2*ee^(-2),-1/2)+Group(487,(-6*cw^2*sw^2+17*sw^4+9*cw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1),-1/2)+Group(505,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,-1/2)+Group(509,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,-1/2)+Group(512,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,-1/2)+Group(63,1,-1)+Group(64,1,-1)+Group(66,1,-1/2)+Group(74,1,1/2)+Group(75,1,-1/2)+Group(76,1,1)+Group(77,1,1)+Group(78,1,-1)+Group(79,1,-1/2)+Group(80,1,1)+Group(81,1,1)+Group(82,1,1)+Group(83,1,1)+Group(84,1,1)+Group(85,1,1)+Group(87,1,-1/2) = (5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*-13*sw^4+(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*-6*cw^2*sw^2+(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*-9*cw^4+(conj(CKM1x1))^(-1)*-1*CKM1x1^(-1)*CKM1x2*conj(CKM1x2)+(conj(CKM2x1))^(-1)*-1*CKM2x1^(-1)*CKM2x2*conj(CKM2x2)+(conj(CKM3x1))^(-1)*-1*CKM3x1^(-1)*CKM3x2*conj(CKM3x2)+-1*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22+-1*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32+-27*G^2*ee^(-2)+29/12");
     // Only non-factorizable ones
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping only_detect_zeroes --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"92 | -133/3 = -133/3");
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"67 | -46/3+Group(18,1,-1)+Group(19,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(21,1,-1)+Group(22,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(24,1,-1)+Group(25,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(27,1,-1)+Group(28,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(30,1,-1)+Group(31,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(33,1,-1/2)+Group(34,1,-1/2)+Group(35,1,-1/2)+Group(36,3*G^2*ee^(-2),-1/2)+Group(37,3*G^2*ee^(-2),-1/2)+Group(38,3*G^2*ee^(-2),-1/2)+Group(43,1,-1/2)+Group(46,1,-1)+Group(47,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(48,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(49,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(50,1,-1/2)+Group(51,1,-1/2)+Group(52,1,-1/2)+Group(53,1,-1/2)+Group(54,1,-1)+Group(55,1,-1)+Group(56,1,-1)+Group(57,1,-1/2)+Group(58,1,-1/2)+Group(59,1,-1/2)+Group(60,1,-1/2)+Group(61,1,-1)+Group(62,1,-1)+Group(77,1/4,-1/2)+Group(78,1/4,-1/2)+Group(79,1,-1/2)+Group(80,3*G^2*ee^(-2),-1/2)+Group(81,3*G^2*ee^(-2),-1/2)+Group(82,12*G^2*ee^(-2),-1/2)+Group(85,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*5/9*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*cw^2*sw^(-2),-1/2)+Group(87,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*5/9*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*cw^2*sw^(-2),-1/2) = (-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*-19/18*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*-3/2*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*-5/3+(conj(CKM1x1))^(-1)*-1*CKM1x1^(-1)*CKM1x2*conj(CKM1x2)+(conj(CKM2x1))^(-1)*-1*CKM2x1^(-1)*CKM2x2*conj(CKM2x2)+(conj(CKM3x1))^(-1)*-1*CKM3x1^(-1)*CKM3x2*conj(CKM3x2)+-1*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22+-1*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32+-27/2*G^2*ee^(-2)+-397/12");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"92 | -133/3 = -133/3");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"67 | -46/3+Group(10,1,-1)+Group(11,1,-1)+Group(12,1,-1/2)+Group(13,1,-1/2)+Group(14,1,-1/2)+Group(15,1,-1/2)+Group(16,1,-1)+Group(17,1,-1)+Group(31,1,-1/2)+Group(32,1,-1/2)+Group(33,1,-1/2)+Group(34,12*G^2*ee^(-2),-1/2)+Group(35,12*G^2*ee^(-2),-1/2)+Group(36,12*G^2*ee^(-2),-1/2)+Group(39,1,-1/2)+Group(4,1,-1)+Group(40,1,-1/2)+Group(42,1,-1)+Group(43,1,-1)+Group(44,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(45,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(49,1,-1)+Group(5,1,-1)+Group(50,1,-1)+Group(51,1,-1)+Group(52,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(53,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(54,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(6,1,-1/2)+Group(7,1,-1/2)+Group(76,4,-1/2)+Group(77,1,-1/2)+Group(78,1,-1/2)+Group(79,12*G^2*ee^(-2),-1/2)+Group(8,1,-1/2)+Group(80,3*G^2*ee^(-2),-1/2)+Group(81,3*G^2*ee^(-2),-1/2)+Group(86,(-6*cw^2*sw^2+17*sw^4+9*cw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1),-1/2)+Group(89,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,-1/2)+Group(9,1,-1/2)+Group(90,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,-1/2)+Group(91,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,-1/2) = (5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*-13*sw^4+(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*-6*cw^2*sw^2+(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*-9*cw^4+(conj(CKM1x1))^(-1)*-1*CKM1x1^(-1)*CKM1x2*conj(CKM1x2)+(conj(CKM2x1))^(-1)*-1*CKM2x1^(-1)*CKM2x2*conj(CKM2x2)+(conj(CKM3x1))^(-1)*-1*CKM3x1^(-1)*CKM3x2*conj(CKM3x2)+-1*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22+-1*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32+-215/6+-27*G^2*ee^(-2)");
 
     Ok(())
 }
@@ -1853,7 +2317,7 @@ fn test_vacuum_amplitude_generation_full_sm_three_loop_raw() -> Result<()> {
 
     // Including all graphs
     assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{3}] --numerator-grouping no_grouping --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1",false)?,@"41650 | -14295/8 = -14295/8");
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{3}] --numerator-grouping only_detect_zeroes --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1",false)?,@"38696 | -46369/48 = -46369/48");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{3}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1",false)?,@"38696 | -46369/48 = -46369/48");
 
     Ok(())
 }
@@ -1869,9 +2333,31 @@ fn test_vacuum_amplitude_generation_full_sm_three_loop_filtered() -> Result<()> 
     cli.run_command("set global kv global.n_cores.feyngen=1")?;
 
     // Only non-factorizable ones
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{3}] --numerator-grouping only_detect_zeroes --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"3150 | -9861/16 = -9861/16");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{3}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"3150 | -9861/16 = -9861/16");
 
-    // These selected diagrams have vanishing Lorentz numerators.
+    // Select the original two muon/G0/photon/charged-Goldstone/W graphs by
+    // their interaction inventory. GL0061/GL0062 no longer name them in the
+    // native generator. Each closed muon trace has gamma5 and fewer than four
+    // ordinary gamma matrices, so its Lorentz numerator must vanish.
+    let ProcessCollection::Amplitudes(amplitudes) = &cli.state.process_list.processes[0].collection
+        else { panic!("the vacuum fixture must be an amplitude") };
+    let mut zero_graphs = amplitudes.values().flat_map(|amplitude| &amplitude.graphs)
+        .filter_map(|amplitude_graph| {
+            let graph = &amplitude_graph.graph;
+            let mut rules = graph.underlying.iter_nodes().map(|(_, _, vertex)| {
+                vertex.vertex_rule.and_then(|rule| cli.state.model.vertex_rule_by_id(rule).ok())
+                    .map(|rule| rule.name.as_str())
+            }).collect::<Option<Vec<_>>>()?;
+            rules.sort_unstable();
+            [
+                ["V_102", "V_41", "V_46", "V_99"],
+                ["V_102", "V_40", "V_47", "V_99"],
+            ].iter().any(|expected| rules == expected.as_slice())
+                .then(|| graph.name.clone())
+        }).collect::<Vec<_>>();
+    zero_graphs.sort();
+    assert_eq!(zero_graphs.len(), 2, "the Lorentz-zero check must receive both original physical graphs");
+
 
     // digraph GL0061{
     //   num = "1";
@@ -1890,7 +2376,7 @@ fn test_vacuum_amplitude_generation_full_sm_three_loop_filtered() -> Result<()> 
     //   2:8   -> 3:9   [id=4 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod=-2  lmb_id=2 lmb_rep="K(2,a___)" name=e4 num="1" particle="G-"];
     //   2:10  -> 3:11  [id=5 dir=none source="{ufo_order:0}" sink="{ufo_order:1}"  dod=0  lmb_rep="-1*K(0,a___)+-1*K(1,a___)+-1*K(2,a___)" name=e5 num="-1*spenso::g(spenso::mink(4,hedge(10)),spenso::mink(4,hedge(11)))+Q(5,spenso::mink(4,hedge(10)))*Q(5,spenso::mink(4,hedge(11)))*UFO::MW^(-2)" particle="W+"];
     // }
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{3}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1 --numerical-samples-seed 3 --select-graphs GL0061 GL0062 --compare-canonized-numerator false --number-of-samples-for-numerator-comparisons 3",false)?,@"0 | 0 = 0");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", &format!("{{}} > {{}} [{{3}}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1 --numerical-samples-seed 3 --select-graphs {} --compare-canonized-numerator false --number-of-samples-for-numerator-comparisons 3", zero_graphs.join(" ")),false)?,@"0 | 0 = 0");
 
 
     Ok(())
@@ -1923,12 +2409,12 @@ mod slow {
         cli.run_command("import model sm.json")?;
 
         // Cross sections
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ | d a e- ghg g QED^2==4 [{{2}}] --numerator-grouping only_detect_zeroes",false)?,@"3 | -3 = -3");
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{2}}] --numerator-grouping only_detect_zeroes",false)?,@"3 | -3 = -3");
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{3}} QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"30 | -30 = -30");
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{4}} QCD=2] --numerator-grouping only_detect_zeroes",false)?,@"594 | -261 = -261");
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > b b~ h | d b h a e- ghg g z QED^2==6 [{{2}}] --numerator-grouping only_detect_zeroes",false)?,@"21 | -21 = -21");
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > b b~ h | d b h a e- ghg g z QED^2==6 [{{3}} QCD=2] --numerator-grouping only_detect_zeroes",false)?,@"171 | -171 = -171");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ | d a e- ghg g QED^2==4 [{{2}}] --filter-zero-color --numerator-grouping no_grouping",false)?,@"3 | -3 = -3");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{2}}] --filter-zero-color --numerator-grouping no_grouping",false)?,@"3 | -3 = -3");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{3}} QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"30 | -30 = -30");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{4}} QCD=2] --filter-zero-color --numerator-grouping no_grouping",false)?,@"594 | -261 = -261");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > b b~ h | d b h a e- ghg g z QED^2==6 [{{2}}] --filter-zero-color --numerator-grouping no_grouping",false)?,@"21 | -21 = -21");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > b b~ h | d b h a e- ghg g z QED^2==6 [{{3}} QCD=2] --filter-zero-color --numerator-grouping no_grouping",false)?,@"171 | -171 = -171");
 
         // Enable grouping
         assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ | d a e- ghg g QED^2==4 [{{2}}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"2 | -1+Group(0,1,-1)+Group(1,1,-1) = -3");
@@ -1956,9 +2442,9 @@ mod slow {
         let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
         cli.run_command("import model sm.json")?;
 
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{1}} QCD=0] --numerator-grouping only_detect_zeroes",false)?,@"4 | -4 = -4");
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{2}} QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"40 | -40 = -40");
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{3}} QCD=2] --numerator-grouping only_detect_zeroes",false)?,@"874 | -266 = -266");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{1}} QCD=0] --filter-zero-color --numerator-grouping no_grouping",false)?,@"4 | -4 = -4");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{2}} QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"40 | -40 = -40");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{3}} QCD=2] --filter-zero-color --numerator-grouping no_grouping",false)?,@"874 | -266 = -266");
         assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{1}} QCD=0] --symmetrize-initial-states true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"2 | Group(0,1,-1)+Group(1,1,-1)+Group(2,1,-1)+Group(3,1,-1) = -4");
         assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{2}} QCD=1] --symmetrize-initial-states true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"14 | Group(0,1,-1)+Group(1,1,-1)+Group(10,1,-1)+Group(11,1,-1)+Group(12,1,-2)+Group(13,1,-2)+Group(14,1,-2)+Group(15,1,-2)+Group(16,1,-1)+Group(17,1,-1)+Group(18,1,-1)+Group(19,1,-1)+Group(2,1,-1)+Group(24,1,-1)+Group(25,1,-1)+Group(26,1,-1)+Group(27,1,-1)+Group(28,1,-2)+Group(29,1,-2)+Group(3,1,-1)+Group(30,1,-2)+Group(31,1,-2)+Group(4,1,-2)+Group(5,1,-2)+Group(6,1,-2)+Group(7,1,-2)+Group(8,1,-1)+Group(9,1,-1) = -40");
         assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{3}} QCD=2] --symmetrize-initial-states true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"223 | Group(0,1,-1)+Group(1,1,1)+Group(10,1,2)+Group(100,1,-2)+Group(101,1,-2)+Group(102,1,-2)+Group(103,1,-2)+Group(104,1,-2)+Group(105,1,-2)+Group(11,1,-2)+Group(110,1,-2)+Group(111,1,-2)+Group(112,1,-2)+Group(113,1,-2)+Group(114,1,-2)+Group(115,1,-2)+Group(116,1,-2)+Group(117,1,-2)+Group(118,1,-2)+Group(119,1,-2)+Group(12,1,-2)+Group(120,1,-2)+Group(121,1,-2)+Group(122,1,-2)+Group(123,1,-2)+Group(124,1,-2)+Group(125,1,-2)+Group(126,1,-2)+Group(127,1,-2)+Group(128,1,-2)+Group(129,1,-2)+Group(13,1,2)+Group(130,1,-2)+Group(131,1,-2)+Group(132,1,-2)+Group(133,1,-2)+Group(134,1,-2)+Group(135,1,-2)+Group(14,1,2)+Group(140,1,-2)+Group(141,1,-2)+Group(142,1,-2)+Group(143,1,-2)+Group(144,1,-2)+Group(145,1,-2)+Group(146,1,-2)+Group(147,1,-2)+Group(148,1,-2)+Group(149,1,-2)+Group(15,1,-2)+Group(150,1,-2)+Group(151,1,-2)+Group(152,1,-2)+Group(153,1,-2)+Group(154,1,-2)+Group(155,1,-2)+Group(16,1,-1)+Group(164,1,-1)+Group(165,1,-1)+Group(166,1,-1)+Group(167,1,-1)+Group(168,1,-2)+Group(169,1,-2)+Group(17,1,1)+Group(170,1,-2)+Group(171,1,-2)+Group(172,1,-1)+Group(173,1,-1)+Group(174,1,-1)+Group(175,1,-1)+Group(176,1,-2)+Group(177,1,-2)+Group(178,1,-2)+Group(179,1,-2)+Group(18,1,1)+Group(180,1,-2)+Group(181,1,-2)+Group(186,1,-1)+Group(187,1,-1)+Group(188,1,-1)+Group(189,1,-1)+Group(19,1,-1)+Group(190,1,-2)+Group(191,1,-2)+Group(192,1,-2)+Group(193,1,-2)+Group(194,1,-2)+Group(195,1,-2)+Group(196,1,-2)+Group(197,1,-2)+Group(2,1,1)+Group(20,1,-1)+Group(202,1,-1)+Group(203,1,-1)+Group(204,1,-1)+Group(205,1,-1)+Group(206,1,-2)+Group(207,1,-2)+Group(208,1,-2)+Group(209,1,-2)+Group(21,1,1)+Group(210,1,-2)+Group(211,1,-2)+Group(22,1,1)+Group(220,1,-1)+Group(221,1,-1)+Group(222,1,-1)+Group(223,1,-1)+Group(224,1,-2)+Group(225,1,-2)+Group(226,1,-2)+Group(227,1,-2)+Group(228,1,-1)+Group(229,1,-1)+Group(23,1,-1)+Group(230,1,-1)+Group(231,1,-1)+Group(232,1,-1)+Group(233,1,-1)+Group(234,1,-1)+Group(235,1,-1)+Group(236,1,-2)+Group(237,1,-2)+Group(238,1,-2)+Group(239,1,-2)+Group(24,1,2)+Group(240,1,-1)+Group(241,1,-1)+Group(242,1,-1)+Group(243,1,-1)+Group(246,1,-2)+Group(247,1,-2)+Group(25,1,2)+Group(254,1,-2)+Group(255,1,-2)+Group(256,1,-1)+Group(257,1,-1)+Group(258,1,-1)+Group(259,1,-1)+Group(26,1,2)+Group(260,1,-2)+Group(261,1,-2)+Group(262,1,-1)+Group(263,1,-1)+Group(264,1,-1)+Group(265,1,-1)+Group(266,1,1)+Group(267,1,1)+Group(268,1,1)+Group(269,1,1)+Group(27,1,2)+Group(270,1,1)+Group(271,1,1)+Group(272,1,1)+Group(273,1,1)+Group(274,1,-1)+Group(275,1,-1)+Group(276,1,-1)+Group(277,1,-1)+Group(278,1,-1)+Group(279,1,-1)+Group(28,1,1)+Group(280,1,-1)+Group(281,1,-1)+Group(286,1,-2)+Group(287,1,-2)+Group(288,1,-2)+Group(289,1,-2)+Group(29,1,1)+Group(294,1,-2)+Group(295,1,-2)+Group(296,1,-2)+Group(297,1,-2)+Group(3,1,-1)+Group(30,1,1)+Group(306,1,-1)+Group(307,1,-1)+Group(308,1,-1)+Group(309,1,-1)+Group(31,1,1)+Group(310,1,-2)+Group(311,1,-2)+Group(312,1,-2)+Group(313,1,-2)+Group(314,1,-2)+Group(315,1,-2)+Group(316,1,-1)+Group(317,1,-1)+Group(318,1,-1)+Group(319,1,-1)+Group(324,1,-2)+Group(325,1,-2)+Group(326,1,-2)+Group(327,1,-2)+Group(328,1,-2)+Group(329,1,-2)+Group(330,1,-2)+Group(331,1,-2)+Group(332,1,-2)+Group(333,1,-2)+Group(334,1,1)+Group(335,1,1)+Group(336,1,1)+Group(337,1,1)+Group(338,1,-2)+Group(339,1,-2)+Group(340,1,-2)+Group(341,1,-2)+Group(342,1,-2)+Group(343,1,-2)+Group(344,1,-2)+Group(345,1,-2)+Group(346,1,1)+Group(347,1,1)+Group(348,1,1)+Group(349,1,1)+Group(350,1,-2)+Group(351,1,-2)+Group(356,1,-2)+Group(357,1,-2)+Group(358,1,-2)+Group(359,1,-2)+Group(36,1,1)+Group(360,1,-2)+Group(361,1,-2)+Group(362,1,-2)+Group(363,1,-2)+Group(364,1,-1)+Group(365,1,-1)+Group(366,1,-1)+Group(367,1,-1)+Group(37,1,1)+Group(372,1,-2)+Group(373,1,-2)+Group(374,1,-2)+Group(375,1,-2)+Group(38,1,1)+Group(380,1,-2)+Group(381,1,-2)+Group(386,1,-1)+Group(387,1,-1)+Group(388,1,-1)+Group(389,1,-1)+Group(39,1,1)+Group(398,1,-2)+Group(399,1,-2)+Group(4,1,-1)+Group(40,1,2)+Group(400,1,-2)+Group(401,1,-2)+Group(402,1,-2)+Group(403,1,-2)+Group(404,1,-2)+Group(405,1,-2)+Group(41,1,2)+Group(410,1,-1)+Group(411,1,-1)+Group(412,1,-1)+Group(413,1,-1)+Group(414,1,-2)+Group(415,1,-2)+Group(416,1,-2)+Group(417,1,-2)+Group(418,1,-2)+Group(419,1,-2)+Group(42,1,2)+Group(420,1,-2)+Group(421,1,-2)+Group(426,1,-1)+Group(427,1,-1)+Group(428,1,-1)+Group(429,1,-1)+Group(43,1,2)+Group(430,1,-2)+Group(431,1,-2)+Group(432,1,-2)+Group(433,1,-2)+Group(434,1,-2)+Group(435,1,-2)+Group(436,1,-1)+Group(437,1,-1)+Group(438,1,-1)+Group(439,1,-1)+Group(440,1,-2)+Group(441,1,-2)+Group(442,1,-2)+Group(443,1,-2)+Group(444,1,-1)+Group(445,1,-1)+Group(446,1,-1)+Group(447,1,-1)+Group(448,1,-1/2)+Group(449,1,-1/2)+Group(450,1,-1/2)+Group(451,1,-1/2)+Group(452,1,-1)+Group(453,1,-1)+Group(454,1,-1)+Group(455,1,-1)+Group(456,1,-1/2)+Group(457,1,-1/2)+Group(458,1,-1/2)+Group(459,1,-1/2)+Group(464,1,1)+Group(465,1,1)+Group(466,1,1)+Group(467,1,1)+Group(468,1,1)+Group(469,1,1)+Group(470,1,1)+Group(471,1,1)+Group(48,1,-1)+Group(480,1,-2)+Group(481,1,-2)+Group(482,1,-2)+Group(483,1,-2)+Group(484,1,-2)+Group(485,1,-2)+Group(486,1,-1)+Group(487,1,-1)+Group(488,1,-1)+Group(489,1,-1)+Group(49,1,-1)+Group(490,1,-1)+Group(491,1,-1)+Group(492,1,-1)+Group(493,1,-1)+Group(494,1,-2)+Group(495,1,-2)+Group(496,1,-2)+Group(497,1,-2)+Group(498,1,-2)+Group(499,1,-2)+Group(5,1,1)+Group(50,1,-1)+Group(500,1,-1)+Group(501,1,-1)+Group(502,1,-1)+Group(503,1,-1)+Group(504,1,1)+Group(505,1,1)+Group(506,1,-1)+Group(507,1,-1)+Group(508,1,-1)+Group(509,1,-1)+Group(51,1,-1)+Group(512,1,-2)+Group(513,1,-2)+Group(514,1,-2)+Group(515,1,-2)+Group(516,1,-1)+Group(517,1,-1)+Group(518,1,-1)+Group(519,1,-1)+Group(522,1,-1)+Group(523,1,-1)+Group(524,1,-1)+Group(525,1,-1)+Group(526,1,-1/2)+Group(527,1,-1/2)+Group(528,1,-1/2)+Group(529,1,-1/2)+Group(534,1,-1/2)+Group(535,1,-1/2)+Group(536,1,-1/2)+Group(537,1,-1/2)+Group(538,1,-1)+Group(539,1,-1)+Group(540,1,-1)+Group(541,1,-1)+Group(542,1,1)+Group(543,1,1)+Group(552,1,-2)+Group(553,1,-2)+Group(554,1,-2)+Group(555,1,-2)+Group(556,1,-1)+Group(557,1,-1)+Group(558,1,-1)+Group(559,1,-1)+Group(56,1,-2)+Group(564,1,-1)+Group(565,1,-1)+Group(566,1,-1)+Group(567,1,-1)+Group(568,1,-2)+Group(569,1,-2)+Group(57,1,-2)+Group(570,1,-2)+Group(571,1,-2)+Group(58,1,-2)+Group(586,1,1)+Group(587,1,1)+Group(588,1,1)+Group(589,1,1)+Group(59,1,-2)+Group(590,1,2)+Group(591,1,2)+Group(592,1,2)+Group(593,1,2)+Group(594,1,1)+Group(595,1,1)+Group(596,1,1)+Group(597,1,1)+Group(598,1,2)+Group(599,1,2)+Group(6,1,1)+Group(60,1,-2)+Group(600,1,2)+Group(601,1,2)+Group(602,1,1)+Group(603,1,1)+Group(604,1,1)+Group(605,1,1)+Group(61,1,-2)+Group(610,1,1)+Group(611,1,1)+Group(612,1,1)+Group(613,1,1)+Group(614,1,2)+Group(615,1,2)+Group(616,1,2)+Group(617,1,2)+Group(62,1,-2)+Group(63,1,-2)+Group(634,1,1)+Group(635,1,1)+Group(636,1,1)+Group(637,1,1)+Group(638,1,1)+Group(639,1,1)+Group(64,1,-2)+Group(640,1,1)+Group(641,1,1)+Group(65,1,-2)+Group(658,1,1)+Group(659,1,1)+Group(66,1,-2)+Group(660,1,1)+Group(661,1,1)+Group(662,1,1)+Group(663,1,1)+Group(664,1,1)+Group(665,1,1)+Group(666,1,1)+Group(667,1,1)+Group(668,1,1)+Group(669,1,1)+Group(67,1,-2)+Group(68,1,-2)+Group(69,1,-2)+Group(694,1,1)+Group(695,1,1)+Group(696,1,1)+Group(697,1,1)+Group(7,1,-1)+Group(70,1,-2)+Group(71,1,-2)+Group(72,1,-2)+Group(73,1,-2)+Group(730,1,1)+Group(731,1,1)+Group(74,1,-2)+Group(75,1,-2)+Group(76,1,-1)+Group(77,1,-1)+Group(78,1,-1)+Group(79,1,-1)+Group(8,1,-2)+Group(9,1,2) = -426");
@@ -1982,24 +2468,24 @@ mod slow {
         // // Including all graphs
         // Closed ghost circuits carry the same Grassmann minus as quarks.
         // Recompute only the statistics weights; counts, group IDs and ratios stay fixed.
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{2}] --numerator-grouping only_detect_zeroes --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1 ",false)?,@"6 | -43/24 = -43/24");
+        assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{2}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1 ",false)?,@"6 | -43/24 = -43/24");
         assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1",false)?,@"5 | -19/24+Group(0,1,-1/2)+Group(5,1,-1/2) = -43/24");
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{3}] --numerator-grouping only_detect_zeroes --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1",false)?,@"36 | -91/48 = -91/48");
+        assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{3}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1",false)?,@"36 | -91/48 = -91/48");
         assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{3}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1",false)?,@"27 | -83/48+Group(0,1,-1/4)+Group(1,1,-1/4)+Group(11,1,1/2)+Group(16,1,1/2)+Group(19,1,1/2)+Group(2,1,-1/4)+Group(3,1,-1/3)+Group(30,1,-1/4)+Group(31,1,-1/4)+Group(32,1,-1/3)+Group(33,1,-1/4)+Group(34,1,1/4)+Group(35,1,-1/2)+Group(4,1,1/4)+Group(5,1,-1/2)+Group(6,1,1/2)+Group(7,1,1/2) = -91/48");
         // Exact color contraction removes six of the 270 raw networks;
         // directed AutG and closed Grassmann circuits give 191/24.
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{4}] --numerator-grouping only_detect_zeroes --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1",false)?,@"264 | 191/24 = 191/24");
+        assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{4}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1",false)?,@"264 | 191/24 = 191/24");
         // Old target in main:
         // ('{} > {} | g ghg t u d QED==0 [{4}] -a -num_grouping group_identical_graphs_up_to_scalar_rescaling --max_n_bridges -1 --number_of_factorized_loop_subtopologies -1', snapshot(179), snapshot('-731/168')),
         assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{4}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1",false)?,@"178 | -13/24+Group(0,1,-1/8)+Group(1,1,-1/2)+Group(10,1,-1/8)+Group(100,1,1)+Group(101,1,1)+Group(105,1,1)+Group(107,1,1/2)+Group(11,1,-1/3)+Group(111,1,1/2)+Group(115,1,-1/2)+Group(119,1,-1/2)+Group(12,1,-1/2)+Group(126,1,1/6)+Group(127,7/2,1/6)+Group(13,1,-1/2)+Group(134,1,-1/2)+Group(135,1,-1/2)+Group(136,1,-1)+Group(137,1,-1/2)+Group(138,1,-1/4)+Group(139,1,-1/2)+Group(14,1,-1/2)+Group(140,1,-1)+Group(141,1,1/2)+Group(15,1,-1/2)+Group(153,1,1)+Group(154,1,-1/2)+Group(155,1,-1/2)+Group(156,1,-1/2)+Group(157,1,-1/4)+Group(158,1,-1)+Group(159,1,-1)+Group(16,1,-1/2)+Group(160,1,-1/2)+Group(161,1,1/2)+Group(162,1,-1/3)+Group(163,1,-1/3)+Group(169,1,-1/3)+Group(17,1,-1/2)+Group(170,1,-1/3)+Group(172,1,-1)+Group(175,1,-1)+Group(18,1,-1/4)+Group(184,1,-1/2)+Group(187,1,-1/2)+Group(19,1,-1/4)+Group(2,1,-1/4)+Group(21,1,-1/4)+Group(22,1,-1)+Group(228,1,1)+Group(229,1,1/2)+Group(23,1,1/4)+Group(230,1,1)+Group(231,1,-1/8)+Group(232,1,-1/2)+Group(233,1,-1/4)+Group(234,1,-1/8)+Group(235,1,-1/4)+Group(236,1,-1/8)+Group(237,1,-1/4)+Group(238,1,-1/8)+Group(239,1,-1/12)+Group(24,1,1/4)+Group(240,1,-1/4)+Group(241,1,-1/8)+Group(242,1,-1/3)+Group(243,1,-1/2)+Group(244,1,-1/2)+Group(245,1,-1/2)+Group(246,1,-1/2)+Group(247,1,-1/2)+Group(248,1,-1/2)+Group(249,1,-1/4)+Group(25,1,1/4)+Group(250,1,-1/4)+Group(252,1,-1/4)+Group(253,1,-1)+Group(254,1,1/4)+Group(255,1,1/4)+Group(256,1,1/4)+Group(257,1,1/8)+Group(258,1,-1)+Group(259,1,-1/6)+Group(26,1,1/8)+Group(260,1,1)+Group(261,1,-1/2)+Group(262,1,-1)+Group(263,1,1/6)+Group(264,7/2,1/6)+Group(265,1,1/2)+Group(266,1,1)+Group(267,1,-1/3)+Group(268,1,-1/2)+Group(269,1,-1/6)+Group(27,1,-1)+Group(28,1,-1/6)+Group(29,1,1)+Group(3,1,-1/8)+Group(30,1,-1/2)+Group(31,1,-1/2)+Group(32,1,1/6)+Group(33,7/2,1/6)+Group(34,1,-1)+Group(35,1,1/2)+Group(36,1,1)+Group(37,1,-1/3)+Group(38,1,-1/2)+Group(39,1,-1/6)+Group(4,1,-1/4)+Group(40,1,1/2)+Group(41,1,1/2)+Group(42,1,1/2)+Group(43,1,1/4)+Group(44,1,1)+Group(45,1,-1/2)+Group(46,7/2,1/3)+Group(47,1,1/3)+Group(48,1,1/2)+Group(49,1,1)+Group(5,1,-1/8)+Group(50,1,1/2)+Group(51,1,1/2)+Group(52,1,1)+Group(53,1,1/2)+Group(54,1,1/4)+Group(55,1,1/2)+Group(56,1,1)+Group(57,1,-1/2)+Group(58,1,1)+Group(6,1,-1/4)+Group(61,1,1)+Group(7,1,-1/8)+Group(79,1,-1)+Group(8,1,-1/12)+Group(80,1,1/2)+Group(81,1,1/2)+Group(82,1,1/2)+Group(83,1,1/4)+Group(84,1,1)+Group(85,1,1)+Group(86,1,1/2)+Group(87,1,-1/2)+Group(88,1,1/3)+Group(89,2/7,1/3)+Group(9,1,-1/4)+Group(90,1,1)+Group(91,1,-1/3)+Group(92,1,-1/3)+Group(98,1,1/3)+Group(99,2/7,1/3) = -731/168");
 
         // // Only non-factorizable ones
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{2}] --numerator-grouping only_detect_zeroes --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"5 | -11/12 = -11/12");
+        assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{2}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"5 | -11/12 = -11/12");
         assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"4 | 1/12+Group(0,1,-1/2)+Group(4,1,-1/2) = -11/12");
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{3}] --numerator-grouping only_detect_zeroes --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"30 | -17/12 = -17/12");
+        assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{3}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"30 | -17/12 = -17/12");
         assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{3}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"22 | 1/4+Group(0,1,-1/4)+Group(1,1,-1/4)+Group(14,1,-1/2)+Group(16,1,-1/2)+Group(2,1,-1/3)+Group(25,1,-1/4)+Group(26,1,-1/3)+Group(27,1,-1/4)+Group(28,1,1/4)+Group(29,1,-1/2)+Group(3,1,1/4)+Group(4,1,-1/2)+Group(5,1,1/2)+Group(6,1,1/2)+Group(9,1,1/2) = -17/12");
         assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{3}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 1 --number-of-factorized-loop-subtopologies 1 1",true)?,@"22 | 1/4+Group(0,1,-1/4)+Group(1,1,-1/4)+Group(14,1,-1/2)+Group(16,1,-1/2)+Group(2,1,-1/3)+Group(25,1,-1/4)+Group(26,1,-1/3)+Group(27,1,-1/4)+Group(28,1,1/4)+Group(29,1,-1/2)+Group(3,1,1/4)+Group(4,1,-1/2)+Group(5,1,1/2)+Group(6,1,1/2)+Group(9,1,1/2) = -17/12");
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{4}] --numerator-grouping only_detect_zeroes --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"200 | -199/48 = -199/48");
+        assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{4}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"200 | -199/48 = -199/48");
         assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{4}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"130 | -71/48+Group(0,1,-1/8)+Group(1,1,-1/2)+Group(10,1,-1/2)+Group(106,1,-1/2)+Group(107,1,-1)+Group(108,1,-1/2)+Group(109,1,-1/2)+Group(11,1,-1/4)+Group(110,1,-1)+Group(111,1,1/2)+Group(118,1,1)+Group(119,1,-1/2)+Group(120,1,-1/2)+Group(121,1,-1)+Group(122,1,-1)+Group(123,1,-1/2)+Group(124,1,1/2)+Group(125,1,-1/3)+Group(126,1,-1/3)+Group(13,1,-1/4)+Group(131,1,-1/3)+Group(132,1,-1/3)+Group(134,1,-1)+Group(136,1,-1)+Group(14,1,-1)+Group(144,1,-1/2)+Group(146,1,-1/2)+Group(15,1,1/4)+Group(16,1,1/4)+Group(17,1,-1)+Group(174,1,1)+Group(175,1,1/2)+Group(176,1,1)+Group(177,1,-1/8)+Group(178,1,-1/2)+Group(179,1,-1/4)+Group(18,1,-1/6)+Group(180,1,-1/4)+Group(181,1,-1/8)+Group(182,1,-1/12)+Group(183,1,-1/3)+Group(184,1,-1/2)+Group(185,1,-1/2)+Group(186,1,-1/2)+Group(187,1,-1/2)+Group(188,1,-1/4)+Group(19,1,1)+Group(190,1,-1/4)+Group(191,1,-1)+Group(192,1,1/4)+Group(193,1,1/4)+Group(194,1,-1)+Group(195,1,-1/6)+Group(196,1,1)+Group(197,1,-1/2)+Group(198,1,-1)+Group(199,1,1/6)+Group(2,1,-1/4)+Group(20,1,-1/2)+Group(200,7/2,1/6)+Group(201,1,1/2)+Group(202,1,1)+Group(203,1,-1/3)+Group(204,1,-1/2)+Group(205,1,-1/6)+Group(21,1,-1/2)+Group(22,1,1/6)+Group(23,7/2,1/6)+Group(24,1,-1)+Group(25,1,1/2)+Group(26,1,1)+Group(27,1,-1/3)+Group(28,1,-1/2)+Group(29,1,-1/6)+Group(3,1,-1/4)+Group(30,1,1/2)+Group(31,1,1/2)+Group(32,1,1)+Group(33,1,-1/2)+Group(34,7/2,1/3)+Group(35,1,1/3)+Group(36,1,1/2)+Group(37,1,1)+Group(38,1,1/2)+Group(39,1,1)+Group(4,1,-1/8)+Group(40,1,1/2)+Group(41,1,1/2)+Group(42,1,1)+Group(43,1,-1/2)+Group(44,1,1)+Group(46,1,1)+Group(5,1,-1/12)+Group(58,1,-1)+Group(59,1,1/2)+Group(6,1,-1/3)+Group(60,1,1/2)+Group(61,1,1)+Group(62,1,1)+Group(63,1,1/2)+Group(64,1,-1/2)+Group(65,1,1/3)+Group(66,2/7,1/3)+Group(67,1,1)+Group(68,1,-1/3)+Group(69,1,-1/3)+Group(7,1,-1/2)+Group(74,1,1/3)+Group(75,2/7,1/3)+Group(76,1,1)+Group(77,1,1)+Group(8,1,-1/2)+Group(80,1,1)+Group(82,1,1/2)+Group(85,1,1/2)+Group(89,1,-1/2)+Group(9,1,-1/2)+Group(92,1,-1/2)+Group(98,1,1/6)+Group(99,7/2,1/6) = -853/336");
 
         Ok(())
@@ -2016,8 +2502,728 @@ mod slow {
         cli.run_command("set global kv global.n_cores.feyngen=1")?;
 
         // This filtered grouping reference remains under investigation.
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{3}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1 --numerical-samples-seed 3",false)?,@"1820 | -1537/16+Group(1000,1,1)+Group(1001,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),1)+Group(1004,1,-1)+Group(1005,3*G^2*ee^(-2),-1)+Group(1012,1,-1)+Group(1013,1,-1)+Group(1014,1,-1)+Group(1023,1,-1)+Group(1024,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(1029,1,-1)+Group(1030,I2x12^(-1)*I2x22*I3x31^(-1)*I3x32,-1)+Group(1031,1,-1)+Group(1032,(conj(CKM2x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM2x2),-1)+Group(1033,1,-1)+Group(1034,(conj(CKM2x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM2x2),-1)+Group(1035,1,1/2)+Group(1036,1,-1/2)+Group(1037,1,-1/2)+Group(1038,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),1)+Group(1039,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1040,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1041,1,-1)+Group(1042,1,1)+Group(1043,1,-1)+Group(1044,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),1)+Group(1045,1,1)+Group(1046,1,1)+Group(1047,1,-1)+Group(1048,1,-1)+Group(1049,1,-1)+Group(1050,1,-1)+Group(1051,1,-1)+Group(1052,1,-1)+Group(1053,1,-1)+Group(1054,1,-1)+Group(1055,1,-1)+Group(1056,12*G^2*ee^(-2),-1)+Group(1057,1,-1)+Group(1058,1,-1)+Group(1059,1,-1)+Group(1060,1,-1)+Group(1061,(conj(CKM3x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM3x2),-1)+Group(1062,(conj(CKM3x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM3x2),-1)+Group(1063,1,1/2)+Group(1064,1,1/2)+Group(1065,1,1/2)+Group(1066,1,-1)+Group(1068,1,1)+Group(1069,1,1)+Group(1072,1,-1)+Group(1073,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(1074,(conj(CKM3x1))^(-2)*(conj(CKM3x2))^2*CKM3x1^(-2)*CKM3x2^2,1/2)+Group(1075,(conj(CKM3x1))^(-2)*(conj(CKM3x2))^2*CKM3x1^(-2)*CKM3x2^2,-1/2)+Group(1076,(conj(CKM3x1))^(-2)*(conj(CKM3x2))^2*CKM3x1^(-2)*CKM3x2^2,-1/2)+Group(1077,(conj(CKM1x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM1x2),-1)+Group(1078,(conj(CKM1x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM1x2),-1)+Group(1079,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1080,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),1)+Group(1081,(conj(CKM1x1))^(-1)*(conj(CKM3x1))^(-1)*CKM1x1^(-1)*CKM1x2*CKM3x1^(-1)*CKM3x2*conj(CKM1x2)*conj(CKM3x2),1)+Group(1082,(conj(CKM1x1))^(-1)*(conj(CKM3x1))^(-1)*CKM1x1^(-1)*CKM1x2*CKM3x1^(-1)*CKM3x2*conj(CKM1x2)*conj(CKM3x2),-1)+Group(1083,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),1)+Group(1084,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),1)+Group(1085,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1086,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1087,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1088,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1089,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1090,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1091,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1092,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1093,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1094,(conj(CKM3x1))^(-1)*12*CKM3x1^(-1)*CKM3x2*G^2*conj(CKM3x2)*ee^(-2),-1)+Group(1095,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1096,(conj(CKM1x1))^(-1)*(conj(CKM3x1))^(-1)*CKM1x1^(-1)*CKM1x2*CKM3x1^(-1)*CKM3x2*conj(CKM1x2)*conj(CKM3x2),-1)+Group(1097,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1098,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(11,1/4,1/2)+Group(1102,1,-1)+Group(1103,(conj(CKM3x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM3x2),-1)+Group(1104,1,-1)+Group(1105,(conj(CKM3x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM3x2),-1)+Group(1107,1,-1)+Group(1108,1,-1)+Group(1109,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(1110,1,1)+Group(1111,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),1)+Group(1114,1,1)+Group(1115,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),1)+Group(1116,1,-1)+Group(1117,1,1)+Group(1118,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1119,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),1)+Group(1120,1,-1)+Group(1121,3*G^2*ee^(-2),-1)+Group(1128,1,-1)+Group(1129,1,-1)+Group(1130,1,-1)+Group(1139,1,-1)+Group(114,1,-1/2)+Group(1140,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1144,1,-1/4)+Group(1145,1,1/4)+Group(1146,1,-1/2)+Group(1147,3*G^2*ee^(-2),-1/2)+Group(1149,3*G^2*ee^(-2),-1)+Group(115,1,-1/2)+Group(1150,1/4,1/2)+Group(1151,1/4,1/2)+Group(1154,1,-1)+Group(1155,1,-1)+Group(1157,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(1158,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(1160,1,-1)+Group(1161,1,-1)+Group(1162,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(1163,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(1166,1,-1)+Group(1167,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(1168,1,-1)+Group(1169,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(1170,1,1/2)+Group(1171,1,1/2)+Group(1172,1,-1/2)+Group(1173,1,-1/2)+Group(1176,1/4,1/2)+Group(1177,1/4,1/2)+Group(1180,1,-1/4)+Group(1181,1,1/4)+Group(1182,1,-1/2)+Group(1187,3*G^2*ee^(-2),-1/2)+Group(1189,3*G^2*ee^(-2),-1)+Group(1192,1,-1)+Group(1193,1,-1)+Group(1195,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(1196,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(1198,1,-1)+Group(1199,1,-1)+Group(12,1/4,1/2)+Group(1200,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1201,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1204,1,-1)+Group(1205,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(1206,1,-1)+Group(1207,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1208,1,1/2)+Group(1209,1,-1/2)+Group(1210,1,-1/2)+Group(1213,1/4,1/2)+Group(1214,1/4,1/2)+Group(1216,1,-1/4)+Group(1217,1,1/4)+Group(1218,1,-1/2)+Group(1222,3*G^2*ee^(-2),-1/2)+Group(1224,3*G^2*ee^(-2),-1)+Group(1227,1,-1/4)+Group(1228,-9/8*G^4*ee^(-4),-1/4)+Group(1229,1,-1/3)+Group(1230,9/8*G^4*ee^(-4),1/4)+Group(1231,9*G^4*ee^(-4),-1/2)+Group(1232,9/8*G^4*ee^(-4),1/2)+Group(1233,9/8*G^4*ee^(-4),1/2)+Group(1234,-6*G^2*ee^(-2),-1)+Group(1235,-6*G^2*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22*ee^(-2),-1)+Group(1236,-6*G^2*ee^(-2),-1)+Group(1237,(conj(CKM2x1))^(-1)*-6*CKM2x1^(-1)*CKM2x2*G^2*conj(CKM2x2)*ee^(-2),-1)+Group(1238,3*G^2*ee^(-2),-1)+Group(1239,3*G^2*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22*ee^(-2),-1)+Group(1240,3*G^2*ee^(-2),-1)+Group(1241,(conj(CKM2x1))^(-1)*3*CKM2x1^(-1)*CKM2x2*G^2*conj(CKM2x2)*ee^(-2),-1)+Group(1242,9/8*G^4*ee^(-4),1/2)+Group(1243,9/8*G^4*ee^(-4),1/2)+Group(1246,9/8*G^4*ee^(-4),1/2)+Group(1247,9/8*G^4*ee^(-4),1/2)+Group(1248,-9/8*G^4*ee^(-4),-1/4)+Group(1250,9/8*G^4*ee^(-4),1/4)+Group(1251,9*G^4*ee^(-4),-1/2)+Group(1252,-6*G^2*ee^(-2),-1)+Group(1253,-6*G^2*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32*ee^(-2),-1)+Group(1254,-6*G^2*ee^(-2),-1)+Group(1255,(conj(CKM3x1))^(-1)*-6*CKM3x1^(-1)*CKM3x2*G^2*conj(CKM3x2)*ee^(-2),-1)+Group(1256,3*G^2*ee^(-2),-1)+Group(1257,3*G^2*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32*ee^(-2),-1)+Group(1258,3*G^2*ee^(-2),-1)+Group(1259,(conj(CKM3x1))^(-1)*3*CKM3x1^(-1)*CKM3x2*G^2*conj(CKM3x2)*ee^(-2),-1)+Group(1260,9/8*G^4*ee^(-4),1/2)+Group(1263,9/8*G^4*ee^(-4),1/2)+Group(1264,9/8*G^4*ee^(-4),1/2)+Group(1265,-9/8*G^4*ee^(-4),-1/4)+Group(1267,9/8*G^4*ee^(-4),1/4)+Group(1268,9*G^4*ee^(-4),-1/2)+Group(1283,1,-1)+Group(1284,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(1285,1,-1)+Group(1286,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(1287,1,-1)+Group(1288,3*G^2*ee^(-2),-1)+Group(1291,1,-1/2)+Group(1292,1,-1/2)+Group(1296,1,-1/2)+Group(1298,3*G^2*ee^(-2),-1/2)+Group(1309,1,-1)+Group(1310,1,-1)+Group(1327,1,-1)+Group(1328,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(1329,1,-1)+Group(1330,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1331,1,-1)+Group(1332,3*G^2*ee^(-2),-1)+Group(1334,1,-1/2)+Group(1335,1,-1/2)+Group(1337,1,-1/2)+Group(1339,3*G^2*ee^(-2),-1/2)+Group(1348,1,-1)+Group(1349,1,-1)+Group(1361,1,-1)+Group(1363,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(1365,1,-1)+Group(1366,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(1387,1,-1)+Group(1388,1,-1)+Group(1392,1,-1)+Group(1393,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(1394,1,-1)+Group(1395,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(1396,1,-1)+Group(1397,3*G^2*ee^(-2),-1)+Group(1401,1,-1/2)+Group(1402,1,-1/2)+Group(1411,1,-1/2)+Group(1413,3*G^2*ee^(-2),-1/2)+Group(1444,1,-1)+Group(1445,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(1446,1,-1)+Group(1447,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1448,1,-1)+Group(1449,3*G^2*ee^(-2),-1)+Group(1452,1,-1/2)+Group(1453,1,-1/2)+Group(1461,1,-1/2)+Group(1463,3*G^2*ee^(-2),-1/2)+Group(1488,1,-1)+Group(1489,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1492,1,-1)+Group(1493,1,-1)+Group(1496,1,-1)+Group(1497,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(1500,1,-1)+Group(1501,3*G^2*ee^(-2),-1)+Group(1502,1,-1/2)+Group(1504,3*G^2*ee^(-2),-1/2)+Group(1507,1,-1/2)+Group(1509,1,1/2)+Group(1510,1,1/2)+Group(1511,1,1/2)+Group(1512,1,1)+Group(1514,1,1/2)+Group(1515,1,1)+Group(1517,1,1/2)+Group(1518,1,-1)+Group(1519,1,-1)+Group(1521,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(1522,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(1524,1,-1)+Group(1525,1,-1)+Group(1526,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(1527,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(1533,1,-1)+Group(1534,1,-1)+Group(1539,1,1)+Group(1540,1,1)+Group(1548,1,-1)+Group(1549,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(1550,1,-1)+Group(1551,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(1552,1,-1)+Group(1553,3*G^2*ee^(-2),-1)+Group(1556,1,1/2)+Group(1557,1,1/2)+Group(1558,1,1/2)+Group(1559,1,-1/2)+Group(156,1,-1)+Group(1560,1,-1/2)+Group(1566,1,1/2)+Group(1567,1,1/2)+Group(1568,1,-1/2)+Group(157,1,-1)+Group(1570,3*G^2*ee^(-2),-1/2)+Group(1577,1,-1)+Group(1578,1,-1)+Group(1580,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(1581,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(1583,1,-1)+Group(1584,1,-1)+Group(1585,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1586,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1590,1,-1)+Group(1591,1,-1)+Group(1596,1,1)+Group(1597,1,1)+Group(1603,1,-1)+Group(1604,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(1605,1,-1)+Group(1606,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1607,1,-1)+Group(1608,3*G^2*ee^(-2),-1)+Group(1610,1,1/2)+Group(1611,1,1/2)+Group(1612,1,1/2)+Group(1613,1,-1/2)+Group(1614,1,-1/2)+Group(1618,1,1/2)+Group(1619,1,1/2)+Group(1620,1,-1/2)+Group(1622,3*G^2*ee^(-2),-1/2)+Group(1650,1,-1/4)+Group(1651,(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*1/3*cw^(-4)*sw^4+(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*1/3*cw^4*sw^(-4)+(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*2+(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*4/3*cw^(-2)*sw^2+(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*4/3*cw^2*sw^(-2),-1/2)+Group(1652,1,1/4)+Group(1653,1,1/2)+Group(1654,1,1/2)+Group(1655,1,1/2)+Group(1656,1,1/2)+Group(1657,1,-1/4)+Group(1658,(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*1/3*cw^(-4)*sw^4+(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*1/3*cw^4*sw^(-4)+(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*2+(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*4/3*cw^(-2)*sw^2+(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*4/3*cw^2*sw^(-2),-1/2)+Group(1659,1,1/4)+Group(1660,1,1/2)+Group(1661,1,1/2)+Group(1662,1,1/2)+Group(1663,1,-1/4)+Group(1664,(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*1/3*cw^(-4)*sw^4+(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*1/3*cw^4*sw^(-4)+(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*2+(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*4/3*cw^(-2)*sw^2+(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*4/3*cw^2*sw^(-2),-1/2)+Group(1665,1,1/4)+Group(1666,1,1/2)+Group(1667,1,1/2)+Group(1668,1,1)+Group(1669,1,-1/2)+Group(1670,1,1)+Group(1671,1,1)+Group(1672,1,1)+Group(1673,1,1)+Group(1674,1,1)+Group(1675,1,1)+Group(1676,1,1/4)+Group(1677,1,1/2)+Group(1678,1,1/2)+Group(1679,1,1/2)+Group(1680,1,1/2)+Group(1681,1,1/4)+Group(1682,1,1/2)+Group(1684,1,1)+Group(1685,1,1)+Group(1686,1,-1)+Group(1687,1,1)+Group(1688,1,1)+Group(1689,1,1)+Group(1690,1,1)+Group(1691,1,1)+Group(1692,1,1/2)+Group(1693,1,1)+Group(1697,1,-1/2)+Group(1698,1,1)+Group(1699,1,1)+Group(1700,1,1)+Group(1701,1,1)+Group(1702,1,1)+Group(1703,1,1)+Group(1704,1,1/2)+Group(1705,1,1)+Group(1706,1,1/2)+Group(1707,1,1/2)+Group(1708,1,1/4)+Group(1709,1,1/4)+Group(1710,1,1/2)+Group(1711,1,1/2)+Group(1713,1,1/4)+Group(1714,1,1/2)+Group(1716,1,1/2)+Group(1718,1,1/2)+Group(1719,1,1/4)+Group(172,1,-1/2)+Group(1723,1,1/2)+Group(1724,1,1)+Group(1725,1,1)+Group(1729,1,1)+Group(173,1,-1/2)+Group(1730,1,1)+Group(1734,1,1)+Group(1735,1,1)+Group(1738,1,1)+Group(1739,1,1)+Group(1740,1,1)+Group(1741,1,1)+Group(1742,1,1)+Group(1745,1,1)+Group(1746,1,1)+Group(1747,1,1)+Group(1748,1,1/2)+Group(1749,1,1)+Group(1750,1,-1/2)+Group(1751,1,1)+Group(1752,1,1)+Group(1753,1,1)+Group(1754,1,1/2)+Group(1755,1/4,-1/2)+Group(1756,1/4,-1/2)+Group(1757,1,-1/2)+Group(1758,1,1/4)+Group(1759,1,1/4)+Group(1760,1,1/2)+Group(1761,1,1)+Group(1762,1,1)+Group(1763,1,1)+Group(1764,1,1/2)+Group(1765,1,1)+Group(1766,1,1)+Group(1767,1,1)+Group(1768,1,-1)+Group(1769,1,-1)+Group(1770,1,1)+Group(1771,1,1)+Group(1772,1,1)+Group(1773,1,1)+Group(1774,(-5/3*cw^(-1)*sw+cw*sw^(-1))^(-1)*-1/6*cw^(-1)*sw+(-5/3*cw^(-1)*sw+cw*sw^(-1))^(-1)*1/2*cw*sw^(-1),-1)+Group(1775,(-5/3*cw^(-1)*sw+cw*sw^(-1))^(-1)*-1/6*cw^(-1)*sw+(-5/3*cw^(-1)*sw+cw*sw^(-1))^(-1)*1/2*cw*sw^(-1),-1)+Group(1776,1,-1/2)+Group(1777,1,1)+Group(1778,1,-1/2)+Group(1779,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(1780,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(1781,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(1782,1,1)+Group(1783,1,1)+Group(1784,1,1)+Group(1785,1,1/2)+Group(1786,1,1/2)+Group(1787,1,1)+Group(1788,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*5/9*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*cw^2*sw^(-2),-1/2)+Group(1789,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*5/9*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*cw^2*sw^(-2),-1/2)+Group(1790,1,1/2)+Group(1791,1,1/2)+Group(1792,1,1/4)+Group(1793,1,1/4)+Group(1794,1,1/2)+Group(1795,1,1)+Group(1796,1,1)+Group(1797,1,1)+Group(1798,1,1)+Group(1799,1,1/2)+Group(1800,1,1)+Group(1803,1,1/2)+Group(1804,1,1/2)+Group(1805,1,1/2)+Group(1806,1,1)+Group(1807,1,1)+Group(1809,1,1)+Group(1810,1,1)+Group(1812,1,-1)+Group(1813,1,1)+Group(1814,1,1)+Group(1815,1,1)+Group(1816,1,1)+Group(1818,1,1)+Group(1821,(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw*sw^(-2)+(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw^(-1),1)+Group(1823,1,1)+Group(1825,1,1)+Group(1826,1,1)+Group(1827,1,1)+Group(1828,1,1)+Group(1829,1,1/2)+Group(1830,1,1/2)+Group(1831,1,1/2)+Group(1832,1,1)+Group(1833,1,-1)+Group(1834,1,1)+Group(1835,1,1)+Group(1836,1,1)+Group(1838,1,1)+Group(1839,1,1)+Group(1842,1,-1)+Group(1843,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(1844,1,1)+Group(1846,1,1)+Group(1847,1,1)+Group(1848,1,1)+Group(1854,1,1)+Group(1855,1,-1/2)+Group(1856,1,1)+Group(1857,1,1)+Group(1858,1,1)+Group(1859,1,1)+Group(1860,1,1)+Group(1861,1,1)+Group(1862,1,1/4)+Group(1863,1,1/2)+Group(1864,1,1/2)+Group(1865,1,1/2)+Group(1866,1,1/2)+Group(1867,1,1/4)+Group(1868,1,1/2)+Group(1870,1,1)+Group(1871,1,1)+Group(1872,1,-1)+Group(1873,1,1)+Group(1874,1,1)+Group(1875,1,1)+Group(1876,1,1)+Group(1880,1,-1/2)+Group(1881,1,1)+Group(1882,1,1)+Group(1883,1,1)+Group(1884,1,1)+Group(1885,1,1)+Group(1886,1,1)+Group(1887,1,1/2)+Group(1888,1,1)+Group(1889,1,1/2)+Group(1890,1,1/2)+Group(1891,1,1/4)+Group(1892,1,1/4)+Group(1893,1,1/2)+Group(1894,1,1/2)+Group(1896,1,1/4)+Group(1897,1,1/2)+Group(1899,1,1/2)+Group(1901,1,1/2)+Group(1902,1,1/4)+Group(1903,1,1)+Group(1904,1,1)+Group(1905,1,1)+Group(1909,1,1)+Group(1913,1,1)+Group(1914,1,1)+Group(1917,1,1)+Group(1918,1,1)+Group(1919,1,1)+Group(1920,1,1)+Group(1921,1,1)+Group(1924,1,1)+Group(1925,1,1)+Group(1926,1,1)+Group(1927,1,1/2)+Group(1928,1,1)+Group(1929,1,-1/2)+Group(1930,1,1)+Group(1931,1,1)+Group(1932,1,1)+Group(1933,1,1/2)+Group(1934,1/4,-1/2)+Group(1935,1/4,-1/2)+Group(1936,1,-1/2)+Group(1937,1,1/4)+Group(1938,1,1/4)+Group(1939,1,1/2)+Group(1940,1,1)+Group(1941,1,1)+Group(1942,1,1)+Group(1943,1,1)+Group(1944,1,1)+Group(1945,1,1)+Group(1946,1,-1)+Group(1947,1,-1)+Group(1948,1,1)+Group(1949,1,1)+Group(1950,1,1)+Group(1951,1,1)+Group(1952,(-5/3*cw^(-1)*sw+cw*sw^(-1))^(-1)*-1/6*cw^(-1)*sw+(-5/3*cw^(-1)*sw+cw*sw^(-1))^(-1)*1/2*cw*sw^(-1),-1)+Group(1953,(-5/3*cw^(-1)*sw+cw*sw^(-1))^(-1)*-1/6*cw^(-1)*sw+(-5/3*cw^(-1)*sw+cw*sw^(-1))^(-1)*1/2*cw*sw^(-1),-1)+Group(1954,1,-1/2)+Group(1955,1,1)+Group(1956,1,-1/2)+Group(1957,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(1958,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(1959,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(1960,1,1)+Group(1961,1,1)+Group(1962,1,1)+Group(1963,1,1/2)+Group(1964,1,1/2)+Group(1965,1,1)+Group(1966,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*5/9*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*cw^2*sw^(-2),-1/2)+Group(1967,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*5/9*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*cw^2*sw^(-2),-1/2)+Group(1968,1,1/2)+Group(1969,1,1/2)+Group(1970,1,1/4)+Group(1971,1,1/4)+Group(1972,1,1/2)+Group(1973,1,1)+Group(1974,1,1)+Group(1975,1,1)+Group(1976,1,1)+Group(1977,1,1)+Group(1978,1,1)+Group(1979,1,1/2)+Group(1980,1,1/2)+Group(1981,1,1/2)+Group(1983,1,-1)+Group(1984,1,1)+Group(1985,1,1)+Group(1986,1,1)+Group(1987,1,1)+Group(1989,1,1)+Group(1992,(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw*sw^(-2)+(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw^(-1),1)+Group(1993,1,1)+Group(1995,1,1)+Group(1996,1,1)+Group(1997,1,1)+Group(1998,1,1/2)+Group(1999,1,1/2)+Group(2000,1,1/2)+Group(2001,1,1)+Group(2002,1,1)+Group(2003,1,1)+Group(2004,1,-1)+Group(2005,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(2006,1,-1)+Group(2007,1,1)+Group(2008,1,1)+Group(2009,1,1)+Group(2010,1,1)+Group(2014,1,1)+Group(2018,1,1)+Group(2019,1,1)+Group(2020,(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw*sw^(-2)+(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw^(-1),1)+Group(2021,(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw*sw^(-2)+(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw^(-1),1)+Group(2023,(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw*sw^(-2)+(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw^(-1),1)+Group(2024,(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw*sw^(-2)+(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw^(-1),1)+Group(2025,(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw*sw^(-2)+(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw^(-1),1)+Group(2027,(-2*sw^(-2)+cw^(-2)+cw^2*sw^(-4))^(-1)*2*sw^(-2)+(-2*sw^(-2)+cw^(-2)+cw^2*sw^(-4))^(-1)*cw^(-2)+(-2*sw^(-2)+cw^(-2)+cw^2*sw^(-4))^(-1)*cw^2*sw^(-4),1)+Group(2028,1,1)+Group(2029,1,1)+Group(2030,(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw*sw^(-2)+(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw^(-1),1)+Group(2031,(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw*sw^(-2)+(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw^(-1),1)+Group(2033,(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw*sw^(-2)+(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw^(-1),1)+Group(2034,(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw*sw^(-2)+(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw^(-1),1)+Group(2035,(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw*sw^(-2)+(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw^(-1),1)+Group(2037,1,1)+Group(2038,1,1)+Group(2039,1,1)+Group(2040,1,1)+Group(2047,1,-1/2)+Group(2049,1,-1/2)+Group(2050,1,-1/2)+Group(2061,1,1)+Group(207,1,-1)+Group(2071,1,-1)+Group(2072,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(2073,1,-1)+Group(2078,1/4,-1)+Group(2079,1/4,-1)+Group(208,1,-1)+Group(2087,1,1/2)+Group(2089,1,1/2)+Group(2098,1,-1)+Group(2099,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(2118,1,1)+Group(2119,1,1)+Group(2120,1,1/2)+Group(2122,1,1/2)+Group(2125,1,1/2)+Group(2137,1,1)+Group(2138,1,-1)+Group(2139,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(2140,1,-1)+Group(2141,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(2145,1,1)+Group(2146,1,1)+Group(2147,1,1)+Group(2148,1,1)+Group(2149,1,1)+Group(215,1,1/2)+Group(216,1,1/2)+Group(2165,1,-1)+Group(2166,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(217,1,1/2)+Group(218,1,1/2)+Group(2182,1,1)+Group(2183,1,1)+Group(2184,(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw*sw^(-2)+(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw^(-1),1)+Group(2189,1,1)+Group(219,1,1/2)+Group(2191,1,1)+Group(2192,1,1)+Group(2193,1,1)+Group(2197,1,1)+Group(2198,1,1)+Group(2200,1,-1)+Group(2201,1,-1)+Group(2202,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(2203,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(2205,1,-1)+Group(2206,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(2207,1,-1/2)+Group(2208,1/4,-1/2)+Group(2209,1/4,-1/2)+Group(2215,1,1)+Group(2221,1,1/2)+Group(2223,1,1/2)+Group(2231,1,1)+Group(2232,1,1)+Group(2235,1,1/2)+Group(2237,1,1/2)+Group(2239,1,1/2)+Group(2245,1,1)+Group(2246,1,1)+Group(2247,(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw*sw^(-2)+(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw^(-1),1)+Group(2254,1,1)+Group(2256,1,1)+Group(2257,1,1)+Group(2258,1,1)+Group(2262,1,1)+Group(2263,1,1)+Group(227,1,1)+Group(228,1,1)+Group(2280,1,1)+Group(2281,1,1)+Group(2286,1,1)+Group(2287,1,-1)+Group(2288,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(2289,1,-1)+Group(2290,1,1)+Group(2291,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(2292,1,1)+Group(2293,1,1)+Group(2311,1,1)+Group(2312,1,1)+Group(2321,1,-1)+Group(2322,1,-1)+Group(2323,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(2324,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(2327,1,-1)+Group(2328,1,-1)+Group(2331,1,-1)+Group(2332,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(2333,1,-1/2)+Group(2334,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(2335,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(2336,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(2338,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*5/9*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*cw^2*sw^(-2),-1/2)+Group(2339,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*5/9*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*cw^2*sw^(-2),-1/2)+Group(235,1,1/2)+Group(2354,1,-1)+Group(2355,1,-1)+Group(236,1,1/2)+Group(2364,1,-1/2)+Group(2366,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(2367,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(2368,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(2369,1,1/2)+Group(237,1,1/2)+Group(2370,1,1/2)+Group(2371,1,1/2)+Group(2372,1,1/2)+Group(2379,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*5/9*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*cw^2*sw^(-2),-1/2)+Group(238,1,-1/2)+Group(2380,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*5/9*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*cw^2*sw^(-2),-1/2)+Group(239,1,-1/2)+Group(2392,1,1)+Group(2393,1,1)+Group(2397,1,-1)+Group(2401,(-5/3*cw^(-1)*sw+cw*sw^(-1))^(-1)*-1/6*cw^(-1)*sw+(-5/3*cw^(-1)*sw+cw*sw^(-1))^(-1)*1/2*cw*sw^(-1),-1)+Group(2402,(-5/3*cw^(-1)*sw+cw*sw^(-1))^(-1)*-1/6*cw^(-1)*sw+(-5/3*cw^(-1)*sw+cw*sw^(-1))^(-1)*1/2*cw*sw^(-1),-1)+Group(2404,1,1)+Group(2406,1,1)+Group(2418,1,-1/2)+Group(2419,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(2420,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(2421,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(2427,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*5/9*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*cw^2*sw^(-2),-1/2)+Group(2428,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*5/9*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*cw^2*sw^(-2),-1/2)+Group(243,1,1/2)+Group(244,1,1/2)+Group(2454,1,-1)+Group(2456,(-3/5*cw*sw^(-1)+cw^(-1)*sw)^(-1)*-3/10*cw*sw^(-1)+(-3/5*cw*sw^(-1)+cw^(-1)*sw)^(-1)*1/10*cw^(-1)*sw,-1)+Group(2457,(-3/5*cw*sw^(-1)+cw^(-1)*sw)^(-1)*-3/10*cw*sw^(-1)+(-3/5*cw*sw^(-1)+cw^(-1)*sw)^(-1)*1/10*cw^(-1)*sw,-1)+Group(2459,1,1)+Group(2461,1,1/2)+Group(2468,1,-1)+Group(2469,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(2470,1,-1)+Group(2472,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1)+Group(2473,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1)+Group(2474,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1)+Group(2480,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*5/9*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*cw^2*sw^(-2),-1)+Group(2481,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*5/9*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*cw^2*sw^(-2),-1)+Group(2495,1,-1)+Group(2497,(-3/5*cw*sw^(-1)+cw^(-1)*sw)^(-1)*-3/10*cw*sw^(-1)+(-3/5*cw*sw^(-1)+cw^(-1)*sw)^(-1)*1/10*cw^(-1)*sw,-1)+Group(2498,(-3/5*cw*sw^(-1)+cw^(-1)*sw)^(-1)*-3/10*cw*sw^(-1)+(-3/5*cw*sw^(-1)+cw^(-1)*sw)^(-1)*1/10*cw^(-1)*sw,-1)+Group(2500,1,1)+Group(2502,1,1/2)+Group(2518,1,-1/2)+Group(2519,1,-1/2)+Group(2520,1,-1/2)+Group(2521,1,1/2)+Group(2522,1,1/2)+Group(2526,1,-1/2)+Group(2527,1,-1/2)+Group(2536,1,1)+Group(2537,1,1)+Group(2548,1,1/2)+Group(2549,1,1/2)+Group(2561,1/16,-1/4)+Group(2562,1/16,1/4)+Group(2563,1/16,-1/2)+Group(2564,1/16,1/2)+Group(2565,3/4*G^2*ee^(-2),-1/2)+Group(2567,3/4*G^2*ee^(-2),-1)+Group(2569,1/16,-1/4)+Group(2570,1/16,1/4)+Group(2571,1/16,-1/2)+Group(2572,3/4*G^2*ee^(-2),-1/2)+Group(2574,3/4*G^2*ee^(-2),-1)+Group(2576,1,-1)+Group(2579,1,-1)+Group(2582,1,-1)+Group(2584,1,-1)+Group(2586,1,-1)+Group(2588,1,-1)+Group(2592,1,-1)+Group(2593,1,-1)+Group(2594,1,-1)+Group(2595,1,-1)+Group(2596,1,-1)+Group(2597,1,-1)+Group(2598,1,1/2)+Group(2599,1,1/2)+Group(2600,1,1/2)+Group(2601,1,-1/2)+Group(2602,1,-1/2)+Group(2605,1/4,1/2)+Group(2606,1/4,1/2)+Group(2609,1,-1/4)+Group(261,1,-1)+Group(2610,1,1/4)+Group(2611,1,-1/2)+Group(2617,12*G^2*ee^(-2),-1/2)+Group(2619,12*G^2*ee^(-2),-1)+Group(262,1,-1)+Group(2623,1,-1/4)+Group(2624,1,-1/3)+Group(2625,-9/8*G^4*ee^(-4),-1/4)+Group(2626,9/8*G^4*ee^(-4),1/4)+Group(2627,9*G^4*ee^(-4),-1/2)+Group(2628,9/8*G^4*ee^(-4),1/2)+Group(2629,1,-1/4)+Group(2630,1,-1/3)+Group(2631,-9/8*G^4*ee^(-4),-1/4)+Group(2632,9/8*G^4*ee^(-4),1/4)+Group(2633,9*G^4*ee^(-4),-1/2)+Group(2634,-6*G^2*ee^(-2),-1)+Group(2635,-6*G^2*ee^(-2),-1)+Group(2636,-6*G^2*ee^(-2),-1)+Group(2637,-6*G^2*ee^(-2),-1)+Group(2638,-6*G^2*ee^(-2),-1)+Group(2639,-6*G^2*ee^(-2),-1)+Group(2640,12*G^2*ee^(-2),-1)+Group(2641,12*G^2*ee^(-2),-1)+Group(2642,12*G^2*ee^(-2),-1)+Group(2643,12*G^2*ee^(-2),-1)+Group(2644,12*G^2*ee^(-2),-1)+Group(2645,12*G^2*ee^(-2),-1)+Group(2646,9/2*G^4*ee^(-4),1/2)+Group(2647,9/2*G^4*ee^(-4),1/2)+Group(2648,9/2*G^4*ee^(-4),1/2)+Group(2651,9/2*G^4*ee^(-4),1/2)+Group(2652,9/2*G^4*ee^(-4),1/2)+Group(2654,-18*G^4*ee^(-4),-1/4)+Group(2655,18*G^4*ee^(-4),1/4)+Group(2656,144*G^4*ee^(-4),-1/2)+Group(267,1,1)+Group(268,1,1)+Group(2686,1,-1/2)+Group(2687,1,-1/2)+Group(2691,1,-1)+Group(2692,12*G^2*ee^(-2),-1)+Group(2694,1,-1/2)+Group(2696,12*G^2*ee^(-2),-1/2)+Group(2708,1,-1)+Group(2709,1,-1)+Group(271,1,-1)+Group(272,1,-1)+Group(2753,1,-1)+Group(2754,1,-1)+Group(2766,1,-1/2)+Group(2767,1,-1/2)+Group(277,1,1)+Group(2774,1,-1)+Group(2775,12*G^2*ee^(-2),-1)+Group(278,1,1)+Group(2780,1,-1/2)+Group(2782,12*G^2*ee^(-2),-1/2)+Group(2807,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/4*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/6+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*5/36*cw^(-2)*sw^2,-1)+Group(2808,(-2/3*ee^2+17/9*cw^(-2)*ee^2*sw^2+cw^2*ee^2*sw^(-2))^(-1)*2*G^2+(-2/3*ee^2+17/9*cw^(-2)*ee^2*sw^2+cw^2*ee^2*sw^(-2))^(-1)*3*G^2*cw^2*sw^(-2)+(-2/3*ee^2+17/9*cw^(-2)*ee^2*sw^2+cw^2*ee^2*sw^(-2))^(-1)*5/3*G^2*cw^(-2)*sw^2,-1)+Group(2809,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/4*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/6+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*5/36*cw^(-2)*sw^2,-1/2)+Group(2810,1,1/2)+Group(2811,(-2/3*ee^2+17/9*cw^(-2)*ee^2*sw^2+cw^2*ee^2*sw^(-2))^(-1)*2*G^2+(-2/3*ee^2+17/9*cw^(-2)*ee^2*sw^2+cw^2*ee^2*sw^(-2))^(-1)*3*G^2*cw^2*sw^(-2)+(-2/3*ee^2+17/9*cw^(-2)*ee^2*sw^2+cw^2*ee^2*sw^(-2))^(-1)*5/3*G^2*cw^(-2)*sw^2,-1/2)+Group(2813,1,-1/4)+Group(2814,(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*17/81*cw^(-4)*sw^4+(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*2/3+(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*4/27*cw^(-2)*sw^2+(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*4/3*cw^2*sw^(-2)+(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*cw^4*sw^(-4),-1/2)+Group(2815,1,1/4)+Group(2816,1,1)+Group(2818,1,1/2)+Group(2822,1,1)+Group(2823,1,1)+Group(2839,1,1)+Group(284,1,1/2)+Group(2842,1,1)+Group(285,1,1/2)+Group(2858,1,1)+Group(286,1,1/2)+Group(2860,1,1)+Group(2867,1,1)+Group(2868,1,1)+Group(287,1,-1/2)+Group(288,1,-1/2)+Group(2881,1,-1)+Group(2882,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(2883,1,1)+Group(2884,1,1)+Group(2906,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/4*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/6+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*5/36*cw^(-2)*sw^2,-1)+Group(2907,(-2/3*ee^2+17/9*cw^(-2)*ee^2*sw^2+cw^2*ee^2*sw^(-2))^(-1)*2*G^2+(-2/3*ee^2+17/9*cw^(-2)*ee^2*sw^2+cw^2*ee^2*sw^(-2))^(-1)*3*G^2*cw^2*sw^(-2)+(-2/3*ee^2+17/9*cw^(-2)*ee^2*sw^2+cw^2*ee^2*sw^(-2))^(-1)*5/3*G^2*cw^(-2)*sw^2,-1)+Group(2908,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/4*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/6+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*5/36*cw^(-2)*sw^2,-1/2)+Group(2909,1,1/2)+Group(2910,(-2/3*ee^2+17/9*cw^(-2)*ee^2*sw^2+cw^2*ee^2*sw^(-2))^(-1)*2*G^2+(-2/3*ee^2+17/9*cw^(-2)*ee^2*sw^2+cw^2*ee^2*sw^(-2))^(-1)*3*G^2*cw^2*sw^(-2)+(-2/3*ee^2+17/9*cw^(-2)*ee^2*sw^2+cw^2*ee^2*sw^(-2))^(-1)*5/3*G^2*cw^(-2)*sw^2,-1/2)+Group(2912,1,-1/4)+Group(2913,(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*17/81*cw^(-4)*sw^4+(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*2/3+(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*4/27*cw^(-2)*sw^2+(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*4/3*cw^2*sw^(-2)+(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*cw^4*sw^(-4),-1/2)+Group(2914,1,1/4)+Group(292,1,1/2)+Group(293,1,1/2)+Group(2936,1,-1)+Group(2937,1,-1)+Group(2942,1,1)+Group(2943,1,1)+Group(2961,1,1/2)+Group(2962,1,1/2)+Group(2963,1,1/2)+Group(2964,1,-1/2)+Group(2965,1,-1/2)+Group(2971,1,-1)+Group(2972,12*G^2*ee^(-2),-1)+Group(2973,1,1/2)+Group(2974,1,1/2)+Group(2975,1,-1/2)+Group(2977,12*G^2*ee^(-2),-1/2)+Group(2999,1,-1)+Group(3002,(conj(CKM3x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM3x2),-1)+Group(3014,I2x12^(-1)*I2x22*I3x31^(-1)*I3x32,-1)+Group(3029,(conj(CKM3x1))^(-1)*CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22*I3x31^(-1)*I3x32*conj(CKM3x2),-1)+Group(305,1,-1/2)+Group(3063,1,-1)+Group(3064,I2x13^(-1)*I2x23*I3x21^(-1)*I3x22,-1)+Group(3065,1,-1)+Group(3066,(conj(CKM3x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM3x2),-1)+Group(3067,1,-1)+Group(3068,I2x13^(-1)*I2x23*I3x21^(-1)*I3x22,-1)+Group(3082,1,-1)+Group(3083,(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw*sw^(-2)+(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw^(-1),-1)+Group(3113,1,-1)+Group(3114,(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw*sw^(-2)+(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw^(-1),-1)+Group(312,1/4,-1/2)+Group(313,1/4,-1/2)+Group(3131,1,1/3)+Group(3132,1,1/3)+Group(3150,1,1/4)+Group(3151,1,1/4)+Group(3164,1,-1)+Group(3165,(conj(CKM1x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM1x2),-1)+Group(3166,1,-1)+Group(3167,(conj(CKM1x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM1x2),-1)+Group(3168,1,-1)+Group(3169,I2x13^(-1)*I2x23*I3x21^(-1)*I3x22,-1)+Group(3170,1,-1)+Group(3171,(conj(CKM3x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM3x2),-1)+Group(3172,1,-1)+Group(3173,(conj(CKM3x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM3x2),-1)+Group(3174,1,-1)+Group(3175,(conj(CKM1x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM1x2),-1)+Group(3176,1,-1)+Group(3177,(conj(CKM1x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM1x2),-1)+Group(3178,1,1/2)+Group(3179,1/4,1/2)+Group(3180,1/4,1/2)+Group(3192,1,1/2)+Group(3194,1,-1/2)+Group(3195,1,-1/2)+Group(3198,1/4,1/2)+Group(3199,1/4,1/2)+Group(353,1,-1)+Group(354,1,-1)+Group(359,1,1)+Group(36,1,-1/2)+Group(360,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,1)+Group(37,1,-1/2)+Group(383,1,-1)+Group(384,1,-1)+Group(4,1,1/2)+Group(406,1,1)+Group(407,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),1)+Group(415,1,-1)+Group(416,1,-1)+Group(418,1,-1)+Group(419,1,-1)+Group(425,1,1)+Group(426,1,1)+Group(427,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),1)+Group(428,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),1)+Group(434,1,-1)+Group(435,1,-1)+Group(437,1,-1)+Group(438,1,-1)+Group(444,1,1)+Group(445,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),1)+Group(451,1,1)+Group(452,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,1)+Group(453,1,1)+Group(454,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,1)+Group(459,1,-1)+Group(460,3*G^2*ee^(-2),-1)+Group(465,1,-1)+Group(466,1,-1)+Group(494,1,1/2)+Group(495,1,-1/2)+Group(496,1,-1/2)+Group(497,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,1)+Group(498,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(499,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(50,1,-1)+Group(500,1,-1)+Group(501,1,1)+Group(502,1,-1)+Group(503,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,1)+Group(505,1,-1)+Group(507,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(509,1,1)+Group(51,1,-1)+Group(510,1,1)+Group(511,1,1)+Group(512,1,-1)+Group(513,1,-1)+Group(514,1,-1)+Group(515,1,-1)+Group(516,1,-1)+Group(517,1,-1)+Group(518,1,-1)+Group(519,1,-1)+Group(520,12*G^2*ee^(-2),-1)+Group(521,1,-1)+Group(522,1,-1)+Group(523,1,-1)+Group(524,1,-1)+Group(526,1,-1)+Group(527,I2x12^(-1)*I2x22*I3x31^(-1)*I3x32,-1)+Group(531,I2x12^(-1)*I2x22*I3x31^(-1)*I3x32,-1)+Group(549,1,-1)+Group(550,(conj(CKM2x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM2x2),-1)+Group(551,I2x12^(-2)*I2x22^2*I3x21^(-2)*I3x22^2,1/2)+Group(552,I2x12^(-2)*I2x22^2*I3x21^(-2)*I3x22^2,-1/2)+Group(553,I2x12^(-2)*I2x22^2*I3x21^(-2)*I3x22^2,-1/2)+Group(554,I2x13^(-1)*I2x23*I3x21^(-1)*I3x22,-1)+Group(558,I2x13^(-1)*I2x23*I3x21^(-1)*I3x22,-1)+Group(560,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(561,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,1)+Group(562,I2x12^(-1)*I2x13^(-1)*I2x22*I2x23*I3x21^(-1)*I3x22*I3x31^(-1)*I3x32,1)+Group(563,I2x12^(-1)*I2x13^(-1)*I2x22*I2x23*I3x21^(-1)*I3x22*I3x31^(-1)*I3x32,-1)+Group(565,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(566,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22*conj(CKM2x2),-1)+Group(569,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,1)+Group(570,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,1)+Group(571,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,1)+Group(572,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(573,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(574,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(575,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(576,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(577,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(578,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(579,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(580,12*G^2*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22*ee^(-2),-1)+Group(581,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(582,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(583,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(584,I2x12^(-1)*I2x13^(-1)*I2x22*I2x23*I3x21^(-1)*I3x22*I3x31^(-1)*I3x32,-1)+Group(586,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(587,I2x13^(-1)*I2x23*I3x21^(-1)*I3x22,-1)+Group(604,(conj(CKM2x1))^(-1)*CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23*I3x21^(-1)*I3x22*conj(CKM2x2),-1)+Group(613,1,-1)+Group(614,1,1)+Group(615,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(616,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,1)+Group(617,1,1)+Group(618,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,1)+Group(622,1,-1)+Group(623,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(627,1,-1)+Group(628,3*G^2*ee^(-2),-1)+Group(635,1,-1)+Group(636,1,-1)+Group(644,1,-1)+Group(645,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(651,1,-1)+Group(652,I2x12^(-1)*I2x22*I3x31^(-1)*I3x32,-1)+Group(653,1,-1)+Group(654,(conj(CKM2x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM2x2),-1)+Group(655,1,-1)+Group(656,I2x12^(-1)*I2x22*I3x31^(-1)*I3x32,-1)+Group(664,1,-1)+Group(665,(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw*sw^(-2)+(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw^(-1),-1)+Group(687,1,1/2)+Group(688,1,1/2)+Group(689,1,1/2)+Group(690,1,1)+Group(691,1,-1)+Group(692,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(693,1,-1)+Group(694,1,1)+Group(695,1,1)+Group(7,1,-1/2)+Group(700,1,1)+Group(701,1,1/2)+Group(702,1,-1/2)+Group(703,1,-1/2)+Group(704,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,1)+Group(705,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(706,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(707,1,-1)+Group(709,1,-1)+Group(711,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(712,1,1)+Group(713,1,1)+Group(714,1,-1)+Group(715,1,-1)+Group(716,1,-1)+Group(717,1,-1)+Group(718,1,-1)+Group(719,1,-1)+Group(720,1,-1)+Group(721,12*G^2*ee^(-2),-1)+Group(722,1,-1)+Group(723,1,-1)+Group(725,1,-1)+Group(73,1,-1/2)+Group(74,1,-1/2)+Group(740,I2x13^(-2)*I2x23^2*I3x31^(-2)*I3x32^2,1/2)+Group(741,I2x13^(-2)*I2x23^2*I3x31^(-2)*I3x32^2,-1/2)+Group(742,I2x13^(-2)*I2x23^2*I3x31^(-2)*I3x32^2,-1/2)+Group(746,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(748,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(749,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32*conj(CKM3x2),-1)+Group(751,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,1)+Group(752,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,1)+Group(753,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(754,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(755,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(756,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(757,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(758,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(759,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(760,12*G^2*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32*ee^(-2),-1)+Group(761,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(762,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(764,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(784,1,1)+Group(785,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,1)+Group(786,1,-1)+Group(787,1,1)+Group(788,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(789,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,1)+Group(791,1,-1)+Group(792,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(795,1,-1)+Group(796,3*G^2*ee^(-2),-1)+Group(8,1,-1/2)+Group(803,1,-1)+Group(804,1,-1)+Group(812,1,-1)+Group(813,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(825,1,-1)+Group(826,(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw*sw^(-2)+(-1*cw^(-1)+cw*sw^(-2))^(-1)*cw^(-1),-1)+Group(84,1,-1)+Group(844,1,-1/2)+Group(845,1,-1/2)+Group(846,1,1/2)+Group(847,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(848,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(849,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),1)+Group(85,1,-1)+Group(850,1,-1)+Group(851,3*G^2*ee^(-2),-1)+Group(852,1,-1)+Group(853,1/4,-1)+Group(854,3*G^2*ee^(-2),-1)+Group(855,(-2/3+1/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/9*cw^(-2)*sw^2+(-2/3+1/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3+(-2/3+1/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*cw^2*sw^(-2),-1)+Group(856,1,-1)+Group(857,-6*G^2*ee^(-2),-1)+Group(858,1,-1)+Group(859,(conj(CKM1x1))^(-2)*(conj(CKM1x2))^2*CKM1x1^(-2)*CKM1x2^2,-1/2)+Group(860,(conj(CKM1x1))^(-2)*(conj(CKM1x2))^2*CKM1x1^(-2)*CKM1x2^2,-1/2)+Group(861,(conj(CKM1x1))^(-2)*(conj(CKM1x2))^2*CKM1x1^(-2)*CKM1x2^2,1/2)+Group(862,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(863,(conj(CKM1x1))^(-1)*3*CKM1x1^(-1)*CKM1x2*G^2*conj(CKM1x2)*ee^(-2),-1)+Group(864,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(865,(conj(CKM1x1))^(-1)*1/4*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(866,(conj(CKM1x1))^(-1)*3*CKM1x1^(-1)*CKM1x2*G^2*conj(CKM1x2)*ee^(-2),-1)+Group(867,(-2/3*CKM1x1*conj(CKM1x1)+1/9*CKM1x1*conj(CKM1x1)*cw^(-2)*sw^2+CKM1x1*conj(CKM1x1)*cw^2*sw^(-2))^(-1)*1/9*CKM1x2*conj(CKM1x2)*cw^(-2)*sw^2+(-2/3*CKM1x1*conj(CKM1x1)+1/9*CKM1x1*conj(CKM1x1)*cw^(-2)*sw^2+CKM1x1*conj(CKM1x1)*cw^2*sw^(-2))^(-1)*2/3*CKM1x2*conj(CKM1x2)+(-2/3*CKM1x1*conj(CKM1x1)+1/9*CKM1x1*conj(CKM1x1)*cw^(-2)*sw^2+CKM1x1*conj(CKM1x1)*cw^2*sw^(-2))^(-1)*CKM1x2*conj(CKM1x2)*cw^2*sw^(-2),-1)+Group(868,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(869,(conj(CKM1x1))^(-1)*-6*CKM1x1^(-1)*CKM1x2*G^2*conj(CKM1x2)*ee^(-2),-1)+Group(870,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(874,1,-1)+Group(875,1,-1)+Group(876,1,1)+Group(877,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(878,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),1)+Group(879,1,1)+Group(880,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),1)+Group(881,1,1)+Group(882,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),1)+Group(883,1,-1)+Group(884,3*G^2*ee^(-2),-1)+Group(889,1,-1)+Group(890,1,-1)+Group(891,1,-1)+Group(899,1,-1)+Group(900,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(903,1,1/2)+Group(904,1,-1/2)+Group(905,1,-1/2)+Group(906,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),1)+Group(907,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(908,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(909,1,-1)+Group(911,1,1)+Group(912,1,-1)+Group(913,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),1)+Group(914,1,1)+Group(915,1,-1)+Group(916,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),1)+Group(917,1,1)+Group(918,1,1)+Group(919,1,1)+Group(920,1,-1)+Group(921,1,-1)+Group(922,1,-1)+Group(923,1,-1)+Group(924,1,-1)+Group(925,1,-1)+Group(926,1,-1)+Group(927,1,-1)+Group(928,1,-1)+Group(929,1,-1)+Group(930,1,-1)+Group(931,12*G^2*ee^(-2),-1)+Group(932,1,-1)+Group(933,1,-1)+Group(934,1,-1)+Group(935,1,-1)+Group(936,1,-1)+Group(938,(conj(CKM2x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM2x2),-1)+Group(939,(conj(CKM2x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM2x2),-1)+Group(940,(conj(CKM2x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM2x2),-1)+Group(941,(conj(CKM2x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM2x2),-1)+Group(942,(conj(CKM2x1))^(-2)*(conj(CKM2x2))^2*CKM2x1^(-2)*CKM2x2^2,1/2)+Group(943,(conj(CKM2x1))^(-2)*(conj(CKM2x2))^2*CKM2x1^(-2)*CKM2x2^2,-1/2)+Group(944,(conj(CKM2x1))^(-2)*(conj(CKM2x2))^2*CKM2x1^(-2)*CKM2x2^2,-1/2)+Group(946,(conj(CKM1x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM1x2),-1)+Group(947,(conj(CKM3x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM3x2),-1)+Group(948,(conj(CKM1x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM1x2),-1)+Group(949,(conj(CKM3x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM3x2),-1)+Group(950,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(952,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),1)+Group(953,(conj(CKM1x1))^(-1)*(conj(CKM2x1))^(-1)*CKM1x1^(-1)*CKM1x2*CKM2x1^(-1)*CKM2x2*conj(CKM1x2)*conj(CKM2x2),1)+Group(954,(conj(CKM1x1))^(-1)*(conj(CKM2x1))^(-1)*CKM1x1^(-1)*CKM1x2*CKM2x1^(-1)*CKM2x2*conj(CKM1x2)*conj(CKM2x2),-1)+Group(955,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),1)+Group(956,(conj(CKM2x1))^(-1)*(conj(CKM3x1))^(-1)*CKM2x1^(-1)*CKM2x2*CKM3x1^(-1)*CKM3x2*conj(CKM2x2)*conj(CKM3x2),1)+Group(957,(conj(CKM2x1))^(-1)*(conj(CKM3x1))^(-1)*CKM2x1^(-1)*CKM2x2*CKM3x1^(-1)*CKM3x2*conj(CKM2x2)*conj(CKM3x2),-1)+Group(958,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),1)+Group(959,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),1)+Group(960,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),1)+Group(961,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(962,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(963,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(964,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(965,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(966,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(967,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(968,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(969,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(970,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(971,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(972,(conj(CKM2x1))^(-1)*12*CKM2x1^(-1)*CKM2x2*G^2*conj(CKM2x2)*ee^(-2),-1)+Group(973,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(974,(conj(CKM1x1))^(-1)*(conj(CKM2x1))^(-1)*CKM1x1^(-1)*CKM1x2*CKM2x1^(-1)*CKM2x2*conj(CKM1x2)*conj(CKM2x2),-1)+Group(975,(conj(CKM2x1))^(-1)*(conj(CKM3x1))^(-1)*CKM2x1^(-1)*CKM2x2*CKM3x1^(-1)*CKM3x2*conj(CKM2x2)*conj(CKM3x2),-1)+Group(976,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(977,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(983,1,-1)+Group(984,(conj(CKM2x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM2x2),-1)+Group(985,1,-1)+Group(986,(conj(CKM2x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM2x2),-1)+Group(988,1,-1)+Group(989,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(990,1,-1)+Group(992,1,1)+Group(993,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),1)+Group(996,1,-1)+Group(997,1,1)+Group(998,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(999,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),1) = (-1*cw^(-1)+cw*sw^(-2))^(-1)*10*cw*sw^(-2)+(-1*cw^(-1)+cw*sw^(-2))^(-1)*10*cw^(-1)+(-2*sw^(-2)+cw^(-2)+cw^2*sw^(-4))^(-1)*2*sw^(-2)+(-2*sw^(-2)+cw^(-2)+cw^2*sw^(-4))^(-1)*cw^(-2)+(-2*sw^(-2)+cw^(-2)+cw^2*sw^(-4))^(-1)*cw^2*sw^(-4)+(-2/3*CKM1x1*conj(CKM1x1)+1/9*CKM1x1*conj(CKM1x1)*cw^(-2)*sw^2+CKM1x1*conj(CKM1x1)*cw^2*sw^(-2))^(-1)*-1*CKM1x2*conj(CKM1x2)*cw^2*sw^(-2)+(-2/3*CKM1x1*conj(CKM1x1)+1/9*CKM1x1*conj(CKM1x1)*cw^(-2)*sw^2+CKM1x1*conj(CKM1x1)*cw^2*sw^(-2))^(-1)*-1/9*CKM1x2*conj(CKM1x2)*cw^(-2)*sw^2+(-2/3*CKM1x1*conj(CKM1x1)+1/9*CKM1x1*conj(CKM1x1)*cw^(-2)*sw^2+CKM1x1*conj(CKM1x1)*cw^2*sw^(-2))^(-1)*-2/3*CKM1x2*conj(CKM1x2)+(-2/3*ee^2+17/9*cw^(-2)*ee^2*sw^2+cw^2*ee^2*sw^(-2))^(-1)*-5*G^2*cw^(-2)*sw^2+(-2/3*ee^2+17/9*cw^(-2)*ee^2*sw^2+cw^2*ee^2*sw^(-2))^(-1)*-6*G^2+(-2/3*ee^2+17/9*cw^(-2)*ee^2*sw^2+cw^2*ee^2*sw^(-2))^(-1)*-9*G^2*cw^2*sw^(-2)+(-2/3+1/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*-1*cw^2*sw^(-2)+(-2/3+1/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*-1/9*cw^(-2)*sw^2+(-2/3+1/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*-2/3+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*-281/36*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*-45/4*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*-73/6+(-3/5*cw*sw^(-1)+cw^(-1)*sw)^(-1)*-2/5*cw^(-1)*sw+(-3/5*cw*sw^(-1)+cw^(-1)*sw)^(-1)*6/5*cw*sw^(-1)+(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*-10/3*cw^2*sw^(-2)+(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*-11/3+(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*-115/162*cw^(-4)*sw^4+(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*-3/2*cw^4*sw^(-4)+(-4/27*cw^(-2)*sw^2+-4/3*cw^2*sw^(-2)+2/3+257/81*cw^(-4)*sw^4+cw^4*sw^(-4))^(-1)*-58/27*cw^(-2)*sw^2+(-5/3*cw^(-1)*sw+cw*sw^(-1))^(-1)*-3*cw*sw^(-1)+(-5/3*cw^(-1)*sw+cw*sw^(-1))^(-1)*cw^(-1)*sw+(conj(CKM1x1))^(-1)*(conj(CKM2x1))^(-1)*-1*CKM1x1^(-1)*CKM1x2*CKM2x1^(-1)*CKM2x2*conj(CKM1x2)*conj(CKM2x2)+(conj(CKM1x1))^(-1)*(conj(CKM3x1))^(-1)*-1*CKM1x1^(-1)*CKM1x2*CKM3x1^(-1)*CKM3x2*conj(CKM1x2)*conj(CKM3x2)+(conj(CKM1x1))^(-1)*-4*CKM2x1^(-1)*CKM2x2*conj(CKM1x2)+(conj(CKM1x1))^(-1)*-4*CKM3x1^(-1)*CKM3x2*conj(CKM1x2)+(conj(CKM1x1))^(-1)*-57/4*CKM1x1^(-1)*CKM1x2*conj(CKM1x2)+(conj(CKM1x1))^(-2)*(conj(CKM1x2))^2*-1/2*CKM1x1^(-2)*CKM1x2^2+(conj(CKM2x1))^(-1)*(conj(CKM3x1))^(-1)*-1*CKM2x1^(-1)*CKM2x2*CKM3x1^(-1)*CKM3x2*conj(CKM2x2)*conj(CKM3x2)+(conj(CKM2x1))^(-1)*-1*CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22*conj(CKM2x2)+(conj(CKM2x1))^(-1)*-1*CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23*I3x21^(-1)*I3x22*conj(CKM2x2)+(conj(CKM2x1))^(-1)*-21*CKM2x1^(-1)*CKM2x2*conj(CKM2x2)+(conj(CKM2x1))^(-1)*-4*CKM1x1^(-1)*CKM1x2*conj(CKM2x2)+(conj(CKM2x1))^(-1)*-6*CKM3x1^(-1)*CKM3x2*conj(CKM2x2)+(conj(CKM2x1))^(-1)*-9*CKM2x1^(-1)*CKM2x2*G^2*conj(CKM2x2)*ee^(-2)+(conj(CKM2x1))^(-2)*(conj(CKM2x2))^2*-1/2*CKM2x1^(-2)*CKM2x2^2+(conj(CKM3x1))^(-1)*-1*CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22*I3x31^(-1)*I3x32*conj(CKM3x2)+(conj(CKM3x1))^(-1)*-1*CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32*conj(CKM3x2)+(conj(CKM3x1))^(-1)*-21*CKM3x1^(-1)*CKM3x2*conj(CKM3x2)+(conj(CKM3x1))^(-1)*-4*CKM1x1^(-1)*CKM1x2*conj(CKM3x2)+(conj(CKM3x1))^(-1)*-6*CKM2x1^(-1)*CKM2x2*conj(CKM3x2)+(conj(CKM3x1))^(-1)*-9*CKM3x1^(-1)*CKM3x2*G^2*conj(CKM3x2)*ee^(-2)+(conj(CKM3x1))^(-2)*(conj(CKM3x2))^2*-1/2*CKM3x1^(-2)*CKM3x2^2+-1*I2x12^(-1)*I2x13^(-1)*I2x22*I2x23*I3x21^(-1)*I3x22*I3x31^(-1)*I3x32+-1/2*I2x12^(-2)*I2x22^2*I3x21^(-2)*I3x22^2+-1/2*I2x13^(-2)*I2x23^2*I3x31^(-2)*I3x32^2+-1053/16*G^4*ee^(-4)+-20*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22+-20*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32+-5489/96+-6*I2x12^(-1)*I2x22*I3x31^(-1)*I3x32+-6*I2x13^(-1)*I2x23*I3x21^(-1)*I3x22+-837/4*G^2*ee^(-2)+-9*G^2*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22*ee^(-2)+-9*G^2*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32*ee^(-2)");
+        assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{3}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1 --numerical-samples-seed 3",false)?,@"2114 | -7135/48+Group(1001,1,-1/4)+Group(1004,1,-1/3)+Group(1005,1,-1/3)+Group(1007,1,-1/3)+Group(102,1,-1)+Group(1021,1,1/2)+Group(1023,1,1/2)+Group(1025,1,1/2)+Group(103,1,-1)+Group(1039,1,1)+Group(104,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(1041,1,1)+Group(1044,1,-1)+Group(1045,1,-1)+Group(1046,(1/2)^(1/2)*(conj(CKM2x1))^(-1)*2^(1/2)*I3x21^(-1)*I3x22*conj(CKM2x2),-1)+Group(1047,(1/2)^(1/2)*(conj(CKM3x1))^(-1)*2^(1/2)*I3x31^(-1)*I3x32*conj(CKM3x2),-1)+Group(105,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(1064,1,-1)+Group(1065,1,-1)+Group(1067,1,-1)+Group(1068,1,-1)+Group(1069,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(1070,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(1074,1,-1)+Group(1075,1,-1)+Group(1076,1,-1)+Group(1077,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(1078,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(1079,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1092,4,-1)+Group(1109,1,-1)+Group(1110,1,-1)+Group(1115,(-1*sw^2+3*cw^2)^(-1)*(-5*sw^2+3*cw^2)*2,-1)+Group(1118,1,-1)+Group(1119,1,-1)+Group(1120,(1/2)^(1/2)*(conj(CKM2x1))^(-1)*2^(1/2)*I3x21^(-1)*I3x22*conj(CKM2x2),-1)+Group(1121,(1/2)^(1/2)*(conj(CKM3x1))^(-1)*2^(1/2)*I3x31^(-1)*I3x32*conj(CKM3x2),-1)+Group(1122,1,-1)+Group(1125,1,-1)+Group(1126,1,-1)+Group(1127,(1/2)^(1/2)*(conj(CKM2x1))^(-1)*2^(1/2)*I3x21^(-1)*I3x22*conj(CKM2x2),-1)+Group(1128,(1/2)^(1/2)*(conj(CKM3x1))^(-1)*2^(1/2)*I3x31^(-1)*I3x32*conj(CKM3x2),-1)+Group(1129,1,-1)+Group(1132,1,-1)+Group(1133,1,-1)+Group(1134,1,-1)+Group(1135,1,1/2)+Group(1142,1,1/2)+Group(1144,1,1/2)+Group(1168,1,-1)+Group(1169,1,-1)+Group(1170,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(1171,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(1175,1,-1)+Group(1176,1,-1)+Group(1177,1,-1)+Group(1178,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(1179,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(1180,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1195,1,1)+Group(1196,1,1)+Group(1203,1,1)+Group(1214,1,-1)+Group(1217,1,-1)+Group(1218,1,-1)+Group(1219,(conj(CKM2x1))^(-1)*I3x21^(-1)*I3x22*conj(CKM2x2),-1)+Group(122,1,1)+Group(1220,(conj(CKM3x1))^(-1)*I3x31^(-1)*I3x32*conj(CKM3x2),-1)+Group(1223,1,-1)+Group(1224,1,-1)+Group(1225,1,-1)+Group(1226,1,1/2)+Group(1228,1,1/2)+Group(1235,1,1/2)+Group(1239,1,1)+Group(124,1,1)+Group(1248,1,1)+Group(1249,1,1)+Group(1271,1,-1)+Group(1272,1,-1)+Group(1273,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(1274,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(1278,1,-1)+Group(1279,1,-1)+Group(1280,1,-1)+Group(1281,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(1282,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(1283,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1299,1,1)+Group(1302,1,-1)+Group(1303,1,-1)+Group(1304,(1/2)^(1/2)*(conj(CKM2x1))^(-1)*2^(1/2)*I3x21^(-1)*I3x22*conj(CKM2x2),-1)+Group(1305,(1/2)^(1/2)*(conj(CKM3x1))^(-1)*2^(1/2)*I3x31^(-1)*I3x32*conj(CKM3x2),-1)+Group(1313,1,1)+Group(1316,1,1)+Group(1323,1,-1)+Group(1326,1,-1)+Group(1327,1,-1)+Group(1328,(conj(CKM2x1))^(-1)*I3x21^(-1)*I3x22*conj(CKM2x2),-1)+Group(1329,(conj(CKM3x1))^(-1)*I3x31^(-1)*I3x32*conj(CKM3x2),-1)+Group(1332,1,-1)+Group(1333,1,-1)+Group(1334,1,-1)+Group(1347,1,-1/2)+Group(1348,1,-1/2)+Group(1350,1,-1)+Group(1351,1,-1)+Group(1352,1,-1)+Group(1353,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(1354,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(1355,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(136,1,-1)+Group(1365,4,-1/2)+Group(137,1,-1)+Group(1370,1,1)+Group(1372,1,-1)+Group(1373,1,-1)+Group(1374,(1/2)^(1/2)*2^(1/2)*CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22,-1)+Group(1375,(1/2)^(1/2)*2^(1/2)*CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23,-1)+Group(1390,1,-1)+Group(1391,1,-1)+Group(1396,(-1*sw^2+3*cw^2)^(-1)*(-5*sw^2+3*cw^2)*2,-1)+Group(1399,1,-1)+Group(1400,1,-1)+Group(1401,1,-1)+Group(1402,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(1403,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(1404,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1408,2,-1)+Group(1409,1,-1)+Group(141,1,-1)+Group(1410,1,-1)+Group(1411,(conj(CKM1x1))^(-1)*2*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(1412,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(1413,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(142,1,-1)+Group(1420,1,1/2)+Group(1424,1,-1)+Group(1425,1,-1)+Group(1430,(-1*sw^2+3*cw^2)^(-1)*(-5*sw^2+3*cw^2)*2,-1)+Group(1433,(1/2)^(1/2)*(conj(CKM2x1))^(-1)*2^(1/2)*CKM2x1*I2x12*I3x21^(-1),-1)+Group(1434,(1/2)^(1/2)*(conj(CKM3x1))^(-1)*2^(1/2)*CKM3x1*I2x13*I3x31^(-1),-1)+Group(1435,(1/2)^(1/2)*(conj(CKM2x1))^(-1)*2^(1/2)*CKM2x2*I2x22*I3x21^(-1),-1)+Group(1436,(1/2)^(1/2)*(conj(CKM3x1))^(-1)*2^(1/2)*CKM3x2*I2x23*I3x31^(-1),-1)+Group(1437,(1/2)^(1/2)*(conj(CKM1x3))^(-1)*2^(1/2)*CKM1x3*I1x31*I4x13^(-1),-1)+Group(1440,(1/2)^(1/2)*(conj(CKM2x1))^(-1)*2^(1/2)*CKM2x1*I2x12*I3x21^(-1),-1)+Group(1441,(1/2)^(1/2)*(conj(CKM3x1))^(-1)*2^(1/2)*CKM3x1*I2x13*I3x31^(-1),-1)+Group(1442,(1/2)^(1/2)*(conj(CKM2x1))^(-1)*2^(1/2)*CKM2x2*I2x22*I3x21^(-1),-1)+Group(1443,(1/2)^(1/2)*(conj(CKM3x1))^(-1)*2^(1/2)*CKM3x2*I2x23*I3x31^(-1),-1)+Group(1444,(1/2)^(1/2)*(conj(CKM1x3))^(-1)*2^(1/2)*CKM1x3*I1x31*I4x13^(-1),-1)+Group(1447,1,-1)+Group(1448,1,-1)+Group(1449,1,-1)+Group(1450,1,1/2)+Group(1452,1,1)+Group(1463,(conj(CKM1x3))^(-1)*CKM1x3*I1x31*I4x13^(-1),-1)+Group(1466,(conj(CKM2x1))^(-1)*CKM2x1*I2x12*I3x21^(-1),-1)+Group(1467,(conj(CKM3x1))^(-1)*CKM3x1*I2x13*I3x31^(-1),-1)+Group(1468,(conj(CKM2x1))^(-1)*CKM2x2*I2x22*I3x21^(-1),-1)+Group(1469,(conj(CKM3x1))^(-1)*CKM3x2*I2x23*I3x31^(-1),-1)+Group(1472,1,-1)+Group(1473,1,-1)+Group(1474,1,-1)+Group(1475,1,1/2)+Group(1478,1,1)+Group(1481,1,-1)+Group(1482,1,-1)+Group(1483,(1/2)^(1/2)*2^(1/2)*CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22,-1)+Group(1484,(1/2)^(1/2)*2^(1/2)*CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23,-1)+Group(1492,1,1)+Group(1495,1,1)+Group(150,1,1)+Group(1502,(conj(CKM1x3))^(-1)*CKM1x3*I1x31*I4x13^(-1),-1)+Group(1505,(conj(CKM2x1))^(-1)*CKM2x1*I2x12*I3x21^(-1),-1)+Group(1506,(conj(CKM3x1))^(-1)*CKM3x1*I2x13*I3x31^(-1),-1)+Group(1507,(conj(CKM2x1))^(-1)*CKM2x2*I2x22*I3x21^(-1),-1)+Group(1508,(conj(CKM3x1))^(-1)*CKM3x2*I2x23*I3x31^(-1),-1)+Group(1511,1,-1)+Group(1512,1,-1)+Group(1513,1,-1)+Group(1531,1,-1)+Group(1532,1,-1)+Group(1533,1,-1)+Group(1534,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(1535,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(1536,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1562,1,-1)+Group(1563,1,-1)+Group(1564,(1/2)^(1/2)*(conj(CKM2x1))^(-1)*2^(1/2)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(1565,(1/2)^(1/2)*(conj(CKM3x1))^(-1)*2^(1/2)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(158,1,1)+Group(1584,1,-1/2)+Group(1585,1,-1/2)+Group(1587,1,-1)+Group(1588,1,-1)+Group(1589,1,-1)+Group(159,1,-1)+Group(1590,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(1591,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(1592,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(160,1,-1)+Group(1602,(-6*cw^2*sw^2+17*sw^4+9*cw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1),-1/2)+Group(1605,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,-1/2)+Group(1606,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,-1/2)+Group(1607,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,-1/2)+Group(161,(1/2)^(1/2)*(conj(CKM2x1))^(-1)*2^(1/2)*I3x21^(-1)*I3x22*conj(CKM2x2),-1)+Group(1611,1,-1)+Group(1612,1,-1)+Group(1613,(1/2)^(1/2)*(conj(CKM2x1))^(-1)*2^(1/2)*I3x21^(-1)*I3x22*conj(CKM2x2),-1)+Group(1614,(1/2)^(1/2)*(conj(CKM3x1))^(-1)*2^(1/2)*I3x31^(-1)*I3x32*conj(CKM3x2),-1)+Group(162,(1/2)^(1/2)*(conj(CKM3x1))^(-1)*2^(1/2)*I3x31^(-1)*I3x32*conj(CKM3x2),-1)+Group(1621,1,-1)+Group(1622,1,-1)+Group(1623,(1/2)^(1/2)*2^(1/2)*CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22,-1)+Group(1624,(1/2)^(1/2)*2^(1/2)*CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23,-1)+Group(1631,1,-1)+Group(1632,1,-1)+Group(1633,1,-1)+Group(1634,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(1635,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(1636,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1640,(-1*sw^2+3*cw^2)*(3*cw^2+sw^2)^(-1),-1)+Group(1641,1,-1)+Group(1642,1,-1)+Group(1643,(-1*CKM1x2*conj(CKM1x2)*sw^2+3*CKM1x2*conj(CKM1x2)*cw^2)*(3*cw^2+sw^2)^(-1)*(conj(CKM1x1))^(-1)*CKM1x1^(-1),-1)+Group(1644,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(1645,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1671,1,-1/2)+Group(1672,1,-1/2)+Group(1687,(-6*cw^2*sw^2+17*sw^4+9*cw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1),-1/2)+Group(169,1,1)+Group(1690,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,-1/2)+Group(1691,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,-1/2)+Group(1692,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,-1/2)+Group(1699,1,-1)+Group(1700,1,-1)+Group(1701,1,-1)+Group(1702,1,-1)+Group(1703,1,-1)+Group(1704,1,-1)+Group(1705,1,-1)+Group(1706,1,-1)+Group(1707,1,-1)+Group(1708,1,-1)+Group(1709,1,-1)+Group(1710,1,-1)+Group(1720,1,-1/2)+Group(1721,1,-1/2)+Group(1723,1,-1)+Group(1724,1,-1)+Group(1725,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(1726,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(173,1,1)+Group(1736,(-6*cw^2*sw^2+17*sw^4+9*cw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1),-1/2)+Group(1739,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,-1/2)+Group(174,1,-1)+Group(1740,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,-1/2)+Group(1741,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,-1/2)+Group(1742,1,-1)+Group(1743,1,-1)+Group(1744,(1/2)^(1/2)*(conj(CKM2x1))^(-1)*2^(1/2)*I3x21^(-1)*I3x22*conj(CKM2x2),-1)+Group(1745,(1/2)^(1/2)*(conj(CKM3x1))^(-1)*2^(1/2)*I3x31^(-1)*I3x32*conj(CKM3x2),-1)+Group(175,1,-1)+Group(1752,1,-1)+Group(1753,1,-1)+Group(1754,(1/2)^(1/2)*2^(1/2)*CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22,-1)+Group(1755,(1/2)^(1/2)*2^(1/2)*CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23,-1)+Group(176,(1/2)^(1/2)*2^(1/2)*CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22,-1)+Group(1762,1,-1)+Group(1763,1,-1)+Group(1764,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(1765,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(1769,1,-1)+Group(177,(1/2)^(1/2)*2^(1/2)*CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23,-1)+Group(1770,1,-1)+Group(1771,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(1772,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(1794,1,-1)+Group(1795,1,-1)+Group(1797,1,-1)+Group(1798,1,-1)+Group(1799,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(1800,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(1804,1,-1)+Group(1805,1,-1)+Group(1806,1,-1)+Group(1807,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(1808,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(1809,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1822,(-6*cw^2*sw^2+17*sw^4+9*cw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1),-1)+Group(1825,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,-1)+Group(1826,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,-1)+Group(1827,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,-1)+Group(1828,1,-1)+Group(1829,1,-1)+Group(1830,(1/2)^(1/2)*(conj(CKM2x1))^(-1)*2^(1/2)*I3x21^(-1)*I3x22*conj(CKM2x2),-1)+Group(1831,(1/2)^(1/2)*(conj(CKM3x1))^(-1)*2^(1/2)*I3x31^(-1)*I3x32*conj(CKM3x2),-1)+Group(1832,1,-1)+Group(1835,1,-1)+Group(1836,1,-1)+Group(1837,(1/2)^(1/2)*(conj(CKM2x1))^(-1)*2^(1/2)*I3x21^(-1)*I3x22*conj(CKM2x2),-1)+Group(1838,(1/2)^(1/2)*(conj(CKM3x1))^(-1)*2^(1/2)*I3x31^(-1)*I3x32*conj(CKM3x2),-1)+Group(1839,1,-1)+Group(1842,1,-1)+Group(1843,1,-1)+Group(1844,1,-1)+Group(1845,1,-1)+Group(1846,1,-1)+Group(1847,1,-1)+Group(1848,(1/2)^(1/2)*(conj(CKM2x1))^(-1)*2^(1/2)*CKM2x1*I2x12*I3x21^(-1),-1)+Group(1849,(1/2)^(1/2)*(conj(CKM3x1))^(-1)*2^(1/2)*CKM3x1*I2x13*I3x31^(-1),-1)+Group(1850,(1/2)^(1/2)*(conj(CKM2x1))^(-1)*2^(1/2)*CKM2x2*I2x22*I3x21^(-1),-1)+Group(1851,(1/2)^(1/2)*(conj(CKM3x1))^(-1)*2^(1/2)*CKM3x2*I2x23*I3x31^(-1),-1)+Group(1852,(1/2)^(1/2)*(conj(CKM1x3))^(-1)*2^(1/2)*CKM1x3*I1x31*I4x13^(-1),-1)+Group(1855,(1/2)^(1/2)*(conj(CKM2x1))^(-1)*2^(1/2)*CKM2x1*I2x12*I3x21^(-1),-1)+Group(1856,(1/2)^(1/2)*(conj(CKM3x1))^(-1)*2^(1/2)*CKM3x1*I2x13*I3x31^(-1),-1)+Group(1857,(1/2)^(1/2)*(conj(CKM2x1))^(-1)*2^(1/2)*CKM2x2*I2x22*I3x21^(-1),-1)+Group(1858,(1/2)^(1/2)*(conj(CKM3x1))^(-1)*2^(1/2)*CKM3x2*I2x23*I3x31^(-1),-1)+Group(1859,(1/2)^(1/2)*(conj(CKM1x3))^(-1)*2^(1/2)*CKM1x3*I1x31*I4x13^(-1),-1)+Group(1862,1,-1)+Group(1863,1,-1)+Group(1864,1,-1)+Group(1865,1,-1)+Group(1866,1,-1)+Group(1867,1,-1)+Group(1877,1,-1/2)+Group(1878,1,-1/2)+Group(1888,(-6*cw^2*sw^2+17*sw^4+9*cw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1),-1/2)+Group(1891,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,-1/2)+Group(1892,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,-1/2)+Group(1893,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,-1/2)+Group(1901,1,-1/4)+Group(1902,1,-1/2)+Group(1903,1,1/4)+Group(1904,1,1/2)+Group(1905,1,1/2)+Group(1906,12*G^2*ee^(-2),-1/2)+Group(1907,12*G^2*ee^(-2),-1)+Group(1909,1,-1/2)+Group(1910,1,-1)+Group(1911,1,1/2)+Group(1912,1,-1)+Group(1913,1,-1)+Group(1914,1,-1)+Group(1915,1,-1)+Group(1916,1,-1)+Group(1917,1,1/2)+Group(1918,1,1/2)+Group(1919,1,1/2)+Group(1920,4,1/2)+Group(1921,1,1/2)+Group(1922,1,1/2)+Group(1924,1,1)+Group(1926,1,1)+Group(1930,1,1)+Group(1931,1,1)+Group(1932,1,1)+Group(1933,1,1)+Group(1934,1,1)+Group(1935,1,1)+Group(1936,1,-1)+Group(1937,1,-1)+Group(1938,1,-1)+Group(1939,1,-1)+Group(1940,1,-1)+Group(1941,1,-1/4)+Group(1942,1,-1/2)+Group(1943,1,1/4)+Group(1944,1,1/2)+Group(1945,12*G^2*ee^(-2),-1/2)+Group(1946,12*G^2*ee^(-2),-1)+Group(1948,1,-1/2)+Group(1949,1,-1)+Group(1950,1,1/2)+Group(1951,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(1952,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(1953,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(1954,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(1955,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1956,1,1/2)+Group(1957,1,1/2)+Group(1958,1,1/2)+Group(1959,4,1/2)+Group(1960,1,1/2)+Group(1961,1,1/2)+Group(1963,1,1)+Group(1967,1,1)+Group(1968,1,1)+Group(1969,1,1)+Group(1970,1,1)+Group(1971,1,1)+Group(1972,1,1)+Group(1973,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(1974,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(1975,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(1976,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(1977,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(1978,1,-1/4)+Group(1979,1,-1/2)+Group(1980,1,1/4)+Group(1981,12*G^2*ee^(-2),-1/2)+Group(1982,12*G^2*ee^(-2),-1)+Group(1984,1,-1/2)+Group(1985,1,-1)+Group(1987,1,-1/2)+Group(1988,1,-1)+Group(1990,1,-1/2)+Group(1991,1,-1)+Group(1993,1,-1)+Group(1994,1,-1)+Group(1995,1,-1)+Group(1996,1,-1)+Group(1997,1,-1)+Group(1998,1,-1)+Group(2002,4,1/2)+Group(2003,1,1/2)+Group(2004,1,1/2)+Group(201,1,-1)+Group(202,1,-1)+Group(2024,1,-1)+Group(2025,1,-1)+Group(2026,1,-1)+Group(2027,1,-1)+Group(2028,1,-1)+Group(2029,1,-1)+Group(203,(1/2)^(1/2)*2^(1/2)*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(2030,-18*G^4*ee^(-4),-1/4)+Group(2031,144*G^4*ee^(-4),-1/2)+Group(2032,18*G^4*ee^(-4),1/4)+Group(2033,18*G^4*ee^(-4),1/2)+Group(2034,18*G^4*ee^(-4),1/2)+Group(2035,12*G^2*ee^(-2),-1/2)+Group(2036,12*G^2*ee^(-2),-1)+Group(2038,12*G^2*ee^(-2),-1)+Group(2039,12*G^2*ee^(-2),-1)+Group(204,(1/2)^(1/2)*2^(1/2)*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(2040,12*G^2*ee^(-2),-1)+Group(2041,12*G^2*ee^(-2),-1)+Group(2042,12*G^2*ee^(-2),-1)+Group(2043,18*G^4*ee^(-4),1/2)+Group(2044,9/2*G^4*ee^(-4),1/2)+Group(2045,9/2*G^4*ee^(-4),1/2)+Group(2051,-6*G^2*ee^(-2),-1)+Group(2052,-6*G^2*ee^(-2),-1)+Group(2053,-6*G^2*ee^(-2),-1)+Group(2054,-6*G^2*ee^(-2),-1)+Group(2055,-6*G^2*ee^(-2),-1)+Group(2056,-18*G^4*ee^(-4),-1/4)+Group(2057,144*G^4*ee^(-4),-1/2)+Group(2058,18*G^4*ee^(-4),1/4)+Group(2059,18*G^4*ee^(-4),1/2)+Group(2060,12*G^2*ee^(-2),-1/2)+Group(2061,12*G^2*ee^(-2),-1)+Group(2063,12*G^2*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22*ee^(-2),-1)+Group(2064,12*G^2*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32*ee^(-2),-1)+Group(2065,(conj(CKM1x1))^(-1)*12*CKM1x1^(-1)*CKM1x2*G^2*conj(CKM1x2)*ee^(-2),-1)+Group(2066,(conj(CKM2x1))^(-1)*12*CKM2x1^(-1)*CKM2x2*G^2*conj(CKM2x2)*ee^(-2),-1)+Group(2067,(conj(CKM3x1))^(-1)*12*CKM3x1^(-1)*CKM3x2*G^2*conj(CKM3x2)*ee^(-2),-1)+Group(2068,18*G^4*ee^(-4),1/2)+Group(2069,9/2*G^4*ee^(-4),1/2)+Group(2070,9/2*G^4*ee^(-4),1/2)+Group(2075,-6*G^2*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22*ee^(-2),-1)+Group(2076,-6*G^2*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32*ee^(-2),-1)+Group(2077,(conj(CKM1x1))^(-1)*-6*CKM1x1^(-1)*CKM1x2*G^2*conj(CKM1x2)*ee^(-2),-1)+Group(2078,(conj(CKM2x1))^(-1)*-6*CKM2x1^(-1)*CKM2x2*G^2*conj(CKM2x2)*ee^(-2),-1)+Group(2079,(conj(CKM3x1))^(-1)*-6*CKM3x1^(-1)*CKM3x2*G^2*conj(CKM3x2)*ee^(-2),-1)+Group(2080,-18*G^4*ee^(-4),-1/4)+Group(2081,144*G^4*ee^(-4),-1/2)+Group(2082,18*G^4*ee^(-4),1/4)+Group(2083,12*G^2*ee^(-2),-1/2)+Group(2084,12*G^2*ee^(-2),-1)+Group(2086,12*G^2*ee^(-2),-1/2)+Group(2087,12*G^2*ee^(-2),-1)+Group(2089,12*G^2*ee^(-2),-1/2)+Group(2090,12*G^2*ee^(-2),-1)+Group(2092,12*G^2*ee^(-2),-1)+Group(2093,12*G^2*ee^(-2),-1)+Group(2094,12*G^2*ee^(-2),-1)+Group(2095,12*G^2*ee^(-2),-1)+Group(2096,12*G^2*ee^(-2),-1)+Group(2097,12*G^2*ee^(-2),-1)+Group(2098,18*G^4*ee^(-4),1/2)+Group(2099,9/2*G^4*ee^(-4),1/2)+Group(2100,9/2*G^4*ee^(-4),1/2)+Group(2108,-6*G^2*ee^(-2),-1)+Group(2109,-6*G^2*ee^(-2),-1)+Group(2110,-6*G^2*ee^(-2),-1)+Group(2111,-6*G^2*ee^(-2),-1)+Group(2112,-6*G^2*ee^(-2),-1)+Group(2113,-6*G^2*ee^(-2),-1)+Group(212,1,-1/4)+Group(213,1,-1/4)+Group(2174,1,-1/4)+Group(2175,1,-1/2)+Group(2176,1,1/4)+Group(2177,1,1/2)+Group(2178,1,1/2)+Group(2179,1,-1)+Group(2180,1,-1)+Group(2181,1,-1)+Group(2182,1,-1)+Group(2183,1,-1)+Group(2184,1,1/2)+Group(2185,1,1/2)+Group(2186,1,1/2)+Group(2187,1,1/2)+Group(2188,1,1/2)+Group(2189,1,1/2)+Group(2190,1,1/2)+Group(2191,1,1/2)+Group(2192,1,1/2)+Group(2193,1,-1)+Group(2194,1,-1)+Group(2195,1,-1)+Group(2196,1,-1)+Group(2197,1,-1)+Group(2198,1,-1/4)+Group(2199,1,-1/2)+Group(2200,1,1/4)+Group(2201,1,1/2)+Group(2202,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(2203,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(2204,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(2205,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(2206,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(2207,1,1/2)+Group(2208,1,1/2)+Group(2209,1,1/2)+Group(2210,1,1/2)+Group(2211,1,1/2)+Group(2212,1,1/2)+Group(2213,1,1/2)+Group(2214,1,1/2)+Group(2215,1,1/2)+Group(2216,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(2217,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(2218,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(2219,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(2220,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(2236,1,1/2)+Group(2237,1,1/2)+Group(2238,1,1/2)+Group(2245,1,1/2)+Group(2246,1,-1/2)+Group(2247,1,-1/2)+Group(2248,1,1)+Group(2249,1,-1)+Group(225,1,-1/3)+Group(2250,1,-1)+Group(2251,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,1)+Group(2252,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(2253,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(2254,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,1)+Group(2255,I2x13^(-1)*I2x23*I3x21^(-1)*I3x22,-1)+Group(2256,I2x13^(-1)*I2x23*I3x21^(-1)*I3x22,-1)+Group(2257,1,1)+Group(2258,1,1)+Group(2259,1,-1)+Group(226,1,-1/3)+Group(2260,1,-1)+Group(2261,1,1)+Group(2262,1,-1)+Group(2263,1,-1)+Group(2264,1,-1)+Group(2265,1,-1)+Group(2266,1,-1)+Group(2267,1,1)+Group(2268,1,-1)+Group(2269,1,-1)+Group(2270,1,1)+Group(2271,(conj(CKM1x1))^(-1)*I3x21^(-1)*I3x22*conj(CKM1x2),-1)+Group(2272,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(2273,(conj(CKM2x1))^(-1)*I3x21^(-1)*I3x22*conj(CKM2x2),-1)+Group(2274,(conj(CKM2x1))^(-1)*I3x21^(-1)*I3x22*conj(CKM2x2),1)+Group(2275,(conj(CKM3x1))^(-1)*I3x21^(-1)*I3x22*conj(CKM3x2),-1)+Group(2276,(conj(CKM3x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM3x2),-1)+Group(2277,(conj(CKM3x1))^(-1)*I3x31^(-1)*I3x32*conj(CKM3x2),1)+Group(2278,1,1)+Group(2279,1,-1)+Group(2280,1,-1)+Group(2281,1,-1)+Group(2282,1,1)+Group(2283,1,-1)+Group(2284,1,-1)+Group(2285,1,1)+Group(2286,1,1)+Group(2287,1,1)+Group(2288,1,1)+Group(2289,1,1)+Group(2290,1,1)+Group(2291,1,1)+Group(2292,1,-1)+Group(2293,3*G^2*ee^(-2),-1)+Group(2294,1,-1)+Group(2295,1,-1)+Group(2296,1,-1)+Group(2297,1,1/2)+Group(2298,1,-1/2)+Group(2299,1,-1/2)+Group(2300,I2x12^(-1)*I2x22*I3x31^(-1)*I3x32,-1)+Group(2301,I2x12^(-1)*I2x22*I3x31^(-1)*I3x32,-1)+Group(2302,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,1)+Group(2303,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,1)+Group(2304,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(2305,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(2306,1,1)+Group(2307,1,-1)+Group(2308,1,-1)+Group(2309,1,1)+Group(2310,1,1)+Group(2311,1,-1)+Group(2312,1,-1)+Group(2313,1,-1)+Group(2314,1,-1)+Group(2315,1,1)+Group(2316,1,-1)+Group(2317,1,-1)+Group(2318,1,-1)+Group(2319,1,1)+Group(2320,(conj(CKM1x1))^(-1)*I3x31^(-1)*I3x32*conj(CKM1x2),-1)+Group(2321,(conj(CKM2x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM2x2),-1)+Group(2322,(conj(CKM2x1))^(-1)*I3x21^(-1)*I3x22*conj(CKM2x2),1)+Group(2323,(conj(CKM2x1))^(-1)*I3x31^(-1)*I3x32*conj(CKM2x2),-1)+Group(2324,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(2325,(conj(CKM3x1))^(-1)*I3x31^(-1)*I3x32*conj(CKM3x2),-1)+Group(2326,(conj(CKM3x1))^(-1)*I3x31^(-1)*I3x32*conj(CKM3x2),1)+Group(2327,1,1)+Group(2328,1,-1)+Group(2329,1,-1)+Group(2330,1,1)+Group(2331,1,-1)+Group(2332,1,-1)+Group(2333,1,-1)+Group(2334,1,1)+Group(2335,1,1)+Group(2336,1,1)+Group(2337,1,1)+Group(2338,1,1)+Group(2339,1,1)+Group(2340,1,1)+Group(2341,1,-1)+Group(2342,3*G^2*ee^(-2),-1)+Group(2343,1,-1)+Group(2344,1,-1)+Group(2345,1,-1)+Group(2346,I2x12^(-2)*I2x22^2*I3x21^(-2)*I3x22^2,1/2)+Group(2347,I2x12^(-2)*I2x22^2*I3x21^(-2)*I3x22^2,-1/2)+Group(2348,I2x12^(-2)*I2x22^2*I3x21^(-2)*I3x22^2,-1/2)+Group(2349,I2x12^(-1)*I2x13^(-1)*I2x22*I2x23*I3x21^(-1)*I3x22*I3x31^(-1)*I3x32,1)+Group(2350,I2x12^(-1)*I2x13^(-1)*I2x22*I2x23*I3x21^(-1)*I3x22*I3x31^(-1)*I3x32,-1)+Group(2351,I2x12^(-1)*I2x13^(-1)*I2x22*I2x23*I3x21^(-1)*I3x22*I3x31^(-1)*I3x32,-1)+Group(2352,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,1)+Group(2353,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,1)+Group(2354,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(2355,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(2356,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,1)+Group(2357,I2x12^(-1)*I2x22*I3x31^(-1)*I3x32,-1)+Group(2358,I2x12^(-1)*I2x22*I3x31^(-1)*I3x32,-1)+Group(2359,CKM1x1^(-1)*CKM1x2*I2x12^(-1)*I2x22,-1)+Group(2360,CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22,-1)+Group(2361,CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22,1)+Group(2362,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(2363,CKM3x1^(-1)*CKM3x2*I2x12^(-1)*I2x22,-1)+Group(2364,CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22,1)+Group(2365,I2x12^(-1)*I2x22*I3x31^(-1)*I3x32,-1)+Group(2366,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22*conj(CKM1x2),-1)+Group(2367,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22*conj(CKM2x2),-1)+Group(2368,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22*conj(CKM2x2),-1)+Group(2369,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22*conj(CKM2x2),1)+Group(2370,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22*conj(CKM3x2),-1)+Group(2371,(conj(CKM3x1))^(-1)*CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22*I3x31^(-1)*I3x32*conj(CKM3x2),-1)+Group(2372,(conj(CKM3x1))^(-1)*CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22*I3x31^(-1)*I3x32*conj(CKM3x2),1)+Group(2373,CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22,1)+Group(2374,CKM1x1^(-1)*CKM1x2*I2x12^(-1)*I2x22,-1)+Group(2375,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(2376,CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22,-1)+Group(2377,CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22,1)+Group(2378,CKM3x1^(-1)*CKM3x2*I2x12^(-1)*I2x22,-1)+Group(2379,I2x12^(-1)*I2x22*I3x31^(-1)*I3x32,-1)+Group(2380,CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22,1)+Group(2381,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,1)+Group(2382,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,1)+Group(2383,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,1)+Group(2384,CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22,1)+Group(2385,CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22,1)+Group(2386,CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22,1)+Group(2387,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(2388,3*G^2*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22*ee^(-2),-1)+Group(2389,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(2390,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(2391,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(2392,I2x13^(-2)*I2x23^2*I3x31^(-2)*I3x32^2,1/2)+Group(2393,I2x13^(-2)*I2x23^2*I3x31^(-2)*I3x32^2,-1/2)+Group(2394,I2x13^(-2)*I2x23^2*I3x31^(-2)*I3x32^2,-1/2)+Group(2395,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,1)+Group(2396,I2x13^(-1)*I2x23*I3x21^(-1)*I3x22,-1)+Group(2397,I2x13^(-1)*I2x23*I3x21^(-1)*I3x22,-1)+Group(2398,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,1)+Group(2399,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,1)+Group(2400,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(2401,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(2402,CKM1x1^(-1)*CKM1x2*I2x13^(-1)*I2x23,-1)+Group(2403,CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23,1)+Group(2404,I2x13^(-1)*I2x23*I3x21^(-1)*I3x22,-1)+Group(2405,CKM2x1^(-1)*CKM2x2*I2x13^(-1)*I2x23,-1)+Group(2406,CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23,-1)+Group(2407,CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23,1)+Group(2408,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(2409,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32*conj(CKM1x2),-1)+Group(2410,(conj(CKM2x1))^(-1)*CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23*I3x21^(-1)*I3x22*conj(CKM2x2),-1)+Group(2411,(conj(CKM2x1))^(-1)*CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23*I3x21^(-1)*I3x22*conj(CKM2x2),1)+Group(2412,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32*conj(CKM2x2),-1)+Group(2413,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32*conj(CKM3x2),-1)+Group(2414,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32*conj(CKM3x2),-1)+Group(2415,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32*conj(CKM3x2),1)+Group(2416,CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23,1)+Group(2417,CKM1x1^(-1)*CKM1x2*I2x13^(-1)*I2x23,-1)+Group(2418,I2x13^(-1)*I2x23*I3x21^(-1)*I3x22,-1)+Group(2419,CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23,1)+Group(2420,CKM2x1^(-1)*CKM2x2*I2x13^(-1)*I2x23,-1)+Group(2421,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(2422,CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23,-1)+Group(2423,CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23,1)+Group(2424,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,1)+Group(2425,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,1)+Group(2426,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,1)+Group(2427,CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23,1)+Group(2428,CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23,1)+Group(2429,CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23,1)+Group(2430,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(2431,3*G^2*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32*ee^(-2),-1)+Group(2432,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(2433,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(2434,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(2444,1,-1)+Group(2445,1,1)+Group(2446,1,-1)+Group(2447,1,1)+Group(2448,1,-1)+Group(2449,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(2450,(conj(CKM2x1))^(-1)*I3x21^(-1)*I3x22*conj(CKM2x2),1)+Group(2451,(conj(CKM2x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM2x2),-1)+Group(2452,(conj(CKM3x1))^(-1)*I3x31^(-1)*I3x32*conj(CKM3x2),1)+Group(2453,(conj(CKM3x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM3x2),-1)+Group(246,1,-1/2)+Group(2469,1,-1)+Group(2470,3*G^2*ee^(-2),-1)+Group(2478,1,-1)+Group(2479,1,-1)+Group(248,1,-1/2)+Group(2480,1,-1)+Group(2481,1,1)+Group(2482,1,-1)+Group(2483,1,-1)+Group(2484,1,1)+Group(2485,1,-1)+Group(2486,(conj(CKM1x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM1x2),-1)+Group(2487,(conj(CKM1x1))^(-1)*I3x21^(-1)*I3x22*conj(CKM1x2),-1)+Group(2488,(conj(CKM2x1))^(-1)*I3x21^(-1)*I3x22*conj(CKM2x2),-1)+Group(2489,(conj(CKM2x1))^(-1)*I3x21^(-1)*I3x22*conj(CKM2x2),1)+Group(2490,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(2491,(conj(CKM3x1))^(-1)*I3x21^(-1)*I3x22*conj(CKM3x2),-1)+Group(2492,(conj(CKM3x1))^(-1)*I3x31^(-1)*I3x32*conj(CKM3x2),1)+Group(2493,(conj(CKM3x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM3x2),-1)+Group(25,1,-1/2)+Group(2509,1,-1)+Group(2510,3*G^2*ee^(-2),-1)+Group(2517,1,-1)+Group(2518,1,-1)+Group(2519,1,1)+Group(2520,1,-1)+Group(2521,1,-1)+Group(2522,1,-1)+Group(2523,1,1)+Group(2524,1,-1)+Group(2525,(conj(CKM1x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM1x2),-1)+Group(2526,(conj(CKM1x1))^(-1)*I3x31^(-1)*I3x32*conj(CKM1x2),-1)+Group(2527,(conj(CKM2x1))^(-1)*I3x21^(-1)*I3x22*conj(CKM2x2),1)+Group(2528,(conj(CKM2x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM2x2),-1)+Group(2529,(conj(CKM2x1))^(-1)*I3x31^(-1)*I3x32*conj(CKM2x2),-1)+Group(2530,(conj(CKM3x1))^(-1)*I3x31^(-1)*I3x32*conj(CKM3x2),-1)+Group(2531,(conj(CKM3x1))^(-1)*I3x31^(-1)*I3x32*conj(CKM3x2),1)+Group(2532,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(2548,1,-1)+Group(2549,3*G^2*ee^(-2),-1)+Group(2553,1,-1/2)+Group(2554,1,-1/2)+Group(2555,1,1/2)+Group(2556,1,-1)+Group(2557,1,1)+Group(2558,1,-1)+Group(2559,1,-1)+Group(2560,1,1)+Group(2561,1,-1)+Group(2562,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),1)+Group(2563,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(2564,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(2565,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),1)+Group(2566,(conj(CKM2x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM2x2),-1)+Group(2567,(conj(CKM2x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM2x2),-1)+Group(2568,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),1)+Group(2569,(conj(CKM3x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM3x2),-1)+Group(2570,(conj(CKM3x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM3x2),-1)+Group(2571,1,1)+Group(2572,1,-1)+Group(2573,1,-1)+Group(2574,1,1)+Group(2575,1,-1)+Group(2576,1,-1)+Group(2577,1,1)+Group(2578,1,-1)+Group(2579,1,-1)+Group(2580,1,1)+Group(2581,1,1)+Group(2582,1,1)+Group(2583,4,-1)+Group(2584,12*G^2*ee^(-2),-1)+Group(2585,(-6*cw^2*sw^2+9*cw^4+sw^4)*(3*cw^2+sw^2)^(-2),-1)+Group(2586,1,-1/2)+Group(2587,1,-1/2)+Group(2588,1,1/2)+Group(2589,1,-1)+Group(2590,1,1)+Group(2591,1,-1)+Group(2592,(conj(CKM1x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM1x2),-1)+Group(2593,(conj(CKM1x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM1x2),-1)+Group(2594,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),1)+Group(2595,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),1)+Group(2596,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(2597,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(2598,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),1)+Group(2599,(conj(CKM3x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM3x2),-1)+Group(26,1,-1/4)+Group(2600,(conj(CKM3x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM3x2),-1)+Group(2601,1,-1)+Group(2602,1,-1)+Group(2603,1,1)+Group(2604,1,1)+Group(2605,1,-1)+Group(2606,1,-1)+Group(2607,1,1)+Group(2608,1,-1)+Group(2609,1,-1)+Group(261,1,-1/2)+Group(2610,1,1)+Group(2611,1,1)+Group(2612,1,1)+Group(2613,1,1)+Group(2614,1,1)+Group(2615,1,1)+Group(2616,1,-1)+Group(2617,3*G^2*ee^(-2),-1)+Group(2618,1,-1)+Group(2619,1,-1)+Group(262,1,-1/2)+Group(2620,1,-1)+Group(2621,1,-1/2)+Group(2622,1,-1/2)+Group(2623,1,1/2)+Group(2624,(conj(CKM1x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM1x2),-1)+Group(2625,(conj(CKM1x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM1x2),-1)+Group(2626,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),1)+Group(2627,(conj(CKM2x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM2x2),-1)+Group(2628,(conj(CKM2x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM2x2),-1)+Group(2629,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),1)+Group(2630,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),1)+Group(2631,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(2632,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(2633,1,-1)+Group(2634,1,-1)+Group(2635,1,1)+Group(2636,1,-1)+Group(2637,1,-1)+Group(2638,1,1)+Group(2639,1,1)+Group(264,1,-1)+Group(2640,1,-1)+Group(2641,1,-1)+Group(2642,1,1)+Group(2643,1,1)+Group(2644,1,1)+Group(2645,1,1)+Group(2646,1,1)+Group(2647,1,1)+Group(2648,1,-1)+Group(2649,3*G^2*ee^(-2),-1)+Group(265,1,-1)+Group(2650,1,-1)+Group(2651,1,-1)+Group(2652,1,-1)+Group(2653,(conj(CKM1x1))^(-2)*(conj(CKM1x2))^2*CKM1x1^(-2)*CKM1x2^2,-1/2)+Group(2654,(conj(CKM1x1))^(-2)*(conj(CKM1x2))^2*CKM1x1^(-2)*CKM1x2^2,-1/2)+Group(2655,(conj(CKM1x1))^(-2)*(conj(CKM1x2))^2*CKM1x1^(-2)*CKM1x2^2,1/2)+Group(2656,(conj(CKM1x1))^(-1)*(conj(CKM2x1))^(-1)*CKM1x1^(-1)*CKM1x2*CKM2x1^(-1)*CKM2x2*conj(CKM1x2)*conj(CKM2x2),-1)+Group(2657,(conj(CKM1x1))^(-1)*(conj(CKM2x1))^(-1)*CKM1x1^(-1)*CKM1x2*CKM2x1^(-1)*CKM2x2*conj(CKM1x2)*conj(CKM2x2),1)+Group(2658,(conj(CKM1x1))^(-1)*(conj(CKM2x1))^(-1)*CKM1x1^(-1)*CKM1x2*CKM2x1^(-1)*CKM2x2*conj(CKM1x2)*conj(CKM2x2),-1)+Group(2659,(conj(CKM1x1))^(-1)*(conj(CKM3x1))^(-1)*CKM1x1^(-1)*CKM1x2*CKM3x1^(-1)*CKM3x2*conj(CKM1x2)*conj(CKM3x2),-1)+Group(266,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(2660,(conj(CKM1x1))^(-1)*(conj(CKM3x1))^(-1)*CKM1x1^(-1)*CKM1x2*CKM3x1^(-1)*CKM3x2*conj(CKM1x2)*conj(CKM3x2),1)+Group(2661,(conj(CKM1x1))^(-1)*(conj(CKM3x1))^(-1)*CKM1x1^(-1)*CKM1x2*CKM3x1^(-1)*CKM3x2*conj(CKM1x2)*conj(CKM3x2),-1)+Group(2662,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),1)+Group(2663,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(2664,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(2665,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),1)+Group(2666,(conj(CKM1x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM1x2),-1)+Group(2667,(conj(CKM1x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM1x2),-1)+Group(2668,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),1)+Group(2669,(conj(CKM1x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM1x2),-1)+Group(267,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(2670,(conj(CKM1x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM1x2),-1)+Group(2671,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),1)+Group(2672,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),1)+Group(2673,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),1)+Group(2674,(conj(CKM1x1))^(-1)*4*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(2675,(conj(CKM1x1))^(-1)*12*CKM1x1^(-1)*CKM1x2*G^2*conj(CKM1x2)*ee^(-2),-1)+Group(2676,(-6*CKM1x2*conj(CKM1x2)*cw^2*sw^2+9*CKM1x2*conj(CKM1x2)*cw^4+CKM1x2*conj(CKM1x2)*sw^4)*(3*cw^2+sw^2)^(-2)*(conj(CKM1x1))^(-1)*CKM1x1^(-1),-1)+Group(2677,(conj(CKM2x1))^(-2)*(conj(CKM2x2))^2*CKM2x1^(-2)*CKM2x2^2,-1/2)+Group(2678,(conj(CKM2x1))^(-2)*(conj(CKM2x2))^2*CKM2x1^(-2)*CKM2x2^2,-1/2)+Group(2679,(conj(CKM2x1))^(-2)*(conj(CKM2x2))^2*CKM2x1^(-2)*CKM2x2^2,1/2)+Group(2680,(conj(CKM2x1))^(-1)*(conj(CKM3x1))^(-1)*CKM2x1^(-1)*CKM2x2*CKM3x1^(-1)*CKM3x2*conj(CKM2x2)*conj(CKM3x2),-1)+Group(2681,(conj(CKM2x1))^(-1)*(conj(CKM3x1))^(-1)*CKM2x1^(-1)*CKM2x2*CKM3x1^(-1)*CKM3x2*conj(CKM2x2)*conj(CKM3x2),1)+Group(2682,(conj(CKM2x1))^(-1)*(conj(CKM3x1))^(-1)*CKM2x1^(-1)*CKM2x2*CKM3x1^(-1)*CKM3x2*conj(CKM2x2)*conj(CKM3x2),-1)+Group(2683,(conj(CKM2x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM2x2),-1)+Group(2684,(conj(CKM2x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM2x2),-1)+Group(2685,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),1)+Group(2686,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),1)+Group(2687,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(2688,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(2689,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),1)+Group(2690,(conj(CKM2x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM2x2),-1)+Group(2691,(conj(CKM2x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM2x2),-1)+Group(2692,(conj(CKM2x1))^(-1)*I3x21^(-1)*I3x22*conj(CKM2x2),1)+Group(2693,(conj(CKM2x1))^(-1)*I3x21^(-1)*I3x22*conj(CKM2x2),1)+Group(2694,(conj(CKM2x1))^(-1)*I3x21^(-1)*I3x22*conj(CKM2x2),1)+Group(2695,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),1)+Group(2696,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),1)+Group(2697,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),1)+Group(2698,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(2699,(conj(CKM2x1))^(-1)*3*CKM2x1^(-1)*CKM2x2*G^2*conj(CKM2x2)*ee^(-2),-1)+Group(27,1,-1/2)+Group(2700,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(2701,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(2702,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(2703,(conj(CKM3x1))^(-2)*(conj(CKM3x2))^2*CKM3x1^(-2)*CKM3x2^2,-1/2)+Group(2704,(conj(CKM3x1))^(-2)*(conj(CKM3x2))^2*CKM3x1^(-2)*CKM3x2^2,-1/2)+Group(2705,(conj(CKM3x1))^(-2)*(conj(CKM3x2))^2*CKM3x1^(-2)*CKM3x2^2,1/2)+Group(2706,(conj(CKM3x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM3x2),-1)+Group(2707,(conj(CKM3x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM3x2),-1)+Group(2708,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),1)+Group(2709,(conj(CKM3x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM3x2),-1)+Group(2710,(conj(CKM3x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM3x2),-1)+Group(2711,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),1)+Group(2712,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),1)+Group(2713,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(2714,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(2715,(conj(CKM3x1))^(-1)*I3x31^(-1)*I3x32*conj(CKM3x2),1)+Group(2716,(conj(CKM3x1))^(-1)*I3x31^(-1)*I3x32*conj(CKM3x2),1)+Group(2717,(conj(CKM3x1))^(-1)*I3x31^(-1)*I3x32*conj(CKM3x2),1)+Group(2718,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),1)+Group(2719,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),1)+Group(2720,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),1)+Group(2721,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(2722,(conj(CKM3x1))^(-1)*3*CKM3x1^(-1)*CKM3x2*G^2*conj(CKM3x2)*ee^(-2),-1)+Group(2723,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(2724,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(2725,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(2741,1,-1)+Group(2742,3*G^2*ee^(-2),-1)+Group(2756,1,-1)+Group(2757,3*G^2*ee^(-2),-1)+Group(277,4,-1/2)+Group(2770,1,-1)+Group(2771,3*G^2*ee^(-2),-1)+Group(2791,4,1/2)+Group(28,1,-1/4)+Group(282,1,-1)+Group(2822,4,1/2)+Group(283,1,-1)+Group(2849,4,1/2)+Group(286,1,-1)+Group(287,1,-1)+Group(2971,1,1/2)+Group(2972,1,1/2)+Group(2973,1,1/2)+Group(2985,1,1/2)+Group(2986,1,1/2)+Group(2987,1,1/2)+Group(299,1,1)+Group(2998,1,1/2)+Group(2999,1,1/2)+Group(300,1,-1)+Group(3000,1,1/2)+Group(301,1,-1)+Group(302,(1/2)^(1/2)*(conj(CKM2x1))^(-1)*2^(1/2)*I3x21^(-1)*I3x22*conj(CKM2x2),-1)+Group(303,(1/2)^(1/2)*(conj(CKM3x1))^(-1)*2^(1/2)*I3x31^(-1)*I3x32*conj(CKM3x2),-1)+Group(3048,16,-1/4)+Group(3049,16,-1/2)+Group(3050,16,1/4)+Group(3051,4,1/2)+Group(3052,4,1/2)+Group(3053,48*G^2*ee^(-2),-1/2)+Group(3054,48*G^2*ee^(-2),-1)+Group(3056,(-6*cw^2*sw^2+17*sw^4+9*cw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*4,-1/2)+Group(3057,(-6*cw^2*sw^2+17*sw^4+9*cw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*4,-1)+Group(3063,1,-1/4)+Group(3064,1,-1/2)+Group(3065,1,1/4)+Group(3066,1,1/2)+Group(3067,3*G^2*ee^(-2),-1/2)+Group(3068,3*G^2*ee^(-2),-1)+Group(3070,1,-1/2)+Group(3071,1,-1)+Group(3073,1,-1/2)+Group(3074,1,-1)+Group(3076,1,-1/2)+Group(3077,1,-1)+Group(3083,1,-1/4)+Group(3084,1,-1/2)+Group(3085,1,1/4)+Group(3086,3*G^2*ee^(-2),-1/2)+Group(3087,3*G^2*ee^(-2),-1)+Group(3089,1,-1/2)+Group(3090,1,-1)+Group(3092,1,-1/2)+Group(3093,1,-1)+Group(3095,1,-1/2)+Group(3096,1,-1)+Group(3098,-18*G^4*ee^(-4),-1/4)+Group(3099,144*G^4*ee^(-4),-1/2)+Group(3100,18*G^4*ee^(-4),1/4)+Group(3101,9/2*G^4*ee^(-4),1/2)+Group(3102,9/2*G^4*ee^(-4),1/2)+Group(3103,(-6*G^2*cw^2*sw^2+17*G^2*sw^4+9*G^2*cw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*12*ee^(-2),-1/2)+Group(3104,(-6*G^2*cw^2*sw^2+17*G^2*sw^4+9*G^2*cw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*12*ee^(-2),-1)+Group(3108,-9/8*G^4*ee^(-4),-1/4)+Group(3109,9*G^4*ee^(-4),-1/2)+Group(3110,9/8*G^4*ee^(-4),1/4)+Group(3111,9/8*G^4*ee^(-4),1/2)+Group(3112,3*G^2*ee^(-2),-1/2)+Group(3113,3*G^2*ee^(-2),-1)+Group(3115,3*G^2*ee^(-2),-1/2)+Group(3116,3*G^2*ee^(-2),-1)+Group(3118,3*G^2*ee^(-2),-1/2)+Group(3119,3*G^2*ee^(-2),-1)+Group(3124,-9/8*G^4*ee^(-4),-1/4)+Group(3125,9*G^4*ee^(-4),-1/2)+Group(3126,9/8*G^4*ee^(-4),1/4)+Group(3127,3*G^2*ee^(-2),-1/2)+Group(3128,3*G^2*ee^(-2),-1)+Group(3130,3*G^2*ee^(-2),-1/2)+Group(3131,3*G^2*ee^(-2),-1)+Group(3133,3*G^2*ee^(-2),-1/2)+Group(3134,3*G^2*ee^(-2),-1)+Group(3171,(-108*cw^6*sw^2+-12*cw^2*sw^6+257*sw^8+54*cw^4*sw^4+81*cw^8)*(108*cw^6*sw^2+12*cw^2*sw^6+17*sw^8+54*cw^4*sw^4+81*cw^8)^(-1),-1/4)+Group(3172,(-108*cw^6*sw^2+-12*cw^2*sw^6+257*sw^8+54*cw^4*sw^4+81*cw^8)*(108*cw^6*sw^2+12*cw^2*sw^6+17*sw^8+54*cw^4*sw^4+81*cw^8)^(-1),-1/2)+Group(3176,1,1/2)+Group(3177,1,1/2)+Group(3178,1,1/2)+Group(3183,1,1/2)+Group(3184,1,1/2)+Group(3185,1,1/2)+Group(3189,1,1/2)+Group(3190,1,1/2)+Group(3191,1,1/2)+Group(3192,(108*cw^6*sw^2+12*cw^2*sw^6+17*sw^8+54*cw^4*sw^4+81*cw^8)^(-1)*(4*cw^2*sw^6+4*cw^6*sw^2+6*cw^4*sw^4+cw^8+sw^8)*27,-1/4)+Group(3193,(108*cw^6*sw^2+12*cw^2*sw^6+17*sw^8+54*cw^4*sw^4+81*cw^8)^(-1)*(4*cw^2*sw^6+4*cw^6*sw^2+6*cw^4*sw^4+cw^8+sw^8)*27,-1/2)+Group(3194,1,1/4)+Group(3195,1,1/2)+Group(3196,1,1/2)+Group(3197,(108*cw^6*sw^2+12*cw^2*sw^6+17*sw^8+54*cw^4*sw^4+81*cw^8)^(-1)*(4*cw^2*sw^6+4*cw^6*sw^2+6*cw^4*sw^4+cw^8+sw^8)*27,-1/4)+Group(3198,(108*cw^6*sw^2+12*cw^2*sw^6+17*sw^8+54*cw^4*sw^4+81*cw^8)^(-1)*(4*cw^2*sw^6+4*cw^6*sw^2+6*cw^4*sw^4+cw^8+sw^8)*27,-1/2)+Group(3199,1,1/4)+Group(3200,1,1/2)+Group(3201,(108*cw^6*sw^2+12*cw^2*sw^6+17*sw^8+54*cw^4*sw^4+81*cw^8)^(-1)*(4*cw^2*sw^6+4*cw^6*sw^2+6*cw^4*sw^4+cw^8+sw^8)*27,-1/4)+Group(3202,(108*cw^6*sw^2+12*cw^2*sw^6+17*sw^8+54*cw^4*sw^4+81*cw^8)^(-1)*(4*cw^2*sw^6+4*cw^6*sw^2+6*cw^4*sw^4+cw^8+sw^8)*27,-1/2)+Group(3203,1,1/4)+Group(321,1,1)+Group(322,1,-1)+Group(323,1,-1)+Group(324,(1/2)^(1/2)*2^(1/2)*CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22,-1)+Group(325,(1/2)^(1/2)*2^(1/2)*CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23,-1)+Group(334,1,-1)+Group(335,1,-1)+Group(340,(-1*sw^2+3*cw^2)^(-1)*(-5*sw^2+3*cw^2)*2,-1)+Group(343,1,-1)+Group(344,1,-1)+Group(345,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(346,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(350,1,-1)+Group(351,1,-1)+Group(352,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(353,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(360,1,-1/2)+Group(361,1,-1/2)+Group(362,1,1/2)+Group(367,1,-1)+Group(368,1,-1)+Group(369,1,-1)+Group(370,1,-1)+Group(371,1,-1)+Group(372,1,1)+Group(373,1,-1)+Group(374,1,1)+Group(376,1,-1)+Group(379,1,1)+Group(380,1,1)+Group(381,(1/2)^(1/2)*(conj(CKM2x1))^(-1)*2^(1/2)*I3x21^(-1)*I3x22*conj(CKM2x2),1)+Group(382,(1/2)^(1/2)*(conj(CKM3x1))^(-1)*2^(1/2)*I3x31^(-1)*I3x32*conj(CKM3x2),1)+Group(389,1,-1)+Group(390,1,-1)+Group(391,1,-1)+Group(392,1,-1)+Group(393,1,-1)+Group(394,1,-1)+Group(395,1,-1)+Group(396,1,-1)+Group(397,1,-1)+Group(398,1,1)+Group(399,1,-1)+Group(400,1,1)+Group(405,1,-1)+Group(408,1,1)+Group(409,1,1)+Group(410,1,1)+Group(411,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),1)+Group(412,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),1)+Group(413,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),1)+Group(420,1,-1)+Group(421,1,-1)+Group(422,1,-1)+Group(423,1,-1)+Group(424,1,-1/2)+Group(425,1,-1/2)+Group(426,1,1/2)+Group(427,1,-1)+Group(428,1,-1)+Group(429,1,-1)+Group(430,1,-1)+Group(431,1,1)+Group(432,1,1)+Group(433,1,-1)+Group(434,1,-1)+Group(435,1,-1)+Group(436,1,-1)+Group(437,1,1)+Group(438,1,-1)+Group(440,1,-1)+Group(443,1,1)+Group(444,1,1)+Group(445,(1/2)^(1/2)*2^(1/2)*CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22,1)+Group(446,(1/2)^(1/2)*2^(1/2)*CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23,1)+Group(453,1,-1)+Group(454,1,-1)+Group(455,1,-1)+Group(456,1,-1)+Group(457,1,-1)+Group(458,1,-1)+Group(459,1,-1)+Group(460,1,-1)+Group(461,1,1)+Group(462,1,-1)+Group(463,1,-1)+Group(468,1,-1)+Group(471,1,1)+Group(472,1,1)+Group(473,1,1)+Group(474,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),1)+Group(475,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),1)+Group(476,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),1)+Group(483,1,-1/4)+Group(484,1,1/4)+Group(485,1,-1/2)+Group(486,1,-1/2)+Group(487,1,-1)+Group(489,1,-1/2)+Group(490,1,-1)+Group(491,1,1/2)+Group(492,1,-1/2)+Group(493,1,-1)+Group(494,1,1/2)+Group(495,1,-1)+Group(496,1,-1)+Group(497,1,1/2)+Group(498,1,-1)+Group(499,1,-1/2)+Group(500,1,1/2)+Group(501,1,1/2)+Group(502,1,1/2)+Group(503,1,1/2)+Group(504,1,1/2)+Group(505,1,1/2)+Group(506,1,-1)+Group(507,1,-1)+Group(517,1,1)+Group(518,1,-1)+Group(519,1,-1)+Group(52,1,-1)+Group(526,1,1)+Group(527,1,-1)+Group(528,1,-1)+Group(529,1,-1)+Group(53,1,-1)+Group(530,1,1)+Group(531,1,1)+Group(532,1,1)+Group(533,1,1)+Group(534,1,1)+Group(535,1,1)+Group(536,1,-1)+Group(537,1,-1)+Group(538,1,-1/4)+Group(539,1,1/4)+Group(54,1,-1)+Group(540,1,-1/2)+Group(541,1,-1/2)+Group(542,1,-1)+Group(544,1,-1/2)+Group(545,1,-1)+Group(547,1,-1)+Group(548,1,-1)+Group(549,1,1/2)+Group(55,1,-1)+Group(550,1,1/2)+Group(551,1,-1)+Group(552,1,-1/2)+Group(553,1,-1/2)+Group(554,1,-1/4)+Group(555,1,1/2)+Group(556,1,1/2)+Group(557,1,1/2)+Group(558,1,1/2)+Group(559,1,1/2)+Group(560,1,1/2)+Group(571,1,-1)+Group(582,1,-1)+Group(583,1,-1)+Group(584,1,-1)+Group(585,1,-1)+Group(586,1,-1)+Group(587,1,-1/4)+Group(588,1,-1/2)+Group(589,1,1/4)+Group(590,1,-1/2)+Group(591,1,-1)+Group(592,1,1/2)+Group(593,1,-1)+Group(594,1,-1)+Group(595,1,1/2)+Group(596,1,-1)+Group(597,1,-1/2)+Group(598,1,1/2)+Group(599,1,1/2)+Group(600,1,1/2)+Group(601,1,1/2)+Group(602,1,1/2)+Group(603,1,1/2)+Group(604,4,1/2)+Group(605,1,1/2)+Group(606,1,1/2)+Group(607,1,1)+Group(608,1,-1)+Group(609,1,-1)+Group(610,1,-1)+Group(611,1,1)+Group(612,1,1)+Group(613,1,1)+Group(614,1,1)+Group(615,1,1)+Group(616,1,1)+Group(617,(-1*sw^2+3*cw^2)^(-1)*(-5*sw^2+3*cw^2)*2,1)+Group(618,1,1)+Group(619,1,1)+Group(620,1,-1)+Group(621,1,-1)+Group(622,1,-1)+Group(623,1,-1/4)+Group(624,1,-1/2)+Group(625,1,1/4)+Group(626,1,-1)+Group(627,1,-1)+Group(628,1,1/2)+Group(629,1,-1/2)+Group(630,1,-1/2)+Group(631,1,-1/2)+Group(632,1,-1)+Group(633,1,-1/2)+Group(634,1,1/2)+Group(635,1,1/2)+Group(636,1,1/2)+Group(637,1,1/2)+Group(638,1,1/2)+Group(639,1,1/2)+Group(640,(-6*cw^2*sw^2+17*sw^4+9*cw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1),1/2)+Group(641,1,1/2)+Group(642,1,1/2)+Group(643,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,1/2)+Group(644,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,1/2)+Group(645,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,1/2)+Group(646,1,-1)+Group(647,1,-1)+Group(648,1,-1)+Group(649,1,-1)+Group(650,1,1/2)+Group(651,1,-1/2)+Group(652,1,-1/2)+Group(653,1,-1)+Group(654,1,-1)+Group(655,1,1)+Group(658,1,-1)+Group(661,1,-1)+Group(662,1,-1)+Group(664,1,-1)+Group(665,1,-1)+Group(668,1,1)+Group(669,1,1)+Group(670,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,1)+Group(671,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,1)+Group(678,1,-1)+Group(680,1,-1)+Group(683,1,1)+Group(684,1,1)+Group(685,(1/2)^(1/2)*(conj(CKM2x1))^(-1)*2^(1/2)*I3x21^(-1)*I3x22*conj(CKM2x2),1)+Group(686,(1/2)^(1/2)*(conj(CKM3x1))^(-1)*2^(1/2)*I3x31^(-1)*I3x32*conj(CKM3x2),1)+Group(693,1,-1/2)+Group(694,1,-1/2)+Group(695,1,1/2)+Group(696,1,-1)+Group(701,1,-1)+Group(702,1,-1)+Group(704,1,-1)+Group(707,1,1)+Group(708,1,1)+Group(709,(1/2)^(1/2)*2^(1/2)*CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22,1)+Group(710,(1/2)^(1/2)*2^(1/2)*CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23,1)+Group(717,1,-1)+Group(718,1,-1)+Group(723,1,-1)+Group(726,1,1)+Group(727,1,1)+Group(728,1,1)+Group(729,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),1)+Group(730,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),1)+Group(731,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),1)+Group(738,1,-1/4)+Group(739,1,1/4)+Group(740,1,-1/2)+Group(741,1,-1/2)+Group(742,1,-1)+Group(744,1,-1/2)+Group(745,1,-1)+Group(746,1,1/2)+Group(747,1,-1/2)+Group(748,1,-1)+Group(749,1,1/2)+Group(750,1,-1)+Group(751,1,-1)+Group(752,1,-1)+Group(753,1,-1/2)+Group(754,1,1/2)+Group(755,1,1/2)+Group(756,1,1/2)+Group(757,1,1/2)+Group(758,1,1/2)+Group(759,1,1/2)+Group(760,1,-1)+Group(761,1,-1)+Group(770,1,-1)+Group(771,1,-1)+Group(778,1,-1)+Group(779,1,-1)+Group(780,1,-1)+Group(781,1,1)+Group(782,1,1)+Group(783,1,1)+Group(784,1,1)+Group(785,1,1)+Group(786,1,1)+Group(787,1,-1)+Group(788,1,-1)+Group(789,1,-1/4)+Group(790,1,1/4)+Group(791,1,-1/2)+Group(792,1,-1/2)+Group(793,1,-1)+Group(795,1,-1/2)+Group(796,1,-1)+Group(798,1,-1)+Group(799,1,-1)+Group(800,1,1/2)+Group(801,1,-1)+Group(802,1,-1/2)+Group(803,1,-1/2)+Group(804,1,-1/4)+Group(805,1,1/2)+Group(806,1,1/2)+Group(807,1,1/2)+Group(808,1,1/2)+Group(809,1,1/2)+Group(810,1,1/2)+Group(820,1,-1)+Group(83,1,-1/2)+Group(830,1,-1)+Group(831,1,-1)+Group(832,1,-1)+Group(833,1,-1)+Group(834,1,-1)+Group(835,1,-1/4)+Group(836,1,-1/2)+Group(837,1,1/4)+Group(838,1,-1/2)+Group(839,1,-1)+Group(840,1,1/2)+Group(841,1,-1)+Group(842,1,-1)+Group(843,1,-1)+Group(844,1,-1/2)+Group(845,1,1/2)+Group(846,1,1/2)+Group(847,1,1/2)+Group(848,1,1/2)+Group(849,1,1/2)+Group(85,1,-1/2)+Group(850,1,1/2)+Group(851,4,1/2)+Group(852,1,1/2)+Group(853,1,1/2)+Group(854,1,-1)+Group(855,1,-1)+Group(856,1,-1)+Group(857,1,1)+Group(858,1,1)+Group(859,1,1)+Group(860,1,1)+Group(861,1,1)+Group(862,1,1)+Group(863,(-1*sw^2+3*cw^2)^(-1)*(-5*sw^2+3*cw^2)*2,1)+Group(864,1,1)+Group(865,1,1)+Group(866,1,-1)+Group(867,1,-1)+Group(868,1,-1)+Group(869,1,-1/4)+Group(870,1,-1/2)+Group(871,1,1/4)+Group(872,1,-1)+Group(873,1,-1)+Group(874,1,-1/2)+Group(875,1,-1/2)+Group(876,1,-1/2)+Group(877,1,-1)+Group(878,1,-1/2)+Group(879,1,1/2)+Group(880,1,1/2)+Group(881,1,1/2)+Group(882,1,1/2)+Group(883,1,1/2)+Group(884,1,1/2)+Group(885,(-6*cw^2*sw^2+17*sw^4+9*cw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1),1/2)+Group(886,1,1/2)+Group(887,1,1/2)+Group(888,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,1/2)+Group(889,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,1/2)+Group(890,(2*cw^2*sw^2+cw^4+sw^4)*(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*3,1/2)+Group(891,1,-1)+Group(892,1,-1)+Group(893,1,-1)+Group(894,1,-1)+Group(895,1,-1/2)+Group(896,1,1/2)+Group(897,1,-1/2)+Group(898,1,-1)+Group(899,1,-1)+Group(900,1,1)+Group(901,1,-1)+Group(903,1,-1)+Group(904,1,-1)+Group(907,1,1)+Group(908,1,1)+Group(909,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,1)+Group(910,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,1)+Group(917,1,-1)+Group(919,1,-1)+Group(922,1,1)+Group(923,1,1)+Group(924,(1/2)^(1/2)*2^(1/2)*CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22,1)+Group(925,(1/2)^(1/2)*2^(1/2)*CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23,1)+Group(932,1,-1/2)+Group(933,1,-1/2)+Group(934,1,1/2)+Group(935,1,-1)+Group(937,1,-1)+Group(940,1,1)+Group(941,1,1)+Group(942,(1/2)^(1/2)*(conj(CKM2x1))^(-1)*2^(1/2)*I3x21^(-1)*I3x22*conj(CKM2x2),1)+Group(943,(1/2)^(1/2)*(conj(CKM3x1))^(-1)*2^(1/2)*I3x31^(-1)*I3x32*conj(CKM3x2),1)+Group(950,1,-1)+Group(951,1,-1)+Group(956,1,-1)+Group(959,1,1)+Group(960,1,1)+Group(961,1,1)+Group(962,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),1)+Group(963,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),1)+Group(964,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),1)+Group(989,1,1/2)+Group(990,1,1/2)+Group(992,1,1/2)+Group(998,1,-1/4)+Group(999,1,-1/4) = (-1*sw^2+3*cw^2)^(-1)*-12*cw^2+(-1*sw^2+3*cw^2)^(-1)*20*sw^2+(1/2)^(1/2)*(conj(CKM1x3))^(-1)*-4*2^(1/2)*CKM1x3*I1x31*I4x13^(-1)+(1/2)^(1/2)*(conj(CKM2x1))^(-1)*-1*2^(1/2)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2)+(1/2)^(1/2)*(conj(CKM2x1))^(-1)*-4*2^(1/2)*CKM2x1*I2x12*I3x21^(-1)+(1/2)^(1/2)*(conj(CKM2x1))^(-1)*-4*2^(1/2)*CKM2x2*I2x22*I3x21^(-1)+(1/2)^(1/2)*(conj(CKM2x1))^(-1)*-7*2^(1/2)*I3x21^(-1)*I3x22*conj(CKM2x2)+(1/2)^(1/2)*(conj(CKM3x1))^(-1)*-1*2^(1/2)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2)+(1/2)^(1/2)*(conj(CKM3x1))^(-1)*-4*2^(1/2)*CKM3x1*I2x13*I3x31^(-1)+(1/2)^(1/2)*(conj(CKM3x1))^(-1)*-4*2^(1/2)*CKM3x2*I2x23*I3x31^(-1)+(1/2)^(1/2)*(conj(CKM3x1))^(-1)*-7*2^(1/2)*I3x31^(-1)*I3x32*conj(CKM3x2)+(1/2)^(1/2)*-1*2^(1/2)*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22+(1/2)^(1/2)*-1*2^(1/2)*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32+(1/2)^(1/2)*-3*2^(1/2)*CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22+(1/2)^(1/2)*-3*2^(1/2)*CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23+(108*cw^6*sw^2+12*cw^2*sw^6+17*sw^8+54*cw^4*sw^4+81*cw^8)^(-1)*-162*cw^6*sw^2+(108*cw^6*sw^2+12*cw^2*sw^6+17*sw^8+54*cw^4*sw^4+81*cw^8)^(-1)*-234*cw^2*sw^6+(108*cw^6*sw^2+12*cw^2*sw^6+17*sw^8+54*cw^4*sw^4+81*cw^8)^(-1)*-243/2*cw^8+(108*cw^6*sw^2+12*cw^2*sw^6+17*sw^8+54*cw^4*sw^4+81*cw^8)^(-1)*-405*cw^4*sw^4+(108*cw^6*sw^2+12*cw^2*sw^6+17*sw^8+54*cw^4*sw^4+81*cw^8)^(-1)*-507/2*sw^8+(3*cw^2+sw^2)^(-1)*(conj(CKM1x1))^(-1)*-3*CKM1x1^(-1)*CKM1x2*conj(CKM1x2)*cw^2+(3*cw^2+sw^2)^(-1)*(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2)*sw^2+(3*cw^2+sw^2)^(-1)*-3*cw^2+(3*cw^2+sw^2)^(-1)*sw^2+(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*-154*sw^4+(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*-162*G^2*cw^4*ee^(-2)+(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*-306*G^2*ee^(-2)*sw^4+(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*-90*cw^4+(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*108*G^2*cw^2*ee^(-2)*sw^2+(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*12*cw^2*sw^2+(6*cw^2*sw^2+9*cw^4+sw^4)^(-1)*(conj(CKM1x1))^(-1)*-1*CKM1x1^(-1)*CKM1x2*conj(CKM1x2)*sw^4+(6*cw^2*sw^2+9*cw^4+sw^4)^(-1)*(conj(CKM1x1))^(-1)*-9*CKM1x1^(-1)*CKM1x2*conj(CKM1x2)*cw^4+(6*cw^2*sw^2+9*cw^4+sw^4)^(-1)*(conj(CKM1x1))^(-1)*6*CKM1x1^(-1)*CKM1x2*conj(CKM1x2)*cw^2*sw^2+(6*cw^2*sw^2+9*cw^4+sw^4)^(-1)*-1*sw^4+(6*cw^2*sw^2+9*cw^4+sw^4)^(-1)*-9*cw^4+(6*cw^2*sw^2+9*cw^4+sw^4)^(-1)*6*cw^2*sw^2+(conj(CKM1x1))^(-1)*(conj(CKM2x1))^(-1)*-1*CKM1x1^(-1)*CKM1x2*CKM2x1^(-1)*CKM2x2*conj(CKM1x2)*conj(CKM2x2)+(conj(CKM1x1))^(-1)*(conj(CKM3x1))^(-1)*-1*CKM1x1^(-1)*CKM1x2*CKM3x1^(-1)*CKM3x2*conj(CKM1x2)*conj(CKM3x2)+(conj(CKM1x1))^(-1)*-1*CKM1x1^(-1)*CKM1x2*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22*conj(CKM1x2)+(conj(CKM1x1))^(-1)*-1*CKM1x1^(-1)*CKM1x2*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32*conj(CKM1x2)+(conj(CKM1x1))^(-1)*-11*CKM1x1^(-1)*CKM1x2*conj(CKM1x2)+(conj(CKM1x1))^(-1)*-18*CKM1x1^(-1)*CKM1x2*G^2*conj(CKM1x2)*ee^(-2)+(conj(CKM1x1))^(-1)*-2*I3x21^(-1)*I3x22*conj(CKM1x2)+(conj(CKM1x1))^(-1)*-2*I3x31^(-1)*I3x32*conj(CKM1x2)+(conj(CKM1x1))^(-1)*-5*CKM2x1^(-1)*CKM2x2*conj(CKM1x2)+(conj(CKM1x1))^(-1)*-5*CKM3x1^(-1)*CKM3x2*conj(CKM1x2)+(conj(CKM1x1))^(-2)*(conj(CKM1x2))^2*-1/2*CKM1x1^(-2)*CKM1x2^2+(conj(CKM1x3))^(-1)*-2*CKM1x3*I1x31*I4x13^(-1)+(conj(CKM2x1))^(-1)*(conj(CKM3x1))^(-1)*-1*CKM2x1^(-1)*CKM2x2*CKM3x1^(-1)*CKM3x2*conj(CKM2x2)*conj(CKM3x2)+(conj(CKM2x1))^(-1)*-1*CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22*conj(CKM2x2)+(conj(CKM2x1))^(-1)*-1*CKM2x1^(-1)*CKM2x2*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32*conj(CKM2x2)+(conj(CKM2x1))^(-1)*-12*CKM2x1^(-1)*CKM2x2*conj(CKM2x2)+(conj(CKM2x1))^(-1)*-2*CKM2x1*I2x12*I3x21^(-1)+(conj(CKM2x1))^(-1)*-2*CKM2x2*I2x22*I3x21^(-1)+(conj(CKM2x1))^(-1)*-2*I3x31^(-1)*I3x32*conj(CKM2x2)+(conj(CKM2x1))^(-1)*-5*CKM1x1^(-1)*CKM1x2*conj(CKM2x2)+(conj(CKM2x1))^(-1)*-6*CKM3x1^(-1)*CKM3x2*conj(CKM2x2)+(conj(CKM2x1))^(-1)*-9*CKM2x1^(-1)*CKM2x2*G^2*conj(CKM2x2)*ee^(-2)+(conj(CKM2x1))^(-1)*4*I3x21^(-1)*I3x22*conj(CKM2x2)+(conj(CKM2x1))^(-2)*(conj(CKM2x2))^2*-1/2*CKM2x1^(-2)*CKM2x2^2+(conj(CKM3x1))^(-1)*-1*CKM3x1^(-1)*CKM3x2*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22*conj(CKM3x2)+(conj(CKM3x1))^(-1)*-1*CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32*conj(CKM3x2)+(conj(CKM3x1))^(-1)*-12*CKM3x1^(-1)*CKM3x2*conj(CKM3x2)+(conj(CKM3x1))^(-1)*-2*CKM3x1*I2x13*I3x31^(-1)+(conj(CKM3x1))^(-1)*-2*CKM3x2*I2x23*I3x31^(-1)+(conj(CKM3x1))^(-1)*-2*I3x21^(-1)*I3x22*conj(CKM3x2)+(conj(CKM3x1))^(-1)*-5*CKM1x1^(-1)*CKM1x2*conj(CKM3x2)+(conj(CKM3x1))^(-1)*-6*CKM2x1^(-1)*CKM2x2*conj(CKM3x2)+(conj(CKM3x1))^(-1)*-9*CKM3x1^(-1)*CKM3x2*G^2*conj(CKM3x2)*ee^(-2)+(conj(CKM3x1))^(-1)*4*I3x31^(-1)*I3x32*conj(CKM3x2)+(conj(CKM3x1))^(-2)*(conj(CKM3x2))^2*-1/2*CKM3x1^(-2)*CKM3x2^2+-1*I2x12^(-1)*I2x13^(-1)*I2x22*I2x23*I3x21^(-1)*I3x22*I3x31^(-1)*I3x32+-1/2*I2x12^(-2)*I2x22^2*I3x21^(-2)*I3x22^2+-1/2*I2x13^(-2)*I2x23^2*I3x31^(-2)*I3x32^2+-15*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22+-15*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32+-2*CKM1x1^(-1)*CKM1x2*I2x12^(-1)*I2x22+-2*CKM1x1^(-1)*CKM1x2*I2x13^(-1)*I2x23+-2*CKM2x1^(-1)*CKM2x2*I2x13^(-1)*I2x23+-2*CKM3x1^(-1)*CKM3x2*I2x12^(-1)*I2x22+-2997/16*G^4*ee^(-4)+-360*G^2*ee^(-2)+-6*I2x12^(-1)*I2x22*I3x31^(-1)*I3x32+-6*I2x13^(-1)*I2x23*I3x21^(-1)*I3x22+-6533/16+-9*G^2*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22*ee^(-2)+-9*G^2*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32*ee^(-2)+6*CKM2x1^(-1)*CKM2x2*I2x12^(-1)*I2x22+6*CKM3x1^(-1)*CKM3x2*I2x13^(-1)*I2x23");
 
         Ok(())
     }
+}
+
+fn reference_diagram_key(
+    colored: ColoredGraph<String, String>,
+    graph: &Graph,
+) -> impl Ord + Debug + use<> {
+    let canonical = colored.canonize().graph;
+    let (numerator, numerator_interface) = NumeratorInterface::export(&graph.global_prefactor.num);
+    let (projector, projector_interface) =
+        NumeratorInterface::export(&graph.global_prefactor.projector);
+    (
+        canonical
+            .nodes()
+            .iter()
+            .map(|node| node.data.clone())
+            .collect::<Vec<_>>(),
+        canonical
+            .edges()
+            .iter()
+            .map(|edge| (edge.vertices, edge.directed, edge.data.clone()))
+            .collect::<Vec<_>>(),
+        evaluate_overall_factor(graph.overall_factor.as_view()),
+        (numerator, numerator_interface.map(|ports| ports.to_json())),
+        (projector, projector_interface.map(|ports| ports.to_json())),
+    )
+}
+
+#[test]
+fn scalar_three_loop_generator_preserves_the_fixed_acceptance_inventory() -> Result<()> {
+    let _serial_guard = SERIAL_TEST_LOCK.lock();
+    let test_name = "scalar_three_loop_generator_preserves_the_fixed_acceptance_inventory";
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+    cli.run_command("import model scalars-default.json")?;
+    cli.run_command("generate xs scalar_1 > {scalar_0 scalar_0, scalar_0 scalar_0 scalar_1} | scalar_0 scalar_1 [{{3}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p inventory -i all --only-diagrams")?;
+    let ProcessCollection::CrossSections(cross_sections) =
+        &cli.state.process_list.processes[0].collection
+    else {
+        panic!("expected a cross section")
+    };
+    let generated = &cross_sections["all"].supergraphs;
+    assert_eq!(generated.len(), 49);
+
+    // Scalar rule legs are interchangeable. Compare the colored physics graph,
+    // its local factors, both sides of every initial/physical/threshold cut and its
+    // overall coefficient; omit only labels, routing coordinates and UFO slots.
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let key = |graph: &Graph,
+               cuts: &[FinalizedCut],
+               thresholds: &[FinalizedTopologyThresholdCandidate]| {
+        let mut colored = ColoredGraph::new();
+        let nodes = graph
+            .underlying
+            .iter_nodes()
+            .map(|(node, _, data)| {
+                let color = format!(
+                    "vertex:{:?}:{}:{}",
+                    data.vertex_rule,
+                    cooking
+                        .uncook(data.num.value.expression().as_view())
+                        .to_plain_string(),
+                    data.dod.value
+                );
+                (node, colored.add_node(color))
+            })
+            .collect::<BTreeMap<_, _>>();
+        for (pair, _, edge) in graph.underlying.iter_edges() {
+            let color = format!(
+                "edge:{:?}:{}:{}:{}",
+                edge.data.particle_pdg_code(&graph.model),
+                cooking
+                    .uncook(edge.data.num.value.expression().as_view())
+                    .to_plain_string(),
+                edge.data.dod.value,
+                edge.data.is_dummy
+            );
+            let (source, target) = match pair {
+                HedgePair::Paired { source, sink } => (
+                    nodes[&graph.underlying.node_id(source)],
+                    nodes[&graph.underlying.node_id(sink)],
+                ),
+                HedgePair::Unpaired { hedge, flow } => {
+                    let external = colored.add_node(format!("external:{flow:?}"));
+                    let internal = nodes[&graph.underlying.node_id(hedge)];
+                    if flow == Flow::Sink {
+                        (external, internal)
+                    } else {
+                        (internal, external)
+                    }
+                }
+                _ => unreachable!("whole-graph edges cannot be split"),
+            };
+            colored.add_edge(source, target, false, color).unwrap();
+        }
+        for (kind, left, right) in cuts
+            .iter()
+            .map(|c| ("physical", &c.left, &c.right))
+            .chain(thresholds.iter().map(|c| ("threshold", &c.left, &c.right)))
+            .chain(once((
+                "initial",
+                &graph.initial_state_cut.left,
+                &graph.initial_state_cut.right,
+            )))
+        {
+            let left_node = colored.add_node(format!("{kind}:left"));
+            let right_node = colored.add_node(format!("{kind}:right"));
+            colored
+                .add_edge(left_node, right_node, false, "cut-pair".to_string())
+                .unwrap();
+            for (side, filter) in [(left_node, left), (right_node, right)] {
+                for (node, _, _) in graph.underlying.iter_nodes_of(filter) {
+                    colored
+                        .add_edge(side, nodes[&node], false, "cut-membership".to_string())
+                        .unwrap();
+                }
+            }
+        }
+        reference_diagram_key(colored, graph)
+    };
+    let mut actual = BTreeMap::new();
+    for graph in generated {
+        *actual
+            .entry(key(
+                &graph.graph,
+                &graph.cuts.raw,
+                &graph.topology_threshold_candidates,
+            ))
+            .or_insert(0usize) += 1;
+    }
+    let mut expected = BTreeMap::new();
+    for index in 0..49 {
+        let path = format!("tests/resources/graphs/scalar_3l_reference/GL{index:02}.dot");
+        let graphs = Graph::import_dot(&fs::read_to_string(path)?, &cli.state.model)?;
+        let [graph] = graphs.as_slice() else {
+            panic!("each fixed input contains exactly one graph")
+        };
+        assert_eq!(graph.loop_momentum_basis.loop_edges.len(), 3);
+        assert!(!graph.finalized_cuts.is_empty());
+        *expected
+            .entry(key(
+                graph,
+                &graph.finalized_cuts,
+                &graph.finalized_topology_threshold_candidates,
+            ))
+            .or_insert(0usize) += 1;
+    }
+    assert_eq!(
+        actual, expected,
+        "native generation must preserve every fixed physical graph, weight and cut"
+    );
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+/// The gg -> hhh threshold tests evaluate the frozen GL15 pentagon in its
+/// original edge and loop frame. Generator numbering is not stable, so this
+/// pins that native generation still produces exactly that diagram, up to a
+/// relabelling of internal vertices and edges and the loop-momentum basis.
+#[test]
+fn gg_hhh_generator_produces_the_fixed_gl15_pentagon() -> Result<()> {
+    let _serial_guard = SERIAL_TEST_LOCK.lock();
+    let test_name = "gg_hhh_generator_produces_the_fixed_gl15_pentagon";
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+    cli.run_command("import model sm-default")?;
+    // The original command without --select-graphs/--loop-momentum-bases;
+    // `--filter-zero-color` replaces the removed `only_detect_zeroes` grouping.
+    cli.run_command(
+        r#"generate amp g g > h h h / u d c s b QED==3 [{1}]
+            --only-diagrams --filter-zero-color --numerator-grouping no_grouping
+            --global-prefactor-projector 'gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0)))
+                * gammalooprs::ϵ(1,spenso::mink(4,gammalooprs::hedge(1)))
+                * (1/8)*spenso::g(spenso::coad(8,gammalooprs::hedge(0)),spenso::coad(8,gammalooprs::hedge(1)))'
+            -p gg_hhh -i 1L"#,
+    )?;
+    let ProcessCollection::Amplitudes(amplitudes) = &cli.state.process_list.processes[0].collection
+    else {
+        panic!("expected an amplitude")
+    };
+    let generated = &amplitudes["1L"].graphs;
+
+    // Particles are oriented along their fermion flow, so the two closed top
+    // loop orientations stay distinct. External legs keep their hedge, which
+    // the projector refers to. Local numerators carry internal hedge labels and
+    // are derived from the compared vertex rules and particles.
+    let key = |graph: &Graph| {
+        let mut colored = ColoredGraph::new();
+        let nodes = graph
+            .underlying
+            .iter_nodes()
+            .map(|(node, _, data)| {
+                (
+                    node,
+                    colored.add_node(format!("vertex:{:?}", data.vertex_rule)),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+        for (pair, _, edge) in graph.underlying.iter_edges() {
+            let pdg = edge.data.particle_pdg_code(&graph.model);
+            let (source, target) = match pair {
+                HedgePair::Paired { source, sink } => (
+                    nodes[&graph.underlying.node_id(source)],
+                    nodes[&graph.underlying.node_id(sink)],
+                ),
+                HedgePair::Unpaired { hedge, flow } => {
+                    let external = colored.add_node(format!("external:{}:{flow:?}", hedge.0));
+                    let internal = nodes[&graph.underlying.node_id(hedge)];
+                    if flow == Flow::Sink {
+                        (external, internal)
+                    } else {
+                        (internal, external)
+                    }
+                }
+                _ => unreachable!("whole-graph edges cannot be split"),
+            };
+            let (source, target, pdg) = match pdg {
+                Some(code) if code < 0 => (target, source, Some(-code)),
+                _ => (source, target, pdg),
+            };
+            colored
+                .add_edge(
+                    source,
+                    target,
+                    true,
+                    format!(
+                        "edge:{pdg:?}:{}:{}",
+                        edge.data.dod.value, edge.data.is_dummy
+                    ),
+                )
+                .unwrap();
+        }
+        reference_diagram_key(colored, graph)
+    };
+
+    let references = Graph::import_dot(
+        &fs::read_to_string("benchmarks/performance/gg-hhh-gl15.dot")?,
+        &cli.state.model,
+    )?;
+    let [reference] = references.as_slice() else {
+        panic!("the fixed input contains exactly one graph")
+    };
+    let expected = key(reference);
+    let matches = generated
+        .iter()
+        .filter(|graph| key(&graph.graph) == expected)
+        .map(|graph| graph.graph.name.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        matches.len(),
+        1,
+        "native generation must produce the fixed GL15 diagram exactly once among {} graphs, got {matches:?}",
+        generated.len()
+    );
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+const SCALAR_TWO_LOOP_CUTS_PROCESS: &str = "generate xs scalar_1 > {scalar_0 scalar_0, scalar_0 scalar_0 scalar_1} | scalar_0 scalar_1 [{{2}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 --numerator-grouping no_grouping --only-diagrams";
+
+type CutEdgeSets = BTreeSet<BTreeSet<String>>;
+
+fn setup_scalar_two_loop_cuts_cli(test_name: &str) -> Result<CLIState> {
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+    run_commands(
+        &mut cli,
+        &[
+            "import model scalars-default.json",
+            "set global kv global.n_cores.feyngen=1 global.n_cores.generate=1 global.generation.evaluator.compile=false global.generation.evaluator.summed=false global.generation.evaluator.summed_function_map=true global.generation.evaluator.iterative_orientation_optimization=false global.generation.uv.subtract_uv=false global.generation.threshold_subtraction.enable_thresholds=false global.generation.tropical_subgraph_table.disable_tropical_generation=true",
+            r#"set default-runtime kv kinematics.externals='{"type":"constant","data":{"momenta":[[5.0,0.0,0.0,0.0]],"helicities":[0]}}'"#,
+        ],
+    )?;
+    Ok(cli)
+}
+
+fn cut_edge_sets<'a>(
+    graph: &Graph,
+    cuts: impl IntoIterator<Item = &'a FinalizedCut>,
+) -> CutEdgeSets {
+    cuts.into_iter()
+        .map(|cut| {
+            graph
+                .iter_edges_of(&cut.cut)
+                .map(|(_, _, edge)| edge.data.name.value.to_string())
+                .collect()
+        })
+        .collect()
+}
+
+/// Selected cuts of every stored graph, by graph name.
+fn stored_cut_edge_sets(cli: &CLIState, process: &str) -> BTreeMap<String, CutEdgeSets> {
+    tth_cross_section_for(cli, process, "standard")
+        .supergraphs
+        .iter()
+        .map(|graph| {
+            (
+                graph.graph.name.clone(),
+                cut_edge_sets(&graph.graph, graph.cuts.iter()),
+            )
+        })
+        .collect()
+}
+
+fn built_cross_section_integrand<'a>(
+    cli: &'a CLIState,
+    process: &str,
+) -> &'a CrossSectionIntegrand {
+    match &tth_cross_section_for(cli, process, "standard").integrand {
+        Some(ProcessIntegrand::CrossSection(integrand)) => integrand,
+        _ => panic!("process '{process}' should hold a built cross-section integrand"),
+    }
+}
+
+/// Cuts entering the built integrand, by graph name.
+fn integrand_cut_edge_sets(cli: &CLIState, process: &str) -> BTreeMap<String, CutEdgeSets> {
+    built_cross_section_integrand(cli, process)
+        .data
+        .graph_terms
+        .iter()
+        .map(|term| {
+            (
+                term.graph.name.clone(),
+                cut_edge_sets(&term.graph, term.cuts.iter()),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn global_forced_cuts_select_runtime_cuts_without_pruning_generation() -> Result<()> {
+    const PROCESS: &str = SCALAR_TWO_LOOP_CUTS_PROCESS;
+    let _serial_guard = SERIAL_TEST_LOCK.lock();
+    let mut cli = setup_scalar_two_loop_cuts_cli(
+        "global_forced_cuts_select_runtime_cuts_without_pruning_generation",
+    )?;
+    let single_graph = |cli: &CLIState, process: &str| {
+        let cross_section = tth_cross_section_for(cli, process, "standard");
+        let [graph] = cross_section.supergraphs.as_slice() else {
+            panic!("process '{process}' should contain exactly the selected graph")
+        };
+        (
+            cross_section.integrand.is_some(),
+            cut_edge_sets(&graph.graph, graph.cuts.iter()),
+        )
+    };
+
+    cli.run_command(&format!("{PROCESS} -p gfc_unforced_all -i standard"))?;
+    cli.run_command(&format!(
+        "{PROCESS} --select-graphs GL1 -p gfc_unforced -i standard"
+    ))?;
+    let unforced_all = stored_cut_edge_sets(&cli, "gfc_unforced_all");
+    let (_, unforced_inventory) = single_graph(&cli, "gfc_unforced");
+    assert!(
+        unforced_inventory.len() >= 2,
+        "the fixture graph needs several physical cuts, got {unforced_inventory:?}"
+    );
+    let forced = unforced_inventory.last().unwrap().clone();
+
+    cli.cli_settings.global.generation.force_cuts = vec![forced.iter().cloned().collect()];
+    cli.cli_settings.sync_settings()?;
+    cli.run_command(&format!("{PROCESS} -p gfc_forced_all -i standard"))?;
+    cli.run_command(&format!(
+        "{PROCESS} --select-graphs GL1 -p gfc_forced -i standard"
+    ))?;
+    // The global setting selects cuts when integrands are built.
+    cli.run_command("generate existing -p gfc_unforced -i standard")?;
+    let forced_all = stored_cut_edge_sets(&cli, "gfc_forced_all");
+    let (_, forced_inventory) = single_graph(&cli, "gfc_forced");
+    let (unforced_built, unforced_built_with_force) = single_graph(&cli, "gfc_unforced");
+
+    cli.cli_settings.global.generation.force_cuts.clear();
+    cli.cli_settings.sync_settings()?;
+    cli.run_command("generate existing -p gfc_forced -i standard")?;
+    let (forced_built, forced_built_cleared) = single_graph(&cli, "gfc_forced");
+    println!(
+        "forced cut {forced:?}\nunforced generation: {} diagrams, GL1 {unforced_inventory:?}\nforced generation: {} diagrams, GL1 {forced_inventory:?}\nunforced GL1 built with force: {unforced_built_with_force:?}\nforced GL1 built after clearing: {forced_built_cleared:?}",
+        unforced_all.len(),
+        forced_all.len(),
+    );
+
+    // Generation ignores the global filter: no diagram is discarded and every
+    // diagram keeps its complete physical cut inventory.
+    assert_eq!(forced_all, unforced_all);
+    assert_eq!(forced_inventory, unforced_inventory);
+    assert!(unforced_built && forced_built);
+    assert_eq!(unforced_built_with_force, BTreeSet::from([forced]));
+    // Clearing the global filter restores every physical cut in the integrand.
+    assert_eq!(forced_built_cleared, unforced_inventory);
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+fn global_forced_cuts_build_integrand_from_matching_graphs_only() -> Result<()> {
+    let _serial_guard = SERIAL_TEST_LOCK.lock();
+    let mut cli = setup_scalar_two_loop_cuts_cli(
+        "global_forced_cuts_build_integrand_from_matching_graphs_only",
+    )?;
+    cli.run_command(&format!(
+        "{SCALAR_TWO_LOOP_CUTS_PROCESS} -p gfc_mixed -i standard"
+    ))?;
+    let stored = stored_cut_edge_sets(&cli, "gfc_mixed");
+    let forced = stored
+        .values()
+        .flatten()
+        .find(|cut| stored.values().any(|cuts| !cuts.contains(*cut)))
+        .expect("the fixture needs a cut that only some graphs contain")
+        .clone();
+    let matching = stored
+        .iter()
+        .filter(|(_, cuts)| cuts.contains(&forced))
+        .map(|(name, _)| name.clone())
+        .collect::<BTreeSet<_>>();
+    assert!(!matching.is_empty() && matching.len() < stored.len());
+
+    // Mixed request: only the matching graphs enter the integrand.
+    cli.cli_settings.global.generation.force_cuts = vec![forced.iter().cloned().collect()];
+    cli.cli_settings.sync_settings()?;
+    cli.run_command("generate existing -p gfc_mixed -i standard")?;
+    let forced_integrand = integrand_cut_edge_sets(&cli, "gfc_mixed");
+    let integrand = built_cross_section_integrand(&cli, "gfc_mixed");
+    println!(
+        "forced cut {forced:?}\nstored graphs: {stored:?}\nforced integrand: {forced_integrand:?}"
+    );
+    assert_eq!(
+        forced_integrand.keys().cloned().collect::<BTreeSet<_>>(),
+        matching
+    );
+    assert!(
+        forced_integrand
+            .values()
+            .all(|cuts| *cuts == BTreeSet::from([forced.clone()]))
+    );
+    assert_eq!(integrand.data.graph_group_structure.len(), matching.len());
+    assert_eq!(
+        integrand.data.graph_to_group_id,
+        (0..matching.len()).collect::<Vec<_>>()
+    );
+    for term in &integrand.data.graph_terms {
+        assert!(term.graph.is_group_master);
+        assert_eq!(
+            term.multi_channeling_setup.graph.group_id,
+            term.graph.group_id
+        );
+    }
+    let cross_section = tth_cross_section_for(&cli, "gfc_mixed", "standard");
+    assert_eq!(integrand.data.source_graph_ids.len(), matching.len());
+    for (term, &source_id) in integrand
+        .data
+        .graph_terms
+        .iter()
+        .zip(&integrand.data.source_graph_ids)
+    {
+        assert_eq!(
+            term.graph.name,
+            cross_section.supergraphs[source_id].graph.name
+        );
+    }
+    let info = cli.state.get_integrand_info(None, None)?;
+    assert_eq!(info.graph_count, matching.len());
+    assert_eq!(
+        info.graph_group_count,
+        integrand.data.graph_group_structure.len()
+    );
+    assert_eq!(
+        info.graph_groups
+            .iter()
+            .flat_map(|group| &group.graphs)
+            .map(|graph| graph.name.clone())
+            .collect::<BTreeSet<_>>(),
+        matching
+    );
+
+    // Every source graph stays stored; the non-matching ones are untouched.
+    let after_forced = stored_cut_edge_sets(&cli, "gfc_mixed");
+    assert_eq!(
+        after_forced.keys().collect::<Vec<_>>(),
+        stored.keys().collect::<Vec<_>>()
+    );
+    for (name, cuts) in &after_forced {
+        if !matching.contains(name) {
+            assert_eq!(cuts, &stored[name]);
+        }
+    }
+
+    // Clearing the filter restores every graph with its complete inventory.
+    cli.cli_settings.global.generation.force_cuts.clear();
+    cli.cli_settings.sync_settings()?;
+    cli.run_command("generate existing -p gfc_mixed -i standard")?;
+    assert_eq!(integrand_cut_edge_sets(&cli, "gfc_mixed"), stored);
+
+    // Entirely unmatched request: a descriptive error, and nothing changes.
+    cli.cli_settings.global.generation.force_cuts = vec![vec!["e999".to_string()]];
+    cli.cli_settings.sync_settings()?;
+    let error = cli
+        .run_command("generate existing -p gfc_mixed -i standard")
+        .expect_err("a request that no graph matches must be rejected");
+    assert!(
+        format!("{error:?}")
+            .contains("No graph of cross section 'standard' has a selected Cutkosky cut"),
+        "unexpected error: {error:?}"
+    );
+    assert_eq!(stored_cut_edge_sets(&cli, "gfc_mixed"), stored);
+    assert_eq!(integrand_cut_edge_sets(&cli, "gfc_mixed"), stored);
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+fn selection_only_dot_round_trips_with_explicit_process_specification() -> Result<()> {
+    let _serial_guard = SERIAL_TEST_LOCK.lock();
+    let test_name = "selection_only_dot_round_trips_with_explicit_process_specification";
+    let workspace = get_tests_workspace_path().join(test_name);
+    let mut cli = get_test_cli(
+        None,
+        workspace.join("state"),
+        Some(test_name.to_owned()),
+        true,
+    )?;
+    cli.run_command("import model scalars-default.json")?;
+    let spec = "scalar_0 scalar_0 > scalar_0 scalar_0 scalar_0 | scalar_0 [{{1}}]";
+    cli.run_command(&format!(
+        "generate xs {spec} --allowed-vertex-interactions V_3_SCALAR_000 --n-cut-spectators 0 1 --filter-selfenergies false --filter-tadpoles false --filter-snails false --numerator-grouping no_grouping -p spectators -i lo --only-diagrams"
+    ))?;
+    let inventories = |cli: &CLIState, process_name: &str| {
+        let process = cli
+            .state
+            .process_list
+            .processes
+            .iter()
+            .find(|process| process.definition.folder_name == process_name)
+            .unwrap();
+        let ProcessCollection::CrossSections(cross_sections) = &process.collection else {
+            panic!("the fixture must be a cross section")
+        };
+        let cross_section = &cross_sections["lo"];
+        assert!(cross_section.integrand.is_none());
+        let mut inventory = cross_section
+            .supergraphs
+            .iter()
+            .map(|graph| {
+                (
+                    graph.graph.name.clone(),
+                    graph.graph.finalized_spectator_cuts.clone(),
+                    graph.cuts.len(),
+                )
+            })
+            .collect::<Vec<_>>();
+        inventory.sort();
+        inventory
+    };
+    let original = inventories(&cli, "spectators");
+    assert!(!original.is_empty());
+    assert!(
+        original
+            .iter()
+            .all(|(_, spectators, cuts)| !spectators.is_empty() && *cuts == 0)
+    );
+    for (suffix, flags) in [("separate", ""), ("combined", "-c")] {
+        let destination = workspace.join(suffix);
+        cli.run_command(&format!("save dot '{}' {flags}", destination.display()))?;
+        let source = destination.join("processes/cross_sections/spectators/lo");
+        let count = cli.state.process_list.processes.len();
+        let error = cli
+            .run_command(&format!(
+                "import graphs '{}' -p missing_{suffix} -i lo",
+                source.display()
+            ))
+            .unwrap_err();
+        assert!(format!("{error:?}").contains("--process-spec"), "{error:?}");
+        assert_eq!(cli.state.process_list.processes.len(), count);
+        let process_name = format!("reimported_{suffix}");
+        cli.run_command(&format!(
+            "import graphs '{}' --process-spec '{spec}' -p {process_name} -i lo",
+            source.display()
+        ))?;
+        assert_eq!(inventories(&cli, &process_name), original);
+        let error = cli
+            .run_command(&format!("generate existing -p {process_name} -i lo"))
+            .unwrap_err();
+        assert!(
+            format!("{error:?}").contains("selected only through spectator cuts"),
+            "{error:?}"
+        );
+        assert_eq!(inventories(&cli, &process_name), original);
+    }
+
+    // Graphs with physical cuts determine the final state, so a file that also
+    // contains selection-only graphs re-imports without a process specification.
+    let alternatives =
+        "scalar_0 scalar_0 > {scalar_0 scalar_0, scalar_0 scalar_0 scalar_0} | scalar_0 [{{1}}]";
+    cli.run_command(&format!(
+        "generate xs {alternatives} --allowed-vertex-interactions V_3_SCALAR_000 --n-cut-spectators 0 1 --filter-selfenergies false --filter-tadpoles false --filter-snails false --numerator-grouping no_grouping -p alternatives -i lo --only-diagrams"
+    ))?;
+    let original = inventories(&cli, "alternatives");
+    assert!(
+        original
+            .iter()
+            .any(|(_, spectators, _)| spectators.is_empty())
+    );
+    assert!(
+        original
+            .iter()
+            .any(|(_, spectators, _)| !spectators.is_empty())
+    );
+    let destination = workspace.join("alternatives");
+    cli.run_command(&format!("save dot '{}' -c", destination.display()))?;
+    let source = destination.join("processes/cross_sections/alternatives/lo");
+    cli.run_command(&format!(
+        "import graphs '{}' -p alternatives_inferred -i lo",
+        source.display()
+    ))?;
+    assert_eq!(inventories(&cli, "alternatives_inferred"), original);
+    let error = cli
+        .run_command("generate existing -p alternatives_inferred -i lo")
+        .unwrap_err();
+    assert!(
+        format!("{error:?}").contains("selected only through spectator cuts"),
+        "{error:?}"
+    );
+    assert_eq!(inventories(&cli, "alternatives_inferred"), original);
+
+    // The shared runtime owner also rejects imported mixed collections
+    // containing a selection-only graph.
+    let physical_spec = "scalar_0 scalar_0 > scalar_0 scalar_0 | scalar_0 [{{1}}]";
+    cli.run_command(&format!(
+        "generate xs {physical_spec} --allowed-vertex-interactions V_3_SCALAR_000 --numerator-grouping no_grouping -p physical -i lo --only-diagrams"
+    ))?;
+    assert!(
+        inventories(&cli, "physical")
+            .iter()
+            .any(|(_, _, cuts)| *cuts > 0)
+    );
+    let mixed_inputs = workspace.join("mixed_inputs");
+    cli.run_command(&format!("save dot '{}' -c", mixed_inputs.display()))?;
+    let mut graphs = Vec::new();
+    for name in ["physical", "spectators"] {
+        let path = mixed_inputs.join(format!("processes/cross_sections/{name}/lo/lo_graphs.dot"));
+        let imported = Graph::import_dot(&fs::read_to_string(path)?, &cli.state.model)?;
+        for mut graph in imported {
+            graph.name = format!("{name}_{}", graph.name);
+            graph.group_id = None;
+            graph.is_group_master = true;
+            graphs.push(graph);
+        }
+    }
+    let definition = cli
+        .state
+        .process_list
+        .processes
+        .iter()
+        .find(|process| process.definition.folder_name == "physical")
+        .unwrap()
+        .definition
+        .clone();
+    cli.state.import_graphs(
+        graphs,
+        GraphImportOptions {
+            process_name: Some("mixed".to_owned()),
+            process_id: None,
+            process_definition: Some(definition),
+            integrand_name: Some("lo".to_owned()),
+            overwrite: false,
+            append: false,
+        },
+    )?;
+    let before = inventories(&cli, "mixed");
+    assert!(
+        before
+            .iter()
+            .any(|(_, spectators, _)| !spectators.is_empty())
+    );
+    assert!(before.iter().any(|(_, _, cuts)| *cuts > 0));
+    let error = cli
+        .run_command("generate existing -p mixed -i lo")
+        .unwrap_err();
+    assert!(
+        format!("{error:?}").contains("selected only through spectator cuts"),
+        "{error:?}"
+    );
+    assert_eq!(inventories(&cli, "mixed"), before);
+    let process_id = cli
+        .state
+        .process_list
+        .processes
+        .iter()
+        .position(|process| process.definition.folder_name == "mixed")
+        .unwrap();
+    let global = cli.cli_settings.global.clone();
+    let runtime = cli.default_runtime_settings.clone();
+    let error = cli
+        .state
+        .generate_integrand(
+            &global,
+            (&runtime).into(),
+            process_id,
+            Some("lo".to_owned()),
+        )
+        .unwrap_err();
+    assert!(
+        format!("{error:?}").contains("selected only through spectator cuts"),
+        "{error:?}"
+    );
+    assert_eq!(inventories(&cli, "mixed"), before);
+    clean_test(&workspace);
+    Ok(())
 }

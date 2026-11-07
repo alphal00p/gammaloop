@@ -1,4 +1,5 @@
 digraph GL654{
+    final_state = "H,t,t~|H,t,t~,g|H,t,t~,g,g|H,t,t~,d,d~|H,t,t~,ghG,ghG~";
     // The two physical cuts share the identical oriented e5 cycle
     // (+e5,+e6,+e12), so default full-side treatment already gives a
     // common one-loop solve space. Full local and integrated UV remain enabled.

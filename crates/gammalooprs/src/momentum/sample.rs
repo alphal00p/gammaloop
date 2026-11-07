@@ -2,7 +2,9 @@ use std::fmt::Display;
 
 use crate::graph::{Graph, LMBext, LmbIndex, LoopMomentumBasis};
 use crate::integrands::process::evaluators::SingleOrAllOrientations;
-use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, SignOrZero, ThreeMomentum};
+use crate::momentum::{
+    FourMomentum, Polarization, Rotatable, Rotation, RotationMethod, SignOrZero, ThreeMomentum,
+};
 
 use crate::momentum::signature::LoopSignature;
 use crate::utils::hyperdual_utils::new_constant;
@@ -66,12 +68,6 @@ pub struct LoopIndex(pub usize);
 define_index!(
     pub struct ExternalIndex;
 );
-
-// define_indexed_vec!(
-//     EdgeIndex;
-
-//     pub struct ExternalThr;
-// );
 
 impl Display for LoopIndex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -717,12 +713,7 @@ impl<T: FloatLike> Add<&LoopMomenta<F<T>>> for &LoopMomenta<F<T>> {
     }
 }
 
-// define_indexed_vec!(
-//     MyIdx;
-//     pub struct ExternalMomentumtwo<ThreeMomentum<T>>;
-// );
 pub type ExternalThreeMomenta<T> = TiVec<ExternalIndex, ThreeMomentum<T>>;
-// define_indexed_vec!()
 pub type ExternalFourMomenta<T> = TiVec<ExternalIndex, FourMomentum<T>>;
 // impl<T: Display> Display for ExternalFourMomenta<T> {
 //     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -758,6 +749,9 @@ pub struct BareMomentumSample<T: FloatLike> {
     pub external_mom_cache_id: usize,
     /// Base cache ID for the fundamental external momentum configuration (before transformations)
     pub external_mom_base_cache_id: usize,
+    /// Rotations applied to the external momenta, in order; external
+    /// polarizations are transported through them.
+    pub external_rotations: Vec<RotationMethod>,
     pub jacobian: F<T>,
     pub orientation: Option<usize>,
     pub parameterization_branch: Option<usize>,
@@ -810,6 +804,7 @@ impl MomentumSample<ArbPrec> {
                     .collect::<Result<_>>()?,
                 external_mom_cache_id: sample.external_mom_cache_id,
                 external_mom_base_cache_id: sample.external_mom_base_cache_id,
+                external_rotations: sample.external_rotations.clone(),
                 jacobian: F::from_arb(&sample.jacobian.0)?,
                 orientation: sample.orientation,
                 parameterization_branch: sample.parameterization_branch,
@@ -872,6 +867,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
             loop_mom_base_cache_id: loop_mom_cache_id, // Initially same as cache_id
             external_mom_cache_id,
             external_mom_base_cache_id: external_mom_cache_id, // Initially same as cache_id
+            external_rotations: Vec::new(),
             external_moms,
             jacobian,
             orientation,
@@ -910,6 +906,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
             loop_mom_base_cache_id: self.loop_mom_base_cache_id,
             external_mom_cache_id: self.external_mom_cache_id,
             external_mom_base_cache_id: self.external_mom_base_cache_id,
+            external_rotations: self.external_rotations.clone(),
             loop_moms: self.loop_moms.iter().map(ThreeMomentum::cast).collect(),
             dual_loop_moms: self
                 .dual_loop_moms
@@ -941,6 +938,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
             loop_mom_base_cache_id: self.loop_mom_base_cache_id,
             external_mom_cache_id: self.external_mom_cache_id,
             external_mom_base_cache_id: self.external_mom_base_cache_id,
+            external_rotations: self.external_rotations.clone(),
             jacobian: self.jacobian.higher(),
             orientation: self.orientation,
             parameterization_branch: self.parameterization_branch,
@@ -964,6 +962,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
             loop_mom_base_cache_id: self.loop_mom_base_cache_id,
             external_mom_cache_id: self.external_mom_cache_id,
             external_mom_base_cache_id: self.external_mom_base_cache_id,
+            external_rotations: self.external_rotations.clone(),
             parameterization_branch: self.parameterization_branch,
         }
     }
@@ -990,6 +989,12 @@ impl<T: FloatLike> BareMomentumSample<T> {
             loop_mom_base_cache_id: self.loop_mom_base_cache_id, // Preserve base cache ID
             external_mom_cache_id,
             external_mom_base_cache_id: self.external_mom_base_cache_id, // Preserve base cache ID
+            external_rotations: self
+                .external_rotations
+                .iter()
+                .copied()
+                .chain((!rotation.is_identity()).then_some(rotation.method))
+                .collect(),
             jacobian: self.jacobian.clone(),
             orientation: self.orientation,
             parameterization_branch: self.parameterization_branch,
@@ -1010,6 +1015,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
             external_moms: self.external_moms.clone(),
             external_mom_cache_id: self.external_mom_cache_id,
             external_mom_base_cache_id: self.external_mom_base_cache_id, // Preserve base cache ID
+            external_rotations: self.external_rotations.clone(),
             jacobian: self.jacobian.clone(),
             orientation: self.orientation,
             parameterization_branch: self.parameterization_branch,
@@ -1043,6 +1049,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
             external_moms: self.external_moms.clone(),
             external_mom_cache_id: self.external_mom_cache_id,
             external_mom_base_cache_id: self.external_mom_base_cache_id, // Preserve base cache ID
+            external_rotations: self.external_rotations.clone(),
             jacobian: self.jacobian.clone(),
             orientation: self.orientation,
             parameterization_branch: self.parameterization_branch,
@@ -1200,11 +1207,7 @@ impl<T: FloatLike> MomentumSample<T> {
 #[cfg(test)]
 mod subspace_tests {
     use super::*;
-    use crate::{
-        dot,
-        graph::{lmb::LMBwithEdges, parse::from_dot::IntoGraph},
-        initialisation::test_initialise,
-    };
+    use crate::{graph::lmb::LMBwithEdges, initialisation::test_initialise};
     use typed_index_collections::ti_vec;
 
     #[test]
@@ -1228,6 +1231,7 @@ mod subspace_tests {
                 )],
                 external_mom_cache_id: 23,
                 external_mom_base_cache_id: 19,
+                external_rotations: vec![RotationMethod::Pi2X],
                 jacobian: one.from_i64(3),
                 orientation: Some(7),
                 parameterization_branch: Some(2),
@@ -1239,6 +1243,10 @@ mod subspace_tests {
             assert_eq!(native.sample.loop_mom_base_cache_id, 11);
             assert_eq!(native.sample.external_mom_cache_id, 23);
             assert_eq!(native.sample.external_mom_base_cache_id, 19);
+            assert!(matches!(
+                native.sample.external_rotations[..],
+                [RotationMethod::Pi2X]
+            ));
             assert_eq!(native.sample.orientation, Some(7));
             assert_eq!(native.sample.parameterization_branch, Some(2));
             assert_eq!(native.sample.jacobian, native.one().from_i64(3));
@@ -1258,20 +1266,47 @@ mod subspace_tests {
     }
 
     #[test]
+    fn rotated_samples_record_the_rotations_of_their_externals() {
+        test_initialise().unwrap();
+        let sample = BareMomentumSample {
+            loop_moms: LoopMomenta::from_iter([ThreeMomentum::new(F(1.0), F(2.0), F(3.0))]),
+            dual_loop_moms: None,
+            loop_mom_cache_id: 0,
+            loop_mom_base_cache_id: 0,
+            external_moms: ti_vec![FourMomentum::from_args(F(4.0), F(0.0), F(0.0), F(0.0))],
+            external_mom_cache_id: 0,
+            external_mom_base_cache_id: 0,
+            external_rotations: Vec::new(),
+            jacobian: F(1.0),
+            orientation: None,
+            parameterization_branch: None,
+        };
+        let rotated = sample
+            .rotate(&Rotation::new(RotationMethod::Pi2Z), 1, 1)
+            .rotate(&Rotation::new(RotationMethod::Identity), 2, 2)
+            .rotate(&Rotation::new(RotationMethod::Pi2X), 3, 3);
+        assert!(matches!(
+            rotated.external_rotations[..],
+            [RotationMethod::Pi2Z, RotationMethod::Pi2X]
+        ));
+    }
+
+    #[test]
     fn selected_cycle_identity_and_radial_projection_survive_parent_changes() {
         test_initialise().unwrap();
-        let graph: Graph = dot!(digraph selected_cycles {
+        let graph: Graph = crate::finalized_runtime_dot!(digraph selected_cycles {
+            graph [projector=1]
             ext [style=invis]
             edge [num=1 mass=0]
             node [num=1]
-            ext->a:0 [id=0]
-            a->b [id=1 name=a1]
-            b->a [id=2 name=a2]
-            a->b [id=3 name=a3]
-            b->c [id=4 name=b1]
-            c->b [id=5 name=b2]
-            b->c [id=6 name=b3]
-            ext->c:1 [id=7]
+            ext->a:0 [id=0 sink="{ufo_order:0}"]
+            a->b [id=1 name=a1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
+            b->a [id=2 name=a2 source="{ufo_order:1}" sink="{ufo_order:2}"]
+            a->b [id=3 name=a3 source="{ufo_order:3}" sink="{ufo_order:2}" lmb_id=1]
+            b->c [id=4 name=b1 source="{ufo_order:3}" sink="{ufo_order:0}" lmb_id=2]
+            c->b [id=5 name=b2 source="{ufo_order:1}" sink="{ufo_order:4}"]
+            b->c [id=6 name=b3 source="{ufo_order:5}" sink="{ufo_order:2}" lmb_id=3]
+            ext->c:1 [id=7 sink="{ufo_order:3}"]
         })
         .unwrap();
         let edges = ["a1", "a2", "a3", "b1", "b2", "b3"]
@@ -1372,16 +1407,17 @@ mod subspace_tests {
     #[test]
     fn explicit_parent_basis_edges_recover_their_fundamental_cycle_subspace() {
         test_initialise().unwrap();
-        let graph: Graph = dot!(digraph explicit_basis_subspace {
+        let graph: Graph = crate::finalized_runtime_dot!(digraph explicit_basis_subspace {
+            graph [projector=1]
             ext [style=invis]
             edge [num=1 mass=0]
             node [num=1]
-            ext->v1:0 [id=0]
-            v1->v2 [id=1]
-            v2->v1 [id=2]
-            v1->v2 [id=3]
-            v2->v1 [id=4]
-            ext->v2:1 [id=5]
+            ext->v1:0 [id=0 sink="{ufo_order:0}"]
+            v1->v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
+            v2->v1 [id=2 source="{ufo_order:1}" sink="{ufo_order:2}" lmb_id=2]
+            v1->v2 [id=3 source="{ufo_order:3}" sink="{ufo_order:2}" lmb_id=1]
+            v2->v1 [id=4 source="{ufo_order:3}" sink="{ufo_order:4}"]
+            ext->v2:1 [id=5 sink="{ufo_order:4}"]
         })
         .unwrap();
         let all_lmbs = ti_vec![graph.loop_momentum_basis.clone()];

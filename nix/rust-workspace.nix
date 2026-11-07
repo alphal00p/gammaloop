@@ -62,7 +62,7 @@
   cargoVendorDir = craneLib.vendorCargoDeps {
     cargoLock = (workspaceRoot + "/Cargo.lock");
     overrideVendorGitCheckout = packages: drv:
-      if lib.any (package: package.name == "symbolica-typst-atom-payload") packages
+      if lib.any (package: package.name == "symbolica-typst-plugin") packages
       then
         drv.overrideAttrs (_: {
           # Fetch the exact Cargo.lock revision even if upstream branches move;
@@ -481,6 +481,14 @@
   };
 
   workspacePackageExtraSourceRoots.compileTimeTest = {
+    "spynso3" = [
+      "crates/spynso3/tests/evaluator_horner.py"
+      "crates/spynso3/tests/installed_symbolic_preview.py"
+    ];
+    "idenso" = [
+      "crates/idenso/tests/fixtures/aa_aa_2l_gl16_odd_trace_term.sym"
+      "crates/idenso/tests/fixtures/d11_contracted_temporal_chain.sym"
+    ];
     "linnet-py" = [
       "crates/linnet-py/tests/test_svg_interaction.py"
       "crates/linnet-py/tests/rendering_metrics.py"
@@ -494,10 +502,19 @@
       "crates/linnest/layout/native/fixtures"
       "crates/linnest/src/ec_seed/fixtures"
     ];
+    "feynkit-amplitude" = ["crates/feynkit-model/tests/fixtures"];
+    "feynkit-tensor" = ["crates/feynkit-model/tests/fixtures"];
+    "feynkit-cff" = ["crates/feynkit-model/tests/fixtures"];
+    "feynkit-graph" = ["crates/feynkit-model/tests/fixtures"];
+    "feynkit-generator" = [
+      "crates/feynkit-model/tests/fixtures"
+      "crates/feynkit-generator/tests/fixtures"
+    ];
     "feynkit-model" = [
       "crates/feynkit-model/tests/fixtures"
       "assets/models/json/sm/sm.json"
     ];
+    "vakint" = ["crates/vakint/python/symbolica/community/hepkit/vakint/__init__.py"];
     "alphal00p-docs-macros" = ["crates/alphal00p-docs-macros/tests/ui"];
     "alphal00p-docs-python-exporter" = [
       "docs/api/python"
@@ -518,11 +535,15 @@
       "tests/resources/graphs"
       "examples/cli/epem_a_ttxh/NNLO/graphs/GL638.dot"
     ];
-    gammalooprs = [
+    "gammalooprs" = [
       "tests/resources/graphs"
       "crates/gammalooprs/tests/resources/uv_parametric_numerator"
       "examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL256.dot"
       "examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL262.dot"
+      "tests/resources/algebra"
+      "crates/feynkit-model/tests/fixtures"
+      "crates/gammalooprs/src/graph/parse/finalized_reference.json"
+      "crates/gammalooprs/tests/resources/uv_fixed_basis"
     ];
     "gammaloop-integration-tests" = [
       "tests/resources/graphs"
@@ -535,6 +556,7 @@
   };
 
   workspacePackageExtraSourceRoots.runtimeTest = {
+    "spynso3" = ["crates/spynso3/tests/browser_math_font.py"];
     "linnet-render-py" = ["crates/linnet-render-py/tests"];
     "alphal00p-docs-builder" = [
       "assets/embedded/drawing/templates"
@@ -558,6 +580,9 @@
       "flake.nix"
       "scripts/render-docs-svg-assets.sh"
       "tests/resources/graphs"
+      "crates/linnet-render-py/fonts/STIX-Two-OFL.txt"
+      "crates/linnet-render-py/fonts/STIXTwoMath-Regular.woff2"
+      "examples/notebooks"
     ];
     "alphal00p-docs-catalogs" = [
       "docs/api/python"
@@ -567,6 +592,7 @@
       "docs/assets/typst/theme.typ"
     ];
     "gammaloop-api" = [
+      "benchmarks/performance/gg-hhh-gl15.dot"
       "tests/resources/graphs/scalar_box.dot"
       "tests/resources/graphs/scalar_bubble.dot"
     ];
@@ -579,6 +605,7 @@
     ];
     "gammaloop-integration-tests" = [
       "assets/plot_approach_result.py"
+      "benchmarks/performance/gg-hhh-gl15.dot"
       "examples/api"
       "examples/cli"
       "tests/resources"
@@ -586,10 +613,8 @@
   };
 
   workspacePackageExtraSourceRoots.ownTest = {
-    gammalooprs = [
-      "crates/gammalooprs/src/feyngen/test.rs"
+    "gammalooprs" = [
       "crates/gammalooprs/src/graph/parse/tests.rs"
-      "crates/gammalooprs/src/model/test_polarization_sums.rs"
       "crates/gammalooprs/src/numerator/spensotests.rs"
       "crates/gammalooprs/src/numerator/tests.rs"
       "crates/gammalooprs/src/utils/test_utils.rs"
@@ -609,7 +634,7 @@
       "crates/linnet/src/half_edge/tests.rs"
       "crates/linnet/src/union_find/test.rs"
     ];
-    spenso = [
+    "spenso" = [
       "crates/spenso/src/data/tests.rs"
       "crates/spenso/src/iterators/tests"
       "crates/spenso/src/network/parsing/test.rs"
@@ -617,7 +642,6 @@
       "crates/spenso/src/network/test.rs"
       "crates/spenso/src/network/tests.rs"
       "crates/spenso/src/shadowing/tests.rs"
-      "crates/spenso/src/tests.rs"
     ];
   };
 
@@ -1332,7 +1356,9 @@
     pythonPackages.numpy
   ]);
   nextestUfoPython = pkgs.python313.withPackages (pythonPackages: let
-    packages = (builtins.fromTOML (builtins.readFile (workspaceRoot + "/uv.lock"))).package;
+    # UFO tests consume released wheels; notebook development pins the separate
+    # combined Community host in the root Python environment.
+    packages = (builtins.fromTOML (builtins.readFile (workspaceRoot + "/nix/ufo-runtime/uv.lock"))).package;
     symbolica = lib.findFirst (package: package.name == "symbolica") null packages;
     loader = lib.findFirst (package: package.name == "ufo-model-loader") null packages;
     wheelTag = ci.ufoWheelTags.${system} or (throw "The locked Symbolica ${symbolica.version} Python package has no wheel for ${system}; UFO import tests require ${builtins.concatStringsSep " or " (builtins.attrNames ci.ufoWheelTags)}.");

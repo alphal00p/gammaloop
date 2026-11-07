@@ -1,4 +1,5 @@
 use crate::network::library::DummyKey;
+use crate::structure::slot::IsAbstractSlot;
 
 use super::TensorNetworkError;
 
@@ -222,6 +223,84 @@ fn fast_tensor_sum_parallel_candidate_rejects_light_or_unbalanced_work() {
 
     let unbalanced = candidate(4, 16, 512, 32 * 1024, 400, 20 * 1024);
     assert!(!unbalanced.meets_parallel_shape_floor());
+}
+
+#[test]
+fn tensor_powers_preserve_the_requested_exponent() {
+    use crate::{
+        network::{
+            ExecutionResult, Network, NetworkLeaf, NetworkNode, Sequential, SmallestDegree,
+            graph::ScaledTensorRef,
+            library::{DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},
+            store::{NetworkStore, TensorScalarStore},
+        },
+        structure::{
+            OrderedStructure,
+            representation::{Euclidean, RepName},
+        },
+        tensors::data::DenseTensor,
+    };
+
+    type Tensor = DenseTensor<f64, OrderedStructure<Euclidean>>;
+    type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
+    let lib = DummyLibrary::<Tensor, DummyKey>::new();
+    let functions = ErroringLibrary::<DummyKey>::new();
+
+    for (slots, data) in [
+        (vec![], vec![2.0]),
+        (vec![Euclidean {}.new_slot(2, 1)], vec![1.0, 2.0]),
+    ] {
+        let is_scalar = slots.is_empty();
+        let structure = OrderedStructure::new(slots).into_canonical();
+        let mut tensor = Net::from_tensor(
+            DenseTensor::from_storage_data(data.clone(), structure.clone()).unwrap(),
+        );
+        let doubled = tensor.store.add_tensor(
+            DenseTensor::from_storage_data(data.iter().map(|x| 2.0 * x).collect(), structure)
+                .unwrap(),
+        );
+        let two = tensor.store.add_scalar(2.0);
+
+        for leaf in [
+            NetworkLeaf::LocalTensor(doubled),
+            NetworkLeaf::TensorSum(vec![0, 0]),
+            NetworkLeaf::ScaledTensor(ScaledTensorRef::scaled(0, two)),
+            NetworkLeaf::ScaledTensorSum(vec![
+                ScaledTensorRef::tensor(0),
+                ScaledTensorRef::tensor(0),
+            ]),
+        ] {
+            for exponent in [-5_i8, -3, -2, -1, 1, 2, 3, 4, 5] {
+                if exponent < 0 && !is_scalar {
+                    continue;
+                }
+                let mut power = tensor.clone();
+                let root = power.graph.result().unwrap().1;
+                power.graph.graph[root] = NetworkNode::Leaf(leaf.clone());
+                let mut power = power.pow(exponent);
+                power
+                    .execute::<Sequential, SmallestDegree, DummyLibraryTensor<Tensor>, _, _>(
+                        &lib, &functions,
+                    )
+                    .unwrap();
+                let ExecutionResult::Val(actual) = power
+                    .result_tensor::<DummyLibraryTensor<Tensor>, _>(&lib)
+                    .unwrap()
+                else {
+                    panic!("expected a value for {leaf:?} to power {exponent}");
+                };
+                let expected = if is_scalar {
+                    vec![4.0_f64.powi(exponent.into())]
+                } else if exponent % 2 == 0 {
+                    vec![20.0_f64.powi(i32::from(exponent) / 2)]
+                } else {
+                    let pairs = 20.0_f64.powi(i32::from(exponent) / 2);
+                    vec![2.0 * pairs, 4.0 * pairs]
+                };
+                assert_eq!(actual.data, expected, "{leaf:?} to power {exponent}");
+            }
+        }
+    }
 }
 
 #[test]
@@ -450,8 +529,9 @@ fn lazy_scalar_tensor_sum_rejects_free_indices() {
 fn lazy_scalar_tensor_contraction_adds_scalar_in_either_order() {
     use crate::{
         network::{
-            ExecutionResult, Network, NetworkLeaf, NetworkNode, Sequential, SmallestDegree,
-            graph::ScaledTensorRef,
+            ExecutionResult, Network, NetworkLeaf, NetworkNode, NetworkState, Sequential,
+            SmallestDegree,
+            graph::{NAdd, NMul, ScaledTensorRef},
             library::{DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},
             store::{NetworkStore, TensorScalarStore},
         },
@@ -482,20 +562,58 @@ fn lazy_scalar_tensor_contraction_adds_scalar_in_either_order() {
         ScaledTensorRef::scaled(0, two),
         ScaledTensorRef::scaled(second, three),
     ]));
-    let c = Net::from_tensor(DenseTensor::from_storage_data(vec![5.0, 6.0], structure).unwrap());
-    let contracted = sum * c;
-    for mut sum in [
-        contracted.clone() + Net::from_scalar(1.0),
-        Net::from_scalar(1.0) + contracted,
+    let c_tensor = DenseTensor::from_storage_data(vec![5.0, 6.0], structure).unwrap();
+    let c = Net::from_tensor(c_tensor.clone());
+    let mut assigned = sum.clone();
+    assigned *= c.clone();
+    let mut tensor_assigned = sum.clone();
+    tensor_assigned *= c_tensor.clone();
+    for contracted in [
+        sum.clone() * c.clone(),
+        assigned,
+        sum.clone() * c_tensor,
+        tensor_assigned,
+        sum.n_mul([c]),
     ] {
-        sum.execute::<Sequential, SmallestDegree, DummyLibraryTensor<Tensor>, _, _>(
-            &lib, &functions,
-        )
-        .unwrap();
-        let ExecutionResult::Val(actual) = sum.result_scalar().unwrap() else {
-            panic!("expected a fully contracted scalar");
-        };
-        assert_eq!(*actual, 152.0);
+        assert_eq!(contracted.state, NetworkState::Scalar);
+        assert!(contracted.graph.dangling_indices().is_empty());
+        for tensor_first in [false, true] {
+            for operation in 0..5 {
+                let (mut left, right, left_value, right_value) = if tensor_first {
+                    (contracted.clone(), Net::from_scalar(1.0), 151.0, 1.0)
+                } else {
+                    (Net::from_scalar(1.0), contracted.clone(), 1.0, 151.0)
+                };
+                let (mut result, expected) = match operation {
+                    0 => (left + right, 152.0),
+                    1 => {
+                        left += right;
+                        (left, 152.0)
+                    }
+                    2 => (left - right, left_value - right_value),
+                    3 => {
+                        left -= right;
+                        (left, left_value - right_value)
+                    }
+                    4 => (left.n_add([right]), 152.0),
+                    _ => unreachable!(),
+                };
+                assert_eq!(result.state, NetworkState::Scalar);
+                assert!(result.graph.dangling_indices().is_empty());
+                result
+                    .execute::<Sequential, SmallestDegree, DummyLibraryTensor<Tensor>, _, _>(
+                        &lib, &functions,
+                    )
+                    .unwrap();
+                let ExecutionResult::Val(actual) = result.result_scalar().unwrap() else {
+                    panic!("expected a fully contracted scalar");
+                };
+                assert_eq!(
+                    *actual, expected,
+                    "operation {operation}, tensor first {tensor_first}"
+                );
+            }
+        }
     }
 }
 
@@ -1311,6 +1429,80 @@ fn sparse_pair_estimate_counts_shared_output_coordinates() {
 
 #[cfg(feature = "symbolica")]
 #[test]
+fn sparse_pair_estimate_aligns_three_cycle_matches_with_open_axes() {
+    use symbolica::atom::Atom;
+
+    use super::FastTensorSumContractible;
+    use crate::{
+        structure::{
+            HasStructure, OrderedStructure, TensorDataLayout, TensorStructure,
+            representation::{Euclidean, LibraryRep, Lorentz, RepName},
+            slot::{DualSlotTo, IsAbstractSlot, Slot},
+        },
+        tensors::{
+            data::{SetTensorData, SparseTensor},
+            parametric::ParamTensor,
+        },
+    };
+
+    let matched = [
+        Lorentz {}.new_slot(3, 0).to_lib(),
+        Lorentz {}.new_slot(3, 1).to_lib(),
+        Lorentz {}.dual().new_slot(3, 2).to_lib(),
+    ];
+    let tensor = |slots: Vec<Slot<LibraryRep>>, support: &[[usize; 4]]| {
+        let structure = OrderedStructure::new(slots);
+        let layout = TensorDataLayout::from_canonicalized(&structure).unwrap();
+        let mut tensor = SparseTensor::empty(structure.into_canonical(), Atom::Zero);
+        for coordinates in support {
+            tensor
+                .set(
+                    &layout
+                        .logical_expanded_to_storage_expanded(coordinates)
+                        .unwrap(),
+                    Atom::num(1),
+                )
+                .unwrap();
+        }
+        ParamTensor::composite(tensor.into())
+    };
+    let left = tensor(
+        std::iter::once(Euclidean {}.new_slot(2, 4).to_lib())
+            .chain(matched)
+            .collect(),
+        &[[0, 0, 1, 2], [1, 0, 1, 2], [1, 2, 0, 1]],
+    );
+    let right = tensor(
+        std::iter::once(Euclidean {}.new_slot(2, 5).to_lib())
+            .chain(matched.map(|slot| slot.dual()))
+            .collect(),
+        &[[0, 0, 1, 2], [1, 0, 1, 2], [0, 2, 0, 1]],
+    );
+
+    // The shared coordinate (0,1,2) contributes to all four output coordinates;
+    // (2,0,1) contributes once more at (1,0). Storage groups base/dual slots,
+    // so matching the same logical coordinates requires a three-cycle.
+    for (left, right) in [(&left, &right), (&right, &left)] {
+        let (permutation, left_matches, right_matches) =
+            left.structure().match_indices(right.structure()).unwrap();
+        let estimate = left.contraction_pair_estimate(
+            right,
+            &permutation,
+            &left_matches,
+            &right_matches,
+            left.contraction_profile(),
+            right.contraction_profile(),
+            4,
+            5,
+        );
+        assert_eq!(estimate.estimated_products, 5);
+        assert_eq!(estimate.estimated_output_entries, 4);
+        assert_eq!(estimate.max_output_entry_products, 2);
+    }
+}
+
+#[cfg(feature = "symbolica")]
+#[test]
 fn large_scaled_tensor_sum_preserves_results_across_strategies() {
     use std::collections::HashMap;
 
@@ -1933,5 +2125,1220 @@ fn sparse_contraction_preserves_overlapping_and_disjoint_support() {
                 assert_eq!(actual.get_ref([i, j]).unwrap(), &Atom::Zero);
             }
         }
+    }
+}
+
+#[test]
+fn batched_reindex_preserves_component_axes_and_logical_positions() {
+    use crate::{
+        network::{
+            Network,
+            graph::{NetworkLeaf, NetworkNode, ScaledTensorRef},
+            store::{NetworkStore, TensorScalarStore},
+        },
+        structure::{
+            OrderedStructure, TensorStructure,
+            abstract_index::AbstractIndex,
+            representation::{Euclidean, LibraryRep, RepName},
+        },
+        tensors::data::DenseTensor,
+    };
+    type Tensor = DenseTensor<f64, OrderedStructure<LibraryRep>>;
+    type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
+    let slots = [
+        Euclidean {}.new_slot::<AbstractIndex, _, _>(2, 1).to_lib(),
+        Euclidean {}.new_slot(2, 2).to_lib(),
+    ];
+    let source = Tensor::from_storage_data(
+        vec![0.0, 1.0, 2.0, 3.0],
+        OrderedStructure::new(slots.to_vec()).into_canonical(),
+    )
+    .unwrap();
+    for leaf in [
+        NetworkLeaf::LocalTensor(0),
+        NetworkLeaf::TensorSum(vec![0, 0]),
+        NetworkLeaf::ScaledTensor(ScaledTensorRef::scaled(0, 0)),
+        NetworkLeaf::ScaledTensorSum(vec![
+            ScaledTensorRef::scaled(0, 0),
+            ScaledTensorRef::tensor(0),
+        ]),
+    ] {
+        let mut network = Net::from_tensor(source.clone());
+        network.store.add_scalar(3.0);
+        let node = network.graph.result().unwrap().1;
+        network.graph.graph[node] = NetworkNode::Leaf(leaf);
+        let mut mapped = network
+            .reindex_ports(&[(slots[0], slots[1]), (slots[1], slots[0])])
+            .unwrap();
+        assert_eq!(mapped.graph.slots(node), slots);
+        assert_eq!(
+            mapped.graph.logical_slots(node).unwrap(),
+            [slots[1], slots[0]]
+        );
+        let NetworkNode::Leaf(leaf) = &mut mapped.graph.graph[node] else {
+            panic!("expected leaf")
+        };
+        let mut indices = Vec::new();
+        leaf.map_tensor_refs(|index| {
+            indices.push(index);
+            index
+        });
+        assert!(!indices.is_empty());
+        for index in indices {
+            assert_eq!(mapped.store.tensors[index].external_structure(), slots);
+            assert_eq!(mapped.store.tensors[index].data, [0.0, 2.0, 1.0, 3.0]);
+        }
+    }
+}
+
+#[test]
+fn batched_reindex_follows_sum_incidence_without_capturing_internal_indices() {
+    use crate::{
+        network::{
+            Network,
+            graph::{NetworkLeaf, NetworkNode},
+            store::NetworkStore,
+        },
+        structure::{
+            OrderedStructure, TensorStructure,
+            abstract_index::AbstractIndex,
+            representation::{Euclidean, LibraryRep, RepName},
+        },
+        tensors::data::DenseTensor,
+    };
+    type Tensor = DenseTensor<f64, OrderedStructure<LibraryRep>>;
+    type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
+    let first = Euclidean {}.new_slot::<AbstractIndex, _, _>(2, 1).to_lib();
+    let second = Euclidean {}.new_slot(2, 2).to_lib();
+    let target = Euclidean {}.new_slot(2, 3).to_lib();
+    let matrix = Net::from_tensor(
+        Tensor::from_storage_data(
+            vec![0.0, 1.0, 2.0, 3.0],
+            OrderedStructure::new(vec![first, second]).into_canonical(),
+        )
+        .unwrap(),
+    );
+    let vector = Net::from_tensor(
+        Tensor::from_storage_data(
+            vec![4.0, 5.0],
+            OrderedStructure::new(vec![first]).into_canonical(),
+        )
+        .unwrap(),
+    );
+    let network = (matrix.clone() + (matrix.clone() + matrix)) * (vector.clone() * vector);
+    let mapped = network.reindex_ports(&[(first, target)]).unwrap();
+    let mut matrices = 0;
+    let mut vectors = 0;
+    for (node, _, data) in mapped.graph.graph.iter_nodes() {
+        let NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) = data else {
+            continue;
+        };
+        let tensor = &mapped.store.tensors[*index];
+        let slots = mapped.graph.slots(node);
+        assert_eq!(slots, tensor.external_structure());
+        match slots.len() {
+            2 => {
+                matrices += 1;
+                assert!(slots.contains(&target));
+                assert!(!slots.contains(&first));
+            }
+            1 => {
+                vectors += 1;
+                assert_eq!(slots, [first]);
+            }
+            _ => panic!("unexpected stored rank"),
+        }
+    }
+    assert_eq!((matrices, vectors), (3, 2));
+    let mut dangling = mapped.graph.dangling_indices();
+    dangling.sort();
+    assert_eq!(dangling, [second, target]);
+}
+
+#[test]
+fn occurrence_materialization_keeps_shared_payload_bindings_separate() {
+    use super::{
+        Network, NetworkState,
+        graph::{NetworkGraph, NetworkLeaf, NetworkNode, ScalarRef},
+        store::NetworkStore,
+    };
+    use crate::structure::{
+        Canonicalized, OrderedStructure, TensorShell,
+        representation::{Minkowski, RepName},
+        slot::IsAbstractSlot,
+    };
+
+    let rep = Minkowski {};
+    let slots = [11, 22, 33, 44].map(|index| rep.new_slot(4, index).to_lib());
+    let structure = Canonicalized::<OrderedStructure>::from_iter([slots[0]]).into_canonical();
+    let leaf = |slot| {
+        let structure = Canonicalized::<OrderedStructure>::from_iter([slot]).into_canonical();
+        NetworkGraph::<i8>::tensor(&structure, NetworkLeaf::LocalTensor(0))
+    };
+    // The last two occurrences share both payload and unchanged port labels.
+    // The others share only the payload: two will be bound and one relabeled.
+    let graph = leaf(slots[1]) * leaf(slots[2]) * leaf(slots[3]) * leaf(slots[0]) * leaf(slots[0]);
+    let mut network = Network {
+        state: graph.state(),
+        graph,
+        store: NetworkStore {
+            tensors: vec![TensorShell { structure }],
+            scalar: vec![101_i64, 202],
+            scalar_aliases: vec![None, None],
+        },
+    };
+    let nodes = network
+        .graph
+        .graph
+        .iter_nodes()
+        .filter_map(|(node, _, data)| {
+            matches!(data, NetworkNode::Leaf(NetworkLeaf::LocalTensor(0))).then_some(node)
+        })
+        .collect::<Vec<_>>();
+    for node in &nodes {
+        match network.graph.slots(*node).as_slice() {
+            [slot] if *slot == slots[1] => assert!(network.graph.bind_dangling_port(
+                *node,
+                0,
+                ScalarRef::Store(0)
+            )),
+            [slot] if *slot == slots[2] => assert!(network.graph.bind_dangling_port(
+                *node,
+                0,
+                ScalarRef::Store(1)
+            )),
+            _ => {}
+        }
+    }
+    let original = network.clone();
+    let mut calls = Vec::new();
+    let mapped = network
+        .map_occurrences(
+            |scalar| Ok(*scalar),
+            |_, ports, _logical| {
+                let ports = ports
+                    .iter()
+                    .map(|(position, slot, value)| (*position, *slot, value.copied()))
+                    .collect::<Vec<_>>();
+                calls.push(ports.clone());
+                Ok(TensorShell {
+                    structure: Canonicalized::<OrderedStructure>::from_iter(
+                        ports
+                            .iter()
+                            .filter_map(|(_, slot, bound)| bound.is_none().then_some(*slot)),
+                    )
+                    .into_canonical(),
+                })
+            },
+        )
+        .unwrap();
+    assert_eq!(calls.len(), 4);
+    assert_eq!(mapped.store.tensors.len(), 4);
+    assert!(calls.contains(&vec![(0, slots[1], Some(101))]));
+    assert!(calls.contains(&vec![(0, slots[2], Some(202))]));
+    assert!(calls.contains(&vec![(0, slots[3], None)]));
+    assert_eq!(
+        calls
+            .iter()
+            .filter(|ports| **ports == vec![(0, slots[0], None)])
+            .count(),
+        1
+    );
+    // Removing consumed edges may compact node IDs. Match surviving occurrences
+    // by their ports rather than carrying source NodeIndex values across deletion.
+    let unchanged_refs = mapped
+        .graph
+        .graph
+        .iter_nodes()
+        .filter_map(|(node, _, data)| {
+            if mapped.graph.slots(node) == vec![slots[0]] {
+                let NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) = data else {
+                    panic!("tensor occurrence changed kind")
+                };
+                Some(*index)
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(unchanged_refs.len(), 2);
+    assert_eq!(unchanged_refs[0], unchanged_refs[1]);
+    assert!(!mapped.graph.has_bound_ports());
+    assert_eq!(mapped.state, NetworkState::SelfDualTensor);
+    assert_eq!(network, original);
+    mapped.graph.graph.check().unwrap();
+
+    // Public graph mutation must not silently discard a binding that no mapper
+    // can consume. Reject it before either tensor or scalar callbacks run.
+    let mut invalid = network.clone();
+    let bound_node = nodes
+        .iter()
+        .copied()
+        .find(|node| !invalid.graph.bound_ports(*node).is_empty())
+        .unwrap();
+    invalid.graph.graph[bound_node] = NetworkNode::Leaf(NetworkLeaf::library_key(
+        Canonicalized::identity(invalid.store.tensors[0].structure.clone()).map_canonical(|_| 17),
+    ));
+    assert!(
+        !invalid
+            .graph
+            .bind_dangling_port(bound_node, 0, ScalarRef::Store(0))
+    );
+    let before = invalid.clone();
+    let calls = std::cell::Cell::new(0);
+    let error = invalid
+        .map_occurrences(
+            |value| {
+                calls.set(calls.get() + 1);
+                Ok(*value)
+            },
+            |tensor, _, _logical| {
+                calls.set(calls.get() + 1);
+                Ok(tensor.clone())
+            },
+        )
+        .unwrap_err();
+    assert!(error.to_string().contains("local tensor occurrence"));
+    assert_eq!(calls.get(), 0);
+    assert_eq!(invalid, before);
+}
+
+#[test]
+fn batched_reindex_keeps_dual_endpoints_on_sewn_edges() {
+    use crate::{
+        network::{
+            Network,
+            graph::{NetworkLeaf, NetworkNode},
+            store::NetworkStore,
+        },
+        structure::{
+            OrderedStructure, TensorStructure,
+            abstract_index::AbstractIndex,
+            representation::{Euclidean, LibraryRep, Lorentz, RepName},
+        },
+        tensors::data::DenseTensor,
+    };
+    type Tensor = DenseTensor<f64, OrderedStructure<LibraryRep>>;
+    type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
+    let free = Euclidean {}.new_slot::<AbstractIndex, _, _>(2, 31).to_lib();
+    let target = Euclidean {}.new_slot(2, 7).to_lib();
+    let upper = Lorentz {}.new_slot(2, 9).to_lib();
+    let lower = Lorentz {}.dual().new_slot(2, 9).to_lib();
+    let leaf = |slots: Vec<_>| {
+        let size = 1 << slots.len();
+        Net::from_tensor(
+            Tensor::from_storage_data(
+                (0..size).map(|i| i as f64).collect(),
+                OrderedStructure::new(slots).into_canonical(),
+            )
+            .unwrap(),
+        )
+    };
+    for original in [
+        leaf(vec![free, upper, lower]),
+        leaf(vec![free, upper]) * leaf(vec![lower]),
+    ] {
+        let mapped = original.clone().reindex_ports(&[(free, target)]).unwrap();
+        for (node, _, data) in original.graph.graph.iter_nodes() {
+            let NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) = data else {
+                continue;
+            };
+            let NetworkNode::Leaf(NetworkLeaf::LocalTensor(mapped_index)) =
+                mapped.graph.graph[node]
+            else {
+                panic!("mapped tensor changed kind")
+            };
+            let source = &original.store.tensors[*index];
+            let result = &mapped.store.tensors[mapped_index];
+            let expected = source
+                .external_structure()
+                .into_iter()
+                .map(|slot| if slot == free { target } else { slot })
+                .collect::<Vec<_>>();
+            assert_eq!(result.external_structure(), expected);
+            assert_eq!(result.data, source.data);
+        }
+        assert_eq!(mapped.graph.dangling_indices(), [target]);
+        mapped.graph.graph.check().unwrap();
+    }
+}
+
+#[test]
+fn scalar_network_state_addition_is_symmetric() {
+    use super::NetworkState::{PureScalar, Scalar};
+
+    for (left, right, expected) in [
+        (PureScalar, PureScalar, PureScalar),
+        (PureScalar, Scalar, Scalar),
+        (Scalar, PureScalar, Scalar),
+        (Scalar, Scalar, Scalar),
+    ] {
+        assert!(left.is_compatible(&right));
+        let mut result = left;
+        result += right;
+        assert_eq!(result, expected);
+    }
+}
+
+#[cfg(feature = "symbolica")]
+#[test]
+fn parsed_scalar_tensor_and_pure_scalar_add_in_both_orders() {
+    use crate::{
+        mink,
+        network::{
+            NetworkState,
+            graph::NAdd,
+            parsing::{NetworkParse, ParseSettings, ShorthandParsing},
+        },
+        p, q,
+        structure::abstract_index::{AIND_SYMBOLS, AbstractIndex},
+    };
+    use symbolica::{atom::Atom, function};
+
+    let tensor = p!(q!(mink!(4)));
+    let scalar = Atom::num(2);
+    let input = &tensor + &scalar;
+    // ParamNet realizes the compact dot in its existing component tensor owner.
+    // Check the independent (+---) sum, rather than its input shorthand spelling.
+    let expected = Atom::add_many((0..4).map(|component| {
+        let index = function!(AIND_SYMBOLS.cind, component);
+        Atom::num(if component == 0 { 1 } else { -1 }) * p!(&index) * q!(&index)
+    })) + &scalar;
+    for precontract_scalars in [false, true] {
+        let settings = ParseSettings {
+            precontract_scalars,
+            shorthand_parsing: ShorthandParsing::Opaque,
+            ..Default::default()
+        };
+        for tensor_first in [false, true] {
+            for operation in 0..5 {
+                let tensor = tensor
+                    .parse_to_atom_net::<AbstractIndex>(&settings)
+                    .unwrap();
+                let scalar = scalar
+                    .parse_to_atom_net::<AbstractIndex>(&settings)
+                    .unwrap();
+                assert_eq!(tensor.state, NetworkState::Scalar);
+                assert_eq!(scalar.state, NetworkState::PureScalar);
+                let tensor_value = &expected - Atom::num(2);
+                let (mut left, right, left_value, right_value) = if tensor_first {
+                    (tensor, scalar, tensor_value, Atom::num(2))
+                } else {
+                    (scalar, tensor, Atom::num(2), tensor_value)
+                };
+                let (mut sum, expected) = match operation {
+                    0 => (left + right, &left_value + &right_value),
+                    1 => {
+                        left += right;
+                        (left, &left_value + &right_value)
+                    }
+                    2 => (left - right, &left_value - &right_value),
+                    3 => {
+                        left -= right;
+                        (left, &left_value - &right_value)
+                    }
+                    4 => (left.n_add([right]), &left_value + &right_value),
+                    _ => unreachable!(),
+                };
+                assert_eq!(sum.state, NetworkState::Scalar);
+                assert!(sum.graph.dangling_indices().is_empty());
+                sum.simple_execute();
+                let actual: Atom = sum.result_scalar().unwrap().into();
+                assert_eq!(
+                    actual, expected,
+                    "operation {operation}, tensor first {tensor_first}"
+                );
+            }
+        }
+
+        // Also enter through the parser's sum construction, rather than only
+        // composing already parsed operands. Atom normalization owns term order.
+        let mut sum = input.parse_to_atom_net::<AbstractIndex>(&settings).unwrap();
+        assert_eq!(sum.state, NetworkState::Scalar);
+        assert!(sum.graph.dangling_indices().is_empty());
+        sum.simple_execute();
+        let actual: Atom = sum.result_scalar().unwrap().into();
+        assert_eq!(actual, expected);
+    }
+}
+
+#[test]
+fn incompatible_network_state_additions_still_panic() {
+    use super::NetworkState::{PureScalar, Scalar, SelfDualTensor, Tensor};
+
+    for left in [PureScalar, Scalar, SelfDualTensor, Tensor] {
+        for right in [PureScalar, Scalar, SelfDualTensor, Tensor] {
+            let result = std::panic::catch_unwind(move || {
+                let mut state = left;
+                state += right;
+                state
+            });
+            assert_eq!(result.is_ok(), left.is_compatible(&right));
+        }
+    }
+}
+
+/// Executed products must expose the stored axis order of their result leaf:
+/// a later port reindexing labels stored axes by those graph positions.
+mod reindex_after_contraction {
+    use std::collections::BTreeMap;
+
+    use crate::{
+        network::{
+            ContractionStrategy, MinResultRank, Network, NetworkLeaf, NetworkNode, Sequential,
+            SequentialExtract, SequentialRef, SmallestDegree, Steps, TensorNetworkError,
+            graph::{NetworkGraph, NetworkGraphError, NetworkOperation},
+            library::{
+                DummyKey, DummyLibrary, DummyLibraryTensor, FunctionLibrary, FunctionLibraryError,
+                panicing::ErroringLibrary,
+            },
+            store::NetworkStore,
+        },
+        structure::{
+            OrderedStructure, StructureError, TensorStructure,
+            abstract_index::AbstractIndex,
+            representation::{Euclidean, LibraryRep, LibrarySlot, RepName},
+            slot::IsAbstractSlot,
+        },
+        tensors::data::{DenseTensor, GetTensorData, SetTensorData},
+    };
+
+    type Tensor = DenseTensor<f64, OrderedStructure<LibraryRep>>;
+    type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
+    type Components = BTreeMap<Vec<(AbstractIndex, usize)>, f64>;
+
+    fn slot(index: usize) -> LibrarySlot<AbstractIndex> {
+        Euclidean {}
+            .new_slot::<AbstractIndex, _, _>(2, index)
+            .to_lib()
+    }
+
+    /// All index assignments of a rank-`rank` tensor of `euc(2)` axes.
+    fn assignments(rank: usize) -> impl Iterator<Item = Vec<usize>> {
+        (0..1_usize << rank).map(move |bits| (0..rank).map(|axis| (bits >> axis) & 1).collect())
+    }
+
+    fn labelled(
+        slots: &[LibrarySlot<AbstractIndex>],
+        values: &[usize],
+    ) -> Vec<(AbstractIndex, usize)> {
+        let mut labels = slots
+            .iter()
+            .map(IsAbstractSlot::aind)
+            .zip(values.iter().copied())
+            .collect::<Vec<_>>();
+        labels.sort();
+        labels
+    }
+
+    fn dense(
+        slots: &[LibrarySlot<AbstractIndex>],
+        value: impl Fn(&BTreeMap<usize, usize>) -> f64,
+    ) -> Net {
+        let mut tensor = Tensor::zero(OrderedStructure::new(slots.to_vec()).into_canonical());
+        let stored = tensor.external_structure();
+        for values in assignments(stored.len()) {
+            let labels = labelled(&stored, &values)
+                .into_iter()
+                .map(|(aind, value)| (usize::from(aind), value))
+                .collect();
+            tensor.set(&values, value(&labels)).unwrap();
+        }
+        Net::from_tensor(tensor)
+    }
+
+    fn execute(network: &mut Net) {
+        network
+            .execute::<Sequential, SmallestDegree, DummyLibraryTensor<Tensor>, _, _>(
+                &DummyLibrary::<Tensor, DummyKey>::new(),
+                &ErroringLibrary::<DummyKey>::new(),
+            )
+            .unwrap();
+    }
+
+    /// Compare the executed result by abstract index labels, then check that
+    /// the graph ports name the stored axes in order.
+    fn assert_components(network: &Net, expected: &Components) {
+        let (NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)), node, _) =
+            network.graph.result().unwrap()
+        else {
+            panic!("expected one stored result tensor")
+        };
+        let tensor = &network.store.tensors[*index];
+        let stored = tensor.external_structure();
+        let actual: Components = assignments(stored.len())
+            .map(|values| {
+                (
+                    labelled(&stored, &values),
+                    *tensor.get_ref(&values).unwrap(),
+                )
+            })
+            .collect();
+        assert_eq!(&actual, expected);
+        assert_eq!(network.graph.slots(node), stored);
+    }
+
+    fn t1(i: &BTreeMap<usize, usize>) -> f64 {
+        1.0 + 2.0 * i[&3] as f64 + 5.0 * i[&4] as f64
+    }
+
+    fn t2(i: &BTreeMap<usize, usize>) -> f64 {
+        1.0 + i[&1] as f64 + 3.0 * i[&2] as f64 + 7.0 * i[&4] as f64
+    }
+
+    /// `R[a,b,c] = sum_x T1[c,x] T2[a,b,x]`, with `a` relabelled to `target`.
+    fn expected_product(target: usize) -> Components {
+        let mut components = Components::new();
+        for [a, b, c] in [0, 1].into_iter().flat_map(|a| {
+            [0, 1]
+                .into_iter()
+                .flat_map(move |b| [0, 1].into_iter().map(move |c| [a, b, c]))
+        }) {
+            let value: f64 = (0..2)
+                .map(|x| {
+                    let i = BTreeMap::from([(1, a), (2, b), (3, c), (4, x)]);
+                    t1(&i) * t2(&i)
+                })
+                .sum();
+            let mut key = vec![
+                (AbstractIndex::from(target), a),
+                (AbstractIndex::from(2), b),
+                (AbstractIndex::from(3), c),
+            ];
+            key.sort();
+            components.insert(key, value);
+        }
+        components
+    }
+
+    #[test]
+    fn invalid_stored_leaf_ports_leave_ordinals_unchanged() {
+        let [a, b, c] = [1, 2, 3].map(slot);
+        for stored in [vec![a, c], vec![a]] {
+            let mut network = dense(&[a, b], |_| 1.0);
+            let (index, node) = match network.graph.result().unwrap() {
+                (NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)), node, _) => (*index, node),
+                _ => panic!("expected a stored tensor leaf"),
+            };
+            // A replacement can have consumed the old ordinals before its
+            // new payload is checked against the surviving graph ports.
+            network.graph.slot_order.fill(7);
+            let previous = network.graph.slot_order.clone();
+            network.store.tensors[index] =
+                Tensor::zero(OrderedStructure::new(stored).into_canonical());
+            assert!(matches!(
+                network
+                    .graph
+                    .set_stored_leaf_order(node, &network.store, None),
+                Err(StructureError::InvalidIndexPermutation(_))
+            ));
+            assert_eq!(network.graph.slot_order, previous);
+        }
+    }
+
+    struct DefaultPartialContraction;
+
+    impl
+        ContractionStrategy<
+            NetworkStore<Tensor, f64>,
+            DummyLibrary<Tensor, DummyKey>,
+            DummyKey,
+            DummyKey,
+            AbstractIndex,
+        > for DefaultPartialContraction
+    {
+        const SUPPORTS_PARTIAL_GRAPH_REWRITE: bool = true;
+
+        fn contract(
+            store: &mut NetworkStore<Tensor, f64>,
+            graph: &NetworkGraph<DummyKey, DummyKey>,
+            operation: &NetworkOperation<DummyKey>,
+            library: &DummyLibrary<Tensor, DummyKey>,
+        ) -> Result<NetworkLeaf<DummyKey>, TensorNetworkError<DummyKey, DummyKey>> {
+            <SmallestDegree as ContractionStrategy<
+                NetworkStore<Tensor, f64>,
+                DummyLibrary<Tensor, DummyKey>,
+                DummyKey,
+                DummyKey,
+                AbstractIndex,
+            >>::contract(store, graph, operation, library)
+        }
+    }
+
+    #[test]
+    fn default_partial_contraction_preserves_reindexed_components() {
+        let [a, b, c, x, target] = [1, 2, 3, 4, 5].map(slot);
+        let mut network = dense(&[c, x], t1) * dense(&[a, b, x], t2);
+        network
+            .execute::<Sequential, DefaultPartialContraction, DummyLibraryTensor<Tensor>, _, _>(
+                &DummyLibrary::<Tensor, DummyKey>::new(),
+                &ErroringLibrary::<DummyKey>::new(),
+            )
+            .unwrap();
+        let reindexed = network.reindex_ports(&[(a, target)]).unwrap();
+        assert_components(&reindexed, &expected_product(5));
+    }
+
+    #[test]
+    fn reindex_after_executed_product_keeps_components() {
+        let [a, b, c, x, target] = [1, 2, 3, 4, 5].map(slot);
+        let mut network = dense(&[c, x], t1) * dense(&[a, b, x], t2);
+        execute(&mut network);
+
+        let reindexed = network.reindex_ports(&[(a, target)]).unwrap();
+        assert_components(&reindexed, &expected_product(5));
+    }
+
+    #[test]
+    fn reindex_after_rank_reducing_product_keeps_components() {
+        // T1[x,a] stores `a` second; the contracted vector leaves `a` alone.
+        let [x, a, target] = [4, 5, 6].map(slot);
+        let matrix = |i: &BTreeMap<usize, usize>| 1.0 + 2.0 * i[&4] as f64 + 5.0 * i[&5] as f64;
+        let vector = |i: &BTreeMap<usize, usize>| 3.0 + 7.0 * i[&4] as f64;
+        let mut network = dense(&[x, a], matrix) * dense(&[x], vector);
+        execute(&mut network);
+
+        let reindexed = network.reindex_ports(&[(a, target)]).unwrap();
+        let expected: Components = (0..2)
+            .map(|value| {
+                let component: f64 = (0..2)
+                    .map(|x| {
+                        let i = BTreeMap::from([(4, x), (5, value)]);
+                        matrix(&i) * vector(&i)
+                    })
+                    .sum();
+                (vec![(AbstractIndex::from(6), value)], component)
+            })
+            .collect();
+        assert_components(&reindexed, &expected);
+    }
+
+    #[test]
+    fn reindex_after_chained_products_keeps_components() {
+        let [a, b, c, x, y, target] = [1, 2, 3, 4, 6, 7].map(slot);
+        let t3 = |i: &BTreeMap<usize, usize>| 2.0 + 11.0 * i[&2] as f64 + 13.0 * i[&6] as f64;
+        let mut network = dense(&[c, x], t1) * dense(&[a, b, x], t2);
+        execute(&mut network);
+        let mut network = network * dense(&[b, y], t3);
+        execute(&mut network);
+
+        let reindexed = network.reindex_ports(&[(a, target)]).unwrap();
+        let product = expected_product(7);
+        let mut expected = Components::new();
+        for (key, value) in &product {
+            let labels = key.iter().copied().collect::<BTreeMap<_, _>>();
+            let b = labels[&AbstractIndex::from(2)];
+            for y in 0..2 {
+                let mut key = key
+                    .iter()
+                    .copied()
+                    .filter(|(aind, _)| *aind != AbstractIndex::from(2))
+                    .chain([(AbstractIndex::from(6), y)])
+                    .collect::<Vec<_>>();
+                key.sort();
+                let i = BTreeMap::from([(2, b), (6, y)]);
+                *expected.entry(key).or_insert(0.0) += value * t3(&i);
+            }
+        }
+        assert_components(&reindexed, &expected);
+    }
+
+    fn execute_parallel(network: &mut Net) {
+        network
+            .execute_parallel::<SmallestDegree, DummyLibraryTensor<Tensor>, _, _>(
+                &DummyLibrary::<Tensor, DummyKey>::new(),
+                &ErroringLibrary::<DummyKey>::new(),
+            )
+            .unwrap();
+    }
+
+    /// Relabel two external ports alike and sew them, as
+    /// `TensorNetwork.trace` does.
+    fn traced(network: Net, pair: [usize; 2], label: usize) -> Net {
+        let mut network = relabelled(network, pair, label);
+        network.graph.sew_dangling_slots().unwrap();
+        network.state = network.graph.state();
+        network
+    }
+
+    fn relabelled(network: Net, pair: [usize; 2], label: usize) -> Net {
+        let [first, second] = pair.map(slot);
+        network
+            .reindex_ports(&[(first, slot(label)), (second, slot(label))])
+            .unwrap()
+    }
+
+    /// Sewing the relabelled pair is refused and leaves the graph unchanged.
+    fn assert_sewing_refused(network: Net, pair: [usize; 2], label: usize) {
+        let mut network = relabelled(network, pair, label);
+        let unchanged = format!("{:?}", network.graph);
+        assert!(matches!(
+            network.graph.sew_dangling_slots(),
+            Err(NetworkGraphError::PortsBelowNonlinearOp)
+        ));
+        assert_eq!(format!("{:?}", network.graph), unchanged);
+    }
+
+    /// `R[b,c] = sum_d (T1[c,d] T4[b,d] + T5[c,d,b,d])`, the trace over
+    /// `a = x = d` of a sum whose first term is a product.
+    fn expected_traced_sum(
+        t4: impl Fn(&BTreeMap<usize, usize>) -> f64,
+        t5: impl Fn(&BTreeMap<usize, usize>) -> f64,
+    ) -> Components {
+        let mut components = Components::new();
+        for (b, c) in [(0, 0), (0, 1), (1, 0), (1, 1)] {
+            let value: f64 = (0..2)
+                .map(|d| {
+                    let i = BTreeMap::from([(1, d), (2, b), (3, c), (4, d)]);
+                    t1(&BTreeMap::from([(3, c), (4, d)])) * t4(&i) + t5(&i)
+                })
+                .sum();
+            components.insert(
+                vec![(AbstractIndex::from(2), b), (AbstractIndex::from(3), c)],
+                value,
+            );
+        }
+        components
+    }
+
+    /// Tracing two ports of a sum contracts that pair inside every summand.
+    /// A product summand contracts the pair between its factors, so its
+    /// ports must not stay routed through the sum.
+    #[test]
+    fn traced_sum_contracts_the_pair_inside_every_summand() {
+        let [a, b, c, x] = [1, 2, 3, 4].map(slot);
+        let t4 = |i: &BTreeMap<usize, usize>| 2.0 + 5.0 * i[&2] as f64 + 7.0 * i[&1] as f64;
+        let t5 = |i: &BTreeMap<usize, usize>| {
+            3.0 + i[&3] as f64 + 4.0 * i[&1] as f64 + 6.0 * i[&2] as f64 + 11.0 * i[&4] as f64
+        };
+        let build = || {
+            let product = dense(&[c, x], t1) * dense(&[b, a], t4);
+            traced(product + dense(&[c, a, b, x], t5), [1, 4], 5)
+        };
+        let expected = expected_traced_sum(t4, t5);
+
+        let mut network = build();
+        execute(&mut network);
+        assert_components(&network, &expected);
+
+        let mut network = build();
+        execute_parallel(&mut network);
+        assert_components(&network, &expected);
+    }
+
+    /// An odd power `(T.T)^k T` and a function keep the ports of their
+    /// argument, so contracting two of those ports with each other would act
+    /// on the argument. Sewing refuses such a pair, directly, through a sum,
+    /// below one, and between factors or nested operations inside one.
+    #[test]
+    fn sewing_two_ports_below_one_power_or_function_is_refused() {
+        let [a, c, x, y] = [1, 3, 4, 6].map(slot);
+        let t8 = |i: &BTreeMap<usize, usize>| 1.0 + 2.0 * i[&1] as f64 + 3.0 * i[&4] as f64;
+        let ay = |i: &BTreeMap<usize, usize>| 1.0 + i[&1] as f64 + 2.0 * i[&6] as f64;
+        let yx = |i: &BTreeMap<usize, usize>| 3.0 + i[&6] as f64 + 5.0 * i[&4] as f64;
+        // trace_{a=x} (T[a,x,c])^3
+        assert_sewing_refused(dense(&[a, x, c], t8).pow(3), [1, 4], 5);
+        // trace_{a=x} (T[a,x]^3 + U[x,a])
+        assert_sewing_refused(dense(&[a, x], t8).pow(3) + dense(&[x, a], t8), [1, 4], 5);
+        // trace_{a=x} (T[a,x] + U[x,a])^3
+        assert_sewing_refused((dense(&[a, x], t8) + dense(&[x, a], t8)).pow(3), [1, 4], 5);
+        // trace_{a=x} f(T[a,x,c])
+        assert_sewing_refused(dense(&[a, x, c], t8).fun(DummyKey {}), [1, 4], 5);
+        // trace_{a=x} (A[a,y] B[y,x])^3 and f(A[a,y] B[y,x]): different factors
+        let product = || dense(&[a, y], ay) * dense(&[y, x], yx);
+        assert_sewing_refused(product().pow(3), [1, 4], 5);
+        assert_sewing_refused(product().fun(DummyKey {}), [1, 4], 5);
+        // trace_{a=x} ((T[a,x,c])^3)^3
+        assert_sewing_refused(dense(&[a, x, c], t8).pow(3).pow(3), [1, 4], 5);
+        // trace_{a=x} (T[a,x]^3 + U[x,a])^3
+        assert_sewing_refused(
+            (dense(&[a, x], t8).pow(3) + dense(&[x, a], t8)).pow(3),
+            [1, 4],
+            5,
+        );
+    }
+
+    /// Componentwise square, a function that does not commute with a trace.
+    struct Square;
+
+    impl FunctionLibrary<Tensor, f64> for Square {
+        type Key = DummyKey;
+
+        fn apply(
+            &self,
+            _: &DummyKey,
+            mut tensor: Tensor,
+        ) -> Result<Tensor, FunctionLibraryError<DummyKey>> {
+            for component in &mut tensor.data {
+                *component *= *component;
+            }
+            Ok(tensor)
+        }
+
+        fn apply_scalar(
+            &self,
+            _: &DummyKey,
+            scalar: f64,
+        ) -> Result<f64, FunctionLibraryError<DummyKey>> {
+            Ok(scalar * scalar)
+        }
+    }
+
+    /// Execute `build()` with every executor and contraction strategy and
+    /// compare each result with `expected`.
+    fn assert_components_on_every_executor(build: impl Fn() -> Net, expected: &Components) {
+        type Lt = DummyLibraryTensor<Tensor>;
+        type Run = fn(&mut Net) -> Result<(), TensorNetworkError<DummyKey, DummyKey>>;
+        let runs: [(&str, Run); 7] = [
+            ("Sequential/SmallestDegree", |network| {
+                network
+                    .execute::<Sequential, SmallestDegree, Lt, _, _>(&DummyLibrary::new(), &Square)
+            }),
+            ("Sequential/MinResultRank", |network| {
+                network
+                    .execute::<Sequential, MinResultRank, Lt, _, _>(&DummyLibrary::new(), &Square)
+            }),
+            ("SequentialRef/SmallestDegree", |network| {
+                network.execute::<SequentialRef, SmallestDegree, Lt, _, _>(
+                    &DummyLibrary::new(),
+                    &Square,
+                )
+            }),
+            ("SequentialExtract/SmallestDegree", |network| {
+                network.execute::<SequentialExtract, SmallestDegree, Lt, _, _>(
+                    &DummyLibrary::new(),
+                    &Square,
+                )
+            }),
+            ("Steps/SmallestDegree", |network| {
+                network
+                    .execute::<Steps<1000>, SmallestDegree, Lt, _, _>(&DummyLibrary::new(), &Square)
+            }),
+            ("Parallel/SmallestDegree", |network| {
+                network.execute_parallel::<SmallestDegree, Lt, _, _>(&DummyLibrary::new(), &Square)
+            }),
+            ("Parallel/MinResultRank", |network| {
+                network.execute_parallel::<MinResultRank, Lt, _, _>(&DummyLibrary::new(), &Square)
+            }),
+        ];
+        for (name, run) in runs {
+            let mut network = build();
+            run(&mut network).unwrap_or_else(|error| panic!("{name}: {error}"));
+            let (NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)), _, _) =
+                network.graph.result().unwrap()
+            else {
+                panic!("{name}: expected one stored result tensor")
+            };
+            let tensor = &network.store.tensors[*index];
+            let stored = tensor.external_structure();
+            let actual: Components = assignments(stored.len())
+                .map(|values| {
+                    (
+                        labelled(&stored, &values),
+                        *tensor.get_ref(&values).unwrap(),
+                    )
+                })
+                .collect();
+            assert_eq!(actual.len(), expected.len(), "{name}");
+            for (key, value) in expected {
+                assert!(
+                    (actual[key] - value).abs() <= 1e-9 * value.abs().max(1.0),
+                    "{name}: {key:?} is {} instead of {value}",
+                    actual[key]
+                );
+            }
+        }
+    }
+
+    /// A port below a power or function whose partner lies outside it
+    /// contracts the operation's result, after the operation is applied to
+    /// distinct labels. Relabelling and building the product directly agree,
+    /// on every executor.
+    #[test]
+    fn contracting_a_power_or_function_result_through_its_ports_is_sewn() {
+        let [a, b, c, x] = [1, 2, 3, 4].map(slot);
+        let tv = |a: usize, c: usize| 1.0 + 2.0 * a as f64 + 0.5 * c as f64 + 3.0 * (a * c) as f64;
+        let uv = |p: usize, q: usize| 0.5 + p as f64 + 4.0 * q as f64 + 2.0 * (p * q) as f64;
+        let vv = |x: usize| 1.0 + 4.0 * x as f64;
+        let t = move |i: &BTreeMap<usize, usize>| tv(i[&1], i[&3]);
+        let pairs = || (0..2).flat_map(|p| (0..2).map(move |q| (p, q)));
+        // (T.T) and the odd power (T.T) T of a two-index tensor `f`.
+        let norm =
+            |f: &dyn Fn(usize, usize) -> f64| pairs().map(|(p, q)| f(p, q).powi(2)).sum::<f64>();
+        let by_c = |value: &dyn Fn(usize) -> f64| -> Components {
+            (0..2)
+                .map(|c| (vec![(AbstractIndex::from(3), c)], value(c)))
+                .collect()
+        };
+        let contract_v =
+            |f: &dyn Fn(usize, usize) -> f64| by_c(&|c| (0..2).map(|d| f(d, c) * vv(d)).sum());
+        let cube = |f: &dyn Fn(usize, usize) -> f64, a: usize, c: usize| norm(f) * f(a, c);
+        let v_on = |label: usize| move |i: &BTreeMap<usize, usize>| vv(i[&label]);
+
+        // T[a,c]^3 V[x] with x = a, and T[a,c]^3 V[a] built directly.
+        let expected = contract_v(&|a, c| cube(&tv, a, c));
+        assert_components_on_every_executor(
+            || traced(dense(&[a, c], t).pow(3) * dense(&[x], v_on(4)), [1, 4], 5),
+            &expected,
+        );
+        assert_components_on_every_executor(
+            || dense(&[a, c], t).pow(3) * dense(&[a], v_on(1)),
+            &expected,
+        );
+
+        // T[a,c]^3 U[x,b]^3 with x = a: a partner below another power.
+        let u = move |i: &BTreeMap<usize, usize>| uv(i[&4], i[&2]);
+        let expected: Components = pairs()
+            .map(|(c, e)| {
+                let value = (0..2)
+                    .map(|d| cube(&tv, d, c) * cube(&uv, d, e))
+                    .sum::<f64>();
+                let mut key = vec![(AbstractIndex::from(2), e), (AbstractIndex::from(3), c)];
+                key.sort();
+                (key, value)
+            })
+            .collect();
+        assert_components_on_every_executor(
+            || {
+                traced(
+                    dense(&[a, c], t).pow(3) * dense(&[x, b], u).pow(3),
+                    [1, 4],
+                    5,
+                )
+            },
+            &expected,
+        );
+
+        // ((T[a,c])^3)^3 V[x] with x = a: nested powers.
+        let cubed = move |a: usize, c: usize| cube(&tv, a, c);
+        assert_components_on_every_executor(
+            || {
+                traced(
+                    dense(&[a, c], t).pow(3).pow(3) * dense(&[x], v_on(4)),
+                    [1, 4],
+                    5,
+                )
+            },
+            &contract_v(&|a, c| cube(&cubed, a, c)),
+        );
+
+        // f(T[a,c]) V[x] with x = a, f the componentwise square.
+        assert_components_on_every_executor(
+            || {
+                traced(
+                    dense(&[a, c], t).fun(DummyKey {}) * dense(&[x], v_on(4)),
+                    [1, 4],
+                    5,
+                )
+            },
+            &contract_v(&|a, c| tv(a, c).powi(2)),
+        );
+
+        // (T[a,c]^3 + U[a,c]) V[x] and (T[a,c]^3 + U[a,c])^3 V[x] with x = a:
+        // a power below a sum, and a power below a sum below a power.
+        let s = move |a: usize, c: usize| cube(&tv, a, c) + uv(a, c);
+        let summand = move |i: &BTreeMap<usize, usize>| uv(i[&1], i[&3]);
+        assert_components_on_every_executor(
+            || {
+                let sum = dense(&[a, c], t).pow(3) + dense(&[a, c], summand);
+                traced(sum * dense(&[x], v_on(4)), [1, 4], 5)
+            },
+            &contract_v(&s),
+        );
+        assert_components_on_every_executor(
+            || {
+                let sum = dense(&[a, c], t).pow(3) + dense(&[a, c], summand);
+                traced(sum.pow(3) * dense(&[x], v_on(4)), [1, 4], 5)
+            },
+            &contract_v(&|a, c| cube(&s, a, c)),
+        );
+
+        // trace_{a=x} (T[a,c]^3 W[x] + U[a,c,x]): in the first summand the
+        // traced pair joins the power's result with W.
+        let w = |x: usize| 3.0 - 2.0 * x as f64;
+        let u3 =
+            |a: usize, c: usize, x: usize| 1.0 + a as f64 + 2.0 * c as f64 + 5.0 * (a * x) as f64;
+        assert_components_on_every_executor(
+            || {
+                let first = dense(&[a, c], t).pow(3) * dense(&[x], move |i| w(i[&4]));
+                let second = dense(&[a, c, x], move |i| u3(i[&1], i[&3], i[&4]));
+                traced(first + second, [1, 4], 5)
+            },
+            &by_c(&|c| (0..2).map(|d| cube(&tv, d, c) * w(d) + u3(d, c, d)).sum()),
+        );
+    }
+
+    /// A sum nested in a summand receives the trace in turn, and the check for
+    /// ports below a power or function follows sums downwards only.
+    #[test]
+    fn traced_nested_sum_contracts_the_pair_in_every_summand() {
+        let [a, c, x] = [1, 3, 4].map(slot);
+        let ta = |i: &BTreeMap<usize, usize>| {
+            1.0 + 2.0 * i[&1] as f64 + 3.0 * i[&4] as f64 + 5.0 * i[&3] as f64
+        };
+        let tb = |i: &BTreeMap<usize, usize>| {
+            2.0 + 7.0 * i[&1] as f64 + i[&4] as f64 + 11.0 * (i[&3] * i[&1]) as f64
+        };
+        let tc = |i: &BTreeMap<usize, usize>| {
+            3.0 + 4.0 * i[&1] as f64 + 6.0 * (i[&4] * i[&3]) as f64 + 13.0 * i[&3] as f64
+        };
+        let build = || {
+            let inner = -(dense(&[a, x, c], ta) + dense(&[x, c, a], tb));
+            traced(inner + dense(&[c, a, x], tc), [1, 4], 5)
+        };
+        let expected: Components = (0..2)
+            .map(|c| {
+                let value: f64 = (0..2)
+                    .map(|d| {
+                        let i = BTreeMap::from([(1, d), (3, c), (4, d)]);
+                        tc(&i) - ta(&i) - tb(&i)
+                    })
+                    .sum();
+                (vec![(AbstractIndex::from(3), c)], value)
+            })
+            .collect();
+
+        let mut network = build();
+        execute(&mut network);
+        assert_components(&network, &expected);
+
+        let mut network = build();
+        execute_parallel(&mut network);
+        assert_components(&network, &expected);
+    }
+
+    /// The check for ports below a power or function explores each summand
+    /// port once, so deeply nested and wide traced sums sew without walking
+    /// every path through the nesting (exponential in the depth).
+    #[test]
+    fn deep_and_wide_traced_sums_are_sewn_once_per_port() {
+        let [a, c, x] = [1, 3, 4].map(slot);
+        let t = |k: usize| {
+            move |i: &BTreeMap<usize, usize>| {
+                1.0 + k as f64 * (1 + i[&1]) as f64 * (2 + i[&4] * i[&3]) as f64
+                    + 3.0 * i[&3] as f64
+            }
+        };
+        let trace = |k: usize, c: usize| -> f64 {
+            (0..2)
+                .map(|d| t(k)(&BTreeMap::from([(1, d), (3, c), (4, d)])))
+                .sum()
+        };
+        let ports = |k: usize| {
+            if k.is_multiple_of(2) {
+                [a, x, c]
+            } else {
+                [x, c, a]
+            }
+        };
+        let components = |value: &dyn Fn(usize) -> f64| -> Components {
+            (0..2)
+                .map(|c| (vec![(AbstractIndex::from(3), c)], value(c)))
+                .collect()
+        };
+
+        // S_0 = T_0, S_k = -(S_{k-1} + T_k); S_40 + T_41 traced over a = x.
+        let depth = 40;
+        let mut nested = dense(&ports(0), t(0));
+        for k in 1..=depth {
+            nested = -(nested + dense(&ports(k), t(k)));
+        }
+        let top = depth + 1;
+        let mut network = traced(nested + dense(&ports(top), t(top)), [1, 4], 5);
+        execute(&mut network);
+        let sign = |exponent: usize| {
+            if exponent.is_multiple_of(2) {
+                1.0
+            } else {
+                -1.0
+            }
+        };
+        assert_components(
+            &network,
+            &components(&|c| {
+                trace(top, c)
+                    + sign(depth) * trace(0, c)
+                    + (1..=depth)
+                        .map(|k| sign(depth - k + 1) * trace(k, c))
+                        .sum::<f64>()
+            }),
+        );
+
+        // T_0 + T_1 + ... + T_63, built one summand at a time.
+        let width = 64;
+        let mut wide = dense(&ports(0), t(0));
+        for k in 1..width {
+            wide += dense(&ports(k), t(k));
+        }
+        let mut network = traced(wide, [1, 4], 5);
+        execute(&mut network);
+        assert_components(
+            &network,
+            &components(&|c| (0..width).map(|k| trace(k, c)).sum()),
+        );
+
+        // The same nesting with an odd power at the bottom is refused.
+        let mut refused = dense(&ports(0), t(0)).pow(3);
+        for k in 1..=depth {
+            refused = -(refused + dense(&ports(k), t(k)));
+        }
+        assert_sewing_refused(refused, [1, 4], 5);
+    }
+
+    /// Renaming the free ports of an odd power sews nothing and keeps its
+    /// value `(T.T) T` on the renamed ports.
+    #[test]
+    fn renaming_ports_of_an_odd_power_keeps_its_value() {
+        let [a, c] = [1, 3].map(slot);
+        let t9 = |i: &BTreeMap<usize, usize>| 2.0 + i[&1] as f64 + 5.0 * i[&3] as f64;
+        let mut network = dense(&[a, c], t9)
+            .pow(3)
+            .reindex_ports(&[(a, slot(2))])
+            .unwrap();
+        network.graph.sew_dangling_slots().unwrap();
+        execute(&mut network);
+        let norm: f64 = (0..2)
+            .flat_map(|a| (0..2).map(move |c| BTreeMap::from([(1, a), (3, c)])))
+            .map(|i| t9(&i).powi(2))
+            .sum();
+        let expected = (0..2)
+            .flat_map(|b| (0..2).map(move |c| (b, c)))
+            .map(|(b, c)| {
+                (
+                    vec![(AbstractIndex::from(2), b), (AbstractIndex::from(3), c)],
+                    norm * t9(&BTreeMap::from([(1, b), (3, c)])),
+                )
+            })
+            .collect::<Components>();
+        assert_components(&network, &expected);
+    }
+
+    /// Parallel execution traces summand self-loops before merging the sum,
+    /// as sequential execution does.
+    #[test]
+    fn parallel_execution_traces_summand_self_loops() {
+        let [a, c] = [1, 3].map(slot);
+        let t6 = |i: &BTreeMap<usize, usize>| 1.0 + 2.0 * i[&1] as f64 + 3.0 * i[&3] as f64;
+        let t7 = |i: &BTreeMap<usize, usize>| 5.0 + 7.0 * i[&1] as f64 + 11.0 * i[&3] as f64;
+        let build = || dense(&[c, a, a], t6) + dense(&[a, c, a], t7);
+        let expected: Components = (0..2)
+            .map(|c| {
+                let value: f64 = (0..2)
+                    .map(|a| {
+                        let i = BTreeMap::from([(1, a), (3, c)]);
+                        t6(&i) + t7(&i)
+                    })
+                    .sum();
+                (vec![(AbstractIndex::from(3), c)], value)
+            })
+            .collect();
+
+        let mut network = build();
+        execute(&mut network);
+        assert_components(&network, &expected);
+
+        let mut network = build();
+        execute_parallel(&mut network);
+        assert_components(&network, &expected);
     }
 }

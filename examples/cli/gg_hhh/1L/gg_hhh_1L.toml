@@ -45,15 +45,20 @@ integrate = 10
 name = "generate"
 commands = [
   "import model sm-default.json",
+  # check_esurface_at_generation decides at generation which threshold counterterms
+  # exist, and later model changes are refused: generate at the integration point.
+  # The default is the physical point; use `run generate -D mt=1000.0` for the
+  # euclidean one.
+  "set model MT=$(mt:173.0) WT=0.0 ymt=$(mt:173.0)",
   "set global kv global.n_cores.feyngen=10",
 
   "remove processes",
 
   """generate amp g g > h h h / u d c s b QED==3 [{1}]
            --only-diagrams
-           --numerator-grouping only_detect_zeroes
-           --select-graphs GL15
-           --loop-momentum-bases GL15=8
+           --filter-zero-color --numerator-grouping no_grouping
+           --select-graphs GL60
+           --loop-momentum-bases GL60=8
            --global-prefactor-projector 'gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0)))
                                            * gammalooprs::ϵ(1,spenso::mink(4,gammalooprs::hedge(1)))
                                            * (1/8)*spenso::g(spenso::coad(8,gammalooprs::hedge(0)),spenso::coad(8,gammalooprs::hedge(1)))'
@@ -69,6 +74,7 @@ commands = [
 [[command_blocks]]
 name = "integrate_euclidean"
 commands = [
+  # Requires a state generated at this point: `run generate -D mt=1000.0`.
   "set model MT=1000.0",
   "set model WT=0.0",
   "set model ymt=1000.0",

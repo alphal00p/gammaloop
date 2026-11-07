@@ -43,6 +43,11 @@
 //! # }
 //! ```
 
+#[cfg(test)]
+use std::env;
+#[cfg(test)]
+use std::sync::OnceLock;
+
 use ::tracing::info;
 use ::tracing::level_filters::LevelFilter;
 use ::tracing::warn;
@@ -69,6 +74,7 @@ use eyre::{eyre, Context};
 use gammaloop_tracing_filter::LogFormat;
 use gammalooprs::{
     initialisation::initialise,
+    model::Model,
     processes::{ProcessCollection, ProcessLoadIntegrandSelector, ProcessLoadSelection},
     settings::{GlobalSettings, RuntimeSettings},
     utils::serde_utils::IsDefault,
@@ -130,19 +136,27 @@ fn is_test_workspace_root(path: &Path) -> bool {
 
 #[cfg(test)]
 pub(crate) fn test_workspace_root() -> &'static Path {
-    static WORKSPACE_ROOT: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    static WORKSPACE_ROOT: OnceLock<PathBuf> = OnceLock::new();
 
     WORKSPACE_ROOT
         .get_or_init(|| {
-            let current_dir = std::env::current_dir().ok();
-            let current_exe = std::env::current_exe().ok();
-            let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            if let Some(root) = env::var_os("GAMMALOOP_WORKSPACE_ROOT")
+                .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
+            {
+                return PathBuf::from(root);
+            }
+
+            let current_dir = env::current_dir().ok();
+            let current_exe = env::current_exe().ok();
+            let manifest_dir = env::var_os("CARGO_MANIFEST_DIR")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
 
             let mut candidates = Vec::new();
-            if let Some(dir) = current_dir.clone() {
+            if let Some(dir) = &current_dir {
                 candidates.extend(dir.ancestors().map(Path::to_path_buf));
             }
-            if let Some(exe) = current_exe.clone() {
+            if let Some(exe) = &current_exe {
                 candidates.extend(exe.ancestors().skip(1).map(Path::to_path_buf));
             }
             candidates.extend(manifest_dir.ancestors().map(Path::to_path_buf));
@@ -722,15 +736,17 @@ impl StateLoadOption {
     /// read or validated, startup initialization fails, a boot command fails or requests exit, or
     /// the requested clean/read-only combination is inconsistent.
     pub fn load(self) -> Result<LoadedState> {
-        initialise()?;
-        let mut one_shot = self.into_oneshot();
-        let (loaded_state, boot_exit) = one_shot.bootstrap_session()?;
-        if boot_exit.is_some() {
-            return Err(eyre::eyre!(
-                "Boot run history requested to exit, which is not supported by the API state-load entry point"
-            ));
-        }
-        Ok(loaded_state)
+        Model::with_parameter_display_transaction(|| {
+            initialise()?;
+            let mut one_shot = self.into_oneshot();
+            let (loaded_state, boot_exit) = one_shot.bootstrap_session()?;
+            if boot_exit.is_some() {
+                return Err(eyre::eyre!(
+                    "Boot run history requested to exit, which is not supported by the API state-load entry point"
+                ));
+            }
+            Ok(loaded_state)
+        })
     }
 }
 
@@ -1332,138 +1348,140 @@ impl OneShot {
         RuntimeSettings,
         Option<StateLoadSummary>,
     )> {
-        let process_selection = self.process_load_selection()?;
-        if process_selection.is_some() {
-            if !matches!(state_folder_kind, StateFolderKind::Saved) {
-                return Err(eyre!(
-                    "--processes/--integrands require an existing saved state"
-                ));
+        Model::with_parameter_display_transaction(|| {
+            let process_selection = self.process_load_selection()?;
+            if process_selection.is_some() {
+                if !matches!(state_folder_kind, StateFolderKind::Saved) {
+                    return Err(eyre!(
+                        "--processes/--integrands require an existing saved state"
+                    ));
+                }
+                // A filtered state is a transient view. Never allow the normal CLI
+                // exit path to overwrite the complete on-disk state with it.
+                self.no_save_state = true;
+                self.read_only_state = true;
             }
-            // A filtered state is a transient view. Never allow the normal CLI
-            // exit path to overwrite the complete on-disk state with it.
-            self.no_save_state = true;
-            self.read_only_state = true;
-        }
-        let startup_cli_settings = self.initial_cli_settings_for_startup(
-            &state_folder_kind,
-            boot_run_history,
-            settings_file_overrides,
-        )?;
-        self.configure_startup_tracing(&startup_cli_settings)?;
+            let startup_cli_settings = self.initial_cli_settings_for_startup(
+                &state_folder_kind,
+                boot_run_history,
+                settings_file_overrides,
+            )?;
+            self.configure_startup_tracing(&startup_cli_settings)?;
 
-        let (state, run_history, cli_settings, default_runtime_settings, load_summary) =
-            match state_folder_kind {
-                StateFolderKind::Saved => {
-                    let load_started = Instant::now();
-                    let mut state = State::load_with_selection(
-                        self.state_folder.clone(),
-                        self.model_file.clone(),
-                        self.trace_logs_filename.clone(),
-                        process_selection.as_ref(),
-                    )
-                    .wrap_err_with(|| {
-                        format!(
-                            "Failed to load existing state from {}",
-                            self.state_folder.display()
+            let (state, run_history, cli_settings, default_runtime_settings, load_summary) =
+                match state_folder_kind {
+                    StateFolderKind::Saved => {
+                        let load_started = Instant::now();
+                        let mut state = State::load_with_selection(
+                            self.state_folder.clone(),
+                            self.model_file.clone(),
+                            self.trace_logs_filename.clone(),
+                            process_selection.as_ref(),
                         )
-                    })?;
-                    let allow_symjit_fallback =
-                        startup_cli_settings.global.generation.evaluator.compile
-                            && matches!(
-                                startup_cli_settings
-                                    .global
-                                    .generation
-                                    .compile
-                                    .compilation_mode,
-                                gammalooprs::settings::global::CompilationMode::Symjit
-                            );
-                    state.activate_loaded_integrand_backends(allow_symjit_fallback)?;
+                        .wrap_err_with(|| {
+                            format!(
+                                "Failed to load existing state from {}",
+                                self.state_folder.display()
+                            )
+                        })?;
+                        let allow_symjit_fallback =
+                            startup_cli_settings.global.generation.evaluator.compile
+                                && matches!(
+                                    startup_cli_settings
+                                        .global
+                                        .generation
+                                        .compile
+                                        .compilation_mode,
+                                    gammalooprs::settings::global::CompilationMode::Symjit
+                                );
+                        state.activate_loaded_integrand_backends(allow_symjit_fallback)?;
 
-                    let default_runtime = match RuntimeSettings::from_file_typed(
-                        self.state_folder.join(DEFAULT_RUNTIME_SETTINGS_FILENAME),
-                    ) {
-                        Ok(a) => a,
-                        Err(SerdeFileError::FileError(_)) => RuntimeSettings::default(),
-                        Err(e) => return Err(e.into()),
-                    };
-                    let run_path = self.state_folder.join("run.toml");
-                    let run_history = if run_path.exists() {
-                        RunHistory::load(run_path)?
-                    } else {
-                        RunHistory::default()
-                    };
+                        let default_runtime = match RuntimeSettings::from_file_typed(
+                            self.state_folder.join(DEFAULT_RUNTIME_SETTINGS_FILENAME),
+                        ) {
+                            Ok(a) => a,
+                            Err(SerdeFileError::FileError(_)) => RuntimeSettings::default(),
+                            Err(e) => return Err(e.into()),
+                        };
+                        let run_path = self.state_folder.join("run.toml");
+                        let run_history = if run_path.exists() {
+                            RunHistory::load(run_path)?
+                        } else {
+                            RunHistory::default()
+                        };
 
-                    let load_summary = StateLoadSummary {
-                        elapsed: load_started.elapsed(),
-                        serialized_size_bytes: serialized_size_of_path(&self.state_folder),
-                        total_graphs: total_graph_count(&state),
-                    };
+                        let load_summary = StateLoadSummary {
+                            elapsed: load_started.elapsed(),
+                            serialized_size_bytes: serialized_size_of_path(&self.state_folder),
+                            total_graphs: total_graph_count(&state),
+                        };
 
-                    (
-                        state,
-                        run_history,
-                        startup_cli_settings,
-                        default_runtime,
-                        Some(load_summary),
-                    )
-                }
-                StateFolderKind::Missing | StateFolderKind::Scratch => {
-                    info!(
-                        "{} {}",
-                        "Initializing new state in".blue(),
-                        self.state_folder.display().to_string().green()
-                    );
-
-                    let mut run_history = RunHistory::default();
-                    if let Some(boot_run_history) = boot_run_history {
-                        run_history.freeze_boot_settings_from(boot_run_history);
+                        (
+                            state,
+                            run_history,
+                            startup_cli_settings,
+                            default_runtime,
+                            Some(load_summary),
+                        )
                     }
+                    StateFolderKind::Missing | StateFolderKind::Scratch => {
+                        info!(
+                            "{} {}",
+                            "Initializing new state in".blue(),
+                            self.state_folder.display().to_string().green()
+                        );
 
-                    (
-                        State::new(self.state_folder.clone(), self.trace_logs_filename.clone()),
-                        run_history,
-                        startup_cli_settings,
-                        RuntimeSettings::default(),
-                        None,
-                    )
-                }
-                StateFolderKind::Unmanifested => {
-                    warn!(
-                        "State folder '{}' has no {}; treating leftover contents as blank scratch state.",
-                        self.state_folder.display(),
-                        "state_manifest.toml",
-                    );
-                    info!(
-                        "{} {}",
-                        "Initializing new state in".blue(),
-                        self.state_folder.display().to_string().green()
-                    );
+                        let mut run_history = RunHistory::default();
+                        if let Some(boot_run_history) = boot_run_history {
+                            run_history.freeze_boot_settings_from(boot_run_history);
+                        }
 
-                    let mut run_history = RunHistory::default();
-                    if let Some(boot_run_history) = boot_run_history {
-                        run_history.freeze_boot_settings_from(boot_run_history);
+                        (
+                            State::new(self.state_folder.clone(), self.trace_logs_filename.clone()),
+                            run_history,
+                            startup_cli_settings,
+                            RuntimeSettings::default(),
+                            None,
+                        )
                     }
+                    StateFolderKind::Unmanifested => {
+                        warn!(
+                            "State folder '{}' has no {}; treating leftover contents as blank scratch state.",
+                            self.state_folder.display(),
+                            "state_manifest.toml",
+                        );
+                        info!(
+                            "{} {}",
+                            "Initializing new state in".blue(),
+                            self.state_folder.display().to_string().green()
+                        );
 
-                    (
-                        State::new(self.state_folder.clone(), self.trace_logs_filename.clone()),
-                        run_history,
-                        startup_cli_settings,
-                        RuntimeSettings::default(),
-                        None,
-                    )
-                }
-                StateFolderKind::Invalid(_) => unreachable!(),
-            };
+                        let mut run_history = RunHistory::default();
+                        if let Some(boot_run_history) = boot_run_history {
+                            run_history.freeze_boot_settings_from(boot_run_history);
+                        }
 
-        cli_settings.sync_settings()?;
+                        (
+                            State::new(self.state_folder.clone(), self.trace_logs_filename.clone()),
+                            run_history,
+                            startup_cli_settings,
+                            RuntimeSettings::default(),
+                            None,
+                        )
+                    }
+                    StateFolderKind::Invalid(_) => unreachable!(),
+                };
 
-        Ok((
-            state,
-            run_history,
-            cli_settings,
-            default_runtime_settings,
-            load_summary,
-        ))
+            cli_settings.sync_settings()?;
+
+            Ok((
+                state,
+                run_history,
+                cli_settings,
+                default_runtime_settings,
+                load_summary,
+            ))
+        })
     }
 
     pub fn load(
@@ -1491,62 +1509,64 @@ impl OneShot {
     }
 
     fn bootstrap_session(&mut self) -> Result<(LoadedState, Option<SaveState>)> {
-        let boot_run_history = self.load_boot_run_history()?;
-        let settings_file_overrides = self.load_settings_file_overrides()?;
-        self.state_folder = self.resolve_initial_state_folder(boot_run_history.as_ref())?;
-        self.clean_resolved_state_folder()?;
-        let state_folder_kind = self.current_state_folder_kind()?;
-        if let StateFolderKind::Invalid(reason) = &state_folder_kind {
-            return Err(eyre::eyre!(reason.clone()));
-        }
-        let booted_existing_state = matches!(state_folder_kind, StateFolderKind::Saved);
-
-        let (
-            mut state,
-            mut run_history,
-            mut cli_settings,
-            mut default_runtime_settings,
-            state_load_summary,
-        ) = self.load_with_boot_context(
-            state_folder_kind,
-            boot_run_history.as_ref(),
-            &settings_file_overrides,
-        )?;
-        settings_file_overrides.apply(&mut cli_settings, &mut default_runtime_settings)?;
-
-        let mut session_state = CliSessionState::default();
-        let mut session = CliSession::new(
-            &mut state,
-            &mut run_history,
-            &mut cli_settings,
-            &mut default_runtime_settings,
-            &mut session_state,
-        );
-
-        let mut boot_exit = None;
-        if let Some(boot_run_history) = boot_run_history.as_ref() {
-            let effective_boot_run_history =
-                settings_file_overrides.apply_to_run_history(boot_run_history);
-            if let ControlFlow::Break(save_state) = session.apply_boot_run_history(
-                boot_run_history,
-                &effective_boot_run_history,
-                booted_existing_state,
-            )? {
-                boot_exit = Some(save_state);
+        Model::with_parameter_display_transaction(|| {
+            let boot_run_history = self.load_boot_run_history()?;
+            let settings_file_overrides = self.load_settings_file_overrides()?;
+            self.state_folder = self.resolve_initial_state_folder(boot_run_history.as_ref())?;
+            self.clean_resolved_state_folder()?;
+            let state_folder_kind = self.current_state_folder_kind()?;
+            if let StateFolderKind::Invalid(reason) = &state_folder_kind {
+                return Err(eyre::eyre!(reason.clone()));
             }
-        }
+            let booted_existing_state = matches!(state_folder_kind, StateFolderKind::Saved);
 
-        Ok((
-            LoadedState {
-                state,
-                run_history,
-                cli_settings,
-                default_runtime_settings,
-                session_state,
+            let (
+                mut state,
+                mut run_history,
+                mut cli_settings,
+                mut default_runtime_settings,
                 state_load_summary,
-            },
-            boot_exit,
-        ))
+            ) = self.load_with_boot_context(
+                state_folder_kind,
+                boot_run_history.as_ref(),
+                &settings_file_overrides,
+            )?;
+            settings_file_overrides.apply(&mut cli_settings, &mut default_runtime_settings)?;
+
+            let mut session_state = CliSessionState::default();
+            let mut session = CliSession::new(
+                &mut state,
+                &mut run_history,
+                &mut cli_settings,
+                &mut default_runtime_settings,
+                &mut session_state,
+            );
+
+            let mut boot_exit = None;
+            if let Some(boot_run_history) = boot_run_history.as_ref() {
+                let effective_boot_run_history =
+                    settings_file_overrides.apply_to_run_history(boot_run_history);
+                if let ControlFlow::Break(save_state) = session.apply_boot_run_history(
+                    boot_run_history,
+                    &effective_boot_run_history,
+                    booted_existing_state,
+                )? {
+                    boot_exit = Some(save_state);
+                }
+            }
+
+            Ok((
+                LoadedState {
+                    state,
+                    run_history,
+                    cli_settings,
+                    default_runtime_settings,
+                    session_state,
+                    state_load_summary,
+                },
+                boot_exit,
+            ))
+        })
     }
 
     #[cfg(feature = "cli")]

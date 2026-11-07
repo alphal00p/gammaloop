@@ -291,20 +291,17 @@ disable_threshold_subtraction = false
 '"#
             .replace("ORIENTATION_SAMPLING", orientation_sampling),
             "remove processes",
-            r#"generate amp g g > h h h / u d c s b QED==3 [{1}]
-                --only-diagrams
-                --numerator-grouping only_detect_zeroes
-                --select-graphs GL15
-                --loop-momentum-bases GL15=8
-                --global-prefactor-projector 'gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0)))
-                                                * gammalooprs::ϵ(1,spenso::mink(4,gammalooprs::hedge(1)))
-                                                * (1/8)*spenso::g(spenso::coad(8,gammalooprs::hedge(0)),spenso::coad(8,gammalooprs::hedge(1)))'
-                -p gg_hhh
-                -i 1L"#,
-            "generate",
+            // Threshold existence is checked at generation, so the model point
+            // must be set first; later value changes are refused.
             "set model MT=173.0",
             "set model WT=0.0",
             "set model ymt=173.0",
+            // The original GL15 pentagon, projector and loop routing are frozen
+            // independently of generator numbering (current main uses edge 8).
+            // `gg_hhh_generator_produces_the_fixed_gl15_pentagon` checks that
+            // native generation still produces exactly this diagram.
+            "import graphs ./benchmarks/performance/gg-hhh-gl15.dot --process-spec 'g g > h h h / u d c s b QED==3 [{1}]' -p gg_hhh -i 1L",
+            "generate",
         ],
     )?;
 

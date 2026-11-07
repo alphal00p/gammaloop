@@ -35,7 +35,11 @@ def model_metadata(input_model_path):
                 [
                     (
                         parameter["name"],
-                        (parameter.get("texname"), parameter.get("typstname")),
+                        (
+                            parameter.get("texname"),
+                            parameter.get("typstname"),
+                            parameter.get("mathmlname"),
+                        ),
                     )
                     for parameter in definition["parameters"]
                 ],
@@ -62,6 +66,7 @@ def model_metadata(input_model_path):
                     (
                         getattr(parameter, "texname", None),
                         getattr(parameter, "typstname", None),
+                        getattr(parameter, "mathmlname", None),
                     ),
                 )
                 for parameter in [

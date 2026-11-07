@@ -1,3 +1,5 @@
+use crate::model::ModelGammaLoopExt;
+use crate::utils::test_utils;
 use color_eyre::Result;
 use spenso::algebra::complex::Complex;
 use symbolica::atom::AtomCore;
@@ -6,8 +8,7 @@ use three_dimensional_reps::{
 };
 
 use crate::{
-    dot,
-    graph::{Graph, parse::IntoGraph},
+    graph::Graph,
     initialisation::test_initialise,
     integrands::process::{
         MomentumSpaceEvaluationInput, ProcessIntegrand, param_builder::ParamBuilderGraph,
@@ -32,13 +33,21 @@ fn fermi_sectors_retain_vacuum_subtraction_and_both_uv_contributions() -> Result
     // counterterm leaves that cycle in its thermal cograph, so both local and
     // integrated UV contributions must reach the same Fermi-sector boundary.
     // Every numerator is the constant on its own edge or vertex.
-    let original: AmplitudeGraph = dot!(digraph fermi_cycle_with_uv_tadpole {
-        node [num=1]
-        edge [num=1]
-        A -> B [id=0 particle="d" lmb_id=0]
-        B -> A [id=1 particle="d"]
-        A -> A [id=2 particle="H" lmb_id=1]
-    })?;
+    let original: AmplitudeGraph = crate::graph::Graph::unit_numerator_fixtures(
+        stringify!(digraph fermi_cycle_with_uv_tadpole {
+            node [num=1]
+            edge [num=1]
+            A -> B [id=0 particle="d" lmb_id=0]
+            B -> A [id=1 particle="d"]
+            A -> A [id=2 particle="H" lmb_id=1]
+        }),
+        &crate::utils::load_generic_model("sm"),
+    )
+    .map(|mut graphs| {
+        assert_eq!(graphs.len(), 1);
+        graphs.remove(0)
+    })
+    .map(AmplitudeGraph::new)?;
     let mut generated = Vec::new();
     for (vacuum_subtraction, subtract_uv, generate_integrated) in [
         (false, false, false),
@@ -56,7 +65,13 @@ fn fermi_sectors_retain_vacuum_subtraction_and_both_uv_contributions() -> Result
         settings.uv.softct = false;
         let mut amplitude = original.clone();
         amplitude.generate_cff(&settings)?;
-        amplitude.build_integrands(&settings, crate::utils::vakint()?, &mut Default::default())?;
+        let model = amplitude.graph.model.clone();
+        amplitude.build_integrands(
+            &model,
+            &settings,
+            crate::utils::vakint()?,
+            &mut Default::default(),
+        )?;
 
         // Exercise the actual evaluator input before resolving any retained
         // numerator definitions. Sector collection keeps those bodies opaque.
@@ -107,6 +122,7 @@ fn fermi_sectors_retain_vacuum_subtraction_and_both_uv_contributions() -> Result
 
     let raw = &generated[0];
     let vacuum = original.graph.make_thermal_distributions_explicit(
+        &original.graph.model,
         raw,
         MediumMode::Vacuum,
         original.graph.iter_edge_ids(),
@@ -139,8 +155,7 @@ fn production_fermi_uv_contributions_match_factorized_pointwise_oracle() -> Resu
     test_initialise()?;
     let mut model = load_generic_model("sm");
     let mut card = crate::model::InputParamCard::from_file(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../assets/models/json/sm/restrict_thermal.json"),
+        test_utils::workspace_root().join("assets/models/json/sm/restrict_thermal.json"),
     )?;
     model.simplify(&mut card)?;
     let chemical_potential = 5.0;
@@ -213,7 +228,7 @@ sampling_multichanneling = false
         ] {
             global.generation.medium.mode = medium;
             global.generation.medium.vacuum_subtraction = medium != MediumMode::Vacuum;
-            let graphs = Graph::from_string(source, &model)?;
+            let graphs = Graph::unit_numerator_fixtures(source, &model)?;
             let mut amplitude = Amplitude::from_graph_list(name, graphs)?;
             amplitude.preprocess(&model, &global.generation, &(&settings).into(), &pool)?;
             amplitude.build_integrand(&model, name, &global, (&settings).into(), &pool)?;

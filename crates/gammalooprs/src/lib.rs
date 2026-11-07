@@ -27,6 +27,7 @@ pub use gammaloop_tracing_filter::LogMessage;
 use integrands::*;
 use model::Model;
 use momentum::signature::ExternalSignature;
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use symbolica::state::HasStateMap;
 use symbolica::state::StateMap;
@@ -42,18 +43,19 @@ pub const MAX_CORES: usize = 1000;
 pub trait GammaLoopContext: HasStateMap + HasModel {}
 
 pub trait HasModel {
-    /// Returns the physics model associated with this computation context.
-    fn get_model(&self) -> &Model;
+    /// Returns the shared physics model associated with this computation context.
+    /// Decoded graphs bind to this handle instead of persisting their own copy.
+    fn get_model(&self) -> &Arc<Model>;
 }
 
-impl HasModel for Model {
-    fn get_model(&self) -> &Model {
+impl HasModel for Arc<Model> {
+    fn get_model(&self) -> &Arc<Model> {
         self
     }
 }
 
 impl HasModel for GammaLoopContextContainer<'_> {
-    fn get_model(&self) -> &Model {
+    fn get_model(&self) -> &Arc<Model> {
         self.model
     }
 }
@@ -63,7 +65,7 @@ pub struct GammaLoopContextContainer<'a> {
     /// Symbolica state map used to resolve symbols during GammaLoop computations.
     pub state_map: &'a StateMap,
     /// Physics model that supplies particles, parameters, and interactions.
-    pub model: &'a Model,
+    pub model: &'a Arc<Model>,
 }
 
 impl<'a> HasStateMap for GammaLoopContextContainer<'a> {

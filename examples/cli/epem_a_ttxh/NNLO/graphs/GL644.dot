@@ -1,4 +1,5 @@
 digraph GL644{
+    final_state = "H,t,t~|H,t,t~,g|H,t,t~,g,g|H,t,t~,d,d~|H,t,t~,ghG,ghG~";
     // Every loop-bearing cut side is intrinsically one-loop. Retain its
     // maximal cycle; the two remaining cuts are trees. The three-gluon
     // vertex also requires collinear and correlated soft/collinear checks.

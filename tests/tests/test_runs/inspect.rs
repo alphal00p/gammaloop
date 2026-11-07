@@ -2290,11 +2290,7 @@ fn scalar_sunrise_inspect() -> Result<()> {
             .derived_data
             .representations
             .values()
-            .flat_map(|data| {
-                data.all_mighty_integrand
-                    .iter()
-                    .map(|(_, expression)| expression)
-            })
+            .flat_map(|data| data.all_mighty_integrand.expressions())
         {
             assert!(!expression.contains_symbol(GS.uv_integrate));
             let _ = expression.replace_map(|view, _, _| {
@@ -2797,14 +2793,18 @@ fn raised_iterated_threshold_components_match_cff_and_ltd() -> Result<()> {
         gammaloop_integration_tests::workspace_root()
             .join("tests/resources/graphs/ir_safe_thresholds/triple_dotted_bubble.dot"),
     )?
-    .replacen(
-        "digraph triple_dotted_bubble {",
-        &format!(
-            "digraph triple_dotted_bubble {{\nthreshold_counterterms = \"{}\";\n",
-            directives.replace('"', "\\\"")
-        ),
-        1,
-    );
+    .lines()
+    .map(|line| {
+        if line.trim_start().starts_with("digraph ") {
+            format!(
+                "{line}\nthreshold_counterterms = \"{}\";\n",
+                directives.replace('"', "\\\"")
+            )
+        } else {
+            format!("{line}\n")
+        }
+    })
+    .collect::<String>();
     let mut route_results = Vec::new();
     for (route, local_4d, representation) in [
         ("cff3d", false, RepresentationMode::Cff),
@@ -2959,6 +2959,36 @@ lmb_channels = "summed"
                 EventWeightComparison::IndividualOrders,
             );
         }
+    }
+    Ok(())
+}
+
+/// `dgse.dot` is a hand-written graph whose external edge ids (2: incoming d,
+/// 3: off-shell gluon, 7: outgoing d) are not in external half-edge order, with
+/// explicit spinors u(2) and ubar(7) at fixed helicities. Importing it must
+/// build each spinor from its own leg; the reference is main 227e3534's value
+/// at this point (the stack regression gave -1.6869e-3 + 5.4931e-3i).
+#[test]
+fn dgse_imported_spinors_reproduce_reference_value() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("dgse.toml".into()),
+        get_tests_workspace_path().join("dgse_imported_spinors_reference_value"),
+        Some("dgse_imported_spinors_reference_value".to_string()),
+        true,
+    )?;
+    let (_, value) = Inspect {
+        point: vec![0.31, 0.17, 0.43, 0.26, 0.52, 0.11],
+        momentum_space: false,
+        ..Default::default()
+    }
+    .run(&mut cli)?;
+    let target = Complex::new(-1.6809817166776307e-3, 3.7926314283267845e-3);
+    // Each component is compared at its own scale.
+    for (part, actual, expected) in [("re", value.re, target.re), ("im", value.im, target.im)] {
+        assert!(
+            (actual - expected).abs() <= 1e-10 * expected.abs(),
+            "dgse {part}: actual={actual:e}, expected={expected:e}"
+        );
     }
     Ok(())
 }
