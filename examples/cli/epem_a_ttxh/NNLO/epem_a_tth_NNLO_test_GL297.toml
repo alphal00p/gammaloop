@@ -17,6 +17,9 @@ name = "epem_a_ttxh_NNLO_test_GL297"
 name = "generate_diagrams"
 commands = [
   "import model sm-default.json",
+  # check_esurface_at_generation decides at generation which threshold counterterms
+  # exist, and later model changes are refused: set the integration point first.
+  "run set_model_parameters",
   "remove processes",
   "import graphs ./examples/cli/epem_a_ttxh/NNLO/graphs/GL297.dot --process-spec 'e+ e- > t t~ h | e+ e- g t t~ h d d~ ghG ghG~ a QCD^2==4 QED^2==6 [{{4}} QCD=2]' -p epem_a_tth -i NNLO -o",
   "save dot",

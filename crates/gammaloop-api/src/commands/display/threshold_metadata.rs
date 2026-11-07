@@ -470,7 +470,7 @@ mod tests {
         assert!(attribute.contains("cuts = []"));
 
         let model = load_generic_model("scalars");
-        let graph = Graph::from_string(
+        let graph = Graph::import_dot(
             include_str!("../../../../../tests/resources/graphs/scalar_bubble.dot"),
             &model,
         )?

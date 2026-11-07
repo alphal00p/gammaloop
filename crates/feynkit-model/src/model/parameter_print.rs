@@ -1,16 +1,61 @@
 use std::cell::RefCell;
-use std::{
-    collections::HashMap,
-    sync::{LazyLock, RwLock},
-};
+use std::collections::HashMap;
+use std::sync::{LazyLock, RwLock};
 
 use symbolica::atom::{AtomView, NamespacedSymbol, Symbol, SymbolBuilder};
+use symbolica_notation::{MathMlSubset, MathMlSubsetError};
 
 use crate::{EntityKind, Model, ModelError};
 
+/// A model parameter's serialized spelling and validated presentation MathML.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ParameterMathMl {
+    source: String,
+    presentation: MathMlSubset,
+}
+
+impl ParameterMathMl {
+    /// Validate a presentation fragment suitable for a native math label.
+    ///
+    /// # Errors
+    /// Returns an error for unsupported markup or resource bounds.
+    pub fn parse(source: &str) -> Result<Self, MathMlSubsetError> {
+        Ok(Self {
+            presentation: MathMlSubset::parse(source)?,
+            source: source.to_owned(),
+        })
+    }
+
+    /// Validate an optional model label before installing any symbol printers.
+    ///
+    /// # Errors
+    /// Identifies the parameter containing invalid presentation MathML.
+    pub fn for_parameter(name: &str, source: Option<&str>) -> Result<Option<Self>, ModelError> {
+        source
+            .filter(|label| !label.trim().is_empty())
+            .map(Self::parse)
+            .transpose()
+            .map_err(|source| ModelError::InvalidParameterMathMl {
+                name: name.to_owned(),
+                source,
+            })
+    }
+
+    /// Original spelling retained by the serialized model.
+    pub fn as_str(&self) -> &str {
+        &self.source
+    }
+
+    /// Validated nodes for rendering. Text and attributes are escaped on output.
+    pub fn presentation(&self) -> &MathMlSubset {
+        &self.presentation
+    }
+}
+
 struct ParameterLabel {
-    latex: String,
-    typst: String,
+    latex: Option<String>,
+    typst: Option<String>,
+    mathml: Option<MathMlSubset>,
 }
 
 // Symbols have process-wide identities. Read labels at print time so importing
@@ -103,6 +148,12 @@ impl Model {
     /// Nested successful operations join their parent's transaction. A failure
     /// or panic discards pending updates without reverting other threads' work.
     ///
+    /// Use this around a complete decode when the format or enclosing object
+    /// can fail after deserializing a valid model value, for example when Serde
+    /// checks for trailing input. For a standalone JSON document, prefer
+    /// [`Self::from_json`], which parses the complete definition before
+    /// constructing the model.
+    ///
     /// Parsing still interns immutable symbols and their printing callbacks.
     /// This transaction stages label values on the calling thread; worker-thread
     /// model imports have their own independent registration scope.
@@ -126,14 +177,34 @@ impl Model {
         texname: Option<&str>,
         typstname: Option<&str>,
     ) -> Result<(), ModelError> {
+        Self::register_parameter_display(name, texname, typstname, None)
+    }
+
+    /// Register model-owned symbolic labels for LaTeX, Typst, and native MathML.
+    ///
+    /// The MathML label is a presentation fragment, without a wrapping `<math>`.
+    /// Missing labels retain the ordinary symbol spelling in that format. Importers
+    /// validate every label in a model before calling this function.
+    ///
+    /// # Errors
+    /// Returns an error for a malformed symbol name.
+    pub fn register_parameter_display(
+        name: &str,
+        texname: Option<&str>,
+        typstname: Option<&str>,
+        mathml: Option<&ParameterMathMl>,
+    ) -> Result<(), ModelError> {
         let symbol_name = NamespacedSymbol::parse(&format!("UFO::{name}"));
         let symbol = if let Some(symbol) = Symbol::get_symbol(symbol_name.clone()) {
             // Existing user declarations (including their printers) are immutable.
             symbol
         } else {
             SymbolBuilder::new(symbol_name.clone())
-                .with_print_function(|view, options, _| {
-                    if !options.mode.is_latex() && !options.mode.is_typst() {
+                .with_print_function(|view, options, state| {
+                    if !options.mode.is_latex()
+                        && !options.mode.is_typst()
+                        && !options.mode.is_mathml()
+                    {
                         return None;
                     }
                     let AtomView::Var(variable) = view else {
@@ -141,11 +212,19 @@ impl Model {
                     };
                     let labels = LABELS.read().unwrap();
                     let label = labels.get(&variable.get_symbol())?;
-                    Some(if options.mode.is_latex() {
+                    if options.mode.is_latex() {
                         label.latex.clone()
-                    } else {
+                    } else if options.mode.is_typst() {
                         label.typst.clone()
-                    })
+                    } else {
+                        let label = label.mathml.as_ref()?;
+                        let body = label.to_mathml();
+                        Some(if state.in_exp_base && label.needs_power_fence() {
+                            format!("<mrow><mo>(</mo>{body}<mo>)</mo></mrow>")
+                        } else {
+                            body
+                        })
+                    }
                 })
                 .build()
                 // Another import can create this same immutable symbol after
@@ -162,15 +241,18 @@ impl Model {
         };
         let texname = texname.filter(|name| !name.trim().is_empty());
         let typstname = typstname.filter(|name| !name.trim().is_empty());
-        if texname.is_some() || typstname.is_some() {
-            let latex = texname.unwrap_or(name);
+        if texname.is_some() || typstname.is_some() || mathml.is_some() {
+            let has_text_name = texname.is_some() || typstname.is_some();
             ParameterDisplayTransaction::record(
                 symbol,
                 Some(ParameterLabel {
-                    latex: latex.to_owned(),
-                    typst: typstname
-                        .map(str::to_owned)
-                        .unwrap_or_else(|| format!("{name:?}")),
+                    latex: has_text_name.then(|| texname.unwrap_or(name).to_owned()),
+                    mathml: mathml.map(|label| label.presentation().clone()),
+                    typst: has_text_name.then(|| {
+                        typstname
+                            .map(str::to_owned)
+                            .unwrap_or_else(|| format!("{name:?}"))
+                    }),
                 }),
             );
         } else {
@@ -324,6 +406,90 @@ mod tests {
     }
 
     #[test]
+    fn staged_model_construction_keeps_existing_mathml_until_commit() {
+        let name = "staged_model_mathml_parameter";
+        let mut definition = serde_json::to_value(Model::empty("staged-labels")).unwrap();
+        definition["parameters"] = serde_json::json!([{
+            "name": name, "nature": "external", "parameter_type": "real",
+            "value": [1.0, 0.0], "mathmlname": "<mi>committed</mi>"
+        }]);
+        Model::from_json(&definition.to_string()).unwrap();
+        let atom = Atom::var(
+            Symbol::get_symbol(NamespacedSymbol::parse(&format!("UFO::{name}"))).unwrap(),
+        );
+        let expression = &atom * &atom;
+        let before = expression.printer(PrintOptions::mathml()).to_string();
+        definition["parameters"][0]["mathmlname"] =
+            "<msup><mi>pending</mi><mn>2</mn></msup>".into();
+        let rejected: Result<(), &str> = Model::with_parameter_display_transaction(|| {
+            let model = Model::from_json(&definition.to_string()).unwrap();
+            assert_eq!(
+                model
+                    .parameter(name)
+                    .unwrap()
+                    .mathmlname
+                    .as_ref()
+                    .unwrap()
+                    .as_str(),
+                "<msup><mi>pending</mi><mn>2</mn></msup>"
+            );
+            assert_eq!(
+                expression.printer(PrintOptions::mathml()).to_string(),
+                before
+            );
+            Err("model is incompatible with held graphs")
+        });
+        assert!(rejected.is_err());
+        assert_eq!(
+            expression.printer(PrintOptions::mathml()).to_string(),
+            before
+        );
+
+        let invalid = {
+            let mut broken = definition.clone();
+            // Parameter expressions are parsed after the label registrations.
+            broken["parameters"][0]["expression"] = ")".into();
+            broken
+        };
+        let error = Model::from_json(&invalid.to_string()).unwrap_err();
+        assert!(matches!(
+            error,
+            ModelError::SymbolicParse {
+                kind: EntityKind::Parameter,
+                field: "expression",
+                ..
+            }
+        ));
+        assert_eq!(
+            expression.printer(PrintOptions::mathml()).to_string(),
+            before
+        );
+        serde_json::from_value::<Model>(invalid).unwrap_err();
+        assert_eq!(
+            expression.printer(PrintOptions::mathml()).to_string(),
+            before
+        );
+
+        let trailing = format!("{definition} trailing");
+        assert!(Model::from_json(&trailing).is_err());
+        assert!(
+            Model::with_parameter_display_transaction(|| serde_json::from_str::<Model>(&trailing))
+                .unwrap_err()
+                .is_syntax()
+        );
+        assert_eq!(
+            expression.printer(PrintOptions::mathml()).to_string(),
+            before
+        );
+
+        Model::with_parameter_display_transaction(|| Model::from_json(&definition.to_string()))
+            .unwrap();
+        let committed = expression.printer(PrintOptions::mathml()).to_string();
+        assert!(committed.contains("<mi>pending</mi>"));
+        assert!(committed.contains("<mo>(</mo>"));
+    }
+
+    #[test]
     fn concurrent_parameter_registration_preserves_process_wide_symbols() {
         let barrier = Arc::new(Barrier::new(16));
         let workers = (0..16)
@@ -370,6 +536,86 @@ mod tests {
             "user-printer"
         );
         assert!(Model::register_parameter_symbol("invalid parameter name", None, None).is_err());
+    }
+
+    #[test]
+    fn model_mathml_round_trips_and_updates_existing_expressions() {
+        let name = "mathml_model_roundtrip_mass";
+        let mut definition = serde_json::to_value(Model::empty("mathml-test")).unwrap();
+        definition["parameters"] = serde_json::json!([{
+            "name": name, "nature": "external", "parameter_type": "real",
+            "value": [1.0, 0.0], "texname": "texLabel", "typstname": "typstLabel"
+        }]);
+        let model = Model::from_json(&definition.to_string()).unwrap();
+        assert!(model.parameter(name).unwrap().mathmlname.is_none());
+        let fingerprint = model.fingerprint();
+        let symbol = Symbol::get_symbol(NamespacedSymbol::parse(&format!("UFO::{name}"))).unwrap();
+        let atom = Atom::var(symbol);
+        let fallback = atom.printer(PrintOptions::mathml()).to_string();
+
+        let subscript = "<msub><mi>m</mi><mi>e</mi></msub>";
+        definition["parameters"][0]["mathmlname"] = subscript.into();
+        let model = Model::from_json(&definition.to_string()).unwrap();
+        let model = Model::from_json(&model.to_json().unwrap()).unwrap();
+        assert_eq!(model.fingerprint(), fingerprint);
+        assert_eq!(
+            model
+                .parameter(name)
+                .unwrap()
+                .mathmlname
+                .as_ref()
+                .unwrap()
+                .as_str(),
+            subscript
+        );
+        assert!(
+            atom.printer(PrintOptions::mathml())
+                .to_string()
+                .contains(subscript)
+        );
+        assert_eq!(atom.printer(PrintOptions::latex()).to_string(), "texLabel");
+        assert_eq!(
+            atom.printer(PrintOptions::typst()).to_string(),
+            "typstLabel"
+        );
+
+        let power = &atom * &atom;
+        assert!(
+            !power
+                .printer(PrintOptions::mathml())
+                .to_string()
+                .contains("<mo>(</mo>")
+        );
+        definition["parameters"][0]["mathmlname"] = "<msup><mi>v</mi><mn>2</mn></msup>".into();
+        Model::from_json(&definition.to_string()).unwrap();
+        assert!(
+            power
+                .printer(PrintOptions::mathml())
+                .to_string()
+                .contains("<mo>(</mo>")
+        );
+
+        let mut rejected = definition.clone();
+        rejected["parameters"][0]["mathmlname"] = "<mi>changed</mi>".into();
+        let mut invalid = rejected["parameters"][0].clone();
+        invalid["name"] = "invalid_second_parameter".into();
+        invalid["mathmlname"] = "<mi onclick='x'>m</mi>".into();
+        rejected["parameters"].as_array_mut().unwrap().push(invalid);
+        assert!(matches!(
+            Model::from_json(&rejected.to_string()),
+            Err(ModelError::InvalidParameterMathMl { .. })
+        ));
+        assert!(
+            atom.printer(PrintOptions::mathml())
+                .to_string()
+                .contains("<msup><mi>v</mi><mn>2</mn></msup>")
+        );
+        definition["parameters"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("mathmlname");
+        Model::from_json(&definition.to_string()).unwrap();
+        assert_eq!(atom.printer(PrintOptions::mathml()).to_string(), fallback);
     }
 
     #[test]

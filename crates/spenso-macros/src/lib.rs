@@ -466,3 +466,101 @@ pub fn derive_simple_representation(input: TokenStream) -> TokenStream {
 
     TokenStream::from(expanded)
 }
+
+/// Call a lightweight usage recorder on entry to a function or impl method.
+/// Place this before `pymethods`/`pyfunction`. Class attributes run during module
+/// registration, so they deliberately do not count as user operations.
+/// With `on_success`, record after returning normally (and only for `Ok` on
+/// `Result`/`PyResult` methods). Getters and Python inspection hooks are skipped.
+#[proc_macro_attribute]
+pub fn track_usage(recorder: TokenStream, item: TokenStream) -> TokenStream {
+    let recorder = parse_macro_input!(recorder as UsageRecorder);
+    let mut item = parse_macro_input!(item as syn::Item);
+    match &mut item {
+        syn::Item::Fn(function) => recorder.instrument(&function.sig, &mut function.block),
+        syn::Item::Impl(implementation) => {
+            for item in &mut implementation.items {
+                if let syn::ImplItem::Fn(method) = item
+                    && !method
+                        .attrs
+                        .iter()
+                        .any(|attribute| attribute.path().is_ident("classattr"))
+                {
+                    if recorder.on_success
+                        && (method
+                            .attrs
+                            .iter()
+                            .any(|attr| attr.path().is_ident("getter"))
+                            || matches!(
+                                method.sig.ident.to_string().as_str(),
+                                "__repr__"
+                                    | "__str__"
+                                    | "__class_getitem__"
+                                    | "_repr_html_"
+                                    | "_repr_markdown_"
+                                    | "_repr_pretty_"
+                            ))
+                    {
+                        continue;
+                    }
+                    recorder.instrument(&method.sig, &mut method.block);
+                }
+            }
+        }
+        _ => {
+            return syn::Error::new_spanned(item, "expected a function or impl block")
+                .to_compile_error()
+                .into();
+        }
+    }
+    quote!(#item).into()
+}
+
+struct UsageRecorder {
+    path: syn::Path,
+    on_success: bool,
+}
+
+impl syn::parse::Parse for UsageRecorder {
+    fn parse(input: syn::parse::ParseStream<'_>) -> syn::Result<Self> {
+        let path = input.parse()?;
+        let on_success = if input.is_empty() {
+            false
+        } else {
+            input.parse::<Token![,]>()?;
+            let mode: Ident = input.parse()?;
+            if mode != "on_success" {
+                return Err(syn::Error::new_spanned(mode, "expected on_success"));
+            }
+            true
+        };
+        Ok(Self { path, on_success })
+    }
+}
+
+impl UsageRecorder {
+    fn instrument(&self, signature: &syn::Signature, block: &mut syn::Block) {
+        let recorder = &self.path;
+        if !self.on_success {
+            block.stmts.insert(0, syn::parse_quote!(#recorder();));
+            return;
+        }
+        let returns_result = matches!(&signature.output,
+            syn::ReturnType::Type(_, ty) if matches!(ty.as_ref(),
+                syn::Type::Path(path) if path.path.segments.last().is_some_and(|segment|
+                    segment.ident == "PyResult" || segment.ident == "Result")));
+        let record = if returns_result {
+            quote!(if result.is_ok() { #recorder(); })
+        } else {
+            quote!(#recorder();)
+        };
+        let output = &signature.output;
+        // The closure keeps early returns and `?` inside the observed operation.
+        *block = syn::parse_quote!({
+            #[allow(clippy::redundant_closure_call)]
+            let result = (|| #output #block)();
+            #record
+            result
+        });
+    }
+}

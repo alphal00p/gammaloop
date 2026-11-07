@@ -1,12 +1,12 @@
 //! Tydenso tensor construction, printing, inspection, and Idenso transforms.
 
 use std::{io::Cursor, sync::Once};
+use symbolica_notation::IndexDisplay;
 
 use ciborium::value::Value;
-use idenso::color::ColorSimplifier;
-use idenso::dirac::GammaSimplifier;
-use idenso::selective_expand::SelectiveExpand;
-use idenso::shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip};
+use idenso::color::ColorSimplifySettings;
+use idenso::dirac::GammaSimplifySettings;
+use idenso::tensor::{AlgebraSettings, ContractSettings, SymbolicTensor};
 use idenso::{Cookable, IndexTooling};
 use spenso::network::tags::SPENSO_TAG;
 use spenso::portable_payload::{
@@ -17,14 +17,12 @@ use spenso::portable_payload::{
 };
 use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 use spenso::structure::abstract_index::AbstractIndex;
-use spenso::structure::representation::{
-    IndexDisplay, IndexPalette, IndexRow, LibraryRep, RepName,
-};
+use spenso::structure::representation::{IndexPalette, IndexRow, LibraryRep, RepName};
 use symbolica::atom::{
     Atom, AtomCore, AtomView, DefaultNamespace, NamespacedSymbol, Symbol, SymbolAttribute,
     SymbolBuilder,
 };
-use symbolica_typst_atom_payload::{
+use symbolica_typst_plugin::payload::{
     AttachmentSet, ParsedPayload, encode_atom_from_set, encode_atom_render_tree, parse_payload,
 };
 use wasm_minimal_protocol::*;
@@ -36,7 +34,7 @@ use spenso::portable_payload::REPRESENTATION_ATTACHMENT_VERSION;
 #[cfg(test)]
 use spenso::portable_payload::math_display_symbol_name;
 #[cfg(test)]
-use symbolica_typst_atom_payload::{Attachment, AttachmentKey};
+use symbolica_typst_plugin::payload::{Attachment, AttachmentKey};
 
 initiate_protocol!();
 
@@ -1324,14 +1322,6 @@ fn symbol_from_atom(atom: &Atom, label: &str) -> Result<Symbol, String> {
     }
 }
 
-fn expanded(terms: Vec<(Atom, Atom)>) -> Atom {
-    terms
-        .into_iter()
-        .fold(Atom::Zero, |sum, (coefficient, tensor)| {
-            sum + coefficient * tensor
-        })
-}
-
 fn encode_atom_array(atoms: Vec<Atom>, context: &InputContext) -> Result<Vec<u8>, String> {
     let values = atoms
         .iter()
@@ -1357,12 +1347,11 @@ pub fn from_ast(ast: &[u8], namespace: &[u8]) -> Result<Vec<u8>, String> {
         other => return Err(format!("namespace must be text, got {other:?}")),
     };
     let mut context = InputContext::default();
-    let preflight =
-        symbolica_typst_atom_payload::typst_ast::preflight_payloads_from_ast(ast, "ast")?;
+    let preflight = symbolica_typst_plugin::typst_ast::preflight_payloads_from_ast(ast, "ast")?;
     context.absorb_attachment_set(&preflight.attachments)?;
     context.register_representations()?;
     let attached =
-        symbolica_typst_atom_payload::typst_ast::attached_atom_from_ast(ast, &namespace, "ast")?;
+        symbolica_typst_plugin::typst_ast::attached_atom_from_ast(ast, &namespace, "ast")?;
     debug_assert_eq!(attached.attachments, preflight.attachments);
     encode_atom_with_context(&attached.atom, &context)
 }
@@ -1405,39 +1394,9 @@ pub fn cook_indices(expr: &[u8]) -> Result<Vec<u8>, String> {
 pub fn dirac_adjoint(expr: &[u8]) -> Result<Vec<u8>, String> {
     let (atom, context) = decode_atom_with_context(expr, "expr")?;
     let result = atom
-        .dirac_adjoint::<AbstractIndex>()
+        .dirac_adjoint::<AbstractIndex>(false)
         .map_err(|error| error.to_string())?;
     encode_atom_with_context(&result, &context)
-}
-
-#[wasm_func]
-pub fn expand_bis(expr: &[u8]) -> Result<Vec<u8>, String> {
-    let (atom, context) = decode_atom_with_context(expr, "expr")?;
-    encode_atom_with_context(&expanded(atom.expand_bis()), &context)
-}
-
-#[wasm_func]
-pub fn expand_color(expr: &[u8]) -> Result<Vec<u8>, String> {
-    let (atom, context) = decode_atom_with_context(expr, "expr")?;
-    encode_atom_with_context(&expanded(atom.expand_color()), &context)
-}
-
-#[wasm_func]
-pub fn expand_metrics(expr: &[u8]) -> Result<Vec<u8>, String> {
-    let (atom, context) = decode_atom_with_context(expr, "expr")?;
-    encode_atom_with_context(&expanded(atom.expand_metrics()), &context)
-}
-
-#[wasm_func]
-pub fn expand_mink(expr: &[u8]) -> Result<Vec<u8>, String> {
-    let (atom, context) = decode_atom_with_context(expr, "expr")?;
-    encode_atom_with_context(&expanded(atom.expand_mink()), &context)
-}
-
-#[wasm_func]
-pub fn expand_mink_bis(expr: &[u8]) -> Result<Vec<u8>, String> {
-    let (atom, context) = decode_atom_with_context(expr, "expr")?;
-    encode_atom_with_context(&expanded(atom.expand_mink_bis()), &context)
 }
 
 #[wasm_func]
@@ -1452,25 +1411,50 @@ pub fn list_dangling(expr: &[u8]) -> Result<Vec<u8>, String> {
 #[wasm_func]
 pub fn simplify_color(expr: &[u8]) -> Result<Vec<u8>, String> {
     let (atom, context) = decode_atom_with_context(expr, "expr")?;
-    encode_atom_with_context(&atom.simplify_color(), &context)
+    let source = SymbolicTensor::infer(atom).map_err(|error| error.to_string())?;
+    let result = source
+        .simplify_algebra(&AlgebraSettings {
+            color: Some(ColorSimplifySettings::default()),
+            ..Default::default()
+        })
+        .map_err(|error| error.to_string())?;
+    encode_atom_with_context(result.expression(), &context)
 }
 
 #[wasm_func]
 pub fn simplify_gamma(expr: &[u8]) -> Result<Vec<u8>, String> {
     let (atom, context) = decode_atom_with_context(expr, "expr")?;
-    encode_atom_with_context(&atom.simplify_gamma(), &context)
+    let source = SymbolicTensor::infer(atom).map_err(|error| error.to_string())?;
+    let result = source
+        .simplify_algebra(&AlgebraSettings {
+            gamma: Some(GammaSimplifySettings::default()),
+            ..Default::default()
+        })
+        .map_err(|error| error.to_string())?;
+    encode_atom_with_context(result.expression(), &context)
 }
 
 #[wasm_func]
-pub fn simplify_metrics(expr: &[u8]) -> Result<Vec<u8>, String> {
+pub fn contract(expr: &[u8]) -> Result<Vec<u8>, String> {
     let (atom, context) = decode_atom_with_context(expr, "expr")?;
-    encode_atom_with_context(&atom.simplify_metrics(), &context)
+    let source = SymbolicTensor::infer(atom).map_err(|error| error.to_string())?;
+    let result = source
+        .contract(ContractSettings::default())
+        .map_err(|error| error.to_string())?;
+    if !result.contraction_complete() {
+        return Err("tensor contraction did not complete".into());
+    }
+    encode_atom_with_context(result.expression(), &context)
 }
 
 #[wasm_func]
 pub fn to_dots(expr: &[u8]) -> Result<Vec<u8>, String> {
     let (atom, context) = decode_atom_with_context(expr, "expr")?;
-    encode_atom_with_context(&atom.to_dots(), &context)
+    let result = SymbolicTensor::infer(atom)
+        .map_err(|error| error.to_string())?
+        .to_dots()
+        .map_err(|error| error.to_string())?;
+    encode_atom_with_context(result.expression(), &context)
 }
 
 #[wasm_func]
@@ -1769,7 +1753,7 @@ mod tests {
         assert!(Symbol::get_symbol(NamespacedSymbol::parse(&display_name)).is_none());
 
         let atom = Atom::var(parse_symbol("x", namespace, None).unwrap());
-        let payload = symbolica_typst_atom_payload::encode_atom_with_attachments(
+        let payload = symbolica_typst_plugin::payload::encode_atom_with_attachments(
             &atom,
             [
                 representation_attachment(&representation_name, &representation),
@@ -2202,9 +2186,22 @@ mod tests {
         };
         assert_eq!(i_representation.get_symbol(), j_representation.get_symbol());
 
-        let vector = parse_symbol("q", namespace, None).unwrap();
+        let vector = parse_tensor_symbol("q", namespace, &[], true).unwrap();
         let expression = ETS.metric(i.clone(), dual_j) * vector.call(j);
-        assert_eq!(expression.simplify_metrics(), vector.call(i));
+        assert_eq!(
+            SymbolicTensor::infer(expression.clone())
+                .unwrap()
+                .contract(ContractSettings::default())
+                .unwrap()
+                .into_expression(),
+            vector.call(i.clone())
+        );
+        let payload = encode_atom(&expression).unwrap();
+        let contracted = contract(&payload).unwrap();
+        assert_eq!(
+            decode_atom(&contracted, "contract result").unwrap(),
+            vector.call(i)
+        );
     }
 
     #[test]
@@ -2393,12 +2390,12 @@ mod tests {
         };
         let x = Atom::var(parse_symbol("x", "tydenso_sidecar_raw_conflict_test", None).unwrap());
         let h = Atom::var(parse_symbol("h", "tydenso_sidecar_raw_conflict_test", None).unwrap());
-        let first = symbolica_typst_atom_payload::encode_atom_with_attachments(
+        let first = symbolica_typst_plugin::payload::encode_atom_with_attachments(
             &x,
             [representation_attachment(name, &numeric)],
         )
         .unwrap();
-        let second = symbolica_typst_atom_payload::encode_atom_with_attachments(
+        let second = symbolica_typst_plugin::payload::encode_atom_with_attachments(
             &h,
             [representation_attachment(name, &dual)],
         )
@@ -2435,7 +2432,7 @@ mod tests {
 
         let display = MathDisplayDeclaration::new(expected_display).unwrap();
         let atom = Atom::var(parse_symbol("x", namespace, None).unwrap());
-        let payload = symbolica_typst_atom_payload::encode_atom_with_attachments(
+        let payload = symbolica_typst_plugin::payload::encode_atom_with_attachments(
             &atom,
             [
                 representation_attachment(&representation_name, &representation),
@@ -2499,7 +2496,7 @@ mod tests {
         let atom =
             Atom::var(parse_symbol("x", "tydenso_sidecar_future_version_test", None).unwrap());
         let payload =
-            symbolica_typst_atom_payload::encode_atom_with_attachments(&atom, [attachment])
+            symbolica_typst_plugin::payload::encode_atom_with_attachments(&atom, [attachment])
                 .unwrap();
 
         let error = decode_atom(&payload, "future representation payload").unwrap_err();
@@ -2532,13 +2529,17 @@ mod tests {
         )
         .unwrap();
 
-        let unary = cook_indices(&payload).unwrap();
-        let unary = parse_payload(&unary).unwrap();
-        assert_eq!(
-            unary.attachment(&unknown_key),
-            Some(b"preserve me".as_slice())
-        );
-        assert!(unary.attachment(&rep_key).is_some());
+        for unary in [cook_indices, contract, simplify_gamma, simplify_color] {
+            let result = unary(&payload).unwrap();
+            let imported = decode_atom(&result, "unary result").unwrap();
+            assert_eq!(imported, decode_atom(&payload, "source").unwrap());
+            let result = parse_payload(&result).unwrap();
+            assert_eq!(
+                result.attachment(&unknown_key),
+                Some(b"preserve me".as_slice())
+            );
+            assert!(result.attachment(&rep_key).is_some());
+        }
 
         let fanout = list_dangling(&payload).unwrap();
         let Value::Array(outputs) = decode_cbor(&fanout, "fanout").unwrap() else {

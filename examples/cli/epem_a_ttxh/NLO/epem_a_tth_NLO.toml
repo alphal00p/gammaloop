@@ -31,6 +31,9 @@ name = "generate_diagrams"
 #	  --select-graphs GL06
 commands = [
   "import model sm-default.json",
+  # check_esurface_at_generation decides at generation which threshold counterterms
+  # exist, and later model changes are refused: set the integration point first.
+  "run set_model_parameters",
   "set global kv global.n_cores.feyngen=10",
 
   "remove processes",

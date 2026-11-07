@@ -1,3 +1,4 @@
+use feynkit_generator::GenerationType;
 use std::fmt;
 
 use bincode_trait_derive::{Decode, Encode};
@@ -11,7 +12,6 @@ pub use three_dimensional_reps::{MediumMode, RepresentationMode};
 use crate::{
     GammaLoopContext,
     cff::{expression::OrientationSelector, orientations::GraphOrientation},
-    feyngen::GenerationType,
     processes::EvaluatorSettings,
     utils::{
         DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, GS, W_,
@@ -65,7 +65,9 @@ pub struct GenerationSettings {
     /// Ultraviolet counterterm generation, prescription, and Vakint backend settings.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub uv: UVgenerationSettings,
-    /// Explicit particle-name sets forced to define graph cuts.
+    /// Edge-name sets (`eN`) selecting the Cutkosky cuts used when integrands are built.
+    /// Generation and stored cut inventories ignore it; graphs without a selected cut
+    /// contribute zero.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub force_cuts: Vec<Vec<String>>,
     /// Use explicitly supplied loop-momentum bases instead of the built-in basis heuristics.
@@ -1154,8 +1156,8 @@ mod orientation_pattern_tests {
         assert_eq!(wrapped, tuple_only);
         assert_eq!(wrapped, bare_args);
         assert_eq!(
-            wrapped.pat.as_ref().unwrap().to_string(),
-            "orientation_delta(1,-1,0)"
+            wrapped.pat.as_ref().unwrap().0.to_plain_string(),
+            "gammalooprs::orientation_delta(1,-1,0)"
         );
         assert!(wrapped.filter(&edgevec([1, -1, 0])));
         assert!(!wrapped.filter(&edgevec([1, 1, 0])));

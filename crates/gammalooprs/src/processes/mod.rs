@@ -2,6 +2,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     path::Path,
+    sync::Arc,
 };
 
 // use bincode::{Decode, Encode};
@@ -21,6 +22,8 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::graph::Graph;
+use crate::integrands::process::ProcessIntegrand;
 use crate::model::Model;
 
 mod generation_report;
@@ -744,6 +747,7 @@ impl ProcessList {
 
     pub fn export_uv_forests(
         &self,
+        model: &Model,
         path: impl AsRef<Path>,
         process_id: usize,
         integrand_name: &str,
@@ -759,7 +763,7 @@ impl ProcessList {
                 self.processes.len()
             )
         })?;
-        process.export_uv_forests(&path, integrand_name, graph_ids, settings)
+        process.export_uv_forests(model, &path, integrand_name, graph_ids, settings)
     }
 
     pub fn export_standalone(
@@ -778,6 +782,106 @@ impl ProcessList {
 
     pub fn add_process(&mut self, process: Process) {
         self.processes.push(process);
+    }
+
+    /// Every graph held by `process`: each retained source graph with its
+    /// derived threshold topology and multi-channeling setup, and every graph
+    /// of the generated integrands (terms and their multi-channeling setups).
+    pub fn process_graphs(process: &Process) -> Vec<&Graph> {
+        match &process.collection {
+            ProcessCollection::Amplitudes(amplitudes) => amplitudes
+                .values()
+                .flat_map(|amplitude| {
+                    amplitude
+                        .graphs
+                        .iter()
+                        .flat_map(AmplitudeGraph::graphs)
+                        .chain(
+                            amplitude
+                                .integrand
+                                .iter()
+                                .flat_map(ProcessIntegrand::graphs),
+                        )
+                })
+                .collect(),
+            ProcessCollection::CrossSections(cross_sections) => cross_sections
+                .values()
+                .flat_map(|cross_section| {
+                    cross_section
+                        .supergraphs
+                        .iter()
+                        .flat_map(CrossSectionGraph::graphs)
+                        .chain(
+                            cross_section
+                                .integrand
+                                .iter()
+                                .flat_map(ProcessIntegrand::graphs),
+                        )
+                })
+                .collect(),
+        }
+    }
+
+    /// The model handle shared by the held graphs, if any graph is held.
+    pub fn shared_graph_model(&self) -> Option<&Arc<Model>> {
+        self.processes.iter().find_map(|process| {
+            Self::process_graphs(process)
+                .into_iter()
+                .next()
+                .map(|graph| &graph.model)
+        })
+    }
+
+    /// Check that `model` resolves the typed identifiers of every held graph
+    /// (see [`Self::process_graphs`]) to the same records. This is an identity
+    /// check only; numerical requirements are the caller's.
+    pub fn ensure_graphs_bound_to(&self, model: &Model) -> Result<()> {
+        for process in &self.processes {
+            Self::process_graphs(process)
+                .into_iter()
+                .try_for_each(|graph| graph.ensure_bound_to(model))
+                .wrap_err_with(|| {
+                    format!(
+                        "process '{}' cannot use model '{}'; remove it with `remove processes -p \
+                         name:{}` or start a new state, then regenerate it with the new model",
+                        process.definition.folder_name,
+                        model.name(),
+                        process.definition.folder_name,
+                    )
+                })?;
+        }
+        Ok(())
+    }
+
+    /// Rebind every held graph (see [`Self::process_graphs`]) to `model`,
+    /// validated with [`Self::ensure_graphs_bound_to`], and invalidate the
+    /// runtime caches built from the previous model so that the next warm-up
+    /// uses the new values.
+    pub fn rebind_graph_models(&mut self, model: &Arc<Model>) {
+        for process in &mut self.processes {
+            match &mut process.collection {
+                ProcessCollection::Amplitudes(amplitudes) => {
+                    for amplitude in amplitudes.values_mut() {
+                        for graph in &mut amplitude.graphs {
+                            graph.rebind_model(model);
+                        }
+                        if let Some(integrand) = &mut amplitude.integrand {
+                            integrand.rebind_model(model);
+                        }
+                    }
+                }
+                ProcessCollection::CrossSections(cross_sections) => {
+                    for cross_section in cross_sections.values_mut() {
+                        for graph in &mut cross_section.supergraphs {
+                            graph.rebind_model(model);
+                        }
+                        if let Some(integrand) = &mut cross_section.integrand {
+                            integrand.rebind_model(model);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     ///preprocesses the process list according to the settings
@@ -876,11 +980,13 @@ mod raised_cross_section_tests;
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use symbolica::state::State;
 
     use crate::{
-        GammaLoopContextContainer, dot,
-        graph::{Graph, parse::IntoGraph},
+        GammaLoopContextContainer,
+        graph::Graph,
         initialisation::test_initialise,
         settings::{
             RuntimeSettings,
@@ -936,19 +1042,26 @@ mod tests {
         // Use the model routing produced by graph import for the persistence roundtrip.
         let model = load_generic_model("sm");
 
-        let graph: Graph = dot!(
-            digraph G{
-                e1      [style=invis]
-                e2      [style=invis]
-                e1 -> n1  [particle=H]
-                n4 -> e2    [particle=H]
-                n1 -> n2    [particle=H]
-                n1 -> n3    [particle=H]
-                n2 -> n3    [particle=t]
-                n3 -> n4    [particle=t]
-                n4 -> n2    [particle=t]
-            }
+        let graph: Graph = crate::graph::Graph::import_dot(
+            stringify!(
+                digraph G{
+                    e1      [style=invis]
+                    e2      [style=invis]
+                    e1 -> n1  [particle=H]
+                    n4 -> e2    [particle=H]
+                    n1 -> n2    [particle=H]
+                    n1 -> n3    [particle=H]
+                    n2 -> n3    [particle=t]
+                    n3 -> n4    [particle=t]
+                    n4 -> n2    [particle=t]
+                }
+            ),
+            &crate::utils::load_generic_model("sm"),
         )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })
         .unwrap();
         let mut amplitude: AmplitudeGraph = AmplitudeGraph::new(graph.clone());
 
@@ -981,7 +1094,7 @@ mod tests {
         let state_map = State::import(&mut std::io::Cursor::new(symbols), None).unwrap();
 
         let context = GammaLoopContextContainer {
-            model: &model,
+            model: &Arc::new(model.clone()),
             state_map: &state_map,
         };
 

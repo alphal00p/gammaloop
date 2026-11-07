@@ -12,7 +12,8 @@ use std::{
 };
 
 use feynkit_model::{
-    Model, ModelError, ParameterCard, quantum_number_from_float, quantum_number_from_json,
+    Model, ModelError, ParameterCard, ParameterMathMl, quantum_number_from_float,
+    quantum_number_from_json,
 };
 use pyo3::{
     Py, PyAny, PyErr, Python,
@@ -79,7 +80,7 @@ impl UfoLoader {
         py: Python<'_>,
         path: impl AsRef<Path>,
     ) -> Result<LoadedModel, UfoLoadError> {
-        load_model(py, path.as_ref(), &self.options)
+        Model::with_parameter_display_transaction(|| load_model(py, path.as_ref(), &self.options))
     }
 }
 
@@ -165,7 +166,7 @@ pub enum UfoLoadError {
     },
 }
 
-type DisplayNames = (Option<String>, Option<String>);
+type DisplayNames = (Option<String>, Option<String>, Option<String>);
 
 // The Python loader handles restriction discovery and simplification at the original
 // path. Keep the model JSON's charge tokens so it cannot round floats into strings.
@@ -317,9 +318,19 @@ fn load_model(
     };
 
     let labels: BTreeMap<_, _> = labels.into_iter().collect();
-    for (name, (texname, typstname)) in &labels {
-        Model::register_parameter_symbol(name, texname.as_deref(), typstname.as_deref())
-            .map_err(|source| UfoLoadError::ModelJson { source })?;
+    let mathml_labels = labels
+        .iter()
+        .map(|(name, (_, _, mathml))| ParameterMathMl::for_parameter(name, mathml.as_deref()))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|source| UfoLoadError::ModelJson { source })?;
+    for ((name, (texname, typstname, _)), mathml) in labels.iter().zip(&mathml_labels) {
+        Model::register_parameter_display(
+            name,
+            texname.as_deref(),
+            typstname.as_deref(),
+            mathml.as_ref(),
+        )
+        .map_err(|source| UfoLoadError::ModelJson { source })?;
     }
     let commands = PyModule::import(py, "ufo_model_loader.commands")
         .map_err(|source| UfoLoadError::Import { source })?;
@@ -385,11 +396,12 @@ fn load_model(
         }
         if let Some(parameters) = serialized["parameters"].as_array_mut() {
             for parameter in parameters {
-                if let Some((texname, typstname)) =
+                if let Some((texname, typstname, mathmlname)) =
                     labels.get(parameter["name"].as_str().unwrap_or_default())
                 {
                     parameter["texname"] = serde_json::to_value(texname)?;
                     parameter["typstname"] = serde_json::to_value(typstname)?;
+                    parameter["mathmlname"] = serde_json::to_value(mathmlname)?;
                 }
             }
         }
@@ -651,13 +663,25 @@ sys.modules["ufo_model_loader.raw"] = raw
                 .unwrap();
             let source = PyModule::from_code(
                 py,
-                c"from types import SimpleNamespace\nall_parameters = [SimpleNamespace(name='ZERO'), SimpleNamespace(name='mass')]\nall_particles = [SimpleNamespace(name='s', charge=0.6666666666666666, charge_exact='2/3', Y='1/3', YRight='4/3')]",
+                c"from types import SimpleNamespace\nall_parameters = [SimpleNamespace(name='ZERO'), SimpleNamespace(name='mass', mathmlname='<msub><mi>m</mi><mi>s</mi></msub>')]\nall_particles = [SimpleNamespace(name='s', charge=0.6666666666666666, charge_exact='2/3', Y='1/3', YRight='4/3')]",
                 c"scalar.py", c"scalar",
             ).unwrap();
             modules.set_item("scalar", &source).unwrap();
             let model_directory = directory.join("scalar");
             std::fs::create_dir(&model_directory).unwrap();
             let exact = loader.load(py, &model_directory).unwrap();
+            assert_eq!(
+                exact
+                    .model
+                    .parameter("mass")
+                    .unwrap()
+                    .mathmlname
+                    .as_ref()
+                    .unwrap()
+                    .as_str(),
+                "<msub><mi>m</mi><mi>s</mi></msub>"
+            );
+            assert!(exact.model.parameter("ZERO").unwrap().mathmlname.is_none());
             let particle = exact.model.particle("s").unwrap();
             assert_eq!(particle.charge.to_string(), "2/3");
             assert_eq!(particle.y_charge.as_ref().unwrap().to_string(), "1/3");

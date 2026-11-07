@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use serde::{Deserialize, Serialize};
 use symbolica::domains::integer::Integer;
+use thiserror::Error;
 
 use crate::{
     GenerationError, LinearEnergyExpr, MediumMode, ParsedGraph, ThermalDistributionFactor,
@@ -10,23 +11,25 @@ use crate::{
 use linnet::half_edge::involution::EdgeIndex;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-struct EdgeRef {
-    edge_id: usize,
-    edge_type: EdgeType,
+pub struct EdgeRef {
+    pub edge_id: usize,
+    pub edge_type: EdgeType,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-enum EdgeType {
+pub enum EdgeType {
     Virtual,
     External,
     InitialStateCut,
+    /// A severed internal edge with fixed boundary flow.
+    Boundary,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-struct CffVertex {
-    nodes: BTreeSet<usize>,
-    incoming: Vec<EdgeRef>,
-    outgoing: Vec<EdgeRef>,
+pub struct CffVertex {
+    pub nodes: BTreeSet<usize>,
+    pub incoming: Vec<EdgeRef>,
+    pub outgoing: Vec<EdgeRef>,
 }
 
 impl CffVertex {
@@ -57,12 +60,12 @@ enum VertexType {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-struct CffGenerationGraph {
+pub struct CffGenerationGraph {
     vertices: Vec<CffVertex>,
 }
 
 impl CffGenerationGraph {
-    fn new(mut vertices: Vec<CffVertex>) -> Self {
+    pub fn new(mut vertices: Vec<CffVertex>) -> Self {
         vertices.sort_by_key(|vertex| vertex.nodes.iter().copied().collect::<Vec<_>>());
         Self { vertices }
     }
@@ -94,7 +97,7 @@ impl CffGenerationGraph {
         adjacency
     }
 
-    fn has_directed_cycle(&self) -> bool {
+    pub fn has_directed_cycle(&self) -> bool {
         let adjacency_edges = self.virtual_adjacency();
         let mut visited = HashSet::new();
         let mut stack = HashSet::new();
@@ -586,6 +589,68 @@ fn build_base_graph_from_parsed(parsed: &ParsedGraph) -> CffGenerationGraph {
     CffGenerationGraph::new(vertices)
 }
 
+/// Failure while generating causal denominator chains.
+#[derive(Debug, Error)]
+pub enum SurfaceChainError<E> {
+    #[error("failed to construct a CFF surface: {0}")]
+    Surface(#[source] E),
+    /// A selected source or sink has no contraction whose child completes a
+    /// chain: every child is cyclic or has no admissible source or sink.
+    ///
+    /// The input is unsupported or violates a generation invariant. Known to
+    /// reach it: vertex records listing one virtual edge as both incoming and
+    /// outgoing (self-loops), which keep a vertex from ever being a source or
+    /// sink. Callers must strip self-loops first, as `feynkit-cff` does. Not
+    /// known: whether any acyclic, connected graph without self-loops can reach
+    /// it; there is no proof that such graphs always complete their chains.
+    #[error(
+        "no contraction of a selected CFF vertex completes a causal chain; the topology is unsupported or violates a CFF generation invariant"
+    )]
+    NoContractionBranch,
+}
+
+impl CffGenerationGraph {
+    /// Generate causal denominator chains, mapping each selected cut in the
+    /// caller's energy convention. Cyclic orientations have no branches. An
+    /// acyclic graph whose selected vertex has no completing contraction is
+    /// reported as [`SurfaceChainError::NoContractionBranch`] rather than
+    /// returned as a truncated chain.
+    pub fn try_surface_chains<S: Clone, E>(
+        &self,
+        surface: &mut impl FnMut(&CffVertex) -> std::result::Result<S, E>,
+    ) -> std::result::Result<Vec<Vec<S>>, SurfaceChainError<E>> {
+        if self.has_directed_cycle() {
+            return Ok(Vec::new());
+        }
+        if self.vertices.len() < 2 {
+            return Ok(vec![Vec::new()]);
+        }
+        let Some(vertex) = self.vertices.iter().find(|vertex| {
+            matches!(vertex.vertex_type(), VertexType::Source | VertexType::Sink)
+                && self.has_connected_complement(&vertex.nodes)
+        }) else {
+            return Ok(Vec::new());
+        };
+        let selected = surface(vertex).map_err(SurfaceChainError::Surface)?;
+        if self.vertices.len() == 2 {
+            return Ok(vec![vec![selected]]);
+        }
+        let mut branches = Vec::new();
+        for neighbour in self.undirected_neighbours(&vertex.nodes) {
+            let child = self.contract_vertices(&vertex.nodes, &neighbour.nodes);
+            for chain in child.try_surface_chains(surface)? {
+                let mut branch = vec![selected.clone()];
+                branch.extend(chain);
+                branches.push(branch);
+            }
+        }
+        if branches.is_empty() {
+            return Err(SurfaceChainError::NoContractionBranch);
+        }
+        Ok(branches)
+    }
+}
+
 fn enumerate_cff_branches(
     mut graph: CffGenerationGraph,
     parsed: &ParsedGraph,
@@ -736,6 +801,8 @@ fn boundary_external_shift_from_internal_labels(
 
 #[cfg(test)]
 mod tests {
+    use std::convert::Infallible;
+
     use super::*;
     use symbolica::{
         atom::{Atom, AtomCore},
@@ -1665,5 +1732,37 @@ mod tests {
             enumerate_cff_surface_chains(&parsed, &[1; 2], mode, &BTreeMap::new()),
             Err(GenerationError::NoAdmissibleCffVertex { .. })
         ));
+    }
+
+    #[test]
+    fn surface_chains_reject_a_selection_without_contraction_branches() {
+        let virtual_edges = |edges: &[usize]| {
+            edges
+                .iter()
+                .map(|&edge_id| EdgeRef {
+                    edge_id,
+                    edge_type: EdgeType::Virtual,
+                })
+                .collect::<Vec<_>>()
+        };
+        let vertex = |node, incoming: &[usize], outgoing: &[usize]| CffVertex {
+            nodes: BTreeSet::from([node]),
+            incoming: virtual_edges(incoming),
+            outgoing: virtual_edges(outgoing),
+        };
+        // Self-loops 4, 5 and 6 leave vertex 0 as the only source or sink, so
+        // neither contraction of vertex 0 has a vertex to select next.
+        let graph = CffGenerationGraph::new(vec![
+            vertex(0, &[], &[0, 1]),
+            vertex(1, &[0, 4], &[2, 4]),
+            vertex(2, &[1, 5], &[3, 5]),
+            vertex(3, &[2, 3, 6], &[6]),
+        ]);
+
+        let error = graph
+            .try_surface_chains(&mut |vertex: &CffVertex| Ok::<_, Infallible>(vertex.nodes.clone()))
+            .unwrap_err();
+
+        assert!(matches!(error, SurfaceChainError::NoContractionBranch));
     }
 }

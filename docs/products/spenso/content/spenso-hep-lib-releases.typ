@@ -10,6 +10,7 @@ manual, navigation, search, and product PDF.
 
 #[
   #show heading.where(level: 1): it => none
+  #show "All notable changes to this project will be documented in this file.": none
   #include "/crates/spenso-hep-lib/CHANGELOG.typ"
 ]
 ]

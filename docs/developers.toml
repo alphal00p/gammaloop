@@ -30,6 +30,13 @@ review_triggers = ["crates/gammaloop-api/src/**", "crates/gammaloop-api/python/*
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/state.rs"
 symbol = "gammaloop_api::state::State::load"
+# Reviewed 2026-11-26: a generation that fails part-way records every generated integrand of a value-dependent process at the point of its installed payload, also on its first build, so reloads never rely on the record of a replaced build.
+# Reviewed 2026-11-24: version 23 stores selection-only spectator records in the shared-model Graph payload; integrand generation rejects them before mutating runtime state.
+# Reviewed 2026-11-24: format 23 binds decoded graphs to one shared model; exact generation inputs and kinematics guard dependent integrands through model replacement and reload.
+# Reviewed 2026-11-24: format 23 also stores each compact integrand term's source-supergraph index; cut projection preserves stored inventories.
+# Reviewed 2026-11-23: full states persist the source inventory and the selected
+# cuts. Regenerate states from versions 20, 21 and 22. The exact-version check
+# still runs before model parsing, symbolic import and process decoding.
 anchor = "load_state_manifest(&save_path)?"
 # Reviewed 2026-09-17: State versioning, shared numerator definitions, sampling scale, event pair lists, and covariant cuts are documented in architecture-current.typ.
 # Reviewed 2026-09-23: Canonical sampling/native weighted results, selected loading, state v9, structured Python integration, and threshold event metadata are documented in architecture-current.typ.
@@ -70,7 +77,7 @@ anchor = "load_state_manifest(&save_path)?"
 # Reviewed 2026-10-29: state20 removes the physical-cut reversal mask; projected
 # E-surface bounds use their own signed boundary and fixed-spectator routing.
 # architecture-current.typ documents the changed layout and regeneration guard.
-digest = "8267f92e55a98a41756903f904516e0d59d01bd6"
+digest = "97187f66a086f1e220f72743cd3c173e7c341215"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
@@ -90,7 +97,7 @@ anchor = "fn default_workspace_path(&self"
 # Reviewed 2026-10-14: only streamed integrations convert panics into command
 # errors; non-streamed runs preserve ordinary unwinding and the original report.
 # The dashboard note records this; workspace and persistence contracts are unchanged.
-digest = "0bdb5ccde10675a71a3fa52ed6c8d7da36d71bfa"
+digest = "e33c7d55fa35d4ced50a7a1fb8beea173a520bd6"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrands/evaluation.rs"
@@ -153,7 +160,7 @@ anchor = "pub fn warm_up(&mut self, model"
 # Reviewed 2026-10-29: evaluation leaves observable statistics unchanged and
 # creates independent reducers from warmed definitions; the architecture note
 # records the evaluation/accumulation boundary and native batch retention.
-digest = "b8942b65447b66e5808a3b124cec13267dcfe9db"
+digest = "74f9a464b951f927e8f538496d7e3b56b59e8d2f"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/observables/events.rs"
@@ -184,7 +191,7 @@ anchor = "pub struct EventProcessingRuntime {"
 # the reviewed implementation and data contracts are unchanged.
 # Reviewed 2026-10-29: the note covers explicit coefficients, zero attempts,
 # correlated fills, and the separation of raw snapshots from final estimates.
-digest = "8aafd909390807427f14da49abfa574e53c8f4c3"
+digest = "64446686b7543074f57d6dfca02f571b61907738"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/observables/sample.rs"
@@ -222,7 +229,7 @@ anchor = "struct GammaLoopAPI {"
 # generated representation without rebuilding it; API prose describes this boundary.
 # Reviewed 2026-10-29: single and batch calls share EvaluationResult, while
 # ObservableAccumulator explicitly reduces contributions as described in the note.
-digest = "6fba6d14f887fe18d3e6cc36c061c151d936e677"
+digest = "995d59847586fbcf76fc7c7f095aa5b99267f44c"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/python/residue_map.rs"
@@ -239,14 +246,21 @@ path = "crates/gammalooprs/src/lib.rs"
 symbol = "gammalooprs module topology"
 anchor = "pub mod cff;"
 # Reviewed 2026-09-23: No architecture impact: obsolete root test-module exports were removed; production module ownership is unchanged.
-digest = "41d3e5da3e5b11fbfb34c30432192c7d3ed53e16"
+digest = "edec06f9908cb2a95b833efe44c546282f2331b4"
 
 [[section.note.scope]]
 # No-impact attestation 2026-08-28: tadpole-filter validation failures now
 # warn and reject the candidate instead of panicking; generation ownership and
 # the documented filtering pipeline are unchanged.
-path = "crates/gammalooprs/src/feyngen/diagram_generator.rs"
-symbol = "gammalooprs::feyngen::DiagramGenerator::generate"
+path = "crates/feynkit-generator/src/generation.rs"
+symbol = "feynkit_generator::Generator::generate"
+# Reviewed 2026-11-26: cross-section cuts missed by the attachment-seeded search are recovered from the external-leg enumeration with whole vertex sides, after the cut-independent interaction filters; amplitude left/right symmetrization again permutes identical legs across states, with fermions and ghosts only under the external-fermion option.
+# Reviewed 2026-11-26: user projector momenta resolve on provisional edges and transport Q with Q3; one-sample scalar-rescaling grouping is refused; requested loop-momentum bases reroute only group masters after grouping.
+# Reviewed 2026-11-24: automatic XS projectors close paired initial colors without averaging; equal post-flow payloads combine complete signed weights before naming and optional grouping.
+# Reviewed 2026-11-23: symmetrized amplitude weights include permutations of identical external particles within each requested side.
+# Reviewed 2026-11-23: explicit-leg PSlash uses the same all-incoming momentum as P on that leg.
+# Reviewed 2026-11-23: implicit edge momentum reverses when a particle uses its conjugate’s propagator in the opposite orientation.
+# Reviewed 2026-11-23: forced cuts retain canonical unfiltered diagram names. ID selectors and loop-basis requests accept original and cut-restricted IDs.
 anchor = "pub fn generate("
 # Reviewed 2026-09-14: Symbolica's graph/canonicalization API migration
 # preserves generation, filtering, and persistence ownership.
@@ -263,7 +277,7 @@ anchor = "pub fn generate("
 # errors; diagram generation is unchanged.
 # No architecture impact 2026-10-11: the neutral-ghost predicate tests the
 # rational charge with is_zero, preserving the documented ghost-flow rule.
-digest = "185b08e821e88d54e7a981500fba2a757ab57b49"
+digest = "38ba41d89849e3cdd978c200c75990a6cafebe0c"
 
 [[section.note.scope]]
 path = "crates/three-dimensional-reps/src/generation/ltd.rs"
@@ -317,7 +331,7 @@ anchor = "fn dashboard_event_loop(receiver"
 # Reviewed 2026-10-14: ratatui-integration-dashboard.typ distinguishes streamed
 # recovery from non-streamed unwinding; renderer cleanup and event-loop ownership
 # are unchanged. Regression tests cover both paths and late streamed panics.
-digest = "0bdb5ccde10675a71a3fa52ed6c8d7da36d71bfa"
+digest = "e33c7d55fa35d4ced50a7a1fb8beea173a520bd6"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrate/render_ratatui.rs"
@@ -349,7 +363,7 @@ anchor = "mod render_ratatui;"
 # No dashboard impact 2026-10-29: observable accumulation moves to explicit
 # native integration calls and exported events receive their outer weight.
 # StatusUpdate assembly, renderer ownership, and terminal lifecycle are unchanged.
-digest = "1067ce0970fbbb3fbb03dcedb0a82161a5b4851a"
+digest = "10b5cbde9020ec5915c7bfe9f35367e508b1043f"
 
 [[section.note]]
 id = "uv-renormalization"
@@ -394,7 +408,7 @@ anchor = "impl UVOrchestrator {"
 # full mode options, and each compute call reports only its shared-time delta.
 # Reviewed 2026-10-15: Complete generation settings and the medium guard retain
 # shared preparation before representation-specific projection.
-digest = "d7e02e0b7d9e265248420f2a1dffdd75dc4397d2"
+digest = "254ca4c2a13e36ec05e6f3d034393557c880b5be"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/mod.rs"
@@ -403,7 +417,7 @@ anchor = "pub struct Integrands {"
 # Reviewed 2026-10-19: this file is byte-identical to current main ff533fcd9.
 # Integrands retains its existing cut-keyed roots, numerator families and scalar
 # definitions; the UV note describes these owners without a separate row IR.
-digest = "80cfe9571f4d71b2647cb89f93ba7bf3d3c913d2"
+digest = "53b66ce243bb374e14eebc9f2020d46d040abc9a"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/approx/projected_4d.rs"
@@ -413,7 +427,7 @@ anchor = "pub(crate) struct Local4dProjectionContext {"
 # remain intact. Ordinary LTD skips numerator-capacity reports; raised LTD
 # retains exact sampling bounds. The bounded context records only added shared
 # preparation time across representation passes, as documented in the UV note.
-digest = "3e1d63f1fd4beb45a690333b0443fd283f8e8d09"
+digest = "acbf853a2761ffaa85854f5a135e84df076ea337"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/approx/final_integrand.rs"
@@ -424,7 +438,7 @@ anchor = "pub(crate) struct FinalIntegrandBuilder<'a> {"
 # same selected axes, retaining numerator/scalar definitions. No typed row-product
 # lane or generic factorization rewrite enters the first PR. All main CFF
 # regression-test functions remain present after source-owner restoration.
-digest = "049ef82f625751859df44b029dfbaa5888b8859d"
+digest = "ba621f725a77d20d86d75ba8f5b1e03600cf6eb0"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/approx/direct_3d/branches.rs"
@@ -433,7 +447,7 @@ anchor = "    pub(crate) fn series_preserving_numerators("
 # Reviewed 2026-10-19: this file is byte-identical to current main ff533fcd9.
 # Direct CFF3D keeps the established numerator-preserving Taylor and keyed-family
 # operations documented in the UV note.
-digest = "1fd2a303d2b434ad8197e05e65d54f26ce5100f5"
+digest = "bd45cde638f4625873851afdefa80e0148579e88"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/approx/local_3d/integrated_localizer.rs"
@@ -442,7 +456,7 @@ anchor = "    pub(crate) fn localize<S: ForestNodeLike>("
 # Reviewed 2026-10-19: CFF keeps main allowed-key localization. LTD alone applies
 # its smooth factor to every actual source residue order, including orders above
 # the production root. The UV note records this sparse-order boundary.
-digest = "c3c752fcff2592e0bae6312a83524633a6c60f74"
+digest = "c1fa5732e2d762c373645be01fed09616ad63996"
 
 [[section.note]]
 id = "spenso-parsing-flow"
@@ -469,7 +483,7 @@ anchor = "pub enum ShorthandParsing {"
 # Reviewed 2026-09-21: Documented input-index reservation and fresh internal
 # dummies for separately lowered positive-power copies.
 # Reviewed 2026-10-01: Documented borrowed scalar accumulation, one n-ary addition for mixed sums, and scalar input reuse.
-digest = "bd148e50a697af51b0503822e3be0a1d3cc8229c"
+digest = "583f0514c0418a75d13870024bb02a8b42f3ba02"
 
 [[section.note]]
 id = "schoonschip-network"
@@ -489,12 +503,12 @@ review_triggers = ["crates/idenso/src/shorthands/schoonschip/**", "crates/spenso
 [[section.note.scope]]
 path = "crates/idenso/src/shorthands/schoonschip/api.rs"
 symbol = "idenso::shorthands::schoonschip::Schoonschip"
-anchor = "pub trait Schoonschip {"
+anchor = "pub(crate) trait Schoonschip {"
 # Reviewed 2026-09-14: typed network errors are documented; opaque parsing,
 # contraction settings, and fixed-point execution remain unchanged.
 # Reviewed 2026-10-01: documented opt-in slot replacement for a vector sum
 # contracted with one tensor; API and parser defaults are unchanged.
-digest = "608eb6fd27a8463bc0bbfa6383c41db3a9e95000"
+digest = "3d4e374d18d8e9d69be971e943712b6246a6f362"
 
 [[section.note]]
 id = "gammaloop-draw-style-migration"
@@ -528,7 +542,7 @@ anchor = "pub fn extract_templates<P: AsRef<Path>>"
 # Reviewed 2026-10-12: Template embedding uses include_dir and generated
 # include_bytes tables; extraction paths and shipped Typst assets are
 # unchanged.
-digest = "cc91f55813de46de52ab05aaa476e60714c9a4ed"
+digest = "3dca6f84cadbe237f3beaa7ab05e11cea309cd41"
 
 [[section.note]]
 id = "gammaloop-drawing-architecture"
@@ -571,6 +585,7 @@ review_triggers = ["crates/spenso/src/network/parsing/**", "crates/spenso/src/sh
 [[section.note.scope]]
 path = "crates/idenso/src/lib.rs"
 symbol = "idenso::IndexTooling"
+# Reviewed 2026-11-24: expansion, collection, wrapping and canonicalization preserve closed index scopes, original selectors and opaque callbacks; scalar powers remain compact and materialized root pairs retain their history.
 anchor = "pub trait IndexTooling {"
 # Reviewed 2026-09-14: tagged builders and dualizable dot syntax match the note,
 # which now records the shared chain/trace placeholder scope.
@@ -578,7 +593,7 @@ anchor = "pub trait IndexTooling {"
 # Reviewed 2026-10-05: documented reversible formal-dimension labels around index canonicalization; component dimensions and factorization remain unchanged.
 # Reviewed 2026-10-12: Capability feature names and formatting are updated;
 # the reviewed implementation and data contracts are unchanged.
-digest = "026cfab08c153e267367672d0813462e81ff4807"
+digest = "54d42e2972b1cf09277bc328482a13100988dcfb"
 
 [[section.note]]
 id = "spenso-architecture"
@@ -605,7 +620,7 @@ anchor = "pub trait TensorStructure {"
 # index permutations and records backend features and portable attachments.
 # Reviewed 2026-10-12: Capability feature names and formatting are updated;
 # the reviewed implementation and data contracts are unchanged.
-digest = "9385506a01703431293c49f82c1ff578d299ab7e"
+digest = "251fd974e0561467a8cb0f6f5c59a8429920002d"
 
 [[section.note.scope]]
 path = "crates/spenso/src/tensors/data.rs"
@@ -628,6 +643,7 @@ digest = "1a6c276ef07e2ee5b1270f4b0302ba6540295894"
 [[section.note.scope]]
 path = "crates/spenso/src/network/mod.rs"
 symbol = "spenso::network::Network"
+# Reviewed 2026-11-24: stored tensor axes are reassigned only to surviving graph ports; pending deletion masks exclude consumed sum/contraction seams before validation.
 anchor = "pub struct Network<S, LibKey, FunKey, Aind = AbstractIndex> {"
 # No architecture impact: the 2026-09-02 Rust 1.98 compatibility fix removes
 # an unused higher-ranked lifetime without changing the trait bound or behavior.
@@ -641,7 +657,7 @@ anchor = "pub struct Network<S, LibKey, FunKey, Aind = AbstractIndex> {"
 # Reviewed 2026-10-06: basic profiling retains counters, timers and slow-operation diagnostics; detailed execution and merge traces require verbose mode.
 # Reviewed 2026-10-12: Capability feature names and formatting are updated;
 # the reviewed implementation and data contracts are unchanged.
-digest = "0978dc338492b56f077d8e96923da176e2013df5"
+digest = "d83e952c42bb9d3af299cb35a065ec5f24e0ff35"
 
 [[section.note.scope]]
 path = "crates/spenso/src/network/parsing/mod.rs"
@@ -653,14 +669,14 @@ anchor = "pub struct ParseSettings {"
 # Reviewed 2026-09-21: Documented input-index reservation and fresh internal
 # dummies for separately lowered positive-power copies.
 # Reviewed 2026-10-01: Documented the scalar-sum parsing path and unchanged tensor compatibility boundary.
-digest = "bd148e50a697af51b0503822e3be0a1d3cc8229c"
+digest = "583f0514c0418a75d13870024bb02a8b42f3ba02"
 
 [[section.note.scope]]
 path = "crates/spenso/src/symbolic_parallelism.rs"
 symbol = "spenso::symbolic_parallelism::SymbolicParallelism"
 anchor = "pub enum SymbolicParallelism {"
 # No architecture impact 2026-09-14: only the LicenseManager import path changed.
-digest = "f9475edd533e069fc57ea28b6c14208d1c318a2d"
+digest = "f52c9ac14265f983c86c9affc9713970e6b28561"
 
 [[section.note]]
 id = "idenso-architecture"
@@ -686,11 +702,12 @@ anchor = "pub fn initialize() {"
 # Reviewed 2026-10-12: Bincode derives are always available after removing the
 # redundant capability flag; representation types and wire encodings are
 # unchanged.
-digest = "ac418eb7016701a0e0bda4e300cc2a3b415e1ca1"
+digest = "894b3ff3a258e79254b687b0d1d6d4229ddf2daa"
 
 [[section.note.scope]]
 path = "crates/idenso/src/lib.rs"
 symbol = "idenso::IndexTooling"
+# Reviewed 2026-11-24: expansion, collection, wrapping and canonicalization preserve closed index scopes, original selectors and opaque callbacks; scalar powers remain compact and materialized root pairs retain their history.
 anchor = "pub trait IndexTooling {"
 # Reviewed 2026-09-14: typed structural errors and native/Wasm features are
 # documented; symbolic tensor and rewrite ownership remain unchanged.
@@ -698,7 +715,7 @@ anchor = "pub trait IndexTooling {"
 # Reviewed 2026-10-05: documented reversible formal-dimension labels around index canonicalization; component dimensions and factorization remain unchanged.
 # Reviewed 2026-10-12: Capability feature names and formatting are updated;
 # the reviewed implementation and data contracts are unchanged.
-digest = "026cfab08c153e267367672d0813462e81ff4807"
+digest = "54d42e2972b1cf09277bc328482a13100988dcfb"
 
 [[section.note.scope]]
 path = "crates/idenso/src/cook.rs"
@@ -707,22 +724,23 @@ anchor = "pub struct CookSettings {"
 # No cooking-policy impact 2026-09-14: preserves_tags exposes existing settings
 # without changing selected tags or transformation behavior.
 # Reviewed 2026-10-05: documented representation_dimension user-data wrappers and restoration restricted to owned dimension payloads.
-digest = "2b9ca6fe51b247168e6bd3203e7ae572bf5b4b97"
+digest = "c7eff67d3494ceef2218a5e578de75349e191b98"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/mod.rs"
 symbol = "idenso::tensor::SymbolicTensor"
-anchor = "pub struct SymbolicTensor<Aind: AbsInd = AbstractIndex> {"
+# Reviewed 2026-11-24: expansion, collection, wrapping and canonicalization preserve closed index scopes, original selectors and opaque callbacks; scalar powers remain compact and materialized root pairs retain their history.
+anchor = "pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractIndex>, E = Atom> {"
 # Reviewed 2026-09-14: documented typed expansion and execution errors;
 # symbolic tensor ownership and rewrite boundaries remain unchanged.
 # Reviewed 2026-09-17: Documented factorized index canonicalization and symbolic-dimension materialization.
-digest = "bf2aad648a51b0beb0fcaa8d045a6e5b9a1cec27"
+digest = "b95ee5f1852b22a03b1fe79bfe4342d3c42e831e"
 
 [[section.note.scope]]
 path = "crates/idenso/src/shorthands/schoonschip/settings.rs"
 symbol = "idenso::shorthands::schoonschip::SchoonschipSettings"
-anchor = "pub struct SchoonschipSettings {"
-digest = "6924df328f8de538c789d2b07b312508e7c87534"
+anchor = "pub(crate) struct SchoonschipSettings {"
+digest = "2e6d36f610dba22449e8b11fca0d07719da7f47c"
 
 [[section.note.scope]]
 path = "crates/idenso/src/color/simplify.rs"
@@ -735,7 +753,7 @@ anchor = "fn simplify_cubic_trace_contraction(product: &ProductView) -> Option<A
 # require known invariant matrix factors and zero or one free adjoint slot;
 # the scalar projection uses a fresh typed dummy and closes all slots. Unknown operators and momentum spectators
 # retain their original meaning, as documented in idenso-architecture.typ.
-digest = "57935259c5087e041fd62906ba53446753c34831"
+digest = "6add8a9d89b1116f4eb009fba0788fc939fbd15f"
 
 [[section.note]]
 id = "idenso-form-color-dirac-source-map"
@@ -841,6 +859,7 @@ review_triggers = ["crates/vakint/src/**", "crates/vakint/templates/**", "crates
 [[section.note.scope]]
 path = "crates/vakint/src/lib.rs"
 symbol = "vakint::Vakint"
+# Reviewed 2026-11-26: the numerator-identification check is built only when verification is requested, with epsilon kept symbolic; results are unchanged.
 anchor = "pub struct Vakint {"
 # Reviewed 2026-09-14: bind matcher conditions only to present wildcards;
 # reuse registered symbols and index atoms across FORM conversions to preserve metadata.
@@ -854,7 +873,7 @@ anchor = "pub struct Vakint {"
 # Reviewed 2026-10-12: Embedded FORM sources and template substitution use
 # small static tables and the local renderer; solver dispatch and integral
 # algorithms are unchanged.
-digest = "7766f7350df0de625027faa69123030fcc83df59"
+digest = "eb7630417f5d0f3cff9f5aa025edba918d85f351"
 
 [[section.note.scope]]
 path = "crates/vakint/src/topologies.rs"
@@ -882,7 +901,7 @@ anchor = "pub struct VakintWrapper {"
 # Reviewed 2026-09-17: Documented tensor projection, epsilon depth, opaque spin slots, and complex numerical parameters.
 # Reviewed 2026-10-12: Capability feature names and formatting are updated;
 # the reviewed implementation and data contracts are unchanged.
-digest = "d2483b4ed0df187a8fb6997c70122cbe9887a8e6"
+digest = "c1fbf434f541ddde88b36ccdf74d4d086904d411"
 
 [[section]]
 id = "proposals"
@@ -1250,7 +1269,7 @@ end_anchor = "# Exercise the embedded Typst watcher"
 # Reviewed 2026-10-12: ABI/Python capability names are updated and
 # watcher/server checks are grouped under watch; reusable compiler and
 # terminal publication boundaries are retained.
-digest = "6254c11f064bedd7b7d67dace6de4c9f0be912b1"
+digest = "7b8b58eac9879b0a8915d1c36a75ffb256a5f5ea"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
@@ -1281,6 +1300,9 @@ digest = "6ae7769a5fab0c19db4004118a07e14882b6f4af"
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
 symbol = "workspace package source ownership"
+# Reviewed 2026-11-23: the pinned GL15 reference is read at runtime by API
+# metadata display, native generator comparison and threshold integration tests.
+# Reviewed 2026-11-23: renormalization tests derive numerators from the model; the finalized DOT fixtures are no longer test inputs.
 # Reviewed 2026-09-14: Clinnet include_str fixtures are compile-time inputs
 # shared with aggregate checks and remapped test execution; docs tests carry
 # the notebook sources linked from their generated pages.
@@ -1298,7 +1320,7 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Reviewed 2026-10-12: Package source ownership now includes the shared
 # Linnest asset builder used by GammaLoop and Clinnet; the existing per-
 # package filtering boundary is retained.
-digest = "22131d6f9eaffe67fda286634e555fa338ef7884"
+digest = "6756819c6415e0bb0ad576881774d2b403a64c22"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
@@ -1319,7 +1341,7 @@ end_anchor = "\nin\n{\n  inherit"
 # terminal publication boundaries are retained.
 # Reviewed 2026-10-12: documentation validation runs the feature-enabled
 # GammaLoop and Linnet exporter tests; reusable producer inputs are unchanged.
-digest = "9c1f6842081d8e84ce377f1711fbfbd403672240"
+digest = "191e7a1d7c944821eb395485c0e8ae27f155427d"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"

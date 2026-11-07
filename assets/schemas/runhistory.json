@@ -1882,7 +1882,7 @@
           "$ref": "#/$defs/EvaluatorMethod"
         },
         "generate_events": {
-          "description": "Return generated events in addition to accumulating integration statistics.",
+          "description": "Request diagnostic events even without configured observables.\nObservable evaluation always retains the complete per-sample contribution.",
           "type": "boolean"
         },
         "integral_unit": {
@@ -2015,7 +2015,7 @@
           "$ref": "#/$defs/FeyGenSettings"
         },
         "force_cuts": {
-          "description": "Explicit particle-name sets forced to define graph cuts.",
+          "description": "Edge-name sets (`eN`) selecting the Cutkosky cuts used when integrands are built.\nGeneration and stored cut inventories ignore it; graphs without a selected cut\ncontribute zero.",
           "type": "array",
           "items": {
             "type": "array",
@@ -2123,7 +2123,6 @@
       "type": "string",
       "enum": [
         "NoGrouping",
-        "OnlyDetectZeroes",
         "GroupIdenticalGraphsUpToSign",
         "GroupIdenticalGraphsUpToScalarRescaling"
       ]
@@ -5393,7 +5392,7 @@
       "type": "object",
       "properties": {
         "allow_symmetrization_of_external_fermions_in_amplitudes": {
-          "description": "Permit external fermion permutations when identifying equivalent amplitudes.",
+          "description": "Permit permutations of external fermions and ghosts when identifying equivalent amplitudes.",
           "type": [
             "boolean",
             "null"
@@ -5418,7 +5417,7 @@
           "type": "boolean"
         },
         "compare_canonized_numerator": {
-          "description": "Compare canonicalized numerators in addition to graph topology when grouping.",
+          "description": "Compare canonicalized numerators in addition to graph topology when grouping. Pairs\nthat this comparison does not match are still compared at the numerical samples.",
           "type": [
             "boolean",
             "null"
@@ -5465,6 +5464,11 @@
             "boolean",
             "null"
           ]
+        },
+        "filter_zero_color": {
+          "description": "Remove diagrams whose numerators vanish under color algebra before grouping.",
+          "type": "boolean",
+          "default": false
         },
         "filter_zero_flow_edges": {
           "description": "Filter edges that carry zero momentum flow in the selected routing.",
@@ -5518,12 +5522,6 @@
             "$ref": "#/$defs/KvPair"
           }
         },
-        "max_multiplicity_for_fast_cut_filter": {
-          "description": "Fast cut filter switch multiplicity",
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0
-        },
         "max_n_bridges": {
           "description": "Maximum number of bridges allowed in a generated graph; negative values disable the bound.",
           "type": [
@@ -5545,7 +5543,7 @@
           }
         },
         "n_cut_spectators": {
-          "description": "Inclusive minimum and maximum number of spectators crossing a cross-section cut.",
+          "description": "Inclusive minimum and maximum number of spectators on each side of a cross-section cut.\n\nA spectator is an initial-state leg crossed by the cut. A graph selected only\nthrough such a cut is stored as a selection-only diagram: it can be listed and\nexported, but no integrand can be generated from it.",
           "type": [
             "array",
             "null"
@@ -5579,7 +5577,7 @@
           }
         },
         "number_of_samples_for_numerator_comparisons": {
-          "description": "Number of phase-space samples used to decide whether two numerators are equivalent.",
+          "description": "Number of phase-space samples used to decide whether two numerators are equivalent\n(default 5). Scalar rescaling requires at least two: with one sample any two nonzero\nnumerators look proportional. Sign and identical grouping accept one with a warning.",
           "type": [
             "integer",
             "null"
@@ -5651,7 +5649,7 @@
           ]
         },
         "symmetrize_left_right_states": {
-          "description": "Identify cross-section graphs under CP-based left/right exchange; requires CP symmetry.",
+          "description": "Identify graphs under left/right exchange; cross sections require CP symmetry.\n\nCross sections identify graphs under CP-based exchange of their two forward sides.\nFor amplitudes, the option sets unspecified initial- and final-state symmetrization to\ntrue and rejects an explicit false. Identical bosons, and fermions and ghosts only with\nthe external-fermion option, are then permuted within and across the two states, an\noutgoing leg counting as its incoming antiparticle. Where separate side symmetrization\nadmits the same legs with the same sign convention, this crossing identification keeps\nthe sum of combinatorial graph weights; it does not equate amplitudes at a fixed point.",
           "type": [
             "boolean",
             "null"
@@ -5752,8 +5750,7 @@
         "tokens",
         "append",
         "clear_existing_processes",
-        "only_diagrams",
-        "max_multiplicity_for_fast_cut_filter"
+        "only_diagrams"
       ]
     },
     "StabilityLevelSetting": {
@@ -6356,9 +6353,28 @@
             "string",
             "null"
           ]
+        },
+        "tensor_reduction_method": {
+          "description": "Numerator tensor reduction: native FeynKit by default, or the FORM-based AlphaLoop projector.",
+          "$ref": "#/$defs/VakintTensorReductionMethod"
         }
       },
       "additionalProperties": false
+    },
+    "VakintTensorReductionMethod": {
+      "description": "Numerator tensor-reduction backend used by Vakint.",
+      "oneOf": [
+        {
+          "description": "Historical FORM implementation shipped with AlphaLoop.",
+          "type": "string",
+          "const": "alphaloop"
+        },
+        {
+          "description": "Native, FORM-less FeynKit tensor projector.",
+          "type": "string",
+          "const": "feynkit"
+        }
+      ]
     },
     "Validate": {
       "type": "object",

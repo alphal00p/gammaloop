@@ -1,5 +1,6 @@
 use std::{io, path::PathBuf};
 
+use symbolica_notation::MathMlSubsetError;
 use thiserror::Error;
 
 /// A named collection in a physics model.
@@ -119,6 +120,12 @@ pub enum ModelError {
         path: PathBuf,
         #[source]
         source: io::Error,
+    },
+    #[error("invalid mathmlname for parameter '{name}': {source}")]
+    InvalidParameterMathMl {
+        name: String,
+        #[source]
+        source: MathMlSubsetError,
     },
     #[error("invalid JSON: {0}")]
     Json(#[from] serde_json::Error),

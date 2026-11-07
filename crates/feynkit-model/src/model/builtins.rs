@@ -8,7 +8,7 @@ use super::{
     ParticleDefinition as Particle, PropagatorDefinition as Propagator,
     VertexRuleDefinition as VertexRule,
 };
-use crate::ComplexValue;
+use crate::{ComplexValue, ModelError, Particle as ModelParticle};
 
 impl Model {
     /// Load a fresh copy of the complete embedded Standard Model (`sm`).
@@ -27,7 +27,7 @@ impl Model {
     /// The Standard Model's QCD sector: six quark flavors, gluons, and gluon
     /// ghosts. Keeps the Standard Model parameters and their default values.
     pub fn qcd() -> Self {
-        Self::standard_model_sector("qcd", super::Particle::is_qcd_charged)
+        Self::standard_model_sector("qcd", ModelParticle::is_qcd_charged)
     }
 
     /// The Standard Model's QED sector: photons and all charged fermions,
@@ -64,7 +64,17 @@ impl Model {
         })
     }
 
-    fn standard_model_sector(name: &str, keep_particle: impl Fn(&super::Particle) -> bool) -> Self {
+    fn standard_model_sector(name: &str, keep_particle: impl Fn(&ModelParticle) -> bool) -> Self {
+        Self::with_parameter_display_transaction(|| {
+            Self::build_standard_model_sector(name, keep_particle)
+        })
+        .expect("filtered Standard Model sector must be valid")
+    }
+
+    fn build_standard_model_sector(
+        name: &str,
+        keep_particle: impl Fn(&ModelParticle) -> bool,
+    ) -> Result<Self, ModelError> {
         let model = Self::standard_model();
         let selected: BTreeSet<_> = model
             .particles()
@@ -116,7 +126,7 @@ impl Model {
 
         // Keep the complete parameter definitions: expressions may depend on
         // electroweak inputs even after electroweak particles have been removed.
-        Self::new(definition).expect("filtered Standard Model sector must be valid")
+        Self::new(definition)
     }
 
     /// One real scalar `phi` with L_int = -g phi^3 / 3!.
@@ -178,6 +188,12 @@ impl Model {
                     }
                     .to_owned(),
                 ),
+                mathmlname: match name {
+                    "ZERO" => Some("<mn>0</mn>".to_owned()),
+                    "mass" => Some("<mi>m</mi>".to_owned()),
+                    "lam" => Some("<mi>λ</mi>".to_owned()),
+                    _ => None,
+                },
                 lhablock: (index != 0).then(|| "SCALAR".to_owned()),
                 lhacode: (index != 0).then(|| vec![index]),
                 nature: if index == 0 {
@@ -264,6 +280,7 @@ impl Model {
         charge.name = "e".to_owned();
         charge.texname = Some("e".to_owned());
         charge.typstname = Some("e".to_owned());
+        charge.mathmlname = Some("<mi>e</mi>".to_owned());
         charge.lhacode = Some(vec![3]);
         charge.value = Some(ComplexValue::new(1.0, 0.0));
         definition.parameters.push(charge);
@@ -573,8 +590,8 @@ mod tests {
             serde_json::from_str::<serde_json::Value>(source).unwrap()
         );
         assert_eq!(
-            Model::standard_model().fingerprint(),
-            Model::from_json(source).unwrap().fingerprint()
+            Model::standard_model().to_json().unwrap(),
+            Model::from_json(source).unwrap().to_json().unwrap()
         );
     }
 }

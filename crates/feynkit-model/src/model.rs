@@ -29,6 +29,8 @@ mod parameter_print;
 pub(crate) mod quantum_number;
 mod quantum_number_token;
 
+pub use parameter_print::ParameterMathMl;
+
 const fn default_true() -> bool {
     true
 }
@@ -179,6 +181,9 @@ pub(crate) struct ParameterDefinition {
     /// Native Typst math source (without dollar delimiters).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub typstname: Option<String>,
+    /// Optional presentation MathML fragment for the symbolic parameter.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mathmlname: Option<String>,
     pub lhablock: Option<String>,
     pub lhacode: Option<Vec<usize>>,
     pub nature: ParameterNature,
@@ -550,6 +555,8 @@ pub struct Parameter {
     pub texname: Option<String>,
     /// Native Typst math source (without dollar delimiters).
     pub typstname: Option<String>,
+    /// Optional presentation MathML fragment for the symbolic parameter.
+    pub mathmlname: Option<ParameterMathMl>,
     pub lhablock: Option<String>,
     pub lhacode: Option<Vec<usize>>,
     pub nature: ParameterNature,
@@ -678,15 +685,27 @@ impl Model {
         .expect("an empty model definition is valid")
     }
 
+    /// Validate and index a definition. Its parameter labels are published only
+    /// if construction succeeds, or join an enclosing display transaction.
     fn new(definition: ModelDefinition) -> Result<Self, ModelError> {
+        Self::with_parameter_display_transaction(|| Self::build(definition))
+    }
+
+    fn build(definition: ModelDefinition) -> Result<Self, ModelError> {
         let indexes = ModelIndexes::build(&definition)?;
         // Declare every parameter before parsing any expression: a parameter
         // can reference a later entry, and Symbolica fixes printers at creation.
-        for parameter in &definition.parameters {
-            Self::register_parameter_symbol(
+        let mathml_labels = definition
+            .parameters
+            .iter()
+            .map(|p| ParameterMathMl::for_parameter(&p.name, p.mathmlname.as_deref()))
+            .collect::<Result<Vec<_>, _>>()?;
+        for (parameter, mathml) in definition.parameters.iter().zip(&mathml_labels) {
+            Self::register_parameter_display(
                 &parameter.name,
                 parameter.texname.as_deref(),
                 parameter.typstname.as_deref(),
+                mathml.as_ref(),
             )?;
         }
         // Declare the coupling symbols in model order too. Symbolica orders the
@@ -707,11 +726,13 @@ impl Model {
         let mut parameters = definition
             .parameters
             .iter()
-            .map(|parameter| {
+            .zip(mathml_labels)
+            .map(|(parameter, mathmlname)| {
                 Ok(Parameter {
                     name: parameter.name.clone(),
                     texname: parameter.texname.clone(),
                     typstname: parameter.typstname.clone(),
+                    mathmlname,
                     lhablock: parameter.lhablock.clone(),
                     lhacode: parameter.lhacode.clone(),
                     nature: parameter.nature.clone(),
@@ -1172,6 +1193,10 @@ impl Model {
                     name: parameter.name.clone(),
                     texname: parameter.texname.clone(),
                     typstname: parameter.typstname.clone(),
+                    mathmlname: parameter
+                        .mathmlname
+                        .as_ref()
+                        .map(|label| label.as_str().to_owned()),
                     lhablock: parameter.lhablock.clone(),
                     lhacode: parameter.lhacode.clone(),
                     nature: parameter.nature.clone(),
@@ -1298,7 +1323,13 @@ impl Model {
 
     pub fn fingerprint(&self) -> ModelFingerprint {
         *self.fingerprint.get_or_init(|| {
-            let bytes = serde_json::to_vec(&self.definition())
+            // MathML is presentation metadata. Graphs and saved states retain the
+            // same model identity they had before parameter MathML was introduced.
+            let mut definition = self.definition();
+            for parameter in &mut definition.parameters {
+                parameter.mathmlname = None;
+            }
+            let bytes = serde_json::to_vec(&definition)
                 .expect("canonical model definitions are always JSON serializable");
             ModelFingerprint(*blake3::hash(&bytes).as_bytes())
         })

@@ -1,4 +1,5 @@
 digraph GL662{
+    final_state = "H,t,t~|H,t,t~,g|H,t,t~,g,g|H,t,t~,d,d~|H,t,t~,ghG,ghG~";
     // Only cut (2,4,7,13) has a virtual side, with full cycle
     // (+e5,+e6,-e14); the five-particle cut is a tree. Retain that entire
     // one-loop space and test both soft directions without a multiplier.

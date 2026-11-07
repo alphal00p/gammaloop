@@ -268,7 +268,7 @@ and consult the
 specification]. Exact public signatures are in the
 #link("../../../products/idenso/latest/reference/rust/idenso/")[native Idenso Rustdoc]
 and the
-#link("../../../products/idenso/latest/reference/python/idenso-community/")[Python community
+#link("../../../products/idenso/latest/reference/python/spynso3/")[Python community
 module reference].
 
 == Factorized canonicalization and symbolic targets

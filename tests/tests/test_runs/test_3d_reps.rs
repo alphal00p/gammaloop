@@ -20,7 +20,9 @@ fn display_and_generation_timings_follow_saved_representation_payloads() -> Resu
     run_commands(
         &mut cli,
         &[
-            "import model scalars-default.json",
+            // This audit includes a degree-two scalar insertion. Use the
+            // existing model fixture that owns that interaction and its cuts.
+            "import model ./assets/models/json/scalars/scalars_2p_3p.json",
             "set global kv global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.store_atom=false global.generation.evaluator.summed=false global.generation.evaluator.summed_function_map=true global.generation.uv.subtract_uv=true global.generation.uv.generate_integrated=true global.generation.uv.local_uv_cts_from_expanded_4d_integrands=false global.generation.threshold_subtraction.enable_thresholds=true global.generation.threshold_subtraction.check_esurface_at_generation=false global.generation.tropical_subgraph_table.disable_tropical_generation=true",
             r#"set default-runtime string '
 [kinematics.externals]
@@ -50,16 +52,9 @@ momenta = [[4.0,0.0,0.0,0.0]]
 helicities = [0]
 '"#,
             )?;
-            // The scalar test numerator also defines the degree-two insertion,
-            // which has no interaction rule in scalars-default.
-            let dot = fs::read_to_string("tests/resources/graphs/dotted_bubble.dot")?.replacen(
-                "num = 1",
-                "num = 1\n    node [num=1]",
-                1,
-            );
-            let path = root.join("dotted_bubble_scalar.dot");
-            fs::write(&path, dot)?;
-            path
+            // Finalize the unit-numerator degree-two insertion against this
+            // model rather than editing a model-bound canonical artifact.
+            std::path::PathBuf::from("tests/resources/graphs/dotted_bubble_scalar_compact.dot")
         } else {
             std::path::PathBuf::from("tests/resources/graphs/scalar_box.dot")
         };
@@ -512,6 +507,24 @@ fn cff_cli_validate_and_build_use_gammaloop_graph_state() -> Result<()> {
         cli.run_command("3drep build -g 0 --representation unknown")
             .is_err()
     );
+    for seed in [17, 41] {
+        let input = EvaluationInput::deterministic(&parsed, seed, &Default::default(), None)?;
+        let actual = evaluate_expression(
+            &parsed,
+            &ltd.clone().remap_energy_edge_indices(&local_map),
+            "1",
+            &input,
+        )?
+        .value;
+        let expected = evaluate_expression(&parsed, &reference.expression, "1", &input)?.value;
+        let scale = actual.abs().max(expected.abs()).max(f64::MIN_POSITIVE);
+        assert!(
+            actual.is_finite()
+                && expected.is_finite()
+                && (actual - expected).abs() <= 1.0e-12 * scale,
+            "the exported LTD source changed the scalar box at seed {seed}: {actual:e} != {expected:e}"
+        );
+    }
 
     clean_test(test_root);
     Ok(())

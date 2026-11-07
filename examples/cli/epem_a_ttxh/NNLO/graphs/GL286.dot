@@ -1,4 +1,5 @@
 digraph GL286{
+    final_state = "H,t,t~|H,t,t~,g|H,t,t~,g,g|H,t,t~,d,d~|H,t,t~,ghG,ghG~";
     // Shared 1L soft limits complement native 2L hard dual cancellation.
     // The gated vertex cycle uses e12 so its shared Born minimum is the origin.
     threshold_counterterms = "

@@ -16,6 +16,9 @@ name = "generate_diagrams"
 # Historical --global-prefactor-num "1𝑖" is superseded by the physical LU convention.
 commands = [
   "import model sm-default.json",
+  # check_esurface_at_generation decides at generation which threshold counterterms
+  # exist, and later model changes are refused: set the integration point first.
+  "run set_model_parameters",
   "set global kv global.n_cores.feyngen=10",
 
   "remove processes",
@@ -26,8 +29,8 @@ commands = [
       -p epem_a_tth -i NNLO
       --only-diagrams""",
   #"select -p epem_a_tth -i NNLO --amplitude-graphs --without-raised-propagator-signatures ANY_RAISING --without-raised-cuts-signatures ANY_RAISING",
-  "select -p epem_a_tth -i NNLO --with-only-graph-names GL297",
-  # Diagnostic subset previously used: GL076 GL090 GL132 GL134 GL190 GL443.
+  "select -p epem_a_tth -i NNLO --with-only-graph-names GL319",
+  # Diagnostic subset previously used: GL134 GL529 GL126 GL537 GL171 GL521.
   "save dot",
 ]
 

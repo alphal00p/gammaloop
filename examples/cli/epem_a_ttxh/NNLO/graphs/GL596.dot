@@ -1,4 +1,5 @@
 digraph GL596 {
+    final_state = "H,t,t~|H,t,t~,g|H,t,t~,g,g|H,t,t~,d,d~|H,t,t~,ghG,ghG~";
     // A common two-gluon origin aligns maximal and one-loop soft boundaries,
     // preserving both merged order-two families with unit counterterms.
     threshold_counterterms = "

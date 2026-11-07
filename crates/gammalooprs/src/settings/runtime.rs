@@ -3,6 +3,7 @@ use std::{
     fmt::Display,
 };
 
+use crate::cff::Esurface;
 use bincode_trait_derive::{Decode, Encode};
 use eyre::Result;
 use linnet::half_edge::involution::EdgeVec;
@@ -14,7 +15,6 @@ use typed_index_collections::TiVec;
 
 use crate::{
     DependentMomentaConstructor, GammaLoopContext,
-    cff::esurface::Esurface,
     graph::LoopMomentumBasis,
     integrands::process::SamplingMapDefinition,
     integrands::process::evaluators::EvaluatorMethod,
@@ -849,6 +849,19 @@ mod tests {
             HFunctionSettings::default().normalization(&sigma),
             sigma.PI().sqrt() * &sigma / sigma.from_usize(2)
         );
+    }
+
+    #[test]
+    fn integration_target_compatibility_preserves_tiny_phase_differences() {
+        let mut estimate = IntegralEstimate {
+            result: Complex::new(F(2.0), F(-1e-16)),
+            error: Complex::new(F(2e-18), F(0.0)),
+            ..IntegralEstimate::default()
+        };
+        let target = Complex::new(F(2.0), F(0.0));
+        assert!(!estimate.is_compatible_with_target(target, 1));
+        estimate.error = Complex::new(F(2e-15), F(0.0));
+        assert!(estimate.is_compatible_with_target(target, 1));
     }
 
     #[test]

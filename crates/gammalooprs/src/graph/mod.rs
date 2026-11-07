@@ -1,10 +1,21 @@
+use feynkit_graph::expressions::evaluate_overall_factor;
+use feynkit_graph::{DiagramEndpoint, DiagramHalfEdge, DiagramSpectatorCut, EdgeId};
+use idenso::tensor::SymbolicTensor;
 use std::{
     collections::{BTreeMap, BTreeSet},
     ops::Index,
+    sync::Arc,
 };
 
 use ahash::AHashSet;
+use bincode::Decode as BincodeDecode;
+use bincode::Encode as BincodeEncode;
+use bincode::de::Decoder;
+use bincode::enc::Encoder;
+use bincode::error::{DecodeError, EncodeError};
 use bincode_trait_derive::{Decode, Encode};
+use color_eyre::Result;
+use eyre::ensure;
 use gammaloop_tracing_filter::LogMessage;
 use itertools::Itertools;
 use linnet::{
@@ -12,8 +23,7 @@ use linnet::{
         HedgeGraph,
         involution::{EdgeData, EdgeIndex, Hedge, HedgePair},
         subgraph::{
-            HedgeNode, Inclusion, ModifySubSet, OrientedCut, SuBitGraph, SubGraphLike, SubSetLike,
-            SubSetOps,
+            HedgeNode, ModifySubSet, OrientedCut, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps,
         },
     },
     parser::DotGraph,
@@ -23,17 +33,19 @@ use tracing::debug;
 use rand::{Rng, SeedableRng, rngs::SmallRng};
 // use petgraph::Direction::Outgoing;
 use spenso::shadowing::symbolica_utils::LogPrint;
+use spenso::structure::IndexedStructure;
 use symbolica::atom::{Atom, AtomCore};
 use tracing::warn;
 use typed_index_collections::TiVec;
 
 use crate::{
+    GammaLoopContext,
     cff::surface::SurfaceCache,
     define_index,
-    feyngen::diagram_generator::evaluate_overall_factor,
     integrands::process::{LmbMultiChannelingSetup, ParamBuilder, SamplingChannelId},
+    model::{Model, ModelFingerprint},
     momentum::{Dep, ExternalMomenta, PolDef, sample::ExternalIndex},
-    numerator::GlobalPrefactor,
+    numerator::{GetSingleAtom, GlobalPrefactor},
     processes::DotExportSettings,
     settings::runtime::kinematic::{Externals, improvement::PhaseSpaceImprovementSettings},
     utils::{F, Length, ose_atom_from_index},
@@ -51,9 +63,32 @@ pub struct VertexOrder(pub u8);
 
 define_index! {pub struct GroupId;}
 
+/// Canonical physical cut metadata translated mechanically from FeynKit.
 #[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
-#[trait_decode(trait = crate::GammaLoopContext)]
+pub struct FinalizedCut {
+    pub cut: OrientedCut,
+    pub left: SuBitGraph,
+    pub right: SuBitGraph,
+}
+
+/// Topology-only threshold candidate translated from finalized FeynKit metadata.
+///
+/// This is deliberately distinct from [`FinalizedCut`]: it is the complete
+/// s-channel topology inventory and is not a process-selected physical cut.
+#[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+pub struct FinalizedTopologyThresholdCandidate {
+    pub cut: OrientedCut,
+    pub left: SuBitGraph,
+    pub right: SuBitGraph,
+}
+
+#[derive(Clone)]
 pub struct Graph {
+    /// Canonical model records bound to the graph's stable particle IDs. Numerical
+    /// evaluation still uses the current runtime parameter card. Graphs of one
+    /// import or state share this handle; persistence stores only the model's
+    /// structural fingerprint and rebinds to the decode context's model.
+    pub model: Arc<Model>,
     pub overall_factor: Atom,
     pub name: String,
     pub group_id: Option<GroupId>,
@@ -68,8 +103,134 @@ pub struct Graph {
     /// Only relevant for cross sections, but stored here for the parsing
     pub initial_state_cut: OrientedCut,
     pub polarizations: Vec<(PolDef, Atom)>,
+    /// Physical cuts selected and filtered by canonical FeynKit generation.
+    pub finalized_cuts: Vec<FinalizedCut>,
+    /// Complete topology-only threshold inventory finalized by FeynKit.
+    pub finalized_topology_threshold_candidates: Vec<FinalizedTopologyThresholdCandidate>,
+    /// Spectator cuts of a selection-only cross-section graph, in FeynKit's edge
+    /// frame. Such a graph has no finalized cuts and supports no integrand.
+    pub finalized_spectator_cuts: Vec<DiagramSpectatorCut>,
     /// Compact graph-local threshold-counterterm directives from the DOT input.
     pub threshold_counterterms: autogen::Autogen<threshold_counterterms::ThresholdCountertermSpec>,
+}
+
+// Keep the standalone graph crate independent of the application's bincode codec.
+// Each crossed edge stores its ID and whether the selected half is its target.
+type SpectatorCutPayload = (Vec<(usize, bool)>, Vec<usize>, Vec<usize>);
+
+impl BincodeEncode for Graph {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        let Self {
+            model,
+            overall_factor,
+            name,
+            group_id,
+            is_group_master,
+            tree_edges,
+            underlying,
+            loop_momentum_basis,
+            param_builder,
+            global_prefactor,
+            surface_cache,
+            initial_state_cut,
+            polarizations,
+            finalized_cuts,
+            finalized_topology_threshold_candidates,
+            finalized_spectator_cuts,
+            threshold_counterterms,
+        } = self;
+        // Identity prefix: decoding checks it before any model-dependent field.
+        BincodeEncode::encode(name, encoder)?;
+        BincodeEncode::encode(&model.structure_fingerprint(), encoder)?;
+        BincodeEncode::encode(overall_factor, encoder)?;
+        BincodeEncode::encode(group_id, encoder)?;
+        BincodeEncode::encode(is_group_master, encoder)?;
+        BincodeEncode::encode(tree_edges, encoder)?;
+        BincodeEncode::encode(underlying, encoder)?;
+        BincodeEncode::encode(loop_momentum_basis, encoder)?;
+        BincodeEncode::encode(param_builder, encoder)?;
+        BincodeEncode::encode(global_prefactor, encoder)?;
+        BincodeEncode::encode(surface_cache, encoder)?;
+        BincodeEncode::encode(initial_state_cut, encoder)?;
+        BincodeEncode::encode(polarizations, encoder)?;
+        BincodeEncode::encode(finalized_cuts, encoder)?;
+        BincodeEncode::encode(finalized_topology_threshold_candidates, encoder)?;
+        let spectator_payloads = finalized_spectator_cuts
+            .iter()
+            .map(|record| {
+                let crossed = record
+                    .cut
+                    .iter()
+                    .map(|half| (half.edge.0, half.endpoint == DiagramEndpoint::Target))
+                    .collect::<Vec<_>>();
+                (crossed, &record.left_spectators, &record.right_spectators)
+            })
+            .collect::<Vec<_>>();
+        BincodeEncode::encode(&spectator_payloads, encoder)?;
+        BincodeEncode::encode(threshold_counterterms, encoder)
+    }
+}
+
+impl<C: GammaLoopContext> BincodeDecode<C> for Graph {
+    fn decode<D: Decoder<Context = C>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let name: String = BincodeDecode::decode(decoder)?;
+        let fingerprint: ModelFingerprint = BincodeDecode::decode(decoder)?;
+        let model = Arc::clone(decoder.context().get_model());
+        if model.structure_fingerprint() != fingerprint {
+            return Err(DecodeError::OtherString(format!(
+                "graph '{name}' was saved for model structure {fingerprint}, but model '{}' has \
+                 structure {}; its particle and vertex identifiers would resolve to different \
+                 records. Load it with the model it was generated with, or regenerate it",
+                model.name(),
+                model.structure_fingerprint(),
+            )));
+        }
+        let graph = Self {
+            model,
+            name,
+            overall_factor: BincodeDecode::decode(decoder)?,
+            group_id: BincodeDecode::decode(decoder)?,
+            is_group_master: BincodeDecode::decode(decoder)?,
+            tree_edges: BincodeDecode::decode(decoder)?,
+            underlying: BincodeDecode::decode(decoder)?,
+            loop_momentum_basis: BincodeDecode::decode(decoder)?,
+            param_builder: BincodeDecode::decode(decoder)?,
+            global_prefactor: BincodeDecode::decode(decoder)?,
+            surface_cache: BincodeDecode::decode(decoder)?,
+            initial_state_cut: BincodeDecode::decode(decoder)?,
+            polarizations: BincodeDecode::decode(decoder)?,
+            finalized_cuts: BincodeDecode::decode(decoder)?,
+            finalized_topology_threshold_candidates: BincodeDecode::decode(decoder)?,
+            finalized_spectator_cuts: {
+                let payloads: Vec<SpectatorCutPayload> = BincodeDecode::decode(decoder)?;
+                payloads
+                    .into_iter()
+                    .map(
+                        |(crossed, left_spectators, right_spectators)| DiagramSpectatorCut {
+                            cut: crossed
+                                .into_iter()
+                                .map(|(edge, is_target)| DiagramHalfEdge {
+                                    edge: EdgeId(edge),
+                                    endpoint: if is_target {
+                                        DiagramEndpoint::Target
+                                    } else {
+                                        DiagramEndpoint::Source
+                                    },
+                                })
+                                .collect(),
+                            left_spectators,
+                            right_spectators,
+                        },
+                    )
+                    .collect()
+            },
+            threshold_counterterms: BincodeDecode::decode(decoder)?,
+        };
+        graph.validate_external_order().map_err(|error| {
+            DecodeError::OtherString(format!("{error}; regenerate the saved state"))
+        })?;
+        Ok(graph)
+    }
 }
 
 impl LogMessage for Graph {
@@ -100,23 +261,55 @@ pub(crate) enum ThresholdPinchStatus {
 }
 
 impl Graph {
-    pub(crate) fn with_global_numerator_only(&self, name: String, numerator: Atom) -> Self {
+    /// Check that `model` resolves this graph's typed identifiers to the same
+    /// records as the graph's own model. Parameter values may differ.
+    pub fn ensure_bound_to(&self, model: &Model) -> Result<()> {
+        ensure!(
+            self.model.structure_fingerprint() == model.structure_fingerprint(),
+            "graph '{}' is bound to model '{}', whose particle and vertex records differ \
+             from model '{}'",
+            self.name,
+            self.model.name(),
+            model.name(),
+        );
+        Ok(())
+    }
+
+    /// Point this graph at `model`, which must have the same records. Callers
+    /// validate every graph with [`Self::ensure_bound_to`] first, so that a
+    /// replacement rebinds either all graphs or none.
+    pub fn rebind_model(&mut self, model: &Arc<Model>) {
+        debug_assert_eq!(
+            self.model.structure_fingerprint(),
+            model.structure_fingerprint()
+        );
+        self.model = Arc::clone(model);
+    }
+
+    pub(crate) fn with_global_numerator_only(
+        &self,
+        name: String,
+        numerator: SymbolicTensor<IndexedStructure>,
+    ) -> Self {
         let mut graph = self.clone();
         graph.name = name;
         graph.overall_factor = Atom::one();
         graph.global_prefactor.num = numerator;
-        graph.global_prefactor.projector = Atom::one();
         graph.polarizations.clear();
+        let unit = crate::numerator::AppliedFeynmanRule::new(Atom::one())
+            .expect("literal one is a scalar tensor")
+            .expr;
+        graph.global_prefactor.projector = unit.clone();
         graph.underlying = self.underlying.map_data_ref(
             |_, _, vertex| {
                 let mut vertex = vertex.clone();
-                vertex.num = autogen::Autogen::explicit(Atom::one());
+                vertex.num = autogen::Autogen::explicit(unit.clone());
                 vertex
             },
             |_, _, _, edge| {
                 edge.map(|edge| {
                     let mut edge = edge.clone();
-                    edge.num = autogen::Autogen::explicit(Atom::one());
+                    edge.num = autogen::Autogen::explicit(unit.clone());
                     edge
                 })
             },
@@ -129,8 +322,8 @@ impl Graph {
         DotGraph::from(self).debug_dot()
     }
 
-    pub fn debug_dot_with_settings(&self, settings: &DotExportSettings) -> String {
-        self.to_dot_graph_with_settings(settings).debug_dot()
+    pub fn debug_dot_with_settings(&self, settings: &DotExportSettings) -> eyre::Result<String> {
+        Ok(self.to_dot_graph_with_settings(settings)?.debug_dot())
     }
 
     pub fn pretty_dot(&self) -> String {
@@ -138,23 +331,55 @@ impl Graph {
             &self.full_filter(),
             "",
             &|_a| None,
-            &|e| Some(format!("label=\"{}\"", e.num.log_print(None))),
-            &|v| Some(format!("label=\"{}\"", v.num.log_print(None))),
+            &|e| {
+                Some(format!(
+                    "label=\"{}\"",
+                    parse::NumeratorInterface::export(&e.num.value)
+                        .0
+                        .log_print(None)
+                ))
+            },
+            &|v| {
+                Some(format!(
+                    "label=\"{}\"",
+                    parse::NumeratorInterface::export(&v.num.value)
+                        .0
+                        .log_print(None)
+                ))
+            },
         )
     }
 
-    pub(crate) fn global_atom(&self) -> Atom {
-        &self.global_prefactor.num
-            * &self.global_prefactor.projector
-            * evaluate_overall_factor(self.overall_factor.as_view())
+    pub(crate) fn global_numerator(&self) -> color_eyre::Result<SymbolicTensor<IndexedStructure>> {
+        let factor =
+            SymbolicTensor::infer_indexed(evaluate_overall_factor(self.overall_factor.as_view()))?;
+        eyre::ensure!(
+            factor.is_scalar(),
+            "the overall graph factor must be scalar"
+        );
+        Ok(self
+            .global_prefactor
+            .num
+            .clone()
+            .multiply(self.global_prefactor.projector.clone())?
+            .multiply(factor)?)
     }
 
     pub(crate) fn production_numerator_atom_for_full_3d_expression(&self) -> Atom {
         let reduced = self.full_filter().subtract(&self.initial_state_cut);
-        self.numerator(&reduced, &self.empty_subgraph())
+        let numerator = self
+            .numerator(&reduced, &self.empty_subgraph())
+            .expect("validated graph numerator must have a compatible tensor interface")
+            .state
+            .expr
+            .multiply(
+                self.global_numerator()
+                    .expect("validated global numerator must be a tensor"),
+            )
+            .expect("the complete production numerator must have compatible ports");
+        crate::numerator::AppliedFeynmanRule::from_tensor(numerator)
             .get_single_atom()
             .expect("Graph numerator should be available")
-            * self.global_atom()
     }
 
     pub(crate) fn external_momentum_edge_order(&self) -> Vec<EdgeIndex> {
@@ -178,6 +403,28 @@ impl Graph {
         lmb.canonicalize_external_order(&self.external_momentum_edge_order());
     }
 
+    /// Check that the graph's basis indexes externals in runtime order.
+    ///
+    /// Sample momenta, helicities and external states are indexed in
+    /// [`Self::external_momentum_edge_order`], and consumers address them
+    /// through positions in `loop_momentum_basis.ext_edges`. A basis in any
+    /// other order silently pairs a leg with another leg's momentum.
+    pub(crate) fn validate_external_order(&self) -> Result<()> {
+        let runtime_order = self.external_momentum_edge_order();
+        ensure!(
+            self.loop_momentum_basis
+                .ext_edges
+                .raw
+                .starts_with(&runtime_order),
+            "graph '{}' has loop-momentum basis externals {:?}, but runtime externals are \
+             ordered {:?}",
+            self.name,
+            self.loop_momentum_basis.ext_edges.raw,
+            runtime_order
+        );
+        Ok(())
+    }
+
     pub(crate) fn dummy_stripped_external_flows_of<S: SubGraphLike>(&self, subgraph: &S) -> S::Base
     where
         S::Base: ModifySubSet<HedgePair> + ModifySubSet<Hedge>,
@@ -191,7 +438,7 @@ impl Graph {
         externals
     }
 
-    pub(crate) fn random_externals(&self, seed: u64) -> Externals {
+    pub(crate) fn random_externals(&self, model: &Model, seed: u64) -> Externals {
         let mut rng = SmallRng::seed_from_u64(seed);
         let mom_range = -10.0..10.0;
 
@@ -200,7 +447,7 @@ impl Graph {
         let ext: SuBitGraph = self.external_filter();
 
         for (_, _, d) in self.iter_edges_of(&ext) {
-            let hel = d.data.random_helicity(seed);
+            let hel = d.data.random_helicity(model, seed);
             helicities.push(hel);
             if helicities.len() == 2 {
                 continue;
@@ -302,7 +549,7 @@ impl Graph {
                 .loop_edges
                 .iter()
                 .copied()
-                .filter(|edge_id| self.underlying[*edge_id].particle.is_massless())
+                .filter(|edge_id| matches!(self.underlying[*edge_id].mass, edge::EdgeMass::Zero))
                 .collect_vec();
 
             for mut combination in massless_loop_edges.into_iter().combinations(num_loops) {
@@ -540,41 +787,6 @@ impl Graph {
         None
     }
 
-    pub(crate) fn get_initial_state_tree(&self) -> SuBitGraph {
-        let full_is_cut = self.initial_state_cut.as_subgraph();
-        let full_graph_without_initial_state_cut =
-            self.underlying.full_filter().subtract(&full_is_cut);
-        let mut result: SuBitGraph = self.underlying.empty_subgraph();
-
-        for (pair, edge_id, _) in self
-            .underlying
-            .iter_edges_of(&full_graph_without_initial_state_cut)
-        {
-            if let HedgePair::Paired { source, sink } = pair {
-                let loop_signature = &self.loop_momentum_basis.edge_signatures[edge_id];
-                if loop_signature.internal.iter().all(|sign| sign.is_zero()) {
-                    // A fixed-momentum bridge can also join two internal loop components.
-                    // Amputate only an endpoint attached to the initial-state cut.
-                    let initial_state_node = [source, sink]
-                        .into_iter()
-                        .map(|hedge| self.underlying.node_id(hedge))
-                        .find(|node| {
-                            self.underlying
-                                .iter_crown(*node)
-                                .any(|hedge| full_is_cut.includes(&hedge))
-                        });
-                    if let Some(node) = initial_state_node {
-                        for hedge in self.underlying.iter_crown(node) {
-                            result.add(hedge);
-                        }
-                    }
-                }
-            }
-        }
-
-        result
-    }
-
     pub(crate) fn get_raised_edge_groups(&self) -> Vec<Vec<EdgeIndex>> {
         let mut result = Vec::<Vec<EdgeIndex>>::new();
 
@@ -582,7 +794,8 @@ impl Graph {
             let group_position = result.iter().position(|group| {
                 group.iter().all(|e| {
                     self.loop_momentum_basis.edges_are_raised(*e, edge_index)
-                        && self[edge_index].particle.mass_atom() == self[*e].particle.mass_atom()
+                        && self[edge_index].particle.mass_atom(&self.model)
+                            == self[*e].particle.mass_atom(&self.model)
                 })
             });
 
@@ -606,6 +819,7 @@ impl Graph {
     }
     pub(crate) fn classify_threshold_pinch(
         &self,
+        model: &Model,
         cut_boundary_edges: &[EdgeIndex],
         threshold_boundary_edges: &[EdgeIndex],
     ) -> ThresholdPinchStatus {
@@ -617,7 +831,7 @@ impl Graph {
         let boundary_mass_sum = |edges: &[EdgeIndex]| {
             edges
                 .iter()
-                .map(|edge_id| self[*edge_id].mass_atom())
+                .map(|edge_id| self[*edge_id].mass_atom(model))
                 .fold(Atom::new(), |sum, mass| sum + mass)
         };
 
@@ -674,6 +888,14 @@ impl GraphGroup {
             .position(|id| id == graph_id)
             .map(GraphGroupPosition)
     }
+
+    /// Renumber the graphs `new_id` retains; `None` when the master is not retained.
+    pub(crate) fn project(&self, new_id: impl Fn(usize) -> Option<usize>) -> Option<Self> {
+        Some(Self {
+            master: new_id(self.master)?,
+            remaining: self.remaining.iter().filter_map(|&id| new_id(id)).collect(),
+        })
+    }
 }
 
 impl<'a> IntoIterator for &'a GraphGroup {
@@ -724,31 +946,24 @@ pub fn get_cff_inverse_energy_product_impl<E, V, H, S: SubSetLike>(
     subgraph: &S,
     contract_edges: &[EdgeIndex],
 ) -> Atom {
-    Atom::num(1)
-        / graph
-            .iter_edges_of(subgraph)
-            .filter_map(|(pair, edge_index, _)| match pair {
-                HedgePair::Paired { .. } => {
-                    if contract_edges.contains(&edge_index) {
-                        None
-                    } else {
-                        Some(-Atom::num(2) * ose_atom_from_index(edge_index))
-                    }
-                }
-                _ => None,
-            })
-            .reduce(|acc, x| acc * x)
-            .unwrap_or_else(|| Atom::num(1))
+    feynkit_cff::CffExpression::inverse_energy_product(graph.iter_edges_of(subgraph).filter_map(
+        |(pair, edge, _)| {
+            (matches!(pair, HedgePair::Paired { .. }) && !contract_edges.contains(&edge))
+                .then(|| ose_atom_from_index(edge))
+        },
+    ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
-        dot, graph::parse::from_dot::IntoGraph, initialisation::test_initialise,
+        GammaLoopContextContainer, finalized_runtime_dot, initialisation::test_initialise,
         momentum::signature::LoopExtSignature,
     };
+    use std::io::Cursor;
     use std::sync::OnceLock;
+    use symbolica::state::State;
 
     fn test_lmb(graph: &Graph, loop_edges: &[usize]) -> LoopMomentumBasis {
         LoopMomentumBasis {
@@ -766,15 +981,16 @@ mod tests {
         GRAPH
             .get_or_init(|| {
                 test_initialise().unwrap();
-                dot!(
+                finalized_runtime_dot!(
                     digraph lmb_selector {
+                        graph [projector=1]
                         edge [num=1 mass=0]
                         node [num=1]
-                        A -> B [id=0]
-                        A -> B [id=1]
-                        A -> B [id=2]
-                        A -> B [id=3]
-                        A -> B [id=4 mass=1]
+                        A -> B [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+                        A -> B [id=1 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+                        A -> B [id=2 lmb_id=2 source="{ufo_order:2}" sink="{ufo_order:2}"]
+                        A -> B [id=3 lmb_id=3 source="{ufo_order:3}" sink="{ufo_order:3}"]
+                        A -> B [id=4 mass=1 source="{ufo_order:4}" sink="{ufo_order:4}"]
                     }
                 )
                 .unwrap()
@@ -875,21 +1091,138 @@ mod tests {
     #[test]
     fn threshold_pinch_classification_distinguishes_fixed_and_multiparticle_boundaries() {
         let graph = selector_test_graph();
+        let model = crate::utils::load_generic_model("sm");
 
         assert_eq!(
-            graph.classify_threshold_pinch(&[EdgeIndex::from(0)], &[EdgeIndex::from(1)],),
+            graph.classify_threshold_pinch(&model, &[EdgeIndex::from(0)], &[EdgeIndex::from(1)],),
             ThresholdPinchStatus::Always,
         );
         assert_eq!(
             graph.classify_threshold_pinch(
+                &model,
                 &[EdgeIndex::from(0), EdgeIndex::from(1)],
                 &[EdgeIndex::from(2), EdgeIndex::from(3)],
             ),
             ThresholdPinchStatus::CanBecome,
         );
         assert_eq!(
-            graph.classify_threshold_pinch(&[EdgeIndex::from(0)], &[EdgeIndex::from(4)],),
+            graph.classify_threshold_pinch(&model, &[EdgeIndex::from(0)], &[EdgeIndex::from(4)],),
             ThresholdPinchStatus::NotProven,
+        );
+    }
+
+    fn count_occurrences(haystack: &[u8], needle: &[u8]) -> usize {
+        haystack
+            .windows(needle.len())
+            .filter(|window| *window == needle)
+            .count()
+    }
+
+    #[test]
+    fn graphs_of_one_import_share_one_model_and_persist_only_its_identity() {
+        test_initialise().unwrap();
+        let model = crate::utils::load_generic_model("sm");
+        let graphs = Graph::import_dot(
+            stringify!(
+                digraph tree_a {
+                    num="spenso::g(spenso::dind(spenso::cof(3, hedge(1))), spenso::cof(3, hedge(2)))/3"
+                    ext [style=invis]
+                    ext -> v1:1 [particle="d" id=1];
+                    ext -> v3:2 [particle="d~" id=2];
+                    v1:3 -> ext [particle="a" id=3];
+                    v2:4 -> ext [particle="a" id=4];
+                    v3:0 -> ext [particle="a" id=0];
+                    v1 -> v2 [particle="d" id=5];
+                    v2 -> v3 [particle="d" id=6];
+                }
+                digraph tree_b {
+                    num="spenso::g(spenso::dind(spenso::cof(3, hedge(1))), spenso::cof(3, hedge(2)))/3"
+                    ext [style=invis]
+                    ext -> v1:1 [particle="d" id=1];
+                    ext -> v3:2 [particle="d~" id=2];
+                    v1:3 -> ext [particle="a" id=3];
+                    v2:4 -> ext [particle="a" id=4];
+                    v3:0 -> ext [particle="a" id=0];
+                    v1 -> v2 [particle="d" id=5];
+                    v2 -> v3 [particle="d" id=6];
+                }
+            ),
+            &model,
+        )
+        .unwrap();
+        assert_eq!(graphs.len(), 2);
+
+        let json = model.to_json().unwrap();
+        let encoded = bincode::encode_to_vec(&graphs, bincode::config::standard()).unwrap();
+        let model_copies = count_occurrences(&encoded, json.as_bytes());
+        assert!(
+            Arc::ptr_eq(&graphs[0].model, &graphs[1].model),
+            "graphs of one import must share one model"
+        );
+        assert_eq!(model_copies, 0, "graphs must not persist the model itself");
+
+        let mut symbolica_state = Vec::new();
+        State::export(&mut symbolica_state).unwrap();
+        let state_map = State::import(&mut Cursor::new(symbolica_state), None).unwrap();
+        let session_model = Arc::new(model.clone());
+        let (decoded, consumed): (Vec<Graph>, _) = bincode::decode_from_slice_with_context(
+            &encoded,
+            bincode::config::standard(),
+            GammaLoopContextContainer {
+                state_map: &state_map,
+                model: &session_model,
+            },
+        )
+        .unwrap();
+        assert_eq!(consumed, encoded.len());
+        assert!(
+            decoded
+                .iter()
+                .all(|graph| Arc::ptr_eq(&graph.model, &session_model)),
+            "decoded graphs must bind to the state's model"
+        );
+
+        let other_model = Arc::new(crate::utils::load_generic_model("scalars"));
+        let decoded: Result<(Vec<Graph>, usize), _> = bincode::decode_from_slice_with_context(
+            &encoded,
+            bincode::config::standard(),
+            GammaLoopContextContainer {
+                state_map: &state_map,
+                model: &other_model,
+            },
+        );
+        let error = decoded
+            .err()
+            .expect("graphs must not bind to a structurally different model")
+            .to_string();
+        assert!(error.contains("tree_a"), "{error}");
+
+        // The identity prefix is checked before any model-dependent field, so
+        // a wrong model is reported even when the remaining bytes are invalid.
+        let mut truncated = bincode::encode_to_vec(
+            (&graphs[0].name, graphs[0].model.structure_fingerprint()),
+            bincode::config::standard(),
+        )
+        .unwrap();
+        assert!(encoded[..].windows(truncated.len()).any(|w| w == truncated));
+        truncated.extend([0xff; 64]);
+        let decoded: Result<(Graph, usize), _> = bincode::decode_from_slice_with_context(
+            &truncated,
+            bincode::config::standard(),
+            GammaLoopContextContainer {
+                state_map: &state_map,
+                model: &other_model,
+            },
+        );
+        let error = decoded
+            .err()
+            .expect("a wrong model must be rejected from the prefix")
+            .to_string();
+        assert!(error.contains("graph 'tree_a'"), "{error}");
+        assert!(error.contains("saved for model structure"), "{error}");
+        assert!(
+            error.contains(&other_model.structure_fingerprint().to_string()),
+            "{error}"
         );
     }
 }

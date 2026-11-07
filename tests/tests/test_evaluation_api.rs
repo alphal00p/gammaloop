@@ -1,5 +1,5 @@
 use gammalooprs::integrands::evaluation::{
-    BatchSampleEvaluationResult, PreciseEvaluationResultOutput,
+    BatchSampleEvaluationResult, EvaluationResultOutput, PreciseEvaluationResultOutput,
 };
 use gammalooprs::observables::{EventProcessingRuntime, ObservableSnapshotBundle};
 use std::{
@@ -8,6 +8,7 @@ use std::{
 };
 
 use color_eyre::Result;
+use feynkit_model::Model;
 use gammaloop_api::{
     commands::evaluate_samples::{EvaluateSamples, EvaluateSamplesPrecise},
     integrand_info::{IntegrandEsurfaceClassification, IntegrandKind, IntegrandThresholdStatus},
@@ -16,7 +17,276 @@ use gammaloop_integration_tests::{
     CLIState, clean_test, default_momentum_space_point, default_xspace_point, get_test_cli,
     get_tests_workspace_path, setup_sm_differential_lu_cli,
 };
+use gammalooprs::{
+    graph::{Graph, LMBext, edge::PossibleParticle},
+    model::VertexRuleIdGammaLoopExt,
+    processes::{CrossSectionGraph, ProcessCollection},
+};
+use linnet::half_edge::involution::EdgeIndex;
 use ndarray::{Array1, Array2};
+
+/// An edge of the historical multichannel topology in a canonical node frame.
+/// `source` and `sink` keep the graph's stored edge direction.
+struct FixtureEdge {
+    edge: EdgeIndex,
+    source: usize,
+    sink: usize,
+    abs_pdg: i64,
+}
+
+fn is_multichannel_fixture_topology(graph: &Graph, model: &Model) -> bool {
+    !multichannel_fixture_frames(graph, model).is_empty()
+}
+
+/// Every canonical node labelling under which `graph` has the colored,
+/// undirected connectivity of the historical multichannel topology.
+fn multichannel_fixture_frames(graph: &Graph, model: &Model) -> Vec<Vec<FixtureEdge>> {
+    let vertex_classes = ["V_141", "V_134", "V_137", "V_98"];
+    let mut vertex_groups = Vec::with_capacity(vertex_classes.len());
+    for vertex_class in vertex_classes {
+        let nodes = graph
+            .underlying
+            .iter_nodes()
+            .filter_map(|(node, _, vertex)| {
+                vertex
+                    .vertex_rule
+                    .is_some_and(|rule| rule.resolve(model).name == vertex_class)
+                    .then_some(node)
+            })
+            .collect::<Vec<_>>();
+        if nodes.len() != 2 {
+            return Vec::new();
+        }
+        vertex_groups.push(nodes);
+    }
+
+    // Colored, undirected connectivity of the historical multichannel graph.
+    // The swaps make this independent of native node and edge numbering.
+    let mut expected_edges = vec![
+        (6, 7, 11),
+        (6, 7, 11),
+        (0, 1, 25),
+        (0, 3, 6),
+        (0, 5, 6),
+        (1, 2, 6),
+        (1, 5, 6),
+        (2, 4, 6),
+        (2, 7, 22),
+        (3, 4, 6),
+        (3, 6, 22),
+        (4, 5, 21),
+    ];
+    expected_edges.sort_unstable();
+
+    let mut frames = Vec::new();
+    for swaps in 0..(1 << vertex_groups.len()) {
+        let mut node_map = BTreeMap::new();
+        for (class, nodes) in vertex_groups.iter().enumerate() {
+            let swap = (swaps >> class) & 1;
+            node_map.insert(nodes[swap], class * 2);
+            node_map.insert(nodes[1 - swap], class * 2 + 1);
+        }
+
+        let mut frame = Vec::with_capacity(expected_edges.len());
+        for (pair, edge_id, edge) in graph.underlying.iter_edges() {
+            if !pair.is_paired() {
+                return Vec::new();
+            }
+            let source = pair.any_hedge();
+            let sink = graph.underlying.inv(source);
+            let Some(&source_node) = node_map.get(&graph.underlying.node_id(source)) else {
+                return Vec::new();
+            };
+            let Some(&sink_node) = node_map.get(&graph.underlying.node_id(sink)) else {
+                return Vec::new();
+            };
+            let particle = match &edge.data.particle {
+                PossibleParticle::Particle(particle)
+                | PossibleParticle::MassOverriddenParticle { particle, .. } => *particle,
+                PossibleParticle::JustMass { .. } => return Vec::new(),
+            };
+            let Ok(particle) = model.particle_by_id(particle) else {
+                return Vec::new();
+            };
+            frame.push(FixtureEdge {
+                edge: edge_id,
+                source: source_node,
+                sink: sink_node,
+                abs_pdg: particle.pdg_code.abs(),
+            });
+        }
+        let mut actual_edges = frame
+            .iter()
+            .map(|edge| {
+                (
+                    edge.source.min(edge.sink),
+                    edge.source.max(edge.sink),
+                    edge.abs_pdg,
+                )
+            })
+            .collect::<Vec<_>>();
+        actual_edges.sort_unstable();
+        if actual_edges == expected_edges {
+            frames.push(frame);
+        }
+    }
+
+    frames
+}
+
+/// An internal edge of the multichannel topology in the canonical frame of
+/// [`multichannel_fixture_edge_momenta`].
+struct CanonicalEdgeMomentum {
+    /// Lower and higher canonical node and absolute PDG code.
+    key: (usize, usize, i64),
+    /// `1.0` if the stored edge runs from the lower to the higher canonical node.
+    orientation: f64,
+    /// Spatial momentum flowing from the lower to the higher canonical node.
+    momentum: [f64; 3],
+}
+
+/// Spatial momenta of the internal edges of the multichannel topology at the
+/// given loop momenta, by edge id.
+///
+/// The canonical frame is fixed by requiring the sewn e+ e- momenta to flow into
+/// canonical node 6. This removes the left-right reflection of the topology, so
+/// two graphs with equal momenta on every canonical edge are at the same physical
+/// point, whatever their LMB, edge numbering or closed-fermion-loop direction.
+fn multichannel_fixture_edge_momenta(
+    graph: &Graph,
+    model: &Model,
+    loop_momenta: &[[f64; 3]],
+) -> BTreeMap<usize, CanonicalEdgeMomentum> {
+    let signatures = &graph.loop_momentum_basis.edge_signatures;
+    let external_sign = |edge: EdgeIndex| {
+        signatures[edge]
+            .external
+            .iter()
+            .map(|sign| i8::from(*sign))
+            .sum::<i8>()
+    };
+    let frames = multichannel_fixture_frames(graph, model)
+        .into_iter()
+        .filter(|frame| {
+            frame.iter().filter(|edge| edge.abs_pdg == 11).all(|edge| {
+                let incoming = if external_sign(edge.edge) > 0 {
+                    edge.sink
+                } else {
+                    edge.source
+                };
+                incoming == 6
+            })
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        frames.len(),
+        1,
+        "{} must have one canonical frame with incoming e+ e- at node 6",
+        graph.name
+    );
+
+    frames[0]
+        .iter()
+        .filter(|edge| edge.abs_pdg != 11)
+        .map(|edge| {
+            let signature = &signatures[edge.edge];
+            let external = signature
+                .external
+                .iter()
+                .map(|sign| i8::from(*sign))
+                .collect::<Vec<_>>();
+            // Internal edges carry the total initial momentum only, which has no
+            // spatial part in the centre-of-mass frame of this fixture.
+            assert!(
+                external.windows(2).all(|pair| pair[0] == pair[1]),
+                "{} edge {} carries a single external momentum",
+                graph.name,
+                edge.edge.0
+            );
+            let orientation = if edge.source < edge.sink { 1.0 } else { -1.0 };
+            let mut momentum = [0.0; 3];
+            for (sign, loop_momentum) in signature.internal.iter().zip(loop_momenta) {
+                for (component, loop_component) in momentum.iter_mut().zip(loop_momentum) {
+                    *component += orientation * f64::from(i8::from(*sign)) * loop_component;
+                }
+            }
+            (
+                edge.edge.0,
+                CanonicalEdgeMomentum {
+                    key: (
+                        edge.source.min(edge.sink),
+                        edge.source.max(edge.sink),
+                        edge.abs_pdg,
+                    ),
+                    orientation,
+                    momentum,
+                },
+            )
+        })
+        .collect()
+}
+
+fn canonical_channel_bases(
+    channel_bases: &BTreeSet<Vec<usize>>,
+    edges: &BTreeMap<usize, CanonicalEdgeMomentum>,
+) -> BTreeSet<BTreeSet<(usize, usize, i64)>> {
+    channel_bases
+        .iter()
+        .map(|basis| basis.iter().map(|edge_id| edges[edge_id].key).collect())
+        .collect()
+}
+
+fn epem_tth_nlo_supergraphs(cli: &CLIState) -> &[CrossSectionGraph] {
+    let process = cli
+        .state
+        .process_list
+        .processes
+        .iter()
+        .find(|process| process.definition.folder_name == "epem_a_tth")
+        .expect("the ttH process should have been generated");
+    match &process.collection {
+        ProcessCollection::CrossSections(cross_sections) => {
+            &cross_sections
+                .get("NLO")
+                .expect("the NLO cross section should have been generated")
+                .supergraphs
+        }
+        ProcessCollection::Amplitudes(_) => panic!("the ttH fixture must be a cross section"),
+    }
+}
+
+fn epem_tth_nlo_graph<'a>(cli: &'a CLIState, name: &str) -> &'a Graph {
+    &epem_tth_nlo_supergraphs(cli)
+        .iter()
+        .find(|supergraph| supergraph.graph.name == name)
+        .unwrap_or_else(|| panic!("the ttH NLO cross section must contain {name}"))
+        .graph
+}
+
+fn evaluate_momentum_sample_in_group(
+    cli: &mut CLIState,
+    loop_momenta: &[[f64; 3]],
+    group_id: usize,
+) -> Result<EvaluationResultOutput> {
+    let point = loop_momenta.iter().flatten().copied().collect::<Vec<_>>();
+    let array = Array2::from_shape_vec((1, point.len()), point)?;
+    let discrete_dims = Array2::from_shape_vec((1, 1), vec![group_id])?;
+    let mut results = EvaluateSamples {
+        process_id: None,
+        integrand_name: None,
+        use_arb_prec: false,
+        minimal_output: false,
+        return_generated_events: None,
+        momentum_space: true,
+        points: array.view(),
+        integrator_weights: None,
+        discrete_dims: Some(discrete_dims.view()),
+        graph_names: None,
+        orientations: None,
+    }
+    .run(&mut cli.state)?;
+    Ok(results.samples.remove(0).evaluation)
+}
 
 fn observable_accumulator(cli: &mut CLIState) -> Result<EventProcessingRuntime> {
     let (process_id, name) = cli.state.find_integrand_ref(None, None)?;
@@ -571,6 +841,76 @@ fn gl20_multichannel_local_inspect_event_snapshot() -> Result<()> {
         true,
     )?;
 
+    // Select the historical multichannel topology by interaction names,
+    // particle content, and colored connectivity rather than a GL number.
+    let selected_master = {
+        let candidates = epem_tth_nlo_supergraphs(&cli)
+            .iter()
+            .filter_map(|supergraph| {
+                let graph = &supergraph.graph;
+                (is_multichannel_fixture_topology(graph, &cli.state.model)
+                    && graph.loop_momentum_basis.loop_edges.len() == 3
+                    && graph.underlying.generate_loop_momentum_bases().len() == 255
+                    && supergraph.cuts.len() == 4)
+                    .then(|| graph.name.clone())
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            candidates.len(),
+            1,
+            "the colored multichannel topology must have a unique native master"
+        );
+        candidates.into_iter().next().unwrap()
+    };
+    cli.run_command(&format!(
+        "select -p epem_a_tth -i NLO --with-graph-names {selected_master}"
+    ))?;
+    cli.run_command("generate existing -p epem_a_tth -i NLO")?;
+
+    let info = cli.state.get_integrand_info(None, None)?;
+    assert_eq!(info.graph_groups.len(), 1);
+    let group = &info.graph_groups[0];
+    assert_eq!(
+        group
+            .graphs
+            .iter()
+            .find(|graph| graph.is_master)
+            .map(|graph| graph.name.as_str()),
+        Some(selected_master.as_str()),
+    );
+    let native_channel_bases = group
+        .loop_momentum_bases
+        .iter()
+        .filter(|basis| basis.channel_id.is_some())
+        .map(|basis| basis.edge_ids.clone())
+        .collect::<BTreeSet<_>>();
+    assert_eq!(native_channel_bases.len(), 4);
+
+    // Evaluate the native master at a fixed spatial point in its own LMB and
+    // record that point as momenta on the canonical edges of the topology.
+    let native_loop_momenta = [
+        [37.0, -112.0, 81.0],
+        [-54.0, 23.0, -146.0],
+        [95.0, 68.0, 12.0],
+    ];
+    let native_graph = epem_tth_nlo_graph(&cli, &selected_master);
+    let native_edges =
+        multichannel_fixture_edge_momenta(native_graph, &cli.state.model, &native_loop_momenta);
+    let native_canonical_channel_bases =
+        canonical_channel_bases(&native_channel_bases, &native_edges);
+    let native_evaluation =
+        evaluate_momentum_sample_in_group(&mut cli, &native_loop_momenta, group.group_id)?;
+
+    // The event snapshot is recorded in the directed edge and loop frame of the
+    // reference graph. The native master may be the reversed closed-fermion-loop
+    // representative with another LMB, so the same x-space point is another
+    // physical point there. Evaluate the snapshot in the reference frame, then tie
+    // the native master to the reference at a common physical point.
+    cli.run_command("remove processes")?;
+    cli.run_command(
+        "import graphs tests/resources/graphs/epem_tth_gl20_reference.dot --process-spec 'e+ e- > t t~ h | e+ e- g t t~ h ghG ghG~ a QCD^2==2 QED^2==6 [{{3}} QCD=1]' -p epem_a_tth -i NLO",
+    )?;
+    cli.run_command("generate existing -p epem_a_tth -i NLO")?;
     let info = cli.state.get_integrand_info(None, None)?;
     assert_eq!(info.graph_groups.len(), 1);
     let group = &info.graph_groups[0];
@@ -588,10 +928,7 @@ fn gl20_multichannel_local_inspect_event_snapshot() -> Result<()> {
         .filter(|basis| basis.channel_id.is_some())
         .map(|basis| basis.edge_ids.clone())
         .collect::<BTreeSet<_>>();
-    assert!(
-        active_channel_bases.len() > 1,
-        "GL38 snapshot fixture must exercise explicit LMB multichanneling"
-    );
+    assert_eq!(active_channel_bases.len(), 4);
 
     // This is the former GL20 high-weight point, now on the same topology labeled GL38.
     // The edge relabeling preserves all directed momenta. It exercises every summed LMB channel and all
@@ -663,7 +1000,7 @@ fn gl20_multichannel_local_inspect_event_snapshot() -> Result<()> {
 
     assert_eq!(
         represented_channels, active_channel_bases,
-        "the snapshot must include events from every active GL38 LMB channel"
+        "the snapshot must include events from every active reference-frame LMB channel"
     );
     assert_eq!(
         metadata.generated_event_count,
@@ -792,6 +1129,75 @@ fn gl20_multichannel_local_inspect_event_snapshot() -> Result<()> {
         }
     }
 
+    // Tie the native master to this reference. Both are the same topology; the
+    // map between their frames is the canonical-edge relabelling, with a sign for
+    // every edge whose stored direction differs. Place the reference at the
+    // native point: each reference LMB edge takes the native momentum of the same
+    // canonical edge, then every edge momentum must agree.
+    let reference_graph = epem_tth_nlo_graph(&cli, "GL38");
+    let reference_orientation_edges =
+        multichannel_fixture_edge_momenta(reference_graph, &cli.state.model, &[[0.0; 3]; 3]);
+    let native_momenta = native_edges
+        .values()
+        .map(|edge| (edge.key, edge.momentum))
+        .collect::<BTreeMap<_, _>>();
+    let reference_loop_momenta = reference_graph
+        .loop_momentum_basis
+        .loop_edges
+        .iter()
+        .map(|edge_id| {
+            let edge = &reference_orientation_edges[&edge_id.0];
+            native_momenta[&edge.key].map(|component| edge.orientation * component)
+        })
+        .collect::<Vec<_>>();
+    let reference_edges = multichannel_fixture_edge_momenta(
+        reference_graph,
+        &cli.state.model,
+        &reference_loop_momenta,
+    );
+    for edge in reference_edges.values() {
+        assert_eq!(
+            edge.momentum, native_momenta[&edge.key],
+            "canonical edge {:?} must carry the same momentum in both frames",
+            edge.key
+        );
+    }
+    assert_eq!(
+        canonical_channel_bases(&active_channel_bases, &reference_edges),
+        native_canonical_channel_bases,
+        "native and reference LMB channels must be the same canonical edge sets"
+    );
+    let reference_evaluation =
+        evaluate_momentum_sample_in_group(&mut cli, &reference_loop_momenta, group.group_id)?;
+    let native_result = &native_evaluation.integrand_result;
+    let reference_result = &reference_evaluation.integrand_result;
+    assert!(
+        [
+            native_result.re.0,
+            native_result.im.0,
+            reference_result.re.0,
+            reference_result.im.0
+        ]
+        .into_iter()
+        .all(f64::is_finite),
+        "native and reference values must be finite: native={native_result:?}, reference={reference_result:?}"
+    );
+    println!("common momentum point: native={native_result:?}, reference={reference_result:?}");
+    let distance = (native_result.re.0 - reference_result.re.0)
+        .hypot(native_result.im.0 - reference_result.im.0);
+    let scale = native_result
+        .re
+        .0
+        .hypot(native_result.im.0)
+        .max(reference_result.re.0.hypot(reference_result.im.0));
+    // As for the snapshot, the residual is judged at the complete complex scale,
+    // so a reversed absorptive sign still fails.
+    assert!(
+        scale > 0.0 && distance <= 1.0e-10 * scale,
+        "the native master and the reference must agree at the same physical point: \
+         native={native_result:?}, reference={reference_result:?}",
+    );
+
     clean_test(&cli.cli_settings.state.folder);
     Ok(())
 }
@@ -811,34 +1217,38 @@ fn lu_rust_generated_events_follow_graph_grouping_and_cut_ids() -> Result<()> {
 
     assert_eq!(metadata(&result).generated_event_count, 3);
     assert_eq!(metadata(&result).accepted_event_count, 3);
-    assert_eq!(
-        event_groups
-            .iter()
-            .map(|group| group.len())
-            .collect::<Vec<_>>(),
-        vec![1, 2]
-    );
+    let mut group_sizes = event_groups
+        .iter()
+        .map(|event_group| event_group.0.len())
+        .collect::<Vec<_>>();
+    group_sizes.sort_unstable();
+    assert_eq!(group_sizes, vec![1, 2]);
 
-    let first_event = &event_groups[0][0];
-    assert_eq!(first_event.cut_info.graph_id, 0);
-    assert_eq!(first_event.cut_info.cut_id, 0);
-    assert_eq!(
-        first_event
+    let events = event_groups
+        .iter()
+        .flat_map(|event_group| event_group.0.iter())
+        .collect::<Vec<_>>();
+    let mut graph_ids = BTreeSet::new();
+    for event_group in event_groups.iter() {
+        let graph_id = event_group
+            .0
+            .first()
+            .expect("generated event groups must not be empty")
             .cut_info
-            .particle_pdgs
+            .graph_id;
+        graph_ids.insert(graph_id);
+        let cut_ids = event_group
             .0
             .iter()
-            .copied()
-            .collect::<Vec<_>>(),
-        vec![-11, 11]
-    );
-
-    let second_group_cut_ids = event_groups[1]
-        .iter()
-        .map(|event| (event.cut_info.graph_id, event.cut_info.cut_id))
-        .collect::<Vec<_>>();
-    assert_eq!(second_group_cut_ids, vec![(1, 0), (1, 1)]);
-    for event in event_groups[1].iter() {
+            .map(|event| {
+                assert_eq!(event.cut_info.graph_id, graph_id);
+                event.cut_info.cut_id
+            })
+            .collect::<BTreeSet<_>>();
+        assert_eq!(cut_ids, BTreeSet::from_iter(0..event_group.0.len()));
+    }
+    assert_eq!(graph_ids, BTreeSet::from([0, 1]));
+    for event in events {
         assert_eq!(
             event
                 .cut_info

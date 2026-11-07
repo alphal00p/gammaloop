@@ -1,7 +1,7 @@
 #import "../../shared.typ": callout
 
 #let tutorial = [
-= Tutorial
+= Your first tensor workflow
 
 This tutorial performs one concrete tensor contraction in Rust. The example makes the tensor
 structure, dual index matching, storage, and numerical result visible—the same layers that a
@@ -70,9 +70,9 @@ the component selected by the two remaining free indices. Spenso matched `shared
 `shared.dual()`, summed that axis, and preserved `left_free` and `right_free` in the output
 structure. The contraction follows index identity and duality, not merely equal dimensions.
 
-#callout("Verification scope and cost", [
-  The docs harness compiles and runs this Rust program; it syntax-checks the setup commands
-  without creating a project or using the network. Success is the asserted component value
+#callout("Running locally and cost", [
+  Run the setup commands and Rust program locally; this Rust example cannot run in the browser.
+  Success is the asserted component value
   `10` with two free output indices. The contraction is tiny; a clean external Cargo build can
   take minutes, while the program itself should finish in well under a second.
 ])

@@ -23,7 +23,7 @@ pub use model::quantum_number::{quantum_number_from_float, quantum_number_from_j
 pub use model::{
     Coupling, CouplingId, LineKind, LineStyle, LorentzStructure, LorentzStructureId, Model,
     ModelFingerprint, ModelFormFactor, ModelFormFactorId, ModelFunction, ModelFunctionId, Order,
-    OrderId, Parameter, ParameterId, ParameterNature, ParameterType, Particle, ParticleId,
-    Propagator, PropagatorId, VertexRule, VertexRuleId,
+    OrderId, Parameter, ParameterId, ParameterMathMl, ParameterNature, ParameterType, Particle,
+    ParticleId, Propagator, PropagatorId, VertexRule, VertexRuleId,
 };
 pub use scalar_bindings::resolve_scalar_bindings;

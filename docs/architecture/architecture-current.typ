@@ -847,6 +847,18 @@ LTD; either evaluates that complete sum. CFF numerator construction keeps its ex
 owner. Derivative programs retain the existing
 forced-inlining boundary required by the stock Symbolica vectorizer.
 
+For scalar `SingleParametric` programs with runtime residue dispatch,
+evaluator construction compares zero and two common-pair elimination passes.
+The default trial requires at most 64 orientations and 1 MiB of aliased source.
+The zero-pass program must have at most 16,384 instructions and one million
+arithmetic operand pairs for the trial to run. Dual programs and retained
+sub-evaluators use zero passes by default. The comparison follows the
+exported instruction stream for every generated orientation using exact
+residue identifiers and orientation signs. A candidate must lower total
+modeled work on at least one path without increasing total work, addition
+work or multiplication work on any path. Unknown guards keep the zero-pass
+program. Explicit common-pair settings take precedence.
+
 Every evaluator receives the auxiliary numerator sampling scale `M` as an input, defaulting to one. Warm-up rejects a zero runtime scale for every amplitude or cross-section integrand, including evaluators that do not use `M`. No source-expression scan or serialized usage flag is needed. `M` is an auxiliary numerator-sampling coordinate, not an LMB energy; LTD arguments can additionally contain on-shell and external energies.
 
 Binary64 reporting may round exponentially suppressed, fully weighted components
@@ -1257,7 +1269,11 @@ performance-heavy data.
 
 === Persistence Compatibility Contract
 <persistence-compatibility-contract>
-- State format is versioned with `state_manifest.toml` (`version = 20` currently).
+- State format is versioned with `state_manifest.toml` (`version = 23` currently).
+- Version 23 stores the full physical cut inventory alongside the cuts selected
+  for each cross section. Each generation selects from that full inventory.
+  Regenerate full states from versions 20, 21 and 22 from their source recipes.
+  The loader checks the manifest version before model or process decoding.
 - Version 20 removes the persisted physical-cut reversal mask from cross-section
   graph terms. Projected E-surface bounds use each surface's own signed boundary
   and fixed-spectator routing. Earlier states require regeneration and are rejected

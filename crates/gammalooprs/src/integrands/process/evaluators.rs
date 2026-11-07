@@ -2,10 +2,10 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Result, Section};
 use eyre::{Context, eyre};
 use idenso::{
-    IndexTooling,
+    CookMode, CookSettings, IndexTooling,
     color::{ColorSimplifier, ColorSimplifySettings},
-    dirac::GammaSimplifier,
-    shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
+    dirac::GammaSimplifySettings,
+    tensor::SymbolicTensor,
 };
 use linnet::half_edge::{
     involution::{EdgeVec, Orientation},
@@ -22,13 +22,15 @@ use spenso::{
     },
     iterators::IteratableTensor,
     network::{
-        DEFAULT_EXACT_JOIN_LIMIT, ExecutionResult, MAX_EAGER_TENSOR_SUM_BYTES, MinIntermediateCost,
-        MinResultRank, MinResultRankWith, PAIR_SCORE_ATOM_AWARE, PAIR_SCORE_ENTRY_AWARE,
+        DEFAULT_EXACT_JOIN_LIMIT, ExecutionResult, MinIntermediateCost, MinResultRank,
+        MinResultRankWith, PAIR_SCORE_ATOM_AWARE, PAIR_SCORE_ENTRY_AWARE,
         PAIR_SCORE_RESULT_RANK_ONLY, ScalarAliases, Sequential, SequentialExtract, SequentialRef,
         SmallestDegree,
-        graph::{NetworkLeaf, NetworkNode, NetworkOp},
-        parsing::{AtomStructureExt, ShadowedStructure, StrictTensorFilter},
-        store::{TensorScalarStore, TensorScalarStoreMapping},
+        parsing::{
+            AtomStructureExt, ParseSettings, SchoonschipExpansionMode, ShadowedStructure,
+            ShorthandParsing, StrictTensorFilter,
+        },
+        store::TensorScalarStoreMapping,
         tags::SPENSO_TAG,
     },
     shadowing::{
@@ -36,17 +38,19 @@ use spenso::{
         symbolica_utils::{LogPrint, SpensoPrintSettings},
     },
     structure::{
-        HasStructure, TensorStructure, ToSymbolic,
+        CanonicalLayout, Canonicalized, IndexedStructure, TensorStructure,
         abstract_index::AIND_SYMBOLS,
-        concrete_index::DualConciousIndex,
+        concrete_index::{DualConciousExpandedIndex, DualConciousIndex},
         representation::{LibraryRep, RepName},
-        slot::{DualSlotTo, IsAbstractSlot, Slot},
+        slot::{IsAbstractSlot, Slot},
     },
     tensors::{
         data::{SparseOrDense, StorageTensor},
         parametric::ParamTensor,
     },
 };
+use std::iter;
+use std::time::Instant;
 use std::{
     collections::{HashMap, HashSet},
     ops::Deref,
@@ -56,9 +60,12 @@ use std::{
     },
 };
 use std::{mem::transmute, ops::Neg, path::Path};
+use symbolica::evaluate::Slot::{Const, Out, Param, Temp};
+use symbolica::evaluate::{
+    ExportedInstructions, InliningPolicy, Instruction, JITCompiledEvaluator,
+};
 use symbolica::{
     domains::{dual::HyperDual, float::Complex as SymComplex, rational::Fraction},
-    evaluate::{InliningPolicy, JITCompiledEvaluator},
     prelude::*,
 };
 use tracing::{debug, instrument};
@@ -71,7 +78,7 @@ use crate::{
     graph::Graph,
     integrands::{
         evaluation::EvaluationMetaData,
-        process::param_builder::{FnMapEntry, LUParams},
+        process::param_builder::{FnMapEntry, LUParams, NumeratorDefinition},
     },
     momentum::{Helicity, sample::MomentumSample},
     numerator::{ParsingNet, aind::Aind, symbolica_ext::NumeratorAtomExt},
@@ -100,6 +107,220 @@ use super::{
 
 const NETWORK_SCALAR_ALIAS_MIN_BYTES: usize = 4096;
 static NETWORK_SCALAR_ALIAS_SCOPE: AtomicUsize = AtomicUsize::new(0);
+
+const GUARDED_CPE_PASSES: usize = 2;
+const GUARDED_CPE_MAX_SOURCE_BYTES: usize = 1024 * 1024;
+const GUARDED_CPE_MAX_ORIENTATIONS: usize = 64;
+const GUARDED_CPE_MAX_BASELINE_INSTRUCTIONS: usize = 16_384;
+const GUARDED_CPE_MAX_BASELINE_ARITHMETIC_PAIRS: usize = 1_000_000;
+
+type RationalProgram = ExportedInstructions<SymComplex<Rational>>;
+
+#[derive(Debug, Default, PartialEq, Eq)]
+struct SelectedPathWork {
+    instructions: usize,
+    additions: usize,
+    multiplications: usize,
+}
+
+impl SelectedPathWork {
+    fn total(&self) -> usize {
+        self.instructions + self.additions + self.multiplications
+    }
+}
+
+/// Measures work along a guarded evaluator's selected path. Restrict
+/// branch decisions to exact integer inputs so the path is independent of
+/// loop momenta and the evaluator's numeric precision.
+struct DispatchWork<'a> {
+    program: &'a RationalProgram,
+    labels: HashMap<usize, usize>,
+}
+
+impl<'a> DispatchWork<'a> {
+    fn can_trial(program: &RationalProgram) -> bool {
+        if !program.sub_evaluators.is_empty()
+            || program.instructions.len() > GUARDED_CPE_MAX_BASELINE_INSTRUCTIONS
+        {
+            return false;
+        }
+
+        // Symbolica enumerates operand pairs within each Add and Mul. A short
+        // stream can still be expensive when one instruction has high arity.
+        let pairs = program
+            .instructions
+            .iter()
+            .fold(0_usize, |pairs, instruction| {
+                let arity = match instruction {
+                    Instruction::Add(_, operands, _) | Instruction::Mul(_, operands, _) => {
+                        operands.len()
+                    }
+                    _ => 0,
+                };
+                pairs.saturating_add(arity.saturating_mul(arity.saturating_sub(1)) / 2)
+            });
+        pairs <= GUARDED_CPE_MAX_BASELINE_ARITHMETIC_PAIRS
+    }
+
+    fn new(program: &'a RationalProgram) -> Self {
+        let labels = program
+            .instructions
+            .iter()
+            .enumerate()
+            .filter_map(|(index, instruction)| match instruction {
+                Instruction::Label(label) => Some((*label, index)),
+                _ => None,
+            })
+            .collect();
+        Self { program, labels }
+    }
+
+    fn selected_path(&self, parameters: &[Option<i64>]) -> Option<SelectedPathWork> {
+        fn exact(value: i64) -> Option<i64> {
+            (value.unsigned_abs() <= 1 << 53).then_some(value)
+        }
+
+        let mut temporaries = vec![None; self.program.temporary_count];
+        let mut outputs = vec![None; self.program.output_count];
+        let mut index = 0;
+        let mut work = SelectedPathWork::default();
+        while let Some(instruction) = self.program.instructions.get(index) {
+            let read = |slot| match slot {
+                Param(index) => parameters[index].and_then(exact),
+                Const(index) => {
+                    let constant = &self.program.constants[index];
+                    if constant.im == 0
+                        && constant.re.denominator_ref() == &Integer::from(1)
+                        && !self
+                            .program
+                            .constant_functions
+                            .iter()
+                            .any(|function| function.index == index)
+                    {
+                        exact(constant.re.numerator_ref().to_i64()?)
+                    } else {
+                        None
+                    }
+                }
+                Temp(index) => temporaries[index],
+                Out(index) => outputs[index],
+            };
+            let (output, value) = match instruction {
+                Instruction::IfElse(condition, target) => {
+                    let value = read(*condition)?;
+                    let next = if value == 0 {
+                        *self.labels.get(target)?
+                    } else {
+                        index + 1
+                    };
+                    if next <= index {
+                        return None;
+                    }
+                    work.instructions += 1;
+                    index = next;
+                    continue;
+                }
+                Instruction::Goto(target) => {
+                    let target = *self.labels.get(target)?;
+                    if target <= index {
+                        return None;
+                    }
+                    work.instructions += 1;
+                    index = target;
+                    continue;
+                }
+                Instruction::Add(output, args, _) => {
+                    work.additions += args.len().saturating_sub(1);
+                    let value = args
+                        .iter()
+                        .try_fold(0_i64, |sum, &arg| exact(sum.checked_add(read(arg)?)?));
+                    (*output, value)
+                }
+                Instruction::Mul(output, args, _) => {
+                    work.multiplications += args.len().saturating_sub(1);
+                    let value = args.iter().try_fold(1_i64, |product, &arg| {
+                        exact(product.checked_mul(read(arg)?)?)
+                    });
+                    (*output, value)
+                }
+                Instruction::Assign(output, arg) => (*output, read(*arg)),
+                Instruction::Join(output, condition, yes, no) => {
+                    let value = read(*condition)
+                        .and_then(|value| read(if value == 0 { *no } else { *yes }));
+                    (*output, value)
+                }
+                Instruction::Pow(output, arg, exponent, _) => {
+                    let value = read(*arg)
+                        .and_then(|base| base.checked_pow((*exponent).try_into().ok()?))
+                        .and_then(exact);
+                    (*output, value)
+                }
+                Instruction::Powf(output, ..) | Instruction::Fun(output, ..) => (*output, None),
+                Instruction::Label(_) => {
+                    work.instructions += 1;
+                    index += 1;
+                    continue;
+                }
+            };
+            work.instructions += 1;
+            match output {
+                Temp(index) => temporaries[index] = value,
+                Out(index) => outputs[index] = value,
+                _ => {}
+            }
+            index += 1;
+        }
+        Some(work)
+    }
+
+    fn improves(
+        &self,
+        candidate: &Self,
+        builder: &ParamBuilder,
+        orientations: &[EdgeVec<Orientation>],
+        ids: &[OrientationID],
+    ) -> bool {
+        let residue_slot = builder.pairs.residue_map_id.value_range.start;
+        let sign_range = &builder.pairs.orientations.value_range;
+        let input_count = self.program.input_count;
+        if candidate.program.input_count != input_count
+            || orientations.len() != ids.len()
+            || builder.pairs.residue_map_id.value_range.len() != 1
+            || residue_slot >= input_count
+            || sign_range.end > input_count
+            || sign_range.contains(&residue_slot)
+            || orientations.iter().any(|orientation| {
+                orientation.orientation().into_iter().count() != sign_range.len()
+            })
+        {
+            return false;
+        }
+        let mut parameters = vec![None; input_count];
+        let mut signs = vec![0; sign_range.len()];
+        let mut improved = false;
+        for (orientation, id) in orientations.iter().zip(ids) {
+            parameters[residue_slot] = i64::try_from(id.0).ok();
+            InputParams::<f64>::set_orientation_values_impl(&mut signs, 1, 0, 1, 0, orientation);
+            for (slot, &sign) in parameters[sign_range.clone()].iter_mut().zip(&signs) {
+                *slot = Some(sign);
+            }
+            let (Some(before), Some(after)) = (
+                self.selected_path(&parameters),
+                candidate.selected_path(&parameters),
+            ) else {
+                return false;
+            };
+            if after.additions > before.additions
+                || after.multiplications > before.multiplications
+                || after.total() > before.total()
+            {
+                return false;
+            }
+            improved |= after.total() < before.total();
+        }
+        improved
+    }
+}
 
 #[derive(Clone, Copy)]
 pub enum SingleOrAllOrientations<'a, OID> {
@@ -495,16 +716,17 @@ impl EvaluatorStack {
     fn new_single_parametric(
         parametric_atoms: Vec<AliasedAtom>,
         param_builder: &ParamBuilder,
+        orientations: &[EdgeVec<Orientation>],
+        production_orientation_ids: &[OrientationID],
         dual_shape: &Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<GenericEvaluator> {
         let _progress_guard = crate::processes::enter_detailed_progress_span(
             "Generating Single Parametric Evaluator",
         );
-        let opt_settings = settings.optimization_settings();
-
-        GenericEvaluator::new_from_builder(
-            parametric_atoms.into_iter().map(|atom| {
+        let parametric_atoms = parametric_atoms
+            .into_iter()
+            .map(|atom| {
                 let map = |atom| {
                     GS.collect_orientation_if(Self::parametrize_residue_map_selectors(
                         atom,
@@ -517,13 +739,84 @@ impl EvaluatorStack {
                     mapped.register_alias(alias, map(body));
                 }
                 mapped
-            }),
-            param_builder,
-            dual_shape.clone(),
-            opt_settings.clone(),
-            settings,
-        )
+            })
+            .collect::<Vec<_>>();
+        let guarded_dispatch = settings.cpe_iterations.is_none()
+            && parametric_atoms.iter().any(|atom| {
+                iter::once(atom.get_root())
+                    .chain(atom.get_aliases().values())
+                    .any(|body| {
+                        body.contains_symbol(GS.residue_map_id) && body.contains_symbol(Symbol::IF)
+                    })
+            });
+        let build = |atoms, compiler_settings: &EvaluatorSettings| {
+            GenericEvaluator::new_from_builder(
+                atoms,
+                param_builder,
+                dual_shape.clone(),
+                compiler_settings.optimization_settings(),
+                compiler_settings,
+            )
+        };
+        if !guarded_dispatch {
+            return build(parametric_atoms, settings);
+        }
+
+        let mut compiler_settings = *settings;
+        compiler_settings.cpe_iterations = Some(0);
+        let source_bytes = parametric_atoms
+            .iter()
+            .map(AliasedAtom::get_byte_size)
+            .sum::<usize>();
+        if dual_shape.is_some()
+            || orientations.len() > GUARDED_CPE_MAX_ORIENTATIONS
+            || source_bytes > GUARDED_CPE_MAX_SOURCE_BYTES
+        {
+            return build(parametric_atoms, &compiler_settings);
+        }
+
+        let baseline = build(parametric_atoms.clone(), &compiler_settings)?;
+        let baseline_program = baseline
+            .rational
+            .as_ref()
+            .expect("fresh evaluators retain their rational program")
+            .export_instructions();
+        if !DispatchWork::can_trial(&baseline_program) {
+            return Ok(baseline);
+        }
+        compiler_settings.cpe_iterations = Some(GUARDED_CPE_PASSES);
+        let trial_started = Instant::now();
+        let candidate = build(parametric_atoms, &compiler_settings).context(
+            "Bounded common-pair elimination failed after zero-pass construction succeeded",
+        )?;
+        let candidate_program = candidate
+            .rational
+            .as_ref()
+            .expect("fresh evaluators retain their rational program")
+            .export_instructions();
+        let use_candidate = candidate_program.sub_evaluators.is_empty()
+            && DispatchWork::new(&baseline_program).improves(
+                &DispatchWork::new(&candidate_program),
+                param_builder,
+                orientations,
+                production_orientation_ids,
+            );
+        crate::debug_tags!(#generation, #profile, #compile, #summary;
+            stage = "bounded_guarded_cpe",
+            source_bytes,
+            selected = use_candidate,
+            trial_elapsed_ms = trial_started.elapsed().as_secs_f64() * 1000.0,
+            before_instructions = baseline_program.instructions.len(),
+            after_instructions = candidate_program.instructions.len(),
+            "Bounded common-pair elimination for guarded dispatch"
+        );
+        if use_candidate {
+            Ok(candidate)
+        } else {
+            Ok(baseline)
+        }
     }
+
     #[instrument(skip_all)]
     fn new_iterative(
         parametric_atom: &[AliasedAtom],
@@ -794,7 +1087,7 @@ impl EvaluatorStack {
     pub(crate) fn new_explicit_sum_with_timings<A: AtomCore>(
         atoms: &[A],
         param_builder: &ParamBuilder,
-        numerator_definitions: &[Arc<FnMapEntry>],
+        numerator_definitions: &[Arc<NumeratorDefinition>],
         dual_shape: Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<(Self, EvaluatorBuildTimings)> {
@@ -823,7 +1116,7 @@ impl EvaluatorStack {
     pub(crate) fn from_integrand_with_timings(
         integrand: &Atom,
         param_builder: &ParamBuilder,
-        numerator_definitions: &[Arc<FnMapEntry>],
+        numerator_definitions: &[Arc<NumeratorDefinition>],
         representation: RepresentationMode,
         orientation_catalog: Option<(&[EdgeVec<Orientation>], &[OrientationID])>,
         dual_shape: Option<Vec<Vec<usize>>>,
@@ -873,12 +1166,40 @@ impl EvaluatorStack {
         alias_symbol: Symbol,
         tensor_map: Option<&ParsingTensorMap<'_>>,
     ) -> Result<AliasedAtom> {
+        let admission_started = std::time::Instant::now();
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let tensor = SymbolicTensor::infer_indexed(cooking.try_cook(a.as_atom_view())?)?;
+        crate::debug_tags!(#generation, #profile, #numerator, #compile, #summary;
+            stage = "evaluator_stack_raw_root_admission",
+            atom_index,
+            input_bytes = a.as_atom_view().get_byte_size(),
+            output_bytes = tensor.expression().as_view().get_byte_size(),
+            elapsed_ms = admission_started.elapsed().as_secs_f64() * 1000.0,
+            "Admitted scalar evaluator root before tensor preprocessing"
+        );
+        // Family calls have been replaced by their component shadows before
+        // this boundary. Lower finite dots inside scalar arguments as well;
+        // the component parser deliberately keeps those arguments opaque.
+        let components_started = std::time::Instant::now();
+        let tensor = tensor.expand_dots()?;
+        crate::debug_tags!(#generation, #profile, #numerator, #compile, #summary;
+            stage = "evaluator_stack_raw_root_scalar_components",
+            atom_index,
+            output_bytes = tensor.expression().as_view().get_byte_size(),
+            elapsed_ms = components_started.elapsed().as_secs_f64() * 1000.0,
+            "Lowered finite dot components in scalar evaluator arguments"
+        );
         Self::preprocess_tensor(
-            a,
+            &tensor,
             atom_index,
             settings,
             tensor_map,
-            |net, scalar_aliases, term_index| {
+            |net, scalar_aliases, term_index, layout| {
+                eyre::ensure!(
+                    layout.order() == 0,
+                    "scalar evaluator input retains {} tensor ports",
+                    layout.order(),
+                );
                 let root = match net.result_scalar()? {
                     ExecutionResult::One => Atom::num(1),
                     ExecutionResult::Zero => Atom::Zero,
@@ -947,12 +1268,31 @@ impl EvaluatorStack {
         )
     }
 
-    fn preprocess_tensor<A: AtomCore>(
-        a: &A,
+    fn retain_component_scalar_alias(scalar: &Atom) -> bool {
+        // Keep guards visible until they enclose the complete branch, including
+        // neighboring inverses.
+        scalar.as_view().get_byte_size() >= NETWORK_SCALAR_ALIAS_MIN_BYTES
+            && [
+                OrientationID::symbol(),
+                GS.theta,
+                GS.orientation_delta,
+                Symbol::IF,
+            ]
+            .into_iter()
+            .all(|selector| !scalar.contains_symbol(selector))
+    }
+
+    fn preprocess_tensor(
+        a: &SymbolicTensor<IndexedStructure>,
         atom_index: usize,
         settings: &EvaluatorSettings,
         tensor_map: Option<&ParsingTensorMap<'_>>,
-        mut finish: impl FnMut(&ParsingNet, &ScalarAliases, usize) -> Result<AliasedAtom>,
+        mut finish: impl FnMut(
+            &ParsingNet,
+            &ScalarAliases,
+            usize,
+            &CanonicalLayout,
+        ) -> Result<AliasedAtom>,
     ) -> Result<AliasedAtom> {
         let atom_started = std::time::Instant::now();
         crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
@@ -961,53 +1301,46 @@ impl EvaluatorStack {
             do_algebra = settings.do_algebra,
             "Evaluator timing milestone"
         );
-        // println!("Parsing {}", a.as_atom_view().log_print(Some(120)));
-        let network_input = if settings.do_algebra {
-            let color_simplified = a.as_atom_view().simplify_color_with(
-                ColorSimplifySettings::default().with_cof_dimension_invariants(),
-            );
-            let gamma_simplified = color_simplified.simplify_gamma();
-            crate::debug_tags!(#generation, #profile, #compile, #term, #dump;
-                stage = "evaluator_stack_parse_atom_after_simplify_gamma",
-                atom_index,
-                log.after_gamma = gamma_simplified,
-                "Evaluator atom after gamma simplification"
-            );
-            let simplified = gamma_simplified.simplify_metrics().to_dots();
-            crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                stage = "evaluator_stack_parse_atom_simplify_done",
-                atom_index,
-                elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
-                "Evaluator timing milestone"
-            );
-            simplified
+        // The shared carrier owns admission and tensor identities. Physical
+        // component indices are reversibly encoded only for that strict boundary.
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let input = if settings.do_algebra {
+            a.clone()
         } else {
-            crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                stage = "evaluator_stack_parse_atom_simplify_skipped",
-                atom_index,
-                elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
-                "Evaluator timing milestone"
-            );
-            a.as_atom_view().to_cof_dimension_invariants()
+            a.with_checked_expression(a.expression().to_cof_dimension_invariants())?
         };
-        // CFF sums remain opaque through nested forest operations. Their
-        // explicit momentum arguments have already received every deformation.
-        let network_input = if network_input.contains_symbol(GS.esurface) {
-            GS.lower_esurfaces(&network_input)
+        let network_input = if settings.do_algebra {
+            let simplified = input.simplify_algebra(&idenso::tensor::AlgebraSettings {
+                color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+                gamma: Some(GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })?;
+            // Algebra borrows its input, whose cached graph is no longer needed.
+            drop(input);
+            let completion_started = std::time::Instant::now();
+            let contracted = simplified.contract(idenso::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?;
+            crate::debug_tags!(#generation, #profile, #compile, #summary;
+                stage = "evaluator_post_algebra_contraction",
+                atom_index,
+                certified_complete = simplified.contraction_complete(),
+                expression_changed = contracted.expression() != simplified.expression(),
+                elapsed_ms = completion_started.elapsed().as_secs_f64() * 1000.0,
+                "Completed evaluator structural contraction"
+            );
+            contracted
         } else {
-            network_input
+            input
         };
         crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
             stage = "evaluator_stack_parse_atom_normalization_done",
             atom_index,
             elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
-            "Normalized evaluator input before independent scalar contractions"
-        );
-        crate::debug_tags!(#generation, #profile, #compile, #term, #dump;
-            stage = "evaluator_stack_parse_atom_before_network_parse",
-            atom_index,
-            log.atom = network_input,
-            "Evaluator atom before network parsing"
+            "Admitted evaluator tensor input"
         );
         let execute = |net: &mut ParsingNet| -> Result<()> {
             macro_rules! execute_min_result_rank {
@@ -1093,269 +1426,54 @@ impl EvaluatorStack {
             Ok(())
         };
 
-        // Materialize only an original additive tensor factor. Scalar spectators,
-        // powers and functions stay with the original residual product; this
-        // preparation never distributes a graph numerator or changes a strategy.
-        // Only exact Gaussian integers qualify; floating coefficients retain
-        // their original evaluation order in the ordinary network path.
-        let is_gaussian_integer = |atom: AtomView<'_>| {
-            let AtomView::Num(number) = atom else {
-                return false;
-            };
-            matches!(number.get_coeff_view().to_owned(),
-                symbolica::coefficient::Coefficient::Complex(value)
-                    if value.re.is_integer() && value.im.is_integer())
+        let parse_settings = ParseSettings {
+            shorthand_parsing: ShorthandParsing::Expand {
+                schoonschip: SchoonschipExpansionMode {
+                    inner_products: false,
+                    expand_schoonship: true,
+                    expand_inside_chains: true,
+                },
+                trace: true,
+                chain: true,
+            },
+            ..Default::default()
         };
-        let constant_factor =
-            |factor: AtomView<'_>| -> Result<Option<ParamTensor<ShadowedStructure<Aind>>>> {
-                if !matches!(factor, AtomView::Add(_))
-                    || factor.get_byte_size() >= MAX_EAGER_TENSOR_SUM_BYTES
-                    || spenso::network::profile::lazy_tensor_sums()
-                {
-                    return Ok(None);
-                }
-                // Reject scalar parameters and guards before parsing candidate factors.
-                // A tensor's index arguments are interpreted by the existing parser.
-                let mut pending = vec![factor];
-                while let Some(atom) = pending.pop() {
-                    match atom {
-                        AtomView::Add(sum) => pending.extend(sum.iter()),
-                        AtomView::Mul(product) => pending.extend(product.iter()),
-                        AtomView::Num(_) if is_gaussian_integer(atom) => {}
-                        AtomView::Fun(_) if atom.is_tensorial(StrictTensorFilter::Tagged) => {}
-                        _ => return Ok(None),
-                    }
-                }
-                let mut constant = factor.parse_into_net()?;
-                let exposed = constant.graph.dangling_indices();
-                if exposed.is_empty() || exposed.iter().any(|slot| !slot.matches(slot)) {
-                    return Ok(None);
-                }
-                constant.graph.cache_expr_tree_roots();
-                let mut bounds: HashMap<_, (usize, usize)> = HashMap::new();
-                for node in constant
-                    .graph
-                    .cached_expr_preorder_nodes()
-                    .into_iter()
-                    .rev()
-                {
-                    let children = constant.graph.cached_expr_children(node);
-                    let (entries, bytes) = match &constant.graph.graph[node] {
-                        NetworkNode::Op(op @ (NetworkOp::Sum | NetworkOp::Product)) => children
-                            .into_iter()
-                            .fold((1usize, 0usize), |(entries, bytes), child| {
-                                let (child_entries, child_bytes) = bounds[&child];
-                                (
-                                    if matches!(op, NetworkOp::Sum) {
-                                        entries.max(child_entries)
-                                    } else {
-                                        entries.saturating_mul(child_entries)
-                                    },
-                                    bytes.saturating_add(child_bytes),
-                                )
-                            }),
-                        NetworkNode::Leaf(NetworkLeaf::Scalar(scalar)) => {
-                            let scalar = constant.store.get_scalar_ref(*scalar).as_view();
-                            if !is_gaussian_integer(scalar) {
-                                return Ok(None);
-                            }
-                            (1, scalar.get_byte_size() + std::mem::size_of::<Atom>())
-                        }
-                        NetworkNode::Leaf(
-                            leaf @ (NetworkLeaf::LibraryKey { .. } | NetworkLeaf::LocalTensor(_)),
-                        ) => {
-                            // Bound logical capacity before realizing a library leaf, then
-                            // inspect its actual entries rather than its symbol or name.
-                            let entries = constant
-                                .graph
-                                .slots(node)
-                                .into_iter()
-                                .try_fold(1usize, |size, slot| {
-                                    size.checked_mul(usize::try_from(slot.dim()).ok()?)
-                                });
-                            let Some(entries) = entries.filter(|size| {
-                                size.saturating_mul(std::mem::size_of::<Atom>())
-                                    < MAX_EAGER_TENSOR_SUM_BYTES
-                            }) else {
-                                return Ok(None);
-                            };
-                            let tensor = match leaf {
-                                NetworkLeaf::LibraryKey { .. } => constant
-                                    .graph
-                                    .get_lib_data::<ShadowedStructure<Aind>, _, _>(
-                                    TENSORLIB.read().unwrap().deref(),
-                                    node,
-                                )?,
-                                NetworkLeaf::LocalTensor(index) => {
-                                    constant.store.get_tensor(*index).clone()
-                                }
-                                _ => unreachable!(),
-                            };
-                            let mut bytes = std::mem::size_of::<Atom>();
-                            for (_, value) in tensor.iter_flat() {
-                                if !is_gaussian_integer(value) {
-                                    return Ok(None);
-                                }
-                                bytes =
-                                    bytes.max(value.get_byte_size() + std::mem::size_of::<Atom>());
-                            }
-                            (entries, bytes)
-                        }
-                        _ => return Ok(None),
-                    };
-                    // A product's unreduced Cartesian capacity bounds its partial
-                    // contractions; sums preserve the largest child's capacity.
-                    // Sum component sizes conservatively and reuse the eager budget.
-                    if entries.saturating_mul(bytes) >= MAX_EAGER_TENSOR_SUM_BYTES {
-                        return Ok(None);
-                    }
-                    // Components remain symbolic, so integer arithmetic needs no
-                    // floating-point exactness bound.
-                    bounds.insert(node, (entries, bytes));
-                }
-                execute(&mut constant)?;
-                let lib = TENSORLIB.read().unwrap();
-                let ExecutionResult::Val(tensor) = constant.result_tensor(lib.deref())? else {
-                    return Ok(None);
-                };
-                Ok(Some(tensor.into_owned()))
-            };
-
-        // Each existing top-level summand is an independent tensor contraction.
-        // Keeping its network local avoids scanning unrelated terms during
-        // finite component preparation. Products, powers and nested sums retain
-        // their grouping; the resulting expressions are reunited before optimization.
-        let terms = if let AtomView::Add(sum) = network_input.as_view() {
-            sum.iter().collect::<Vec<_>>()
+        // Retain the checked carrier until the component library owns its ports.
+        // Energy surfaces are scalar functions; their lowering preserves the interface.
+        let network_input = if network_input.expression().contains_symbol(GS.esurface) {
+            network_input.with_checked_expression(GS.lower_esurfaces(network_input.expression()))?
         } else {
-            vec![network_input.as_view()]
+            network_input
         };
+        let net: Canonicalized<ParsingNet> = network_input.into_network(
+            TENSORLIB.read().unwrap().deref(),
+            FUN_LIB.deref(),
+            &parse_settings,
+            Some(&cooking),
+        )?;
+        let (net, layout) = net.into_parts();
+        let mut net = net.map_result(Ok::<_, eyre::Report>, |tensor| match tensor_map {
+            Some(map) => map(tensor),
+            None => Ok(tensor),
+        })?;
+        // Component-network scalar storage remains independent of symbolic
+        // tensor reduction. The finishers scope those scalar references once.
+        let term_index = 0;
+        let scalar_aliases =
+            net.alias_scalar_refs(|_, scalar| Self::retain_component_scalar_alias(scalar));
+        let closed_sum_boundaries = net.graph.contract_ready_sum_boundaries();
         crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-            stage = "evaluator_stack_parse_atom_terms_start",
+            stage = "evaluator_stack_parse_atom_tensor_boundaries_done",
             atom_index,
-            term_count = terms.len(),
-            "Contracting independent scalar summands"
+            term_index,
+            closed_sum_boundaries,
+            elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
+            "Prepared finite tensor contractions through retained sums"
         );
-        // Network handles are local indices. Give each summand its own scope
-        // before combining independently contracted networks.
-        let result = terms
-            .into_iter()
-            .enumerate()
-            .map(|(term_index, term)| -> Result<AliasedAtom> {
-                let term_started = std::time::Instant::now();
-                let mut residual = Vec::new();
-                let mut constants = Vec::new();
-                if let AtomView::Mul(product) = term {
-                    for factor in product.iter() {
-                        if let Some(tensor) = constant_factor(factor)? {
-                            constants.push(tensor);
-                        } else {
-                            residual.push(factor);
-                        }
-                    }
-                }
-                let mut net = if constants.is_empty() {
-                    term.parse_into_net()?
-                } else {
-                    let mut net = Atom::mul_many(residual).parse_into_net()?;
-                    for tensor in constants.into_iter().rev() {
-                        net = ParsingNet::from_tensor(tensor) * net;
-                    }
-                    net
-                };
-                if let Some(tensor_map) = tensor_map {
-                    net = net.map_result(Ok, tensor_map)?;
-                }
-                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                    stage = "evaluator_stack_parse_atom_net_done",
-                    atom_index,
-                    term_index,
-                    elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
-                    "Evaluator timing milestone"
-                );
-
-                // println!("Net: {}", net.dot_pretty());
-                let scalar_aliases = net.alias_scalar_refs(|_, scalar| {
-                    scalar.as_view().get_byte_size() >= NETWORK_SCALAR_ALIAS_MIN_BYTES
-                        // Keep guards visible until they enclose the complete branch,
-                        // including inverses in neighboring scalar factors. These
-                        // definitions precede generated handles, so selector structure
-                        // cannot be hidden through another registered alias either.
-                        && [OrientationID::symbol(), GS.theta, GS.orientation_delta, Symbol::IF]
-                            .into_iter().all(|selector| !scalar.contains_symbol(selector))
-                });
-                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                    stage = "evaluator_stack_parse_atom_scalar_aliases_done",
-                    atom_index,
-                    term_index,
-                    automatic_scalar_aliasing = true,
-                    threshold_bytes = NETWORK_SCALAR_ALIAS_MIN_BYTES,
-                    aliases_created = scalar_aliases.aliases_created(),
-                    aliased_terms = scalar_aliases.aliased_terms(),
-                    aliased_bytes = scalar_aliases.aliased_bytes(),
-                    max_aliased_bytes = scalar_aliases.max_aliased_bytes(),
-                    elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
-                    "Evaluator timing milestone"
-                );
-                // Prepare only the finite component contraction. Raw symbolic networks
-                // used by Taylor expansion retain their original product/sum grouping.
-                let contraction_preparation_started = std::time::Instant::now();
-                let closed_sum_boundaries = net.graph.contract_ready_sum_boundaries();
-                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                    stage = "evaluator_stack_parse_atom_tensor_boundaries_done",
-                    atom_index,
-                    term_index,
-                    closed_sum_boundaries,
-                    elapsed_ms = contraction_preparation_started.elapsed().as_secs_f64() * 1000.0,
-                    "Prepared finite tensor contractions through pending sums"
-                );
-                crate::debug_tags!(#generation, #compile, #term, #dump;
-                    stage = "evaluator_stack_parse_atom_network_dump",
-                    atom_index,
-                    term_index,
-                    file.atom = %term.to_canonical_string(),
-                    file.network = %net.dot_pretty(),
-                    "Parsed evaluator network dump"
-                );
-
-                let parse_elapsed = term_started.elapsed();
-                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                    stage = "evaluator_stack_parse_atom_parse_elapsed",
-                    atom_index,
-                    term_index,
-                    elapsed_ms = parse_elapsed.as_secs_f64() * 1000.0,
-                    "Evaluator timing milestone"
-                );
-                let instant = std::time::Instant::now();
-
-                execute(&mut net)?;
-
-                let execute_elapsed = instant.elapsed();
-                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                    stage = "evaluator_stack_parse_atom_execute_elapsed",
-                    atom_index,
-                    term_index,
-                    elapsed_ms = execute_elapsed.as_secs_f64() * 1000.0,
-                    "Evaluator timing milestone"
-                );
-                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                    stage = "evaluator_stack_parse_atom_execute_done",
-                    atom_index,
-                    term_index,
-                    elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
-                    "Evaluator timing milestone"
-                );
-
-                finish(&net, &scalar_aliases, term_index).map_err(|error| {
-                    error.with_note(|| format!("Network looks like: {}", net.dot_pretty()))
-                })
-            })
-            .collect::<Result<Vec<_>>>()
-            .map(|terms| {
-                terms.into_iter().fold(AliasedAtom::default(), |sum, term| {
-                    sum.try_add(&term).unwrap()
-                })
-            });
+        execute(&mut net)?;
+        let result = finish(&net, &scalar_aliases, term_index, &layout).map_err(|error| {
+            error.with_note(|| format!("Network looks like: {}", net.dot_pretty()))
+        });
         crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
             stage = "evaluator_stack_parse_atom_done",
             atom_index,
@@ -1373,12 +1491,12 @@ impl EvaluatorStack {
     /// scalar weights and factorized numerator sums retain their boundaries.
     fn combine_numerator_families<A: AtomCore>(
         atoms: &[A],
-        definitions: &[Arc<FnMapEntry>],
+        definitions: &[Arc<NumeratorDefinition>],
         param_builder: &ParamBuilder,
         families: &HashMap<(Symbol, Vec<Atom>), usize>,
         tag_counts: &HashMap<Symbol, usize>,
         symbols: (Symbol, Symbol, Symbol),
-    ) -> (Vec<Atom>, Vec<Arc<FnMapEntry>>) {
+    ) -> Result<(Vec<Atom>, Vec<Arc<NumeratorDefinition>>)> {
         let (joint_symbol, argument_symbol, shadow_symbol) = symbols;
         // Renaming a formal hidden inside a parameter alias would lose its
         // lexical binding. Leave those families at the existing open interface.
@@ -1392,8 +1510,22 @@ impl EvaluatorStack {
                         .iter()
                         .any(|entry| entry.rhs.contains(&formal))
                 });
-                let mut parameterized_slot = false;
-                definition.rhs.visitor(&mut |part| {
+                // Strict admission gives every retained external axis an index,
+                // including a zero body. Keep the declared logical order here.
+                let slots = definition
+                    .rhs
+                    .structure()
+                    .logical_slots()
+                    .into_iter()
+                    .map(|slot| slot.to_atom())
+                    .collect::<Vec<_>>();
+                let mut parameterized_slot = slots.iter().any(|slot| {
+                    definition
+                        .args
+                        .iter()
+                        .any(|formal| slot.contains(Atom::from(formal.clone())))
+                });
+                definition.rhs.expression().visitor(&mut |part| {
                     if Slot::<LibraryRep, Aind>::try_from(part).is_ok() {
                         parameterized_slot |= definition
                             .args
@@ -1407,13 +1539,7 @@ impl EvaluatorStack {
                 if captured || parameterized_slot {
                     return None;
                 }
-                // An unknown symbolic interface is not eligible for fusion;
-                // the ordinary preparation retains its existing validation.
-                definition
-                    .rhs
-                    .list_dangling::<Aind>()
-                    .ok()
-                    .map(|slots| slots.into_iter().collect::<HashSet<_>>())
+                Some(slots)
             })
             .collect::<Vec<_>>();
         let family_call = |view: AtomView<'_>| {
@@ -1448,15 +1574,9 @@ impl EvaluatorStack {
             let mut valid = true;
             let shadow = view.replace_map(|part, _, out| {
                 if let Some((family, _)) = family_call(part) {
-                    let mut slots = interfaces[family]
-                        .as_ref()
-                        .unwrap()
-                        .iter()
-                        .collect::<Vec<_>>();
-                    slots.sort();
                     **out = FunctionBuilder::new(shadow_symbol)
                         .add_arg(family)
-                        .add_args(slots)
+                        .add_args(interfaces[family].as_ref().unwrap())
                         .finish();
                 } else if matches!(part, AtomView::Fun(_) | AtomView::Pow(_))
                     && !structural_function(part)
@@ -1473,8 +1593,9 @@ impl EvaluatorStack {
             })
             .collect::<HashSet<_>>();
         let mut next_index = 0usize;
-        let mut combined = Vec::<Arc<FnMapEntry>>::new();
+        let mut combined = Vec::<Arc<NumeratorDefinition>>::new();
         let mut cached = HashMap::<Atom, Option<usize>>::new();
+        let mut combination_error = None;
         let mut join = |core: AtomView<'_>| -> Atom {
             let mut calls = Vec::new();
             core.visitor(&mut |part| {
@@ -1526,7 +1647,7 @@ impl EvaluatorStack {
                     // ports can connect it to other factors in this template.
                     let interface = interfaces[family].as_ref().unwrap();
                     let mut private_indices = HashMap::new();
-                    let body = definition.rhs.replace_map(|part, _, output| {
+                    let body = definition.rhs.expression().replace_map(|part, _, output| {
                         if let Ok(slot) = Slot::<LibraryRep, Aind>::try_from(part) {
                             if !interface.contains(&part.to_owned()) {
                                 let fresh =
@@ -1587,6 +1708,13 @@ impl EvaluatorStack {
                 if rhs.validate_chain_like_nesting().is_err() {
                     return None;
                 }
+                let rhs = match SymbolicTensor::infer_indexed(rhs) {
+                    Ok(tensor) => tensor,
+                    Err(error) => {
+                        combination_error = Some(error);
+                        return None;
+                    }
+                };
                 combined.push(Arc::new(FnMapEntry {
                     inlining: InliningPolicy::Always,
                     is_alias: false,
@@ -1625,6 +1753,7 @@ impl EvaluatorStack {
                 _ => false,
             });
             collected
+                .into_inner()
                 .map_collects(|wrapped, _, out| {
                     let core = wrapped.as_fun_view().unwrap().iter().next().unwrap();
                     let factors = match core {
@@ -1720,7 +1849,10 @@ impl EvaluatorStack {
                 prepared.remove(root.get_data()).unwrap()
             })
             .collect();
-        (atoms, combined)
+        if let Some(error) = combination_error {
+            return Err(eyre!(error).wrap_err("while composing shared numerator tensors"));
+        }
+        Ok((atoms, combined))
     }
 
     /// Contract each shared numerator body once, then expose only its scalar
@@ -1729,7 +1861,7 @@ impl EvaluatorStack {
     fn preprocess_numerator_families<A: AtomCore>(
         atoms: &[A],
         param_builder: &ParamBuilder,
-        definitions: &[Arc<FnMapEntry>],
+        definitions: &[Arc<NumeratorDefinition>],
         settings: &EvaluatorSettings,
         alias_symbol: Symbol,
         inlining: InliningPolicy,
@@ -1815,19 +1947,24 @@ impl EvaluatorStack {
         if definitions.iter().any(|definition| {
             tag_counts
                 .keys()
-                .any(|head| definition.rhs.contains_symbol(*head))
+                .any(|head| definition.rhs.expression().contains_symbol(*head))
         }) {
             return Err(eyre!("nested shared numerator families are unsupported"));
         }
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let atoms = atoms
+            .iter()
+            .map(|atom| cooking.try_cook(atom.as_atom_view()))
+            .collect::<std::result::Result<Vec<_>, _>>()?;
         let combination_started = std::time::Instant::now();
         let (atoms, combined) = Self::combine_numerator_families(
-            atoms,
+            &atoms,
             definitions,
             param_builder,
             &families,
             &tag_counts,
             (joint_symbol, argument_symbol, shadow_symbol),
-        );
+        )?;
         crate::debug_tags!(#generation, #profile, #summary;
             stage = "evaluator_stack_numerator_families_combined",
             elapsed_ms = combination_started.elapsed().as_secs_f64() * 1000.0,
@@ -1913,6 +2050,7 @@ impl EvaluatorStack {
             // An existing zero-argument parameter alias can capture a formal
             // without mentioning it in the family body. Keep such formals
             // conservatively; generated scalar aliases are analyzed exactly below.
+            let capture_started = std::time::Instant::now();
             let captured_arguments = formal_args
                 .iter()
                 .enumerate()
@@ -1924,19 +2062,41 @@ impl EvaluatorStack {
                         .then_some(index)
                 })
                 .collect::<HashSet<_>>();
+            crate::debug_tags!(#generation, #profile, #compile, #summary;
+                stage = "evaluator_family_captured_arguments",
+                family_index,
+                formal_count = formal_args.len(),
+                captured_count = captured_arguments.len(),
+                elapsed_ms = capture_started.elapsed().as_secs_f64() * 1000.0,
+                "Resolved captured numerator arguments"
+            );
             let shadow = Self::preprocess_tensor(
                 &definition.rhs,
                 family_index,
                 settings,
                 None,
-                |net, scalar_aliases, term_index| {
+                |net, scalar_aliases, term_index, layout| {
                     let tensor = match net.result_tensor(TENSORLIB.read().unwrap().deref())? {
-                        ExecutionResult::One => return Ok(Atom::num(1).into()),
-                        ExecutionResult::Zero => return Ok(Atom::Zero.into()),
+                        ExecutionResult::One => {
+                            eyre::ensure!(
+                                layout.order() == 0,
+                                "tensor identity lost its declared ports"
+                            );
+                            return Ok(Atom::num(1).into());
+                        }
+                        ExecutionResult::Zero => {
+                            eyre::ensure!(
+                                layout.order() == 0,
+                                "tensor zero lost its declared ports"
+                            );
+                            return Ok(Atom::Zero.into());
+                        }
                         ExecutionResult::Val(tensor) => tensor.into_owned(),
                     };
-                    let dimensions = tensor
-                        .external_reps_iter()
+                    let representations = tensor.external_reps_iter().collect::<Vec<_>>();
+                    let dimensions = layout
+                        .canonical_to_logical(&representations)
+                        .into_iter()
                         .map(|rep| Ok((usize::try_from(rep.dim)?, !rep.rep.is_base())))
                         .collect::<Result<Vec<_>>>()?;
                     let tags = vec![Atom::num(family_index), Atom::num(term_index)];
@@ -2034,7 +2194,11 @@ impl EvaluatorStack {
                         })
                     };
                     for (alias, body) in aliases {
-                        let body = if body == alias { body } else { rename(body) };
+                        let body = if body == alias {
+                            body
+                        } else {
+                            rename(body.collect_compact_factors())
+                        };
                         generated.push(FnMapEntry {
                             inlining,
                             is_alias: false,
@@ -2053,8 +2217,26 @@ impl EvaluatorStack {
                         if body.is_zero() {
                             continue;
                         }
-                        let index = Atom::from(tensor.co_expanded_index(index)?);
-                        let body = body.to_owned();
+                        let logical_index: DualConciousExpandedIndex = layout
+                            .canonical_to_logical(&tensor.co_expanded_index(index)?)
+                            .into();
+                        let index = Atom::from(logical_index);
+                        // Component contraction exposes new repeated scalar
+                        // factors. Collect them before registration so inlining
+                        // does not make the scalar compiler share unnecessary
+                        // arithmetic across different orientation branches.
+                        // Powers and lazy guards keep their existing boundaries.
+                        let collection_started = std::time::Instant::now();
+                        let input_bytes = body.get_byte_size();
+                        let body = body.collect_compact_factors();
+                        crate::debug_tags!(#generation, #profile, #compile, #summary;
+                            stage = "evaluator_component_factor_collection",
+                            family_index,
+                            input_bytes,
+                            output_bytes = body.as_view().get_byte_size(),
+                            elapsed_ms = collection_started.elapsed().as_secs_f64() * 1000.0,
+                            "Collected completed numerator component factors"
+                        );
                         let positions = argument_positions(&body);
                         populated.insert(index.clone(), positions.clone());
                         generated.push(FnMapEntry {
@@ -2073,10 +2255,10 @@ impl EvaluatorStack {
                                 .collect(),
                         });
                     }
-                    if populated.is_empty() {
-                        return Ok(Atom::Zero.into());
-                    }
                     if dimensions.is_empty() {
+                        if populated.is_empty() {
+                            return Ok(Atom::Zero.into());
+                        }
                         return Ok(FunctionBuilder::new(component_symbol)
                             .add_args(&tags)
                             .add_arg(function!(AIND_SYMBOLS.cind))
@@ -2088,11 +2270,12 @@ impl EvaluatorStack {
                             .finish()
                             .into());
                     }
-                    let shadow = tensor.structure().to_symbolic_with(
-                        shadow_symbol,
-                        &[tags.clone(), formal_args.clone()].concat(),
-                        None,
-                    );
+                    let logical_slots = layout.canonical_to_logical(&tensor.external_structure());
+                    let shadow = FunctionBuilder::new(shadow_symbol)
+                        .add_args(&tags)
+                        .add_args(&formal_args)
+                        .add_args(logical_slots.into_iter().map(|slot| slot.to_atom()))
+                        .finish();
                     components.insert(tags, (dimensions, populated, formal_args.len()));
                     Ok(shadow.into())
                 },
@@ -2319,7 +2502,7 @@ impl EvaluatorStack {
     pub fn new_with_timings<A: AtomCore>(
         atoms: &[A],
         param_builder: &ParamBuilder,
-        numerator_definitions: &[Arc<FnMapEntry>],
+        numerator_definitions: &[Arc<NumeratorDefinition>],
         orientations: &[EdgeVec<Orientation>],
         production_orientation_ids: &[OrientationID],
         dual_shape: Option<Vec<Vec<usize>>>,
@@ -2470,12 +2653,18 @@ impl EvaluatorStack {
             );
         }
 
-        let single_started = std::time::Instant::now();
+        let single_started = Instant::now();
         // The optional variants have finished borrowing these scalars. Transfer
         // them to the final evaluator instead of retaining a second full copy.
-        let single_parametric =
-            Self::new_single_parametric(parsed_atoms, param_builder, &dual_shape, settings)
-                .with_context(|| "Failed to create parametric")?;
+        let single_parametric = Self::new_single_parametric(
+            parsed_atoms,
+            param_builder,
+            orientations,
+            production_orientation_ids,
+            &dual_shape,
+            settings,
+        )
+        .with_context(|| "Failed to create parametric")?;
         crate::debug_tags!(#generation, #profile, #compile, #summary;
             stage = "evaluator_stack_new_single_parametric_done",
             orientation_count = orientations.len(),
@@ -2983,7 +3172,7 @@ impl GenericEvaluator {
             fn_map_entries
                 .iter()
                 .filter(|entry| entry.inlining != InliningPolicy::Never)
-                .map(FnMapEntry::replacement)
+                .map(|entry| entry.replacement())
                 .collect::<Vec<_>>()
         } else {
             Vec::new()
@@ -3586,7 +3775,9 @@ mod hyperbolic_tests;
 
 #[cfg(test)]
 mod tests {
+    use crate::numerator::symbolica_ext::NumeratorAtomExt;
     use std::io::Cursor;
+    use std::sync::Arc;
     use typed_index_collections::TiVec;
 
     use idenso::{dirac::AGS, representations::Bispinor};
@@ -3610,20 +3801,272 @@ mod tests {
     }
 
     #[test]
+    fn guarded_cpe_accounts_for_work_on_the_skipped_path() {
+        let input = Param(0);
+        let independent = Param(1);
+        let temporary = Temp(0);
+        let multiply = || Instruction::Mul(temporary, vec![independent, independent], 2);
+        let program = |instructions| RationalProgram {
+            input_count: 2,
+            output_count: 0,
+            instructions,
+            temporary_count: 1,
+            constants: vec![],
+            constant_functions: vec![],
+            sub_evaluators: vec![],
+        };
+        let original = program(vec![
+            Instruction::IfElse(input, 1),
+            multiply(),
+            multiply(),
+            Instruction::Label(1),
+        ]);
+        let hoisted = program(vec![
+            multiply(),
+            Instruction::IfElse(input, 1),
+            Instruction::Label(1),
+        ]);
+        let original = DispatchWork::new(&original);
+        let hoisted = DispatchWork::new(&hoisted);
+
+        assert_eq!(
+            original
+                .selected_path(&[Some(1), None])
+                .map(|work| work.total()),
+            Some(6)
+        );
+        assert_eq!(
+            hoisted
+                .selected_path(&[Some(1), None])
+                .map(|work| work.total()),
+            Some(4)
+        );
+        assert_eq!(
+            original
+                .selected_path(&[Some(0), None])
+                .map(|work| work.total()),
+            Some(2)
+        );
+        assert_eq!(
+            hoisted
+                .selected_path(&[Some(0), None])
+                .map(|work| work.total()),
+            Some(4)
+        );
+        assert_eq!(hoisted.selected_path(&[None, None]), None);
+    }
+
+    #[test]
+    fn guarded_cpe_requires_improvement_without_work_regressions() {
+        test_initialise().unwrap();
+        let mut builder = ParamBuilder::new_empty();
+        builder.pairs.residue_map_id = ParamValuePairs::default_from_symbol(GS.residue_map_id);
+        builder.pairs.orientations = [GS.sign(EdgeIndex(0))].into_iter().collect();
+        let input_count = builder.pairs.update_ranges();
+        let residue = Param(builder.pairs.residue_map_id.value_range.start);
+        let sign = Param(builder.pairs.orientations.value_range.start);
+        let orientations = [
+            EdgeVec::from_iter([Orientation::Reversed]),
+            EdgeVec::from_iter([Orientation::Undirected]),
+        ];
+        let ids = [OrientationID(9), OrientationID(0)];
+        let program = |instructions| RationalProgram {
+            input_count,
+            output_count: 0,
+            instructions,
+            temporary_count: 1,
+            constants: vec![],
+            constant_functions: vec![],
+            sub_evaluators: vec![],
+        };
+        let multiply = || Instruction::Mul(Temp(0), vec![sign, sign], 2);
+
+        for guard in [residue, sign] {
+            let original = program(vec![
+                Instruction::IfElse(guard, 1),
+                multiply(),
+                multiply(),
+                Instruction::Label(1),
+            ]);
+            let guarded = program(vec![
+                Instruction::IfElse(guard, 1),
+                multiply(),
+                Instruction::Label(1),
+            ]);
+            let hoisted = program(vec![
+                multiply(),
+                Instruction::IfElse(guard, 1),
+                Instruction::Label(1),
+            ]);
+            let better = |after: &RationalProgram,
+                          orientations: &[EdgeVec<Orientation>],
+                          ids: &[OrientationID]| {
+                DispatchWork::new(&original).improves(
+                    &DispatchWork::new(after),
+                    &builder,
+                    orientations,
+                    ids,
+                )
+            };
+            assert!(better(&guarded, &orientations, &ids));
+            assert!(better(&hoisted, &orientations[..1], &ids[..1]));
+            assert!(!better(&hoisted, &orientations, &ids));
+            let extra_dispatch = program(vec![
+                Instruction::Assign(Temp(0), sign),
+                Instruction::IfElse(guard, 1),
+                multiply(),
+                Instruction::Label(1),
+            ]);
+            // The assignment increases only dispatch work on the skipped path.
+            assert!(!better(&extra_dispatch, &orientations, &ids));
+            assert!(!better(&original, &orientations, &ids));
+            assert!(!better(&guarded, &orientations, &ids[..1]));
+            let wrong_sign_layout = [
+                EdgeVec::from_iter([Orientation::Undirected; 2]),
+                orientations[1].clone(),
+            ];
+            assert!(!better(&guarded, &wrong_sign_layout, &ids));
+            let wrong_input_layout = RationalProgram {
+                input_count: input_count - 1,
+                ..guarded
+            };
+            assert!(!better(&wrong_input_layout, &orientations, &ids));
+        }
+
+        let add = || Instruction::Add(Temp(0), vec![sign, sign], 2);
+        let additions = program(vec![add(), add()]);
+        let multiplication = program(vec![multiply()]);
+        assert!(!DispatchWork::new(&additions).improves(
+            &DispatchWork::new(&multiplication),
+            &builder,
+            &orientations,
+            &ids,
+        ));
+        assert!(
+            !DispatchWork::new(&program(vec![multiply(), multiply()])).improves(
+                &DispatchWork::new(&program(vec![add()])),
+                &builder,
+                &orientations,
+                &ids,
+            )
+        );
+
+        assert!(DispatchWork::can_trial(&additions));
+        let long = program(vec![
+            Instruction::Label(0);
+            GUARDED_CPE_MAX_BASELINE_INSTRUCTIONS + 1
+        ]);
+        let wide = program(vec![Instruction::Mul(Temp(0), vec![sign; 1500], 1500)]);
+        assert!(!DispatchWork::can_trial(&long));
+        assert!(!DispatchWork::can_trial(&wide));
+    }
+
+    #[test]
+    fn guarded_cpe_defaults_and_overrides_preserve_selected_residue_values() {
+        test_initialise().unwrap();
+        let a = parse_lit!(guarded_cpe_test::a);
+        let b = parse_lit!(guarded_cpe_test::b);
+        let extras = [
+            parse_lit!(guarded_cpe_test::x),
+            parse_lit!(guarded_cpe_test::y),
+            parse_lit!(guarded_cpe_test::z),
+        ];
+        let ids = [OrientationID(4), OrientationID(9)];
+        let orientations = [
+            EdgeVec::from_iter([Orientation::Reversed]),
+            EdgeVec::from_iter([Orientation::Undirected]),
+        ];
+        let source = ids[0].atom()
+            * Atom::add_many(extras.iter().map(|x| Symbol::SIN.call_args([&a * &b * x])));
+        let mut builder = ParamBuilder::new_empty();
+        builder.pairs.residue_map_id = ParamValuePairs::default_from_symbol(GS.residue_map_id);
+        builder.pairs.orientations = [GS.sign(EdgeIndex(0))].into_iter().collect();
+        builder.pairs.additional_params = [a, b].into_iter().chain(extras).collect();
+        let input_count = builder.pairs.update_ranges();
+
+        let build =
+            |iterations, orientations: &[EdgeVec<Orientation>], ids: &[OrientationID], shape| {
+                EvaluatorStack::new_single_parametric(
+                    vec![source.clone().into()],
+                    &builder,
+                    orientations,
+                    ids,
+                    &shape,
+                    &EvaluatorSettings {
+                        cpe_iterations: iterations,
+                        // Direct translation bypasses CPE for a single scalar expression.
+                        direct_translation: false,
+                        horner_iterations: 0,
+                        ..Default::default()
+                    },
+                )
+                .unwrap()
+            };
+        let instructions = |evaluator: &GenericEvaluator| {
+            evaluator
+                .rational
+                .as_ref()
+                .unwrap()
+                .export_instructions()
+                .instructions
+                .len()
+        };
+        let mut zero = build(Some(0), &orientations, &ids, None);
+        let mut default = build(None, &orientations, &ids, None);
+        let over_limit = vec![orientations[0].clone(); GUARDED_CPE_MAX_ORIENTATIONS + 1];
+        let over_limit_ids = vec![ids[0]; over_limit.len()];
+        let explicit = build(Some(GUARDED_CPE_PASSES), &over_limit, &over_limit_ids, None);
+        assert_ne!(instructions(&explicit), instructions(&zero));
+        assert_eq!(instructions(&default), instructions(&explicit));
+        let out_of_bounds = build(None, &over_limit, &over_limit_ids, None);
+        assert_eq!(instructions(&out_of_bounds), instructions(&zero));
+
+        for (orientation, id) in orientations.iter().zip(ids) {
+            let mut input = vec![Complex::new_re(F(1.0)); input_count];
+            input[builder.pairs.residue_map_id.value_range.start] = Complex::new_re(F(id.0 as f64));
+            InputParams::<f64>::set_orientation_values_impl(
+                &mut input,
+                Complex::new_re(F(1.0)),
+                Complex::new_re(F(0.0)),
+                1,
+                builder.pairs.orientations.value_range.start,
+                orientation,
+            );
+            let eval =
+                |evaluator| <f64 as GenericEvaluatorFloat>::get_evaluator_single(evaluator)(&input);
+            let zero_value = eval(&mut zero);
+            if id == ids[0] {
+                assert_ne!(zero_value, Complex::new_re(F(0.0)));
+            } else {
+                assert_eq!(zero_value, Complex::new_re(F(0.0)));
+            }
+            assert_eq!(eval(&mut default), zero_value);
+        }
+
+        let dual_shape = Some(vec![vec![0], vec![1]]);
+        let dual_zero = build(Some(0), &orientations, &ids, dual_shape.clone());
+        let dual_default = build(None, &orientations, &ids, dual_shape);
+        assert_eq!(instructions(&dual_default), instructions(&dual_zero));
+    }
+
+    #[test]
     fn generated_numerator_bodies_remain_shared_through_rebuild_and_serialization() {
         test_initialise().unwrap();
         let family = symbol!("evaluator_test::retained_body_family");
         let q = symbol!("evaluator_test::retained_body_formal");
         let x = parse_lit!(evaluator_test::retained_body_x);
         let g = parse_lit!(evaluator_test::retained_body_global);
-        let definition = Arc::new(FnMapEntry {
-            lhs: function!(family, 0, q),
-            rhs: Atom::add_many((1..=16).map(|i| (Atom::var(q) + &g + i).pow(-1))),
-            args: vec![q.into()],
-            tags: vec![Atom::num(0)],
-            inlining: InliningPolicy::Always,
-            is_alias: false,
-        });
+        let definition = Arc::new(
+            NumeratorDefinition::try_from(FnMapEntry {
+                lhs: function!(family, 0, q),
+                rhs: Atom::add_many((1..=16).map(|i| (Atom::var(q) + &g + i).pow(-1))),
+                args: vec![q.into()],
+                tags: vec![Atom::num(0)],
+                inlining: InliningPolicy::Always,
+                is_alias: false,
+            })
+            .unwrap(),
+        );
         let source = Atom::add_many((1..=32).map(|j| function!(family, 0, &x + j)));
         let mut builder = ParamBuilder::new_empty();
         builder.pairs.additional_params = [x.clone(), g.clone()].into_iter().collect();
@@ -3725,13 +4168,13 @@ mod tests {
             let mut state = Vec::new();
             State::export(&mut state).unwrap();
             let state_map = State::import(&mut Cursor::new(state), None).unwrap();
-            let model = Model::default();
+            let model = crate::utils::load_generic_model("scalars");
             let (mut decoded, _): (GenericEvaluator, _) = bincode::decode_from_slice_with_context(
                 &encoded,
                 bincode::config::standard(),
                 GammaLoopContextContainer {
                     state_map: &state_map,
-                    model: &model,
+                    model: &Arc::new(model.clone()),
                 },
             )
             .unwrap();
@@ -3854,14 +4297,17 @@ mod tests {
         .into_iter()
         .enumerate()
         .map(|(i, rhs)| {
-            Arc::new(FnMapEntry {
-                inlining: InliningPolicy::Always,
-                is_alias: false,
-                lhs: function!(family, i, q.clone()),
-                rhs,
-                tags: vec![Atom::num(i)],
-                args: vec![Indeterminate::try_from(q.clone()).unwrap()],
-            })
+            Arc::new(
+                NumeratorDefinition::try_from(FnMapEntry {
+                    inlining: InliningPolicy::Always,
+                    is_alias: false,
+                    lhs: function!(family, i, q.clone()),
+                    rhs,
+                    tags: vec![Atom::num(i)],
+                    args: vec![Indeterminate::try_from(q.clone()).unwrap()],
+                })
+                .unwrap(),
+            )
         })
         .collect::<Vec<_>>();
         let mut builder = ParamBuilder::new_empty();
@@ -3987,26 +4433,32 @@ mod tests {
         let tensor = SPENSO_TAG.tensor_symbol("evaluator_test::unused_numerator_tensor");
         let weight = Atom::add_many((1..512).map(|i| (&x + i).pow(2)));
         let definitions = [
-            Arc::new(FnMapEntry {
-                inlining: InliningPolicy::Always,
-                is_alias: false,
-                lhs: function!(family, 0, q.clone()),
-                rhs: &q * &x,
-                tags: vec![Atom::num(0)],
-                args: vec![Indeterminate::try_from(q.clone()).unwrap()],
-            }),
-            Arc::new(FnMapEntry {
-                inlining: InliningPolicy::Always,
-                is_alias: false,
-                lhs: function!(family, 1, q.clone()),
-                rhs: weight
-                    * function!(
-                        tensor,
-                        parse_lit!(spenso::mink(evaluator_test::unused_dimension, 1))
-                    ),
-                tags: vec![Atom::num(1)],
-                args: vec![Indeterminate::try_from(q).unwrap()],
-            }),
+            Arc::new(
+                NumeratorDefinition::try_from(FnMapEntry {
+                    inlining: InliningPolicy::Always,
+                    is_alias: false,
+                    lhs: function!(family, 0, q.clone()),
+                    rhs: &q * &x,
+                    tags: vec![Atom::num(0)],
+                    args: vec![Indeterminate::try_from(q.clone()).unwrap()],
+                })
+                .unwrap(),
+            ),
+            Arc::new(
+                NumeratorDefinition::try_from(FnMapEntry {
+                    inlining: InliningPolicy::Always,
+                    is_alias: false,
+                    lhs: function!(family, 1, q.clone()),
+                    rhs: weight
+                        * function!(
+                            tensor,
+                            parse_lit!(spenso::mink(evaluator_test::unused_dimension, 1))
+                        ),
+                    tags: vec![Atom::num(1)],
+                    args: vec![Indeterminate::try_from(q).unwrap()],
+                })
+                .unwrap(),
+            ),
         ];
         let mut builder = ParamBuilder::new_empty();
         builder.pairs.additional_params = [x].into_iter().collect();
@@ -4083,7 +4535,7 @@ mod tests {
             );
         }
         let mut conflict = (*definitions[1]).clone();
-        conflict.rhs = Atom::Zero;
+        conflict.rhs = conflict.rhs.with_checked_expression(Atom::Zero).unwrap();
         assert!(
             EvaluatorStack::preprocess_numerator_families(
                 &[Atom::Zero],
@@ -4119,7 +4571,10 @@ mod tests {
                 .contains("formal arguments must be distinct")
         );
         let mut nested = (*definitions[0]).clone();
-        nested.rhs = function!(family, 1, 3);
+        nested.rhs = nested
+            .rhs
+            .with_checked_expression(function!(family, 1, 3))
+            .unwrap();
         assert!(
             EvaluatorStack::preprocess_numerator_families(
                 &[function!(family, 0, 3)],
@@ -4131,6 +4586,196 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn shared_ranked_zero_numerator_preserves_its_interface() {
+        test_initialise().unwrap();
+        let family = symbol!("evaluator_test::ranked_zero_family");
+        let vector = SPENSO_TAG.tensor_symbol("evaluator_test::ranked_zero_vector");
+        let index = parse_lit!(spenso::mink(4, 1));
+        let mut definition = NumeratorDefinition::try_from(FnMapEntry {
+            inlining: InliningPolicy::Always,
+            is_alias: false,
+            lhs: function!(family, 0),
+            rhs: function!(vector, index.clone()),
+            tags: vec![Atom::num(0)],
+            args: vec![],
+        })
+        .unwrap();
+        definition.rhs = definition.rhs.with_checked_expression(Atom::Zero).unwrap();
+        assert_eq!(definition.rhs.structure().logical_slots().len(), 1);
+        let definitions = [Arc::new(definition)];
+        let builder = ParamBuilder::new_empty();
+        let settings = EvaluatorSettings::default();
+        let alias = symbol!("evaluator_test::ranked_zero_scalar");
+        let call = function!(family, 0);
+
+        // A vanishing vector is not a scalar evaluator output.
+        let error = EvaluatorStack::preprocess_numerator_families(
+            std::slice::from_ref(&call),
+            &builder,
+            &definitions,
+            &settings,
+            alias,
+            InliningPolicy::Never,
+        )
+        .err()
+        .expect("an uncontracted zero vector must retain its port");
+        assert!(
+            error.to_string().contains("retains 1 tensor ports"),
+            "{error:?}"
+        );
+
+        // A matching contraction is a scalar zero and needs no component functions.
+        let (contracted, prepared) = EvaluatorStack::preprocess_numerator_families(
+            &[&call * GS.energy_delta(index.as_view())],
+            &builder,
+            &definitions,
+            &settings,
+            alias,
+            InliningPolicy::Never,
+        )
+        .unwrap();
+        assert!(contracted[0].get_root().is_zero());
+        assert!(prepared.reps.is_empty());
+
+        // Different abstract indices leave an outer product, even when every
+        // component vanishes. They cannot silently close the zero family's port.
+        let other_index = parse_lit!(spenso::mink(4, 2));
+        let error = EvaluatorStack::preprocess_numerator_families(
+            &[call * GS.energy_delta(other_index.as_view())],
+            &builder,
+            &definitions,
+            &settings,
+            alias,
+            InliningPolicy::Never,
+        )
+        .err()
+        .expect("mismatched zero-vector ports must not contract");
+        assert!(
+            error.to_string().contains("retains 2 tensor ports"),
+            "{error:?}"
+        );
+    }
+
+    #[test]
+    fn shared_scalar_zero_numerator_remains_a_scalar_output() {
+        test_initialise().unwrap();
+        let family = symbol!("evaluator_test::scalar_zero_family");
+        let definitions = [Arc::new(
+            NumeratorDefinition::try_from(FnMapEntry {
+                inlining: InliningPolicy::Always,
+                is_alias: false,
+                lhs: function!(family, 0),
+                rhs: Atom::Zero,
+                tags: vec![Atom::num(0)],
+                args: vec![],
+            })
+            .unwrap(),
+        )];
+        let (atoms, prepared) = EvaluatorStack::preprocess_numerator_families(
+            &[function!(family, 0)],
+            &ParamBuilder::new_empty(),
+            &definitions,
+            &EvaluatorSettings::default(),
+            symbol!("evaluator_test::scalar_zero_alias"),
+            InliningPolicy::Never,
+        )
+        .unwrap();
+        assert!(atoms[0].get_root().is_zero());
+        assert!(prepared.reps.is_empty());
+    }
+
+    #[test]
+    fn scalar_argument_dots_lower_after_shared_tensor_interfaces_are_resolved() {
+        test_initialise().unwrap();
+        let family = symbol!("evaluator_test::scalar_dot_argument_family");
+        let index = parse_lit!(spenso::mink(4, 719));
+        let definitions = [Arc::new(
+            NumeratorDefinition::try_from(FnMapEntry {
+                inlining: InliningPolicy::Always,
+                is_alias: false,
+                lhs: function!(family, 0),
+                rhs: GS.energy_delta(index.as_view()),
+                tags: vec![Atom::num(0)],
+                args: vec![],
+            })
+            .unwrap(),
+        )];
+        assert_eq!(definitions[0].rhs.rank(), 1);
+        let momentum = GS.emr_mom(EdgeIndex(8), parse_lit!(spenso::mink(4)));
+        let squared = function!(SPENSO_TAG.dot, &momentum, &momentum);
+        let scalar = function!(GS.tree_denom_wrapper, (&squared - 4).pow(-1))
+            + function!(GS.on_shell_energy, 7, &squared + 9);
+        let call = function!(family, 0);
+        let mut builder = ParamBuilder::new_empty();
+        let argument = symbol!("evaluator_test::scalar_dot_argument");
+        builder
+            .add_function(GS.tree_denom_wrapper, vec![argument], Atom::var(argument))
+            .unwrap();
+        builder
+            .add_function(
+                GS.on_shell_energy,
+                vec![symbol!("evaluator_test::scalar_dot_owner"), argument],
+                Atom::var(argument).pow((1, 2)),
+            )
+            .unwrap();
+        builder.pairs.additional_params = (0..4)
+            .map(|component| GS.emr_mom(EdgeIndex(8), GS.cind(component)))
+            .collect();
+        builder.pairs.update_ranges();
+        for do_algebra in [false, true] {
+            let settings = EvaluatorSettings {
+                do_algebra,
+                ..Default::default()
+            };
+            let (atoms, prepared) = EvaluatorStack::preprocess_numerator_families(
+                &[&call * GS.energy_delta(index.as_view()) * &scalar],
+                &builder,
+                &definitions,
+                &settings,
+                symbol!("evaluator_test::scalar_dot_alias"),
+                InliningPolicy::Never,
+            )
+            .unwrap();
+            assert!(
+                std::iter::once(atoms[0].get_root())
+                    .chain(atoms[0].get_aliases().values())
+                    .chain(prepared.reps.iter().map(|entry| &entry.rhs))
+                    .all(|body| !body.contains_symbol(SPENSO_TAG.dot))
+            );
+            let mut evaluator = GenericEvaluator::new_from_builder(
+                atoms,
+                &prepared,
+                None,
+                settings.optimization_settings(),
+                &settings,
+            )
+            .unwrap();
+            // q^2 = 25 - 1 - 4 - 4 = 16, so the two scalar arguments
+            // independently give 1/(16-4) and sqrt(16+9).
+            let values = [5.0, 1.0, 2.0, 2.0].map(|value| Complex::new_re(F(value)));
+            let actual =
+                <f64 as GenericEvaluatorFloat>::get_evaluator_single(&mut evaluator)(&values);
+            assert!((actual.re.0 - 61.0 / 12.0).abs() < 1e-12);
+            assert_eq!(actual.im.0, 0.0);
+
+            let error = EvaluatorStack::preprocess_numerator_families(
+                &[&call * &scalar],
+                &builder,
+                &definitions,
+                &settings,
+                symbol!("evaluator_test::scalar_dot_open_alias"),
+                InliningPolicy::Never,
+            )
+            .err()
+            .expect("lowering scalar arguments must retain the unclosed family port");
+            assert!(
+                error.to_string().contains("retains 1 tensor ports"),
+                "{error:?}"
+            );
+        }
     }
 
     #[test]
@@ -4146,17 +4791,20 @@ mod tests {
         let definitions = [(family, &q + 10 * &r), (other_family, 2 * &q + 3 * &r)]
             .into_iter()
             .map(|(head, rhs)| {
-                Arc::new(FnMapEntry {
-                    inlining: InliningPolicy::Always,
-                    is_alias: false,
-                    lhs: function!(head, 7, &q, &r),
-                    rhs,
-                    tags: vec![Atom::num(7)],
-                    args: [&q, &r]
-                        .into_iter()
-                        .map(|arg| Indeterminate::try_from(arg.clone()).unwrap())
-                        .collect(),
-                })
+                Arc::new(
+                    NumeratorDefinition::try_from(FnMapEntry {
+                        inlining: InliningPolicy::Always,
+                        is_alias: false,
+                        lhs: function!(head, 7, &q, &r),
+                        rhs,
+                        tags: vec![Atom::num(7)],
+                        args: [&q, &r]
+                            .into_iter()
+                            .map(|arg| Indeterminate::try_from(arg.clone()).unwrap())
+                            .collect(),
+                    })
+                    .unwrap(),
+                )
             })
             .collect::<Vec<_>>();
         let roots = [
@@ -4177,7 +4825,7 @@ mod tests {
         let replacements = prepared
             .reps
             .iter()
-            .map(FnMapEntry::replacement)
+            .map(|entry| entry.replacement())
             .collect::<Vec<_>>();
         let expected = [
             &r + 10 * &q,
@@ -4209,22 +4857,28 @@ mod tests {
             .map(|arg| Indeterminate::try_from(arg).unwrap())
             .collect::<Vec<_>>();
         let definitions = [
-            Arc::new(FnMapEntry {
-                inlining: InliningPolicy::Always,
-                is_alias: false,
-                lhs: function!(family, 0, q1.clone(), q2.clone()),
-                rhs: (&q1 + &x) * &weight * GS.energy_delta(index.as_view()),
-                tags: vec![Atom::num(0)],
-                args: formals.clone(),
-            }),
-            Arc::new(FnMapEntry {
-                inlining: InliningPolicy::Always,
-                is_alias: false,
-                lhs: function!(family, 1, q1.clone(), q2.clone()),
-                rhs: weight,
-                tags: vec![Atom::num(1)],
-                args: formals,
-            }),
+            Arc::new(
+                NumeratorDefinition::try_from(FnMapEntry {
+                    inlining: InliningPolicy::Always,
+                    is_alias: false,
+                    lhs: function!(family, 0, q1.clone(), q2.clone()),
+                    rhs: (&q1 + &x) * &weight * GS.energy_delta(index.as_view()),
+                    tags: vec![Atom::num(0)],
+                    args: formals.clone(),
+                })
+                .unwrap(),
+            ),
+            Arc::new(
+                NumeratorDefinition::try_from(FnMapEntry {
+                    inlining: InliningPolicy::Always,
+                    is_alias: false,
+                    lhs: function!(family, 1, q1.clone(), q2.clone()),
+                    rhs: weight,
+                    tags: vec![Atom::num(1)],
+                    args: formals,
+                })
+                .unwrap(),
+            ),
         ];
         let roots = [
             function!(family, 0, 3, 5) * function!(vector, index.clone()),
@@ -4339,14 +4993,17 @@ mod tests {
             tags: vec![Atom::num(0)],
             args: vec![],
         });
-        let definition = Arc::new(FnMapEntry {
-            inlining: InliningPolicy::Always,
-            is_alias: false,
-            lhs: function!(family, 0, q.clone()),
-            rhs: alias,
-            tags: vec![Atom::num(0)],
-            args: vec![Indeterminate::try_from(q).unwrap()],
-        });
+        let definition = Arc::new(
+            NumeratorDefinition::try_from(FnMapEntry {
+                inlining: InliningPolicy::Always,
+                is_alias: false,
+                lhs: function!(family, 0, q.clone()),
+                rhs: alias,
+                tags: vec![Atom::num(0)],
+                args: vec![Indeterminate::try_from(q).unwrap()],
+            })
+            .unwrap(),
+        );
         let settings = EvaluatorSettings::default();
         let (atoms, prepared) = EvaluatorStack::preprocess_numerator_families(
             &[function!(family, 0, 3) + function!(family, 0, 5)],
@@ -4398,14 +5055,17 @@ mod tests {
         .into_iter()
         .enumerate()
         .map(|(index, (formal, rhs))| {
-            Arc::new(FnMapEntry {
-                inlining: InliningPolicy::Always,
-                is_alias: false,
-                lhs: function!(family, index, formal.clone()),
-                rhs,
-                tags: vec![Atom::num(index)],
-                args: vec![Indeterminate::try_from(formal.clone()).unwrap()],
-            })
+            Arc::new(
+                NumeratorDefinition::try_from(FnMapEntry {
+                    inlining: InliningPolicy::Always,
+                    is_alias: false,
+                    lhs: function!(family, index, formal.clone()),
+                    rhs,
+                    tags: vec![Atom::num(index)],
+                    args: vec![Indeterminate::try_from(formal.clone()).unwrap()],
+                })
+                .unwrap(),
+            )
         })
         .collect::<Vec<_>>();
         let mut roots = vec![
@@ -4461,7 +5121,7 @@ mod tests {
 
     #[test]
     fn shared_numerator_residue_sum_closes_through_color_trace_and_outer_gamma() {
-        use idenso::{color::CS, dirac::gamma_tensor, shorthands::chain::Chain};
+        use idenso::{color::CS, dirac::gamma_tensor};
 
         test_initialise().unwrap();
         let family = symbol!("evaluator_test::trace_joint_family");
@@ -4471,14 +5131,28 @@ mod tests {
         let left = parse_lit!(spenso::bis(4, 3));
         let right = parse_lit!(spenso::bis(4, 4));
         let generator = CS.chain_t(parse_lit!(spenso::coad(8, 7)));
-        let definition = Arc::new(FnMapEntry {
-            inlining: InliningPolicy::Always,
-            is_alias: false,
-            lhs: function!(family, 0, &q),
-            rhs: (&q + &x) * gamma_tensor(left.clone(), right.clone(), mu.clone()),
-            tags: vec![Atom::num(0)],
-            args: vec![Indeterminate::try_from(q).unwrap()],
-        });
+        let compact_body = (&q + &x)
+            * spenso::chain!(
+                &left,
+                &right,
+                function!(
+                    idenso::dirac::AGS.gamma,
+                    SPENSO_TAG.chain_in,
+                    SPENSO_TAG.chain_out,
+                    &mu
+                )
+            );
+        let definition = Arc::new(
+            NumeratorDefinition::try_from(FnMapEntry {
+                inlining: InliningPolicy::Always,
+                is_alias: false,
+                lhs: function!(family, 0, &q),
+                rhs: (&q + &x) * gamma_tensor(left.clone(), right.clone(), mu.clone()),
+                tags: vec![Atom::num(0)],
+                args: vec![Indeterminate::try_from(q).unwrap()],
+            })
+            .unwrap(),
+        );
         let traced = |argument: Atom| {
             function!(
                 SPENSO_TAG.trace,
@@ -4499,7 +5173,10 @@ mod tests {
         let compact = Arc::new(FnMapEntry {
             inlining: InliningPolicy::Always,
             is_alias: false,
-            rhs: definition.rhs.chainify(Bispinor {}.into()),
+            rhs: definition
+                .rhs
+                .with_checked_expression(compact_body)
+                .unwrap(),
             ..(*definition).clone()
         });
         let (unfused, joints) = EvaluatorStack::combine_numerator_families(
@@ -4513,7 +5190,8 @@ mod tests {
                 symbol!("evaluator_test::trace_binder_argument"),
                 SPENSO_TAG.tensor_symbol("evaluator_test::trace_binder_shadow"),
             ),
-        );
+        )
+        .unwrap();
         assert!(joints.is_empty());
         assert!(unfused[0].contains_symbol(family));
         let settings = EvaluatorSettings::default();
@@ -4568,14 +5246,17 @@ mod tests {
             .into_iter()
             .enumerate()
             .map(|(index, rhs)| {
-                Arc::new(FnMapEntry {
-                    inlining: InliningPolicy::Always,
-                    is_alias: false,
-                    lhs: function!(family, index, &q),
-                    rhs,
-                    tags: vec![Atom::num(index)],
-                    args: vec![Indeterminate::try_from(q.clone()).unwrap()],
-                })
+                Arc::new(
+                    NumeratorDefinition::try_from(FnMapEntry {
+                        inlining: InliningPolicy::Always,
+                        is_alias: false,
+                        lhs: function!(family, index, &q),
+                        rhs,
+                        tags: vec![Atom::num(index)],
+                        args: vec![Indeterminate::try_from(q.clone()).unwrap()],
+                    })
+                    .unwrap(),
+                )
             })
             .collect::<Vec<_>>();
         let calls = HashMap::from([
@@ -4602,13 +5283,14 @@ mod tests {
             &calls,
             &tag_counts,
             (joint, argument, shadow),
-        );
+        )
+        .unwrap();
         assert_eq!(joints.len(), 1);
-        assert!(joints[0].rhs.contains(&companion));
+        assert!(joints[0].rhs.expression().contains(&companion));
         assert_eq!(prepared[1], scalar_product);
         assert_eq!(prepared[2], guarded);
-        assert!(!joints[0].rhs.contains_symbol(Symbol::IF));
-        assert!(!joints[0].rhs.contains(x.pow(-1)));
+        assert!(!joints[0].rhs.expression().contains_symbol(Symbol::IF));
+        assert!(!joints[0].rhs.expression().contains(x.pow(-1)));
     }
 
     #[test]
@@ -4634,18 +5316,21 @@ mod tests {
                 )
             }))
         );
-        let definition = Arc::new(FnMapEntry {
-            inlining: InliningPolicy::Always,
-            is_alias: false,
-            lhs: function!(family, 0, q.clone()),
-            rhs: (&q + &x)
-                * function!(p, &internal)
-                * function!(r, other_internal)
-                * trace
-                * GS.energy_delta(external.as_view()),
-            tags: vec![Atom::num(0)],
-            args: vec![Indeterminate::try_from(q).unwrap()],
-        });
+        let definition = Arc::new(
+            NumeratorDefinition::try_from(FnMapEntry {
+                inlining: InliningPolicy::Always,
+                is_alias: false,
+                lhs: function!(family, 0, q.clone()),
+                rhs: (&q + &x)
+                    * function!(p, &internal)
+                    * function!(r, other_internal)
+                    * trace
+                    * GS.energy_delta(external.as_view()),
+                tags: vec![Atom::num(0)],
+                args: vec![Indeterminate::try_from(q).unwrap()],
+            })
+            .unwrap(),
+        );
         let root = function!(family, 0, 2 * &x + 3) * function!(family, 0, &x + 2);
         let mut builder = ParamBuilder::new_empty();
         builder.pairs.additional_params = std::iter::once(x)
@@ -4714,14 +5399,17 @@ mod tests {
             tags: vec![Atom::num(0)],
             args: vec![],
         });
-        let definition = Arc::new(FnMapEntry {
-            inlining: InliningPolicy::Always,
-            is_alias: false,
-            lhs: function!(family, 0, q.clone()),
-            rhs: alias,
-            tags: vec![Atom::num(0)],
-            args: vec![Indeterminate::try_from(q.clone()).unwrap()],
-        });
+        let definition = Arc::new(
+            NumeratorDefinition::try_from(FnMapEntry {
+                inlining: InliningPolicy::Always,
+                is_alias: false,
+                lhs: function!(family, 0, q.clone()),
+                rhs: alias,
+                tags: vec![Atom::num(0)],
+                args: vec![Indeterminate::try_from(q.clone()).unwrap()],
+            })
+            .unwrap(),
+        );
         let settings = EvaluatorSettings::default();
         let (atoms, prepared) = EvaluatorStack::preprocess_numerator_families(
             &[function!(family, 0, 3) * function!(family, 0, 5)],
@@ -4887,35 +5575,44 @@ mod tests {
                 let mut builder = base_builder.clone();
                 let mut definitions = if variant == 1 {
                     vec![
-                        Arc::new(FnMapEntry {
-                            inlining: InliningPolicy::Always,
-                            is_alias: false,
-                            lhs: function!(family, 1, q1.clone()),
-                            rhs: first.clone(),
-                            tags: vec![Atom::num(1)],
-                            args: vec![Indeterminate::try_from(q1.clone()).unwrap()],
-                        }),
-                        Arc::new(FnMapEntry {
-                            inlining: InliningPolicy::Always,
-                            is_alias: false,
-                            lhs: function!(family, 2, q2.clone()),
-                            rhs: second.clone(),
-                            tags: vec![Atom::num(2)],
-                            args: vec![Indeterminate::try_from(q2.clone()).unwrap()],
-                        }),
+                        Arc::new(
+                            NumeratorDefinition::try_from(FnMapEntry {
+                                inlining: InliningPolicy::Always,
+                                is_alias: false,
+                                lhs: function!(family, 1, q1.clone()),
+                                rhs: first.clone(),
+                                tags: vec![Atom::num(1)],
+                                args: vec![Indeterminate::try_from(q1.clone()).unwrap()],
+                            })
+                            .unwrap(),
+                        ),
+                        Arc::new(
+                            NumeratorDefinition::try_from(FnMapEntry {
+                                inlining: InliningPolicy::Always,
+                                is_alias: false,
+                                lhs: function!(family, 2, q2.clone()),
+                                rhs: second.clone(),
+                                tags: vec![Atom::num(2)],
+                                args: vec![Indeterminate::try_from(q2.clone()).unwrap()],
+                            })
+                            .unwrap(),
+                        ),
                     ]
                 } else {
-                    vec![Arc::new(FnMapEntry {
-                        inlining: InliningPolicy::Always,
-                        is_alias: false,
-                        lhs: function!(family, 0, q1.clone(), q2.clone()),
-                        rhs: &first * &second,
-                        tags: vec![Atom::num(0)],
-                        args: [q1.clone(), q2.clone()]
-                            .into_iter()
-                            .map(|arg| Indeterminate::try_from(arg).unwrap())
-                            .collect(),
-                    })]
+                    vec![Arc::new(
+                        NumeratorDefinition::try_from(FnMapEntry {
+                            inlining: InliningPolicy::Always,
+                            is_alias: false,
+                            lhs: function!(family, 0, q1.clone(), q2.clone()),
+                            rhs: &first * &second,
+                            tags: vec![Atom::num(0)],
+                            args: [q1.clone(), q2.clone()]
+                                .into_iter()
+                                .map(|arg| Indeterminate::try_from(arg).unwrap())
+                                .collect(),
+                        })
+                        .unwrap(),
+                    )]
                 };
                 if variant == 2 {
                     builder
@@ -4933,8 +5630,14 @@ mod tests {
                     let entry = Arc::make_mut(&mut definitions[0]);
                     entry.rhs = entry
                         .rhs
-                        .replace(weight.to_pattern())
-                        .with(weight_alias.clone());
+                        .with_checked_expression(
+                            entry
+                                .rhs
+                                .expression()
+                                .replace(weight.to_pattern())
+                                .with(weight_alias.clone()),
+                        )
+                        .unwrap();
                 }
                 let root = Atom::add_many(rows.iter().zip(&production_ids).enumerate().map(
                     |(i, ((a, b), id))| {
@@ -4949,7 +5652,7 @@ mod tests {
                 let input_bytes = root.as_view().get_byte_size();
                 let definition_bytes = definitions
                     .iter()
-                    .map(|entry| entry.rhs.as_view().get_byte_size())
+                    .map(|entry| entry.rhs.expression().as_view().get_byte_size())
                     .sum::<usize>()
                     + builder
                         .reps
@@ -5093,14 +5796,14 @@ mod tests {
                     let mut state = Vec::new();
                     State::export(&mut state).unwrap();
                     let state_map = State::import(&mut Cursor::new(state), None).unwrap();
-                    let model = Model::default();
+                    let model = Model::empty("test");
                     let (mut decoded, _): (EvaluatorStack, _) =
                         bincode::decode_from_slice_with_context(
                             &encoded,
                             bincode::config::standard(),
                             GammaLoopContextContainer {
                                 state_map: &state_map,
-                                model: &model,
+                                model: &Arc::new(model.clone()),
                             },
                         )
                         .unwrap();
@@ -5214,14 +5917,17 @@ mod tests {
         let family = symbol!("evaluator_test::numerator_family");
         let weight = Atom::add_many((1..512).map(|i| (&x + i).pow(2)));
         assert!(weight.as_view().get_byte_size() >= NETWORK_SCALAR_ALIAS_MIN_BYTES);
-        let definition = Arc::new(FnMapEntry {
-            inlining: InliningPolicy::Always,
-            is_alias: false,
-            lhs: function!(family, 7, q.clone()),
-            rhs: &q * &weight + q.pow(2) * &x,
-            tags: vec![Atom::num(7)],
-            args: vec![Indeterminate::try_from(q).unwrap()],
-        });
+        let definition = Arc::new(
+            NumeratorDefinition::try_from(FnMapEntry {
+                inlining: InliningPolicy::Always,
+                is_alias: false,
+                lhs: function!(family, 7, q.clone()),
+                rhs: &q * &weight + q.pow(2) * &x,
+                tags: vec![Atom::num(7)],
+                args: vec![Indeterminate::try_from(q).unwrap()],
+            })
+            .unwrap(),
+        );
         let atom = function!(family, 7, 3) + 2 * function!(family, 7, -1);
         let expected_body: Atom = weight + 11 * &x;
         let mut builder = ParamBuilder::new_empty();
@@ -5298,14 +6004,17 @@ mod tests {
             .into_iter()
             .enumerate()
             .map(|(i, tensor)| {
-                Arc::new(FnMapEntry {
-                    inlining: InliningPolicy::Always,
-                    is_alias: false,
-                    lhs: function!(family, i, q.clone()),
-                    rhs: &q * tensor,
-                    tags: vec![Atom::num(i)],
-                    args: vec![Indeterminate::try_from(q.clone()).unwrap()],
-                })
+                Arc::new(
+                    NumeratorDefinition::try_from(FnMapEntry {
+                        inlining: InliningPolicy::Always,
+                        is_alias: false,
+                        lhs: function!(family, i, q.clone()),
+                        rhs: &q * tensor,
+                        tags: vec![Atom::num(i)],
+                        args: vec![Indeterminate::try_from(q.clone()).unwrap()],
+                    })
+                    .unwrap(),
+                )
             })
             .collect::<Vec<_>>();
         let outer = function!(
@@ -5348,7 +6057,7 @@ mod tests {
             let replacements = builder
                 .reps
                 .iter()
-                .map(FnMapEntry::replacement)
+                .map(|entry| entry.replacement())
                 .collect::<Vec<_>>();
             let mut resolved = roots[0].clone().into_inner();
             // Resolve only this finite SU(3) tensor-component fixture. The bound
@@ -5416,14 +6125,17 @@ mod tests {
             .slot::<Aind, _>(Aind::Normal(1))
             .to_atom();
         let upper_slot = representation.slot::<Aind, _>(Aind::Normal(1)).to_atom();
-        let definition = Arc::new(FnMapEntry {
-            inlining: InliningPolicy::Always,
-            is_alias: false,
-            lhs: function!(family, 5, q.clone()),
-            rhs: &q * function!(lower, lower_slot),
-            tags: vec![Atom::num(5)],
-            args: vec![Indeterminate::try_from(q).unwrap()],
-        });
+        let definition = Arc::new(
+            NumeratorDefinition::try_from(FnMapEntry {
+                inlining: InliningPolicy::Always,
+                is_alias: false,
+                lhs: function!(family, 5, q.clone()),
+                rhs: &q * function!(lower, lower_slot),
+                tags: vec![Atom::num(5)],
+                args: vec![Indeterminate::try_from(q).unwrap()],
+            })
+            .unwrap(),
+        );
         let atom = function!(family, 5, 3) * function!(upper, upper_slot);
         let mut builder = ParamBuilder::new_empty();
         builder.pairs.additional_params = (0..4)
@@ -5472,14 +6184,17 @@ mod tests {
         let vector = SPENSO_TAG.tensor_symbol("evaluator_test::sparse_numerator_vector");
         let index = parse_lit!(spenso::mink(4, 1));
         let temporal = GS.energy_delta(index.as_view());
-        let definition = Arc::new(FnMapEntry {
-            inlining: InliningPolicy::Always,
-            is_alias: false,
-            lhs: function!(family, 3, q.clone()),
-            rhs: (&q + 1) * temporal,
-            tags: vec![Atom::num(3)],
-            args: vec![Indeterminate::try_from(q).unwrap()],
-        });
+        let definition = Arc::new(
+            NumeratorDefinition::try_from(FnMapEntry {
+                inlining: InliningPolicy::Always,
+                is_alias: false,
+                lhs: function!(family, 3, q.clone()),
+                rhs: (&q + 1) * temporal,
+                tags: vec![Atom::num(3)],
+                args: vec![Indeterminate::try_from(q).unwrap()],
+            })
+            .unwrap(),
+        );
         let orientations = TiVec::<OrientationID, _>::from_iter([
             EdgeVec::from_iter([Orientation::Default]),
             EdgeVec::from_iter([Orientation::Default]),
@@ -6149,14 +6864,14 @@ mod tests {
                     let mut state = Vec::new();
                     State::export(&mut state).unwrap();
                     let state_map = State::import(&mut Cursor::new(state), None).unwrap();
-                    let model = Model::default();
+                    let model = Model::empty("test");
                     let (mut decoded, _): (GenericEvaluator, _) =
                         bincode::decode_from_slice_with_context(
                             &encoded,
                             bincode::config::standard(),
                             GammaLoopContextContainer {
                                 state_map: &state_map,
-                                model: &model,
+                                model: &Arc::new(model.clone()),
                             },
                         )
                         .unwrap();
@@ -6632,6 +7347,74 @@ mod tests {
         }
     }
     #[test]
+    fn evaluator_scalar_invariant_rewrite_keeps_declared_axes_and_ranked_zero() {
+        use idenso::{color::CS, representations::ColorFundamental};
+        use spenso::structure::{abstract_index::AbstractIndex, representation::Minkowski};
+
+        test_initialise().unwrap();
+        let rep = Minkowski {}.new_rep(4).to_lib();
+        let slots =
+            [48013, 48017].map(|index| rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(index)));
+        let invariant = function!(CS.idx, 2, ColorFundamental {}.new_rep(3).to_symbolic([]));
+        let expression = invariant
+            * GS.emr_vec(EdgeIndex(7), slots[0].to_atom())
+            * GS.emr_vec(EdgeIndex(8), slots[1].to_atom());
+        assert_ne!(expression.to_cof_dimension_invariants(), expression);
+        let structure = IndexedStructure::from_iter([slots[1], slots[0]]);
+        let source = SymbolicTensor::from_indexed_parts(expression, structure).unwrap();
+        let zero = source.with_checked_expression(Atom::Zero).unwrap();
+        let expected_slots = [slots[1].to_atom(), slots[0].to_atom()];
+        let settings = EvaluatorSettings {
+            do_algebra: false,
+            ..Default::default()
+        };
+
+        for (input, is_zero) in [(&source, false), (&zero, true)] {
+            EvaluatorStack::preprocess_tensor(input, 0, &settings, None, |net, _, _, layout| {
+                let library = TENSORLIB.read().unwrap();
+                let ExecutionResult::Val(tensor) = net.result_tensor(library.deref())? else {
+                    panic!("an open matrix, including zero, must retain both axes");
+                };
+                assert_eq!(layout.order(), 2);
+                assert_eq!(
+                    layout
+                        .canonical_to_logical(&tensor.external_structure())
+                        .into_iter()
+                        .map(|slot| slot.to_atom())
+                        .collect::<Vec<_>>(),
+                    expected_slots,
+                );
+                let components = tensor
+                    .iter_expanded()
+                    .map(|(indices, body)| (layout.canonical_to_logical(&indices), body.to_owned()))
+                    .collect::<HashMap<_, _>>();
+                if is_zero {
+                    assert!(components.values().all(Atom::is_zero));
+                } else {
+                    // The logical axes are (nu, mu), so these two distinct
+                    // components must not be transposed by scalar rewriting.
+                    let nu_one_mu_two = GS.emr_vec(EdgeIndex(7), GS.cind(2))
+                        * GS.emr_vec(EdgeIndex(8), GS.cind(1))
+                        / Atom::num(2);
+                    let nu_two_mu_one = GS.emr_vec(EdgeIndex(7), GS.cind(1))
+                        * GS.emr_vec(EdgeIndex(8), GS.cind(2))
+                        / Atom::num(2);
+                    assert_ne!(nu_one_mu_two, nu_two_mu_one);
+                    assert_eq!(components[&vec![1, 2]], nu_one_mu_two);
+                    assert_eq!(components[&vec![2, 1]], nu_two_mu_one);
+                    assert!(
+                        components
+                            .values()
+                            .all(|body| !body.contains_symbol(CS.idx))
+                    );
+                }
+                Ok(Atom::Zero.into())
+            })
+            .unwrap();
+        }
+    }
+
+    #[test]
     fn evaluator_preprocess_scalarizes_abstract_minkowski_contractions_without_algebra() {
         test_initialise().unwrap();
         let abstract_index = parse_lit!(spenso::mink(4, 1));
@@ -6750,7 +7533,7 @@ mod tests {
         .collect();
         let numerator = Bispinor {}.new_rep(4).g(9, 9) * &coefficients[0]
             + Bispinor {}.new_rep(4).g(8, 8) * &coefficients[1];
-        let expected = Atom::num(4) * &coefficients[0] + Atom::num(4) * &coefficients[1];
+        let expected = Atom::num(4) * (&coefficients[0] + &coefficients[1]);
         let scalar = EvaluatorStack::preprocess_atom(
             &numerator,
             0,
@@ -6972,13 +7755,13 @@ mod tests {
         let mut state = Vec::new();
         State::export(&mut state).unwrap();
         let state_map = State::import(&mut Cursor::new(state), None).unwrap();
-        let model = Model::default();
+        let model = Model::empty("test");
         let (mut decoded, _): (GenericEvaluator, _) = bincode::decode_from_slice_with_context(
             &encoded,
             bincode::config::standard(),
             GammaLoopContextContainer {
                 state_map: &state_map,
-                model: &model,
+                model: &Arc::new(model.clone()),
             },
         )
         .unwrap();
@@ -7466,7 +8249,7 @@ mod tests {
             let mut state = Vec::new();
             State::export(&mut state).unwrap();
             let state_map = State::import(&mut Cursor::new(state), None).unwrap();
-            let model = Model::default();
+            let model = Model::empty("evaluator_fixture");
             let ((mut decoded, decoded_compilation), _): (
                 (GenericEvaluator, FrozenCompilationMode),
                 _,
@@ -7475,7 +8258,7 @@ mod tests {
                 bincode::config::standard(),
                 GammaLoopContextContainer {
                     state_map: &state_map,
-                    model: &model,
+                    model: &Arc::new(model.clone()),
                 },
             )
             .unwrap();

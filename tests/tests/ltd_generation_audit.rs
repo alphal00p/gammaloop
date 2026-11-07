@@ -133,7 +133,7 @@ helicities = [0, 0]
 '"#
             },
             if cuts {
-                "import graphs tests/resources/graphs/double_dotted_double_triangle.dot -p audit -i audit"
+                "import graphs tests/resources/graphs/double_dotted_double_triangle_compact.dot -p audit -i audit"
             } else {
                 "import graphs tests/resources/graphs/scalar_self_energy_amp.dot -p audit -i audit"
             },

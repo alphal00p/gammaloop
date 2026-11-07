@@ -1,4 +1,5 @@
 digraph GL648{
+    final_state = "H,t,t~|H,t,t~,g|H,t,t~,g,g|H,t,t~,d,d~|H,t,t~,ghG,ghG~";
     // The virtual sides are intrinsically one-loop; cut (2,7,13) has
     // independent one-loop factors on both sides. Keep these full spaces
     // and their left/right product. Validate both soft gluons jointly.

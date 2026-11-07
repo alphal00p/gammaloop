@@ -12,6 +12,7 @@ use std::{
 
 use bincode_trait_derive::{Decode, Encode};
 use eyre::Context;
+use feynkit_kinematics::{Axis as KinematicAxis, Rotation as KinematicRotation, WavefunctionError};
 use linnet::half_edge::involution::EdgeIndex;
 pub use linnet::num_traits::{Pow, Sign, SignError, SignOrZero};
 use momtrop::vector::Vector;
@@ -1298,17 +1299,40 @@ pub enum PolType {
     EpsilonBar,
 }
 
+impl From<PolType> for feynkit_kinematics::WavefunctionKind {
+    fn from(value: PolType) -> Self {
+        match value {
+            PolType::Scalar => Self::Scalar,
+            PolType::Epsilon => Self::Epsilon,
+            PolType::EpsilonBar => Self::EpsilonBar,
+            PolType::U => Self::U,
+            PolType::UBar => Self::UBar,
+            PolType::V => Self::V,
+            PolType::VBar => Self::VBar,
+        }
+    }
+}
+
+impl From<feynkit_kinematics::WavefunctionKind> for PolType {
+    fn from(value: feynkit_kinematics::WavefunctionKind) -> Self {
+        use feynkit_kinematics::WavefunctionKind as Kind;
+        match value {
+            Kind::Scalar => Self::Scalar,
+            Kind::Epsilon => Self::Epsilon,
+            Kind::EpsilonBar => Self::EpsilonBar,
+            Kind::U => Self::U,
+            Kind::UBar => Self::UBar,
+            Kind::V => Self::V,
+            Kind::VBar => Self::VBar,
+        }
+    }
+}
+
 impl PolType {
     pub(crate) fn bar(self) -> Self {
-        match self {
-            Self::Epsilon => Self::EpsilonBar,
-            Self::Scalar => Self::Scalar,
-            Self::U => Self::UBar,
-            Self::UBar => Self::U,
-            Self::EpsilonBar => Self::Epsilon,
-            Self::VBar => Self::V,
-            Self::V => Self::VBar,
-        }
+        feynkit_kinematics::WavefunctionKind::from(self)
+            .bar()
+            .into()
     }
 }
 
@@ -1829,189 +1853,138 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
         }
     }
 
-    pub(crate) fn pol_one(&self) -> [F<T>; 4]
-    where
-        T: FloatLike,
-    {
-        // definition from helas_ref A.2
-
-        // debug!("pol_one in: {}", self);
-
-        let pt = self.pt();
-        let p = self.spatial.norm();
-
-        let (e1, e2, e3) = if pt.is_zero() {
-            (pt.one(), pt.zero(), pt.zero())
-        } else {
-            (
-                &self.spatial.px * &self.spatial.pz / (&pt * &p),
-                &self.spatial.py * &self.spatial.pz / (&pt * &p),
-                -(&pt / &p),
-            )
-        };
-
-        // debug!(
-        //     " (pt.zero(), e1, e2, e3) {} {} {} {}",
-        //     pt.zero(),
-        //     e1,
-        //     e2,
-        //     e3
-        // );
-        [pt.zero(), e1, e2, e3]
-
-        // debug!("pol :{pol}");
+    fn external_state_momentum(&self) -> feynkit_kinematics::FourMomentum<F<T>> {
+        feynkit_kinematics::FourMomentum::from_args(
+            self.temporal.value.clone(),
+            self.spatial.px.clone(),
+            self.spatial.py.clone(),
+            self.spatial.pz.clone(),
+        )
     }
 
-    pub(crate) fn pol_two(&self) -> [F<T>; 4]
-    where
-        T: FloatLike,
-    {
-        // definition from helas_ref A.2
-        let pt = self.pt();
-        let (e1, e2, e3) = if pt.is_zero() {
-            if self.spatial.pz.positive() {
-                (pt.zero(), pt.one(), pt.zero())
-            } else {
-                (pt.zero(), -pt.one(), pt.zero())
-            }
-        } else {
-            (-(&self.spatial.py / &pt), &self.spatial.px / &pt, pt.zero())
-        };
-        [pt.zero(), e1, e2, e3]
+    pub(crate) fn pol_one(&self) -> [F<T>; 4] {
+        self.external_state_momentum().transverse_basis()[0].clone()
     }
 
-    pub(crate) fn pol_three(&self) -> Polarization<F<T>>
-    where
-        T: FloatLike,
-    {
-        // definition from helas_ref A.2
-        let m = self.norm();
-        let p = self.spatial.norm();
-        let emp = &self.temporal.value / (&m * &p);
-        let e0 = p / &m;
-        let e1 = &self.spatial.px * &emp;
-        let e2 = &self.spatial.py * &emp;
-        let e3 = &self.spatial.pz * &emp;
-
-        Polarization::lorentz([e0, e1, e2, e3])
+    pub(crate) fn pol_two(&self) -> [F<T>; 4] {
+        self.external_state_momentum().transverse_basis()[1].clone()
     }
 
-    pub(crate) fn eps_pol<Hel: Into<Helicity>>(&self, lambda: Hel) -> Polarization<Complex<F<T>>> {
+    pub(crate) fn eps_pol<Hel: Into<Helicity>>(
+        &self,
+        lambda: Hel,
+    ) -> Result<Polarization<Complex<F<T>>>, WavefunctionError> {
         match lambda.into() {
-            Helicity::Signed(lambda) => {
-                if lambda.is_zero() {
-                    self.pol_three().cast()
-                } else {
-                    let one = self.temporal.value.one();
-                    let sqrt_2_inv: F<T> = (&one + &one).sqrt().inv();
-
-                    let [eone0, eone1, eone2, eone3] = self.pol_one();
-
-                    let [etwo0, etwo1, etwo2, etwo3] = self.pol_two();
-
-                    let components = [
-                        Complex {
-                            re: -lambda * eone0 * &sqrt_2_inv,
-                            im: -etwo0 * &sqrt_2_inv, //using opposite convention with respect to helas to align with madgraph
-                        },
-                        Complex {
-                            re: -lambda * eone1 * &sqrt_2_inv,
-                            im: -etwo1 * &sqrt_2_inv,
-                        },
-                        Complex {
-                            re: -lambda * eone2 * &sqrt_2_inv,
-                            im: -etwo2 * &sqrt_2_inv,
-                        },
-                        Complex {
-                            re: -lambda * eone3 * &sqrt_2_inv,
-                            im: -etwo3 * &sqrt_2_inv,
-                        },
-                    ];
-
-                    Polarization::lorentz(components)
-                }
-            }
+            Helicity::Signed(lambda) => Ok(Polarization::from_external_state(
+                self.external_state_momentum()
+                    .wavefunction(feynkit_kinematics::WavefunctionKind::Epsilon, lambda.into())?,
+            )),
+            // Summation is a runtime policy; retain the existing zero placeholder.
             _ => {
                 let zero = self.temporal.value.zero();
                 let cmpz = Complex::new_re(zero);
-                Polarization::lorentz([cmpz.clone(), cmpz.clone(), cmpz.clone(), cmpz.clone()])
+                Ok(Polarization::lorentz([
+                    cmpz.clone(),
+                    cmpz.clone(),
+                    cmpz.clone(),
+                    cmpz.clone(),
+                ]))
             }
         }
+    }
+
+    /// The external state of a polarization, or `None` for scalars.
+    ///
+    /// `rotations` were applied to the event in order; the state is transported
+    /// through them, so a state at rest keeps its rotated quantization axis.
+    pub(crate) fn external_polarization(
+        &self,
+        pol_type: PolType,
+        helicity: SignOrZero,
+        rotations: &[RotationMethod],
+    ) -> Result<Option<Polarization<Complex<F<T>>>>, WavefunctionError> {
+        if pol_type == PolType::Scalar {
+            return Ok(None);
+        }
+        let rotations = rotations
+            .iter()
+            .map(RotationMethod::kinematic_rotation)
+            .collect::<Vec<KinematicRotation<F<T>>>>();
+        Ok(Some(Polarization::from_external_state(
+            self.external_state_momentum()
+                .wavefunction_after_rotations(pol_type.into(), helicity.into(), &rotations)?,
+        )))
     }
 
     pub(crate) fn omega(&self, lambda: Sign) -> Complex<F<T>> {
-        match lambda {
-            Sign::Positive => (&self.temporal.value + self.spatial.norm()).complex_sqrt(),
-            Sign::Negative => (&self.temporal.value - self.spatial.norm()).complex_sqrt(),
-        }
+        let value = self.external_state_momentum().spinor_energy_factor(lambda);
+        Complex::new(value.re, value.im)
     }
 
-    pub(crate) fn u(&self, lambda: Sign) -> Polarization<Complex<F<T>>> {
-        let xi = self.xi(lambda);
-        Polarization::bispinor_u([
-            self.omega(-lambda) * &xi[0],
-            self.omega(-lambda) * &xi[1],
-            self.omega(lambda) * &xi[0],
-            self.omega(lambda) * &xi[1],
-        ])
+    pub(crate) fn u(&self, lambda: Sign) -> Result<Polarization<Complex<F<T>>>, WavefunctionError> {
+        Ok(Polarization::from_external_state(
+            self.external_state_momentum()
+                .wavefunction(feynkit_kinematics::WavefunctionKind::U, lambda.into())?,
+        ))
     }
 
-    pub(crate) fn v(&self, lambda: Sign) -> Polarization<Complex<F<T>>> {
-        let xi = self.xi(-lambda);
-        Polarization::bispinor_v([
-            (-lambda) * self.omega(lambda) * &xi[0],
-            (-lambda) * self.omega(lambda) * &xi[1],
-            lambda * self.omega(-lambda) * &xi[0],
-            lambda * self.omega(-lambda) * &xi[1],
-        ])
+    pub(crate) fn v(&self, lambda: Sign) -> Result<Polarization<Complex<F<T>>>, WavefunctionError> {
+        Ok(Polarization::from_external_state(
+            self.external_state_momentum()
+                .wavefunction(feynkit_kinematics::WavefunctionKind::V, lambda.into())?,
+        ))
     }
 
     pub(crate) fn xi(&self, lambda: Sign) -> [Complex<F<T>>; 2] {
-        if (self.spatial.pz < self.spatial.pz.zero()
-            && self.spatial.py.is_zero()
-            && self.spatial.px.is_zero())
-            || (self.spatial.pz == -self.spatial.norm())
-        {
-            let zero: Complex<F<T>> = self.temporal.value.zero().into();
-            let one = zero.one();
-            // We are defining using madgraph conventions not helas, taking py =0 and the limit px =0 from below
-            match lambda {
-                Sign::Positive => [zero, -one],
-                Sign::Negative => [one, zero],
-            }
-        } else {
-            let prefactor: F<T> = ((F::from_f64(2.)
-                * self.spatial.norm()
-                * (self.spatial.norm() + &self.spatial.pz))
-                .sqrt())
-            .inv();
-            let mut xi: [Complex<F<T>>; 2] = [
-                Complex::new_re(&prefactor * (self.spatial.norm() + &self.spatial.pz)),
-                Complex::new(self.spatial.px.clone(), self.spatial.py.clone()) * &prefactor,
-            ]; //plus
-
-            if matches!(lambda, Sign::Negative) {
-                xi.swap(0, 1);
-                xi[0].re = -xi[0].re.clone();
-            }
-            xi
-        }
+        self.external_state_momentum()
+            .helicity_spinor(lambda)
+            .map(|value| Complex::new(value.re, value.im))
     }
 }
 
 impl<T: FloatLike> Polarization<Complex<F<T>>> {
-    pub(crate) fn bar(&self) -> Self {
-        let mut tensor = self.tensor.map_data_ref(Complex::conj);
-
-        if matches!(
-            self.pol_type,
-            PolType::U | PolType::V | PolType::UBar | PolType::VBar
-        ) {
-            tensor.data.swap(0, 2);
-            tensor.data.swap(1, 3);
+    /// Adapt the shared numerical state to GammaLoop's existing tensor storage.
+    fn from_external_state(state: feynkit_kinematics::Wavefunction<F<T>>) -> Self {
+        let kind = state.kind();
+        let data = state
+            .into_components()
+            .into_iter()
+            .map(|value| Complex::new(value.re, value.im))
+            .collect();
+        let structure = if kind == feynkit_kinematics::WavefunctionKind::Scalar {
+            IndexLess::new(vec![])
+        } else if kind.is_spinor() {
+            IndexLess::new(vec![GR.bis.new_rep(4)])
+        } else {
+            IndexLess::new(vec![Minkowski {}.new_rep(4).cast()])
+        };
+        Self {
+            tensor: DenseTensor { data, structure },
+            pol_type: kind.into(),
         }
-        Polarization {
-            tensor,
+    }
+
+    pub(crate) fn bar(&self) -> Self {
+        let state = feynkit_kinematics::Wavefunction::from_components(
+            self.pol_type.into(),
+            self.tensor
+                .data
+                .iter()
+                .map(|value| SymComplex::new(value.re.clone(), value.im.clone()))
+                .collect(),
+        )
+        .expect("invalid external wavefunction components")
+        .bar();
+        // Preserve the original tensor representation and serialized PolType layout.
+        Self {
+            tensor: DenseTensor {
+                data: state
+                    .into_components()
+                    .into_iter()
+                    .map(|value| Complex::new(value.re, value.im))
+                    .collect(),
+                structure: self.tensor.structure.clone(),
+            },
             pol_type: self.pol_type.bar(),
         }
     }
@@ -2743,6 +2716,22 @@ pub enum RotationMethod {
     Identity,
 }
 
+impl RotationMethod {
+    /// The same active rotation for FeynKit kinematics at the working precision.
+    pub(crate) fn kinematic_rotation<T: FloatLike>(&self) -> KinematicRotation<F<T>> {
+        match *self {
+            RotationMethod::Identity => KinematicRotation::Identity,
+            RotationMethod::Pi2X => KinematicRotation::quarter_turn(KinematicAxis::X),
+            RotationMethod::Pi2Y => KinematicRotation::quarter_turn(KinematicAxis::Y),
+            RotationMethod::Pi2Z => KinematicRotation::quarter_turn(KinematicAxis::Z),
+            // Rotation settings are persisted as f64, as in `inverse_rotate_three`.
+            RotationMethod::EulerAngles(alpha, beta, gamma) => {
+                KinematicRotation::euler(F::from_f64(alpha), F::from_f64(beta), F::from_f64(gamma))
+            }
+        }
+    }
+}
+
 impl Display for RotationMethod {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -3408,6 +3397,128 @@ mod tests {
     use crate::utils::ApproxEq;
 
     #[test]
+    fn shared_polarized_density_matches_runtime_spinors() {
+        use feynkit_amplitude::SpinSum;
+        use spenso::{
+            network::{
+                ExecutionResult, Sequential, SmallestDegree,
+                library::symbolic::ExplicitKey,
+                parsing::{ParseSettings, StrictTensorFilter},
+            },
+            tensors::data::GetTensorData,
+        };
+        use spenso_hep_lib::{FUN_LIB, HepNet, hep_lib_su3};
+
+        let model = feynkit_model::Model::from_json(include_str!(
+            "../../../feynkit-model/tests/fixtures/sm.json"
+        ))
+        .unwrap();
+        let p = spenso::tensor_symbol!("polarized_runtime::p");
+        let spin = spenso::tensor_symbol!("polarized_runtime::s");
+        let indices = [
+            symbol!("polarized_runtime::a"),
+            symbol!("polarized_runtime::b"),
+        ];
+        for (momentum, axis) in [
+            ([5.0, 0.0, 0.0, 4.0], [4.0 / 3.0, 0.0, 0.0, 5.0 / 3.0]),
+            (
+                [5.0, 12.0 / 5.0, 16.0 / 5.0, 0.0],
+                [4.0 / 3.0, 1.0, 4.0 / 3.0, 0.0],
+            ),
+        ] {
+            let runtime_p = FourMomentum::from_args(
+                F(momentum[0]),
+                F(momentum[1]),
+                F(momentum[2]),
+                F(momentum[3]),
+            );
+            for helicity in [Sign::Positive, Sign::Negative] {
+                let orientation = if helicity == Sign::Positive {
+                    1.0
+                } else {
+                    -1.0
+                };
+                let mut library = hep_lib_su3::<AbstractIndex>();
+                for (name, components) in [(p, momentum), (spin, axis.map(|x| orientation * x))] {
+                    let key = ExplicitKey::from_iter([Minkowski {}.new_rep(4)], name, None);
+                    library.insert_explicit(key.map_canonical(|key| {
+                        DenseTensor::from_storage_data(components.to_vec(), key)
+                            .unwrap()
+                            .into()
+                    }));
+                }
+                for pdg in [15, -15] {
+                    let particle = model
+                        .particle_by_id(model.particle_id_by_pdg(pdg).unwrap())
+                        .unwrap();
+                    let density = SpinSum::new(particle, &model)
+                        .unwrap()
+                        .expression(
+                            &p.to_atom(),
+                            indices.map(|index| index.to_atom()),
+                            None,
+                            Some(&spin.to_atom()),
+                        )
+                        .unwrap()
+                        .replace(particle.symbolic_mass(&model).to_pattern())
+                        .with(Atom::num(3))
+                        .expand();
+                    let mut network = HepNet::<AbstractIndex>::try_from_view(
+                        density.as_view(),
+                        &library,
+                        &ParseSettings::default()
+                            .with_strict_tensor_filter(StrictTensorFilter::ContainsReps),
+                    )
+                    .unwrap();
+                    network
+                        .execute::<Sequential, SmallestDegree, _, _, _>(&library, &*FUN_LIB)
+                        .unwrap();
+                    let ExecutionResult::Val(result) = network.result_tensor(&library).unwrap()
+                    else {
+                        panic!("a polarized density must retain its two spinor indices");
+                    };
+                    let mut density_tensor = result.into_owned();
+                    density_tensor.evaluate_complex::<Atom>(&Default::default());
+                    let concrete = density_tensor.try_into_concrete().unwrap();
+                    assert_eq!(
+                        concrete.external_indices(),
+                        indices.map(AbstractIndex::from),
+                        "density axes must follow the spinor row and adjoint column"
+                    );
+                    let spinor = if pdg > 0 {
+                        runtime_p.u(helicity).unwrap()
+                    } else {
+                        runtime_p.v(helicity).unwrap()
+                    };
+                    let adjoint = spinor.bar();
+                    for row in 0..4 {
+                        for column in 0..4 {
+                            let actual = concrete.get_ref([row, column]).unwrap();
+                            let actual = match actual {
+                                spenso::algebra::complex::RealOrComplexRef::Real(value) => {
+                                    Complex::new(*value, 0.0)
+                                }
+                                spenso::algebra::complex::RealOrComplexRef::Complex(value) => {
+                                    *value
+                                }
+                            };
+                            let expected = spinor.tensor.data[row] * adjoint.tensor.data[column];
+                            assert!(
+                                (actual.re - expected.re.0).abs() < 1e-12,
+                                "PDG {pdg}, helicity {helicity:?}, ({row},{column}): {actual:?} vs {expected:?}"
+                            );
+                            assert!(
+                                (actual.im - expected.im.0).abs() < 1e-12,
+                                "PDG {pdg}, helicity {helicity:?}, ({row},{column}): {actual:?} vs {expected:?}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
     fn polarization() {
         let mom = FourMomentum::from_args(F(1.), F(1.), F(0.), F(0.));
 
@@ -3484,7 +3595,7 @@ helicities = [1, "minus", "zero", "summed", "summed_averaged"]
             F(50.81619686346704),
         );
 
-        let pol = mom.eps_pol(SignOrZero::Plus);
+        let pol = mom.eps_pol(SignOrZero::Plus).unwrap();
         println!("{}", pol);
 
         let mom = FourMomentum::from_args(
@@ -3494,12 +3605,12 @@ helicities = [1, "minus", "zero", "summed", "summed_averaged"]
             F(-51.523329523343534),
         );
 
-        let pol = mom.eps_pol(SignOrZero::Plus);
+        let pol = mom.eps_pol(SignOrZero::Plus).unwrap();
         println!("{}", pol);
 
         let mom = FourMomentum::from_args(F(485.0355), F(0.), F(0.), F(485.0355));
 
-        let pol = mom.eps_pol(SignOrZero::Plus);
+        let pol = mom.eps_pol(SignOrZero::Plus).unwrap();
 
         println!("{}", pol);
 
@@ -3507,7 +3618,7 @@ helicities = [1, "minus", "zero", "summed", "summed_averaged"]
 
         let mom = FourMomentum::from_args(F(485.0355), F(-107.6044), F(-431.5174), F(193.5805));
 
-        let pol = mom.eps_pol(SignOrZero::Plus).bar();
+        let pol = mom.eps_pol(SignOrZero::Plus).unwrap().bar();
 
         // Helicity=           1           1           1           1
         //  W(*,1)=               (5.4707403520912967,0.0000000000000000)               (0.0000000000000000,0.0000000000000000)               (31.622776601683793,0.0000000000000000)               (0.0000000000000000,0.0000000000000000)
@@ -3533,7 +3644,7 @@ helicities = [1, "minus", "zero", "summed", "summed_averaged"]
             mom.xi(Sign::Negative)
         );
 
-        let u_p = mom.u(Sign::Positive);
+        let u_p = mom.u(Sign::Positive).unwrap();
         let u_p_target: Polarization<Complex<F<_>>> =
             Polarization::bispinor_u([F(0.), F(0.), F(0.), F(-2.)]).cast();
 
@@ -3551,7 +3662,7 @@ helicities = [1, "minus", "zero", "summed", "summed_averaged"]
             .wrap_err("u+bar((2,0,0,-2)) does not match target: (0,-2,0,0)")
             .unwrap();
 
-        let u_m = mom.u(Sign::Negative);
+        let u_m = mom.u(Sign::Negative).unwrap();
         let u_m_target: Polarization<Complex<F<_>>> =
             Polarization::bispinor_u([F(2.), F(0.), F(0.), F(0.)]).cast();
 
@@ -3569,7 +3680,7 @@ helicities = [1, "minus", "zero", "summed", "summed_averaged"]
             .wrap_err("u-bar((2,0,0,-2)) does not match target: (0,0,2,0)")
             .unwrap();
 
-        let v_p = mom.v(Sign::Positive);
+        let v_p = mom.v(Sign::Positive).unwrap();
         let v_p_target: Polarization<Complex<F<_>>> =
             Polarization::bispinor_v([F(-2.), F(0.), F(0.), F(0.)]).cast();
 
@@ -3587,7 +3698,7 @@ helicities = [1, "minus", "zero", "summed", "summed_averaged"]
             .wrap_err("v+bar((2,0,0,-2)) does not match target: (0,0,-2,0)")
             .unwrap();
 
-        let v_m = mom.v(Sign::Negative);
+        let v_m = mom.v(Sign::Negative).unwrap();
         let v_m_target: Polarization<Complex<F<_>>> =
             Polarization::bispinor_v([F(0.), F(0.), F(0.), F(2.)]).cast();
 
@@ -3635,7 +3746,7 @@ helicities = [1, "minus", "zero", "summed", "summed_averaged"]
         );
 
         let zero: Complex<_> = F(0.).into();
-        let u_p = mom.u(Sign::Positive);
+        let u_p = mom.u(Sign::Positive).unwrap();
         let u_p_target: Polarization<Complex<F<_>>> =
             Polarization::bispinor_u([zero, zero, Complex::new_re(F(2.)), Complex::new_im(F(2.))])
                 .cast();
@@ -3655,7 +3766,7 @@ helicities = [1, "minus", "zero", "summed", "summed_averaged"]
             .wrap_err("u+bar((4,0,4,0)) does not match target: (2,-2i,0,0)")
             .unwrap();
 
-        let u_m = mom.u(Sign::Negative);
+        let u_m = mom.u(Sign::Negative).unwrap();
         let u_m_target: Polarization<Complex<F<_>>> =
             Polarization::bispinor_u([Complex::new_im(F(2.)), Complex::new_re(F(2.)), zero, zero])
                 .cast();
@@ -3675,7 +3786,7 @@ helicities = [1, "minus", "zero", "summed", "summed_averaged"]
             .wrap_err("u-bar((4,0,4,0)) does not match target: (0,0,-2i,2)")
             .unwrap();
 
-        let v_p = mom.v(Sign::Positive);
+        let v_p = mom.v(Sign::Positive).unwrap();
         let v_p_target: Polarization<Complex<F<_>>> = Polarization::bispinor_v([
             Complex::new_im(-F(2.)),
             Complex::new_re(-F(2.)),
@@ -3699,7 +3810,7 @@ helicities = [1, "minus", "zero", "summed", "summed_averaged"]
             .wrap_err("v+bar((4,0,4,0)) does not match target: (0,0,2i,-2)")
             .unwrap();
 
-        let v_m = mom.v(Sign::Negative);
+        let v_m = mom.v(Sign::Negative).unwrap();
         let v_m_target: Polarization<Complex<F<_>>> = Polarization::bispinor_v([
             zero,
             zero,
@@ -3738,7 +3849,7 @@ helicities = [1, "minus", "zero", "summed", "summed_averaged"]
             "pol_two((2,0,0,-2)) does not match target: (0,0,-1,0)"
         );
 
-        let e_p = mom.eps_pol(SignOrZero::Plus);
+        let e_p = mom.eps_pol(SignOrZero::Plus).unwrap();
 
         let zero = F(0.).into();
         let e_p_target = Polarization::lorentz([
@@ -3766,7 +3877,7 @@ helicities = [1, "minus", "zero", "summed", "summed_averaged"]
             .wrap_err("e+bar((2,0,0,-2)) does not match target: (0,-1/sqrt(2),-i/sqrt(2),0)")
             .unwrap();
 
-        let e_m = mom.eps_pol(SignOrZero::Minus);
+        let e_m = mom.eps_pol(SignOrZero::Minus).unwrap();
 
         let e_m_target = Polarization::lorentz([
             zero,
@@ -3808,7 +3919,7 @@ helicities = [1, "minus", "zero", "summed", "summed_averaged"]
             "pol_two((2,0,0,-2)) does not match target: (0,0,-1,0)"
         );
 
-        let e_p = mom.eps_pol(SignOrZero::Plus);
+        let e_p = mom.eps_pol(SignOrZero::Plus).unwrap();
 
         let zero = F(0.).into();
         let e_p_target = Polarization::lorentz([
@@ -3836,7 +3947,7 @@ helicities = [1, "minus", "zero", "summed", "summed_averaged"]
             .wrap_err("e+bar((2,0,0,-2)) does not match target: (0,-1/sqrt(2),-i/sqrt(2),0)")
             .unwrap();
 
-        let e_m = mom.eps_pol(SignOrZero::Minus);
+        let e_m = mom.eps_pol(SignOrZero::Minus).unwrap();
 
         let e_m_target = Polarization::lorentz([
             zero,
@@ -3870,7 +3981,7 @@ helicities = [1, "minus", "zero", "summed", "summed_averaged"]
 
         let momc: [F<f64>; 4] = mom.into();
         let e = Polarization::lorentz(momc.map(Complex::new_re));
-        let u = mom.u(Sign::Negative);
+        let u = mom.u(Sign::Negative).unwrap();
 
         let rot: Rotation = RotationMethod::EulerAngles(std::f64::consts::PI / 2., 0., 0.).into();
         let rotx = RotationMethod::Pi2X.into();

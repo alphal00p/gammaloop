@@ -142,6 +142,28 @@ impl FromStripedStr for usize {
     }
 }
 
+/// Resolve a model entity named by redundant DOT attributes, rejecting
+/// attributes that identify different entities.
+pub(crate) fn consistent_dot_identity<T: Copy + PartialEq>(
+    entity: &str,
+    resolved: impl IntoIterator<Item = Option<Result<(&'static str, T)>>>,
+    describe: impl Fn(T) -> String,
+) -> Result<Option<T>> {
+    let resolved = resolved.into_iter().flatten().collect::<Result<Vec<_>>>()?;
+    let Some(&(_, first)) = resolved.first() else {
+        return Ok(None);
+    };
+    if resolved.iter().any(|&(_, id)| id != first) {
+        let identities = resolved
+            .iter()
+            .map(|&(attribute, id)| format!("{attribute} identifies {}", describe(id)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Err(eyre!("conflicting {entity} attributes: {identities}"));
+    }
+    Ok(Some(first))
+}
+
 #[cfg(test)]
 mod tests {
     use linnet::parser::DotGraph;

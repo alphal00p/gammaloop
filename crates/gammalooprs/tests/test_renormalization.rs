@@ -1,8 +1,7 @@
 use gammalooprs::{
-    dot,
-    graph::{Graph, parse::IntoGraph},
+    graph::Graph,
     initialisation::test_initialise,
-    model::{InputParamCard, Model},
+    model::{InputParamCard, Model, ModelGammaLoopExt},
     numerator::{aind::Aind, symbolica_ext::NumeratorAtomExt},
     processes::{Amplitude, AmplitudeGraph},
     utils::{GS, load_generic_model},
@@ -13,16 +12,16 @@ use gammalooprs::{
     },
 };
 use idenso::{
-    Cookable, IndexTooling, coad, cof,
-    color::{CS, ColorSimplifier},
-    color_idx,
-    dirac::GammaSimplifier,
-    shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
+    CookMode, CookSettings, IndexTooling, coad, cof,
+    color::{CS, ColorSimplifier, ColorSimplifySettings},
+    color_cas, color_idx,
+    dirac::GammaSimplifySettings,
+    tensor::{ContractSettings, SymbolicTensor},
 };
 use spenso::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG},
     shadowing::symbolica_utils::LogPrint,
-    structure::abstract_index::AbstractIndex,
+    structure::{abstract_index::AbstractIndex, representation::RepName},
 };
 use symbolica::{
     atom::{Atom, AtomCore, Symbol},
@@ -58,21 +57,51 @@ fn pole_part_uv_settings() -> UVgenerationSettings {
 // Their ghost-gluon momentum and color conventions differ as well, so the net
 // graph sign cannot be inferred from the ghost-edge count or applied globally.
 pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
-    (model
-        .apply_parameter_replacement_rules(
-            &model.apply_coupling_replacement_rules(&atom.simplify_color().expand()),
-        )
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let color = SymbolicTensor::infer(cooking.try_cook(atom.as_view()).unwrap())
+        .unwrap()
+        .simplify_algebra(&idenso::tensor::AlgebraSettings {
+            color: Some(ColorSimplifySettings::default()),
+            ..Default::default()
+        })
+        .unwrap()
+        .contract(idenso::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
+        .unwrap();
+    let color = cooking.uncook(color.expression().as_view());
+    let expression = model
+        .apply_parameter_replacement_rules(&model.expand_couplings(&color))
         .replace(parse_lit!(gammalooprs::dim))
         .with(parse_lit!(4))
-        .collect_factors()
-        .simplify_metrics()
-        .simplify_gamma()
-        .simplify_color()
+        .collect_factors();
+    let expression = SymbolicTensor::infer(cooking.try_cook(expression.as_view()).unwrap())
+        .unwrap()
+        .contract(ContractSettings::default().without_rank_one_tensors())
+        .unwrap()
+        .simplify_algebra(&idenso::tensor::AlgebraSettings {
+            gamma: Some(GammaSimplifySettings::default()),
+            color: Some(ColorSimplifySettings::default()),
+            epsilon: true,
+            ..Default::default()
+        })
+        .unwrap()
+        .contract(idenso::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
+        .unwrap()
         .to_dots()
-        .replace(CS.tr)
-        .with(Atom::num((1, 2)))
+        .unwrap();
+    (cooking
+        .uncook(expression.expression().as_view())
         .replace(CS.nc)
-        .with(CS.ca)
+        .with(color_cas!(2, coad!(8)))
         // RQFT closed-quark-loop references write the flavor-summed index as
         // T_F = n_f / 2. External projection traces must first be restored to C_F.
         .replace(color_idx!(2, cof!(3)))
@@ -249,13 +278,15 @@ fn rqft_alignment_normalizes_positive_uv_scale_logs() {
 #[test]
 fn scalar_pole_part() {
     test_initialise().unwrap();
-    let sunrise: Vec<Graph> = dot!( digraph sunrise{
-        edge [particle=scalar_1]
-        A -> B    [ id=0]
-        A -> B     [ id=1]
-        A -> B   [ id=2]
-
-    },"scalars")
+    let sunrise: Vec<Graph> = Graph::import_dot(
+        stringify!(digraph sunrise {
+            edge [particle=scalar_1]
+            A -> B [id=0]
+            A -> B [id=1]
+            A -> B [id=2]
+        }),
+        &load_generic_model("scalars"),
+    )
     .unwrap();
 
     let mut results = Vec::new();
@@ -283,14 +314,31 @@ fn scalar_pole_part() {
             },
             ..Default::default()
         };
-        let a = amp.graphs[0].renormalization_part(&settings).unwrap();
+        let a = amp.graphs[0]
+            .renormalization_part(&model, &settings)
+            .unwrap();
 
         println!("ren part: {:>}", a);
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let color = SymbolicTensor::infer(cooking.try_cook(a.expression.as_view()).unwrap())
+            .unwrap()
+            .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                color: Some(ColorSimplifySettings::default()),
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(idenso::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
+            .unwrap();
+        let color = cooking.uncook(color.expression().as_view());
         println!(
             "ren part: {:>}",
-            model.apply_parameter_replacement_rules(
-                &model.apply_coupling_replacement_rules(&a.simplify_color().expand())
-            )
+            model.apply_parameter_replacement_rules(&model.expand_couplings(&color))
         );
         assert!(
             !a.is_zero(),
@@ -298,15 +346,18 @@ fn scalar_pole_part() {
         );
         let mut pole_amp = Amplitude::from_graph_list("bub_poles", sunrise.clone()).unwrap();
         let poles = pole_amp.graphs[0]
-            .renormalization_part(&UVgenerationSettings {
-                renormalization_prescription: RenormalizationPrescriptionSettings {
-                    log_divergent: ApproximationType::PolePart,
-                    massive_power_divergent: ApproximationType::PolePart,
-                    massless_power_divergent: ApproximationType::PolePart,
-                    ..Default::default()
+            .renormalization_part(
+                &model,
+                &UVgenerationSettings {
+                    renormalization_prescription: RenormalizationPrescriptionSettings {
+                        log_divergent: ApproximationType::PolePart,
+                        massive_power_divergent: ApproximationType::PolePart,
+                        massless_power_divergent: ApproximationType::PolePart,
+                        ..Default::default()
+                    },
+                    ..settings
                 },
-                ..settings
-            })
+            )
             .unwrap();
         assert!(!poles.is_zero());
         assert!(poles.contains_symbol(GS.dim_epsilon));
@@ -326,7 +377,8 @@ fn finite_part_quark_lo() {
     )
     .unwrap();
     model.simplify(&mut restriction).unwrap();
-    let g: Vec<Graph> = dot!(digraph d1 {
+    let g: Vec<Graph> = Graph::import_dot(
+        r#"digraph d1 {
           overall_factor= "+1"
           projector = "spenso::g(spenso::cof(3,hedge(2)),spenso::dind(spenso::cof(3,hedge(1))))/4/3*(Q(0,spenso::mink(4,1))*spenso::gamma(spenso::bis(4,hedge(1)),spenso::bis(4,hedge(2)),spenso::mink(4,1)))"
 
@@ -340,7 +392,8 @@ fn finite_part_quark_lo() {
 
           v1 -> v2 [particle= "d"];
           v2 -> v1 [particle= "g"];
-        }, &model
+        }"#,
+        &model,
     )
     .unwrap();
 
@@ -366,10 +419,13 @@ fn finite_part_quark_lo() {
         };
 
         let a = amp.graphs[0]
-            .renormalization_part(&UVgenerationSettings {
-                project_integrated_uv_cts_onto_tensor_integrals,
-                ..pole_part_uv_settings()
-            })
+            .renormalization_part(
+                &model,
+                &UVgenerationSettings {
+                    project_integrated_uv_cts_onto_tensor_integrals,
+                    ..pole_part_uv_settings()
+                },
+            )
             .unwrap();
 
         println!("ren part: {:>}", a.log_print(Some(80)));
@@ -386,11 +442,14 @@ fn finite_part_quark_lo() {
         assert!((&aligned_pole - expected).expand().is_zero());
 
         let muv = amp.graphs[0]
-            .renormalization_part(&UVgenerationSettings {
-                softct: false,
-                project_integrated_uv_cts_onto_tensor_integrals,
-                ..Default::default()
-            })
+            .renormalization_part(
+                &model,
+                &UVgenerationSettings {
+                    softct: false,
+                    project_integrated_uv_cts_onto_tensor_integrals,
+                    ..Default::default()
+                },
+            )
             .unwrap();
         let muv = align_external_quark(&muv).replace(GS.dim_epsilon).with(0);
         assert!(!aligned_pole.is_zero());
@@ -400,9 +459,18 @@ fn finite_part_quark_lo() {
         // also covers equivalent forms such as log(mUV²/μ_R²), without imposing
         // a particular logarithm spelling or rewriting complex branches.
         let log_coefficient = Atom::var(GS.mu_r_sq) * muv.derivative(GS.mu_r_sq);
-        let contracted_log_coefficient = log_coefficient
-            .normalize_dots()
-            .metric_shorthand_to_dot()
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let contracted_log_coefficient =
+            SymbolicTensor::infer(cooking.try_cook(log_coefficient.as_view()).unwrap())
+                .unwrap()
+                .contract(ContractSettings::default())
+                .unwrap()
+                .to_dots()
+                .unwrap();
+        let contracted_log_coefficient = cooking
+            .uncook(contracted_log_coefficient.expression().as_view())
             .collect_factors();
         // Vakint can leave a repeated Lorentz dummy as an indexed momentum squared. After
         // contracting it and stripping the standard i/(16 pi^2) loop normalization,
@@ -425,7 +493,9 @@ fn finite_part_quark_lo() {
 #[test]
 fn finite_part_ghost_2loop() {
     test_initialise().unwrap();
-    let g: Vec<Graph> = dot!(digraph d1 {//0
+    let model = load_generic_model("sm");
+    let g: Vec<Graph> = Graph::import_dot(
+        r#"digraph d1 {//0
       overall_factor= "+1"
       num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
       in1 [style=invis];
@@ -645,7 +715,9 @@ fn finite_part_ghost_2loop() {
         0:6	-> 3:7	 [id=4 dir=none particle="g"];
         1:8	-> 2:9	 [id=5 dir=none particle="g"];
         3:10	-> 2:11	 [id=6 dir=none   particle="ghG"];
-    })
+    }"#,
+        &model,
+    )
     .unwrap();
 
     let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
@@ -660,23 +732,42 @@ fn finite_part_ghost_2loop() {
         ..settings.clone()
     };
 
-    let model = load_generic_model("sm");
-
     fn assert_new_paths_match_legacy(
         amp: &mut AmplitudeGraph,
+        model: &Model,
         a: RenormalizationPart,
         new_settings: &UVgenerationSettings,
     ) {
         let normalize = |atom: &Atom| {
-            atom.replace(parse_lit!(gammalooprs::dim))
-                .with(parse_lit!(4))
-                .simplify_metrics()
+            let atom = atom
+                .replace(parse_lit!(gammalooprs::dim))
+                .with(parse_lit!(4));
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let atom = SymbolicTensor::infer(cooking.try_cook(atom.as_view()).unwrap())
+                .unwrap()
+                .contract(ContractSettings::default())
+                .unwrap()
                 .to_dots()
-                .simplify_color()
+                .unwrap()
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                    color: Some(ColorSimplifySettings::default()),
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(idenso::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
+                .unwrap();
+            cooking
+                .uncook(atom.expression().as_view())
                 .expand_num()
                 .collect_factors()
         };
-        let new_part = amp.renormalization_part(new_settings).unwrap();
+        let new_part = amp.renormalization_part(model, new_settings).unwrap();
         assert_eq!(
             normalize(&new_part.expression),
             normalize(&a.expression),
@@ -689,7 +780,9 @@ fn finite_part_ghost_2loop() {
 
     // Each F_i below follows the summand order in the corresponding RQFT
     // `Fill forest(0)` definition.
-    let a = amp.graphs[0].renormalization_part(&settings).unwrap();
+    let a = amp.graphs[0]
+        .renormalization_part(&model, &settings)
+        .unwrap();
     // RQFT ghost_nlo_0_in.h, H = p1.p1*i_*gs^4*ca^2:
     // F0 (140 -> 0) / H = +3/16*ep^-2 + 5/32*ep^-1.
     // F1 (140 -> DM -> 0) / H = -3/16*ep^-2.
@@ -704,9 +797,11 @@ fn finite_part_ghost_2loop() {
          *gs^4*gammalooprs::ε^(-2)"
     );
     assert!((align_to_rqft(&a, &model) - expected).expand().is_zero());
-    assert_new_paths_match_legacy(&mut amp.graphs[0], a, &new_settings);
+    assert_new_paths_match_legacy(&mut amp.graphs[0], &model, a, &new_settings);
 
-    let a = amp.graphs[1].renormalization_part(&settings).unwrap();
+    let a = amp.graphs[1]
+        .renormalization_part(&model, &settings)
+        .unwrap();
     // RQFT ghost_nlo_1_in.h, H = p1.p1*i_*gs^4*ca^2:
     // F0 (140 -> 0) / H = +1/16*ep^-2 + 1/32*ep^-1.
     // F1 (140 -> oW -> 0) / H = -1/16*ep^-2.
@@ -719,9 +814,11 @@ fn finite_part_ghost_2loop() {
          *gs^4*gammalooprs::ε^(-2)"
     );
     assert!((align_to_rqft(&a, &model) - expected).expand().is_zero());
-    assert_new_paths_match_legacy(&mut amp.graphs[1], a, &new_settings);
+    assert_new_paths_match_legacy(&mut amp.graphs[1], &model, a, &new_settings);
 
-    let a = amp.graphs[2].renormalization_part(&settings).unwrap();
+    let a = amp.graphs[2]
+        .renormalization_part(&model, &settings)
+        .unwrap();
     // RQFT ghost_nlo_2_in.h, H = p1.p1*i_*gs^4*ca^2:
     // F0 (140 -> 0) / H = +1/8*ep^-2 - 1/48*ep^-1.
     // F1 (not emitted by GammaLoop) / H = 0.
@@ -734,9 +831,11 @@ fn finite_part_ghost_2loop() {
          *gs^4*gammalooprs::ε^(-2)"
     );
     assert!((align_to_rqft(&a, &model) - expected).expand().is_zero());
-    assert_new_paths_match_legacy(&mut amp.graphs[2], a, &new_settings);
+    assert_new_paths_match_legacy(&mut amp.graphs[2], &model, a, &new_settings);
 
-    let a = amp.graphs[3].renormalization_part(&settings).unwrap();
+    let a = amp.graphs[3]
+        .renormalization_part(&model, &settings)
+        .unwrap();
     // RQFT ghost_nlo_3_in.h, H = p1.p1*i_*gs^4*ca*nf:
     // F0 (140 -> 0) / H = -1/4*ep^-2 - 13/24*ep^-1.
     // F1 (140 -> zw -> 0) / H = +1/2*ep^-2 + 1/3*ep^-1.
@@ -748,9 +847,11 @@ fn finite_part_ghost_2loop() {
          *gs^4*nf*gammalooprs::ε^(-2)"
     );
     assert!((align_to_rqft(&a, &model) - expected).expand().is_zero());
-    assert_new_paths_match_legacy(&mut amp.graphs[3], a, &new_settings);
+    assert_new_paths_match_legacy(&mut amp.graphs[3], &model, a, &new_settings);
 
-    let a = amp.graphs[4].renormalization_part(&settings).unwrap();
+    let a = amp.graphs[4]
+        .renormalization_part(&model, &settings)
+        .unwrap();
     // RQFT ghost_nlo_4_in.h, H = p1.p1*i_*gs^4*ca^2:
     // F0 (140 -> 0) / H = +5/8*ep^-2 - 77/48*ep^-1.
     // F1 (not emitted by GammaLoop) / H = 0.
@@ -764,9 +865,11 @@ fn finite_part_ghost_2loop() {
          *gs^4*gammalooprs::ε^(-2)"
     );
     assert!((align_to_rqft(&a, &model) - expected).expand().is_zero());
-    assert_new_paths_match_legacy(&mut amp.graphs[4], a, &new_settings);
+    assert_new_paths_match_legacy(&mut amp.graphs[4], &model, a, &new_settings);
 
-    let a = amp.graphs[5].renormalization_part(&settings).unwrap();
+    let a = amp.graphs[5]
+        .renormalization_part(&model, &settings)
+        .unwrap();
     // RQFT ghost_nlo_5_in.h, H = p1.p1*i_*gs^4*ca^2:
     // F0 (140 -> 0) / H = +5/24*ep^-1.
     // F1 (not emitted by GammaLoop) / H = 0.
@@ -779,14 +882,16 @@ fn finite_part_ghost_2loop() {
          *gs^4*gammalooprs::ε^(-1)"
     );
     assert!((align_to_rqft(&a, &model) - expected).expand().is_zero());
-    assert_new_paths_match_legacy(&mut amp.graphs[5], a, &new_settings);
+    assert_new_paths_match_legacy(&mut amp.graphs[5], &model, a, &new_settings);
 }
 
 #[test]
 fn finit_part_ghlo() {
     test_initialise().unwrap();
 
-    let g: Vec<Graph> = dot!(digraph d1 {
+    let model = load_generic_model("sm");
+    let g: Vec<Graph> = Graph::import_dot(
+        r#"digraph d1 {
 
         projector = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))/8"
 
@@ -800,15 +905,15 @@ fn finit_part_ghlo() {
 
           v1:2 -> v2:3 [id=2 particle= "g"];
           v2:4 -> v1:5 [id=3 particle= "ghG~"];
-        }
+        }"#,
+        &model,
     )
     .unwrap();
 
     let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
 
-    let model = load_generic_model("sm");
     let a = amp.graphs[0]
-        .renormalization_part(&pole_part_uv_settings())
+        .renormalization_part(&model, &pole_part_uv_settings())
         .unwrap();
 
     println!("ren part: {:>}", a);
@@ -862,11 +967,11 @@ fn finite_part_ghost_3loop_developed() {
     test_initialise().unwrap();
 
     let model = load_generic_model("sm");
-    let g: Vec<Graph> = Graph::from_path(
-        concat!(
+    let g: Vec<Graph> = Graph::import_dot(
+        include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../tests/resources/graphs/uv_tests/rqft_ghG_3l.dot"
-        ),
+        )),
         &model,
     )
     .unwrap();
@@ -879,7 +984,9 @@ fn finite_part_ghost_3loop_developed() {
 
     let settings = rqft_3loop_settings();
 
-    let a = amp.graphs[0].renormalization_part(&settings).unwrap();
+    let a = amp.graphs[0]
+        .renormalization_part(&model, &settings)
+        .unwrap();
     // `Fi` denotes textual summand i of RQFT's `Fill forest(0)`. These values
     // come from FORM runs with each summand tagged before the forest reduction;
     // they already include the diagram's overall prefactor.
@@ -904,7 +1011,9 @@ fn finite_part_ghost_3loop_developed() {
        align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-3/8+29/32*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
     );
 
-    let a = amp.graphs[1].renormalization_part(&settings).unwrap();
+    let a = amp.graphs[1]
+        .renormalization_part(&model, &settings)
+        .unwrap();
     // d2: RQFT `ghost_nnlo_1`.
     // H = p1.p1*gs^6*ca^3
     // F0/H = rat(1/32*ep^-2 + 5/192*ep^-1)
@@ -915,20 +1024,30 @@ fn finite_part_ghost_3loop_developed() {
     // native GammaLoop / RQFT = +1.
     // The two remaining six-f terms have an odd signed graph automorphism and
     // vanish independently during tensor canonicalization.
-    let aligned = align_to_rqft(&a, &model)
-        .expand()
-        .map_terms_single_core(|term| {
-            term.cook_indices()
-                .canonize::<AbstractIndex>(AbstractIndex::Dummy)
-                .expect("test expression should canonicalize")
-        })
-        .collect_factors()
-        .to_dots();
+    let aligned = align_to_rqft(&a, &model);
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let aligned = cooking
+        .try_cook(aligned.as_view())
+        .unwrap()
+        .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+        .expect("test expression should canonicalize")
+        .collect_factors();
+    let aligned = SymbolicTensor::infer(aligned)
+        .unwrap()
+        .contract(ContractSettings::default())
+        .unwrap()
+        .to_dots()
+        .unwrap();
+    let aligned = cooking.uncook(aligned.expression().as_view());
     insta::assert_snapshot!(
        aligned.to_bare_ordered_string(),@"(-1/16+5/192*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
     );
 
-    let a = amp.graphs[2].renormalization_part(&settings).unwrap();
+    let a = amp.graphs[2]
+        .renormalization_part(&model, &settings)
+        .unwrap();
     // d3: RQFT `ghost_nnlo_2`.
     // H = p1.p1*gs^6*ca^3
     // F0/H = rat(9/128*ep^-3 + 15/256*ep^-2 + 27/512*ep^-1)
@@ -952,7 +1071,9 @@ fn finite_part_ghost_3loop_developed() {
        align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-39/256*ε+9/128+9/128*ε^2)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
     );
 
-    let a = amp.graphs[3].renormalization_part(&settings).unwrap();
+    let a = amp.graphs[3]
+        .renormalization_part(&model, &settings)
+        .unwrap();
     // d4: SM-UFO counterpart of RQFT `ghost_nnlo_4` (RQFT d5).
     // H = p1.p1*gs^6*ca^3
     // F0/H = rat(9/32*ep^-2 + 33/64*ep^-1)
@@ -970,7 +1091,9 @@ fn finite_part_ghost_3loop_developed() {
        align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-9/64+21/128*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
     );
 
-    let a = amp.graphs[4].renormalization_part(&settings).unwrap();
+    let a = amp.graphs[4]
+        .renormalization_part(&model, &settings)
+        .unwrap();
     // d5: SM-UFO counterpart of RQFT `ghost_nnlo_3` (RQFT d4).
     // H = p1.p1*gs^6*ca^3
     // F0/H = rat(9/128*ep^-3 + 15/256*ep^-2 + 99/512*ep^-1)
@@ -992,7 +1115,9 @@ fn finite_part_ghost_3loop_developed() {
        align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-39/256*ε+27/128*ε^2+9/128)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
     );
 
-    let a = amp.graphs[5].renormalization_part(&settings).unwrap();
+    let a = amp.graphs[5]
+        .renormalization_part(&model, &settings)
+        .unwrap();
     // d6: RQFT `ghost_nnlo_5`.
     // H = p1.p1*gs^6*ca^3
     // F0/H = rat(3/64*ep^-3 - 451/128*ep^-2 - 2767/256*ep^-1)
@@ -1016,7 +1141,9 @@ fn finite_part_ghost_3loop_developed() {
        align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1*ε^2+3/64+35/128*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
     );
 
-    let a = amp.graphs[6].renormalization_part(&settings).unwrap();
+    let a = amp.graphs[6]
+        .renormalization_part(&model, &settings)
+        .unwrap();
     // d7: RQFT `ghost_nnlo_6`.
     // H = p1.p1*gs^6*ca^3
     // F0/H = rat(3/64*ep^-3 - 451/128*ep^-2 - 2767/256*ep^-1)
@@ -1040,7 +1167,9 @@ fn finite_part_ghost_3loop_developed() {
        align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1*ε^2+3/64+35/128*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
     );
 
-    let a = amp.graphs[7].renormalization_part(&settings).unwrap();
+    let a = amp.graphs[7]
+        .renormalization_part(&model, &settings)
+        .unwrap();
     // d8: RQFT `ghost_nnlo_7`.
     // H = p1.p1*gs^6*ca^3
     // F0/H = rat(27/32*ep^-3 + 9/32*ep^-2 - 63/64*ep^-1)
@@ -1065,7 +1194,9 @@ fn finite_part_ghost_3loop_developed() {
        align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-63/64*ε+-99/128*ε^2+27/32)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
     );
 
-    let a = amp.graphs[8].renormalization_part(&settings).unwrap();
+    let a = amp.graphs[8]
+        .renormalization_part(&model, &settings)
+        .unwrap();
     // d9: RQFT `ghost_nnlo_8`.
     // H = p1.p1*gs^6*ca^3
     // F0..F25 = 0
@@ -1074,7 +1205,9 @@ fn finite_part_ghost_3loop_developed() {
        align_to_rqft(&a,&model).to_bare_ordered_string(),@"0"
     );
 
-    let a = amp.graphs[9].renormalization_part(&settings).unwrap();
+    let a = amp.graphs[9]
+        .renormalization_part(&model, &settings)
+        .unwrap();
     // d10: RQFT `ghost_nnlo_9`.
     // H = p1.p1*gs^6*ca^3
     // F0..F25 = 0
@@ -1106,13 +1239,10 @@ macro_rules! rqft_ghost_reference {
         fn $name() {
             test_initialise().unwrap();
             let model = load_generic_model("sm");
-            let graphs: Vec<Graph> = Graph::from_path(
-                concat!(
+            let graphs: Vec<Graph> = Graph::import_dot(include_str!(concat!(
                     env!("CARGO_MANIFEST_DIR"),
                     "/../../tests/resources/graphs/uv_tests/rqft_ghG_3l.dot"
-                ),
-                &model,
-            )
+                )), &model)
             .unwrap();
             let mut amp = Amplitude::from_graph_list("bub", graphs).unwrap();
             assert_eq!(amp.graphs.len(), 78);
@@ -1120,7 +1250,7 @@ macro_rules! rqft_ghost_reference {
                 assert_eq!(graph.graph.name, format!("d{}", index + 1));
             }
             let a = amp.graphs[$diagram - 1]
-                .renormalization_part(&rqft_3loop_settings())
+                .renormalization_part(&model, &rqft_3loop_settings())
                 .unwrap();
             let momentum = function!(GS.external_mom, 0, spenso::mink!(4));
             let expected = function!(SPENSO_TAG.dot, &momentum, &momentum)
@@ -1202,13 +1332,24 @@ fn rqft_photon_projection_preserves_regulated_dimension() {
         function!(GS.external_mom, 0, spenso::mink!(GS.dim)),
         function!(GS.external_mom, 0, spenso::mink!(GS.dim))
     );
-    let projected_metric = metric.pow(2).schoonschip_with_net_full::<Aind>().unwrap();
-    assert_eq!(projected_metric, dimension);
-    let projected_momentum =
-        (metric * function!(GS.external_mom, 0, left) * function!(GS.external_mom, 0, right))
-            .schoonschip_with_net_full::<Aind>()
+    let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+    let projected_metric =
+        SymbolicTensor::infer(cooking.try_cook(metric.pow(2).as_view()).unwrap())
             .unwrap()
-            .to_dots();
+            .contract(ContractSettings::default())
+            .unwrap();
+    let projected_metric = cooking.uncook(projected_metric.expression().as_view());
+    assert_eq!(projected_metric, dimension);
+    let contracted_momentum =
+        metric * function!(GS.external_mom, 0, left) * function!(GS.external_mom, 0, right);
+    let projected_momentum =
+        SymbolicTensor::infer(cooking.try_cook(contracted_momentum.as_view()).unwrap())
+            .unwrap()
+            .contract(ContractSettings::default())
+            .unwrap()
+            .to_dots()
+            .unwrap();
+    let projected_momentum = cooking.uncook(projected_momentum.expression().as_view());
     assert_eq!(projected_momentum, momentum_squared);
 
     // RQFT feynman_rules.h declares D=4-2*ep. This exact Laurent identity
@@ -1237,12 +1378,21 @@ mod slow {
     fn finite_part_photon_3loop_no_ghost() {
         test_initialise().unwrap();
 
-        let model = load_generic_model("sm");
-        let g: Vec<Graph> = Graph::from_path(
-            concat!(
+        // RQFT's Feynman rules set the down-quark mass to zero; the reference
+        // below is therefore the massless-quark forest sum.
+        let mut model = load_generic_model("sm");
+        let mut restriction = InputParamCard::from_str(
+            include_str!("../../../assets/models/json/sm/restrict_light_quarks_massless.json")
+                .to_owned(),
+            "json",
+        )
+        .unwrap();
+        model.simplify(&mut restriction).unwrap();
+        let g: Vec<Graph> = Graph::import_dot(
+            include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/../../tests/resources/graphs/uv_tests/rqft_a_3l_no_ghost.dot"
-            ),
+            )),
             &model,
         )
         .unwrap();
@@ -1290,28 +1440,63 @@ mod slow {
         let adjoint_dimension = parse!("rqft_dA");
         let fundamental = function!(CS.fundamental_rep, &fundamental_dimension);
         let adjoint = function!(CS.adjoint_rep, &adjoint_dimension);
-        let parametrize = |atom: &mut Atom| {
-            let original = atom.clone();
-            *atom = atom
-                .to_param_color()
-                .replace(CS.nc * CS.nc - 1)
-                .with(adjoint_dimension.clone())
-                .replace(CS.nc)
-                .with(fundamental_dimension.clone());
-            assert_eq!(
-                atom.replace(fundamental_dimension.as_view().to_pattern())
-                    .with(Atom::num(3))
-                    .replace(adjoint_dimension.as_view().to_pattern())
-                    .with(Atom::num(8)),
-                original,
-                "parametric color changes a primitive at N_c = 3"
-            );
-        };
+        let parametrize_tensor =
+            |tensor: &mut idenso::tensor::SymbolicTensor<spenso::structure::IndexedStructure>| {
+                let original = tensor.clone();
+                let mapped = tensor
+                    .map_representation_dimensions(|representation, dimension| {
+                        if representation.base()
+                            == (idenso::representations::ColorFundamental {}).into()
+                        {
+                            fundamental_dimension.clone()
+                        } else if representation.base()
+                            == (idenso::representations::ColorAdjoint {}).into()
+                        {
+                            adjoint_dimension.clone()
+                        } else {
+                            dimension.to_owned()
+                        }
+                    })
+                    .unwrap();
+                let expression = mapped
+                    .expression()
+                    .replace(CS.nc * CS.nc - 1)
+                    .with(adjoint_dimension.clone())
+                    .replace(CS.nc)
+                    .with(fundamental_dimension.clone());
+                let mapped = mapped.with_checked_expression(expression).unwrap();
+                let restored = mapped
+                    .map_representation_dimensions(|_, dimension| {
+                        dimension
+                            .replace(fundamental_dimension.as_view().to_pattern())
+                            .with(Atom::num(3))
+                            .replace(adjoint_dimension.as_view().to_pattern())
+                            .with(Atom::num(8))
+                    })
+                    .unwrap();
+                let restored = restored
+                    .with_checked_expression(
+                        restored
+                            .expression()
+                            .replace(fundamental_dimension.as_view().to_pattern())
+                            .with(Atom::num(3))
+                            .replace(adjoint_dimension.as_view().to_pattern())
+                            .with(Atom::num(8)),
+                    )
+                    .unwrap();
+                assert_eq!(
+                    restored.expression(),
+                    original.expression(),
+                    "parametric color changes a primitive at N_c = 3"
+                );
+                assert_eq!(restored.structure(), original.structure());
+                *tensor = mapped;
+            };
 
         for index in [21, 24] {
             let graph = &mut amp.graphs[index];
             for (_, _, vertex) in graph.graph.underlying.iter_nodes_mut() {
-                parametrize(&mut vertex.num.value);
+                parametrize_tensor(&mut vertex.num.value);
             }
             let edges: Vec<_> = graph
                 .graph
@@ -1320,24 +1505,33 @@ mod slow {
                 .map(|(_, index, _)| index)
                 .collect();
             for edge in edges {
-                parametrize(&mut graph.graph.underlying[edge].num.value);
+                parametrize_tensor(&mut graph.graph.underlying[edge].num.value);
             }
-            parametrize(&mut graph.graph.global_prefactor.num);
-            parametrize(&mut graph.graph.global_prefactor.projector);
+            parametrize_tensor(&mut graph.graph.global_prefactor.num);
+            parametrize_tensor(&mut graph.graph.global_prefactor.projector);
             // RQFT projects in d=4-2ε, using the same open Lorentz domain as
             // the integrated tensor. A fixed four-dimensional projector would
             // lose its ε-dependent contribution to the finite coefficient.
-            graph.graph.global_prefactor.projector =
-                graph.graph.global_prefactor.projector.map_mink_dim(GS.dim);
+            graph.graph.global_prefactor.projector = graph
+                .graph
+                .global_prefactor
+                .projector
+                .with_lorentz_dimension(GS.dim.into())
+                .unwrap();
 
-            let renormalized = graph
-                .renormalization_part(&settings)
-                .unwrap()
-                // Contract only this completed integrated tensor and its
-                // projector; the graph numerator remains factorized.
-                .schoonschip_with_net_full::<Aind>()
-                .unwrap()
-                .to_dots()
+            let renormalized = graph.renormalization_part(&model, &settings).unwrap();
+            // Contract only this completed integrated tensor and its projector;
+            // the graph numerator remains factorized.
+            let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+            let renormalized =
+                SymbolicTensor::infer(cooking.try_cook(renormalized.as_view()).unwrap())
+                    .unwrap()
+                    .contract(ContractSettings::default())
+                    .unwrap()
+                    .to_dots()
+                    .unwrap();
+            let renormalized = cooking
+                .uncook(renormalized.expression().as_view())
                 .to_color_casimir(fundamental.as_view(), adjoint.as_view())
                 .replace(fundamental.as_view().to_pattern())
                 .with(cof!(3))
@@ -1366,11 +1560,11 @@ fn finite_part_ghost_3loop_quark_bubble() {
     test_initialise().unwrap();
 
     let model = load_generic_model("sm");
-    let g: Vec<Graph> = Graph::from_path(
-        concat!(
+    let g: Vec<Graph> = Graph::import_dot(
+        include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../tests/resources/graphs/uv_tests/rqft_ghG_3l.dot"
-        ),
+        )),
         &model,
     )
     .unwrap();
@@ -1383,7 +1577,9 @@ fn finite_part_ghost_3loop_quark_bubble() {
 
     let settings = rqft_3loop_settings();
 
-    let a = amp.graphs[10].renormalization_part(&settings).unwrap();
+    let a = amp.graphs[10]
+        .renormalization_part(&model, &settings)
+        .unwrap();
     // d11: RQFT `ghost_nnlo_10`.
     // H = p1.p1*gs^6*ca^2*nf
     // F0/H = rat(1/12*ep^-3 + 1/6*ep^-2 + 1/72*ep^-1)

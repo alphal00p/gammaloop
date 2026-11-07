@@ -18,11 +18,31 @@ use crate::{
     tensors::data::{DataIterator, DenseTensor, SparseTensor},
 };
 
-use linnet::half_edge::subgraph::{SubSetLike, subset::SubSet};
+use linnet::{
+    half_edge::subgraph::{SubSetLike, subset::SubSet},
+    permutation::Permutation,
+};
 
 use std::iter::Iterator;
 
 use super::{ContractableWith, ContractionError, MultiContract, MultiContractInterleaved};
+
+/// Matched slots of `left` and `right`, with the permutation that orders the
+/// matched axes of a `left` fiber like the matched axes of a `right` fiber.
+///
+/// [`TensorStructure::match_indices`] returns the permutation that aligns the
+/// right-hand matched axes with the left-hand order, which permuted left
+/// fibers must apply inversely. The two coincide only for involutions, so a
+/// direct use is wrong once three or more matched axes form a longer cycle.
+pub(crate) fn matched_left_fibers<I: TensorStructure>(
+    left: &I,
+    right: &I,
+) -> Option<(Permutation, Vec<bool>, Vec<bool>)> {
+    left.match_indices(right)
+        .map(|(permutation, left_matches, right_matches)| {
+            (permutation.inverse(), left_matches, right_matches)
+        })
+}
 
 impl<T, U, I> MultiContract<DenseTensor<T, I>> for DenseTensor<U, I>
 where
@@ -41,7 +61,7 @@ where
         trace!("multi contract dense dense");
         let zero = self.data[0].try_upgrade().unwrap().into_owned().ref_zero();
         let (permutation, self_matches, other_matches) =
-            self.structure().match_indices(other.structure()).unwrap();
+            matched_left_fibers(self.structure(), other.structure()).unwrap();
 
         // Initialize result tensor with default values
         let mut result_data = vec![zero.clone(); final_structure.size()?];
@@ -104,7 +124,7 @@ where
         };
         // let zero = other.data[0].try_upgrade().unwrap().as_ref().ref_zero();
         let (permutation, self_matches, other_matches) =
-            self.structure().match_indices(other.structure()).unwrap();
+            matched_left_fibers(self.structure(), other.structure()).unwrap();
 
         // let mut final_structure = self.structure.clone();
         // let _ = final_structure.merge(&other.structure);
@@ -163,7 +183,7 @@ where
         trace!("multi contract dense sparse");
         let zero = self.data[0].try_upgrade().unwrap().as_ref().ref_zero();
         let (permutation, self_matches, other_matches) =
-            self.structure().match_indices(other.structure()).unwrap();
+            matched_left_fibers(self.structure(), other.structure()).unwrap();
 
         let mut result_data = vec![zero.clone(); final_structure.size()?];
         let mut result_index = 0;
@@ -218,7 +238,7 @@ where
     ) -> Result<Self::LCM, ContractionError> {
         trace!("multi contract sparse sparse");
         let (permutation, self_matches, other_matches) =
-            self.structure().match_indices(other.structure()).unwrap();
+            matched_left_fibers(self.structure(), other.structure()).unwrap();
 
         // let mut final_structure = self.structure.clone();
         // let _ = final_structure.merge(&other.structure);
@@ -338,9 +358,7 @@ where
         let mut iter_self = if contracted_slots_aligned {
             self.fiber(FiberData::from(&pos_self)).iter_metric()
         } else {
-            let contraction_permutation = self
-                .structure()
-                .match_indices(other.structure())
+            let contraction_permutation = matched_left_fibers(self.structure(), other.structure())
                 .map(|(permutation, _, _)| permutation)
                 .ok_or_else(|| {
                     ContractionError::Other(eyre::eyre!(
@@ -449,9 +467,7 @@ where
         let mut iter_self = if contracted_slots_aligned {
             self.fiber(FiberData::from(&pos_self)).iter_metric()
         } else {
-            let contraction_permutation = self
-                .structure()
-                .match_indices(other.structure())
+            let contraction_permutation = matched_left_fibers(self.structure(), other.structure())
                 .map(|(permutation, _, _)| permutation)
                 .ok_or_else(|| {
                     ContractionError::Other(eyre::eyre!(
@@ -562,9 +578,7 @@ where
         let mut iter_self = if contracted_slots_aligned {
             self.fiber(FiberData::from(&pos_self)).iter_metric()
         } else {
-            let contraction_permutation = self
-                .structure()
-                .match_indices(other.structure())
+            let contraction_permutation = matched_left_fibers(self.structure(), other.structure())
                 .map(|(permutation, _, _)| permutation)
                 .ok_or_else(|| {
                     ContractionError::Other(eyre::eyre!(
@@ -678,15 +692,14 @@ where
             let mut iter_self = if contracted_slots_aligned {
                 self.fiber(FiberData::from(&pos_self)).iter_metric()
             } else {
-                let contraction_permutation = self
-                    .structure()
-                    .match_indices(other.structure())
-                    .map(|(permutation, _, _)| permutation)
-                    .ok_or_else(|| {
-                        ContractionError::Other(eyre::eyre!(
-                            "missing matching interleaved sparse contraction slots"
-                        ))
-                    })?;
+                let contraction_permutation =
+                    matched_left_fibers(self.structure(), other.structure())
+                        .map(|(permutation, _, _)| permutation)
+                        .ok_or_else(|| {
+                            ContractionError::Other(eyre::eyre!(
+                                "missing matching interleaved sparse contraction slots"
+                            ))
+                        })?;
                 self.fiber(FiberData::from(&pos_self))
                     .iter_perm_metric(contraction_permutation)
             };
@@ -918,5 +931,176 @@ mod tests {
         );
 
         assert_eq!(*result.get_ref([0, 1, 0]).unwrap(), 10);
+    }
+
+    mod matched_slot_cycles {
+        use std::collections::BTreeMap;
+
+        use crate::{
+            contraction::Contract,
+            structure::{
+                Canonicalized, HasStructure, OrderedStructure, TensorStructure,
+                abstract_index::AbstractIndex,
+                representation::{Euclidean, LibraryRep, LibrarySlot, Lorentz, Minkowski, RepName},
+                slot::IsAbstractSlot,
+            },
+            tensors::data::{DataTensor, DenseTensor, GetTensorData, SetTensorData},
+        };
+
+        type Slot = LibrarySlot<AbstractIndex>;
+        type Tensor = DenseTensor<i32, OrderedStructure<LibraryRep>>;
+
+        fn up(label: usize) -> Slot {
+            Lorentz {}.new_slot(2, label).to_lib()
+        }
+        fn down(label: usize) -> Slot {
+            Lorentz {}.dual().new_slot(2, label).to_lib()
+        }
+        fn mink(label: usize) -> Slot {
+            Minkowski {}.new_slot(2, label).to_lib()
+        }
+        fn euc(label: usize) -> Slot {
+            Euclidean {}.new_slot(2, label).to_lib()
+        }
+
+        /// A component determined by the index labels alone, so the reference
+        /// is independent of canonical storage order. It is not affine in the
+        /// indices, so a wrong pairing of matched axes cannot cancel out.
+        fn value(seed: i32, labels: &BTreeMap<usize, usize>) -> i32 {
+            labels.iter().fold(seed, |acc, (label, index)| {
+                acc * (2 + *index as i32) + (*label as i32 % 5 + seed) * (*index as i32 + 1)
+            })
+        }
+
+        fn labels(slots: &[Slot], indices: &[usize]) -> BTreeMap<usize, usize> {
+            slots
+                .iter()
+                .map(|slot| usize::from(slot.aind()))
+                .zip(indices.iter().copied())
+                .collect()
+        }
+
+        fn assignments(rank: usize) -> impl Iterator<Item = Vec<usize>> {
+            (0..1_usize << rank).map(move |bits| (0..rank).map(|axis| (bits >> axis) & 1).collect())
+        }
+
+        fn tensor(slots: &[Slot], seed: i32) -> Tensor {
+            let structure: OrderedStructure<LibraryRep> =
+                Canonicalized::from_iter(slots.iter().copied()).into_canonical();
+            let stored = structure.external_structure();
+            let mut tensor = Tensor::zero(structure);
+            for indices in assignments(stored.len()) {
+                tensor
+                    .set(&indices, value(seed, &labels(&stored, &indices)))
+                    .unwrap();
+            }
+            tensor
+        }
+
+        /// `sum` over the shared labels of the two label-defined factors, with
+        /// the Minkowski metric diag(+, -) on shared `mink` labels. Each factor
+        /// is given with the seed its components were built from.
+        fn reference(
+            (left, left_seed): (&[Slot], i32),
+            (right, right_seed): (&[Slot], i32),
+            free: &BTreeMap<usize, usize>,
+        ) -> i32 {
+            let shared = left
+                .iter()
+                .filter(|slot| right.iter().any(|other| other.aind() == slot.aind()))
+                .copied()
+                .collect::<Vec<_>>();
+            assignments(shared.len())
+                .map(|indices| {
+                    let mut all = free.clone();
+                    let mut sign = 1;
+                    for (slot, index) in shared.iter().zip(&indices) {
+                        all.insert(usize::from(slot.aind()), *index);
+                        if *slot == mink(usize::from(slot.aind())) && *index > 0 {
+                            sign = -sign;
+                        }
+                    }
+                    let restrict = |slots: &[Slot]| {
+                        slots
+                            .iter()
+                            .map(|slot| {
+                                let label = usize::from(slot.aind());
+                                (label, all[&label])
+                            })
+                            .collect::<BTreeMap<_, _>>()
+                    };
+                    sign * value(left_seed, &restrict(left)) * value(right_seed, &restrict(right))
+                })
+                .sum()
+        }
+
+        fn check(left: (&[Slot], i32), right: (&[Slot], i32), result: &Tensor) {
+            let stored = result.external_structure();
+            for indices in assignments(stored.len()) {
+                let free = labels(&stored, &indices);
+                assert_eq!(
+                    *result.get_ref(&indices).unwrap(),
+                    reference(left, right, &free),
+                    "{left:?} . {right:?} at {free:?}"
+                );
+            }
+        }
+
+        fn contract_all_storages(left: &[Slot], right: &[Slot]) {
+            let (a, b) = (tensor(left, 1), tensor(right, 2));
+            // The matched dual slots must form a cycle longer than two, where
+            // a permutation and its inverse differ.
+            let (permutation, _, _) = a.structure().match_indices(b.structure()).unwrap();
+            assert_ne!(permutation, permutation.inverse());
+            let storages = |tensor: &Tensor| {
+                [
+                    DataTensor::Dense(tensor.clone()),
+                    DataTensor::Sparse(tensor.to_sparse()),
+                ]
+            };
+            for lhs in storages(&a) {
+                for rhs in storages(&b) {
+                    for (result, l, r) in [
+                        (lhs.contract(&rhs).unwrap(), (left, 1), (right, 2)),
+                        (rhs.contract(&lhs).unwrap(), (right, 2), (left, 1)),
+                    ] {
+                        let dense = match result {
+                            DataTensor::Dense(dense) => dense,
+                            DataTensor::Sparse(sparse) => sparse.to_dense(),
+                        };
+                        check(l, r, &dense);
+                    }
+                }
+            }
+        }
+
+        #[test]
+        fn three_cycle_of_dual_pairs_beside_a_free_index() {
+            contract_all_storages(&[up(1), up(2), down(3), euc(9)], &[up(3), down(1), down(2)]);
+        }
+
+        #[test]
+        fn three_cycle_of_dual_pairs_with_interleaved_free_indices() {
+            contract_all_storages(
+                &[up(1), up(2), down(3), euc(5), euc(9)],
+                &[up(3), down(1), down(2), euc(7)],
+            );
+        }
+
+        /// Canonical order sorts by representation first, so a self-dual
+        /// metric pair is a fixed point of the cycle; its sign must still
+        /// follow its own axis.
+        #[test]
+        fn three_cycle_beside_a_metric_pair() {
+            contract_all_storages(
+                &[up(1), up(2), down(3), mink(4), euc(9)],
+                &[up(3), down(1), down(2), mink(4)],
+            );
+        }
+
+        #[test]
+        fn fully_contracted_three_cycle() {
+            contract_all_storages(&[up(1), up(2), down(3)], &[up(3), down(1), down(2)]);
+        }
     }
 }
