@@ -1138,7 +1138,8 @@ fn real_part_digit_loss_is_still_reported_beside_a_zero_consistent_imaginary_par
         .evaluate_with_prec(&ahash::HashMap::<Atom, Complex<Float>>::default(), 128)
         .unwrap();
     assert!(value.im.is_zero());
-    assert!((value.re.to_rational() - Rational::from((5, 2))).abs() < Rational::from((1, 1000)));
+    let tolerance = Rational::from((1, 1000));
+    assert!((value.re.to_rational() - Rational::from((5, 2))).abs() < tolerance);
     // No reliable digit in the real part is still an error, whatever the
     // imaginary part: the relaxation never applies to the real component.
     let (lost, warnings) =

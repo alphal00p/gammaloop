@@ -1105,7 +1105,7 @@ impl MasterCatalog {
             super::postprocessing_threads(settings),
         );
         super::log_phase("finalize_alias_normalization", started);
-        if &normalized == raw {
+        if normalized == *raw {
             return None;
         }
         let started = super::phase_start();
