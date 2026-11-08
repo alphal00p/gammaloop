@@ -1,5 +1,131 @@
 {
+  "runs": [
+    {
+      "id": "2026-11-08T15:24:04Z-0ebe9405bf5e",
+      "measurements": [
+        {
+          "arithmetic": "none",
+          "backend": "forcer",
+          "cell": "L1_d0_r0",
+          "dots": 0,
+          "evaluate_seconds": 0.003543744,
+          "finished_utc": "2026-11-08T15:24:05Z",
+          "form_runs": 0,
+          "load_seconds": 0.547249252,
+          "loops": 1,
+          "n": 1,
+          "output_sha256": "e97c44580ba290710e5d8368591db939eb13279174200a86961a1896611f100c",
+          "output_terms": 1,
+          "process_seconds": 0.559640152,
+          "rank": 0,
+          "reduction_seconds": 0.0,
+          "repetition": 0,
+          "state": "cold",
+          "status": "ok",
+          "threads": 1
+        },
+        {
+          "arithmetic": "none",
+          "backend": "forcer",
+          "cell": "L1_d0_r0",
+          "dots": 0,
+          "evaluate_seconds": 0.003559035,
+          "finished_utc": "2026-11-08T15:24:06Z",
+          "form_runs": 0,
+          "load_seconds": 0.541034246,
+          "loops": 1,
+          "n": 1,
+          "output_sha256": "e97c44580ba290710e5d8368591db939eb13279174200a86961a1896611f100c",
+          "output_terms": 1,
+          "process_seconds": 0.555920037,
+          "rank": 0,
+          "reduction_seconds": 0.0,
+          "repetition": 0,
+          "state": "warm",
+          "status": "ok",
+          "threads": 1
+        }
+      ],
+      "protocol": {
+        "adjoint_tail_env": null,
+        "arithmetics": [
+          "modular_polynomial"
+        ],
+        "binary_sha256": "0ebe9405bf5e1fdbc2c4b462ac353e8024ff79755e02bdd47ac699a3c93809d0",
+        "build_profile": "release",
+        "build_stamp": "59a572397ef9be6437c439c686de2d781e7342c8",
+        "cap_seconds": null,
+        "cells": [],
+        "cpu_model": "AMD EPYC 9754 128-Core Processor",
+        "cpus": {
+          "1": "128",
+          "16": "128-143"
+        },
+        "cpus_allowed": "159",
+        "debug_assertions": false,
+        "exact_sha256": "9888eb0bb3537eed065d091b57147251cab7da9d5fb62a4c25724084b26d056e",
+        "forcer_commit": "68a30bfb2aec3672a2f674ca8666bfc970105e24",
+        "form_sha256": "2b3de22e575b20328ed1d848d1821129b550f885ac32785aa73728a7fec408fd",
+        "form_version": "FORM 5.0.0 (Jan  1 1980)",
+        "gammaloop_sha": "59a572397ef9be6437c439c686de2d781e7342c8",
+        "grid_sha256": "610e732d67935e7682711833280a18067b9427c4cc1ff2611f3413c7d4cbef3c",
+        "host": "itphlies",
+        "invocation": [
+          "/shared/vhirschi/t3code/vakint_dev/p_integral_dev/build/vk-bench-v1/release/examples/benchmark_p_integrals",
+          "--build-profile",
+          "release",
+          "--numa-node",
+          "4",
+          "--numactl",
+          "/nix/store/00p2pzg3i0bdlg9iab09jyr46lnvpi6n-numactl-2.0.18/bin/numactl",
+          "--work-dir",
+          "/shared/vhirschi/t3code/vakint_dev/p_integral_dev/SCRATCHPAD/m2-bench-v1/work",
+          "--stop-file",
+          "/shared/vhirschi/t3code/vakint_dev/p_integral_dev/ops/PAUSE",
+          "--threads",
+          "1,16",
+          "--cpus",
+          "1=128,16=128-143",
+          "--loops",
+          "1",
+          "--physics",
+          ""
+        ],
+        "mems_allowed": "0-7",
+        "numactl": "--cpunodebind=4 --membind=4",
+        "ordered_weight_arithmetic": {
+          "modular_polynomial": {
+            "1": "modular_polynomial",
+            "16": "modular_polynomial:threads=16"
+          }
+        },
+        "physics_sha256": "d93a5c50e6d23013222a84efefcce611fb8ac018c20812575d194f8a52e4e8ec",
+        "repetitions": 3,
+        "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+        "rustred_sha": "7c14cea095e098609f982e85613a352cfb792ea4",
+        "scope": "Wall time of Vakint::evaluate in Retain mode, in a fresh process, input parsed, engine (and RustRed library) loaded and the one-loop bubble evaluated once beforehand by either backend, on directories of its own: same frontend and finalizer for both backends. RustRed cold: empty ordered-cache directory, shipped caches off. Warm-same: fresh process replaying a read-only copy of the cache its cold run filled. Warm-shared: per L one chain over the cells in table order sharing one cache from empty. Forcer cold: private empty materialisation directory; warm: materialised (Forcer has no result cache). Raw: the generated FORM programs run directly, one FORM process each. OS pages are not flushed.",
+        "source_dirty": false,
+        "started_utc": "2026-11-08T15:24:04Z",
+        "thread_environment": {
+          "1": {
+            "MKL_NUM_THREADS": "1",
+            "OMP_NUM_THREADS": "1",
+            "RAYON_NUM_THREADS": "1"
+          },
+          "16": {
+            "MKL_NUM_THREADS": "16",
+            "OMP_NUM_THREADS": "16",
+            "RAYON_NUM_THREADS": "16"
+          }
+        },
+        "threads": [
+          1,
+          16
+        ],
+        "work_filesystem": "zfs"
+      }
+    }
+  ],
   "schema": "vakint.p-benchmark.v1",
-  "selected_run": null,
-  "runs": []
+  "selected_run": null
 }
