@@ -752,6 +752,12 @@ impl Vakint {
         }
     }
 
+    /// The Ordered-cache program of [`Self::loaded_p_library`]; never loads a
+    /// library, so it lists the p program only once one is loaded.
+    pub(crate) fn loaded_p_cache_program(&self) -> Option<OrderedCacheProgram> {
+        self.loaded_p_library().map(|handle| handle.cache.clone())
+    }
+
     /// The library of this engine (module documentation), loaded on first use.
     pub(crate) fn p_library(&self) -> Result<Arc<PLibraryHandle>, RustRedEvaluationError> {
         if let Some(handle) = &self.p_library {

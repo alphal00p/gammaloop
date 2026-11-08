@@ -45,6 +45,9 @@ mod numerator;
 mod ordered;
 pub(crate) mod p_data;
 pub(crate) mod p_integral;
+pub(crate) mod p_shipped_cache;
+#[cfg(test)]
+mod p_shipped_cache_tests;
 pub(crate) mod parallel;
 #[cfg(test)]
 mod postprocessing_profile_tests;

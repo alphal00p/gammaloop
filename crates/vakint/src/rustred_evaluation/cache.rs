@@ -596,6 +596,7 @@ impl OrderedCacheRegistry {
             Some(data) if settings.shipped && program.textual_tables.is_none() => {
                 self.shipped(data, program)?
             }
+            Some(data) if settings.shipped => super::p_shipped_cache::shipped(data, program)?,
             _ => ShippedOrderedCache::None,
         };
         let key = program.key();
@@ -972,6 +973,7 @@ impl Vakint {
         if let Ok(application) = self.loaded_application() {
             programs.push(application.ordered_cache_program().clone());
         }
+        programs.extend(self.loaded_p_cache_program());
         Ok(programs)
     }
 }
