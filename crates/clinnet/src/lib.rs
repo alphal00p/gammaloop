@@ -891,6 +891,12 @@ mod tests {
                 .is_some()
         );
         assert!(KURVST_PACKAGE_ASSETS.get_file("src/impl.typ").is_some());
+        assert!(LINNEST_PACKAGE_ASSETS.get_file("ec-layout.wasm").is_none());
+        assert!(
+            LINNEST_PACKAGE_ASSETS
+                .get_file("LICENSE.ec-layout")
+                .is_none()
+        );
         // linnest.wasm compiles Clarabel and NetworkX-derived code.
         for name in ["LICENSE.clarabel", "LICENSE.networkx"] {
             assert!(
@@ -1322,6 +1328,24 @@ mod tests {
                 base.join("preparation-assertions.pdf"),
                 &[&repository],
             )
+            .unwrap();
+
+        // Supplied geometry still renders with the retained Linnest package.
+        let precomputed = templates.join("precomputed.typ");
+        fs::write(
+            &precomputed,
+            r#"#import "crates/linnest/typst/src/graph.typ" as graph
+#import "crates/linnest/typst/src/render/layout.typ": layout-graph
+#let g = graph.build({
+  graph.node(<v>, pos: graph.pos(x: 0, y: 0))
+  graph.edge(graph.source(<v>), pos: graph.pos(x: 2, y: 0))
+})
+#context layout-graph((layouts: none, draw: (title: none)), g)
+"#,
+        )
+        .unwrap();
+        renderer
+            .compile_template(&precomputed, base.join("precomputed.pdf"), &[])
             .unwrap();
 
         fs::remove_dir_all(base).unwrap();
