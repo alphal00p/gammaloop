@@ -88,13 +88,21 @@
   if n == 0 { none } else { (sorted.at(int((n - 1) / 2)) + sorted.at(int(n / 2))) / 2 }
 }
 
-// The measurements of one (cell, backend, threads, state).
-#let samples(cell, backend, threads, state) = measurements.filter(
-  m => m.cell == cell and m.backend == backend and m.threads == threads and m.state == state,
+// RustRed's Ordered weight arithmetic of the tables; the exact series has a
+// table of its own. Forcer measurements carry "none".
+#let headline = "modular_polynomial"
+#let arithmetic-of(m) = m.at("arithmetic", default: if m.backend == "rustred" { headline } else { "none" })
+
+// The measurements of one (cell, backend, threads, state), RustRed under `arithmetic`.
+#let samples(cell, backend, threads, state, arithmetic: headline) = measurements.filter(
+  m => (
+    m.cell == cell and m.backend == backend and m.threads == threads and m.state == state
+      and (backend != "rustred" or arithmetic-of(m) == arithmetic)
+  ),
 )
 // Median over the repetitions; none without a complete measurement.
-#let seconds(cell, backend, threads, state, field: "evaluate_seconds") = median(
-  samples(cell, backend, threads, state)
+#let seconds(cell, backend, threads, state, field: "evaluate_seconds", arithmetic: headline) = median(
+  samples(cell, backend, threads, state, arithmetic: arithmetic)
     .filter(m => m.status == "ok")
     .map(m => m.at(field, default: none))
     .filter(is-num),
@@ -248,7 +256,7 @@
 }
 #let load-seconds = (
   measurements
-    .filter(m => m.backend == "rustred" and m.status == "ok")
+    .filter(m => m.backend == "rustred" and m.status == "ok" and arithmetic-of(m) == headline)
     .map(m => m.at("load_seconds", default: none))
     .filter(is-num)
 )
@@ -292,8 +300,97 @@
   )),
   text(size: 7pt)[×4 Forcer faster],
 ))
-#figure(timing-table(1), caption: [1 thread (`n_cores` 1, `form`).], supplement: [Table])
-#figure(timing-table(16), caption: [16 threads (`n_cores` 16, `tform -w16`).], supplement: [Table])
+#figure(timing-table(1), caption: [1 thread (`n_cores` 1, `form`); RustRed arithmetic #raw(headline).], supplement: [Table])
+#figure(timing-table(16), caption: [16 threads (`n_cores` 16, `tform -w16`); RustRed arithmetic #raw(headline).], supplement: [Table])
+
+// ------------------------------------------------- arithmetic and reuse --
+
+// Exact against modular_polynomial, RustRed cold, on three grid cells and the
+// physics cell per loop count.
+#let exact-cells = (1, 2, 3).map(loops => {
+  let names = ("d0_r0", "d1_r4", "d2_r8").map(cell => "L" + str(loops) + "_" + cell)
+  if loops >= 2 { names.push("physics_L" + str(loops)) }
+  names.map(name => (loops, name))
+}).flatten().chunks(2)
+#let gain(a, b) = { let r = ratio(a, b); if r == none { [—] } else { [×#fmt-ratio(r)] } }
+#let exact-table = {
+  let rows = ()
+  for (loops, cell) in exact-cells {
+    rows.push(text(size: 7pt)[#cell.replace("_", " ")])
+    for threads in (1, 16) {
+      let ex = seconds(cell, "rustred", threads, "cold", arithmetic: "exact")
+      let mp = seconds(cell, "rustred", threads, "cold")
+      rows.push(text(size: 7pt)[#fmt(ex)])
+      rows.push(text(size: 7pt)[#fmt(mp)])
+      rows.push(text(size: 7pt, weight: "semibold")[#gain(ex, mp)])
+    }
+  }
+  table(
+    columns: (auto, ..((1fr,) * 6)),
+    align: (x, y) => if x == 0 { left } else { right },
+    inset: (x: 3pt, y: 1.6pt),
+    stroke: 0.4pt + luma(215),
+    fill: (x, y) => if y < 2 { navy },
+    table.cell(rowspan: 2, header[cell]), table.cell(colspan: 3, header[1 thread]), table.cell(colspan: 3, header[16 threads]),
+    ..((header[exact], header[mod.], header[gain]) * 2),
+    ..rows,
+  )
+}
+
+// Measured vakint-level reuse per loop count: the sums of the medians of a
+// warm state over those of RustRed cold, on the cells where both exist.
+#let reuse-ratio(loops, threads, state) = {
+  let cells = measurements.filter(m => m.loops == loops and m.backend == "rustred").map(m => m.cell).dedup()
+  let pairs = cells
+    .map(cell => (seconds(cell, "rustred", threads, state), seconds(cell, "rustred", threads, "cold")))
+    .filter(pair => pair.all(is-num))
+  if pairs.len() == 0 { [—] } else {
+    let r = pairs.map(pair => pair.at(0)).sum() / pairs.map(pair => pair.at(1)).sum()
+    [×#fmt-ratio(r)]
+  }
+}
+// Cache counters of the RustRed children (headline arithmetic) of one loop count and state.
+#let children(loops, state) = measurements.filter(m => (
+  m.loops == loops and m.backend == "rustred" and m.state == state and m.status == "ok"
+    and arithmetic-of(m) == headline and m.at("cache", default: none) != none
+))
+// Warm-same replays its cold cache: no miss and no insert in any child.
+#let clean-replays(loops) = {
+  let all = children(loops, "warm-same")
+  if all.len() == 0 { [—] } else {
+    [#all.filter(m => m.cache.misses == 0 and m.cache.inserts == 0).len() / #all.len()]
+  }
+}
+// Warm-shared hits and misses summed over the chain of one loop count, the
+// median over repetitions, at 16 threads.
+#let chain-sum(loops, field) = {
+  let all = children(loops, "warm-shared").filter(m => m.threads == 16)
+  let sums = all.map(m => m.repetition).dedup().map(rep => all.filter(m => m.repetition == rep).map(m => m.cache.at(field)).sum())
+  if sums.len() == 0 { [—] } else { [#calc.round(median(sums))] }
+}
+#let reuse-table = table(
+  columns: (auto, ..((1fr,) * 6)),
+  align: (x, y) => if x == 0 { left } else { right },
+  inset: (x: 3pt, y: 1.6pt),
+  stroke: 0.4pt + luma(215),
+  fill: (x, y) => if y < 2 { navy },
+  table.cell(rowspan: 2, header[L]), table.cell(colspan: 2, header[1 thread]), table.cell(colspan: 2, header[16 threads]),
+  table.cell(rowspan: 2, header[ws clean]), table.cell(rowspan: 2, header[wc hits / misses]),
+  ..((header[ws/cold], header[wc/cold]) * 2),
+  ..(1, 2, 3).map(loops => (
+    text(size: 7pt)[#loops L],
+    ..(1, 16).map(threads => ("warm-same", "warm-shared").map(state => text(size: 7pt)[#reuse-ratio(loops, threads, state)])).flatten(),
+    text(size: 7pt)[#clean-replays(loops)],
+    text(size: 7pt)[#chain-sum(loops, "hits") / #chain-sum(loops, "misses")],
+  )).flatten(),
+)
+
+#block(breakable: false, grid(
+  columns: (1fr, 1fr),
+  column-gutter: 8pt,
+  figure(exact-table, supplement: [Table], caption: [RustRed cold, arithmetic `exact` against `modular_polynomial` (mod.); gain = exact / mod.]),
+  figure(reuse-table, supplement: [Table], caption: [Reuse, `modular_polynomial`: warm time over cold time per loop count (sums over the cells). ws clean: warm-same children with 0 misses and 0 inserts. wc: the chain's cache counters at 16 threads.]),
+))
 
 // ------------------------------------------------------------ methodology --
 
@@ -304,6 +401,7 @@
     measurements
       .filter(m => (
         m.loops == loops and m.backend == backend and m.threads == 1 and m.state == state and m.status == "ok"
+          and (backend != "rustred" or arithmetic-of(m) == headline)
       ))
       .map(m => m.cell)
       .dedup()
@@ -348,7 +446,9 @@
     #protocol.cpu_model on #protocol.host,
     CPUs #protocol.cpus.pairs().map(pair => pair.at(0) + " thread: " + pair.at(1)).join("; "),
     binding #if protocol.numactl == none [none] else { raw(protocol.numactl) },
-    RustRed arithmetic #protocol.ordered_weight_arithmetic.pairs().map(pair => pair.at(0) + " thread: " + pair.at(1).split("(").first()).join("; "),
+    RustRed arithmetic #raw(headline) in Tables 1, 2 and 4, `exact` in Table 3 (each child records the arithmetic it resolved),
+    `RUSTRED_ORDERED_ADJOINT_TAIL` #if protocol.at("adjoint_tail_env", default: none) == none [unset] else [set],
+    no official external data loaded,
     #raw(str(measurements.len())) measurements in `data/p_results.json`.
   ]
 ]
