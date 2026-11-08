@@ -958,8 +958,9 @@ impl Vakint {
     /// listed.
     pub(super) fn detach_superseded_ordered_caches(&self) {
         if let Ok(mut programs) = self.ordered_cache_programs() {
-            // An injected p library outlives data changes.
-            programs.extend(self.p_library.as_ref().map(|handle| handle.cache.clone()));
+            // The p library the engine resolves to after the change (injected,
+            // external-data or built-in) keeps its cache.
+            programs.extend(self.loaded_p_library().map(|handle| handle.cache.clone()));
             self.ordered_cache.detach_except(&programs);
         }
     }

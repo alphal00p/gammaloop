@@ -22,9 +22,8 @@ mod vendored {
     include!(concat!(env!("OUT_DIR"), "/vakint_vendored_data.rs"));
 }
 
-/// The vendored 1L-3L data files (relative path, bytes), for tests that need
-/// a writable external-data directory.
-#[cfg(test)]
+/// The embedded `data/` files (relative path, bytes): the vendored 1L-3L data
+/// and the built-in p data (`p_data`).
 pub(super) fn vendored_files() -> &'static [(&'static str, &'static [u8])] {
     vendored::FILES
 }
