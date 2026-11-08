@@ -82,6 +82,32 @@ fn an_odd_bubble_carries_its_wick_sign_once() {
     }
 }
 
+/// One input per loop count for the concurrent path: an odd-rank dotted
+/// bubble, a dotted kite with a rank-3 numerator, and the dotted NO top,
+/// which reduces onto both masters `no` and `t105`.
+const CONCURRENT_INPUTS: [&str; 3] = [
+    "dot(k(1),p(1))^3*topo(P1L(p(1),2,3))",
+    "dot(k(1),p(1))*dot(k(2),p(1))^2*topo(P2L(p(1),1,2,1,1,1))",
+    "topo(P3L_NO(p(1),2,1,1,1,1,1,1,1))",
+];
+
+/// The concurrent path (M2 exit criterion 2; every other p test runs on one
+/// core): with `n_cores = 4`, `modular_sampled` on four fixed workers and
+/// `modular_polynomial` following `n_cores` agree with Forcer, at the
+/// deepest loop count of [`P_BATTERY_LOOPS`].
+#[test]
+fn four_cores_under_both_modular_arithmetics_agree_with_forcer() {
+    let loops = *P_BATTERY_LOOPS.end();
+    for arithmetic in ["modular_sampled:threads=4", "modular_polynomial"] {
+        assert_p_backends_agree_under(
+            CONCURRENT_INPUTS[loops - 1],
+            battery_terms(loops),
+            arithmetic,
+            4,
+        );
+    }
+}
+
 /// A FORM that does not run Forcer.
 const BROKEN_FORM: &str = "/nonexistent/vakint-battery/form";
 

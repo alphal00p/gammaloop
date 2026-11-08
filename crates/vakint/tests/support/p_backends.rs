@@ -19,7 +19,8 @@
 //!    `mursq = 1`, 40 digits, agree within `1e-30`.
 //!
 //! The RustRed side is [`p_battery_engine`] with RustRed alone
-//! ([`rustred_p_settings`]); the Forcer side is a live Forcer (FORM 5, Tier
+//! ([`rustred_p_settings`], the default Ordered arithmetic on one core, or
+//! [`rustred_p_settings_with_arithmetic`]); the Forcer side is a live Forcer (FORM 5, Tier
 //! B) or the frozen fixture outputs (Tier C). A live Forcer side runs Forcer
 //! alone on the p-integrals ([`forcer_side_value`]): it fails closed, never
 //! handing them to RustRed, whatever p library the engine holds.
@@ -58,6 +59,26 @@ pub use super::p_rustred::rustred_p_settings;
 /// The loop counts [`p_battery_engine`] reduces with RustRed (STAGE 1: the
 /// one-loop reference library).
 pub const P_BATTERY_LOOPS: RangeInclusive<usize> = 1..=1;
+
+/// [`rustred_p_settings`] under the Ordered weight `arithmetic` in vakint's
+/// text form (`exact`, `modular_polynomial`, `modular_sampled:threads=4`, ...)
+/// on `n_cores` workers (M2 exit criterion 2: the p path under every
+/// arithmetic, and the concurrent path).
+pub fn rustred_p_settings_with_arithmetic(
+    mode: RustRedMasterMode,
+    normalization: LoopNormalizationFactor,
+    terms: i64,
+    arithmetic: &str,
+    n_cores: usize,
+) -> VakintSettings {
+    VakintSettings {
+        ordered_weight_arithmetic: arithmetic
+            .parse()
+            .unwrap_or_else(|error| panic!("arithmetic {arithmetic}: {error}")),
+        n_cores,
+        ..rustred_p_settings(mode, normalization, terms)
+    }
+}
 
 /// The relative tolerance of the numerical agreement at 40 digits.
 pub const NUMERICAL_TOLERANCE: f64 = 1e-30;
@@ -215,10 +236,22 @@ pub const MODES: [RustRedMasterMode; 3] = [
 
 /// The value of `input` on the RustRed side in `mode`, G-scheme, `terms`.
 pub fn rustred_value(input: &Atom, mode: RustRedMasterMode, terms: i64) -> Result<Atom, String> {
-    let settings = rustred_p_settings(mode, LoopNormalizationFactor::GScheme, terms);
+    rustred_value_with(
+        &rustred_p_settings(mode, LoopNormalizationFactor::GScheme, terms),
+        input,
+    )
+}
+
+/// The value of `input` on the RustRed side with `settings`.
+pub fn rustred_value_with(settings: &VakintSettings, input: &Atom) -> Result<Atom, String> {
     p_battery_engine()
-        .evaluate(&settings, input.as_view())
-        .map_err(|error| format!("RustRed ({mode}): {error}"))
+        .evaluate(settings, input.as_view())
+        .map_err(|error| {
+            format!(
+                "RustRed ({}, {}): {error}",
+                settings.evaluation_order, settings.ordered_weight_arithmetic
+            )
+        })
 }
 
 /// [`forcer_side_value`] on the shared engine `VAKINT` (`Vakint::new()`).
@@ -358,6 +391,19 @@ pub fn agreement(
     terms: i64,
     forcer: impl Fn(RustRedMasterMode) -> Result<Atom, String>,
 ) -> Result<(), Disagreement> {
+    agreement_with(
+        input,
+        |mode| rustred_p_settings(mode, LoopNormalizationFactor::GScheme, terms),
+        forcer,
+    )
+}
+
+/// [`agreement`] with the RustRed side's settings given by `rustred(mode)`.
+pub fn agreement_with(
+    input: &Atom,
+    rustred: impl Fn(RustRedMasterMode) -> VakintSettings,
+    forcer: impl Fn(RustRedMasterMode) -> Result<Atom, String>,
+) -> Result<(), Disagreement> {
     for mode in MODES {
         let expected = forcer(mode).map_err(Disagreement::Failed)?;
         if expected.is_zero() {
@@ -365,7 +411,7 @@ pub fn agreement(
                 "Forcer gives 0 ({mode}): the agreement tests nothing"
             )));
         }
-        let actual = rustred_value(input, mode, terms).map_err(Disagreement::Failed)?;
+        let actual = rustred_value_with(&rustred(mode), input).map_err(Disagreement::Failed)?;
         values_agree(&actual, &expected, mode).map_err(|disagreement| match disagreement {
             Disagreement::Failed(error) => Disagreement::Failed(format!("{mode}: {error}")),
             Disagreement::Differs(difference) => Disagreement::Differs(format!(
@@ -393,6 +439,31 @@ pub fn assert_p_backends_agree_atom(input: &Atom, terms: i64) {
         live_forcer_value(&form, input, mode, terms)
     })
     .unwrap_or_else(|difference| panic!("{input}:\n{difference}"));
+}
+
+/// [`assert_p_backends_agree`] with the RustRed side under the Ordered
+/// `arithmetic` on `n_cores` workers ([`rustred_p_settings_with_arithmetic`]).
+pub fn assert_p_backends_agree_under(input: &str, terms: i64, arithmetic: &str, n_cores: usize) {
+    let input = parse(input);
+    let Some(form) = live_form(&format!(
+        "the RustRed ({arithmetic}, {n_cores} cores)/Forcer agreement of {input}"
+    )) else {
+        return;
+    };
+    agreement_with(
+        &input,
+        |mode| {
+            rustred_p_settings_with_arithmetic(
+                mode,
+                LoopNormalizationFactor::GScheme,
+                terms,
+                arithmetic,
+                n_cores,
+            )
+        },
+        |mode| live_forcer_value(&form, &input, mode, terms),
+    )
+    .unwrap_or_else(|difference| panic!("{input} ({arithmetic}, {n_cores} cores):\n{difference}"));
 }
 
 /// The Laurent depth of [`assert_p_backends_agree_routed`].
