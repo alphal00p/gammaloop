@@ -220,6 +220,17 @@ fn prepare_coefficient(
     Err(failure("constant definitions did not reach a fixed point"))
 }
 
+/// One prepared coefficient of [`materialize`]: an exact rational, or its
+/// tracked value with the warnings and origins of its evaluation.
+enum Evaluated {
+    Exact(Atom),
+    Numerical {
+        value: super::NumericalCoefficient,
+        warnings: Vec<super::PrecisionWarning>,
+        origins: Vec<super::PrecisionSource>,
+    },
+}
+
 fn epsilon_power(monomial: AtomView, epsilon: Symbol) -> Option<i64> {
     match monomial {
         AtomView::Var(variable) if variable.get_symbol() == epsilon => Some(1),
@@ -255,7 +266,10 @@ pub(crate) fn materialize(
         vk_symbol!(&settings.epsilon_symbol),
         "Input",
     )?;
+    let started = crate::rustred_evaluation::phase_start();
     let expression = combine_exact(Vakint::normalize_gamma_functions(expression.as_view()));
+    crate::rustred_evaluation::log_phase("materialize_combination", started);
+    let started = crate::rustred_evaluation::phase_start();
     let expression = if let Some(catalog) = catalog {
         catalog.resolve_numerical(expression, settings)?
     } else {
@@ -275,9 +289,11 @@ pub(crate) fn materialize(
         }
         expression
     };
+    crate::rustred_evaluation::log_phase("materialize_resolution", started);
     if expression.is_zero() {
         return Ok(Atom::Zero);
     }
+    let started = crate::rustred_evaluation::phase_start();
     let mut classification = NumericalParts {
         parameters,
         catalog,
@@ -313,32 +329,59 @@ pub(crate) fn materialize(
         variables.push(temporary);
     }
     let grouped = expression.replace_multiple(&replacements);
+    crate::rustred_evaluation::log_phase("materialize_classification", started);
+    let started = crate::rustred_evaluation::phase_start();
+    let terms = grouped.coefficient_list::<i32>(&variables);
+    // Every coefficient is prepared and evaluated independently, on up to
+    // `n_cores` workers; the loop below consumes them in collection order, so
+    // warnings, errors and the result are those of a sequential pass.
+    let evaluated = crate::rustred_evaluation::map_ordered(
+        crate::rustred_evaluation::postprocessing_threads(settings),
+        &terms,
+        |_, (_, coefficient)| -> Result<Evaluated, VakintError> {
+            let prepared = prepare_coefficient(coefficient.clone(), catalog, parameters)?;
+            // A resolved rational is already an exact numerical coefficient.
+            // Retain it across partial evaluation boundaries (for example nested
+            // forest integrations); only final numerical evaluation needs a Float.
+            // Staged Float literals and finite sources cannot enter this branch.
+            if let AtomView::Num(number) = prepared.expression.as_view()
+                && matches!(
+                    number.get_coeff_view(),
+                    CoefficientView::Natural(..) | CoefficientView::Large(..)
+                )
+            {
+                return Ok(Evaluated::Exact(prepared.expression));
+            }
+            let (value, warnings) = evaluate_coefficient(
+                prepared.expression.as_view(),
+                &prepared.sources,
+                parameters,
+                settings,
+            )?;
+            Ok(Evaluated::Numerical {
+                value,
+                warnings,
+                origins: prepared.origins,
+            })
+        },
+    );
     let mut result = Atom::Zero;
-    for (monomial, coefficient) in grouped.coefficient_list::<i32>(&variables) {
+    for ((monomial, _), evaluated) in terms.into_iter().zip(evaluated) {
         let monomial = monomial.replace_multiple(&restore);
-        let prepared = prepare_coefficient(coefficient, catalog, parameters)?;
-        // A resolved rational is already an exact numerical coefficient.
-        // Retain it across partial evaluation boundaries (for example nested
-        // forest integrations); only final numerical evaluation needs a Float.
-        // Staged Float literals and finite sources cannot enter this branch.
-        if let AtomView::Num(number) = prepared.expression.as_view()
-            && matches!(
-                number.get_coeff_view(),
-                CoefficientView::Natural(..) | CoefficientView::Large(..)
-            )
-        {
-            result += prepared.expression * monomial;
-            continue;
-        }
-        let (value, mut warnings) = evaluate_coefficient(
-            prepared.expression.as_view(),
-            &prepared.sources,
-            parameters,
-            settings,
-        )?;
+        let (value, mut warnings, origins) = match evaluated? {
+            Evaluated::Exact(value) => {
+                result += value * monomial;
+                continue;
+            }
+            Evaluated::Numerical {
+                value,
+                warnings,
+                origins,
+            } => (value, warnings, origins),
+        };
         attach_origins(
             &mut warnings,
-            &prepared.origins,
+            &origins,
             epsilon_power(monomial.as_view(), vk_symbol!(&settings.epsilon_symbol)),
             catalog.map_or("built-in definitions and declared parameters", |catalog| {
                 catalog.version.as_str()
@@ -352,6 +395,7 @@ pub(crate) fn materialize(
             .map_err(|error| failure(format!("coefficient multiplying {monomial}: {error}")))?;
         result += coefficient * monomial;
     }
+    crate::rustred_evaluation::log_phase("materialize_evaluation", started);
     Ok(result)
 }
 
@@ -461,6 +505,93 @@ mod tests {
                 .unwrap()
                 .is_zero()
         );
+    }
+
+    #[test]
+    fn uncertain_imaginary_zero_is_exported_as_zero_and_real_loss_still_fails() {
+        let settings = settings();
+        let parameters = |bits: u32| -> HashMap<Atom, Complex<Float>> {
+            ["a", "b"]
+                .map(|name| {
+                    (
+                        Atom::var(vk_symbol!(name)),
+                        Complex::new(Float::with_val(bits, 1), Float::new(bits)),
+                    )
+                })
+                .into_iter()
+                .collect()
+        };
+        // The full-call boundary: an imaginary part consistent with zero and
+        // negligible at the 40 requested digits (77-digit inputs) no longer
+        // fails the export; the other factor keeps its exact value.
+        let precise = parameters(256);
+        let source = vk_parse!("𝑖*(a-b)*x+2*y").unwrap();
+        let result = materialize(source.as_view(), &settings, &precise, None).unwrap();
+        assert!(!result.contains_symbol(vk_symbol!("x")), "{result}");
+        assert_eq!(result, vk_parse!("2*y").unwrap());
+        // 38-digit inputs only resolve the same zero below the request: it is
+        // not negligible and the export still fails.
+        let error = materialize(source.as_view(), &settings, &parameters(128), None).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("imaginary component has no reliable")
+                && error.to_string().contains("not negligible"),
+            "{error}"
+        );
+        // An uncertain real zero in the same coefficient is still rejected.
+        let source = vk_parse!("(1+𝑖)*(a-b)*x").unwrap();
+        let error = materialize(source.as_view(), &settings, &precise, None).unwrap_err();
+        assert!(
+            error.to_string().contains("real component has no reliable"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn coefficients_materialize_identically_for_every_worker_count() {
+        let source =
+            vk_parse!("(z3+Zeta(3))*ep^-2*x+Zeta(5)*ep^-1*x+(1/3+z3)*y+7*x*y+𝑖*Zeta(3)^2*ep*x^2")
+                .unwrap();
+        let outcome = |n_cores| {
+            let request = VakintSettings {
+                n_cores,
+                ..settings()
+            };
+            materialize(source.as_view(), &request, &HashMap::new(), None)
+                .map(|value| value.to_canonical_string())
+                .map_err(|error| error.to_string())
+        };
+        let sequential = outcome(1);
+        assert!(sequential.is_ok(), "{sequential:?}");
+        for n_cores in [2, 4, 8] {
+            assert_eq!(outcome(n_cores), sequential);
+        }
+        // The first failing coefficient in collection order decides the
+        // error, whatever the worker count.
+        let parameters: HashMap<Atom, Complex<Float>> = ["a", "b"]
+            .map(|name| {
+                (
+                    Atom::var(vk_symbol!(name)),
+                    Complex::new(Float::with_val(128, 1), Float::new(128)),
+                )
+            })
+            .into_iter()
+            .collect();
+        let failing = vk_parse!("(a-b)*x+(a-b)*y+z3*w").unwrap();
+        let errors: Vec<_> = [1, 4]
+            .into_iter()
+            .map(|n_cores| {
+                let request = VakintSettings {
+                    n_cores,
+                    ..settings()
+                };
+                materialize(failing.as_view(), &request, &parameters, None)
+                    .unwrap_err()
+                    .to_string()
+            })
+            .collect();
+        assert_eq!(errors[0], errors[1]);
     }
 
     #[test]

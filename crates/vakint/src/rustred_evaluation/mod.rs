@@ -13,6 +13,7 @@ pub(crate) mod data;
 pub(crate) mod masters;
 pub(crate) use experimental::timing::MathSpan;
 pub(crate) use masters::combine_exact;
+pub(crate) use parallel::map_ordered;
 #[cfg(all(unix, not(target_arch = "wasm32")))]
 mod official;
 #[cfg(all(unix, not(target_arch = "wasm32")))]
@@ -45,6 +46,8 @@ mod ordered;
 pub(crate) mod p_data;
 pub(crate) mod p_integral;
 pub(crate) mod parallel;
+#[cfg(test)]
+mod postprocessing_profile_tests;
 mod request_dump;
 #[cfg(test)]
 mod terminal;
@@ -210,6 +213,25 @@ impl RustRedEvaluationError {
     }
 }
 
+/// Debug wall time of one post-reduction phase, logged at `debug` level with
+/// target `vakint::postprocessing` (`RUST_LOG=vakint::postprocessing=debug`).
+/// Nothing is measured or printed unless that level is enabled.
+pub(crate) fn log_phase(phase: &str, started: Option<std::time::Instant>) {
+    if let Some(started) = started {
+        log::debug!(
+            target: "vakint::postprocessing",
+            "phase={phase} elapsed_seconds={:.6}",
+            started.elapsed().as_secs_f64()
+        );
+    }
+}
+
+/// The start of a phase timed by [`log_phase`]; `None` when the log level is off.
+pub(crate) fn phase_start() -> Option<std::time::Instant> {
+    log::log_enabled!(target: "vakint::postprocessing", log::Level::Debug)
+        .then(std::time::Instant::now)
+}
+
 /// Worker threads for the independent caller-side work around a native
 /// reduction: guard and retained-coefficient materialization and the retained
 /// catalogue combination. Each item is computed exactly as on one thread and
@@ -359,7 +381,9 @@ impl Vakint {
         // Ordered reduction combines all normalized contributions first, so
         // simplify real logarithms and zero powers once here, before master
         // substitution, rather than per contribution.
+        let started = phase_start();
         let raw = crate::utils::simplify_real(raw.as_view());
+        log_phase("finalize_simplify_real", started);
         let data = self.rustred_data()?;
         let announced = self.announced_bare_masters()?;
         let result = if mode == RustRedMasterMode::Retain {
@@ -371,8 +395,15 @@ impl Vakint {
             )
         } else {
             if !announced.is_empty() {
-                data.masters
-                    .require_coefficients(&combine_exact(raw.clone()), &announced)?;
+                let started = phase_start();
+                data.masters.require_coefficients(
+                    &masters::MasterCatalog::combine_master_coefficients(
+                        raw.clone(),
+                        postprocessing_threads(settings),
+                    ),
+                    &announced,
+                )?;
+                log_phase("finalize_announced_check", started);
             }
             data.masters.finalize(raw, settings, loop_count, mode)?
         };

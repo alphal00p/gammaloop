@@ -52,7 +52,19 @@ const SIGNAL_POLL: Duration = Duration::from_millis(25);
 /// Smallest stack of the request thread. The work used to run on the calling
 /// thread (at least 8 MiB on Python's main thread); Symbolica's normalization
 /// recurses deeply on nested input. Only reserved, not committed.
-const MIN_REQUEST_STACK_BYTES: usize = 64 << 20;
+///
+/// Debug builds (`debug_assertions`: maturin's default dev profile and the
+/// profiles inheriting from it) reserve [`DEBUG_STACK_FACTOR`] times more:
+/// unoptimized frames are several times larger. Evaluating a nested function
+/// of depth 4000, which an optimized build does in 8 MiB, needed 56-64 MiB
+/// unoptimized and overflowed the 64 MiB request thread.
+const MIN_REQUEST_STACK_BYTES: usize = if cfg!(debug_assertions) {
+    DEBUG_STACK_FACTOR * (64 << 20)
+} else {
+    64 << 20
+};
+/// Stack factor of debug builds (see [`MIN_REQUEST_STACK_BYTES`]).
+const DEBUG_STACK_FACTOR: usize = 4;
 /// Request thread stack when the caller's stack limit is unlimited.
 const UNLIMITED_REQUEST_STACK_BYTES: usize = 1 << 30;
 

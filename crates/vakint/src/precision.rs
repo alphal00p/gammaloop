@@ -16,7 +16,10 @@ mod tests;
 
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
-    domains::float::{Complex, Float, Real, RealBall, SingleFloat, TrackedComplex},
+    domains::{
+        float::{Complex, Float, Real, RealBall, RoundingDirection, SingleFloat, TrackedComplex},
+        rational::Rational,
+    },
 };
 
 pub use symbolica::domains::float::{
@@ -76,6 +79,15 @@ pub struct NumericalCoefficient {
     value: Complex<Float>,
     precision: CoefficientPrecision,
     maximum_export_bits: u32,
+    /// The decimal precision the coefficient was requested at (lowered by
+    /// [`Self::capped_decimal_precision`]).
+    requested_decimal_precision: u32,
+    /// For an imaginary component [consistent with
+    /// zero](Self::imaginary_consistent_with_zero) evaluated from an
+    /// expression: the largest imaginary contribution of one of its terms
+    /// (see [`imaginary_term_scale`]). `None` for every other coefficient
+    /// (boxed: it is rare and keeps the common coefficient small).
+    imaginary_term_scale: Option<Box<Rational>>,
 }
 
 impl NumericalCoefficient {
@@ -87,6 +99,8 @@ impl NumericalCoefficient {
             value: Complex::new(value.ball.re.center.clone(), value.ball.im.center.clone()),
             precision: value.precision(),
             maximum_export_bits: decimal_bits(requested),
+            requested_decimal_precision: requested,
+            imaginary_term_scale: None,
         }
     }
 
@@ -111,6 +125,8 @@ impl NumericalCoefficient {
         let rounded = value.rounded(Some(maximum_bits)).unwrap_or(value);
         let mut result = Self::from_tracked(rounded, requested);
         result.maximum_export_bits = maximum_bits;
+        result.requested_decimal_precision = self.requested_decimal_precision.min(requested);
+        result.imaginary_term_scale = self.imaginary_term_scale.clone();
         result
     }
 
@@ -134,13 +150,65 @@ impl NumericalCoefficient {
     }
 
     /// Export only when both components have a representable accuracy.
+    ///
+    /// An imaginary component that is a [negligible
+    /// zero](Self::imaginary_negligible_zero) is exported as an exact zero;
+    /// [`evaluate_coefficient`] records a warning with its midpoint,
+    /// uncertainty and term scale. Any other imaginary component without a
+    /// reliable digit, consistent with zero or not, fails the export. The real
+    /// component is never treated this way.
     pub fn to_atom(&self) -> Result<Atom, VakintError> {
         self.check_export()?;
-        let value = self
-            .as_tracked()
+        let mut value = self.as_tracked();
+        if self.imaginary_negligible_zero() {
+            value.ball.im = RealBall::exact(Float::new(value.ball.im.center.prec()));
+        }
+        let value = value
             .to_float_with_max_precision(self.maximum_export_bits)
             .map_err(VakintError::NumericalPrecision)?;
         Ok(Atom::num(value))
+    }
+
+    /// Whether the imaginary component is an uncertain zero: not an exact
+    /// zero, without a reliable significant decimal digit, and with a finite
+    /// tracked enclosure that contains zero. An imaginary component whose
+    /// enclosure excludes zero is never in this class, however few digits
+    /// it has. Containing zero alone says nothing about the size of the true
+    /// value; see [`Self::imaginary_negligible_zero`].
+    pub fn imaginary_consistent_with_zero(&self) -> bool {
+        let imaginary = self.precision.imaginary();
+        if imaginary.exact_zero()
+            || imaginary
+                .significant_digits()
+                .is_some_and(|digits| digits >= 1)
+        {
+            return false;
+        }
+        let ball = RealBall::new(self.value.im.clone(), imaginary.absolute_error().clone());
+        ball.is_finite() && ball.contains(&Float::new(self.value.im.prec()))
+    }
+
+    /// Whether the imaginary component is an uncertain zero whose uncertainty
+    /// is negligible at the requested precision: it is [consistent with
+    /// zero](Self::imaginary_consistent_with_zero) and its absolute
+    /// uncertainty `r` satisfies `r * 10^requested <= S`, where `S` is the
+    /// largest imaginary contribution of a term of the evaluated expression
+    /// (see [`imaginary_term_scale`]).
+    ///
+    /// The true imaginary part is then at most `2 r`, below the requested
+    /// relative precision of every term that contributes to it, so an exact
+    /// zero is correct to the requested precision. Only coefficients
+    /// evaluated by [`evaluate_coefficient`] carry the scale; any other
+    /// coefficient is never in this class.
+    pub fn imaginary_negligible_zero(&self) -> bool {
+        self.imaginary_consistent_with_zero()
+            && self.imaginary_term_scale.as_ref().is_some_and(|scale| {
+                negligible_against(
+                    self.precision.imaginary().absolute_error(),
+                    scale,
+                    self.requested_decimal_precision,
+                )
+            })
     }
 
     /// Real constants and canonical master coefficients have an exact imaginary zero.
@@ -173,9 +241,23 @@ impl NumericalCoefficient {
                 && !component
                     .significant_digits()
                     .is_some_and(|digits| digits >= 1)
+                && !(name == "imaginary" && self.imaginary_negligible_zero())
             {
+                // A zero-consistent imaginary part with a known term scale
+                // says why it is not exported as zero.
+                let scale = match &self.imaginary_term_scale {
+                    Some(scale) if name == "imaginary" && self.imaginary_consistent_with_zero() => {
+                        format!(
+                            "; consistent with zero, but not negligible at the requested {} digits against its largest term contribution {} (uncertainty / scale {})",
+                            self.requested_decimal_precision,
+                            display_magnitude(scale),
+                            uncertainty_ratio(component.absolute_error(), scale),
+                        )
+                    }
+                    _ => String::new(),
+                };
                 return Err(VakintError::NumericalPrecision(format!(
-                    "{name} component has no reliable significant decimal digit; midpoint {}, absolute uncertainty {}",
+                    "{name} component has no reliable significant decimal digit; midpoint {}, absolute uncertainty {}{scale}",
                     if name == "real" {
                         &self.value.re
                     } else {
@@ -546,6 +628,114 @@ impl NumericalEvaluationResult {
     }
 }
 
+/// Whether `uncertainty * 10^digits <= scale`, compared exactly.
+fn negligible_against(uncertainty: &Float, scale: &Rational, digits: u32) -> bool {
+    uncertainty.is_finite()
+        && !uncertainty.is_negative()
+        && uncertainty.to_rational() * Rational::from(10).pow(u64::from(digits)) <= *scale
+}
+
+fn display_magnitude(value: &Rational) -> Float {
+    Float::from_rational_round(value, 24, RoundingDirection::Nearest)
+}
+
+fn uncertainty_ratio(uncertainty: &Float, scale: &Rational) -> String {
+    if scale.is_zero() {
+        "infinite".into()
+    } else {
+        display_magnitude(&(uncertainty.to_rational() / scale)).to_string()
+    }
+}
+
+/// Upper bounds on the real and imaginary midpoint magnitudes of `left * right`.
+fn multiply_magnitudes(
+    left: &(Rational, Rational),
+    right: &(Rational, Rational),
+) -> (Rational, Rational) {
+    (
+        &(&left.0 * &right.0) + &(&left.1 * &right.1),
+        &(&left.0 * &right.1) + &(&left.1 * &right.0),
+    )
+}
+
+/// The magnitude scale against which an uncertain imaginary zero of
+/// `expression` is judged: the largest imaginary contribution of one term of
+/// the expression with its sums and products distributed, from the midpoints
+/// of its evaluated factors.
+///
+/// Every node is bounded by its real and imaginary midpoint magnitudes `(R,
+/// I)`: a sum by the componentwise largest of its terms, a product by `(R1 R2 +
+/// I1 I2, R1 I2 + I1 R2)`, a positive integer power by repeated products, and
+/// every other node (symbol, source, function, negative or symbolic power) by
+/// its own evaluated midpoint. A sum is thus bounded by its largest term, not
+/// by the sum of all of them, and the scale never exceeds the size of the
+/// largest single contribution by more than a combinatorial factor.
+pub(crate) fn imaginary_term_scale(
+    expression: AtomView,
+    inputs: &HashMap<Atom, TrackedComplex>,
+    bits: u32,
+) -> Result<Rational, VakintError> {
+    fn magnitudes<'a>(
+        expression: AtomView<'a>,
+        inputs: &HashMap<Atom, TrackedComplex>,
+        bits: u32,
+        cache: &mut HashMap<AtomView<'a>, (Rational, Rational)>,
+    ) -> Result<(Rational, Rational), VakintError> {
+        if let Some(known) = cache.get(&expression) {
+            return Ok(known.clone());
+        }
+        let bound = match expression {
+            AtomView::Add(sum) => {
+                let mut bound = (Rational::zero(), Rational::zero());
+                for term in sum.iter() {
+                    let (real, imaginary) = magnitudes(term, inputs, bits, cache)?;
+                    if real > bound.0 {
+                        bound.0 = real;
+                    }
+                    if imaginary > bound.1 {
+                        bound.1 = imaginary;
+                    }
+                }
+                bound
+            }
+            AtomView::Mul(product) => {
+                let mut bound = (Rational::one(), Rational::zero());
+                for factor in product.iter() {
+                    bound = multiply_magnitudes(&bound, &magnitudes(factor, inputs, bits, cache)?);
+                }
+                bound
+            }
+            AtomView::Pow(power)
+                if i64::try_from(power.get_exp())
+                    .is_ok_and(|exponent| (1..=1024).contains(&exponent)) =>
+            {
+                let exponent = i64::try_from(power.get_exp()).unwrap();
+                let base = magnitudes(power.get_base(), inputs, bits, cache)?;
+                let mut bound = (Rational::one(), Rational::zero());
+                for _ in 0..exponent {
+                    bound = multiply_magnitudes(&bound, &base);
+                }
+                bound
+            }
+            _ => {
+                let value = expression.evaluate_tracked(inputs, bits).map_err(|error| {
+                    VakintError::EvaluationError(format!(
+                        "imaginary term scale of {}: {error}",
+                        expression.to_canonical_string()
+                    ))
+                })?;
+                (
+                    value.ball.re.center.to_rational().abs(),
+                    value.ball.im.center.to_rational().abs(),
+                )
+            }
+        };
+        cache.insert(expression, bound.clone());
+        Ok(bound)
+    }
+    Ok(magnitudes(expression, inputs, bits, &mut HashMap::new())?.1)
+}
+
 pub(crate) fn decimal_bits(digits: u32) -> u32 {
     // Upper bound on log2(10), plus the leading-bit convention used by the
     // tracked relative error. No f64 conversion or decimal-digit truncation.
@@ -777,15 +967,48 @@ pub(crate) fn evaluate_coefficient_with_working_precision(
                 normalized.to_canonical_string()
             ))
         })?;
-    let coefficient = NumericalCoefficient::from_tracked(value, requested);
+    let mut coefficient = NumericalCoefficient::from_tracked(value, requested);
+    if coefficient.imaginary_consistent_with_zero() {
+        coefficient.imaginary_term_scale = Some(Box::new(imaginary_term_scale(
+            normalized.as_view(),
+            &inputs,
+            bits,
+        )?));
+    }
+    // A negligible imaginary zero is reported on its own below, so this
+    // shortfall then describes the real component in full. An imaginary zero
+    // that is not negligible keeps its zero digits in the shortfall (and
+    // fails the export).
+    let zero_imaginary = coefficient.imaginary_negligible_zero();
     let achieved = [
-        coefficient.precision.real(),
-        coefficient.precision.imaginary(),
+        Some(coefficient.precision.real()),
+        (!zero_imaginary).then(|| coefficient.precision.imaginary()),
     ]
     .into_iter()
+    .flatten()
     .filter(|part| !part.exact_zero())
     .map(|part| part.significant_digits().unwrap_or(0))
     .min();
+    if let Some(scale) = coefficient
+        .imaginary_term_scale
+        .as_ref()
+        .filter(|_| zero_imaginary)
+    {
+        let uncertainty = coefficient.precision.imaginary().absolute_error();
+        warnings.push(PrecisionWarning {
+            epsilon_power: None,
+            requested_decimal_precision: requested,
+            achieved_decimal_precision: None,
+            sources: used_sources.clone(),
+            data_version: versions.iter().cloned().collect::<Vec<_>>().join(", "),
+            message: format!(
+                "imaginary part consistent with zero within its tracked error (midpoint {}, absolute uncertainty {uncertainty}) and negligible at the requested {requested} digits against its largest term contribution {} (uncertainty / scale {}); exported as an exact zero",
+                coefficient.value.im,
+                display_magnitude(scale),
+                uncertainty_ratio(uncertainty, scale),
+            ),
+        });
+    }
     if achieved.is_some_and(|digits| digits < requested) {
         if used_sources.is_empty() {
             used_sources.push(PrecisionSource {
