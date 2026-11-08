@@ -5,13 +5,16 @@
 //! The cache is the complete Ordered step cache of Vakint's built-in 1L-3L p
 //! library for one fixed workload (`tests/support/p_cache.rs`: the 1L-3L
 //! benchmark grid, the 2L/3L physics cells, the Forcer batteries and the
-//! anchors), recorded cold under exact arithmetic. Records do not depend on the
-//! weight arithmetic, so the cache serves all three.
+//! anchors), recorded cold under each of the three weight arithmetics in turn
+//! (exact first): a modular arithmetic visits a few steps exact does not (two
+//! 2L benchmark cells, 9 steps), so the cache holds the union and serves all
+//! three without a miss.
 //!
 //! ```text
 //! p_cache_maintenance prepare --output WORK [--n-cores N]
 //!     [--vakint-revision REV] [--rustred-revision REV]
-//!   the workload cold (shipped caches ignored, exact) into WORK/cache-root,
+//!   the workload cold (shipped caches ignored) under exact, modular_polynomial
+//!   and modular_sampled into one read-write WORK/cache-root,
 //!   then export_ordered_caches into WORK/export (p_integral/ordered-cache/,
 //!   p_integral/ordered-cache.json); WORK must not exist. Stage it with
 //!   `python3 tools/p_integral_area.py stage --export WORK/export` in
@@ -44,6 +47,8 @@ use vakint::{
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 const P_LABEL: &str = "p-library-1-3";
+/// The weight arithmetics prepare records and replay is run under.
+const ARITHMETICS: [&str; 3] = ["exact", "modular_polynomial", "modular_sampled"];
 const BUBBLE: &str = "topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))";
 
 struct Options {
@@ -146,44 +151,42 @@ fn prepare(options: &Options) -> Result<()> {
     let root = work.join("cache-root");
     std::fs::create_dir_all(&root)?;
     let engine = Vakint::new()?;
-    let settings = settings(
-        options,
-        OrderedWeightArithmetic::exact(),
-        OrderedCacheSettings {
-            shipped: false,
-            ..OrderedCacheSettings::read_write(&root)
-        },
-    );
-    let mut rows = Vec::new();
-    for input in p_cache::p_cache_workload()? {
-        let before = p_counters(&engine);
-        let started = Instant::now();
-        drop(engine.evaluate(&settings, input.input.as_view())?);
-        let seconds = started.elapsed().as_secs_f64();
-        let after = p_counters(&engine);
-        let mut row = input.row();
-        row["inserts"] = (after.2 - before.2).into();
-        row["seconds"] = seconds.into();
-        eprintln!(
-            "{}: {seconds:.2} s, {} inserts",
-            input.name,
-            after.2 - before.2
+    let workload = p_cache::p_cache_workload()?;
+    let mut rows: Vec<serde_json::Value> = workload.iter().map(|input| input.row()).collect();
+    for name in ARITHMETICS {
+        let settings = settings(
+            options,
+            name.parse()?,
+            OrderedCacheSettings {
+                shipped: false,
+                ..OrderedCacheSettings::read_write(&root)
+            },
         );
-        rows.push(row);
+        for (input, row) in workload.iter().zip(&mut rows) {
+            let before = p_counters(&engine);
+            let started = Instant::now();
+            drop(engine.evaluate(&settings, input.input.as_view())?);
+            let seconds = started.elapsed().as_secs_f64();
+            let inserts = p_counters(&engine).2 - before.2;
+            row["inserts"][name] = inserts.into();
+            row["seconds"][name] = seconds.into();
+            eprintln!("{name} {}: {seconds:.2} s, {inserts} inserts", input.name);
+        }
     }
     let producer = {
         let mut producer = vakint::ordered_cache_producer(
             &options.vakint_revision,
             &options.rustred_revision,
             &format!(
-                "p_cache_maintenance prepare --n-cores {} (exact, built-in library)",
+                "p_cache_maintenance prepare --n-cores {} (exact, modular_polynomial, \
+                 modular_sampled; built-in library)",
                 options.n_cores
             ),
         );
         producer["p"] = serde_json::json!({
             "persistence": "rustred ordered step cache: ordered-step-cache.txt + RR-ORDERED-STEP1 \
                             shards (+ ordered-tail.rrtail)",
-            "arithmetic": "exact",
+            "arithmetics": ARITHMETICS,
             "adjoint_tail": std::env::var("RUSTRED_ORDERED_ADJOINT_TAIL").unwrap_or("default".into()),
             "n_cores": options.n_cores,
         });
