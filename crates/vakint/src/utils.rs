@@ -142,72 +142,20 @@ pub fn replace_until_stable(
 }
 
 pub fn simplify_real(input: AtomView) -> Atom {
+    let symbols = &*crate::symbols::S;
+    let (left, right) = &symbols.real_simplification_rules[0];
     let mut res = replace_until_stable(
         input,
-        &vk_parse!("x_^y_").unwrap().to_pattern(),
-        &vk_parse!("1").unwrap().to_pattern(),
-        Some(&Condition::from((crate::vk_symbol!("y_"), eq_condition(0)))),
+        left,
+        right,
+        Some(&Condition::from((symbols.y_, eq_condition(0)))),
         None,
     );
-    res = replace_until_stable(
-        res.as_view(),
-        &vk_parse!("log(x__*exp(EulerGamma))").unwrap().to_pattern(),
-        &vk_parse!("EulerGamma+log(x__)").unwrap().to_pattern(),
-        None,
-        None,
-    );
-    res = replace_until_stable(
-        res.as_view(),
-        &vk_parse!("exp(x_)^p_").unwrap().to_pattern(),
-        &vk_parse!("exp(p_*x_)").unwrap().to_pattern(),
-        None,
-        None,
-    );
-    // res = replace_until_stable(
-    //     res.as_view(),
-    //     &vk_parse!("log(x__*𝜋)").unwrap().to_pattern(),
-    //     &vk_parse!("log(x__)+log(𝜋)").unwrap().to_pattern(),
-    //     None,
-    //     None,
-    // );
-    // res = replace_until_stable(
-    //     res.as_view(),
-    //     &vk_parse!("log(x__*𝜋^p_)").unwrap().to_pattern(),
-    //     &vk_parse!("log(x__)+p_*log(𝜋)").unwrap().to_pattern(),
-    //     None,
-    //     None,
-    // );
-    res = replace_until_stable(
-        res.as_view(),
-        &vk_parse!("log(exp(x_))").unwrap().to_pattern(),
-        &vk_parse!("x_").unwrap().to_pattern(),
-        None,
-        None,
-    );
-    res = replace_until_stable(
-        res.as_view(),
-        &vk_parse!("exp(log(x_))").unwrap().to_pattern(),
-        &vk_parse!("x_").unwrap().to_pattern(),
-        None,
-        None,
-    );
-    res = replace_until_stable(
-        res.as_view(),
-        &vk_parse!("log(x_^p_)").unwrap().to_pattern(),
-        &vk_parse!("p_*log(x_)").unwrap().to_pattern(),
-        None,
-        None,
-    );
-    res = replace_until_stable(
-        res.as_view(),
-        &vk_parse!("exp(x_)*exp(y_)").unwrap().to_pattern(),
-        &vk_parse!("exp(x_+y_)").unwrap().to_pattern(),
-        None,
-        None,
-    );
-    // Collect in EulerGamma to explicitly realise the MSbar cancellation
-    res = res.collect::<i8>(vakint_parse!("EulerGamma").unwrap());
-    res
+    for (left, right) in &symbols.real_simplification_rules[1..] {
+        res = replace_until_stable(res.as_view(), left, right, None, None);
+    }
+    // Collect in EulerGamma to explicitly realise the MSbar cancellation.
+    res.collect::<i8>(Atom::var(symbols.euler_gamma))
 }
 
 pub fn multi_string_replace(text: String, repls: &HashMap<String, String>) -> String {

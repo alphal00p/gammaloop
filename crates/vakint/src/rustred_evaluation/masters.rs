@@ -3,8 +3,10 @@
 //! Input masters are unit-mass integrals in the package's FMFT/MATAD convention.
 //! The caller restores target mass powers and measure normalization exactly once.
 
+use crate::symbols::S;
+
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -66,9 +68,35 @@ pub(crate) struct Master {
     graph: String,
     pub(crate) metadata: serde_json::Value,
     pub(crate) data: Option<Arc<LoopData>>,
+    parsed_basis: OnceLock<Option<Atom>>,
+    parsed_names: OnceLock<Vec<Atom>>,
 }
 
 impl Master {
+    // Catalog records are immutable once published. Cache parser-resolved
+    // metadata on that record, never across data snapshots or user settings.
+    pub(crate) fn basis_expression(&self) -> Option<&Atom> {
+        self.parsed_basis
+            .get_or_init(|| {
+                self.metadata["exact_basis_expression"]
+                    .as_str()
+                    .and_then(|value| vk_parse!(value).ok())
+            })
+            .as_ref()
+    }
+
+    pub(crate) fn names(&self) -> &[Atom] {
+        self.parsed_names.get_or_init(|| {
+            [
+                self.identity.as_str(),
+                self.metadata["name"].as_str().unwrap_or(""),
+            ]
+            .into_iter()
+            .filter(|name| !name.is_empty())
+            .filter_map(|name| vk_parse!(name).ok())
+            .collect()
+        })
+    }
     /// The lowest Laurent order of the master: `ε^-L` for an `L`-loop
     /// vacuum master, or a lower order shipped by its data.
     fn leading_power(&self) -> Result<i64, RustRedEvaluationError> {
@@ -340,12 +368,13 @@ impl MasterCatalog {
                     .get(&metadata.family_sha256)
                     .ok_or_else(|| failure("master references an undeclared family"))?;
                 let symbol = catalog.symbol(fingerprint, &metadata.powers);
-                if let Some(expression) = &metadata.exact_basis_expression {
-                    basis_expressions.push((
-                        count,
-                        symbol.clone(),
-                        vk_parse!(expression).map_err(failure)?,
-                    ));
+                let parsed_basis = metadata
+                    .exact_basis_expression
+                    .as_ref()
+                    .map(|expression| vk_parse!(expression).map_err(failure))
+                    .transpose()?;
+                if let Some(expression) = &parsed_basis {
+                    basis_expressions.push((count, symbol.clone(), expression.clone()));
                 }
                 let symbolic = Self::read_coefficients(data, metadata.files.get("symbolic.json"))?;
                 let numerical =
@@ -424,6 +453,8 @@ impl MasterCatalog {
                     graph: Self::graph_location(data, &metadata.parent_graph)?,
                     metadata: value.clone(),
                     data: Some(Arc::clone(data)),
+                    parsed_basis: OnceLock::from(parsed_basis),
+                    parsed_names: OnceLock::new(),
                 };
                 parent_graphs
                     .entry(Self::family_symbol(fingerprint))
@@ -490,7 +521,7 @@ impl MasterCatalog {
                     || head.get_namespace() == "symbolica"
                     || head.get_evaluation_info().is_some()
                     || crate::symbols::SYMBOL_REGISTRY.contains(&head)
-                    || head == vk_symbol!("NumericalSource")
+                    || head == S.numerical_source
                     || crate::inspection::definitions::is_definition_head(head)
                     || (head.get_namespace() == crate::NAMESPACE
                         && head.get_stripped_name().starts_with("RustRed"))
@@ -608,7 +639,7 @@ impl MasterCatalog {
     }
 
     fn load_basis_aliases(&mut self, expressions: Vec<(usize, Atom, Atom)>) {
-        let epsilon = Atom::var(vk_symbol!("ep"));
+        let epsilon = Atom::var(S.form_epsilon);
         let mut identical = BTreeMap::new();
         let mut primitives = BTreeMap::new();
         for (loops, master, expression) in &expressions {
@@ -713,11 +744,12 @@ impl MasterCatalog {
     pub(super) fn symbol(&self, family_fingerprint: &str, powers: &[i64]) -> Atom {
         let mut arguments = vec![Self::family_symbol(family_fingerprint)];
         arguments.extend(powers.iter().copied().map(Atom::num));
-        vk_symbol!("RustRedMaster").call(&arguments)
+        S.rustred_master.call(&arguments)
     }
 
     pub(crate) fn coefficient_symbol(&self, master: &Atom, power: i64) -> Atom {
-        vk_symbol!("RustRedCoefficient").call((&self.coefficient_tag, master, power))
+        S.rustred_coefficient
+            .call((&self.coefficient_tag, master, power))
     }
 
     pub(crate) fn coefficient_snapshot_tag(&self) -> &Atom {
@@ -725,13 +757,14 @@ impl MasterCatalog {
     }
 
     fn referenced_masters(expression: &Atom) -> BTreeSet<Atom> {
+        let (coefficient_head, master_head) = (S.rustred_coefficient, S.rustred_master);
         let mut result = BTreeSet::new();
         expression.visitor(&mut |part| {
             if let AtomView::Fun(function) = part {
-                if function.get_symbol() == vk_symbol!("RustRedCoefficient") {
+                if function.get_symbol() == coefficient_head {
                     return false;
                 }
-                if function.get_symbol() == vk_symbol!("RustRedMaster") {
+                if function.get_symbol() == master_head {
                     result.insert(part.to_owned());
                     return false;
                 }
@@ -924,9 +957,7 @@ impl MasterCatalog {
         // unbounded search for its first nonzero Laurent coefficient.
         let raw = if mode == RustRedMasterMode::Numerical {
             crate::precision::legacy::stage_table(
-                vk_symbol!("rustred_input")
-                    .call(loop_count as i64)
-                    .as_view(),
+                S.rustred_input.call(loop_count as i64).as_view(),
                 raw.as_view(),
                 vk_symbol!(&settings.epsilon_symbol),
                 "Input",
@@ -946,13 +977,14 @@ impl MasterCatalog {
         // their rounding differences in a mathematically zero combination.
         // Keep direct data as a fallback when an alias has additional orders.
         // Corruption, parsing and algebra errors are never hidden by this path.
+        let epsilon = Atom::var(vk_symbol!(&settings.epsilon_symbol));
         let replacements: Vec<_> = self
             .basis_aliases
             .iter()
             .map(|(master, basis)| {
                 let basis = basis
-                    .replace(vk_parse!("ep").unwrap().to_pattern())
-                    .with(Atom::var(vk_symbol!(&settings.epsilon_symbol)));
+                    .replace(Atom::var(S.form_epsilon).to_pattern())
+                    .with(epsilon.clone());
                 Replacement::new(master.clone(), basis)
             })
             .collect();
@@ -1185,7 +1217,7 @@ impl MasterCatalog {
         output: &mut BTreeMap<Atom, i64>,
     ) -> Result<(), RustRedEvaluationError> {
         match value {
-            AtomView::Fun(function) if function.get_symbol() == vk_symbol!("RustRedMaster") => {
+            AtomView::Fun(function) if function.get_symbol() == S.rustred_master => {
                 *output.entry(value.to_owned()).or_default() += 1;
             }
             AtomView::Mul(product) => {
@@ -1200,7 +1232,7 @@ impl MasterCatalog {
                     .ok_or_else(|| {
                         failure("master expressions must be polynomials in terminal integrals")
                     })?;
-                if !matches!(base, AtomView::Fun(function) if function.get_symbol() == vk_symbol!("RustRedMaster"))
+                if !matches!(base, AtomView::Fun(function) if function.get_symbol() == S.rustred_master)
                 {
                     return Err(failure("unexpected factor in master monomial"));
                 }
@@ -1217,12 +1249,16 @@ impl MasterCatalog {
     }
 
     fn coefficient_references(expression: &Atom) -> BTreeSet<Atom> {
+        let coefficient_head = S.rustred_coefficient;
         let mut references = BTreeSet::new();
         expression.visitor(&mut |part| {
-            if matches!(part, AtomView::Fun(function) if function.get_symbol() == vk_symbol!("RustRedCoefficient")) {
+            if matches!(part, AtomView::Fun(function) if function.get_symbol() == coefficient_head)
+            {
                 references.insert(part.to_owned());
                 false
-            } else { true }
+            } else {
+                true
+            }
         });
         references
     }
@@ -1380,6 +1416,8 @@ mod tests {
                 graph: "test-parent.dot".into(),
                 metadata: serde_json::Value::Null,
                 data: None,
+                parsed_basis: OnceLock::new(),
+                parsed_names: OnceLock::new(),
                 coefficients: BTreeMap::from([
                     (
                         -1,
@@ -1414,6 +1452,45 @@ mod tests {
             number_of_terms_in_epsilon_expansion: terms,
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn parsed_master_metadata_is_local_to_each_immutable_record() {
+        let (mut first, first_symbol) = catalog(None, 30);
+        let first_master = first.masters.get_mut(&first_symbol).unwrap();
+        first_master.identity = "cache_identity_a".into();
+        first_master.metadata = serde_json::json!({
+            "name": "cache_public_a", "exact_basis_expression": "PR4",
+        });
+        let (mut second, second_symbol) = catalog(None, 30);
+        let second_master = second.masters.get_mut(&second_symbol).unwrap();
+        second_master.identity = "cache_identity_b".into();
+        second_master.metadata = serde_json::json!({
+            "name": "cache_public_b", "exact_basis_expression": "PR4d",
+        });
+        let first = &first.masters[&first_symbol];
+        let second = &second.masters[&second_symbol];
+        assert_eq!(first.basis_expression(), Some(&vk_parse!("PR4").unwrap()));
+        assert_eq!(second.basis_expression(), Some(&vk_parse!("PR4d").unwrap()));
+        assert_ne!(first.names(), second.names());
+        assert!(
+            first
+                .names()
+                .contains(&vk_parse!("cache_public_a").unwrap())
+        );
+        let basis = first.basis_expression().unwrap();
+        let names = first.names();
+        std::thread::scope(|scope| {
+            for _ in 0..8 {
+                scope.spawn(|| {
+                    for _ in 0..128 {
+                        assert!(std::ptr::eq(first.basis_expression().unwrap(), basis));
+                        assert!(std::ptr::eq(first.names(), names));
+                        assert_ne!(first.basis_expression(), second.basis_expression());
+                    }
+                });
+            }
+        });
     }
 
     #[test]
@@ -2409,6 +2486,8 @@ mod tests {
                 graph: "test-parent.dot".into(),
                 metadata: serde_json::Value::Null,
                 data: None,
+                parsed_basis: OnceLock::new(),
+                parsed_names: OnceLock::new(),
                 coefficients: BTreeMap::from([
                     (
                         -1,

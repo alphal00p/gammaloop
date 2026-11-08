@@ -1070,12 +1070,17 @@ fn get_prop_with_id(
     expression: AtomView,
     prop_id: usize,
 ) -> Option<HashMap<symbolica::atom::Symbol, Atom>> {
-    let pattern: Pattern =
-        vk_parse!(format!("prop({},edge(nl_,nr_),q_,mUVsq_,pow_)", prop_id).as_str())
-            .unwrap()
-            .to_pattern();
-    let number_node_condition = Condition::from((vk_symbol!("nl_"), ge_condition(0)))
-        & Condition::from((vk_symbol!("nr_"), ge_condition(0)));
+    let pattern = function!(
+        S.prop,
+        prop_id,
+        function!(S.edge, S.nl_, S.nr_),
+        S.q_,
+        S.muvsq_,
+        S.pow_
+    )
+    .to_pattern();
+    let number_node_condition =
+        Condition::from((S.nl_, ge_condition(0))) & Condition::from((S.nr_, ge_condition(0)));
     expression
         .pattern_match(&pattern, Some(&number_node_condition), None)
         .next()
@@ -1097,7 +1102,7 @@ fn with_index_tail(head: AtomView) -> Result<Atom, VakintError> {
     for argument in function.iter() {
         builder = builder.add_arg(argument);
     }
-    Ok(builder.add_arg(vk_parse!("idx___").unwrap()).finish())
+    Ok(builder.add_arg(S.idx___).finish())
 }
 
 /// Attach the `idx___` index tail to every canonical loop momentum `k(i)`.
@@ -4821,9 +4826,10 @@ impl VakintExpression {
         vakint: &Vakint,
         settings: &VakintSettings,
     ) -> Result<Self, VakintError> {
+        let topo = S.topo;
         let mut has_float = false;
         input.visitor(&mut |part| {
-            if matches!(part, AtomView::Fun(function) if function.get_symbol() == vk_symbol!("topo"))
+            if matches!(part, AtomView::Fun(function) if function.get_symbol() == topo)
                 || precision::legacy::is_source(part)
             {
                 return false;
@@ -4844,9 +4850,10 @@ impl VakintExpression {
             .map(|index| vk_symbol!(format!("input_coefficient_placeholder_{index}")))
             .find(|symbol| !input.contains_symbol(*symbol))
             .unwrap();
+        let epsilon = std::cell::LazyCell::new(|| vk_symbol!(&settings.epsilon_symbol));
         let mut literals = Vec::new();
         let lifted = input.replace_map(|part, _context, out| {
-            if matches!(part, AtomView::Fun(function) if function.get_symbol() == vk_symbol!("topo"))
+            if matches!(part, AtomView::Fun(function) if function.get_symbol() == topo)
                 || precision::legacy::is_source(part)
             {
                 **out = part.to_owned();
@@ -4871,14 +4878,9 @@ impl VakintExpression {
                 }
                 let value = if track {
                     precision::legacy::stage_table(
-                        function!(
-                            vk_symbol!("input_coefficient"),
-                            request_id,
-                            literal_id as i64
-                        )
-                        .as_view(),
+                        function!(S.input_coefficient, request_id, literal_id as i64).as_view(),
                         value.as_view(),
-                        vk_symbol!(&settings.epsilon_symbol),
+                        *epsilon,
                         "Input",
                     )?
                 } else {
@@ -4894,12 +4896,15 @@ impl VakintExpression {
 
     pub fn split_integrals(input: AtomView) -> Result<Vec<VakintTerm>, VakintError> {
         let mut res = vec![];
+        let topology = function!(S.topo, S.props_);
+        let topology_pattern = topology.to_pattern();
+        let topology_power_pattern = topology.pow(Atom::var(S.n_)).to_pattern();
 
         // An ordered set keeps the term order independent of hash seeds, so
         // repeated evaluations issue identically ordered native requests.
         let topo_variables = input
-            .pattern_match(&vk_parse!("topo(props_)").unwrap().to_pattern(), None, None)
-            .map(|m| function!(vk_symbol!("topo"), m.get(&vk_symbol!("props_")).unwrap()))
+            .pattern_match(&topology_pattern, None, None)
+            .map(|m| function!(S.topo, m.get(&S.props_).unwrap()))
             .collect::<std::collections::BTreeSet<_>>();
 
         for (integral, numerator) in
@@ -4908,10 +4913,7 @@ impl VakintExpression {
             if integral == Atom::num(1) {
                 return Err(VakintError::InvalidIntegralFormat(format!("{}", numerator)));
             }
-            if utils::could_match(
-                &vk_parse!("topo(props_)^n_").unwrap().to_pattern(),
-                integral.as_view(),
-            ) {
+            if utils::could_match(&topology_power_pattern, integral.as_view()) {
                 return Err(VakintError::InvalidIntegralFormat(format!("{}", integral)));
             }
             res.push(VakintTerm {
@@ -7780,11 +7782,7 @@ Evaluated (n_loops=1, mu_r=1) :
             return Ok(input.to_owned());
         }
         precision::legacy::stage_table(
-            function!(
-                vk_symbol!("input_coefficient"),
-                Self::next_input_request_id()?
-            )
-            .as_view(),
+            function!(S.input_coefficient, Self::next_input_request_id()?).as_view(),
             input,
             vk_symbol!(&settings.epsilon_symbol),
             "Input",

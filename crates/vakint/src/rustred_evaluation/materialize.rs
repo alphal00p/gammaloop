@@ -8,7 +8,7 @@ use symbolica::function;
 
 use crate::matad::MATAD;
 use crate::symbols::S;
-use crate::utils::vakint_macros::{vk_parse, vk_symbol};
+use crate::utils::vakint_macros::vk_symbol;
 use crate::{MATADOptions, VakintSettings};
 
 use super::RustRedEvaluationError;
@@ -80,8 +80,10 @@ pub(super) fn evaluate_ordered_batch(
     let first = MatchedScalarFamily::try_new(&first.matched)?;
     let snapshot = data.artifact(first.family)?;
     let artifact = snapshot.artifact();
-    let dimension = vk_parse!("4-2*ep").unwrap();
-    let rustred_dimension = vk_parse!("rustred::d").unwrap();
+    let dimension = S.epsilon_dimension.clone();
+    let rustred_dimension = S.rustred_dimension.clone();
+    let epsilon = Atom::var(vk_symbol!(settings.epsilon_symbol.as_str()));
+    let physical_dimension = Atom::num(4) - Atom::num(2) * &epsilon;
     let mut channels =
         BTreeMap::<(Atom, Atom, i64), Vec<(IntegralKey, rustred::algebra::Coefficient)>>::new();
     let mut anchors = BTreeMap::<Atom, i64>::new();
@@ -100,13 +102,11 @@ pub(super) fn evaluate_ordered_batch(
             artifact,
             super::numerator::ScalarNumeratorForm::PreserveProducts,
         )?;
-        let epsilon = Atom::var(vk_symbol!(settings.epsilon_symbol.as_str()));
-        let physical_dimension = Atom::num(4) - Atom::num(2) * &epsilon;
         // The Atom-only lower-loop API has no public guard field. It still
         // rejects an original pole that vanishes under the dimension relation.
         drop(input.input_conditions_after_mapping(&scalar, |condition| {
             condition
-                .replace(vk_parse!("ep").unwrap().to_pattern())
+                .replace(Atom::var(S.form_epsilon).to_pattern())
                 .with(epsilon.to_pattern())
                 .replace(rustred_dimension.to_pattern())
                 .with(physical_dimension.to_pattern())
@@ -114,7 +114,7 @@ pub(super) fn evaluate_ordered_batch(
         // MATAD finalization reserves this exact internal regulator symbol.
         let numerator = input
             .numerator
-            .replace(vk_parse!("ep").unwrap().to_pattern())
+            .replace(Atom::var(S.form_epsilon).to_pattern())
             .with(epsilon.to_pattern());
         input.numerator = super::numerator::MatchedScalarInput::numerator_in_family_dimension(
             numerator.as_view(),
