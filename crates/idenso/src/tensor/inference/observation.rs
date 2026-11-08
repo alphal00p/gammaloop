@@ -851,7 +851,15 @@ mod tests {
         ] {
             let expression = Atom::var(Symbol::E).pow(exponent);
             assert!(SymbolicTensor::<PartialStructure>::validate_atom(&expression).is_err());
-            assert!(SymbolicTensor::infer(expression.clone()).is_err());
+            if InterfaceInference::contains_tensor_symbol(expression.as_view()) {
+                assert!(SymbolicTensor::infer(expression.clone()).is_err());
+            } else {
+                assert!(
+                    SymbolicTensor::infer(expression.clone())
+                        .unwrap()
+                        .is_scalar()
+                );
+            }
             assert!(
                 InterfaceInference::has_explicit_index_pairs(
                     expression.as_view(),

@@ -705,7 +705,15 @@ mod tests {
             .new_rep(4)
             .to_lib()
             .slot(AbstractIndex::Normal(97131));
-        let scalar = SymbolicTensor::<PartialStructure>::infer(slot.to_atom()).unwrap();
+        let opaque = SymbolicTensor::<PartialStructure>::infer(slot.to_atom()).unwrap();
+        assert!(opaque.is_scalar());
+        assert!(opaque.explicit_index_occurrences().unwrap().is_empty());
+        // Declared intake retains hidden index uses; opaque inference does not.
+        let scalar = SymbolicTensor::from_declared_parts(
+            slot.to_atom(),
+            PartialStructure::from_logical_slots([]),
+        )
+        .unwrap();
         assert!(scalar.is_scalar());
         assert_eq!(scalar.explicit_index_occurrences().unwrap().count(slot), 1);
         let vector = SymbolicTensor::<PartialStructure>::infer(function!(
@@ -716,7 +724,7 @@ mod tests {
         let product = scalar.multiply(&vector).unwrap();
         assert_eq!(product.rank(), 1);
         assert_eq!(product.explicit_index_occurrences().unwrap().count(slot), 2);
-        for source in [scalar, product] {
+        for source in [opaque, scalar, product] {
             let expected = source.explicit_index_occurrences().unwrap().count(slot);
             INFERENCE_CALLS.with(|count| count.set(0));
             OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));

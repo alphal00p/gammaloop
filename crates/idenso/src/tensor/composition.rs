@@ -5834,8 +5834,12 @@ mod tests {
                 .finish(),
         )
         .unwrap();
-        let base =
-            SymbolicTensor::infer(representation.slot::<AbstractIndex, _>(i).to_atom()).unwrap();
+        // Declared intake records the hidden use; tensor-free inference is opaque.
+        let base = SymbolicTensor::from_declared_parts(
+            representation.slot::<AbstractIndex, _>(i).to_atom(),
+            PartialStructure::from_logical_slots([]),
+        )
+        .unwrap();
         assert!(base.is_scalar());
         let pair = v.multiply(&base).unwrap();
         assert_eq!(pair.rank(), 1);
@@ -5850,8 +5854,8 @@ mod tests {
             .unwrap();
         assert_eq!((total, base_max, dual_max), (1, 1, 0));
         assert_eq!(hidden.rep(), representation);
-        // Exercise independent branch maxima at their metadata owner. A bare
-        // dual slot is tensor syntax, so it is not a scalar-fixture constructor.
+        // Exercise independent branch maxima directly at their metadata owner,
+        // without inferring a tensor interface from bare slot metadata.
         let mut occurrences = ExplicitIndexOccurrences::default();
         occurrences.add(representation.slot(i), 2);
         let mut mixed = ExplicitIndexOccurrences::default();

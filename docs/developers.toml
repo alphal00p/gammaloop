@@ -1002,7 +1002,11 @@ anchor = "pub struct ContractSettings<'a> {"
 # The Idenso and Schoonschip notes describe the corresponding slot-replacement
 # capability, preserving variance, scalar opacity and lazy vector refusal.
 # Contractor ownership and existing checked publication remain unchanged.
-digest = "99ce4ba307d317c5992743c7fded6912fdb524d9"
+# No-impact attestation 2026-11-06: only the malformed-conjugate test changes.
+# It checks opaque tensor-free admission while retaining declared-interface and
+# tensor-present rejection. Contractor production code is unchanged; the Idenso
+# note documents the scalar admission policy and strict declared boundary.
+digest = "14280ba9d3ff8aa77be7d685167886b58f414876"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/simplification.rs"
@@ -1792,7 +1796,11 @@ anchor = "pub(crate) fn group_diagrams("
 # No-impact attestation 2026-11-03: grouping reuses the shared annotation head.
 # Group algebra, source identities, factor payloads and historical timings are
 # unchanged; this does not establish new performance results.
-digest = "ebe871d99d414d083daf59ba14764d5b7b26aae5"
+# No-impact attestation 2026-11-06: only the comparison fixture and its test
+# import change. The untagged scalar is compared as opaque; a tensor-tagged
+# fixture retains invalid-multiplicity rejection. Production grouping and the
+# historical performance evidence in this note are unchanged.
+digest = "37a4d4fa5c61d1a0db19acb2e6c27a491f3a9d1c"
 
 [[section.note]]
 id = "nix-crane-cache-reuse"

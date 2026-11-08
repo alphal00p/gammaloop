@@ -1,4 +1,7 @@
 use super::*;
+use spenso::network::library::DummyLibrary;
+use spenso::network::parsing::ParseSettings;
+use symbolica::atom::AtomOrView;
 
 #[test]
 fn admitted_slot_metadata_does_not_become_a_standalone_tensor() {
@@ -194,7 +197,11 @@ fn scalar_arithmetic_and_color_invariants_have_an_empty_interface() {
     }
     let bare_tensor = Atom::var(spenso::tensor_symbol!("builtin_scalar_invalid_tensor"));
     assert!(SymbolicTensor::infer(bare_tensor).is_err());
-    assert!(SymbolicTensor::infer(Atom::var(SPENSO_TAG.chain_in)).is_err());
+    assert!(
+        SymbolicTensor::infer(Atom::var(SPENSO_TAG.chain_in))
+            .unwrap()
+            .is_scalar()
+    );
 }
 
 #[test]
@@ -408,10 +415,7 @@ fn builtin_compact_ports_are_observed_without_constructing_components() {
 }
 
 #[test]
-fn typed_tensor_ports_require_tagged_heads() {
-    use spenso::network::{library::DummyLibrary, parsing::ParseSettings};
-    use symbolica::atom::AtomOrView;
-
+fn tensor_tags_control_initial_admission_and_strict_observation() {
     let rep = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
     let slot = rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(99701));
     let untagged = symbolica::symbol!("strict_admission_untagged_vector");
@@ -421,9 +425,10 @@ fn typed_tensor_ports_require_tagged_heads() {
             .add_arg(Atom::num(2))
             .add_arg(&port)
             .finish();
-        let error = SymbolicTensor::<PartialStructure>::infer(raw.clone()).unwrap_err();
-        assert!(matches!(error, TensorInferenceError::Invalid(ref message)
-            if message.contains("not tagged as a tensor")));
+        // Tensor-free untagged calls are opaque at initial admission.
+        let scalar = SymbolicTensor::<PartialStructure>::infer(raw.clone()).unwrap();
+        assert!(scalar.is_scalar());
+        assert_eq!(scalar.expression(), &raw);
         assert!(InterfaceInference::replacement_interface(raw.as_view()).is_err());
 
         let registered = FunctionBuilder::new(tagged)
@@ -433,6 +438,8 @@ fn typed_tensor_ports_require_tagged_heads() {
         let tensor = SymbolicTensor::<PartialStructure>::infer(registered.clone()).unwrap();
         assert_eq!(tensor.expression(), &registered);
         assert_eq!(tensor.structure().canonical().order(), 1);
+        // Tensor-present admission still rejects the untagged structural call.
+        assert!(SymbolicTensor::infer(&raw * &registered).is_err());
 
         // The explicit raw-network opt-in retains its broader grammar.
         let settings = ParseSettings {
@@ -553,7 +560,7 @@ fn compact_inner_products_observe_ports_without_component_callbacks() {
 }
 
 #[test]
-fn scalar_finishers_share_strict_admission_and_preserve_identity_and_zero() {
+fn scalar_finishers_distinguish_checked_and_opaque_admission() {
     let scalar = SymbolicTensor::<PartialStructure>::infer(Atom::one()).unwrap();
     let rep = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
     let slot = rep
@@ -563,7 +570,13 @@ fn scalar_finishers_share_strict_admission_and_preserve_identity_and_zero() {
         .add_arg(&slot)
         .finish();
     assert!(scalar.with_checked_expression(invalid.clone()).is_err());
-    assert!(scalar.with_transformed_expression(invalid.clone()).is_err());
+    assert!(
+        scalar
+            .with_transformed_expression(invalid.clone())
+            .unwrap()
+            .0
+            .is_scalar()
+    );
     assert!(SymbolicTensor::validate_interface(&invalid, scalar.structure()).is_err());
 
     let vector = FunctionBuilder::new(spenso::vector_symbol!("strict_finisher_vector"))
@@ -642,12 +655,14 @@ fn checked_error_precedence_keeps_strict_structured_and_scalar_failures() {
         ),
         (Atom::var(head), "must be called"),
     ] {
-        for error in [
-            scalar.with_checked_expression(invalid.clone()).unwrap_err(),
-            scalar
-                .with_transformed_expression(invalid.clone())
-                .unwrap_err(),
-        ] {
+        let mut errors = vec![scalar.with_checked_expression(invalid.clone()).unwrap_err()];
+        let transformed = scalar.with_transformed_expression(invalid.clone());
+        if InterfaceInference::contains_tensor_symbol(invalid.as_view()) {
+            errors.push(transformed.unwrap_err());
+        } else {
+            assert!(transformed.unwrap().0.is_scalar());
+        }
+        for error in errors {
             let TensorInferenceError::Invalid(reason) = error else {
                 panic!("unexpected strict admission error: {error}");
             };
