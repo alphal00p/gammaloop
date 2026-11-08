@@ -2841,6 +2841,30 @@ mod shadowing_tests {
 
     #[test]
     fn existing_representation_checks_do_not_require_a_write_lock() {
+        const CHILD: &str = "SPENSO_READ_ONLY_REPRESENTATION_TEST";
+        if std::env::var_os(CHILD).is_none() {
+            // An unrelated test's queued writer can block new readers. Isolate
+            // this test so the held read guard probes only these constructors.
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "structure::representation::shadowing_tests::existing_representation_checks_do_not_require_a_write_lock",
+                    "--test-threads=1",
+                    "--nocapture",
+                ])
+                .env(CHILD, "1")
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success()
+                    && String::from_utf8_lossy(&output.stdout).contains("1 passed"),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr),
+            );
+            return;
+        }
+
         let self_dual_name = "ReadOnlySelfDualForSpensoTests";
         let dual_name = "ReadOnlyDualForSpensoTests";
         let palette = greek_palette();
