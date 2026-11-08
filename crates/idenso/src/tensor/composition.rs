@@ -41,6 +41,7 @@ use thiserror::Error;
 
 mod chain;
 mod product;
+mod word;
 
 #[cfg(test)]
 thread_local! {
@@ -773,6 +774,7 @@ impl super::TensorProofs {
 
 pub(super) fn is_composite_head(symbol: Symbol, tags: &SpensoTags) -> bool {
     symbol == tags.bracket
+        || symbol.has_tag(&tags.tensor_word)
         || symbol == tags.chain
         || symbol == tags.trace
         || symbol.has_tag(&tags.broadcast)
