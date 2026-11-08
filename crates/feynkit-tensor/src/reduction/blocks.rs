@@ -16,6 +16,7 @@ use spenso::structure::abstract_index::AbstractIndex;
 use spenso::structure::partial::{PartialStructure, PartialStructureExt};
 use spenso::structure::representation::{BaseRepName, LibraryRep, Minkowski};
 use spenso::structure::slot::IsAbstractSlot;
+use std::cell::LazyCell;
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder};
 use symbolica::utils::resources;
 use symbolica::utils::resources::ResourceBudget;
@@ -24,14 +25,13 @@ impl TensorReducer {
     pub(super) fn has_tensor_sum(expression: AtomView<'_>) -> Result<bool, TensorReductionError> {
         let mut found = false;
         let mut resource_error = None;
+        let minkowski = LazyCell::new(Minkowski::selfless_symbol);
         expression.visitor(&mut |value| {
             if let Err(error) = resources::checkpoint() {
                 resource_error = Some(error);
                 return false;
             }
-            if matches!(value, AtomView::Add(_))
-                && value.contains_symbol(Minkowski::selfless_symbol())
-            {
+            if matches!(value, AtomView::Add(_)) && value.contains_symbol(*minkowski) {
                 found = true;
             }
             !found
@@ -85,6 +85,7 @@ impl TensorReducer {
         }
         let indexed = source.with_checked_expression(indexed)?;
         resources::checkpoint()?;
+        let minkowski = LazyCell::new(Minkowski::selfless_symbol);
         let rows = indexed
             .coefficient_list_with(|value| {
                 match self.indexed_vector(value) {
@@ -97,7 +98,7 @@ impl TensorReducer {
                         // Metrics rotate covariantly with the loop block. Other
                         // Lorentz tensors (including spin matrices) stay fixed.
                         matches!(value, AtomView::Fun(f) if f.get_symbol() != ETS.metric && f.get_symbol() != SPENSO_TAG.dot)
-                            && value.contains_symbol(Minkowski::selfless_symbol())
+                            && value.contains_symbol(*minkowski)
                     }
                 }
             })
