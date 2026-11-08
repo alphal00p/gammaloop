@@ -429,8 +429,8 @@
 
   *Method.* Timed: the wall time of `Vakint::evaluate` in Retain mode (exact reduction onto masters,
   same frontend and finalizer for both backends) in one fresh process per measurement, with the
-  input parsed, the engine and library loaded and the 1L bubble evaluated once beforehand, by either
-  backend, on directories of its own; repetitions:
+  input parsed, the engine and library loaded and the 1L bubble with four dots (in no cell: vakint
+  memoises Forcer's FORM runs per process) evaluated once beforehand, by either backend, on directories of its own; repetitions:
   #protocol.at("repetitions", default: 3), median. RustRed cold: empty ordered-cache directory, shipped caches off. ws: a fresh
   process on a read-only copy of the cache of its cold run. wc: per loop count, one chain over the
   cells in table order sharing one cache from empty, each cell measured once in the chain. Forcer
