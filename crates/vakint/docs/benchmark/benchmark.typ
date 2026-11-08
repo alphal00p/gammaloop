@@ -23,6 +23,16 @@
     )
 )
 #let measurements = results.runs.filter(same-source).map(run => run.measurements).flatten()
+// The provenance prints the selected run's CPUs for every merged run: each of
+// them must have pinned every thread count it measured.
+#for run in results.runs.filter(same-source) {
+  assert(
+    run.protocol.threads.all(t => (
+      str(t) in run.protocol.cpus and run.protocol.cpus.at(str(t)) == protocol.cpus.at(str(t), default: none)
+    )),
+    message: "run " + run.id + " has a thread count without --cpus, or CPUs other than the selected run's",
+  )
+}
 
 // A filled exact file marks only the source it was computed on: gammaloop_sha
 // is the last commit outside docs/benchmark, rustred_sha the Cargo.lock pin.
