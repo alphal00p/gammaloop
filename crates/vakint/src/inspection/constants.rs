@@ -4,6 +4,8 @@
 //! Real HPL/GPL projections remain opaque until the shared numerical evaluator
 //! materializes them, so surrounding algebra preserves their reality.
 
+use crate::symbols::S;
+
 use std::collections::BTreeSet;
 
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
@@ -13,7 +15,7 @@ use symbolica::transcendental::{euler_gamma, polylog, zeta};
 use crate::utils::vakint_macros::vk_symbol;
 use crate::{VakintError, get_integer_from_atom, hpl, matad};
 
-const NAMED_CONSTANTS: &[&str] = &[
+pub(crate) const NAMED_CONSTANTS: [&str; 12] = [
     "z2",
     "z3",
     "z4",
@@ -44,14 +46,15 @@ pub(crate) const MATAD_BARS: [(&str, &str, i64); 6] = [
 
 /// `Cl_4(π/3) = Im Li_4(e^(iπ/3))`.
 fn clausen4() -> Atom {
-    vk_symbol!("PolylogImag").call((Atom::num(4), positive_sixth_root()))
+    S.polylog_imag.call((Atom::num(4), positive_sixth_root()))
 }
 
 /// The alternating Euler sum `s6 = Σ_(m≥k≥1) (-1)^(m+k)/(m^5 k) = ζ(-5,-1) + ζ(6)`
 /// (diagonal included), evaluated as `π^6/945 + G(0,0,0,0,-1,1; 1)`.
 fn alternating_euler_sum6() -> Atom {
     Atom::var(Symbol::PI).pow(Atom::num(6)) / Atom::num(945)
-        + vk_symbol!("GPLReal").call(&[0_i64, 0, 0, 0, -1, 1, 1].map(Atom::num)[..])
+        + S.gpl_real
+            .call(&[0_i64, 0, 0, 0, -1, 1, 1].map(Atom::num)[..])
 }
 
 fn positive_sixth_root() -> Atom {
@@ -120,21 +123,21 @@ pub(crate) fn builtin_definition(source: AtomView<'_>) -> Result<Option<Atom>, V
             if symbol == Symbol::PI || symbol == Symbol::E || symbol == euler_gamma() {
                 return Ok(Some(source.to_owned()));
             }
-            if symbol == vk_symbol!("EulerGamma") {
+            if symbol == S.euler_gamma {
                 return Ok(Some(Atom::var(euler_gamma())));
             }
-            if symbol == vk_symbol!("D6") {
+            if symbol == S.d6 {
                 // The pole 2ζ₃/ep multiplies 1/((1-2ep)(1-ep)) = 1+3ep+... .
                 let value = matad_coefficient("D6bar", 0)? + Atom::num(6) * zeta().call(3);
                 return hpl::normalize_constants(value.as_view()).map(Some);
             }
-            if symbol == vk_symbol!("T1ep") || symbol == vk_symbol!("T1ep2") {
-                return sunset_coefficient(symbol == vk_symbol!("T1ep2")).map(Some);
+            if symbol == S.t1ep || symbol == S.t1ep2 {
+                return sunset_coefficient(symbol == S.t1ep2).map(Some);
             }
-            if symbol == vk_symbol!("cl4") {
+            if symbol == S.cl4 {
                 return Ok(Some(clausen4()));
             }
-            if symbol == vk_symbol!("s6") {
+            if symbol == S.s6 {
                 return hpl::normalize_constants(alternating_euler_sum6().as_view()).map(Some);
             }
             if let Some((_, family, order)) = MATAD_BARS
@@ -144,29 +147,16 @@ pub(crate) fn builtin_definition(source: AtomView<'_>) -> Result<Option<Atom>, V
                 let value = matad_coefficient(family, *order)?;
                 return hpl::normalize_constants(value.as_view()).map(Some);
             }
-            if NAMED_CONSTANTS
-                .iter()
-                .any(|name| symbol == vk_symbol!(name))
-            {
+            if S.named_constants.contains(&symbol) {
                 return hpl::normalize_constants(source).map(Some);
             }
         }
         AtomView::Fun(function) => {
             let symbol = function.get_symbol();
-            if [
-                "HR",
-                "HI",
-                "GPLReal",
-                "GPLImag",
-                "PolylogReal",
-                "PolylogImag",
-            ]
-            .iter()
-            .any(|name| symbol == vk_symbol!(name))
-            {
+            if hpl::is_projection_symbol(symbol) {
                 return hpl::normalize_constants(source).map(Some);
             }
-            if symbol == vk_symbol!("Zeta") || symbol == zeta() {
+            if symbol == S.zeta || symbol == zeta() {
                 let arguments = function.iter().collect::<Vec<_>>();
                 if let [argument] = arguments.as_slice()
                     && get_integer_from_atom(*argument).is_some_and(|order| order >= 2)
@@ -178,7 +168,7 @@ pub(crate) fn builtin_definition(source: AtomView<'_>) -> Result<Option<Atom>, V
                     "expected zeta at an integer order of at least two",
                 ));
             }
-            if symbol == vk_symbol!("MZV") {
+            if symbol == S.mzv {
                 let arguments = function.iter().collect::<Vec<_>>();
                 // Symbolica's GPL evaluator stops at weight six; the
                 // evaluable terminal sums the MZV directly at any weight.
@@ -192,7 +182,7 @@ pub(crate) fn builtin_definition(source: AtomView<'_>) -> Result<Option<Atom>, V
                         )
                     });
             }
-            if symbol == vk_symbol!("Sqrt") || symbol == Symbol::SQRT {
+            if symbol == S.sqrt || symbol == Symbol::SQRT {
                 let arguments = function.iter().collect::<Vec<_>>();
                 if let [argument] = arguments.as_slice()
                     && get_integer_from_atom(*argument).is_some_and(|value| value >= 0)
@@ -274,16 +264,17 @@ pub(crate) fn mzv_word(indices: &[i64]) -> Option<(i64, Vec<i64>)> {
 /// Discover named constants and the concrete projections in the built-in data.
 /// The active registry can extend this set with calls occurring in loaded data.
 pub(crate) fn builtin_symbols() -> Vec<Atom> {
-    let mut symbols = NAMED_CONSTANTS
+    let mut symbols = S
+        .named_constants
         .iter()
-        .map(|name| Atom::var(vk_symbol!(name)))
+        .map(|name| Atom::var(*name))
         .collect::<BTreeSet<_>>();
     symbols.extend([
         Atom::var(Symbol::PI),
         Atom::var(Symbol::E),
         Atom::var(euler_gamma()),
-        Atom::var(vk_symbol!("cl4")),
-        Atom::var(vk_symbol!("s6")),
+        Atom::var(S.cl4),
+        Atom::var(S.s6),
     ]);
     symbols.extend(
         MATAD_BARS
@@ -293,8 +284,7 @@ pub(crate) fn builtin_symbols() -> Vec<Atom> {
     for expression in matad::MASTERS_SUBSTITUTION.values() {
         expression.visitor(&mut |part| {
             if let AtomView::Fun(function) = part
-                && (function.get_symbol() == vk_symbol!("HR")
-                    || function.get_symbol() == vk_symbol!("HI"))
+                && (function.get_symbol() == S.hr || function.get_symbol() == S.hi)
             {
                 symbols.insert(part.to_owned());
                 return false;
@@ -304,11 +294,12 @@ pub(crate) fn builtin_symbols() -> Vec<Atom> {
     }
     let r4 = -(Atom::one() + Atom::i() * Atom::num(3).pow((1, 2))) / Atom::num(2);
     symbols.insert(
-        vk_symbol!("GPLReal")
+        S.gpl_real
             .call(&[Atom::Zero, Atom::Zero, r4.clone(), Atom::one(), Atom::one()][..]),
     );
     symbols.insert(
-        vk_symbol!("GPLImag").call(&[Atom::Zero, Atom::one(), Atom::one(), r4, Atom::one()][..]),
+        S.gpl_imag
+            .call(&[Atom::Zero, Atom::one(), Atom::one(), r4, Atom::one()][..]),
     );
     symbols.into_iter().collect()
 }

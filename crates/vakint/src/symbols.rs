@@ -127,6 +127,7 @@ pub struct VakintSymbols {
     pub props_: Symbol,
     pub idx___: Symbol,
     pub zeta_shorthands: [Symbol; 5],
+    pub named_constants: [Symbol; 12],
     pub period_bindings: [(Symbol, Symbol, i64); 5],
     pub sixth_roots: [Atom; 4],
     pub inverse_sqrt3: Atom,
@@ -246,6 +247,7 @@ pub static S: LazyLock<VakintSymbols> = LazyLock::new(|| VakintSymbols {
     props_: vk_symbol!("props_"),
     idx___: vk_symbol!("idx___"),
     zeta_shorthands: ["z2", "z3", "z4", "z5", "z6"].map(|name| vk_symbol!(name)),
+    named_constants: crate::inspection::constants::NAMED_CONSTANTS.map(|name| vk_symbol!(name)),
     period_bindings: PERIOD_BINDINGS
         .map(|(name, basis, power)| (vk_symbol!(name), vk_symbol!(basis), power)),
     sixth_roots: [

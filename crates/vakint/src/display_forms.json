@@ -1144,6 +1144,10 @@
    "reason": "test namespace"
   },
   {
+   "name": "snapshot_cache_foreign::RustRedMaster",
+   "reason": "test namespace"
+  },
+  {
    "name": "vakint::props_",
    "reason": "pattern"
   },
