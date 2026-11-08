@@ -199,7 +199,8 @@ Matching of a normalized input:
    - a new field `propagator: Option<PropagatorWitness>`. The witness also carries `powers` (the matched power of
      every canonical line, 0 for pinched ones), so the glue reads the backend `powers` and `external`
      (`canonical_external() = σ·p(i)`) from it directly.
-5. No graph match: `UnreckognizedIntegral`. There is no quadric-search fallback in M1. Normalization (merging
+5. No graph match: as section 1 item 8 (`UnreckognizedIntegral` without `allow_unknown_integrals`, with it the
+   unknown integral). There is no quadric-search fallback in M1. Normalization (merging
    identical quadrics, contracting pinched lines) turns self-energy-insertion graphs into contractions of the tops.
    The census test of section 7 proves coverage, and any uncovered graph is added as a new data family, never as
    special code.
@@ -357,8 +358,9 @@ p-master table (`PMaster` values):
   permission.
 
 Exact backend comparison:
-- Retain-mode results are compared coefficient by coefficient over the master monomials (products of
-  `PMaster`/`PG`): `(c_A - c_B).together() == 0`.
+- Retain-mode results are compared in the tag basis (`p_integral::compare::tag_basis`, section 6): `PG` and
+  `PGamma` factors become products of `Γ(1+mε)`, then the coefficients of the monomials `Π Γ(1+mε)^e × Π PMaster`
+  are compared: `(c_A - c_B).together() == 0`.
 - Numerical results are compared at `p(i) = (0,0,0,1)` (`Q^2 = 1`) and `mursq = 1`, to `1e-30` relative.
 - Both backends share the same finalizer, so a disagreement is a reduction disagreement.
 
@@ -482,14 +484,39 @@ The library program:
      (`PLibrarySource::Directory`). Exactly one library directory may exist under `p/`; a `p/` area without one, with
      several, or holding a file or a symlink in their place is an error, and so is a library whose scope differs
      from its directory name. The 4L release (M3/M4) uses this same loader;
-  3. the built-in library embedded from `data/p/` (`PLibrarySource::Memory`; shipped by M2-V4, together with the
-     default switch 1L-3L -> RustRed).
+  3. the built-in 1L-3L library embedded from `data/p/` (`PLibrarySource::Memory`; see "Built-in library" below).
 - Every library is checked once before first use: the coefficient context is `{d}`; every vakint family of the
   scope has a top presentation (`PLibrary::top_presentation(P_FAMILIES[i].name)`) whose line slots are vakint's
   canonical lines in order (momenta up to an overall sign, no eps units), followed by ISP slots only; every
   terminal maps onto `1` or a Forcer master that `Masters.prc` tabulates (without a basis map only the unit
   terminal may exist). Any failure is a typed error, never a silent fallback to Forcer.
 - A `p/` area that is present but broken counts as data: its p-integrals fail closed with its error.
+
+Built-in library (M2-V4):
+- `data/p/p-library-1-3/` is the directory `rustred p-package --max-loops 3` writes at the pinned RustRed revision
+  (scope 1-3: the 5 vakint tops of 1-3 loops, 43 DAG nodes, the Custom owners NO and t1star05, the basis layer
+  `layer/p-layer.json` onto Forcer's masters `no` and `t105`; 54 files, about 0.9 MB). `data/p/manifest.json`
+  (schema `vakint.p-data.v1`) records the library directory, its identity and versions (copied from its
+  `library.json`) and every file with its size and sha256. `build.rs` embeds `data/p/` with the vendored data; the
+  vacuum `data/manifest.json` and loop packs do not change.
+- On first use the embedded files are checked against the manifest (a missing, extra or altered file fails) and
+  loaded once per process through `load_p_library(PLibrarySource::Memory)`, without re-running the descent
+  certificate: `rustred p-package` certified the files when it wrote them (it loads its output back with the
+  certificate), their sha256 pins them, and the shipping tests compare them with the current RustRed assembly. The
+  library's identity must be the manifest's.
+- Default order: `EvaluationOrder::all()` puts RustRed before Forcer, so with the built-in library 1L-3L
+  p-integrals go to RustRed and 4L p-integrals (outside its scope) to Forcer. Massive closures
+  (`p_integral::MassiveClosure`) follow the same dispatch.
+- Fail closed: a `p/` area of the loaded external data that cannot be resolved (no or several library directories,
+  a file or symlink in their place) counts as data for every loop count, so its error also stops 4L p-integrals
+  from going to Forcer. A built-in library that fails its checks fails every p-integral of its scope.
+- Regeneration (after a RustRed pin that changes a `P_*` version or the assembly): run `rustred p-package
+  --max-loops 3 --out crates/vakint/data/p/p-library-1-3` with the pinned RustRed, then rewrite the manifest with
+  `VAKINT_P_DATA=write` on the test `the_p_data_manifest_lists_the_shipped_library_files`
+  (`tests/p_library_shipping_tests.rs`). The shipping tests check the versions and identity against RustRed, the
+  shipped families against vakint's and RustRed's, the library against `assemble_p_package` with the shipped Custom
+  payloads (`equivalent_p_libraries`, never bytes), the DAG keys against `rustred_topology` run in vakint's build
+  (graphica skew), and the terminals against `{1, PMaster(no), PMaster(t105)}`.
 
 Evaluation (`p_integral::evaluate_ordered_batch`):
 - The matched p contributions of one loop count and master mode form one ordered batch (key: loop count, master
