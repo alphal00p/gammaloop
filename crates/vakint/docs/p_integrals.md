@@ -565,8 +565,23 @@ Step cache:
 - The cache statistics report the program `p-library-<a>-<b>`, its origin (`injected`, `external-data`,
   `built-in`) as data version, zero `rule_tables` (64 hexadecimal digits; the p program has no rule-table digest)
   and, when the cache has a directory, `directory = <ordered_cache.directory>/<the textual name above>` instead of
-  `<program>.<rule tables>.<stamp>`. The p program never uses a shipped cache of a vacuum loop pack, and is not part
-  of `load_ordered_cache`, `shipped_ordered_caches` or `export_ordered_caches` (vacuum programs only).
+  `<program>.<rule tables>.<stamp>`. The p program never uses a shipped cache of a vacuum loop pack.
+- Shipped p cache (`rustred_evaluation/p_shipped_cache.rs`): an external-data root read from a directory may carry a
+  top-level `p_integral/` area, declared by the root-manifest key `p_integral` (`manifest`, `manifest_sha256`; area
+  schema `vakint.external-data.p-integral.v1`, metadata `p_integral/ordered-cache.json` of schema
+  `vakint.external-data.p-ordered-cache.v1`). It holds a light Ordered step cache of the 1L-3L library (RustRed's
+  manifest, shards and tail table) recorded on a fixed workload tuned to the benchmark and test batteries (the 1L-3L
+  benchmark grid, the 2L/3L physics cells, the Forcer batteries, the anchors). Validity is by versions only: the cache
+  is used iff its label, directory name, library identity, binding stamp and tail versions are those of the running
+  build and every listed file matches its sha256 and size; otherwise the program reports `Rejected` (one stderr line)
+  and reduces cold, with the same values. Only a resource limit propagates. An injected library, a root without the
+  area and a packed release (the key, no area) ship no p cache. Read-only settings use the area in place, a
+  read-write directory installs a copy. The branch `p_integral` of vakint-external-data carries the area; it is not
+  released. Regeneration: the example `p_cache_maintenance prepare` (cold read-write run of the workload, then
+  `export_ordered_caches`), `tools/p_integral_area.py stage` in vakint-external-data, then `p_cache_maintenance
+  check` and `replay`.
+- Once a p library is loaded (`Vakint::loaded_p_library`; listing never loads one), its program is part of
+  `load_ordered_cache`, `shipped_ordered_caches` and `export_ordered_caches` (written as `p_integral/` of the export).
 
 Not in M2: caller families (`register_family`, run-time key computation) and `LocusPolicy` plumbing (M3); the 4L
 library in vakint-external-data (M3/M4, through the Directory source above); phase-level progress of a p request

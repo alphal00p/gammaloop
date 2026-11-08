@@ -138,17 +138,26 @@ fn exported() -> Exported {
     };
     assert_eq!(values(&engine, &settings(recording)), cold);
     let export = tempfile::tempdir().unwrap();
-    let handle = engine.p_library().unwrap();
-    let entry = super::p_shipped_cache::export(
-        cache.path(),
-        &export.path().join("out"),
-        &handle.cache,
-        &json!({"command": "p_shipped_cache_tests"}),
-        &[json!({"name": "bubbles", "loop_count": 1})],
-    )
-    .unwrap()
-    .expect("the cold run recorded the p cache");
+    let report = engine
+        .export_ordered_caches(
+            cache.path(),
+            &export.path().join("out"),
+            json!({"command": "p_shipped_cache_tests"}),
+            vec![json!({"name": "bubbles", "loop_count": 1})],
+        )
+        .unwrap();
+    let entry = report
+        .p_integral
+        .as_ref()
+        .expect("the cold run recorded the p cache");
     assert!(entry.records > 0 && entry.shards > 0, "{entry:?}");
+    assert!(report.packs.is_empty(), "{report:?}");
+    assert!(
+        export
+            .path()
+            .join("out/p_integral/ordered-cache.json")
+            .is_file()
+    );
     Exported { cold, export }
 }
 
@@ -373,4 +382,38 @@ fn without_an_area_or_for_an_injected_library_no_p_cache_is_shipped() {
         assert_eq!(row.shipped, None, "{name}");
         assert!(row.native.misses > 0, "{name}: {row:?}");
     }
+}
+
+/// L1: once the p library is loaded, `shipped_ordered_caches` and
+/// `load_ordered_cache` list the p program with its shipped cache in place
+/// (`export_ordered_caches` lists it in every [`exported`]).
+#[test]
+fn the_public_entry_points_list_the_loaded_p_program() {
+    let exported = exported();
+    let root = staged(&exported, |_| {}, |_| {});
+    let engine = engine(root.path(), false);
+    let checks = engine.shipped_ordered_caches().unwrap();
+    let check = checks
+        .iter()
+        .find(|check| check.program == "p-library-1-1")
+        .expect("shipped_ordered_caches lists the p program");
+    assert_eq!(check.loop_count, 1);
+    assert_eq!(
+        check.shipped.as_ref().map(|shipped| shipped.status),
+        Some(ShippedOrderedCacheStatus::InPlace),
+        "{check:?}"
+    );
+    let statistics = engine
+        .load_ordered_cache(&settings(read_only_in_memory()))
+        .unwrap();
+    let row = statistics
+        .programs
+        .iter()
+        .find(|row| row.program == "p-library-1-1")
+        .expect("load_ordered_cache attaches the p program");
+    assert_eq!(
+        row.shipped.as_ref().map(|shipped| shipped.status),
+        Some(ShippedOrderedCacheStatus::InPlace),
+        "{row:?}"
+    );
 }

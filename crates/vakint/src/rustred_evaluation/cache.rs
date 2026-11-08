@@ -973,6 +973,7 @@ impl Vakint {
         if let Ok(application) = self.loaded_application() {
             programs.push(application.ordered_cache_program().clone());
         }
+        programs.extend(self.loaded_p_cache_program());
         Ok(programs)
     }
 }
