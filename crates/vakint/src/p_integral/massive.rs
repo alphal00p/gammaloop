@@ -29,14 +29,16 @@ pub struct MassiveClosure {
 
 impl MassiveClosure {
     /// Evaluate scalar p-integrals and loop-free powers of `dot(p,p)`, including
-    /// sums of both. The configured Forcer backend reduces the p-integrals;
-    /// loop-free terms need no external backend. Tensor dependence on the hard
-    /// momentum is rejected rather than discarded.
+    /// sums of both. The p backend the evaluation order selects for a
+    /// p-integral (RustRed with a p library covering its loop count, else
+    /// Forcer) reduces it; loop-free terms need no external backend. Tensor
+    /// dependence on the hard momentum is rejected rather than discarded.
     ///
     /// The Laurent depth counts the closing loop as well: a cut with `L` loops
     /// is expanded through `number_of_terms_in_epsilon_expansion - L - 2`.
-    /// Forcer's master mode selects retained or expanded output; without a
-    /// Forcer entry, loop-free terms use symbolic expansion.
+    /// The master mode of the selecting backend gives retained or expanded
+    /// output; loop-free terms use the mode of the first RustRed or Forcer
+    /// entry of the order, else symbolic expansion.
     pub fn evaluate(
         &self,
         vakint: &Vakint,
@@ -69,6 +71,7 @@ impl MassiveClosure {
                 .0
                 .iter()
                 .find_map(|method| match method {
+                    EvaluationMethod::RustRed(options) => Some(options.master_mode),
                     EvaluationMethod::Forcer(options) => Some(options.master_mode),
                     _ => None,
                 })
@@ -89,10 +92,13 @@ impl MassiveClosure {
             });
             topologies.sort();
             topologies.dedup();
+            // Terms finalized in `Numerical` mode get their constants
+            // substituted together at the end.
             let mut result = Atom::Zero;
+            let mut numerical = Atom::Zero;
             for (topology, numerator) in input.coefficient_list::<i16>(&topologies) {
                 if topology == Atom::one() {
-                    result += self.finalize(
+                    let value = self.finalize(
                         &[ReducedPropagatorValue {
                             scale_power: 0,
                             reduced: Vakint::convert_to_dot_notation(numerator.as_view()),
@@ -102,6 +108,11 @@ impl MassiveClosure {
                         settings,
                         mode,
                     )?;
+                    if mode == RustRedMasterMode::Numerical {
+                        numerical += value;
+                    } else {
+                        result += value;
+                    }
                     continue;
                 }
                 let mut expression = VakintExpression::try_from(topology * numerator)?;
@@ -120,30 +131,50 @@ impl MassiveClosure {
                     }
                     term.numerator = scalar_numerator(term.numerator.as_view(), &head)?;
                     let matched = term.prepare_integral_specs(vakint, settings, None)?;
-                    if !matches!(
-                        vakint.evaluation_method(settings, &matched.canonical_topology),
-                        Some(EvaluationMethod::Forcer(_))
-                    ) {
-                        return Err(super::invalid(
-                            "massive closure of a p-integral requires the Forcer backend",
-                        ));
-                    }
+                    let method = vakint.evaluation_method(settings, &matched.canonical_topology);
+                    let term_mode = match method {
+                        Some(EvaluationMethod::Forcer(options)) => options.master_mode,
+                        Some(EvaluationMethod::RustRed(options)) => options.master_mode,
+                        _ => {
+                            return Err(super::invalid(
+                                "massive closure of a p-integral requires the RustRed or Forcer \
+                                 backend",
+                            ));
+                        }
+                    };
                     let request = matched
                         .propagator_request(term.numerator.as_view())
                         .expect("a p-integral match has a propagator request");
-                    let values = forcer::reduce_p(
-                        request.family,
-                        request.powers,
-                        request.canonical_numerator,
-                        &request.external,
-                        settings,
-                    )?;
-                    result +=
-                        self.finalize(&values, request.family.loops, &head, settings, mode)?;
+                    let values = if matches!(method, Some(EvaluationMethod::Forcer(_))) {
+                        forcer::reduce_p(
+                            request.family,
+                            request.powers,
+                            request.canonical_numerator,
+                            &request.external,
+                            settings,
+                        )?
+                    } else {
+                        crate::rustred_evaluation::p_integral::reduce_requests(
+                            vakint,
+                            settings,
+                            std::slice::from_ref(&request),
+                            None,
+                        )?
+                        .into_values()
+                        .flatten()
+                        .collect()
+                    };
+                    let value =
+                        self.finalize(&values, request.family.loops, &head, settings, term_mode)?;
+                    if term_mode == RustRedMasterMode::Numerical {
+                        numerical += value;
+                    } else {
+                        result += value;
+                    }
                 }
             }
-            if mode == RustRedMasterMode::Numerical {
-                result = vakint.resolve_rustred_numerical(result, settings)?;
+            if !numerical.is_zero() {
+                result += vakint.resolve_rustred_numerical(numerical, settings)?;
             }
             Ok(result.expand())
         })
@@ -273,6 +304,9 @@ impl MassiveClosure {
 #[cfg(test)]
 mod tests {
     use std::sync::LazyLock;
+
+    use ahash::HashMap;
+    use symbolica::domains::float::Float;
 
     use super::*;
     use crate::{EvaluationOrder, ForcerOptions, LoopNormalizationFactor, VakintSettings};
@@ -504,6 +538,82 @@ mod tests {
         assert!(
             matches!(error, VakintError::MissingMasterOrders(_)),
             "{error}"
+        );
+    }
+
+    /// The default order after the built-in 1L-3L library (grant U1): with
+    /// `[RustRed, Forcer]` the closures of a 1L bubble, the 2L kite and the 3L
+    /// NO top go to RustRed and equal the Forcer-only closures, exactly in
+    /// `Symbolic` mode and within 1e-30 in `Numerical` mode (40 digits).
+    #[test]
+    fn massive_closures_through_rustred_equal_the_forcer_closures() {
+        let base = VakintSettings {
+            run_time_decimal_precision: 40,
+            ..settings(5)
+        };
+        if forcer::forcer_form_version(&base.form_exe_path).is_err() {
+            assert_ne!(
+                std::env::var("VAKINT_REQUIRE_FORM5").as_deref(),
+                Ok("1"),
+                "FORM 5 is unavailable, but VAKINT_REQUIRE_FORM5=1 requires it"
+            );
+            eprintln!("skipping the massive closures through RustRed: FORM 5 is unavailable");
+            return;
+        }
+        let massive = closure(2);
+        let mursq = HashMap::from_iter([(
+            base.mu_r_sq_symbol.clone(),
+            Float::with_val(base.get_binary_precision(), 1),
+        )]);
+        for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Numerical] {
+            let forcer = EvaluationMethod::Forcer(ForcerOptions { master_mode: mode });
+            let rustred =
+                EvaluationMethod::RustRed(crate::RustRedEvaluationOptions { master_mode: mode });
+            let both = VakintSettings {
+                evaluation_order: EvaluationOrder(vec![rustred, forcer.clone()]),
+                ..base.clone()
+            };
+            let forcer_only = VakintSettings {
+                evaluation_order: EvaluationOrder(vec![forcer]),
+                ..base.clone()
+            };
+            for input in [
+                "topo(P1L(p(1),1,1))",
+                "topo(P2L(p(1),1,1,1,1,1))",
+                "topo(P3L_NO(p(1),1,1,1,1,1,1,1,1))",
+            ] {
+                let input = parse(input);
+                let value = |settings| massive.evaluate(&VAKINT, settings, input.as_view());
+                let (actual, expected) = (value(&both).unwrap(), value(&forcer_only).unwrap());
+                if mode == RustRedMasterMode::Symbolic {
+                    assert_equal(&actual, &expected);
+                    continue;
+                }
+                let number = |value: &Atom| {
+                    VAKINT
+                        .numerical_evaluation(
+                            &both,
+                            value.as_view(),
+                            &mursq,
+                            &Default::default(),
+                            None,
+                        )
+                        .unwrap()
+                        .0
+                };
+                let (agree, diagnostic) =
+                    number(&actual).does_approx_match(&number(&expected), None, 1e-30, 5.0);
+                assert!(agree, "{input}: {diagnostic}");
+            }
+        }
+        // RustRed reduced them: the built-in program's cache recorded steps.
+        let statistics = VAKINT.ordered_cache_statistics();
+        assert!(
+            statistics
+                .programs
+                .iter()
+                .any(|program| program.data_version == "built-in" && program.native.inserts > 0),
+            "{statistics:?}"
         );
     }
 

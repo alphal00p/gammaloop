@@ -14,7 +14,8 @@ mod p_integrals;
 use p_integrals::*;
 use symbolica::atom::{Atom, AtomCore};
 use vakint::{
-    EvaluationOrder, LoopNormalizationFactor, RustRedMasterMode, VakintError, VakintSettings,
+    EvaluationMethod, EvaluationOrder, LoopNormalizationFactor, RustRedMasterMode, VakintError,
+    VakintSettings,
 };
 
 const BUBBLE: &str = "topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))";
@@ -154,9 +155,59 @@ fn three_and_four_loop_dot_graphs_evaluate_like_their_atoms() {
     }
 }
 
+/// The default order with the built-in 1L-3L p library (M2-V4): the 2L kite
+/// goes to RustRed (RustRed alone gives the same value), a 4L top to Forcer
+/// (RustRed has no library for it); both equal Forcer alone, and a vacuum
+/// term next to the kite is evaluated as on its own.
 #[test]
-fn the_default_order_hands_p_integrals_to_forcer() {
-    assert_default_order_dispatches_to_forcer("topo(prop(1,edge(1,1),k(1),muvsq,1))", KITE);
+fn the_default_order_hands_one_to_three_loops_to_rustred_and_four_loops_to_forcer() {
+    let Some(form) = forcer_form() else {
+        eprintln!("FORM 5 is unavailable: skipped the default-order evaluation");
+        return;
+    };
+    let forcer = forcer_settings(
+        &form,
+        RustRedMasterMode::Symbolic,
+        LoopNormalizationFactor::MSbar,
+        3,
+    );
+    let mut order = EvaluationOrder::available(&form, "python3");
+    for method in order.0.iter_mut() {
+        match method {
+            EvaluationMethod::RustRed(options) => options.master_mode = RustRedMasterMode::Symbolic,
+            EvaluationMethod::Forcer(options) => options.master_mode = RustRedMasterMode::Symbolic,
+            _ => {}
+        }
+    }
+    let rustred = VakintSettings {
+        evaluation_order: EvaluationOrder(vec![order.0[0].clone()]),
+        ..forcer.clone()
+    };
+    assert!(matches!(
+        rustred.evaluation_order.0[0],
+        EvaluationMethod::RustRed(_)
+    ));
+    let default = VakintSettings {
+        evaluation_order: order,
+        ..forcer.clone()
+    };
+    let assert_same =
+        |left: Atom, right: Atom| assert!((&left - &right).expand().is_zero(), "{left}\n{right}");
+    let kite = parse(KITE);
+    let value = forcer_evaluate(&kite, &default);
+    assert_same(value.clone(), forcer_evaluate(&kite, &rustred));
+    assert_same(value.clone(), forcer_evaluate(&kite, &forcer));
+    let vacuum = parse("topo(prop(1,edge(1,1),k(1),muvsq,1))");
+    assert_same(
+        forcer_evaluate(&(&vacuum + &kite), &default),
+        forcer_evaluate(&vacuum, &default) + value,
+    );
+    let four_loops = parse("topo(P4L_LA4(p(1),1,1,1,1,1,1,1,1,1,1,1))");
+    assert!(VAKINT.evaluate(&rustred, four_loops.as_view()).is_err());
+    assert_same(
+        forcer_evaluate(&four_loops, &default),
+        forcer_evaluate(&four_loops, &forcer),
+    );
 }
 
 #[test]
@@ -214,15 +265,17 @@ fn forcer_without_form_five_is_reported() {
         LoopNormalizationFactor::pySecDec,
         4,
     );
-    // The default order without FORM 5 has no method for p-integrals.
+    // The default order without FORM 5 has no method for 4L p-integrals (the
+    // built-in RustRed library covers one to three loops).
     let default_order = VakintSettings {
         evaluation_order: EvaluationOrder::available(missing, "python3"),
         ..forcer_only.clone()
     };
-    for settings in [forcer_only, default_order] {
+    let four_loops = parse("topo(P4L_LA4(p(1),1,1,1,1,1,1,1,1,1,1,1))");
+    for (settings, input) in [(forcer_only, parse(KITE)), (default_order, four_loops)] {
         match vakint::Vakint::new()
             .unwrap()
-            .evaluate(&settings, parse(KITE).as_view())
+            .evaluate(&settings, input.as_view())
         {
             Err(VakintError::ForcerUnavailable { form_exe_path, .. }) => {
                 assert_eq!(form_exe_path, missing)
@@ -591,7 +644,8 @@ mod g_scheme {
 
 /// A host whose FORM is older than 5 (M1 review F3): Forcer is optional in a
 /// mixed evaluation order, never runs, and a p-integral without another
-/// method reports `ForcerUnavailable`. No live FORM is needed.
+/// method (four loops: RustRed's built-in library covers one to three)
+/// reports `ForcerUnavailable`. No live FORM is needed.
 #[test]
 fn a_form_4_host_never_runs_forcer() {
     let form = fake_form("4.3.1");
@@ -620,8 +674,16 @@ fn a_form_4_host_never_runs_forcer() {
         )
         .unwrap();
     assert!(!tadpole.is_zero());
-    // ... and a p-integral finds no method, because Forcer needs FORM 5.
-    match vakint.evaluate(&settings, parse(KITE).as_view()) {
+    // ... so does a 2L p-integral (RustRed's built-in library) ...
+    assert!(
+        !vakint
+            .evaluate(&settings, parse(KITE).as_view())
+            .unwrap()
+            .is_zero()
+    );
+    // ... and a 4L p-integral finds no method, because Forcer needs FORM 5.
+    let four_loops = parse("topo(P4L_LA4(p(1),1,1,1,1,1,1,1,1,1,1,1))");
+    match vakint.evaluate(&settings, four_loops.as_view()) {
         Err(VakintError::ForcerUnavailable { reason, .. }) => {
             assert!(reason.contains("4.3.1"), "{reason}")
         }

@@ -10,8 +10,12 @@
 //! 2. the external data the engine loaded: `<root>/p/p-library-<a>-<b>/` under
 //!    the external-data root (the layout `rustred p-package` writes), so the
 //!    4L release of M3/M4 needs no new loader;
-//! 3. the built-in library embedded from `data/p/` (shipped by M2-V4; none in
-//!    this build, so 1L-3L p-integrals keep going to Forcer).
+//! 3. the built-in 1L-3L library embedded from `data/p/` (M2-V4):
+//!    `data/p/p-library-1-3/` is the directory `rustred p-package --max-loops 3`
+//!    writes, `data/p/manifest.json` (schema [`P_DATA_SCHEMA`]) lists its files
+//!    with their sha256 and the library identity. The files are embedded with
+//!    the vendored data (`build.rs`) and checked against the manifest before
+//!    the library is loaded from memory, once per process.
 //!
 //! Directory and embedded libraries go through `rustred_app`'s fail-closed
 //! loader (`load_p_library`). Every library, injected ones included, is
@@ -31,15 +35,18 @@ use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 
+use once_cell::sync::OnceCell;
 use rustred::propagator::PresentationId;
 use rustred::propagator::library::{PBasis, PLibrary};
 use rustred::propagator::presentation::Slot;
 use rustred::propagator::tag::GammaTag;
 use rustred_app::propagator::{PLibraryOptions, PLibrarySource, load_p_library};
+use serde::{Deserialize, Serialize};
 use symbolica::atom::Atom;
 
 use super::RustRedEvaluationError;
 use super::cache::OrderedCacheProgram;
+use super::data::{checked_bytes, vendored_files};
 use crate::Vakint;
 use crate::p_integral::{P_FAMILIES, P_INTEGRAL_LOOP_COUNTS, masters, parts};
 
@@ -49,6 +56,10 @@ pub(crate) const P_DATA_DIRECTORY: &str = "p";
 pub(crate) const P_LIBRARY_DIRECTORY_PREFIX: &str = "p-library-";
 /// Longest cache directory name: below `NAME_MAX` (255) with a margin.
 const MAX_CACHE_DIRECTORY_NAME: usize = 200;
+/// Schema of `data/p/manifest.json`, the manifest of the built-in p data.
+pub(crate) const P_DATA_SCHEMA: &str = "vakint.p-data.v1";
+/// The manifest of a p area, `p/manifest.json` below the data root.
+pub(crate) const P_DATA_MANIFEST: &str = "manifest.json";
 
 fn data_failure(detail: impl fmt::Display) -> RustRedEvaluationError {
     RustRedEvaluationError::ExternalData {
@@ -61,7 +72,6 @@ fn data_failure(detail: impl fmt::Display) -> RustRedEvaluationError {
 pub(crate) enum PLibraryOrigin {
     Injected,
     ExternalData,
-    #[allow(dead_code, reason = "M2-V4 wires the built-in Memory source")]
     BuiltIn,
 }
 
@@ -506,10 +516,150 @@ fn resolved_roots() -> &'static Mutex<BTreeMap<PathBuf, PLibraryDirectory>> {
     &RESOLVED
 }
 
-/// The built-in library embedded from `data/p/` (M2-V4 wires the Memory
-/// source; this build embeds none).
+/// `data/p/manifest.json` (schema [`P_DATA_SCHEMA`]): the library directory
+/// of the built-in p data, its identity and versions (copied from its
+/// `library.json`) and every file of the library directory with its sha256.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PDataManifest {
+    pub schema: String,
+    /// `p-library-<a>-<b>`, the directory below `data/p/`.
+    pub library: String,
+    /// `PLibrary::identity()` of the shipped program.
+    pub identity: String,
+    pub versions: BTreeMap<String, String>,
+    /// The files of the library directory, by relative path, in path order.
+    pub files: Vec<PDataFile>,
+}
+
+/// One file of the built-in library directory.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PDataFile {
+    /// Relative to the library directory, `/`-separated.
+    pub path: String,
+    pub sha256: String,
+    pub bytes: u64,
+}
+
+fn built_in_failure(detail: impl fmt::Display) -> RustRedEvaluationError {
+    data_failure(format!("built-in data/p: {detail}"))
+}
+
+/// The embedded file `p/<name>` of the vendored data.
+fn embedded_p_file(name: &str) -> Option<&'static [u8]> {
+    vendored_files()
+        .iter()
+        .find(|(path, _)| path.strip_prefix("p/") == Some(name))
+        .map(|(_, bytes)| *bytes)
+}
+
+/// The built-in manifest and its scope: `None` for a build without
+/// `data/p/manifest.json`; an error for a manifest that is no valid
+/// [`PDataManifest`]. Nothing else is read.
+fn built_in_manifest()
+-> Result<Option<&'static (PDataManifest, RangeInclusive<u8>)>, RustRedEvaluationError> {
+    static MANIFEST: OnceCell<Option<(PDataManifest, RangeInclusive<u8>)>> = OnceCell::new();
+    MANIFEST
+        .get_or_try_init(|| {
+            let Some(bytes) = embedded_p_file(P_DATA_MANIFEST) else {
+                return Ok(None);
+            };
+            let manifest: PDataManifest = serde_json::from_slice(bytes)
+                .map_err(|error| built_in_failure(format!("{P_DATA_MANIFEST}: {error}")))?;
+            if manifest.schema != P_DATA_SCHEMA {
+                return Err(built_in_failure(format!(
+                    "{P_DATA_MANIFEST} has the schema {:?}, expected {P_DATA_SCHEMA:?}",
+                    manifest.schema
+                )));
+            }
+            let scope = directory_scope(&manifest.library).ok_or_else(|| {
+                built_in_failure(format!("the library directory {:?}", manifest.library))
+            })?;
+            Ok(Some((manifest, scope)))
+        })
+        .map(Option::as_ref)
+}
+
+/// The files of the built-in library directory as a Memory source: exactly
+/// the files the manifest lists, each with its recorded size and sha256 (fail
+/// closed on a missing, extra or altered file).
+fn built_in_files(
+    manifest: &PDataManifest,
+) -> Result<&'static [(&'static str, &'static [u8])], RustRedEvaluationError> {
+    let prefix = format!("p/{}/", manifest.library);
+    let mut embedded: BTreeMap<&'static str, &'static [u8]> = BTreeMap::new();
+    for (path, bytes) in vendored_files() {
+        if let Some(name) = path.strip_prefix(prefix.as_str()) {
+            embedded.insert(name, bytes);
+        } else if path.starts_with("p/") && *path != format!("p/{P_DATA_MANIFEST}") {
+            return Err(built_in_failure(format!(
+                "{path} is not part of the library"
+            )));
+        }
+    }
+    let mut files = Vec::with_capacity(manifest.files.len());
+    for file in &manifest.files {
+        let (name, bytes) = embedded
+            .remove_entry(file.path.as_str())
+            .ok_or_else(|| built_in_failure(format!("missing file {}", file.path)))?;
+        if bytes.len() as u64 != file.bytes {
+            return Err(built_in_failure(format!(
+                "{} has {} bytes, the manifest records {}",
+                file.path,
+                bytes.len(),
+                file.bytes
+            )));
+        }
+        checked_bytes(bytes, &file.sha256)
+            .map_err(|error| built_in_failure(format!("{}: {error}", file.path)))?;
+        files.push((name, bytes));
+    }
+    if let Some(extra) = embedded.keys().next() {
+        return Err(built_in_failure(format!(
+            "{prefix}{extra} is not listed in {P_DATA_MANIFEST}"
+        )));
+    }
+    Ok(Vec::leak(files))
+}
+
+/// The loaded built-in library of this process.
+fn built_in_cell() -> &'static OnceCell<Arc<PLibraryHandle>> {
+    static BUILT_IN: OnceCell<Arc<PLibraryHandle>> = OnceCell::new();
+    &BUILT_IN
+}
+
+/// The built-in library (module documentation): loaded from memory on first
+/// use and shared by every engine of the process. The descent certificate is
+/// not re-run: the bytes are those `rustred p-package` certified when it wrote
+/// them (it loads its output back with the certificate), pinned here by
+/// their sha256, and the shipping tests compare them with the current RustRed
+/// assembly. Only a loaded library is kept, so a failure is reported again.
 fn built_in() -> Result<Option<Arc<PLibraryHandle>>, RustRedEvaluationError> {
-    Ok(None)
+    let Some((manifest, scope)) = built_in_manifest()? else {
+        return Ok(None);
+    };
+    built_in_cell()
+        .get_or_try_init(|| {
+            let files = built_in_files(manifest)?;
+            let library = load_p_library(
+                PLibrarySource::Memory(files),
+                &PLibraryOptions {
+                    verify_descent: false,
+                },
+            )
+            .map_err(|error| built_in_failure(format!("{}: {error}", manifest.library)))?;
+            if library.scope() != *scope || library.identity() != manifest.identity {
+                return Err(built_in_failure(format!(
+                    "{} holds the library {:?}, the manifest records {:?}",
+                    manifest.library,
+                    library.identity(),
+                    manifest.identity
+                )));
+            }
+            PLibraryHandle::new(library, PLibraryOrigin::BuiltIn).map(Arc::new)
+        })
+        .map(|handle| Some(Arc::clone(handle)))
 }
 
 /// What [`Vakint::p_library_scope`] found without loading anything.
@@ -577,10 +727,28 @@ impl Vakint {
             Ok(None) => {}
             Err(_) => return PDataPresence::Broken,
         }
-        match built_in() {
-            Ok(Some(handle)) => PDataPresence::Scope(handle.scope()),
+        match built_in_manifest() {
+            Ok(Some((_, scope))) => PDataPresence::Scope(scope.clone()),
             Ok(None) => PDataPresence::None,
             Err(_) => PDataPresence::Broken,
+        }
+    }
+
+    /// The library this engine resolves to, if it is loaded already (an
+    /// injected one, the external-data directory of its data root, else the
+    /// built-in library); never loads one.
+    pub(crate) fn loaded_p_library(&self) -> Option<Arc<PLibraryHandle>> {
+        if let Some(handle) = &self.p_library {
+            return Some(Arc::clone(handle));
+        }
+        match self.resolved_directory() {
+            Ok(Some(directory)) => loaded_directories()
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .get(&directory.path)
+                .cloned(),
+            Ok(None) => built_in_cell().get().cloned(),
+            Err(_) => None,
         }
     }
 
@@ -605,8 +773,8 @@ impl Vakint {
             return Ok(handle);
         }
         built_in()?.ok_or_else(|| RustRedEvaluationError::UnsupportedMatchedFamily {
-            detail: "no RustRed p library is loaded (the built-in 1L-3L library ships with M2-V4; \
-                     external data provide p/p-library-<a>-<b>/)"
+            detail: "no RustRed p library is loaded (this build embeds no data/p; external data \
+                     provide p/p-library-<a>-<b>/)"
                 .into(),
         })
     }
@@ -807,12 +975,17 @@ mod tests {
     }
 
     /// A `p/` area of the loaded external data takes part in the dispatch:
-    /// its scope counts as present data (so a broken library fails closed
-    /// instead of silently going to Forcer), an injected library comes first.
+    /// without one the engine uses the built-in library; a broken library
+    /// directory counts as present data (it fails closed instead of falling
+    /// back to the built-in library or to Forcer); an injected library comes
+    /// first.
     #[test]
     fn an_external_data_p_area_is_found_from_the_loaded_root() {
         let root = tempfile::tempdir().unwrap();
-        for (path, bytes) in super::super::data::vendored_files() {
+        for (path, bytes) in vendored_files() {
+            if path.starts_with("p/") {
+                continue;
+            }
             let target = root.path().join(path);
             fs::create_dir_all(target.parent().unwrap()).unwrap();
             fs::write(target, bytes).unwrap();
@@ -823,7 +996,8 @@ mod tests {
             engine.external_data_root().unwrap(),
             root.path().canonicalize().unwrap()
         );
-        assert_eq!(engine.p_library_presence(), PDataPresence::None);
+        assert_eq!(engine.p_library_presence(), PDataPresence::Scope(1..=3));
+        assert_eq!(engine.p_library().unwrap().origin, PLibraryOrigin::BuiltIn);
         fs::create_dir_all(root.path().join("p/p-library-1-3")).unwrap();
         let mut engine = Vakint::new().unwrap();
         engine.load_external_data(root.path(), 3).unwrap();
@@ -835,5 +1009,111 @@ mod tests {
         engine.inject_p_library(reference()).unwrap();
         assert_eq!(engine.p_library_presence(), PDataPresence::Scope(1..=1));
         assert_eq!(engine.p_library().unwrap().origin, PLibraryOrigin::Injected);
+    }
+
+    /// The built-in library is the program `data/p/manifest.json` describes:
+    /// scope 1-3, its identity, origin `built-in`, the cache directory of an
+    /// external-data library of that identity.
+    #[test]
+    fn the_built_in_library_is_the_program_of_its_manifest() {
+        let (manifest, scope) = built_in_manifest().unwrap().unwrap();
+        assert_eq!(
+            (manifest.library.as_str(), scope),
+            ("p-library-1-3", &(1..=3))
+        );
+        let handle = built_in().unwrap().unwrap();
+        assert_eq!(handle.origin, PLibraryOrigin::BuiltIn);
+        assert_eq!(handle.library.identity(), manifest.identity);
+        assert_eq!(
+            handle.cache.textual_tables.as_deref(),
+            Some(
+                p_cache_directory_name(&manifest.identity, PLibraryOrigin::ExternalData)
+                    .unwrap()
+                    .as_str()
+            )
+        );
+        assert!(Arc::ptr_eq(&handle, &built_in().unwrap().unwrap()));
+    }
+
+    /// vakint's families, RustRed's `P_FAMILIES_V1_JSON` and the shipped
+    /// library agree: the same names and loop counts in the same order; every
+    /// RustRed top passes vakint's top check (vakint's canonical lines as line
+    /// slots, ISPs after); the shipped families file is RustRed's restricted to
+    /// one to three loops; the built-in library has a checked top for every
+    /// vakint family of its scope.
+    #[test]
+    fn p_families_match_library() {
+        use rustred::propagator::families::{P_FAMILIES_V1_JSON, PFamiliesFile};
+        let rustred: PFamiliesFile = serde_json::from_str(P_FAMILIES_V1_JSON).unwrap();
+        assert_eq!(
+            (P_FAMILIES.iter())
+                .map(|family| (family.name, family.loops))
+                .collect::<Vec<_>>(),
+            (rustred.families.iter())
+                .map(|entry| (entry.name.as_str(), usize::from(entry.loops)))
+                .collect::<Vec<_>>()
+        );
+        let context = rustred::algebra::CoefficientContext::try_new(["d"]).unwrap();
+        for (index, (family, entry)) in P_FAMILIES.iter().zip(&rustred.families).enumerate() {
+            let id = PresentationId(index as u32);
+            check_top_presentation(&entry.presentation(id, &context).unwrap(), id, family)
+                .unwrap_or_else(|error| panic!("{}: {error}", family.name));
+        }
+        let shipped: PFamiliesFile = serde_json::from_slice(
+            embedded_p_file("p-library-1-3/families/p-families.json").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            shipped.families,
+            (rustred.families.iter())
+                .filter(|entry| entry.loops <= 3)
+                .cloned()
+                .collect::<Vec<_>>()
+        );
+        let handle = built_in().unwrap().unwrap();
+        for (index, family) in P_FAMILIES.iter().enumerate() {
+            assert_eq!(
+                handle.top(index).is_ok(),
+                family.loops <= 3,
+                "{}",
+                family.name
+            );
+        }
+    }
+
+    /// The embedded files must be exactly the manifest's, byte for byte.
+    #[test]
+    fn a_built_in_file_that_differs_from_the_manifest_is_refused() {
+        let (manifest, _) = built_in_manifest().unwrap().unwrap();
+        assert_eq!(
+            built_in_files(manifest).unwrap().len(),
+            manifest.files.len()
+        );
+        let tampered = |change: &dyn Fn(&mut PDataManifest)| {
+            let mut manifest = manifest.clone();
+            change(&mut manifest);
+            built_in_files(&manifest).unwrap_err().to_string()
+        };
+        for (change, message) in [
+            (
+                &(|m: &mut PDataManifest| m.files[0].sha256 = "0".repeat(64)) as &dyn Fn(&mut _),
+                "SHA256 mismatch",
+            ),
+            (
+                &|m: &mut PDataManifest| m.files[0].bytes += 1,
+                "the manifest records",
+            ),
+            (
+                &|m: &mut PDataManifest| drop(m.files.pop()),
+                "is not listed",
+            ),
+            (
+                &|m: &mut PDataManifest| m.files[0].path = "census.json.missing".into(),
+                "missing file",
+            ),
+        ] {
+            let error = tampered(change);
+            assert!(error.contains(message), "{error}");
+        }
     }
 }

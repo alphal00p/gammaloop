@@ -691,10 +691,12 @@ fn rendering_fails_closed_outside_the_forcer_basis() {
     ));
 }
 
-/// Without p data, p-integrals keep their Forcer dispatch (default order with
-/// a FORM 5), the selection does not depend on the p backend's structural
-/// support; with an injected library covering the loop count RustRed is
-/// chosen, and a p-integral outside its scope stays with Forcer.
+/// Without p data for their loop count (four loops: the built-in library
+/// covers one to three), p-integrals keep their Forcer dispatch (default
+/// order with a FORM 5), the selection does not depend on the p backend's
+/// structural support; with the built-in library or an injected one covering
+/// the loop count RustRed is chosen, and a p-integral outside its scope stays
+/// with Forcer.
 #[test]
 fn without_p_data_p_integrals_go_to_forcer() {
     use std::io::Write;
@@ -728,21 +730,25 @@ fn without_p_data_p_integrals_go_to_forcer() {
     };
     let bubble = "topo(P1L(p(1),1,1))";
     let kite = "topo(P2L(p(1),1,1,1,1,1))";
+    let four_loops = "topo(P4L_LA4(p(1),1,1,1,1,1,1,1,1,1,1,1))";
     let bare = Vakint::new().unwrap();
-    for input in [bubble, kite] {
+    for input in [bubble, kite, four_loops] {
         let topology = topology(&bare, input);
         assert!(crate::rustred_evaluation::supports(
             &settings,
             &topology,
             &RustRedEvaluationOptions::default()
         ));
-        assert!(!crate::rustred_evaluation::has_data(
-            &bare, &settings, &topology
-        ));
-        assert!(matches!(
-            bare.evaluation_method(&settings, &topology),
-            Some(EvaluationMethod::Forcer(_))
-        ));
+        let built_in = input != four_loops;
+        assert_eq!(
+            crate::rustred_evaluation::has_data(&bare, &settings, &topology),
+            built_in
+        );
+        assert!(match bare.evaluation_method(&settings, &topology) {
+            Some(EvaluationMethod::RustRed(_)) => built_in,
+            Some(EvaluationMethod::Forcer(_)) => !built_in,
+            _ => false,
+        });
     }
     let injected = engine();
     assert!(matches!(
@@ -758,18 +764,25 @@ fn without_p_data_p_integrals_go_to_forcer() {
 /// RustRed is never the fallback method of a p-integral without a p library
 /// (it stays the fallback that reports missing vacuum data): with RustRed
 /// alone and no FORM 5, the expression path reports `ForcerUnavailable` and
-/// the term path `NoEvaluationMethodFound`, as before the p backend existed.
+/// the term path `NoEvaluationMethodFound` for a four-loop p-integral (the
+/// built-in library covers one to three loops), as before the p backend
+/// existed.
 #[test]
 fn without_p_data_rustred_is_never_the_fallback_of_a_p_integral() {
     let settings = settings(RustRedMasterMode::Symbolic, None);
+    let topology = |engine: &Vakint, input: &Atom| {
+        engine
+            .match_topologies_for_settings(&settings, input.as_view())
+            .unwrap()
+            .unwrap()
+            .canonical_topology
+    };
     let bare = Vakint::new().unwrap();
-    let input = parse("topo(P1L(p(1),1,1))");
-    let topology = bare
-        .match_topologies_for_settings(&settings, input.as_view())
-        .unwrap()
-        .unwrap()
-        .canonical_topology;
-    assert!(bare.evaluation_method(&settings, &topology).is_none());
+    let input = parse("topo(P4L_LA4(p(1),1,1,1,1,1,1,1,1,1,1,1))");
+    assert!(
+        bare.evaluation_method(&settings, &topology(&bare, &input))
+            .is_none()
+    );
     assert!(matches!(
         bare.evaluate(&settings, input.as_view()),
         Err(VakintError::ForcerUnavailable { .. })
@@ -784,8 +797,9 @@ fn without_p_data_rustred_is_never_the_fallback_of_a_p_integral() {
         Err(VakintError::NoEvaluationMethodFound(..))
     ));
     let injected = engine();
+    let bubble = parse("topo(P1L(p(1),1,1))");
     assert!(matches!(
-        injected.evaluation_method(&settings, &topology),
+        injected.evaluation_method(&settings, &topology(&injected, &bubble)),
         Some(EvaluationMethod::RustRed(_))
     ));
 }
