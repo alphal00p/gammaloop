@@ -891,7 +891,14 @@ mod tests {
                 .is_some()
         );
         assert!(KURVST_PACKAGE_ASSETS.get_file("src/impl.typ").is_some());
-        for name in ["ec-layout.wasm", "LICENSE.ec-layout", "LICENSE.clarabel"] {
+        assert!(LINNEST_PACKAGE_ASSETS.get_file("ec-layout.wasm").is_none());
+        assert!(
+            LINNEST_PACKAGE_ASSETS
+                .get_file("LICENSE.ec-layout")
+                .is_none()
+        );
+        // linnest.wasm compiles Clarabel and NetworkX-derived code.
+        for name in ["LICENSE.clarabel", "LICENSE.networkx"] {
             assert!(
                 !LINNEST_PACKAGE_ASSETS
                     .get_file(name)
@@ -911,9 +918,8 @@ mod tests {
                             "typst.toml"
                                 | "linnest.wasm"
                                 | "kurvst.wasm"
-                                | "ec-layout.wasm"
-                                | "LICENSE.ec-layout"
                                 | "LICENSE.clarabel"
+                                | "LICENSE.networkx"
                         )
                     )
             }));
@@ -1324,9 +1330,8 @@ mod tests {
             )
             .unwrap();
 
-        // Drawing supplied geometry must not load the unused EC seed plugin.
-        fs::remove_file(templates.join(LINNEST_PACKAGE_DIR).join("ec-layout.wasm")).unwrap();
-        let precomputed = templates.join("precomputed-without-ec.typ");
+        // Supplied geometry still renders with the retained Linnest package.
+        let precomputed = templates.join("precomputed.typ");
         fs::write(
             &precomputed,
             r#"#import "crates/linnest/typst/src/graph.typ" as graph
@@ -1340,7 +1345,7 @@ mod tests {
         )
         .unwrap();
         renderer
-            .compile_template(&precomputed, base.join("precomputed-without-ec.pdf"), &[])
+            .compile_template(&precomputed, base.join("precomputed.pdf"), &[])
             .unwrap();
 
         fs::remove_dir_all(base).unwrap();
