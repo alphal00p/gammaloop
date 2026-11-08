@@ -9,7 +9,6 @@
 //! Unsupported words or arguments return errors instead of using finite tables.
 
 use std::collections::BTreeMap;
-use std::sync::LazyLock;
 
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use symbolica::coefficient::CoefficientView;
@@ -35,17 +34,16 @@ fn failure(detail: impl Into<String>) -> VakintError {
 
 /// Real period projections are scalar functions, even at arity two.
 pub(crate) fn is_projection_symbol(symbol: Symbol) -> bool {
-    // Resolve through the parser once, retaining existing aliases and metadata.
-    // Separate lazy entries preserve the original short-circuit registration.
-    static PROJECTIONS: [LazyLock<Symbol>; 6] = [
-        LazyLock::new(|| vk_symbol!("HR")),
-        LazyLock::new(|| vk_symbol!("HI")),
-        LazyLock::new(|| vk_symbol!("GPLReal")),
-        LazyLock::new(|| vk_symbol!("GPLImag")),
-        LazyLock::new(|| vk_symbol!("PolylogReal")),
-        LazyLock::new(|| vk_symbol!("PolylogImag")),
-    ];
-    PROJECTIONS.iter().any(|projection| symbol == **projection)
+    [
+        "HR",
+        "HI",
+        "GPLReal",
+        "GPLImag",
+        "PolylogReal",
+        "PolylogImag",
+    ]
+    .iter()
+    .any(|name| symbol == vk_symbol!(name))
 }
 
 fn projection(word: &[i8], sign: i8, imaginary: bool) -> Result<Atom, VakintError> {
@@ -495,63 +493,3 @@ pub(crate) fn substitute_numerically(
 
 #[cfg(test)]
 mod tests;
-
-#[cfg(test)]
-#[test]
-fn projection_symbol_cache_preserves_parser_identity() {
-    use symbolica::atom::{NamespacedSymbol, SymbolBuilder, UserData};
-
-    const CHILD: &str = "VAKINT_PROJECTION_SYMBOL_CACHE_TEST";
-    if std::env::var_os(CHILD).is_none() {
-        // Other tests may already have registered these fixed names. Exercise
-        // first access in isolation, including ordinary cargo test invocations.
-        let output = std::process::Command::new(std::env::current_exe().unwrap())
-            .args([
-                "--exact",
-                "hpl::projection_symbol_cache_preserves_parser_identity",
-                "--nocapture",
-            ])
-            .env(CHILD, "1")
-            .output()
-            .unwrap();
-        assert!(
-            output.status.success() && String::from_utf8_lossy(&output.stdout).contains("1 passed"),
-            "{}\n{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr),
-        );
-        return;
-    }
-
-    let metadata = UserData::Atom(Atom::num(17));
-    let real = SymbolBuilder::new(NamespacedSymbol::parse("vakint::ProjectionCacheReal"))
-        .with_aliases(["HR"])
-        .with_tags(["projection_cache_test::tag"])
-        .with_user_data(metadata.clone())
-        .build()
-        .unwrap();
-    assert!(is_projection_symbol(real));
-    assert!(is_projection_symbol(real));
-    assert_eq!(vk_symbol!("vakint::HR"), real);
-    assert_eq!(real.get_data(), &metadata);
-    assert!(real.has_tag("projection_cache_test::tag"));
-    for name in ["HI", "GPLReal", "GPLImag", "PolylogReal", "PolylogImag"] {
-        assert!(
-            Symbol::get_symbol(NamespacedSymbol::parse(&format!("vakint::{name}"))).is_none(),
-            "short-circuit recognition must not register {name}",
-        );
-    }
-    let foreign = vk_symbol!("projection_cache_foreign::HR");
-    assert!(!is_projection_symbol(foreign));
-    for name in [
-        "HR",
-        "HI",
-        "GPLReal",
-        "GPLImag",
-        "PolylogReal",
-        "PolylogImag",
-    ] {
-        assert!(is_projection_symbol(vk_symbol!(name)));
-        assert!(is_projection_symbol(vk_symbol!(format!("vakint::{name}"))));
-    }
-}

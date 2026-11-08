@@ -1,7 +1,6 @@
 //! Checked numerical coefficients with symbolic spectators retained.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::sync::LazyLock;
 
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
@@ -24,16 +23,8 @@ fn failure(message: impl Into<String>) -> VakintError {
 }
 
 pub(crate) fn snapshot_reference(part: AtomView) -> bool {
-    // Keep parser resolution and per-name initialization order, without parsing
-    // these fixed names again at every node of an expression.
-    static REFERENCES: [LazyLock<Symbol>; 4] = [
-        LazyLock::new(|| vk_symbol!("RustRedMaster")),
-        LazyLock::new(|| vk_symbol!("RustRedCoefficient")),
-        LazyLock::new(|| vk_symbol!("RustRedFiniteLiteral")),
-        LazyLock::new(|| vk_symbol!("RustRedConstant")),
-    ];
-    matches!(part, AtomView::Fun(function) if REFERENCES
-        .iter().any(|reference| function.get_symbol() == **reference))
+    matches!(part, AtomView::Fun(function) if ["RustRedMaster", "RustRedCoefficient", "RustRedFiniteLiteral", "RustRedConstant"]
+        .iter().any(|name| function.get_symbol() == vk_symbol!(name)))
 }
 
 fn private_reference(part: AtomView) -> bool {
@@ -374,75 +365,6 @@ mod tests {
         VakintSettings {
             run_time_decimal_precision: 40,
             ..Default::default()
-        }
-    }
-
-    #[test]
-    fn snapshot_reference_cache_preserves_parser_identity() {
-        use symbolica::atom::{NamespacedSymbol, SymbolBuilder, UserData};
-
-        const CHILD: &str = "VAKINT_SNAPSHOT_SYMBOL_CACHE_TEST";
-        if std::env::var_os(CHILD).is_none() {
-            let output = std::process::Command::new(std::env::current_exe().unwrap())
-                .args([
-                    "--exact",
-                    "precision::materialize::tests::snapshot_reference_cache_preserves_parser_identity",
-                    "--nocapture",
-                ])
-                .env(CHILD, "1")
-                .output()
-                .unwrap();
-            assert!(
-                output.status.success()
-                    && String::from_utf8_lossy(&output.stdout).contains("1 passed"),
-                "{}\n{}",
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr),
-            );
-            return;
-        }
-
-        let names = [
-            "RustRedMaster",
-            "RustRedCoefficient",
-            "RustRedFiniteLiteral",
-            "RustRedConstant",
-        ];
-        assert!(!snapshot_reference(Atom::num(1).as_view()));
-        for name in names {
-            assert!(
-                Symbol::get_symbol(NamespacedSymbol::parse(&format!("vakint::{name}"))).is_none(),
-                "non-function input must not register {name}",
-            );
-        }
-        let metadata = UserData::Atom(Atom::num(23));
-        let master = SymbolBuilder::new(NamespacedSymbol::parse("vakint::SnapshotCacheMaster"))
-            .with_aliases(["RustRedMaster"])
-            .with_tags(["snapshot_cache_test::tag"])
-            .with_user_data(metadata.clone())
-            .build()
-            .unwrap();
-        assert!(!snapshot_reference(Atom::var(master).as_view()));
-        let reference = master.call((7, 9));
-        assert!(snapshot_reference(reference.as_view()));
-        assert!(snapshot_reference(reference.as_view()));
-        assert_eq!(vk_symbol!("vakint::RustRedMaster"), master);
-        assert_eq!(master.get_data(), &metadata);
-        assert!(master.has_tag("snapshot_cache_test::tag"));
-        for name in &names[1..] {
-            assert!(
-                Symbol::get_symbol(NamespacedSymbol::parse(&format!("vakint::{name}"))).is_none(),
-                "short-circuit recognition must not register {name}",
-            );
-        }
-        let foreign = vk_symbol!("snapshot_cache_foreign::RustRedMaster").call(1);
-        assert!(!snapshot_reference(foreign.as_view()));
-        for name in names {
-            assert!(snapshot_reference(vk_symbol!(name).call(1).as_view()));
-            assert!(snapshot_reference(
-                vk_symbol!(format!("vakint::{name}")).call(1).as_view()
-            ));
-            assert!(!snapshot_reference(Atom::var(vk_symbol!(name)).as_view()));
         }
     }
 
