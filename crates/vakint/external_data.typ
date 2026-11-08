@@ -296,5 +296,16 @@ user's own runs is separate); the vendored snapshot has no shipped-cache path, a
 its cold 1L–3L reductions take well under a second. The copied root
 manifest keeps the release version, which also selects the test release above.
 
+The vakint-external-data branch `p_integral` (not released) adds a top-level
+`p_integral/` area, declared by the root-manifest key `p_integral`, with a light
+Ordered step cache of Vakint's built-in 1L–3L p-integral library. It is the
+complete cache of a fixed workload tuned to Vakint's p benchmark and test
+batteries (the 1L–3L benchmark grid, the 2L/3L physics cells, the Forcer
+batteries and anchors). Validity is by versions only: Vakint uses it only when
+the data are loaded from a directory and the cache's directory name, library
+identity, RustRed stamp and tail versions are the running build's; otherwise it
+prints one line and reduces without it. Releases and managed installs do not
+carry the area, and the vendored snapshot never does.
+
 Mathematica may be used to develop independent numerical reference values. It is
 not a build or runtime dependency of Vakint or the official-data loader.

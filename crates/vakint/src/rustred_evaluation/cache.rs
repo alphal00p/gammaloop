@@ -596,6 +596,7 @@ impl OrderedCacheRegistry {
             Some(data) if settings.shipped && program.textual_tables.is_none() => {
                 self.shipped(data, program)?
             }
+            Some(data) if settings.shipped => super::p_shipped_cache::shipped(data, program)?,
             _ => ShippedOrderedCache::None,
         };
         let key = program.key();
