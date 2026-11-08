@@ -1261,13 +1261,23 @@ class HistogramBin:
         Sum of squared per-sample projected weights for this bin.
         """
     @property
+    def centered_sum_weights_squared(self) -> typing.Optional[builtins.float]:
+        r"""
+        Optional centered M2 across all histogram samples, including implicit zeros.
+        """
+    @property
+    def exact_moments_json(self) -> typing.Optional[builtins.str]:
+        r"""
+        Canonical exact represented-sample moments, or ``None`` for legacy statistics.
+        """
+    @property
     def mitigated_fill_count(self) -> builtins.int:
         r"""
         Number of fills produced by paired boundary-misbinning mitigation.
         """
     def average(self, sample_count: builtins.int) -> builtins.float:
         r"""
-        Compute this bin's Monte Carlo mean from its raw weight sum.
+        Compute this bin's Monte Carlo mean, preserving exact moments when supplied.
 
         Parameters
         ----------
@@ -1277,7 +1287,13 @@ class HistogramBin:
         Returns
         -------
         float
-            ``sum_weights / sample_count``, or zero when ``sample_count`` is zero.
+            The certified exact mean when exact moments are present; otherwise
+            ``sum_weights / sample_count``, or zero for an empty legacy state.
+
+        Raises
+        ------
+        ValueError
+            If exact data, sample counts or final reporting bounds are invalid.
         """
     def error(self, sample_count: builtins.int) -> builtins.float:
         r"""
@@ -1291,7 +1307,13 @@ class HistogramBin:
         Returns
         -------
         float
-            Sample-mean standard error, or zero when it cannot be estimated reliably.
+            The certified exact sample-mean standard error when exact moments are
+            present. Otherwise centered M2 or legacy raw statistics are used.
+
+        Raises
+        ------
+        ValueError
+            If exact data, sample counts or final reporting bounds are invalid.
         """
 
 @typing.final

@@ -40,6 +40,7 @@ feynkit-generator = { workspace = true }
 feynkit-graph = { workspace = true }
 feynkit-kinematics = { workspace = true }
 feynkit-model = { workspace = true }
+gammaloop-statistics = { workspace = true }
 gammaloop-tracing-filter = { workspace = true, features = ["symbolica"] }
 idenso = { workspace = true, features = ["bincode", "native"] }
 include_dir = { workspace = true }
