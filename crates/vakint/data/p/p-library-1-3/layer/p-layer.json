@@ -1,0 +1,108 @@
+{
+  "schema": "rustred.p-basis-layer.v1",
+  "base": {
+    "P_OWNER_LIBRARY_SEMANTICS": "rustred-p-owner-library-2026-11-05",
+    "P_CENSUS_VERSION": "1",
+    "P_CLASS_KEY_VERSION": "1",
+    "terminals": 3
+  },
+  "parameters": [
+    "d"
+  ],
+  "masters": [
+    "no",
+    "t105"
+  ],
+  "rows": [
+    {
+      "terminal": {
+        "id": 0,
+        "class": null,
+        "node": 42,
+        "key": []
+      },
+      "terms": [
+        {
+          "master": "1",
+          "tag": [],
+          "coefficient": "1"
+        }
+      ],
+      "provenance": "identity"
+    },
+    {
+      "terminal": {
+        "id": 1,
+        "class": "L3T08-61cd69124cf81eb3",
+        "node": 1,
+        "key": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          0
+        ]
+      },
+      "terms": [
+        {
+          "master": "no",
+          "tag": [
+            [
+              -2,
+              -3
+            ],
+            [
+              -1,
+              6
+            ],
+            [
+              1,
+              3
+            ]
+          ],
+          "coefficient": "1/(-27+27*d-9*d^2+d^3)"
+        }
+      ],
+      "provenance": "rustred"
+    },
+    {
+      "terminal": {
+        "id": 2,
+        "class": "L2T05-810c5f0ff11c4c40",
+        "node": 28,
+        "key": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "terms": [
+        {
+          "master": "t105",
+          "tag": [
+            [
+              -2,
+              -2
+            ],
+            [
+              -1,
+              4
+            ],
+            [
+              1,
+              2
+            ]
+          ],
+          "coefficient": "-1/(9-6*d+d^2)"
+        }
+      ],
+      "provenance": "rustred"
+    }
+  ]
+}

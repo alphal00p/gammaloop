@@ -1,0 +1,5679 @@
+{
+  "edges": [
+    {
+      "child": 5,
+      "fates": [
+        "contracted",
+        {
+          "kept": 3
+        },
+        {
+          "kept": 5
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 6
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 0,
+      "parent": 0
+    },
+    {
+      "child": 3,
+      "fates": [
+        {
+          "kept": 1
+        },
+        "contracted",
+        {
+          "kept": 6
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 5
+        }
+      ],
+      "kind": "contract",
+      "line": 1,
+      "parent": 0
+    },
+    {
+      "child": 9,
+      "fates": [
+        {
+          "kept": 4
+        },
+        {
+          "kept": 2
+        },
+        "contracted",
+        {
+          "kept": 3
+        },
+        {
+          "kept": 5
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 6
+        },
+        {
+          "kept": 1
+        }
+      ],
+      "kind": "contract",
+      "line": 2,
+      "parent": 0
+    },
+    {
+      "child": 3,
+      "fates": [
+        {
+          "kept": 1
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        },
+        "contracted",
+        {
+          "kept": 6
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 5
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 3,
+      "parent": 0
+    },
+    {
+      "child": 9,
+      "fates": [
+        {
+          "kept": 4
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 5
+        },
+        {
+          "kept": 2
+        },
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 6
+        }
+      ],
+      "kind": "contract",
+      "line": 4,
+      "parent": 0
+    },
+    {
+      "child": 5,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        },
+        "contracted",
+        {
+          "kept": 5
+        },
+        {
+          "kept": 6
+        }
+      ],
+      "kind": "contract",
+      "line": 5,
+      "parent": 0
+    },
+    {
+      "child": 9,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 6
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 4
+        },
+        "contracted",
+        {
+          "kept": 5
+        }
+      ],
+      "kind": "contract",
+      "line": 6,
+      "parent": 0
+    },
+    {
+      "child": 9,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 6
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 5
+        },
+        "contracted"
+      ],
+      "kind": "contract",
+      "line": 7,
+      "parent": 0
+    },
+    {
+      "child": 3,
+      "fates": [
+        "contracted",
+        {
+          "kept": 3
+        },
+        {
+          "kept": 6
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 5
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 0,
+      "parent": 1
+    },
+    {
+      "child": 3,
+      "fates": [
+        {
+          "kept": 3
+        },
+        "contracted",
+        {
+          "kept": 6
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 5
+        }
+      ],
+      "kind": "contract",
+      "line": 1,
+      "parent": 1
+    },
+    {
+      "child": 8,
+      "fates": [
+        {
+          "kept": 2
+        },
+        {
+          "kept": 5
+        },
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 6
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 2,
+      "parent": 1
+    },
+    {
+      "child": 3,
+      "fates": [
+        {
+          "kept": 1
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        },
+        "contracted",
+        {
+          "kept": 3
+        },
+        {
+          "kept": 6
+        },
+        {
+          "kept": 5
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 3,
+      "parent": 1
+    },
+    {
+      "child": 3,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        },
+        "contracted",
+        {
+          "kept": 6
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 5
+        }
+      ],
+      "kind": "contract",
+      "line": 4,
+      "parent": 1
+    },
+    {
+      "child": 8,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 6
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 5
+        },
+        "contracted",
+        {
+          "kept": 1
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 5,
+      "parent": 1
+    },
+    {
+      "child": 8,
+      "fates": [
+        {
+          "kept": 2
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 5
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        },
+        "contracted",
+        {
+          "kept": 6
+        }
+      ],
+      "kind": "contract",
+      "line": 6,
+      "parent": 1
+    },
+    {
+      "child": 8,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 5
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 6
+        },
+        "contracted"
+      ],
+      "kind": "contract",
+      "line": 7,
+      "parent": 1
+    },
+    {
+      "child": 3,
+      "fates": [
+        "contracted",
+        {
+          "kept": 5
+        },
+        {
+          "kept": 6
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 0,
+      "parent": 2
+    },
+    {
+      "child": 4,
+      "fates": [
+        {
+          "kept": 4
+        },
+        "contracted",
+        {
+          "kept": 6
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 5
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        }
+      ],
+      "kind": "contract",
+      "line": 1,
+      "parent": 2
+    },
+    {
+      "child": 4,
+      "fates": [
+        {
+          "kept": 4
+        },
+        {
+          "kept": 6
+        },
+        "contracted",
+        {
+          "kept": 1
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 5
+        }
+      ],
+      "kind": "contract",
+      "line": 2,
+      "parent": 2
+    },
+    {
+      "child": 7,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        "contracted",
+        {
+          "kept": 3
+        },
+        {
+          "kept": 6
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 5
+        }
+      ],
+      "kind": "contract",
+      "line": 3,
+      "parent": 2
+    },
+    {
+      "child": 6,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        },
+        "contracted",
+        {
+          "kept": 5
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 6
+        }
+      ],
+      "kind": "contract",
+      "line": 4,
+      "parent": 2
+    },
+    {
+      "child": 8,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 5
+        },
+        {
+          "kept": 6
+        },
+        "contracted",
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 5,
+      "parent": 2
+    },
+    {
+      "child": 6,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 6
+        },
+        "contracted",
+        {
+          "kept": 5
+        }
+      ],
+      "kind": "contract",
+      "line": 6,
+      "parent": 2
+    },
+    {
+      "child": 8,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 5
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 6
+        },
+        "contracted"
+      ],
+      "kind": "contract",
+      "line": 7,
+      "parent": 2
+    },
+    {
+      "child": 15,
+      "fates": [
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 5
+        }
+      ],
+      "kind": "contract",
+      "line": 0,
+      "parent": 3
+    },
+    {
+      "child": 17,
+      "fates": [
+        {
+          "kept": 0
+        },
+        "contracted",
+        {
+          "kept": 3
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 5
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 1,
+      "parent": 3
+    },
+    {
+      "child": 11,
+      "fates": [
+        {
+          "kept": 2
+        },
+        {
+          "kept": 4
+        },
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 5
+        }
+      ],
+      "kind": "contract",
+      "line": 2,
+      "parent": 3
+    },
+    {
+      "child": 17,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        "contracted",
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 5
+        }
+      ],
+      "kind": "contract",
+      "line": 3,
+      "parent": 3
+    },
+    {
+      "child": 11,
+      "fates": [
+        {
+          "kept": 2
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 4
+        },
+        "contracted",
+        {
+          "kept": 5
+        },
+        {
+          "kept": 3
+        }
+      ],
+      "kind": "contract",
+      "line": 4,
+      "parent": 3
+    },
+    {
+      "child": 12,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        },
+        "contracted",
+        {
+          "kept": 5
+        }
+      ],
+      "kind": "contract",
+      "line": 5,
+      "parent": 3
+    },
+    {
+      "child": 12,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 5
+        },
+        "contracted"
+      ],
+      "kind": "contract",
+      "line": 6,
+      "parent": 3
+    },
+    {
+      "child": 26,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        },
+        "absorbed_into_q",
+        "absorbed_into_q"
+      ],
+      "kind": "rule",
+      "parent": 4
+    },
+    {
+      "child": 18,
+      "fates": [
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 5
+        }
+      ],
+      "kind": "contract",
+      "line": 0,
+      "parent": 4
+    },
+    {
+      "child": 16,
+      "fates": [
+        {
+          "kept": 0
+        },
+        "contracted",
+        {
+          "kept": 4
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 5
+        }
+      ],
+      "kind": "contract",
+      "line": 1,
+      "parent": 4
+    },
+    {
+      "child": 12,
+      "fates": [
+        {
+          "kept": 3
+        },
+        {
+          "kept": 2
+        },
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 5
+        }
+      ],
+      "kind": "contract",
+      "line": 2,
+      "parent": 4
+    },
+    {
+      "child": 16,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        "contracted",
+        {
+          "kept": 4
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 5
+        }
+      ],
+      "kind": "contract",
+      "line": 3,
+      "parent": 4
+    },
+    {
+      "child": 12,
+      "fates": [
+        {
+          "kept": 3
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 2
+        },
+        "contracted",
+        {
+          "kept": 1
+        },
+        {
+          "kept": 5
+        }
+      ],
+      "kind": "contract",
+      "line": 4,
+      "parent": 4
+    },
+    {
+      "child": 10,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        },
+        "contracted",
+        {
+          "kept": 5
+        }
+      ],
+      "kind": "contract",
+      "line": 5,
+      "parent": 4
+    },
+    {
+      "child": 26,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        },
+        "absorbed_into_q",
+        "absorbed_into_q"
+      ],
+      "kind": "rule",
+      "parent": 5
+    },
+    {
+      "child": 19,
+      "fates": [
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 5
+        }
+      ],
+      "kind": "contract",
+      "line": 0,
+      "parent": 5
+    },
+    {
+      "child": 17,
+      "fates": [
+        {
+          "kept": 0
+        },
+        "contracted",
+        {
+          "kept": 5
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 1,
+      "parent": 5
+    },
+    {
+      "child": 13,
+      "fates": [
+        {
+          "kept": 4
+        },
+        {
+          "kept": 1
+        },
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 5
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        }
+      ],
+      "kind": "contract",
+      "line": 2,
+      "parent": 5
+    },
+    {
+      "child": 17,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        "contracted",
+        {
+          "kept": 5
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 3,
+      "parent": 5
+    },
+    {
+      "child": 13,
+      "fates": [
+        {
+          "kept": 4
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 5
+        },
+        {
+          "kept": 1
+        },
+        "contracted",
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        }
+      ],
+      "kind": "contract",
+      "line": 4,
+      "parent": 5
+    },
+    {
+      "child": 27,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 1
+        },
+        {
+          "series_merged_into": 4
+        },
+        {
+          "series_merged_into": 4
+        },
+        {
+          "kept": 3
+        },
+        {
+          "series_merged_into": 4
+        }
+      ],
+      "kind": "rule",
+      "parent": 6
+    },
+    {
+      "child": 17,
+      "fates": [
+        "contracted",
+        {
+          "kept": 5
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 2
+        }
+      ],
+      "kind": "contract",
+      "line": 0,
+      "parent": 6
+    },
+    {
+      "child": 16,
+      "fates": [
+        {
+          "kept": 4
+        },
+        "contracted",
+        {
+          "kept": 5
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 2
+        }
+      ],
+      "kind": "contract",
+      "line": 1,
+      "parent": 6
+    },
+    {
+      "child": 18,
+      "fates": [
+        {
+          "kept": 3
+        },
+        {
+          "kept": 5
+        },
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 2
+        }
+      ],
+      "kind": "contract",
+      "line": 2,
+      "parent": 6
+    },
+    {
+      "child": 20,
+      "fates": [
+        {
+          "kept": 1
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 5
+        },
+        "contracted",
+        {
+          "kept": 3
+        }
+      ],
+      "kind": "contract",
+      "line": 5,
+      "parent": 6
+    },
+    {
+      "child": 11,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 5
+        },
+        {
+          "kept": 3
+        },
+        "contracted"
+      ],
+      "kind": "contract",
+      "line": 6,
+      "parent": 6
+    },
+    {
+      "child": 28,
+      "fates": [
+        {
+          "series_merged_into": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "series_merged_into": 0
+        },
+        {
+          "series_merged_into": 0
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "rule",
+      "parent": 7
+    },
+    {
+      "child": 15,
+      "fates": [
+        "contracted",
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 5
+        }
+      ],
+      "kind": "contract",
+      "line": 0,
+      "parent": 7
+    },
+    {
+      "child": 16,
+      "fates": [
+        {
+          "kept": 2
+        },
+        "contracted",
+        {
+          "kept": 5
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 3
+        }
+      ],
+      "kind": "contract",
+      "line": 1,
+      "parent": 7
+    },
+    {
+      "child": 16,
+      "fates": [
+        {
+          "kept": 2
+        },
+        {
+          "kept": 5
+        },
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 2,
+      "parent": 7
+    },
+    {
+      "child": 12,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        },
+        "contracted",
+        {
+          "kept": 5
+        }
+      ],
+      "kind": "contract",
+      "line": 5,
+      "parent": 7
+    },
+    {
+      "child": 12,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 5
+        },
+        "contracted"
+      ],
+      "kind": "contract",
+      "line": 6,
+      "parent": 7
+    },
+    {
+      "child": 11,
+      "fates": [
+        "contracted",
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 5
+        }
+      ],
+      "kind": "contract",
+      "line": 0,
+      "parent": 8
+    },
+    {
+      "child": 10,
+      "fates": [
+        {
+          "kept": 3
+        },
+        "contracted",
+        {
+          "kept": 5
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 1,
+      "parent": 8
+    },
+    {
+      "child": 12,
+      "fates": [
+        {
+          "kept": 3
+        },
+        {
+          "kept": 5
+        },
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 2,
+      "parent": 8
+    },
+    {
+      "child": 11,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        "contracted",
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 5
+        }
+      ],
+      "kind": "contract",
+      "line": 3,
+      "parent": 8
+    },
+    {
+      "child": 10,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        },
+        "contracted",
+        {
+          "kept": 5
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 4,
+      "parent": 8
+    },
+    {
+      "child": 12,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 5
+        },
+        "contracted",
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 5,
+      "parent": 8
+    },
+    {
+      "child": 20,
+      "fates": [
+        {
+          "kept": 1
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 5
+        },
+        "contracted"
+      ],
+      "kind": "contract",
+      "line": 6,
+      "parent": 8
+    },
+    {
+      "child": 27,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "series_merged_into": 4
+        },
+        {
+          "series_merged_into": 4
+        },
+        {
+          "series_merged_into": 4
+        },
+        {
+          "kept": 3
+        }
+      ],
+      "kind": "rule",
+      "parent": 9
+    },
+    {
+      "child": 13,
+      "fates": [
+        "contracted",
+        {
+          "kept": 2
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 5
+        },
+        {
+          "kept": 3
+        }
+      ],
+      "kind": "contract",
+      "line": 0,
+      "parent": 9
+    },
+    {
+      "child": 14,
+      "fates": [
+        {
+          "kept": 3
+        },
+        "contracted",
+        {
+          "kept": 5
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 1,
+      "parent": 9
+    },
+    {
+      "child": 12,
+      "fates": [
+        {
+          "kept": 2
+        },
+        {
+          "kept": 5
+        },
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 1
+        }
+      ],
+      "kind": "contract",
+      "line": 2,
+      "parent": 9
+    },
+    {
+      "child": 11,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        "contracted",
+        {
+          "kept": 4
+        },
+        {
+          "kept": 5
+        },
+        {
+          "kept": 3
+        }
+      ],
+      "kind": "contract",
+      "line": 3,
+      "parent": 9
+    },
+    {
+      "child": 21,
+      "fates": [
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 5
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        },
+        "contracted"
+      ],
+      "kind": "contract",
+      "line": 6,
+      "parent": 9
+    },
+    {
+      "child": 26,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        },
+        "absorbed_into_q"
+      ],
+      "kind": "rule",
+      "parent": 10
+    },
+    {
+      "child": 24,
+      "fates": [
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 0,
+      "parent": 10
+    },
+    {
+      "child": 22,
+      "fates": [
+        {
+          "kept": 1
+        },
+        "contracted",
+        {
+          "kept": 3
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 1,
+      "parent": 10
+    },
+    {
+      "child": 22,
+      "fates": [
+        {
+          "kept": 1
+        },
+        {
+          "kept": 3
+        },
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 2,
+      "parent": 10
+    },
+    {
+      "child": 22,
+      "fates": [
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 0
+        },
+        "contracted",
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 3,
+      "parent": 10
+    },
+    {
+      "child": 22,
+      "fates": [
+        {
+          "kept": 1
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        },
+        "contracted",
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 4,
+      "parent": 10
+    },
+    {
+      "child": 27,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        },
+        {
+          "series_merged_into": 4
+        },
+        {
+          "series_merged_into": 4
+        }
+      ],
+      "kind": "rule",
+      "parent": 11
+    },
+    {
+      "child": 25,
+      "fates": [
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 0,
+      "parent": 11
+    },
+    {
+      "child": 24,
+      "fates": [
+        {
+          "kept": 0
+        },
+        "contracted",
+        {
+          "kept": 4
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        }
+      ],
+      "kind": "contract",
+      "line": 1,
+      "parent": 11
+    },
+    {
+      "child": 23,
+      "fates": [
+        {
+          "kept": 1
+        },
+        {
+          "kept": 4
+        },
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        }
+      ],
+      "kind": "contract",
+      "line": 2,
+      "parent": 11
+    },
+    {
+      "child": 22,
+      "fates": [
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 0
+        },
+        "contracted",
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 3,
+      "parent": 11
+    },
+    {
+      "child": 32,
+      "fates": [
+        {
+          "series_merged_into": 2
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "series_merged_into": 2
+        },
+        {
+          "series_merged_into": 2
+        },
+        {
+          "kept": 3
+        }
+      ],
+      "kind": "rule",
+      "parent": 12
+    },
+    {
+      "child": 23,
+      "fates": [
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 0,
+      "parent": 12
+    },
+    {
+      "child": 22,
+      "fates": [
+        {
+          "kept": 0
+        },
+        "contracted",
+        {
+          "kept": 3
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 1,
+      "parent": 12
+    },
+    {
+      "child": 30,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 3
+        },
+        "absorbed_into_q",
+        "absorbed_into_q",
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        }
+      ],
+      "kind": "rule",
+      "parent": 13
+    },
+    {
+      "child": 25,
+      "fates": [
+        "contracted",
+        {
+          "kept": 2
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 0,
+      "parent": 13
+    },
+    {
+      "child": 33,
+      "fates": [
+        {
+          "series_merged_into": 0
+        },
+        {
+          "series_merged_into": 0
+        },
+        {
+          "series_merged_into": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        }
+      ],
+      "kind": "rule",
+      "parent": 14
+    },
+    {
+      "child": 24,
+      "fates": [
+        "contracted",
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 0,
+      "parent": 14
+    },
+    {
+      "child": 28,
+      "fates": [
+        {
+          "series_merged_into": 0
+        },
+        {
+          "series_merged_into": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "rule",
+      "parent": 15
+    },
+    {
+      "child": 23,
+      "fates": [
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        "contracted",
+        {
+          "kept": 4
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 0
+        }
+      ],
+      "kind": "contract",
+      "line": 2,
+      "parent": 15
+    },
+    {
+      "child": 23,
+      "fates": [
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 4
+        },
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 3
+        }
+      ],
+      "kind": "contract",
+      "line": 3,
+      "parent": 15
+    },
+    {
+      "child": 23,
+      "fates": [
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 0
+        },
+        "contracted",
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 4,
+      "parent": 15
+    },
+    {
+      "child": 23,
+      "fates": [
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        },
+        "contracted"
+      ],
+      "kind": "contract",
+      "line": 5,
+      "parent": 15
+    },
+    {
+      "child": 32,
+      "fates": [
+        {
+          "series_merged_into": 2
+        },
+        {
+          "series_merged_into": 2
+        },
+        {
+          "series_merged_into": 2
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 3
+        }
+      ],
+      "kind": "rule",
+      "parent": 16
+    },
+    {
+      "child": 23,
+      "fates": [
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 2,
+      "parent": 16
+    },
+    {
+      "child": 22,
+      "fates": [
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 0
+        },
+        "contracted",
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 3,
+      "parent": 16
+    },
+    {
+      "child": 35,
+      "fates": [
+        {
+          "series_merged_into": 3
+        },
+        {
+          "series_merged_into": 3
+        },
+        {
+          "series_merged_into": 3
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        }
+      ],
+      "kind": "rule",
+      "parent": 17
+    },
+    {
+      "child": 25,
+      "fates": [
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        },
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 2,
+      "parent": 17
+    },
+    {
+      "child": 33,
+      "fates": [
+        {
+          "series_merged_into": 0
+        },
+        {
+          "series_merged_into": 0
+        },
+        {
+          "series_merged_into": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        }
+      ],
+      "kind": "rule",
+      "parent": 18
+    },
+    {
+      "child": 24,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        "contracted",
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 2,
+      "parent": 18
+    },
+    {
+      "child": 34,
+      "fates": [
+        "absorbed_into_q",
+        "absorbed_into_q",
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        }
+      ],
+      "kind": "rule",
+      "parent": 19
+    },
+    {
+      "child": 31,
+      "fates": [
+        {
+          "series_merged_into": 3
+        },
+        {
+          "series_merged_into": 3
+        },
+        {
+          "series_merged_into": 3
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        }
+      ],
+      "kind": "rule",
+      "parent": 20
+    },
+    {
+      "child": 22,
+      "fates": [
+        "contracted",
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        }
+      ],
+      "kind": "contract",
+      "line": 0,
+      "parent": 20
+    },
+    {
+      "child": 22,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        "contracted",
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        }
+      ],
+      "kind": "contract",
+      "line": 3,
+      "parent": 20
+    },
+    {
+      "child": 31,
+      "fates": [
+        {
+          "series_merged_into": 3
+        },
+        {
+          "series_merged_into": 3
+        },
+        {
+          "series_merged_into": 3
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 0
+        }
+      ],
+      "kind": "rule",
+      "parent": 21
+    },
+    {
+      "child": 22,
+      "fates": [
+        "contracted",
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 0
+        }
+      ],
+      "kind": "contract",
+      "line": 0,
+      "parent": 21
+    },
+    {
+      "child": 22,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        },
+        {
+          "kept": 4
+        },
+        "contracted"
+      ],
+      "kind": "contract",
+      "line": 5,
+      "parent": 21
+    },
+    {
+      "child": 37,
+      "fates": [
+        {
+          "series_merged_into": 2
+        },
+        {
+          "series_merged_into": 2
+        },
+        {
+          "series_merged_into": 2
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        }
+      ],
+      "kind": "rule",
+      "parent": 22
+    },
+    {
+      "child": 29,
+      "fates": [
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        }
+      ],
+      "kind": "contract",
+      "line": 0,
+      "parent": 22
+    },
+    {
+      "child": 32,
+      "fates": [
+        {
+          "kept": 0
+        },
+        {
+          "series_merged_into": 2
+        },
+        {
+          "series_merged_into": 2
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 3
+        }
+      ],
+      "kind": "rule",
+      "parent": 23
+    },
+    {
+      "child": 29,
+      "fates": [
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        }
+      ],
+      "kind": "contract",
+      "line": 0,
+      "parent": 23
+    },
+    {
+      "child": 33,
+      "fates": [
+        {
+          "series_merged_into": 0
+        },
+        {
+          "series_merged_into": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        }
+      ],
+      "kind": "rule",
+      "parent": 24
+    },
+    {
+      "child": 36,
+      "fates": [
+        "absorbed_into_q",
+        "absorbed_into_q",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        }
+      ],
+      "kind": "rule",
+      "parent": 25
+    },
+    {
+      "child": 34,
+      "fates": [
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 3
+        }
+      ],
+      "kind": "contract",
+      "line": 0,
+      "parent": 26
+    },
+    {
+      "child": 30,
+      "fates": [
+        {
+          "kept": 1
+        },
+        "contracted",
+        {
+          "kept": 3
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 0
+        }
+      ],
+      "kind": "contract",
+      "line": 1,
+      "parent": 26
+    },
+    {
+      "child": 30,
+      "fates": [
+        {
+          "kept": 1
+        },
+        {
+          "kept": 3
+        },
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        }
+      ],
+      "kind": "contract",
+      "line": 2,
+      "parent": 26
+    },
+    {
+      "child": 30,
+      "fates": [
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 0
+        },
+        "contracted",
+        {
+          "kept": 3
+        }
+      ],
+      "kind": "contract",
+      "line": 3,
+      "parent": 26
+    },
+    {
+      "child": 30,
+      "fates": [
+        {
+          "kept": 1
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        },
+        "contracted"
+      ],
+      "kind": "contract",
+      "line": 4,
+      "parent": 26
+    },
+    {
+      "child": 35,
+      "fates": [
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 3
+        }
+      ],
+      "kind": "contract",
+      "line": 0,
+      "parent": 27
+    },
+    {
+      "child": 33,
+      "fates": [
+        {
+          "kept": 1
+        },
+        "contracted",
+        {
+          "kept": 3
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 0
+        }
+      ],
+      "kind": "contract",
+      "line": 1,
+      "parent": 27
+    },
+    {
+      "child": 32,
+      "fates": [
+        {
+          "kept": 1
+        },
+        {
+          "kept": 3
+        },
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        }
+      ],
+      "kind": "contract",
+      "line": 2,
+      "parent": 27
+    },
+    {
+      "child": 31,
+      "fates": [
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 0
+        },
+        "contracted",
+        {
+          "kept": 3
+        }
+      ],
+      "kind": "contract",
+      "line": 3,
+      "parent": 27
+    },
+    {
+      "child": 32,
+      "fates": [
+        {
+          "kept": 2
+        },
+        "contracted",
+        {
+          "kept": 3
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 0
+        }
+      ],
+      "kind": "contract",
+      "line": 1,
+      "parent": 28
+    },
+    {
+      "child": 32,
+      "fates": [
+        {
+          "kept": 2
+        },
+        {
+          "kept": 3
+        },
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        }
+      ],
+      "kind": "contract",
+      "line": 2,
+      "parent": 28
+    },
+    {
+      "child": 32,
+      "fates": [
+        {
+          "kept": 2
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 0
+        },
+        "contracted",
+        {
+          "kept": 3
+        }
+      ],
+      "kind": "contract",
+      "line": 3,
+      "parent": 28
+    },
+    {
+      "child": 32,
+      "fates": [
+        {
+          "kept": 2
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 3
+        },
+        "contracted"
+      ],
+      "kind": "contract",
+      "line": 4,
+      "parent": 28
+    },
+    {
+      "child": 37,
+      "fates": [
+        {
+          "series_merged_into": 2
+        },
+        {
+          "series_merged_into": 2
+        },
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        }
+      ],
+      "kind": "rule",
+      "parent": 29
+    },
+    {
+      "child": 39,
+      "fates": [
+        {
+          "series_merged_into": 1
+        },
+        {
+          "series_merged_into": 1
+        },
+        {
+          "series_merged_into": 1
+        },
+        {
+          "kept": 0
+        }
+      ],
+      "kind": "rule",
+      "parent": 30
+    },
+    {
+      "child": 36,
+      "fates": [
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        }
+      ],
+      "kind": "contract",
+      "line": 0,
+      "parent": 30
+    },
+    {
+      "child": 41,
+      "fates": [
+        {
+          "series_merged_into": 0
+        },
+        {
+          "series_merged_into": 0
+        },
+        {
+          "series_merged_into": 0
+        },
+        {
+          "kept": 1
+        }
+      ],
+      "kind": "rule",
+      "parent": 31
+    },
+    {
+      "child": 37,
+      "fates": [
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        },
+        {
+          "kept": 2
+        }
+      ],
+      "kind": "contract",
+      "line": 0,
+      "parent": 31
+    },
+    {
+      "child": 40,
+      "fates": [
+        {
+          "series_merged_into": 1
+        },
+        {
+          "series_merged_into": 1
+        },
+        {
+          "series_merged_into": 1
+        },
+        {
+          "kept": 0
+        }
+      ],
+      "kind": "rule",
+      "parent": 32
+    },
+    {
+      "child": 37,
+      "fates": [
+        "contracted",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 2
+        },
+        {
+          "kept": 1
+        }
+      ],
+      "kind": "contract",
+      "line": 0,
+      "parent": 32
+    },
+    {
+      "child": 40,
+      "fates": [
+        {
+          "series_merged_into": 1
+        },
+        {
+          "series_merged_into": 1
+        },
+        {
+          "series_merged_into": 1
+        },
+        {
+          "kept": 0
+        }
+      ],
+      "kind": "rule",
+      "parent": 33
+    },
+    {
+      "child": 38,
+      "fates": [
+        "absorbed_into_q",
+        "absorbed_into_q",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        }
+      ],
+      "kind": "rule",
+      "parent": 34
+    },
+    {
+      "child": 39,
+      "fates": [
+        "absorbed_into_q",
+        "absorbed_into_q",
+        {
+          "kept": 0
+        },
+        {
+          "kept": 1
+        }
+      ],
+      "kind": "rule",
+      "parent": 35
+    },
+    {
+      "child": 39,
+      "fates": [
+        {
+          "series_merged_into": 1
+        },
+        {
+          "series_merged_into": 1
+        },
+        {
+          "kept": 0
+        }
+      ],
+      "kind": "rule",
+      "parent": 36
+    },
+    {
+      "child": 41,
+      "fates": [
+        {
+          "series_merged_into": 0
+        },
+        {
+          "series_merged_into": 0
+        },
+        {
+          "kept": 1
+        }
+      ],
+      "kind": "rule",
+      "parent": 37
+    },
+    {
+      "child": 42,
+      "fates": [
+        "absorbed_into_q",
+        "absorbed_into_q"
+      ],
+      "kind": "rule",
+      "parent": 38
+    },
+    {
+      "child": 42,
+      "fates": [
+        "absorbed_into_q",
+        "absorbed_into_q"
+      ],
+      "kind": "rule",
+      "parent": 39
+    },
+    {
+      "child": 42,
+      "fates": [
+        "absorbed_into_q",
+        "absorbed_into_q"
+      ],
+      "kind": "rule",
+      "parent": 40
+    },
+    {
+      "child": 42,
+      "fates": [
+        "absorbed_into_q",
+        "absorbed_into_q"
+      ],
+      "kind": "rule",
+      "parent": 41
+    }
+  ],
+  "nodes": [
+    {
+      "action": {
+        "a1": 2,
+        "a2": 4,
+        "apex": 5,
+        "b": 0,
+        "c1": 1,
+        "c2": 3,
+        "kind": "triangle",
+        "v_a": 0,
+        "v_b": 1
+      },
+      "children": [
+        3,
+        5,
+        9
+      ],
+      "eps_lines": 0,
+      "index": 0,
+      "key": "01060000000001010001010000030100000501000102010001050100020301000204010003040100",
+      "loops": 3,
+      "series_parallel": false,
+      "t": 8,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            0,
+            5,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            5,
+            0
+          ],
+          [
+            2,
+            3,
+            0
+          ],
+          [
+            2,
+            4,
+            0
+          ],
+          [
+            3,
+            4,
+            0
+          ]
+        ],
+        "n": 6,
+        "s": 4,
+        "t": 5
+      }
+    },
+    {
+      "action": {
+        "kind": "custom"
+      },
+      "children": [
+        3,
+        8
+      ],
+      "eps_lines": 0,
+      "index": 1,
+      "key": "01060000000001010002010000030100000501000102010001030100010501000204010003040100",
+      "loops": 3,
+      "series_parallel": false,
+      "t": 8,
+      "topology": {
+        "lines": [
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            0,
+            5,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            3,
+            0
+          ],
+          [
+            1,
+            5,
+            0
+          ],
+          [
+            2,
+            4,
+            0
+          ],
+          [
+            3,
+            4,
+            0
+          ]
+        ],
+        "n": 6,
+        "s": 4,
+        "t": 5
+      }
+    },
+    {
+      "action": {
+        "a1": 4,
+        "a2": 6,
+        "apex": 3,
+        "b": 3,
+        "c1": 5,
+        "c2": 7,
+        "kind": "triangle",
+        "v_a": 1,
+        "v_b": 2
+      },
+      "children": [
+        3,
+        4,
+        6,
+        7,
+        8
+      ],
+      "eps_lines": 0,
+      "index": 2,
+      "key": "01060000000001010003010000040100000501000102010001030100010501000203010002040100",
+      "loops": 3,
+      "series_parallel": false,
+      "t": 8,
+      "topology": {
+        "lines": [
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            0,
+            4,
+            0
+          ],
+          [
+            0,
+            5,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            3,
+            0
+          ],
+          [
+            1,
+            5,
+            0
+          ],
+          [
+            2,
+            3,
+            0
+          ],
+          [
+            2,
+            4,
+            0
+          ]
+        ],
+        "n": 6,
+        "s": 4,
+        "t": 5
+      }
+    },
+    {
+      "action": {
+        "a1": 1,
+        "a2": 3,
+        "apex": 2,
+        "b": 0,
+        "c1": 2,
+        "c2": 4,
+        "kind": "triangle",
+        "v_a": 0,
+        "v_b": 1
+      },
+      "children": [
+        11,
+        12,
+        15,
+        17
+      ],
+      "eps_lines": 0,
+      "index": 3,
+      "key": "0105000000010100010100000201000004010001020100010301000203010002040100",
+      "loops": 3,
+      "series_parallel": false,
+      "t": 7,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            4,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            3,
+            0
+          ],
+          [
+            2,
+            3,
+            0
+          ],
+          [
+            2,
+            4,
+            0
+          ]
+        ],
+        "n": 5,
+        "s": 3,
+        "t": 4
+      }
+    },
+    {
+      "action": {
+        "blob": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "blob_eps": 0,
+        "blob_loops": 2,
+        "kind": "carpet",
+        "r": 6,
+        "third": 5
+      },
+      "children": [
+        10,
+        12,
+        16,
+        18,
+        26
+      ],
+      "eps_lines": 0,
+      "index": 4,
+      "key": "0105000000010100010100000201000004010001020100010401000203010003040100",
+      "loops": 3,
+      "series_parallel": false,
+      "t": 7,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            4,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            4,
+            0
+          ],
+          [
+            2,
+            3,
+            0
+          ],
+          [
+            3,
+            4,
+            0
+          ]
+        ],
+        "n": 5,
+        "s": 3,
+        "t": 4
+      }
+    },
+    {
+      "action": {
+        "drop": 6,
+        "keep": 5,
+        "kind": "insertion"
+      },
+      "children": [
+        13,
+        17,
+        19,
+        26
+      ],
+      "eps_lines": 0,
+      "index": 5,
+      "key": "0105000000010100010100000201000004010001020100010401000203020000",
+      "loops": 3,
+      "series_parallel": false,
+      "t": 7,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            4,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            4,
+            0
+          ],
+          [
+            2,
+            3,
+            0
+          ],
+          [
+            2,
+            3,
+            0
+          ]
+        ],
+        "n": 5,
+        "s": 3,
+        "t": 4
+      }
+    },
+    {
+      "action": {
+        "drop": 4,
+        "keep": 3,
+        "kind": "insertion"
+      },
+      "children": [
+        11,
+        16,
+        17,
+        18,
+        20,
+        27
+      ],
+      "eps_lines": 0,
+      "index": 6,
+      "key": "0105000000010100010100000301000004010001020200000104010002030100",
+      "loops": 3,
+      "series_parallel": false,
+      "t": 7,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            0,
+            4,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            4,
+            0
+          ],
+          [
+            2,
+            3,
+            0
+          ]
+        ],
+        "n": 5,
+        "s": 3,
+        "t": 4
+      }
+    },
+    {
+      "action": {
+        "drop": 4,
+        "keep": 3,
+        "kind": "insertion"
+      },
+      "children": [
+        12,
+        15,
+        16,
+        28
+      ],
+      "eps_lines": 0,
+      "index": 7,
+      "key": "0105000000010100010100000301000004010001020200000203010002040100",
+      "loops": 3,
+      "series_parallel": false,
+      "t": 7,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            0,
+            4,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            2,
+            3,
+            0
+          ],
+          [
+            2,
+            4,
+            0
+          ]
+        ],
+        "n": 5,
+        "s": 3,
+        "t": 4
+      }
+    },
+    {
+      "action": {
+        "a1": 2,
+        "a2": 6,
+        "apex": 4,
+        "b": 0,
+        "c1": 1,
+        "c2": 3,
+        "kind": "triangle",
+        "v_a": 0,
+        "v_b": 2
+      },
+      "children": [
+        10,
+        11,
+        12,
+        20
+      ],
+      "eps_lines": 0,
+      "index": 8,
+      "key": "0105000000010100020100000301000004010001020100010301000104010002040100",
+      "loops": 3,
+      "series_parallel": false,
+      "t": 7,
+      "topology": {
+        "lines": [
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            0,
+            4,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            3,
+            0
+          ],
+          [
+            1,
+            4,
+            0
+          ],
+          [
+            2,
+            4,
+            0
+          ]
+        ],
+        "n": 5,
+        "s": 3,
+        "t": 4
+      }
+    },
+    {
+      "action": {
+        "drop": 5,
+        "keep": 4,
+        "kind": "insertion"
+      },
+      "children": [
+        11,
+        12,
+        13,
+        14,
+        21,
+        27
+      ],
+      "eps_lines": 0,
+      "index": 9,
+      "key": "0105000000010100020100000301000004010001020100010402000002030100",
+      "loops": 3,
+      "series_parallel": false,
+      "t": 7,
+      "topology": {
+        "lines": [
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            0,
+            4,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            4,
+            0
+          ],
+          [
+            1,
+            4,
+            0
+          ],
+          [
+            2,
+            3,
+            0
+          ]
+        ],
+        "n": 5,
+        "s": 3,
+        "t": 4
+      }
+    },
+    {
+      "action": {
+        "blob": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "blob_eps": 0,
+        "blob_loops": 2,
+        "kind": "carpet",
+        "r": 5,
+        "third": null
+      },
+      "children": [
+        22,
+        24,
+        26
+      ],
+      "eps_lines": 0,
+      "index": 10,
+      "key": "010400000101000101000002010000030100010201000103010002030100",
+      "loops": 3,
+      "series_parallel": false,
+      "t": 6,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            3,
+            0
+          ],
+          [
+            2,
+            3,
+            0
+          ]
+        ],
+        "n": 4,
+        "s": 2,
+        "t": 3
+      }
+    },
+    {
+      "action": {
+        "drop": 5,
+        "keep": 4,
+        "kind": "insertion"
+      },
+      "children": [
+        22,
+        23,
+        24,
+        25,
+        27
+      ],
+      "eps_lines": 0,
+      "index": 11,
+      "key": "010400000101000101000002010000030100010201000103020000",
+      "loops": 3,
+      "series_parallel": false,
+      "t": 6,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            3,
+            0
+          ],
+          [
+            1,
+            3,
+            0
+          ]
+        ],
+        "n": 4,
+        "s": 2,
+        "t": 3
+      }
+    },
+    {
+      "action": {
+        "drop": 4,
+        "keep": 3,
+        "kind": "insertion"
+      },
+      "children": [
+        22,
+        23,
+        32
+      ],
+      "eps_lines": 0,
+      "index": 12,
+      "key": "010400000101000101000002010000030100010302000002030100",
+      "loops": 3,
+      "series_parallel": true,
+      "t": 6,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            1,
+            3,
+            0
+          ],
+          [
+            1,
+            3,
+            0
+          ],
+          [
+            2,
+            3,
+            0
+          ]
+        ],
+        "n": 4,
+        "s": 2,
+        "t": 3
+      }
+    },
+    {
+      "action": {
+        "drop": 3,
+        "keep": 2,
+        "kind": "insertion"
+      },
+      "children": [
+        25,
+        30
+      ],
+      "eps_lines": 0,
+      "index": 13,
+      "key": "010400000101000101000002010000030200000102020000",
+      "loops": 3,
+      "series_parallel": true,
+      "t": 6,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ]
+        ],
+        "n": 4,
+        "s": 2,
+        "t": 3
+      }
+    },
+    {
+      "action": {
+        "drop": 2,
+        "keep": 1,
+        "kind": "insertion"
+      },
+      "children": [
+        24,
+        33
+      ],
+      "eps_lines": 0,
+      "index": 14,
+      "key": "010400000101000101000003020000010202000002030100",
+      "loops": 3,
+      "series_parallel": true,
+      "t": 6,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            2,
+            3,
+            0
+          ]
+        ],
+        "n": 4,
+        "s": 2,
+        "t": 3
+      }
+    },
+    {
+      "action": {
+        "drop": 1,
+        "keep": 0,
+        "kind": "insertion"
+      },
+      "children": [
+        23,
+        28
+      ],
+      "eps_lines": 0,
+      "index": 15,
+      "key": "010400000101000102000000020100000301000102010001030100",
+      "loops": 3,
+      "series_parallel": false,
+      "t": 6,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            3,
+            0
+          ]
+        ],
+        "n": 4,
+        "s": 2,
+        "t": 3
+      }
+    },
+    {
+      "action": {
+        "drop": 1,
+        "keep": 0,
+        "kind": "insertion"
+      },
+      "children": [
+        22,
+        23,
+        32
+      ],
+      "eps_lines": 0,
+      "index": 16,
+      "key": "010400000101000102000000030100010201000103010002030100",
+      "loops": 3,
+      "series_parallel": true,
+      "t": 6,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            3,
+            0
+          ],
+          [
+            2,
+            3,
+            0
+          ]
+        ],
+        "n": 4,
+        "s": 2,
+        "t": 3
+      }
+    },
+    {
+      "action": {
+        "drop": 1,
+        "keep": 0,
+        "kind": "insertion"
+      },
+      "children": [
+        25,
+        35
+      ],
+      "eps_lines": 0,
+      "index": 17,
+      "key": "010400000101000102000000030100010202000001030100",
+      "loops": 3,
+      "series_parallel": true,
+      "t": 6,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            3,
+            0
+          ]
+        ],
+        "n": 4,
+        "s": 2,
+        "t": 3
+      }
+    },
+    {
+      "action": {
+        "drop": 1,
+        "keep": 0,
+        "kind": "insertion"
+      },
+      "children": [
+        24,
+        33
+      ],
+      "eps_lines": 0,
+      "index": 18,
+      "key": "010400000101000102000000030100010202000002030100",
+      "loops": 3,
+      "series_parallel": true,
+      "t": 6,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            2,
+            3,
+            0
+          ]
+        ],
+        "n": 4,
+        "s": 2,
+        "t": 3
+      }
+    },
+    {
+      "action": {
+        "drop": 1,
+        "keep": 0,
+        "kind": "insertion"
+      },
+      "children": [
+        34
+      ],
+      "eps_lines": 0,
+      "index": 19,
+      "key": "010400000101000102000000030200000102020000",
+      "loops": 3,
+      "series_parallel": true,
+      "t": 6,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ]
+        ],
+        "n": 4,
+        "s": 2,
+        "t": 3
+      }
+    },
+    {
+      "action": {
+        "drop": 2,
+        "keep": 1,
+        "kind": "insertion"
+      },
+      "children": [
+        22,
+        31
+      ],
+      "eps_lines": 0,
+      "index": 20,
+      "key": "010400000101000201000003020000010201000103020000",
+      "loops": 3,
+      "series_parallel": true,
+      "t": 6,
+      "topology": {
+        "lines": [
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            3,
+            0
+          ],
+          [
+            1,
+            3,
+            0
+          ]
+        ],
+        "n": 4,
+        "s": 2,
+        "t": 3
+      }
+    },
+    {
+      "action": {
+        "drop": 2,
+        "keep": 1,
+        "kind": "insertion"
+      },
+      "children": [
+        22,
+        31
+      ],
+      "eps_lines": 0,
+      "index": 21,
+      "key": "010400000101000201000003020000010202000001030100",
+      "loops": 3,
+      "series_parallel": true,
+      "t": 6,
+      "topology": {
+        "lines": [
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            3,
+            0
+          ]
+        ],
+        "n": 4,
+        "s": 2,
+        "t": 3
+      }
+    },
+    {
+      "action": {
+        "drop": 2,
+        "keep": 1,
+        "kind": "insertion"
+      },
+      "children": [
+        29,
+        37
+      ],
+      "eps_lines": 0,
+      "index": 22,
+      "key": "01030001010001010000020200000102020000",
+      "loops": 3,
+      "series_parallel": true,
+      "t": 5,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ]
+        ],
+        "n": 3,
+        "s": 1,
+        "t": 2
+      }
+    },
+    {
+      "action": {
+        "drop": 2,
+        "keep": 1,
+        "kind": "insertion"
+      },
+      "children": [
+        29,
+        32
+      ],
+      "eps_lines": 0,
+      "index": 23,
+      "key": "01030001010001010000020300000001020100",
+      "loops": 3,
+      "series_parallel": true,
+      "t": 5,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ]
+        ],
+        "n": 3,
+        "s": 1,
+        "t": 2
+      }
+    },
+    {
+      "action": {
+        "drop": 1,
+        "keep": 0,
+        "kind": "insertion"
+      },
+      "children": [
+        33
+      ],
+      "eps_lines": 0,
+      "index": 24,
+      "key": "01030001010001020000000202000001020100",
+      "loops": 3,
+      "series_parallel": true,
+      "t": 5,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ]
+        ],
+        "n": 3,
+        "s": 1,
+        "t": 2
+      }
+    },
+    {
+      "action": {
+        "drop": 1,
+        "keep": 0,
+        "kind": "insertion"
+      },
+      "children": [
+        36
+      ],
+      "eps_lines": 0,
+      "index": 25,
+      "key": "01030001010001020000000203000000",
+      "loops": 3,
+      "series_parallel": true,
+      "t": 5,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ]
+        ],
+        "n": 3,
+        "s": 1,
+        "t": 2
+      }
+    },
+    {
+      "action": {
+        "a1": 1,
+        "a2": 3,
+        "apex": 2,
+        "b": 0,
+        "c1": 2,
+        "c2": 4,
+        "kind": "triangle",
+        "v_a": 0,
+        "v_b": 1
+      },
+      "children": [
+        30,
+        34
+      ],
+      "eps_lines": 0,
+      "index": 26,
+      "key": "0104000001010001010000020100000301000102010001030100",
+      "loops": 2,
+      "series_parallel": false,
+      "t": 5,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            3,
+            0
+          ]
+        ],
+        "n": 4,
+        "s": 2,
+        "t": 3
+      }
+    },
+    {
+      "action": {
+        "a1": 2,
+        "a2": 4,
+        "apex": 3,
+        "b": 0,
+        "c1": 1,
+        "c2": 3,
+        "kind": "triangle",
+        "v_a": 0,
+        "v_b": 1
+      },
+      "children": [
+        31,
+        32,
+        33,
+        35
+      ],
+      "eps_lines": 1,
+      "index": 27,
+      "key": "0104000001010001010000020100000301000102010001030101",
+      "loops": 2,
+      "series_parallel": false,
+      "t": 5,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            3,
+            1
+          ]
+        ],
+        "n": 4,
+        "s": 2,
+        "t": 3
+      }
+    },
+    {
+      "action": {
+        "kind": "custom"
+      },
+      "children": [
+        32
+      ],
+      "eps_lines": 1,
+      "index": 28,
+      "key": "0104000001010001010100020100000301000102010001030100",
+      "loops": 2,
+      "series_parallel": false,
+      "t": 5,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            3,
+            0
+          ]
+        ],
+        "n": 4,
+        "s": 2,
+        "t": 3
+      }
+    },
+    {
+      "action": {
+        "drop": 1,
+        "keep": 0,
+        "kind": "insertion"
+      },
+      "children": [
+        37
+      ],
+      "eps_lines": 0,
+      "index": 29,
+      "key": "0102010100010400000000",
+      "loops": 3,
+      "series_parallel": true,
+      "t": 4,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ]
+        ],
+        "n": 2,
+        "s": 0,
+        "t": 1
+      }
+    },
+    {
+      "action": {
+        "drop": 2,
+        "keep": 1,
+        "kind": "insertion"
+      },
+      "children": [
+        36,
+        39
+      ],
+      "eps_lines": 0,
+      "index": 30,
+      "key": "010300010100010100000202000001020100",
+      "loops": 2,
+      "series_parallel": true,
+      "t": 4,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ]
+        ],
+        "n": 3,
+        "s": 1,
+        "t": 2
+      }
+    },
+    {
+      "action": {
+        "drop": 2,
+        "keep": 1,
+        "kind": "insertion"
+      },
+      "children": [
+        37,
+        41
+      ],
+      "eps_lines": 1,
+      "index": 31,
+      "key": "010300010100010100000202000001020101",
+      "loops": 2,
+      "series_parallel": true,
+      "t": 4,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            1,
+            2,
+            1
+          ]
+        ],
+        "n": 3,
+        "s": 1,
+        "t": 2
+      }
+    },
+    {
+      "action": {
+        "drop": 2,
+        "keep": 1,
+        "kind": "insertion"
+      },
+      "children": [
+        37,
+        40
+      ],
+      "eps_lines": 1,
+      "index": 32,
+      "key": "010300010100010100000202000101020100",
+      "loops": 2,
+      "series_parallel": true,
+      "t": 4,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            2,
+            1
+          ],
+          [
+            1,
+            2,
+            0
+          ]
+        ],
+        "n": 3,
+        "s": 1,
+        "t": 2
+      }
+    },
+    {
+      "action": {
+        "drop": 2,
+        "keep": 1,
+        "kind": "insertion"
+      },
+      "children": [
+        40
+      ],
+      "eps_lines": 1,
+      "index": 33,
+      "key": "010300010100010101000202000001020100",
+      "loops": 2,
+      "series_parallel": true,
+      "t": 4,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ]
+        ],
+        "n": 3,
+        "s": 1,
+        "t": 2
+      }
+    },
+    {
+      "action": {
+        "drop": 1,
+        "keep": 0,
+        "kind": "insertion"
+      },
+      "children": [
+        38
+      ],
+      "eps_lines": 0,
+      "index": 34,
+      "key": "010300010100010200000002020000",
+      "loops": 2,
+      "series_parallel": true,
+      "t": 4,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ]
+        ],
+        "n": 3,
+        "s": 1,
+        "t": 2
+      }
+    },
+    {
+      "action": {
+        "drop": 1,
+        "keep": 0,
+        "kind": "insertion"
+      },
+      "children": [
+        39
+      ],
+      "eps_lines": 1,
+      "index": 35,
+      "key": "010300010100010200000002020001",
+      "loops": 2,
+      "series_parallel": true,
+      "t": 4,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            2,
+            1
+          ]
+        ],
+        "n": 3,
+        "s": 1,
+        "t": 2
+      }
+    },
+    {
+      "action": {
+        "drop": 1,
+        "keep": 0,
+        "kind": "insertion"
+      },
+      "children": [
+        39
+      ],
+      "eps_lines": 0,
+      "index": 36,
+      "key": "01020101000103000000",
+      "loops": 2,
+      "series_parallel": true,
+      "t": 3,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ]
+        ],
+        "n": 2,
+        "s": 0,
+        "t": 1
+      }
+    },
+    {
+      "action": {
+        "drop": 1,
+        "keep": 0,
+        "kind": "insertion"
+      },
+      "children": [
+        41
+      ],
+      "eps_lines": 1,
+      "index": 37,
+      "key": "01020101000103000001",
+      "loops": 2,
+      "series_parallel": true,
+      "t": 3,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            1
+          ]
+        ],
+        "n": 2,
+        "s": 0,
+        "t": 1
+      }
+    },
+    {
+      "action": {
+        "drop": 1,
+        "keep": 0,
+        "kind": "insertion"
+      },
+      "children": [
+        42
+      ],
+      "eps_lines": 0,
+      "index": 38,
+      "key": "010201010001020000",
+      "loops": 1,
+      "series_parallel": true,
+      "t": 2,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ]
+        ],
+        "n": 2,
+        "s": 0,
+        "t": 1
+      }
+    },
+    {
+      "action": {
+        "drop": 1,
+        "keep": 0,
+        "kind": "insertion"
+      },
+      "children": [
+        42
+      ],
+      "eps_lines": 1,
+      "index": 39,
+      "key": "010201010001020001",
+      "loops": 1,
+      "series_parallel": true,
+      "t": 2,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            1
+          ]
+        ],
+        "n": 2,
+        "s": 0,
+        "t": 1
+      }
+    },
+    {
+      "action": {
+        "drop": 1,
+        "keep": 0,
+        "kind": "insertion"
+      },
+      "children": [
+        42
+      ],
+      "eps_lines": 1,
+      "index": 40,
+      "key": "010201010001020002",
+      "loops": 1,
+      "series_parallel": true,
+      "t": 2,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            2
+          ]
+        ],
+        "n": 2,
+        "s": 0,
+        "t": 1
+      }
+    },
+    {
+      "action": {
+        "drop": 1,
+        "keep": 0,
+        "kind": "insertion"
+      },
+      "children": [
+        42
+      ],
+      "eps_lines": 2,
+      "index": 41,
+      "key": "010201010001020101",
+      "loops": 1,
+      "series_parallel": true,
+      "t": 2,
+      "topology": {
+        "lines": [
+          [
+            0,
+            1,
+            1
+          ],
+          [
+            0,
+            1,
+            1
+          ]
+        ],
+        "n": 2,
+        "s": 0,
+        "t": 1
+      }
+    },
+    {
+      "action": {
+        "kind": "trivial"
+      },
+      "children": [],
+      "eps_lines": 0,
+      "index": 42,
+      "key": "01020101",
+      "loops": 0,
+      "series_parallel": true,
+      "t": 0,
+      "topology": {
+        "lines": [],
+        "n": 2,
+        "s": 0,
+        "t": 1
+      }
+    }
+  ],
+  "p_topology_version": 1,
+  "schema": "rustred.p-topologies.v1"
+}
