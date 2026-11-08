@@ -2,9 +2,10 @@
 //! RustRed p path against Forcer's frozen outputs, without FORM.
 //!
 //! Every case of the frozen batteries `tests/fixtures/forcer/p{1,2,3}l_battery.json`
-//! (45 + 23 + 19 = 87), of the gate part of the grids
-//! `p{1,2,3}l_grid.json` ([`in_gate`]) and of the anchors `p_anchors.json` is
-//! checked three ways:
+//! (45 + 23 + 19 = 87) and of the anchors `p_anchors.json` (11) is checked
+//! three ways, every case of the gate part of the grids `p{1,2,3}l_grid.json`
+//! ([`in_gate`]) by check 1 (Tier C runs every grid case through all three
+//! modes of the public API):
 //!
 //! 1. exact: RustRed's reduced values (the request level below the finalizer,
 //!    `rustred_evaluation::p_integral::reduce_requests`) equal Forcer's
@@ -28,12 +29,9 @@
 //! loops stay with Forcer: the engine has no p library for them, and a
 //! four-loop case fails closed on the RustRed path.
 //!
-//! The engine of the battery is [`battery_engine`], covering
-//! [`BATTERY_LOOPS`]. STAGE 1 (until M2-V4 ships the built-in 1L-3L library):
-//! RustRed's one-loop reference library, injected; the two- and three-loop
-//! tests are ignored. STAGE 2: the built-in library of `Vakint::new()`,
-//! `BATTERY_LOOPS = 1..=3`, no test ignored. The full grids and the
-//! benchmark cells through vakint's public API are Tier C
+//! The engine of the battery is [`battery_engine`], `Vakint::new()` with
+//! its built-in 1L-3L p library (M2-V4), covering [`BATTERY_LOOPS`]. The full
+//! grids and the benchmark cells through vakint's public API are Tier C
 //! (`tests/p_integral_rustred_full.rs`); live FORM comparisons are Tier B
 //! (`tests/p_integral_rustred_tests.rs`).
 
@@ -56,18 +54,14 @@ use crate::{
     Vakint, VakintError, VakintSettings,
 };
 
-/// The loop counts [`battery_engine`] reduces with RustRed (STAGE 1: the
-/// one-loop reference library).
-const BATTERY_LOOPS: RangeInclusive<usize> = 1..=1;
+/// The loop counts [`battery_engine`] reduces with RustRed: the scope of the
+/// built-in p library.
+const BATTERY_LOOPS: RangeInclusive<usize> = 1..=3;
 
-/// The engine of the battery: RustRed's one-loop reference library injected
-/// (STAGE 1). STAGE 2 switches to `Vakint::new()` and its built-in library.
+/// The engine of the battery: `Vakint::new()`, whose built-in p library
+/// (M2-V4) covers [`BATTERY_LOOPS`].
 fn battery_engine() -> Vakint {
-    let mut engine = Vakint::new().unwrap();
-    engine
-        .inject_p_library(rustred::propagator::testing::one_loop_reference_library().unwrap())
-        .unwrap();
-    engine
+    Vakint::new().unwrap()
 }
 
 /// A frozen fixture file and the number of cases it must hold.
@@ -294,8 +288,9 @@ fn assert_symbolic(
     );
 }
 
-/// The point of check 3: `p(1..4) = (0,0,0,1)`, so `Q² = -p² = 1`, and
-/// `μ² = 2`, at the precision of `settings`.
+/// The point of check 3: `p(1..4) = (0,0,0,1)`, so `Q² = -p² = 1`, `μ² = 2`
+/// and `mass = 3` (the free coefficient of the two-loop battery case
+/// `kite_coefficients`), at the precision of `settings`.
 type NumericalPoint = (
     HashMap<String, Float, ahash::RandomState>,
     HashMap<usize, Momentum, ahash::RandomState>,
@@ -304,7 +299,10 @@ type NumericalPoint = (
 fn numerical_point(settings: &VakintSettings) -> NumericalPoint {
     let bits = settings.get_binary_precision();
     let float = |value: i64| Float::with_val(bits, value);
-    let params = HashMap::from_iter([(settings.mu_r_sq_symbol.clone(), float(2))]);
+    let params = HashMap::from_iter([
+        (settings.mu_r_sq_symbol.clone(), float(2)),
+        ("mass".to_owned(), float(3)),
+    ]);
     let externals = (1..=4)
         .map(|head| {
             (
@@ -359,8 +357,9 @@ fn assert_numerical(
     assert!(equal, "{name}: {diagnostic}");
 }
 
-/// The three checks on every case of `loops` loops ([`cases`]), whose number
-/// is pinned: `battery + grid gate part + anchors`.
+/// Check 1 on every case of `loops` loops ([`cases`]), whose number is
+/// pinned (`battery + grid gate part + anchors`), and checks 2 and 3 on the
+/// battery and anchor cases (the grid cases go through every mode in Tier C).
 fn assert_loop_count_matches_forcer(loops: usize, expected_cases: usize) {
     let engine = battery_engine();
     assert!(
@@ -372,8 +371,10 @@ fn assert_loop_count_matches_forcer(loops: usize, expected_cases: usize) {
     let retain = settings(RustRedMasterMode::Retain, loops, None);
     for (file, case) in &cases {
         assert_reduced_exactly(&engine, &retain, file, case);
-        assert_symbolic(&engine, loops, None, file, case);
-        assert_numerical(&engine, loops, None, file, case);
+        if *file != GRIDS[loops - 1].file {
+            assert_symbolic(&engine, loops, None, file, case);
+            assert_numerical(&engine, loops, None, file, case);
+        }
     }
 }
 
@@ -387,7 +388,6 @@ fn one_loop_cases_match_forcer_exactly_symbolically_and_numerically() {
 /// 2L: 23 battery cases (kite, dots, odd rank with `-p(3)`, sunset, pinched,
 /// negative power), the 39 grid cases and the 3 kite anchors.
 #[test]
-#[ignore = "M2-V5 STAGE 2: needs the built-in 1L-3L p library (M2-V4)"]
 fn two_loop_cases_match_forcer_exactly_symbolically_and_numerically() {
     assert_loop_count_matches_forcer(2, 23 + 39 + 3);
 }
@@ -397,7 +397,6 @@ fn two_loop_cases_match_forcer_exactly_symbolically_and_numerically() {
 /// 22 dotted sectors) and the 5 anchors (the master `no` and the parents of
 /// the ε-line kite `t1star05`, including its `n = 0` chart).
 #[test]
-#[ignore = "M2-V5 STAGE 2: needs the built-in 1L-3L p library (M2-V4)"]
 fn three_loop_cases_match_forcer_exactly_symbolically_and_numerically() {
     assert_loop_count_matches_forcer(3, 19 + 67 + 5);
 }

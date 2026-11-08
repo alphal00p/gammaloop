@@ -29,10 +29,8 @@
 //! `VAKINT_REQUIRE_FORM5=1` ([`REQUIRE_FORM5`], the gate environment), which
 //! makes a missing FORM 5 a failure ([`live_form`]).
 //!
-//! STAGE 1 (until M2-V4 ships the built-in 1L-3L library): the RustRed engine
-//! holds RustRed's one-loop reference library, [`P_BATTERY_LOOPS`] is `1..=1`
-//! and the two- and three-loop tests are ignored. STAGE 2: `Vakint::new()`
-//! with its built-in library, `1..=3`.
+//! The RustRed engine is `Vakint::new()` with its built-in 1L-3L p library
+//! (M2-V4), covering [`P_BATTERY_LOOPS`].
 
 #![allow(dead_code)]
 
@@ -56,9 +54,9 @@ use vakint::{
 use super::p_integrals::{VAKINT, forcer_form, parse};
 pub use super::p_rustred::rustred_p_settings;
 
-/// The loop counts [`p_battery_engine`] reduces with RustRed (STAGE 1: the
-/// one-loop reference library).
-pub const P_BATTERY_LOOPS: RangeInclusive<usize> = 1..=1;
+/// The loop counts [`p_battery_engine`] reduces with RustRed: the scope of
+/// the built-in p library.
+pub const P_BATTERY_LOOPS: RangeInclusive<usize> = 1..=3;
 
 /// [`rustred_p_settings`] under the Ordered weight `arithmetic` in vakint's
 /// text form (`exact`, `modular_polynomial`, `modular_sampled:threads=4`, ...)
@@ -90,13 +88,10 @@ pub fn p_battery_engine() -> &'static Vakint {
     &P_BATTERY_ENGINE
 }
 
-/// A new engine of the RustRed side, with caches of its own: RustRed's
-/// one-loop reference library injected (STAGE 1); STAGE 2 uses
-/// `Vakint::new()` and its built-in library.
+/// A new engine of the RustRed side, with caches of its own:
+/// `Vakint::new()` and its built-in p library.
 pub fn new_p_battery_engine() -> Vakint {
-    super::p_rustred::rustred_p_engine(
-        rustred::propagator::testing::one_loop_reference_library().unwrap(),
-    )
+    Vakint::new().unwrap()
 }
 
 /// Cumulative step-cache counters of one engine's p program.
@@ -666,11 +661,12 @@ pub fn assert_rustred_p_identity(lhs: &str, rhs: &str) {
 }
 
 /// The `Oep` guard under RustRed (M1 review, missing test 5): `input`
-/// evaluates through `passing` Laurent terms with RustRed and with a live
-/// Forcer to the same value without an `Oep` tail, and one term more is a
-/// `MissingMasterOrders` error on both sides (the boundary is the masters'
-/// table, shared by both backends). The Forcer side is skipped without FORM
-/// 5 unless it is required ([`live_form`]); the RustRed side always runs.
+/// evaluates with RustRed through `passing` Laurent terms without an `Oep`
+/// tail, in `Symbolic` and `Numerical` mode, and one term more is a
+/// `MissingMasterOrders` error (the boundary is the masters' table, shared
+/// with Forcer). The `Symbolic` value equals a live Forcer's, skipped without
+/// FORM 5 unless it is required ([`live_form`]). Forcer's own error one term
+/// further is not re-run here (about 37 s per mode at three loops).
 pub fn assert_p_backends_oep_boundary(input: &str, passing: i64) {
     let atom = parse(input);
     for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Numerical] {
@@ -688,6 +684,9 @@ pub fn assert_p_backends_oep_boundary(input: &str, passing: i64) {
                 passing + 1
             ),
         }
+        if mode != RustRedMasterMode::Symbolic {
+            continue;
+        }
         let Some(form) = live_form("the Forcer side of the Oep boundary") else {
             continue;
         };
@@ -695,12 +694,5 @@ pub fn assert_p_backends_oep_boundary(input: &str, passing: i64) {
             .unwrap_or_else(|error| panic!("{input}: {error}"));
         values_agree(&value, &forcer, mode)
             .unwrap_or_else(|difference| panic!("{input} ({mode}): {difference}"));
-        match forcer_side_value(&VAKINT, &form, &atom, mode, passing + 1) {
-            Err(VakintError::MissingMasterOrders(_)) => {}
-            other => panic!(
-                "{input} ({mode}) with Forcer through {} terms: expected a missing master order, got {other:?}",
-                passing + 1
-            ),
-        }
     }
 }
