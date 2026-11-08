@@ -361,6 +361,11 @@ impl TryFrom<LibraryRep> for Minkowski {
 impl BaseRepName for Minkowski {
     const NAME: &'static str = "mink";
 
+    #[cfg(feature = "shadowing")]
+    fn selfless_symbol() -> Symbol {
+        ExtendibleReps::MINKOWSKI.symbol()
+    }
+
     fn selfless_base() -> Self::Base {
         Self::default()
     }
@@ -1729,9 +1734,23 @@ impl LibraryRep {
             .new_dual_impl_with_metadata_request(name, index_palette, index_row)
     }
 
+    /// Read already-published representation data without consulting the maps.
+    /// This must not force `REPS`: registry construction also uses this lookup.
+    fn data(&self) -> &'static RepData {
+        match *self {
+            Self::Dummy => &DUMMY_REP_DATA,
+            Self::SelfDual(index) => &SELF_DUAL[index as usize].1,
+            Self::InlineMetric(index) => &INLINE_METRIC[index as usize].1.rep_data,
+            Self::Dualizable(index) => &DUALIZABLE[index.unsigned_abs() as usize - 1].1,
+        }
+    }
+
     #[cfg(feature = "shadowing")]
     pub fn symbol(&self) -> Symbol {
-        REPS.read().unwrap()[*self].symbol
+        // The lazy handle completes native registration before the append-only
+        // storage is read; no registry map lock is needed for a published ID.
+        let _ = &*REPS;
+        self.data().symbol
     }
 
     pub fn name(&self) -> String {
@@ -2142,12 +2161,7 @@ impl Index<LibraryRep> for ExtendibleReps {
     type Output = RepData;
 
     fn index(&self, index: LibraryRep) -> &Self::Output {
-        match index {
-            LibraryRep::Dummy => &DUMMY_REP_DATA,
-            LibraryRep::SelfDual(l) => &SELF_DUAL[l as usize].1,
-            LibraryRep::InlineMetric(l) => &INLINE_METRIC[l as usize].1.rep_data,
-            LibraryRep::Dualizable(l) => &DUALIZABLE[l.unsigned_abs() as usize - 1].1,
-        }
+        index.data()
     }
 }
 
@@ -2659,18 +2673,160 @@ mod test {
 #[cfg(test)]
 #[cfg(feature = "shadowing")]
 mod shadowing_tests {
+    use std::process::{Command, Stdio};
     use std::sync::{Barrier, mpsc};
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     use symbolica::atom::{Atom, AtomView, NamespacedSymbol, Symbol, SymbolBuilder};
 
-    use crate::network::tags::SPENSO_TAG;
+    use crate::network::{library::symbolic::ETS, tags::SPENSO_TAG};
 
     use super::{
-        IndexDisplay, IndexPalette, IndexRow, LibraryRep, Minkowski, RepLibraryError, RepName,
-        RepresentationClass, RepresentationError, RepresentationMetadata,
+        BaseRepName, ExtendibleReps, IndexDisplay, IndexPalette, IndexRow, LibraryRep, Minkowski,
+        RepLibraryError, RepName, RepresentationClass, RepresentationError, RepresentationMetadata,
         representation_typst_body,
     };
+
+    #[test]
+    fn minkowski_symbol_cold_start_uses_canonical_representation() {
+        const CASE: &str = "SPENSO_MINKOWSKI_SYMBOL_COLD_CASE";
+        let Ok(case) = std::env::var(CASE) else {
+            for case in ["minkowski", "tags", "ets", "concurrent"] {
+                let mut child = Command::new(std::env::current_exe().unwrap())
+                    .args([
+                        "--exact",
+                        "structure::representation::shadowing_tests::minkowski_symbol_cold_start_uses_canonical_representation",
+                        "--nocapture",
+                    ])
+                    .env(CASE, case)
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .spawn()
+                    .unwrap();
+                let deadline = Instant::now() + Duration::from_secs(15);
+                while child.try_wait().unwrap().is_none() {
+                    if Instant::now() >= deadline {
+                        child.kill().unwrap();
+                        child.wait().unwrap();
+                        panic!("Minkowski initialization timed out for {case}");
+                    }
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                let output = child.wait_with_output().unwrap();
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                assert!(
+                    output.status.success() && stdout.contains("1 passed"),
+                    "Minkowski initialization failed for {case}: {stdout}\n{}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+            return;
+        };
+
+        let symbol = match case.as_str() {
+            "minkowski" => Minkowski::selfless_symbol(),
+            "tags" => {
+                let _ = SPENSO_TAG.dot;
+                Minkowski::selfless_symbol()
+            }
+            "ets" => {
+                let _ = ETS.metric;
+                Minkowski::selfless_symbol()
+            }
+            "concurrent" => {
+                let barrier = Barrier::new(9);
+                std::thread::scope(|scope| {
+                    let workers = (0..9)
+                        .map(|index| {
+                            let barrier = &barrier;
+                            scope.spawn(move || {
+                                barrier.wait();
+                                match index % 3 {
+                                    0 => {
+                                        let _ = SPENSO_TAG.dot;
+                                    }
+                                    1 => {
+                                        let _ = ETS.metric;
+                                    }
+                                    _ => {}
+                                }
+                                Minkowski::selfless_symbol()
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    let symbols = workers
+                        .into_iter()
+                        .map(|worker| worker.join().unwrap())
+                        .collect::<Vec<_>>();
+                    assert!(symbols.iter().all(|symbol| *symbol == symbols[0]));
+                    symbols[0]
+                })
+            }
+            _ => panic!("unknown Minkowski initialization case {case}"),
+        };
+
+        let canonical = LibraryRep::from(Minkowski {});
+        assert_eq!(canonical, ExtendibleReps::MINKOWSKI);
+        assert_eq!(symbol, canonical.symbol());
+        assert_eq!(symbol.get_namespace(), "spenso");
+        assert!(symbol.has_tag(&SPENSO_TAG.representation));
+        assert!(symbol.has_tag(&SPENSO_TAG.self_dual));
+        assert!(!symbol.has_tag(&SPENSO_TAG.dualizable));
+        assert!(symbol.get_print_function().is_some());
+        let metadata = RepresentationMetadata::from_symbol(symbol).unwrap();
+        assert_eq!(metadata.class, RepresentationClass::InlineMetric);
+        assert_eq!(
+            metadata.index_palette,
+            super::default_index_palette(Minkowski::NAME)
+        );
+        assert_eq!(
+            metadata.index_row,
+            super::default_index_row(Minkowski::NAME)
+        );
+        for alias in ["mink", "spenso::mink"] {
+            assert_eq!(LibraryRep::new_self_dual(alias).unwrap(), canonical);
+            assert!(matches!(
+                LibraryRep::new_dual(alias),
+                Err(RepLibraryError::AlreadyExistsDifferentType(_))
+            ));
+        }
+        let foreign = symbolica::symbol!("spenso_minkowski_cold_test::mink");
+        assert_ne!(symbol, foreign);
+        assert!(Minkowski::new_slot_from(symbol, 4usize.into(), 0usize.into()).is_ok());
+        assert!(Minkowski::new_slot_from(foreign, 4usize.into(), 0usize.into()).is_err());
+    }
+
+    #[test]
+    fn registered_representation_symbols_do_not_require_registry_lock() {
+        let representations = [
+            LibraryRep::Dummy,
+            ExtendibleReps::EUCLIDEAN,
+            ExtendibleReps::MINKOWSKI,
+            ExtendibleReps::LORENTZ_UP,
+            ExtendibleReps::LORENTZ_DOWN,
+        ];
+        let expected = representations.map(|representation| representation.symbol());
+        let (tx, rx) = mpsc::channel();
+        let completed_while_write_locked = std::thread::scope(|scope| {
+            let writer = super::REPS.write().unwrap();
+            scope.spawn(move || {
+                tx.send((
+                    representations.map(|representation| representation.symbol()),
+                    Minkowski::selfless_symbol(),
+                ))
+                .unwrap();
+            });
+            let completed = rx.recv_timeout(Duration::from_secs(5));
+            // Release the guard before joining, even if the accessor regresses
+            // to taking a read lock: the regression must fail, not deadlock.
+            drop(writer);
+            completed
+        });
+        let (symbols, minkowski) = completed_while_write_locked
+            .expect("published representation symbols must not acquire the registry lock");
+        assert_eq!(symbols, expected);
+        assert_eq!(minkowski, expected[2]);
+    }
 
     fn greek_palette() -> IndexPalette {
         IndexPalette::cyclic(
