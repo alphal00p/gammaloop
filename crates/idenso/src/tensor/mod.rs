@@ -56,8 +56,11 @@ mod network;
 #[cfg(feature = "bincode")]
 mod persistence;
 mod replacement;
+mod scalar_algebra;
+mod scalar_payload;
 pub mod simplification;
 pub use replacement::TensorRule;
+pub use scalar_payload::ScalarPayloadPosition;
 
 #[cfg(test)]
 pub mod tests;
