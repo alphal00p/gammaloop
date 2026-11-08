@@ -6,9 +6,8 @@
 //! environment); the RustRed identities, the reroutings and the fail-closed
 //! checks of the Forcer side need no FORM.
 //!
-//! STAGE 1 (until M2-V4 ships the built-in 1L-3L library) runs the one-loop
-//! tests against RustRed's one-loop reference library; the two- and
-//! three-loop tests are ignored until STAGE 2.
+//! The RustRed side is `Vakint::new()` with its built-in 1L-3L p library
+//! (M2-V4).
 
 #![cfg(feature = "feynkit-ingress")]
 
@@ -21,9 +20,13 @@ mod p_rustred;
 
 use p_backends::*;
 use p_integrals::{canonical, from_dot, parse};
+use p_rustred::rustred_p_evaluate;
 use symbolica::atom::Atom;
 use vakint::p_integral::forcer_fixtures::nonzero_sectors;
-use vakint::{RustRedMasterMode, VakintError};
+use vakint::{
+    LoopNormalizationFactor, OrderedCacheMode, OrderedCacheSettings, RustRedMasterMode,
+    VakintError, VakintSettings,
+};
 
 /// The scalar numerators of rank 0 to 4 of the bubble grid, each with its own
 /// coefficient (distinct primes), summed into one input per pair of powers.
@@ -79,6 +82,108 @@ fn odd_rank_bubbles_with_a_reversed_head_agree_with_forcer() {
 fn an_odd_bubble_carries_its_wick_sign_once() {
     for input in ["dot(k(1),p(1))*topo(P1L(p(1),1,1))", "topo(P1L(p(1),2,1))"] {
         assert_p_backends_agree(input, battery_terms(1));
+    }
+}
+
+/// One input per loop count for the concurrent path: an odd-rank dotted
+/// bubble, a dotted kite with a rank-3 numerator, and the dotted NO top,
+/// which reduces onto both masters `no` and `t105`.
+const CONCURRENT_INPUTS: [&str; 3] = [
+    "dot(k(1),p(1))^3*topo(P1L(p(1),2,3))",
+    "dot(k(1),p(1))*dot(k(2),p(1))^2*topo(P2L(p(1),1,2,1,1,1))",
+    "topo(P3L_NO(p(1),2,1,1,1,1,1,1,1))",
+];
+
+/// The concurrent path (M2 exit criterion 2; every other p test runs on one
+/// core): with `n_cores = 4`, `modular_sampled` on four fixed workers and
+/// `modular_polynomial` following `n_cores` agree with Forcer, at the
+/// deepest loop count of [`P_BATTERY_LOOPS`].
+#[test]
+fn four_cores_under_both_modular_arithmetics_agree_with_forcer() {
+    let loops = *P_BATTERY_LOOPS.end();
+    for arithmetic in ["modular_sampled:threads=4", "modular_polynomial"] {
+        assert_p_backends_agree_under(
+            CONCURRENT_INPUTS[loops - 1],
+            battery_terms(loops),
+            arithmetic,
+            4,
+        );
+    }
+}
+
+/// The pair of the step-cache test: the kite, then the kite with line 5
+/// dotted, whose reduction passes through steps of the first.
+const CACHE_PAIR: [&str; 2] = ["topo(P2L(p(1),1,1,1,1,1))", "topo(P2L(p(1),1,1,1,1,2))"];
+
+/// The p library's Ordered step cache (M2 exit criterion 4, the vakint
+/// half), FORM-free. The pair evaluated read-write into a directory under
+/// `exact`, the second integral reusing steps of the first (step hits), is
+/// replayed read-only by fresh engines under `modular_polynomial` and
+/// `modular_sampled`, which compute nothing (step hits only: no miss, no
+/// insert). Every value equals a cache-off engine's. The counts are printed
+/// for the notes.
+#[test]
+fn the_p_step_cache_is_reused_and_replays_under_every_arithmetic() {
+    let loops = 2;
+    let pair = CACHE_PAIR.map(parse);
+    let settings = |arithmetic, cache| VakintSettings {
+        ordered_cache: cache,
+        ..rustred_p_settings_with_arithmetic(
+            RustRedMasterMode::Retain,
+            LoopNormalizationFactor::GScheme,
+            battery_terms(loops),
+            arithmetic,
+            1,
+        )
+    };
+    let off = settings("exact", OrderedCacheSettings::off());
+    let expected = pair.each_ref().map(|input| {
+        let value = rustred_p_evaluate(&new_p_battery_engine(), &off, input);
+        assert!(!value.is_zero(), "{input}");
+        value
+    });
+
+    let directory = tempfile::tempdir().unwrap();
+    let writing = settings("exact", OrderedCacheSettings::read_write(directory.path()));
+    let writer = new_p_battery_engine();
+    let mut before = PCacheCounts::default();
+    for (index, (input, expected)) in pair.iter().zip(&expected).enumerate() {
+        assert_eq!(&rustred_p_evaluate(&writer, &writing, input), expected);
+        let counts = p_cache_counts(&writer, OrderedCacheMode::ReadWrite);
+        let own = counts - before;
+        eprintln!(
+            "[p cache] exact read-write, integral {}: {own:?}",
+            index + 1
+        );
+        assert!(own.misses > 0 && own.inserts > 0, "{input}: {own:?}");
+        if index == 1 {
+            assert!(own.hits > 0, "{input} reuses no step of {}", pair[0]);
+        }
+        before = counts;
+    }
+    let program = p_cache_program(&writer, OrderedCacheMode::ReadWrite);
+    let mut files = std::fs::read_dir(program.directory.unwrap())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    files.sort();
+    eprintln!("[p cache] files written: {files:?}");
+    assert!(!files.is_empty(), "the read-write cache wrote no file");
+
+    for arithmetic in ["modular_polynomial", "modular_sampled"] {
+        let reading = settings(
+            arithmetic,
+            OrderedCacheSettings::read_only(directory.path()),
+        );
+        let reader = new_p_battery_engine();
+        for (input, expected) in pair.iter().zip(&expected) {
+            let value = rustred_p_evaluate(&reader, &reading, input);
+            assert_eq!(&value, expected, "{arithmetic}");
+        }
+        let counts = p_cache_counts(&reader, OrderedCacheMode::ReadOnly);
+        eprintln!("[p cache] {arithmetic} read-only replay: {counts:?}");
+        assert_eq!((counts.misses, counts.inserts), (0, 0), "{arithmetic}");
+        assert!(counts.hits > 0, "{arithmetic}: {counts:?}");
     }
 }
 
@@ -203,11 +308,10 @@ const ONE_LOOP_DEPTH: i64 = 11;
 
 /// The `Oep` guard under RustRed at three loops (M1 review, missing test 5):
 /// `Master(no)` is tabulated through `ε^7` (`Masters.prc:354`, `ALARMno` at
-/// `ep^8`), so the NO top passes through 11 terms (`ε^-3..ε^7`) and one term
-/// more is `MissingMasterOrders` with RustRed and with Forcer. The boundary
-/// is pinned so that a guard firing too early fails too.
+/// `ep^8`), so the NO top passes through 11 terms (`ε^-3..ε^7`), equal to
+/// Forcer's value, and one term more is `MissingMasterOrders` with RustRed.
+/// The boundary is pinned so that a guard firing too early fails too.
 #[test]
-#[ignore = "M2-V5 STAGE 2: needs the built-in 1L-3L p library (M2-V4)"]
 fn the_three_loop_oep_guard_fails_closed_under_rustred() {
     assert_p_backends_oep_boundary("topo(P3L_NO(p(1),1,1,1,1,1,1,1,1))", 11);
 }
@@ -267,7 +371,6 @@ mod rustred_identities {
     }
 
     #[test]
-    #[ignore = "M2-V5 STAGE 2: needs the built-in 1L-3L p library (M2-V4)"]
     fn two_loop_partial_fractions() {
         let a = [1, 2, 1, 3, 1];
         let k = |a, head| kite(a, head);
@@ -292,7 +395,6 @@ mod rustred_identities {
     }
 
     #[test]
-    #[ignore = "M2-V5 STAGE 2: needs the built-in 1L-3L p library (M2-V4)"]
     fn two_and_three_loops_with_the_external_momentum_reversed() {
         let a = [1, 2, 1, 3, 1];
         assert_rustred_p_identity(
@@ -327,7 +429,6 @@ mod rustred_identities {
 /// The kite and every non-scaleless labelled sector of the two-loop family,
 /// each times a rank-0-to-4 numerator.
 #[test]
-#[ignore = "M2-V5 STAGE 2: needs the built-in 1L-3L p library (M2-V4)"]
 fn the_kite_and_every_two_loop_sector_agree_with_forcer() {
     let numerator = "(3+5*dot(k(1),k(2))+7*dot(k(2),p(1))^2+11*dot(k(1),p(1))*dot(k(2),p(1))^3)";
     let sectors = nonzero_sectors("P2L").unwrap();
@@ -345,43 +446,34 @@ fn the_kite_and_every_two_loop_sector_agree_with_forcer() {
 /// RustRed agrees with Forcer, whose nonzero value a doubled sign would
 /// negate (Tier A pins the Wick-visible cases of the frozen batteries).
 #[test]
-#[ignore = "M2-V5 STAGE 2: needs the built-in 1L-3L p library (M2-V4)"]
 fn the_kite_carries_its_wick_sign_once() {
     assert_p_backends_agree("topo(P2L(p(1),1,1,1,1,1))", battery_terms(2));
 }
 
 /// The three-loop tops LA, BE and NO: plain, with a dot, and with numerators
-/// that reach their ISPs.
+/// that reach their ISPs, summed into one input per family with distinct
+/// coefficients (one Forcer run per family and mode).
 #[test]
-#[ignore = "M2-V5 STAGE 2: needs the built-in 1L-3L p library (M2-V4)"]
 fn the_three_loop_tops_with_dots_and_isps_agree_with_forcer() {
     for family in ["P3L_LA", "P3L_BE", "P3L_NO"] {
-        for (numerator, dotted) in [
-            ("1", None),
-            ("1", Some(2)),
-            ("dot(k(1),k(2))*dot(k(2),k(3))", None),
-            ("dot(k(1),p(1))*dot(k(3),p(1))+dot(k(1),k(3))", Some(5)),
-        ] {
-            let mut powers = [1i64; 8];
-            if let Some(line) = dotted {
-                powers[line - 1] = 2;
-            }
-            let powers = powers.map(|power| power.to_string()).join(",");
-            assert_p_backends_agree(
-                &format!("({numerator})*topo({family}(p(1),{powers}))"),
-                battery_terms(3),
-            );
-        }
+        assert_p_backends_agree(
+            &format!(
+                "(2+3*dot(k(1),k(2))*dot(k(2),k(3)))*topo({family}(p(1),1,1,1,1,1,1,1,1)) \
+                 + 5*topo({family}(p(1),1,2,1,1,1,1,1,1)) \
+                 + (7*dot(k(1),p(1))*dot(k(3),p(1))+11*dot(k(1),k(3)))\
+                 *topo({family}(p(1),1,1,1,1,2,1,1,1))"
+            ),
+            battery_terms(3),
+        );
     }
 }
 
 /// Odd ranks with the head `-p(3)` at two and three loops.
 #[test]
-#[ignore = "M2-V5 STAGE 2: needs the built-in 1L-3L p library (M2-V4)"]
 fn odd_rank_two_and_three_loop_integrals_with_a_reversed_head_agree_with_forcer() {
     for (input, loops) in [
         ("dot(k(1),p(3))*topo(P2L(-p(3),1,1,1,1,1))", 2),
-        ("dot(k(2),p(3))^3*topo(P2L(-p(3),1,2,1,1,1))", 2),
+        ("dot(k(2),p(3))^3*topo(P2L(-p(3),2,1,1,1,1))", 2),
         (
             "dot(k(1),p(3))*dot(k(2),k(3))*topo(P3L_BE(-p(3),1,1,1,1,1,1,1,1))",
             3,
@@ -393,7 +485,6 @@ fn odd_rank_two_and_three_loop_integrals_with_a_reversed_head_agree_with_forcer(
 
 /// A kite, a bubble of another head and a vacuum tadpole in one expression.
 #[test]
-#[ignore = "M2-V5 STAGE 2: needs the built-in 1L-3L p library (M2-V4)"]
 fn a_kite_with_mixed_heads_and_a_vacuum_tadpole_agrees_with_forcer() {
     assert_p_backends_agree(
         "dot(k(1),p(1))*topo(P2L(p(1),1,1,1,1,1)) + dot(k(1),p(3))^2*topo(P1L(-p(3),1,2)) \
@@ -417,7 +508,6 @@ const DOT_KITE: &str = "digraph p2l_kite {
 
 /// DOT ingress at two and three loops: the DOT kite and an exported NO top.
 #[test]
-#[ignore = "M2-V5 STAGE 2: needs the built-in 1L-3L p library (M2-V4)"]
 fn dot_graphs_agree_with_forcer() {
     assert_p_backends_agree_atom(&from_dot(DOT_KITE), battery_terms(2));
     let no = canonical(&parse("topo(P3L_NO(p(1),1,1,1,1,1,1,1,2))"));
@@ -427,7 +517,6 @@ fn dot_graphs_agree_with_forcer() {
 
 /// A kite and a three-loop top in the user's routing, rerouted.
 #[test]
-#[ignore = "M2-V5 STAGE 2: needs the built-in 1L-3L p library (M2-V4)"]
 fn rerouted_two_and_three_loop_integrals_agree_with_forcer() {
     assert_p_backends_agree_routed(
         "dot(k(1),p(1))*dot(k(2),p(1))*topo(prop(1,edge(1,3),k(1),0,1)*prop(2,edge(1,4),p(1)-k(1),0,2)\

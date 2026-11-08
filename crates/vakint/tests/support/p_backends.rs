@@ -19,7 +19,8 @@
 //!    `mursq = 1`, 40 digits, agree within `1e-30`.
 //!
 //! The RustRed side is [`p_battery_engine`] with RustRed alone
-//! ([`rustred_p_settings`]); the Forcer side is a live Forcer (FORM 5, Tier
+//! ([`rustred_p_settings`], the default Ordered arithmetic on one core, or
+//! [`rustred_p_settings_with_arithmetic`]); the Forcer side is a live Forcer (FORM 5, Tier
 //! B) or the frozen fixture outputs (Tier C). A live Forcer side runs Forcer
 //! alone on the p-integrals ([`forcer_side_value`]): it fails closed, never
 //! handing them to RustRed, whatever p library the engine holds.
@@ -28,10 +29,8 @@
 //! `VAKINT_REQUIRE_FORM5=1` ([`REQUIRE_FORM5`], the gate environment), which
 //! makes a missing FORM 5 a failure ([`live_form`]).
 //!
-//! STAGE 1 (until M2-V4 ships the built-in 1L-3L library): the RustRed engine
-//! holds RustRed's one-loop reference library, [`P_BATTERY_LOOPS`] is `1..=1`
-//! and the two- and three-loop tests are ignored. STAGE 2: `Vakint::new()`
-//! with its built-in library, `1..=3`.
+//! The RustRed engine is `Vakint::new()` with its built-in 1L-3L p library
+//! (M2-V4), covering [`P_BATTERY_LOOPS`].
 
 #![allow(dead_code)]
 
@@ -48,30 +47,96 @@ use vakint::p_integral::compare::tag_basis_difference;
 use vakint::symbols::S;
 use vakint::{
     EvaluationMethod, EvaluationOrder, ForcerOptions, LoopNormalizationFactor, Momentum,
-    NumericalEvaluationResult, RustRedMasterMode, Vakint, VakintError, VakintSettings,
-    vakint_symbol,
+    NumericalEvaluationResult, OrderedCacheMode, OrderedCacheProgramStatistics, RustRedMasterMode,
+    Vakint, VakintError, VakintSettings, vakint_symbol,
 };
 
 use super::p_integrals::{VAKINT, forcer_form, parse};
 pub use super::p_rustred::rustred_p_settings;
 
-/// The loop counts [`p_battery_engine`] reduces with RustRed (STAGE 1: the
-/// one-loop reference library).
-pub const P_BATTERY_LOOPS: RangeInclusive<usize> = 1..=1;
+/// The loop counts [`p_battery_engine`] reduces with RustRed: the scope of
+/// the built-in p library.
+pub const P_BATTERY_LOOPS: RangeInclusive<usize> = 1..=3;
+
+/// [`rustred_p_settings`] under the Ordered weight `arithmetic` in vakint's
+/// text form (`exact`, `modular_polynomial`, `modular_sampled:threads=4`, ...)
+/// on `n_cores` workers (M2 exit criterion 2: the p path under every
+/// arithmetic, and the concurrent path).
+pub fn rustred_p_settings_with_arithmetic(
+    mode: RustRedMasterMode,
+    normalization: LoopNormalizationFactor,
+    terms: i64,
+    arithmetic: &str,
+    n_cores: usize,
+) -> VakintSettings {
+    VakintSettings {
+        ordered_weight_arithmetic: arithmetic
+            .parse()
+            .unwrap_or_else(|error| panic!("arithmetic {arithmetic}: {error}")),
+        n_cores,
+        ..rustred_p_settings(mode, normalization, terms)
+    }
+}
 
 /// The relative tolerance of the numerical agreement at 40 digits.
 pub const NUMERICAL_TOLERANCE: f64 = 1e-30;
 
-static P_BATTERY_ENGINE: LazyLock<Vakint> = LazyLock::new(|| {
-    super::p_rustred::rustred_p_engine(
-        rustred::propagator::testing::one_loop_reference_library().unwrap(),
-    )
-});
+static P_BATTERY_ENGINE: LazyLock<Vakint> = LazyLock::new(new_p_battery_engine);
 
-/// The engine of the RustRed side: RustRed's one-loop reference library
-/// injected (STAGE 1); STAGE 2 uses `Vakint::new()` and its built-in library.
+/// The engine of the RustRed side, shared by the tests of a binary.
 pub fn p_battery_engine() -> &'static Vakint {
     &P_BATTERY_ENGINE
+}
+
+/// A new engine of the RustRed side, with caches of its own:
+/// `Vakint::new()` and its built-in p library.
+pub fn new_p_battery_engine() -> Vakint {
+    Vakint::new().unwrap()
+}
+
+/// Cumulative step-cache counters of one engine's p program.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PCacheCounts {
+    pub hits: u64,
+    pub misses: u64,
+    pub inserts: u64,
+}
+
+impl std::ops::Sub for PCacheCounts {
+    type Output = PCacheCounts;
+
+    fn sub(self, before: PCacheCounts) -> PCacheCounts {
+        PCacheCounts {
+            hits: self.hits - before.hits,
+            misses: self.misses - before.misses,
+            inserts: self.inserts - before.inserts,
+        }
+    }
+}
+
+/// The cache of `engine`'s p program (`p-library-<a>-<b>`), which must be
+/// attached with `mode` and use no shipped cache, so that the counts are the
+/// engine's own.
+pub fn p_cache_program(engine: &Vakint, mode: OrderedCacheMode) -> OrderedCacheProgramStatistics {
+    let statistics = engine.ordered_cache_statistics();
+    let program = statistics
+        .programs
+        .into_iter()
+        .find(|program| program.program.starts_with("p-library-"))
+        .expect("the p program has a cache");
+    assert_eq!(program.mode, mode, "{}", program.program);
+    assert!(program.shipped.is_none(), "{:?}", program.shipped);
+    program
+}
+
+/// The step-cache counters of [`p_cache_program`].
+pub fn p_cache_counts(engine: &Vakint, mode: OrderedCacheMode) -> PCacheCounts {
+    let native = p_cache_program(engine, mode).native;
+    PCacheCounts {
+        hits: native.hits,
+        misses: native.misses,
+        inserts: native.inserts,
+    }
 }
 
 /// The Laurent depth through `ε^(L+2)` for `loops` loops (the depth of the
@@ -215,10 +280,22 @@ pub const MODES: [RustRedMasterMode; 3] = [
 
 /// The value of `input` on the RustRed side in `mode`, G-scheme, `terms`.
 pub fn rustred_value(input: &Atom, mode: RustRedMasterMode, terms: i64) -> Result<Atom, String> {
-    let settings = rustred_p_settings(mode, LoopNormalizationFactor::GScheme, terms);
+    rustred_value_with(
+        &rustred_p_settings(mode, LoopNormalizationFactor::GScheme, terms),
+        input,
+    )
+}
+
+/// The value of `input` on the RustRed side with `settings`.
+pub fn rustred_value_with(settings: &VakintSettings, input: &Atom) -> Result<Atom, String> {
     p_battery_engine()
-        .evaluate(&settings, input.as_view())
-        .map_err(|error| format!("RustRed ({mode}): {error}"))
+        .evaluate(settings, input.as_view())
+        .map_err(|error| {
+            format!(
+                "RustRed ({}, {}): {error}",
+                settings.evaluation_order, settings.ordered_weight_arithmetic
+            )
+        })
 }
 
 /// [`forcer_side_value`] on the shared engine `VAKINT` (`Vakint::new()`).
@@ -358,6 +435,19 @@ pub fn agreement(
     terms: i64,
     forcer: impl Fn(RustRedMasterMode) -> Result<Atom, String>,
 ) -> Result<(), Disagreement> {
+    agreement_with(
+        input,
+        |mode| rustred_p_settings(mode, LoopNormalizationFactor::GScheme, terms),
+        forcer,
+    )
+}
+
+/// [`agreement`] with the RustRed side's settings given by `rustred(mode)`.
+pub fn agreement_with(
+    input: &Atom,
+    rustred: impl Fn(RustRedMasterMode) -> VakintSettings,
+    forcer: impl Fn(RustRedMasterMode) -> Result<Atom, String>,
+) -> Result<(), Disagreement> {
     for mode in MODES {
         let expected = forcer(mode).map_err(Disagreement::Failed)?;
         if expected.is_zero() {
@@ -365,7 +455,7 @@ pub fn agreement(
                 "Forcer gives 0 ({mode}): the agreement tests nothing"
             )));
         }
-        let actual = rustred_value(input, mode, terms).map_err(Disagreement::Failed)?;
+        let actual = rustred_value_with(&rustred(mode), input).map_err(Disagreement::Failed)?;
         values_agree(&actual, &expected, mode).map_err(|disagreement| match disagreement {
             Disagreement::Failed(error) => Disagreement::Failed(format!("{mode}: {error}")),
             Disagreement::Differs(difference) => Disagreement::Differs(format!(
@@ -393,6 +483,31 @@ pub fn assert_p_backends_agree_atom(input: &Atom, terms: i64) {
         live_forcer_value(&form, input, mode, terms)
     })
     .unwrap_or_else(|difference| panic!("{input}:\n{difference}"));
+}
+
+/// [`assert_p_backends_agree`] with the RustRed side under the Ordered
+/// `arithmetic` on `n_cores` workers ([`rustred_p_settings_with_arithmetic`]).
+pub fn assert_p_backends_agree_under(input: &str, terms: i64, arithmetic: &str, n_cores: usize) {
+    let input = parse(input);
+    let Some(form) = live_form(&format!(
+        "the RustRed ({arithmetic}, {n_cores} cores)/Forcer agreement of {input}"
+    )) else {
+        return;
+    };
+    agreement_with(
+        &input,
+        |mode| {
+            rustred_p_settings_with_arithmetic(
+                mode,
+                LoopNormalizationFactor::GScheme,
+                terms,
+                arithmetic,
+                n_cores,
+            )
+        },
+        |mode| live_forcer_value(&form, &input, mode, terms),
+    )
+    .unwrap_or_else(|difference| panic!("{input} ({arithmetic}, {n_cores} cores):\n{difference}"));
 }
 
 /// The Laurent depth of [`assert_p_backends_agree_routed`].
@@ -546,11 +661,12 @@ pub fn assert_rustred_p_identity(lhs: &str, rhs: &str) {
 }
 
 /// The `Oep` guard under RustRed (M1 review, missing test 5): `input`
-/// evaluates through `passing` Laurent terms with RustRed and with a live
-/// Forcer to the same value without an `Oep` tail, and one term more is a
-/// `MissingMasterOrders` error on both sides (the boundary is the masters'
-/// table, shared by both backends). The Forcer side is skipped without FORM
-/// 5 unless it is required ([`live_form`]); the RustRed side always runs.
+/// evaluates with RustRed through `passing` Laurent terms without an `Oep`
+/// tail, in `Symbolic` and `Numerical` mode, and one term more is a
+/// `MissingMasterOrders` error (the boundary is the masters' table, shared
+/// with Forcer). The `Symbolic` value equals a live Forcer's, skipped without
+/// FORM 5 unless it is required ([`live_form`]). Forcer's own error one term
+/// further is not re-run here (about 37 s per mode at three loops).
 pub fn assert_p_backends_oep_boundary(input: &str, passing: i64) {
     let atom = parse(input);
     for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Numerical] {
@@ -568,6 +684,9 @@ pub fn assert_p_backends_oep_boundary(input: &str, passing: i64) {
                 passing + 1
             ),
         }
+        if mode != RustRedMasterMode::Symbolic {
+            continue;
+        }
         let Some(form) = live_form("the Forcer side of the Oep boundary") else {
             continue;
         };
@@ -575,12 +694,5 @@ pub fn assert_p_backends_oep_boundary(input: &str, passing: i64) {
             .unwrap_or_else(|error| panic!("{input}: {error}"));
         values_agree(&value, &forcer, mode)
             .unwrap_or_else(|difference| panic!("{input} ({mode}): {difference}"));
-        match forcer_side_value(&VAKINT, &form, &atom, mode, passing + 1) {
-            Err(VakintError::MissingMasterOrders(_)) => {}
-            other => panic!(
-                "{input} ({mode}) with Forcer through {} terms: expected a missing master order, got {other:?}",
-                passing + 1
-            ),
-        }
     }
 }

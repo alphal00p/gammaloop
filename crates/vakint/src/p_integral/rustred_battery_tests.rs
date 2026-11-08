@@ -2,9 +2,10 @@
 //! RustRed p path against Forcer's frozen outputs, without FORM.
 //!
 //! Every case of the frozen batteries `tests/fixtures/forcer/p{1,2,3}l_battery.json`
-//! (45 + 23 + 19 = 87), of the gate part of the grids
-//! `p{1,2,3}l_grid.json` ([`in_gate`]) and of the anchors `p_anchors.json` is
-//! checked three ways:
+//! (45 + 23 + 19 = 87) and of the anchors `p_anchors.json` (11) is checked
+//! three ways, every case of the gate part of the grids `p{1,2,3}l_grid.json`
+//! ([`in_gate`]) by check 1 (Tier C runs every grid case through all three
+//! modes of the public API):
 //!
 //! 1. exact: RustRed's reduced values (the request level below the finalizer,
 //!    `rustred_evaluation::p_integral::reduce_requests`) equal Forcer's
@@ -21,17 +22,16 @@
 //! the batteries ([`rustred_carries_the_wick_sign_of_odd_cases_once`]).
 //!
 //! All of it runs under the default Ordered arithmetic (`modular_polynomial`,
-//! the `Z_p(d)` replay vakint users get); the exact check of the frozen
-//! batteries is repeated under the `exact` arithmetic (coordinator note
-//! 2026-11-07 09:40Z). Four loops stay with Forcer: the engine has no p
-//! library for them, and a four-loop case fails closed on the RustRed path.
+//! the `Z_p(d)` replay vakint users get; coordinator note 2026-11-07 09:40Z).
+//! The other two arithmetics, `exact` and `modular_sampled` (M2 exit
+//! criterion 2), repeat check 1 on the frozen batteries and the anchors
+//! ([`arithmetic_subset`]) and checks 2 and 3 on [`FINALIZE_CASES`]. Four
+//! loops stay with Forcer: the engine has no p library for them, and a
+//! four-loop case fails closed on the RustRed path.
 //!
-//! The engine of the battery is [`battery_engine`], covering
-//! [`BATTERY_LOOPS`]. STAGE 1 (until M2-V4 ships the built-in 1L-3L library):
-//! RustRed's one-loop reference library, injected; the two- and three-loop
-//! tests are ignored. STAGE 2: the built-in library of `Vakint::new()`,
-//! `BATTERY_LOOPS = 1..=3`, no test ignored. The full grids and the
-//! benchmark cells through vakint's public API are Tier C
+//! The engine of the battery is [`battery_engine`], `Vakint::new()` with
+//! its built-in 1L-3L p library (M2-V4), covering [`BATTERY_LOOPS`]. The full
+//! grids and the benchmark cells through vakint's public API are Tier C
 //! (`tests/p_integral_rustred_full.rs`); live FORM comparisons are Tier B
 //! (`tests/p_integral_rustred_tests.rs`).
 
@@ -54,18 +54,14 @@ use crate::{
     Vakint, VakintError, VakintSettings,
 };
 
-/// The loop counts [`battery_engine`] reduces with RustRed (STAGE 1: the
-/// one-loop reference library).
-const BATTERY_LOOPS: RangeInclusive<usize> = 1..=1;
+/// The loop counts [`battery_engine`] reduces with RustRed: the scope of the
+/// built-in p library.
+const BATTERY_LOOPS: RangeInclusive<usize> = 1..=3;
 
-/// The engine of the battery: RustRed's one-loop reference library injected
-/// (STAGE 1). STAGE 2 switches to `Vakint::new()` and its built-in library.
+/// The engine of the battery: `Vakint::new()`, whose built-in p library
+/// (M2-V4) covers [`BATTERY_LOOPS`].
 fn battery_engine() -> Vakint {
-    let mut engine = Vakint::new().unwrap();
-    engine
-        .inject_p_library(rustred::propagator::testing::one_loop_reference_library().unwrap())
-        .unwrap();
-    engine
+    Vakint::new().unwrap()
 }
 
 /// A frozen fixture file and the number of cases it must hold.
@@ -267,8 +263,14 @@ fn assert_reduced_exactly(
 /// Check 2: the case through `Vakint::evaluate` (matching, the p backend and
 /// the shared finalizer) in `Symbolic` mode is its frozen value finalized like
 /// a Forcer evaluation (which returns through `simplify_real`).
-fn assert_symbolic(engine: &Vakint, loops: usize, file: &str, case: &ForcerCase) {
-    let settings = settings(RustRedMasterMode::Symbolic, loops, None);
+fn assert_symbolic(
+    engine: &Vakint,
+    loops: usize,
+    arithmetic: Option<&str>,
+    file: &str,
+    case: &ForcerCase,
+) {
+    let settings = settings(RustRedMasterMode::Symbolic, loops, arithmetic);
     let input = case.expression().unwrap();
     let actual = engine
         .evaluate(&settings, input.as_view())
@@ -286,8 +288,9 @@ fn assert_symbolic(engine: &Vakint, loops: usize, file: &str, case: &ForcerCase)
     );
 }
 
-/// The point of check 3: `p(1..4) = (0,0,0,1)`, so `Q² = -p² = 1`, and
-/// `μ² = 2`, at the precision of `settings`.
+/// The point of check 3: `p(1..4) = (0,0,0,1)`, so `Q² = -p² = 1`, `μ² = 2`
+/// and `mass = 3` (the free coefficient of the two-loop battery case
+/// `kite_coefficients`), at the precision of `settings`.
 type NumericalPoint = (
     HashMap<String, Float, ahash::RandomState>,
     HashMap<usize, Momentum, ahash::RandomState>,
@@ -296,7 +299,10 @@ type NumericalPoint = (
 fn numerical_point(settings: &VakintSettings) -> NumericalPoint {
     let bits = settings.get_binary_precision();
     let float = |value: i64| Float::with_val(bits, value);
-    let params = HashMap::from_iter([(settings.mu_r_sq_symbol.clone(), float(2))]);
+    let params = HashMap::from_iter([
+        (settings.mu_r_sq_symbol.clone(), float(2)),
+        ("mass".to_owned(), float(3)),
+    ]);
     let externals = (1..=4)
         .map(|head| {
             (
@@ -311,9 +317,15 @@ fn numerical_point(settings: &VakintSettings) -> NumericalPoint {
 /// Check 3: the same in `Numerical` mode, both sides evaluated to 40 digits
 /// at [`numerical_point`] (the logarithms of `μ²/Q²` count) and equal within
 /// `1e-30`.
-fn assert_numerical(engine: &Vakint, loops: usize, file: &str, case: &ForcerCase) {
+fn assert_numerical(
+    engine: &Vakint,
+    loops: usize,
+    arithmetic: Option<&str>,
+    file: &str,
+    case: &ForcerCase,
+) {
     let name = format!("{file}: {}", case.name);
-    let settings = settings(RustRedMasterMode::Numerical, loops, None);
+    let settings = settings(RustRedMasterMode::Numerical, loops, arithmetic);
     let input = case.expression().unwrap();
     let actual = engine
         .evaluate(&settings, input.as_view())
@@ -345,8 +357,9 @@ fn assert_numerical(engine: &Vakint, loops: usize, file: &str, case: &ForcerCase
     assert!(equal, "{name}: {diagnostic}");
 }
 
-/// The three checks on every case of `loops` loops ([`cases`]), whose number
-/// is pinned: `battery + grid gate part + anchors`.
+/// Check 1 on every case of `loops` loops ([`cases`]), whose number is
+/// pinned (`battery + grid gate part + anchors`), and checks 2 and 3 on the
+/// battery and anchor cases (the grid cases go through every mode in Tier C).
 fn assert_loop_count_matches_forcer(loops: usize, expected_cases: usize) {
     let engine = battery_engine();
     assert!(
@@ -358,8 +371,10 @@ fn assert_loop_count_matches_forcer(loops: usize, expected_cases: usize) {
     let retain = settings(RustRedMasterMode::Retain, loops, None);
     for (file, case) in &cases {
         assert_reduced_exactly(&engine, &retain, file, case);
-        assert_symbolic(&engine, loops, file, case);
-        assert_numerical(&engine, loops, file, case);
+        if *file != GRIDS[loops - 1].file {
+            assert_symbolic(&engine, loops, None, file, case);
+            assert_numerical(&engine, loops, None, file, case);
+        }
     }
 }
 
@@ -373,7 +388,6 @@ fn one_loop_cases_match_forcer_exactly_symbolically_and_numerically() {
 /// 2L: 23 battery cases (kite, dots, odd rank with `-p(3)`, sunset, pinched,
 /// negative power), the 39 grid cases and the 3 kite anchors.
 #[test]
-#[ignore = "M2-V5 STAGE 2: needs the built-in 1L-3L p library (M2-V4)"]
 fn two_loop_cases_match_forcer_exactly_symbolically_and_numerically() {
     assert_loop_count_matches_forcer(2, 23 + 39 + 3);
 }
@@ -383,40 +397,85 @@ fn two_loop_cases_match_forcer_exactly_symbolically_and_numerically() {
 /// 22 dotted sectors) and the 5 anchors (the master `no` and the parents of
 /// the ε-line kite `t1star05`, including its `n = 0` chart).
 #[test]
-#[ignore = "M2-V5 STAGE 2: needs the built-in 1L-3L p library (M2-V4)"]
 fn three_loop_cases_match_forcer_exactly_symbolically_and_numerically() {
     assert_loop_count_matches_forcer(3, 19 + 67 + 5);
 }
 
-/// The exact check of every frozen battery case the engine covers, repeated
-/// under the `exact` Ordered arithmetic: the default `modular_polynomial` and
-/// the exact replay both reproduce Forcer.
-#[test]
-fn the_exact_arithmetic_reproduces_the_batteries_too() {
-    let engine = battery_engine();
-    let mut checked = 0;
-    for loops in BATTERY_LOOPS {
-        let exact = settings(RustRedMasterMode::Retain, loops, Some("exact"));
-        assert_eq!(exact.ordered_weight_arithmetic.name(), "exact");
-        assert_eq!(
-            settings(RustRedMasterMode::Retain, loops, None)
-                .ordered_weight_arithmetic
-                .name(),
-            "modular_polynomial"
-        );
-        let fixture = &BATTERIES[loops - 1];
+/// The arithmetics besides the default `modular_polynomial` (M2 exit
+/// criterion 2).
+const OTHER_ARITHMETICS: [&str; 2] = ["exact", "modular_sampled"];
+
+/// The cases of `loops` loops that check 1 repeats under
+/// [`OTHER_ARITHMETICS`]: the frozen battery (every rank group, dots, ISPs,
+/// both masters at three loops) and the anchors.
+fn arithmetic_subset(loops: usize) -> Vec<(&'static str, ForcerCase)> {
+    let mut cases = Vec::new();
+    for fixture in [&BATTERIES[loops - 1], &ANCHORS] {
         for case in fixture.parse().cases {
-            assert_reduced_exactly(&engine, &exact, fixture.file, &case);
-            checked += 1;
+            if case.loops().unwrap() == loops {
+                cases.push((fixture.file, case));
+            }
         }
     }
-    assert_eq!(
-        checked,
-        BATTERIES[..*BATTERY_LOOPS.end()]
-            .iter()
-            .map(|fixture| fixture.cases)
-            .sum::<usize>()
-    );
+    cases
+}
+
+/// Check 1 on [`arithmetic_subset`] under `exact` and `modular_sampled`: every
+/// arithmetic reproduces Forcer exactly, as the default does in the per-loop
+/// tests. The subset sizes are pinned: battery + anchors per loop count.
+#[test]
+fn the_exact_and_sampled_arithmetics_reproduce_the_batteries_and_anchors() {
+    let engine = battery_engine();
+    let anchors = [3, 3, 5];
+    for loops in BATTERY_LOOPS {
+        let cases = arithmetic_subset(loops);
+        assert_eq!(
+            cases.len(),
+            BATTERIES[loops - 1].cases + anchors[loops - 1],
+            "{loops} loops"
+        );
+        for arithmetic in OTHER_ARITHMETICS {
+            let settings = settings(RustRedMasterMode::Retain, loops, Some(arithmetic));
+            assert_eq!(settings.ordered_weight_arithmetic.name(), arithmetic);
+            for (file, case) in &cases {
+                assert_reduced_exactly(&engine, &settings, &format!("{file} ({arithmetic})"), case);
+            }
+        }
+    }
+}
+
+/// Three cases per loop count for checks 2 and 3 under every arithmetic: odd
+/// and even ranks with dots at one loop, the kite with a rank-3 and a dotted
+/// rank-4 numerator at two loops (no master below three loops), and at three
+/// loops the masters `no` (`no_top`), `t105` (`la_top`) and both (`no_dot`).
+const FINALIZE_CASES: [[&str; 3]; 3] = [
+    ["bubble_32_n4", "bubble_13_n3", "bubble_21_n1"],
+    ["kite", "kite_rank3", "kite_dots_rank4"],
+    ["no_top", "la_top", "no_dot"],
+];
+
+/// Checks 2 and 3 (Symbolic through `ε^(L+2)`, Numerical within `1e-30` at
+/// `μ² = 2`) on [`FINALIZE_CASES`] under `exact` and `modular_sampled`; the
+/// default arithmetic finalizes every case in the per-loop tests.
+#[test]
+fn the_exact_and_sampled_arithmetics_finalize_like_forcer() {
+    let engine = battery_engine();
+    for loops in BATTERY_LOOPS {
+        let fixture = &BATTERIES[loops - 1];
+        let battery = fixture.parse();
+        for name in FINALIZE_CASES[loops - 1] {
+            let case = battery
+                .cases
+                .iter()
+                .find(|case| case.name == name)
+                .unwrap_or_else(|| panic!("{}: no case {name}", fixture.file));
+            for arithmetic in OTHER_ARITHMETICS {
+                let file = format!("{} ({arithmetic})", fixture.file);
+                assert_symbolic(&engine, loops, Some(arithmetic), &file, case);
+                assert_numerical(&engine, loops, Some(arithmetic), &file, case);
+            }
+        }
+    }
 }
 
 /// The frozen battery cases per loop count whose Wick sign is visible:

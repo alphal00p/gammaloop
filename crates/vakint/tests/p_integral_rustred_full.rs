@@ -33,9 +33,8 @@
 //!   --test p_integral_rustred_full -- --exact the_exact_agreement_file_is_written_on_request`
 //!   (one process, no per-test time limit).
 //!
-//! STAGE 1 (until M2-V4 ships the built-in 1L-3L library) checks the one-loop
-//! parts against RustRed's one-loop reference library; the two- and
-//! three-loop parts are ignored and the file writer refuses to run.
+//! The RustRed side is `Vakint::new()` with its built-in 1L-3L p library
+//! (M2-V4).
 
 #![cfg(feature = "feynkit-ingress")]
 
@@ -109,7 +108,6 @@ fn the_one_loop_grid_agrees_with_forcer() {
 }
 
 #[test]
-#[ignore = "M2-V5 STAGE 2: needs the built-in 1L-3L p library (M2-V4)"]
 fn the_two_loop_grid_agrees_with_forcer() {
     assert_grid_part(2, 0, 1);
 }
@@ -118,7 +116,6 @@ fn the_two_loop_grid_agrees_with_forcer() {
 macro_rules! three_loop_grid_parts {
     ($($name:ident: $part:expr),* $(,)?) => {$(
         #[test]
-        #[ignore = "M2-V5 STAGE 2: needs the built-in 1L-3L p library (M2-V4)"]
         fn $name() {
             assert_grid_part(3, $part, 11);
         }
@@ -239,13 +236,11 @@ fn the_one_loop_benchmark_cells_agree_with_forcer() {
 }
 
 #[test]
-#[ignore = "M2-V5 STAGE 2: needs the built-in 1L-3L p library (M2-V4)"]
 fn the_two_loop_benchmark_cells_agree_with_forcer() {
     assert_all_agree(&benchmark_cells(2));
 }
 
 #[test]
-#[ignore = "M2-V5 STAGE 2: needs the built-in 1L-3L p library (M2-V4)"]
 fn the_three_loop_benchmark_cells_agree_with_forcer() {
     assert_all_agree(&benchmark_cells(3));
 }
@@ -300,7 +295,6 @@ fn physics_cell(form: &str, loops: usize) -> ExactCell {
 const PHYSICS_LOOPS: [usize; 2] = [2, 3];
 
 #[test]
-#[ignore = "M2-V5 STAGE 2: needs the built-in 1L-3L p library (M2-V4)"]
 fn the_physics_cells_agree_with_forcer() {
     let Some(form) = live_form("the physics cells") else {
         return;
@@ -482,7 +476,7 @@ fn the_exact_agreement_file_is_written_on_request() {
     assert_eq!(
         P_BATTERY_LOOPS,
         1..=3,
-        "the exact-agreement file needs the 1L-3L library (M2-V5 STAGE 2)"
+        "the exact-agreement file needs the 1L-3L p library"
     );
     let path = exact_output(path);
     let sources = sources();

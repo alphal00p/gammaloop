@@ -911,3 +911,98 @@ fn numerators_lower_exactly_onto_the_slots_of_every_family() {
         assert_eq!(direct, via_slots, "{}: {polynomial:?}", family.name);
     }
 }
+
+/// What the p backend sends under each Ordered arithmetic (grant U6, review
+/// R2-S1). `request_options` carries the settings' arithmetic on `n_cores`
+/// workers and the settings' scheduler. A real request, with the inputs
+/// `add_request` lowers from a case and built by `p_reduction_request` as
+/// `reduce_requests` builds it, reduces under each arithmetic to Forcer's
+/// frozen value, and so does `reduce_requests`. A modular option below
+/// RustRed's minimum (`max_primes = 1`) in the settings fails
+/// `reduce_requests`, which therefore sends the settings' arithmetic.
+#[test]
+fn every_arithmetic_is_sent_with_real_inputs() {
+    use crate::{OrderedWeightArithmetic, RustRedModularCommon, RustRedOrderedWeightArithmetic};
+
+    let engine = engine();
+    let handle = engine.p_library().unwrap();
+    let fixture = battery();
+    let case = case(&fixture, "bubble_32_n4");
+    let numerator = parse(&case.numerator);
+    let request = PropagatorRequest {
+        family: registry_family(&case.family).unwrap(),
+        powers: &case.powers,
+        canonical_numerator: numerator.as_view(),
+        external: parse(&case.external),
+    };
+    let (mut forms, mut channels) = (BTreeMap::new(), Channels::new());
+    add_request(&handle, &request, &mut forms, &mut channels).unwrap();
+    assert!(!channels.is_empty());
+    for arithmetic in ["exact", "modular_polynomial", "modular_sampled"] {
+        let mut settings = settings(RustRedMasterMode::Retain, Some(arithmetic));
+        for n_cores in [1, 3] {
+            settings.n_cores = n_cores;
+            let options = request_options(&settings);
+            assert_eq!(options.arithmetic.name(), arithmetic);
+            assert_eq!(
+                options.arithmetic,
+                settings.ordered_weight_arithmetic.resolve(n_cores)
+            );
+            let workers = if arithmetic == "exact" { 1 } else { n_cores };
+            assert_eq!(options.arithmetic.threads(), workers, "{arithmetic}");
+            assert_eq!(
+                options.scheduler,
+                crate::rustred_evaluation::ordered_scheduler(&settings)
+            );
+        }
+        settings.n_cores = 1;
+        let options = request_options(&settings);
+        let epsilon = epsilon(&settings);
+        let mut sent = BTreeMap::<i64, Atom>::new();
+        for (channel, lowered) in &channels {
+            let inputs = lowered
+                .inputs
+                .iter()
+                .filter(|(_, value)| !value.is_zero())
+                .map(|((presentation, powers), value)| {
+                    let context = handle.library.coefficient_context();
+                    let value = coefficient(context, value, options.limits.exact_algebra).unwrap();
+                    (
+                        *presentation,
+                        IntegralKey::try_new(powers.clone()).unwrap(),
+                        value,
+                    )
+                })
+                .collect::<Vec<_>>();
+            assert!(!inputs.is_empty());
+            let request = p_reduction_request(&options, inputs, None);
+            assert_eq!(request.arithmetic.name(), arithmetic);
+            let reduction = handle.library.reduce(request).unwrap();
+            *sent.entry(channel.scale_power).or_default() +=
+                render(&handle, &reduction, epsilon).unwrap() * &channel.coefficient;
+        }
+        sent.retain(|_, reduced| !reduced.expand().is_zero());
+        let forcer = frozen_values(&settings, case);
+        assert_tag_basis_equal(arithmetic, &sent, &forcer, epsilon);
+        let reduced = rustred_values(&engine, &settings, case);
+        assert_tag_basis_equal(arithmetic, &reduced, &forcer, epsilon);
+    }
+    let below_minimum = RustRedModularCommon {
+        max_primes: 1,
+        ..RustRedModularCommon::default()
+    };
+    for invalid in [
+        RustRedOrderedWeightArithmetic::ModularSampled(below_minimum, Default::default()),
+        RustRedOrderedWeightArithmetic::ModularPolynomial(below_minimum, Default::default()),
+    ] {
+        let settings = VakintSettings {
+            ordered_weight_arithmetic: OrderedWeightArithmetic::new(invalid),
+            ..settings(RustRedMasterMode::Retain, None)
+        };
+        assert!(
+            reduce_requests(&engine, &settings, std::slice::from_ref(&request), None).is_err(),
+            "{}: max_primes = 1 must fail the sent request",
+            invalid.name()
+        );
+    }
+}
