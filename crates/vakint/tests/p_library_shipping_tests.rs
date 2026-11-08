@@ -36,7 +36,7 @@ use rustred_app::propagator::{
     equivalent_p_libraries, load_p_library,
 };
 use sha2::{Digest, Sha256};
-use symbolica::atom::Atom;
+use symbolica::atom::{Atom, AtomCore};
 use vakint::p_integral::forcer_fixtures::{ForcerCase, ForcerFixture};
 use vakint::{
     EvaluationMethod, OrderedCacheProgramStatistics, OrderedCacheSettings, RustRedMasterMode,
@@ -380,6 +380,44 @@ fn the_default_path_matches_forcer_through_three_loops() {
     let program = p_program(&engine);
     assert_eq!(program.data_version, "built-in");
     assert!(program.native.inserts > 0);
+}
+
+/// A p-integral whose numerator keeps a tensor spectator with native `dim`
+/// metric slots (as gammaloop's R* hands it over, `uv::rstar`) evaluates alike
+/// with RustRed (the built-in library) and with Forcer: both p backends take
+/// one numerator path. Needs FORM 5 for the Forcer side.
+#[test]
+fn a_tensor_spectator_takes_one_numerator_path_with_both_p_backends() {
+    let Some(form) = p_backends::live_form("the tensor spectator through Forcer") else {
+        return;
+    };
+    let input = p_integrals::parse(
+        "g(spenso::mink(dim,mu),spenso::mink(dim,nu))*dot(k(1),p(1))*topo(P2L(p(1),1,1,1,1,1))",
+    );
+    let value = |method| {
+        let settings = VakintSettings {
+            evaluation_order: vakint::EvaluationOrder(vec![method]),
+            form_exe_path: form.clone(),
+            use_dot_product_notation: true,
+            ..in_mode(&VakintSettings::default(), RustRedMasterMode::Symbolic, 2)
+        };
+        Vakint::new()
+            .unwrap()
+            .evaluate_integral(&settings, input.as_view())
+            .unwrap_or_else(|error| panic!("{error}"))
+    };
+    let mode = RustRedMasterMode::Symbolic;
+    let rustred = value(EvaluationMethod::RustRed(
+        vakint::RustRedEvaluationOptions { master_mode: mode },
+    ));
+    let forcer = value(EvaluationMethod::Forcer(vakint::ForcerOptions {
+        master_mode: mode,
+    }));
+    assert!(!rustred.is_zero());
+    assert!(
+        (&rustred - &forcer).expand().is_zero(),
+        "{rustred}\n{forcer}"
+    );
 }
 
 /// The built-in program's step cache on disk: directory `p-library-1-3_...`

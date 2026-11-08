@@ -3059,11 +3059,14 @@ impl VakintTerm {
 
         // Choose the witness before transporting the scalar numerator. A
         // finite saved union may admit only some exact family presentations;
-        // ordinary/default backends keep their original matching path.
-        let scalar_rustred = matches!(
-            vakint.evaluation_method(settings, &integral_specs.canonical_topology),
-            Some(EvaluationMethod::RustRed(_))
-        );
+        // ordinary/default backends keep their original matching path. A
+        // p-integral takes Forcer's numerator path whichever p backend reduces
+        // it (both read the same propagator request).
+        let scalar_rustred = !matches!(integral_specs.canonical_topology, Topology::Propagator(_))
+            && matches!(
+                vakint.evaluation_method(settings, &integral_specs.canonical_topology),
+                Some(EvaluationMethod::RustRed(_))
+            );
         let scalar_five_loop =
             matches!(integral_specs.canonical_topology, Topology::FiveLoop(_)) && scalar_rustred;
         if scalar_five_loop {
