@@ -11,7 +11,7 @@
 //! three without a miss.
 //!
 //! ```text
-//! p_cache_maintenance prepare --output WORK [--n-cores N]
+//! p_cache_maintenance prepare --output WORK [--tail default] [--n-cores N]
 //!     [--vakint-revision REV] [--rustred-revision REV]
 //!   the workload cold (shipped caches ignored) under exact, modular_polynomial
 //!   and modular_sampled into one read-write WORK/cache-root,
@@ -91,6 +91,17 @@ fn parse() -> Result<(String, Options)> {
             "--n-cores" => options.n_cores = value()?.parse()?,
             "--vakint-revision" => options.vakint_revision = value()?,
             "--rustred-revision" => options.rustred_revision = value()?,
+            // The recorded `producer.p.adjoint_tail`: accepted only as the current setting.
+            "--tail" => {
+                let tail = value()?;
+                let current =
+                    std::env::var("RUSTRED_ORDERED_ADJOINT_TAIL").unwrap_or("default".into());
+                if tail != current {
+                    return Err(
+                        format!("--tail {tail}: this run's adjoint tail is {current}").into(),
+                    );
+                }
+            }
             other => return Err(format!("unknown argument {other}").into()),
         }
     }
