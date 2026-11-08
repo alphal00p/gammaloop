@@ -136,7 +136,10 @@ fn p_counters(engine: &Vakint) -> (u64, u64, u64) {
 }
 
 fn prepare(options: &Options) -> Result<()> {
-    let work = options.output.as_ref().ok_or("prepare needs --output WORK")?;
+    let work = options
+        .output
+        .as_ref()
+        .ok_or("prepare needs --output WORK")?;
     if work.exists() {
         return Err(format!("{} exists; use a fresh WORK directory", work.display()).into());
     }
@@ -161,7 +164,11 @@ fn prepare(options: &Options) -> Result<()> {
         let mut row = input.row();
         row["inserts"] = (after.2 - before.2).into();
         row["seconds"] = seconds.into();
-        eprintln!("{}: {seconds:.2} s, {} inserts", input.name, after.2 - before.2);
+        eprintln!(
+            "{}: {seconds:.2} s, {} inserts",
+            input.name,
+            after.2 - before.2
+        );
         rows.push(row);
     }
     let producer = {
@@ -191,7 +198,10 @@ fn prepare(options: &Options) -> Result<()> {
 }
 
 fn check(options: &Options) -> Result<()> {
-    let artifacts = options.artifacts.as_ref().ok_or("check needs --artifacts")?;
+    let artifacts = options
+        .artifacts
+        .as_ref()
+        .ok_or("check needs --artifacts")?;
     let engine = engine(artifacts)?;
     let load = settings(
         options,
@@ -213,12 +223,19 @@ fn check(options: &Options) -> Result<()> {
         {
             Ok(())
         }
-        _ => Err(format!("the p cache of {} is not used in place", artifacts.display()).into()),
+        _ => Err(format!(
+            "the p cache of {} is not used in place",
+            artifacts.display()
+        )
+        .into()),
     }
 }
 
 fn replay(options: &Options) -> Result<()> {
-    let artifacts = options.artifacts.as_ref().ok_or("replay needs --artifacts")?;
+    let artifacts = options
+        .artifacts
+        .as_ref()
+        .ok_or("replay needs --artifacts")?;
     if options.arithmetic.is_empty() {
         return Err("replay needs --arithmetic LIST".into());
     }
@@ -265,7 +282,10 @@ fn replay(options: &Options) -> Result<()> {
                 failures.push(format!("{name} {}: {input_misses} misses", input.name));
             }
             if value != *cold {
-                failures.push(format!("{name} {}: value differs from cache-off", input.name));
+                failures.push(format!(
+                    "{name} {}: value differs from cache-off",
+                    input.name
+                ));
             }
         }
         let warm_seconds = started.elapsed().as_secs_f64();

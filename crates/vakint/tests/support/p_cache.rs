@@ -55,12 +55,7 @@ fn read(fixture: &str) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|error| format!("{}: {error}", path.display()))
 }
 
-fn input(
-    fixture: &'static str,
-    case: &str,
-    loop_count: usize,
-    input: Atom,
-) -> PCacheInput {
+fn input(fixture: &'static str, case: &str, loop_count: usize, input: Atom) -> PCacheInput {
     let stem = fixture.rsplit('/').next().unwrap_or(fixture);
     PCacheInput {
         name: format!("{}/{case}", stem.trim_end_matches(".json")),
