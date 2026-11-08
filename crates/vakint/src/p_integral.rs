@@ -25,6 +25,8 @@ mod massive;
 pub(crate) mod masters;
 pub(crate) mod mzv;
 pub(crate) mod parts;
+#[cfg(test)]
+mod rustred_battery_tests;
 
 use std::sync::OnceLock;
 
