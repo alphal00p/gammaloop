@@ -49,8 +49,8 @@ use vakint::p_integral::compare::tag_basis_difference;
 use vakint::symbols::S;
 use vakint::{
     EvaluationMethod, EvaluationOrder, ForcerOptions, LoopNormalizationFactor, Momentum,
-    NumericalEvaluationResult, RustRedMasterMode, Vakint, VakintError, VakintSettings,
-    vakint_symbol,
+    NumericalEvaluationResult, OrderedCacheMode, OrderedCacheProgramStatistics, RustRedMasterMode,
+    Vakint, VakintError, VakintSettings, vakint_symbol,
 };
 
 use super::p_integrals::{VAKINT, forcer_form, parse};
@@ -83,16 +83,65 @@ pub fn rustred_p_settings_with_arithmetic(
 /// The relative tolerance of the numerical agreement at 40 digits.
 pub const NUMERICAL_TOLERANCE: f64 = 1e-30;
 
-static P_BATTERY_ENGINE: LazyLock<Vakint> = LazyLock::new(|| {
+static P_BATTERY_ENGINE: LazyLock<Vakint> = LazyLock::new(new_p_battery_engine);
+
+/// The engine of the RustRed side, shared by the tests of a binary.
+pub fn p_battery_engine() -> &'static Vakint {
+    &P_BATTERY_ENGINE
+}
+
+/// A new engine of the RustRed side, with caches of its own: RustRed's
+/// one-loop reference library injected (STAGE 1); STAGE 2 uses
+/// `Vakint::new()` and its built-in library.
+pub fn new_p_battery_engine() -> Vakint {
     super::p_rustred::rustred_p_engine(
         rustred::propagator::testing::one_loop_reference_library().unwrap(),
     )
-});
+}
 
-/// The engine of the RustRed side: RustRed's one-loop reference library
-/// injected (STAGE 1); STAGE 2 uses `Vakint::new()` and its built-in library.
-pub fn p_battery_engine() -> &'static Vakint {
-    &P_BATTERY_ENGINE
+/// Cumulative step-cache counters of one engine's p program.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PCacheCounts {
+    pub hits: u64,
+    pub misses: u64,
+    pub inserts: u64,
+}
+
+impl std::ops::Sub for PCacheCounts {
+    type Output = PCacheCounts;
+
+    fn sub(self, before: PCacheCounts) -> PCacheCounts {
+        PCacheCounts {
+            hits: self.hits - before.hits,
+            misses: self.misses - before.misses,
+            inserts: self.inserts - before.inserts,
+        }
+    }
+}
+
+/// The cache of `engine`'s p program (`p-library-<a>-<b>`), which must be
+/// attached with `mode` and use no shipped cache, so that the counts are the
+/// engine's own.
+pub fn p_cache_program(engine: &Vakint, mode: OrderedCacheMode) -> OrderedCacheProgramStatistics {
+    let statistics = engine.ordered_cache_statistics();
+    let program = statistics
+        .programs
+        .into_iter()
+        .find(|program| program.program.starts_with("p-library-"))
+        .expect("the p program has a cache");
+    assert_eq!(program.mode, mode, "{}", program.program);
+    assert!(program.shipped.is_none(), "{:?}", program.shipped);
+    program
+}
+
+/// The step-cache counters of [`p_cache_program`].
+pub fn p_cache_counts(engine: &Vakint, mode: OrderedCacheMode) -> PCacheCounts {
+    let native = p_cache_program(engine, mode).native;
+    PCacheCounts {
+        hits: native.hits,
+        misses: native.misses,
+        inserts: native.inserts,
+    }
 }
 
 /// The Laurent depth through `ε^(L+2)` for `loops` loops (the depth of the

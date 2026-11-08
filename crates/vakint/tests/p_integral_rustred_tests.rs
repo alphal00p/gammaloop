@@ -21,9 +21,13 @@ mod p_rustred;
 
 use p_backends::*;
 use p_integrals::{canonical, from_dot, parse};
+use p_rustred::rustred_p_evaluate;
 use symbolica::atom::Atom;
 use vakint::p_integral::forcer_fixtures::nonzero_sectors;
-use vakint::{RustRedMasterMode, VakintError};
+use vakint::{
+    LoopNormalizationFactor, OrderedCacheMode, OrderedCacheSettings, RustRedMasterMode,
+    VakintError, VakintSettings,
+};
 
 /// The scalar numerators of rank 0 to 4 of the bubble grid, each with its own
 /// coefficient (distinct primes), summed into one input per pair of powers.
@@ -105,6 +109,84 @@ fn four_cores_under_both_modular_arithmetics_agree_with_forcer() {
             arithmetic,
             4,
         );
+    }
+}
+
+/// The pair of the step-cache test: an integral, then the same with one more
+/// dot, whose reduction passes through steps of the first. The test takes
+/// the two-loop pair (the kite) when [`P_BATTERY_LOOPS`] covers it.
+const CACHE_PAIRS: [[&str; 2]; 2] = [
+    [
+        "dot(k(1),p(1))^2*topo(P1L(p(1),1,1))",
+        "dot(k(1),p(1))^2*topo(P1L(p(1),2,1))",
+    ],
+    ["topo(P2L(p(1),1,1,1,1,1))", "topo(P2L(p(1),1,1,1,1,2))"],
+];
+
+/// The p library's Ordered step cache (M2 exit criterion 4, the vakint
+/// half), FORM-free. A pair evaluated read-write into a directory under
+/// `exact`, the second integral reusing steps of the first (step hits), is
+/// replayed read-only by fresh engines under `modular_polynomial` and
+/// `modular_sampled`, which compute nothing (no miss, no insert): RustRed's
+/// adjoint tail table, saved next to the steps, closes the replay, so its
+/// step hits may be 0. Every value equals a cache-off engine's. The counts
+/// are printed for the notes.
+#[test]
+fn the_p_step_cache_is_reused_and_replays_under_every_arithmetic() {
+    let loops = (*P_BATTERY_LOOPS.end()).min(2);
+    let pair = CACHE_PAIRS[loops - 1].map(parse);
+    let settings = |arithmetic, cache| VakintSettings {
+        ordered_cache: cache,
+        ..rustred_p_settings_with_arithmetic(
+            RustRedMasterMode::Retain,
+            LoopNormalizationFactor::GScheme,
+            battery_terms(loops),
+            arithmetic,
+            1,
+        )
+    };
+    let off = settings("exact", OrderedCacheSettings::off());
+    let expected = pair.each_ref().map(|input| {
+        let value = rustred_p_evaluate(&new_p_battery_engine(), &off, input);
+        assert!(!value.is_zero(), "{input}");
+        value
+    });
+
+    let directory = tempfile::tempdir().unwrap();
+    let writing = settings("exact", OrderedCacheSettings::read_write(directory.path()));
+    let writer = new_p_battery_engine();
+    let mut before = PCacheCounts::default();
+    for (index, (input, expected)) in pair.iter().zip(&expected).enumerate() {
+        assert_eq!(&rustred_p_evaluate(&writer, &writing, input), expected);
+        let counts = p_cache_counts(&writer, OrderedCacheMode::ReadWrite);
+        let own = counts - before;
+        eprintln!(
+            "[p cache] exact read-write, integral {}: {own:?}",
+            index + 1
+        );
+        assert!(own.misses > 0 && own.inserts > 0, "{input}: {own:?}");
+        if index == 1 {
+            assert!(own.hits > 0, "{input} reuses no step of {}", pair[0]);
+        }
+        before = counts;
+    }
+    let program = p_cache_program(&writer, OrderedCacheMode::ReadWrite);
+    let tail = program.directory.unwrap().join("ordered-tail.rrtail");
+    assert!(tail.is_file(), "{}", tail.display());
+
+    for arithmetic in ["modular_polynomial", "modular_sampled"] {
+        let reading = settings(
+            arithmetic,
+            OrderedCacheSettings::read_only(directory.path()),
+        );
+        let reader = new_p_battery_engine();
+        for (input, expected) in pair.iter().zip(&expected) {
+            let value = rustred_p_evaluate(&reader, &reading, input);
+            assert_eq!(&value, expected, "{arithmetic}");
+        }
+        let counts = p_cache_counts(&reader, OrderedCacheMode::ReadOnly);
+        eprintln!("[p cache] {arithmetic} read-only replay: {counts:?}");
+        assert_eq!((counts.misses, counts.inserts), (0, 0), "{arithmetic}");
     }
 }
 
