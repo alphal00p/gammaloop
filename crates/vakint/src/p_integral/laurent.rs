@@ -383,10 +383,11 @@ pub(crate) fn expand(
     epsilon: Symbol,
     order: i64,
 ) -> Result<Atom, VakintError> {
+    let symbols = [pg_symbol(), p_master_symbol(), p_gamma_symbol()];
     let mut masters = Vec::new();
     reduced.visitor(&mut |part| {
         if let AtomView::Fun(function) = part
-            && [pg_symbol(), p_master_symbol(), p_gamma_symbol()].contains(&function.get_symbol())
+            && symbols.contains(&function.get_symbol())
         {
             masters.push(part.to_owned());
             return false;
@@ -395,7 +396,6 @@ pub(crate) fn expand(
     });
     masters.sort();
     masters.dedup();
-    let symbols = [pg_symbol(), p_master_symbol(), p_gamma_symbol()];
     let expanded = reduced.expand();
     if let Some(power) = unsupported_power(&expanded, &symbols) {
         return Err(failure(format!("{power} is not an i16 integer power")));
@@ -424,7 +424,7 @@ pub(crate) fn expand(
                 _ => (factor.clone(), Some(1)),
             };
             if let AtomView::Fun(function) = base.as_view()
-                && function.get_symbol() == p_gamma_symbol()
+                && function.get_symbol() == symbols[2]
             {
                 // A Gamma tag: any nonzero integer power of Γ(1+mε), m ≠ 0.
                 let m = match function.iter().collect::<Vec<_>>().as_slice() {
@@ -447,7 +447,7 @@ pub(crate) fn expand(
                 }
                 return Err(failure(format!("unexpected master factor {factor}")));
             };
-            if function.get_symbol() == pg_symbol() {
+            if function.get_symbol() == symbols[0] {
                 let arguments = function
                     .iter()
                     .map(get_integer_from_atom)

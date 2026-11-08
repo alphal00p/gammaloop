@@ -1,5 +1,7 @@
 //! Checked numerical coefficients with symbolic spectators retained.
 
+use crate::symbols::S;
+
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use symbolica::{
@@ -23,8 +25,9 @@ fn failure(message: impl Into<String>) -> VakintError {
 }
 
 pub(crate) fn snapshot_reference(part: AtomView) -> bool {
-    matches!(part, AtomView::Fun(function) if ["RustRedMaster", "RustRedCoefficient", "RustRedFiniteLiteral", "RustRedConstant"]
-        .iter().any(|name| function.get_symbol() == vk_symbol!(name)))
+    matches!(part, AtomView::Fun(function) if [
+        S.rustred_master, S.rustred_coefficient, S.rustred_finite_literal, S.rustred_constant,
+    ].contains(&function.get_symbol()))
 }
 
 fn private_reference(part: AtomView) -> bool {
@@ -67,8 +70,8 @@ impl NumericalParts<'_> {
                 }
             }
             AtomView::Fun(function) => {
-                if function.get_symbol() == vk_symbol!("RustRedCoefficient")
-                    || function.get_symbol() == vk_symbol!("RustRedConstant")
+                if function.get_symbol() == S.rustred_coefficient
+                    || function.get_symbol() == S.rustred_constant
                 {
                     // resolve_numerical validated its snapshot and epsilon
                     // order before classification. Arguments are identity tags.
@@ -247,12 +250,14 @@ pub(crate) fn materialize(
     if settings.run_time_decimal_precision == 0 {
         return Err(failure("requested decimal precision must be positive"));
     }
+    let epsilon = vk_symbol!(&settings.epsilon_symbol);
+    let spectator_head = S.materialize_spectator;
     // Raw approximate literals must keep independent source identities before
     // expansion can accidentally cancel their equal midpoints.
     let expression = legacy::stage_table(
-        Atom::var(vk_symbol!("partial_numerical_input")).as_view(),
+        Atom::var(S.partial_numerical_input).as_view(),
         expression,
-        vk_symbol!(&settings.epsilon_symbol),
+        epsilon,
         "Input",
     )?;
     let expression = combine_exact(Vakint::normalize_gamma_functions(expression.as_view()));
@@ -300,7 +305,7 @@ pub(crate) fn materialize(
     let mut index = 0_i64;
     for spectator in spectators {
         let temporary = loop {
-            let candidate = vk_symbol!("RustRedMaterializeSpectator").call(index);
+            let candidate = spectator_head.call(index);
             index = index
                 .checked_add(1)
                 .ok_or_else(|| failure("too many symbolic spectators"))?;
@@ -339,7 +344,7 @@ pub(crate) fn materialize(
         attach_origins(
             &mut warnings,
             &prepared.origins,
-            epsilon_power(monomial.as_view(), vk_symbol!(&settings.epsilon_symbol)),
+            epsilon_power(monomial.as_view(), epsilon),
             catalog.map_or("built-in definitions and declared parameters", |catalog| {
                 catalog.version.as_str()
             }),
@@ -365,6 +370,75 @@ mod tests {
         VakintSettings {
             run_time_decimal_precision: 40,
             ..Default::default()
+        }
+    }
+
+    #[test]
+    fn snapshot_reference_cache_preserves_parser_identity() {
+        use symbolica::atom::{NamespacedSymbol, SymbolBuilder, UserData};
+
+        const CHILD: &str = "VAKINT_SNAPSHOT_SYMBOL_CACHE_TEST";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "precision::materialize::tests::snapshot_reference_cache_preserves_parser_identity",
+                    "--nocapture",
+                ])
+                .env(CHILD, "1")
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success()
+                    && String::from_utf8_lossy(&output.stdout).contains("1 passed"),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr),
+            );
+            return;
+        }
+
+        let names = [
+            "RustRedMaster",
+            "RustRedCoefficient",
+            "RustRedFiniteLiteral",
+            "RustRedConstant",
+        ];
+        assert!(!snapshot_reference(Atom::num(1).as_view()));
+        for name in names {
+            assert!(
+                Symbol::get_symbol(NamespacedSymbol::parse(&format!("vakint::{name}"))).is_none(),
+                "non-function input must not register {name}",
+            );
+        }
+        let metadata = UserData::Atom(Atom::num(23));
+        let master = SymbolBuilder::new(NamespacedSymbol::parse("vakint::SnapshotCacheMaster"))
+            .with_aliases(["RustRedMaster"])
+            .with_tags(["snapshot_cache_test::tag"])
+            .with_user_data(metadata.clone())
+            .build()
+            .unwrap();
+        assert!(!snapshot_reference(Atom::var(master).as_view()));
+        let reference = master.call((7, 9));
+        assert!(snapshot_reference(reference.as_view()));
+        assert!(snapshot_reference(reference.as_view()));
+        assert_eq!(vk_symbol!("vakint::RustRedMaster"), master);
+        assert_eq!(master.get_data(), &metadata);
+        assert!(master.has_tag("snapshot_cache_test::tag"));
+        for name in &names[1..] {
+            assert!(
+                Symbol::get_symbol(NamespacedSymbol::parse(&format!("vakint::{name}"))).is_some(),
+                "global Vakint initialization must register {name}",
+            );
+        }
+        let foreign = vk_symbol!("snapshot_cache_foreign::RustRedMaster").call(1);
+        assert!(!snapshot_reference(foreign.as_view()));
+        for name in names {
+            assert!(snapshot_reference(vk_symbol!(name).call(1).as_view()));
+            assert!(snapshot_reference(
+                vk_symbol!(format!("vakint::{name}")).call(1).as_view()
+            ));
+            assert!(!snapshot_reference(Atom::var(vk_symbol!(name)).as_view()));
         }
     }
 

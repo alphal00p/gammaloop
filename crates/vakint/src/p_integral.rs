@@ -242,12 +242,12 @@ impl PFamilyData {
 /// `vakint::PG(x1,x2)`: Forcer's `GschemeConstants(x1,x2)`,
 /// `(1+x1+x2)·G(1+x1ε, 1+x2ε)/(ε·G(1,1))`.
 pub(crate) fn pg_symbol() -> Symbol {
-    vk_symbol!("PG")
+    S.pg
 }
 
 /// `vakint::PMaster(name)`: Forcer's `Master(name)`, in the G-scheme.
 pub(crate) fn p_master_symbol() -> Symbol {
-    vk_symbol!("PMaster")
+    S.p_master
 }
 
 /// `vakint::PGamma(m) = Γ(1+mε)` for a nonzero integer `m`, raised to integer
@@ -255,7 +255,7 @@ pub(crate) fn p_master_symbol() -> Symbol {
 /// `Retain` keeps it symbolic; `Symbolic` and `Numerical` expand it exactly to
 /// any depth (`laurent::expand`).
 pub(crate) fn p_gamma_symbol() -> Symbol {
-    vk_symbol!("PGamma")
+    S.p_gamma
 }
 
 /// The user's external head `p(i)` and the sign `σ` of `external = σ·p(i)`.
@@ -395,7 +395,7 @@ pub(crate) fn families() -> &'static [PFamily] {
                         PLine {
                             id: id as i64,
                             ends: (node("nl_"), node("nr_")),
-                            momentum: prop[&vk_symbol!("q_")].clone(),
+                            momentum: prop[&S.q_].clone(),
                             power: 1,
                         }
                     })

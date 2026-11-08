@@ -5,7 +5,6 @@ use symbolica::function;
 use symbolica::id::Replacement;
 
 use crate::symbols::S;
-use crate::utils::vakint_macros::vk_symbol;
 use crate::{Integral, ReplacementRules, Topology, get_integer_from_atom, get_prop_with_id};
 
 use super::RustRedEvaluationError;
@@ -138,7 +137,7 @@ impl Integral {
             require_momentum(parent, axis + 1, momentum.clone())?;
             if let Some(properties) = get_prop_with_id(expression.as_view(), axis + 1) {
                 let actual = properties
-                    .get(&vk_symbol!("q_"))
+                    .get(&S.q_)
                     .expect("Vakint's canonical propagator matcher captures momentum");
                 if !(actual.replace_multiple(&routing) - momentum)
                     .expand()
@@ -180,18 +179,18 @@ impl MatchedScalarFamily {
                 continue;
             };
             let power = properties
-                .get(&vk_symbol!("pow_"))
+                .get(&S.pow_)
                 .and_then(|power| get_integer_from_atom(power.as_view()))
                 .ok_or_else(|| RustRedEvaluationError::InvalidPower {
                     propagator,
                     power: properties
-                        .get(&vk_symbol!("pow_"))
+                        .get(&S.pow_)
                         .map_or_else(|| "<missing>".to_owned(), Atom::to_canonical_string),
                 })?;
             powers.push(power);
 
             let propagator_mass = properties
-                .get(&vk_symbol!("mUVsq_"))
+                .get(&S.muvsq_)
                 .expect("Vakint's canonical propagator matcher captures the mass");
             if let Some(expected) = &common_mass_squared {
                 if propagator_mass != expected {
@@ -243,7 +242,7 @@ fn require_momentum(
         }
     })?;
     let actual = properties
-        .get(&vk_symbol!("q_"))
+        .get(&S.q_)
         .expect("Vakint's canonical propagator matcher captures momentum");
     if actual != &expected {
         return Err(RustRedEvaluationError::InvalidMatchedFamily {
