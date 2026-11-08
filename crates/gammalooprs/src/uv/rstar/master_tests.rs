@@ -33,6 +33,20 @@ use crate::{
 
 use super::{RStarPlan, tests::canonical_tensor};
 
+/// The external-data release that vakint's vendored manifest pins, the same
+/// source vakint's own tests read, so a vakint data bump needs no edit here.
+fn vakint_data_version() -> String {
+    let manifest: serde_json::Value = serde_json::from_slice(include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../vakint/data/manifest.json"
+    )))
+    .expect("vakint's vendored data manifest is JSON");
+    manifest["version"]
+        .as_str()
+        .expect("vakint's vendored data manifest declares a version")
+        .to_owned()
+}
+
 struct PublishedMaster {
     number: usize,
     edges: [(usize, usize); 10],
@@ -103,7 +117,7 @@ impl PublishedMaster {
             vakint.load_official_external_data(
                 4,
                 &vakint::OfficialExternalDataOptions {
-                    version: "v0.2.0".into(),
+                    version: vakint_data_version(),
                     local_artifacts_path: Some(artifacts),
                     ..Default::default()
                 },
