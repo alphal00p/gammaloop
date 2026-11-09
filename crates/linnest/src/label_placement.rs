@@ -722,16 +722,17 @@ impl LineGrid {
 }
 
 impl CollisionCandidate {
-    fn edge_intersection(&self, lines: &[StrokeLine], grid: &LineGrid) -> Cost {
+    /// Clearance cost and contact with the open stroke-expanded text box.
+    fn edge_intersection(&self, lines: &[StrokeLine], grid: &LineGrid) -> (Cost, bool) {
         let Some(corners) = self.corners.filter(|_| !lines.is_empty()) else {
-            return Cost::Integer(0);
+            return (Cost::Integer(0), false);
         };
         let origin = corners[0];
         let x = corners[1].sub(origin);
         let y = corners[2].sub(origin);
         let determinant = x.cross(y);
         if determinant.abs() < 1e-12 {
-            return Cost::Integer(0);
+            return (Cost::Integer(0), false);
         }
         let width = x.length();
         let height = y.length();
@@ -740,6 +741,7 @@ impl CollisionCandidate {
             [delta.cross(y) / determinant, x.cross(delta) / determinant]
         };
         let mut length = 0.0;
+        let mut contact = false;
         for line in grid
             .near(self.bounds)
             .into_iter()
@@ -757,10 +759,9 @@ impl CollisionCandidate {
             let b = local(line.end);
             let mut low: f64 = 0.0;
             let mut high: f64 = 1.0;
-            for axis in 0..2 {
-                // The inverse transform's row norm also handles sheared canvases.
-                let padding =
-                    line.radius * (if axis == 0 { height } else { width }) / determinant.abs();
+            // The inverse transform's row norm also handles sheared canvases.
+            let padding = [height, width].map(|extent| line.radius * extent / determinant.abs());
+            for (axis, padding) in padding.into_iter().enumerate() {
                 let delta = b[axis] - a[axis];
                 if delta.abs() < 1e-12 {
                     if a[axis] < -padding || a[axis] > 1.0 + padding {
@@ -774,9 +775,22 @@ impl CollisionCandidate {
                     high = high.min(from.max(to));
                 }
             }
-            length += (high - low).max(0.0) * line.start.distance(line.end);
+            let clipped = (high - low).max(0.0) * line.start.distance(line.end);
+            length += clipped;
+            if clipped > 0.0 {
+                // Inclusive clipping retains the existing clearance cost. A
+                // boundary-only segment has no midpoint inside the open box.
+                let midpoint = low + (high - low) * 0.5;
+                contact |= padding.into_iter().enumerate().all(|(axis, padding)| {
+                    let position = a[axis] + (b[axis] - a[axis]) * midpoint;
+                    position > -padding && position < 1.0 + padding
+                });
+            }
         }
-        Cost::Float(6.0 * length / width.min(height).max(1e-9))
+        (
+            Cost::Float(6.0 * length / width.min(height).max(1e-9)),
+            contact,
+        )
     }
 }
 
@@ -1616,7 +1630,7 @@ impl CollisionSpec {
                 let raw = candidate.bounds;
                 let area = (raw.right - raw.left) * (raw.top - raw.bottom);
                 areas.push(area);
-                let lines = candidate.edge_intersection(&self.edge_lines, &grid);
+                let (lines, edge_contact) = candidate.edge_intersection(&self.edge_lines, &grid);
                 let initial = Cost::from_value(&candidate.cost)?.add(lines)?;
                 let mut cost = initial.float();
                 // Keep zero terms too: adding them converts integer costs to
@@ -1651,7 +1665,7 @@ impl CollisionSpec {
                 // Painted lines arrive as loose pieces and count once; every
                 // obstacle box counts on its own.
                 contacts.push(
-                    i64::from(lines.float() > 0.0)
+                    i64::from(edge_contact)
                         + others
                             .iter()
                             .filter(|obstacle| raw.meets(obstacle.bounds))
@@ -2586,7 +2600,7 @@ mod tests {
         };
         assert!(matches!(
             candidate.edge_intersection(&[], &LineGrid::new(&[])),
-            Cost::Integer(0)
+            (Cost::Integer(0), false)
         ));
         let lines = vec![StrokeLine {
             start: Point(-2.0, 0.0),
@@ -2594,11 +2608,13 @@ mod tests {
             radius: 0.0,
         }];
         let grid = LineGrid::new(&lines);
-        assert_eq!(candidate.edge_intersection(&lines, &grid).float(), 12.0);
+        let (cost, contact) = candidate.edge_intersection(&lines, &grid);
+        assert_eq!(cost.float(), 12.0);
+        assert!(contact);
         candidate.corners = Some([Point(0.0, 0.0); 4]);
         assert!(matches!(
             candidate.edge_intersection(&lines, &grid),
-            Cost::Integer(0)
+            (Cost::Integer(0), false)
         ));
         candidate.corners = None;
         let mut spec = CollisionSpec {
@@ -2871,6 +2887,83 @@ mod tests {
             result.costs,
             [ciborium::Value::Float(0.0), ciborium::Value::Float(0.0)]
         );
+    }
+
+    #[test]
+    fn tangent_strokes_keep_clearance_cost_without_contact_priority() {
+        let candidate = |left, cost| CollisionCandidate {
+            bounds: Bounds {
+                left,
+                right: left + 1.0,
+                bottom: 0.0,
+                top: 1.0,
+            },
+            corners: Some([
+                Point(left, 1.0),
+                Point(left + 1.0, 1.0),
+                Point(left, 0.0),
+                Point(left + 1.0, 0.0),
+            ]),
+            cost: Value::Float(cost),
+            arrow_bounds: Vec::new(),
+        };
+        let math = SearchMath {
+            temperatures: (0..84).map(|sweep| 0.15 * 0.9_f64.powi(sweep)).collect(),
+            exponentials: Vec::new(),
+            pair_padding: 0.0,
+        };
+        for horizontal in [false, true] {
+            for upper in [false, true] {
+                for reversed in [false, true] {
+                    for penetration in [-1e-6, 0.0, 1e-6] {
+                        let coordinate = if upper {
+                            1.125 - penetration
+                        } else {
+                            -0.125 + penetration
+                        };
+                        let point = |along| {
+                            if horizontal {
+                                Point(along, coordinate)
+                            } else {
+                                Point(coordinate, along)
+                            }
+                        };
+                        let [start, end] = if reversed { [2.0, -1.0] } else { [-1.0, 2.0] };
+                        let geometry = CollisionSpec {
+                            fixed: false,
+                            edge_lines: vec![StrokeLine {
+                                start: point(start),
+                                end: point(end),
+                                radius: 0.125,
+                            }],
+                            placements: vec![CollisionLabel {
+                                records: CandidateRecords::Expanded(Vec::new()),
+                                candidates: vec![candidate(0.0, 0.0), candidate(3.0, 100.0)],
+                                edge: None,
+                            }],
+                            obstacles: Vec::new(),
+                            label_padding: 0.0,
+                            obstacle_padding: 0.0,
+                            fixed_arrows: Vec::new(),
+                            coordinated: false,
+                        }
+                        .geometry(math.pair_padding)
+                        .unwrap();
+                        let contact = penetration > 0.0;
+                        assert_eq!(geometry.contacts[0], [i64::from(contact), 0]);
+                        if penetration == 0.0 {
+                            // Tangency still has the original clearance penalty.
+                            assert_eq!(geometry.costs[0][0], Value::Float(7.5));
+                        }
+                        assert_eq!(
+                            geometry.search(&math).unwrap().choices,
+                            [usize::from(contact)],
+                            "horizontal={horizontal}, upper={upper}, reversed={reversed}, penetration={penetration}"
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[test]
