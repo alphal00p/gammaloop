@@ -280,7 +280,8 @@ four_loop_grid_parts!(
 
 /// RustRed's values on the 1-4 package are invariant under `q -> -q` and a
 /// unimodular change of loop momenta (with line reversals), one case per
-/// four-loop family top: the top times the odd numerator `dot(k(1),p(1))`.
+/// four-loop family top: the top times `1 + dot(k(1),p(1))` (the odd part
+/// alone is 0 on the LA4, J4 and J11 tops, for Forcer too).
 #[test]
 fn four_loop_values_are_routing_invariant() {
     let what = "the four-loop routing invariance";
@@ -288,7 +289,7 @@ fn four_loop_values_are_routing_invariant() {
         return;
     };
     for family in FOUR_LOOP_FAMILIES {
-        let input = parse("dot(k(1),p(1))") * long_form_top(family, &[1; 11]);
+        let input = parse("1+dot(k(1),p(1))") * long_form_top(family, &[1; 11]);
         assert_routing_invariant(&engine, &input, 0..1);
     }
 }
