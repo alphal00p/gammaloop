@@ -1,0 +1,222 @@
+/* Shared source typography and palette, including adopted editor shadow styles. */
+:root, :host {
+  --font-mono: "IBM Plex Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --code-size: 14.4px;
+  --code-leading: 22.32px;
+  --code-gutter: 44px;
+}
+/* A code editor contains block layout. An inline custom-element host leaves
+   stale scrollable overflow in WebKit after completion/theme changes. */
+:host(marimo-code-editor) { display: block; min-width: 0; }
+:root, [data-code-theme="light"] {
+  --popup-surface: #f9f6f0;
+  --popup-selected: #eadff0;
+  --popup-accent: #745080;
+  --surface: #fff;
+  --ink: #333;
+  --ink-muted: #625b63;
+  --hairline: #d9cfd9;
+  --syntax-call: #4b69c6;
+  --syntax-comment: #74747c;
+  --syntax-keyword: #d73948;
+  --syntax-number: #9b5e00;
+  --syntax-label: #1d6c76;
+  --syntax-property: #8b41b1;
+  --syntax-raw: #6b6b6f;
+  --syntax-string: #198810;
+}
+:root[data-theme="dark"], [data-code-theme="dark"] {
+  --popup-surface: #2d2430;
+  --popup-selected: #4a3750;
+  --popup-accent: #d8b9e3;
+  --surface: #2d2430;
+  --ink: #eee8ef;
+  --ink-muted: #c7bdc9;
+  --hairline: #57475b;
+  --syntax-call: #9cb5ff;
+  --syntax-comment: #aaa3ad;
+  --syntax-keyword: #ff8793;
+  --syntax-number: #e7b66f;
+  --syntax-label: #76d3df;
+  --syntax-property: #d7a6f2;
+  --syntax-raw: #c2bbc5;
+  --syntax-string: #71d083;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]):not([data-code-theme]) {
+    --popup-surface: #2d2430;
+    --popup-selected: #4a3750;
+    --popup-accent: #d8b9e3;
+    --surface: #2d2430;
+    --ink: #eee8ef;
+    --ink-muted: #c7bdc9;
+    --hairline: #57475b;
+    --syntax-call: #9cb5ff;
+    --syntax-comment: #aaa3ad;
+    --syntax-keyword: #ff8793;
+    --syntax-number: #e7b66f;
+    --syntax-label: #76d3df;
+    --syntax-property: #d7a6f2;
+    --syntax-raw: #c2bbc5;
+    --syntax-string: #71d083;
+  }
+}
+
+.code-frame { border-radius: 0 !important; position: relative; min-width: 0; margin-block: 1.5rem; border: 1px solid var(--hairline); background: var(--surface); }
+.code-frame > pre { border-radius: 0 !important; margin: 0; border: 0 !important; padding: 12px 16px; }
+.code-frame::before, .code-frame::after {
+  content: ''; position: absolute; width: .6rem; height: .6rem; z-index: 3; border-color: var(--ink-muted); pointer-events: none;
+}
+.code-frame::before { top: -1px; left: -1px; border-top: 2px solid; border-left: 2px solid; }
+.code-frame::after { bottom: -1px; right: -1px; border-bottom: 2px solid; border-right: 2px solid; }
+.code-line-numbers { position: absolute; right: 100%; top: 0; width: var(--code-gutter); padding: 12px 9px 12px 0; text-align: right; white-space: pre; user-select: none; color: var(--ink-muted); font: 400 var(--code-size)/var(--code-leading) var(--font-mono); }
+.code-line-numbers::before { content: attr(data-line-numbers); }
+
+.documentation-type-info { box-sizing: border-box; width: max-content; max-width: min(40rem, calc(100vw - 32px)); max-height: min(24rem, calc(100dvh - var(--notebook-bar-height, 0px) - 32px)); overflow: auto; overflow-wrap: anywhere; padding: 8px 12px; white-space: normal; font: 14px/1.5 "Atkinson Hyperlegible", sans-serif; color: var(--ink); background: var(--popup-surface); border: 1px solid var(--hairline); }
+.documentation-type-info > :first-child { margin-top: 0; }
+.documentation-type-info > :last-child { margin-bottom: 0; }
+.cm-tooltip .documentation-type-info p { margin-block: .5em; }
+.cm-tooltip .documentation-type-info :is(pre, code), .documentation-signature code { font: 12px/1.5 var(--font-mono); }
+.cm-tooltip .documentation-type-info pre { margin: .5em 0; padding: .4em; border: 0; background: transparent; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cm-tooltip .documentation-type-info hr { border: 0; border-top: 1px solid var(--hairline); }
+.cm-tooltip .documentation-type-info a { color: var(--link); }
+.documentation-signature { position: fixed; z-index: 45; pointer-events: none; }
+.documentation-signature code { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* CodeMirror inserts these outside the scroller, and completion documentation
+   is a separate tooltip. Override the pinned light/dark base theme together. */
+.cm-tooltip.cm-tooltip.cm-tooltip {
+  box-sizing: border-box;
+  max-width: calc(100vw - 32px);
+  border: 1px solid var(--hairline);
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--popup-surface);
+  color: var(--ink);
+}
+.cm-tooltip.cm-tooltip-autocomplete { width: min(30rem, calc(100vw - 32px)); }
+.cm-tooltip.cm-tooltip-autocomplete > ul {
+  max-height: min(18rem, calc(100dvh - var(--notebook-bar-height, 0px) - 48px));
+  overflow: auto;
+  padding: 4px;
+  font: 13px/1.5 "Inter", sans-serif;
+}
+.cm-tooltip.cm-tooltip-autocomplete > ul > li {
+  display: flex;
+  align-items: baseline;
+  gap: .5rem;
+  padding: 5px 8px;
+  border-radius: 0;
+  color: var(--ink);
+}
+.cm-tooltip.cm-tooltip.cm-tooltip-autocomplete > ul > li:is([aria-selected="true"], :hover) {
+  background: var(--popup-selected);
+  color: var(--ink);
+}
+.cm-tooltip.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected="true"] { outline: 1px solid var(--popup-accent); outline-offset: -1px; }
+.cm-completionLabel { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-mono); }
+.cm-completionDetail { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; font: 12px/1.5 var(--font-mono); color: var(--ink-muted); }
+.cm-tooltip.cm-completionInfo { padding: 0; max-height: min(24rem, calc(100dvh - var(--notebook-bar-height, 0px) - 32px)); overflow: auto; }
+.cm-tooltip .documentation-type-info { width: auto; max-width: 100%; border: 0; }
+.cm-tooltip .documentation-type-info :is(pre, code) { white-space: pre-wrap; overflow-wrap: anywhere; }
+.cm-tooltip .documentation-type-info a { color: var(--popup-accent); }
+
+/* Searchable Marimo menus are portalled to body, outside their widget shadow.
+   These selectors also work for a portal retained in a shadow root. */
+[data-radix-popper-content-wrapper]:has([cmdk-root]) { min-width: 0 !important; max-width: calc(100vw - 32px); }
+[role="dialog"]:has(> [cmdk-root]) {
+  min-width: 0;
+  width: min(var(--radix-popover-trigger-width, 24rem), calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  border: 1px solid var(--hairline);
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--popup-surface);
+  color: var(--ink);
+  animation: none;
+}
+[cmdk-root][cmdk-root] { border-radius: 0; background: var(--popup-surface); color: var(--ink); font: 13px/1.5 "Inter", sans-serif; }
+[cmdk-root] [cmdk-input-wrapper] { height: auto; padding: 6px 10px; border-color: var(--hairline); }
+[cmdk-root] input[cmdk-input] { height: auto; min-height: 30px; padding: 4px; border: 0; border-radius: 0; background: transparent; color: var(--ink); font: inherit; box-shadow: none; }
+[cmdk-root] input[cmdk-input]:focus { outline: 1px solid var(--popup-accent); outline-offset: 1px; box-shadow: none; }
+[cmdk-root] [cmdk-list] { max-height: min(18rem, calc(100dvh - var(--notebook-bar-height, 0px) - 96px), calc(var(--radix-popover-content-available-height, 100dvh) - 56px)); overflow: auto; }
+[cmdk-root] [cmdk-item] { padding-block: 6px; border-radius: 0; white-space: normal; overflow-wrap: anywhere; }
+[cmdk-root] [cmdk-item]:is([aria-selected="true"], [data-highlighted], :hover) { background: var(--popup-selected); color: var(--ink); }
+[cmdk-root] [cmdk-item][aria-selected="true"] { outline: 1px solid var(--popup-accent); outline-offset: -1px; }
+[cmdk-root] [cmdk-empty] { padding: 12px; color: var(--ink-muted); }
+:host .marimo [data-testid="marimo-plugin-searchable-dropdown"] > button { min-height: 34px; height: auto; border-radius: 0; font-family: "Inter", sans-serif; }
+:host .marimo select[data-testid="marimo-plugin-dropdown"] { min-height: 34px; height: auto; border-radius: 0; font-family: "Inter", sans-serif; background: var(--popup-surface); color: var(--ink); border-color: var(--hairline); box-shadow: none; }
+
+/* Lezer semantic classes across static themes and each pinned editor runtime. */
+:is(.live-notebook, .documentation-editor, .documentation-full-code-frame, :host) .cm-content :is(.tok-keyword, .tok-operator, .tok-bool, .tok-null) { color: var(--syntax-keyword); }
+:is(.live-notebook, .documentation-editor, .documentation-full-code-frame, :host) .cm-content .tok-comment { color: var(--syntax-comment); }
+:is(.live-notebook, .documentation-editor, .documentation-full-code-frame, :host) .cm-content :is(.tok-string, .tok-string2) { color: var(--syntax-string); }
+:is(.live-notebook, .documentation-editor, .documentation-full-code-frame, :host) .cm-content .tok-number { color: var(--syntax-number); }
+:is(.live-notebook, .documentation-editor, .documentation-full-code-frame, :host) .cm-content .tok-propertyName { color: var(--syntax-property); }
+:is(.live-notebook, .documentation-editor, .documentation-full-code-frame, :host) .cm-content :is(.tok-typeName, .tok-labelName) { color: var(--syntax-label); }
+:is(.live-notebook, .documentation-editor, .documentation-full-code-frame, :host) .cm-content .tok-variableName { color: var(--ink); }
+:is(.live-notebook, .documentation-editor, .documentation-full-code-frame, :host) .cm-content .tok-function { color: var(--syntax-call); }
+
+/* Pygments fences in reactive Markdown use the same static source owner. */
+.codehilite.code-frame { overflow: visible; background: var(--surface) !important; }
+.codehilite.code-frame > pre, .codehilite.code-frame > pre > code {
+  font: 400 var(--code-size)/var(--code-leading) var(--font-mono) !important;
+  color: var(--ink); background: transparent; border-radius: 0;
+  white-space: pre; overflow-x: auto;
+}
+.codehilite.code-frame :is(.k,.kc,.kd,.kn,.kp,.kr,.o,.ow) { color: var(--syntax-keyword) !important; }
+.codehilite.code-frame :is(.c,.ch,.cm,.cp,.cpf,.c1,.cs) { color: var(--syntax-comment) !important; }
+.codehilite.code-frame :is(.s,.sa,.sb,.sc,.dl,.sd,.s2,.se,.sh,.si,.sx,.sr,.s1,.ss) { color: var(--syntax-string) !important; }
+.codehilite.code-frame :is(.m,.mb,.mf,.mh,.mi,.mo,.il) { color: var(--syntax-number) !important; }
+.codehilite.code-frame :is(.nf,.fm) { color: var(--syntax-call) !important; }
+.codehilite.code-frame :is(.nc,.nn) { color: var(--syntax-label) !important; }
+
+.codehilite.code-frame :is(.n,.nb,.bp,.nv,.p) { color: var(--ink) !important; }
+
+/* Keep Marimo's own clipboard control and handler inside the Markdown frame.
+   Both frontends render this wrapper; utility CSS is not available in islands. */
+:is(.live-notebook, #root, :host) .codehilite-wrapper:has(> .codehilite.code-frame) {
+  position: relative;
+  margin-block: 1.5rem;
+}
+:is(.live-notebook, #root, :host) .codehilite-wrapper > .codehilite.code-frame {
+  margin-block: 0;
+  padding: 0;
+}
+:is(.live-notebook, #root, :host) .codehilite-wrapper > .codehilite.code-frame > pre {
+  margin: 0;
+  padding: 12px 3.6rem 12px 16px;
+}
+:is(.live-notebook, #root, :host) .codehilite-wrapper:has(> .codehilite.code-frame) > div:has(> button) {
+  position: absolute;
+  top: .5rem;
+  right: .5rem;
+  z-index: 2;
+  opacity: 1;
+}
+:is(.live-notebook, #root, :host) .codehilite-wrapper > div > button {
+  display: grid;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--hairline);
+  border-radius: 0;
+  background: var(--surface);
+  color: var(--link, var(--ink-muted));
+  cursor: pointer;
+}
+:is(.live-notebook, #root, :host) .codehilite-wrapper > div > button svg {
+  width: .9rem;
+  height: .9rem;
+  padding: 0;
+}
+:is(.live-notebook, #root, :host) .codehilite-wrapper > div > button:hover {
+  background: var(--accent-soft, var(--surface));
+}
+:is(.live-notebook, #root, :host) .codehilite-wrapper > div > button:focus-visible {
+  outline: 2px solid var(--link, var(--ink));
+  outline-offset: 2px;
+}

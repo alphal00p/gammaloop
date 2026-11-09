@@ -46,7 +46,7 @@ triggers identify related code worth reviewing; a clean digest alone does
 not prove that every architectural dependency is unchanged.
 
 The collaboration portal is authored in `docs/portal/`. One Typst bundle
-emits the landing, About, People, Talks, and Publications routes.
+emits the landing, Libraries and APIs, About, People, Talks, and Publications routes.
 Those sources load `docs/portal.toml`, `docs/talks.toml`,
 `docs/products/registry.toml`, and the generated INSPIRE publication cache
 directly. Page bodies use ordinary Typst headings, paragraphs, emphasis, links,
@@ -56,6 +56,14 @@ shell, and interactive browser controls to semantic HTML and CSS selectors. The
 Rust documentation builder validates those inputs, invokes Typst, copies assets,
 federates search, and checks links; it does not own the public page prose or HTML
 composition.
+
+The landing page groups documentation by perturbative-QFT topics. A topic can
+use several libraries, and a library can appear under several topics. The portal
+registry names the participating libraries and registered guide/example pages;
+the builder rejects unknown destinations and duplicate topic identifiers. Links
+resolve against the selected latest or snapshot channel. Worked examples state
+whether they run in the browser or require local Python. The separate library
+index lists crates, modules, and their Rust and Python API references.
 
 Project tutorials and manuals remain under
 `/products/<project>/latest/`. Architecture notes may explain internal

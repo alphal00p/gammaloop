@@ -1323,7 +1323,9 @@ pub fn decode_graph_bytes_list(arg: &[u8]) -> Result<Vec<Vec<u8>>, String> {
 
 pub fn graph_info_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     let graph = decode_typst_graph(arg)?;
-    let info = with_dot_view(&graph, |graph| Ok(graph_info(graph)))?;
+    let mut info = with_dot_view(&graph, |graph| Ok(graph_info(graph)))?;
+    // DOT export omits layout keys; inspection retains the parsed statements.
+    info.global_statements = graph.global_statements;
     encode_cbor(&info)
 }
 

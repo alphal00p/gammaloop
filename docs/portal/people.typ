@@ -25,6 +25,8 @@
 #let people = [
   #page-hero(class: "portal-page-hero-compact")[
     = People
+
+    Researchers and contributors developing Local Unitarity and the αLoop software libraries.
   ]
   #people-grid[
     #for person in portal.people { person-entry(person) }
@@ -33,7 +35,7 @@
 
 #let people-page = portal-document(
   "People",
-  "Researchers and collaborators building GammaLoop.",
+  "Researchers and collaborators developing Local Unitarity and the αLoop software libraries.",
   people,
   active: "people",
 )

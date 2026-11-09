@@ -81,60 +81,45 @@
   ))
 ]
 
-#let landing-art(graphs, body) = group(class: "portal-hero-art")[
-  #group(class: "portal-wordmark", attrs: (
-    "aria-label": "αLoop collaboration mark",
-    role: "img",
-  ))[]
+#let landing-art(graphs) = group(class: "portal-hero-art")[
   #group(class: "portal-graph-field", attrs: (
     role: "img",
     "aria-label": "A jumble of Feynman graphs rendered by GammaLoop from real process and test data",
   ))[
     #for graph in graphs { portal-process-graph(graph) }
   ]
-  #el("p")[#body]
 ]
 
-#let task-choice(product, href, order, label, product-line, tagline) = el(
-  "a",
-  class: "portal-task-link",
-  attrs: ("data-product": product, href: href),
-)[
-  #el("span", class: "portal-task-order")[#order]
-  #el("span", class: "portal-task-copy")[
-    #el("strong")[#label]
-    #el("span")[#product-line]
-    #el("small")[#tagline]
-  ]
-  #el("span", class: "portal-task-arrow", attrs: ("aria-hidden": "true"))[→]
-]
-
-#let task-section(body) = region(
-  class: "portal-section portal-task-chooser",
-  id: "tasks",
-  labelled-by: "tasks-title",
+#let topic-card(id, body) = panel(class: "portal-topic-card", id: id, body)
+#let topic-links(title, body) = navigation(title, class: "portal-topic-links", body)
+#let topic-libraries(body) = styled-paragraph("portal-topic-libraries", body)
+#let topic-section(body) = region(
+  class: "portal-section portal-topics",
+  id: "topics",
+  labelled-by: "topics-title",
   body,
 )
-#let task-heading(body) = el("header", class: "portal-task-heading", body)
-#let task-grid(body) = navigation("Documentation by task", class: "portal-task-grid", body)
-#let heading-copy(body) = group(body)
+#let topic-heading(body) = el("header", class: "portal-topic-heading", body)
+#let topic-grid(body) = group(class: "portal-topic-grid", body)
 
-#let projects-section(body) = region(
-  class: "portal-section portal-projects",
-  id: "projects",
-  labelled-by: "projects-title",
+#let examples-section(body) = region(
+  class: "portal-section portal-examples",
+  id: "examples",
+  labelled-by: "examples-title",
   body,
 )
-#let portal-section-heading(body) = group(class: "portal-section-heading", body)
+#let example-row(href, runtime, body) = el("a", class: "portal-example", attrs: (
+  href: href,
+  "data-runtime": runtime,
+), body)
+#let example-runtime(body) = el("span", class: "portal-example-runtime", body)
+#let library-note(body) = group(class: "portal-library-note", body)
 #let project-grid(body) = group(class: "portal-project-grid", body)
 #let project-card(product, body) = panel(
   class: "portal-project-card",
   attrs: ("data-product": product),
   body,
 )
-#let project-meta(order, role) = group(class: "portal-project-meta")[
-  #el("span")[#order]#el("span")[#role]
-]
 #let project-summary(body) = styled-paragraph("portal-project-summary", body)
 #let package-list(title, packages) = el("div", class: "portal-packages", attrs: (
   "aria-label": title + " crates and modules",
@@ -145,12 +130,6 @@
 #let project-links(title, body) = navigation(
   title + " documentation",
   class: "portal-card-links",
-  body,
-)
-#let project-overview-link(href, body) = el(
-  "a",
-  class: "portal-card-primary",
-  attrs: (href: href),
   body,
 )
 // The animated tour mounts itself into the data-showcase host once site.js has loaded the
@@ -341,53 +320,61 @@
   (href: href)
 }
 
-#let portal-header(root: "", home: "", active: none, search: false) = el(
+// Theme variants are decorative inside the single named brand link.
+#let brand-art(root: "") = [
+  #for theme in ("light", "dark") {
+    void("img", class: "site-brand-logo site-brand-logo-" + theme + " portal-graph-theme-" + theme, attrs: (
+      src: root + "assets/alphalooplogo-" + theme + ".svg",
+      alt: "",
+      "aria-hidden": "true",
+    ))
+  }
+]
+
+#let portal-header(root: "", home: "", active: none) = el(
   "header",
   class: "portal-header",
 )[
   #el("a", class: "portal-brand", attrs: (href: home, "aria-label": "αLoop home"))[
-    #el("span", class: "portal-brand-logo", attrs: ("aria-hidden": "true"))[]
-    #el("span", class: "portal-brand-copy")[
-      #el("strong")[αLoop]
-      #el("small")[Local Unitarity research]
-    ]
+    #brand-art(root: root)
   ]
-  #el("nav", class: "portal-nav", attrs: ("aria-label": "Primary"))[
+  #el("nav", class: "portal-nav", attrs: (id: "portal-navigation", "aria-label": "Primary"))[
+    #el("a", attrs: nav-attrs(root + "libraries/", "libraries", active))[Documentation]
     #el("a", attrs: nav-attrs(root + "about/", "about", active))[About]
-    #el("a", attrs: (href: root + "#projects"))[Projects]
     #el("a", attrs: nav-attrs(root + "people/", "people", active))[People]
     #el("a", attrs: nav-attrs(root + "talks/", "talks", active))[Talks]
     #el("a", attrs: nav-attrs(root + "publications/", "publications", active))[Publications]
-    #el("a", attrs: (href: root + "developers/"))[Developers]
   ]
-  #el("div", class: "portal-header-actions")[
-    #if search {
-      el("button", class: "portal-search-button", attrs: (
-        type: "button",
-        "data-search-open": "",
-      ))[
-        Search #el("span", class: "header-button-label")[⌘K]
-      ]
-    }
-    #el("a", class: "portal-source-link", attrs: (
+  #el("div", class: "portal-header-actions", {
+    el("button", class: "portal-menu-button", attrs: (
+      type: "button", "data-portal-menu-toggle": "",
+      "aria-controls": "portal-navigation", "aria-expanded": "false",
+      "aria-label": "Open navigation", title: "Navigation",
+    ))[#el("span", attrs: ("aria-hidden": "true"))[☰]]
+    el("button", class: "portal-search-button", attrs: (
+      type: "button", "data-search-open": "",
+      "aria-label": "Search all documentation", title: "Search (⌘/Ctrl+K)",
+    ))[#el("span", class: "header-search-icon", attrs: ("aria-hidden": "true"))[]]
+    el("a", class: "portal-source-link", attrs: (
       href: "https://github.com/alphal00p/gammaloop",
-    ))[GitHub #arrow()]
-    #el("button", class: "portal-theme-button", attrs: (
+      "aria-label": "GitHub repository", title: "GitHub repository",
+    ))[#el("span", class: "header-github-icon", attrs: ("aria-hidden": "true"))[]]
+    el("button", class: "portal-theme-button", attrs: (
       type: "button",
       "data-theme-toggle": "",
-      "aria-label": "Toggle color theme",
+      "aria-label": "Toggle color theme", title: "Change theme",
     ))[#el("span", attrs: ("aria-hidden": "true"))[◐]]
-  ]
+  })
 ]
 
 #let portal-footer(root: "") = el("footer", class: "portal-footer")[
   #el("div")[
-    #el("span", class: "portal-footer-mark", attrs: ("aria-hidden": "true"))[]
+    #brand-art(root: root)
     #el("p")[#el("strong")[αLoop] #el("br")[] Local Unitarity research software]
   ]
   #el("nav", attrs: ("aria-label": "Footer"))[
     #el("a", attrs: (href: root + "about/"))[About]
-    #el("a", attrs: (href: root + "#projects"))[Projects]
+    #el("a", attrs: (href: root + "libraries/"))[Libraries & APIs]
     #el("a", attrs: (href: root + "people/"))[People]
     #el("a", attrs: (href: root + "talks/"))[Talks]
     #el("a", attrs: (href: root + "publications/"))[Publications]
@@ -435,12 +422,12 @@
     #void("link", attrs: (
       rel: "icon",
       type: "image/svg+xml",
-      href: root + "assets/local-unitarity-light.svg",
+      href: root + "assets/alphalooplogo-light.svg",
     ))
     #void("link", attrs: (
       rel: "icon",
       type: "image/svg+xml",
-      href: root + "assets/local-unitarity-dark.svg",
+      href: root + "assets/alphalooplogo-dark.svg",
       media: "(prefers-color-scheme: dark)",
     ))
     #el("title")[#if landing { [αLoop · #title] } else { [#title · αLoop] }]
@@ -450,14 +437,10 @@
   #el(
     "body",
     class: if landing { "portal-body" } else { "portal-body portal-subpage-body" },
-    attrs: if landing {
-      ("data-search-index": "search-index.json", "data-search-root": "")
-    } else {
-      (:)
-    },
+    attrs: ("data-search-index": root + "search-index.json", "data-search-root": root),
   )[
     #el("a", class: "skip-link", attrs: (href: "#main-content"))[Skip to content]
-    #portal-header(root: root, home: home, active: active, search: landing)
+    #portal-header(root: root, home: if landing { "./" } else { home }, active: active)
     #el(
       "main",
       class: if landing { "portal-main" } else { "portal-main portal-subpage-main" },
@@ -470,6 +453,6 @@
       #body
     ]
     #portal-footer(root: root)
-    #if landing { search-dialog }
+    #search-dialog
   ]
 ]

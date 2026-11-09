@@ -2,7 +2,7 @@
 # requires-python = ">=3.11"
 # dependencies = [
 #     "anywidget>=0.9,<1",
-#     "marimo==0.24.0",
+#     "marimo==0.25.1",
 #     "symbolica==3.0.1",
 # ]
 # ///

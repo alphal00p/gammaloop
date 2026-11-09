@@ -1683,20 +1683,124 @@ combined site. This ordering keeps a second build byte-identical to the first:
 the previously published snapshot and the fresh candidate are both already in
 their normalized form when immutability is checked.
 
-Revisions with live notebook support add a publication step after the site render. The Pages
-workflow copies the locally rendered site into writable staging, then exports Marimo notebook assets
-with a Linnet Python WebAssembly wheel built from the documented revision. That wheel has a
-separate cache keyed by the exact source commit and pinned cibuildwheel version; the export
-uses pinned Marimo and the source commit's timestamp. This step leaves the Nix Cargo producer
-boundary unchanged. Notebook assets live inside the selected product version and participate
-in immutable snapshot comparisons. Historical revisions without notebook support keep the
-original static bundle.
+Live notebook publication uses the combined Symbolica host, which registers the FeynKit,
+Linnet, and Spenso Python modules in one WebAssembly wheel. Its `wasm` feature selects the
+portable backends. `nix build .#notebook-wasm-wheel` compiles and packages the host offline
+in the Nix sandbox with pinned Rust, Emscripten, and Pyodide cross-Python inputs.
+`notebook-wasm-deps` retains its Cargo dependencies separately from wheel packaging.
+The final packaging layer adds the existing pinned font bundle and its license under
+`symbolica/_data/fonts`, updates the wheel record, and compresses the portable
+`pyemscripten_2026_0_wasm32` wheel without repeating cross-compilation.
+Website prose, styling, and notebook edits do not invalidate this compilation. The pure
+UFO loader is a separate fixed-hash `notebook-ufo-wheel` output. Both wheels use their
+correct distribution filenames inside the store outputs.
 
-The physics notebook export also runs the native GammaLoop CLI to import the bundled Standard
-Model and `save dot` into temporary staging. Its generated particle map and canonical drawing
-packages become `public/gammaloop-drawing.zip`. Browser Python passes edited DOT and controls to
-those Typst templates; model import runs only during export. This additional publication asset
-uses the existing GammaLoop package and does not change the documentation Cargo producer.
+The flake's `alphal00p-docs-notebooks` executable pins Marimo 0.25.1 and stages the notebook
+sources and scalar UFO fixture separately from native Cargo compilation. The Pages workflow
+builds the wheel through Nix and appends the executable cells to the rendered site. For local
+complete-site assembly, `alphal00p-docs-publication` composes the existing licensed site
+runner with the wheel outputs and the same exporter:
+
+```sh
+nix run .#alphal00p-docs-publication -- target/docs-pages
+```
+
+Nix builds or substitutes the wheels automatically. Native documentation checks use the
+invoking user's license; the browser host embeds no key. Set `ALPHAL00P_DOCS_CHANNEL=snapshot`
+and `ALPHAL00P_DOCS_SNAPSHOT_TAG` for snapshot assembly. Authored payloads and standalone
+wheels stay inside the selected product version. Shared runtime assets use immutable
+content-addressed URLs; publication retains earlier runtime directories and hashed cache
+workers so existing snapshots remain usable. Conflicting bytes fail before publication
+changes. Historical
+revisions use their own exporter and wheel recipe, retaining the static bundle when they
+predate live notebooks.
+
+The browser runtime is a separate Nix preparation layer over the existing wheel;
+notebook and prose edits do not repeat native compilation or runtime preparation.
+Fixed-hash Marimo islands, Pyodide 314.0.0's package lock and standard-library ZIP
+supply the runtime. Its dependency closure is fetched by the lock's hashes. Checked
+CPython 3.14 bytecode is added to the standard library and runtime wheels while retaining
+every source and data file, avoiding repeated Python compilation on navigation.
+Archive timestamps, wheel records and gzip output are deterministic.
+
+The embedded runtime loads a support wheel and compiles the unchanged native module
+in parallel with Python initialization. Static hosts can serve its gzip stream without
+configuring content encoding; the worker decompresses the stream before WASM compilation.
+The pinned Pyodide version, bytecode magic and dynamic-linking interfaces are checked
+explicitly. The ordinary complete wheel remains available to the standalone editor.
+No fonts, native library features or source introspection files are removed. The exporter
+hashes the complete prepared runtime manifest and publishes it once under
+`assets/notebook-runtime/<sha256>/`. Product versions reference that immutable shared URL,
+so switching libraries does not duplicate the binary and package downloads. The full
+standalone wheel remains version-local. A root-scoped cache worker handles only immutable
+runtime binaries and packages; authored pages and notebook payloads keep normal freshness.
+Successful cached responses receive an explicit immutable cache policy, independently of
+the private file server's headers. Errors are not cached, and changed runtime hashes use
+new keys. The stable real `.wasm` response is eligible for the browser's normal streaming
+code cache; no compiled Module is serialized into storage or across agent clusters.
+Every page and product switch still starts fresh Python and native memory.
+
+The source inventory covers Marimo apps in `examples/notebooks`, Linnet's examples and
+FeynKit's Python examples, including aliased imports. Unregistered sources fail export.
+All four additional Spenso notebooks have their own guide routes. The API tour checks
+interpreted component evaluation and network execution in the browser; its C++ compilation
+example remains native. The current-kernel notebook checks all four numerical components,
+notation checks component identities, and the tensor explorer exercises its component slider.
+
+The documentation check executes every registered browser example with the built wheel
+and pinned Chromium. It fails on Python or loader errors and requires every island to
+execute and become idle. The browser numerical CFF/LTD notebook additionally
+runs its two- and three-loop picker and integration form; only the independent
+OneLOop reference is native. Run all retains editor values through Marimo's
+value events and replaces the active session through the exported islands initializer.
+A generation comment in the hidden installation cell forces a rerun even when user code
+has no edits. Widgets detach before this transition; the bridge remains active for their
+cleanup rather than leaving a gap with no session. Compatible
+packages remain installed between runs; only conflicting explicit dependency
+pins are replaced. Restart original reloads Python as well as the notebook. The optional
+full HTML-WASM editor keeps upstream notebook controls available. The separate
+native numerical CFF/LTD notebook runs through Marimo
+against the installed native wheel, including its integration form. Its native host
+enables the optional FeynKit `oneloop` adapter pinned to the upstream Community
+host's OneLOop implementation; the browser host omits that native reference. These runtime tests
+are rerun on invocation; a substituted producer is not a test result. Focused commands reuse
+an existing rendered latest site and the prepared FeynKit dependency producer.
+Startup profiling uses the same pinned Python and Chromium without rebuilding
+or reducing the host wheel. It records worker execution phases, resource timings,
+transfer sizes and errors in JSON for three cold and same-context warm pairs by default.
+`--minimal --only-alpha` replaces the published tensor workload with one checked, small
+tensor expression for controlled runtime comparisons. This payload interception disables
+Chromium's HTTP cache; those second navigations are explicitly not ordinary cached loads.
+The diagnostic `--no-stream` compares the full wheel with streaming under that same setup.
+`--stdlib-url` changes only the standard-library archive, allowing source and bytecode to
+be compared with the same runtime, workload and origin. Controlled runs block service workers
+to keep these interventions effective. The browser suite separately tests real reloads,
+product switching, shared offline package reads, Python-state isolation and cache error/version
+invalidation with service workers enabled.
+The normal second navigation creates a fresh page, worker and Python interpreter;
+Run all measures reuse of the live interpreter separately. CDP cache-hit events and
+response headers describe the page cache; worker ResourceTiming, offline CacheStorage
+reads and browser WASM cache traces verify runtime reuse. Same-context navigation alone
+does not establish cache reuse.
+Private preview response headers are recorded separately from production cache policy.
+The comparison uses the current Symbolica tensor notebook; its runtime version,
+workload and CDN hosting differ, so total timings are not an identical-workload
+benchmark. Run `nix run .#profile-notebook-startup -- REPORT SITE_URL` to repeat it.
+Kernel readiness alone is not computation completion.
+
+The focused native runner does not build GammaLoop reference exporters and also
+runs Clippy for the optional OneLOop adapter:
+
+```sh
+nix run .#test-notebook-examples -- target/notebook-tests target/docs-pages
+nix run .#test-native-notebook-examples -- target/native-notebook-tests
+```
+
+The physics notebook loads `Model.standard_model()` from the same combined host in native
+and browser sessions. FeynKit constructs the graph and SVG geometry; the browser widget
+measures MathML labels. Export no longer runs the GammaLoop CLI or bundles a generated DOT
+template archive. The separate UFO tutorial includes the raw scalar UFO fixture and its
+pinned pure-Python loader wheel to demonstrate importing an external model.
 
 Manual Pages dispatches with `publish=false` build and seed this cache
 without merging Pages history or configuring, uploading, or deploying
@@ -1925,3 +2029,46 @@ artifact family, where it is linked with its normal feature context.
   compare Crane\'s `use-symlink` artifact-install mode across earlier
   root-to-package-to-test stages without reintroducing read-only terminal
   artifacts.
+
+=== Standalone documentation cells
+
+Scientific runtimes publish their prepared stdlib, wheels and native WASM at
+`assets/notebook-runtime-files/<file-sha256>/<filename>`. The packager retains
+the lockfile hashes, and the exporter verifies shared bytes and rejects immutable
+collisions. A renderer/native-wheel revision therefore keeps unchanged Python
+archive URLs. The cache worker can migrate an archive from an older runtime-wide
+URL only after checking its SHA-256; its optional lookup remains bounded to one
+second. Native cached responses retain their original streaming/code-cache state.
+
+The private preview uses `scripts/website-preview.Caddyfile` with the pinned
+Nixpkgs Caddy, `WEBSITE_PREVIEW_ROOT` and `WEBSITE_PREVIEW_PORT`. It binds loopback
+behind the existing Tailscale HTTPS handler. Precompressed gzip negotiation on
+the ordinary WASM URL works even with service workers blocked; explicitly
+requested `.gz` files remain raw gzip files. Successful content-addressed assets
+are immutable, mutable shells/config/JavaScript revalidate, and errors do not
+receive immutable freshness. Caddy supplies representation-specific ETags,
+conditional responses and byte ranges. The delivery browser check records the
+encoded and decoded native sizes, old-cache migration, a controlled delayed
+response-header case, and real four-loop execution with workers blocked/active.
+
+`alphal00p-docs-cells` publishes a separate content-addressed bundle for direct
+Pyodide and Typst cells. It reuses the scientific notebook wheel and prepared
+Python package closure; IPython is an explicit offline runtime dependency.
+The bundle pins the Typst 0.15.1 compiler and renderer, ty WASM, matching
+Symbolica stubs, repository Typst packages, fonts, fixtures and execution
+prerequisites. Its manifest includes license notices. Publication verifies
+content before mutation and rejects immutable collisions; version-local
+configuration points to the site-root runtime. Editing initializes ty separately
+from Python execution. These assets do not change the native Cargo producer or
+runtime-only license boundary.
+
+Authored fences declare prerequisites or a concrete capability exclusion in
+`docs/documentation-cells.toml`. Generated Python references retain class and
+method setup from the exported stubs. Tidy references retain hidden execution
+lines separately from their displayed source. The worker inventory and the UI
+use these same owners. `test-documentation-cells OUTPUT [GENERATED_SITE]` runs
+all supported sources and exact scientific assertions in Chromium; supplying
+the generated site also checks the real standalone, embedded and full editors.
+Full Marimo keeps its native editor state and reactive kernel. Its separately
+pinned CodeMirror constructors receive the same ty service through a small
+runtime adapter, while shared source tokens and gutter measurement own styling.

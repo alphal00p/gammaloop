@@ -3,7 +3,7 @@
 #let showcases = [
 = FeynKit notebook showcases
 
-Seven executable Marimo notebooks cover the FeynKit components and numerical integration. Start with a small scalar
+Eight executable Marimo notebooks cover the FeynKit components and numerical integration. Start with a small scalar
 model, then choose the physics operation you want to explore. Diagrams, tables, and symbolic
 expressions are computed by the same APIs documented in the reference.
 
@@ -24,13 +24,15 @@ expressions are computed by the same APIs documented in the reference.
 - #link("guides/showcases/tensor-reduction/")[Vacuum tensor reduction] projects low- and
   high-rank numerators and turns a vacuum graph into scalar contributions.
 
+- #link("guides/showcases/four-loop-numerator/")[Four-loop gluon numerators] generates the complete one-flavor QCD propagator collection and contracts selected numerators.
+
 == Component coverage
 
 #table(
   columns: (1fr, 2fr),
   table.header([Component], [Showcase]),
   [`feynkit` facade], [#link("guides/showcases/first-diagram/")[A first diagram]],
-  [`feynkit-py`], [All seven notebooks through `symbolica.community.hepkit`],
+  [`feynkit-py`], [All eight notebooks through `symbolica.community.hepkit`],
   [`feynkit-model`], [#link("guides/showcases/models-and-diagrams/")[Models and parameter cards]],
   [`feynkit-generator`], [#link("guides/showcases/models-and-diagrams/")[Processes and generation]],
   [`feynkit-graph`], [#link("guides/showcases/models-and-diagrams/")[Serialization and momentum bases]],
@@ -58,9 +60,9 @@ The UFO example additionally needs Python 3.11 or newer and the
 `SYMBOLICA_LICENSE` through your local environment when required by your Symbolica
 distribution.
 
-The numerical integration showcase additionally needs the full native community
-host with OneLOop, NumPy, and Matplotlib. Its guide describes this separate
-environment; it is not included in the browser notebook exports.
+The numerical integration showcase runs its symbolic multiloop gallery, CFF/LTD
+plots, and sampling in the browser with NumPy and Matplotlib. Only its independent
+OneLOop reference needs the native community host; no substitute reference is used.
 
 Run the following from the checkout, replacing the interpreter path with that environment's
 Python. The command opens an editable Marimo notebook using FeynKit's built-in models.

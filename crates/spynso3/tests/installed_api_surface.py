@@ -127,7 +127,12 @@ class ApiSurfaceTests(unittest.TestCase):
             value = self.values[name]
             with self.subTest(value=name):
                 before = repr(value)
-                html = value._repr_html_()
+                if isinstance(value, sp.TensorNetwork):
+                    bundle = value._repr_mimebundle_()
+                    self.assertIn("text/plain", bundle)
+                    html = bundle["text/html"]
+                else:
+                    html = value._repr_html_()
                 if isinstance(
                     value,
                     (

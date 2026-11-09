@@ -28,6 +28,8 @@ use std::env;
 #[cfg(feature = "python_stubgen")]
 use std::path::PathBuf;
 
+#[cfg(all(feature = "oneloop", not(target_arch = "wasm32")))]
+use oneloop_native as oneloop;
 use pyo3::types::PyModule;
 use pyo3::types::PyModuleMethods;
 #[cfg(any(test, feature = "python_stubgen"))]
@@ -189,6 +191,8 @@ impl SymbolicaCommunityModule for FeynkitModule {
         if !TENSOR_CITATIONS_USED.load(std::sync::atomic::Ordering::Relaxed) {
             citations.truncate(1);
         }
+        #[cfg(all(feature = "oneloop", not(target_arch = "wasm32")))]
+        citations.extend(oneloop::CommunityModule::get_citations());
         citations
     }
 
@@ -224,6 +228,9 @@ pub fn initialize_feynkit(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyEnergySurface>()?;
     module.add_class::<PyOnShellEnergy>()?;
     module.add_class::<PySurfaceFactor>()?;
+
+    #[cfg(all(feature = "oneloop", not(target_arch = "wasm32")))]
+    oneloop::register_hep_module(module)?;
 
     tensor::register(module)?;
     integrals::register(module)?;

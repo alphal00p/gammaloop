@@ -1954,6 +1954,79 @@ mod tests {
     use super::super::tests::{input, setup};
     use super::*;
     use crate::shorthands::schoonschip::Schoonschip;
+    use crate::{color_f, epsilon, test_support};
+    use spenso::{g, mink, p, q};
+
+    #[test]
+    fn factorized_builtin_tensor_sums_preserve_antisymmetric_signs_and_typed_zero() {
+        test_support::test_initialize();
+        let [mu, nu, rho, sigma, replacement] =
+            [97901, 97902, 97903, 97904, 97905].map(|index| mink!(4, Atom::num(index)));
+        let volume = epsilon!(&mu, &nu, &rho, &sigma);
+        let spectator = input("(x+y)^11");
+        let compact_p = p!(mink!(4));
+        let compact_q = q!(mink!(4));
+        let cases = [
+            (
+                (p!(&mu) + q!(&mu)) * p!(&nu) * &volume,
+                epsilon!(&compact_q, &compact_p, &rho, &sigma),
+            ),
+            (
+                (p!(&mu) + q!(&mu)) * (p!(&nu) + q!(&nu)) * &volume,
+                Atom::Zero,
+            ),
+            (
+                g!(&mu, &replacement) * &volume,
+                epsilon!(&replacement, &nu, &rho, &sigma),
+            ),
+        ];
+        for (expression, expected) in cases {
+            let source = SymbolicTensor::infer(&spectator * expression).unwrap();
+            let contractor = SlotContraction::new().observed(source.reduction_observations());
+            let result = contractor
+                .contract_factorized(source.expression.as_view(), None, true)
+                .expect("intrinsic antisymmetric leaves admit factorized contraction");
+            assert_eq!(result.status, ReductionStatus::Complete);
+            assert_eq!(result.root, &spectator * &expected);
+            let contracted = source.contract(Default::default()).unwrap();
+            assert_eq!(contracted.expression(), &result.root);
+            assert_eq!(contracted.structure, source.structure);
+            assert_eq!(
+                contracted
+                    .contract(Default::default())
+                    .unwrap()
+                    .expression(),
+                &result.root
+            );
+        }
+    }
+
+    #[test]
+    fn factorized_color_tensor_sums_preserve_dummy_orientation() {
+        let reps = test_support::test_initialize();
+        let [a, b, c, d, e, renamed] = [97911, 97912, 97913, 97914, 97915, 97916]
+            .map(|index| reps.coad_da.to_symbolic([Atom::num(index)]));
+        let mu = mink!(4, 97917);
+        let nu = mink!(4, 97918);
+        let first = color_f!(&a, &b, &e) * color_f!(&c, &d, &e);
+        let second = color_f!(&a, &b, &renamed) * color_f!(&c, &d, &renamed);
+        // The color factors share a sum with Lorentz sources, as in the
+        // quartic vertex. They must not refuse the whole connected frontier.
+        let source =
+            SymbolicTensor::infer(&first * p!(&mu) * q!(&mu) + &second * p!(&nu) * q!(&nu))
+                .unwrap();
+        let contractor = SlotContraction::new().observed(source.reduction_observations());
+        let result = contractor
+            .contract_factorized(source.expression.as_view(), None, true)
+            .expect("explicit color tensor ports admit the factorized frontier");
+        assert_eq!(result.status, ReductionStatus::Complete);
+        let coefficient = Atom::num(2) * g!(p!(mink!(4)), q!(mink!(4)));
+        assert!(result.root == &coefficient * first || result.root == coefficient * second);
+        assert_eq!(
+            SymbolicTensor::infer(result.root).unwrap().structure,
+            source.structure
+        );
+    }
 
     #[test]
     fn source_free_color_scopes_stay_opaque_beside_real_contractions() {

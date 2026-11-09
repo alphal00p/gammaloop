@@ -108,6 +108,15 @@
         incrementalBaselineRoot = /. + builtins.unsafeDiscardStringContext self.inputs.ci-cache-base.outPath;
       };
       requestedTestProfile = builtins.getEnv "GAMMALOOP_NIX_TEST_PROFILE";
+      notebookWasmToolchain = fenix.packages.${system}.combine [
+        ciToolchain
+        fenix.packages.${system}.targets.wasm32-unknown-emscripten.stable.rust-std
+      ];
+      notebookWasm = import ./nix/notebook-wasm.nix {
+        inherit pkgs docsPkgs craneLib workspace;
+        toolchain = notebookWasmToolchain;
+        workspaceRoot = ./.;
+      };
       testWorkspace =
         if requestedTestProfile == "" || requestedTestProfile == workspace.ciCargoProfile
         then workspace
@@ -358,10 +367,22 @@
           "alphal00p-docs-cargo-artifacts" = alphal00pDocsCargoArtifacts;
           "alphal00p-docs-pages" = alphal00pDocsPages;
           "alphal00p-docs-snapshot-fixture" = alphal00pDocsSnapshotFixture;
-          "notebook-wasm-toolchain" = fenix.packages.${system}.combine [
-            ciToolchain
-            fenix.packages.${system}.targets.wasm32-unknown-emscripten.stable.rust-std
-          ];
+          "alphal00p-docs-notebooks" = workspace.alphal00pDocsNotebooks;
+          "alphal00p-docs-cells" = workspace.alphal00pDocsCells;
+          "test-documentation-cells" = workspace.alphal00pDocsCellsTest;
+          "profile-notebook-startup" = workspace.alphal00pDocsNotebookProfile;
+          "alphal00p-docs-publication" = workspace.alphal00pDocsPublication;
+          "notebook-wasm-toolchain" = notebookWasmToolchain;
+          "notebook-wasm-deps" = notebookWasm.notebookWasmDeps;
+          "notebook-wasm-wheel" = notebookWasm.notebookWasmWheel;
+          "notebook-ufo-wheel" = workspace.notebookUfoWheel;
+          "test-native-notebook-examples" = workspace.alphal00pDocsNativeNotebooks;
+          "test-notebook-examples" = import ./nix/notebook-tests.nix {
+            inherit pkgs;
+            alphal00pDocsNotebooks = workspace.alphal00pDocsNotebooks;
+            notebookWasmWheel = notebookWasm.notebookWasmWheel;
+            notebookUfoWheel = workspace.notebookUfoWheel;
+          };
           "ci-workspace-graph-json" = guppyWorkspaceGraphJson;
           "nix-ci-config" = nixCiConfiguration;
           inherit linnest-wasm;

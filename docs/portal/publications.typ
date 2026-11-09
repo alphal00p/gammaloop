@@ -53,6 +53,8 @@
   #page-hero(class: "portal-page-hero-compact")[
     = Publications
 
+    Research on Local Unitarity, perturbative calculations, and the methods behind the software.
+
     #publication-provenance[
       Updated #publication-cache.updated · #link(publication-cache.api_url)[
         Open the live INSPIRE query

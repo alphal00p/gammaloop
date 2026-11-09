@@ -18,6 +18,19 @@ Shift-click CFF factors to compare multiple surface regions, then inspect the
 corresponding LTD cuts and E/H surface pairs. Numerical sampling and the OneLOop
 comparison continue to use the triangle.
 
+#context if target() == "html" {
+  html.elem("div", attrs: (
+    class: "live-notebook",
+    "data-notebook": "08_numerical_cff_ltd_marimo",
+    "aria-label": "FeynKit: Numerical CFF and LTD",
+  ))[
+    #html.elem("p", attrs: (class: "live-notebook-fallback"))[
+      Enable JavaScript to run the notebook here, or open the
+      #source-link("examples/notebooks/feynkit/08_numerical_cff_ltd_marimo.py", label: "notebook source").
+    ]
+  ]
+}
+
 == What to explore
 
 `diagram.integrate_energy(method="ltd")` returns a native `symbolica.community.hepkit.LtdRepresentation`.
@@ -82,9 +95,14 @@ just notebook feynkit/08_numerical_cff_ltd_marimo /path/to/python
 Use an optimized native build, such as the community host's
 `release-performance` profile, when comparing timings.
 
-The smaller browser notebook host bundled with this repository does not
-include OneLOop; this example is offered as a native notebook rather than a
-browser embed. Select *Run integration comparison* to begin sampling.
+The browser runs the multiloop gallery, symbolic equality checks, numerical
+CFF/LTD evaluators, plots and integration samplers. Select *Run integration
+comparison* to begin sampling. Only the independent OneLOop reference is
+unavailable there: its pinned Rust adapter unconditionally links Symbolica native
+code generation and SymJIT. Browser sampling shows unnormalized estimates and
+errors without inventing a reference. The native notebook retains the actual
+OneLOop comparison. A browser port of OneLOop would require separating its
+expression evaluator from those native dependencies; it is not a Fortran limitation.
 
 Start with the #link("guides/showcases/cff/")[CFF structure showcase] for an
 introduction to orientations and surface metadata, or return to the

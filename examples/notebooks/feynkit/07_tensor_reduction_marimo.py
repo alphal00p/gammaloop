@@ -2,7 +2,7 @@
 # requires-python = ">=3.11"
 # dependencies = [
 #     "anywidget>=0.9,<1",
-#     "marimo==0.24.0",
+#     "marimo==0.25.1",
 #     "symbolica==3.0.1",
 # ]
 # ///
@@ -65,13 +65,13 @@ def _(Symbols):
     import math
     import time
 
-    from symbolica.community.hepkit import Model, TensorReducer
     from symbolica import E, S
+    from symbolica.community.hepkit import Model, TensorReducer
+    from symbolica.community.tensor import Representation, TensorName
 
     D = S("D")
     momentum = Symbols.edge_momentum()
-    external = S("TensorTutorial::p")
-    from symbolica.community.tensor import Representation
+    external = TensorName.vector("TensorTutorial::p").to_expression()
 
     mink = Representation.mink(4).to_expression().get_head()
     return (D, E, Model, S, TensorReducer, external, math, mink, momentum, time)
@@ -306,15 +306,15 @@ def _(mo):
 def _(E, Model, TensorReducer, mo, table):
     _vacuum_model = Model.yang_mills()
 
-    _vacuum_result = _vacuum_model.with_filters(
+    _vacuum_result = _vacuum_model.process(
+        [],
+        [],
         particle_veto=[
             _particle
             for _particle in _vacuum_model.particles
             if abs(_particle.pdg_code) != 21
-        ]
-    ).generate_diagrams(
-        incoming=[], outgoing=[], loops=2, max_vertices=2, coupling_orders={"QCD": 2}
-    )
+        ],
+    ).generate_diagrams(loops=2, max_vertices=2, coupling_orders={"QCD": 2})
     if len(_vacuum_result) != 1:
         raise RuntimeError("expected one pure-gluon theta vacuum graph")
 

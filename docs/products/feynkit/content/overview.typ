@@ -3,13 +3,19 @@
 #let overview = [
 = Overview
 
-FeynKit is a standalone particle-physics toolkit for validated models, Feynman diagrams,
+FeynKit is a collection of reusable Rust and Python tools for perturbative quantum field
+theory: validated models, Feynman diagrams,
 deterministic generation, cross-free family (CFF) and loop-tree duality (LTD)
 energy representations, relativistic kinematics, and
 covariant tensor reduction. Rust clients use the focused crates or the `feynkit` facade. Python
 clients use `symbolica.community.hepkit` inside a shared Symbolica kernel.
 
-== Choose a task
+Use the focused crates independently, alongside the `linnet-*` graph libraries and
+`spenso-*` tensor libraries, or within the `gammaloop-*` application and APIs. The
+#link("reference/interfaces/")[interface guide] maps the components to their responsibilities;
+a calculation can combine several of them.
+
+== Choose a starting point
 
 - Generate and inspect a small diagram with the #link("quickstart/rust/")[Rust] or
   #link("quickstart/python/")[Python] quickstart.

@@ -1,125 +1,115 @@
 #import "shared.typ": *
 #import "components.typ": *
 
-#let ordinal(index) = if index < 9 { "0" + str(index + 1) } else { str(index + 1) }
+#let topic-entry(topic) = topic-card(topic.id)[
+  === #topic.title
 
-#let task-link(task, index) = {
-  let product = registry.product.find(product => product.id == task.product)
-  let quickstart = product.pages.find(page => page.id == "quickstart")
-  let href = "products/" + product.id + "/" + channel-route + "/" + quickstart.route
-  task-choice(
-    product.id,
-    href,
-    ordinal(index),
-    task.label,
-    [#product.title · #task.role],
-    product.tagline,
-  )
-}
+  #topic.summary
 
-#let project-entry(product, index) = {
-  let task = portal.task.find(task => task.product == product.id)
-  let components = product.rust_components + product.python_components
-  let packages = components.map(component => component.package).sorted().dedup()
-  let quickstart = product.pages.find(page => page.id == "quickstart")
-  let guide = product.pages.find(page => page.group == "Guides")
-  let root = "products/" + product.id + "/" + channel-route + "/"
-  project-card(product.id)[
-    #project-meta(ordinal(index), task.role)
-
-    === #link(root)[#product.title]
-
-    #project-summary[#product.tagline]
-
-    #package-list(product.title, packages)
-
-    #project-links(product.title)[
-      #project-overview-link(root)[Overview #arrow()]
-      #link(root + quickstart.route)[Get started]
-      #link(root + guide.route)[Guides]
-      #link(root + "reference/")[Reference]
-    ]
+  #topic-links(topic.title)[
+    #link(page-link(topic.guide))[Read the guide #arrow()]
+    #link(page-link(topic.examples))[Examples #arrow()]
   ]
-}
-
-#let funding = funding-note(portal.funding_url)[
-  #kicker[Funding]
-
-  #anchored-heading(2, "funding-title")[Publicly funded research]
-
-  #portal.funding
-]
-
-#let tour = tour-section[
-  #portal-section-heading[
-    #heading-copy[
-      #kicker[Guided tour]
-
-      #anchored-heading(2, "tour-title")[See GammaLoop run]
-    ]
-
-    An animated walk through the command line, process generation, Monte Carlo integration, the Rust and Python APIs, and the crates behind them, drawn live in the browser. The commands are real; the terminal output is illustrative.
-  ]
-  #tour-frame("Animated tour of GammaLoop", "assets/showcase-hard-boiled.mp3")
-  #tour-credit[
-    Music: #link("https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1700076")[Hard Boiled]
-    by Kevin MacLeod (incompetech.com), licensed under
-    #link("https://creativecommons.org/licenses/by/4.0/")[Creative Commons Attribution 4.0].
+  #topic-libraries[
+    #for (index, id) in topic.products.enumerate() {
+      let product = registry.product.find(product => product.id == id)
+      if index > 0 { [ · ] }
+      link(product-root(id))[#product.title]
+    }
   ]
 ]
 
 #let landing = [
-  #landing-hero(landing-art(portal.graphs)[
-    Local cancellation. \
-    Global precision.
-  ])[
-    #kicker[#portal.eyebrow]
+  #landing-hero(landing-art(portal.graphs))[
+    #kicker[The #el("span", class: "keep-alpha", attrs: (style: "text-transform: none"))[α]Loop collaboration]
 
     = #portal.title
 
     #hero-lede[#portal.summary]
 
+    #portal.libraries_summary
+
     #hero-actions[
-      #button("#tasks", [Choose a task #arrow(symbol: "↓")], primary: true)
-      #button("products/gammaloop/" + channel-route + "/quickstart/", [
-        Start with GammaLoop #arrow()
-      ])
+      #button("#examples", [Explore the examples #arrow(symbol: "→")], primary: true)
+      #button("libraries/", [Browse the libraries #arrow(symbol: "→")])
     ]
   ]
-  #task-section[
-    #task-heading[
-      #heading-copy[
-        #kicker[Choose by task · 01—05]
+  #topic-section[
+    #topic-heading[
+      #anchored-heading(2, "topics-title")[Work through a calculation]
+    ]
+    #topic-grid[
+      #for topic in portal.topic { topic-entry(topic) }
+    ]
+  ]
+  #region(class: "portal-section portal-research", id: "research", labelled-by: "research-title")[
+    #section-header[
+      #anchored-heading(2, "research-title")[Local Unitarity]
+    ]
+    #about-origin[
+      #about-origin-copy[
+        Our research develops a shared numerical representation for perturbative
+        cross-section calculations, with local cancellation of infrared singularities.
 
-        #anchored-heading(2, "tasks-title")[What do you want to work on?]
+        #navigation("Local Unitarity research")[
+          #button("about/", [About the research #arrow(symbol: "→")])
+          #button("publications/", [Publications #arrow(symbol: "→")])
+        ]
       ]
-
-      Start with the scientific object or operation you have in hand. Each route opens the maintained first workflow for the component that owns it.
-    ]
-    #task-grid[
-      #for (index, task) in portal.task.enumerate() { task-link(task, index) }
+      #about-equation(
+        "assets/about-double-triangle-light.svg",
+        "assets/about-double-triangle-dark.svg",
+        "assets/about-local-unitarity-equation-light.svg",
+        "assets/about-local-unitarity-equation-dark.svg",
+        [Real and virtual contributions share one numerical representation.],
+      )
     ]
   ]
-  #projects-section[
-    #portal-section-heading[
-      #heading-copy[
-        #kicker[Research software · 01—05]
+  #examples-section[
+    #topic-heading[
+      #anchored-heading(2, "examples-title")[Worked examples]
+    ]
+    #for example in portal.example {
+      example-row(page-link(example.target), example.runtime)[
+        #group[
+          === #example.title
 
-        #anchored-heading(2, "projects-title")[Projects & crates]
+          #example.summary
+        ]
+        #example-runtime[
+          #if example.runtime == "browser" { [Browser example] } else { [Run locally] }
+          #arrow()
+        ]
       ]
+    }
+  ]
+  #library-note[
+    FeynKit is a collection of tools for perturbative quantum field theory.
+    Use its crates independently, alongside Linnet and Spenso, or together in GammaLoop.
+    #link("libraries/")[Browse the libraries and API references #arrow()]
+  ]
+  #tour-section[
+    #topic-heading[
+      #anchored-heading(2, "tour-title")[See GammaLoop run]
 
-      Five connected codebases spanning numerical cross-sections, graph algorithms, tensor networks, symbolic identities, and integral evaluation.
+      An animated walk through process generation, numerical integration, and the Rust and Python APIs. The commands are real; the terminal output is illustrative.
     ]
-    #project-grid[
-      #for (index, product) in registry.product.enumerate() { project-entry(product, index) }
+    #tour-frame("Animated tour of GammaLoop", "assets/showcase-hard-boiled.mp3")
+    #tour-credit[
+      Music: #link("https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1700076")[Hard Boiled]
+      by Kevin MacLeod, licensed under
+      #link("https://creativecommons.org/licenses/by/4.0/")[CC BY 4.0].
     ]
   ]
-  #tour
-  #funding
+  #funding-note(portal.funding_url)[
+    #anchored-heading(2, "funding-title")[Research funding]
+
+    #portal.funding
+  ]
 ]
 
 #let index-page = portal-document(
-  "Research software for collider physics",
+  "Software for perturbative quantum field theory",
   portal.summary,
   landing,
   root: "",

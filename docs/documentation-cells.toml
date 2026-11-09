@@ -1,0 +1,328 @@
+# Prerequisites refer to the exact displayed source; setup declares omitted context.
+
+[cell."docs/products/feynkit/content/api.typ:1"]
+depends = []
+
+[cell."docs/products/feynkit/content/api.typ:2"]
+depends = ["docs/products/feynkit/content/api.typ:1"]
+
+[cell."docs/products/feynkit/content/api.typ:3"]
+depends = []
+setup = "from symbolica import Expression\nfrom symbolica.community.hepkit import CutPropagator"
+
+[cell."docs/products/feynkit/content/feyncalc-coverage.typ:1"]
+depends = []
+
+[cell."docs/products/feynkit/content/feyncalc-coverage.typ:2"]
+reason = "Requires a RustRed-enabled host exposing hepkit.IBPFamily; the pinned browser scientific host does not register RustRed."
+
+[cell."docs/products/feynkit/content/integral-families.typ:1"]
+depends = []
+
+[cell."docs/products/feynkit/content/integral-families.typ:2"]
+depends = []
+setup = "import symbolica.community.hepkit as fk\nsunrise = fk.FeynmanDiagram.from_dot(fk.Model.phi4(), 'digraph sunrise {\\n ext [style=invis]; ext -> a [particle=\"phi\"];\\n a -> b [particle=\"phi\", lmb_id=0]; a -> b [particle=\"phi\", lmb_id=1];\\n a -> b [particle=\"phi\"]; b -> ext [particle=\"phi\"];\\n}')"
+
+[cell."docs/products/feynkit/content/integral-families.typ:3"]
+depends = []
+
+[cell."docs/products/feynkit/content/integral-families.typ:4"]
+depends = []
+
+[cell."docs/products/feynkit/content/integral-families.typ:5"]
+depends = []
+
+[cell."docs/products/feynkit/content/integral-families.typ:6"]
+depends = []
+
+[cell."docs/products/feynkit/content/integral-families.typ:7"]
+depends = []
+
+[cell."docs/products/feynkit/content/integral-families.typ:8"]
+depends = []
+
+[cell."docs/products/feynkit/content/integral-families.typ:9"]
+depends = []
+
+[cell."docs/products/feynkit/content/integral-families.typ:10"]
+depends = []
+
+[cell."docs/products/feynkit/content/notebooks.typ:1"]
+depends = ["docs/products/feynkit/content/api.typ:1"]
+
+[cell."docs/products/feynkit/content/notebooks.typ:2"]
+depends = ["docs/products/feynkit/content/notebooks.typ:1"]
+
+[cell."docs/products/feynkit/content/notebooks.typ:3"]
+reason = "Launches a local Chromium process through Playwright; browser workers cannot spawn native processes."
+
+[cell."docs/products/feynkit/content/notebooks.typ:4"]
+reason = "Launches a local Chromium process through Playwright; browser workers cannot spawn native processes."
+
+[cell."docs/products/feynkit/content/notebooks.typ:5"]
+reason = "Launches a local Chromium process through Playwright; browser workers cannot spawn native processes."
+
+[cell."docs/products/feynkit/content/quickstart-python.typ:1"]
+depends = []
+
+[cell."docs/products/feynkit/content/quickstart-python.typ:2"]
+depends = []
+
+[cell."docs/products/feynkit/content/quickstart-python.typ:3"]
+depends = ["docs/products/feynkit/content/quickstart-python.typ:1"]
+
+[cell."docs/products/feynkit/content/quickstart-python.typ:4"]
+depends = []
+
+[cell."docs/products/feynkit/content/showcase-cff.typ:1"]
+depends = ["docs/products/feynkit/content/api.typ:1"]
+
+[cell."docs/products/feynkit/content/tensor-reduction.typ:1"]
+depends = []
+
+[cell."docs/products/feynkit/content/tensor-reduction.typ:2"]
+depends = []
+
+[cell."docs/products/feynkit/content/tutorial.typ:1"]
+reason = "Requires the user-provided models/sm UFO model and derived diagram/amplitude or counterterm inputs introduced in this tutorial. The external model is not included in the published browser filesystem."
+
+[cell."docs/products/feynkit/content/tutorial.typ:2"]
+reason = "Requires the user-provided models/sm UFO model and derived diagram/amplitude or counterterm inputs introduced in this tutorial. The external model is not included in the published browser filesystem."
+
+[cell."docs/products/feynkit/content/tutorial.typ:3"]
+reason = "Requires the user-provided models/sm UFO model and derived diagram/amplitude or counterterm inputs introduced in this tutorial. The external model is not included in the published browser filesystem."
+
+[cell."docs/products/feynkit/content/tutorial.typ:4"]
+reason = "Requires the user-provided models/sm UFO model and derived diagram/amplitude or counterterm inputs introduced in this tutorial. The external model is not included in the published browser filesystem."
+
+[cell."docs/products/feynkit/content/tutorial.typ:5"]
+reason = "Requires the user-provided models/sm UFO model and derived diagram/amplitude or counterterm inputs introduced in this tutorial. The external model is not included in the published browser filesystem."
+
+[cell."docs/products/feynkit/content/tutorial.typ:6"]
+reason = "Requires the user-provided models/sm UFO model and derived diagram/amplitude or counterterm inputs introduced in this tutorial. The external model is not included in the published browser filesystem."
+
+[cell."docs/products/feynkit/content/tutorial.typ:7"]
+reason = "Requires the user-provided models/sm UFO model and derived diagram/amplitude or counterterm inputs introduced in this tutorial. The external model is not included in the published browser filesystem."
+
+[cell."docs/products/feynkit/content/tutorial.typ:8"]
+reason = "Requires the user-provided models/sm UFO model and derived diagram/amplitude or counterterm inputs introduced in this tutorial. The external model is not included in the published browser filesystem."
+
+[cell."docs/products/feynkit/content/tutorial.typ:9"]
+reason = "Requires the user-provided models/sm UFO model and derived diagram/amplitude or counterterm inputs introduced in this tutorial. The external model is not included in the published browser filesystem."
+
+[cell."docs/products/feynkit/content/tutorial.typ:10"]
+reason = "Requires the user-provided models/sm UFO model and derived diagram/amplitude or counterterm inputs introduced in this tutorial. The external model is not included in the published browser filesystem."
+
+[cell."docs/products/feynkit/content/tutorial.typ:11"]
+reason = "Requires the user-provided models/sm UFO model and derived diagram/amplitude or counterterm inputs introduced in this tutorial. The external model is not included in the published browser filesystem."
+
+[cell."docs/products/feynkit/content/tutorial.typ:12"]
+reason = "Requires the user-provided models/sm UFO model and derived diagram/amplitude or counterterm inputs introduced in this tutorial. The external model is not included in the published browser filesystem."
+
+[cell."docs/products/feynkit/content/tutorial.typ:13"]
+reason = "Requires the user-provided models/sm UFO model and derived diagram/amplitude or counterterm inputs introduced in this tutorial. The external model is not included in the published browser filesystem."
+
+[cell."docs/products/feynkit/content/tutorial.typ:14"]
+reason = "Requires the user-provided models/sm UFO model and derived diagram/amplitude or counterterm inputs introduced in this tutorial. The external model is not included in the published browser filesystem."
+
+[cell."docs/products/feynkit/content/tutorial.typ:15"]
+reason = "Requires the user-provided models/sm UFO model and derived diagram/amplitude or counterterm inputs introduced in this tutorial. The external model is not included in the published browser filesystem."
+
+[cell."docs/products/feynkit/content/tutorial.typ:16"]
+reason = "Requires the user-provided models/sm UFO model and derived diagram/amplitude or counterterm inputs introduced in this tutorial. The external model is not included in the published browser filesystem."
+
+[cell."docs/products/feynkit/content/tutorial.typ:17"]
+reason = "Requires the user-provided models/sm UFO model and derived diagram/amplitude or counterterm inputs introduced in this tutorial. The external model is not included in the published browser filesystem."
+
+[cell."docs/products/gammaloop/content/api.typ:1"]
+reason = "Requires native GammaLoopAPI and its generated evaluator/state files; the browser Symbolica host does not contain gammaloop."
+
+[cell."docs/products/gammaloop/content/api.typ:2"]
+reason = "Requires native GammaLoopAPI and its generated evaluator/state files; the browser Symbolica host does not contain gammaloop."
+
+[cell."docs/products/gammaloop/content/api.typ:3"]
+reason = "Requires native GammaLoopAPI and its generated evaluator/state files; the browser Symbolica host does not contain gammaloop."
+
+[cell."docs/products/gammaloop/content/events.typ:1"]
+reason = "Requires native GammaLoopAPI and its generated evaluator/state files; the browser Symbolica host does not contain gammaloop."
+
+[cell."docs/products/gammaloop/content/quickstart-python.typ:1"]
+reason = "Requires native GammaLoopAPI and its generated evaluator/state files; the browser Symbolica host does not contain gammaloop."
+
+[cell."docs/products/idenso/content/algebra.typ:1"]
+depends = []
+
+[cell."docs/products/idenso/content/api.typ:1"]
+depends = []
+
+[cell."docs/products/idenso/content/api.typ:2"]
+depends = ["docs/products/idenso/content/api.typ:1"]
+
+[cell."docs/products/idenso/content/api.typ:3"]
+depends = ["docs/products/idenso/content/api.typ:2"]
+
+[cell."docs/products/idenso/content/api.typ:4"]
+depends = ["docs/products/idenso/content/api.typ:1"]
+
+[cell."docs/products/idenso/content/api.typ:5"]
+depends = ["docs/products/idenso/content/api.typ:2"]
+
+[cell."docs/products/idenso/content/api.typ:6"]
+depends = ["docs/products/idenso/content/api.typ:1"]
+
+[cell."docs/products/idenso/content/api.typ:7"]
+depends = ["docs/products/idenso/content/api.typ:1", "docs/products/idenso/content/api.typ:5"]
+
+[cell."docs/products/idenso/content/api.typ:8"]
+depends = ["docs/products/idenso/content/api.typ:1", "docs/products/idenso/content/api.typ:5"]
+
+[cell."docs/products/idenso/content/form-symbolica-color-and-dirac.typ:1"]
+depends = []
+
+[cell."docs/products/idenso/content/quickstart-python.typ:1"]
+depends = []
+
+[cell."docs/products/idenso/content/tutorial.typ:1"]
+depends = []
+
+[cell."docs/products/linnet/content/algorithms.typ:1"]
+depends = []
+setup = "from symbolica.community.graph import Graph, DotCodec\ngraph = Graph.from_dot(\"digraph { a -> b; b -> c; c -> a; }\", DotCodec.topology())"
+
+[cell."docs/products/linnet/content/api.typ:1"]
+depends = []
+
+[cell."docs/products/linnet/content/api.typ:2"]
+depends = []
+
+[cell."docs/products/linnet/content/api.typ:3"]
+depends = ["docs/products/linnet/content/api.typ:2"]
+
+[cell."docs/products/linnet/content/api.typ:4"]
+depends = ["docs/products/linnet/content/api.typ:2"]
+
+[cell."docs/products/linnet/content/api.typ:5"]
+depends = ["docs/products/linnet/content/api.typ:2"]
+
+[cell."docs/products/linnet/content/api.typ:6"]
+depends = ["docs/products/linnet/content/api.typ:2"]
+
+[cell."docs/products/linnet/content/api.typ:7"]
+depends = ["docs/products/linnet/content/api.typ:5"]
+
+[cell."docs/products/linnet/content/api.typ:8"]
+reason = "Uses the native Python typst-py compiler for vector/PDF/PNG export; that native extension cannot run in Pyodide."
+
+[cell."docs/products/linnet/content/api.typ:9"]
+depends = ["docs/products/linnet/content/api.typ:5"]
+setup = "from symbolica.community.graph import DrawOptions"
+
+[cell."docs/products/linnet/content/api.typ:10"]
+depends = []
+
+[cell."docs/products/linnet/content/api.typ:11"]
+depends = []
+
+[cell."docs/products/linnet/content/api.typ:12"]
+depends = []
+
+[cell."docs/products/linnet/content/clinnet.typ:1"]
+reason = "Native Clinnet template: imports the generated layout.typ emitted by the command-line renderer for a user-provided graph."
+
+[cell."docs/products/linnet/content/python-rendering.typ:1"]
+depends = ["docs/products/linnet/content/quickstart-python.typ:1"]
+setup = "from symbolica.community import graph as linnet"
+
+[cell."docs/products/linnet/content/python-rendering.typ:2"]
+depends = ["docs/products/linnet/content/python-rendering.typ:1"]
+
+[cell."docs/products/linnet/content/python-rendering.typ:3"]
+depends = ["docs/products/linnet/content/python-rendering.typ:2"]
+
+[cell."docs/products/linnet/content/quickstart-python.typ:1"]
+depends = []
+
+[cell."docs/products/linnet/content/quickstart-python.typ:2"]
+depends = ["docs/products/linnet/content/quickstart-python.typ:1"]
+
+[cell."docs/products/linnet/content/quickstart-typst.typ:1"]
+depends = []
+
+[cell."docs/products/linnet/content/typst-reference.typ:1"]
+depends = []
+
+[cell."docs/products/spenso/content/api.typ:1"]
+depends = []
+
+[cell."docs/products/spenso/content/api.typ:2"]
+depends = []
+
+[cell."docs/products/spenso/content/python.typ:1"]
+depends = []
+
+[cell."docs/products/spenso/content/python.typ:2"]
+depends = ["docs/products/spenso/content/python.typ:1"]
+
+[cell."docs/products/spenso/content/python.typ:3"]
+depends = ["docs/products/spenso/content/python.typ:2"]
+
+[cell."docs/products/spenso/content/python.typ:4"]
+depends = []
+
+[cell."docs/products/spenso/content/python.typ:5"]
+depends = []
+
+[cell."docs/products/spenso/content/python.typ:6"]
+depends = []
+
+[cell."docs/products/spenso/content/python.typ:7"]
+depends = []
+
+[cell."docs/products/spenso/content/python.typ:8"]
+depends = []
+
+[cell."docs/products/spenso/content/python.typ:9"]
+depends = []
+
+[cell."docs/products/spenso/content/python.typ:10"]
+depends = []
+
+[cell."docs/products/spenso/content/python.typ:11"]
+depends = []
+
+[cell."docs/products/spenso/content/python.typ:12"]
+depends = ["docs/products/spenso/content/python.typ:11"]
+
+[cell."docs/products/spenso/content/python.typ:13"]
+depends = []
+
+[cell."docs/products/spenso/content/python.typ:14"]
+depends = []
+
+[cell."docs/products/spenso/content/python.typ:15"]
+depends = []
+
+[cell."docs/products/spenso/content/python.typ:16"]
+depends = ["docs/products/spenso/content/python.typ:15"]
+setup = "numerator = trace"
+
+[cell."docs/products/spenso/content/python.typ:17"]
+depends = []
+
+[cell."docs/products/spenso/content/python.typ:18"]
+depends = []
+
+[cell."docs/products/spenso/content/python.typ:19"]
+depends = ["docs/products/spenso/content/python.typ:18"]
+
+[cell."docs/products/spenso/content/quickstart-python.typ:1"]
+depends = []
+
+[cell."docs/products/vakint/content/api.typ:1"]
+reason = "Requires the native Vakint extension and external integral evaluation programs; these are not linked into the browser host."
+
+[cell."docs/products/vakint/content/evaluation.typ:1"]
+reason = "Requires the native Vakint extension and external integral evaluation programs; these are not linked into the browser host."
+
+[cell."docs/products/vakint/content/quickstart-python.typ:1"]
+reason = "Requires the native Vakint extension and external integral evaluation programs; these are not linked into the browser host."

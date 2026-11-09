@@ -24,6 +24,13 @@ PyO3, and the other community modules compatible with this checkout. The `ufo` f
 by default in the Python adapter; disable default features if the host intentionally omits UFO
 loading. The pure Rust facade has different defaults.
 
+The optional native `oneloop` feature registers the pinned OneLOop scalar-master
+adapter in the same kernel. Package `hepkit/oneloop` alongside the main Python
+wrapper to expose `from symbolica.community.hepkit import oneloop`. The notebook
+host enables this feature for its native numerical showcase. Browser builds omit
+only the independent OneLOop reference; the symbolic and numerical CFF/LTD
+showcase runs without it.
+
 The 3.0.1 dependency versions alone do not select the Community extension and
 resource-budget APIs used by this checkout. Pin Symbolica, Numerica and Graphica together to the
 compatible public Symbolica revision below, alongside the Typst atom payload.
@@ -238,8 +245,8 @@ it requires Python 3.14 with Zstandard support, as provided by the pinned Pyodid
 runtime. Its ABI3 tag describes extension compatibility, not archive decompression
 support in older Python installers.
 
-The wheel command uses the checkout's pinned Emscripten Rust toolchain and provisions the
-matching Pyodide build environment through cibuildwheel. Then export the executable
+The wheel command builds through the Nix flake with pinned Rust, Emscripten, and
+Pyodide inputs. Compilation runs offline and reuses a separate dependency archive. Then export the executable
 cells and start the existing documentation watcher:
 
 // docs-example: syntax
@@ -250,8 +257,8 @@ just docs-notebooks /path/to/symbolica-wasm.whl feynkit docs/generated/notebooks
 just docs-watch feynkit 8117
 ```
 
-Pass the actual Symbolica wheel filename produced by the build. `notebook-ufo-wheel` downloads
-the released `ufo-model-loader==1.0.1` pure Python wheel, matching the notebook dependency.
+Pass the actual Symbolica wheel filename produced by the build. `notebook-ufo-wheel` exports
+the fixed-hash released `ufo-model-loader==1.0.1` pure Python wheel, matching the notebook dependency.
 `docs-notebooks` stages generated assets
 under `docs/generated/notebooks`, which `docs-site` and `docs-watch` include automatically.
 Rerun the export after editing a notebook; the watcher reloads the changed assets. The output
@@ -266,8 +273,32 @@ just docs-notebooks /path/to/symbolica-wasm.whl spenso docs/generated/notebooks
 just docs-notebooks /path/to/symbolica-wasm.whl idenso docs/generated/notebooks
 ```
 
-Publication builds the host wheel at the documented revision and adds all three products' assets
-to the versioned site. The FeynKit notebooks use built-in model constructors, so neither
+The flake builds the wheels and assembles the complete site:
+
+// docs-example: syntax
+```sh
+nix run .#alphal00p-docs-publication -- target/docs-pages
+```
+
+The command validates and renders the documentation, then exports the live cells for Linnet,
+GammaLoop, Spenso, Idenso, and FeynKit. It requires a user Symbolica license for the native
+documentation checks, loaded through the usual development environment. Nix reuses the compiled
+documentation artifacts, the WASM dependency archive, the browser wheels, and the pinned
+Marimo exporter. Editing website prose or styling does not rebuild the wheel.
+For a snapshot, set `ALPHAL00P_DOCS_CHANNEL=snapshot` and
+`ALPHAL00P_DOCS_SNAPSHOT_TAG` to the release tag before running the command.
+The lower-level `alphal00p-docs-notebooks` exporter also accepts `--browser-smoke`
+and `--browser-executable /path/to/chromium` to check the exported cells in a browser.
+Its Nix environment includes the Playwright client; supply the browser executable separately.
+The documentation tests provide Chromium and execute every browser example. Run them
+against an already rendered site with `nix run .#test-notebook-examples -- target/notebook-tests target/docs-pages`.
+The numerical CFF/LTD example runs in the browser without the independent OneLOop
+reference and in the native installed-wheel tests through Marimo;
+`nix run .#test-native-notebook-examples -- target/native-notebook-tests` runs that check separately.
+
+Publication builds the host wheel from the documented source and adds the notebook assets
+to the versioned site. Its wheel cache follows the Rust, Python, and embedded-asset inputs, so
+website styling changes do not trigger another WebAssembly compilation. The FeynKit notebooks use built-in model constructors, so neither
 native execution nor browser export needs separate model JSON files. The UFO-loading
 tutorial deliberately retains its raw UFO fixture to demonstrate importing external models.
 

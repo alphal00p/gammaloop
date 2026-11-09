@@ -23,13 +23,14 @@ This self-contained example integrates `k` and leaves `p` external:
 // docs-example: compile feynkit-tensor-selectors
 ```python
 from symbolica import S
+from symbolica.community.tensor import TensorName
 import symbolica.community.hepkit as fk
 
 D = S("feynkit_docs::D")
 mu = S("feynkit_docs::mu")
 nu = S("feynkit_docs::nu")
-k = S("feynkit_docs::k")
-p = S("feynkit_docs::p")
+k = TensorName("feynkit_docs::k", rank=1).to_expression()
+p = TensorName("feynkit_docs::p", rank=1).to_expression()
 mink = S("spenso::mink")
 dot = S("spenso::dot")
 k_compact = k(mink(D))
@@ -44,6 +45,10 @@ expected = dot(k_compact, k_compact) * dot(p_compact, p_compact) / D
 assert scalar.rank == 0 and scalar.axes == ()
 assert scalar.to_expression() == expected
 ```
+
+`TensorName(..., rank=1)` registers the vector head with Spenso's tensor and rank-one
+tags. `to_expression()` exposes that tagged head for the compact source notation used here;
+a plain untagged `S("k")` cannot own structural ports.
 
 Compact contractions can be passed directly: the same reducer gives zero for
 `dot(k_compact, p_compact)` and gives `expected` for
@@ -84,10 +89,12 @@ then be nonzero.
 // docs-example: compile feynkit-tensor-external-basis
 ```python
 from symbolica import S
-from symbolica.community.tensor import TensorExpression
+from symbolica.community.tensor import TensorExpression, TensorName
 import symbolica.community.hepkit as fk
 
-D, k, p, mu = S("external_docs::D", "external_docs::k", "external_docs::p", "external_docs::mu")
+D, mu = S("external_docs::D", "external_docs::mu")
+k = TensorName("external_docs::k", rank=1).to_expression()
+p = TensorName("external_docs::p", rank=1).to_expression()
 mink, dot = S("spenso::mink", "spenso::dot")
 kc, pc = k(mink(D)), p(mink(D))
 reducer = fk.TensorReducer(D, integrated=[kc], external=[pc])
