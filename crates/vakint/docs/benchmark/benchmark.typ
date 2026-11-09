@@ -290,6 +290,7 @@
   ws, wc: RustRed warm on its own cache, and warm on one cache shared along the cells of that loop
   count. ✓: result exactly equal to Forcer's. n: integrals in the input. †: fewer repetitions than
   the protocol. Grey: Forcer only in v1.
+  *Caveat:* indicative timings on a shared, loaded host (foreign load on node 4 not excluded): median foreign share of the measuring CPUs 1L n/a (before the sampler), 2L 0.82, 3L 0.12, 4L 0.52.
 ]
 
 #block(stroke: 0.6pt + luma(200), inset: 6pt, radius: 3pt, width: 100%)[
