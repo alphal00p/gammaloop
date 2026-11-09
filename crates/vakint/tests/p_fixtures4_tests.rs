@@ -27,9 +27,15 @@ use vakint::p_integral::forcer_fixtures::{
 };
 use vakint::{LoopNormalizationFactor, RustRedMasterMode, VakintSettings};
 
-/// The provenance block is complete and every case has a nonzero, parseable,
-/// finalizable value (none of these cases is scaleless).
-fn assert_frozen(file: &str, fixture: &ForcerFixture) {
+/// The four-loop benchmark tops whose Forcer value is an exact 0: the J11
+/// top with `dot(k(1),p(1))*dot(k(2),p(1))`, undotted and with one dot (raw
+/// output ` 0`). The grid keeps them as data.
+const ZERO_GRID_CASES: [&str; 2] = ["bench_L4_d0_r2_P4L_J11", "bench_L4_d1_r2_P4L_J11"];
+
+/// The provenance block is complete and every case has a parseable,
+/// finalizable value, nonzero except for the cases `zeros` (none of these
+/// cases is scaleless).
+fn assert_frozen(file: &str, fixture: &ForcerFixture, zeros: &[&str]) {
     assert!(!fixture.form_version.is_empty(), "{file}: FORM version");
     let run = fixture.run.as_ref().expect("a run block");
     assert!(run.flags.contains("Forcer()"), "{file}: {run:?}");
@@ -41,6 +47,15 @@ fn assert_frozen(file: &str, fixture: &ForcerFixture) {
     let epsilon = vakint::vakint_symbol!(&settings.epsilon_symbol);
     for case in fixture.cases.iter().chain(&fixture.boundary) {
         let values = frozen_values(case);
+        if zeros.contains(&case.name.as_str()) {
+            assert_eq!(case.outputs, [" 0\n"], "{file}: {}", case.name);
+            assert!(
+                values.iter().all(|(_, v)| v.is_zero()),
+                "{file}: {}",
+                case.name
+            );
+            continue;
+        }
         assert!(!values.is_empty(), "{file}: {}", case.name);
         for (_, reduced) in &values {
             let basis = tag_basis(reduced, epsilon)
@@ -91,7 +106,7 @@ fn assert_nonzero_series(coefficients: &[String], terms: i64, name: &str) {
 #[test]
 fn the_four_loop_anchor_fixture_is_complete() {
     let fixture = anchor4_fixture();
-    assert_frozen("p4l_anchors.json", &fixture);
+    assert_frozen("p4l_anchors.json", &fixture, &[]);
     // A master anchor is the master integral itself: its Forcer value carries
     // its own master and no other.
     for case in &fixture.cases {
@@ -120,7 +135,7 @@ fn the_four_loop_anchor_fixture_is_complete() {
 fn the_four_loop_grid_fixture_is_complete() {
     let file = "p4l_grid.json";
     let fixture = grid4_fixture();
-    assert_frozen(file, &fixture);
+    assert_frozen(file, &fixture, &ZERO_GRID_CASES);
     let count = |prefix: &str| {
         fixture
             .cases
@@ -136,7 +151,23 @@ fn the_four_loop_grid_fixture_is_complete() {
     );
     assert_eq!(fixture.cases.len(), 220);
     for case in &fixture.cases {
-        assert_depth(file, case);
+        if ZERO_GRID_CASES.contains(&case.name.as_str()) {
+            // A zero finalizes at any depth: the cap, every coefficient 0.
+            let depth = case.depth.as_ref().unwrap();
+            assert_eq!(depth.terms, DEPTH_CAP_TERMS, "{}", case.name);
+            assert!(depth.symbolic.iter().all(|c| c == "0"), "{}", case.name);
+        } else {
+            assert_depth(file, case);
+        }
+    }
+    // The depths are the finalizer's (recomputed here for the dotted sectors;
+    // forcer_four_loop_battery recomputes every battery depth).
+    for case in fixture
+        .cases
+        .iter()
+        .filter(|case| case.name.starts_with("dotted_"))
+    {
+        assert_eq!(&case.deepest().unwrap(), assert_depth(file, case));
     }
 }
 
@@ -144,7 +175,7 @@ fn the_four_loop_grid_fixture_is_complete() {
 fn the_four_loop_battery_fixture_is_complete() {
     let file = "p4l_battery.json";
     let fixture = battery4_fixture();
-    assert_frozen(file, &fixture);
+    assert_frozen(file, &fixture, &[]);
     // All eleven four-loop families, with ranks, dots and ISPs.
     let families = fixture
         .cases
