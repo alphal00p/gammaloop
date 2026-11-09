@@ -5,10 +5,6 @@
 
 The `feynkit-ufo` showcase uses the repository's scalar UFO fixture and its default restriction card. After normalization, generation uses the same typed `Model` API as the other showcases.
 
-The notebook runs in the browser when this site's notebook assets are available. Its cells
-are editable; run a changed cell to update the dependent results. The first load downloads
-Symbolica, the notebook runtime, and this example's data.
-
 #context if target() == "html" {
   html.elem("div", attrs: (
     class: "live-notebook",

@@ -2,7 +2,7 @@
 # requires-python = ">=3.11"
 # dependencies = [
 #     "anywidget>=0.9,<1",
-#     "marimo==0.24.0",
+#     "marimo==0.25.1",
 #     "symbolica==3.0.1",
 #     "ufo-model-loader==1.0.1",
 # ]
@@ -14,8 +14,9 @@ __generated_with = "0.24.0"
 app = marimo.App(width="medium", app_title="FeynKit: Loading UFO models")
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _():
+    # documentation: setup-only
     from functools import partial
 
     import marimo as mo
@@ -197,9 +198,9 @@ def _(mo):
 
 @app.cell
 def _(model):
-    generated = model.with_filters(vertex_allow=["V_3_SCALAR_000"]).generate_diagrams(
-        incoming=["scalar_0"],
-        outgoing=["scalar_0", "scalar_0"],
+    generated = model.process(
+        ["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"]
+    ).generate_diagrams(
         loops=0,
         max_vertices=3,
     )

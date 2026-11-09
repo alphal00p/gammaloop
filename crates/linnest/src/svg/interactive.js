@@ -558,6 +558,13 @@
     };
     const graphPoint = event => new DOMPoint(event.clientX, event.clientY).matrixTransform(viewport.getScreenCTM().inverse());
     const inGraph = event => event.target === panSurface || viewport.contains(event.target);
+    const graphContent = event => inGraph(event)
+      && !event.target.closest('button, input, select, textarea, [contenteditable], [role=button]');
+    /* Native mouse focus otherwise overrides the camera focus from pointerdown.
+       Keep pointer capture and clicks intact; controls retain their defaults. */
+    svg.addEventListener('mousedown', event => {
+      if (graphContent(event)) event.preventDefault();
+    });
     svg.addEventListener('wheel', event => {
       if (!inGraph(event)) return;
       if (!event.ctrlKey && !event.metaKey) return;
@@ -569,7 +576,7 @@
     let pointer;
     svg.addEventListener('pointerdown', event => {
       if (event.button !== 0 || !inGraph(event)) return;
-      if (event.target === panSurface) viewport.focus();
+      if (graphContent(event)) viewport.focus({preventScroll:true});
       pointer = { id: event.pointerId, x: event.clientX, y: event.clientY, camera: { ...camera }, matrix: viewport.getScreenCTM().inverse() };
       suppressClick = false;
     });

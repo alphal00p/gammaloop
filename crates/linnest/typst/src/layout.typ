@@ -200,6 +200,7 @@
 /// Pass the result to @layout with argument spreading.
 ///
 /// ```example
+/// >>>#let g = graph.build({ graph.node(<a>); graph.node(<b>); graph.edge(graph.source(<a>), graph.sink(<b>)) })
 /// #let common = options(
 ///   spring: (strength: 8, length: 0.5),
 ///   repulsion: (edge-node: 0.05, dangling: 2),

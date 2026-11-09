@@ -5,10 +5,6 @@
 
 The `feynkit-tensor` showcase distinguishes integrated and external momenta, preserves the symbolic dimension, and uses contraction symmetry to keep high-rank results compact. It then reduces the numerator of a two-loop gluon vacuum graph.
 
-The notebook runs in the browser when this site's notebook assets are available. Its cells
-are editable; run a changed cell to update the dependent results. The first load downloads
-Symbolica, the notebook runtime, and this example's data.
-
 #context if target() == "html" {
   html.elem("div", attrs: (
     class: "live-notebook",

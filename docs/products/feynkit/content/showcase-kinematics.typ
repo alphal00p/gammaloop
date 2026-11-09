@@ -5,10 +5,6 @@
 
 The `feynkit-kinematics` showcase makes the mostly-minus metric and component order explicit. It covers on-shell momenta, boosts and their inverses, rotations, rapidity, angular distances, and generalized-kt jet clustering.
 
-The notebook runs in the browser when this site's notebook assets are available. Its cells
-are editable; run a changed cell to update the dependent results. The first load downloads
-Symbolica, the notebook runtime, and this example's data.
-
 #context if target() == "html" {
   html.elem("div", attrs: (
     class: "live-notebook",

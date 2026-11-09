@@ -1,7 +1,11 @@
 #import "../../shared.typ": callout, boundary, developer-link, product-link
 
 #let overview = [
-= Overview
+#context if target() == "html" {
+  html.elem("span", attrs: (id: "overview"))[]
+} else {
+  heading(level: 1)[Overview]
+}
 
 GammaLoop is alpha-stage research software that computes numerical amplitude integrands and
 uses Local Unitarity for differential partonic cross sections. Its current

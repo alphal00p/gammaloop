@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Check deterministic accessibility invariants in every generated docs shell page."""
 
 from __future__ import annotations
@@ -9,7 +8,6 @@ import sys
 from collections import Counter
 from html.parser import HTMLParser
 from pathlib import Path
-
 
 VOID_ELEMENTS = {
     "area",
@@ -59,7 +57,9 @@ class DocumentAudit(HTMLParser):
     def handle_decl(self, declaration: str) -> None:
         self.doctype |= declaration.lower().strip() == "doctype html"
 
-    def handle_starttag(self, tag: str, raw_attributes: list[tuple[str, str | None]]) -> None:
+    def handle_starttag(
+        self, tag: str, raw_attributes: list[tuple[str, str | None]]
+    ) -> None:
         attributes = {name.lower(): value or "" for name, value in raw_attributes}
         tag = tag.lower()
         ancestors = tuple(self.stack)
@@ -75,7 +75,7 @@ class DocumentAudit(HTMLParser):
         elif tag == "main":
             self.main_count += 1
             if attributes.get("id") != "main-content":
-                self.errors.append("the main landmark must use id=\"main-content\"")
+                self.errors.append('the main landmark must use id="main-content"')
         elif tag in {"h1", "h2", "h3", "h4", "h5", "h6"}:
             level = int(tag[1])
             self.heading_levels.append(level)
@@ -88,13 +88,19 @@ class DocumentAudit(HTMLParser):
                 self.labelled_controls.append((tag, attributes, inside_label))
         elif tag == "img" and "alt" not in attributes:
             self.errors.append("an img element is missing its alt attribute")
-        elif attributes.get("role") == "img" and not self._has_accessible_name(attributes):
-            self.errors.append("an element with role=\"img\" has no accessible name")
+        elif attributes.get("role") == "img" and not self._has_accessible_name(
+            attributes
+        ):
+            self.errors.append('an element with role="img" has no accessible name')
         elif tag == "iframe" and not attributes.get("title", "").strip():
             self.errors.append("an iframe has no title")
         elif tag == "th":
             table = next(
-                (ancestor for ancestor in reversed(ancestors) if ancestor["tag"] == "table"),
+                (
+                    ancestor
+                    for ancestor in reversed(ancestors)
+                    if ancestor["tag"] == "table"
+                ),
                 None,
             )
             if table is not None:
@@ -129,7 +135,9 @@ class DocumentAudit(HTMLParser):
                         f"the documentation sidebar is {forbidden} without JavaScript"
                     )
             if attributes.get("aria-hidden", "").lower() == "true":
-                self.errors.append("the documentation sidebar is aria-hidden without JavaScript")
+                self.errors.append(
+                    "the documentation sidebar is aria-hidden without JavaScript"
+                )
         elif tag == "a" and in_sidebar and href:
             self.sidebar_links += 1
         elif tag == "a" and in_primary_navigation and href:
@@ -168,9 +176,7 @@ class DocumentAudit(HTMLParser):
 
     def handle_data(self, data: str) -> None:
         for ancestor in self.stack:
-            if ancestor["tag"] in {"button", "title"} or ancestor[
-                "python_example"
-            ]:
+            if ancestor["tag"] in {"button", "title"} or ancestor["python_example"]:
                 ancestor["text"].append(data)
 
     def handle_endtag(self, tag: str) -> None:
@@ -208,9 +214,11 @@ class DocumentAudit(HTMLParser):
         if not self.doctype:
             self.errors.append("the HTML5 doctype is missing")
         if self.html_language != "en":
-            self.errors.append("the root html element must declare lang=\"en\"")
+            self.errors.append('the root html element must declare lang="en"')
         if "js" in self.html_classes:
-            self.errors.append("the static html element must not enable JavaScript-only navigation")
+            self.errors.append(
+                "the static html element must not enable JavaScript-only navigation"
+            )
         if not self.title:
             self.errors.append("the document title is empty")
         if not self.viewport:
@@ -221,7 +229,9 @@ class DocumentAudit(HTMLParser):
             self.errors.append(f"expected one h1, found {self.h1_count}")
         for previous, current in zip(self.heading_levels, self.heading_levels[1:]):
             if current > previous + 1:
-                self.errors.append(f"heading level jumps from h{previous} to h{current}")
+                self.errors.append(
+                    f"heading level jumps from h{previous} to h{current}"
+                )
         if not self.skip_link:
             self.errors.append("the skip link to #main-content is missing")
 
@@ -240,7 +250,9 @@ class DocumentAudit(HTMLParser):
                 or attributes.get("id") in self.label_targets
             )
             if not labelled:
-                self.errors.append(f"a {tag} control has no associated accessible label")
+                self.errors.append(
+                    f"a {tag} control has no associated accessible label"
+                )
 
         if require_sidebar:
             if self.sidebar_count != 1:
@@ -270,7 +282,9 @@ class DocumentAudit(HTMLParser):
                     f"expected one mobile navigation backdrop, found {len(self.sidebar_backdrops)}"
                 )
         elif self.primary_navigation_links < 3:
-            self.errors.append("the portal primary navigation has fewer than three ordinary links")
+            self.errors.append(
+                "the portal primary navigation has fewer than three ordinary links"
+            )
         return self.errors
 
     @staticmethod
@@ -301,41 +315,47 @@ def generated_shell_pages(root: Path) -> list[tuple[str, Path, bool]]:
 
 
 def css_media_body(stylesheet: str, max_width: str) -> str | None:
-    """Return a max-width media body without depending on a CSS parser."""
+    """Return every matching media body so later cascade rules are checked too."""
 
-    marker = re.search(
-        rf"@media\s*\(\s*max-width\s*:\s*{re.escape(max_width)}\s*\)\s*\{{",
-        stylesheet,
-    )
-    if marker is None:
-        return None
-    opening_brace = marker.end() - 1
-    depth = 0
-    for index in range(opening_brace, len(stylesheet)):
-        if stylesheet[index] == "{":
-            depth += 1
-        elif stylesheet[index] == "}":
-            depth -= 1
-            if depth == 0:
-                return stylesheet[opening_brace + 1 : index]
-    return None
+    pattern = rf"@media\s*\(\s*max-width\s*:\s*{re.escape(max_width)}\s*\)\s*\{{"
+    bodies: list[str] = []
+    for marker in re.finditer(pattern, stylesheet):
+        opening_brace = marker.end() - 1
+        depth = 0
+        for index in range(opening_brace, len(stylesheet)):
+            if stylesheet[index] == "{":
+                depth += 1
+            elif stylesheet[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    bodies.append(stylesheet[opening_brace + 1 : index])
+                    break
+        else:
+            return None
+    return "\n".join(bodies) if bodies else None
 
 
 def progressive_navigation_errors(root: Path) -> list[str]:
-    """Check progressive mobile navigation, drawer focus, and compact references."""
+    """Check shared navigation owners, non-modal contents focus, and references."""
 
     asset_names = (
         "site.css",
         "site.js",
+        "site-header.css",
+        "navigation.js",
         "STIXTwoMath-Regular.woff2",
         "STIX-Two-OFL.txt",
     )
     assets = {name: root / "assets" / name for name in asset_names}
     missing = [path for path in assets.values() if not path.is_file()]
     if missing:
-        return [f"missing documentation asset {path.relative_to(root)}" for path in missing]
+        return [
+            f"missing documentation asset {path.relative_to(root)}" for path in missing
+        ]
     css = assets["site.css"].read_text(encoding="utf-8")
     script = assets["site.js"].read_text(encoding="utf-8")
+    header_css = assets["site-header.css"].read_text(encoding="utf-8")
+    navigation = assets["navigation.js"].read_text(encoding="utf-8")
     errors: list[str] = []
     mobile_css = css_media_body(css, "52rem")
     if mobile_css is None:
@@ -349,8 +369,11 @@ def progressive_navigation_errors(root: Path) -> list[str]:
             r"\.js\s+\.docs-sidebar\s*\{[^}]*position:\s*fixed[^}]*"
             r"transform:\s*translateX\(-105%\)"
         ),
-        "the mobile menu button is not scoped to the JavaScript marker": (
-            r"\.js\s+\.menu-button\s*\{[^}]*display:\s*inline-block"
+        "the no-JS local contents controls are not hidden": (
+            r"html:not\(\.js\)\s+\.docs-local-bar\s*\{[^}]*display:\s*none"
+        ),
+        "the enhanced local contents controls are not visible": (
+            r"\.docs-local-bar\s*\{[^}]*display:\s*flex"
         ),
         "the enhanced mobile sidebar has no visible open state": (
             r"\.js\s+body\.sidebar-open\s+\.docs-sidebar\s*\{[^}]*"
@@ -367,8 +390,8 @@ def progressive_navigation_errors(root: Path) -> list[str]:
         if not re.search(pattern, mobile_css)
     )
     base_rules = {
-        "the no-JS mobile menu button is not hidden": (
-            r"(?:^|\n)\s*\.menu-button\s*\{[^}]*display:\s*none"
+        "desktop pages do not hide the mobile contents bar": (
+            r"(?:^|\n)\s*\.docs-local-bar\s*\{[^}]*display:\s*none"
         ),
         "the no-JS mobile backdrop is not hidden": (
             r"(?:^|\n)\s*\.sidebar-backdrop\s*\{[^}]*display:\s*none"
@@ -405,16 +428,69 @@ def progressive_navigation_errors(root: Path) -> list[str]:
         ),
     }
     errors.extend(
-        message for message, pattern in base_rules.items() if not re.search(pattern, css)
+        message
+        for message, pattern in base_rules.items()
+        if not re.search(pattern, css)
     )
+
+    owner_rules = {
+        "site.css does not import the shared header stylesheet": (
+            css,
+            r"@import\s+url\(\s*[\"'](?:\./)?site-header\.css[\"']\s*\)",
+        ),
+        "site.js does not initialize the shared navigation module": (
+            script,
+            (
+                r"import\(new URL\([\"']navigation\.js[\"'].*?"
+                r"module\.initializeNavigation\(\)"
+            ),
+        ),
+    }
+    for message, (owner, pattern) in owner_rules.items():
+        if not re.search(pattern, owner, re.DOTALL):
+            errors.append(message)
+    if not re.search(r"export\s+function\s+initializeNavigation\(\)", navigation):
+        errors.append("navigation.js does not export the shared navigation owner")
+
+    header_mobile_css = css_media_body(header_css, "52rem")
+    if header_mobile_css is None:
+        errors.append("site-header.css has no complete mobile navigation rules")
+        header_mobile_css = ""
+    header_rules = {
+        "the compact shared header does not use two bounded columns": (
+            r"\.portal-header\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto"
+        ),
+        "the compact shared header does not reduce its horizontal inset": (
+            r"\.portal-header\s*\{[^}]*padding-inline:\s*8px"
+        ),
+        "the global mobile menu button is not scoped to JavaScript": (
+            r"\.js\s+\.portal-header-actions\s*>\s*\.portal-menu-button"
+            r"\s*\{[^}]*display:\s*flex"
+        ),
+        "no-JS global navigation does not remain in normal flow": (
+            r"html:not\(\.js\)\s+\.portal-nav\s*\{[^}]*position:\s*static"
+        ),
+    }
+    errors.extend(
+        message
+        for message, pattern in header_rules.items()
+        if not re.search(pattern, header_mobile_css)
+    )
+    if not re.search(
+        r"\.portal-header-actions\s*>\s*\.portal-menu-button\s*\{[^}]*display:\s*none",
+        header_css,
+    ):
+        errors.append("the no-JS global menu button is not hidden")
 
     contextual_css = css_media_body(css, "82rem")
     if contextual_css is None:
-        errors.append("site.css has no complete max-width: 82rem contextual navigation rules")
-    elif not re.search(
-        r"\.docs-inline-toc\s*\{[^}]*display:\s*block", contextual_css
-    ):
-        errors.append("the inline page outline is not shown when the right rail is hidden")
+        errors.append(
+            "site.css has no complete max-width: 82rem contextual navigation rules"
+        )
+    elif not re.search(r"\.docs-inline-toc\s*\{[^}]*display:\s*block", contextual_css):
+        errors.append(
+            "the inline page outline is not shown when the right rail is hidden"
+        )
 
     if not re.search(r"\.classList\.add\([\"']js[\"']\)", script):
         errors.append("site.js does not add the progressive-enhancement marker")
@@ -423,8 +499,6 @@ def progressive_navigation_errors(root: Path) -> list[str]:
     background_selectors = {
         ".docs-main",
         ".docs-toc",
-        ".site-brand",
-        ".site-header-tools",
         ".skip-link",
     }
     selector_declaration = re.compile(
@@ -433,38 +507,78 @@ def progressive_navigation_errors(root: Path) -> list[str]:
         r"(?P<selectors>.*?)(?P=quote)\s*\)",
         re.DOTALL,
     )
-    for declaration in selector_declaration.finditer(script):
+    for declaration in selector_declaration.finditer(navigation):
         selectors = {
             selector.strip() for selector in declaration.group("selectors").split(",")
         }
-        if background_selectors <= selectors:
+        # Contents is non-modal: shared header/local-bar controls stay reachable.
+        if background_selectors == selectors:
             background_name = declaration.group("name")
             break
     if background_name is None:
-        errors.append("site.js does not identify every drawer background region")
+        errors.append(
+            "navigation.js does not isolate content while retaining header controls"
+        )
     elif not re.search(
         rf"\b{re.escape(background_name)}\.forEach\([^;]*"
         r"toggleAttribute\(\s*[\"']inert[\"']\s*,\s*open\s*\)",
-        script,
+        navigation,
     ):
-        errors.append("site.js does not make the drawer background inert while open")
+        errors.append(
+            "navigation.js does not make the content background inert while open"
+        )
 
-    script_rules = {
+    navigation_rules = {
         "the mobile navigation backdrop remains in the tab order": (
             r"\bbackdrop[^;\n]*\.tabIndex\s*=\s*-1"
         ),
-        "opening the mobile drawer does not focus its current navigation": (
-            r"if\s*\(\s*open\s*&&\s*focusNavigation\s*\)\s*\{.*?"
-            r"sidebar[^;]*querySelector\([^;]*aria-current.*?\.focus\(\)"
+        "the inactive mobile contents remain keyboard reachable": (
+            r"sidebar\??\.toggleAttribute\(\s*[\"']inert[\"']\s*,\s*narrow\.matches\s*&&\s*!open"
         ),
-        "Escape does not close the mobile drawer and restore toggle focus": (
-            r"event\.key\s*===\s*[\"']Escape[\"'].*?sidebar-open.*?"
-            r"closeMenu\(\)\s*;\s*menu\??\.focus\(\)"
+        "the inactive global navigation remains keyboard reachable": (
+            r"globalNav\??\.toggleAttribute\(\s*[\"']inert[\"']\s*,\s*narrow\.matches\s*&&\s*!open"
         ),
-        "clicking the mobile backdrop does not restore toggle focus": (
+        "opening contents does not focus the current navigation": (
+            r"if\s*\(\s*open\s*&&\s*focus\s*\)\s*\{.*?"
+            r"sidebar[^;]*querySelector\([^;]*aria-current.*?target\??\.focus\("
+        ),
+        "Escape does not close contents and restore its toggle focus": (
+            r"event\.key\s*!==\s*[\"']Escape[\"'].*?return.*?sidebar-open.*?"
+            r"setLocal\(false\)\s*;\s*localToggle\??\.focus\(\)"
+        ),
+        "Escape does not close global navigation and restore its toggle focus": (
+            r"event\.key\s*!==\s*[\"']Escape[\"'].*?return.*?"
+            r"setGlobal\(false\)\s*;\s*globalToggle\.focus\(\)"
+        ),
+        "clicking the mobile backdrop does not restore contents-toggle focus": (
             r"backdrop\??\.addEventListener\(\s*[\"']click[\"'].*?"
-            r"closeMenu\(\)\s*;\s*menu\??\.focus\(\)"
+            r"setLocal\(false\)\s*;\s*localToggle\??\.focus\(\)"
         ),
+        "keyboard focus leaving contents does not close the non-modal drawer": (
+            r"addEventListener\([\"']focusin[\"'].*?sidebar-open.*?"
+            r"!event\.target\.closest\([\"']\.docs-sidebar, \.docs-local-bar, "
+            r"\[data-sidebar-backdrop\][\"']\)\)\s*setLocal\(false\)"
+        ),
+        "keyboard focus leaving the shared header does not close global navigation": (
+            r"addEventListener\([\"']focusin[\"'].*?"
+            r"!event\.target\.closest\([\"']\.portal-header[\"']\)\)\s*setGlobal\(false\)"
+        ),
+        "desktop transitions do not restore focused global navigation": (
+            r"narrow\.addEventListener\([\"']change[\"'].*?"
+            r"!narrow\.matches\s*&&\s*globalFocused.*?globalNav.*?\.focus\(\)"
+        ),
+        "desktop transitions do not restore focused contents navigation": (
+            r"narrow\.addEventListener\([\"']change[\"'].*?"
+            r"!narrow\.matches\s*&&\s*localFocused.*?sidebar.*?\.focus\(\)"
+        ),
+    }
+    errors.extend(
+        message
+        for message, pattern in navigation_rules.items()
+        if not re.search(pattern, navigation, re.DOTALL)
+    )
+
+    script_rules = {
         "Python code is not selected generally for highlighting": (
             r"querySelectorAll\(\s*[\"']code\[data-lang=[\\\"']python[\\\"']\]"
         ),
@@ -483,16 +597,6 @@ def progressive_navigation_errors(root: Path) -> list[str]:
             r"button\.dataset\.copyState\s*=\s*[\"']copied[\"'].*?"
             r"button\.dataset\.copyFeedback\s*=\s*[\"']Copied[\"']"
         ),
-        "Tab does not wrap from the mobile drawer end to its beginning": (
-            r"event\.key\s*===\s*[\"']Tab[\"'].*?sidebar-open.*?"
-            r"document\.activeElement\s*===\s*last.*?event\.preventDefault\(\).*?"
-            r"first\??\.focus\(\)"
-        ),
-        "Shift+Tab does not wrap from the mobile drawer beginning to its end": (
-            r"event\.key\s*===\s*[\"']Tab[\"'].*?sidebar-open.*?event\.shiftKey.*?"
-            r"document\.activeElement\s*===\s*first.*?event\.preventDefault\(\).*?"
-            r"last\??\.focus\(\)"
-        ),
     }
     errors.extend(
         message
@@ -505,10 +609,6 @@ def progressive_navigation_errors(root: Path) -> list[str]:
         errors.append("site.css has no complete max-width: 34rem compact layout rules")
         compact_css = ""
     compact_rules = {
-        "the compact documentation header does not reduce its spacing": (
-            r"(?:^|\n)\s*\.site-header\s*\{[^}]*gap:\s*[^;}]+;[^}]*"
-            r"padding-inline:\s*[^;}]+"
-        ),
         "the compact documentation header does not constrain project selection": (
             r"(?:^|\n)\s*\.product-select\s*\{[^}]*max-width:\s*[^;}]+"
         ),
@@ -527,7 +627,9 @@ def progressive_navigation_errors(root: Path) -> list[str]:
         r"(?:display:\s*none|position:\s*absolute[^}]*overflow:\s*hidden)",
         compact_css,
     ):
-        errors.append("the compact documentation header hides every visible search label")
+        errors.append(
+            "the compact documentation header hides every visible search label"
+        )
     if re.search(
         r"\.api-parameter-table\s+thead\s*\{[^}]*display:\s*none",
         compact_css,
@@ -545,14 +647,18 @@ def main() -> int:
     try:
         pages = generated_shell_pages(root)
     except (OSError, UnicodeError) as error:
-        print(f"could not discover generated documentation pages: {error}", file=sys.stderr)
+        print(
+            f"could not discover generated documentation pages: {error}",
+            file=sys.stderr,
+        )
         return 1
     if not pages:
         print("no generated documentation shell pages found", file=sys.stderr)
         return 1
     try:
         failures.extend(
-            f"navigation assets: {error}" for error in progressive_navigation_errors(root)
+            f"navigation assets: {error}"
+            for error in progressive_navigation_errors(root)
         )
     except (OSError, UnicodeError) as error:
         failures.append(f"navigation assets could not be read: {error}")
@@ -565,7 +671,9 @@ def main() -> int:
             audit.feed(path.read_text(encoding="utf-8"))
             audit.close()
         except (OSError, UnicodeError) as error:
-            failures.append(f"{name}: could not parse {path.relative_to(root)}: {error}")
+            failures.append(
+                f"{name}: could not parse {path.relative_to(root)}: {error}"
+            )
             continue
         failures.extend(
             f"{name} ({path.relative_to(root)}): {error}"

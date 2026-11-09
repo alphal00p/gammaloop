@@ -20,7 +20,7 @@ pyo3 = { version = "0.28", features = ["abi3-py310", "extension-module"] }
 
 [features]
 default = ["native"]
-native = ["linnet-py/native", "feynkit-py/native", "spynso3/native"]
+native = ["linnet-py/native", "feynkit-py/native", "feynkit-py/oneloop", "spynso3/native"]
 wasm = ["linnet-py/wasm", "feynkit-py/wasm", "spynso3/wasm"]
 
 [patch.crates-io]

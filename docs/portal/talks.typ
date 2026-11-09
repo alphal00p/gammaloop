@@ -45,8 +45,9 @@
 
     Selected presentations on Local Unitarity, numerical perturbation theory, GammaLoop, and the scientific software surrounding them.
 
-    #talks-provenance[#str(sorted-talks.len()) talks · linked to public conference records, slides, and recordings where available.]
+    #talks-provenance[Linked to public conference records, slides, and recordings where available.]
   ]
+  #talk-filters(years, sorted-talks.len())
   #talk-timeline[
     #for year in years {
       talk-year(year)[

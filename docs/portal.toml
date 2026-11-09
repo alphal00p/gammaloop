@@ -1,7 +1,8 @@
-schema = 2
-eyebrow = "Public research software"
-title = "Open tools for precision collider physics."
-summary = "The αLoop collaboration develops theoretical and algorithmic methods for automated cross-section calculations in quantum field theory, centred on Local Unitarity."
+schema = 3
+eyebrow = "The αLoop collaboration"
+title = "Software for perturbative quantum field theory"
+summary = "The αLoop collaboration develops methods for perturbative cross-section calculations, centred on Local Unitarity."
+libraries_summary = "Use the libraries independently, or together in GammaLoop."
 funding = "Research associated with Local Unitarity has been supported by the Swiss National Science Foundation."
 funding_url = "https://data.snf.ch/grants/grant/203335"
 graphs = [
@@ -18,35 +19,71 @@ graphs = [
   "epem-ttbar-cut",
 ]
 
-[[task]]
-label = "Calculations"
-product = "gammaloop"
-role = "Calculation application"
+[[topic]]
+id = "models"
+title = "Models and interactions"
+summary = "Define particles, parameters and interaction vertices, or load a UFO model."
+products = ["feynkit"]
+guide = { product = "feynkit", page = "tutorial" }
+examples = { product = "feynkit", page = "showcase-ufo" }
 
-[[task]]
-label = "Diagrams"
-product = "feynkit"
-role = "Particle-physics toolkit"
+[[topic]]
+id = "diagrams"
+title = "Diagrams and amplitudes"
+summary = "Generate diagrams, assign loop momenta, and construct symbolic numerators and amplitudes."
+products = ["feynkit", "linnet", "spenso"]
+guide = { product = "feynkit", page = "tutorial" }
+examples = { product = "feynkit", page = "showcase-models-and-diagrams" }
 
-[[task]]
-label = "Graphs"
-product = "linnet"
-role = "Graph-algorithm library"
+[[topic]]
+id = "tensors"
+title = "Tensor algebra and reduction"
+summary = "Contract tensor networks, apply symbolic identities, and reduce covariant tensor numerators."
+products = ["spenso", "idenso", "feynkit"]
+guide = { product = "spenso", page = "quickstart" }
+examples = { product = "feynkit", page = "showcase-tensor-reduction" }
 
-[[task]]
-label = "Tensors"
-product = "spenso"
-role = "Tensor-network library"
+[[topic]]
+id = "integrals"
+title = "Loop integrals"
+summary = "Construct CFF and LTD representations, work with integral families, and evaluate vacuum integrals."
+products = ["feynkit", "vakint"]
+guide = { product = "feynkit", page = "integral-families" }
+examples = { product = "feynkit", page = "showcase-numerical-integration" }
 
-[[task]]
-label = "Identities"
-product = "idenso"
-role = "Symbolic-identity library"
+[[topic]]
+id = "graphs"
+title = "Graphs and drawing"
+summary = "Build half-edge graphs, run subgraph algorithms, and draw labeled graphs."
+products = ["linnet"]
+guide = { product = "linnet", page = "algorithms" }
+examples = { product = "linnet", page = "playground" }
 
-[[task]]
-label = "Integrals"
-product = "vakint"
-role = "Integral-evaluation library"
+[[topic]]
+id = "calculations"
+title = "Cross-section calculations"
+summary = "Generate processes and run numerical cross-section calculations using Local Unitarity."
+products = ["gammaloop"]
+guide = { product = "gammaloop", page = "quickstart" }
+examples = { product = "gammaloop", page = "tutorial" }
+
+[[example]]
+title = "Generate a one-loop diagram"
+summary = "Start with a scalar model and inspect the generated diagram and its particle metadata."
+target = { product = "feynkit", page = "showcase-first-diagram" }
+runtime = "browser"
+
+[[example]]
+title = "Reduce a tensor numerator"
+summary = "Follow a covariant tensor reduction in symbolic dimension."
+target = { product = "feynkit", page = "showcase-tensor-reduction" }
+runtime = "browser"
+
+[[example]]
+title = "Compare CFF and LTD"
+summary = "Compare numerical stability and integration in the browser. The independent OneLOop reference requires native Python."
+target = { product = "feynkit", page = "showcase-numerical-integration" }
+runtime = "browser"
 
 [[pillar]]
 label = "01 · Physics"

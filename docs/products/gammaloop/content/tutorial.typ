@@ -1,7 +1,7 @@
 #import "../../shared.typ": boundary, callout, source-link
 
 #let tutorial = [
-= Tutorial
+= Create your first state
 
 This tutorial builds the GammaLoop command-line interface and uses the included one-loop
 `g g -> h h h` run card to create a state that can be inspected and resumed. Compilation and
@@ -40,9 +40,9 @@ The last command should print the one-shot CLI options and command tree.
 `target/dev-optim/`, or `target/ci-optim/`, falling back to `target/debug/`.
 Use `./gammaloop --ci-optim --help` to select the default build profile explicitly.
 
-#callout("Verification scope and cost", [
-  The docs harness checks these shell blocks for syntax; it does not build or execute
-  GammaLoop. Verify a clean checkout manually in `nix develop`. A cold CLI build and process
+#callout("Running locally and cost", [
+  Run these commands locally from a clean checkout in `nix develop`. This tutorial requires
+  the native GammaLoop CLI and cannot run in the browser. A cold CLI build and process
   generation are the high-resource path and can take tens of minutes, while reopening a valid
   state is normally much cheaper. The invariant for this tutorial is a resumable state with the
   files listed below, not a completed Monte Carlo integration.

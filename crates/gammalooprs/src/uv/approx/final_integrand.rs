@@ -22,12 +22,10 @@ use crate::{
 };
 use color_eyre::Result;
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
+use idenso::color::ColorSimplifySettings;
+use idenso::tensor::{AlgebraContraction, AlgebraSettings, ContractSettings, SymbolicTensor};
 #[cfg(test)]
 use idenso::{CookMode, CookSettings};
-use idenso::{
-    color::ColorSimplifySettings,
-    tensor::{ContractSettings, SymbolicTensor},
-};
 use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps};
 use spenso::shadowing::TensorCollectFilter;
 use spenso::structure::IndexedStructure;
@@ -133,10 +131,10 @@ impl<'a> FinalIntegrandBuilder<'a> {
         // momentum numerator. The final pass still closes attached UV/projector
         // color indices that remain open at this boundary.
         let resnum = graph.numerator(&reduced, current.subgraph())?.state.expr;
-        let resnum = resnum.simplify_algebra(&idenso::tensor::AlgebraSettings {
-            color: Some(ColorSimplifySettings {
-                ..Default::default()
-            }),
+        let resnum = resnum.simplify_algebra(&AlgebraSettings {
+            color: Some(ColorSimplifySettings::default()),
+            // Keep momentum and Dirac factors opaque until residue mapping.
+            contract: AlgebraContraction::None,
             ..Default::default()
         })?;
         let resnum = resnum.multiply(global_num)?;
@@ -223,10 +221,10 @@ impl<'a> FinalIntegrandBuilder<'a> {
             "Computed global numerator"
         );
         let resnum = graph.numerator(&reduced, current.subgraph())?.state.expr;
-        let resnum = resnum.simplify_algebra(&idenso::tensor::AlgebraSettings {
-            color: Some(ColorSimplifySettings {
-                ..Default::default()
-            }),
+        let resnum = resnum.simplify_algebra(&AlgebraSettings {
+            color: Some(ColorSimplifySettings::default()),
+            // Keep momentum and Dirac factors opaque until residue mapping.
+            contract: AlgebraContraction::None,
             ..Default::default()
         })?;
         let resnum = resnum.multiply(global_num)?;
@@ -558,13 +556,15 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 "Mapped factorized integrand before final color simplification"
             );
             let reduced = tensor
-                .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                .simplify_algebra(&AlgebraSettings {
                     color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+                    contract: AlgebraContraction::None,
                     ..Default::default()
                 })?
                 .contract(ContractSettings {
                     collect_chains: false,
                     collect_traces: false,
+                    expand: false,
                     ..Default::default()
                 })?
                 .expand_dots()?;

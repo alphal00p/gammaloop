@@ -1,0 +1,85 @@
+/* Source presentation only; Marimo continues to own the full application. */
+#root .documentation-full-code-frame {
+  position: relative; border: 1px solid var(--hairline); border-radius: 0;
+  margin-left: var(--code-gutter); width: calc(100% - var(--code-gutter));
+}
+#root .documentation-full-code-frame::before, #root .documentation-full-code-frame::after {
+  content: ''; position: absolute; width: .6rem; height: .6rem; z-index: 3; pointer-events: none;
+}
+#root .documentation-full-code-frame::before { top: -1px; left: -1px; border-top: 2px solid var(--ink-muted); border-left: 2px solid var(--ink-muted); }
+#root .documentation-full-code-frame::after { bottom: -1px; right: -1px; border-bottom: 2px solid var(--ink-muted); border-right: 2px solid var(--ink-muted); }
+#root .documentation-full-code-frame .cm-editor { background: var(--surface); border-radius: 0; font: var(--code-size)/var(--code-leading) var(--font-mono); }
+#root .documentation-full-code-frame .cm-line { line-height: var(--code-leading); }
+#root .documentation-full-code-frame .cm-editor { --notebook-gutter-width: var(--code-gutter); width: calc(100% + var(--notebook-gutter-width)); margin-left: calc(-1 * var(--notebook-gutter-width)); }
+#root .documentation-full-code-frame .cm-scroller { padding-block: 12px; font: inherit; }
+#root .documentation-full-code-frame .cm-content { padding-block: 0; }
+#root .documentation-full-code-frame .cm-line { padding-inline: 16px; }
+#root .documentation-full-code-frame .cm-gutters { padding-right: 9px; border: 0; background: transparent; color: var(--ink-muted); font: inherit; }
+#root .documentation-full-code-frame .cm-lineNumbers .cm-gutterElement { min-width: 3ch; padding-inline: 0; text-align: right; }
+#root .documentation-full-code-frame .cm-gutter:not(.cm-lineNumbers) { display: none; }
+#root .documentation-full-code-frame .cm-editor:not(.cm-focused) :is(.cm-activeLine,.cm-activeLineGutter) { background: transparent; }
+
+#root .marimo-cell:has(.documentation-full-code-frame),
+#root .marimo-cell:has(.documentation-full-code-frame) .tray { border-radius: 0; }
+#root .marimo-cell:has(.documentation-full-code-frame) { border-color: transparent; }
+/* Native hovered cells rise to 30. Keep an active popup above its siblings,
+   while the existing native pane still clips it beside the navigation rail. */
+#root .marimo-cell:has(.cm-tooltip) { z-index: 40; }
+
+.codehilite.code-frame { margin-left: var(--code-gutter); }
+
+/* The full app's late-loaded theme uses #root tooltip rules. Keep the shared
+   ty popup palette and bounds above that native theme's specificity. */
+#root .cm-tooltip.cm-tooltip.cm-tooltip {
+  max-width: min(calc(100vw - 32px), var(--documentation-popup-width, 100vw));
+  max-height: min(24rem, calc(100dvh - 32px));
+  border: 1px solid var(--hairline); border-radius: 0; box-shadow: none;
+  background: var(--popup-surface); color: var(--ink);
+}
+#root .cm-tooltip.cm-tooltip-autocomplete { width: min(30rem, calc(100vw - 32px)); }
+/* Native .cm-completionInfo sets 36rem !important, even on phones. */
+#root .cm-tooltip.cm-tooltip.cm-completionInfo {
+  max-width: min(calc(100vw - 32px), var(--documentation-popup-width, 100vw)) !important; padding: 0;
+}
+body .documentation-signature { max-width: var(--documentation-popup-width, calc(100vw - 32px)); }
+#root .cm-tooltip.cm-tooltip-autocomplete > ul > li:is([aria-selected="true"], :hover) {
+  background: var(--popup-selected); color: var(--ink);
+}
+
+/* The startup strip reserves its own row above the native application. */
+body:has(.documentation-full-start) { display: flex; flex-direction: column; height: 100dvh; }
+body:has(.documentation-full-start) #root { flex: 1; min-height: 0; contain: layout; }
+body:has(.documentation-full-start) #root > div { height: 100%; }
+.documentation-full-start {
+  display: flex; align-items: center; justify-content: center; gap: 1rem;
+  padding: .5rem 1rem; border-bottom: 1px solid var(--hairline);
+  background: var(--surface); color: var(--ink); font: .875rem/1.4 var(--font-ui);
+}
+.documentation-full-start button {
+  flex: none; padding: .35rem .8rem; border: 1px solid var(--hairline);
+  background: var(--surface); color: var(--ink); font: inherit; cursor: pointer;
+}
+.documentation-full-start button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.documentation-full-start button:disabled { opacity: .5; cursor: wait; }
+
+/* Native side placement is unstable on phones. Keep the native option list
+   and documentation in one column, each with its own bounded scroll area. */
+@media (max-width: 700px) {
+  /* Keep native cell actions and the outside timing shoulder clear of the
+     floating chrome column. The lane also keeps complete timings in the pane. */
+  #root #App [data-testid="cell-column"] { margin-right: 6rem; }
+  #root .marimo-cell .shoulder-right { left: 100%; }
+  #root .shoulder-right .cell-status-icon { margin-left: 0; }
+  #root .shoulder-right .elapsed-time { white-space: nowrap; }
+  #root .cm-tooltip.cm-tooltip-autocomplete {
+    display: flex; flex-direction: column; max-height: calc(100dvh - 64px);
+  }
+  #root .cm-tooltip.cm-tooltip-autocomplete > ul {
+    flex: 0 1 auto; min-height: 2rem; max-height: min(12rem, 30dvh);
+  }
+  #root .cm-tooltip.cm-tooltip.cm-completionInfo {
+    position: static !important; width: 100%; max-width: 100% !important;
+    min-height: 0; flex: 0 1 auto; max-height: min(24rem, 50dvh); overflow: auto;
+  }
+  #root .cm-completionInfo .documentation-type-info { max-height: none; overflow: visible; }
+}

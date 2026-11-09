@@ -1,4 +1,4 @@
-= GammaLoop Drawing Architecture
+= GammaLoop drawing architecture
 
 #quote(block: true)[
 #strong[Status:] Current contract; audited against the implementation on 2026-09-10

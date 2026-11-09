@@ -1,4 +1,4 @@
-= Spenso Symbolica Syntax And Rewrite Idioms
+= Spenso Symbolica syntax and rewrite idioms
 
 #quote(block: true)[
 #strong[Status:] Implemented reference; source reviewed against Spenso and Idenso on 2026-10-17.

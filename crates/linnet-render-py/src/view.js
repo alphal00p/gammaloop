@@ -357,7 +357,7 @@ export default {
         mountAbort?.abort();
         frame?.remove();
         const mounted = owner.doc.createElement('iframe');
-        mounted.setAttribute('sandbox', 'allow-same-origin');
+        mounted.setAttribute('sandbox', 'allow-same-origin allow-scripts');
         mountAbort = new owner.win.AbortController();
         const signal = mountAbort.signal;
         frame = mounted;
@@ -369,7 +369,9 @@ export default {
           try {
             if (disposed || current !== revision || frame !== mounted || !mounted.contentDocument) return;
             const doc = mounted.contentDocument;
-            // The sandbox blocks all document scripts, including imported markup.
+            // CSP blocks document scripts and inline handlers from imported markup.
+            // WebKit also blocks parent-installed event callbacks when the sandbox
+            // disallows scripts, so retain sandbox isolation with script-src 'none'.
             // Controls come from Rust templates before label substitution. Run
             // only exact trusted sources in the parent, also for lazy children.
             const trusted = new Set(model.get('scripts') || []);
@@ -378,17 +380,51 @@ export default {
               for (const script of doc.querySelectorAll('script')) {
                 if (executed.has(script) || !trusted.has(script.textContent)) continue;
                 executed.add(script);
-                new Function('document', 'window', script.textContent)(doc, mounted.contentWindow);
+                // Resize delivery belongs to the observed document's window. Using
+                // the module's parent constructor for child SVGs leaves Chromium
+                // with perpetually undelivered cross-document notifications.
+                new Function('document', 'window', 'ResizeObserver', script.textContent)(
+                  doc, mounted.contentWindow, mounted.contentWindow.ResizeObserver);
+              }
+              // A notebook frame owns presentation outside the graph camera.
+              // Keep the live navigation controls in a separate row so they
+              // never obscure labels, including on touch devices.
+              for (const svg of doc.querySelectorAll('svg[data-linnet-interactive]')) {
+                if (svg.parentElement.closest('svg')) continue;
+                const controls = svg.querySelector('.linnet-toolbar');
+                let row = svg.previousElementSibling;
+                if (controls) {
+                  row = doc.createElement('div');
+                  row.className = 'linnet-control-row';
+                  const style = doc.createElement('style');
+                  style.textContent = [...svg.querySelectorAll('style')].map(style =>
+                    style.textContent.replaceAll('svg[data-linnet-interactive]', '.linnet-control-row')).join('\n');
+                  row.append(style, controls);
+                  svg.before(row);
+                }
+                if (row?.classList.contains('linnet-control-row') && row.dataset.theme !== svg.dataset.theme) {
+                  if (svg.dataset.theme) row.dataset.theme = svg.dataset.theme;
+                  else row.removeAttribute('data-theme');
+                }
               }
             };
             controls = new owner.win.MutationObserver(activate);
-            controls.observe(doc.body, { childList: true, subtree: true });
+            controls.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-theme'] });
             activate();
+            let fitFrame;
             const fit = () => {
-              if (mounted.isConnected) mounted.style.height = `${Math.ceil(doc.body.getBoundingClientRect().height)}px`;
+              fitFrame = 0;
+              if (!mounted.isConnected || signal.aborted) return;
+              const height = `${Math.ceil(doc.body.getBoundingClientRect().height)}px`;
+              if (mounted.style.height !== height) mounted.style.height = height;
             };
             fit();
-            resize = new owner.win.ResizeObserver(fit);
+            // Changing the parent iframe during child resize delivery can
+            // invalidate shallower notebook/table observations in the same turn.
+            resize = new mounted.contentWindow.ResizeObserver(() => {
+              fitFrame ||= owner.win.requestAnimationFrame(fit);
+            });
+            signal.addEventListener('abort', () => owner.win.cancelAnimationFrame(fitFrame), {once: true});
             resize.observe(doc.body);
             // Snapshot controls and fallback-font layout are ready now. Exact
             // measurement still waits for STIX separately; displaying a graph
@@ -428,7 +464,21 @@ export default {
             }
           }
         }, { once: true, signal });
-        mounted.srcdoc = `<!doctype html><html><head><meta charset="utf-8"><style>html{overflow:hidden}body{margin:0;display:flow-root}</style></head><body data-linnet-frame-owner>${result.html}</body></html>`;
+        // Parse while inert, before entering the CSP-protected live frame.
+        // Trusted control text stays byte-identical for allowlist activation;
+        // arbitrary scripts and handlers remain blocked by the frame's CSP.
+        const template = owner.doc.createElement('template');
+        template.innerHTML = result.html;
+        const inertScripts = root => {
+          for (const script of root.querySelectorAll('script')) {
+            if (!script.type || /^(?:module|(?:text|application)\/(?:java|ecma)script)$/i.test(script.type))
+              script.setAttribute('type', 'application/x-linnet-inert');
+          }
+          for (const child of root.querySelectorAll('template')) inertScripts(child.content);
+        };
+        inertScripts(template.content);
+        const html = template.innerHTML;
+        mounted.srcdoc = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="script-src 'none'; object-src 'none'; base-uri 'none'"><style>html{overflow:hidden}body{margin:0;display:flow-root}</style></head><body data-linnet-frame-owner>${html}</body></html>`;
         el.replaceChildren(mounted);
       } catch (error) { fail(error); }
     };

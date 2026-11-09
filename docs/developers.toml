@@ -650,7 +650,7 @@ digest = "3dca6f84cadbe237f3beaa7ab05e11cea309cd41"
 
 [[section.note]]
 id = "gammaloop-drawing-architecture"
-title = "GammaLoop Drawing Architecture"
+title = "GammaLoop drawing architecture"
 summary = "The current GammaLoop/Linnest/Kurvst drawing pipeline, DOT data ownership and style callbacks, with the superseded evaluated-field proposal kept behind an explicit historical boundary."
 source = "docs/architecture/gammaloop-drawing-architecture.typ"
 kind = "Drawing architecture and syntax reference"
@@ -673,7 +673,7 @@ digest = "df4d9c7e162b3d67227e4d3fcd660b19a1bca0e0"
 
 [[section.note]]
 id = "spenso-symbolica-syntax-and-rewrites"
-title = "Spenso Symbolica Syntax And Rewrite Idioms"
+title = "Spenso Symbolica syntax and rewrite idioms"
 summary = "Implemented Spenso surface forms, tag-aware builders and patterns, and the Idenso pass boundaries used for static and dynamic algebraic rewrites."
 source = "docs/architecture/spenso-symbolica-syntax-and-rewrites.typ"
 kind = "Symbolic algebra implementation reference"
@@ -1485,7 +1485,7 @@ review_triggers = ["crates/idenso/src/**", "crates/spenso/src/**"]
 
 [[section.note]]
 id = "gammaloop-drawing-evaluated-fields-history"
-title = "GammaLoop Evaluated-Field Proposal"
+title = "GammaLoop evaluated-field proposal"
 summary = "The superseded proposal for executable Typst fields in DOT drawing data, preserved separately from the maintained callback-based drawing architecture."
 source = "docs/architecture/gammaloop-drawing-evaluated-fields-history.typ"
 kind = "Superseded drawing proposal"
@@ -1499,7 +1499,7 @@ topics = ["drawing", "dot", "typst", "implementation-history"]
 
 [[section.note]]
 id = "bnl-benchmark-investigation"
-title = "BNL Benchmark Investigation"
+title = "BNL benchmark investigation"
 summary = "A 2026-05-25 threshold-subtraction and four-mass integration study whose cards and graph remain, but whose generated states, workspaces, command blocks, and result logs are absent."
 source = "docs/architecture/bnl-benchmark-investigation.typ"
 kind = "Performance investigation · 2026-05-25"
@@ -1513,7 +1513,7 @@ topics = ["performance", "bnl", "threshold-subtraction", "integration"]
 
 [[section.note]]
 id = "bnl-contraction-order-performance"
-title = "BNL Contraction Order Performance Notes"
+title = "BNL contraction order performance notes"
 summary = "A 2026-05-27 to 2026-05-28 contraction-order comparison with retained input atoms and example code, but incomplete machine and dependency controls."
 source = "docs/architecture/bnl-contraction-order-performance.typ"
 kind = "Performance investigation · 2026-05-27 to 2026-05-28"
@@ -1528,7 +1528,7 @@ topics = ["performance", "bnl", "contraction-order", "tensor-network"]
 
 [[section.note]]
 id = "bnl-scalar-alias-capture"
-title = "BNL Scalar Alias Capture"
+title = "BNL scalar alias capture"
 summary = "An undated four-alias evaluator rendering preserved as a concise provenance page plus a hashed ANSI data artifact instead of 9,500 lines of authored prose."
 source = "docs/architecture/bnl-scalar-alias-capture.typ"
 kind = "Raw evaluator evidence · undated"
@@ -1542,7 +1542,7 @@ topics = ["bnl", "evaluator", "scalar-aliasing", "raw-output"]
 
 [[section.note]]
 id = "aa-aa-three-loop-performance-smoke"
-title = "Three-Loop aa to aa Performance Smoke"
+title = "Three-loop aa to aa performance smoke"
 summary = "A 2026-06-15 generation and integration smoke record with retained cards, DOTs, scripts, and CSV summaries, explicit missing-state boundaries, and a warning for 400--570 GiB attempts."
 source = "docs/architecture/aa-aa-three-loop-performance-smoke.typ"
 kind = "Performance investigation · 2026-06-15"
@@ -1818,6 +1818,40 @@ topics = ["nix", "ci", "cache", "documentation"]
 review_triggers = ["flake.nix", "flake.lock", "nix/**", "nix-ci.nix", ".github/workflows/**", "crates/gammaloop-workspace-hack/**", "crates/alphal00p-docs-builder/**", "justfile"]
 
 [[section.note.scope]]
+path = "nix/documentation.nix"
+symbol = "pinned Marimo exporter and publication assembly"
+anchor = "notebookMarimo ="
+end_anchor = "docsFontPath ="
+# Reviewed 2026-11-10: the cache note describes the pinned exporter, explicit
+# Nix-built browser/UFO wheel inputs, invoking-user site render and version-local
+# assembly. The pinned Marimo helper serves the exporter and native notebook tests;
+# the separate offline WASM derivation owns cross-compilation.
+# Reviewed 2026-11-10: the startup profiler reuses the same pinned Python and
+# Chromium. The exporter preserves compatible packages on reruns and replaces
+# conflicting explicit source pins; native producers and runtime licensing stay fixed.
+# Reviewed 2026-11-10: fixed-hash islands/Pyodide inputs and dependency closure
+# feed a separate runtime preparation layer. Checked bytecode retains Python
+# sources; deterministic support-wheel/native streaming preserves the full module,
+# fonts, data and original standalone wheel. Version and bytecode guards protect
+# the reviewed loader boundary. The note records global source coverage and the
+# controlled profiler's HTTP-cache limitation; native producers/licensing stay fixed.
+# Reviewed 2026-11-10: product payloads reference the prepared manifest hash at
+# the site root. Binary/package caching is immutable and source/version isolated;
+# publication retains prior runtimes and hash-named cache workers for snapshots.
+# Reviewed 2026-11-12: standalone cells add a pinned content-addressed runtime
+# consumer, offline IPython and publication assembly; the cache note now records
+# this boundary. Native Cargo producers and runtime licensing are unchanged.
+# Reviewed 2026-11-12: standalone cell assets and editor checks share the pinned
+# runtime closure; full Marimo exports retain their native editor constructors.
+# Reviewed 2026-11-14: the additional notebook startup browser check consumes
+# the existing editor-test runtime. Export, native producers, publication and
+# invoking-user licensing retain the documented boundaries.
+# Reviewed 2026-11-16: local-import graph analysis calls the locked Nix-built
+# Ruff directly, preserving the graph flags and local-module bundling. The cache
+# note records this runtime-closure repair; native science and browser pins stay fixed.
+digest = "9035e764e3985f94dba0b5dc5e2f8448619f35e8"
+
+[[section.note.scope]]
 # Documentation-impact attestation 2026-08-26: the CI repair completes the
 # documented per-package archive/runtime-source boundary by staging the exact
 # documentation sources and tools, restoring vendored Cargo configuration,
@@ -1882,7 +1916,7 @@ end_anchor = "# Exercise the embedded Typst watcher"
 # No-impact attestation 2026-11-02 against 501183a5: this producer range only
 # changes a comment to describe executable runners inheriting the user's license;
 # registry selection and reusable Cargo artifact construction are unchanged.
-digest = "2f0895ef6312939b1fd6a722f7a4be6df409d780"
+digest = "9df75bc3ca6dfe2b39037c556154037aeddc7448"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
@@ -1905,7 +1939,13 @@ end_anchor = "documentationRegistry = builtins.fromTOML"
 # Reviewed 2026-10-19: linked FeynKit installed tests and the notebook host's
 # Linnet Python shim are staged with existing terminal documentation sources.
 # Source-link and wheel validation stay strict; reusable compiler ownership is unchanged.
-digest = "bfafb920e4cc1fc0511aa12ad4c1f86272bb8e75"
+# Reviewed 2026-11-12: standalone cell assets and editor checks share the pinned
+# runtime closure; full Marimo exports retain their native editor constructors.
+# No-impact attestation 2026-11-16: stage export_wasm.py alongside the installed
+# notebook-coverage test that imports it. This repairs the terminal runtime
+# source closure; compiled producers, publication behavior and runtime licensing
+# retain the documented ownership and cache boundaries.
+digest = "e0ff2fc1f806b46e84c5b4e702f6808d89d479a5"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -2021,7 +2061,37 @@ end_anchor = "\nin\n{\n  inherit"
 # No-impact review 2026-11-02 against e32b14a2: the terminal resource copy
 # makes only its copied directories owner-writable for runtime cleanup. Pinned
 # resource bytes, installed-package discovery and producer ownership are unchanged.
-digest = "46c2a94622bd5edd53e04db1f4bd04a4a771a5b8"
+# Reviewed 2026-11-10: publication checks require the separate libraries index,
+# reject incomplete bundles, remove stale library routes, and preserve the index
+# when publishing a snapshot. The terminal check additionally executes browser
+# notebooks with the Nix-built wheel and native numerical notebooks through Marimo.
+# The focused native runner uses the FeynKit dependency archive, avoiding
+# GammaLoop reference exporters, and checks the optional OneLOop adapter with Clippy.
+# Compiled producers and runtime licensing are unchanged.
+# No-impact attestation 2026-11-10: the terminal publication check compares all
+# six generated Rustdoc themes with the current stylesheet. This strengthens
+# presentation validation without changing producer ownership or cache boundaries.
+# Reviewed 2026-11-12: native documentation rendering and direct browser cells
+# use the same source-built plugins. Editor/runtime checks share pinned assets;
+# scientific Cargo producers and runtime-only licensing remain separate.
+# No-impact attestation 2026-11-12: the installed native notebook runner also
+# executes the canonical four-loop showcase. This adds runtime validation only;
+# compiled producer ownership, cache inputs and runtime licensing are unchanged.
+# No-impact attestation 2026-11-16: four terminal publication-test commands
+# interpolate update-docs-pages.sh directly instead of applying that Nix path
+# as a function to prepare-documentation-cells.py. The script receives its
+# existing latest/snapshot arguments; producer ownership, cache boundaries,
+# runtime licensing and publication assertions are unchanged.
+# No-impact attestation 2026-11-16: compare the Rustdoc theme against its
+# declared Nix source asset instead of the script-only runner directory.
+# Theme bytes, producer ownership and publication policy remain unchanged;
+# the byte-for-byte comparison stays strict.
+# No-impact attestation 2026-11-16: the publication check stages the existing
+# notebook runtime, then the documentation-cell bundle before notebook smoke,
+# matching supported publication.
+# This supplies the shared editor/timing configuration; all readiness, timing,
+# scientific assertions, producer ownership and publication policy stay intact.
+digest = "87987f73ace1c5bb4203846d9b3b702cde6710f4"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -2178,6 +2248,11 @@ review_ref = "4e77d8804aa3394992572575dab5d3f9dedf65a9"
 products = ["gammaloop", "linnet", "spenso", "idenso", "vakint"]
 topics = ["documentation", "rustdoc", "python", "api", "examples"]
 review_triggers = ["flake.nix", "crates/gammalooprs/src/**", "crates/gammaloop-api/src/**", "crates/linnet/src/**", "crates/linnet-py/src/**", "crates/linnest/src/**", "crates/spenso/src/**", "crates/spenso-hep-lib/src/**", "crates/spenso-macros/src/**", "crates/spynso3/src/**", "crates/idenso/src/**", "crates/vakint/src/**", "docs/api/python/**", "docs/products/**", "docs/examples.toml", "crates/alphal00p-docs-catalogs/src/**", "crates/alphal00p-docs-examples/**", "crates/alphal00p-docs-python-exporter/src/**"]
+
+[[section]]
+id = "physics-conventions"
+title = "Physics and reconstruction records"
+summary = "Scientific conventions, audits, and preserved reconstruction investigations."
 
 [[section.note]]
 id = "exact-powered-denominator-cff-lifting"

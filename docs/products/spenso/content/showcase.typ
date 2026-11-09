@@ -46,10 +46,17 @@ For the full workflows, see
 #product-link("feynkit", page: "guides/showcases/", label: "FeynKit's showcase gallery")
 connects these symbolic tools to models, Feynman diagrams, CFF, and tensor reduction.
 
+== More executable examples
+
+- #product-link("spenso", page: "guides/api-tour/", label: "Python API tour"): symbolic objects, component data, network execution and evaluators. C++ compilation remains a local operation.
+- #product-link("spenso", page: "guides/current-kernel/", label: "Derive a quark current"): contract the vertex and propagator and check four complex components.
+- #product-link("spenso", page: "guides/notation/", label: "Read tensor notation"): compare display conventions and verify component identities.
+- #product-link("spenso", page: "guides/tensor-explorer/", label: "Explore a spinor tensor"): execute the current and select any of its 256 components.
+
 == Run and edit locally
 
 From a checkout, use an interpreter with the combined Symbolica community host containing
-Spenso and Idenso, plus Marimo 0.24.0, Typst 0.15.0, and this checkout's Linnet Python wheel:
+Spenso and Idenso, plus Marimo 0.25.1, Typst 0.15.0, and this checkout's Linnet Python wheel:
 
 // docs-example: syntax
 ```sh

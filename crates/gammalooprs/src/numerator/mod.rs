@@ -1,9 +1,10 @@
 #![allow(dead_code)]
 
 use aind::Aind;
+use idenso::tensor::{AlgebraContraction, AlgebraSettings, ContractSettings, SymbolicTensor};
 use idenso::{
     CookMode, CookSettings, coad, cof, color::ColorSimplifySettings, color_cas, color_idx,
-    dirac::GammaSimplifySettings, tensor::SymbolicTensor,
+    dirac::GammaSimplifySettings,
 };
 use linnet::half_edge::involution::EdgeIndex;
 use schemars::JsonSchema;
@@ -763,13 +764,17 @@ impl Numerator<Global> {
             expr: {
                 self.state
                     .expr
-                    .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                    .simplify_algebra(&AlgebraSettings {
                         color: Some(ColorSimplifySettings::default()),
+                        // Color prerequisites must not distribute fermion numerators
+                        // or collect Dirac chains before local Taylor operations.
+                        contract: AlgebraContraction::None,
                         ..Default::default()
                     })?
-                    .contract(idenso::tensor::ContractSettings {
+                    .contract(ContractSettings {
                         collect_chains: false,
                         collect_traces: false,
+                        expand: false,
                         ..Default::default()
                     })?
             },
@@ -886,13 +891,17 @@ impl Numerator<AppliedFeynmanRule> {
             expr: {
                 self.state
                     .expr
-                    .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                    .simplify_algebra(&AlgebraSettings {
                         color: Some(ColorSimplifySettings::default()),
+                        // Color prerequisites must not distribute fermion numerators
+                        // or collect Dirac chains before local Taylor operations.
+                        contract: AlgebraContraction::None,
                         ..Default::default()
                     })?
-                    .contract(idenso::tensor::ContractSettings {
+                    .contract(ContractSettings {
                         collect_chains: false,
                         collect_traces: false,
+                        expand: false,
                         ..Default::default()
                     })?
             },
@@ -946,6 +955,54 @@ impl Numerator<ColorSimplified> {
 #[cfg(test)]
 mod typed_expression_tests {
     use super::*;
+    use crate::initialisation::test_initialise;
+    use idenso::bis;
+    use idenso::dirac::AGS;
+    use spenso::network::tags::SPENSO_TAG;
+    use spenso::{g, mink, p, q};
+
+    #[test]
+    fn color_stage_preserves_factorized_fermion_numerators() {
+        test_initialise().unwrap();
+        let [i, j, k, l] = [91, 92, 93, 94].map(|index| bis!(4, Atom::num(index)));
+        let [mu, nu] = [95, 96].map(|index| mink!(4, Atom::num(index)));
+        let mass = Atom::var(symbol!("color_stage_fermion_mass"));
+        let expression = (&mass * g!(&i, &j) + function!(AGS.gamma, &j, &i, p!(mink!(4))))
+            * (&mass * g!(&k, &l) + function!(AGS.gamma, &l, &k, q!(mink!(4))))
+            * function!(AGS.gamma, &i, &l, &mu)
+            * function!(AGS.gamma, &k, &j, &nu);
+        let local = Numerator {
+            state: AppliedFeynmanRule::new(expression.clone()).unwrap(),
+        }
+        .color_simplify()
+        .unwrap();
+        let global = Numerator {
+            state: Global::new(expression).unwrap(),
+        }
+        .color_simplify()
+        .unwrap();
+        for result in [local, global] {
+            assert!(
+                !result
+                    .state
+                    .expr
+                    .expression()
+                    .contains_symbol(SPENSO_TAG.trace),
+                "the color stage must leave Dirac collection to the gamma stage",
+            );
+            let AtomView::Mul(product) = result.state.expr.expression().as_view() else {
+                panic!("the color stage must retain the fermion numerator product");
+            };
+            assert_eq!(
+                product
+                    .iter()
+                    .filter(|factor| matches!(factor, AtomView::Add(_)))
+                    .count(),
+                2,
+                "the two propagator numerators must remain independent factors",
+            );
+        }
+    }
 
     #[test]
     fn admitted_numerator_keeps_its_interface_through_color_and_gamma_stages() {

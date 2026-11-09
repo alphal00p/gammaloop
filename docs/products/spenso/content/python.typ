@@ -369,8 +369,9 @@ its atom-valued variant. Component values retain the same Python types as
 == Construct and inspect concrete data
 
 This complete source creates a named rank-two tensor, verifies one component, and converts its
-storage in place. The documentation harness compiles the Python source without importing the
-native module.
+storage in place. Use Run example to execute it in your browser. To run the same source locally,
+install a Symbolica community build containing `symbolica.community.tensor`; installing or
+building that native module takes longer than this small component calculation.
 
 // docs-example: compile
 ```python
@@ -614,9 +615,17 @@ direct = gamma("i", "j", "mu").to_expression() * gamma("k", "l", "mu").to_expres
 crossed = gamma("i", "l", "nu").to_expression() * gamma("k", "j", "nu").to_expression()
 amplitude = TensorExpression((1 + 2 * E("1𝑖")) * direct + (3 - E("1𝑖")) * crossed)
 adjoint = amplitude.dirac_adjoint(preserve_indices=True)
-restored = adjoint.dirac_adjoint(preserve_indices=True).to_expression()
-assert (restored - amplitude.to_expression()).expand() == E("0")
+restored = adjoint.dirac_adjoint(preserve_indices=True)
+assert restored.axes == amplitude.axes
+assert (
+    restored.canonize().to_expression() - amplitude.canonize().to_expression()
+).expand() == E("0")
 ```
+
+Canonicalization compares the exact tensor normal forms, including dummy-index renaming
+and equivalent explicit-matrix/chain notation. It preserves the open physical-leg labels;
+the separate axes assertion also checks their ordered interface. Polynomial expansion alone
+does not identify those tensor representations.
 
 Both conventions conjugate scalar coefficients and retain the required boundary
 factors. The physical-leg convention distributes those factors across sums

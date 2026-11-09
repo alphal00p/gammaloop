@@ -1,7 +1,11 @@
 #import "../../shared.typ": callout, boundary, developer-link, product-link
 
 #let overview = [
-= Overview
+#context if target() == "html" {
+  html.elem("span", attrs: (id: "overview"))[]
+} else {
+  heading(level: 1)[Overview]
+}
 
 Spenso represents and evaluates tensors with abstract indices. It separates a tensor's
 structure—representations, slots, dimensions, names, and index order—from its stored data.

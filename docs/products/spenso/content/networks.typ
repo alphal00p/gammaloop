@@ -87,8 +87,9 @@ fn main() {
 ```
 
 The output invariant is the component vector `[11.0, 16.0]`; the original rank-one structure
-must also remain attached to the result. The documentation harness compiles the complete program;
-run it to execute the assertion in a provisioned Symbolica environment. See the exact
+must also remain attached to the result. Run this native Rust program locally in a provisioned
+Symbolica environment to execute the assertion; it cannot run in the browser. A cold dependency
+build can take minutes; this small network calculation should finish in seconds. See the exact
 #link("reference/rust/spenso/network/struct.Network.html")[`Network`],
 #link("reference/rust/spenso/tensors/data/dense/struct.DenseTensor.html")[`DenseTensor`], and
 #link("reference/rust/spenso/contraction/trait.Contract.html")[pairwise contraction] Rustdoc.

@@ -131,7 +131,7 @@ filter = '''
     (binary(=gammalooprs) and test(=integrands::process::amplitude::sampling_tests::generated_kite_sampling_uses_physical_six_dimensional_surfaces)) or
     (binary(=test_renormalization) and (test(=finite_part_ghost_3loop_d35) or test(=finite_part_ghost_3loop_d54)))
 )) or
-(package(gammaloop-integration-tests) and binary(=uv) and test(=dod2_bubble_uv))
+(package(gammaloop-integration-tests) and binary(=uv) and (test(=dod0_bubble_uv) or test(=dod2_bubble_uv)))
 '''
 threads-required = "num-test-threads"
 

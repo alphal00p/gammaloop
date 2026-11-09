@@ -32,11 +32,11 @@ Save this as `spenso_quickstart.py`:
 
 // docs-example: compile spenso-community-quickstart
 ```python
-from symbolica.community.tensor import Representation, Tensor, TensorIndices
+from symbolica.community.tensor import Representation, Tensor, TensorName
 
 rep = Representation.euc(2)
 matrix = Tensor.dense(
-    TensorIndices(rep("i"), rep("j")),
+    TensorName("quickstart::matrix")(rep("i"), rep("j")),
     [1.0, 0.0, 0.0, 1.0],
 )
 
@@ -46,7 +46,7 @@ matrix.to_sparse()
 print(matrix)
 ```
 
-Run `python spenso_quickstart.py`. `TensorIndices` gives the data a representation-aware
+Run `python spenso_quickstart.py`. `TensorName` gives the data a named, representation-aware
 structure, while the four row-major values provide its concrete storage. Converting to sparse
 storage changes only that storage; it does not change the slots or re-index the tensor.
 

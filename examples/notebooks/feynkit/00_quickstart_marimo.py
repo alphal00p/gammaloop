@@ -2,7 +2,7 @@
 # requires-python = ">=3.11"
 # dependencies = [
 #     "anywidget>=0.9,<1",
-#     "marimo==0.24.0",
+#     "marimo==0.25.1",
 #     "symbolica==3.0.1",
 # ]
 # ///
@@ -13,8 +13,9 @@ __generated_with = "0.24.0"
 app = marimo.App(width="medium", app_title="FeynKit: A first diagram")
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _():
+    # documentation: setup-only
     from functools import partial
 
     import marimo as mo
@@ -106,9 +107,7 @@ def _(mo):
 
 @app.cell
 def _(model, table):
-    generated = model.generate_diagrams(
-        incoming=["phi"],
-        outgoing=["phi", "phi"],
+    generated = model.process(["phi"], ["phi", "phi"]).generate_diagrams(
         loops=1,
         max_vertices=3,
         allow_self_loops=True,
@@ -151,17 +150,31 @@ def _(generated, mo, table):
     diagram.validate()
     _factor = diagram.overall_factor_expression()
 
-    table(
+    mo.vstack(
         [
-            {
-                "diagram": mo.as_html(diagram),
-                "loops": diagram.loop_count,
-                "vertices": len(diagram.vertices),
-                "edges": len(diagram.edges),
-                "overall factor": mo.as_html(_factor.formatted()),
-            }
-        ],
-        column_widths={"diagram": 440, "overall factor": 180},
+            table(
+                [
+                    {
+                        "diagram": mo.as_html(diagram),
+                        "loops": diagram.loop_count,
+                        "vertices": len(diagram.vertices),
+                        "edges": len(diagram.edges),
+                    }
+                ],
+                column_widths={
+                    "diagram": 300,
+                    "loops": 64,
+                    "vertices": 76,
+                    "edges": 64,
+                },
+            ),
+            mo.md("### Overall factor"),
+            mo.Html(
+                '<div class="notebook-factor-scroll" role="region" '
+                'aria-label="Overall factor" tabindex="0">'
+                f"{mo.as_html(_factor.formatted()).text}</div>"
+            ),
+        ]
     )
     return (diagram,)
 
@@ -210,7 +223,8 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(diagram, generated, mo):
     mo.Html(
-        f'<p data-notebook-ready="00_quickstart_marimo">Generated {len(generated)} diagrams; the displayed diagram has {diagram.loop_count} loop.</p>'
+        f'<p data-notebook-ready="00_quickstart_marimo">Generated {len(generated)} diagram{"s" if len(generated) != 1 else ""}; '
+        f"the displayed diagram has {diagram.loop_count} loop{'s' if diagram.loop_count != 1 else ''}.</p>"
     )
     return
 
