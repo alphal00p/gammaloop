@@ -47,6 +47,9 @@ impl FeynmanDiagram {
             ));
         }
         let selected = subgraph.intersection(&self.momentum_subgraph());
+        for (_, edge_id, edge) in self.graph.iter_edges_of(&selected) {
+            edge.data.validate_propagator_power(edge_id.0)?;
+        }
         if selected.is_empty() {
             return Ok(Atom::Zero);
         }

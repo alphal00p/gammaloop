@@ -1471,6 +1471,35 @@ mod tests {
     }
 
     #[test]
+    fn diagram_power_guard_respects_contractions_and_subgraph_selection() {
+        let diagram = FeynmanDiagram::from_dot(
+            Model::phi3(),
+            "digraph { ext [style=invis]; a -> b [particle=phi, power=2]; b -> c [particle=phi]; c -> a [particle=phi]; ext -> a [particle=phi]; ext -> b [particle=phi]; c -> ext [particle=phi]; }",
+        ).unwrap();
+        let raised = diagram
+            .edges()
+            .find(|(_, _, data)| data.propagator_power == 2)
+            .unwrap()
+            .0;
+        let contracted = diagram
+            .build_cff(CffOptions::default().with_contracted_edge(edge(raised.0)))
+            .unwrap();
+        assert!(!contracted.expression.orientations().is_empty());
+        let graph = diagram.underlying();
+        let mut selected: SuBitGraph = graph.empty_subgraph();
+        for half in diagram.half_edges() {
+            if half.edge != raised {
+                selected.add(diagram.half_edge_id(half).unwrap());
+            }
+        }
+        assert!(
+            diagram
+                .build_cff_subgraph(&selected, CffOptions::default())
+                .is_ok()
+        );
+    }
+
+    #[test]
     fn linnet_subgraph_keeps_original_ids_boundary_flow_and_caller_cache() {
         let graph: DotGraph = DotGraph::from_string(
             r#"

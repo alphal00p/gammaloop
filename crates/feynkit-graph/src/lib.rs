@@ -205,6 +205,16 @@ pub struct DiagramEdge {
 }
 
 impl DiagramEdge {
+    fn validate_propagator_power(&self, edge: usize) -> Result<(), DiagramError> {
+        if self.propagator_power <= 0 {
+            return Err(DiagramError::InvalidPropagatorPower {
+                edge,
+                power: self.propagator_power,
+            });
+        }
+        Ok(())
+    }
+
     const fn unit_power() -> i32 {
         1
     }
@@ -582,6 +592,15 @@ pub enum DiagramError {
         "physical edge {edge} has nonpositive propagator power {power}; contract absent edges and place negative powers in the numerator"
     )]
     InvalidPropagatorPower { edge: usize, power: i32 },
+    #[error(
+        "cannot sew edges {incoming} and {outgoing} with different propagator powers {incoming_power} and {outgoing_power}"
+    )]
+    InconsistentPropagatorPowers {
+        incoming: usize,
+        outgoing: usize,
+        incoming_power: i32,
+        outgoing_power: i32,
+    },
     #[error("serialized diagram ID {serialized} does not match its content-derived ID {actual}")]
     DiagramIdMismatch {
         serialized: DiagramId,
@@ -1755,12 +1774,7 @@ impl FeynmanDiagram {
         let mut vertex_slots = vec![BTreeSet::new(); self.graph.n_nodes()];
         let vertex_half_edges = self.vertex_half_edges();
         for (edge_id, endpoints, edge) in self.edges() {
-            if edge.propagator_power <= 0 {
-                return Err(DiagramError::InvalidPropagatorPower {
-                    edge: edge_id.0,
-                    power: edge.propagator_power,
-                });
-            }
+            edge.validate_propagator_power(edge_id.0)?;
             self.resolve_particle(edge_id, edge)?;
             if let Some(external) = &edge.external {
                 if !external_indices.insert(external.index) {

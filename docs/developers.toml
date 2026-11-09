@@ -289,7 +289,11 @@ anchor = "pub struct FeynmanDiagram {"
 # composition, canonical named interfaces and the positional multiplication path.
 # The source regression covers positional/ranked-zero reconstruction and JSON/DOT
 # round trips; this review adds no numerical or performance qualification.
-digest = "79cb84f0885f45d159bcf3ad470922d195013600"
+# Scoped review 2026-11-09: the architecture records positive integral powers,
+# DOT/JSON and routing preservation, signed overrides, UV/cut defaults and
+# unit-power integration guards. Source sewing and native consumption validate
+# stored powers. Topology, numerator and rendering ownership remain unchanged.
+digest = "4df72fe2b1c06b23b5d7d927db188b201aac3e16"
 
 [[section.note.scope]]
 path = "crates/feynkit-tensor/src/lib.rs"
@@ -1370,7 +1374,10 @@ path = "crates/feynkit-cff/src/generation.rs"
 symbol = "feynkit_cff::CffGenerator::generate_into"
 anchor = "pub fn generate_into("
 # Reviewed 2026-09-23: Updated the note for the shared generalized recursion and distinct standalone/runtime surface representations.
-digest = "89000ab1668f83dfb3b32351e6dbed65e0d5c91e"
+# No-impact attestation 2026-11-09: the diagram adapter rejects raised stored
+# powers before generator dispatch; scalar recursion and surface-cache ownership
+# are unchanged. Guard regressions cover contractions and selected subgraphs.
+digest = "db0b003a02961b81c688b10a96607df4eb86192d"
 
 [[section.note.scope]]
 path = "crates/feynkit-cff/src/expression.rs"

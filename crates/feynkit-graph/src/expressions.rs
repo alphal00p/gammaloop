@@ -248,6 +248,9 @@ impl crate::FeynmanDiagram {
         edge_powers: &std::collections::BTreeMap<crate::EdgeId, isize>,
         dimension: Dimension,
     ) -> Result<Atom, crate::DiagramError> {
+        for (_, edge_id, edge) in self.graph.iter_edges_of(subgraph) {
+            edge.data.validate_propagator_power(edge_id.0)?;
+        }
         let symbols = PropagatorSymbols {
             momentum: crate::symbols::momentum(),
             denominator: crate::symbols::denominator(),

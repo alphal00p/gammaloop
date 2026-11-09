@@ -11,9 +11,8 @@ use linnet::half_edge::EdgeAccessors;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use serde_json::{Map, Value};
-use symbolica::atom::AtomCore;
 
-use crate::{DiagramError, FeynmanDiagram, LoopMomentumBasis, NumeratorInterface};
+use crate::{DiagramError, FeynmanDiagram, LoopMomentumBasis};
 
 /// The physics palette of `physics-edge-style.typ` and the highlight paints.
 const INK: &str = "#3d2645";
@@ -252,16 +251,7 @@ impl FeynmanDiagram {
                     if options.show_particle {
                         // Typst metadata is executable source, not a MathML label.
                         let mut label = LabelSource::text(&particle.name);
-                        let typst = particle.typst_label();
-                        if edge.propagator_power == 1 {
-                            label.typst = Some(typst);
-                        } else {
-                            label.mathml = format!(
-                                "<msup><mrow>{}</mrow><mn>{}</mn></msup>",
-                                label.mathml, edge.propagator_power,
-                            );
-                            label.typst = Some(format!("({typst})^({})", edge.propagator_power));
-                        }
+                        label.typst = Some(particle.typst_label());
                         components.push(label);
                     }
                     if show_momentum {
@@ -365,22 +355,6 @@ impl FeynmanDiagram {
                 ),
                 ("particle", particle.name.clone().into()),
                 ("pdg", particle.pdg_code.into()),
-                ("propagator-power", edge.propagator_power.into()),
-                (
-                    "lmb-id",
-                    basis
-                        .loop_edges
-                        .iter()
-                        .position(|candidate| *candidate == id)
-                        .map_or(Value::Null, Value::from),
-                ),
-                (
-                    "numerator",
-                    NumeratorInterface::export(&edge.numerator)
-                        .0
-                        .to_canonical_string()
-                        .into(),
-                ),
             ]
             .into_iter()
             .collect();
