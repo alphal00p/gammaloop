@@ -610,6 +610,19 @@ Rules:
   Without FORM, they test the input generation, the parser, the finalizer and RustRed.
 - With FORM 5 (`VAKINT_TEST_FORM5=/path/to/form`, or the default `form` when it is FORM 5, as in the dev shell and
   CI) every case also runs live and must reproduce the fixture; `VAKINT_FORCER_FIXTURES=write` regenerates them.
+- Four-loop Forcer data (M3-V7; one parse test per file in `tests/p_fixtures4_tests.rs`): `p4l_anchors.json` (every
+  master of Forcer's four-loop basis at its Forcer definition, with the source path:line, frozen for M3-T17),
+  `p4l_battery.json` (all eleven families: top, ISP at rank 2, rank 3 with `p(1)`, a dot; M2's three-loop `Oep`
+  boundary in `boundary`; the nodes Forcer cannot check whole-family, T147, T152 and T153, in `forcer_blind`) and
+  `p4l_grid.json` (the 165 four-loop benchmark tops and a seeded sample of labelled sectors). Each battery and grid
+  case records its `depth`: the most Laurent terms (at most 16) at which its frozen value finalizes in `Symbolic` mode
+  (G-scheme), that order, the masters whose `ALARM` orders stop one term more, and the value there as unit-scale
+  Laurent coefficients from `ε^-L` (`Q² = μ² = 1`; the raw outputs stay in the file). Battery cases also record
+  `eleven_terms`: the 11-term value (I-7), or the expected `MissingMasterOrders` of an `Oep` case. Depths come from
+  the frozen outputs without FORM (`VAKINT_FORCER_FIXTURES=depths`; the ignored
+  `every_four_loop_grid_depth_is_the_finalizers` recomputes all grid depths); the files are written once with
+  `VAKINT_FORCER_FIXTURES=write VAKINT_FORCER_FIXTURES_WORKERS=4` (`tform -w4`), one test at a time. Only the M1
+  four-loop cases run live in the gate.
 - Fast gate (`just test_vakint`): everything at 1L-3L plus a few frozen 4L cases. Slow 4L RustRed cases go in the
   `test_vakint` profile's default-filter (never in `slow::` modules); `test_vakint_full` runs everything.
 

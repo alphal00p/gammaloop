@@ -1,0 +1,417 @@
+{
+  "forcer_commit": "68a30bfb2aec3672a2f674ca8666bfc970105e24",
+  "form_version": "5.0.0",
+  "provenance": "M3-V7 four-loop normalization anchors (M3 plan D-M3-5, G5): every master of Forcer's four-loop basis at its Forcer definition (case field definition: source path:line relative to crates/vakint and the realization), la4_top (finalized eps^0 = -70 zeta(7) in the G-scheme), the no3 and bubu tops; fixtures::anchor_cases_4l in src/p_integral/forcer/fixtures.rs; VAKINT_FORCER_FIXTURES=write with FORM 5 (run: flags, jobs, seconds); outputs are raw Forcer C_G before the Wick sign: reduced = (-1)^(sum a + r) C_G (ForcerCase::frozen_values)",
+  "run": {
+    "flags": "tform -w4 run_forcer.frm; #call Forcer() with default options (exact G-scheme reduction, no expansion)",
+    "jobs": 1,
+    "seconds": 18
+  },
+  "cases": [
+    {
+      "name": "bebe",
+      "family": "P4L_J1",
+      "powers": [
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "Master(bebe)*rat(1,1)\n"
+      ],
+      "master": "bebe",
+      "definition": "form_src/forcer/forcer/forcer-manual.h:9066: Z(1,1,1,1,1,1,1,1,0,0,0,0,0,0) = Master(bebe); topology bebe 0-1 4-5 1-4 3-5 1-3 1-2 2-4 2-3 3-4 5-9"
+    },
+    {
+      "name": "cross",
+      "family": "P4L_J2",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "Master(cross)*rat(1,1)\n"
+      ],
+      "master": "cross",
+      "definition": "form_src/forcer/forcer/forcer-manual.h:7383: Z(1,1,1,1,1,1,1,1,0,0,0,0,0,0) = Master(cross); topology cross 0-1 3-5 1-3 4-5 1-4 2-5 1-2 2-3 2-4 5-9"
+    },
+    {
+      "name": "haha",
+      "family": "P4L_HAHA",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "Master(haha)*rat(1,1)\n"
+      ],
+      "master": "haha",
+      "definition": "form_src/forcer/forcer/forcer-manual.h:1886: Z(1,1,1,1,1,1,1,1,1,1,1,0,0,0) = Master(haha); topology haha 0-3 5-8 4-5 3-4 2-3 1-2 1-8 5-6 1-6 4-7 2-7 6-7 8-9"
+    },
+    {
+      "name": "lala",
+      "family": "P4L_LA4",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "Master(lala)*rat(1,1)\n"
+      ],
+      "master": "lala",
+      "definition": "form_src/forcer/forcer/forcer-manual.h:5008: Z(1,1,1,1,1,1,1,1,1,0,0,0,0,0) = Master(lala); topology lala 0-3 5-8 4-5 3-4 2-3 1-2 1-8 2-4 1-4 1-5 8-9"
+    },
+    {
+      "name": "no1",
+      "family": "P4L_NO1",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "Master(no1)*rat(1,1)\n"
+      ],
+      "master": "no1",
+      "definition": "form_src/forcer/forcer/forcer-manual.h:2594, :2687: Z(1,1,1,1,1,1,1,1,1,1,1,0,0,0) = Master(no1); topology no1 0-1 4-8 3-4 2-3 1-2 1-5 5-6 6-7 7-8 3-7 2-6 4-5 8-9"
+    },
+    {
+      "name": "no2",
+      "family": "P4L_NO2",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "Master(no2)*rat(1,1)\n"
+      ],
+      "master": "no2",
+      "definition": "form_src/forcer/forcer/forcer-rules.h:57: Zno2(1,1,1,1,1,1,1,1,1,1,1,0,0,0) = Master(no2) / Q2^3; topology no2 0-1 5-8 4-5 2-4 1-2 1-6 3-6 3-7 7-8 5-6 3-4 2-7 8-9"
+    },
+    {
+      "name": "no6",
+      "family": "P4L_NO1",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "Master(no6)*rat(1,1)\n"
+      ],
+      "master": "no6",
+      "definition": "form_src/forcer/forcer/forcer-manual.h:3851: Z(1,1,1,1,1,1,1,1,1,1,0,0,0,0) = Master(no6); topology no6 0-1 7-8 6-7 2-6 1-2 1-7 3-7 3-4 4-8 4-6 2-3 8-9"
+    },
+    {
+      "name": "nono",
+      "family": "P4L_J4",
+      "powers": [
+        1,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "Master(nono)*rat(1,1)\n"
+      ],
+      "master": "nono",
+      "definition": "form_src/forcer/forcer/forcer-manual.h:6421: Z(1,1,1,1,1,1,1,1,1,0,0,0,0,0) = Master(nono); topology nono 0-1 4-6 2-4 1-2 1-3 3-5 5-6 4-5 3-4 2-5 6-9"
+    },
+    {
+      "name": "fastar2",
+      "family": "P4L_J2",
+      "powers": [
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*Master(fastar2)*rat(1,1)\n"
+      ],
+      "master": "fastar2",
+      "definition": "form_src/forcer/forcer/forcer-rules.h:182 (FASTAR2SCHEME 1, the default): Zfastar2(1,1,1,1,1,1,1,0,0) = Master(fastar2) / Q2 (scheme 0: forcer-manual.h:665); topology fastar2 0-1 3-4 2-3* 1-2 1-5 4-5 3-5 2-5 4-9; the eps line 2-3* is a line and a one-loop bubble in series"
+    },
+    {
+      "name": "nostar5",
+      "family": "P4L_J4",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*Master(nostar5)*rat(1,1)\n"
+      ],
+      "master": "nostar5",
+      "definition": "form_src/forcer/forcer/forcer-rules.h:201 (NOSTAR5SCHEME 1, the default): Znostar5(1,1,1,1,1,1,1,1,0) = BasicNOIntegral5 / Q2^2 (scheme 0: :196, XXX: normalization?); form_src/forcer/forcer.h:278: BasicNOIntegral5 = Master(nostar5); topology nostar5 0-1 3-4 2-3 1-2 1-6 5-6* 4-5 3-6 2-5 4-9; the eps line 5-6* is a line and a one-loop bubble in series"
+    },
+    {
+      "name": "nostar6",
+      "family": "P4L_J4",
+      "powers": [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)*Master(nostar6)*rat(1,1)\n"
+      ],
+      "master": "nostar6",
+      "definition": "form_src/forcer/forcer/forcer-rules.h:221 (NOSTAR6SCHEME 1, the default): Znostar6(1,1,1,1,1,1,1,1,0) = BasicNOIntegral6 / Q2^2 (scheme 0: :216, XXX: normalization?); form_src/forcer/forcer.h:279: BasicNOIntegral6 = Master(nostar6); topology nostar6 0-1 3-4 2-3 1-2 1-6 5-6 4-5* 3-6 2-5 4-9; the eps line 4-5* is a line and a one-loop bubble in series"
+    },
+    {
+      "name": "t124",
+      "family": "P4L_J6",
+      "powers": [
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*Master(t124)*rat(1,1)\n"
+      ],
+      "master": "t124",
+      "definition": "form_src/forcer/forcer/forcer-rules.h:252: Z(0,1,0,1,0,1,1,1,1,1) = BasicT1Integral24 / Q2 * Q2^5 (XXX: normalization?); form_src/forcer/forcer.h:282: BasicT1Integral24 = Master(t124); topology t1star24 0-1 2-3 1-2* 1-4 3-4* 2-4 3-9; each eps line is a line and a one-loop bubble in series"
+    },
+    {
+      "name": "t145",
+      "family": "P4L_J1",
+      "powers": [
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*Master(t145)*rat(1,1)\n"
+      ],
+      "master": "t145",
+      "definition": "form_src/forcer/forcer/forcer-rules.h:271: Z(0,0,0,1,1,1,1,1,1,1) = BasicT1Integral45 / Q2 * Q2^5 (XXX: normalization?); form_src/forcer/forcer.h:281: BasicT1Integral45 = Master(t145); topology t1star45 0-1 2-3 1-2 1-4 3-4* 2-4* 3-9; each eps line is a line and a one-loop bubble in series"
+    },
+    {
+      "name": "t155",
+      "family": "P4L_J6",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*Master(t155)*rat(1,1)\n"
+      ],
+      "master": "t155",
+      "definition": "form_src/forcer/forcer/forcer-rules.h:281: Z(0,0,0,0,2,1,1,1,1,1) = BasicT1Integral55 / Q2 * Q2^5 (XXX: normalization?); form_src/forcer/forcer.h:280: BasicT1Integral55 = Master(t155); topology t1star55 0-1 2-3 1-2 1-4 3-4 2-4** 3-9: line 2-4 at power 1+2eps (unit power, two eps units); realized as a one-loop bubble, a line and a one-loop bubble in series"
+    },
+    {
+      "name": "la4_top",
+      "family": "P4L_LA4",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^4*rat( - 8*ep^3 + 12*ep^2 - 6*ep + 1,ep^3) + GschemeConstants(0,0)^3*GschemeConstants(1,0)*rat(60*ep^3 - 80*ep^2 + 35*ep - 5,ep^3) + GschemeConstants(0,0)^3*GschemeConstants(2,0)*rat( - 448*ep^3 + 560*ep^2 - 224*ep + 28,9*ep^3) + \n      GschemeConstants(0,0)^2*GschemeConstants(1,0)^2*rat( - 342*ep^3 + 399*ep^2 - 152*ep + 19,24*ep^3) + GschemeConstants(0,0)^2*GschemeConstants(1,0)*GschemeConstants(2,0)*rat( - 408*ep^3 + 442*ep^2 - 153*ep + 17,9*ep^3) + GschemeConstants(0,0)^2*\n      GschemeConstants(1,0)*GschemeConstants(3,0)*rat(1230*ep^3 - 1271*ep^2 + 410*ep - 41,24*ep^3) + GschemeConstants(0,0)^2*Master(t105)*rat(24*ep^2 - 24*ep + 6,ep^2) + GschemeConstants(0,0)^2*Master(t124)*rat(56*ep^2 - 56*ep + 14,3*ep^2) + \n      GschemeConstants(0,0)^2*Master(t145)*rat( - 160*ep^2 + 160*ep - 40,3*ep^2) + GschemeConstants(0,0)*GschemeConstants(1,0)*GschemeConstants(2,0)*GschemeConstants(3,0)*rat(60*ep^3 - 47*ep^2 + 12*ep - 1,12*ep^3) + GschemeConstants(0,0)*\n      GschemeConstants(1,0)*Master(t155)*rat(42*ep^2 - 35*ep + 7,2*ep^2) + Master(lala)*rat(2,1)\n"
+      ],
+      "definition": "the four-loop ladder (topology la4 0-1 1-2 1-5 2-3 2-5 3-4 3-6 4-7 4-8 5-6 6-7 7-8 8-9): C(8,4) zeta(7) = 70 zeta(7) in the G-scheme, finalized eps^0 = -70 zeta(7) (src/p_integral/forcer/tests.rs, forcer_four_loop_battery)"
+    },
+    {
+      "name": "no3_top",
+      "family": "P4L_NO3",
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*GschemeConstants(1,0)^2*rat( - 8838*ep^5 + 6297*ep^4 + 287*ep^3 - 747*ep^2 + 15*ep + 26,432*ep^5 + 540*ep^4 + 204*ep^3 + 24*ep^2) + GschemeConstants(0,0)^2*GschemeConstants(1,0)*GschemeConstants(2,0)*rat( - 9984*ep^4 + 8320*ep^3\n       - 1040*ep^2 - 520*ep + 104,243*ep^4 + 243*ep^3 + 54*ep^2) + GschemeConstants(0,0)^2*GschemeConstants(1,0)*GschemeConstants(3,0)*rat(58650*ep^5 - 37355*ep^4 - 2075*ep^3 + 3315*ep^2 + 25*ep - 80,648*ep^5 + 810*ep^4 + 306*ep^3 + 36*ep^2) + \n      GschemeConstants(0,0)^2*GschemeConstants(2,0)*GschemeConstants(3,0)*rat( - 600*ep^5 + 2370*ep^4 - 1475*ep^3 + 130*ep^2 + 65*ep - 10,108*ep^5 + 135*ep^4 + 51*ep^3 + 6*ep^2) + GschemeConstants(0,0)^2*Master(t145)*rat( - 2560*ep^3 + 1920*ep^2 - 160,81\n      *ep^3 + 81*ep^2 + 18*ep) + GschemeConstants(0,0)*GschemeConstants(1,0)*GschemeConstants(2,0)*GschemeConstants(3,0)*rat( - 6900*ep^5 - 50695*ep^4 + 31165*ep^3 - 2175*ep^2 - 1345*ep + 190,3888*ep^5 + 4860*ep^4 + 1836*ep^3 + 216*ep^2) + \n      GschemeConstants(3,0)*Master(no)*rat(125*ep^2 - 5,18*ep^2 + 18*ep + 4) + Master(no6)*rat( - 4*ep - 1,3*ep + 2) + Master(bebe)*rat( - 6400*ep^3 + 1280*ep^2 + 400*ep - 80,81*ep^3 + 81*ep^2 + 18*ep) + Master(cross)*rat(850*ep^3 + 480*ep^2 - 30*ep - 20\n      ,108*ep^3 + 135*ep^2 + 51*ep + 6)\n"
+      ],
+      "definition": "form_src/forcer/forcer/forcer-rules.h:7 (HASSCHEMEZno3, pathforcer.h:347) and SchemeZno3.prc: Forcer's no3 override; topology no3 0-1 4-8 7-8 1-4 1-5 3-4 2-7 6-7 2-5 5-6 2-3 3-6 8-9 (diamond)"
+    },
+    {
+      "name": "bubu_top",
+      "family": "P4L_J4",
+      "powers": [
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1
+      ],
+      "numerator": "1",
+      "external": "p(1)",
+      "outputs": [
+        "GschemeConstants(0,0)^2*GschemeConstants(1,0)^2*rat(18*ep^3 - 21*ep^2 + 8*ep - 1,4*ep^3 - 4*ep^2) + GschemeConstants(0,0)^2*GschemeConstants(1,0)*GschemeConstants(2,0)*rat(48*ep^3 - 52*ep^2 + 18*ep - 2,9*ep^3 - 9*ep^2) + GschemeConstants(0,0)^2*\n      GschemeConstants(1,0)*GschemeConstants(3,0)*rat( - 750*ep^3 + 775*ep^2 - 250*ep + 25,48*ep^3 - 48*ep^2) + GschemeConstants(0,0)^2*Master(t145)*rat(16*ep^2 - 16*ep + 4,3*ep^2 - 3*ep) + GschemeConstants(0,0)*GschemeConstants(1,0)*GschemeConstants(2,0\n      )*GschemeConstants(3,0)*rat(420*ep^3 - 329*ep^2 + 84*ep - 7,144*ep^3 - 144*ep^2) + Master(bebe)*rat(40*ep^2 - 18*ep + 2,3*ep^2 - 3*ep) + Master(cross)*rat( - 5*ep + 1,ep - 1)\n"
+      ],
+      "definition": "form_src/forcer/forcer/forcer-rules.h:62-63: #case bubu, ReduceImpl2(bubu,Zbubu,14), no master of its own (knock-out); topology bubu 0-4 4-5 2-4 3-4 5-6 2-5 3-5 1-6 1-2 1-3 6-9"
+    }
+  ]
+}

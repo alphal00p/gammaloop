@@ -534,14 +534,99 @@ fn assert_guard(
     }
 }
 
+/// The M1 cases of the four-loop battery, which also run live with FORM 5.
+/// The cases M3-V7 added ran once, when the file was frozen by
+/// `tests/p_fixtures4_tests.rs` (M3 plan section 2 item 2), and are checked
+/// from the file.
+const FOUR_LOOP_LIVE: [&str; 10] = [
+    "la4_top",
+    "la4_isp",
+    "la4_dot",
+    "haha_rank2",
+    "no1_top",
+    "contracted_la4_five_momenta",
+    "contracted_no2_six_momenta",
+    "contracted_j4_six_and_five_momenta_dot",
+    "contracted_no2_six_momenta_numerator",
+    "la4_kq_six_momenta",
+];
+
+/// The frozen value finalizes in `Retain` mode, and in `Symbolic` mode
+/// exactly through its recorded depth (M3 plan G7): there it is the stored
+/// value, one term more is `MissingMasterOrders` of the recorded masters
+/// (below the cap), and at 11 terms it is the stored I-7 value or the
+/// stored `Oep` error.
+fn assert_finalizes_through_its_depth(case: &Case, values: &[ReducedPropagatorValue]) {
+    use super::fixtures::{DEPTH_CAP_TERMS, Finalized, I7_TERMS, finalize_settings};
+    let depth = case.depth.as_ref().expect("a depth");
+    let settings = finalize_settings(depth.terms);
+    let (loops, external) = (family(&case.family).loops, parse(&case.external));
+    let retained = finalize(
+        values,
+        loops,
+        &external,
+        &settings,
+        RustRedMasterMode::Retain,
+        "Forcer",
+    );
+    assert!(!retained.unwrap().is_zero(), "{}", case.name);
+    let at = |terms| case.finalized_at(terms).unwrap();
+    assert_eq!(
+        at(depth.terms),
+        Finalized::Symbolic(depth.symbolic.clone()),
+        "{}",
+        case.name
+    );
+    if depth.terms < DEPTH_CAP_TERMS {
+        assert_eq!(
+            at(depth.terms + 1),
+            Finalized::MissingMasterOrders(depth.limit.clone()),
+            "{}",
+            case.name
+        );
+    }
+    let eleven = case.eleven_terms.clone().expect("an 11-term value");
+    if depth.terms == I7_TERMS {
+        assert_eq!(eleven, Finalized::Symbolic(depth.symbolic.clone()));
+    } else {
+        assert_eq!(at(I7_TERMS), eleven, "{}", case.name);
+    }
+}
+
 #[test]
 fn forcer_four_loop_battery() {
-    let battery = forcer_battery(
-        "p4l_battery.json",
-        include_str!("../../../tests/fixtures/forcer/p4l_battery.json"),
-    );
+    let fixture = Battery::parse(include_str!(
+        "../../../tests/fixtures/forcer/p4l_battery.json"
+    ))
+    .unwrap();
+    let live = forcer_test_form();
+    let battery = fixture
+        .cases
+        .iter()
+        .chain(&fixture.boundary)
+        .map(|case| {
+            let values = frozen(case);
+            if let Some(form) = live
+                .as_deref()
+                .filter(|_| FOUR_LOOP_LIVE.contains(&case.name.as_str()))
+            {
+                let reduced = reduce_p(
+                    family(&case.family),
+                    &case.powers,
+                    parse(&case.numerator).as_view(),
+                    &parse(&case.external),
+                    &settings(form),
+                )
+                .unwrap_or_else(|error| panic!("{}: {error}", case.name));
+                assert_eq!(reduced, values, "{}: live Forcer differs", case.name);
+            }
+            (case.clone(), values)
+        })
+        .collect::<Vec<_>>();
     for (case, values) in &battery {
+        // MSbar at 5 terms (the M1 check), then the G-scheme depth.
         assert_finalizes(case, values, 5);
+        assert_finalizes_through_its_depth(case, values);
         if case.name.starts_with("contracted") {
             assert_series_parallel(case, values);
         }
@@ -1265,7 +1350,7 @@ const PROGRAM_DIGESTS: [(&str, &str); 8] = [
     ),
     (
         "p4l_battery.json",
-        "4db77a0e957fc721fc0b981feab8a2197b43828e4973aecf19520343356e6596",
+        "3867d5923661214904cff95c69d0586344621a869b3650fe8c3d3a4d7dd8b1cf",
     ),
     (
         "p_anchors.json",
