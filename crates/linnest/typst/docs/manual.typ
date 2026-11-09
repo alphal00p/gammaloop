@@ -791,6 +791,11 @@
   their painted paths intersect the measured text box, with no surrounding
   repulsion band. This intersection test excludes `label-collision-padding`;
   node boxes, neighbouring labels and self-loop bends retain their clearances.
+  A placement whose text meets other text, a painted edge, a node box or a
+  self-loop bend ranks behind every placement that meets fewer of them;
+  clearances and preferred positions only order placements with equal contacts.
+  Boundary-only touching is not a contact, though its clearance cost remains.
+  Arrows, whose boxes cover more than their paint, count through clearance only.
   Stroke width uses a conservative envelope around the text box; dash gaps are
   treated continuously, so placement does not depend on the phase of a dash.
 
