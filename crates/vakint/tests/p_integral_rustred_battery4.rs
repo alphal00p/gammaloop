@@ -7,12 +7,15 @@
 //! four-loop cases (`src/p_integral/rustred_battery_tests.rs`). Every test
 //! but the pin of the case counts needs `VAKINT_TEST_P_LIBRARY_1_4` (the
 //! package of the PP-M3b pin) and reports a skip on stderr without it. The
-//! evidence run (G7 Tier A at four loops), from the repository root:
+//! evidence run (G7 Tier A at four loops), from the repository root, in a
+//! profile without termination and without retries (the default profile
+//! ends a test after 60 s); each case reports its seconds and peak RSS on
+//! stderr ([`timed`]):
 //!
 //! ```text
 //! VAKINT_TEST_P_LIBRARY_1_4=<package> cargo nextest run --cargo-profile ci-optim \
-//!     --locked -p vakint --features vakint/feynkit-ingress \
-//!     --test p_integral_rustred_battery4 --no-fail-fast
+//!     --locked -p vakint --features vakint/feynkit-ingress -P test_gammaloop \
+//!     --retries 0 --test p_integral_rustred_battery4 --no-fail-fast --no-capture
 //! ```
 //!
 //! - The battery: the 54 cases of `p4l_battery.json` in parts of
@@ -92,8 +95,10 @@ fn assert_battery_part(part: usize, parts: usize) {
     };
     let battery = fixture4(BATTERY4, BATTERY4_CASES);
     for case in part_of(&battery.cases, part, parts, BATTERY_PART) {
-        assert_case_agrees(engine, BATTERY4, case, None);
-        assert_eleven_terms(engine, BATTERY4, case);
+        timed(format!("{BATTERY4}: {}", case.name), || {
+            assert_case_agrees(engine, BATTERY4, case, None);
+            assert_eleven_terms(engine, BATTERY4, case);
+        });
     }
 }
 
@@ -125,7 +130,9 @@ fn the_four_loop_anchors_agree_with_forcer_and_reach_every_master() {
     };
     let mut reached = BTreeSet::new();
     for case in fixture4(ANCHORS4, ANCHORS4_CASES).cases {
-        let masters = assert_case_agrees(engine, ANCHORS4, &case, None);
+        let masters = timed(format!("{ANCHORS4}: {}", case.name), || {
+            assert_case_agrees(engine, ANCHORS4, &case, None)
+        });
         if let Some(master) = &case.master {
             assert!(masters.contains(master), "{}: {masters:?}", case.name);
         }
@@ -144,7 +151,9 @@ fn assert_grid_part(part: usize, parts: usize) {
         return;
     };
     for case in part_of(&grid4_gate(), part, parts, GRID_PART) {
-        assert_case_agrees(engine, GRID4, case, None);
+        timed(format!("{GRID4}: {}", case.name), || {
+            assert_case_agrees(engine, GRID4, case, None)
+        });
     }
 }
 
@@ -172,7 +181,9 @@ fn assert_subset_under(arithmetic: &str) {
         return;
     };
     for (file, case) in arithmetic_subset4() {
-        assert_case_agrees(engine, file, &case, Some(arithmetic));
+        timed(format!("{file}: {} ({arithmetic})", case.name), || {
+            assert_case_agrees(engine, file, &case, Some(arithmetic))
+        });
     }
 }
 

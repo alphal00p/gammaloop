@@ -204,6 +204,36 @@ pub fn frozen_value(
         .map_err(|error| format!("Forcer fixture {}: {error}", case.name))
 }
 
+/// Runs `check` and reports its seconds and peak RSS on stderr as
+/// `[tier A 4L] <what>: <s> s, peak <GB> GB` (the evidence of G7 records them
+/// per case). The peak is the process's resident high-water mark, reset
+/// before `check` (Linux `clear_refs`); elsewhere it reads `?`.
+pub fn timed<T>(what: impl std::fmt::Display, check: impl FnOnce() -> T) -> T {
+    let _ = std::fs::write("/proc/self/clear_refs", "5");
+    let started = std::time::Instant::now();
+    let value = check();
+    let peak = std::fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|status| {
+            let line = status
+                .lines()
+                .find_map(|line| line.strip_prefix("VmHWM:"))?;
+            let kilobytes = line
+                .trim()
+                .trim_end_matches("kB")
+                .trim()
+                .parse::<f64>()
+                .ok()?;
+            Some(format!("{:.2}", kilobytes / 1e6))
+        })
+        .unwrap_or_else(|| "?".into());
+    eprintln!(
+        "[tier A 4L] {what}: {:.1} s, peak {peak} GB",
+        started.elapsed().as_secs_f64()
+    );
+    value
+}
+
 /// The masters of a `Retain` value (its tag basis).
 pub fn masters_of(value: &Atom) -> BTreeSet<String> {
     let epsilon = vakint_symbol!(&VakintSettings::default().epsilon_symbol);
