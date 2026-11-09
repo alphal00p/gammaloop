@@ -407,8 +407,8 @@ mod results_file {
     use super::results::{self, Key, Source};
 
     fn measurement(cell: &str, repetition: usize) -> Value {
-        json!({"cell": cell, "backend": "forcer", "threads": 1, "state": "cold",
-               "repetition": repetition, "status": "ok", "evaluate_seconds": 0.5})
+        json!({"cell": cell, "backend": "forcer", "arithmetic": "none", "threads": 1,
+               "state": "cold", "repetition": repetition, "status": "ok", "evaluate_seconds": 0.5})
     }
 
     fn protocol(gammaloop: &str, rustred: &str) -> Value {
@@ -441,6 +441,7 @@ mod results_file {
         let key = |cell: &str, repetition| Key {
             cell: cell.into(),
             backend: "forcer".into(),
+            arithmetic: "none".into(),
             threads: 1,
             state: "cold".into(),
             repetition,
@@ -470,12 +471,37 @@ mod results_file {
     }
 
     #[test]
+    fn the_arithmetic_is_part_of_what_a_rerun_skips() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("p_results.json");
+        results::begin_run(&path, "run", &protocol("aaa", "bbb"), true)?;
+        let rustred = |arithmetic: &str| {
+            json!({"cell": "L3_d1_r4", "backend": "rustred", "arithmetic": arithmetic,
+                   "threads": 16, "state": "cold", "repetition": 0, "status": "ok"})
+        };
+        results::append(&path, "run", rustred("exact"))?;
+        results::append(&path, "run", rustred("modular_polynomial"))?;
+        let mut without = rustred("exact");
+        without.as_object_mut().unwrap().remove("arithmetic");
+        assert!(results::append(&path, "run", without).is_err());
+
+        let document = results::read(&path)?;
+        let recorded = results::recorded(&document, source("aaa", "bbb", "ci-optim"), None)?;
+        let arithmetics = recorded
+            .iter()
+            .map(|key| key.arithmetic.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(arithmetics, ["exact", "modular_polynomial"]);
+        Ok(())
+    }
+
+    #[test]
     fn a_capped_record_is_final_only_up_to_its_cap() -> Result<()> {
         let directory = tempfile::tempdir()?;
         let path = directory.path().join("p_results.json");
         results::begin_run(&path, "run", &protocol("aaa", "bbb"), true)?;
         let capped = |cell, status| {
-            json!({"cell": cell, "backend": "forcer", "threads": 16, "state": "warm",
+            json!({"cell": cell, "backend": "forcer", "arithmetic": "none", "threads": 16, "state": "warm",
                    "repetition": 0, "status": status, "cap_seconds": 100.0})
         };
         results::append(&path, "run", capped("L4_d0_r0", "capped"))?;

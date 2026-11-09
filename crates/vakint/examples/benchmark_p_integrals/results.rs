@@ -31,12 +31,18 @@ pub struct Source<'a> {
     pub source_dirty: bool,
 }
 
+/// The arithmetic of a Forcer measurement, which has none to choose.
+pub const NO_ARITHMETIC: &str = "none";
+
 /// What one measurement measures. A recorded key is never measured again for
 /// the same source, unless a capped record leaves room for a longer cap.
+/// `arithmetic` is RustRed's Ordered weight arithmetic by mode name (`exact`,
+/// `modular_polynomial`, `modular_sampled`), [`NO_ARITHMETIC`] for Forcer.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Key {
     pub cell: String,
     pub backend: String,
+    pub arithmetic: String,
     pub threads: usize,
     pub state: String,
     pub repetition: usize,
@@ -59,6 +65,7 @@ impl Key {
         Ok(Self {
             cell: text("cell")?,
             backend: text("backend")?,
+            arithmetic: text("arithmetic")?,
             threads: number("threads")?,
             state: text("state")?,
             repetition: number("repetition")?,

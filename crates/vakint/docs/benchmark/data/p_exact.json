@@ -1,7 +1,334 @@
 {
-  "schema": "vakint.p-exact.v1",
-  "stub": true,
-  "gammaloop_sha": null,
-  "rustred_sha": null,
-  "cells": []
+  "cells": [
+    {
+      "L": 1,
+      "agree": true,
+      "dots": 0,
+      "rank": 0,
+      "terms": 5
+    },
+    {
+      "L": 1,
+      "agree": true,
+      "dots": 0,
+      "rank": 2,
+      "terms": 5
+    },
+    {
+      "L": 1,
+      "agree": true,
+      "dots": 0,
+      "rank": 4,
+      "terms": 5
+    },
+    {
+      "L": 1,
+      "agree": true,
+      "dots": 0,
+      "rank": 6,
+      "terms": 5
+    },
+    {
+      "L": 1,
+      "agree": true,
+      "dots": 0,
+      "rank": 8,
+      "terms": 5
+    },
+    {
+      "L": 1,
+      "agree": true,
+      "dots": 1,
+      "rank": 0,
+      "terms": 5
+    },
+    {
+      "L": 1,
+      "agree": true,
+      "dots": 1,
+      "rank": 2,
+      "terms": 5
+    },
+    {
+      "L": 1,
+      "agree": true,
+      "dots": 1,
+      "rank": 4,
+      "terms": 5
+    },
+    {
+      "L": 1,
+      "agree": true,
+      "dots": 1,
+      "rank": 6,
+      "terms": 5
+    },
+    {
+      "L": 1,
+      "agree": true,
+      "dots": 1,
+      "rank": 8,
+      "terms": 5
+    },
+    {
+      "L": 1,
+      "agree": true,
+      "dots": 2,
+      "rank": 0,
+      "terms": 5
+    },
+    {
+      "L": 1,
+      "agree": true,
+      "dots": 2,
+      "rank": 2,
+      "terms": 5
+    },
+    {
+      "L": 1,
+      "agree": true,
+      "dots": 2,
+      "rank": 4,
+      "terms": 5
+    },
+    {
+      "L": 1,
+      "agree": true,
+      "dots": 2,
+      "rank": 6,
+      "terms": 5
+    },
+    {
+      "L": 1,
+      "agree": true,
+      "dots": 2,
+      "rank": 8,
+      "terms": 5
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "dots": 0,
+      "rank": 0,
+      "terms": 7
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "dots": 0,
+      "rank": 2,
+      "terms": 7
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "dots": 0,
+      "rank": 4,
+      "terms": 7
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "dots": 0,
+      "rank": 6,
+      "terms": 7
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "dots": 0,
+      "rank": 8,
+      "terms": 7
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "dots": 1,
+      "rank": 0,
+      "terms": 7
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "dots": 1,
+      "rank": 2,
+      "terms": 7
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "dots": 1,
+      "rank": 4,
+      "terms": 7
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "dots": 1,
+      "rank": 6,
+      "terms": 7
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "dots": 1,
+      "rank": 8,
+      "terms": 7
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "dots": 2,
+      "rank": 0,
+      "terms": 7
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "dots": 2,
+      "rank": 2,
+      "terms": 7
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "dots": 2,
+      "rank": 4,
+      "terms": 7
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "dots": 2,
+      "rank": 6,
+      "terms": 7
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "dots": 2,
+      "rank": 8,
+      "terms": 7
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "dots": 0,
+      "rank": 0,
+      "terms": 9
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "dots": 0,
+      "rank": 2,
+      "terms": 9
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "dots": 0,
+      "rank": 4,
+      "terms": 9
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "dots": 0,
+      "rank": 6,
+      "terms": 9
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "dots": 0,
+      "rank": 8,
+      "terms": 9
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "dots": 1,
+      "rank": 0,
+      "terms": 9
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "dots": 1,
+      "rank": 2,
+      "terms": 9
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "dots": 1,
+      "rank": 4,
+      "terms": 9
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "dots": 1,
+      "rank": 6,
+      "terms": 9
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "dots": 1,
+      "rank": 8,
+      "terms": 9
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "dots": 2,
+      "rank": 0,
+      "terms": 9
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "dots": 2,
+      "rank": 2,
+      "terms": 9
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "dots": 2,
+      "rank": 4,
+      "terms": 9
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "dots": 2,
+      "rank": 6,
+      "terms": 9
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "dots": 2,
+      "rank": 8,
+      "terms": 9
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "physics": true,
+      "terms": 7
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "physics": true,
+      "terms": 9
+    }
+  ],
+  "gammaloop_sha": "a659e3bf86ca614bcf545b95511269940ffc5174",
+  "rustred_sha": "7c14cea095e098609f982e85613a352cfb792ea4",
+  "schema": "vakint.p-exact.v1"
 }
