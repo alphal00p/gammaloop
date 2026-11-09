@@ -2,8 +2,12 @@ use std::collections::BTreeMap;
 
 use feynkit_kinematics::Kinematics;
 use feynkit_model::Model;
+#[cfg(feature = "svg")]
+use serde_json::Value;
 use symbolica::atom::{Atom, AtomCore};
 
+#[cfg(feature = "svg")]
+use crate::SceneOptions;
 use crate::{DiagramError, EdgeId, FeynmanDiagram, NumeratorInterface};
 
 fn master_diagram() -> FeynmanDiagram {
@@ -140,6 +144,35 @@ fn stored_power_defaults_to_one_for_existing_json() {
     assert!(
         NumeratorInterface::export(restored.numerator_prefactor()).0
             == NumeratorInterface::export(diagram.numerator_prefactor()).0
+    );
+}
+
+#[cfg(feature = "svg")]
+#[test]
+fn native_scene_displays_dots_without_an_automatic_title() {
+    let diagram = master_diagram();
+    let scene = diagram
+        .to_scene(None, &Default::default(), None, &SceneOptions::default())
+        .unwrap();
+    assert!(scene.pages.iter().any(|label| {
+        label.mathml.contains("<mn>2</mn>")
+            && label
+                .typst
+                .as_ref()
+                .is_some_and(|source| source.contains("^(2)"))
+    }));
+    assert!(scene.title.is_none());
+    assert!(
+        scene
+            .edges
+            .iter()
+            .any(|edge| edge.details.get("propagator-power") == Some(&Value::from(3)))
+    );
+    assert!(
+        scene
+            .edges
+            .iter()
+            .any(|edge| edge.details.get("lmb-id") == Some(&Value::from(1)))
     );
 }
 

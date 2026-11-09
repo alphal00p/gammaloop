@@ -45,6 +45,7 @@ restored = hep.FeynmanDiagram.from_dot(model, diagram.to_dot())
 assert [edge.propagator_power for edge in restored.internal_edges] == [2, 3]
 assert restored.loop_momentum_basis.loop_edges == diagram.loop_momentum_basis.loop_edges
 assert restored.denominator_expression() == diagram.denominator_expression()
+assert '<svg' in diagram.render().to_svg()
 for restored in (hep.FeynmanDiagram.from_json(model, diagram.to_json()),
                  hep.FeynmanDiagram.from_dot_set(model, diagram.to_dot())[0]):
     assert restored.to_json() == diagram.to_json()
