@@ -101,7 +101,7 @@
 // RustRed's Ordered weight arithmetic of the tables; the exact series has a
 // table of its own. Forcer measurements carry "none".
 #let headline = "modular_polynomial"
-#let arithmetic-of(m) = m.at("arithmetic", default: if m.backend == "rustred" { headline } else { "none" })
+#let arithmetic-of(m) = { assert(m.backend != "rustred" or "arithmetic" in m, message: "RustRed record without arithmetic"); m.at("arithmetic", default: "none") }
 
 // The measurements of one (cell, backend, threads, state), RustRed under `arithmetic`.
 #let samples(cell, backend, threads, state, arithmetic: headline) = measurements.filter(
@@ -290,7 +290,7 @@
   ws, wc: RustRed warm on its own cache, and warm on one cache shared along the cells of that loop
   count. ✓: result exactly equal to Forcer's. n: integrals in the input. †: fewer repetitions than
   the protocol. Grey: Forcer only in v1.
-  *Caveat:* indicative timings on a shared, loaded host (foreign load on node 4 not excluded): median foreign share of the measuring CPUs 1L n/a (before the sampler), 2L 0.82, 3L 0.12, 4L 0.52.
+  *Caveat:* indicative timings on a shared, loaded host (foreign load on node 4 not excluded): median foreign share of the measuring CPUs 1L n/a (before the sampler), 2L 0.82, 3L 0.12, 4L 0.52. RustRed cold and wc include the after-evaluation cache save (fsync on the ZFS work dir); 122 of 624 saving children stalled 2-18 s, none of the non-saving children nor Forcer at 1L-3L.
 ]
 
 #block(stroke: 0.6pt + luma(200), inset: 6pt, radius: 3pt, width: 100%)[
@@ -329,8 +329,8 @@
   for (loops, cell) in exact-cells {
     rows.push(text(size: 7pt)[#cell.replace("_", " ")])
     for threads in (1, 16) {
-      let ex = seconds(cell, "rustred", threads, "cold", arithmetic: "exact")
-      let mp = seconds(cell, "rustred", threads, "cold")
+      let ex = seconds(cell, "rustred", threads, "cold", arithmetic: "exact", field: "reduction_seconds")
+      let mp = seconds(cell, "rustred", threads, "cold", field: "reduction_seconds")
       rows.push(text(size: 7pt)[#fmt(ex)])
       rows.push(text(size: 7pt)[#fmt(mp)])
       rows.push(text(size: 7pt, weight: "semibold")[#gain(ex, mp)])
@@ -399,8 +399,8 @@
 #block(breakable: false, grid(
   columns: (1fr, 1fr),
   column-gutter: 8pt,
-  figure(exact-table, supplement: [Table], caption: [RustRed cold, arithmetic `exact` against `modular_polynomial` (mod.); gain = exact / mod.]),
-  figure(reuse-table, supplement: [Table], caption: [Reuse, `modular_polynomial`: warm time over cold time per loop count (sums over the cells). ws clean: warm-same children with 0 misses and 0 inserts. wc: the chain's cache counters at 16 threads.]),
+  figure(exact-table, supplement: [Table], caption: [RustRed cold, arithmetic `exact` against `modular_polynomial` (mod.), reduction-only seconds (median); gain = exact / mod.]),
+  figure(reuse-table, supplement: [Table], caption: [Reuse, `modular_polynomial`: warm time over cold time per loop count (sums over the cells). ws clean: warm-same children with 0 misses and 0 inserts. wc: the chain's cache counters at 16 threads. The ratios are dominated by the cache-save stalls of the cold runs (caveat).]),
 ))
 
 // ------------------------------------------------------------ methodology --
