@@ -14,7 +14,11 @@
 //!   labelled sector of the registry families at rank 0 and 2, and dotted
 //!   sectors;
 //! - `p_anchors.json`: [`anchor_cases`], the normalization anchors of the M2
-//!   plan (section 3.3), including the parents of the eps-line kite `t1star05`.
+//!   plan (section 3.3), including the parents of the eps-line kite `t1star05`;
+//! - `p4l_anchors.json`: [`anchor_cases_4l`], the four-loop master anchors of
+//!   the M3 plan (D-M3-5): every master integral of Forcer's four-loop basis
+//!   at its Forcer definition (source line in `definition`), the ladder
+//!   `la4_top`, and the `no3` and `bubu` tops.
 //!
 //! This module is public for the integration tests only; it is not part of
 //! vakint's API.
@@ -41,7 +45,21 @@ pub struct ForcerFixture {
     /// What the file holds and how it was made (newer files only).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provenance: Option<String>,
+    /// How the outputs were produced (files written since M3).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run: Option<ForcerRun>,
     pub cases: Vec<ForcerCase>,
+}
+
+/// The run that wrote a fixture's outputs.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct ForcerRun {
+    /// The FORM command and the Forcer call (`tform -w4`, default options).
+    pub flags: String,
+    /// FORM processes at a time.
+    pub jobs: usize,
+    /// Wall seconds of the whole regeneration, rounded.
+    pub seconds: u64,
 }
 
 /// One canonical case and its frozen Forcer output.
@@ -59,6 +77,13 @@ pub struct ForcerCase {
     /// The raw `%E` output of each Forcer local, in the order of the parts of
     /// the program; empty for a scaleless case.
     pub outputs: Vec<String>,
+    /// For a master anchor: the Forcer master (`Master(name)`) the case is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub master: Option<String>,
+    /// For an anchor: its Forcer definition (source path:line, relative to
+    /// the crate) and how the input realizes it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub definition: Option<String>,
 }
 
 impl ForcerFixture {
@@ -85,6 +110,7 @@ impl ForcerFixture {
             forcer_commit: FORCER_UPSTREAM_COMMIT.into(),
             form_version: String::new(),
             provenance: Some(provenance.into()),
+            run: None,
             cases,
         }
     }
@@ -104,6 +130,18 @@ impl ForcerFixture {
     /// case with `jobs` FORM processes at a time and store the outputs and the
     /// FORM version.
     pub fn write_outputs(&mut self, form: &str, jobs: usize) -> Result<(), VakintError> {
+        self.write_outputs_with(form, jobs, 1)
+    }
+
+    /// [`Self::write_outputs`] with `workers` TFORM workers per FORM process
+    /// (`tform -w<workers>`; 1 is plain FORM); records the run.
+    pub fn write_outputs_with(
+        &mut self,
+        form: &str,
+        jobs: usize,
+        workers: usize,
+    ) -> Result<(), VakintError> {
+        let started = std::time::Instant::now();
         self.form_version =
             super::forcer_form_version(form).map_err(|reason| VakintError::ForcerUnavailable {
                 form_exe_path: form.into(),
@@ -116,9 +154,23 @@ impl ForcerFixture {
             .collect::<Result<Vec<_>, _>>()?;
         let settings = VakintSettings {
             form_exe_path: form.into(),
-            n_cores: 1,
+            n_cores: workers.max(1),
             ..VakintSettings::default()
         };
+        let command = super::form_command(&settings);
+        let program = std::path::Path::new(command.get_program())
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned();
+        let flags = std::iter::once(program)
+            .chain(
+                command
+                    .get_args()
+                    .map(|arg| arg.to_string_lossy().into_owned()),
+            )
+            .collect::<Vec<_>>()
+            .join(" ");
         let next = AtomicUsize::new(0);
         let mut outputs = (0..programs.len()).map(|_| None).collect::<Vec<_>>();
         std::thread::scope(|scope| {
@@ -158,6 +210,13 @@ impl ForcerFixture {
                 .expect("every case ran")
                 .map_err(|error| malformed(format!("{}: {error}", case.name)))?;
         }
+        self.run = Some(ForcerRun {
+            flags: format!(
+                "{flags} run_forcer.frm; #call Forcer() with default options (exact G-scheme reduction, no expansion)"
+            ),
+            jobs: jobs.max(1),
+            seconds: started.elapsed().as_secs_f64().round() as u64,
+        });
         Ok(())
     }
 
@@ -207,7 +266,17 @@ impl ForcerCase {
             numerator: numerator.into(),
             external: external.into(),
             outputs: Vec::new(),
+            master: None,
+            definition: None,
         }
+    }
+
+    /// An anchor case: `self` labelled with the Forcer master it is (if any)
+    /// and its definition.
+    pub fn anchoring(mut self, master: Option<&str>, definition: &str) -> Self {
+        self.master = master.map(Into::into);
+        self.definition = Some(definition.into());
+        self
     }
 
     /// The loop count of the family.
@@ -581,6 +650,182 @@ pub fn anchor_cases() -> Vec<ForcerCase> {
     ]
 }
 
+/// The provenance line of the four-loop anchors.
+pub const ANCHOR4_PROVENANCE: &str = "M3-V7 four-loop normalization anchors (M3 plan D-M3-5, G5): \
+every master of Forcer's four-loop basis at its Forcer definition (case field definition: source path:line \
+relative to crates/vakint and the realization), la4_top (finalized eps^0 = -70 zeta(7) in the G-scheme), \
+the no3 and bubu tops; fixtures::anchor_cases_4l in src/p_integral/forcer/fixtures.rs; \
+VAKINT_FORCER_FIXTURES=write with FORM 5 (run: flags, jobs, seconds); \
+outputs are raw Forcer C_G before the Wick sign: reduced = (-1)^(sum a + r) C_G (ForcerCase::frozen_values)";
+
+/// Forcer's definition of each four-loop-relevant master that is not already
+/// anchored by [`anchor_cases`] (`no`, `t105`), with the labelled sector that
+/// realizes it: `(master, family, powers, definition)`. The sectors are the
+/// first ones (registry order, then line mask) whose contracted graph is the
+/// master's Forcer topology (`forcer_dag_68a30bf.tsv` notation), found by
+/// graph isomorphism; an eps unit on a line (`*`) is realized at four loops
+/// by a line in series with a one-loop bubble (power `1+ε`), and the two
+/// units of `t155` by a bubble, a line and a bubble in series (power
+/// `1+2ε`).
+const FOUR_LOOP_MASTERS: [(&str, &str, [i64; 11], &str); 14] = [
+    (
+        "bebe",
+        "P4L_J1",
+        [1, 0, 1, 1, 1, 1, 1, 1, 0, 0, 1],
+        "form_src/forcer/forcer/forcer-manual.h:9066: Z(1,1,1,1,1,1,1,1,0,0,0,0,0,0) = Master(bebe); \
+         topology bebe 0-1 4-5 1-4 3-5 1-3 1-2 2-4 2-3 3-4 5-9",
+    ),
+    (
+        "cross",
+        "P4L_J2",
+        [1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1],
+        "form_src/forcer/forcer/forcer-manual.h:7383: Z(1,1,1,1,1,1,1,1,0,0,0,0,0,0) = Master(cross); \
+         topology cross 0-1 3-5 1-3 4-5 1-4 2-5 1-2 2-3 2-4 5-9",
+    ),
+    (
+        "haha",
+        "P4L_HAHA",
+        [1; 11],
+        "form_src/forcer/forcer/forcer-manual.h:1886: Z(1,1,1,1,1,1,1,1,1,1,1,0,0,0) = Master(haha); \
+         topology haha 0-3 5-8 4-5 3-4 2-3 1-2 1-8 5-6 1-6 4-7 2-7 6-7 8-9",
+    ),
+    (
+        "lala",
+        "P4L_LA4",
+        [1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1],
+        "form_src/forcer/forcer/forcer-manual.h:5008: Z(1,1,1,1,1,1,1,1,1,0,0,0,0,0) = Master(lala); \
+         topology lala 0-3 5-8 4-5 3-4 2-3 1-2 1-8 2-4 1-4 1-5 8-9",
+    ),
+    (
+        "no1",
+        "P4L_NO1",
+        [1; 11],
+        "form_src/forcer/forcer/forcer-manual.h:2594, :2687: Z(1,1,1,1,1,1,1,1,1,1,1,0,0,0) = Master(no1); \
+         topology no1 0-1 4-8 3-4 2-3 1-2 1-5 5-6 6-7 7-8 3-7 2-6 4-5 8-9",
+    ),
+    (
+        "no2",
+        "P4L_NO2",
+        [1; 11],
+        "form_src/forcer/forcer/forcer-rules.h:57: Zno2(1,1,1,1,1,1,1,1,1,1,1,0,0,0) = Master(no2) / Q2^3; \
+         topology no2 0-1 5-8 4-5 2-4 1-2 1-6 3-6 3-7 7-8 5-6 3-4 2-7 8-9",
+    ),
+    (
+        "no6",
+        "P4L_NO1",
+        [1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1],
+        "form_src/forcer/forcer/forcer-manual.h:3851: Z(1,1,1,1,1,1,1,1,1,1,0,0,0,0) = Master(no6); \
+         topology no6 0-1 7-8 6-7 2-6 1-2 1-7 3-7 3-4 4-8 4-6 2-3 8-9",
+    ),
+    (
+        "nono",
+        "P4L_J4",
+        [1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1],
+        "form_src/forcer/forcer/forcer-manual.h:6421: Z(1,1,1,1,1,1,1,1,1,0,0,0,0,0) = Master(nono); \
+         topology nono 0-1 4-6 2-4 1-2 1-3 3-5 5-6 4-5 3-4 2-5 6-9",
+    ),
+    (
+        "fastar2",
+        "P4L_J2",
+        [1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1],
+        "form_src/forcer/forcer/forcer-rules.h:182 (FASTAR2SCHEME 1, the default): \
+         Zfastar2(1,1,1,1,1,1,1,0,0) = Master(fastar2) / Q2 (scheme 0: forcer-manual.h:665); \
+         topology fastar2 0-1 3-4 2-3* 1-2 1-5 4-5 3-5 2-5 4-9; the eps line 2-3* is a line and a one-loop bubble in series",
+    ),
+    (
+        "nostar5",
+        "P4L_J4",
+        [1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1],
+        "form_src/forcer/forcer/forcer-rules.h:201 (NOSTAR5SCHEME 1, the default): \
+         Znostar5(1,1,1,1,1,1,1,1,0) = BasicNOIntegral5 / Q2^2 (scheme 0: :196, XXX: normalization?); \
+         form_src/forcer/forcer.h:278: BasicNOIntegral5 = Master(nostar5); \
+         topology nostar5 0-1 3-4 2-3 1-2 1-6 5-6* 4-5 3-6 2-5 4-9; the eps line 5-6* is a line and a one-loop bubble in series",
+    ),
+    (
+        "nostar6",
+        "P4L_J4",
+        [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        "form_src/forcer/forcer/forcer-rules.h:221 (NOSTAR6SCHEME 1, the default): \
+         Znostar6(1,1,1,1,1,1,1,1,0) = BasicNOIntegral6 / Q2^2 (scheme 0: :216, XXX: normalization?); \
+         form_src/forcer/forcer.h:279: BasicNOIntegral6 = Master(nostar6); \
+         topology nostar6 0-1 3-4 2-3 1-2 1-6 5-6 4-5* 3-6 2-5 4-9; the eps line 4-5* is a line and a one-loop bubble in series",
+    ),
+    (
+        "t124",
+        "P4L_J6",
+        [0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1],
+        "form_src/forcer/forcer/forcer-rules.h:252: Z(0,1,0,1,0,1,1,1,1,1) = BasicT1Integral24 / Q2 * Q2^5 \
+         (XXX: normalization?); form_src/forcer/forcer.h:282: BasicT1Integral24 = Master(t124); \
+         topology t1star24 0-1 2-3 1-2* 1-4 3-4* 2-4 3-9; each eps line is a line and a one-loop bubble in series",
+    ),
+    (
+        "t145",
+        "P4L_J1",
+        [1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1],
+        "form_src/forcer/forcer/forcer-rules.h:271: Z(0,0,0,1,1,1,1,1,1,1) = BasicT1Integral45 / Q2 * Q2^5 \
+         (XXX: normalization?); form_src/forcer/forcer.h:281: BasicT1Integral45 = Master(t145); \
+         topology t1star45 0-1 2-3 1-2 1-4 3-4* 2-4* 3-9; each eps line is a line and a one-loop bubble in series",
+    ),
+    (
+        "t155",
+        "P4L_J6",
+        [1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1],
+        "form_src/forcer/forcer/forcer-rules.h:281: Z(0,0,0,0,2,1,1,1,1,1) = BasicT1Integral55 / Q2 * Q2^5 \
+         (XXX: normalization?); form_src/forcer/forcer.h:280: BasicT1Integral55 = Master(t155); \
+         topology t1star55 0-1 2-3 1-2 1-4 3-4 2-4** 3-9: line 2-4 at power 1+2eps (unit power, two eps units); \
+         realized as a one-loop bubble, a line and a one-loop bubble in series",
+    ),
+];
+
+/// The four-loop anchors of `p4l_anchors.json`, without outputs (M3 plan
+/// D-M3-5): one case per [`FOUR_LOOP_MASTERS`] entry, named after its master,
+/// with numerator 1 and `p(1)`; then
+/// - `la4_top`: the four-loop ladder `P4L_LA4(1^11)`, whose finalized `ε^0`
+///   is `-70ζ7` in the G-scheme (the case of `p4l_battery.json`);
+/// - `no3_top`: `P4L_NO3(1^11)`, Forcer's `no3` with its `SchemeZno3`
+///   override (the diamond lane's check);
+/// - `bubu_top`: Forcer's knock-out topology `bubu` at unit powers
+///   (forcer-rules.h:62-63), reduced onto `bebe` and `cross`.
+pub fn anchor_cases_4l() -> Vec<ForcerCase> {
+    let mut cases = FOUR_LOOP_MASTERS
+        .iter()
+        .map(|(master, family, powers, definition)| {
+            ForcerCase::new((*master).into(), family, powers.to_vec(), "1", "p(1)")
+                .anchoring(Some(master), definition)
+        })
+        .collect::<Vec<_>>();
+    cases.push(
+        ForcerCase::new("la4_top".into(), "P4L_LA4", vec![1; 11], "1", "p(1)").anchoring(
+            None,
+            "the four-loop ladder (topology la4 0-1 1-2 1-5 2-3 2-5 3-4 3-6 4-7 4-8 5-6 6-7 7-8 8-9): \
+             C(8,4) zeta(7) = 70 zeta(7) in the G-scheme, finalized eps^0 = -70 zeta(7) \
+             (src/p_integral/forcer/tests.rs, forcer_four_loop_battery)",
+        ),
+    );
+    cases.push(
+        ForcerCase::new("no3_top".into(), "P4L_NO3", vec![1; 11], "1", "p(1)").anchoring(
+            None,
+            "form_src/forcer/forcer/forcer-rules.h:7 (HASSCHEMEZno3, pathforcer.h:347) and SchemeZno3.prc: Forcer's no3 override; \
+             topology no3 0-1 4-8 7-8 1-4 1-5 3-4 2-7 6-7 2-5 5-6 2-3 3-6 8-9 (diamond)",
+        ),
+    );
+    cases.push(
+        ForcerCase::new(
+            "bubu_top".into(),
+            "P4L_J4",
+            vec![1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 1],
+            "1",
+            "p(1)",
+        )
+        .anchoring(
+            None,
+            "form_src/forcer/forcer/forcer-rules.h:62-63: #case bubu, ReduceImpl2(bubu,Zbubu,14), no master of its own (knock-out); \
+             topology bubu 0-4 4-5 2-4 3-4 5-6 2-5 3-5 1-6 1-2 1-3 6-9",
+        ),
+    );
+    cases
+}
+
 /// The fixture at `path` after an optional regeneration: with `write`, the
 /// cases `definitions` run through Forcer (FORM 5 at `form`, `jobs` FORM
 /// processes at a time) and the file is rewritten; then the file is read and
@@ -591,9 +836,25 @@ pub fn write_or_read(
     definitions: Vec<ForcerCase>,
     write: Option<(&str, usize)>,
 ) -> Result<ForcerFixture, VakintError> {
-    if let Some((form, jobs)) = write {
+    write_or_read_with(
+        path,
+        provenance,
+        definitions,
+        write.map(|(form, jobs)| (form, jobs, 1)),
+    )
+}
+
+/// [`write_or_read`] with `(form, jobs, workers)`: each FORM process of a
+/// regeneration runs `tform -w<workers>` (plain FORM for 1).
+pub fn write_or_read_with(
+    path: &std::path::Path,
+    provenance: &str,
+    definitions: Vec<ForcerCase>,
+    write: Option<(&str, usize, usize)>,
+) -> Result<ForcerFixture, VakintError> {
+    if let Some((form, jobs, workers)) = write {
         let mut fixture = ForcerFixture::unwritten(provenance, definitions.clone());
-        fixture.write_outputs(form, jobs)?;
+        fixture.write_outputs_with(form, jobs, workers)?;
         std::fs::write(path, fixture.to_json())?;
     }
     let text = std::fs::read_to_string(path)
