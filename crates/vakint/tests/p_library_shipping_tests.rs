@@ -3,7 +3,10 @@
 //! the default path against Forcer's frozen values, fail-closed data and the
 //! step cache of the built-in program. The crate-internal checks (embedded
 //! files against the manifest, vakint's families against RustRed's and the
-//! library's) are unit tests of `rustred_evaluation::p_data`.
+//! library's, the listed-library resolver) are unit tests of
+//! `rustred_evaluation::p_data`. The checks of a library take its scope from
+//! the library directory (M3-V8); the scope 1-4 package of M3 runs them in
+//! the ignored tests below (`VAKINT_TEST_P_LIBRARY_1_4`).
 //!
 //! `VAKINT_P_DATA=write` rewrites `data/p/manifest.json` from the shipped
 //! library directory (after `rustred p-package`, see the docs).
@@ -14,6 +17,8 @@
 mod p_backends;
 #[path = "support/p_integrals.rs"]
 mod p_integrals;
+#[path = "support/p_library4.rs"]
+mod p_library4;
 #[path = "support/p_rustred.rs"]
 mod p_rustred;
 
@@ -23,6 +28,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use p_backends::values_agree;
+use p_library4::{
+    PLibraryRoute, built_in_p_library, engine_with_p_library, load_p_library_directory,
+    p_library_name, p_library_scope, regenerate_p_library, require_p_library_1_4,
+};
 use rustred::propagator::families::{P_FAMILIES_V1_JSON, PFamiliesFile};
 use rustred::propagator::library::{PBasis, PLibrary};
 use rustred::propagator::present::top_topology;
@@ -32,8 +41,7 @@ use rustred::propagator::{PTerminalId, p_versions};
 use rustred_app::propagator::loader::read_custom_payloads;
 use rustred_app::propagator::package::{assemble_p_package, p_library_differences};
 use rustred_app::propagator::{
-    AssembleOptions, CustomOwnerOptions, CustomPayloads, PLibraryOptions, PLibrarySource,
-    equivalent_p_libraries, load_p_library,
+    AssembleOptions, CustomOwnerOptions, CustomPayloads, PLibrarySource, equivalent_p_libraries,
 };
 use sha2::{Digest, Sha256};
 use symbolica::atom::{Atom, AtomCore};
@@ -47,8 +55,9 @@ fn data() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data")
 }
 
+/// The built-in library directory, `data/p/p-library-<a>-<b>`.
 fn shipped_directory() -> PathBuf {
-    data().join("p/p-library-1-3")
+    built_in_p_library()
 }
 
 fn shipped_source() -> PLibrarySource {
@@ -56,13 +65,7 @@ fn shipped_source() -> PLibrarySource {
 }
 
 fn shipped() -> Arc<PLibrary> {
-    load_p_library(
-        shipped_source(),
-        &PLibraryOptions {
-            verify_descent: false,
-        },
-    )
-    .unwrap()
+    load_p_library_directory(&shipped_directory())
 }
 
 fn json(path: &Path) -> serde_json::Value {
@@ -175,7 +178,7 @@ fn the_p_data_manifest_lists_the_shipped_library_files() {
     let library = json(&shipped_directory().join("library.json"));
     let expected = serde_json::json!({
         "schema": "vakint.p-data.v1",
-        "library": "p-library-1-3",
+        "library": p_library_name(&shipped_directory()),
         "identity": library["identity"],
         "versions": library["versions"],
         "files": files(&shipped_directory()).iter().map(|(path, bytes)| serde_json::json!({
@@ -197,8 +200,9 @@ fn the_p_data_manifest_lists_the_shipped_library_files() {
 #[test]
 fn p_library_versions_match_rustred() {
     let versions = p_versions();
+    let [start, end] = p_library_scope(&shipped_directory());
     let identity = format!(
-        "p-library:scope=1-3:{}",
+        "p-library:scope={start}-{end}:{}",
         (versions.iter())
             .map(|(name, value)| format!("{name}={value}"))
             .collect::<Vec<_>>()
@@ -223,12 +227,14 @@ fn p_library_versions_match_rustred() {
     assert_eq!(shipped().identity(), identity);
 }
 
-/// Every terminal of the shipped library maps onto `1`, `PMaster(no)` or
-/// `PMaster(t105)` through its basis layer, each of them reached, never a
-/// residual or another name.
+/// Every terminal of the shipped library maps onto `1` or a Forcer master
+/// through its basis layer, never a residual: the 1-3 library onto `1`,
+/// `PMaster(no)` and `PMaster(t105)`, each of them reached. vakint's own
+/// load check (masters it tabulates) accepts it.
 #[test]
 fn every_terminal_maps_onto_one_or_a_forcer_master() {
     let library = shipped();
+    engine_with_p_library(&shipped_directory(), PLibraryRoute::Injected);
     let map = library
         .basis_map()
         .expect("the shipped library has a basis layer");
@@ -244,34 +250,60 @@ fn every_terminal_maps_onto_one_or_a_forcer_master() {
             });
         }
     }
-    assert_eq!(bases, BTreeSet::from(["1", "no", "t105"].map(String::from)));
+    if p_library_scope(&shipped_directory()) == [1, 3] {
+        assert_eq!(bases, BTreeSet::from(["1", "no", "t105"].map(String::from)));
+    }
 }
 
 /// The shipped library is the program the current RustRed assembles
 /// (`assemble_p_package`: assembly and basis layer), compared structurally
-/// (`equivalent_p_libraries`), never by bytes: with the shipped Custom
-/// payloads, and with the Custom owners NO and t1star05 generated again.
+/// (`equivalent_p_libraries`), never by bytes: the regeneration check
+/// (`regenerate_p_library`: the descent certificate once, the stored LP of
+/// its Custom owners NO and t1star05 counted again, the assembly from its
+/// payloads), and with NO and t1star05 generated again.
 #[test]
 fn embedded_p_library_matches_current_rustred_assembly() {
+    let regeneration = regenerate_p_library(&shipped_directory(), 1);
+    println!("{regeneration:?}");
+    assert_eq!(
+        regeneration.owners.len(),
+        2,
+        "the Custom owners NO and t1star05"
+    );
+    assert!(
+        regeneration
+            .owners
+            .iter()
+            .all(|owner| owner.recounted.is_some())
+    );
     let families: PFamiliesFile = serde_json::from_str(P_FAMILIES_V1_JSON).unwrap();
-    let payloads = read_custom_payloads(&shipped_source()).unwrap();
-    assert_eq!(payloads.len(), 2, "the Custom owners NO and t1star05");
+    let options = AssembleOptions {
+        threads: 1,
+        verify_descent: false,
+    };
+    let generated = CustomPayloads::Generate(CustomOwnerOptions::default());
+    let [_, end] = p_library_scope(&shipped_directory());
+    let assembled = assemble_p_package(&families, end, generated, &options).unwrap();
     let shipped = shipped();
-    for custom in [
-        CustomPayloads::Provided(payloads),
-        CustomPayloads::Generate(CustomOwnerOptions::default()),
-    ] {
-        let options = AssembleOptions {
-            threads: 1,
-            verify_descent: false,
-        };
-        let assembled = assemble_p_package(&families, 3, custom, &options).unwrap();
-        assert!(
-            equivalent_p_libraries(&shipped, &assembled.library).unwrap(),
-            "{:?}",
-            p_library_differences(&shipped, &assembled.library).unwrap()
-        );
-    }
+    assert!(
+        equivalent_p_libraries(&shipped, &assembled.library).unwrap(),
+        "{:?}",
+        p_library_differences(&shipped, &assembled.library).unwrap()
+    );
+    assert_eq!(read_custom_payloads(&shipped_source()).unwrap().len(), 2);
+}
+
+/// The regeneration check of M3's scope 1-4 package (`VAKINT_TEST_P_LIBRARY_1_4`,
+/// from the PP-M3b pin on): the descent certificate once, the LP of its
+/// Custom owners of at most 9 lines counted again (every owner with
+/// `P_LP_RECOUNT_ALL=1`), the assembly from its payloads equal to it.
+#[test]
+#[ignore = "slow: the scope 1-4 certificate and assembly (about 10 min)"]
+fn the_one_to_four_library_regenerates_from_its_payloads() {
+    let directory = require_p_library_1_4("the_one_to_four_library_regenerates_from_its_payloads");
+    let regeneration = regenerate_p_library(&directory, 4);
+    println!("{regeneration:#?}");
+    assert_eq!(regeneration.scope, [1, 4]);
 }
 
 /// Graphica skew: `rustred_topology` run in vakint's build (gammaloop's
@@ -290,7 +322,8 @@ fn p_topology_keys_match_shipped_library() {
         .collect::<Vec<_>>();
     let library = shipped();
     let dag = library.topology().expect("the shipped library has its DAG");
-    assert_eq!(dag.nodes.len(), 43);
+    let counts = json(&shipped_directory().join("library.json"))["counts"].clone();
+    assert_eq!(serde_json::json!(dag.nodes.len()), counts["dag_nodes"]);
     assert_eq!(
         topologies_json(&reduction_graph(&roots, ChildMode::ForcerTree)),
         topologies_json(dag)
@@ -303,7 +336,11 @@ fn p_topology_keys_match_shipped_library() {
 #[test]
 fn a_library_of_another_version_fails_closed() {
     let root = external_data_root(true);
-    let library = root.path().join("p/p-library-1-3/library.json");
+    let library = root
+        .path()
+        .join("p")
+        .join(p_library_name(&shipped_directory()))
+        .join("library.json");
     let text = fs::read_to_string(&library).unwrap();
     let tampered = text.replacen(
         "\"P_CENSUS_VERSION\": \"1\"",
@@ -423,8 +460,9 @@ fn a_tensor_spectator_takes_one_numerator_path_with_both_p_backends() {
 /// The built-in program's step cache on disk: directory `p-library-1-3_...`
 /// (no `_injected`, at most 200 bytes); a read-write evaluation of a 2L and a
 /// 3L p-integral writes it, a fresh read-only engine replays both without a
-/// miss or an insert, and so does a fresh engine whose library comes from an
-/// external-data `p/` area of the same identity (same directory).
+/// miss or an insert, and so do fresh engines whose library of the same
+/// identity comes from an external-data `p/` area or is listed in a
+/// `p_integral/` area (M3-V8; same directory).
 #[test]
 fn the_built_in_step_cache_is_replayed_by_fresh_engines() {
     let directory = tempfile::tempdir().unwrap();
@@ -449,7 +487,8 @@ fn the_built_in_step_cache_is_replayed_by_fresh_engines() {
     let cache = cold.directory.clone().unwrap();
     let name = cache.file_name().unwrap().to_str().unwrap();
     assert!(
-        name.starts_with("p-library-1-3_") && !name.ends_with("_injected"),
+        name.starts_with(&format!("{}_", p_library_name(&shipped_directory())))
+            && !name.ends_with("_injected"),
         "{name}"
     );
     assert!(name.len() <= 200, "{} bytes", name.len());
@@ -460,9 +499,11 @@ fn the_built_in_step_cache_is_replayed_by_fresh_engines() {
     let root = external_data_root(true);
     let mut external = Vakint::new().unwrap();
     external.load_external_data(root.path(), 3).unwrap();
+    let listed = engine_with_p_library(&shipped_directory(), PLibraryRoute::Listed);
     for (engine, origin) in [
         (Vakint::new().unwrap(), "built-in"),
         (external, "external-data"),
+        (listed.engine, "external-data"),
     ] {
         let (replayed, warm) = run(&engine, &read_only);
         assert_eq!(replayed, values, "{origin}");

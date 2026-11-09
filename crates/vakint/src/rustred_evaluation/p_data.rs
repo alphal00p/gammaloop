@@ -7,9 +7,21 @@
 //! 1. a library injected into the engine ([`Vakint::inject_p_library`], tests
 //!    and callers that build their own program, e.g.
 //!    `rustred::propagator::testing::one_loop_reference_library()`);
-//! 2. the external data the engine loaded: `<root>/p/p-library-<a>-<b>/` under
-//!    the external-data root (the layout `rustred p-package` writes), so the
-//!    4L release of M3/M4 needs no new loader;
+//! 2. the external data the engine loaded: a hand-made
+//!    `<root>/p/p-library-<a>-<b>/` under the external-data root (the layout
+//!    `rustred p-package` writes; loaded with the descent certificate), else
+//!    the library the `p_integral/` area of vakint-external-data lists in
+//!    `p_integral/manifest.json` `libraries` (M3-V8; adoption, ignored entries
+//!    and errors in [`super::p_shipped_cache`]): its files are checked against
+//!    their listed sha256 and sizes, and it loads without the certificate like
+//!    the built-in library, the bytes pinned by the area manifest (whose own
+//!    sha256 the root manifest declares) and certified when `rustred
+//!    p-package` wrote them; the shipping tests run the certificate once per
+//!    library. A listed library supersedes the built-in one for every loop
+//!    count of its scope (one program per engine), said once on stderr when it
+//!    is loaded. The external-data root is found only through the vacuum loop
+//!    packs the engine loaded (`load_external_data` with at least one loop),
+//!    as for the shipped p cache; a p-only root is not discovered;
 //! 3. the built-in 1L-3L library embedded from `data/p/` (M2-V4):
 //!    `data/p/p-library-1-3/` is the directory `rustred p-package --max-loops 3`
 //!    writes, `data/p/manifest.json` (schema [`P_DATA_SCHEMA`]) lists its files
@@ -47,6 +59,7 @@ use symbolica::atom::Atom;
 use super::RustRedEvaluationError;
 use super::cache::OrderedCacheProgram;
 use super::data::{checked_bytes, vendored_files};
+use super::p_shipped_cache::{self, ListedLibrary};
 use crate::Vakint;
 use crate::p_integral::{P_FAMILIES, P_INTEGRAL_LOOP_COUNTS, masters, parts};
 
@@ -388,13 +401,26 @@ impl PLibraryHandle {
 /// A library directory under an external-data root.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PLibraryDirectory {
-    /// `<root>/p/p-library-<a>-<b>`.
+    /// `<root>/p/p-library-<a>-<b>` or `<root>/p_integral/p-library-<a>-<b>`.
     pub path: PathBuf,
     pub scope: RangeInclusive<u8>,
+    /// The `p_integral/manifest.json` entry of a listed library; `None` for a
+    /// `p/` directory.
+    pub listed: Option<Arc<ListedLibrary>>,
+}
+
+impl PLibraryDirectory {
+    fn listed(library: ListedLibrary) -> Self {
+        Self {
+            path: library.path.clone(),
+            scope: library.scope.clone(),
+            listed: Some(Arc::new(library)),
+        }
+    }
 }
 
 /// `a..=b` of a directory name `p-library-<a>-<b>`.
-fn directory_scope(name: &str) -> Option<RangeInclusive<u8>> {
+pub(crate) fn directory_scope(name: &str) -> Option<RangeInclusive<u8>> {
     let (start, end) = name
         .strip_prefix(P_LIBRARY_DIRECTORY_PREFIX)?
         .split_once('-')?;
@@ -452,6 +478,7 @@ pub(crate) fn resolve_directory(
         found.push(PLibraryDirectory {
             path: entry.path(),
             scope,
+            listed: None,
         });
     }
     found.sort_by(|a, b| a.path.cmp(&b.path));
@@ -474,23 +501,31 @@ pub(crate) fn resolve_directory(
 }
 
 /// Load a library directory through `rustred_app`'s fail-closed loader and
-/// check that its scope is the one its name declares.
+/// check that its scope is the one its name declares. A listed library
+/// (module documentation) is first checked file by file against its entry,
+/// loads without the descent certificate, must carry the identity its entry
+/// records, and says once on stderr that it supersedes the built-in library.
 pub(crate) fn load_directory(
     directory: &PLibraryDirectory,
 ) -> Result<Arc<PLibraryHandle>, RustRedEvaluationError> {
+    let located =
+        |error: &dyn fmt::Display| data_failure(format!("{}: {error}", directory.path.display()));
     if !directory.path.is_dir() {
         return Err(data_failure(format!(
             "missing library directory {}",
             directory.path.display()
         )));
     }
+    if let Some(listed) = &directory.listed {
+        p_shipped_cache::verify_listed_files(listed).map_err(|error| located(&error))?;
+    }
     let library = load_p_library(
         PLibrarySource::Directory(directory.path.clone()),
         &PLibraryOptions {
-            verify_descent: true,
+            verify_descent: directory.listed.is_none(),
         },
     )
-    .map_err(|error| data_failure(format!("{}: {error}", directory.path.display())))?;
+    .map_err(|error| located(&error))?;
     if library.scope() != directory.scope {
         return Err(data_failure(format!(
             "{} holds a library of scope {:?}",
@@ -498,7 +533,28 @@ pub(crate) fn load_directory(
             library.scope()
         )));
     }
-    PLibraryHandle::new(library, PLibraryOrigin::ExternalData).map(Arc::new)
+    if let Some(listed) = &directory.listed
+        && library.identity() != listed.identity
+    {
+        return Err(located(&format!(
+            "the library {:?} is not the one its entry records, {:?}",
+            library.identity(),
+            listed.identity
+        )));
+    }
+    let handle = PLibraryHandle::new(library, PLibraryOrigin::ExternalData).map(Arc::new)?;
+    if directory.listed.is_some()
+        && let Ok(Some((manifest, _))) = built_in_manifest()
+    {
+        eprintln!(
+            "vakint: the RustRed p library {} (listed in {}/manifest.json) supersedes the \
+             built-in {}",
+            directory.path.display(),
+            p_shipped_cache::AREA_DIRECTORY,
+            manifest.library
+        );
+    }
+    Ok(handle)
 }
 
 /// Libraries loaded from external-data directories, by directory: loaded once
@@ -667,7 +723,9 @@ fn built_in() -> Result<Option<Arc<PLibraryHandle>>, RustRedEvaluationError> {
 pub(crate) enum PDataPresence {
     None,
     Scope(RangeInclusive<u8>),
-    /// A `p/` area that cannot be resolved: p-integrals fail closed with its error.
+    /// A `p/` area that cannot be resolved, or a listed library of the supported
+    /// schema that cannot be used (`p_shipped_cache::listed_library`):
+    /// p-integrals fail closed with its error.
     Broken,
 }
 
@@ -696,6 +754,8 @@ impl Vakint {
         })
     }
 
+    /// The library directory of this engine's external data: a `p/` area,
+    /// else the library its `p_integral/` area lists.
     fn resolved_directory(&self) -> Result<Option<PLibraryDirectory>, RustRedEvaluationError> {
         let Some(root) = self.external_data_root() else {
             return Ok(None);
@@ -707,14 +767,14 @@ impl Vakint {
         {
             return Ok(Some(known.clone()));
         }
-        let resolved = resolve_directory(&root)?;
-        if let Some(directory) = &resolved {
+        if let Some(directory) = resolve_directory(&root)? {
             resolved_roots()
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
                 .insert(root, directory.clone());
+            return Ok(Some(directory));
         }
-        Ok(resolved)
+        Ok(p_shipped_cache::listed_library(&root)?.map(PLibraryDirectory::listed))
     }
 
     /// The scope of the library this engine would use, without loading it.
@@ -780,7 +840,7 @@ impl Vakint {
         }
         built_in()?.ok_or_else(|| RustRedEvaluationError::UnsupportedMatchedFamily {
             detail: "no RustRed p library is loaded (this build embeds no data/p; external data \
-                     provide p/p-library-<a>-<b>/)"
+                     provide p/p-library-<a>-<b>/ or list one in p_integral/manifest.json)"
                 .into(),
         })
     }
@@ -968,6 +1028,7 @@ mod tests {
         let gone = PLibraryDirectory {
             path: area.join("p-library-2-2"),
             scope: 2..=2,
+            listed: None,
         };
         assert!(matches!(
             load_directory(&gone),
@@ -996,18 +1057,25 @@ mod tests {
             fs::create_dir_all(target.parent().unwrap()).unwrap();
             fs::write(target, bytes).unwrap();
         }
+        let (manifest, scope) = built_in_manifest().unwrap().unwrap();
         let mut engine = Vakint::new().unwrap();
         engine.load_external_data(root.path(), 3).unwrap();
         assert_eq!(
             engine.external_data_root().unwrap(),
             root.path().canonicalize().unwrap()
         );
-        assert_eq!(engine.p_library_presence(), PDataPresence::Scope(1..=3));
+        assert_eq!(
+            engine.p_library_presence(),
+            PDataPresence::Scope(scope.clone())
+        );
         assert_eq!(engine.p_library().unwrap().origin, PLibraryOrigin::BuiltIn);
-        fs::create_dir_all(root.path().join("p/p-library-1-3")).unwrap();
+        fs::create_dir_all(root.path().join("p").join(&manifest.library)).unwrap();
         let mut engine = Vakint::new().unwrap();
         engine.load_external_data(root.path(), 3).unwrap();
-        assert_eq!(engine.p_library_presence(), PDataPresence::Scope(1..=3));
+        assert_eq!(
+            engine.p_library_presence(),
+            PDataPresence::Scope(scope.clone())
+        );
         assert!(matches!(
             engine.p_library(),
             Err(RustRedEvaluationError::ExternalData { .. })
@@ -1018,16 +1086,17 @@ mod tests {
     }
 
     /// The built-in library is the program `data/p/manifest.json` describes:
-    /// scope 1-3, its identity, origin `built-in`, the cache directory of an
-    /// external-data library of that identity.
+    /// the scope its directory names, its identity, origin `built-in`, the
+    /// cache directory of an external-data library of that identity.
     #[test]
     fn the_built_in_library_is_the_program_of_its_manifest() {
         let (manifest, scope) = built_in_manifest().unwrap().unwrap();
         assert_eq!(
-            (manifest.library.as_str(), scope),
-            ("p-library-1-3", &(1..=3))
+            manifest.library,
+            format!("p-library-{}-{}", scope.start(), scope.end())
         );
         let handle = built_in().unwrap().unwrap();
+        assert_eq!(handle.scope(), *scope);
         assert_eq!(handle.origin, PLibraryOrigin::BuiltIn);
         assert_eq!(handle.library.identity(), manifest.identity);
         assert_eq!(
@@ -1045,7 +1114,7 @@ mod tests {
     /// library agree: the same names and loop counts in the same order; every
     /// RustRed top passes vakint's top check (vakint's canonical lines as line
     /// slots, ISPs after); the shipped families file is RustRed's restricted to
-    /// one to three loops; the built-in library has a checked top for every
+    /// the library's scope; the built-in library has a checked top for every
     /// vakint family of its scope.
     #[test]
     fn p_families_match_library() {
@@ -1065,14 +1134,15 @@ mod tests {
             check_top_presentation(&entry.presentation(id, &context).unwrap(), id, family)
                 .unwrap_or_else(|error| panic!("{}: {error}", family.name));
         }
+        let (manifest, scope) = built_in_manifest().unwrap().unwrap();
         let shipped: PFamiliesFile = serde_json::from_slice(
-            embedded_p_file("p-library-1-3/families/p-families.json").unwrap(),
+            embedded_p_file(&format!("{}/families/p-families.json", manifest.library)).unwrap(),
         )
         .unwrap();
         assert_eq!(
             shipped.families,
             (rustred.families.iter())
-                .filter(|entry| entry.loops <= 3)
+                .filter(|entry| scope.contains(&entry.loops))
                 .cloned()
                 .collect::<Vec<_>>()
         );
@@ -1080,7 +1150,7 @@ mod tests {
         for (index, family) in P_FAMILIES.iter().enumerate() {
             assert_eq!(
                 handle.top(index).is_ok(),
-                family.loops <= 3,
+                u8::try_from(family.loops).is_ok_and(|loops| scope.contains(&loops)),
                 "{}",
                 family.name
             );
@@ -1120,6 +1190,209 @@ mod tests {
         ] {
             let error = tampered(change);
             assert!(error.contains(message), "{error}");
+        }
+    }
+
+    /// An external-data root: vakint's vendored vacuum data without the `p/`
+    /// area, and a `p_integral/` area whose manifest lists the built-in
+    /// library (as `tools/p_integral_area.py stage-library` writes it).
+    /// `edit` changes the area manifest before the root key records its
+    /// sha256.
+    fn listed_root(edit: impl FnOnce(&mut serde_json::Value)) -> tempfile::TempDir {
+        use sha2::{Digest, Sha256};
+        let (manifest, scope) = built_in_manifest().unwrap().unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let area = root.path().join(p_shipped_cache::AREA_DIRECTORY);
+        let library = format!("p/{}/", manifest.library);
+        for (path, bytes) in vendored_files() {
+            let target = match path.strip_prefix(library.as_str()) {
+                Some(name) => area.join(&manifest.library).join(name),
+                None if path.starts_with("p/") => continue,
+                None => root.path().join(path),
+            };
+            fs::create_dir_all(target.parent().unwrap()).unwrap();
+            fs::write(target, bytes).unwrap();
+        }
+        let files: serde_json::Map<String, serde_json::Value> = (manifest.files.iter())
+            .map(|file| {
+                let digest = serde_json::json!({"sha256": file.sha256, "bytes": file.bytes});
+                (file.path.clone(), digest)
+            })
+            .collect();
+        let mut listing = serde_json::json!({
+            "schema": p_shipped_cache::AREA_SCHEMA,
+            "libraries": [{
+                "directory": manifest.library,
+                "schema": rustred::propagator::P_LIBRARY_SCHEMA,
+                "scope": [scope.start(), scope.end()],
+                "identity": manifest.identity,
+                "files": files,
+            }],
+            "files": {},
+        });
+        edit(&mut listing);
+        let bytes = serde_json::to_vec_pretty(&listing).unwrap();
+        fs::write(area.join(P_DATA_MANIFEST), &bytes).unwrap();
+        let release_path = root.path().join("manifest.json");
+        let mut release: serde_json::Value =
+            serde_json::from_slice(&fs::read(&release_path).unwrap()).unwrap();
+        release["p_integral"] = serde_json::json!({
+            "manifest": "p_integral/manifest.json",
+            "manifest_sha256": format!("{:x}", Sha256::digest(&bytes)),
+        });
+        fs::write(&release_path, serde_json::to_vec_pretty(&release).unwrap()).unwrap();
+        root
+    }
+
+    /// The listed-library resolver (M3-V8), one row per case: the stderr
+    /// notes of the area, what the engine's presence says and which library
+    /// it uses. Only a listed library of the supported schema is adopted, in
+    /// place of the built-in one (whose shipped-cache lookup stays silent);
+    /// unlisted, unknown, future-schema and future-area libraries are ignored
+    /// with one note each (the engine keeps the built-in library); a listed
+    /// supported library that fails verification is an error, never a
+    /// fallback.
+    #[test]
+    fn the_listed_library_resolver_adopts_ignores_and_refuses() {
+        let (manifest, scope) = built_in_manifest().unwrap().unwrap();
+        let library = manifest.library.clone();
+        enum Uses {
+            Listed,
+            BuiltIn,
+            /// Presence names the listed scope; loading fails with this text.
+            FailsToLoad(&'static str),
+            /// Presence is `Broken`; every p-integral fails with this text.
+            Broken(&'static str),
+        }
+        type Edit = Box<dyn Fn(&mut serde_json::Value)>;
+        type After = Box<dyn Fn(&Path)>;
+        let schema = |value: &'static str| -> Edit {
+            Box::new(move |area| area["libraries"][0]["schema"] = value.into())
+        };
+        let nothing = || -> After { Box::new(|_| {}) };
+        let directory = library.clone();
+        let cases: Vec<(&str, Edit, After, &[&str], Uses)> = vec![
+            ("listed", Box::new(|_| {}), nothing(), &[], Uses::Listed),
+            (
+                "M2 area: nothing listed",
+                Box::new(|area| area["libraries"] = serde_json::json!([])),
+                Box::new(move |root| {
+                    fs::remove_dir_all(root.join("p_integral").join(&directory)).unwrap()
+                }),
+                &[],
+                Uses::BuiltIn,
+            ),
+            (
+                "unlisted",
+                Box::new(|area| area["libraries"] = serde_json::json!([])),
+                nothing(),
+                &["is not listed in p_integral/manifest.json"],
+                Uses::BuiltIn,
+            ),
+            (
+                "unknown schema",
+                schema("acme.p-library.v1"),
+                nothing(),
+                &["the library schema Some(\"acme.p-library.v1\")"],
+                Uses::BuiltIn,
+            ),
+            (
+                "future library schema",
+                schema("rustred.p-owner-library.v2"),
+                nothing(),
+                &["the library schema Some(\"rustred.p-owner-library.v2\")"],
+                Uses::BuiltIn,
+            ),
+            (
+                "future area schema",
+                Box::new(|area| area["schema"] = "vakint.external-data.p-integral.v2".into()),
+                nothing(),
+                &["has the schema Some(\"vakint.external-data.p-integral.v2\")"],
+                Uses::BuiltIn,
+            ),
+            (
+                "broken: a file differs from its entry",
+                Box::new(|_| {}),
+                Box::new(move |root| {
+                    let file = root.join("p_integral").join(&library).join("census.json");
+                    let mut bytes = fs::read(&file).unwrap();
+                    bytes.push(b' ');
+                    fs::write(file, bytes).unwrap();
+                }),
+                &[],
+                Uses::FailsToLoad("census.json does not match its sha256 and size"),
+            ),
+            (
+                "broken: the area manifest is not the root key's",
+                Box::new(|_| {}),
+                Box::new(|root| {
+                    let file = root.join("p_integral/manifest.json");
+                    let mut bytes = fs::read(&file).unwrap();
+                    bytes.push(b'\n');
+                    fs::write(file, bytes).unwrap();
+                }),
+                &[],
+                Uses::Broken("does not match the root manifest's sha256"),
+            ),
+            (
+                "broken: the scope is not the directory's",
+                Box::new(|area| area["libraries"][0]["scope"] = serde_json::json!([1, 4])),
+                nothing(),
+                &[],
+                Uses::Broken("does not declare the scope [1, 4]"),
+            ),
+        ];
+        for (name, edit, after, notes, uses) in cases {
+            let root = listed_root(edit);
+            after(root.path());
+            let release: serde_json::Value =
+                serde_json::from_slice(&fs::read(root.path().join("manifest.json")).unwrap())
+                    .unwrap();
+            let declared = release["p_integral"]["manifest_sha256"].as_str().unwrap();
+            let resolution = p_shipped_cache::resolve_listed(root.path(), declared).unwrap();
+            assert_eq!(
+                resolution.notes.len(),
+                notes.len(),
+                "{name}: {resolution:?}"
+            );
+            for (note, expected) in resolution.notes.iter().zip(notes) {
+                assert!(note.contains(expected), "{name}: {note}");
+            }
+            let mut engine = Vakint::new().unwrap();
+            engine.load_external_data(root.path(), 1).unwrap();
+            let presence = engine.p_library_presence();
+            let loaded = engine.p_library();
+            match uses {
+                Uses::Listed => {
+                    assert_eq!(presence, PDataPresence::Scope(scope.clone()), "{name}");
+                    let handle = loaded.unwrap();
+                    assert_eq!(handle.origin, PLibraryOrigin::ExternalData, "{name}");
+                    assert_eq!(handle.library.identity(), manifest.identity, "{name}");
+                    let path = engine.resolved_directory().unwrap().unwrap().path;
+                    assert!(
+                        path.starts_with(root.path().canonicalize().unwrap().join("p_integral"))
+                    );
+                    let data = engine.rustred_data().unwrap();
+                    assert!(matches!(
+                        p_shipped_cache::resolve(&data, &handle.cache).unwrap(),
+                        super::super::shipped_cache::ShippedOrderedCache::None
+                    ));
+                }
+                Uses::BuiltIn => {
+                    assert_eq!(presence, PDataPresence::Scope(scope.clone()), "{name}");
+                    assert_eq!(loaded.unwrap().origin, PLibraryOrigin::BuiltIn, "{name}");
+                }
+                Uses::FailsToLoad(text) => {
+                    assert_eq!(presence, PDataPresence::Scope(scope.clone()), "{name}");
+                    let error = loaded.unwrap_err().to_string();
+                    assert!(error.contains(text), "{name}: {error}");
+                }
+                Uses::Broken(text) => {
+                    assert_eq!(presence, PDataPresence::Broken, "{name}");
+                    let error = loaded.unwrap_err().to_string();
+                    assert!(error.contains(text), "{name}: {error}");
+                }
+            }
         }
     }
 }
