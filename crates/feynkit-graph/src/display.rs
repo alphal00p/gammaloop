@@ -185,12 +185,15 @@ impl FeynmanDiagram {
                 .collect::<String>();
             writeln!(
                 output,
-                "    edge({endpoint_spec}, id: {}, orientation: {orientation:?}, particle: {}, pdg: {}, directed: {}, numerator: {}, inspection: (edge: {edge_id}, source: {}, sink: {}), momentum: {}, momentum-signature: (loops: ({loops}), external: ({external})){external_metadata}{cut_metadata})",
+                "    edge({endpoint_spec}, id: {}, orientation: {orientation:?}, particle: {}, pdg: {}, directed: {}, numerator: {}, propagator-power: {}, lmb-id: {}, inspection: (edge: {edge_id}, source: {}, sink: {}), momentum: {}, momentum-signature: (loops: ({loops}), external: ({external})){external_metadata}{cut_metadata})",
                 id.0,
                 typst_string(&particle.name),
                 particle.pdg_code,
                 edge.directed,
                 typst_string(&crate::NumeratorInterface::export(&edge.numerator).0.to_canonical_string()),
+                edge.propagator_power,
+                basis.loop_edges.iter().position(|candidate| *candidate == id)
+                    .map(|slot| slot.to_string()).unwrap_or_else(|| "none".into()),
                 endpoints.source.map(|vertex| vertex.0.to_string()).unwrap_or_else(|| "none".to_owned()),
                 endpoints.target.map(|vertex| vertex.0.to_string()).unwrap_or_else(|| "none".to_owned()),
                 typst_string(&momentum.format_momentum()),
@@ -201,11 +204,12 @@ impl FeynmanDiagram {
 
         writeln!(
             output,
-            "  }}, name: {}, data: (symmetry-factor: {}, overall-factor: {}, numerator: {}, loop-count: {}))",
+            "  }}, name: {}, data: (symmetry-factor: {}, overall-factor: {}, numerator: {}, numerator-prefactor: {}, loop-count: {}))",
             typst_string(self.name()),
             self.symmetry_factor(),
             typst_string(&self.overall_factor().to_canonical_string()),
             typst_string(&crate::NumeratorInterface::export(self.numerator()).0.to_canonical_string()),
+            typst_string(&crate::NumeratorInterface::export(self.numerator_prefactor()).0.to_canonical_string()),
             self.loop_count(),
         )
         .expect("writing to a string cannot fail");
