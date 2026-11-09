@@ -9,6 +9,11 @@
 //!
 //! Files:
 //! - `p{1,2,3,4}l_battery.json`: the M1 batteries (hand-picked cases);
+//!   `p4l_battery.json` extended by M3-V7 to all eleven four-loop families,
+//!   with the depth of every case ([`CaseDepth`]), its value at
+//!   [`I7_TERMS`] Laurent terms ([`ForcerCase::eleven_terms`]), M2's
+//!   three-loop `Oep` boundary ([`ForcerFixture::boundary`]) and Forcer's
+//!   whole-family blind spots ([`ForcerFixture::forcer_blind`]);
 //! - `p{1,2,3}l_grid.json`: [`grid_cases`], the benchmark cells
 //!   (`tests/fixtures/benchmark_p_integrals.json`), every non-scaleless
 //!   labelled sector of the registry families at rank 0 and 2, and dotted
@@ -18,7 +23,13 @@
 //! - `p4l_anchors.json`: [`anchor_cases_4l`], the four-loop master anchors of
 //!   the M3 plan (D-M3-5): every master integral of Forcer's four-loop basis
 //!   at its Forcer definition (source line in `definition`), the ladder
-//!   `la4_top`, and the `no3` and `bubu` tops.
+//!   `la4_top`, and the `no3` and `bubu` tops;
+//! - `p4l_grid.json`: [`grid_cases_4l`], the 165 four-loop benchmark tops and
+//!   a seeded sample of labelled sectors, each with its depth.
+//!
+//! The depths and the finalized values are derived from the frozen outputs
+//! by the shared p-finalizer ([`ForcerCase::finalized_at`], `Symbolic` mode,
+//! [`finalize_settings`]); no FORM runs for them.
 //!
 //! This module is public for the integration tests only; it is not part of
 //! vakint's API.
@@ -26,12 +37,13 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use serde::{Deserialize, Serialize};
-use symbolica::atom::{Atom, Symbol};
+use symbolica::atom::{Atom, AtomCore, Symbol};
 
 use super::{ForcerInput, combine_parts, forcer_input, run_forcer};
 use crate::p_integral::{FORCER_UPSTREAM_COMMIT, P_FAMILIES, PFamilyData, ReducedPropagatorValue};
+use crate::rustred_evaluation::RustRedMasterMode;
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
-use crate::{Vakint, VakintError, VakintSettings};
+use crate::{LoopNormalizationFactor, Vakint, VakintError, VakintSettings};
 
 fn malformed(detail: impl std::fmt::Display) -> VakintError {
     VakintError::InvalidGenericExpression(format!("Forcer fixture: {detail}"))
@@ -49,6 +61,92 @@ pub struct ForcerFixture {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run: Option<ForcerRun>,
     pub cases: Vec<ForcerCase>,
+    /// Cases of another loop count frozen with this file: in
+    /// `p4l_battery.json`, M2's three-loop `Oep` boundary (the `P3L_NO` top,
+    /// D-S2-2) with its value at [`I7_TERMS`] terms (I-7).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub boundary: Vec<ForcerCase>,
+    /// The nodes Forcer cannot check whole-family (M3 plan section 2 item 4)
+    /// and the cases of this file it does run for their masters.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub forcer_blind: Vec<ForcerBlind>,
+}
+
+/// A Forcer blind spot: a four-loop node whose whole-family comparison with
+/// Forcer fails, and the per-integral cases Forcer runs for its master.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct ForcerBlind {
+    /// The cascade node (`rules_study/targets.tsv`).
+    pub node: String,
+    /// Its Forcer master, `Master(master)`.
+    pub master: String,
+    /// What fails whole-family, and the source of that measurement.
+    pub whole_family: String,
+    /// Cases of the file whose Forcer output carries `Master(master)`.
+    pub per_integral: Vec<String>,
+}
+
+/// Laurent terms of the I-7 values (M3, D-S2-2): `ε^-4..ε^6` at four loops,
+/// `ε^-3..ε^7` at three.
+pub const I7_TERMS: i64 = 11;
+
+/// The most Laurent terms a depth is probed at: `ε^-4..ε^11` at four loops,
+/// beyond every tabulated master order (`Masters.prc` stops at `ε^9`).
+pub const DEPTH_CAP_TERMS: i64 = 16;
+
+/// The settings of the frozen finalized values: the G-scheme, dot-product
+/// notation, 40 digits, vakint's default symbols and `terms` Laurent terms.
+pub fn finalize_settings(terms: i64) -> VakintSettings {
+    VakintSettings {
+        integral_normalization_factor: LoopNormalizationFactor::GScheme,
+        number_of_terms_in_epsilon_expansion: terms,
+        use_dot_product_notation: true,
+        run_time_decimal_precision: 40,
+        ..VakintSettings::default()
+    }
+}
+
+/// A master whose unknown Laurent tail reaches a finalized value (one entry
+/// of `VakintError::MissingMasterOrders`).
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct MissingOrder {
+    /// The master as the `Oep` guard names it (`PMaster(name)`).
+    pub master: String,
+    /// Its first Laurent order that `Masters.prc` does not give (`ALARM`).
+    pub first_missing_order: i64,
+    /// The lowest order of the result that this tail affects.
+    pub first_affected_result_order: i64,
+}
+
+/// A frozen value finalized at a Laurent depth in `Symbolic` mode
+/// ([`ForcerCase::finalized_at`]).
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Finalized {
+    /// The value's Laurent coefficients at unit scale
+    /// ([`ForcerCase::unit_scale_coefficients`]).
+    Symbolic(Vec<String>),
+    /// The depth needs master orders that are unknown: an `Oep` case, an
+    /// expected `VakintError::MissingMasterOrders`.
+    MissingMasterOrders(Vec<MissingOrder>),
+}
+
+/// The deepest Laurent depth at which a frozen value finalizes (M3 plan G7:
+/// "through the deepest order Forcer finalizes per case").
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct CaseDepth {
+    /// `number_of_terms_in_epsilon_expansion` (from `ε^-L`), at most
+    /// [`DEPTH_CAP_TERMS`].
+    pub terms: i64,
+    /// The highest order of the value, `ε^(terms-L-1)`.
+    pub order: i64,
+    /// The masters whose unknown orders stop one term more; empty when
+    /// `terms` is the cap.
+    pub limit: Vec<MissingOrder>,
+    /// The `Symbolic` value at `terms` ([`finalize_settings`]): its Laurent
+    /// coefficients `ε^-L..ε^order` at unit scale
+    /// ([`ForcerCase::unit_scale_coefficients`]).
+    pub symbolic: Vec<String>,
 }
 
 /// The run that wrote a fixture's outputs.
@@ -84,6 +182,14 @@ pub struct ForcerCase {
     /// the crate) and how the input realizes it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub definition: Option<String>,
+    /// The deepest depth the frozen value finalizes at (M3 fixtures).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub depth: Option<CaseDepth>,
+    /// The frozen value finalized at [`I7_TERMS`] terms (I-7): Forcer's
+    /// `Symbolic` value, or the expected `MissingMasterOrders` of an `Oep`
+    /// case.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub eleven_terms: Option<Finalized>,
 }
 
 impl ForcerFixture {
@@ -112,18 +218,26 @@ impl ForcerFixture {
             provenance: Some(provenance.into()),
             run: None,
             cases,
+            boundary: Vec::new(),
+            forcer_blind: Vec::new(),
         }
     }
 
-    /// The cases with their outputs removed, to compare with a definition.
+    /// The cases with their outputs (and the values derived from them)
+    /// removed, to compare with a definition.
     pub fn definitions(&self) -> Vec<ForcerCase> {
-        self.cases
-            .iter()
-            .map(|case| ForcerCase {
-                outputs: Vec::new(),
-                ..case.clone()
-            })
-            .collect()
+        self.cases.iter().map(ForcerCase::definition).collect()
+    }
+
+    /// The fixture as a definition, ready for [`Self::write_outputs_with`]:
+    /// every case and boundary case without outputs, no FORM version, no
+    /// run, the provenance `provenance`; the blind spots are kept.
+    pub fn unwritten_like(&self, provenance: &str) -> Self {
+        ForcerFixture {
+            boundary: self.boundary.iter().map(ForcerCase::definition).collect(),
+            forcer_blind: self.forcer_blind.clone(),
+            ..Self::unwritten(provenance, self.definitions())
+        }
     }
 
     /// Run Forcer (FORM 5 at `form`, one worker per FORM process) on every
@@ -150,6 +264,7 @@ impl ForcerFixture {
         let programs = self
             .cases
             .iter()
+            .chain(&self.boundary)
             .map(ForcerCase::input)
             .collect::<Result<Vec<_>, _>>()?;
         let settings = VakintSettings {
@@ -205,7 +320,7 @@ impl ForcerFixture {
                 }
             }
         });
-        for (case, output) in self.cases.iter_mut().zip(outputs) {
+        for (case, output) in self.cases.iter_mut().chain(&mut self.boundary).zip(outputs) {
             case.outputs = output
                 .expect("every case ran")
                 .map_err(|error| malformed(format!("{}: {error}", case.name)))?;
@@ -217,6 +332,60 @@ impl ForcerFixture {
             jobs: jobs.max(1),
             seconds: started.elapsed().as_secs_f64().round() as u64,
         });
+        Ok(())
+    }
+
+    /// Store the depth ([`ForcerCase::deepest`]) of every case and boundary
+    /// case and, with `eleven`, its value at [`I7_TERMS`] terms, from the
+    /// frozen outputs (no FORM), finalizing on `workers` threads.
+    pub fn write_depths(&mut self, eleven: bool, workers: usize) -> Result<(), VakintError> {
+        let next = AtomicUsize::new(0);
+        let cases = self
+            .cases
+            .iter()
+            .chain(&self.boundary)
+            .cloned()
+            .collect::<Vec<_>>();
+        let derive = |case: &ForcerCase| -> Result<_, VakintError> {
+            let depth = case.deepest()?;
+            let at_eleven = if !eleven {
+                None
+            } else if depth.terms == I7_TERMS {
+                Some(Finalized::Symbolic(depth.symbolic.clone()))
+            } else {
+                Some(case.finalized_at(I7_TERMS)?)
+            };
+            Ok((depth, at_eleven))
+        };
+        let mut derived = (0..cases.len()).map(|_| None).collect::<Vec<_>>();
+        std::thread::scope(|scope| {
+            let threads = (0..workers.max(1))
+                .map(|_| {
+                    scope.spawn(|| {
+                        let mut done = Vec::new();
+                        loop {
+                            let index = next.fetch_add(1, Ordering::Relaxed);
+                            let Some(case) = cases.get(index) else {
+                                return done;
+                            };
+                            done.push((index, derive(case)));
+                        }
+                    })
+                })
+                .collect::<Vec<_>>();
+            for thread in threads {
+                for (index, result) in thread.join().expect("depth worker") {
+                    derived[index] = Some(result);
+                }
+            }
+        });
+        for (case, result) in self.cases.iter_mut().chain(&mut self.boundary).zip(derived) {
+            let (depth, at_eleven) = result
+                .expect("every case finalized")
+                .map_err(|error| malformed(format!("{}: {error}", case.name)))?;
+            case.depth = Some(depth);
+            case.eleven_terms = at_eleven;
+        }
         Ok(())
     }
 
@@ -268,6 +437,18 @@ impl ForcerCase {
             outputs: Vec::new(),
             master: None,
             definition: None,
+            depth: None,
+            eleven_terms: None,
+        }
+    }
+
+    /// The case without its outputs and the values derived from them.
+    pub fn definition(&self) -> Self {
+        ForcerCase {
+            outputs: Vec::new(),
+            depth: None,
+            eleven_terms: None,
+            ..self.clone()
         }
     }
 
@@ -338,7 +519,7 @@ impl ForcerCase {
     pub fn finalized(
         &self,
         settings: &VakintSettings,
-        mode: crate::rustred_evaluation::RustRedMasterMode,
+        mode: RustRedMasterMode,
     ) -> Result<Atom, VakintError> {
         let values = self.frozen(vk_symbol!(&settings.epsilon_symbol))?;
         crate::p_integral::finalize::finalize(
@@ -349,6 +530,131 @@ impl ForcerCase {
             mode,
             "Forcer",
         )
+    }
+
+    /// The Laurent coefficients `ε^-L..ε^(terms-L-1)` of `value`, a value of
+    /// this case finalized at `terms` terms with [`finalize_settings`], at
+    /// unit scale: `Q² = μ² = 1` (`dot(p,p) = -1`, `mursq = 1`, so every
+    /// logarithm of the scale vanishes), each in Symbolica's canonical text.
+    /// The scale dependence is fixed by dimensional analysis; this is what the
+    /// numerical comparisons evaluate (`tests/support/p_backends.rs`).
+    pub fn unit_scale_coefficients(
+        &self,
+        value: &Atom,
+        terms: i64,
+    ) -> Result<Vec<String>, VakintError> {
+        let settings = finalize_settings(terms);
+        let loops = self.loops()? as i64;
+        let (head, _) = crate::p_integral::external_head(&parse(&self.external)?)?;
+        let e = Atom::var(vk_symbol!(&settings.epsilon_symbol));
+        let shifted = (value
+            .replace(Atom::var(vk_symbol!(&settings.mu_r_sq_symbol)).to_pattern())
+            .with(Atom::num(1).to_pattern())
+            .replace(crate::symbols::S.dot.call((&head, &head)).to_pattern())
+            .with(Atom::num(-1).to_pattern())
+            .replace(Symbol::LOG.call(Atom::num(1)).to_pattern())
+            .with(Atom::Zero.to_pattern())
+            * e.pow(Atom::num(loops)))
+        .expand();
+        let mut coefficients = vec![Atom::Zero; terms as usize];
+        for (monomial, coefficient) in shifted.coefficient_list::<i8>(std::slice::from_ref(&e)) {
+            let power = match monomial.as_view() {
+                _ if monomial == Atom::num(1) => 0,
+                _ if monomial == e => 1,
+                symbolica::atom::AtomView::Pow(power) => {
+                    crate::get_integer_from_atom(power.get_base_exp().1).unwrap_or(-1)
+                }
+                _ => -1,
+            };
+            let slot = usize::try_from(power)
+                .ok()
+                .and_then(|power| coefficients.get_mut(power))
+                .ok_or_else(|| {
+                    malformed(format!(
+                        "{}: ε monomial {monomial} at unit scale",
+                        self.name
+                    ))
+                })?;
+            *slot = coefficient.expand();
+        }
+        if let Some(scale) = coefficients
+            .iter()
+            .find(|coefficient| coefficient.to_string().contains("log("))
+        {
+            return Err(malformed(format!(
+                "{}: a scale logarithm at unit scale: {scale}",
+                self.name
+            )));
+        }
+        Ok(coefficients
+            .iter()
+            .map(AtomCore::to_canonical_string)
+            .collect())
+    }
+
+    /// The frozen value finalized at `terms` Laurent terms in `Symbolic` mode
+    /// with [`finalize_settings`], as unit-scale Laurent coefficients; a
+    /// missing master order is a value too.
+    pub fn finalized_at(&self, terms: i64) -> Result<Finalized, VakintError> {
+        match self.finalized(&finalize_settings(terms), RustRedMasterMode::Symbolic) {
+            Ok(value) => Ok(Finalized::Symbolic(
+                self.unit_scale_coefficients(&value, terms)?,
+            )),
+            Err(VakintError::MissingMasterOrders(missing)) => Ok(Finalized::MissingMasterOrders(
+                missing
+                    .masters
+                    .iter()
+                    .map(|master| MissingOrder {
+                        master: master.master.clone(),
+                        first_missing_order: master.first_missing_order,
+                        first_affected_result_order: master.first_affected_result_order,
+                    })
+                    .collect(),
+            )),
+            Err(error) => Err(error),
+        }
+    }
+
+    /// The deepest depth at which the frozen value finalizes, at most
+    /// [`DEPTH_CAP_TERMS`]: the cap, or one order below the lowest result
+    /// order an unknown master tail affects at the cap.
+    pub fn deepest(&self) -> Result<CaseDepth, VakintError> {
+        let loops = self.loops()? as i64;
+        let (terms, limit) = match self.finalized_at(DEPTH_CAP_TERMS)? {
+            Finalized::Symbolic(symbolic) => {
+                return Ok(CaseDepth {
+                    terms: DEPTH_CAP_TERMS,
+                    order: DEPTH_CAP_TERMS - loops - 1,
+                    limit: Vec::new(),
+                    symbolic,
+                });
+            }
+            Finalized::MissingMasterOrders(missing) => {
+                let first = missing
+                    .iter()
+                    .map(|master| master.first_affected_result_order)
+                    .min()
+                    .ok_or_else(|| malformed(format!("{}: no missing master", self.name)))?;
+                let limit = missing
+                    .into_iter()
+                    .filter(|master| master.first_affected_result_order == first)
+                    .collect();
+                // Through ε^(first-1): terms - L - 1 = first - 1.
+                (first + loops, limit)
+            }
+        };
+        match self.finalized_at(terms)? {
+            Finalized::Symbolic(symbolic) if terms > 0 => Ok(CaseDepth {
+                terms,
+                order: terms - loops - 1,
+                limit,
+                symbolic,
+            }),
+            other => Err(malformed(format!(
+                "{}: does not finalize at {terms} terms: {other:?}",
+                self.name
+            ))),
+        }
     }
 
     /// The case as a vakint input, `(numerator)*topo(NAME(external, powers...))`.
@@ -495,22 +801,7 @@ const DOTTED_SECTORS: [(usize, usize); 2] = [(2, 8), (3, 22)];
 ///   3L: 22, 30 in all) with every second positive line, starting with the
 ///   first or the second, at power 2.
 pub fn grid_cases(loops: usize, benchmark: &str) -> Result<Vec<ForcerCase>, VakintError> {
-    let mut cases = Vec::new();
-    for cell in BenchmarkInputs::parse(benchmark)?
-        .cells
-        .iter()
-        .filter(|cell| cell.loops == loops)
-    {
-        for top in &cell.tops {
-            cases.push(ForcerCase::new(
-                format!("bench_{}_{}", cell.name, top.family),
-                &top.family,
-                top.powers.clone(),
-                &cell.numerator,
-                "p(1)",
-            ));
-        }
-    }
+    let mut cases = benchmark_tops(loops, benchmark)?;
     let rank_two = rank_two_numerators(loops);
     let mut sectors = Vec::new();
     for family in P_FAMILIES.iter().filter(|family| family.loops == loops) {
@@ -560,6 +851,142 @@ pub fn grid_cases(loops: usize, benchmark: &str) -> Result<Vec<ForcerCase>, Vaki
     }
     Ok(cases)
 }
+
+/// `bench_<cell>_<family>`: every top of every benchmark cell of `loops`
+/// loops (`benchmark` is the text of `benchmark_p_integrals.json`).
+fn benchmark_tops(loops: usize, benchmark: &str) -> Result<Vec<ForcerCase>, VakintError> {
+    let mut cases = Vec::new();
+    for cell in BenchmarkInputs::parse(benchmark)?
+        .cells
+        .iter()
+        .filter(|cell| cell.loops == loops)
+    {
+        for top in &cell.tops {
+            cases.push(ForcerCase::new(
+                format!("bench_{}_{}", cell.name, top.family),
+                &top.family,
+                top.powers.clone(),
+                &cell.numerator,
+                "p(1)",
+            ));
+        }
+    }
+    Ok(cases)
+}
+
+/// The seed of the sampled sectors of `p4l_grid.json` ([`grid_cases_4l`]).
+pub const GRID4_SEED: u64 = 20_261_109;
+
+/// SplitMix64: the reproducible draw of [`grid_cases_4l`].
+struct SplitMix64(u64);
+
+impl SplitMix64 {
+    fn below(&mut self, bound: usize) -> usize {
+        self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        let mut z = self.0;
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        ((z ^ (z >> 31)) % bound as u64) as usize
+    }
+}
+
+/// The cases of `p4l_grid.json`, without outputs (M3-V7; not all 3,606
+/// labelled four-loop sectors, which would take hours of FORM):
+/// - `bench_<cell>_<family>`: the 165 tops of the 15 four-loop benchmark
+///   cells;
+/// - per four-loop family, three distinct non-scaleless labelled sectors
+///   other than the top, drawn with [`GRID4_SEED`] (SplitMix64 seeded with
+///   the seed plus the family's index among the four-loop families):
+///   `sector_<family>_<lines>_r0` and `_r2` for the first two (numerator 1
+///   and a drawn rank-2 numerator, shifted by [`RANK_TWO_STEPS_4L`] where it
+///   would give an exact 0), and `dotted_<family>_<lines>` for the third,
+///   every second positive line from the first at power 2.
+pub fn grid_cases_4l(benchmark: &str) -> Result<Vec<ForcerCase>, VakintError> {
+    let mut cases = benchmark_tops(4, benchmark)?;
+    let rank_two = rank_two_numerators(4);
+    for (index, family) in P_FAMILIES
+        .iter()
+        .filter(|family| family.loops == 4)
+        .enumerate()
+    {
+        let sectors = nonzero_sectors(family.name)?
+            .into_iter()
+            .filter(|powers| powers.contains(&0))
+            .collect::<Vec<_>>();
+        let mut draw = SplitMix64(GRID4_SEED + index as u64);
+        let mut picked = Vec::<usize>::new();
+        while picked.len() < 3 {
+            let sector = draw.below(sectors.len());
+            if !picked.contains(&sector) {
+                picked.push(sector);
+            }
+        }
+        for &sector in &picked[..2] {
+            let powers = &sectors[sector];
+            let label = format!("sector_{}_{}", family.name, power_label(powers));
+            let step = RANK_TWO_STEPS_4L
+                .iter()
+                .find(|(listed, _)| *listed == label)
+                .map_or(0, |(_, step)| *step);
+            let numerator = &rank_two[(draw.below(rank_two.len()) + step) % rank_two.len()];
+            cases.push(ForcerCase::new(
+                format!("{label}_r0"),
+                family.name,
+                powers.clone(),
+                "1",
+                "p(1)",
+            ));
+            cases.push(ForcerCase::new(
+                format!("{label}_r2"),
+                family.name,
+                powers.clone(),
+                numerator,
+                "p(1)",
+            ));
+        }
+        let mut dotted = sectors[picked[2]].clone();
+        for (ordinal, power) in dotted.iter_mut().filter(|power| **power > 0).enumerate() {
+            if ordinal % 2 == 0 {
+                *power = 2;
+            }
+        }
+        cases.push(ForcerCase::new(
+            format!("dotted_{}_{}", family.name, power_label(&dotted)),
+            family.name,
+            dotted,
+            "1",
+            "p(1)",
+        ));
+    }
+    Ok(cases)
+}
+
+/// The sampled sectors of [`grid_cases_4l`] whose drawn rank-2 numerator
+/// gives an exact 0, and how many numerators further the first nonzero one
+/// is.
+const RANK_TWO_STEPS_4L: [(&str, usize); 2] = [
+    ("sector_P4L_J11_11011000101", 1),
+    ("sector_P4L_NO1_01111001101", 1),
+];
+
+/// The provenance line of `p4l_grid.json`.
+pub const GRID4_PROVENANCE: &str = "M3-V7 four-loop grid: the 165 tops of the 15 four-loop benchmark cells \
+(tests/fixtures/benchmark_p_integrals.json) and a seeded sample of labelled sectors (rank 0 and 2, dotted; \
+fixtures::grid_cases_4l, GRID4_SEED) in src/p_integral/forcer/fixtures.rs; VAKINT_FORCER_FIXTURES=write with \
+FORM 5 (run: flags, jobs, seconds); per case, depth: the deepest Laurent depth (at most DEPTH_CAP_TERMS = 16 \
+terms) at which the frozen value finalizes in Symbolic mode (G-scheme, fixtures::finalize_settings), its order, \
+the masters that stop one term more and the Symbolic value there (ForcerCase::deepest, no FORM); \
+outputs are raw Forcer C_G before the Wick sign: reduced = (-1)^(sum a + r) C_G (ForcerCase::frozen_values)";
+
+/// The provenance line of `p4l_battery.json`.
+pub const BATTERY4_PROVENANCE: &str = "M1 four-loop battery (hand-picked cases) extended by M3-V7 to all \
+eleven four-loop families (top, ISP at rank 2, rank 3 with p(1), a dot); boundary: M2's three-loop Oep \
+boundary case (P3L_NO top, D-S2-2); forcer_blind: the nodes Forcer cannot check whole-family \
+(rules_study/M2_M3_INPUTS.md section 4a) and the per-integral cases it runs; VAKINT_FORCER_FIXTURES=write \
+with FORM 5 through tests/p_fixtures4_tests.rs (run: flags, jobs, seconds); per case, depth (as in \
+p4l_grid.json, ForcerCase::deepest) and eleven_terms: the Symbolic value at 11 Laurent terms (I-7) or, for an \
+Oep case, the expected MissingMasterOrders (ForcerCase::finalized_at, G-scheme, no FORM); \
+outputs are raw Forcer C_G before the Wick sign: reduced = (-1)^(sum a + r) C_G (ForcerCase::frozen_values)";
 
 /// The provenance line of the grid fixtures.
 pub const GRID_PROVENANCE: &str = "M2-V2 grid: benchmark cells (tests/fixtures/benchmark_p_integrals.json), \

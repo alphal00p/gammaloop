@@ -5,20 +5,26 @@
 //!
 //! ```text
 //! VAKINT_FORCER_FIXTURES=write VAKINT_FORCER_FIXTURES_WORKERS=4 \
-//!     cargo nextest run -p vakint --test p_fixtures4_tests
+//!     cargo nextest run -p vakint --test p_fixtures4_tests -E 'test(<one test>)'
 //! ```
 //!
-//! regenerates the files (`tform -w4`, one FORM process at a time).
+//! regenerates the file of that test (`tform -w4`, one FORM process at a
+//! time) and its depths; `VAKINT_FORCER_FIXTURES=depths` recomputes only the
+//! depths. Select one test: `p4l_anchors.json` is frozen for M3-T17.
 
 #[path = "support/p_fixtures.rs"]
 mod p_fixtures;
 #[path = "support/p_fixtures4.rs"]
 mod p_fixtures4;
 
+use std::collections::BTreeSet;
+
 use p_fixtures::*;
 use p_fixtures4::*;
 use vakint::p_integral::compare::tag_basis;
-use vakint::p_integral::forcer_fixtures::ForcerFixture;
+use vakint::p_integral::forcer_fixtures::{
+    CaseDepth, DEPTH_CAP_TERMS, Finalized, ForcerCase, ForcerFixture, I7_TERMS,
+};
 use vakint::{LoopNormalizationFactor, RustRedMasterMode, VakintSettings};
 
 /// The provenance block is complete and every case has a nonzero, parseable,
@@ -33,7 +39,7 @@ fn assert_frozen(file: &str, fixture: &ForcerFixture) {
         ..VakintSettings::default()
     };
     let epsilon = vakint::vakint_symbol!(&settings.epsilon_symbol);
-    for case in &fixture.cases {
+    for case in fixture.cases.iter().chain(&fixture.boundary) {
         let values = frozen_values(case);
         assert!(!values.is_empty(), "{file}: {}", case.name);
         for (_, reduced) in &values {
@@ -44,6 +50,42 @@ fn assert_frozen(file: &str, fixture: &ForcerFixture) {
         let value = finalized(case, &settings, RustRedMasterMode::Retain);
         assert!(!value.is_zero(), "{file}: {}", case.name);
     }
+}
+
+/// The depth of a case is consistent: `ε^(terms-L-1)`, within the cap, a
+/// limit exactly when below the cap, and a nonzero value.
+fn assert_depth<'a>(file: &str, case: &'a ForcerCase) -> &'a CaseDepth {
+    let depth = case
+        .depth
+        .as_ref()
+        .unwrap_or_else(|| panic!("{file}: {}: no depth", case.name));
+    let loops = case.loops().unwrap() as i64;
+    assert_eq!(
+        depth.order,
+        depth.terms - loops - 1,
+        "{file}: {}",
+        case.name
+    );
+    assert!(
+        (1..=DEPTH_CAP_TERMS).contains(&depth.terms),
+        "{file}: {}",
+        case.name
+    );
+    assert_eq!(
+        depth.limit.is_empty(),
+        depth.terms == DEPTH_CAP_TERMS,
+        "{file}: {}",
+        case.name
+    );
+    assert_nonzero_series(&depth.symbolic, depth.terms, &case.name);
+    depth
+}
+
+/// `terms` parseable unit-scale Laurent coefficients, not all zero.
+fn assert_nonzero_series(coefficients: &[String], terms: i64, name: &str) {
+    assert_eq!(coefficients.len() as i64, terms, "{name}");
+    let parsed = coefficients.iter().map(|c| parse(c)).collect::<Vec<_>>();
+    assert!(parsed.iter().any(|c| !c.is_zero()), "{name}");
 }
 
 #[test]
@@ -72,4 +114,113 @@ fn the_four_loop_anchor_fixture_is_complete() {
         (&ladder.family, &ladder.powers, &ladder.outputs),
         (&pinned.family, &pinned.powers, &pinned.outputs)
     );
+}
+
+#[test]
+fn the_four_loop_grid_fixture_is_complete() {
+    let file = "p4l_grid.json";
+    let fixture = grid4_fixture();
+    assert_frozen(file, &fixture);
+    let count = |prefix: &str| {
+        fixture
+            .cases
+            .iter()
+            .filter(|case| case.name.starts_with(prefix))
+            .count()
+    };
+    // 15 cells x 11 families; 2 sectors at rank 0 and 2 and 1 dotted sector
+    // per family.
+    assert_eq!(
+        [count("bench_L4_"), count("sector_"), count("dotted_")],
+        [165, 44, 11]
+    );
+    assert_eq!(fixture.cases.len(), 220);
+    for case in &fixture.cases {
+        assert_depth(file, case);
+    }
+}
+
+#[test]
+fn the_four_loop_battery_fixture_is_complete() {
+    let file = "p4l_battery.json";
+    let fixture = battery4_fixture();
+    assert_frozen(file, &fixture);
+    // All eleven four-loop families, with ranks, dots and ISPs.
+    let families = fixture
+        .cases
+        .iter()
+        .map(|case| case.family.as_str())
+        .collect::<BTreeSet<_>>();
+    assert_eq!(families.len(), 11, "{families:?}");
+    assert!(families.iter().all(|family| family.starts_with("P4L_")));
+    for kind in ["_top", "_isp", "_rank3", "_dot"] {
+        let with = fixture
+            .cases
+            .iter()
+            .filter(|case| case.name.ends_with(kind))
+            .map(|case| case.family.as_str())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(with, families, "{kind}");
+    }
+    // Every case has its depth and its 11-term value; the Oep cases need an
+    // ALARM order of no1, no2 or lala at ε^6, or of haha, no6, cross or nono
+    // at ε^7.
+    let mut alarms = BTreeSet::new();
+    for case in &fixture.cases {
+        let depth = assert_depth(file, case);
+        match case.eleven_terms.as_ref().expect("an 11-term value") {
+            Finalized::Symbolic(value) => {
+                assert!(depth.terms >= I7_TERMS, "{}", case.name);
+                assert_nonzero_series(value, I7_TERMS, &case.name);
+            }
+            Finalized::MissingMasterOrders(missing) => {
+                assert!(depth.terms < I7_TERMS, "{}", case.name);
+                alarms.extend(
+                    missing
+                        .iter()
+                        .map(|master| (master.master.clone(), master.first_missing_order)),
+                );
+            }
+        }
+    }
+    let alarm = |master: &str, order: i64| alarms.contains(&(format!("PMaster({master})"), order));
+    assert!(
+        ["no1", "no2", "lala"].iter().all(|master| alarm(master, 6)),
+        "{alarms:?}"
+    );
+    assert!(
+        ["haha", "no6", "cross", "nono"]
+            .iter()
+            .any(|master| alarm(master, 7)),
+        "{alarms:?}"
+    );
+    // M2's three-loop Oep boundary: the NO top finalizes through 11 terms
+    // (ε^7) and no further (Master(no) is known through ε^7).
+    let [boundary] = fixture.boundary.as_slice() else {
+        panic!("one boundary case")
+    };
+    let depth = assert_depth(file, boundary);
+    assert_eq!((depth.terms, depth.limit.len()), (I7_TERMS, 1));
+    assert_eq!(
+        boundary.eleven_terms,
+        Some(Finalized::Symbolic(depth.symbolic.clone()))
+    );
+    // The whole-family blind spots, with the per-integral cases Forcer runs.
+    let nodes = fixture
+        .forcer_blind
+        .iter()
+        .map(|blind| blind.node.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(nodes, ["T147", "T152", "T153"]);
+    for blind in &fixture.forcer_blind {
+        assert!(!blind.per_integral.is_empty(), "{}", blind.node);
+        for name in &blind.per_integral {
+            let output = case(&fixture, name).outputs.concat();
+            assert!(
+                output.contains(&format!("Master({})", blind.master)),
+                "{}: {name}",
+                blind.node
+            );
+        }
+    }
 }

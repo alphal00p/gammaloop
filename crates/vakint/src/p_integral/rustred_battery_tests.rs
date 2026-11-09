@@ -116,7 +116,7 @@ const ANCHORS: Fixture = Fixture {
 const FOUR_LOOP_BATTERY: Fixture = Fixture {
     file: "p4l_battery.json",
     json: include_str!("../../tests/fixtures/forcer/p4l_battery.json"),
-    cases: 10,
+    cases: 54,
 };
 
 impl Fixture {
