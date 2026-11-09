@@ -178,14 +178,17 @@
   palette.sample(calc.clamp(0.5 + calc.log(r, base: 2) / 4, 0, 1) * 100%)
 }
 
-// The mark of a grid cell, or of the physics cell of `loops` when `dots` is none.
+// The mark of a grid cell, or of the physics cell of `loops` when `dots` is
+// none; n.c. for a cell the exact tier lists as not exact-checked (its cost).
+#let same-cell(loops, dots, rank) = c => if dots == none {
+  c.at("physics", default: none) not in (none, false) and c.L == loops
+} else {
+  c.L == loops and c.at("dots", default: none) == dots and c.at("rank", default: none) == rank
+}
 #let exact-mark(loops, dots, rank) = {
-  let found = if exact-marks { exact.cells.find(c => if dots == none {
-    c.at("physics", default: none) not in (none, false) and c.L == loops
-  } else {
-    c.L == loops and c.at("dots", default: none) == dots and c.at("rank", default: none) == rank
-  }) }
-  if found == none { [] } else if found.agree {
+  let found = if exact-marks { exact.cells.find(same-cell(loops, dots, rank)) }
+  let unchecked = exact-marks and exact.at("not_exact_checked", default: ()).any(same-cell(loops, dots, rank))
+  if found == none and unchecked { text(fill: luma(100), size: 6pt)[#h(2pt)n.c.] } else if found == none { [] } else if found.agree {
     text(fill: rgb("#1b7a3e"), size: 7pt)[#h(2pt)✓]
   } else {
     text(fill: rgb("#b2182b"), size: 7pt, weight: "bold")[#h(2pt)✗]
@@ -405,7 +408,7 @@
   numerator of that rank. Bold: RustRed cold (seconds, median). F: Forcer cold (Fw: warm, where
   only that was measured). ×: the ratio RustRed cold over Forcer; green is RustRed faster.
   ws, wc: RustRed warm on its own cache, and warm on one cache shared along the cells of that loop
-  count. ✓: result exactly equal to Forcer's. n: integrals in the input. †: fewer repetitions than
+  count. ✓: result exactly equal to Forcer's; n.c.: not exact-checked (cost; `p_exact.json`). n: integrals in the input. †: fewer repetitions than
   its run planned.
   #if cited-run != none [*Sources:* 4L RustRed measured on the scope 1-4 library (#library-name, #library-origin);
     every Forcer row and RustRed at 1L-3L cited from benchmark v1 (run #raw(cited-run.id), gammaloop
@@ -420,8 +423,8 @@
 #block(stroke: 0.6pt + luma(200), inset: 6pt, radius: 3pt, width: 100%)[
   #set text(8.4pt)
   *Performance gates* (recorded, not blocking; the 4L target blocks in M5). #h(1em)
-  4L per cell (Table 5): on par with Forcer at 1 thread (≤ ×#par-tolerance): #tally(target-1); better at 16 threads:
-  #tally(target-16); cold start dominated by loading: #tally(target-load). #h(1em)
+  4L per cell (Table 5): on par with Forcer at 1 thread (≤ ×#par-tolerance): #tally(target-1)\; better at 16 threads:
+  #tally(target-16)\; cold start dominated by loading: #tally(target-load). #h(1em)
   Load of a fresh process: #let loads = load-seconds(measured); #if loads.len() == 0 [pending] else [#fmt(median(loads)) s (median, #library-name)]. #h(1em)
   G10b of v1, 3L rank ≥ 4, 16 threads, RustRed cold ≤ Forcer: #range-of(g10b, 9).
 ]
