@@ -35,13 +35,37 @@
 //! (opened in place, installed into a read-write cache directory, replayed
 //! read-only; see [`super::cache`]). [`export`] writes the area layout below
 //! an export directory for [`Vakint::export_ordered_caches`].
+//!
+//! The area may also ship RustRed p libraries (M3-V8; `tools/p_integral_area.py
+//! stage-library`), each listed in `libraries`:
+//!
+//! ```text
+//! {"directory": "p-library-<a>-<b>", "schema": <its P_LIBRARY_SCHEMA>, "scope": [a, b],
+//!  "identity": <its PLibrary identity>, "files": {<path below the directory>: {"sha256", "bytes"}}}
+//! p_integral/p-library-<a>-<b>/            the `rustred p-package` output
+//! ```
+//!
+//! [`listed_library`] adopts only a listed library whose schema is this
+//! RustRed's `P_LIBRARY_SCHEMA`. A listed library of another schema, a
+//! `p-library-<a>-<b>` directory the manifest does not list, an area manifest
+//! of another area schema or one that cannot be read are ignored with one
+//! stderr line each (once per area manifest and process). Only a listed
+//! library of the supported schema that fails verification is an error (the
+//! engine's p data are broken): an area manifest that does not match the root
+//! key, several such libraries, a malformed entry, a missing directory, or,
+//! when the library is loaded ([`verify_listed_files`]), a file inventory or
+//! sha256 that differs from the entry. The area schema stays
+//! `vakint.external-data.p-integral.v1`: `libraries` and the library
+//! directories are additive, and the cache reader above ignores both.
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
+    ops::RangeInclusive,
     path::{Path, PathBuf},
     sync::{Mutex, PoisonError},
 };
 
+use rustred::propagator::P_LIBRARY_SCHEMA;
 use rustred::reduction::{
     ORDERED_STEP_CACHE_SCHEMA, ORDERED_STEP_SEMANTICS, ORDERED_TAIL_SCHEMA, ORDERED_TAIL_SEMANTICS,
 };
@@ -53,6 +77,7 @@ use super::{
     RustRedEvaluationError,
     cache::{OrderedCacheProgram, hex, ordered_cache_failure, program_directory_name},
     data::{FileDigest, RustRedData, relative_path},
+    p_data::directory_scope,
     shipped_cache::{
         AcceptedOrderedCache, OrderedCacheSection, RUSTRED_MANIFEST, ShippedOrderedCache,
         ShippedOrderedCacheProgram, ShippedOrderedCacheStatus, ShippedOrderedCacheUse,
@@ -84,12 +109,12 @@ struct RootKey {
     manifest_sha256: String,
 }
 
-/// `p_integral/manifest.json`.
+/// `p_integral/manifest.json`, as far as the cache reader goes.
 #[derive(Deserialize)]
 struct AreaManifest {
     schema: String,
-    // `libraries` is reserved for p libraries shipped in the area (M4) and
-    // ignored here.
+    // `libraries` lists p libraries shipped in the area ([`listed_library`]);
+    // the cache reader ignores it.
     #[serde(default)]
     ordered_cache: Option<OrderedCacheSection>,
     files: BTreeMap<String, FileDigest>,
@@ -382,6 +407,264 @@ impl Area {
             entry: entry.shipped_entry(),
         }))
     }
+}
+
+/// One file of a listed library, by its path below the library directory.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub(crate) struct ListedFile {
+    pub sha256: String,
+    pub bytes: u64,
+}
+
+/// A `libraries` entry of the supported schema (module documentation).
+#[derive(Deserialize)]
+struct LibraryEntry {
+    directory: String,
+    scope: [u8; 2],
+    identity: String,
+    files: BTreeMap<String, ListedFile>,
+}
+
+/// A library the area lists with this RustRed's `P_LIBRARY_SCHEMA`, checked
+/// as far as its entry goes ([`verify_listed_files`] checks the files).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ListedLibrary {
+    /// `<root>/p_integral/p-library-<a>-<b>`.
+    pub path: PathBuf,
+    pub scope: RangeInclusive<u8>,
+    /// The `PLibrary::identity()` the entry records.
+    pub identity: String,
+    pub files: BTreeMap<String, ListedFile>,
+}
+
+/// What the area manifest of one root lists.
+#[derive(Debug)]
+pub(crate) struct ListedResolution {
+    /// `Ok(None)` without a listed library of the supported schema; `Err` for
+    /// one that cannot be used (the detail of the engine's error).
+    pub library: Result<Option<ListedLibrary>, String>,
+    /// One line per ignored library or unreadable area manifest.
+    pub notes: Vec<String>,
+}
+
+/// The listed library of `root`'s area, given the area manifest sha256 the
+/// root key declares (module documentation). Reads only the area manifest and
+/// the area directory listing; fails only when the request's resource limits
+/// stop the read.
+pub(crate) fn resolve_listed(
+    root: &Path,
+    declared_sha256: &str,
+) -> Result<ListedResolution, RustRedEvaluationError> {
+    let manifest_path = format!("{AREA_DIRECTORY}/{AREA_MANIFEST}");
+    let ignored = |detail: String| ListedResolution {
+        library: Ok(None),
+        notes: vec![format!("{detail}; its p libraries are ignored")],
+    };
+    let bytes = match read_file(root, &manifest_path) {
+        Ok(Some(bytes)) => bytes,
+        Ok(None) => {
+            return Ok(ListedResolution {
+                library: Ok(None),
+                notes: Vec::new(),
+            });
+        }
+        Err(error @ RustRedEvaluationError::ResourceLimit(_)) => return Err(error),
+        Err(error) => return Ok(ignored(format!("{manifest_path}: {error}"))),
+    };
+    let area: serde_json::Value = match serde_json::from_slice(&bytes) {
+        Ok(area) => area,
+        Err(error) => return Ok(ignored(format!("{manifest_path}: {error}"))),
+    };
+    let schema = area.get("schema").and_then(serde_json::Value::as_str);
+    if schema != Some(AREA_SCHEMA) {
+        return Ok(ignored(format!(
+            "{manifest_path} has the schema {schema:?}; this vakint reads {AREA_SCHEMA:?}"
+        )));
+    }
+    let entries = match area.get("libraries") {
+        None => Vec::new(),
+        Some(serde_json::Value::Array(entries)) => entries.clone(),
+        Some(_) => return Ok(ignored(format!("{manifest_path}: libraries is not a list"))),
+    };
+    let mut notes = Vec::new();
+    let mut supported = Vec::new();
+    let mut listed = BTreeSet::new();
+    for entry in entries {
+        let directory = entry
+            .get("directory")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("(no directory)")
+            .to_owned();
+        match entry.get("schema").and_then(serde_json::Value::as_str) {
+            Some(schema) if schema == P_LIBRARY_SCHEMA => supported.push(entry),
+            schema => notes.push(format!(
+                "{AREA_DIRECTORY}/{directory} has the library schema {schema:?}; this vakint \
+                 reads {P_LIBRARY_SCHEMA:?}; ignored"
+            )),
+        }
+        listed.insert(directory);
+    }
+    let area_directory = root.join(AREA_DIRECTORY);
+    if let Ok(read) = fs::read_dir(&area_directory) {
+        let mut unlisted = read
+            .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
+            .filter(|name| directory_scope(name).is_some() && !listed.contains(name))
+            .collect::<Vec<_>>();
+        unlisted.sort();
+        notes.extend(unlisted.into_iter().map(|name| {
+            format!("{AREA_DIRECTORY}/{name} is not listed in {manifest_path}; ignored")
+        }));
+    }
+    let library = match supported.as_slice() {
+        [] => Ok(None),
+        _ if sha256(&bytes) != declared_sha256 => Err(format!(
+            "{manifest_path} does not match the root manifest's sha256"
+        )),
+        [entry] => listed_entry(&area_directory, entry.clone()).map(Some),
+        _ => Err(format!(
+            "{manifest_path} lists {} p libraries of the schema {P_LIBRARY_SCHEMA:?}; one \
+             engine uses one library program",
+            supported.len()
+        )),
+    };
+    Ok(ListedResolution { library, notes })
+}
+
+/// The entry `value` of the supported schema under `area`: its directory
+/// names its scope, its identity is of that scope, its file paths are plain
+/// relative paths and the directory exists (no symlink).
+fn listed_entry(area: &Path, value: serde_json::Value) -> Result<ListedLibrary, String> {
+    let entry: LibraryEntry = serde_json::from_value(value)
+        .map_err(|error| format!("a {P_LIBRARY_SCHEMA:?} entry of libraries: {error}"))?;
+    let name = &entry.directory;
+    let scope = directory_scope(name)
+        .filter(|scope| [*scope.start(), *scope.end()] == entry.scope)
+        .ok_or_else(|| {
+            format!(
+                "the library directory {name:?} does not declare the scope {:?}",
+                entry.scope
+            )
+        })?;
+    let [start, end] = entry.scope;
+    if !entry
+        .identity
+        .starts_with(&format!("p-library:scope={start}-{end}:"))
+    {
+        return Err(format!(
+            "{name}: the identity {:?} is not of the scope {start}-{end}",
+            entry.identity
+        ));
+    }
+    if entry.files.is_empty() {
+        return Err(format!("{name}: no files are listed"));
+    }
+    for file in entry.files.keys() {
+        relative_path(file).map_err(|error| format!("{name}: {error}"))?;
+    }
+    let path = area.join(name);
+    if !fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_dir()) {
+        return Err(format!(
+            "the listed library directory {} is missing (symlinks are refused)",
+            path.display()
+        ));
+    }
+    Ok(ListedLibrary {
+        path,
+        scope,
+        identity: entry.identity,
+        files: entry.files,
+    })
+}
+
+/// Listed-library verdicts by external-data root and the area manifest sha256
+/// its root key declares (a restaged area declares another one): resolved
+/// once, their notes printed once.
+type ListedVerdict = Result<Option<ListedLibrary>, String>;
+
+fn listed_memo() -> &'static Mutex<BTreeMap<(PathBuf, String), ListedVerdict>> {
+    static MEMO: Mutex<BTreeMap<(PathBuf, String), ListedVerdict>> = Mutex::new(BTreeMap::new());
+    &MEMO
+}
+
+/// The library the `p_integral/` area of the external-data `root` lists, if
+/// any ([`resolve_listed`], memoised; each note is printed once on stderr).
+/// An error is a listed library of the supported schema that cannot be used.
+pub(crate) fn listed_library(root: &Path) -> Result<Option<ListedLibrary>, RustRedEvaluationError> {
+    let declared = match area_of(root) {
+        Ok(Some(area)) => area.manifest_sha256,
+        Ok(None) => return Ok(None),
+        Err(Refusal::Budget(error)) => return Err(error),
+        // The cache reader reports a malformed root key; no library is listed.
+        Err(Refusal::Data(_)) => return Ok(None),
+    };
+    let key = (root.to_owned(), declared);
+    if let Some(known) = listed_memo()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get(&key)
+    {
+        return known.clone().map_err(super::data::failure);
+    }
+    let resolution = resolve_listed(root, &key.1)?;
+    for note in &resolution.notes {
+        eprintln!("vakint: external data {}: {note}", root.display());
+    }
+    listed_memo()
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .insert(key, resolution.library.clone());
+    resolution.library.map_err(super::data::failure)
+}
+
+/// The files of `library` are exactly its entry's, each with its sha256 and
+/// size; no symlink below its directory.
+pub(crate) fn verify_listed_files(library: &ListedLibrary) -> Result<(), RustRedEvaluationError> {
+    fn visit(
+        root: &Path,
+        directory: &Path,
+        found: &mut BTreeSet<String>,
+    ) -> Result<(), RustRedEvaluationError> {
+        for entry in fs::read_dir(directory).map_err(super::data::failure)? {
+            let path = entry.map_err(super::data::failure)?.path();
+            let metadata = fs::symlink_metadata(&path).map_err(super::data::failure)?;
+            if metadata.is_dir() {
+                visit(root, &path, found)?;
+            } else if metadata.is_file() {
+                let relative = path.strip_prefix(root).map_err(super::data::failure)?;
+                found.insert(relative.to_string_lossy().replace('\\', "/"));
+            } else {
+                return Err(super::data::failure(format!(
+                    "{} is not a plain file (symlinks are refused)",
+                    path.display()
+                )));
+            }
+        }
+        Ok(())
+    }
+    let mut found = BTreeSet::new();
+    visit(&library.path, &library.path, &mut found)?;
+    let listed: BTreeSet<String> = library.files.keys().cloned().collect();
+    if found != listed {
+        let first = |set: BTreeSet<&String>| set.into_iter().take(3).cloned().collect::<Vec<_>>();
+        return Err(super::data::failure(format!(
+            "{}: the files differ from its {AREA_DIRECTORY}/{AREA_MANIFEST} entry (unlisted {:?}, \
+             missing {:?})",
+            library.path.display(),
+            first(found.difference(&listed).collect()),
+            first(listed.difference(&found).collect()),
+        )));
+    }
+    for (name, digest) in &library.files {
+        let bytes = read_file(&library.path, name)?
+            .ok_or_else(|| super::data::failure(format!("{name} disappeared")))?;
+        if bytes.len() as u64 != digest.bytes || sha256(&bytes) != digest.sha256 {
+            return Err(super::data::failure(format!(
+                "{}/{name} does not match its sha256 and size in {AREA_DIRECTORY}/{AREA_MANIFEST}",
+                library.path.display()
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// The fields of a RustRed step-cache manifest that decide its use.
