@@ -94,6 +94,7 @@ and not (binary(ordered_reduction_rungs) and test(/^four_loop_/))
 and not binary(rustred_five_loop_closure_tests)
 and not test(/^rustred_evaluation::five_loop::partial_acceptance::/)
 and not binary(p_integral_rustred_full)
+and not binary(p_integral_rustred_battery4)
 """
 
 [profile.test_vakint.junit]

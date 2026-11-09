@@ -242,7 +242,7 @@ fn every_four_loop_p_graph_is_covered_after_normalization() {
 
 #[test]
 fn catalogue_entries_are_the_first_family_and_smallest_pinch_set() {
-    for loops in 1..=3 {
+    for loops in 1..=4 {
         let mut expected =
             BTreeMap::<(usize, usize), Vec<(Vec<(i64, i64)>, usize, Vec<i64>)>>::new();
         for family in families()

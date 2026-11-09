@@ -55,7 +55,9 @@ use super::p_integrals::{VAKINT, forcer_form, parse};
 pub use super::p_rustred::rustred_p_settings;
 
 /// The loop counts [`p_battery_engine`] reduces with RustRed: the scope of
-/// the built-in p library.
+/// its library, the built-in one (`1..=3` until M3 switches the default). An
+/// engine on M3's scope 1-4 package covers `1..=4` ([`agreement_on`],
+/// `support/p_battery4.rs`).
 pub const P_BATTERY_LOOPS: RangeInclusive<usize> = 1..=3;
 
 /// [`rustred_p_settings`] under the Ordered weight `arithmetic` in vakint's
@@ -464,6 +466,51 @@ pub fn agreement_with(
         })?;
     }
     Ok(())
+}
+
+/// The value of `input` with `settings` on `engine`, an engine with a p
+/// library of its own (M3's scope 1-4 package, `support/p_battery4.rs`).
+pub fn rustred_value_on(
+    engine: &Vakint,
+    settings: &VakintSettings,
+    input: &Atom,
+) -> Result<Atom, String> {
+    engine.evaluate(settings, input.as_view()).map_err(|error| {
+        format!(
+            "RustRed ({}, {}): {error}",
+            settings.evaluation_order, settings.ordered_weight_arithmetic
+        )
+    })
+}
+
+/// [`agreement_with`] on `engine` instead of [`p_battery_engine`]: every
+/// mode of [`MODES`], a nonzero Forcer value, and RustRed's value per mode
+/// (in the order of [`MODES`]) when they all agree.
+pub fn agreement_on(
+    engine: &Vakint,
+    input: &Atom,
+    rustred: impl Fn(RustRedMasterMode) -> VakintSettings,
+    forcer: impl Fn(RustRedMasterMode) -> Result<Atom, String>,
+) -> Result<Vec<Atom>, Disagreement> {
+    let mut values = Vec::new();
+    for mode in MODES {
+        let expected = forcer(mode).map_err(Disagreement::Failed)?;
+        if expected.is_zero() {
+            return Err(Disagreement::Failed(format!(
+                "Forcer gives 0 ({mode}): the agreement tests nothing"
+            )));
+        }
+        let actual =
+            rustred_value_on(engine, &rustred(mode), input).map_err(Disagreement::Failed)?;
+        values_agree(&actual, &expected, mode).map_err(|disagreement| match disagreement {
+            Disagreement::Failed(error) => Disagreement::Failed(format!("{mode}: {error}")),
+            Disagreement::Differs(difference) => Disagreement::Differs(format!(
+                "{mode}: RustRed {actual}\nForcer {expected}\n{difference}"
+            )),
+        })?;
+        values.push(actual);
+    }
+    Ok(values)
 }
 
 /// `input` (a vakint expression with p-integrals, vacuum terms allowed)
