@@ -616,9 +616,11 @@ Rules:
   boundary in `boundary`; the nodes Forcer cannot check whole-family, T147, T152 and T153, in `forcer_blind`) and
   `p4l_grid.json` (the 165 four-loop benchmark tops and a seeded sample of labelled sectors). Each battery and grid
   case records its `depth`: the most Laurent terms (at most 16) at which its frozen value finalizes in `Symbolic` mode
-  (G-scheme), that order, the masters whose `ALARM` orders stop one term more, and the value there. Battery cases
-  also record `eleven_terms`: the 11-term value (I-7), or the expected `MissingMasterOrders` of an `Oep` case. Depths
-  come from the frozen outputs without FORM (`VAKINT_FORCER_FIXTURES=depths`); the files are written once with
+  (G-scheme), that order, the masters whose `ALARM` orders stop one term more, and the value there as unit-scale
+  Laurent coefficients from `ε^-L` (`Q² = μ² = 1`; the raw outputs stay in the file). Battery cases also record
+  `eleven_terms`: the 11-term value (I-7), or the expected `MissingMasterOrders` of an `Oep` case. Depths come from
+  the frozen outputs without FORM (`VAKINT_FORCER_FIXTURES=depths`; the ignored
+  `every_four_loop_grid_depth_is_the_finalizers` recomputes all grid depths); the files are written once with
   `VAKINT_FORCER_FIXTURES=write VAKINT_FORCER_FIXTURES_WORKERS=4` (`tform -w4`), one test at a time. Only the M1
   four-loop cases run live in the gate.
 - Fast gate (`just test_vakint`): everything at 1L-3L plus a few frozen 4L cases. Slow 4L RustRed cases go in the

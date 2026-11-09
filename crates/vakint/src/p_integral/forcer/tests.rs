@@ -624,6 +624,8 @@ fn forcer_four_loop_battery() {
         })
         .collect::<Vec<_>>();
     for (case, values) in &battery {
+        // MSbar at 5 terms (the M1 check), then the G-scheme depth.
+        assert_finalizes(case, values, 5);
         assert_finalizes_through_its_depth(case, values);
         if case.name.starts_with("contracted") {
             assert_series_parallel(case, values);

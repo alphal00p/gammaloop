@@ -10,7 +10,10 @@
 //!
 //! regenerates the file of that test (`tform -w4`, one FORM process at a
 //! time) and its depths; `VAKINT_FORCER_FIXTURES=depths` recomputes only the
-//! depths. Select one test: `p4l_anchors.json` is frozen for M3-T17.
+//! depths. Select one test: `p4l_anchors.json` is frozen for M3-T17. The
+//! ignored `every_four_loop_grid_depth_is_the_finalizers` recomputes every
+//! grid depth (`--run-ignored all`), and the Forcer programs of the grid and
+//! the anchors are pinned by digest.
 
 #[path = "support/p_fixtures.rs"]
 mod p_fixtures;
@@ -23,7 +26,8 @@ use p_fixtures::*;
 use p_fixtures4::*;
 use vakint::p_integral::compare::tag_basis;
 use vakint::p_integral::forcer_fixtures::{
-    CaseDepth, DEPTH_CAP_TERMS, Finalized, ForcerCase, ForcerFixture, I7_TERMS,
+    ANCHOR4_PROVENANCE, CaseDepth, DEPTH_CAP_TERMS, Finalized, ForcerCase, ForcerFixture,
+    GRID4_PROVENANCE, I7_TERMS, anchor_cases_4l, grid_cases_4l,
 };
 use vakint::{LoopNormalizationFactor, RustRedMasterMode, VakintSettings};
 
@@ -222,7 +226,7 @@ fn the_four_loop_battery_fixture_is_complete() {
     assert!(
         ["haha", "no6", "cross", "nono"]
             .iter()
-            .any(|master| alarm(master, 7)),
+            .all(|master| alarm(master, 7)),
         "{alarms:?}"
     );
     // M2's three-loop Oep boundary: the NO top finalizes through 11 terms
@@ -236,7 +240,9 @@ fn the_four_loop_battery_fixture_is_complete() {
         boundary.eleven_terms,
         Some(Finalized::Symbolic(depth.symbolic.clone()))
     );
-    // The whole-family blind spots, with the per-integral cases Forcer runs.
+    // The whole-family blind spots, with the per-integral cases Forcer runs:
+    // exactly the cases whose output carries the master (FORM wraps lines
+    // anywhere, so the text is compared without whitespace).
     let nodes = fixture
         .forcer_blind
         .iter()
@@ -244,14 +250,69 @@ fn the_four_loop_battery_fixture_is_complete() {
         .collect::<Vec<_>>();
     assert_eq!(nodes, ["T147", "T152", "T153"]);
     for blind in &fixture.forcer_blind {
-        assert!(!blind.per_integral.is_empty(), "{}", blind.node);
-        for name in &blind.per_integral {
-            let output = case(&fixture, name).outputs.concat();
-            assert!(
-                output.contains(&format!("Master({})", blind.master)),
-                "{}: {name}",
-                blind.node
-            );
-        }
+        let master = format!("Master({})", blind.master);
+        let carriers = fixture
+            .cases
+            .iter()
+            .filter(|case| {
+                let output = case.outputs.concat();
+                let compact = output
+                    .chars()
+                    .filter(|c| !c.is_whitespace())
+                    .collect::<String>();
+                compact.contains(&master)
+            })
+            .map(|case| case.name.as_str())
+            .collect::<Vec<_>>();
+        assert!(!carriers.is_empty(), "{}", blind.node);
+        assert_eq!(blind.per_integral, carriers, "{}", blind.node);
     }
+}
+
+/// Every stored grid depth is the finalizer's: the parse test recomputes the
+/// dotted sectors only, this recomputes all 220 cases from the frozen outputs
+/// (no FORM; about 90 s with `VAKINT_FORCER_FIXTURES_WORKERS=4`).
+#[test]
+#[ignore = "recomputes all 220 four-loop grid depths (minutes)"]
+fn every_four_loop_grid_depth_is_the_finalizers() {
+    let fixture = grid4_fixture();
+    let mut recomputed = fixture.clone();
+    recomputed
+        .write_depths(false, workers())
+        .unwrap_or_else(|error| panic!("p4l_grid.json: {error}"));
+    for (stored, fresh) in fixture.cases.iter().zip(&recomputed.cases) {
+        assert_eq!(stored.depth, fresh.depth, "{}", stored.name);
+    }
+}
+
+/// `blake3` of the Forcer programs (name, program) of the grid and anchor
+/// definitions, as `forcer_programs_are_byte_identical` keeps for the other
+/// fixture files: the frozen outputs belong to these programs.
+const PROGRAM_DIGESTS_4L: [(&str, &str); 2] = [
+    (
+        "p4l_grid.json",
+        "176becab393e704d529b02346a8e9eb837209b170c087bef79f1d8fac6009ebe",
+    ),
+    (
+        "p4l_anchors.json",
+        "1ee821498d2db0349bd0e57eadfe3598177ca33a91a2d6affcd4a49735230b7f",
+    ),
+];
+
+#[test]
+fn the_four_loop_grid_and_anchor_programs_are_byte_identical() {
+    let found = [
+        ForcerFixture::unwritten(
+            GRID4_PROVENANCE,
+            grid_cases_4l(&benchmark_inputs_text()).unwrap(),
+        ),
+        ForcerFixture::unwritten(ANCHOR4_PROVENANCE, anchor_cases_4l()),
+    ]
+    .map(|fixture| fixture.program_digest().unwrap());
+    assert_eq!(
+        found,
+        PROGRAM_DIGESTS_4L.map(|(_, digest)| digest.to_string()),
+        "the Forcer programs of {:?} changed",
+        PROGRAM_DIGESTS_4L.map(|(file, _)| file)
+    );
 }
