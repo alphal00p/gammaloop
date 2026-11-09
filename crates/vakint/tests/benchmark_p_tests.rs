@@ -413,7 +413,7 @@ mod results_file {
 
     fn protocol(gammaloop: &str, rustred: &str) -> Value {
         json!({"gammaloop_sha": gammaloop, "rustred_sha": rustred, "build_profile": "ci-optim",
-               "source_dirty": false})
+               "source_dirty": false, "p_library": {"identity": "p-library:scope=1-3"}})
     }
 
     fn source<'a>(gammaloop: &'a str, rustred: &'a str, build_profile: &'a str) -> Source<'a> {
@@ -422,6 +422,7 @@ mod results_file {
             rustred_sha: rustred,
             build_profile,
             source_dirty: false,
+            p_library: "p-library:scope=1-3",
         }
     }
 
@@ -467,6 +468,43 @@ mod results_file {
         assert!(results::append(&path, "missing", measurement("L1_d0_r0", 2)).is_err());
         assert!(results::begin_run(&path, "first", &protocol("aaa", "bbb"), false).is_err());
         assert_eq!(std::fs::read(&path)?, before, "a refusal changed the file");
+        Ok(())
+    }
+
+    #[test]
+    fn the_p_library_is_part_of_the_source_and_a_child_must_have_used_it() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("p_results.json");
+        results::begin_run(&path, "m2", &protocol("aaa", "bbb"), false)?;
+        results::append(&path, "m2", measurement("L4_d0_r0", 0))?;
+        let mut listed = protocol("aaa", "bbb");
+        listed["p_library"]["identity"] = json!("p-library:scope=1-4");
+        results::begin_run(&path, "m3", &listed, true)?;
+        assert!(results::cite_run(&path, "missing").is_err());
+        results::cite_run(&path, "m2")?;
+
+        let document = results::read(&path)?;
+        assert_eq!(document["cited_run"], "m2");
+        let one_to_four = Source {
+            p_library: "p-library:scope=1-4",
+            ..source("aaa", "bbb", "ci-optim")
+        };
+        assert!(results::recorded(&document, one_to_four, None)?.is_empty());
+        let built_in = results::recorded(&document, source("aaa", "bbb", "ci-optim"), None)?;
+        assert_eq!(built_in.len(), 1);
+
+        let library = json!({"origin": "external-data", "directory": "p-library-1-4"});
+        let child = |program: &str, origin: &str| {
+            json!({"cache": {"programs": [
+                {"program": "1L-unit-mass-vacuum", "data_version": "v0.2.2"},
+                {"program": program, "data_version": origin}]}})
+        };
+        assert!(
+            results::check_p_program(&child("p-library-1-4", "external-data"), &library).is_ok()
+        );
+        assert!(results::check_p_program(&child("p-library-1-3", "built-in"), &library).is_err());
+        assert!(results::check_p_program(&child("p-library-1-4", "built-in"), &library).is_err());
+        assert!(results::check_p_program(&json!({"cache": {"programs": []}}), &library).is_err());
         Ok(())
     }
 

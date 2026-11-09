@@ -1,9 +1,10 @@
-//! The append-only results file of benchmark v1,
+//! The append-only results file of the p benchmark,
 //! `docs/benchmark/data/p_results.json` (schema `vakint.p-benchmark.v1`): runs
 //! with their protocol, each holding the raw measurements in the order they
 //! were taken. Nothing recorded is ever rewritten; the report reads the
 //! measurements of every run of the same source as the selected run, so that
-//! a resumed run continues the interrupted one.
+//! a resumed run continues the interrupted one, and those of the source of
+//! the cited run (`cited_run`) for what the selected source does not measure.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
@@ -22,13 +23,17 @@ pub const EXACT_SCHEMA: &str = "vakint.p-exact.v1";
 
 /// What is measured: the sources and the build. `gammaloop_sha` is the last
 /// commit outside `crates/vakint/docs/benchmark`, `rustred_sha` the commit
-/// pinned in `Cargo.lock`. A dirty tree is another source than its clean sha.
+/// pinned in `Cargo.lock`, `p_library` the identity of the RustRed p library
+/// the children reduce with (protocol `p_library.identity`: the built-in one,
+/// or the one an external-data root lists). A dirty tree is another source
+/// than its clean sha.
 #[derive(Clone, Copy, Debug)]
 pub struct Source<'a> {
     pub gammaloop_sha: &'a str,
     pub rustred_sha: &'a str,
     pub build_profile: &'a str,
     pub source_dirty: bool,
+    pub p_library: &'a str,
 }
 
 /// The arithmetic of a Forcer measurement, which has none to choose.
@@ -115,6 +120,20 @@ pub fn begin_run(path: &Path, id: &str, protocol: &Value, select: bool) -> Resul
     write(path, &document)
 }
 
+/// Cite the recorded run `id` in the report: the measurements of its source
+/// fill the cells the selected source does not measure.
+pub fn cite_run(path: &Path, id: &str) -> Result<()> {
+    let mut document = read(path)?;
+    let runs = document["runs"].as_array().expect("checked by read");
+    ensure!(
+        runs.iter().any(|run| run["id"] == id),
+        "no run {id} to cite in {}",
+        path.display()
+    );
+    document["cited_run"] = json!(id);
+    write(path, &document)
+}
+
 /// Append one measurement to the run `id` and save at once: an interrupted
 /// harness loses at most the measurement in flight.
 pub fn append(path: &Path, id: &str, measurement: Value) -> Result<()> {
@@ -147,6 +166,7 @@ fn of_source<'a>(document: &'a Value, source: Source<'a>) -> impl Iterator<Item 
             let protocol = &run["protocol"];
             protocol["gammaloop_sha"] == source.gammaloop_sha
                 && protocol["rustred_sha"] == source.rustred_sha
+                && protocol["p_library"]["identity"] == source.p_library
                 && protocol["build_profile"] == source.build_profile
                 && protocol["source_dirty"] == source.source_dirty
         })
@@ -185,6 +205,39 @@ pub fn outputs(document: &Value, source: Source) -> BTreeMap<(String, String), S
             Some(((cell, backend), digest))
         })
         .collect()
+}
+
+/// A RustRed child must have reduced with the library of the protocol
+/// (`p_library`, see [`Source`]): every p program its cache counters list
+/// (`p-library-<a>-<b>`) is that library's directory, loaded from its origin
+/// (`built-in` or `external-data`), and there is one.
+pub fn check_p_program(report: &Value, p_library: &Value) -> Result<()> {
+    let programs = report["cache"]["programs"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|program| {
+            program["program"]
+                .as_str()
+                .is_some_and(|name| name.starts_with("p-library-"))
+        })
+        .collect::<Vec<_>>();
+    ensure!(
+        !programs.is_empty(),
+        "the child reports no p library program"
+    );
+    for program in programs {
+        ensure!(
+            program["program"] == p_library["directory"]
+                && program["data_version"] == p_library["origin"],
+            "the child reduced with {} ({}), the protocol names {} ({})",
+            program["program"],
+            program["data_version"],
+            p_library["directory"],
+            p_library["origin"]
+        );
+    }
+    Ok(())
 }
 
 /// An exact-agreement file marks what was measured only for the same sources;
