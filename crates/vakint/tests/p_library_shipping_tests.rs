@@ -29,8 +29,9 @@ use std::sync::Arc;
 
 use p_backends::values_agree;
 use p_library4::{
-    PLibraryRoute, built_in_p_library, engine_with_p_library, load_p_library_directory,
-    p_library_name, p_library_scope, regenerate_p_library, require_p_library_1_4,
+    P_LIBRARY_1_4_VARIABLE, PLibraryRoute, built_in_p_library, engine_with_p_library,
+    load_p_library_directory, p_library_1_4, p_library_name, p_library_scope, regenerate_p_library,
+    require_p_library_1_4,
 };
 use rustred::propagator::families::{P_FAMILIES_V1_JSON, PFamiliesFile};
 use rustred::propagator::library::{PBasis, PLibrary};
@@ -390,12 +391,14 @@ fn a_broken_p_area_fails_closed_for_every_loop_count() {
     }
 }
 
-/// The default path: `Vakint::new()` and `VakintSettings::default()` (default
-/// order, normalization and arithmetic) reduce a dotted 2L kite and 3L inputs
-/// carrying `PMaster(no)` and `PMaster(t105)` with the built-in library, equal
-/// to Forcer's frozen values finalized alike: exactly in `Symbolic` mode
-/// through `ε^(L+2)`, within 1e-30 in the default `Numerical` mode. No FORM
-/// is called.
+/// The default path without external data: `Vakint::new()` and
+/// `VakintSettings::default()` (default order, normalization and arithmetic)
+/// reduce a dotted 2L kite and 3L inputs carrying `PMaster(no)` and
+/// `PMaster(t105)` with the built-in 1L-3L library, equal to Forcer's frozen
+/// values finalized alike: exactly in `Symbolic` mode through `ε^(L+2)`,
+/// within 1e-30 in the default `Numerical` mode. No FORM is called. Four
+/// loops need the scope 1-4 library of vakint-external-data (next test);
+/// without it they stay with Forcer.
 #[test]
 fn the_default_path_matches_forcer_through_three_loops() {
     let engine = Vakint::new().unwrap();
@@ -417,6 +420,50 @@ fn the_default_path_matches_forcer_through_three_loops() {
     let program = p_program(&engine);
     assert_eq!(program.data_version, "built-in");
     assert!(program.native.inserts > 0);
+}
+
+/// The default path at four loops (plan M3 D-M3-7, the default switch):
+/// `Vakint::new()`, `load_external_data` of a root whose `p_integral/` area
+/// lists M3's scope 1-4 library as vakint-external-data's `p_integral` branch
+/// ships it (`VAKINT_TEST_P_LIBRARY_1_4`; a skip on stderr without it) and
+/// `VakintSettings::default()`: the four-loop `bubu` top, whose value carries
+/// the masters `bebe`, `cross` and `t145`, is reduced by RustRed with that
+/// library and equals Forcer's frozen value finalized alike, exactly in
+/// `Symbolic` mode and within 1e-30 in `Numerical` mode, through `ε^(L+2)`
+/// or the deepest order its masters reach.
+#[test]
+fn the_default_path_with_external_data_matches_forcer_at_four_loops() {
+    let Some(package) = p_library_1_4() else {
+        eprintln!("{P_LIBRARY_1_4_VARIABLE} is unset: skipped the four-loop default path");
+        return;
+    };
+    let engine = engine_with_p_library(&package, PLibraryRoute::Listed);
+    let case = ForcerFixture::parse(include_str!("fixtures/forcer/p4l_anchors.json"))
+        .unwrap()
+        .cases
+        .into_iter()
+        .find(|case| case.name == "bubu_top")
+        .unwrap();
+    assert_eq!(case.loops().unwrap(), 4);
+    let default = VakintSettings::default();
+    let terms = case.deepest().unwrap().terms.min(2 * 4 + 3);
+    assert!(terms > 4, "{} does not finalize through ε^0", case.name);
+    for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Numerical] {
+        let settings = VakintSettings {
+            number_of_terms_in_epsilon_expansion: terms,
+            ..in_mode(&default, mode, 4)
+        };
+        let actual = evaluate(&engine, &settings, &case);
+        let expected = case.finalized(&settings, mode).unwrap();
+        values_agree(&actual, &expected, mode)
+            .unwrap_or_else(|difference| panic!("{} ({mode}): {difference}", case.name));
+    }
+    let program = p_program(&engine);
+    assert_eq!(
+        (program.program.as_str(), program.data_version.as_str()),
+        ("p-library-1-4", "external-data")
+    );
+    assert!(program.native.inserts > 0, "{program:?}");
 }
 
 /// A p-integral whose numerator keeps a tensor spectator with native `dim`

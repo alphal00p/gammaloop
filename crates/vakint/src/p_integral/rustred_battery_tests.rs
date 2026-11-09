@@ -751,10 +751,10 @@ fn rustred_carries_the_wick_sign_of_odd_cases_once() {
 /// The battery engine covers exactly its library's scope ([`battery_loops`]:
 /// `1..=3` built in, `1..=4` with the M3 package), and an engine without a
 /// four-loop library never reduces four loops: for the default engine
-/// (`Vakint::new()`, whose built-in library stops at three loops until M3
-/// switches the default), `has_p_data(4)` is false and every case of the
-/// four-loop battery fails closed on the RustRed path (an unsupported
-/// family, never a value).
+/// (`Vakint::new()`, whose built-in library stops at three loops; the
+/// four-loop default comes with vakint-external-data's `p-library-1-4`),
+/// `has_p_data(4)` is false and every case of the four-loop battery fails
+/// closed on the RustRed path (an unsupported family, never a value).
 #[test]
 fn rustred_covers_the_library_scope_and_no_more() {
     let engine = battery_engine();
