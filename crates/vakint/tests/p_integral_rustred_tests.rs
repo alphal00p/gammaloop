@@ -7,7 +7,9 @@
 //! checks of the Forcer side need no FORM.
 //!
 //! The RustRed side is `Vakint::new()` with its built-in 1L-3L p library
-//! (M2-V4).
+//! (M2-V4); at four loops (M3-V9c, [`four_loops`]) an engine on M3's scope
+//! 1-4 package listed in an external-data root (`VAKINT_TEST_P_LIBRARY_1_4`;
+//! skipped without it), against a live Forcer that must be there.
 
 #![cfg(feature = "feynkit-ingress")]
 
@@ -15,8 +17,12 @@
 mod p_backends;
 #[path = "support/p_integrals.rs"]
 mod p_integrals;
+#[path = "support/p_library4.rs"]
+mod p_library4;
 #[path = "support/p_rustred.rs"]
 mod p_rustred;
+#[path = "support/p_tierc4.rs"]
+mod p_tierc4;
 
 use p_backends::*;
 use p_integrals::{canonical, from_dot, parse};
@@ -526,4 +532,60 @@ fn rerouted_two_and_three_loop_integrals_agree_with_forcer() {
     let be: Atom = parse("dot(k(1),p(1))*dot(k(2),k(3))")
         * canonical(&parse("topo(P3L_BE(p(1),1,2,1,1,1,1,1,1))"));
     assert_p_backends_agree_routed_atom(&be, 0..2);
+}
+
+/// Tier B at four loops (M3-V9c; M3 plan, G7): RustRed on M3's scope 1-4
+/// package, listed in an external-data root (the route that ships it, D-SIZE
+/// (B)), against a live Forcer, through the deepest depth (at most `ε^6`) at
+/// which Forcer's value finalizes. With the package, a missing FORM 5 fails.
+mod four_loops {
+    use super::p_backends::live_forcer_value;
+    use super::p_integrals::{forcer_form, parse};
+    use super::p_library4::PLibraryRoute;
+    use super::p_tierc4::{agreement4, live_terms, p_library4_engine, settings4};
+
+    /// `(input, arithmetic, cores)`: an odd rank on a dotted top with the head
+    /// written `-p(3)`; a dotted top, a two-loop kite of another head and a
+    /// vacuum tadpole in one expression under `modular_sampled` on four
+    /// workers; a top with ISP numerators under `modular_polynomial` on four
+    /// cores (the concurrent path at four loops).
+    const CASES: [(&str, Option<&str>, usize); 3] = [
+        (
+            "dot(k(1),p(3))*topo(P4L_HAHA(-p(3),1,1,1,1,1,1,1,2,1,1,1))",
+            None,
+            1,
+        ),
+        (
+            "topo(P4L_NO3(p(1),1,1,1,1,1,1,1,1,1,1,2)) + dot(k(1),p(3))*topo(P2L(-p(3),1,1,1,1,1)) \
+             + topo(prop(1,edge(1,1),k(1),muvsq,2))",
+            Some("modular_sampled:threads=4"),
+            4,
+        ),
+        (
+            "(2+3*dot(k(1),k(2))*dot(k(3),k(4)))*topo(P4L_J1(p(1),1,1,1,1,1,1,1,1,1,1,1))",
+            Some("modular_polynomial"),
+            4,
+        ),
+    ];
+
+    #[test]
+    fn four_loop_inputs_agree_with_a_live_forcer() {
+        let what = "the four-loop Tier B";
+        let Some(engine) = p_library4_engine(PLibraryRoute::Listed, what) else {
+            return;
+        };
+        let form = forcer_form().expect("the four-loop Tier B needs FORM 5");
+        for (input, arithmetic, cores) in CASES {
+            let input = parse(input);
+            let terms = live_terms(&form, &input, 4);
+            let seconds = agreement4(
+                &engine,
+                &input,
+                |mode| settings4(mode, terms, arithmetic, cores),
+                |mode| live_forcer_value(&form, &input, mode, terms),
+            )
+            .unwrap_or_else(|difference| panic!("{input} ({terms} terms):\n{difference}"));
+            eprintln!("[tier B 4L] {input}: {terms} terms, RustRed {seconds:.1} s");
+        }
+    }
 }
