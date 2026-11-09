@@ -434,6 +434,19 @@ A finalized diagram's `with_numerator_prefactor` consumes a retained
 `SymbolicTensor<PartialStructure>` in that diagram's existing index frame.
 It replaces only the global multiplier and moves its interface and reduction
 proofs; local fragments, aggregate numerator, topology and routing are unchanged.
+
+Physical propagator powers are positive graph-owned integral annotations,
+independent of topology identity. Native and Python DOT/JSON imports preserve
+them together with stored routing; missing powers default to one. Finalization
+checks both legs before sewing and rejects conflicting powers. Denominators,
+UV degree counting and cut-propagator defaults use stored powers. Explicit signed
+denominator and UV overrides remain authoritative: zero omits a denominator and
+negative powers move it to the numerator. Native metadata transformations retain
+their explicit validation contract; denominator and UV construction also reject
+invalid stored powers. Unit-propagator energy integration rejects raised powers
+in native CFF and Python scalar CFF, numerator CFF and LTD dispatch, except on
+contracted or unselected internal edges.
+
 `ordered_propagators` exposes the existing denominator construction in edge-ID
 order, and `propagator_family` delegates to that same owner. Symbolic kinematics
 can expose borrowed momentum/assumption views and map distinct scalar values
