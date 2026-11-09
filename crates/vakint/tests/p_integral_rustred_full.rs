@@ -20,9 +20,9 @@
 //!   skip on stderr without it), on [`four_loop_cores`] workers under the
 //!   default Ordered arithmetic: every case of `p4l_grid.json` (220) against
 //!   its frozen Forcer output through its frozen depth (the deepest at which
-//!   Forcer's value finalizes), in 20 parts ([`GRID4_PART`]: the 11 tops of
-//!   each benchmark cell, then the sampled and dotted sectors); the 15
-//!   four-loop benchmark cells are the sums of their grid tops (canonical
+//!   Forcer's value finalizes), at most `ε^6` ([`case_terms`]), in 20 parts
+//!   ([`GRID4_PART`]: the 11 tops of each benchmark cell, then the sampled
+//!   and dotted sectors); the 15 four-loop benchmark cells are the sums of their grid tops (canonical
 //!   forms, FORM- and library-free); RustRed's values are invariant under
 //!   `q -> -q` and a unimodular change of loop momenta, and through the DOT
 //!   round trip, for one case per family top.
@@ -180,12 +180,16 @@ const GRID4_PART: usize = 11;
 const ZERO_GRID4_CASES: [&str; 2] = ["bench_L4_d0_r2_P4L_J11", "bench_L4_d1_r2_P4L_J11"];
 
 /// The Laurent depth a frozen four-loop case is compared through: its frozen
-/// depth, the deepest at which Forcer's value finalizes (M3 G7).
+/// depth (the deepest at which Forcer's value finalizes), at most the depth
+/// of the battery, [`battery_terms`] (`ε^6`, M3 G7's "at least `ε^(L+2)`").
+/// Deeper, RustRed's `Symbolic` series grows about fivefold per order (M3-V9c
+/// notes: a 4L sector at 12 terms 20 s, at 16 terms over 11 min); Tier A
+/// owns the deepest orders.
 fn case_terms(case: &ForcerCase) -> i64 {
-    case.depth
-        .as_ref()
+    let frozen = (case.depth.as_ref())
         .unwrap_or_else(|| panic!("{}: no frozen depth", case.name))
-        .terms
+        .terms;
+    frozen.min(battery_terms(4))
 }
 
 /// Part `part` of the four-loop grid on a fresh engine on the 1-4 package:
@@ -697,7 +701,7 @@ type Forcer<'a> = dyn Fn(RustRedMasterMode) -> Result<Atom, String> + 'a;
 
 /// The four-loop cells of the exact-agreement file on `engine` (the 1-4
 /// package), under [`EXACT4_ARITHMETIC`] on [`four_loop_cores`] workers,
-/// through their deepest common depth (the least frozen depth of the tops;
+/// through their deepest common depth (the least [`case_terms`] of the tops;
 /// a live probe for the physics cell): the 15 benchmark cells in increasing
 /// dots and rank, then the physics cell. Each RustRed side runs within
 /// [`EXACT4_CELL_CAP`] and what is left of [`EXACT4_TOTAL_CAP`]; a cell that

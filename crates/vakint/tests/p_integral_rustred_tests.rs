@@ -545,10 +545,11 @@ mod four_loops {
     use super::p_tierc4::{agreement4, live_terms, p_library4_engine, settings4};
 
     /// `(input, arithmetic, cores)`: an odd rank on a dotted top with the head
-    /// written `-p(3)`; a dotted top, a two-loop kite of another head and a
-    /// vacuum tadpole in one expression under `modular_sampled` on four
-    /// workers; a top with ISP numerators under `modular_polynomial` on four
-    /// cores (the concurrent path at four loops).
+    /// written `-p(3)`; a dotted top and a two-loop kite of another head in
+    /// one expression under `modular_sampled` on four workers; a top with ISP
+    /// numerators under `modular_polynomial` on four cores (the concurrent
+    /// path at four loops). No vacuum term: at the four-loop depth a one-loop
+    /// tadpole's `Symbolic` series runs for minutes (M3-V9c notes).
     const CASES: [(&str, Option<&str>, usize); 3] = [
         (
             "dot(k(1),p(3))*topo(P4L_HAHA(-p(3),1,1,1,1,1,1,1,2,1,1,1))",
@@ -556,8 +557,7 @@ mod four_loops {
             1,
         ),
         (
-            "topo(P4L_NO3(p(1),1,1,1,1,1,1,1,1,1,1,2)) + dot(k(1),p(3))*topo(P2L(-p(3),1,1,1,1,1)) \
-             + topo(prop(1,edge(1,1),k(1),muvsq,2))",
+            "topo(P4L_NO3(p(1),1,1,1,1,1,1,1,1,1,1,2)) + dot(k(1),p(3))*topo(P2L(-p(3),1,1,1,1,1))",
             Some("modular_sampled:threads=4"),
             4,
         ),
