@@ -2687,10 +2687,10 @@ impl FeynmanDiagram {
 
     /// Return the local superficial UV degree in `dimension` spacetime dimensions.
     ///
-    /// This is `dimension * loops + sum(vertex degrees) + sum(edge degrees - 2)`.
-    /// Degrees come from the stored local numerators; each internal propagator
-    /// contributes its quadratic denominator. External legs, the projector, and
-    /// diagram-wide prefactors are excluded, as in GammaLoop's local UV counting.
+    /// This is `dimension * loops + sum(vertex degrees) + sum(edge degrees - 2 * power)`.
+    /// Degrees come from the stored local numerators; each internal propagator's
+    /// quadratic denominator contributes twice its stored power. External legs,
+    /// the projector and diagram-wide prefactors are excluded, as in GammaLoop's local UV counting.
     /// All momenta at a vertex scale together. This is a superficial bound, not
     /// a test of cancellations in the contracted numerator or of subdivergences.
     /// Zero means logarithmic, positive means power divergent, and negative means

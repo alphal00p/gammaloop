@@ -293,7 +293,10 @@ anchor = "pub struct FeynmanDiagram {"
 # DOT/JSON and routing preservation, signed overrides, UV/cut defaults and
 # unit-power integration guards. Source sewing and native consumption validate
 # stored powers. Topology, numerator and rendering ownership remain unchanged.
-digest = "4df72fe2b1c06b23b5d7d927db188b201aac3e16"
+# Review follow-up 2026-11-09: the public UV formula subtracts twice each
+# stored propagator power. This scope changes only that documentation; the
+# existing selected-edge counting owner now also validates powers before use.
+digest = "2479e505847238f68d05e11ea2fcdbf532814abf"
 
 [[section.note.scope]]
 path = "crates/feynkit-tensor/src/lib.rs"

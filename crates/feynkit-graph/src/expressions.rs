@@ -294,6 +294,7 @@ impl crate::FeynmanDiagram {
         }
         for (pair, edge_id, edge) in self.graph.iter_edges_of(subgraph) {
             if pair.is_paired() && edge.data.external.is_none() && !edge.data.is_dummy {
+                edge.data.validate_propagator_power(edge_id.0)?;
                 degree += i64::from(
                     edge.data
                         .numerator

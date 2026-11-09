@@ -262,6 +262,15 @@ fn invalid_powers_are_rejected_at_every_import_boundary() {
             invalid.denominator_expression(),
             Err(DiagramError::InvalidPropagatorPower { .. })
         ));
+        for degree in [
+            invalid.superficial_degree_of_divergence(4),
+            invalid.superficial_degree_of_divergence_of(&invalid.internal_subgraph(), 4),
+        ] {
+            assert!(matches!(
+                degree,
+                Err(DiagramError::InvalidPropagatorPower { power: actual, .. }) if actual == power
+            ));
+        }
         assert!(matches!(
             invalid.uv_expansion_of(
                 &invalid.internal_subgraph(),

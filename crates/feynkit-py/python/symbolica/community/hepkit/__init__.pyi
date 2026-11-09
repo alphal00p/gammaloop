@@ -3812,9 +3812,9 @@ class FeynmanDiagram:
         Return the local superficial UV degree of divergence.
 
         Counts ``dimension * loops`` plus vertex momentum powers and internal
-        propagator numerator powers minus two per internal propagator. Uses the
-        stored local numerators; excludes external legs, projectors, and global
-        prefactors. Vertex momenta scale together, before tensor cancellations.
+        propagator numerator powers minus twice each internal propagator's stored
+        power. Uses the stored local numerators; excludes external legs, projectors,
+        and global prefactors. Vertex momenta scale together, before tensor cancellations.
         Zero is logarithmic, positive is power divergent, and negative is
         superficially convergent. Subdivergences are not tested.
 
