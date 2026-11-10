@@ -164,6 +164,13 @@ filter = "test(/^uv::hedge_poset::tests::bugblatter$/) or test(/^aaa$/)"
 test-group = "gammalooprs-diagnostics"
 slow-timeout = { period = "5m", terminate-after = 2 }
 
+[[profile.ci_gammaloop.overrides]]
+# The four-loop Tiers C of the full p binary (M3-V9c; they run only with a
+# scope 1-4 p library in VAKINT_TEST_P_LIBRARY_1_4, otherwise they skip):
+# one grid part takes minutes to hours, far beyond the ci profile's 240 s.
+filter = "binary(p_integral_rustred_full) and test(/four_loop/)"
+slow-timeout = { period = "600s" }
+
 [[profile.ci.overrides]]
 # In CI, be extra conservative with timeouts
 filter = "test(integration) or test(heavy) or test(memory) or test(large)"
