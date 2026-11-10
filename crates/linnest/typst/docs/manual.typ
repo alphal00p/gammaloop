@@ -1,5 +1,5 @@
 #import "@preview/tidy:0.4.3"
-#import "../src/lib.typ": draw, graph, layout, layouts, subgraph
+#import "../src/lib.typ": curve, draw, graph, layout, layouts, subgraph
 #import graph: (
   build, dot, edge, edge-data, edges, node, node-data, nodes, parse, sink,
   source, update-edge-data, update-node-data,
@@ -538,8 +538,10 @@
   the positioned graph and its rendered bounds before overlays and canvas
   padding. The numeric `left`, `right`, `top`, `bottom`, `width`, and `height`
   fields use graph units; `top` is the greatest y coordinate. Bounds include
-  drawn shapes, curves, and label boxes, following CeTZ's convention of excluding
-  extra stroke thickness. An empty drawing supplies zeros for every field.
+  drawn shapes, curves, and label boxes. Ordinary CeTZ paths exclude extra
+  stroke thickness; Kurvst heads contribute their painted outlines so thick
+  caps and miters cannot escape the canvas. An empty drawing supplies zeros for
+  every field.
   Overlay elements share `unit` and can enlarge the final canvas without
   affecting graph layout. `draw-after` also accepts an array of CeTZ elements
   or `none`.
@@ -562,21 +564,28 @@
   `mark-shift` for a signed arc-length adjustment along the derived path. This
   positioning is independent of whether the layer is straight or patterned.
   `"center-if-dangling"` centers a dangling mark but keeps an orientation-selected
-  paired mark at the source/sink split point. Heads span a chord between two
-  points on the full carrier, not a tangent. Triangle and straight heads place
-  their geometric tip and the center of their back on the curve; other marks
-  use their declared tip/base anchors. Centered heads straddle the requested
-  arc position, so the chord midpoint can lie off the curve. Near endpoints the
-  sampling interval moves inward, and short carriers compress the head to fit.
-  Longitudinal fitting preserves the head's width and stroke thickness.
-  Interior marks overlay the unshortened curve. With shortening enabled, filled
-  end heads meet the shaft at the inward contact; straight open heads keep the
-  shaft running to their tip.
+  paired mark at the source/sink split point. Pass data-only `curve.mark`
+  specifications; legacy CeTZ mark dictionaries are errors.
+  Stations refer to the visible carrier after offsets, node outsets and crossing
+  windows, before arrow shortening or bending. Interior marks straddle the
+  station on a chord. At ends, `fit: "chord"` preserves the carrier and trims
+  the shaft to the head's back contact. `fit: "bend"` instead retracts the
+  endpoint along its tangent while retaining control points, with `shorten`
+  scaling the retraction (default 100%; 0% leaves the endpoint unchanged).
+  Short carriers keep the full-sized head and clamp the shaft contact separately.
+  Patterns, footprints and collision checks use the resulting painted shaft.
+  `curve.mark.combine` fits all children and gaps as one composite.
+
+  Preparation callbacks and named path anchors refer to the derived, unshortened
+  reference carrier. Fitted heads and shafts are produced after placement
+  selection, so preparation callbacks must not depend on fitted-head geometry.
+  Use `draw-after` to inspect or decorate the final painted drawing. Callbacks
+  are not evaluated again to resolve head-dependent state.
 
   ```typ
   #let oriented-arrow = (
     stroke: black + 0.7pt,
-    mark: (end: (symbol: ">", fill: black, anchor: "center", shorten-to: auto), scale: 0.75),
+    mark: curve.mark.triangle(length: 0.15cm, width: 0.1125cm),
     mark-position: "center-if-dangling",
     mark-orientation: "edge",
   )
@@ -594,14 +603,14 @@
   Linnest itself:
 
   ```typ
-  #import "../src/lib.typ": draw, graph, layout
+  #import "../src/lib.typ": curve, draw, graph, layout
   #import graph: build, edge, node, sink, source
 
   #let kinds = (
     dependency: (stroke: rgb("#315f9f") + 0.8pt),
     event: (
       stroke: rgb("#a24b36") + 0.8pt,
-      mark: (end: ">"),
+      mark: curve.mark.triangle(length: 0.15cm, width: 0.1125cm),
       mark-position: "center",
       mark-orientation: "edge",
     ),
@@ -642,15 +651,18 @@
   - `node-line-width: auto`: node outline, defaulting to `line-width`.
   - `massive-line-width: auto`: scalar/ghost stroke, defaulting to
     `2 * line-width`.
-  - `fermion-arrow-line-width: auto`: fermion arrowhead outline, defaulting to
-    `0.4 * line-width`.
   - `momentum-line-width: auto`: momentum shaft and arrowhead thickness, both
     defaulting to `0.8 * line-width`.
+  - `fermion-mark`: a Kurvst triangle at `0.10cm × 0.075cm`, filled by default.
+  - `momentum-mark`: a Kurvst straight head at `0.10cm × 0.075cm`.
+    Either mark may be replaced with another `curve.mark` specification or `none`.
 
   Width overrides are Typst lengths, independent of the graph unit and node
   radius. With all defaults, the node and ordinary edge strokes are `0.5pt`,
-  scalar/ghost strokes `1pt`, fermion arrowheads `0.2pt`, and momentum strokes
-  `0.4pt`. The constructor stores resolved `node-style`, `fermion`, `particles`,
+  scalar/ghost strokes `1pt`, and momentum strokes `0.4pt`. Mark stroke thickness
+  comes from its carrier line; the former `fermion-arrow-line-width` option is
+  removed. Choose shape, size and paint through `fermion-mark` instead.
+  The constructor stores resolved `node-style`, `fermion`, `particles`,
   `momentum-stroke`, and `momentum-mark` presets in `scope.feynman`.
   `graph.style` uses this scope for measurement, and `draw` inherits it after
   layout; no repeated draw-time configuration is needed. Separate styles do not
@@ -1598,6 +1610,7 @@
 
 #let _tidy-scope = (
   api-link: _api-link,
+  curve: curve,
   draw: draw,
   graph: graph,
   layout: layout,

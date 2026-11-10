@@ -40,9 +40,21 @@
   native-data: native-data,
 )
 
+// Carrier knots cache geometry owned by the native graph. They remain useful
+// across styling, but must not outlive position/route or topology changes.
+#let _without-layout-carriers(native-data) = {
+  native-data.edges = native-data.edges.map(data => {
+    if type(data) == dictionary and data.keys().contains("layout-carrier") {
+      let _ = data.remove("layout-carrier")
+    }
+    data
+  })
+  native-data
+}
+
 #let with-bytes(graph, graph-bytes) = _graph-object(
   graph-bytes,
-  _native-data(graph),
+  _without-layout-carriers(_native-data(graph)),
 )
 
 #let _array-at(values, index) = if index == none {
@@ -78,22 +90,6 @@
 } else {
   none
 }
-
-#let _get-native-data(native-data, kind, index) = {
-  if kind == "graph" {
-    native-data.graph
-  } else if kind == "node" {
-    _array-at(native-data.nodes, index)
-  } else if kind == "edge" {
-    _array-at(native-data.edges, index)
-  } else if kind == "hedge" {
-    _array-at(native-data.hedges, index)
-  } else {
-    none
-  }
-}
-
-#let _clean-statements(statements) = statements
 
 #let _with-build-payload(item, data-key) = {
   let result = item
@@ -142,6 +138,19 @@
         + ": statement values must be flat scalars; use data for nested data or Typst content",
     )
   }
+}
+
+#let _route-points(points) = {
+  if type(points) != array { panic("route-points must be an array") }
+  points.map(point => {
+    let coords = if type(point) == array and point.len() == 2 { point }
+      else if type(point) == dictionary and point.keys().contains("x") and point.keys().contains("y") { (point.x, point.y) }
+      else { panic("route-points entries must be two-item arrays or (x:, y:) dictionaries") }
+    if not coords.all(value => type(value) in (int, float) and value > -calc.inf and value < calc.inf) {
+      panic("route-points coordinates must be finite numbers")
+    }
+    (x: coords.at(0), y: coords.at(1))
+  })
 }
 
 #let _point-statement(point) = {
@@ -421,6 +430,7 @@
   }
   let result = (
     node: _resolve-node-ref(half.node, node-keys, context_),
+    route-points: _route-points(half.at("route-points", default: ())),
   )
   let id = half.at("id", default: none)
   if id != none {
@@ -942,7 +952,7 @@
   } else if kind == "edge" {
     ("pos", "shift", "label-pos", "label-angle", "bend", "statements", "spring-length")
   } else if kind == "hedge" {
-    ("statement", "port-label", "compass")
+    ("statement", "port-label", "compass", "route-points")
   } else {
     ()
   }
@@ -1003,6 +1013,8 @@
         if changed.len() != 0 {
           structural.insert(key, changed)
         }
+      } else if key == "route-points" {
+        structural.insert(key, _route-points(value))
       } else if key == "spring-length" {
         if value != none and (
           type(value) not in (int, float)
@@ -1153,13 +1165,10 @@
 
 #let _native-record-data(record, native-data, kind, index) = {
   let result = record
-  if result.at("statements", default: none) != none {
-    result.statements = _clean-statements(result.statements)
-  }
   if kind == "node" and result.at("name", default: none) != none {
     result.name = _name-label(result.name, "graph.nodes")
   }
-  result.data = _get-native-data(native-data, kind, index)
+  result.data = _array-at(native-data.at(kind + "s"), index)
   let origins = native-data.at("origins", default: (:))
   if kind + "s" in origins {
     result.origin = origins.at(kind + "s").at(index)
@@ -1209,12 +1218,11 @@
       subgraph-impl.subgraph-bytes(subgraph-impl.validate(graph, subgraph)),
     ))
   }
-  records.map(record => _native-record-data(
-    record,
-    native-data,
-    "node",
-    record.node,
-  ))
+  let result = ()
+  for record in records {
+    result.push(_native-record-data(record, native-data, "node", record.node))
+  }
+  result
 }
 
 #let _edge-records(graph, subgraph) = {
@@ -1227,7 +1235,11 @@
       subgraph-impl.subgraph-bytes(subgraph-impl.validate(graph, subgraph)),
     ))
   }
-  records.map(record => _native-edge-record(record, native-data))
+  let result = ()
+  for record in records {
+    result.push(_native-edge-record(record, native-data))
+  }
+  result
 }
 #let map(graph_, callbacks) = {
   let graph = callbacks.graph
@@ -1235,6 +1247,9 @@
   let edge = callbacks.edge
   let source = callbacks.source
   let sink = callbacks.sink
+  if callbacks.values().all(mapper => mapper == none) {
+    return _assert-graph(graph_)
+  }
   let records = (
     node: if node == none { () } else { _node-records(graph_, none) },
     edge: if edge == none and source == none and sink == none { () } else {
@@ -1266,21 +1281,23 @@
   let structural-changed = false
   let structural-patches = (nodes: (), edges: (), hedges: ())
   let native-data = _native-data(graph_)
-  let info = _info-record(graph_)
-  let graph-record = _record-with-fields(
-    info + (statements: info.at("global-statements", default: (:))),
-    (:),
-    (:),
-  )
-  let graph-patch = _mapped-patch(
-    graph,
-    graph-record,
-    "graph",
-    "graph.map graph",
-  )
-  if graph-patch.data != none {
-    native-data.graph = graph-patch.data
-    changed = true
+  if graph != none {
+    let info = _info-record(graph_)
+    let graph-record = _record-with-fields(
+      info + (statements: info.at("global-statements", default: (:))),
+      (:),
+      (:),
+    )
+    let graph-patch = _mapped-patch(
+      graph,
+      graph-record,
+      "graph",
+      "graph.map graph",
+    )
+    if graph-patch.data != none {
+      native-data.graph = graph-patch.data
+      changed = true
+    }
   }
 
   if node != none {
@@ -1307,23 +1324,25 @@
     for edge-source in records.edge {
       let edge-record = _record-with-fields(edge-source, (:), (:))
       let edge-fields = edge-record.fields
-      let patch = _mapped-patch(edge, edge-record, "edge", "graph.map edge")
-      if patch.data != none {
-        native-data.edges = _array-set(
-          native-data.edges,
-          edge-source.edge,
-          patch.data,
-        )
-        changed = true
-      }
-      if patch.structural != none {
-        let structural = patch.structural + (index: edge-source.edge)
-        structural-patches.edges.push(structural)
-        structural-changed = true
+      if edge != none {
+        let patch = _mapped-patch(edge, edge-record, "edge", "graph.map edge")
+        if patch.data != none {
+          native-data.edges = _array-set(
+            native-data.edges,
+            edge-source.edge,
+            patch.data,
+          )
+          changed = true
+        }
+        if patch.structural != none {
+          let structural = patch.structural + (index: edge-source.edge)
+          structural-patches.edges.push(structural)
+          structural-changed = true
+        }
       }
 
       let source-record = edge-source.at("source", default: none)
-      if source-record != none {
+      if source != none and source-record != none {
         let source-patch = _mapped-patch(
           source,
           _record-with-fields(source-record, edge-fields, (edge: edge-record)),
@@ -1348,7 +1367,7 @@
       }
 
       let sink-record = edge-source.at("sink", default: none)
-      if sink-record != none {
+      if sink != none and sink-record != none {
         let sink-patch = _mapped-patch(
           sink,
           _record-with-fields(sink-record, edge-fields, (edge: edge-record)),
@@ -1370,6 +1389,17 @@
         }
       }
     }
+  }
+
+  let geometry-changed = (
+    (structural-patches.nodes + structural-patches.edges).any(patch => (
+      patch.keys().any(key => key in ("pos", "shift"))
+    )) or structural-patches.hedges.any(patch => (
+      patch.keys().contains("route-points")
+    ))
+  )
+  if geometry-changed {
+    native-data = _without-layout-carriers(native-data)
   }
 
   if structural-changed {
@@ -1688,6 +1718,7 @@
     data: data,
     statement: statement,
     compass: compass,
+    route-points: _route-points(options.route-points),
   )
 }
 #let sink(node, options, ..args) = {
@@ -1709,6 +1740,7 @@
     data: data,
     statement: statement,
     compass: compass,
+    route-points: _route-points(options.route-points),
   )
 }
 #let edge(options, ..args) = {
@@ -1943,7 +1975,7 @@
   }))
   _graph-object(
     result.graph,
-    _join-native-data(result, _native-data(left), _native-data(right)),
+    _without-layout-carriers(_join-native-data(result, _native-data(left), _native-data(right))),
   )
 }
 
@@ -2073,7 +2105,7 @@
     )
     native.boundaries.push(b + (node: node, edge: edge.edge))
   }
-  let output = _graph-object(result.graph, native)
+  let output = _graph-object(result.graph, _without-layout-carriers(native))
   if boundary == none { output } else {
     let created = result.boundaries.map(b => (b.node, b.edge))
     let patch = record => if (

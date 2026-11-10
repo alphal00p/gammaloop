@@ -4,7 +4,7 @@
 #let _plugin = plugin("../linnest.wasm")
 
 #let _option-rules = (
-  spring: (strength: "number", length: "number"),
+  spring: (strength: "number", length: "number", "rest-length-scale": "number"),
   repulsion: (
     strength: "number",
     centering: "number",
@@ -16,8 +16,9 @@
   ),
   constraints: (
     "side-strength": "number",
-    "external-centroid-bias": "number",
-    "external-centroid-distance": "number",
+    "external-pull": "number",
+    "external-pull-balance": "non-negative-finite",
+    "external-pull-attachment": "non-negative-finite",
     "node-movement": ("fixed", "layout"),
     direction: ("down", "right", "left-to-right", "left-right", "lr"),
     "rank-alignment": (
@@ -42,13 +43,23 @@
     spring: "number",
     repulsion: "number",
     steps: "integer",
-    model: ("normal", "dangling-tangent", "fixed-length"),
+    model: ("normal", "dangling-tangent", "fixed-length", "fixed-gap"),
     step: "number",
     tolerance: "number",
     "max-movement": "number",
   ),
   solver: (
-    algorithm: ("force", "anneal", "tree", "dot", "stable-layered", "railroad"),
+    "initial-repulsion": "number",
+    "repulsion-growth": "number",
+    algorithm: (
+      "force",
+      "anneal",
+      "tree",
+      "dot",
+      "stable-layered",
+      "railroad",
+      "impred",
+    ),
     steps: "integer",
     epochs: "integer",
     seed: "integer",
@@ -60,6 +71,7 @@
     temperature: "number",
     "max-movement": "number",
     "incremental-energy": "boolean",
+    "subgraph-mode": ("fixed-boundary", "isolated"),
     "crossing-penalty": "number",
     "depth-scale": "non-negative-finite",
     "flattening-end": "unit-interval",
@@ -286,17 +298,19 @@
   /// Semantic solver options. Supported fields are `algorithm`, `steps`,
   /// `epochs`, `seed`, `step`, `step-shrink`, `cooling`, `acceptance-floor`,
   /// `tolerance`, `temperature`, `max-movement`, `incremental-energy`,
-  /// `crossing-penalty`, `depth-scale`, and `flattening-end`. These override the
-  /// corresponding flat parameters below.
+  /// `subgraph-mode`, `crossing-penalty`, `depth-scale`, and `flattening-end`.
+  /// These override the corresponding flat parameters below.
   /// -> none | dictionary
   solver: none,
   /// Optional subgraph object to lay out. With `"tree"`, other edges are drawn
   /// from the resulting node positions. With `"dot"` and `"stable-layered"`,
   /// the subgraph determines rank constraints, while all paired edges between
   /// included nodes get dummy routing vertices and edge positions. With
-  /// `"force"` and `"anneal"`, nodes and edges outside the subgraph are fixed
-  /// boundary points during optimization.
-  /// The selection must have compatible topology. -> none | dictionary
+  /// `"force"` and `"anneal"`, `solver.subgraph-mode: "fixed-boundary"` keeps
+  /// outside points fixed but interacting; `"isolated"` excludes them from the
+  /// solver and label-layout interactions. The selection must have compatible
+  /// topology, and isolated selections cannot cross grouped coordinates.
+  /// -> none | dictionary
   subgraph: none,
   /// Width of the layout viewport used to derive the natural spring length.
   /// Applies to both `"force"` and `"anneal"`. -> float
@@ -333,8 +347,8 @@
   accept-floor: 0.15,
   /// Force-only early stop threshold for maximum movement in one step, as a
   /// multiple of the natural spring length, eligible only after effective depth
-  /// scale reaches zero. The annealing schedule stores this value but does not
-  /// currently use it for stopping. -> float
+  /// scale reaches zero and repulsion reaches its final strength. The annealing
+  /// schedule stores this value but does not currently use it for stopping. -> float
   early-tol: 1e-6,
   /// Anneal-only initial temperature used in the Metropolis acceptance test,
   /// scaled by natural spring length squared. -> float
@@ -351,6 +365,15 @@
   /// Spring stiffness for node-to-edge incidence lengths. Applies to both
   /// modes. -> float
   k-spring: 11.0,
+  /// Rest-length multiplier, independent of drawing scale and repulsive strengths.
+  /// Multiplies each edge's `spring-length` value. -> float
+  spring-length-scale: 1.0,
+  /// Initial fraction of final repulsion for force layout. It grows monotonically
+  /// without resetting positions; 1 disables continuation. -> float
+  initial-repulsion: 1.0,
+  /// Fraction of the iteration budget spent growing repulsion to its final value.
+  /// Remaining iterations settle at full repulsion. -> float
+  repulsion-growth: 0.7,
   /// Centering strength relative to `beta`. Applies to both modes.
   /// -> float
   g-center: 0.002,
@@ -358,8 +381,9 @@
   /// each epoch. Force mode shares this budget and its cooling schedule across
   /// depth flattening and the remaining planar relaxation. -> int
   epochs: 30,
-  /// Anneal-only fixed energy penalty per detected edge crossing. The direct
-  /// force integrator does not currently add a crossing force. -> float
+  /// Fixed energy penalty per detected edge crossing. Force layout also uses
+  /// it when choosing swaps along constrained lines during planar relaxation;
+  /// it does not add a continuous crossing force. -> float
   crossing-penalty: 30.0,
   /// Repulsion for dangling half edges, relative to `beta`. Applies to
   /// both modes through the shared spring energy. -> float
@@ -368,15 +392,27 @@
   /// relative to `beta`. The equal-and-opposite reaction is shared over the
   /// nodes, avoiding translational drift. Applies to both modes. -> float
   gamma-dangling-centroid: 0.0,
-  /// Horizontal spring relative to `k-spring`, pulling incoming endpoints left
-  /// and outgoing endpoints right of the current node centroid. The target
-  /// distance is controlled by `external-centroid-distance`. Leaves Y free
-  /// and respects pins. Both modes.
-  /// Zero disables this bias. -> float
-  external-centroid-bias: 0.0,
-  /// Horizontal target offset from the centroid in external spring lengths,
-  /// including each edge's `spring-length` multiplier. -> float
-  external-centroid-distance: 1.0,
+  /// Constant external pull, scaled by `k-spring` and natural spring length.
+  /// Mixed momentum directions pull left/right; one direction spreads radially.
+  /// Components with both directions balance their total pull across the sides
+  /// and normalize it by the largest unit-flow spring load, including dangling
+  /// springs. A series chain with one leg at each end keeps its pull regardless
+  /// of length; parallel routes share the load. Distributed owners sharing an
+  /// external X coordinate receive extra pull to clear their outermost owner,
+  /// which can exceed the base force. One-direction components keep the base force.
+  /// These fixed topology weights apply identically to force and energy.
+  /// Reaction is shared over nodes, preserving translation and respecting pins.
+  /// Zero disables the pull. Applies to force and annealing modes. -> float
+  external-pull: 0.0,
+  /// Non-negative exponent on topology weights: 0 gives uniform per-endpoint
+  /// pull, 1 keeps the default balancing, and values above 1 strengthen it.
+  /// One-direction radial pull is unaffected. -> float
+  external-pull-balance: 1.0,
+  /// Non-negative multiplier on the extra demand from distributed owners
+  /// sharing an external X coordinate. Zero uses only bottleneck load sharing;
+  /// 1 keeps the default correction, and larger values increase that demand.
+  /// Terminal groups and one-direction radial pull are unaffected. -> float
+  external-pull-attachment: 1.0,
   /// Local edge-edge repulsion, relative to `beta`. Applies to both
   /// modes. -> float
   gamma-ee: 0.1,
@@ -404,7 +440,12 @@
   /// `"dangling-tangent"` uses the edge direction for dangling half-edge labels
   /// and a perpendicular offset for paired edges, and `"fixed-length"` keeps
   /// each label at a fixed distance from its edge point and only lets that
-  /// segment rotate. -> string
+  /// segment rotate. `"fixed-gap"` keeps internal labels at a uniform clearance
+  /// from their measured text box, sliding along the rendered curve to avoid
+  /// overlaps without changing that gap;
+  /// dangling labels retain outward tangent relaxation. ImPrEd relaxes no
+  /// labels: in every mode the drawing's annotation search places its
+  /// internal labels, clearing coil and wave bands. -> string
   label-layout: "normal",
   /// Label relaxation step size. Applies after both modes. -> float
   label-step: 0.15,
@@ -426,7 +467,8 @@
   /// Layout algorithm. Use `"force"` for direct force integration, `"anneal"`
   /// for simulated annealing against the spring energy, `"tree"` for a
   /// traversal-tree placement, `"dot"` for a Graphviz-like layered placement,
-  /// or `"stable-layered"` for a stable railroad-inspired layered placement.
+  /// `"stable-layered"` for a stable railroad-inspired layered placement, or
+  /// `"impred"` for constrained planarization and topology-preserving relaxation.
   /// -> string
   layout-algo: "force",
   /// Node movement policy. `"layout"` lets the layout algorithm move nodes.
@@ -486,10 +528,69 @@
   /// mostly zooms the result instead of retuning the force ratios. Applies to
   /// both modes. -> float
   length-scale: 0.35,
+  /// ImPrEd nominal cooling budget; accelerated integration can use fewer solves. -> int
+  impred-steps: 500,
+  /// Maximum virtual-iteration stride after the first 20% of fine steps.
+  /// Must be positive; 1 retains the reference integration schedule. -> int
+  impred-step-scale: 2,
+  /// Rotate the drawing to its external-pull optimum at every refinement
+  /// checkpoint, levelling mixed incoming/outgoing legs. Pinned or aligned
+  /// coordinates keep their frame. -> bool
+  impred-level: true,
+  /// ImPrEd target route spacing. -> float
+  impred-spacing: 2.4,
+  /// ImPrEd point repulsion multiplier. -> float
+  impred-repulsion: 2.5,
+  /// ImPrEd route attraction multiplier. -> float
+  impred-attraction: 2.5,
+  /// Correction for multiple parallel edges. -> float
+  impred-parallel-balance: 1.0,
+  /// Topology-normalized external pull. -> float
+  impred-pull: 0.45,
+  /// External pull normalization exponent. -> float
+  impred-pull-balance: 1.0,
+  /// Pull transmitted to constrained external attachments. -> float
+  impred-pull-attachment: 4.0,
+  /// Maximum intermediate points on each external route, from zero to three. -> int
+  impred-external-max-points: 2,
+  /// Segment length threshold for subdivision, relative to spacing. -> float
+  impred-split-length-ratio: 1.5,
+  /// Chord length threshold for route contraction, relative to spacing. -> float
+  impred-contract-chord-ratio: 1.25,
+  /// ImPrEd node/edge clearance. -> float
+  impred-edge-clearance: 0.4,
+  /// ImPrEd point-to-segment repulsion multiplier. -> float
+  impred-node-edge-strength: 4.0,
+  /// Opt-in label-aware layout: lay out each measured internal label as a
+  /// point tethered beside its carrier, so the drawing makes room for it; the
+  /// annotation search then prefers that side. Off by default. -> bool
+  impred-labels: false,
+  // Normalize the same options without moving geometry.
+  _snapshot: false,
 ) = {
   spring = _checked-group("spring", spring)
   repulsion = _checked-group("repulsion", repulsion)
   constraints = _checked-group("constraints", constraints)
+  let pull-balance = constraints.at(
+    "external-pull-balance",
+    default: external-pull-balance,
+  )
+  _check-option-value(
+    "constraints",
+    "external-pull-balance",
+    pull-balance,
+    "non-negative-finite",
+  )
+  let pull-attachment = constraints.at(
+    "external-pull-attachment",
+    default: external-pull-attachment,
+  )
+  _check-option-value(
+    "constraints",
+    "external-pull-attachment",
+    pull-attachment,
+    "non-negative-finite",
+  )
   labels = _checked-group("labels", labels)
   solver = _checked-group(
     "solver",
@@ -519,6 +620,18 @@
     delta: str(solver.at("max-movement", default: delta)),
     beta: str(repulsion.at("strength", default: beta)),
     k-spring: str(spring.at("strength", default: k-spring)),
+    spring-length-scale: str(spring.at(
+      "rest-length-scale",
+      default: spring-length-scale,
+    )),
+    initial-repulsion: str(solver.at(
+      "initial-repulsion",
+      default: initial-repulsion,
+    )),
+    repulsion-growth: str(solver.at(
+      "repulsion-growth",
+      default: repulsion-growth,
+    )),
     g-center: str(repulsion.at("centering", default: g-center)),
     epochs: str(solver.at("epochs", default: epochs)),
     crossing-penalty: str(solver.at(
@@ -529,21 +642,22 @@
     gamma-dangling-centroid: str(
       repulsion.at("dangling-centroid", default: gamma-dangling-centroid),
     ),
-    external-centroid-bias: str(constraints.at(
-      "external-centroid-bias",
-      default: external-centroid-bias,
-    )),
-    external-centroid-distance: str(constraints.at(
-      "external-centroid-distance",
-      default: external-centroid-distance,
-    )),
+    external-pull: str(constraints.at("external-pull", default: external-pull)),
+    external-pull-balance: str(pull-balance),
+    external-pull-attachment: str(pull-attachment),
     gamma-ee: str(repulsion.at("edge-edge", default: gamma-ee)),
     directional-force: str(constraints.at(
       "side-strength",
       default: directional-force,
     )),
-    internal-label-length-scale: str(labels.at("internal-distance", default: internal-label-length-scale)),
-    external-label-length-scale: str(labels.at("external-distance", default: external-label-length-scale)),
+    internal-label-length-scale: str(labels.at(
+      "internal-distance",
+      default: internal-label-length-scale,
+    )),
+    external-label-length-scale: str(labels.at(
+      "external-distance",
+      default: external-label-length-scale,
+    )),
     label-spring: str(labels.at("spring", default: label-spring)),
     label-charge: str(labels.at("repulsion", default: label-charge)),
     label-steps: str(labels.at("steps", default: label-steps)),
@@ -559,6 +673,7 @@
       "incremental-energy",
       default: incremental-energy,
     ),
+    subgraph-mode: solver.at("subgraph-mode", default: "fixed-boundary"),
     layout-algo: solver.at("algorithm", default: layout-algo),
     layout-nodes: constraints.at("node-movement", default: layout-nodes),
     layout-direction: constraints.at("direction", default: layout-direction),
@@ -581,6 +696,59 @@
       subgraph-module._impl.validate(graph, subgraph),
     ))
   }
+  if _snapshot {
+    return cbor(_plugin.graph_layout_snapshot(
+      graph-module.graph-bytes(graph),
+      cbor.encode(settings),
+    ))
+  }
+  if settings.at("layout-algo") == "impred" {
+    if subgraph != none {
+      panic("ImPrEd currently requires a complete layout graph")
+    }
+    let snapshot = _plugin.graph_layout_snapshot(
+      graph-module.graph-bytes(graph),
+      cbor.encode(settings),
+    )
+    let seed = _plugin.graph_impred_seed(bytes(json.encode((
+      diagram: json(_plugin.graph_impred_diagram(snapshot)),
+      scale: impred-spacing,
+      external_sides: true,
+    ))))
+    let options = (
+      impred-steps: impred-steps,
+      impred-step-scale: impred-step-scale,
+      impred-level: impred-level,
+      impred-spacing: impred-spacing,
+      impred-repulsion: impred-repulsion,
+      impred-attraction: impred-attraction,
+      impred-parallel-balance: impred-parallel-balance,
+      impred-pull: impred-pull,
+      impred-pull-balance: impred-pull-balance,
+      impred-pull-attachment: impred-pull-attachment,
+      impred-external-max-points: impred-external-max-points,
+      impred-split-length-ratio: impred-split-length-ratio,
+      impred-contract-chord-ratio: impred-contract-chord-ratio,
+      impred-edge-clearance: impred-edge-clearance,
+      impred-node-edge-strength: impred-node-edge-strength,
+      impred-labels: impred-labels,
+    )
+    let result = cbor(_plugin.graph_impred_layout(
+      snapshot,
+      seed,
+      cbor.encode(options),
+    ))
+    let graph = graph-module.with-bytes(graph, bytes(result.graph))
+    if result.carriers.len() != graph-module.edges(graph).len() {
+      panic("ImPrEd carriers do not match the layout graph")
+    }
+    // Preserve the physical knots: the half-edge storage anchor is not an
+    // interpolation point in the Hobby curve designed for this carrier.
+    return graph-module.map(graph, edge: edge => (
+      layout-carrier: result.carriers.at(edge.edge),
+    ))
+  }
+  let graph = graph-module.map(graph, edge: _ => (layout-carrier: none))
   let graph-bytes = _plugin.layout_parsed_graph(
     graph-module.graph-bytes(graph),
     cbor.encode(settings),

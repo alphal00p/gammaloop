@@ -4,3 +4,5 @@ vendor/typst-packages/** -whitespace
 # Unified diffs use a literal space for empty context lines.
 examples/reproducers/symbolica-expansion/patches/*.patch -whitespace
 *.mp3 binary
+# Generated bundles preserve upstream license bytes verbatim.
+**/LICENSE.ec-layout -whitespace

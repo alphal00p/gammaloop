@@ -1,6 +1,7 @@
 //! Convert typed graph drawings to native SVG scenes.
 use super::{
-    LengthUnit, MathScript, MathValue, NativeEnum, NativeValue, RenderSettingsTransport, TextValue,
+    LengthUnit, MathScript, MathValue, NativeEnum, NativeValue, PyMark, RenderSettingsTransport,
+    TextValue,
 };
 use crate::drawing::{DrawingKind, EDGE_FIELDS, NODE_FIELDS};
 use crate::PyErrExt;
@@ -284,9 +285,12 @@ impl RenderSettingsTransport {
         values: &BTreeMap<String, NativeValue>,
     ) -> Result<(), NativeSceneError> {
         let mut config = Config::default();
-        let value = NativeValue::Dict(values.clone())
-            .json()
-            .map_err(NativeSceneError::JsonValue)?;
+        let value = if group == "edge-style" {
+            PyMark::native_style(values)
+        } else {
+            NativeValue::Dict(values.clone()).json()
+        }
+        .map_err(NativeSceneError::JsonValue)?;
         config.style.insert(group.into(), value);
         config.apply(scene).map_err(NativeSceneError::Configuration)
     }
@@ -739,6 +743,10 @@ impl RenderSettingsTransport {
                 flow: None,
                 momentum: false,
                 momentum_offset: EdgeDrawing::DEFAULT_MOMENTUM_OFFSET,
+                flow_arrow: EdgeDrawing::default_flow_arrow(),
+                momentum_arrow: EdgeDrawing::default_momentum_arrow(),
+                flow_arrow_paints: Vec::new(),
+                momentum_arrow_paints: Vec::new(),
                 label,
                 details: scene.graph.edges[index]
                     .name
@@ -827,6 +835,42 @@ mod tests {
     use crate::typst::{ColorValue, PyTextStyle, SelectorCallbacks, TypstModuleSource};
     use roxmltree::Document;
     use serde_json::json;
+
+    #[test]
+    fn native_mark_styles_keep_engine_dimensions_and_leaf_paints() {
+        let values = BTreeMap::from([
+            ("kind".into(), NativeValue::String("kurvst-mark".into())),
+            ("shape".into(), NativeValue::String("triangle".into())),
+            ("length".into(), NativeValue::Length(3.0, LengthUnit::Pt)),
+            (
+                "fill".into(),
+                NativeValue::Color(ColorValue::Named("red".into())),
+            ),
+        ]);
+        let style = PyMark::native_style(&BTreeMap::from([(
+            "mark".into(),
+            NativeValue::Mark(values),
+        )]))
+        .unwrap();
+        assert_eq!(style["flow-arrow"]["shape"], "triangle");
+        assert_eq!(style["flow-arrow"]["length"]["points"], 3.0);
+        assert_eq!(style["flow-arrow-paints"][0]["fill"], "#ff4136");
+        assert!(style.get("mark").is_none());
+        let public = BTreeMap::from([
+            ("kind".into(), NativeValue::String("kurvst-mark".into())),
+            ("shape".into(), NativeValue::String("triangle".into())),
+            ("length".into(), NativeValue::String("3pt".into())),
+            ("fill".into(), NativeValue::String("red".into())),
+        ]);
+        assert_eq!(
+            PyMark::native_style(&BTreeMap::from([(
+                "mark".into(),
+                NativeValue::Dict(public)
+            ),]))
+            .unwrap(),
+            style
+        );
+    }
 
     #[test]
     fn label_absence_is_distinct_from_invalid_content_and_styles() {

@@ -192,6 +192,7 @@
       "linnet-render-py"
     ],
     "linnet-render-py": [
+      "kurvst",
       "linnest",
       "linnet",
       "symbolica-data",
@@ -541,6 +542,7 @@
       "linnet-render-py": []
     },
     "linnet-render-py": {
+      "kurvst": [],
       "linnest": [
         "svg"
       ],
@@ -1050,7 +1052,9 @@
     ],
     "alphal00p-docs-python-exporter": [],
     "alphal00p-docs-schema": [],
-    "clinnet": [],
+    "clinnet": [
+      "kurvst"
+    ],
     "feynkit": [
       "feynkit-amplitude",
       "feynkit-cff",
@@ -1435,7 +1439,9 @@
       "vakint"
     ],
     "alphal00p-docs-schema": [],
-    "clinnet": [],
+    "clinnet": [
+      "kurvst"
+    ],
     "feynkit": [
       "feynkit-amplitude",
       "feynkit-cff",
@@ -1590,6 +1596,7 @@
       "linnet-render-py"
     ],
     "linnet-render-py": [
+      "kurvst",
       "linnest",
       "linnet",
       "symbolica-data",
@@ -1704,7 +1711,9 @@
       ]
     },
     "alphal00p-docs-schema": {},
-    "clinnet": {},
+    "clinnet": {
+      "kurvst": []
+    },
     "feynkit": {
       "feynkit-amplitude": [],
       "feynkit-cff": [],
@@ -1948,6 +1957,7 @@
       "linnet-render-py": []
     },
     "linnet-render-py": {
+      "kurvst": [],
       "linnest": [
         "svg"
       ],

@@ -1968,7 +1968,7 @@ class TestDotCodec(unittest.TestCase):
             "stroke": lp.Stroke(paint=lp.Color("red"), thickness=lp.Length.pt(0.7))
         }
         graph.edge("propagator").drawing.decoration = {
-            "marks": [lp.Mark.barbed()],
+            "marks": [lp.Mark("stealth")],
             "padding": lp.Insets(all=lp.Length.mm(1)),
         }
         graph.edge("propagator").source.drawing.statement = "source statement"
@@ -2282,9 +2282,9 @@ class TestTypedTypstSurface(unittest.TestCase):
         )
         insets = lp.Insets(x=length, y=lp.Length.em(0.5))
         mark = lp.Mark(
-            end=lp.MarkSymbol.Barbed,
+            "stealth",
             fill=lp.Color("red"),
-            anchor=lp.Anchor.Center,
+            length="3pt + 450%",
         )
         label = lp.TextLabel(
             'literal "#(not code)"',
@@ -2671,7 +2671,6 @@ class TestTypedTypstSurface(unittest.TestCase):
             edge_ratio=0.8,
             edge_resolve_length=lp.EdgeLengthResolution.Shorter,
             edge_accuracy=0.001,
-            edge_optimize=True,
             edge_split_gap=0.25,
             edge_dangling_tangent=lp.DanglingTangent.Horizontal,
             source_style=[{"stroke": stroke}],

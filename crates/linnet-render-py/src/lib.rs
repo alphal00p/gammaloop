@@ -155,8 +155,13 @@ _OptionalStrokeCap: typing.TypeAlias = StrokeCap | None | Inherit
 _OptionalStrokeJoin: typing.TypeAlias = StrokeJoin | None | Inherit
 _OptionalDashValue: typing.TypeAlias = _DashValue | None
 _OptionalStrokeValue: typing.TypeAlias = _StrokeValue | None
-_MarkAnchor: typing.TypeAlias = Anchor | Inherit
-_MarkShorten: typing.TypeAlias = _LengthValue | None | Auto
+_MarkSize: typing.TypeAlias = builtins.str | Length | Ratio | RelativeLength
+_MarkPaint: typing.TypeAlias = Color | builtins.str | builtins.bool | None | Auto
+_AutoMarkSize: typing.TypeAlias = _MarkSize | Auto
+_MarkRatio: typing.TypeAlias = builtins.str | Ratio
+_MarkStroke: typing.TypeAlias = _MarkPaint | Stroke
+_MarkPhase: typing.TypeAlias = Angle | Auto
+_MarkPart: typing.TypeAlias = Mark | _NativeDict | _MarkSize
 _TextStyleValue: typing.TypeAlias = TextStyle | Inherit
 _AutoOptionalStaticContent: typing.TypeAlias = _StaticContent | None | Auto
 _OptionalStaticContent: typing.TypeAlias = _StaticContent | None
@@ -475,6 +480,10 @@ config = graph.RenderSettings(
                     flow: None,
                     momentum: false,
                     momentum_offset: EdgeDrawing::DEFAULT_MOMENTUM_OFFSET,
+                flow_arrow: EdgeDrawing::default_flow_arrow(),
+                momentum_arrow: EdgeDrawing::default_momentum_arrow(),
+                flow_arrow_paints: Vec::new(),
+                momentum_arrow_paints: Vec::new(),
                     label: None,
                     details: [("particle", "phi")].into_iter().collect(),
                 }],

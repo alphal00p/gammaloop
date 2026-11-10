@@ -15,6 +15,7 @@ path = "src/bin/stubgen.rs"
 required-features = ["python_stubgen"]
 
 [dependencies]
+kurvst = { path = "../kurvst" }
 symbolica-notation = { workspace = true }
 symbolica = { workspace = true, features = ["python_export"] }
 linnet = { workspace = true }

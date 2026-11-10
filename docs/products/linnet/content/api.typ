@@ -533,6 +533,38 @@ Executable Typst module references cannot define graph geometry or styles. Use `
 and `MathSymbol` for labels; their sizes are measured before native layout. Standalone
 Typst documents can still use Linnest's separate Typst package.
 
+==== Shared arrowhead geometry
+
+`Mark` is data for Kurvst's shared Rust/Wasm engine. The catalogue is
+`triangle`, `straight`, `stealth`, `round`, `tikz`, `barb`, `hooks`, `bar`,
+`bracket`, `circle`, `square`, `diamond`, and `rays`. Defaults, fitting,
+shaft contacts and painted footprints have one geometry owner.
+
+```python
+from symbolica.community import graph
+flow = graph.Mark("triangle", length="0.21cm", width="0.1575cm")
+heads = graph.Mark.combine(graph.Mark("bar"), "2pt", graph.Mark("circle"), fit="bend")
+```
+
+Native styles accept `flow-arrow` and `momentum-arrow` under `edge-style`.
+Standalone Typst uses the same data under the half-edge's `mark` key, with
+placement selected independently by `mark-position` and `mark-orientation`.
+Lengths use `pt`, `mm`, `cm` or `in`; ratios scale with line thickness.
+Mixed sizes such as `"3pt + 450%"` add physical and stroke-relative parts.
+`fit="chord"` is the default; endpoint `fit="bend"` follows the carrier,
+while interior stations always use a chord. Composite children omit `fit`
+and `shorten` so the whole composite is fitted once.
+
+`to_dict()` returns public data (`kind="kurvst-mark"`, `shape`) with typed
+values and omitted defaults. `from_dict()` normalizes this data without
+modifying its input. `to_native()` returns JSON-compatible `mark` geometry
+and a `paints` array in flattened drawable order. Fill and stroke are
+paint-only; line thickness and joins belong to the line. Legacy CeTZ
+`symbol`, `start`, `end`, `scale`, `anchor` and `shorten_to` fields reject
+with migration guidance. Standalone documents use stock CeTZ 0.5.2 to
+paint the engine's finished geometry.
+
+
 === Explicit DOT codecs
 
 DOT conversion is never implicit because arbitrary Python data and rich drawing values have no

@@ -25,7 +25,7 @@
   let external = graph
     .edges(g)
     .filter(edge => edge.source == none or edge.sink == none)
-  let cut = external.any(edge => _field(edge, "is_cut") != none)
+  let cut = graph.edges(g).any(edge => _field(edge, "is_cut") != none)
   (amplitude: external.len() > 0 and not cut, cross-section: cut)
 }
 
@@ -51,6 +51,8 @@
       right.push(edge.edge)
     }
   }
+  // A single momentum direction has no scattering axis: let all legs spread radially.
+  let place = place and left.len() > 0 and right.len() > 0
   if place {
     left = left.sorted(key: id => edges.at(id).sink.hedge)
     right = right.sorted(key: id => edges.at(id).source.hedge)
@@ -136,8 +138,8 @@
   let (internal-label-length-scale, external-label-length-scale) = if (
     show-momentum in (true, "true", "\"true\"")
   ) {
-    (0.75, 0.60)
-  } else { (0.60, 0.45) }
+    (0.45, 0.60)
+  } else { (0.36, 0.45) }
   let styles = (
     (
       scope: scope,
@@ -171,7 +173,7 @@
     }
     let defaults = if mode.amplitude {
       (
-        k-spring: 4.5,
+        k-spring: 9.0,
         eps: 1e-7,
         step: 0.6,
         gamma-dangling: 2.3,
@@ -179,21 +181,24 @@
         external-label-length-scale: external-label-length-scale,
         label-steps: 100,
         directional-force: 4.5,
-        label-layout: "dangling-tangent",
+        label-layout: "fixed-gap",
       )
     } else if mode.cross-section {
       (
         length-scale: 0.4,
+        k-spring: 22.0,
         internal-label-length-scale: internal-label-length-scale,
         external-label-length-scale: external-label-length-scale,
         label-steps: 100,
-        label-layout: "dangling-tangent",
+        label-layout: "fixed-gap",
       )
     } else { (:) }
     if mode.amplitude or mode.cross-section {
       defaults.insert("gamma-dangling-centroid", 1.25)
-      defaults.insert("external-centroid-bias", 1.0)
-      defaults.insert("external-centroid-distance", 3.0)
+      defaults.insert("external-pull", 1.0)
+      defaults.insert("spring-length-scale", 0.75)
+      defaults.insert("initial-repulsion", 0.15)
+      defaults.insert("repulsion-growth", 0.7)
     }
     (renderer.layout-graph)(
       (
@@ -242,6 +247,7 @@
     "mode",
     "amplitude-mode",
     "cross-section-mode",
+    "split-initial-state",
     "show-node-index",
     "debug",
     "columns",

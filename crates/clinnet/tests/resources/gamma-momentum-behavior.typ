@@ -1,4 +1,4 @@
-#import "crates/linnest/typst/src/lib.typ": graph, draw
+#import "crates/linnest/typst/src/lib.typ": graph, draw, curve
 #import "gamma-physics-edge-style.typ" as physics
 #import "gamma-layout-core.typ": autogen-external-edge-fields
 #set page(width: auto, height: auto, margin: 0pt)
@@ -6,6 +6,8 @@
 #assert.eq(physics.momentum-arrow-defaults.offset, 0.35)
 #assert.eq(physics.momentum-arrow-defaults.length, 1.4)
 #assert.eq(physics.momentum-arrow-defaults.ratio, 0.5)
+#assert.eq(physics.fermion-arrow-mark, curve.mark.triangle(length: 0.21cm, width: 0.1575cm))
+#assert.eq(physics.momentum-arrow-defaults.mark, curve.mark.straight(length: 0.16cm, width: 0.12cm))
 #assert.eq(physics.coil.pattern-natural-endpoints, true)
 #assert.eq(physics.coil.pattern-amplitude, 0.15)
 #assert.eq(physics.coil.pattern-wavelength, 0.45)
@@ -51,7 +53,9 @@
     map: (probe: (
       source: line, sink: line, label: [generated particle label],
       fermion-arrow: true,
-      fermion-arrow-mark: (end: (symbol: "triangle", fill: green, stroke: none, anchor: "center"), scale: 0.5),
+      fermion-arrow-mark: curve.mark.triangle(
+        length: 0.1cm, width: 0.075cm, fill: green, stroke: none,
+      ),
     )),
     momentum-arrows: mode != "ordinary" and not mode.ends-with("-ordinary"),
     show-momentum: true,
@@ -70,7 +74,9 @@
     momentum-arrow-stroke: (paint: red, thickness: 0.4pt, cap: "round"),
     momentum-arrow-mark: if mode == "no-mark" { none }
       else if mode == "default-mark" { auto }
-      else { (end: (symbol: "triangle", fill: red, stroke: none)) },
+      else { curve.mark.triangle(
+        length: 0.16cm, width: 0.12cm, fill: red, stroke: none,
+      ) },
   )
   if outside {
     let generated-label = callbacks.edge-label
