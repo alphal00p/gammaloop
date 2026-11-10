@@ -144,6 +144,9 @@ fn massive_vacuum_masters_reproduce_their_poles() -> Result<()> {
     let mass_symbol = symbol!("rstar_vacuum_mass"; Scalar);
     let mass = Atom::var(mass_symbol);
     let mut failures = Vec::new();
+    let recursion = (std::env::var("RSTAR_MASSIVE_CHILDREN").as_deref() != Ok("standalone")
+        && std::env::var("RSTAR_MASSIVE_CHILDREN").as_deref() != Ok("forest"))
+    .then(|| super::massive::RecursionContext::new(&model, &vakint, &settings, extra));
     for (loops, master) in selected {
         let started = Instant::now();
         let topology = master_topology(loops, &master)?;
@@ -177,7 +180,8 @@ fn massive_vacuum_masters_reproduce_their_poles() -> Result<()> {
                 .into();
             let sub = plan.massive_vacuum_subdivergence_poles(
                 &graph, &model, &mass, &vakint, &settings, extra, forest_extra,
-                std::env::var("RSTAR_MASSIVE_CHILDREN").map(|v| v == "standalone").unwrap_or(true),
+                std::env::var("RSTAR_MASSIVE_CHILDREN").map(|v| v == "standalone").unwrap_or(false),
+                recursion.as_ref(),
             )?;
             record["children_ms"] = (sub.children_ms as u64).into();
             record["subdivergences"] = sub.poles.to_string().into();
@@ -229,6 +233,24 @@ fn massive_vacuum_masters_reproduce_their_poles() -> Result<()> {
                     }
                 }
             }
+            if routes.split(',').any(|r| r.trim() == "r") {
+                let t = Instant::now();
+                let context = super::massive::RecursionContext::new(&model, &vakint, &settings, extra);
+                match context.counterterm(&graph) {
+                    Ok(delta) => {
+                        let delta = super::massive::RecursionContext::identified(&delta);
+                        record["delta_r_ms"] = (t.elapsed().as_millis() as u64).into();
+                        record["delta_r"] = delta.to_string().into();
+                        record["m_uv_in_delta_r"] = delta.contains_symbol(GS.m_uv_vacuum).into();
+                        record["delta_r_calls"] = context.calls.get().into();
+                        deltas.push(("r", delta));
+                    }
+                    Err(error) => {
+                        record["error_r"] = format!("{error:?}").into();
+                        ok = false;
+                    }
+                }
+            }
             if routes.split(',').any(|r| r.trim() == "ii") {
                 let t = Instant::now();
                 let (delta, log) = match topology.overall_counterterm_rstar(&model, &mass, &vakint, &settings) {
@@ -260,9 +282,11 @@ fn massive_vacuum_masters_reproduce_their_poles() -> Result<()> {
                 record[format!("pass_{route}")] = pass.into();
                 ok &= pass;
             }
-            if deltas.len() == 2 {
-                record["delta_i_minus_ii"] =
-                    (&deltas[0].1 - &deltas[1].1).expand().together().to_string().into();
+            for a in 0..deltas.len() {
+                for b in a + 1..deltas.len() {
+                    record[format!("delta_{}_minus_{}", deltas[a].0, deltas[b].0)] =
+                        (&deltas[a].1 - &deltas[b].1).expand().together().to_string().into();
+                }
             }
             Ok(ok)
         })();
@@ -324,6 +348,9 @@ fn massive_vacuum_part_a_from_spec() -> Result<()> {
     let vakint = loaded_vakint(4)?;
     let mass_symbol = symbol!("rstar_vacuum_mass"; Scalar);
     let mass = Atom::var(mass_symbol);
+    let recursion = (std::env::var("RSTAR_MASSIVE_CHILDREN").as_deref() != Ok("standalone")
+        && std::env::var("RSTAR_MASSIVE_CHILDREN").as_deref() != Ok("forest"))
+    .then(|| super::massive::RecursionContext::new(&model, &vakint, &settings, extra));
     for entry in spec.as_array().expect("a JSON list") {
         let name = entry["name"].as_str().unwrap().to_owned();
         if names.as_ref().is_some_and(|names| !names.contains(&name)) {
@@ -365,7 +392,8 @@ fn massive_vacuum_part_a_from_spec() -> Result<()> {
                 .into();
             let sub = plan.massive_vacuum_subdivergence_poles(
                 &graph, &model, &mass, &vakint, &settings, extra, forest_extra,
-                std::env::var("RSTAR_MASSIVE_CHILDREN").map(|v| v == "standalone").unwrap_or(true),
+                std::env::var("RSTAR_MASSIVE_CHILDREN").map(|v| v == "standalone").unwrap_or(false),
+                recursion.as_ref(),
             )?;
             record["children_ms"] = (sub.children_ms as u64).into();
             record["part_a"] = sub.poles.to_string().into();
