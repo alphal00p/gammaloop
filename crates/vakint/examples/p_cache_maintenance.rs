@@ -1,20 +1,24 @@
-//! Prepare, check and replay the light 1L-3L p cache that vakint-external-data
-//! ships in its `p_integral/` area (branch `p_integral`; M2-V6). Build with
+//! Prepare, check and replay the light p cache that vakint-external-data ships
+//! in its `p_integral/` area (branch `p_integral`; M2-V6, M3-V10). Build with
 //! `cargo build --release -p vakint --example p_cache_maintenance`.
 //!
-//! The cache is the complete Ordered step cache of Vakint's built-in 1L-3L p
-//! library for one fixed workload (`tests/support/p_cache.rs`: the 1L-3L
+//! The cache is the complete Ordered step cache of one RustRed p library
+//! program for one fixed workload (`tests/support/p_cache.rs`: the 1L-3L
 //! benchmark grid, the 2L/3L physics cells, the Forcer batteries and the
-//! anchors), recorded cold under each of the three weight arithmetics in turn
-//! (exact first): a modular arithmetic visits a few steps exact does not (two
-//! 2L benchmark cells, 9 steps), so the cache holds the union and serves all
-//! three without a miss.
+//! anchors, plus the four-loop anchors for a library reaching four loops).
+//! The program is the one the engine resolves: with `--artifacts DATA` the
+//! library DATA's `p_integral/` area lists (the scope 1-4 library of the
+//! default program), else the built-in 1L-3L library; its label
+//! `p-library-<a>-<b>` and scope come from the loaded library. The workload is
+//! recorded cold under exact (RustRed records the same steps under the three
+//! weight arithmetics since M3-T19, so one exact-prepared cache serves them
+//! all; `--arithmetic LIST` records the union of several in turn).
 //!
 //! ```text
-//! p_cache_maintenance prepare --output WORK [--tail default] [--n-cores N]
-//!     [--vakint-revision REV] [--rustred-revision REV]
-//!   the workload cold (shipped caches ignored) under exact, modular_polynomial
-//!   and modular_sampled into one read-write WORK/cache-root,
+//! p_cache_maintenance prepare --output WORK [--artifacts DATA] [--arithmetic LIST]
+//!     [--tail default] [--n-cores N] [--vakint-revision REV] [--rustred-revision REV]
+//!   the workload cold (shipped caches ignored) under each arithmetic of LIST
+//!   (default exact) into one read-write WORK/cache-root,
 //!   then export_ordered_caches into WORK/export (p_integral/ordered-cache/,
 //!   p_integral/ordered-cache.json); WORK must not exist. Stage it with
 //!   `python3 tools/p_integral_area.py stage --export WORK/export` in
@@ -40,15 +44,14 @@ use std::time::Instant;
 use symbolica::atom::Atom;
 use vakint::{
     EvaluationMethod, EvaluationOrder, OrderedCacheMode, OrderedCacheSettings,
-    OrderedWeightArithmetic, RustRedEvaluationOptions, RustRedMasterMode,
+    OrderedWeightArithmetic, RustRedEvaluationOptions, RustRedMasterMode, ShippedOrderedCacheCheck,
     ShippedOrderedCacheStatus, Vakint, VakintSettings, vakint_parse,
 };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-const P_LABEL: &str = "p-library-1-3";
-/// The weight arithmetics prepare records and replay is run under.
-const ARITHMETICS: [&str; 3] = ["exact", "modular_polynomial", "modular_sampled"];
+/// The weight arithmetic prepare records under without `--arithmetic`.
+const PREPARE_ARITHMETIC: &str = "exact";
 const BUBBLE: &str = "topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))";
 
 struct Options {
@@ -129,19 +132,46 @@ fn settings(
     }
 }
 
-/// An engine with the 1L-3L data of `artifacts` loaded from its directory.
+/// An engine with the 1L-3L data of `artifacts` loaded from its directory
+/// (and the p library its `p_integral/` area lists, if any).
 fn engine(artifacts: &Path) -> Result<Vakint> {
     let mut engine = Vakint::new()?;
     engine.load_external_data(artifacts, 3)?;
     Ok(engine)
 }
 
-fn p_counters(engine: &Vakint) -> (u64, u64, u64) {
+/// The p program of `engine`, loaded by one cache-off evaluation: its label
+/// `p-library-<a>-<b>`, the scope's last loop count `b` and its row of
+/// `shipped_ordered_caches()`.
+fn p_program(
+    engine: &Vakint,
+    options: &Options,
+) -> Result<(String, usize, ShippedOrderedCacheCheck)> {
+    let load = settings(
+        options,
+        OrderedWeightArithmetic::default(),
+        OrderedCacheSettings::off(),
+    );
+    drop(engine.evaluate(&load, vakint_parse!(BUBBLE)?.as_view())?);
+    let mut rows = (engine.shipped_ordered_caches()?.into_iter())
+        .filter(|row| row.program.starts_with("p-library-"))
+        .collect::<Vec<_>>();
+    if rows.len() != 1 {
+        return Err(format!("expected one p program, found {}", rows.len()).into());
+    }
+    let row = rows.remove(0);
+    let scope = (row.program.rsplit('-').next())
+        .and_then(|end| end.parse().ok())
+        .ok_or_else(|| format!("{}: no scope", row.program))?;
+    Ok((row.program.clone(), scope, row))
+}
+
+fn p_counters(engine: &Vakint, label: &str) -> (u64, u64, u64) {
     engine
         .ordered_cache_statistics()
         .programs
         .iter()
-        .find(|program| program.program == P_LABEL)
+        .find(|program| program.program == label)
         .map_or((0, 0, 0), |program| {
             (
                 program.native.hits,
@@ -159,12 +189,26 @@ fn prepare(options: &Options) -> Result<()> {
     if work.exists() {
         return Err(format!("{} exists; use a fresh WORK directory", work.display()).into());
     }
+    let arithmetics = match options.arithmetic.as_slice() {
+        [] => vec![PREPARE_ARITHMETIC.to_owned()],
+        list => list.to_vec(),
+    };
     let root = work.join("cache-root");
     std::fs::create_dir_all(&root)?;
-    let engine = Vakint::new()?;
-    let workload = p_cache::p_cache_workload()?;
+    let engine = match &options.artifacts {
+        Some(artifacts) => engine(artifacts)?,
+        None => Vakint::new()?,
+    };
+    let (label, scope, _) = p_program(&engine, options)?;
+    let library = match &options.artifacts {
+        Some(_) => format!("{label} of the p_integral area"),
+        None => format!("built-in {label}"),
+    };
+    eprintln!("preparing the p cache of the {library} under {arithmetics:?}");
+    let workload = p_cache::p_cache_workload(scope)?;
     let mut rows: Vec<serde_json::Value> = workload.iter().map(|input| input.row()).collect();
-    for name in ARITHMETICS {
+    for name in &arithmetics {
+        let name = name.as_str();
         let settings = settings(
             options,
             name.parse()?,
@@ -174,11 +218,11 @@ fn prepare(options: &Options) -> Result<()> {
             },
         );
         for (input, row) in workload.iter().zip(&mut rows) {
-            let before = p_counters(&engine);
+            let before = p_counters(&engine, &label);
             let started = Instant::now();
             drop(engine.evaluate(&settings, input.input.as_view())?);
             let seconds = started.elapsed().as_secs_f64();
-            let inserts = p_counters(&engine).2 - before.2;
+            let inserts = p_counters(&engine, &label).2 - before.2;
             row["inserts"][name] = inserts.into();
             row["seconds"][name] = seconds.into();
             eprintln!("{name} {}: {seconds:.2} s, {inserts} inserts", input.name);
@@ -189,15 +233,15 @@ fn prepare(options: &Options) -> Result<()> {
             &options.vakint_revision,
             &options.rustred_revision,
             &format!(
-                "p_cache_maintenance prepare --n-cores {} (exact, modular_polynomial, \
-                 modular_sampled; built-in library)",
-                options.n_cores
+                "p_cache_maintenance prepare --n-cores {} ({}; {library})",
+                options.n_cores,
+                arithmetics.join(", ")
             ),
         );
         producer["p"] = serde_json::json!({
             "persistence": "rustred ordered step cache: ordered-step-cache.txt + RR-ORDERED-STEP1 \
                             shards (+ ordered-tail.rrtail)",
-            "arithmetics": ARITHMETICS,
+            "arithmetics": arithmetics,
             "adjoint_tail": std::env::var("RUSTRED_ORDERED_ADJOINT_TAIL").unwrap_or("default".into()),
             "n_cores": options.n_cores,
         });
@@ -217,18 +261,8 @@ fn check(options: &Options) -> Result<()> {
         .as_ref()
         .ok_or("check needs --artifacts")?;
     let engine = engine(artifacts)?;
-    let load = settings(
-        options,
-        OrderedWeightArithmetic::default(),
-        OrderedCacheSettings::off(),
-    );
-    drop(engine.evaluate(&load, vakint_parse!(BUBBLE)?.as_view())?);
-    let checks = engine.shipped_ordered_caches()?;
-    let row = checks
-        .iter()
-        .find(|check| check.program == P_LABEL)
-        .ok_or("the p program is not listed")?;
-    println!("{}", serde_json::to_string_pretty(row)?);
+    let (_, _, row) = p_program(&engine, options)?;
+    println!("{}", serde_json::to_string_pretty(&row)?);
     let data = artifacts.canonicalize()?;
     match &row.shipped {
         Some(shipped)
@@ -253,7 +287,8 @@ fn replay(options: &Options) -> Result<()> {
     if options.arithmetic.is_empty() {
         return Err("replay needs --arithmetic LIST".into());
     }
-    let workload = p_cache::p_cache_workload()?;
+    let (label, scope, _) = p_program(&engine(artifacts)?, options)?;
+    let workload = p_cache::p_cache_workload(scope)?;
     let mut failures = Vec::new();
     let mut summary = Vec::new();
     for name in &options.arithmetic {
@@ -283,9 +318,9 @@ fn replay(options: &Options) -> Result<()> {
         let started = Instant::now();
         let (mut hits, mut misses, mut without_steps) = (0, 0, 0);
         for (input, cold) in workload.iter().zip(&cold) {
-            let before = p_counters(&warm_engine);
+            let before = p_counters(&warm_engine, &label);
             let value = warm_engine.evaluate(&read_only, input.input.as_view())?;
-            let after = p_counters(&warm_engine);
+            let after = p_counters(&warm_engine, &label);
             let (input_hits, input_misses) = (after.0 - before.0, after.1 - before.1);
             hits += input_hits;
             misses += input_misses;
@@ -307,7 +342,7 @@ fn replay(options: &Options) -> Result<()> {
         let status = statistics
             .programs
             .iter()
-            .find(|program| program.program == P_LABEL)
+            .find(|program| program.program == label)
             .and_then(|program| program.shipped.as_ref())
             .map(|shipped| shipped.status.as_str());
         if status != Some("in-place") {
@@ -326,7 +361,7 @@ fn replay(options: &Options) -> Result<()> {
     }
     let report = serde_json::json!({
         "verdict": if failures.is_empty() { "pass" } else { "fail" },
-        "artifacts": artifacts, "n_cores": options.n_cores,
+        "artifacts": artifacts, "program": label, "n_cores": options.n_cores,
         "arithmetics": summary, "failures": failures,
     });
     let text = serde_json::to_string_pretty(&report)?;

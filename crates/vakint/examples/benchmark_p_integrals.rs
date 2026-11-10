@@ -62,7 +62,7 @@ mod harness {
     /// turn its measurement into a replay.
     const BUBBLE: &str = "topo(prop(1,edge(1,2),k(1),0,3)*prop(2,edge(2,1),k(1)-p(1),0,3))";
     const SCOPE: &str = "Wall time of Vakint::evaluate in Retain mode, in a fresh process, input \
-        parsed, engine (and RustRed library) loaded and the one-loop bubble with four dots (in no \
+        parsed, engine (and RustRed p library: built in for 1L-3L, the scope 1-4 one vakint-external-data lists for 4L) loaded and the one-loop bubble with four dots (in no \
         cell) evaluated once beforehand by either backend, on directories of its own: same frontend and finalizer for \
         both backends. RustRed cold: empty ordered-cache directory, shipped caches off. \
         Warm-same: fresh process replaying a read-only copy of the cache its cold run filled. \

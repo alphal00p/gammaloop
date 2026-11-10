@@ -456,14 +456,15 @@ Output parsing:
 
 `EvaluationMethod::RustRed`, unchanged options (`master_mode`); no new option, setting or Python API:
 - `supports` (structural): `Topology::Propagator` with `1 <= L <= 4`.
-- `has_data` for a p-integral: the engine's RustRed p library (section 6) has a scope containing `L`. Without one
-  the p-integral goes to the next method of the order, Forcer, exactly as 4L vacuum yields to FMFT. When no other
+- `has_data` for a p-integral: the engine's RustRed p library (section 6) has a scope containing `L`. RustRed is
+  the default for 1L-4L p-integrals whenever its library is available; Forcer is the fallback. Without a library
+  for `L` the p-integral goes to the next method of the order, Forcer, exactly as 4L vacuum yields to FMFT. When no other
   method supports it either, the error stays `ForcerUnavailable` (no FORM 5) or `NoEvaluationMethodFound`: RustRed
   is never chosen for a p-integral it has no library for (`Vakint::evaluation_method` falls back to RustRed only to
   report missing vacuum data), on the expression path and the term path alike.
 - It returns the same `ReducedPropagatorValue`s as Forcer and uses the same finalizer; see section 6.
 
-## 6. RustRed backend (M2: one RustRed p library program)
+## 6. RustRed backend (one RustRed p library program: 1L-3L built in, 1L-4L from vakint-external-data)
 
 Code: `src/rustred_evaluation/p_integral.rs` (dispatch, lowering, rendering), `src/rustred_evaluation/p_data.rs`
 (the library of an engine), RustRed's `rustred::propagator` (the library program, plan M2 sections 3-4). Crate entry
@@ -483,8 +484,11 @@ The library program:
      by `rustred p-package` for the scope `a..=b`, loaded through `rustred_app::propagator::load_p_library`
      (`PLibrarySource::Directory`). Exactly one library directory may exist under `p/`; a `p/` area without one, with
      several, or holding a file or a symlink in their place is an error, and so is a library whose scope differs
-     from its directory name. The 4L release (M3/M4) uses this same loader;
-  3. the built-in 1L-3L library embedded from `data/p/` (`PLibrarySource::Memory`; see "Built-in library" below).
+     from its directory name;
+  3. else the library the external data's `p_integral/` area lists (`<root>/p_integral/p-library-<a>-<b>/`, an entry
+     of `libraries` in `p_integral/manifest.json`; see "Four-loop library" below): how vakint-external-data ships the
+     scope 1-4 library;
+  4. the built-in 1L-3L library embedded from `data/p/` (`PLibrarySource::Memory`; see "Built-in library" below).
 - Every library is checked once before first use: the coefficient context is `{d}`; every vakint family of the
   scope has a top presentation (`PLibrary::top_presentation(P_FAMILIES[i].name)`) whose line slots are vakint's
   canonical lines in order (momenta up to an overall sign, no eps units), followed by ISP slots only; every
@@ -504,7 +508,7 @@ Built-in library (M2-V4):
   certificate: `rustred p-package` certified the files when it wrote them (it loads its output back with the
   certificate), their sha256 pins them, and the shipping tests compare them with the current RustRed assembly. The
   library's identity must be the manifest's.
-- Default order: `EvaluationOrder::all()` puts RustRed before Forcer, so with the built-in library 1L-3L
+- Default order: `EvaluationOrder::all()` puts RustRed before Forcer, so with the built-in library alone 1L-3L
   p-integrals go to RustRed and 4L p-integrals (outside its scope) to Forcer. Massive closures
   (`p_integral::MassiveClosure`) follow the same dispatch.
 - Fail closed: a `p/` area of the loaded external data that cannot be resolved (no or several library directories,
@@ -517,6 +521,40 @@ Built-in library (M2-V4):
   shipped families against vakint's and RustRed's, the library against `assemble_p_package` with the shipped Custom
   payloads (`equivalent_p_libraries`, never bytes), the DAG keys against `rustred_topology` run in vakint's build
   (graphica skew), and the terminals against `{1, PMaster(no), PMaster(t105)}`.
+
+Four-loop library (M3):
+- RustRed is the default for 1L-4L p-integrals whenever its library is available; Forcer is the fallback. The
+  library of scope 1-4 is reachable through vakint-external-data's `p_integral` branch (unreleased until M4): after
+  `load_external_data` of such a checkout, 4L p-integrals go to RustRed; otherwise 4L stays on Forcer. There is no
+  order code: the dispatch asks only whether the engine's library covers `L` (`has_p_data`).
+- The library is `rustred p-package --max-loops 4 --reuse-custom <owners>` at the pinned RustRed: the 16 vakint tops
+  of 1-4 loops (all eleven 4L families), 438 DAG nodes with Forcer's actions (the four diamond nodes d384, d394, d399
+  and no3 as Custom owners), 25 Custom owners with their stored LP counts, and the basis layer onto Forcer's 16
+  masters (`P_BASIS_MASTERS_1_TO_4`: no, t105 and the 14 four-loop masters). 470 files, about 50 MB raw, the largest
+  `census.json` at about 22.6 MB, so no file needs compression or splitting (the area's per-file rule: below 100 MB,
+  compressed or split above 50 MB). It does not fit the vakint crate (crates.io limit about 10 MB), so it is not
+  vendored (user ruling, 2026-11-09).
+- vakint-external-data lists it in `p_integral/manifest.json` as `{"directory": "p-library-1-4", "schema":
+  "rustred.p-owner-library.v1", "scope": [1, 4], "identity": <PLibrary::identity()>, "files": {<path>: {"sha256",
+  "bytes"}}}` (`tools/p_integral_area.py stage-library --package <dir>`); the root key pins the area manifest by
+  sha256. vakint adopts exactly one listed library of the supported `P_LIBRARY_SCHEMA`: each file is checked against
+  its entry, the library loads without re-running the descent certificate (as the built-in one) and must carry the
+  identity its entry records. An unlisted library directory, an entry of another schema and an area manifest of
+  another schema are ignored with one stderr line each; a listed supported library that fails a check fails every
+  p-integral of its scope closed, never falls back to the built-in library or to Forcer.
+- One program per engine: the listed 1-4 library supersedes the built-in 1-3 library for every loop count (one stderr
+  line when it loads), so 1L-3L inputs reduce in the 1-4 program too, with the same values. It loads once per process
+  (about 4 s, mostly the family decode of the 4L nodes, against about 0.13 s for 1-3).
+- Fail closed after selection: a 4L input that the library does not cover is a typed error naming the integral;
+  there is no Forcer retry after a RustRed error (a silent retry would hide a coverage hole).
+- Tests: `p_integrals_go_to_rustred_within_the_library_scope_else_to_forcer` (the dispatch with and without a listed
+  4L library), `the_default_path_with_external_data_matches_forcer_at_four_loops` (the default path through
+  `load_external_data` against frozen Forcer values; needs `VAKINT_TEST_P_LIBRARY_1_4`), the ignored
+  `the_one_to_four_library_regenerates_from_its_payloads` (certificate, LP recount, assembly) and the four-loop
+  Tier A battery against Forcer (full profile).
+- Regeneration (after a RustRed pin that changes a `P_*` version or the assembly): `rustred p-package --max-loops 4
+  --reuse-custom <owners> --out <dir>`, then `tools/p_integral_area.py stage-library --package <dir> --replace` and a
+  re-prepared shipped cache (below) in one data commit of vakint-external-data.
 
 Evaluation (`p_integral::evaluate_ordered_batch`):
 - The matched p contributions of one loop count and master mode form one ordered batch (key: loop count, master
@@ -569,23 +607,28 @@ Step cache:
 - Shipped p cache (`rustred_evaluation/p_shipped_cache.rs`): an external-data root read from a directory may carry a
   top-level `p_integral/` area, declared by the root-manifest key `p_integral` (`manifest`, `manifest_sha256`; area
   schema `vakint.external-data.p-integral.v1`, metadata `p_integral/ordered-cache.json` of schema
-  `vakint.external-data.p-ordered-cache.v1`). It holds a light Ordered step cache of the 1L-3L library (RustRed's
-  manifest, shards and tail table) recorded on a fixed workload tuned to the benchmark and test batteries (the 1L-3L
-  benchmark grid, the 2L/3L physics cells, the Forcer batteries, the anchors). Validity is by versions only: the cache
+  `vakint.external-data.p-ordered-cache.v1`). It holds a light Ordered step cache of the default program, the
+  scope 1-4 library the area lists (RustRed's manifest, shards and tail table), recorded on a fixed workload tuned to
+  the benchmark and test batteries (`tests/support/p_cache.rs`: the 1L-3L benchmark grid, the 2L/3L physics cells,
+  the Forcer batteries, the anchors and the 4L anchors; the 4L benchmark cells would take hours and gigabytes). It is
+  recorded under `exact`: RustRed records the same steps under the three weight arithmetics, so one cache serves
+  them all (`p_cache_maintenance replay` checks 0 misses under each). Its cache files stay within the light budget
+  of 16,000,000 bytes. Validity is by versions only: the cache
   is used iff its label, directory name, library identity, binding stamp and tail versions are those of the running
   build and every listed file matches its sha256 and size; otherwise the program reports `Rejected` (one stderr line)
   and reduces cold, with the same values. Only a resource limit propagates. An injected library, a root without the
   area and a packed release (the key, no area) ship no p cache. Read-only settings use the area in place, a
   read-write directory installs a copy. The branch `p_integral` of vakint-external-data carries the area; it is not
-  released. Regeneration: the example `p_cache_maintenance prepare` (cold read-write run of the workload, then
-  `export_ordered_caches`), `tools/p_integral_area.py stage` in vakint-external-data, then `p_cache_maintenance
-  check` and `replay`.
+  released. Regeneration: the example `p_cache_maintenance prepare --artifacts <checkout>` (cold read-write run of
+  the workload with the library the checkout lists, then `export_ordered_caches`), `tools/p_integral_area.py stage
+  --replace` in vakint-external-data, then `p_cache_maintenance check` and `replay --arithmetic
+  exact,modular_polynomial,modular_sampled`.
 - Once a p library is loaded (`Vakint::loaded_p_library`; listing never loads one), its program is part of
   `load_ordered_cache`, `shipped_ordered_caches` and `export_ordered_caches` (written as `p_integral/` of the export).
 
-Not in M2: caller families (`register_family`, run-time key computation) and `LocusPolicy` plumbing (M3); the 4L
-library in vakint-external-data (M3/M4, through the Directory source above); phase-level progress of a p request
-(the monitor counts its channels as cohorts).
+Not yet: caller families (`register_family`, run-time key computation) and `LocusPolicy` plumbing; the release of
+the `p_integral` area of vakint-external-data (M4); phase-level progress of a p request (the monitor counts its
+channels as cohorts).
 
 ## 7. Test plan
 

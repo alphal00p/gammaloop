@@ -691,14 +691,58 @@ fn rendering_fails_closed_outside_the_forcer_basis() {
     ));
 }
 
-/// Without p data for their loop count (four loops: the built-in library
-/// covers one to three), p-integrals keep their Forcer dispatch (default
-/// order with a FORM 5), the selection does not depend on the p backend's
-/// structural support; with the built-in library or an injected one covering
-/// the loop count RustRed is chosen, and a p-integral outside its scope stays
-/// with Forcer.
+/// An external-data root (vakint's vendored vacuum data) whose `p_integral/`
+/// area lists a scope 1-4 library, as vakint-external-data lists the default
+/// program's, that does not load (one placeholder `library.json`): what the
+/// area lists decides the dispatch, the library's files only its evaluation.
+fn listed_one_to_four_placeholder() -> tempfile::TempDir {
+    use sha2::{Digest, Sha256};
+    let root = tempfile::tempdir().unwrap();
+    for (path, bytes) in super::super::data::vendored_files() {
+        if !path.starts_with("p/") {
+            let target = root.path().join(path);
+            std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+            std::fs::write(target, bytes).unwrap();
+        }
+    }
+    let library = root.path().join("p_integral/p-library-1-4");
+    std::fs::create_dir_all(&library).unwrap();
+    std::fs::write(library.join("library.json"), b"{}").unwrap();
+    let area = serde_json::to_vec_pretty(&serde_json::json!({
+        "schema": super::super::p_shipped_cache::AREA_SCHEMA,
+        "libraries": [{
+            "directory": "p-library-1-4",
+            "schema": rustred::propagator::P_LIBRARY_SCHEMA,
+            "scope": [1, 4],
+            "identity": "p-library:scope=1-4:placeholder",
+            "files": {"library.json": {"sha256": format!("{:x}", Sha256::digest(b"{}")), "bytes": 2}},
+        }],
+        "files": {},
+    }))
+    .unwrap();
+    std::fs::write(root.path().join("p_integral/manifest.json"), &area).unwrap();
+    let release_path = root.path().join("manifest.json");
+    let mut release: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&release_path).unwrap()).unwrap();
+    release["p_integral"] = serde_json::json!({
+        "manifest": "p_integral/manifest.json",
+        "manifest_sha256": format!("{:x}", Sha256::digest(&area)),
+    });
+    std::fs::write(&release_path, serde_json::to_vec_pretty(&release).unwrap()).unwrap();
+    root
+}
+
+/// The default order sends a p-integral to RustRed exactly when the engine's
+/// p library covers its loop count (plan M3 D-M3-7), whatever the p
+/// backend's structural support: without a four-loop library (the built-in
+/// one covers one to three loops) four loops keep their Forcer dispatch
+/// (default order with a FORM 5); with an injected library only its scope
+/// goes to RustRed; with a scope 1-4 library listed in the external data
+/// (vakint-external-data's default program) one to four loops go to RustRed,
+/// and a listed library that does not load fails them closed with its typed
+/// error, never with a Forcer value.
 #[test]
-fn without_p_data_p_integrals_go_to_forcer() {
+fn p_integrals_go_to_rustred_within_the_library_scope_else_to_forcer() {
     use std::io::Write;
     use std::os::unix::fs::PermissionsExt;
 
@@ -759,14 +803,34 @@ fn without_p_data_p_integrals_go_to_forcer() {
         injected.evaluation_method(&settings, &topology(&injected, kite)),
         Some(EvaluationMethod::Forcer(_))
     ));
+    let root = listed_one_to_four_placeholder();
+    let mut listed = Vakint::new().unwrap();
+    listed.load_external_data(root.path(), 1).unwrap();
+    for input in [bubble, kite, four_loops] {
+        let topology = topology(&listed, input);
+        assert!(crate::rustred_evaluation::has_data(
+            &listed, &settings, &topology
+        ));
+        assert!(matches!(
+            listed.evaluation_method(&settings, &topology),
+            Some(EvaluationMethod::RustRed(_))
+        ));
+    }
+    match listed.evaluate(&settings, parse(four_loops).as_view()) {
+        Err(VakintError::RustRedEvaluation(error)) => {
+            assert!(error.to_string().contains("p-library-1-4"), "{error}")
+        }
+        other => panic!("expected the listed library's error, got {other:?}"),
+    }
 }
 
 /// RustRed is never the fallback method of a p-integral without a p library
-/// (it stays the fallback that reports missing vacuum data): with RustRed
-/// alone and no FORM 5, the expression path reports `ForcerUnavailable` and
-/// the term path `NoEvaluationMethodFound` for a four-loop p-integral (the
-/// built-in library covers one to three loops), as before the p backend
-/// existed.
+/// for its loop count (it stays the fallback that reports missing vacuum
+/// data): with RustRed alone and no FORM 5, the expression path reports
+/// `ForcerUnavailable` and the term path `NoEvaluationMethodFound` for a
+/// four-loop p-integral of an engine without a four-loop library (the
+/// built-in library covers one to three loops; the scope 1-4 library comes
+/// from vakint-external-data), as before the p backend existed.
 #[test]
 fn without_p_data_rustred_is_never_the_fallback_of_a_p_integral() {
     let settings = settings(RustRedMasterMode::Symbolic, None);
