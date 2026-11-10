@@ -67,6 +67,8 @@ pub struct MassiveVacuumSubdivergences {
     pub terms: Vec<MassiveVacuumTerm>,
     /// Wall time of the proper UV children (massive R operation).
     pub children_ms: u128,
+    /// The proper children `Delta(S)` (support label, loops, polynomial).
+    pub children: Vec<(String, usize, Atom)>,
 }
 
 #[derive(Clone, Debug)]
@@ -110,6 +112,7 @@ impl RStarPlan {
         uv_settings: &UVgenerationSettings,
         extra_terms: i64,
         forest_extra_terms: i64,
+        standalone_children: bool,
     ) -> Result<MassiveVacuumSubdivergences> {
         ensure!(
             graph.external_filter::<SuBitGraph>().is_empty(),
@@ -126,16 +129,35 @@ impl RStarPlan {
                 .iter()
                 .map(|call| call.argument.support.clone())
                 .collect::<Vec<_>>();
-            self.massive_forest_counterterms(
-                graph,
-                model,
-                vakint,
-                &uv_settings,
-                false,
-                forest_extra_terms,
-                &supports,
-            )
-            .wrap_err("while computing the proper UV counterterms with massive R")?
+            if standalone_children {
+                let mut values = BTreeMap::new();
+                for support in &supports {
+                    values.insert(
+                        support.clone(),
+                        standalone_child_counterterm(
+                            graph,
+                            model,
+                            support,
+                            vakint,
+                            &uv_settings,
+                            forest_extra_terms,
+                        )
+                        .wrap_err("while computing a standalone child counterterm")?,
+                    );
+                }
+                values
+            } else {
+                self.massive_forest_counterterms(
+                    graph,
+                    model,
+                    vakint,
+                    &uv_settings,
+                    false,
+                    forest_extra_terms,
+                    &supports,
+                )
+                .wrap_err("while computing the proper UV counterterms with massive R")?
+            }
         };
         let children_ms = started.elapsed().as_millis();
         let base = uv_settings.vakint.true_settings();
@@ -196,10 +218,24 @@ impl RStarPlan {
                 elapsed_ms: started.elapsed().as_millis(),
             });
         }
+        let children = self
+            .counterterms
+            .iter()
+            .filter_map(|call| {
+                children.get(&call.argument.support).map(|value| {
+                    (
+                        call.argument.support.string_label(),
+                        call.argument.loops,
+                        value.clone(),
+                    )
+                })
+            })
+            .collect();
         Ok(MassiveVacuumSubdivergences {
             poles: total.series(epsilon, 0, -1)?.to_atom().expand(),
             terms,
             children_ms,
+            children,
         })
     }
 
@@ -622,4 +658,126 @@ impl VacuumTopology {
         }
         Ok(((total * mass.pow(Atom::num(omega))).expand(), log))
     }
+}
+
+/// `Delta(S)` of a CONNECTED proper child `S` of `graph`, computed on a
+/// standalone runtime graph: the lines of `S` (own masses) plus one external
+/// leg per boundary half-edge of `S`, all incoming. The leg momenta are then
+/// renamed to the momenta entering `S` through those half-edges: `+Q(e)` at
+/// the sink end of line `e`, `-Q(e)` at its source end (a self-loop at a
+/// vertex of `S` contributes `+Q(e) - Q(e) = 0`). The counterterm of `S`
+/// depends on `S` and its incoming momenta only, so this is the same object
+/// the in-graph forest computes, without its boundary bookkeeping.
+#[allow(clippy::too_many_arguments)]
+pub fn standalone_child_counterterm(
+    graph: &Graph,
+    model: &Model,
+    support: &SuBitGraph,
+    vakint: &Vakint,
+    uv_settings: &UVgenerationSettings,
+    forest_extra_terms: i64,
+) -> Result<Atom> {
+    use linnet::half_edge::{involution::{Flow, HedgePair}, subgraph::SubSetLike as _};
+    let mut nodes = Vec::new();
+    let mut internal = Vec::new();
+    for (pair, edge, data) in graph.iter_edges_of(support) {
+        let HedgePair::Paired { source, sink } = pair else {
+            return Err(eyre!("a child contains an unpaired half-edge"));
+        };
+        let (a, b) = (graph.node_id(source), graph.node_id(sink));
+        for node in [a, b] {
+            if !nodes.contains(&node) {
+                nodes.push(node);
+            }
+        }
+        internal.push((edge, a, b, data.data.mass_atom(model)));
+    }
+    let crown = graph.dummy_less_full_crown(support);
+    let mut boundary = Vec::new();
+    for hedge in crown.included_iter() {
+        let edge = graph[&hedge];
+        let node = graph.node_id(hedge);
+        ensure!(nodes.contains(&node), "a boundary half-edge outside the child");
+        let sign = match graph.flow(hedge) {
+            Flow::Sink => 1,
+            Flow::Source => -1,
+        };
+        boundary.push((edge, node, sign));
+    }
+    ensure!(!boundary.is_empty(), "a proper child of a vacuum graph has a boundary");
+    let index = |node| nodes.iter().position(|n| *n == node).unwrap();
+    let mut components = (0..nodes.len()).collect::<Vec<_>>();
+    let mut slots = vec![0usize; nodes.len()];
+    let mut loops = 0;
+    let mut dot = String::from(
+        "digraph child {\ngraph [projector=1]; node [num=1];\nedge [particle=\"scalar_1\" num=1];\next [style=invis];\n",
+    );
+    for (id, (_, a, b, _)) in internal.iter().enumerate() {
+        let (ia, ib) = (index(*a), index(*b));
+        let source = slots[ia];
+        slots[ia] += 1;
+        let sink = slots[ib];
+        slots[ib] += 1;
+        let basis = if components[ia] == components[ib] {
+            loops += 1;
+            format!("lmb_id={}", loops - 1)
+        } else {
+            let (from, into) = (components[ib], components[ia]);
+            for component in &mut components {
+                if *component == from {
+                    *component = into;
+                }
+            }
+            String::new()
+        };
+        dot.push_str(&format!(
+            "v{ia} -> v{ib} [id={id} {basis} source=\"{{ufo_order:{source}}}\" sink=\"{{ufo_order:{sink}}}\"];\n"
+        ));
+    }
+    let first_external = internal.len();
+    for (j, (_, node, _)) in boundary.iter().enumerate() {
+        let i = index(*node);
+        let sink = slots[i];
+        slots[i] += 1;
+        dot.push_str(&format!(
+            "ext -> v{i} [id={} sink=\"{{ufo_order:{sink}}}\"];\n",
+            first_external + j
+        ));
+    }
+    dot.push('}');
+    let mut child: Graph = dot
+        .into_finalized_runtime_graph(model)
+        .wrap_err("while building a standalone child graph")?;
+    for (id, (_, _, _, mass)) in internal.iter().enumerate() {
+        let data = &mut child.underlying[linnet::half_edge::involution::EdgeIndex::from(id)];
+        data.particle = data.particle.clone().override_mass(Some(mass.clone()));
+    }
+    let plan = RStarPlan::new(
+        &child,
+        model,
+        linnet::half_edge::involution::EdgeIndex::from(0),
+        uv_settings,
+    )?;
+    let support = plan.support.clone();
+    let mut values = plan.massive_forest_counterterms(
+        &child,
+        model,
+        vakint,
+        uv_settings,
+        true,
+        forest_extra_terms,
+        std::slice::from_ref(&support),
+    )?;
+    let value = values.remove(&support).unwrap_or_default();
+    let renames = boundary
+        .iter()
+        .enumerate()
+        .map(|(j, (edge, _, sign))| {
+            symbolica::id::Replacement::new(
+                function!(GS.emr_mom, first_external + j, W_.x___).to_pattern(),
+                Atom::num(*sign) * function!(GS.emr_mom, usize::from(*edge), W_.x___),
+            )
+        })
+        .collect::<Vec<_>>();
+    Ok(value.replace_multiple(&renames).expand())
 }
