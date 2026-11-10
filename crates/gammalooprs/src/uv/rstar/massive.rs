@@ -506,6 +506,18 @@ fn simplify(expression: &Atom) -> Result<Atom> {
 pub struct VacuumTopology {
     pub name: String,
     pub edges: Vec<(usize, usize, u32)>,
+    /// Irreducible numerator factors `(q^2 - m^2)`, each `q` a signed sum of
+    /// line momenta: `[(line index, sign)]` (line orientation as in `edges`).
+    pub numerators: Vec<Vec<(usize, i64)>>,
+}
+
+/// One monomial of the expanded numerator: a scalar coefficient (with its
+/// mass powers) and, per line, the numerator factors attached to it (each a
+/// rank-1 `Q(line)^mu_f` contracted with the partner line of factor `f`).
+#[derive(Clone, Debug)]
+pub struct NumeratorMonomial {
+    pub coefficient: Atom,
+    pub attachments: Vec<Vec<usize>>,
 }
 
 impl VacuumTopology {
@@ -522,6 +534,7 @@ impl VacuumTopology {
     /// `4 L - 2 sum p` (scalar numerator).
     pub fn superficial_degree(&self) -> i64 {
         4 * self.loops() as i64 - 2 * self.edges.iter().map(|e| e.2 as i64).sum::<i64>()
+            + self.numerator_degree()
     }
 
     /// Runtime DOT: a line of power `q` is a chain of `q` lines through
@@ -601,6 +614,74 @@ impl VacuumTopology {
         Ok(graph)
     }
 
+    /// Expand `prod_f (q_f^2 - m^2)` with `q_f = sum s_i Q_i` into monomials
+    /// `prod_f [s_i s_j Q_i.Q_j or -m^2]`. Exact by linearity of R' and K;
+    /// each monomial is an ordinary graph with edge-attached rank-1 numerators,
+    /// so gammaloop's power counting and Taylor operation see every factor on
+    /// exactly the subgraphs containing its line.
+    pub fn numerator_monomials(&self, mass: &Atom) -> Vec<NumeratorMonomial> {
+        let mut out = vec![NumeratorMonomial {
+            coefficient: Atom::one(),
+            attachments: vec![Vec::new(); self.edges.len()],
+        }];
+        for (f, factor) in self.numerators.iter().enumerate() {
+            let mut next = Vec::new();
+            for monomial in &out {
+                for (a, &(i, si)) in factor.iter().enumerate() {
+                    for (b, &(j, sj)) in factor.iter().enumerate() {
+                        if b < a {
+                            continue;
+                        }
+                        let weight = if a == b { si * sj } else { 2 * si * sj };
+                        let mut attachments = monomial.attachments.clone();
+                        attachments[i].push(f);
+                        attachments[j].push(f);
+                        next.push(NumeratorMonomial {
+                            coefficient: &monomial.coefficient * Atom::num(weight),
+                            attachments,
+                        });
+                    }
+                }
+                next.push(NumeratorMonomial {
+                    coefficient: -(&monomial.coefficient * mass.pow(Atom::num(2))),
+                    attachments: monomial.attachments.clone(),
+                });
+            }
+            out = next;
+        }
+        out
+    }
+
+    /// The runtime graph of one numerator monomial: rank-1 momenta of the
+    /// first chain segment of each line, `Q(e)^{mu_f}` with the factor's index.
+    pub fn monomial_graph(&self, model: &Model, mass: &Atom, attachments: &[Vec<usize>]) -> Result<Graph> {
+        let mut graph = self.graph(model, mass)?;
+        let mut first = 0usize;
+        for (line, &(_, _, power)) in self.edges.iter().enumerate() {
+            if let Some(factors) = attachments.get(line).filter(|f| !f.is_empty()) {
+                let mut numerator = Atom::one();
+                for f in factors {
+                    let index: Atom = crate::numerator::aind::Aind::Edge(4000 + *f as u16, 1).into();
+                    numerator *= function!(
+                        GS.emr_mom,
+                        first,
+                        Minkowski {}.new_rep(GS.dim).to_symbolic([index])
+                    );
+                }
+                let data = &mut graph.underlying[linnet::half_edge::involution::EdgeIndex::from(first)];
+                data.num = crate::graph::Autogen::explicit(numerator);
+                data.dod = crate::graph::Autogen::explicit(-2 + factors.len() as i32);
+            }
+            first += power as usize;
+        }
+        Ok(graph)
+    }
+
+    /// Total numerator degree (each factor counts 2).
+    pub fn numerator_degree(&self) -> i64 {
+        2 * self.numerators.len() as i64
+    }
+
     /// All distributions `a` with `|a| = n` and their Minkowski expansion
     /// weight `prod_e binom(p_e + a_e - 1, a_e)` of
     /// `1/(k^2-m^2)^p = sum_a binom(p+a-1, a) (m^2)^a / (k^2)^(p+a)`.
@@ -656,7 +737,12 @@ impl VacuumTopology {
         let mut log = Vec::new();
         for (a, weight) in self.power_distributions(n) {
             let started = Instant::now();
+            ensure!(
+                self.numerators.is_empty(),
+                "route (ii) is not implemented for numerator graphs"
+            );
             let dotted = VacuumTopology {
+                numerators: Vec::new(),
                 name: format!("{}_a{}", self.name, a.iter().map(u32::to_string).collect::<String>()),
                 edges: self
                     .edges
@@ -924,7 +1010,19 @@ impl<'a> RecursionContext<'a> {
             ));
         }
         dot.push('}');
-        let key = format!("{dot}\n{masses:?}");
+        let numerators = internal
+            .iter()
+            .enumerate()
+            .map(|(id, (edge, _, _, _))| {
+                parent.underlying[*edge]
+                    .num
+                    .value
+                    .replace(function!(GS.emr_mom, usize::from(*edge), W_.x___))
+                    .with(function!(GS.emr_mom, id, W_.x___))
+                    .to_string()
+            })
+            .collect::<Vec<_>>();
+        let key = format!("{dot}\n{masses:?}\n{numerators:?}");
         let cached = self.cache.borrow().get(&key).cloned();
         let value = match cached {
             Some(value) => value,
@@ -936,6 +1034,16 @@ impl<'a> RecursionContext<'a> {
                 for (id, mass) in masses.iter().enumerate() {
                     let data = &mut child.underlying[EdgeIndex::from(id)];
                     data.particle = data.particle.clone().override_mass(Some(mass.clone()));
+                    let parent_edge = internal[id].0;
+                    let parent_data = &parent.underlying[parent_edge];
+                    data.num = crate::graph::Autogen::explicit(
+                        parent_data
+                            .num
+                            .value
+                            .replace(function!(GS.emr_mom, usize::from(parent_edge), W_.x___))
+                            .with(function!(GS.emr_mom, id, W_.x___)),
+                    );
+                    data.dod = crate::graph::Autogen::explicit(parent_data.dod.value);
                 }
                 let value = self.counterterm(&child)?;
                 self.cache.borrow_mut().insert(key, value.clone());

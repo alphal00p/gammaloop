@@ -88,6 +88,7 @@ pub(super) fn master_topology(loops: usize, master: &str) -> Result<VacuumTopolo
     let topology = VacuumTopology {
         name: format!("m{loops}L_{master}"),
         edges,
+        numerators: Vec::new(),
     };
     eyre::ensure!(topology.loops() == loops, "{master}: wrong loop count");
     Ok(topology)
@@ -370,9 +371,26 @@ fn massive_vacuum_part_a_from_spec() -> Result<()> {
                     )
                 })
                 .collect(),
+            numerators: entry["numerators"]
+                .as_array()
+                .map(|factors| {
+                    factors
+                        .iter()
+                        .map(|factor| {
+                            factor
+                                .as_array()
+                                .unwrap()
+                                .iter()
+                                .map(|t| (t[0].as_u64().unwrap() as usize, t[1].as_i64().unwrap()))
+                                .collect()
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
         };
         let started = Instant::now();
         let mut record = serde_json::json!({
+            "numerators": topology.numerators,
             "master": name,
             "loops": topology.loops(),
             "omega": topology.superficial_degree(),
@@ -381,20 +399,56 @@ fn massive_vacuum_part_a_from_spec() -> Result<()> {
             "forest_extra_terms": forest_extra,
         });
         let outcome = (|| -> Result<()> {
-            let graph = topology.graph(&model, &mass)?;
-            let plan = RStarPlan::new(&graph, &model, EdgeIndex::from(0), &settings)?;
-            record["plan_ms"] = (started.elapsed().as_millis() as u64).into();
-            record["spinneys"] = plan
-                .ordinary_uv
-                .iter()
-                .filter(|term| !term.counterterms.is_empty())
-                .count()
-                .into();
-            let sub = plan.massive_vacuum_subdivergence_poles(
-                &graph, &model, &mass, &vakint, &settings, extra, forest_extra,
-                std::env::var("RSTAR_MASSIVE_CHILDREN").map(|v| v == "standalone").unwrap_or(false),
-                recursion.as_ref(),
-            )?;
+            let monomials = topology.numerator_monomials(&mass);
+            record["monomials"] = monomials.len().into();
+            let validate = std::env::var("RSTAR_PARTA_VALIDATE").is_ok_and(|v| v == "1");
+            let mut poles = Atom::Zero;
+            let mut direct = Atom::Zero;
+            let mut delta_r = Atom::Zero;
+            let mut spinneys = 0usize;
+            let mut children = Vec::new();
+            let mut children_ms = 0u128;
+            for monomial in &monomials {
+                let graph = topology.monomial_graph(&model, &mass, &monomial.attachments)?;
+                let plan = RStarPlan::new(&graph, &model, EdgeIndex::from(0), &settings)?;
+                spinneys += plan
+                    .ordinary_uv
+                    .iter()
+                    .filter(|term| !term.counterterms.is_empty())
+                    .count();
+                let sub = plan.massive_vacuum_subdivergence_poles(
+                    &graph, &model, &mass, &vakint, &settings, extra, forest_extra,
+                    std::env::var("RSTAR_MASSIVE_CHILDREN").map(|v| v == "standalone").unwrap_or(false),
+                    recursion.as_ref(),
+                )?;
+                poles += &monomial.coefficient * &sub.poles;
+                children.extend(sub.children);
+                children_ms += sub.children_ms;
+                if validate {
+                    direct += &monomial.coefficient
+                        * massive_vacuum_direct(&graph, &model, &vakint, &settings, extra)?;
+                    let context = super::massive::RecursionContext::new(&model, &vakint, &settings, extra);
+                    delta_r += &monomial.coefficient
+                        * super::massive::RecursionContext::identified(&context.counterterm(&graph)?);
+                }
+            }
+            record["spinneys"] = spinneys.into();
+            let sub = super::massive::MassiveVacuumSubdivergences {
+                poles: poles.series(GS.dim_epsilon, 0, -1)?.to_atom().expand(),
+                terms: Vec::new(),
+                children_ms,
+                children,
+            };
+            if validate {
+                let direct = direct.series(GS.dim_epsilon, 0, -1)?.to_atom().expand();
+                let delta_r = delta_r.expand();
+                let difference = (&sub.poles - &delta_r - &direct).expand().together();
+                record["direct"] = direct.to_string().into();
+                record["delta_r"] = delta_r.to_string().into();
+                record["m_uv_in_delta_r"] = delta_r.contains_symbol(GS.m_uv_vacuum).into();
+                record["difference_r"] = difference.to_string().into();
+                record["pass_r"] = difference.is_zero().into();
+            }
             record["children_ms"] = (sub.children_ms as u64).into();
             record["part_a"] = sub.poles.to_string().into();
             let unit = unit_scales(&sub.poles, mass_symbol);
