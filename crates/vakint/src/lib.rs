@@ -5495,9 +5495,20 @@ impl Vakint {
 
     pub fn validate_settings(&self, settings: &VakintSettings) -> Result<(), VakintError> {
         settings.validate_execution()?;
-        // Verify that the chosen normalisation only contains the expected symbols
+        // Verify that the chosen normalisation only contains the expected
+        // symbols. The check needs no depth, while Symbolica's series of the
+        // G-scheme Γ ratio grows about threefold per term (3.9 s at 11 terms,
+        // 83 s at 13, unfinished after 13 min and 30 GB at 16), so it stops
+        // at 6 terms.
         let (_full_atom, expanded, evaluated) =
-            settings.integral_normalization_factor.validate(settings)?;
+            settings
+                .integral_normalization_factor
+                .validate(&VakintSettings {
+                    number_of_terms_in_epsilon_expansion: settings
+                        .number_of_terms_in_epsilon_expansion
+                        .min(6),
+                    ..settings.clone()
+                })?;
 
         debug!(
             "Loop normalisation factor considered:
@@ -8962,6 +8973,41 @@ mod tests {
                 ..settings
             })
             .unwrap();
+    }
+
+    /// `validate_settings` checks the normalisation factor through at most 6
+    /// terms: the built-in factors pass at 16 terms within a second, and a
+    /// factor with an unknown symbol or without a Laurent series still fails.
+    #[test]
+    fn the_normalization_check_is_fast_at_any_depth_and_still_rejects() {
+        let vakint = Vakint::new().unwrap();
+        let settings = |integral_normalization_factor| VakintSettings {
+            integral_normalization_factor,
+            number_of_terms_in_epsilon_expansion: 16,
+            evaluation_order: EvaluationOrder::rustred_only(),
+            ..Default::default()
+        };
+        for factor in [
+            LoopNormalizationFactor::GScheme,
+            LoopNormalizationFactor::MSbar,
+            LoopNormalizationFactor::FMFTandMATAD,
+            LoopNormalizationFactor::pySecDec,
+        ] {
+            let started = std::time::Instant::now();
+            vakint.validate_settings(&settings(factor.clone())).unwrap();
+            assert!(started.elapsed().as_secs_f64() < 1.0, "{factor}");
+        }
+        let custom = |factor: &str| {
+            vakint.validate_settings(&settings(LoopNormalizationFactor::Custom(factor.into())))
+        };
+        assert!(matches!(
+            custom("unknown_symbol^(eps*n_loops)"),
+            Err(VakintError::InvalidLoopNormalization(..))
+        ));
+        assert!(matches!(
+            custom("exp(1/eps)^n_loops"),
+            Err(VakintError::SymbolicaError(..))
+        ));
     }
 
     /// A FORM executable that only reports `FORM {version}` (M1 review F3).
