@@ -68,7 +68,7 @@ pub struct MassiveVacuumSubdivergences {
     /// Wall time of the proper UV children (massive R operation).
     pub children_ms: u128,
     /// The proper children `Delta(S)` (support label, loops, polynomial).
-    pub children: Vec<(String, usize, Atom)>,
+    pub children: Vec<(String, usize, Vec<usize>, Atom)>,
 }
 
 #[derive(Clone, Debug)]
@@ -226,6 +226,10 @@ impl RStarPlan {
                     (
                         call.argument.support.string_label(),
                         call.argument.loops,
+                        graph
+                            .iter_edges_of(&call.argument.support)
+                            .map(|(_, edge, _)| usize::from(edge))
+                            .collect(),
                         value.clone(),
                     )
                 })
