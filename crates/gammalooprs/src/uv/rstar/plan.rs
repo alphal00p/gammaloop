@@ -487,6 +487,11 @@ impl RStarPlan {
         })
     }
 
+    /// The classified UV spinney catalogue (root included), smallest first.
+    pub fn uv_catalogue(&self) -> &[Spinney] {
+        &self.catalogue
+    }
+
     /// Reuse the existing UV forest for evaluations of the original UV map.
     /// Its all-mass Taylor kernel is not the R* root's single-line kernel.
     pub fn uv_forest(&self, graph: &Graph, settings: &UVgenerationSettings) -> Forests {
