@@ -403,6 +403,22 @@ fn massive_vacuum_part_a_from_spec() -> Result<()> {
                 Err(error) => record["part_a_numeric_error"] = format!("{error}").into(),
             }
             record["m_uv_in_part_a"] = sub.poles.contains_symbol(GS.m_uv_vacuum).into();
+            if std::env::var("RSTAR_PARTA_DELTA").is_ok_and(|v| v == "ii") {
+                let t = Instant::now();
+                match topology.overall_counterterm_rstar(&model, &mass, &vakint, &settings) {
+                    Ok((delta, log)) => {
+                        let unit = unit_scales(&delta, mass_symbol);
+                        record["delta_ii"] = unit.to_string().into();
+                        record["delta_ii_ms"] = (t.elapsed().as_millis() as u64).into();
+                        record["delta_ii_terms"] = log
+                            .iter()
+                            .map(|(a, w, d, ms)| serde_json::json!({"a": a, "weight": w, "delta": d.to_string(), "ms": *ms as u64}))
+                            .collect::<Vec<_>>()
+                            .into();
+                    }
+                    Err(error) => record["delta_ii_error"] = format!("{error:?}").into(),
+                }
+            }
             record["children_with_m_uv"] = sub
                 .children
                 .iter()
