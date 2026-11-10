@@ -50,17 +50,17 @@ pub(crate) fn load_ufo_model(
     ))
 }
 
-/// Releases before 1.0.0 silently discard particle chemical potentials.
+/// The shared metadata adapter requires the isolated import API added in 1.0.1.
 #[cfg(feature = "ufo_support")]
-fn require_chemical_potential_loader(version: &str, python: &str) -> eyre::Result<()> {
-    if version
+fn require_ufo_loader_version(version: &str, python: &str) -> eyre::Result<()> {
+    let release = version
         .split('.')
-        .next()
-        .and_then(|major| major.parse::<u64>().ok())
-        .is_none_or(|major| major < 1)
-    {
+        .take(3)
+        .map(str::parse::<u64>)
+        .collect::<std::result::Result<Vec<_>, _>>();
+    if !release.is_ok_and(|parts| parts.as_slice() >= [1, 0, 1].as_slice()) {
         return Err(eyre!(
-            "UFO import requires ufo-model-loader>=1.0.0; found {version}. Upgrade the loader in Python environment {python}."
+            "UFO import requires ufo-model-loader>=1.0.1; found {version}. Upgrade the loader in Python environment {python}."
         ));
     }
     Ok(())
@@ -87,7 +87,7 @@ pub(crate) fn load_ufo_model(
             Ok(version) => version.extract()?,
             Err(e) if e.is_instance(py, &metadata.getattr("PackageNotFoundError")?) => {
                 return Err(eyre!(
-                    "UFO import requires ufo-model-loader>=1.0.0, but Python environment {exe} has no installed ufo-model-loader metadata. A source checkout on PYTHONPATH cannot be version-checked; install it, for example with `pip install -e <checkout>`."
+                    "UFO import requires ufo-model-loader>=1.0.1, but Python environment {exe} has no installed ufo-model-loader metadata. A source checkout on PYTHONPATH cannot be version-checked; install it, for example with `pip install -e <checkout>`."
                 ));
             }
             Err(e) => {
@@ -96,7 +96,7 @@ pub(crate) fn load_ufo_model(
                 ));
             }
         };
-        require_chemical_potential_loader(&loader_version, &exe)?;
+        require_ufo_loader_version(&loader_version, &exe)?;
 
         // Resolution has already selected any default card; an explicit full
         // import must not let the Python loader select its default again.
@@ -881,15 +881,15 @@ mod tests {
     #[cfg(feature = "ufo_support")]
     #[test]
     fn ufo_import_rejects_loader_without_chemical_potential_support() {
-        for version in ["0.1.8", "dev"] {
-            let error = require_chemical_potential_loader(version, "python")
+        for version in ["0.1.8", "1.0.0", "dev"] {
+            let error = require_ufo_loader_version(version, "python")
                 .unwrap_err()
                 .to_string();
-            assert!(error.contains("ufo-model-loader>=1.0.0"), "{error}");
+            assert!(error.contains("ufo-model-loader>=1.0.1"), "{error}");
             assert!(error.contains(version), "{error}");
         }
-        for version in ["1.0.0", "12.3"] {
-            require_chemical_potential_loader(version, "python").unwrap();
+        for version in ["1.0.1", "1.1.0", "2.0.0", "12.3"] {
+            require_ufo_loader_version(version, "python").unwrap();
         }
     }
 
@@ -1218,6 +1218,114 @@ mod tests {
                 "{name} pole mass"
             );
         }
+        // The real loader isolates imports, while a different source with the
+        // same module name may already occupy Python's import cache.
+        Python::attach(|py| -> Result<()> {
+            use pyo3::types::{PyDict, PyDictMethods};
+
+            let first_parent = tempfile::tempdir()?;
+            let second_parent = tempfile::tempdir()?;
+            let module_name = "feynkit_ufo_metadata_scope";
+            let first = first_parent.path().join(module_name);
+            let second = second_parent.path().join(module_name);
+            let shutil = py.import("shutil")?;
+            let copy_options = PyDict::new(py);
+            copy_options.set_item(
+                "ignore",
+                shutil.getattr("ignore_patterns")?.call1(("__pycache__",))?,
+            )?;
+            for (source, label, hypercharge) in [(&first, "A", 111), (&second, "B", 222)] {
+                shutil.getattr("copytree")?.call(
+                    (
+                        assets.join("ufo/sm").to_string_lossy().as_ref(),
+                        source.to_string_lossy().as_ref(),
+                    ),
+                    Some(&copy_options),
+                )?;
+                let init = source.join("__init__.py");
+                let mut contents = fs::read_to_string(&init)?;
+                contents.push_str(&format!(
+                    "\nparticles.d.YRight = {hypercharge}\nparticles.d.typstname = 'd_{label}'\nparticles.d.antitypstname = 'dbar_{label}'\nparameters.aEWM1.texname = '{label}_label'\nparameters.aEWM1.typstname = '{label}_typst'\n"
+                ));
+                if label == "B" {
+                    contents.push_str("covariant_cut_multiplets.pop(23)\n");
+                }
+                fs::write(init, contents)?;
+            }
+            let sys = py.import("sys")?;
+            let original_path = sys.getattr("path")?.call_method0("copy")?;
+            let original_profile = sys.call_method0("getprofile")?;
+            let original_bytecode: bool = sys.getattr("dont_write_bytecode")?.extract()?;
+            let source_path = py
+                .import("pathlib")?
+                .getattr("Path")?
+                .call1((first.to_string_lossy().as_ref(),))?;
+            let scope = py
+                .import("ufo_model_loader.raw")?
+                .getattr("imported_ufo_module")?
+                .call1((source_path,))?;
+            let cached = scope.call_method0("__enter__")?;
+            let scoped_path = sys.getattr("path")?.call_method0("copy")?;
+            let scoped_profile = sys.call_method0("getprofile")?;
+            let scoped_bytecode: bool = sys.getattr("dont_write_bytecode")?.extract()?;
+            let check_state = || -> Result<()> {
+                assert!(sys.getattr("modules")?.get_item(module_name)?.is(&cached));
+                assert!(sys.getattr("path")?.eq(&scoped_path)?);
+                assert!(sys.call_method0("getprofile")?.is(&scoped_profile));
+                assert_eq!(
+                    sys.getattr("dont_write_bytecode")?.extract::<bool>()?,
+                    scoped_bytecode
+                );
+                Ok(())
+            };
+            let result = (|| -> Result<()> {
+                for (source, label, hypercharge) in [(&first, "A", 111), (&second, "B", 222)] {
+                    let (loaded, _) = load_ufo_model(source, Some("full".into()), false)?;
+                    let particle = loaded.particle("d")?;
+                    assert_eq!(particle.y_charge_right, Some(Rational::from(hypercharge)));
+                    assert_eq!(
+                        particle.typstname.as_deref(),
+                        Some(format!("d_{label}").as_str())
+                    );
+                    assert_eq!(
+                        particle.antitypstname.as_deref(),
+                        Some(format!("dbar_{label}").as_str())
+                    );
+                    let parameter = loaded.get_parameter("aEWM1");
+                    assert_eq!(
+                        parameter.texname.as_deref(),
+                        Some(format!("{label}_label").as_str())
+                    );
+                    assert_eq!(
+                        parameter.typstname.as_deref(),
+                        Some(format!("{label}_typst").as_str())
+                    );
+                    assert_eq!(
+                        loaded.covariant_cut_multiplets().contains_key(&23),
+                        label == "A"
+                    );
+                    check_state()?;
+                }
+                let failing = second_parent.path().join("failure").join(module_name);
+                fs::create_dir_all(&failing)?;
+                fs::write(
+                    failing.join("__init__.py"),
+                    "raise RuntimeError('UFO import cleanup control')\n",
+                )?;
+                let error = load_ufo_model(&failing, Some("full".into()), false).unwrap_err();
+                assert!(format!("{error:?}").contains("UFO import cleanup control"));
+                check_state()?;
+                Ok(())
+            })();
+            scope.call_method1("__exit__", (py.None(), py.None(), py.None()))?;
+            assert!(sys.getattr("path")?.eq(&original_path)?);
+            assert!(sys.call_method0("getprofile")?.is(&original_profile));
+            assert_eq!(
+                sys.getattr("dont_write_bytecode")?.extract::<bool>()?,
+                original_bytecode
+            );
+            result
+        })?;
         Ok(())
     }
 }

@@ -606,18 +606,27 @@ pub(crate) fn group_diagrams(
             } else {
                 exact_source
             };
-            let canonical = exact_source.canonize().map_err(|error| {
-                tensor_evaluation_error(&diagram, 0, format!("exact canonicalization: {error}"))
-            })?;
-            canonical
-                .with_algebra_result(canonical.expression().replace_map_bottom_up(
+            // Factoring can change which tensor sum anchors the dummy frame.
+            // Finish scalar normalization before assigning canonical indices.
+            let exact_source = exact_source
+                .with_algebra_result(exact_source.expression().replace_map_bottom_up(
                     |value, _, out| {
                         if matches!(value, AtomView::Add(_)) {
                             **out = value.collect_numeric_content();
                         }
                     },
                 ))
-                .map_err(&color_error)?
+                .map_err(&color_error)?;
+            let exact_source = if matches!(grouping, NumeratorGrouping::UpToScalar(_)) {
+                exact_source
+                    .with_algebra_result(exact_source.expression().collect_factors())
+                    .map_err(|error| tensor_evaluation_error(&diagram, 0, error))?
+            } else {
+                exact_source
+            };
+            exact_source.canonize().map_err(|error| {
+                tensor_evaluation_error(&diagram, 0, format!("exact canonicalization: {error}"))
+            })?
         } else {
             SymbolicTensor::infer(Atom::one()).expect("literal scalar one")
         };

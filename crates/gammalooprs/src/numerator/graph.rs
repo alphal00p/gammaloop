@@ -284,11 +284,54 @@ mod test {
         tensor::{SymbolicNetParse, SymbolicTensor},
     };
 
-    use crate::{graph::Graph, uv::UltravioletGraph};
+    use crate::{
+        graph::Graph, processes::AmplitudeGraph, settings::global::GenerationSettings,
+        uv::UltravioletGraph,
+    };
     use spenso::network::parsing::ParseSettings;
     use symbolica::parse_lit;
 
     use crate::{initialisation::test_initialise, model::ModelGammaLoopExt, numerator::aind::Aind};
+    #[test]
+    fn qqx_aaa_tree() {
+        test_initialise().unwrap();
+
+        let model = crate::utils::load_generic_model("sm");
+        let graph = Graph::import_dot(r#"digraph qqx_aaa_tree_1 {
+                    num="spenso::g(spenso::dind(spenso::cof(3, hedge(1))), spenso::cof(3, hedge(2)))/3"
+                    ext    [style=invis]
+                    ext -> v1:1 [particle="d" id=1];
+                    ext -> v3:2 [particle="d~" id=2];
+                    v1:3 -> ext [particle="a" id=3];
+                    v2:4 -> ext [particle="a" id=4];
+                    v3:0 -> ext [particle="a" id=0];
+                    v1 -> v2 [particle="d" id=5];
+                    v2 -> v3 [particle="d" id=6];
+        }"#, &model).unwrap().remove(0);
+        let mut graph = AmplitudeGraph::new(graph);
+
+        let vk = crate::utils::vakint().unwrap();
+
+        // let model = crate::utils::load_generic_model("sm");
+
+        graph.generate_cff(&GenerationSettings::default()).unwrap();
+        graph
+            .build_integrands(
+                &model,
+                &GenerationSettings::default(),
+                vk,
+                &mut Default::default(),
+            )
+            .unwrap();
+
+        println!(
+            "{}",
+            graph.derived_data.representations
+                [&three_dimensional_reps::generation::RepresentationMode::Cff]
+                .resolved_integrand()
+                .unwrap()
+        );
+    }
 
     #[test]
     fn simplify() {

@@ -808,27 +808,27 @@ impl DirectForestFixture {
                 let parent_term =
                     builder.build_direct(&mut graph, &parent, &bare_parent, &parent_integrated)?;
                 completed = completed
-                    .zip_add(bare)?
-                    .zip_add(child)?
-                    .zip_add(parent_term)?;
+                    .zip_add([bare])?
+                    .zip_add([child])?
+                    .zip_add([parent_term])?;
                 if let Some(box_child) = &box_child {
                     let box_ct = Direct3dApproximation::new(localizer, &mut graph, &settings)
                         .run_local(&source, box_child, &root, box_child, &root)?;
                     let nested_box = Direct3dApproximation::new(localizer, &mut graph, &settings)
                         .run_local(&box_ct, &parent, box_child, &parent, box_child)?;
                     completed = completed
-                        .zip_add(builder.build_direct(
+                        .zip_add([builder.build_direct(
                             &mut graph,
                             box_child,
                             &box_ct,
                             &integrated,
-                        )?)?
-                        .zip_add(builder.build_direct(
+                        )?])?
+                        .zip_add([builder.build_direct(
                             &mut graph,
                             &parent,
                             &nested_box,
                             &integrated,
-                        )?)?;
+                        )?])?;
                 }
             }
             crate::debug_tags!(#generation, #profile, #uv, #summary;
@@ -970,9 +970,9 @@ impl DirectForestFixture {
                 &parent_integrated,
             )?;
             projected_final = projected_final
-                .zip_add(bare)?
-                .zip_add(child_term)?
-                .zip_add(parent_term)?;
+                .zip_add([bare])?
+                .zip_add([child_term])?
+                .zip_add([parent_term])?;
             if let (Some(box_child), Some(box_local)) = (&box_child, &box_local) {
                 let nested_box = uv_limit(
                     &Full4dCts::from_factorized_local(box_local),
@@ -988,18 +988,18 @@ impl DirectForestFixture {
                     Projected4dApproximation::new(localizer, &mut graph, &settings)
                         .project_local_4d(&nested_box, &mut projection_context)?;
                 projected_final = projected_final
-                    .zip_add(builder.build_projected(
+                    .zip_add([builder.build_projected(
                         &mut graph,
                         box_child,
                         &box_projected,
                         &integrated,
-                    )?)?
-                    .zip_add(builder.build_projected(
+                    )?])?
+                    .zip_add([builder.build_projected(
                         &mut graph,
                         &parent,
                         &nested_box_projected,
                         &integrated,
-                    )?)?;
+                    )?])?;
             }
         }
         crate::debug_tags!(#generation, #profile, #uv, #summary;
@@ -1533,20 +1533,25 @@ impl DirectForestFixture {
                 &model,
                 cuts,
                 crate::utils::vakint()?,
-                OrientationProjection::exact_expression(
+                &[OrientationProjection::exact_expression(
                     &production,
                     &options,
                     &settings.orientation_pattern,
                     true,
-                ),
+                )],
                 &settings,
+                &mut Default::default(),
             )?;
             assert_eq!(
                 generated.len(),
                 1,
                 "the uncut amplitude has one complete forest sum"
             );
-            let generated = generated.pop().unwrap();
+            let generated = generated
+                .get_mut(&options.representation)
+                .unwrap()
+                .pop()
+                .unwrap();
             return ForestTensorEvaluator::new_shared(self, &graph, route, &generated.integrands);
         }
         let (graph, expressions) =

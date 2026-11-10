@@ -388,6 +388,8 @@ fn native_sampling_saved_state_boundary() -> Result<()> {
                 &model,
                 &mut EvaluationMetaData::new_empty(),
             )?;
+            let representation = integrand.get_settings().stability.levels[0]
+                .resolved_representation(integrand.generated_representations())?;
             let adopted = evaluate_single(
                 integrand,
                 EvaluationTarget::Physical(&model),
@@ -395,6 +397,7 @@ fn native_sampling_saved_state_boundary() -> Result<()> {
                 &identity,
                 &mut EvaluationMetaData::new_empty(),
                 Some(&anchor),
+                representation,
             )?;
             let solved = evaluate_single(
                 integrand,
@@ -403,6 +406,7 @@ fn native_sampling_saved_state_boundary() -> Result<()> {
                 &identity,
                 &mut EvaluationMetaData::new_empty(),
                 Some(&independent),
+                representation,
             )?;
             record["adopted_physics"] = json!(format!("{adopted:?}"));
             record["independent_physics"] = json!(format!("{solved:?}"));
@@ -532,7 +536,7 @@ fn native_sampling_saved_state_boundary() -> Result<()> {
                             }
                         }
                         evaluate_all_rotations(integrand, EvaluationTarget::Physical(&model), &native,
-                            &mut EvaluationMetaData::new_empty(), true, Some(&anchor))
+                            &mut EvaluationMetaData::new_empty(), true, Some(&anchor), representation)
                     })();
                     record["lanes"].as_array_mut().unwrap().push(json!({"precision": stringify!($numeric),
                         "result": format!("{result:?}"), "required": $required}));

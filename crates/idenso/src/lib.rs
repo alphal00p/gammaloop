@@ -17,6 +17,8 @@ use spenso::{
     },
     shadowing::symbolica_utils::SpensoPrintSettings,
     structure::{
+        abstract_index::AbstractIndex,
+        partial::{PartialStructure, PartialStructureExt},
         representation::{Euclidean, Lorentz, Minkowski, RepName},
         slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind},
     },
@@ -550,6 +552,10 @@ impl IndexTooling for AtomView<'_> {
 
         net.remove_antisymmetric_zero_terms();
 
+        // Keep duality wrappers in the expression graph. The canonicalizer
+        // follows the same base index inside dind(...), while the wrapper
+        // preserves which occurrence is covariant. Erasing that distinction
+        // can collapse opposite color metrics into an invalid tensor square.
         let mut dummies = BTreeMap::new();
         for (p, _, d) in net.graph.graph.iter_edges() {
             if p.is_paired()
@@ -625,9 +631,8 @@ impl IndexTooling for AtomView<'_> {
             scalar_definitions.register_alias(alias, original);
         }
         // Spenso supplies validated incidence and external slots. Symbolica
-        // follows the underlying index inside dind(...), retaining each endpoint's
-        // duality. Stripping and restoring it by tensor head would lose the slot
-        // orientation of symmetric metrics. Nested sums remain factorized.
+        // canonizes the reconstructed expression, including dummy pairs inside
+        // nested sums, without distributing any products of sums.
         let canonical =
             expr.canonize_tensors(dummies)
                 .map_err(|error| CanonicalizationError::Indices {

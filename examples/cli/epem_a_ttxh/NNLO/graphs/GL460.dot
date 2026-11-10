@@ -1,0 +1,237 @@
+digraph GL460{
+    // Retain native two-loop charts at competing hard thresholds, and share
+    // one-loop charts across soft-related cuts through complementary weights.
+    threshold_counterterms = "
+schema_version = 1
+
+[function_map]
+\"NL()\" = \"if(denL(),dL()^2/denL(),1)\"
+\"NR()\" = \"if(denR(),dR()^2/denR(),1)\"
+\"SL()\" = \"if(denL(),pL()^2/denL(),0)\"
+\"SR()\" = \"if(denR(),pR()^2/denR(),0)\"
+\"dL()\" = \"dE(UFO::MT,UFO::MT,E(star,6),E(star,8),Q3(star,6,cind(1)),Q3(star,6,cind(2)),Q3(star,6,cind(3)),Q3(star,8,cind(1)),Q3(star,8,cind(2)),Q3(star,8,cind(3)))+E(star,13)\"
+\"dR()\" = \"dE(UFO::MT,UFO::MT,E(star,4),E(star,8),Q3(star,4,cind(1)),Q3(star,4,cind(2)),Q3(star,4,cind(3)),Q3(star,8,cind(1)),Q3(star,8,cind(2)),Q3(star,8,cind(3)))+E(star,13)\"
+\"denL()\" = \"dL()^2+pL()^2\"
+\"denR()\" = \"dR()^2+pR()^2\"
+\"p26()\" = \"E(star,6)+E(star,8)+E(star,13)-wQ()\"
+\"p27()\" = \"E(star,6)+E(star,8)+E(star,11)+E(star,12)-wQ()\"
+\"p28()\" = \"E(star,7)+E(star,8)-wQ()\"
+\"p38()\" = \"E(star,4)+E(star,7)+E(star,11)+E(star,12)-wQ()\"
+\"p46()\" = \"E(star,4)+E(star,7)+E(star,13)-wQ()\"
+\"pL()\" = \"p28()*p26()*p27()/wQ()^2\"
+\"pR()\" = \"p28()*p46()*p38()/wQ()^2\"
+\"wQ()\" = \"P(0,cind(0))+P(1,cind(0))\"
+
+[[cuts]]
+edges = [2, 3, 6]
+
+[[cuts.thresholds]]
+edges = [6, 8, 11, 12]
+
+[[cuts.thresholds.counterterms]]
+name = \"default\"
+subspace = [7, 11]
+parent_lmb = [3, 6, 7, 11]
+
+[[cuts.thresholds]]
+edges = [6, 8, 13]
+
+[[cuts.thresholds.counterterms]]
+name = \"default\"
+subspace = [7, 11]
+parent_lmb = [3, 6, 7, 11]
+
+[[cuts.thresholds]]
+edges = [7, 8]
+
+[[cuts.thresholds.counterterms]]
+name = \"default\"
+subspace = [7, 11]
+parent_lmb = [3, 6, 7, 11]
+
+[[cuts.thresholds]]
+edges = [8, 11, 14]
+
+[[cuts.thresholds.counterterms]]
+name = \"shared_1l\"
+subspace = [11]
+parent_lmb = [3, 6, 7, 11]
+
+[cuts.thresholds.counterterms.multiplier]
+expression = \"SL()\"
+
+[[cuts.thresholds.counterterms]]
+name = \"native_2l\"
+subspace = [7, 11]
+parent_lmb = [3, 6, 7, 11]
+
+[cuts.thresholds.counterterms.multiplier]
+expression = \"NL()\"
+
+[[cuts]]
+edges = [2, 3, 12, 14]
+
+[[cuts.thresholds]]
+edges = [7, 8]
+
+[[cuts.thresholds.counterterms]]
+name = \"default\"
+subspace = [7]
+parent_lmb = [3, 7, 12, 14]
+
+[[cuts.thresholds]]
+edges = [8, 11, 14]
+
+[[cuts.thresholds.counterterms]]
+name = \"default\"
+subspace = [7]
+parent_lmb = [3, 7, 12, 14]
+
+[[cuts.thresholds]]
+edges = [8, 12, 13, 14]
+
+[[cuts.thresholds.counterterms]]
+name = \"default\"
+subspace = [7]
+parent_lmb = [3, 7, 12, 14]
+
+[[cuts]]
+edges = [2, 4, 5]
+
+[[cuts.thresholds]]
+edges = [4, 7, 11, 12]
+
+[[cuts.thresholds.counterterms]]
+name = \"default\"
+subspace = [7, 11]
+parent_lmb = [2, 4, 7, 11]
+
+[[cuts.thresholds]]
+edges = [4, 7, 13]
+
+[[cuts.thresholds.counterterms]]
+name = \"default\"
+subspace = [7, 11]
+parent_lmb = [2, 4, 7, 11]
+
+[[cuts.thresholds]]
+edges = [4, 11, 13, 14]
+
+[[cuts.thresholds.counterterms]]
+name = \"shared_1l\"
+subspace = [11]
+parent_lmb = [2, 4, 7, 11]
+
+[cuts.thresholds.counterterms.multiplier]
+expression = \"SR()\"
+
+[[cuts.thresholds.counterterms]]
+name = \"native_2l\"
+subspace = [7, 11]
+parent_lmb = [2, 4, 7, 11]
+
+[cuts.thresholds.counterterms.multiplier]
+expression = \"NR()\"
+
+[[cuts.thresholds]]
+edges = [4, 12, 14]
+
+[[cuts.thresholds.counterterms]]
+name = \"shared_1l\"
+subspace = [11]
+parent_lmb = [2, 4, 7, 11]
+
+[cuts.thresholds.counterterms.multiplier]
+expression = \"SR()\"
+
+[[cuts.thresholds.counterterms]]
+name = \"native_2l\"
+subspace = [7, 11]
+parent_lmb = [2, 4, 7, 11]
+
+[cuts.thresholds.counterterms.multiplier]
+expression = \"NR()\"
+
+[[cuts.thresholds]]
+edges = [7, 8]
+
+[[cuts.thresholds.counterterms]]
+name = \"default\"
+subspace = [7, 11]
+parent_lmb = [2, 4, 7, 11]
+
+[[cuts.thresholds]]
+edges = [8, 11, 14]
+
+[[cuts.thresholds.counterterms]]
+name = \"shared_1l\"
+subspace = [11]
+parent_lmb = [2, 4, 7, 11]
+
+[cuts.thresholds.counterterms.multiplier]
+expression = \"SR()\"
+
+[[cuts.thresholds.counterterms]]
+name = \"native_2l\"
+subspace = [7, 11]
+parent_lmb = [2, 4, 7, 11]
+
+[cuts.thresholds.counterterms.multiplier]
+expression = \"NR()\"
+
+[[cuts]]
+edges = [2, 5, 8, 13]
+
+[[cuts.thresholds]]
+edges = [8, 11, 14]
+
+[[cuts.thresholds.counterterms]]
+name = \"default\"
+subspace = [11]
+parent_lmb = [5, 8, 11, 13]
+
+[[cuts.thresholds]]
+edges = [8, 12, 13, 14]
+
+[[cuts.thresholds.counterterms]]
+name = \"default\"
+subspace = [11]
+parent_lmb = [5, 8, 11, 13]
+";
+    num = "1";
+    overall_factor = "NumeratorDependentGrouping(460,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1)*NumeratorIndependentSymmetryGrouping(2))+NumeratorDependentGrouping(461,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1)*NumeratorIndependentSymmetryGrouping(2))";
+    overall_factor_evaluated = "-4";
+    projector = "u(1,spenso::bis(4,hedge(1)))*ubar(1,spenso::bis(4,hedge(29)))*v(0,spenso::bis(4,hedge(28)))*vbar(0,spenso::bis(4,hedge(0)))";
+
+	0 [int_id="V_141"];
+	1 [int_id="V_141"];
+	2 [int_id="V_134"];
+	3 [int_id="V_134"];
+	4 [int_id="V_137"];
+	5 [int_id="V_137"];
+	6 [int_id="V_137"];
+	7 [int_id="V_137"];
+	8 [int_id="V_98"];
+	9 [int_id="V_98"];
+	exte0	[style=invis];
+	exte0	-> 9:0	[id=0 is_cut="28" particle="e+" ];
+	exte1	[style=invis];
+	exte1	-> 9:1	[id=1 is_cut="29" particle="e-" ];
+	0:2	-> 1:3	[id=2 lmb_id="0" particle="H"];
+	0:4	-> 3:5	[id=3 particle="t"];
+	7:6	-> 0:7	[id=4 lmb_id="1" particle="t"];
+	3:8	-> 1:9	[id=5 particle="t"];
+	1:10	-> 6:11	[id=6 particle="t"];
+	5:12	-> 2:13	[id=7 lmb_id="2" particle="t"];
+	2:14	-> 7:15	[id=8 particle="t"];
+	2:16	-> 9:17	[id=9 particle="a"];
+	3:18	-> 8:19	[id=10 particle="a"];
+	4:20	-> 5:21	[id=11 lmb_id="3" particle="t"];
+	6:22	-> 4:23	[id=12 particle="t"];
+	4:24	-> 7:25	[id=13 particle="g"];
+	5:26	-> 6:27	[id=14 particle="g"];
+	exte15	[style=invis];
+	8:28	-> exte15	[id=15 is_cut="28" particle="e+" ];
+	exte16	[style=invis];
+	8:29	-> exte16	[id=16 is_cut="29" particle="e-" ];
+}

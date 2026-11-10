@@ -23,13 +23,13 @@ use std::{env, path::PathBuf};
 
 use color_eyre::Result;
 use gammaloop_api::{
+    StateLoadOption,
     commands::evaluate_samples::{
-        evaluate_sample, evaluate_sample_precise, EvaluateSamples, EvaluateSamplesPrecise,
+        EvaluateSamples, EvaluateSamplesPrecise, evaluate_sample, evaluate_sample_precise,
     },
     state::CommandHistory,
-    StateLoadOption,
 };
-use ndarray::{arr2, Array2};
+use ndarray::{Array2, arr2};
 
 fn example_dir() -> Result<PathBuf> {
     Ok(PathBuf::from(file!())
@@ -81,6 +81,22 @@ fn main() -> Result<()> {
     )?;
     println!("\n== evaluate_sample ==\n");
     println!("{single_result}");
+
+    let (process_id, integrand_name) = loaded.state.find_integrand_ref(None, None)?;
+    let mut accumulator = loaded
+        .state
+        .process_list
+        .get_integrand_mut(process_id, &integrand_name)?
+        .new_observable_accumulator()?;
+    let sample = &single_result.sample.evaluation;
+    accumulator.accumulate_sample(&sample.event_groups, &sample.integrator_weight)?;
+    for (name, histogram) in accumulator.snapshot_bundle().histograms {
+        println!(
+            "{name}: {} samples, {} bins",
+            histogram.sample_count,
+            histogram.bins.len()
+        );
+    }
 
     // Momentum-space rows contain one flattened (px, py, pz) triplet per loop;
     // neither loop energies nor external momenta are input here.

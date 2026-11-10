@@ -100,7 +100,7 @@
           "description": "Smallest non-zero |t| for logarithmic spacing",
           "type": "number",
           "format": "double",
-          "default": 1e-6
+          "default": 1e-06
         },
         "momentum_space": {
           "description": "Interpret `--point` and every axis as spatial loop-momentum triplets",
@@ -431,13 +431,6 @@
         "NeverM",
         "MForAll",
         "MForBeyondQuadraticOnly"
-      ]
-    },
-    "CliRepresentationMode": {
-      "type": "string",
-      "enum": [
-        "cff",
-        "ltd"
       ]
     },
     "CommandHistory": {
@@ -1932,10 +1925,6 @@
         "store_additional_weights_in_event": {
           "description": "Persist every configured additional weight on each generated event.",
           "type": "boolean"
-        },
-        "use_ltd": {
-          "description": "Evaluate through the loop-tree-duality representation where the selected integrand supports it.",
-          "type": "boolean"
         }
       },
       "additionalProperties": false
@@ -2046,6 +2035,10 @@
         "override_lmb_heuristics": {
           "description": "Use explicitly supplied loop-momentum bases instead of the built-in basis heuristics.",
           "type": "boolean"
+        },
+        "three_dimensional_representations": {
+          "description": "Three-dimensional representations to generate; the first is the default for stability levels.",
+          "$ref": "#/$defs/ThreeDRepresentationSelection"
         },
         "threshold_subtraction": {
           "description": "Generation-time selection of local threshold counterterms.",
@@ -4249,6 +4242,13 @@
         "print_namespaces"
       ]
     },
+    "RepresentationMode": {
+      "type": "string",
+      "enum": [
+        "cff",
+        "ltd"
+      ]
+    },
     "RotationSetting": {
       "oneOf": [
         {
@@ -5816,6 +5816,17 @@
           "description": "Maximum accepted relative error in the real component before escalating.",
           "type": "number",
           "format": "double"
+        },
+        "three_dimensional_representation": {
+          "description": "Representation for this attempt; omission selects the first generated representation.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RepresentationMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
@@ -5864,7 +5875,7 @@
           "format": "int32"
         },
         "levels": {
-          "description": "Ordered numerical-precision levels and tolerances used during stability escalation.",
+          "description": "Ordered precision and representation choices with tolerances for stability escalation.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/StabilityLevelSetting"
@@ -6010,6 +6021,20 @@
           "required": [
             "Build"
           ]
+        }
+      ]
+    },
+    "ThreeDRepresentationSelection": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RepresentationMode"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RepresentationMode"
+          },
+          "minItems": 1
         }
       ]
     },

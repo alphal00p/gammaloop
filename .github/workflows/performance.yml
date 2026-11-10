@@ -163,6 +163,7 @@ jobs:
             nixpkgs#python313 nixpkgs#form nixpkgs#gcc nixpkgs#gnum4 \
             --command env -u LD_LIBRARY_PATH -u DYLD_LIBRARY_PATH PYTHONPATH="$PWD/gammabench/src" \
             python3 candidate/.github/scripts/run_performance.py \
+            --lane fast \
             --input-root "$PWD/candidate" \
             --baseline-binary "$BASELINE_BINARY" --candidate-binary "$CANDIDATE_BINARY" \
             --baseline-commit "$BASELINE_COMMIT" --candidate-commit "$CANDIDATE_COMMIT" \

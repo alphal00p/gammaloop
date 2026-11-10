@@ -17,7 +17,7 @@ digraph GL638{
     // The default dE function rationalizes energy differences to preserve soft cancellations.
     // W_H and its complement have explicit complementary values at their common zero.
     // This replaces the old (2,4,12) embedded projection that moved the opposite side.
-    // The candidate passes the sampled soft/ordinary-threshold checks and generates
+    // This prescription passes the sampled soft/ordinary-threshold checks and generates
     // all 936 orientations with full UV. Exact coincident A/P radial roots still need
     // a stable combined-residue limit; generation and pilot runs do not certify it.
     // See docs/products/gammaloop/content/threshold-subtraction.typ for the prescription and limits.
@@ -25,88 +25,114 @@ digraph GL638{
 schema_version = 1
 
 [function_map]
-\"wQ()\" = \"P(0,cind(0))+P(1,cind(0))\"
-\"de46()\" = '''
-dE(UFO::MT,UFO::MT,E(star,4),E(star,6),
-   Q3(star,4,cind(1)),Q3(star,4,cind(2)),Q3(star,4,cind(3)),
-   Q3(star,6,cind(1)),Q3(star,6,cind(2)),Q3(star,6,cind(3)))
-'''
-\"de3_10()\" = '''
+\"WF()\" = \"g0()^2*g4()^2/denF()\"
+\"WH()\" = \"if(denH(),wH()^2/denH(),0)\"
+\"WHc()\" = \"if(denH(),(wP()*wZ()/wQ())^2/denH(),1)\"
+\"de3_10()\" = \"\"\"
 dE(UFO::MT,UFO::MT,E(star,3),E(star,10),
    Q3(star,3,cind(1)),Q3(star,3,cind(2)),Q3(star,3,cind(3)),
    Q3(star,10,cind(1)),Q3(star,10,cind(2)),Q3(star,10,cind(3)))
-'''
-\"wH()\" = \"de46()+de3_10()\"
+\"\"\"
+\"de46()\" = \"\"\"
+dE(UFO::MT,UFO::MT,E(star,4),E(star,6),
+   Q3(star,4,cind(1)),Q3(star,4,cind(2)),Q3(star,4,cind(3)),
+   Q3(star,6,cind(1)),Q3(star,6,cind(2)),Q3(star,6,cind(3)))
+\"\"\"
+\"denF()\" = \"g0()^2*g4()^2+wP()^2*wZ()^2\"
+\"denH()\" = \"wH()^2+(wP()*wZ()/wQ())^2\"
 \"g0()\" = \"de3_10()+E(star,13)\"
 \"g4()\" = \"de46()+E(star,13)\"
+\"wH()\" = \"de46()+de3_10()\"
 \"wP()\" = \"2*E(star,3)-wQ()\"
+\"wQ()\" = \"P(0,cind(0))+P(1,cind(0))\"
 \"wZ()\" = \"E(star,3)+E(star,10)+E(star,13)-wQ()\"
-\"denH()\" = \"wH()^2+(wP()*wZ()/wQ())^2\"
-\"denF()\" = \"g0()^2*g4()^2+wP()^2*wZ()^2\"
-\"WH()\" = \"if(denH(),wH()^2/denH(),0)\"
-\"WHc()\" = \"if(denH(),(wP()*wZ()/wQ())^2/denH(),1)\"
-\"WF()\" = \"g0()^2*g4()^2/denF()\"
 
 [[cuts]]
-edges = [2, 6, 10]
+edges = [2, 4, 7, 14]
 
-# The natural maximal subspace on this side is [3,7]. Its [7] variants supply
-# the common-cycle LU partners on cuts (2,6,12,13) and (2,4,12), while the
-# complementary [3,7] variants retain same-amplitude dual cancellation.
+[[cuts.thresholds]]
+edges = [5, 7, 13, 14]
+
+[[cuts.thresholds.counterterms]]
+name = \"default\"
+subspace = [5]
+parent_lmb = [4, 5, 7, 14]
+
+[[cuts.thresholds]]
+edges = [5, 10]
+
+[[cuts.thresholds.counterterms]]
+name = \"default\"
+subspace = [5]
+parent_lmb = [4, 5, 7, 14]
+
+[[cuts]]
+edges = [2, 4, 10, 13]
 
 [[cuts.thresholds]]
 edges = [7, 8]
 
 [[cuts.thresholds.counterterms]]
-name = \"shared_1l\"
+name = \"default\"
 subspace = [7]
-parent_lmb = [3, 6, 7, 10]
-[cuts.thresholds.counterterms.multiplier]
-expression = \"WHc()\"
-
-[[cuts.thresholds.counterterms]]
-name = \"native_2l\"
-subspace = [3, 7]
-parent_lmb = [3, 6, 7, 10]
-[cuts.thresholds.counterterms.multiplier]
-expression = \"WH()\"
-
-[[cuts.thresholds]]
-edges = [8, 12, 14]
-
-[[cuts.thresholds.counterterms]]
-name = \"shared_1l\"
-subspace = [7]
-parent_lmb = [3, 6, 7, 10]
-[cuts.thresholds.counterterms.multiplier]
-expression = \"WHc()\"
-
-[[cuts.thresholds.counterterms]]
-name = \"native_2l\"
-subspace = [3, 7]
-parent_lmb = [3, 6, 7, 10]
-[cuts.thresholds.counterterms.multiplier]
-expression = \"WH()\"
+parent_lmb = [4, 7, 10, 13]
 
 [[cuts.thresholds]]
 edges = [8, 10, 13, 14]
 
 [[cuts.thresholds.counterterms]]
-name = \"shared_1l\"
+name = \"default\"
 subspace = [7]
-parent_lmb = [3, 6, 7, 10]
-[cuts.thresholds.counterterms.multiplier]
-expression = \"1-WF()\"
+parent_lmb = [4, 7, 10, 13]
+
+[[cuts]]
+edges = [2, 4, 12]
+
+[[cuts.thresholds]]
+edges = [5, 10]
+
+[[cuts.thresholds.counterterms]]
+name = \"default\"
+subspace = [5]
+parent_lmb = [4, 5, 7, 12]
+
+[[cuts.thresholds]]
+edges = [5, 12, 13]
+
+[[cuts.thresholds.counterterms]]
+name = \"default\"
+subspace = [5]
+parent_lmb = [4, 5, 7, 12]
+
+[[cuts.thresholds]]
+edges = [7, 8]
+
+[[cuts.thresholds.counterterms]]
+name = \"default\"
+subspace = [7]
+parent_lmb = [4, 5, 7, 12]
+
+[[cuts.thresholds]]
+edges = [8, 12, 14]
+
+[[cuts.thresholds.counterterms]]
+name = \"default\"
+subspace = [7]
+parent_lmb = [4, 5, 7, 12]
+
+[[cuts]]
+edges = [2, 6, 10]
+
+[[cuts.thresholds]]
+edges = [3, 7, 14]
 
 [[cuts.thresholds.counterterms]]
 name = \"native_2l\"
 subspace = [3, 7]
 parent_lmb = [3, 6, 7, 10]
-[cuts.thresholds.counterterms.multiplier]
-expression = \"WF()\"
 
 [[cuts.thresholds]]
-edges = [3, 7, 14]
+edges = [3, 10, 13]
 
 [[cuts.thresholds.counterterms]]
 name = \"native_2l\"
@@ -122,12 +148,80 @@ subspace = [3, 7]
 parent_lmb = [3, 6, 7, 10]
 
 [[cuts.thresholds]]
-edges = [3, 10, 13]
+edges = [7, 8]
+
+[[cuts.thresholds.counterterms]]
+name = \"shared_1l\"
+subspace = [7]
+parent_lmb = [3, 6, 7, 10]
+
+[cuts.thresholds.counterterms.multiplier]
+expression = \"WHc()\"
 
 [[cuts.thresholds.counterterms]]
 name = \"native_2l\"
 subspace = [3, 7]
 parent_lmb = [3, 6, 7, 10]
+
+[cuts.thresholds.counterterms.multiplier]
+expression = \"WH()\"
+
+[[cuts.thresholds]]
+edges = [8, 10, 13, 14]
+
+[[cuts.thresholds.counterterms]]
+name = \"shared_1l\"
+subspace = [7]
+parent_lmb = [3, 6, 7, 10]
+
+[cuts.thresholds.counterterms.multiplier]
+expression = \"1-WF()\"
+
+[[cuts.thresholds.counterterms]]
+name = \"native_2l\"
+subspace = [3, 7]
+parent_lmb = [3, 6, 7, 10]
+
+[cuts.thresholds.counterterms.multiplier]
+expression = \"WF()\"
+
+[[cuts.thresholds]]
+edges = [8, 12, 14]
+
+[[cuts.thresholds.counterterms]]
+name = \"shared_1l\"
+subspace = [7]
+parent_lmb = [3, 6, 7, 10]
+
+[cuts.thresholds.counterterms.multiplier]
+expression = \"WHc()\"
+
+[[cuts.thresholds.counterterms]]
+name = \"native_2l\"
+subspace = [3, 7]
+parent_lmb = [3, 6, 7, 10]
+
+[cuts.thresholds.counterterms.multiplier]
+expression = \"WH()\"
+
+[[cuts]]
+edges = [2, 6, 12, 13]
+
+[[cuts.thresholds]]
+edges = [7, 8]
+
+[[cuts.thresholds.counterterms]]
+name = \"default\"
+subspace = [7]
+parent_lmb = [6, 7, 12, 13]
+
+[[cuts.thresholds]]
+edges = [8, 12, 14]
+
+[[cuts.thresholds.counterterms]]
+name = \"default\"
+subspace = [7]
+parent_lmb = [6, 7, 12, 13]
 ";
 
 	0 [int_id="V_141"];

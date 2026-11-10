@@ -96,7 +96,7 @@
     (workspaceRoot + "/assets")
     (workspaceRoot + "/crates/clinnet/templates")
     (workspaceRoot + "/crates/feynkit-model/data/sm.json.zlib")
-    (workspaceRoot + "/crates/feynkit-ufo/src/parameter_labels.py")
+    (workspaceRoot + "/crates/feynkit-ufo/src/model_metadata.py")
     (workspaceRoot + "/crates/feynkit-py/src/collection.css")
     (workspaceRoot + "/crates/feynkit-py/src/collection.js")
     (workspaceRoot + "/crates/feynkit-py/src/notebook.js")
@@ -426,7 +426,7 @@
       "crates/linnest/src/svg/interactive.css"
       "crates/linnest/src/svg/interactive.js"
     ];
-    "feynkit-ufo" = ["crates/feynkit-ufo/src/parameter_labels.py"];
+    "feynkit-ufo" = ["crates/feynkit-ufo/src/model_metadata.py"];
     "feynkit-py" = [
       "crates/feynkit-py/src/collection.css"
       "crates/feynkit-py/src/collection.js"

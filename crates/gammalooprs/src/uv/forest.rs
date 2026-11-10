@@ -101,6 +101,11 @@ impl ParametricIntegrands {
 }
 
 impl CutForests {
+    /// Return the measured representation-independent part of this computation.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "keep model, physical projection, and shared preparation ownership explicit"
+    )]
     #[debug_instrument(graph = %graph.log_display())]
     pub(crate) fn compute(
         &mut self,
@@ -109,8 +114,10 @@ impl CutForests {
         vakint: &Vakint,
         orientation: OrientationProjection<'_>,
         settings: &UVgenerationSettings,
-    ) -> Result<()> {
-        let mut projection_context = Local4dProjectionContext::default();
+        compute_four_d: bool,
+        projection_context: &mut Local4dProjectionContext,
+    ) -> Result<std::time::Duration> {
+        let shared_before = projection_context.shared_preparation_time;
         for ((forest, cuts), vakint_settings) in &mut self
             .forests
             .iter_mut()
@@ -126,14 +133,15 @@ impl CutForests {
                 (vakint, vakint_settings),
                 localizer,
                 settings,
-                &mut projection_context,
+                projection_context,
+                compute_four_d,
             )?;
         }
-        Ok(())
+        Ok(projection_context.shared_preparation_time - shared_before)
     }
     #[debug_instrument(graph = %graph.log_display())]
     pub(crate) fn orientation_parametric_exprs(
-        self,
+        &self,
         graph: &Graph,
         _settings: &UVgenerationSettings,
     ) -> Result<Vec<ParametricIntegrands>> {
@@ -150,7 +158,7 @@ impl CutForests {
         );
         let mut exprs = vec![];
 
-        for (forest, cuts) in forests.iter().zip(cuts.cuts.into_iter()) {
+        for (forest, cuts) in forests.iter().zip(cuts.cuts.iter().cloned()) {
             exprs.push(ParametricIntegrands::from_final(
                 forest.orientation_parametric_expr(graph)?,
                 cuts,
@@ -241,6 +249,7 @@ impl Forest {
         localizer: Localizer<'_>,
         settings: &UVgenerationSettings,
         projection_context: &mut Local4dProjectionContext,
+        compute_four_d: bool,
     ) -> Result<()> {
         let started = std::time::Instant::now();
         debug_tags!(#generation, #profile, #uv, #graph, #summary;
@@ -295,9 +304,17 @@ impl Forest {
                     );
 
                     current.data.topo_order = i;
-                    current
-                        .data
-                        .compute_4d(graph, &graph.model, vakint, &parent.data, settings)?;
+                    if compute_four_d {
+                        let started = std::time::Instant::now();
+                        current.data.compute_4d(
+                            graph,
+                            &graph.model,
+                            vakint,
+                            &parent.data,
+                            settings,
+                        )?;
+                        projection_context.shared_preparation_time += started.elapsed();
+                    }
 
                     match settings.final_integrand {
                         FinalIntegrandDimension::FourD => {
@@ -444,7 +461,7 @@ impl Forest {
             ]);
             let terms = n.data.final_integrand(graph)?.collect(color)?;
             sum = Some(match sum {
-                Some(sum) => sum.zip_add(terms).wrap_err_with(|| {
+                Some(sum) => sum.zip_add([terms]).wrap_err_with(|| {
                     format!(
                         "while aggregating legacy UV forest term {}",
                         n.data.simple_display(graph)

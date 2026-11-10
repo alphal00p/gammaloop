@@ -21,7 +21,7 @@ use gammalooprs::{
         evaluation::PreciseEvaluationResultOutput,
         process::{ProcessIntegrand, ProcessIntegrandImpl, sampling::SamplingMapDefinition},
     },
-    settings::global::VectorPolarizationSumGauge,
+    settings::global::{RepresentationMode, VectorPolarizationSumGauge},
     utils::{ArbPrec, F, FloatLike},
     uv::{
         CTIdentifier, CTRenormalizationRule, UltravioletGraph,
@@ -806,7 +806,7 @@ fn gamma_star_ttx_nlo_matches_reference(case: GammaStarTtxCase) -> Result<()> {
                     .expect("the physical real cut contains the soft gluon");
                 assert!(representatives.contains(&real_cut));
                 for (group_id, group) in term.cut_group_data.cut_groups.iter_enumerated() {
-                    let orders = term.integrand[group_id]
+                    let orders = term.integrand[&RepresentationMode::Cff][group_id]
                         .keys()
                         .map(|index| {
                             assert!(

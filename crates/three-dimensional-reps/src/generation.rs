@@ -37,6 +37,9 @@ use crate::{
 
 mod ltd;
 
+#[cfg(feature = "generation-audit")]
+pub mod audit;
+
 #[derive(
     Debug,
     Clone,
@@ -52,6 +55,9 @@ mod ltd;
     Encode,
     Decode,
 )]
+#[cfg_attr(feature = "json_schema", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
 #[serde(rename_all = "snake_case")]
 pub enum RepresentationMode {
     #[default]
@@ -386,8 +392,8 @@ mod generated_expression_persistence_tests {
 
 #[derive(Debug, Error)]
 pub enum GenerationError {
-    #[error("LTD currently supports vacuum generation only; use CFF for medium mode {0:?}")]
-    LtdMediumNotSupported(MediumMode),
+    #[error("LTD supports only vacuum generation; medium mode {medium_mode:?} is unsupported")]
+    LtdRequiresVacuum { medium_mode: MediumMode },
     #[error("invalid LTD residue coordinate: {0}")]
     InvalidResidueCoordinate(String),
     #[error(
@@ -461,6 +467,13 @@ pub fn generate_3d_expression<G: ThreeDGraphSource + ?Sized>(
     graph: &G,
     options: &Generate3DExpressionOptions,
 ) -> Result<GeneratedThreeDExpression> {
+    if options.representation == RepresentationMode::Ltd
+        && options.medium_mode != MediumMode::Vacuum
+    {
+        return Err(GenerationError::LtdRequiresVacuum {
+            medium_mode: options.medium_mode,
+        });
+    }
     let parsed = graph.to_three_d_parsed_graph()?;
     let validation = crate::validate_parsed_graph(&parsed);
     if !validation
@@ -599,11 +612,6 @@ fn generate_3d_expression_from_parsed_generated(
     parsed: &ParsedGraph,
     options: &Generate3DExpressionOptions,
 ) -> Result<GeneratedThreeDExpression> {
-    if options.representation == RepresentationMode::Ltd
-        && options.medium_mode != MediumMode::Vacuum
-    {
-        return Err(GenerationError::LtdMediumNotSupported(options.medium_mode));
-    }
     let bounds = if options.representation == RepresentationMode::Cff {
         normalize_energy_degree_bounds(
             options.energy_degree_bounds.as_deref().unwrap_or(&[]),
@@ -623,11 +631,9 @@ fn generate_3d_expression_from_parsed_generated(
         assign_numerator_map_labels(&mut generated.expression.orientations);
         return Ok(generated);
     }
-
     if options.representation == RepresentationMode::Ltd {
         return ltd::LtdBuilder::new(parsed, options)?.build();
     }
-
     // Thermal distributions belong to each surviving denominator sector.
     // Keep them outside the shared polynomial Laurent interpolation, which
     // reconstructs only the numerator and its denominator-cancelling contacts.
@@ -1522,6 +1528,8 @@ fn generate_pure_cff_expression_from_parsed(
     medium_mode: MediumMode,
     preferred_tadpole_poles: &BTreeMap<usize, i32>,
 ) -> Result<ThreeDExpression<OrientationID>> {
+    #[cfg(feature = "generation-audit")]
+    audit::record_cff();
     let signatures = parsed.signatures();
     let n_internal = signatures.len();
     let denominator_edge_ids = parsed.denominator_internal_edge_ids();
@@ -2335,6 +2343,8 @@ struct BoundedCffBuilder<'a> {
 
 impl<'a> BoundedCffBuilder<'a> {
     fn new(parsed: &'a ParsedGraph, options: &Generate3DExpressionOptions) -> Result<Self> {
+        #[cfg(feature = "generation-audit")]
+        audit::record_cff();
         let bounds = normalize_energy_degree_bounds(
             options.energy_degree_bounds.as_deref().unwrap_or(&[]),
             parsed.internal_edges.len(),
@@ -2998,6 +3008,8 @@ impl<'a> KnownFactorCffBuilder<'a> {
         sampling_scale_mode: NumeratorSamplingScaleMode,
         medium_mode: MediumMode,
     ) -> Self {
+        #[cfg(feature = "generation-audit")]
+        audit::record_cff();
         Self {
             original,
             source_prefactor: Rational::from(
@@ -4227,6 +4239,8 @@ struct LowerSectorCffBuilder<'a> {
 
 impl<'a> LowerSectorCffBuilder<'a> {
     fn new(parsed: &'a ParsedGraph, medium_mode: MediumMode) -> Self {
+        #[cfg(feature = "generation-audit")]
+        audit::record_cff();
         Self {
             parsed,
             medium_mode,
@@ -5067,6 +5081,30 @@ mod representation_tests {
             )
             .is_ok()
         );
+    }
+
+    #[test]
+    fn ltd_rejects_equilibrium_modes_before_graph_generation() {
+        for medium_mode in [
+            MediumMode::ThermodynamicEquilibrium,
+            MediumMode::ZeroTemperatureEquilibrium,
+        ] {
+            let mut graph = crate::graph_io::test_graphs::box_graph();
+            let options = Generate3DExpressionOptions {
+                representation: RepresentationMode::Ltd,
+                medium_mode,
+                ..Default::default()
+            };
+            for invalid_graph in [false, true] {
+                if invalid_graph {
+                    graph.internal_edges[0].signature.loop_signature.clear();
+                }
+                assert!(matches!(
+                    generate_3d_expression(&graph, &options),
+                    Err(GenerationError::LtdRequiresVacuum { medium_mode: rejected }) if rejected == medium_mode
+                ));
+            }
+        }
     }
 
     #[test]

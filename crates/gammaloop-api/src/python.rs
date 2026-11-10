@@ -1,11 +1,12 @@
+use crate::commands::evaluate_samples;
 use feynkit_cff::{CffError, CffOptions, CffResult, HedgeGraphCffExt, SurfaceCache};
 use feynkit_graph::expressions::evaluate_overall_factor;
 use gammaloop_tracing_filter::LogFormat;
+use gammalooprs::observables::{EventProcessingRuntime, ObservableSnapshotBundle};
+use gammalooprs::utils::F;
 use gammalooprs::{
     graph::{self, FeynmanGraph, Graph, LMBext},
-    integrands::evaluation::{
-        BatchSampleEvaluationResult, SampleEvaluationResult, SingleSampleEvaluationResult,
-    },
+    integrands::evaluation::{BatchSampleEvaluationResult, SampleEvaluationResult},
     observables::{
         AdditionalWeightKey, DiscreteBinOrdering, Event, EventGroup, GenericAdditionalWeightInfo,
         GenericThresholdCountertermComponentWeight, GenericThresholdCountertermEventInfo,
@@ -29,6 +30,13 @@ use linnet::half_edge::{
 };
 use linnet::parser::{set::DotGraphSet, DotGraph};
 use numpy::{PyReadonlyArray1, PyReadonlyArray2};
+use std::fmt::Display;
+
+mod residue_map;
+use residue_map::{
+    PyLinearEnergyExpression, PyResidue, PyResidueMap, PyResidueMapKey, PyResidueVariant,
+    PyThermalDistributionFactor, PyThermalNumerator, PyThermalWeight,
+};
 
 use crate::{
     commands::{
@@ -204,7 +212,6 @@ fn register_python_api(m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<DotExportSettings>()?;
     m.add_class::<PyEvaluationResult>()?;
     m.add_class::<PyBatchEvaluationResult>()?;
-    m.add_class::<PySampleEvaluationResult>()?;
     m.add_class::<PyEventGroup>()?;
     m.add_class::<PyEvent>()?;
     m.add_class::<PyThresholdCountertermEventInfo>()?;
@@ -230,6 +237,7 @@ fn register_python_api(m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PyIntegrandThresholdEsurfaceInfo>()?;
     m.add_class::<PyAdditionalWeight>()?;
     m.add_class::<PyHistogramAccumulator>()?;
+    m.add_class::<PyObservableAccumulator>()?;
     m.add_class::<PyHistogramSnapshot>()?;
     m.add_class::<PyHistogramBinSnapshot>()?;
     m.add_class::<PyHistogramStatisticsSnapshot>()?;
@@ -247,6 +255,14 @@ fn register_python_api(m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PyIntegrationResult>()?;
     m.add_class::<PyStabilityResult>()?;
     m.add_class::<PySettingsValue>()?;
+    m.add_class::<PyLinearEnergyExpression>()?;
+    m.add_class::<PyResidueMapKey>()?;
+    m.add_class::<PyResidue>()?;
+    m.add_class::<PyResidueVariant>()?;
+    m.add_class::<PyThermalDistributionFactor>()?;
+    m.add_class::<PyThermalNumerator>()?;
+    m.add_class::<PyThermalWeight>()?;
+    m.add_class::<PyResidueMap>()?;
     /*
     m.add_class::<PyFeynGenFilters>()?;
     m.add_class::<PySnailFilterOptions>()?;
@@ -373,7 +389,7 @@ impl PySettingsValue {
 
     /// Convert the complete detached value tree to ordinary Python containers and scalars.
     fn to_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        py_builtin_from_settings_value(py, &self.value)
+        py_builtin_from_json_value(py, &self.value)
     }
 
     #[gen_stub(skip)]
@@ -540,11 +556,11 @@ fn py_object_from_settings_value<'py>(
             )?;
             Ok(value.into_bound(py).into_any())
         }
-        _ => py_builtin_from_settings_value(py, value),
+        _ => py_builtin_from_json_value(py, value),
     }
 }
 
-fn py_builtin_from_settings_value<'py>(
+fn py_builtin_from_json_value<'py>(
     py: Python<'py>,
     value: &JsonValue,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -556,14 +572,14 @@ fn py_builtin_from_settings_value<'py>(
         JsonValue::Array(items) => {
             let list = PyList::empty(py);
             for item in items {
-                list.append(py_builtin_from_settings_value(py, item)?)?;
+                list.append(py_builtin_from_json_value(py, item)?)?;
             }
             Ok(list.into_any())
         }
         JsonValue::Object(map) => {
             let dict = PyDict::new(py);
             for (key, value) in map {
-                dict.set_item(key, py_builtin_from_settings_value(py, value)?)?;
+                dict.set_item(key, py_builtin_from_json_value(py, value)?)?;
             }
             Ok(dict.into_any())
         }
@@ -623,6 +639,92 @@ mod settings_wrapper_tests {
                 .extract::<bool>()
                 .unwrap());
         });
+    }
+
+    #[test]
+    fn settings_snapshots_preserve_generated_representation_order_and_stability_choice() {
+        use gammalooprs::settings::GlobalSettings;
+        use three_dimensional_reps::RepresentationMode;
+
+        Python::initialize();
+        let global: GlobalSettings = toml::from_str(
+            r#"
+[generation]
+three_dimensional_representations = ["ltd", "cff", "ltd"]
+[generation.uv]
+local_uv_cts_from_expanded_4d_integrands = true
+"#,
+        )
+        .unwrap();
+        let encoded = render_smart_toml(&global).unwrap();
+        let restored: GlobalSettings = toml::from_str(&encoded).unwrap();
+        assert_eq!(
+            restored.generation.three_dimensional_representations,
+            [RepresentationMode::Ltd, RepresentationMode::Cff]
+        );
+        let mut runtime = RuntimeSettings::default();
+        runtime.stability.levels[0].three_dimensional_representation =
+            Some(RepresentationMode::Cff);
+        let encoded = render_smart_toml(&runtime).unwrap();
+        let restored_runtime: RuntimeSettings = toml::from_str(&encoded).unwrap();
+        assert_eq!(
+            restored_runtime.stability.levels[0].three_dimensional_representation,
+            Some(RepresentationMode::Cff)
+        );
+        let global_snapshot =
+            PySettingsValue::from_settings(&restored, "global settings", "global").unwrap();
+        let runtime_snapshot =
+            PySettingsValue::from_settings(&restored_runtime, "runtime settings", "runtime")
+                .unwrap();
+        Python::attach(|py| {
+            let generation = Py::new(py, restored.generation.clone()).unwrap();
+            assert!(generation
+                .bind(py)
+                .hasattr("three_dimensional_representations")
+                .unwrap());
+            assert!(!generation
+                .bind(py)
+                .hasattr("three_d_representations")
+                .unwrap());
+            let level = Py::new(py, restored_runtime.stability.levels[0]).unwrap();
+            assert!(level
+                .bind(py)
+                .hasattr("three_dimensional_representation")
+                .unwrap());
+            assert!(!level.bind(py).hasattr("representation").unwrap());
+            let modes = global_snapshot
+                .to_dict(py)
+                .unwrap()
+                .get_item("generation")
+                .unwrap()
+                .get_item("three_dimensional_representations")
+                .unwrap()
+                .extract::<Vec<String>>()
+                .unwrap();
+            assert_eq!(modes, ["ltd", "cff"]);
+            let mode = runtime_snapshot
+                .to_dict(py)
+                .unwrap()
+                .get_item("stability")
+                .unwrap()
+                .get_item("levels")
+                .unwrap()
+                .get_item(0)
+                .unwrap()
+                .get_item("three_dimensional_representation")
+                .unwrap()
+                .extract::<String>()
+                .unwrap();
+            assert_eq!(mode, "cff");
+        });
+        let schema = serde_json::to_value(schemars::schema_for!(GlobalSettings)).unwrap();
+        assert!(schema
+            .to_string()
+            .contains("three_dimensional_representations"));
+        let schema = serde_json::to_value(schemars::schema_for!(RuntimeSettings)).unwrap();
+        assert!(schema
+            .to_string()
+            .contains("three_dimensional_representation"));
     }
 
     #[test]
@@ -901,6 +1003,8 @@ pub struct PyIntegrandGraphInfo {
     pub name: String,
     /// Whether this graph is the representative graph of its group.
     pub is_master: bool,
+    /// Native residue-map counts as (representation, count), in generation order.
+    pub native_residue_counts: Vec<(String, usize)>,
     /// Threshold directives requested for this graph, including implicit defaults.
     pub threshold_counterterm_directives: Vec<PyThresholdCountertermDirectiveInfo>,
     /// Resolved graph-local threshold registry, when generated metadata is available.
@@ -1117,9 +1221,11 @@ pub struct PyIntegrandGraphGroupInfo {
     pub group_id: usize,
     /// Graphs in this group, with the representative graph marked as master.
     pub graphs: Vec<PyIntegrandGraphInfo>,
+    /// Whether every native residue is evaluated through the complete-sum layout.
+    pub complete_residue_sum: bool,
     /// Edge identifiers that establish the ordering of every orientation signature.
     pub orientation_edge_ids: Vec<usize>,
-    /// Available causal-flow orientations for the representative graph.
+    /// Runtime execution orientations; a complete-sum slot is not a native residue key.
     pub orientations: Vec<PyIntegrandOrientationInfo>,
     /// Available loop-momentum bases for the representative graph.
     pub loop_momentum_bases: Vec<PyIntegrandLoopMomentumBasisInfo>,
@@ -1144,6 +1250,8 @@ pub struct PyIntegrandInfo {
     pub integrand_name: String,
     /// ``"amplitude"`` or ``"cross section"``.
     pub kind: String,
+    /// Generated representations, in persisted generation order.
+    pub generated_representations: Vec<String>,
     /// Compilation backend frozen into the generated integrand.
     pub generation_backend: String,
     /// Backend-specific compilation options, when configured.
@@ -1228,14 +1336,74 @@ pub struct PyEventGroup {
     pub events: Vec<PyEvent>,
 }
 
+/// Independent observable statistics compiled from one integrand's definitions.
+///
+/// Construct with ``api.observable_accumulator()`` and add exactly one evaluation
+/// record per independent draw. The coefficient is the complete outer weight;
+/// zero keeps the attempted sample count without fills. Event groups stay unmodified.
+///
+/// Examples
+/// --------
+/// ```python
+/// accumulator = api.observable_accumulator()
+/// batch = api.evaluate_samples(points)
+/// for sample in batch.samples:
+///     accumulator.add_sample(sample, sample.integrator_weight)
+/// histograms = accumulator.snapshot()
+/// ```
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[pyclass(name = "ObservableAccumulator", skip_from_py_object)]
+pub struct PyObservableAccumulator {
+    inner: EventProcessingRuntime,
+}
+
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[pymethods]
+impl PyObservableAccumulator {
+    /// Commit one sample with an explicit outer weight, including zero-weight misses.
+    fn add_sample(&mut self, sample: &PyEvaluationResult, coefficient: f64) -> PyResult<()> {
+        self.inner
+            .accumulate_sample(&sample.inner.evaluation.event_groups, &F(coefficient))
+            .map_err(to_py_value_error)
+    }
+
+    /// Merge independent sample statistics without changing the source accumulator.
+    fn merge_in_place(&mut self, other: &PyObservableAccumulator) -> PyResult<()> {
+        self.inner
+            .merge_snapshot(&other.inner.snapshot_bundle())
+            .map_err(to_py_value_error)
+    }
+
+    /// Sum means and variances of independent populations, preserving their separate counts.
+    /// Merge batches within a stratum before passing its accumulator here.
+    #[staticmethod]
+    fn sum_independent_estimates<'py>(
+        py: Python<'py>,
+        accumulators: Vec<PyRef<'py, PyObservableAccumulator>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let snapshots = accumulators
+            .iter()
+            .map(|accumulator| accumulator.inner.snapshot_bundle())
+            .collect::<Vec<_>>();
+        let estimates = ObservableSnapshotBundle::sum_independent_estimates(&snapshots)
+            .map_err(to_py_value_error)?;
+        let json = serde_json::to_value(estimates.histograms).map_err(to_py_value_error)?;
+        py_builtin_from_json_value(py, &json)
+    }
+
+    /// Return mergeable raw histogram statistics, without clearing or committing them.
+    fn snapshot<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        py_observable_dict_from_bundle(py, &self.inner.snapshot_bundle())
+    }
+}
+
 /// Mutable continuous or discrete histogram accumulator with sample-level statistics.
 ///
 /// Notes
 /// -----
-/// The example below deliberately places at most one entry in each bin. If several correlated
-/// entries land in one bin, the current helper records their squared weights separately rather
-/// than grouping their weights like GammaLoop's native observable pipeline. Do not replay raw
-/// event groups through this class until that statistical contract is aligned.
+/// Each fill call represents one independent sample. Repeated entries in a bin
+/// are summed before their squared contribution is recorded, matching the native
+/// observable pipeline. Empty fills still increment the sample count.
 ///
 /// Examples
 /// --------
@@ -1825,13 +1993,15 @@ impl PyIntegrationResult {
     }
 }
 
-/// Outcome and cost of one numerical-stability precision level.
+/// Outcome and cost of one stability attempt, including precision and representation.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "StabilityResult", get_all)]
 #[derive(Clone)]
 pub struct PyStabilityResult {
     /// Numerical precision used for this stability level.
     pub precision: String,
+    /// Generated three-dimensional representation evaluated at this level.
+    pub three_dimensional_representation: String,
     /// Estimated relative accuracy, or ``None`` when it could not be estimated.
     pub estimated_relative_accuracy: Option<f64>,
     pub estimated_decimal_digits: Option<f64>,
@@ -1845,15 +2015,15 @@ pub struct PyStabilityResult {
 
 /// Numerical value, metadata, stability records, and generated events for one sample.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, name = "SampleEvaluationResult")]
+#[pyclass(from_py_object, name = "EvaluationResult")]
 #[derive(Clone)]
-pub struct PySampleEvaluationResult {
+pub struct PyEvaluationResult {
     inner: SampleEvaluationResult,
 }
 
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
-impl PySampleEvaluationResult {
+impl PyEvaluationResult {
     /// Complex physical contribution including map Jacobians and channel partitions, before the outer-grid weight.
     #[getter]
     fn integrand_result<'py>(&self, py: Python<'py>) -> Bound<'py, PyComplex> {
@@ -1928,7 +2098,8 @@ impl PySampleEvaluationResult {
             .map(|metadata| metadata.is_nan)
     }
 
-    /// Per-precision stability attempts, or ``None`` when metadata was omitted.
+    /// Ordered stability-level attempts, or ``None`` when metadata was omitted.
+    /// Each attempt records its precision and representation; precision may repeat.
     #[getter]
     fn stability_results(&self) -> Option<Vec<PyStabilityResult>> {
         self.inner
@@ -1941,6 +2112,7 @@ impl PySampleEvaluationResult {
                     .iter()
                     .map(|result| PyStabilityResult {
                         precision: result.precision.to_string(),
+                        three_dimensional_representation: result.representation.to_string(),
                         estimated_relative_accuracy: result
                             .estimated_relative_accuracy
                             .map(|value| value.0),
@@ -1955,7 +2127,7 @@ impl PySampleEvaluationResult {
             })
     }
 
-    /// Correlated event groups produced while evaluating this sample.
+    /// All correlated event groups for this sample, before the outer sampler weight.
     #[getter]
     fn event_groups(&self) -> Vec<PyEventGroup> {
         self.inner
@@ -1977,107 +2149,7 @@ impl PySampleEvaluationResult {
     }
 }
 
-/// Single-sample evaluation paired with the observable snapshot for that sample.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(from_py_object, name = "EvaluationResult")]
-#[derive(Clone)]
-pub struct PyEvaluationResult {
-    inner: SingleSampleEvaluationResult,
-}
-
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[pymethods]
-impl PyEvaluationResult {
-    /// Evaluation record for the requested sample.
-    #[getter]
-    fn sample(&self) -> PySampleEvaluationResult {
-        PySampleEvaluationResult {
-            inner: self.inner.sample.clone(),
-        }
-    }
-
-    /// Complex physical contribution including map Jacobians and channel partitions, before the outer-grid weight.
-    #[getter]
-    fn integrand_result<'py>(&self, py: Python<'py>) -> Bound<'py, PyComplex> {
-        self.sample().integrand_result(py)
-    }
-
-    /// Componentwise absolute physical contributions summed over channel points, before the outer-grid weight.
-    #[getter]
-    fn absolute_integrand_result<'py>(&self, py: Python<'py>) -> Option<Bound<'py, PyComplex>> {
-        self.sample().absolute_integrand_result(py)
-    }
-
-    /// Monte Carlo weight supplied by the integrator, excluding the parameterization Jacobian.
-    #[getter]
-    fn integrator_weight(&self) -> f64 {
-        self.inner.sample.evaluation.integrator_weight.0
-    }
-
-    /// Number of candidate events generated, or ``None`` when metadata was omitted.
-    #[getter]
-    fn generated_event_count(&self) -> Option<usize> {
-        self.sample().generated_event_count()
-    }
-
-    /// Number of generated events accepted by selectors, or ``None`` without metadata.
-    #[getter]
-    fn accepted_event_count(&self) -> Option<usize> {
-        self.sample().accepted_event_count()
-    }
-
-    /// Time spent building and selecting events, in seconds, or ``None`` without metadata.
-    #[getter]
-    fn event_processing_time_seconds(&self) -> Option<f64> {
-        self.sample().event_processing_time_seconds()
-    }
-
-    /// Sample parameterization Jacobian, or ``None`` when no Jacobian was supplied.
-    #[getter]
-    fn parameterization_jacobian(&self) -> Option<f64> {
-        self.inner
-            .sample
-            .evaluation
-            .parameterization_jacobian
-            .map(|jac| jac.0)
-    }
-
-    /// Whether evaluation metadata flagged a non-finite result, or ``None`` without metadata.
-    #[getter]
-    fn is_nan(&self) -> Option<bool> {
-        self.sample().is_nan()
-    }
-
-    /// Per-precision stability attempts, or ``None`` when metadata was omitted.
-    #[getter]
-    fn stability_results(&self) -> Option<Vec<PyStabilityResult>> {
-        self.sample().stability_results()
-    }
-
-    /// Correlated event groups produced while evaluating this sample.
-    #[getter]
-    fn event_groups(&self) -> Vec<PyEventGroup> {
-        self.sample().event_groups()
-    }
-
-    /// Observable snapshots produced from the same Monte Carlo sample.
-    #[getter]
-    fn observables<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        py_observable_dict_from_bundle(py, &self.inner.observables)
-    }
-
-    /// Return a human-readable evaluation and observable summary.
-    fn __str__(&self) -> String {
-        self.inner.to_string()
-    }
-
-    /// Return the human-readable evaluation and observable summary.
-    fn __repr__(&self) -> String {
-        self.__str__()
-    }
-}
-
-/// Per-sample evaluations paired with one observable snapshot for the complete batch.
+/// One evaluation record per input sample, plus optional batch stability diagnostics.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "BatchEvaluationResult")]
 #[derive(Clone)]
@@ -2090,19 +2162,13 @@ pub struct PyBatchEvaluationResult {
 impl PyBatchEvaluationResult {
     /// Evaluation records in the same order as the requested samples.
     #[getter]
-    fn samples(&self) -> Vec<PySampleEvaluationResult> {
+    fn samples(&self) -> Vec<PyEvaluationResult> {
         self.inner
             .samples
             .iter()
             .cloned()
-            .map(|inner| PySampleEvaluationResult { inner })
+            .map(|inner| PyEvaluationResult { inner })
             .collect()
-    }
-
-    /// Observable snapshots accumulated across the complete sample batch.
-    #[getter]
-    fn observables<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        py_observable_dict_from_bundle(py, &self.inner.observables)
     }
 
     #[getter]
@@ -2116,12 +2182,12 @@ impl PyBatchEvaluationResult {
             .transpose()
     }
 
-    /// Return a human-readable batch and observable summary.
+    /// Return a human-readable per-sample batch summary.
     fn __str__(&self) -> String {
         self.inner.to_string()
     }
 
-    /// Return the human-readable batch and observable summary.
+    /// Return the human-readable per-sample batch summary.
     fn __repr__(&self) -> String {
         self.__str__()
     }
@@ -2552,7 +2618,7 @@ fn py_discrete_ordering(ordering: &str) -> PyResult<DiscreteBinOrdering> {
     }
 }
 
-fn to_py_value_error(error: eyre::Report) -> PyErr {
+fn to_py_value_error(error: impl Display) -> PyErr {
     exceptions::PyValueError::new_err(error.to_string())
 }
 
@@ -2797,6 +2863,11 @@ fn py_integrand_graph_info_from_info(graph: IntegrandGraphInfo) -> PyIntegrandGr
         graph_id: graph.graph_id,
         name: graph.name,
         is_master: graph.is_master,
+        native_residue_counts: graph
+            .native_residue_counts
+            .into_iter()
+            .map(|(mode, count)| (mode.to_string(), count))
+            .collect(),
         threshold_counterterm_directives: graph
             .threshold_counterterm_directives
             .into_iter()
@@ -3040,6 +3111,7 @@ fn py_integrand_graph_group_info_from_info(
             .into_iter()
             .map(py_integrand_graph_info_from_info)
             .collect(),
+        complete_residue_sum: group.complete_residue_sum,
         orientation_edge_ids: group.orientation_edge_ids,
         orientations: group
             .orientations
@@ -3071,6 +3143,11 @@ fn py_integrand_info_from_info(info: IntegrandInfo) -> PyIntegrandInfo {
         process_name: info.process_name,
         integrand_name: info.integrand_name,
         kind: info.kind.to_string(),
+        generated_representations: info
+            .generated_representations
+            .iter()
+            .map(ToString::to_string)
+            .collect(),
         generation_backend: info
             .generation_compilation
             .active_backend_name()
@@ -3863,6 +3940,31 @@ impl GammaLoopAPI {
         self.cli_settings.state.folder.display().to_string()
     }
 
+    /// Create empty observable statistics for the selected integrand.
+    /// Evaluation itself never commits observable moments. See ``ObservableAccumulator``.
+    #[pyo3(signature = (process_id=None, integrand_name=None))]
+    pub fn observable_accumulator(
+        &mut self,
+        process_id: Option<usize>,
+        integrand_name: Option<String>,
+    ) -> Result<PyObservableAccumulator> {
+        let process_ref = process_id.map(ProcessRef::Id);
+        let (process_id, integrand_name) = self
+            .gammaloop_state
+            .find_integrand_ref(process_ref.as_ref(), integrand_name.as_ref())?;
+        evaluate_samples::with_warmed_integrand(
+            &mut self.gammaloop_state,
+            process_id,
+            &integrand_name,
+            None,
+            |integrand, _| {
+                Ok(PyObservableAccumulator {
+                    inner: integrand.new_observable_accumulator()?,
+                })
+            },
+        )
+    }
+
     /// Evaluate one integration or momentum-space sample.
     ///
     /// Parameters
@@ -3900,7 +4002,7 @@ impl GammaLoopAPI {
     /// Returns
     /// -------
     /// EvaluationResult
-    ///     The sample evaluation and the observable snapshot for its one-row batch.
+    ///     One independent sample, with an unweighted contribution for configured observables.
     ///
     /// Raises
     /// ------
@@ -3914,8 +4016,8 @@ impl GammaLoopAPI {
     /// ``f128``, and arbitrary-precision stability ladder. ``use_arb_prec=True``
     /// forces arbitrary-precision (Arb) internal evaluation. Python-visible numeric
     /// fields use the package's ``float64`` output contract. Evaluation may
-    /// warm the integrand and update in-memory caches or observable snapshots even in
-    /// a read-only-state session.
+    /// warm the integrand and update in-memory caches even in a read-only-state
+    /// session. Observable statistics change only through explicit accumulation.
     ///
     /// See Also
     /// --------
@@ -3993,18 +4095,12 @@ impl GammaLoopAPI {
         .run(&mut self.gammaloop_state)?;
         let gammalooprs::integrands::evaluation::BatchSampleEvaluationResult {
             mut samples,
-            observables,
             numerical_stability: _,
         } = res;
         let value = samples.pop().ok_or_else(|| {
             eyre!("evaluate_sample did not return any result for the single input sample")
         })?;
-        Ok(PyEvaluationResult {
-            inner: SingleSampleEvaluationResult {
-                sample: value,
-                observables,
-            },
-        })
+        Ok(PyEvaluationResult { inner: value })
     }
 
     /// Evaluate a batch of integration or momentum-space samples.
@@ -4044,7 +4140,7 @@ impl GammaLoopAPI {
     /// Returns
     /// -------
     /// BatchEvaluationResult
-    ///     Per-sample evaluations and one observable snapshot for the complete batch.
+    ///     One evaluation per input sample and optional numerical-stability diagnostics.
     ///
     /// Raises
     /// ------
@@ -4058,7 +4154,7 @@ impl GammaLoopAPI {
     /// ``f128``, and arbitrary-precision stability ladder. ``use_arb_prec=True``
     /// forces arbitrary-precision (Arb) internal evaluation. Python-visible numeric
     /// fields use the package's ``float64`` output contract. Evaluation may
-    /// update in-memory caches or observable snapshots in a read-only-state session.
+    /// update numerical caches; observable statistics change only through explicit accumulation.
     ///
     /// See Also
     /// --------
@@ -4067,7 +4163,7 @@ impl GammaLoopAPI {
     ///
     /// Examples
     /// --------
-    /// Evaluate two rows and inspect their per-sample events and batch-level histograms:
+    /// Evaluate two rows and explicitly accumulate their correlated observable contributions:
     ///
     /// ```python
     /// from pathlib import Path
@@ -4088,8 +4184,12 @@ impl GammaLoopAPI {
     /// result = api.evaluate_samples(points, return_events=True)
     /// assert len(result.samples) == 2
     /// assert all(sample.event_groups for sample in result.samples)
-    /// assert result.observables["leading_jet_pt_hist"].sample_count == 2
-    /// assert len(result.observables["leading_jet_pt_hist"].bins) == 8
+    /// accumulator = api.observable_accumulator()
+    /// for sample in result.samples:
+    ///     accumulator.add_sample(sample, sample.integrator_weight)
+    /// histograms = accumulator.snapshot()
+    /// assert histograms["leading_jet_pt_hist"].sample_count == 2
+    /// assert len(histograms["leading_jet_pt_hist"].bins) == 8
     /// ```
     ///
     /// The fixture exercises the API surface; its powered coupling selector is not a validated
@@ -4323,11 +4423,12 @@ impl GammaLoopAPI {
             .collect())
     }
 
-    /// Return the causal-flow orientations generated for one graph.
+    /// Return a detached snapshot of one graph's persisted native residue map.
     ///
-    /// Each returned dictionary maps an edge id to ``1`` (default), ``-1``
-    /// (reversed), or ``0`` (undirected). Supply process and integrand selectors when
-    /// the active state does not identify a unique integrand.
+    /// Keys retain the complete direction vector and exact ordered affine loop and
+    /// edge energy maps. Values retain every native residue ID and all scalar
+    /// variants, with exact Fraction coefficients and unexpanded denominator trees.
+    /// This is graph-level generation data, not the evaluated UV/threshold catalogue.
     ///
     /// Parameters
     /// ----------
@@ -4336,86 +4437,97 @@ impl GammaLoopAPI {
     /// process_id : int, optional
     ///     Numeric process identifier; omit when process selection is unambiguous.
     /// integrand_name : str, optional
-    ///     Integrand containing the graph; omit when integrand selection is unambiguous.
+    ///     Integrand containing the graph; omit when selection is unambiguous.
+    /// three_dimensional_representation : str, optional
+    ///     ``cff`` or ``ltd``; defaults to the first representation generated for
+    ///     this integrand, independently of current mutable generation settings.
     ///
     /// Returns
     /// -------
-    /// list[dict[int, int]]
-    ///     One edge-direction mapping per generated orientation.
-    #[pyo3(name="get_orientations", signature = (graph_name, process_id=None, integrand_name=None))]
-    pub(crate) fn get_orientations(
+    /// ResidueMap
+    ///     Detached native entries, shared surfaces and persisted normalization metadata.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If the graph or representation is unavailable or the integrand is ungenerated.
+    #[pyo3(signature = (graph_name, process_id=None, integrand_name=None, three_dimensional_representation=None))]
+    pub(crate) fn get_residue_map(
         &self,
         graph_name: String,
         process_id: Option<usize>,
         integrand_name: Option<String>,
-    ) -> Result<Vec<HashMap<usize, i8>>> {
+        three_dimensional_representation: Option<String>,
+    ) -> PyResult<PyResidueMap> {
+        use three_dimensional_reps::RepresentationMode;
         let (pid, name) = self
             .gammaloop_state
             .process_list
             .find_integrand(process_id, integrand_name.as_ref())
-            .map_err(|e| {
-                exceptions::PyException::new_err(format!("Could not find integrand: {}", e))
-            })?;
-
-        let orientations = match &self.gammaloop_state.process_list.processes[pid].collection {
+            .map_err(to_py_value_error)?;
+        let resolved = self
+            .gammaloop_state
+            .process_list
+            .get_integrand(pid, &name)
+            .map_err(to_py_value_error)?;
+        let generated_modes = resolved
+            .require_generated()
+            .map_err(to_py_value_error)?
+            .generated_representations();
+        let representation = match three_dimensional_representation.as_deref() {
+            Some("cff") => RepresentationMode::Cff,
+            Some("ltd") => RepresentationMode::Ltd,
+            Some(mode) => {
+                return Err(exceptions::PyValueError::new_err(format!(
+                    "Unknown three-dimensional representation '{mode}'; expected 'cff' or 'ltd'"
+                )));
+            }
+            None => *generated_modes.first().ok_or_else(|| {
+                exceptions::PyValueError::new_err(
+                    "No three-dimensional representation was generated for this integrand",
+                )
+            })?,
+        };
+        if !generated_modes.contains(&representation) {
+            return Err(exceptions::PyValueError::new_err(format!(
+                "Representation '{representation}' was not generated for integrand '{name}'"
+            )));
+        }
+        let missing_graph = || {
+            exceptions::PyValueError::new_err(format!(
+                "Graph '{graph_name}' was not found in integrand '{name}'"
+            ))
+        };
+        let expression = match &self.gammaloop_state.process_list.processes[pid].collection {
             ProcessCollection::Amplitudes(amplitudes) => {
-                let cff = amplitudes
-                    .get(&name)
-                    .unwrap()
+                let amplitude = amplitudes.get(&name).ok_or_else(missing_graph)?;
+                let graph = amplitude
                     .graphs
                     .iter()
                     .find(|g| g.graph.name == graph_name)
-                    .as_ref()
-                    .unwrap()
+                    .ok_or_else(missing_graph)?;
+                graph
                     .derived_data
-                    .cff_expression
-                    .as_ref()
-                    .unwrap();
-
-                cff.expression
-                    .orientations
-                    .iter()
-                    .map(|or_data| or_data.data.orientation.clone())
-                    .collect_vec()
+                    .representations
+                    .get(&representation)
+                    .map(|data| &data.expression)
             }
-
             ProcessCollection::CrossSections(cross_sections) => {
-                let cff = cross_sections
-                    .get(&name)
-                    .unwrap()
+                let cross_section = cross_sections.get(&name).ok_or_else(missing_graph)?;
+                let graph = cross_section
                     .supergraphs
                     .iter()
                     .find(|g| g.graph.name == graph_name)
-                    .as_ref()
-                    .unwrap()
-                    .derived_data
-                    .global_cff_expression
-                    .as_ref()
-                    .unwrap();
-
-                cff.expression
-                    .orientations
-                    .iter()
-                    .map(|or_data| or_data.data.orientation.clone())
-                    .collect_vec()
+                    .ok_or_else(missing_graph)?;
+                graph.derived_data.expressions.get(&representation)
             }
-        };
-
-        Ok(orientations
-            .into_iter()
-            .map(|orientation| {
-                let mut result = HashMap::new();
-                for (edge_id, direction) in orientation.into_iter() {
-                    let direction = match direction {
-                        Orientation::Default => 1,
-                        Orientation::Reversed => -1,
-                        Orientation::Undirected => 0,
-                    };
-                    result.insert(edge_id.0, direction);
-                }
-                result
-            })
-            .collect())
+        }
+        .ok_or_else(|| {
+            exceptions::PyValueError::new_err(format!(
+                "Graph '{graph_name}' has no generated '{representation}' residue map"
+            ))
+        })?;
+        Ok(PyResidueMap::new(graph_name, expression))
     }
 
     /// Serialize the active physics model as JSON.

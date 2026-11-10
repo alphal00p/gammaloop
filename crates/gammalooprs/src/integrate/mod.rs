@@ -10,6 +10,7 @@ mod render_ratatui;
 mod render_tabled;
 mod status_update;
 
+use crate::integrands::process;
 use crate::integrands::process::EvaluationTarget;
 use bincode::Decode;
 use bincode::Encode;
@@ -2125,7 +2126,7 @@ impl CoreIterationState {
 
                 for (slot_index, integrand) in self.slot_integrands.iter_mut().enumerate() {
                     let evaluation_start = Instant::now();
-                    let raw_batch = integrand.evaluate_samples_raw_with_estimate(
+                    let mut raw_batch = integrand.evaluate_samples_raw_with_estimate(
                         &samples,
                         slot_targets[slot_index],
                         iter,
@@ -2136,6 +2137,11 @@ impl CoreIterationState {
                     )?;
                     if raw_batch.samples.len() < samples.len() {
                         return Ok(0);
+                    }
+                    for result in &mut raw_batch.samples {
+                        integrand.process_evaluation_result(result)?;
+                        // Slot integration retains moments, not the event payload.
+                        result.event_groups.clear();
                     }
                     batch_evaluation_time += evaluation_start.elapsed();
                     total_sample_evaluations += raw_batch.samples.len();
@@ -2272,6 +2278,7 @@ impl CoreIterationState {
                         self.slot_stats[slot_index].merged(&raw_batch.statistics);
 
                     for (sample, result) in samples.iter().zip(raw_batch.samples.iter()) {
+                        self.slot_integrands[slot_index].process_evaluation_result(result)?;
                         if result.evaluation_metadata.is_nan {
                             self.failed_samples.push((
                                 slot_index,
@@ -2814,7 +2821,24 @@ where
         .sampling
         .get_parameterization_settings()
         .is_none();
-    let use_ltd = primary.settings.general.use_ltd;
+    let representation_stack = primary
+        .settings
+        .stability
+        .levels
+        .iter()
+        .map(|level| {
+            let representation = match &primary.integrand {
+                Integrand::ProcessIntegrand(integrand) => {
+                    level.resolved_representation(integrand.generated_representations())?
+                }
+                #[cfg(test)]
+                Integrand::TestProbe(_) => level
+                    .resolved_representation(&[crate::settings::global::RepresentationMode::Cff])?,
+            };
+            Ok(format!("{} / {}", level.precision, representation))
+        })
+        .collect::<Result<Vec<_>>>()?
+        .join(" → ");
     let integration_seed = primary.settings.integrator.seed;
     let integrated_phase = primary.settings.integrator.integrated_phase;
     let target_relative_accuracy = primary.settings.integrator.target_relative_accuracy;
@@ -2856,8 +2880,8 @@ where
     let t_start = Instant::now();
 
     info!(
-        "Integrating using {} ltd with {} {} over {} ...",
-        if use_ltd { "naive" } else { "cff" },
+        "Integrating using [{}] with {} {} over {} ...",
+        representation_stack,
         cores,
         if cores > 1 { "cores" } else { "core" },
         grid_str
@@ -3389,6 +3413,11 @@ fn generate_event_output(
         EventOutputSettings::EventList => {
             let mut event_groups = EventGroupList::default();
             for mut result in evaluation_results {
+                let factor = Complex::new_re(result.integrator_weight);
+                process::apply_full_event_multiplicative_factor_precise(
+                    &mut result.event_groups,
+                    &factor,
+                );
                 event_groups.append(&mut result.event_groups);
             }
             EventOutput::EventList { event_groups }
@@ -3867,6 +3896,9 @@ fn evaluate_sample_list(
                 false,
                 max_eval,
             )?;
+            for result in &raw_batch.samples {
+                integrand.process_evaluation_result(result)?;
+            }
             Ok((raw_batch.samples, raw_batch.statistics, integrand))
         })
         .collect();
@@ -4722,6 +4754,7 @@ mod tests {
         };
         evaluation.evaluation_metadata.stability_results.push(
             crate::integrands::evaluation::StabilityResult {
+                representation: crate::settings::global::RepresentationMode::Cff,
                 precision: fixture.precision,
                 estimated_relative_accuracy,
                 estimated_decimal_digits: estimated_relative_accuracy
@@ -4889,6 +4922,7 @@ mod tests {
         metadata.record_threshold_counterterm_error("AlmostPrimalInfeasible: no interior center");
         for precision in [Precision::Double, Precision::Quad, Precision::Arb] {
             metadata.stability_results.push(StabilityResult {
+                representation: crate::settings::global::RepresentationMode::Cff,
                 precision,
                 estimated_relative_accuracy: None,
                 estimated_decimal_digits: None,

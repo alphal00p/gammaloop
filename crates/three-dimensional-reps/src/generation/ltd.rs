@@ -22,7 +22,7 @@ use crate::{
     utils::determinant_i32,
 };
 use itertools::Itertools;
-use linnet::half_edge::involution::{EdgeIndex, EdgeVec};
+use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
 use std::collections::{BTreeMap, HashMap, hash_map::Entry};
 
 struct Channel {
@@ -55,6 +55,8 @@ impl<'a> LtdBuilder<'a> {
         options: &'a Generate3DExpressionOptions,
     ) -> Result<Self> {
         let repeated = repeated_groups(parsed);
+        #[cfg(feature = "generation-audit")]
+        super::audit::record_ltd(parsed, options, !repeated.is_empty());
         let bounds = if repeated.is_empty() {
             // Ordinary residues evaluate the complete numerator on their pole
             // maps; their validity has no dependence on an EMR degree bound.
@@ -176,6 +178,28 @@ impl<'a> LtdBuilder<'a> {
             solve_loop_energy_from_target_edge_exprs(&self.signatures, &basis, &targets)?;
         let mut edge_energies = edge_q0_from_loop_exprs(&self.signatures, &loop_energies);
         apply_initial_state_cut_edge_energy_exprs(self.parsed, &mut edge_energies);
+        // A numerator stencil moves off shell without changing the physical
+        // residue. Keep every signed copy of a cut pole bound to that pole,
+        // independently of its sampled affine numerator energy.
+        let mut pole_orientation =
+            EdgeVec::from_iter(self.signatures.iter().map(|_| Orientation::Undirected));
+        for (&channel_id, &sigma) in residue.basis.iter().zip(&residue.sigmas) {
+            let channel = &self.channels[channel_id];
+            let (_, representative_sign) =
+                self.signatures[channel.representative()].canonical_up_to_sign();
+            for &member in &channel.members {
+                let (_, member_sign) = self.signatures[member].canonical_up_to_sign();
+                pole_orientation[EdgeIndex(member)] =
+                    if sigma * representative_sign * member_sign > 0 {
+                        Orientation::Default
+                    } else {
+                        Orientation::Reversed
+                    };
+            }
+        }
+        let identity_edges = (0..self.signatures.len())
+            .map(|edge| (edge, edge))
+            .collect();
 
         // Differentiate only the scalar affine routing, never the graph
         // numerator. The same inverse defines each physical stencil map.
@@ -342,9 +366,10 @@ impl<'a> LtdBuilder<'a> {
                     self.assembly.push_variant_for_maps(
                         loop_map.clone(),
                         edge_map.clone(),
-                        &EdgeVec::from(Vec::new()),
-                        &BTreeMap::new(),
+                        &pole_orientation,
+                        &identity_edges,
                         CFFVariant {
+                            thermal_weight: Default::default(),
                             origin: Some("ltd".to_string()),
                             prefactor: &sample_coefficient * &term.coefficient,
                             half_edges,
@@ -352,7 +377,6 @@ impl<'a> LtdBuilder<'a> {
                             denominator_surface_signs: BTreeMap::new(),
                             denominator_edge_support_signs: BTreeMap::new(),
                             uniform_scale_power,
-                            thermal_weight: Default::default(),
                             numerator_surfaces: Vec::new(),
                             denominator: denominator_tree_from_chains(std::slice::from_ref(
                                 &term.chain,
@@ -503,7 +527,6 @@ impl DenominatorFactor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "eval")]
     use crate::NumeratorSamplingScaleMode;
     use crate::{
         generation::generate_3d_expression,
@@ -556,7 +579,7 @@ mod tests {
             };
             assert!(matches!(
                 generate_3d_expression(&parsed, &options),
-                Err(GenerationError::LtdMediumNotSupported(mode)) if mode == medium_mode
+                Err(GenerationError::LtdRequiresVacuum { medium_mode: mode }) if mode == medium_mode
             ));
         }
     }
@@ -592,6 +615,48 @@ mod tests {
             ),
             Err(GenerationError::CoefficientOutOfRange)
         ));
+    }
+
+    #[test]
+    fn vacuum_ltd_keeps_pole_directions_separate_from_numerator_samples() {
+        let parsed = repeated_cycle(2, &[1, -1]);
+        let generated = generate_3d_expression(
+            &parsed,
+            &Generate3DExpressionOptions {
+                representation: RepresentationMode::Ltd,
+                energy_degree_bounds: Some(vec![(0, 2)]),
+                numerator_sampling_scale: NumeratorSamplingScaleMode::All,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(generated.expression.orientations.len() > 1);
+        for row in &generated.expression.orientations {
+            assert_eq!(
+                row.data.orientation,
+                EdgeVec::from_iter([Orientation::Default, Orientation::Reversed])
+            );
+            assert_eq!(row.edge_energy_map[1], -row.edge_energy_map[0].clone());
+            assert!(
+                row.variants
+                    .iter()
+                    .all(|variant| variant.thermal_weight == crate::ThermalWeight::default())
+            );
+        }
+        assert!(
+            generated
+                .expression
+                .orientations
+                .iter()
+                .any(|row| !row.edge_energy_map[0].uniform_scale_coeff.is_zero())
+        );
+        let keys = generated
+            .expression
+            .orientations
+            .iter()
+            .map(|row| row.residue_map_key())
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(keys.len(), generated.expression.orientations.len());
     }
 
     #[test]
@@ -728,9 +793,9 @@ mod tests {
     #[test]
     fn ltd_matches_current_cff_for_simple_and_repeated_sources() {
         let mut forward_bubble = test_graphs::initial_state_cut_line_graph(1);
-        forward_bubble
-            .node_name_to_internal
-            .insert("v1".to_string(), 1);
+        // This fixture has two vertices, unlike the one-vertex terminal source.
+        // Restore the physical cut incidence before adding its two loop lines.
+        forward_bubble.node_name_to_internal.insert("v1".into(), 1);
         forward_bubble.internal_edges[0].head = 1;
         forward_bubble.internal_edges[1].tail = 1;
         forward_bubble.internal_edges[1].head = 0;

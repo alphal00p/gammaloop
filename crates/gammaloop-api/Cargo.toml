@@ -40,7 +40,7 @@ feynkit-graph = { workspace = true }
 figment = { version = "0.10.19", features = ["json", "toml"] }
 gammaloop-tracing-filter = { workspace = true, features = ["clap"] }
 gammalooprs = { workspace = true }
-three-dimensional-reps = { workspace = true, features = ["display"] }
+three-dimensional-reps = { workspace = true, features = ["display", "cli"] }
 feynkit-ufo = { workspace = true, optional = true }
 idenso = { workspace = true, features = ["native"] }
 include_dir = { workspace = true }

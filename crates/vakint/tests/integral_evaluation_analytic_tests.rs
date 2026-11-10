@@ -428,6 +428,46 @@ fn partly_massless_sunsets_match_independent_gamma_integrals() {
 }
 
 #[test]
+fn partly_massless_sunset_scalar_products_obey_momentum_conservation() {
+    let vakint = get_vakint(VakintSettings {
+        number_of_terms_in_epsilon_expansion: 4,
+        integral_normalization_factor: LoopNormalizationFactor::pySecDec,
+        evaluation_order: EvaluationOrder::matad_only(None),
+        ..VakintSettings::default()
+    });
+    for power in [1, 3] {
+        let topology = vakint_parse!(format!(
+            "topo(prop(1,edge(1,2),k(1),muvsq,{power})*\
+             prop(2,edge(1,2),k(2),0,1)*\
+             prop(3,edge(2,1),k(1)+k(2),0,1))"
+        ))
+        .unwrap();
+        let square = vakint
+            .evaluate((vakint_parse!("dot(k(1),k(1))").unwrap() * &topology).as_view())
+            .unwrap();
+        assert!(!square.is_zero(), "the massive-loop square must contribute");
+        // Exchanging the two massless lines sends k2 -> -k1-k2.
+        // Their products with k1 integrate to -k1^2/2; reversing that
+        // orientation gives +k1^2/2. Cancelling a massless square is scaleless.
+        for (numerator, sign) in [
+            ("dot(k(1),k(2))", 1),
+            ("-dot(k(1),k(1))-dot(k(1),k(2))", 1),
+            ("dot(k(1),k(2))+dot(k(2),k(2))", 1),
+            ("dot(k(1),k(1))+dot(k(1),k(2))", -1),
+        ] {
+            let actual = vakint
+                .evaluate((vakint_parse!(numerator).unwrap() * &topology).as_view())
+                .unwrap();
+            let difference = &actual + Atom::num(sign) * &square / Atom::num(2);
+            assert!(
+                difference.expand().is_zero(),
+                "M00 power {power}, numerator {numerator}: {difference}"
+            );
+        }
+    }
+}
+
+#[test]
 fn test_integrate_1l_a() {
     let mut vakint = get_vakint(VakintSettings {
         allow_unknown_integrals: false,

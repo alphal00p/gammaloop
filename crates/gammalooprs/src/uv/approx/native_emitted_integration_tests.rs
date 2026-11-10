@@ -351,6 +351,7 @@ impl EmittedVectorIntegral {
             crate::utils::vakint()?,
             orientation,
             &settings.uv,
+            true,
             &mut projection_context,
         )?;
         ensure!(projection_context.denominator_reconstruction_certificates > 0);

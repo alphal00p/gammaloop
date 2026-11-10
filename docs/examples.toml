@@ -110,6 +110,21 @@ owner = "GammaLoop maintainers"
 test_command = "cargo test --locked -p alphal00p-docs-examples"
 
 [[example]]
+id = "gammaloop-python-residue-map"
+marker = "gammaloop-python-residue-map"
+product = "gammaloop"
+task = "Inspect exact native CFF or LTD residue maps from a generated graph"
+audience = "real-value"
+source = "docs/products/gammaloop/content/api.typ"
+route = "reference/interfaces/"
+prerequisites = ["Built GammaLoop Python API", "Saved state containing the selected generated graph and representation"]
+expected = "A detached residue map exposes exact affine energy keys and every native residue and scalar variant."
+verification = "compile"
+tier = "pull-request"
+owner = "GammaLoop maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
 id = "linnet-quickstart-boundary"
 marker = "linnet-quickstart-boundary"
 product = "linnet"

@@ -461,6 +461,19 @@ impl Vakint {
                     vk_parse!(format!("-dot(p{},p{})", i_edge1, i_edge2).as_str()).unwrap()
                 });
 
+        if matches!(integral_name.as_str(), "I2L_MM0" | "I2L_M00") {
+            // The canonical loop carriers map to p2 and p3, with p1 = p2 + p3.
+            // MATAD's partly massless routines can silently discard their
+            // mixed scalar product. Reduce it to propagator squares first.
+            numerator = numerator
+                .replace(vk_parse!("dot(p2,p3)").unwrap().to_pattern())
+                .with(
+                    vk_parse!("(dot(p1,p1)-dot(p2,p2)-dot(p3,p3))/2")
+                        .unwrap()
+                        .to_pattern(),
+                );
+        }
+
         // Substitute eps by (4-d)/2
         numerator = numerator
             .replace(vk_parse!(&settings.epsilon_symbol).unwrap().to_pattern())

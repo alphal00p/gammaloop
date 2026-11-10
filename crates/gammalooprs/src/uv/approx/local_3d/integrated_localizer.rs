@@ -112,6 +112,15 @@ impl Localizer<'_> {
                 })
                 .collect(),
         );
+        if self.orientation.cff_options()?.representation
+            == three_dimensional_reps::RepresentationMode::Ltd
+        {
+            let mut localized = FrozenActiveCt::from(active);
+            localized.frozen_integrands = localized
+                .frozen_integrands
+                .map(|_| localizing_integrand.clone());
+            return Ok(localized);
+        }
         let frozen_integrands = self
             .cutset
             .residue_selector

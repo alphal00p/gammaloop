@@ -88,7 +88,9 @@ impl Integrands {
         self.atoms.iter()
     }
 
-    pub(crate) fn numerators(&self) -> &[Arc<NumeratorDefinition>] {
+    /// Shared tensor bodies referenced by the factorized roots from [`Self::iter`].
+    /// Inspect both to measure expression storage without expanding the bodies.
+    pub fn numerators(&self) -> &[Arc<NumeratorDefinition>] {
         &self.numerators
     }
 

@@ -46,6 +46,8 @@ impl<E: Clone, H: Clone> ThreeDExpression<OrientationID, E, H> {
         other_selected_surfaces: &[LinearEnergyExpr],
         energy_degree_bounds: Option<&[(usize, usize)]>,
     ) -> Result<Vec<Self>, GenerationError> {
+        #[cfg(feature = "generation-audit")]
+        crate::generation::audit::record_ltd_residue_selection();
         if !self.residual_denominators.is_empty() {
             return Err(GenerationError::InvalidResidueCoordinate(
                 "residual four-dimensional denominators must be resolved before pole selection"

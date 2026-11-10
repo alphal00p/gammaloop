@@ -150,3 +150,35 @@ graph_name = "GL1"
 family = "thermal"
 process = "double_triangle"
 graph_name = "GL1"
+# The slow gate measures native Arb evaluator and complete physical-call times.
+# Generation runs once per revision, without a paired generation verdict.
+[precise]
+card = "paper-massless-soft-cff4d-arb.toml"
+fixture_timeout_seconds = 7200
+required_metrics = ["evaluator_seconds_per_sample", "warm_runtime_seconds_per_sample"]
+correctness_format = "decimal"
+correctness_tolerance = { absolute = 0.0, relative = 1e-5 }
+
+[precise.corpus]
+process_id = 0
+integrand = "paper_figure_b1_double_triangle_soft_ir"
+certificate = "benchmarks/performance/paper-massless-soft-cff4d-arb.json"
+inputs = [
+  "tests/resources/graphs/paper_figure_b1_double_triangle_soft_ir.dot",
+  "tests/resources/run_cards/paper_figure_b1_double_triangle_soft_ir.toml",
+  "assets/models/json/sm/sm.json",
+  "assets/models/json/sm/restrict_default.json",
+  "benchmarks/performance/paper-massless-soft-cff4d-arb.json",
+  "benchmarks/performance/precise_sample.rs",
+  "benchmarks/performance/precise_sample.nix",
+]
+
+[workloads.paper-massless-soft-cff4d-arb]
+family = "precise"
+process = "paper_figure_b1_double_triangle_soft_ir"
+graph_name = "paper_figure_b1_double_triangle_soft_ir"
+
+# One candidate executable, two explicit representations, unchanged scalar inputs.
+[representation_comparisons.gl04-q1-squared-ltd-vs-cff-4d]
+case = "gl04-q1-squared-projected-4d"
+comparison = "ltd_vs_cff"

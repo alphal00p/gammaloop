@@ -2,6 +2,8 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
+pub mod evaluation_comparison;
+
 use color_eyre::Result;
 
 use gammaloop_api::{
@@ -218,24 +220,34 @@ impl CLIState {
         let expressions = amplitude
             .graphs
             .iter()
-            .map(|graph| {
-                let data = &graph.derived_data;
-                let root_bytes = data.all_mighty_integrand.as_view().get_byte_size();
-                let definition_bytes = data
-                    .all_mighty_numerators
+            .flat_map(|graph| {
+                graph
+                    .derived_data
+                    .representations
                     .iter()
-                    .map(|entry| {
-                        entry.lhs.as_view().get_byte_size()
-                            + entry.rhs.expression().as_view().get_byte_size()
+                    .map(|(representation, data)| {
+                        let integrands = &data.all_mighty_integrand;
+                        let root_bytes = integrands
+                            .iter()
+                            .map(|(_, atom)| atom.as_view().get_byte_size())
+                            .sum::<usize>();
+                        let definition_bytes = integrands
+                            .numerators()
+                            .iter()
+                            .map(|entry| {
+                                entry.lhs.as_view().get_byte_size()
+                                    + entry.rhs.expression().as_view().get_byte_size()
+                            })
+                            .sum::<usize>();
+                        serde_json::json!({
+                            "graph_name": graph.graph.name,
+                            "representation": representation,
+                            "root_bytes": root_bytes,
+                            "definition_bytes": definition_bytes,
+                            "definition_count": integrands.numerators().len(),
+                            "total_bytes": root_bytes + definition_bytes,
+                        })
                     })
-                    .sum::<usize>();
-                serde_json::json!({
-                    "graph_name": graph.graph.name,
-                    "root_bytes": root_bytes,
-                    "definition_bytes": definition_bytes,
-                    "definition_count": data.all_mighty_numerators.len(),
-                    "total_bytes": root_bytes + definition_bytes,
-                })
             })
             .collect::<Vec<_>>();
         let mut stats = GraphGenerationStats::default();
@@ -267,13 +279,13 @@ impl CLIState {
             "generation_peak_ram_bytes": summary.peak_ram_bytes,
             "process_lifetime_peak_rss_bytes": process_lifetime_peak_rss_bytes,
             "process_lifetime_peak_rss_scope": "process_start_through_report_capture_including_model_import",
-            "generation_native_seconds": stats.total_time.as_secs_f64(),
+            "generation_native_seconds": stats.timings.total_time.as_secs_f64(),
             "generation_expression_seconds": stats.expression_build_time().as_secs_f64(),
             "evaluator_build_seconds": stats.evaluator_build_time().as_secs_f64(),
-            "evaluator_spenso_seconds": stats.evaluator_spenso_time.as_secs_f64(),
-            "evaluator_symbolica_seconds": stats.evaluator_symbolica_time.as_secs_f64(),
-            "evaluator_compile_seconds": stats.evaluator_compile_time.as_secs_f64(),
-            "evaluator_count": stats.evaluator_count,
+            "evaluator_spenso_seconds": stats.timings.evaluator_spenso_time.as_secs_f64(),
+            "evaluator_symbolica_seconds": stats.timings.evaluator_symbolica_time.as_secs_f64(),
+            "evaluator_compile_seconds": stats.timings.evaluator_compile_time.as_secs_f64(),
+            "evaluator_count": stats.timings.evaluator_count,
             "expression_representation": "factorized_pre_evaluator_roots_and_function_definitions",
             "expression_sizes": expressions,
         }))

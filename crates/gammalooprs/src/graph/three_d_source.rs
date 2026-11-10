@@ -453,6 +453,37 @@ impl ExactSourceEnergyMapper {
         Ok(candidates)
     }
 
+    /// Bind the complete LTD numerator to the unchanged physical pole map.
+    /// Serial copies describe the same physical affine energy; capacity-driven
+    /// redistribution is needed only for generalized numerator sampling.
+    pub(crate) fn unbounded_numerator_plan(
+        &self,
+        numerator: &Atom,
+    ) -> Result<EnergyPowerAssignmentPlan> {
+        let assignments = self
+            .source_edge_occurrences
+            .iter()
+            .filter_map(|(edge, occurrences)| {
+                occurrences
+                    .iter()
+                    .find(|occurrence| occurrence.is_base)
+                    .map(|occurrence| {
+                        Ok((EnergyReference::Physical(*edge), occurrence.energy_edge_id))
+                    })
+            })
+            .chain(self.uv_classes.iter().map(|(class, (_, occurrences))| {
+                let occurrence = occurrences.first().ok_or_else(|| {
+                    eyre::eyre!("exact UV class {} has no retained occurrence", class.0)
+                })?;
+                Ok((EnergyReference::UvClass(*class), occurrence.energy_edge_id))
+            }))
+            .collect::<Result<BTreeMap<_, _>>>()?;
+        Ok(EnergyPowerAssignmentPlan::unbounded(
+            numerator.clone(),
+            assignments,
+        ))
+    }
+
     /// Replace only temporal components. Spatial components remain in the
     /// production graph's parent momentum basis, including abstract indices.
     /// Inactive source energies are placeholders while the affine maps are

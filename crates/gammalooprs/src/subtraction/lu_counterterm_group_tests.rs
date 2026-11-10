@@ -11,6 +11,7 @@ use crate::{
     },
     subtraction::generate_rstar_t_dependence_evaluator,
 };
+use linnet::half_edge::involution::EdgeIndex;
 use symbolica::atom::Atom;
 
 #[test]
@@ -784,13 +785,18 @@ fn shared_group_weights_preserve_foreign_cut_data_and_radial_derivatives() {
         .unwrap();
     let mut counterterm = LUCounterTerm {
         evaluators: ti_vec![LUCounterTermEvaluators {
-            left_thresholds_evaluator: ti_vec![BTreeMap::new()],
-            right_thresholds_evaluator: ti_vec![BTreeMap::new()],
-            iterated_evaluator: IteratedCtCollection::new(
-                vec![BTreeMap::from([(index, residue)])],
-                1,
-                1,
-            ),
+            integrands: BTreeMap::from([(
+                crate::settings::global::RepresentationMode::Cff,
+                crate::subtraction::lu_counterterm::LUCounterTermRepresentationEvaluators {
+                    left_thresholds_evaluator: ti_vec![BTreeMap::new()],
+                    right_thresholds_evaluator: ti_vec![BTreeMap::new()],
+                    iterated_evaluator: IteratedCtCollection::new(
+                        vec![BTreeMap::from([(index, residue)])],
+                        1,
+                        1,
+                    ),
+                }
+            )]),
             threshold_helpers: LUThresholdHelperEvaluators {
                 left_thresholds: ti_vec![BTreeMap::new()],
                 right_thresholds: ti_vec![BTreeMap::new()],
@@ -821,12 +827,12 @@ fn shared_group_weights_preserve_foreign_cut_data_and_radial_derivatives() {
             .evaluate(
                 &runtime_point,
                 CutGroupId(0),
-                &[],
                 &lmbs,
                 &graph,
                 &masses,
                 &rotation,
                 &settings,
+                crate::settings::global::RepresentationMode::Cff,
                 &mut param_builder,
                 SingleOrAllOrientations::Single {
                     orientation: &orientation,

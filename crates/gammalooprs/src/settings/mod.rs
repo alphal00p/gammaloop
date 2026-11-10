@@ -105,10 +105,6 @@ impl RuntimeSettings {
     pub(crate) fn should_buffer_generated_events(&self) -> bool {
         self.general.generate_events || !self.observables.is_empty()
     }
-
-    pub(crate) fn should_return_generated_events(&self) -> bool {
-        self.general.generate_events
-    }
 }
 
 fn default_logfile_directive() -> String {
@@ -572,7 +568,6 @@ mod tests {
         let mut settings = RuntimeSettings::default();
         assert!(!settings.should_generate_events());
         assert!(!settings.should_buffer_generated_events());
-        assert!(!settings.should_return_generated_events());
 
         settings.observables.insert(
             "observable".to_string(),
@@ -599,7 +594,6 @@ mod tests {
         );
         assert!(settings.should_generate_events());
         assert!(settings.should_buffer_generated_events());
-        assert!(!settings.should_return_generated_events());
 
         settings.observables.clear();
 
@@ -620,7 +614,6 @@ mod tests {
         );
         assert!(settings.should_generate_events());
         assert!(!settings.should_buffer_generated_events());
-        assert!(!settings.should_return_generated_events());
 
         settings.observables.insert(
             "observable".to_string(),
@@ -647,12 +640,10 @@ mod tests {
         );
         assert!(settings.should_generate_events());
         assert!(settings.should_buffer_generated_events());
-        assert!(!settings.should_return_generated_events());
 
         settings.general.generate_events = true;
         assert!(settings.should_generate_events());
         assert!(settings.should_buffer_generated_events());
-        assert!(settings.should_return_generated_events());
     }
 
     #[test]
@@ -751,6 +742,7 @@ mod tests {
         use crate::settings::runtime::OverlapSettings;
         generic_test_settings::<OverlapSettings>();
     }
+
     #[test]
     fn test_h_function_settings_serialize_deserialize() {
         use crate::settings::runtime::HFunctionSettings;

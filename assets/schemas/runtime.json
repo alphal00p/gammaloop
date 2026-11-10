@@ -518,10 +518,6 @@
         "store_additional_weights_in_event": {
           "description": "Persist every configured additional weight on each generated event.",
           "type": "boolean"
-        },
-        "use_ltd": {
-          "description": "Evaluate through the loop-tree-duality representation where the selected integrand supports it.",
-          "type": "boolean"
         }
       },
       "additionalProperties": false
@@ -1374,6 +1370,13 @@
         }
       ]
     },
+    "RepresentationMode": {
+      "type": "string",
+      "enum": [
+        "cff",
+        "ltd"
+      ]
+    },
     "RotationSetting": {
       "oneOf": [
         {
@@ -1791,6 +1794,17 @@
           "description": "Maximum accepted relative error in the real component before escalating.",
           "type": "number",
           "format": "double"
+        },
+        "three_dimensional_representation": {
+          "description": "Representation for this attempt; omission selects the first generated representation.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RepresentationMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
@@ -1839,7 +1853,7 @@
           "format": "int32"
         },
         "levels": {
-          "description": "Ordered numerical-precision levels and tolerances used during stability escalation.",
+          "description": "Ordered precision and representation choices with tolerances for stability escalation.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/StabilityLevelSetting"

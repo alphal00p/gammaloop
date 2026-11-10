@@ -46,8 +46,12 @@ def main() -> None:
     batch_result = api.evaluate_samples(batch_points, return_events=True)
     assert len(batch_result.samples) == 2
     assert all(sample.event_groups for sample in batch_result.samples)
-    leading_jet_pt = batch_result.observables["leading_jet_pt_hist"]
-    jet_count = batch_result.observables["jet_count_hist"]
+    accumulator = api.observable_accumulator()
+    for sample in batch_result.samples:
+        accumulator.add_sample(sample, sample.integrator_weight)
+    histograms = accumulator.snapshot()
+    leading_jet_pt = histograms["leading_jet_pt_hist"]
+    jet_count = histograms["jet_count_hist"]
     assert len(leading_jet_pt.bins) == 8
     assert len(jet_count.bins) == 6
     assert leading_jet_pt.sample_count == 2
@@ -68,13 +72,12 @@ def main() -> None:
     print("== x-space evaluate_sample ==\n")
     print(result)
     print(f"integrand_result = {result.integrand_result}")
-    print(f"observables = {result.observables}")
 
     print("\n== x-space evaluate_samples ==\n")
     print(batch_result)
     for idx, sample in enumerate(batch_result.samples):
         print(f"sample[{idx}] integrand_result = {sample.integrand_result}")
-    print(f"batch observables = {batch_result.observables}")
+    print(f"batch observables = {histograms}")
 
     print("\n== momentum-space evaluate_sample ==\n")
     print(momentum_result)

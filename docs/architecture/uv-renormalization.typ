@@ -5,6 +5,8 @@
 #strong[Reviewed:] 2026-10-15; includes the native algebra foundation,
 component-local on-shell operations and their admitted forest histories.
 
+#strong[Scope:] Shared soft/UV preparation with CFF and vacuum LTD projection.
+
 #strong[Lifecycle:] Current implementation architecture. Unsupported
 prescription paths are recorded explicitly under
 #link(<current-boundaries>)[Current Boundaries];.
@@ -129,7 +131,8 @@ remain owned by the shared tensor interface.
 modes:
 
 - `legacy_dag_forest` computes the established `Approximation` DAG and
-  remains the reference implementation for connected graphs.
+  remains the reference implementation for connected graphs. It does not
+  compute disconnected UV unions; those require `hedge_poset`.
 - `hedge_poset` is the default. It unfolds commuting UV operations into
   trace levels and stores their results in a compute store. It supports
   disconnected unions.
@@ -199,6 +202,26 @@ same numerical master coefficients without a tolerance or finite-value
 rounding; it does not establish the analytic accuracy of those coefficients.
 Source-frame certificates compare the independently normalized operands;
 subtracting them first can itself recreate differing zero metadata.
+
+Generation supplies all requested three-dimensional representations in
+their configured order to one orchestrator call. Each backend unfolds its
+forest once and computes the requested local four-dimensional Taylor terms and
+integrated Vakint counterterms during the first representation pass.
+Subsequent passes reuse those values and rebuild the cut-dependent 3D
+projection and final integrand for the selected representation. Each
+completed result is extracted before the next pass replaces the transient
+cut store. `compare` performs this shared preparation independently for
+each backend and compares the result for every requested representation.
+
+One bounded projection cache remains local to the graph and backend across
+all requested representations, so equal canonical Taylor sectors are reused.
+Exact source and native-generation cache identities retain the full generation
+options, including the representation and occurrence-local bounds. Each pass
+reports only its own additional shared preparation time. Cached
+payloads retain their certified numerator assignment; reuse never turns
+independent Taylor sources into one capacity or coefficient sum. An LTD
+source contributes its complete residue sum once, with its own numerator
+maps, rather than once per possible production-orientation host.
 
 == Scheme and Computation Ownership
 <scheme-and-computation-ownership>
@@ -455,9 +478,19 @@ unrelated factors in a disconnected product.
 The projected local-4D route is separate: it completes the Taylor expansion
 in four dimensions, reconstructs the exact source occurrence graph, performs
 the factorized minimax EMR dispatch needed for derivative-created occurrences,
-and only then projects the completed term to CFF. Direct OS shares the exact
+and only then projects the completed term to the requested representation. Direct OS shares the exact
 original-source certificate infrastructure, while retaining its own
 post-residue Taylor operations and component replay.
+
+Final assembly retains the existing cut-keyed `Integrands` roots and shared
+numerator definitions. Projected sectors complete their source-local residue sums
+before the outer assembly; UV markers and tensor replacements use the existing
+expression operations. CFF/from4D keeps its already-summed `SingleParametric`
+construction. LTD uses the same generic evaluator builder for its complete sum,
+with `SingleParametric` and `SummedFunctionMap` available when requested. The direct
+CFF/from3D Taylor path keeps its existing keyed-family representation.
+
+Requesting LTD requires local UV counterterms from expanded four-dimensional integrands and a complete orientation sum. Mixed CFF/LTD generation uses that same UV setting for both representations. Individual raised threshold residue-order coefficients may differ between CFF and LTD. Their complete contribution for each physical degenerate cut/residue must agree locally, with all pieces multiplying the same observable function grouped together. LTD threshold localization uses its own denominator factors and never reconstructs CFF to fix those individual coefficients.
 
 == Marker Representation
 <marker-representation>
@@ -581,7 +614,9 @@ For accepted tails, tables label the sparse terminal-zero evidence as `zero tail
   wood construction can see the medium. It rejects
   `local_uv_cts_from_expanded_4d_integrands` for medium modes and vacuum
   subtraction; their thermal-weight ownership is documented in
-  #link("architecture-current.typ#3-2-cff-production-and-numerator-energy-ownership")[the current architecture].
+  #link("architecture-current.typ#3-2-three-dimensional-representations-and-numerator-energy-ownership")[the current architecture].
+- LTD is vacuum-only and uses the projected local-4D route. Direct local-3D Taylor
+  subtraction and orientation-local evaluation remain CFF-only.
 - The legacy DAG executor constructs union-shaped nodes but does not
   execute multi-parent unions. Disconnected generation therefore
   requires the hedge-poset backend.

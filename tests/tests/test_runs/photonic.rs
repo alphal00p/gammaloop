@@ -453,8 +453,9 @@ fn photons_phys_1l_inspect() -> Result<()> {
     // the current one gives (-5.127347252278015e-10, 2.827365556430783e-10).
     // Compact collection and guarded evaluator compilation change binary64
     // operation order. Main and the native route agree exactly after Arb evaluation.
-    let target = Complex::new(-5.127347252277986e-10, 2.827365556430804e-10);
-    assert_eq!(inspect, target);
+    let target = Complex::new(-5.127347252277998e-10, 2.8273655564308247e-10);
+    F(inspect.re).assert_approx_eq(&F(target.re), &F(1.0e-13));
+    F(inspect.im).assert_approx_eq(&F(target.im), &F(1.0e-13));
     let (_, precise) = Inspect {
         process: None,
         integrand_name: Some("default".to_string()),

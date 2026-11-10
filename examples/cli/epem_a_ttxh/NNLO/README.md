@@ -16,3 +16,16 @@ explain the settings and their validation limits.
 
 Run cards from the repository root. Generated states and integration outputs
 are local artifacts and are not included in the repository.
+
+The `graphs/` folder contains the complete **166-master-graph unfiltered ttH NNLO
+selection**, including raised propagators and cuts, with explicit threshold metadata;
+29 graphs have no eligible thresholds. Import with the process specification in the run
+cards to select the physical ttH cuts. The graph prescriptions were checked with complete
+orientation sums and local 3D plus integrated UV subtraction at 1000 GeV, with
+`mu_r = 91.188 GeV` and `m_uv = 50 GeV`. New kinematics need their own checks.
+
+Use `display integrands --show_threshold_subtraction`, `inspect` and `approach` to review
+or refine a prescription, as described in the threshold guide. Regenerate states predating
+**state format 20**. The scoped soft/threshold checks do not establish bounded weights,
+finite variance or global IR safety. Deep imaginary-part stability remains uncertified for
+GL474 and GL554; their physical real-part checks pass.

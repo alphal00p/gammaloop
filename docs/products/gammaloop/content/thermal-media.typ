@@ -12,6 +12,10 @@ Medium modes generate fixed-order amplitudes only; cross sections are rejected. 
 graphs, which give the pressure, are the only amplitudes validated against literature values.
 Higher-point amplitudes are supported but remain experimental.
 
+Medium modes require `global.generation.three_dimensional_representations = ["cff"]`.
+LTD supports vacuum integrands only; requests containing LTD, including mixed CFF/LTD
+generation, are rejected.
+
 #boundary("Infrared safety and thresholds", [
   GammaLoop has no thermal infrared subtraction or resummation, so only infrared-safe
   fixed-order amplitudes can be evaluated. At finite temperature, soft bosonic modes, whose

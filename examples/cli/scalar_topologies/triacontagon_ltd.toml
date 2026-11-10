@@ -1,0 +1,132 @@
+# https://arxiv.org/pdf/1906.06138, Eq. (1), Table I and Appendix B.1.
+# Unit scalar numerator: integral d^4k/(2pi)^4 product_i 1/(q_i^2-m_i^2+i0).
+# Published reference: +i * 0.358640 (original MadLoop value: 0.35864077119483945).
+# No UV or E-surface subtraction is needed.
+# The arXiv appendix misprints p_1z=p_2z=2.5, violating momentum conservation
+# by 0.5 GeV. The authors' original Tringigon_P1_no_ellipse fixture has 2.25:
+# https://github.com/alphal00p/alphaloop/blob/d20cb27786aaff58fa4dc8e413ff02d10dbcc72d/LTD/manually_crafted_topologies.py#L3002
+# Use its full-precision external data below.
+# Run from the repository root:
+#   gammaloop examples/cli/scalar_topologies/triacontagon_ltd.toml run generate integrate
+commands = []
+
+[cli_settings.state]
+folder = "./examples/cli/scalar_topologies/gammaloop_state/triacontagon_ltd"
+name = "triacontagon_ltd"
+
+[[command_blocks]]
+name = "generate"
+commands = [
+    "import model scalars-default.json",
+    "remove processes",
+    "import graphs examples/cli/scalar_topologies/triacontagon_ltd.dot -p triacontagon -i scalar",
+    "generate existing -p triacontagon -i scalar",
+    "save state -o",
+]
+
+[[command_blocks]]
+name = "integrate"
+commands = [
+    "integrate -p triacontagon -i scalar --n-cores 1 --restart",
+]
+
+[cli_settings.global.generation]
+"three_dimensional_representations" = ["ltd"]
+
+[cli_settings.global.generation.evaluator]
+compile = false
+store_atom = true
+summed = false
+summed_function_map = true
+iterative_orientation_optimization = false
+
+[cli_settings.global.generation.uv]
+local_uv_cts_from_expanded_4d_integrands = true
+subtract_uv = false
+generate_integrated = false
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+
+[cli_settings.global.generation.tropical_subgraph_table]
+disable_tropical_generation = true
+
+[default_runtime_settings.general]
+evaluator_method = "SingleParametric"
+integral_unit = "none"
+disable_flux_factor = true
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+
+# Center each channel on a propagator momentum. This resolves the narrow
+# nearly-collinear peak without sampling the individual LTD residues.
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "monte_carlo"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 0.02
+
+# Dual H-surface cancellation becomes severe with many nearly collinear legs.
+# Start in quad precision and retain an arbitrary-precision LTD rescue; rotating
+# the complete sum detects precision loss without introducing a CFF evaluator.
+[default_runtime_settings.stability]
+rotation_axis = [{ type = "euler_angles", alpha = 0.1, beta = 0.2, gamma = 0.3 }]
+levels = [
+    { precision = "Quad", "three_dimensional_representation" = "ltd", required_precision_for_re = 1e-7, required_precision_for_im = 1e-7, escalate_for_large_weight_threshold = -1.0 },
+    { precision = "Arb", "three_dimensional_representation" = "ltd", required_precision_for_re = 1e-7, required_precision_for_im = 1e-7, escalate_for_large_weight_threshold = -1.0 },
+]
+
+[default_runtime_settings.kinematics]
+# Sampling scale; the spacelike benchmark momenta below define the kinematics.
+e_cm = 5.0
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+[default_runtime_settings.kinematics.externals.data]
+# Momenta p_1,...,p_29 from the original author fixture, in GeV, all incoming.
+# Momentum conservation fixes p_30; this removes rounding in its printed value.
+momenta = [
+    [0.4497499305169484e-01, 0.0000000000000000e+00, 0.0000000000000000e+00, 0.2250000000000000e+01],
+    [-0.4497499305169484e-01, 0.0000000000000000e+00, 0.0000000000000000e+00, 0.2250000000000000e+01],
+    [0.1190914841688229e-02, 0.4811227902220809e-03, -0.8341860844658933e-03, -0.1071870295667918e+00],
+    [-0.2953676144156442e-03, 0.1653208835624463e-02, 0.2848734934413556e-02, -0.1815601292160574e+00],
+    [-0.3076524095310454e-03, 0.1513401940618040e-02, 0.7861188448553309e-03, -0.1145973197460720e+00],
+    [0.1826390036566392e-02, -0.1970736165619368e-02, -0.6152450853423359e-02, -0.3439554953185766e+00],
+    [-0.9504372484440454e-03, 0.7908062483943983e-03, 0.6339866998242894e-04, -0.9724614230247197e-01],
+    [-0.3995306507647221e-02, 0.1291832979641057e-02, 0.1465796670892942e-02, -0.2346799225420517e+00],
+    [0.1397668611845013e-02, -0.7382426010658949e-03, 0.2042622601469497e-02, -0.1493384309094558e+00],
+    [0.2922013023842157e-03, 0.1278514318474545e-02, 0.1951856314298545e-02, -0.1394607788531113e+00],
+    [0.2083295515366754e-02, -0.1206148100688736e-02, 0.1196453807046953e-02, -0.1539189328635323e+00],
+    [0.1119494688534474e-02, 0.4323911541453069e-03, 0.9659621201751422e-04, -0.9617121835580723e-01],
+    [0.5716287720297196e-03, 0.1106557732182105e-02, -0.3298377382829204e-02, -0.1915758519961705e+00],
+    [-0.5369562427290601e-03, -0.8116977264730579e-03, 0.1165446985452119e-02, -0.1067174058163272e+00],
+    [-0.3038203642399709e-03, 0.9971571409418041e-03, 0.2249169047900924e-02, -0.1448740020111760e+00],
+    [0.3487267645289651e-04, 0.1615148442435443e-02, -0.8542986948582869e-03, -0.1182132274187326e+00],
+    [-0.5117047914552305e-03, 0.2247503633420991e-03, -0.1651133441512298e-02, -0.1149847398690462e+00],
+    [-0.2846706995927436e-02, -0.1362233500133966e-02, 0.4794467816646061e-02, -0.2966325271881199e+00],
+    [0.6091584485756564e-02, 0.2195915724549356e-02, -0.1197142659379113e-02, -0.3376854970358457e+00],
+    [0.5980168657704429e-03, 0.2629583881848909e-04, -0.7665766571385161e-03, -0.8938617642223451e-01],
+    [-0.3342042485085184e-02, 0.1650655929454859e-02, 0.1312973979301171e-02, -0.2113516834560396e+00],
+    [-0.1264861426574454e-03, 0.1915890345560194e-03, 0.1316019919940445e-02, -0.1004317371666761e+00],
+    [0.3562605710800450e-03, -0.7763262588943595e-03, 0.7852910865420466e-03, -0.9481938284651482e-01],
+    [-0.1421836695496606e-02, -0.7456157604864837e-03, -0.3770019054652306e-03, -0.1114640400271648e+00],
+    [-0.1310529030415712e-02, -0.8542658344382956e-03, -0.1598285983983683e-02, -0.1346455953795890e+00],
+    [-0.1913722145628823e-02, 0.8006367042236683e-04, -0.5783245758276338e-05, -0.1216426743367967e+00],
+    [0.2334791001580955e-02, 0.5082287378373648e-03, -0.3533908119628510e-03, -0.1421656651323283e+00],
+    [-0.9648375412153015e-04, 0.5048990265441869e-04, -0.5142668558714967e-03, -0.7947214518508026e-01],
+    [0.3717510139731588e-04, -0.4957556091851899e-02, -0.4157498399677060e-02, -0.3320901132800367e+00],
+    "dependent",
+]
+helicities = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+[default_runtime_settings.integrator]
+integrated_phase = "imag"
+n_start = 2000
+n_increase = 5000
+n_max = 1000000
+min_samples_for_update = 1000
+seed = 190606138
+target_relative_accuracy = 0.005

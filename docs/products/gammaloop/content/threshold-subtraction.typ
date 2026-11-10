@@ -7,6 +7,7 @@ Threshold metadata tells GammaLoop which loop variables to vary when constructin
 threshold counterterm and how to combine alternative counterterms for one threshold.
 It is generation input attached to a DOT graph. Changing it requires regenerating the
 integrand; changing runtime sampling channels does not change the subtraction prescription.
+State format 20 changes the persisted projected-bound data; regenerate older states.
 
 The interface applies to amplitudes and cross sections. GammaLoop discovers eligible
 thresholds, resolves the supplied directives, and checks their geometry. It does not
@@ -435,11 +436,29 @@ localization boundaries. Include normal and higher-precision replays. A generic 
 can expose cancellations missed by a special axis permutation; a stable complex norm does
 not by itself bound the relative error in a tiny real component.
 
-For a single soft three-momentum radius `lambda`, include `lambda^2 d lambda`; for two
-simultaneously soft three-momenta at fixed ratio include `lambda^5 d lambda`. A fitted ray
-power without that measure cannot decide integrability. Rays also do not certify angular,
-hierarchical or tangential limits. All-orientation generation verifies construction, not
-numerical cancellation; evaluate the complete orientation sum as a separate acceptance gate.
+For `|f| ~ lambda^beta` in a soft sector with `D` independent spatial components,
+the radial measure is `lambda^(D-1) d lambda`; the directional convergence margin is
+`beta + D`. One independent soft three-momentum has `D = 3`; two at fixed ratio have
+`D = 6`. Count independent directions, not massless edge labels: three gluons at a vertex
+can span only two soft momenta. A soft-plus-threshold ray does not establish the additional
+hard-normal codimension. Keep its power as a directional diagnostic unless that geometry
+is independently established. Fixed-ratio rays also do not certify true hierarchical,
+angular or tangential limits.
+
+Use the fully weighted total returned by `inspect` or `approach` for scaling fits;
+rounded cut/component reconstructions are diagnostics. A nonpositive radial margin or
+an unresolved fit needs review. If a profiler subtracts a constant before fitting, its
+power need not be the raw integrand power. Generate and evaluate the complete physical
+orientation sum; generation alone does not test its cancellations. Replay difficult points
+at identical coordinates with higher precision and generic rotations. Preserve failures
+separately from successful precision rescues, and check stability of the physical component
+rather than borrowing a larger component's scale.
+
+A finite-energy collinear region can be narrower than an affine diagonal approach. When
+the splitting gap scales as `theta^2`, probe the hard normal on that scale,
+`eta / E_cm ~ theta^2`; a linear approach can miss the dangerous region. Test genuine
+hierarchies separately from fixed-ratio rays. Retest every independent generic soft class
+after changing a multiplier: improving one intersection can spoil another soft limit.
 
 Two durable GL638 cautions remain relevant when interpreting such tests. Coincident radial
 roots can expose a removable singularity as separate undefined residues; increasing
@@ -450,4 +469,49 @@ moment if the leading coefficient persists on an angular/tangential neighborhood
 subtraction and effective sampling are therefore separate requirements. Surface-focused
 sampling can address that corner; it does not prove bounded weights everywhere or replace
 the threshold-prescription checks above.
+
+== Generation and center checks
+
+Compare the materialized export before and after a refinement. Preserve every eligible
+association's full parent LMB, selected defining edges and signed solve cycles, including
+raised-residue constituents. Dormant or skipped declarations are not active validation
+targets; check generated associations rather than counting DOT entries. Verify each host
+shell and target threshold after that cut's own rescaling. Test the completed higher-power
+residue, its lower-order pole coefficients and merged-root limits; compatible variant
+lists alone do not establish that an after-derivative multiplier is valid.
+
+An admissible re-expression of a varying cycle can place a strict interior witness exactly
+at zero, allowing the existing origin check to avoid an ill-conditioned SOCP solve without
+changing tolerances. Update every partner's defining edge and parent consistently: the
+grouping key still includes the selected defining edge. Record
+`subtraction.overlap_settings.try_origin`, `check_global_center` and the required interior
+mass gaps. An origin-based check does not cover a forced nonzero center or
+`try_origin = false` without further validation.
+
+== Scoped soft-improved UV treatment
+
+For the local three-dimensional UV path, `prescription = "IR"` selects the soft-improved
+operator `H_UV = U + S - U S`. Scope this prescription to the required components rather
+than applying it indiscriminately. For example, an exact signed single-gluon boundary flow
+can be selected in a run card by:
+
+// docs-example: syntax
+```toml
+[[cli_settings.global.generation.uv.renormalization_prescription.overrides]]
+prescription = "IR"
+ct_identifier = { external_pdg_set = [21] }
+```
+
+The boundary-flow set matches exactly: `[21]`, `[-21]` and `[-21,21]` select different
+components. An omitted internal-PDG set is a wildcard. Include the positive-degree
+containing components required by an IR child, so the reduced cograph has its corresponding
+parent `S-US` completion.
+
+Check scheme preservation separately from local soft improvement: compare complete
+recursively assembled U and H_UV Laurent poles at the same masses and normalization,
+retaining finite and positive-epsilon child terms required by parents. Include analytically
+integrated UV terms in the numerical checks; neither a smoother local soft limit nor
+threshold metadata alone proves equality of renormalized results. A massive physical soft
+sector must not be discarded as scaleless. Vakint's `MSbar` normalization and GammaLoop's
+local prescription are distinct settings.
 ]
