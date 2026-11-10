@@ -201,8 +201,8 @@ fn massive_vacuum_masters_reproduce_their_poles() -> Result<()> {
             record["children"] = sub
                 .children
                 .iter()
-                .map(|(label, loops, value)| {
-                    serde_json::json!({"label": label, "loops": loops, "m_uv": value.contains_symbol(GS.m_uv_vacuum), "delta": value.expand().to_string()})
+                .map(|(label, loops, edges, value)| {
+                    serde_json::json!({"label": label, "loops": loops, "edges": edges, "m_uv": value.expand().contains_symbol(GS.m_uv_vacuum), "delta": value.expand().to_string()})
                 })
                 .collect::<Vec<_>>()
                 .into();
@@ -377,7 +377,41 @@ fn massive_vacuum_part_a_from_spec() -> Result<()> {
                 coefficients.insert(power.to_string(), coefficient.expand().to_string().into());
             }
             record["part_a_coefficients"] = coefficients.into();
+            let mut numeric_settings = settings.vakint.true_settings();
+            numeric_settings.run_time_decimal_precision = 80;
+            match vakint.numerical_evaluation(
+                &numeric_settings,
+                unit.as_view(),
+                &Default::default(),
+                &Default::default(),
+                None,
+            ) {
+                Ok((value, _)) => {
+                    let mut numeric = serde_json::Map::new();
+                    for (power, coefficient) in value.coefficients() {
+                        numeric.insert(
+                            power.to_string(),
+                            format!("{:.70e}", coefficient.value().re).into(),
+                        );
+                        numeric.insert(
+                            format!("{power}_im"),
+                            format!("{:.5e}", coefficient.value().im).into(),
+                        );
+                    }
+                    record["part_a_numeric"] = numeric.into();
+                }
+                Err(error) => record["part_a_numeric_error"] = format!("{error}").into(),
+            }
             record["m_uv_in_part_a"] = sub.poles.contains_symbol(GS.m_uv_vacuum).into();
+            record["children_with_m_uv"] = sub
+                .children
+                .iter()
+                .filter(|(_, _, _, value)| value.expand().contains_symbol(GS.m_uv_vacuum))
+                .map(|(label, loops, edges, value)| {
+                    serde_json::json!({"label": label, "loops": loops, "edges": edges, "delta": value.expand().to_string()})
+                })
+                .collect::<Vec<_>>()
+                .into();
             record["terms"] = sub
                 .terms
                 .iter()
