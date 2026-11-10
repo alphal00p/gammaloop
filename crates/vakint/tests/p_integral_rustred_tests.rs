@@ -542,7 +542,10 @@ mod four_loops {
     use super::p_backends::live_forcer_value;
     use super::p_integrals::{forcer_form, parse};
     use super::p_library4::PLibraryRoute;
-    use super::p_tierc4::{agreement4, live_terms, p_library4_engine, settings4};
+    use super::p_tierc4::{agreement4, live_terms, p_library4_engine, resource_stop, settings4};
+    use std::time::Duration;
+    use symbolica::utils::resources::ResourceLimitError;
+    use vakint::{RustRedEvaluationError, VakintError};
 
     /// `(input, arithmetic, cores)`: an odd rank on a dotted top with the head
     /// written `-p(3)`; a dotted top and a two-loop kite of another head in
@@ -586,6 +589,51 @@ mod four_loops {
             )
             .unwrap_or_else(|difference| panic!("{input} ({terms} terms):\n{difference}"));
             eprintln!("[tier B 4L] {input}: {terms} terms, RustRed {seconds:.1} s");
+        }
+    }
+
+    /// The four-loop tiers tell a resource stop from a failure by its cause
+    /// (`p_tierc4::resource_stop`; review vk-tierc4 round 1): a typed time or
+    /// RSS limit always counts; the untyped "malformed p library" form in
+    /// which vakint's p path may report a stop counts only once the caller's
+    /// budget is spent (not spent: a stop memoised by an earlier evaluation,
+    /// a failure); every other error is a failure.
+    #[test]
+    fn resource_stops_are_told_from_failures_by_their_cause() {
+        let elapsed = ResourceLimitError::Elapsed {
+            elapsed: Duration::from_secs(5),
+            limit: Duration::from_secs(5),
+        };
+        let memory = ResourceLimitError::Memory {
+            rss_bytes: 2,
+            additional_bytes: 1,
+            limit_bytes: 2,
+        };
+        let unavailable = ResourceLimitError::MonitorUnavailable {
+            resource: "RSS",
+            message: "no /proc".into(),
+        };
+        let untyped = |detail: String| {
+            VakintError::RustRedEvaluation(RustRedEvaluationError::Reduction {
+                detail: format!("malformed p library: the route of sector 0x1ff: {detail}"),
+            })
+        };
+        for spent in [false, true] {
+            for limit in [&elapsed, &memory] {
+                assert!(resource_stop(
+                    &VakintError::ResourceLimit(limit.clone()),
+                    spent
+                ));
+                let typed = RustRedEvaluationError::ResourceLimit(limit.clone());
+                assert!(resource_stop(&VakintError::RustRedEvaluation(typed), spent));
+                assert_eq!(resource_stop(&untyped(limit.to_string()), spent), spent);
+            }
+            assert!(!resource_stop(
+                &VakintError::ResourceLimit(unavailable.clone()),
+                spent
+            ));
+            assert!(!resource_stop(&untyped(unavailable.to_string()), spent));
+            assert!(!resource_stop(&untyped("no route".into()), spent));
         }
     }
 }

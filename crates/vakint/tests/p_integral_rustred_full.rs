@@ -218,9 +218,11 @@ fn case_limit(variable: &str) -> Option<f64> {
 /// under the default arithmetic (an exact 0 for [`ZERO_GRID4_CASES`]); a
 /// benchmark part holds exactly the tops of the cell `cell`. The parts cover
 /// the grid exactly once. Seconds and the process's peak RSS per case on
-/// stderr. A case over the limits of [`CASE_SECONDS_VARIABLE`] and
-/// [`CASE_RSS_GB_VARIABLE`], or listed in [`SKIP_CASES_VARIABLE`], is not
-/// checked: reported on stderr, it fails the part once the other cases ran.
+/// stderr. A case that a resource stop ends (`p_tierc4::resource_stop`) at
+/// the limits of [`CASE_SECONDS_VARIABLE`] and [`CASE_RSS_GB_VARIABLE`], or
+/// one listed in [`SKIP_CASES_VARIABLE`], is not checked: reported on stderr
+/// with the error text, it fails the part once the other cases ran. Any
+/// other failure fails the part at once.
 fn assert_grid4_part(part: usize, cell: Option<&str>) {
     let what = format!("part {} of the four-loop grid", part + 1);
     let Some(engine) = p_library4_engine(PLibraryRoute::Injected, &what) else {
@@ -282,10 +284,10 @@ fn assert_grid4_part(part: usize, cell: Option<&str>) {
                     compare_with_forcer(&values, |mode| frozen_value(case, mode, terms))
                 }
                 (Err(RustRedSide::Failed(error)), _) => Err(Disagreement::Failed(error)),
-                (Err(RustRedSide::OverBudget), seconds) => {
+                (Err(RustRedSide::OverBudget(error)), seconds) => {
                     eprintln!(
                         "[tier C 4L] {} ({terms} terms, {cores} cores): NOT CHECKED, over the \
-                         case limits ({limits}) after {seconds:.1} s, peak RSS {}",
+                         case limits ({limits}) after {seconds:.1} s, peak RSS {}: {error}",
                         case.name,
                         peak_rss_text()
                     );
@@ -775,9 +777,11 @@ type Forcer<'a> = dyn Fn(RustRedMasterMode) -> Result<Atom, String> + 'a;
 /// a live probe for the physics cell): the 15 benchmark cells in increasing
 /// dots and rank, then the physics cell. Each RustRed side runs within
 /// [`EXACT4_CELL_CAP`] and what is left of [`EXACT4_TOTAL_CAP`]; a cell that
-/// runs out is not exact-checked, and neither is a later benchmark cell with
-/// at least its dots and rank (its run costs more). Returns the checked cells
-/// and the others with their cost, and the exact seconds spent.
+/// a resource stop ends (`p_tierc4::resource_stop`; its error text on
+/// stderr) is not exact-checked, and neither is a later benchmark cell with
+/// at least its dots and rank (its run costs more); any other failure fails
+/// the test. Returns the checked cells and the others with their cost, and
+/// the exact seconds spent.
 fn four_loop_exact_cells(
     engine: &Vakint,
     form: &str,
@@ -812,9 +816,12 @@ fn four_loop_exact_cells(
                     rustred_seconds: Some(seconds),
                 })
             }
-            Capped::OverBudget(seconds) => {
+            Capped::OverBudget(seconds, error) => {
                 spent += seconds;
                 let cost = format!("> {} s", budget.as_secs());
+                eprintln!(
+                    "[exact 4L] {name} ({terms} terms): OverBudget after {seconds:.1} s: {error}"
+                );
                 Err((cost, budget == EXACT4_CELL_CAP))
             }
         };

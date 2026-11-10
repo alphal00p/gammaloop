@@ -29,7 +29,10 @@ use symbolica::atom::{Atom, AtomCore};
 use symbolica::id::Replacement;
 use symbolica::utils::resources::ResourceLimitError;
 use vakint::symbols::S;
-use vakint::{LoopNormalizationFactor, RustRedMasterMode, Vakint, VakintError, VakintSettings};
+use vakint::{
+    LoopNormalizationFactor, RustRedEvaluationError, RustRedMasterMode, Vakint, VakintError,
+    VakintSettings,
+};
 
 use super::p_backends::{
     Disagreement, MODES, ROUTED_TERMS, battery_terms, forcer_side_value, rerouted,
@@ -95,21 +98,54 @@ pub fn settings4(
     }
 }
 
-/// Why RustRed's side of an agreement has no values.
+/// Why RustRed's side of an agreement has no values; each carries the error
+/// text (`RustRed (<mode>, <arithmetic>): <error>`).
 #[derive(Clone, Debug)]
 pub enum RustRedSide {
-    /// The wall-time budget ran out (`rustred_resources.max_elapsed`).
-    OverBudget,
-    /// An evaluation failed within the budget.
+    /// A time or RSS limit stopped RustRed ([`resource_stop`]): the budget's
+    /// `rustred_resources.max_elapsed`, or a limit of the settings.
+    OverBudget(String),
+    /// Any other failure (fail-closed: it is never filed as a cost).
     Failed(String),
+}
+
+/// Symbolica's messages of a time and of an RSS stop (the `Display` of
+/// `ResourceLimitError::Elapsed` and `::Memory`).
+const LIMIT_MESSAGES: [&str; 2] = ["reached the configured time budget", "exceeds RAM budget"];
+
+/// Whether `error` is a resource stop: a time or RSS limit typed as such,
+/// `VakintError::ResourceLimit` or `RustRedEvaluationError::ResourceLimit`
+/// (`Elapsed` or `Memory`). vakint's p path may also report a stop as a
+/// `Reduction` error ("malformed p library: ...: elapsed time ... reached
+/// the configured time budget ...") and then memoises it in the engine
+/// (review vk-tierc4 round 1, probes P1/P2); while it does, such an error
+/// counts as a stop only when the caller's budget is `spent` and its text
+/// carries Symbolica's limit message ([`LIMIT_MESSAGES`]). Every other
+/// error, a memoised stop of an earlier evaluation included, is not.
+pub fn resource_stop(error: &VakintError, spent: bool) -> bool {
+    match error {
+        VakintError::ResourceLimit(limit)
+        | VakintError::RustRedEvaluation(RustRedEvaluationError::ResourceLimit(limit)) => matches!(
+            limit,
+            ResourceLimitError::Elapsed { .. } | ResourceLimitError::Memory { .. }
+        ),
+        _ => {
+            let text = error.to_string();
+            spent && LIMIT_MESSAGES.iter().any(|message| text.contains(message))
+        }
+    }
 }
 
 /// RustRed's value of `input` on `engine` in every mode of [`MODES`], with
 /// the settings `rustred(mode)` and, given a `budget`, within it in total:
 /// each evaluation runs with the remaining time as its
-/// `rustred_resources.max_elapsed`. A failure once the budget is spent, or
-/// at a time or RSS limit of the settings, is [`RustRedSide::OverBudget`].
-/// Returns the values and RustRed's seconds.
+/// `rustred_resources.max_elapsed`. A failure is
+/// [`RustRedSide::OverBudget`] only for a resource stop ([`resource_stop`]:
+/// a typed time or RSS limit, of the budget or of the settings, or a stop
+/// that vakint reports untyped once the budget is spent), and when the
+/// budget is spent before a mode starts; every other failure is
+/// [`RustRedSide::Failed`]. Both carry the error text. Returns the values
+/// and RustRed's seconds.
 pub fn rustred_values(
     engine: &Vakint,
     input: &Atom,
@@ -122,8 +158,9 @@ pub fn rustred_values(
         let mut settings = rustred(mode);
         if let Some(budget) = budget {
             let Some(left) = budget.checked_sub(started.elapsed()) else {
+                let why = format!("the {budget:?} budget was spent before {mode}");
                 return (
-                    Err(RustRedSide::OverBudget),
+                    Err(RustRedSide::OverBudget(why)),
                     started.elapsed().as_secs_f64(),
                 );
             };
@@ -134,19 +171,14 @@ pub fn rustred_values(
             Err(error) => {
                 let seconds = started.elapsed().as_secs_f64();
                 let spent = budget.is_some_and(|budget| started.elapsed() >= budget);
-                let limited = matches!(
-                    error,
-                    VakintError::ResourceLimit(
-                        ResourceLimitError::Elapsed { .. } | ResourceLimitError::Memory { .. }
-                    )
+                let text = format!(
+                    "RustRed ({mode}, {}): {error}",
+                    settings.ordered_weight_arithmetic
                 );
-                let side = if spent || limited {
-                    RustRedSide::OverBudget
+                let side = if resource_stop(&error, spent) {
+                    RustRedSide::OverBudget(text)
                 } else {
-                    RustRedSide::Failed(format!(
-                        "RustRed ({mode}, {}): {error}",
-                        settings.ordered_weight_arithmetic
-                    ))
+                    RustRedSide::Failed(text)
                 };
                 return (Err(side), seconds);
             }
@@ -191,8 +223,8 @@ pub fn agreement4(
     match rustred_values(engine, input, rustred, None) {
         (Ok(values), seconds) => compare_with_forcer(&values, forcer).map(|()| seconds),
         (Err(RustRedSide::Failed(error)), _) => Err(Disagreement::Failed(error)),
-        (Err(RustRedSide::OverBudget), seconds) => Err(Disagreement::Failed(format!(
-            "RustRed at a resource limit of its settings after {seconds:.1} s"
+        (Err(RustRedSide::OverBudget(error)), seconds) => Err(Disagreement::Failed(format!(
+            "RustRed at a resource limit of its settings after {seconds:.1} s: {error}"
         ))),
     }
 }
@@ -200,12 +232,12 @@ pub fn agreement4(
 /// A capped agreement ([`capped_agreement`]).
 #[derive(Debug)]
 pub enum Capped {
-    /// RustRed finished within the budget: the agreement and RustRed's
-    /// seconds.
+    /// RustRed finished within the budget, or failed for another cause than
+    /// a resource stop: the agreement and RustRed's seconds.
     Done(Result<(), Disagreement>, f64),
-    /// RustRed did not finish within the budget (its seconds, at least the
-    /// budget).
-    OverBudget(f64),
+    /// A resource stop ([`resource_stop`]) ended RustRed's side: its seconds
+    /// (at least the budget for a stop of the budget) and the error text.
+    OverBudget(f64, String),
 }
 
 /// [`agreement4`] with RustRed's side within `budget`; the Forcer side is
@@ -219,7 +251,7 @@ pub fn capped_agreement(
 ) -> Capped {
     match rustred_values(engine, input, rustred, Some(budget)) {
         (Ok(values), seconds) => Capped::Done(compare_with_forcer(&values, forcer), seconds),
-        (Err(RustRedSide::OverBudget), seconds) => Capped::OverBudget(seconds),
+        (Err(RustRedSide::OverBudget(error)), seconds) => Capped::OverBudget(seconds, error),
         (Err(RustRedSide::Failed(error)), seconds) => {
             Capped::Done(Err(Disagreement::Failed(error)), seconds)
         }
