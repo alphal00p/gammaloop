@@ -434,6 +434,7 @@
   *Caveat:* indicative timings on a shared, loaded host.
   #if cited-run != none [Benchmark v1 (cited rows):] else [Benchmark v1:] median foreign share of the measuring CPUs 1L n/a (before the sampler), 2L 0.82, 3L 0.12, 4L 0.52; v1's RustRed cold and wc include the after-evaluation cache save (fsync on the ZFS work dir): 122 of 624 saving children stalled 2-18 s, none of the non-saving children nor Forcer at 1L-3L.
   #if measured.any(m => "save_seconds" in m) [Measured rows save the cache after the clock (save seconds in Table 5 and the sub-lines).]
+  #if measured.len() > 0 [Measured rows (this run, window CPUs 128-143 of node 4): median foreign share of the measuring CPUs 1L 0.17, 2L 0.11, 3L 0.20, 4L 0.09 (4L: RustRed 1 thread 0.04, 16 threads 0.12, Forcer 1 thread 0.18); CPU 129 hosted two idle foreign pinned processes, and our own exact-tier writer ran on CPUs 148-151 of node 4 until 12:02Z, during the 1-thread 4L RustRed rows.]
 ]
 
 #block(stroke: 0.6pt + luma(200), inset: 6pt, radius: 3pt, width: 100%)[
@@ -548,7 +549,7 @@
   figure(reuse-table, supplement: [Table], caption: [Reuse, `modular_polynomial`: warm time over cold time per loop count (sums over the cells). ws clean: warm-same children with 0 misses and 0 inserts. wc: the chain's cache counters at 16 threads.#v1 #if cited-run != none [The 1L-3L ratios are dominated by the cache-save stalls of v1's cold runs (caveat).]]),
 ))
 
-#figure(target-table, supplement: [Table], caption: [4L speed target per cell (G10b; recorded, not blocking): RustRed cold over Forcer#if cited-run != none [ (cited)] at 1 and 16 threads; load of a fresh process against the one-off cost of a cold evaluation (cold − ws); for a missed thread count the breakdown of the cold run. Inside the reduction about a third is step generation and two thirds the ordered weight elimination (M3-T19 S2, 4 threads).])
+#figure(target-table, supplement: [Table], caption: [4L speed target per cell (G10b; recorded, not blocking): RustRed cold over Forcer#if cited-run != none [ (#if measured.any(m => m.backend == "forcer") [measured at 1 thread, ] cited at 16 threads)] at 1 and 16 threads; load of a fresh process against the one-off cost of a cold evaluation (cold − ws); for a missed thread count the breakdown of the cold run. Inside the reduction about a third is step generation and two thirds the ordered weight elimination (M3-T19 S2, 4 threads).])
 
 #figure(cross-table, supplement: [Table], caption: [1L-3L under the scope 1-4 program (#library-name), 1 thread, against the built-in 1-3 program of the cited rows; seconds (median). The 1-4 load is the price of one program for every loop count (M3 decision D-M3-1).])
 
