@@ -6,6 +6,7 @@
     "P_CENSUS_VERSION": "1",
     "P_CLASS_KEY_VERSION": "1",
     "P_CUSTOM_OWNER_VERSION": "1",
+    "P_DIAMOND_TEMPLATE_VERSION": "1",
     "P_FAMILIES_SCHEMA": "rustred.p-families.v1",
     "P_FAMILIES_VERSION": "1",
     "P_GAMMA_TAG_MAX_M": "8",
