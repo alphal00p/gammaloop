@@ -4,13 +4,12 @@ use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};
 use itertools::Itertools;
 use linnet::half_edge::{
-    HedgeGraph, HedgeGraphError, NoData,
-    involution::{EdgeData, EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, Orientation},
+    HedgeGraph, NoData,
+    involution::{EdgeData, EdgeIndex, EdgeVec, Hedge, HedgePair, Orientation},
     subgraph::{
         Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubGraphLike, SubGraphOps,
-        SubSetLike, SubSetOps, cycle::SignedCycle,
+        SubSetLike, SubSetOps,
     },
-    tree::SimpleTraversalTree,
 };
 use serde::{Deserialize, Serialize};
 use symbolica::{
@@ -75,35 +74,8 @@ pub enum LmbError {
         loop_edges: String,
         loop_edges_dot: String,
     },
-    #[error("externals\n{externals_dot}\ncontain non-subgraph nodes:\n{subgraph_dot}\n")]
-    ExternalsOutsideSubgraph {
-        externals_dot: String,
-        subgraph_dot: String,
-    },
-    #[error(
-        "external cover is empty for externals\n{externals_dot}\nand subgraph\n{subgraph_dot}\n"
-    )]
-    EmptyExternalCover {
-        externals_dot: String,
-        subgraph_dot: String,
-    },
-    #[error(
-        "forest guide\n{forest_guide_dot}\ndoes not cover the same nodes as subgraph\n{subgraph_dot}\n"
-    )]
-    ForestGuideMismatch {
-        forest_guide_dot: String,
-        subgraph_dot: String,
-    },
-    #[error(
-        "failed to trace external flow from hedge {hedge} to dependent root {root} in tree\n{tree_dot}\n"
-    )]
-    ExternalFlowPathMissing {
-        hedge: Hedge,
-        root: Hedge,
-        tree_dot: String,
-    },
-    #[error("failed to get cycle for source hedge {hedge} in tree:\n{tree_dot}\n")]
-    MissingCycle { hedge: Hedge, tree_dot: String },
+    #[error(transparent)]
+    Routing(#[from] feynkit_graph::routing::LmbError),
     #[error(
         "no loop-momentum basis compatible with the parent basis was found for subgraph\n{subgraph_dot}\nparent basis\n{parent_lmb_dot}"
     )]
@@ -111,16 +83,6 @@ pub enum LmbError {
         subgraph_dot: String,
         parent_lmb_dot: String,
     },
-    #[error("failed to get cycle from tree:{is_circuit}\n{cycle_dot}\n{cover_dot}")]
-    InvalidCycle {
-        is_circuit: bool,
-        cycle_dot: String,
-        cover_dot: String,
-    },
-    #[error("split edge on full graph")]
-    SplitEdgeOnFullGraph,
-    #[error("failed to build edge-signature vector")]
-    EdgeSignatureVector(#[source] HedgeGraphError),
     #[error(
         "shrunken subgraph is not contained in outer graph\nouter:\n{outer_dot}\nshrunken:\n{shrunken_dot}"
     )]
@@ -818,356 +780,24 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
         })
     }
 
-    /// The true externals (that will flow through the graph (i.e. not dummy)) are those that are both in the subgraph and in the externals
     fn lmb_impl<S: SubGraphLike + SubSetOps + ModifySubSet<HedgePair> + ModifySubSet<Hedge>>(
         &self,
         subgraph: &S,
-        forest_guide: &S, //guide for the forest (can be the full subgraph if no guide necessary), however it must cover the same nodes as subgraph
-        mut externals: S, //externals to consider for the flow, cannot contain non-subgraph nodes
+        forest_guide: &S,
+        externals: S,
     ) -> LmbResult<LoopMomentumBasis>
     where
         S::Base: ModifySubSet<Hedge> + SubGraphLike,
     {
-        // println!(
-        //     "//Lmb of subgraph:\n{}\n//Forest_guide:\n{}//Externals:\n{}",
-        //     self.dot(subgraph),
-        //     self.dot(forest_guide),
-        //     self.dot(&externals),
-        // );
-
-        if subgraph.is_empty() {
-            return Ok(self.empty_lmb());
-        };
-
-        let mut not_seen = subgraph.clone();
-        let mut forest_edge: SuBitGraph = self.empty_subgraph();
-
-        // The external flows are signed subgraphs (i.e. with only half of the edges to indicate a direction)
-        // They always contain the dependent external (except for the flow for the dep ext)
-        let external_edge_order = self
-            .iter_edges_of(&externals)
-            .map(|(_, edge_id, _)| edge_id)
-            .unique()
-            .collect_vec();
-
-        let mut external_flows: TiVec<ExternalIndex, _> = vec![].into();
-        let mut ext_edges: TiVec<ExternalIndex, EdgeIndex> = vec![].into();
-
-        let mut loop_edges: TiVec<LoopIndex, EdgeIndex> = vec![].into();
-        let mut cycles = vec![];
-
-        loop {
-            let Some(mut root) = not_seen.included_iter().next() else {
-                break;
-            };
-
-            //we keep removing hedges from not_seen until it is empty
-            // we need to get the first root
-            // if the externals are not yet empty then take from them
-            let tree = if let Some(external_root) = externals.included_iter().next() {
-                root = external_root;
-                let root_node = self.node_id(root);
-                let subgraph_tree =
-                    SimpleTraversalTree::depth_first_traverse(self, subgraph, &root_node, None)
-                        .map_err(|_| LmbError::ExternalsOutsideSubgraph {
-                            externals_dot: self.dot(&externals),
-                            subgraph_dot: self.dot(subgraph),
-                        })?;
-
-                let external_cover = subgraph_tree.covers(&externals);
-
-                root = external_cover.included_iter().next_back().ok_or_else(|| {
-                    LmbError::EmptyExternalCover {
-                        externals_dot: self.dot(&externals),
-                        subgraph_dot: self.dot(subgraph),
-                    }
-                })?;
-                let root_node = self.node_id(root);
-                let tree =
-                    SimpleTraversalTree::depth_first_traverse(self, forest_guide, &root_node, None)
-                        .map_err(|_| LmbError::ForestGuideMismatch {
-                            forest_guide_dot: self.dot(forest_guide),
-                            subgraph_dot: self.dot(subgraph),
-                        })?; //select the last half edge in the external cover of this tree as the dependent one
-
-                debug_assert_eq!(
-                    subgraph_tree.covers(subgraph),
-                    tree.covers(subgraph),
-                    "Forest guide \n{}\n,does not cover the same nodes as subgraph \n{}\n",
-                    self.dot(forest_guide),
-                    self.dot(subgraph)
-                );
-
-                // println!(
-                //     "//External cover:\n{}//of \n{}",
-                //     self.dot(&external_cover),
-                //     self.dot(&tree.tree_subgraph)
-                // );
-
-                for (p, e, _) in self.iter_edges_of(&external_cover) {
-                    let mut path_to_dep: S = self.empty_subgraph();
-
-                    match p {
-                        HedgePair::Split {
-                            source,
-                            sink,
-                            split,
-                        } => {
-                            let hedge = match split {
-                                Flow::Sink => sink,
-                                Flow::Source => source,
-                            };
-                            let ext_sign: SignOrZero = split.into();
-                            path_to_dep.add(root);
-
-                            if hedge != root {
-                                let ext = tree.hedge_parent(hedge, self.as_ref());
-                                if let Some(ext) = ext {
-                                    for h in tree.ancestor_iter_hedge(ext, self.as_ref()).step_by(2)
-                                    {
-                                        path_to_dep.add(h);
-                                    }
-                                }
-                            }
-                            external_flows.push((ext_sign, path_to_dep));
-                            ext_edges.push(e);
-                        }
-                        HedgePair::Unpaired { hedge, flow } => {
-                            let ext_sign: SignOrZero = flow.into();
-
-                            path_to_dep.add(root);
-                            if hedge != root {
-                                if self.node_id(hedge) == root_node {
-                                } else {
-                                    let ext = tree.hedge_parent(hedge, self.as_ref()).ok_or_else(
-                                        || LmbError::ExternalFlowPathMissing {
-                                            hedge,
-                                            root,
-                                            tree_dot: self.dot(&tree.tree_subgraph),
-                                        },
-                                    )?;
-
-                                    for h in tree.ancestor_iter_hedge(ext, self.as_ref()).step_by(2)
-                                    {
-                                        path_to_dep.add(h);
-                                    }
-                                }
-                            }
-                            ext_edges.push(e);
-                            external_flows.push((ext_sign, path_to_dep));
-                        }
-                        HedgePair::Paired { source, .. } => {
-                            path_to_dep.add(root);
-
-                            let ext_sign: SignOrZero = Flow::Source.into();
-                            if source != root {
-                                let ext = tree.hedge_parent(source, self.as_ref());
-                                if let Some(ext) = ext {
-                                    for h in tree.ancestor_iter_hedge(ext, self.as_ref()).step_by(2)
-                                    {
-                                        path_to_dep.add(h);
-                                    }
-                                }
-                            }
-                            external_flows.push((ext_sign, path_to_dep));
-                            ext_edges.push(e);
-                        }
-                    }
-                }
-
-                tree
-            } else {
-                let root_node = self.node_id(root);
-                if forest_guide.is_empty() {
-                    SimpleTraversalTree::empty(self)
-                } else {
-                    SimpleTraversalTree::depth_first_traverse(self, forest_guide, &root_node, None)
-                        .map_err(|_| LmbError::ForestGuideMismatch {
-                            forest_guide_dot: self.dot(forest_guide),
-                            subgraph_dot: self.dot(subgraph),
-                        })?
-                }
-            };
-
-            forest_edge.union_with(&tree.tree_subgraph);
-
-            let mut cover = tree.covers(subgraph);
-
-            for i in self.iter_crown(self.node_id(root)) {
-                if subgraph.includes(&i) {
-                    cover.add(i);
-                }
-            }
-            //remove all edges in cover+node_crowns from not_seen and externals
-            //if the edge is a non-tree, full internal edge then it is a loop edge
-            for (p, e, _) in self.iter_edges_of(&cover) {
-                match p {
-                    HedgePair::Paired { source, sink } => {
-                        for h in self.iter_crown(self.node_id(sink)) {
-                            not_seen.sub(h);
-                            externals.sub(h);
-                        }
-                        for h in self.iter_crown(self.node_id(source)) {
-                            not_seen.sub(h);
-                            externals.sub(h);
-                        }
-                        if !tree.tree_subgraph.includes(&p) {
-                            let cycle = tree.get_cycle(source, self).ok_or_else(|| {
-                                LmbError::MissingCycle {
-                                    hedge: source,
-                                    tree_dot: self.dot(&tree.tree_subgraph),
-                                }
-                            })?;
-                            let cycle_is_circuit = cycle.is_circuit(self);
-                            let cycle_dot = self.dot(&cycle.filter);
-                            cycles.push(SignedCycle::from_cycle(&cycle, source, self).ok_or_else(
-                                || LmbError::InvalidCycle {
-                                    is_circuit: cycle_is_circuit,
-                                    cycle_dot,
-                                    cover_dot: self.dot(&cover),
-                                },
-                            )?);
-                            loop_edges.push(e);
-                        }
-                    }
-                    HedgePair::Split {
-                        source,
-                        sink,
-                        split,
-                    } => match split {
-                        Flow::Sink => {
-                            for h in self.iter_crown(self.node_id(sink)) {
-                                not_seen.sub(h);
-                                externals.sub(h);
-                            }
-                        }
-                        Flow::Source => {
-                            for h in self.iter_crown(self.node_id(source)) {
-                                not_seen.sub(h);
-                                externals.sub(h);
-                            }
-                        }
-                    },
-                    HedgePair::Unpaired { hedge, .. } => {
-                        for h in self.iter_crown(self.node_id(hedge)) {
-                            not_seen.sub(h);
-                            externals.sub(h);
-                        }
-                    }
-                }
-            }
-        }
-        // for (i, e) in external_flows.iter().enumerate() {
-        //     println!(
-        //         "//Ext flow {} for {}: \n{}",
-        //         e.0,
-        //         ext_edges[ExternalIndex(i)],
-        //         self.dot(&e.1)
-        //     );
-        // }
-
-        let signature = self
-            .new_edgevec_from_iter(
-                self.iter_edges()
-                    .map(|(p, eid, _)| -> LmbResult<_> {
-                        let mut internal = vec![];
-                        let mut external = vec![];
-                        // if dep_ext.is_some() {
-                        // external.push(SignOrZero::Zero);
-                        // }
-
-                        let empty_internal = vec![SignOrZero::Zero; cycles.len()];
-                        let empty_external = vec![SignOrZero::Zero; external_flows.len()];
-
-                        match p {
-                            HedgePair::Paired { source, sink } => {
-                                if subgraph.includes(&p) {
-                                    for l in &cycles {
-                                        if l.filter.includes(&source) {
-                                            internal.push(SignOrZero::Plus);
-                                        } else if l.filter.includes(&sink) {
-                                            internal.push(SignOrZero::Minus);
-                                        } else {
-                                            internal.push(SignOrZero::Zero);
-                                        }
-                                    }
-                                } else {
-                                    internal = empty_internal;
-                                }
-                                if subgraph.intersects(&p) {
-                                    for (i, (s, e)) in external_flows.iter_enumerated() {
-                                        if ext_edges[i] == eid {
-                                            if e.includes(&source) || e.includes(&sink) {
-                                                external.push(SignOrZero::Zero); //This is the dependent momentum
-                                            } else {
-                                                external.push(SignOrZero::Plus);
-                                            }
-                                        } else if e.includes(&source) {
-                                            external.push(*s * SignOrZero::Minus);
-                                        } else if e.includes(&sink) {
-                                            external.push(*s * SignOrZero::Plus);
-                                        } else {
-                                            external.push(SignOrZero::Zero);
-                                        }
-                                    }
-                                } else {
-                                    external = empty_external;
-                                }
-                            }
-                            HedgePair::Unpaired { hedge, flow } => {
-                                if subgraph.includes(&hedge) {
-                                    for (i, (s, e)) in external_flows.iter_enumerated() {
-                                        if ext_edges[i] == eid {
-                                            if e.includes(&hedge) {
-                                                external.push(SignOrZero::Zero); //This is the dependent momentum
-                                            } else {
-                                                external.push(SignOrZero::Plus);
-                                            }
-                                        } else if e.includes(&hedge) {
-                                            match flow {
-                                                Flow::Source => {
-                                                    external.push(*s * SignOrZero::Minus)
-                                                }
-                                                Flow::Sink => external.push(*s * SignOrZero::Plus),
-                                            }
-                                        } else {
-                                            external.push(SignOrZero::Zero);
-                                        }
-                                    }
-                                } else {
-                                    external = empty_external;
-                                    if externals.includes(&hedge)
-                                        && let Some((e, _)) =
-                                            ext_edges.iter().find_position(|a| *a == &eid)
-                                    {
-                                        external[e] = SignOrZero::Plus;
-                                    };
-                                }
-                                internal = empty_internal;
-                            }
-                            HedgePair::Split { .. } => {
-                                return Err(LmbError::SplitEdgeOnFullGraph);
-                            }
-                        }
-
-                        Ok(LoopExtSignature {
-                            internal: SignatureLike::from_iter(internal),
-                            external: SignatureLike::from_iter(external),
-                        })
-                    })
-                    .collect::<LmbResult<Vec<_>>>()?,
-            )
-            .map_err(LmbError::EdgeSignatureVector)?;
-
-        let mut lmb = LoopMomentumBasis {
-            tree: forest_edge,
-            edge_signatures: signature,
-            ext_edges,
-            loop_edges,
-        };
-        lmb.canonicalize_external_order(&external_edge_order);
-
-        Ok(lmb)
+        // Use the shared incidence routing: an omitted chord carries an independent
+        // momentum between both endpoints, including when it closes on a UV child.
+        let basis = feynkit_graph::routing::MomentumRouting::lmb_impl(
+            self,
+            subgraph,
+            forest_guide,
+            externals,
+        )?;
+        Ok(basis.into())
     }
 
     fn generate_loop_momentum_bases_of<S: SubGraphLike>(
@@ -1778,7 +1408,9 @@ pub mod test {
     use insta::assert_snapshot;
     use linnet::{
         half_edge::{
-            involution::{EdgeIndex, Hedge},
+            HedgeGraph, NodeIndex,
+            builder::HedgeGraphBuilder,
+            involution::{EdgeIndex, Flow, Hedge, Orientation},
             subgraph::{Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubSetOps},
         },
         parser::DotGraph,
@@ -1786,13 +1418,134 @@ pub mod test {
 
     use crate::{
         finalized_runtime_dot,
-        graph::{FeynmanGraph, Graph, LMBext, LmbError, parse::IntoFinalizedRuntimeGraph},
+        graph::{
+            FeynmanGraph, Graph, LMBext, LmbError, LoopMomentumBasis,
+            parse::IntoFinalizedRuntimeGraph,
+        },
         initialisation::test_initialise,
         momentum::SignOrZero,
     };
 
     static SHRUNKEN_LMB_TEST_INIT: std::sync::Once = std::sync::Once::new();
     static SHRUNKEN_LMB_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn assert_routing_conserved(
+        graph: &HedgeGraph<(), ()>,
+        basis: &LoopMomentumBasis,
+        nodes: &[NodeIndex],
+    ) {
+        for &node in nodes {
+            let mut sum = vec![0; basis.loop_edges.len() + basis.ext_edges.len()];
+            for hedge in graph.iter_crown(node) {
+                let incidence = if graph.flow(hedge) == Flow::Source {
+                    1
+                } else {
+                    -1
+                };
+                let signature = &basis.edge_signatures[graph[&hedge]];
+                for (total, coefficient) in sum
+                    .iter_mut()
+                    .zip(signature.internal.iter().chain(signature.external.iter()))
+                {
+                    let coefficient = match coefficient {
+                        SignOrZero::Plus => 1,
+                        SignOrZero::Minus => -1,
+                        SignOrZero::Zero => 0,
+                    };
+                    *total += incidence * coefficient;
+                }
+            }
+            assert!(
+                sum.iter().all(|coefficient| *coefficient == 0),
+                "momentum is not conserved at {node:?}: {sum:?}; {basis}"
+            );
+        }
+    }
+
+    #[test]
+    fn omitted_chords_conserve_momentum_for_every_orientation() {
+        for orientations in 0..8 {
+            let mut builder = HedgeGraphBuilder::new();
+            let nodes = (0..4).map(|_| builder.add_node(())).collect::<Vec<_>>();
+            for (a, b) in [(0, 1), (1, 2), (2, 3), (3, 0)] {
+                builder.add_edge(nodes[a], nodes[b], (), Orientation::Default);
+            }
+            // Two boundary half-edges at A and C belong to different omitted
+            // chords. Each chord transports momentum between both endpoints.
+            for (index, (mut a, mut b)) in [(0, 2), (1, 3), (0, 2)].into_iter().enumerate() {
+                if orientations & (1 << index) != 0 {
+                    std::mem::swap(&mut a, &mut b);
+                }
+                builder.add_edge(nodes[a], nodes[b], (), Orientation::Default);
+            }
+            let graph: HedgeGraph<(), ()> = builder.build();
+            let mut selected: SuBitGraph = graph.empty_subgraph();
+            for edge in 0..4 {
+                selected.add(graph[&EdgeIndex(edge)].1);
+            }
+            let bases = graph.generate_loop_momentum_bases_of(&selected);
+            assert_eq!(bases.len(), 4);
+            for basis in bases {
+                assert_eq!(basis.loop_edges.len(), 1);
+                assert_eq!(
+                    basis.ext_edges.raw,
+                    vec![EdgeIndex(4), EdgeIndex(5), EdgeIndex(6)]
+                );
+                for (slot, edge) in basis.ext_edges.iter_enumerated() {
+                    let signature = &basis.edge_signatures[*edge];
+                    assert_eq!(signature.external[slot], SignOrZero::Plus);
+                    assert!(
+                        signature
+                            .internal
+                            .iter()
+                            .all(|sign| *sign == SignOrZero::Zero)
+                    );
+                }
+                assert_routing_conserved(&graph, &basis, &nodes);
+            }
+        }
+    }
+
+    #[test]
+    fn boundary_self_loop_does_not_inject_momentum_into_child() {
+        for self_loop_node in 0..4 {
+            let mut builder = HedgeGraphBuilder::new();
+            let nodes = (0..4).map(|_| builder.add_node(())).collect::<Vec<_>>();
+            for (a, b) in [(0, 1), (1, 2), (2, 3), (3, 0)] {
+                builder.add_edge(nodes[a], nodes[b], (), Orientation::Default);
+            }
+            builder.add_edge(
+                nodes[self_loop_node],
+                nodes[self_loop_node],
+                (),
+                Orientation::Default,
+            );
+            builder.add_external_edge(nodes[1], (), Orientation::Default, Flow::Sink);
+            builder.add_external_edge(nodes[3], (), Orientation::Default, Flow::Source);
+            let graph: HedgeGraph<(), ()> = builder.build();
+            let mut selected: SuBitGraph = graph.empty_subgraph();
+            for edge in 0..4 {
+                selected.add(graph[&EdgeIndex(edge)].1);
+            }
+            let bases = graph.generate_loop_momentum_bases_of(&selected);
+            assert_eq!(bases.len(), 4);
+            for basis in bases {
+                let self_loop_slot = basis.ext_from(EdgeIndex(4)).unwrap();
+                assert_eq!(
+                    basis.edge_signatures[EdgeIndex(4)].external[self_loop_slot],
+                    SignOrZero::Plus
+                );
+                for edge in 0..4 {
+                    assert_eq!(
+                        basis.edge_signatures[EdgeIndex(edge)].external[self_loop_slot],
+                        SignOrZero::Zero,
+                        "a boundary self-loop cannot supply momentum to the child"
+                    );
+                }
+                assert_routing_conserved(&graph, &basis, &nodes);
+            }
+        }
+    }
 
     #[test]
     fn lmb_for_dummy() {

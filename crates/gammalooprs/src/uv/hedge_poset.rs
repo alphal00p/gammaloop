@@ -1507,7 +1507,10 @@ mod tests {
         graph::{Graph, parse::IntoFinalizedRuntimeGraph},
         initialisation::test_initialise,
         processes::DotExportSettings,
-        uv::{UltravioletGraph, Wood as OldWood, settings::RenormalizationPrescriptionSettings},
+        uv::{
+            UltravioletGraph, Wood as OldWood,
+            settings::{CTRenormalizationRule, RenormalizationPrescriptionSettings},
+        },
     };
 
     use super::*;
@@ -1519,6 +1522,52 @@ mod tests {
 
     fn standard_model() -> Model {
         crate::utils::load_generic_model("sm")
+    }
+
+    fn four_loop_banana() -> Result<Graph> {
+        finalized_runtime_dot!(
+            digraph G {
+                graph [projector=1];
+                node [num=1];
+                edge [particle="scalar_1" num=1];
+                v1 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}"];
+                v1 -> v2 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
+                v1 -> v2 [lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"];
+                v1 -> v2 [lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:3}"];
+                v1 -> v2 [lmb_id=3 source="{ufo_order:4}" sink="{ufo_order:4}"];
+            },
+            "scalars"
+        )
+    }
+
+    #[test]
+    fn epsilon_depth_retains_finite_order_for_counterterm_override() -> Result<()> {
+        test_initialise().unwrap();
+        let graph = four_loop_banana()?;
+        let model = scalar_model();
+        let settings = UVgenerationSettings {
+            renormalization_prescription: RenormalizationPrescriptionSettings {
+                log_divergent: ApproximationType::PolePart,
+                massive_power_divergent: ApproximationType::PolePart,
+                massless_power_divergent: ApproximationType::PolePart,
+                overrides: vec![CTRenormalizationRule::new(
+                    graph.ct_identifier(&graph.full_filter(), &model),
+                    ApproximationType::MUV,
+                )],
+            },
+            ..Default::default()
+        };
+        let wood = Wood::new(CutStructure::empty(&graph), &graph, &model, &settings);
+        let schemes = wood
+            .graph
+            .iter_nodes()
+            .filter(|(_, _, spinney)| !spinney.filter().is_empty())
+            .map(|(_, _, spinney)| spinney.renormalization_scheme)
+            .collect::<Vec<_>>();
+        assert!(schemes.contains(&ApproximationType::PolePart));
+        assert!(schemes.contains(&ApproximationType::MUV));
+        assert_eq!(wood.vakint_settings.number_of_terms_in_epsilon_expansion, 5);
+        Ok(())
     }
 
     impl Forests {
