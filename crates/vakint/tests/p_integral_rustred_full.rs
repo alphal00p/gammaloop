@@ -22,8 +22,11 @@
 //!   its frozen Forcer output through its frozen depth (the deepest at which
 //!   Forcer's value finalizes), at most `ε^6` ([`case_terms`]), in 20 parts
 //!   ([`GRID4_PART`]: the 11 tops of each benchmark cell, then the sampled
-//!   and dotted sectors); the 15 four-loop benchmark cells are the sums of their grid tops (canonical
-//!   forms, FORM- and library-free); RustRed's values are invariant under
+//!   and dotted sectors; seconds and peak RSS per case on stderr; optional
+//!   per-case limits for long measured runs, [`CASE_SECONDS_VARIABLE`],
+//!   [`CASE_RSS_GB_VARIABLE`], [`SKIP_CASES_VARIABLE`]); the 15 four-loop
+//!   benchmark cells are the sums of their grid tops (canonical forms, FORM-
+//!   and library-free); RustRed's values are invariant under
 //!   `q -> -q` and a unimodular change of loop momenta, and through the DOT
 //!   round trip, for one case per family top.
 //! - Physics cells: the 2L, 3L and 4L inputs of
@@ -192,11 +195,32 @@ fn case_terms(case: &ForcerCase) -> i64 {
     frozen.min(battery_terms(4))
 }
 
+/// Optional limits of one four-loop grid case, for long measured runs
+/// (unset by default: no limit): RustRed's wall seconds over its three modes
+/// (`rustred_resources.max_elapsed`) and this process's RSS in GB
+/// (`max_process_rss_bytes`, checked by RustRed between its steps).
+const CASE_SECONDS_VARIABLE: &str = "VAKINT_TEST_P4L_CASE_SECONDS";
+const CASE_RSS_GB_VARIABLE: &str = "VAKINT_TEST_P4L_CASE_RSS_GB";
+/// Comma-separated four-loop grid cases not to run (e.g. ones whose cost
+/// another case over the limits bounds from below); unset by default.
+const SKIP_CASES_VARIABLE: &str = "VAKINT_TEST_P4L_SKIP_CASES";
+
+fn case_limit(variable: &str) -> Option<f64> {
+    let text = std::env::var(variable).ok()?;
+    let limit: f64 = (text.parse().ok())
+        .filter(|limit: &f64| *limit > 0.0)
+        .unwrap_or_else(|| panic!("{variable}={text}: not a positive number"));
+    Some(limit)
+}
+
 /// Part `part` of the four-loop grid on a fresh engine on the 1-4 package:
 /// every case agrees with its frozen Forcer output through [`case_terms`]
 /// under the default arithmetic (an exact 0 for [`ZERO_GRID4_CASES`]); a
 /// benchmark part holds exactly the tops of the cell `cell`. The parts cover
-/// the grid exactly once. Seconds per case on stderr.
+/// the grid exactly once. Seconds and the process's peak RSS per case on
+/// stderr. A case over the limits of [`CASE_SECONDS_VARIABLE`] and
+/// [`CASE_RSS_GB_VARIABLE`], or listed in [`SKIP_CASES_VARIABLE`], is not
+/// checked: reported on stderr, it fails the part once the other cases ran.
 fn assert_grid4_part(part: usize, cell: Option<&str>) {
     let what = format!("part {} of the four-loop grid", part + 1);
     let Some(engine) = p_library4_engine(PLibraryRoute::Injected, &what) else {
@@ -214,10 +238,34 @@ fn assert_grid4_part(part: usize, cell: Option<&str>) {
         None => assert!(cases.iter().all(|case| !case.name.starts_with("bench_"))),
     }
     let cores = four_loop_cores();
+    let seconds_limit = case_limit(CASE_SECONDS_VARIABLE).map(Duration::from_secs_f64);
+    let rss_limit = case_limit(CASE_RSS_GB_VARIABLE).map(|gb| (gb * (1u64 << 30) as f64) as u64);
+    let limit_text = |variable: &str| std::env::var(variable).unwrap_or_else(|_| "none".into());
+    let limits = format!(
+        "{} s, {} GB",
+        limit_text(CASE_SECONDS_VARIABLE),
+        limit_text(CASE_RSS_GB_VARIABLE)
+    );
+    let skipped = std::env::var(SKIP_CASES_VARIABLE).unwrap_or_default();
+    let skipped: Vec<&str> = skipped.split(',').map(str::trim).collect();
+    let mut unchecked = Vec::new();
     for case in cases {
+        if skipped.contains(&case.name.as_str()) {
+            eprintln!(
+                "[tier C 4L] {}: NOT CHECKED (listed in {SKIP_CASES_VARIABLE})",
+                case.name
+            );
+            unchecked.push(format!("{} (listed)", case.name));
+            continue;
+        }
         let terms = case_terms(case);
         let input = case.expression().unwrap();
-        let rustred = |mode| settings4(mode, terms, None, cores);
+        let rustred = |mode| {
+            let mut settings = settings4(mode, terms, None, cores);
+            settings.rustred_resources.max_process_rss_bytes = rss_limit;
+            settings
+        };
+        reset_peak_rss();
         let started = Instant::now();
         if ZERO_GRID4_CASES.contains(&case.name.as_str()) {
             for mode in MODES {
@@ -229,19 +277,40 @@ fn assert_grid4_part(part: usize, cell: Option<&str>) {
             }
             assert_rustred_zero(&engine, &case.name, &input, rustred);
         } else {
-            agreement4(&engine, &input, rustred, |mode| {
-                frozen_value(case, mode, terms)
-            })
-            .unwrap_or_else(|difference| {
+            let agreement = match rustred_values(&engine, &input, rustred, seconds_limit) {
+                (Ok(values), _) => {
+                    compare_with_forcer(&values, |mode| frozen_value(case, mode, terms))
+                }
+                (Err(RustRedSide::Failed(error)), _) => Err(Disagreement::Failed(error)),
+                (Err(RustRedSide::OverBudget), seconds) => {
+                    eprintln!(
+                        "[tier C 4L] {} ({terms} terms, {cores} cores): NOT CHECKED, over the \
+                         case limits ({limits}) after {seconds:.1} s, peak RSS {}",
+                        case.name,
+                        peak_rss_text()
+                    );
+                    unchecked.push(format!("{} (over the limits, {seconds:.1} s)", case.name));
+                    continue;
+                }
+            };
+            agreement.unwrap_or_else(|difference| {
                 panic!("p4l_grid.json: {} ({terms} terms): {difference}", case.name)
             });
         }
         eprintln!(
-            "[tier C 4L] {} ({terms} terms, {cores} cores): {:.1} s",
+            "[tier C 4L] {} ({terms} terms, {cores} cores): {:.1} s, peak RSS {}",
             case.name,
-            started.elapsed().as_secs_f64()
+            started.elapsed().as_secs_f64(),
+            peak_rss_text()
         );
     }
+    assert!(
+        unchecked.is_empty(),
+        "{what}: {} of {} cases not checked: {}",
+        unchecked.len(),
+        cases.len(),
+        unchecked.join(", ")
+    );
 }
 
 /// The four-loop grid in 20 parts: the tops of each benchmark cell (table

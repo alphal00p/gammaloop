@@ -27,6 +27,7 @@ use std::time::{Duration, Instant};
 
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::id::Replacement;
+use symbolica::utils::resources::ResourceLimitError;
 use vakint::symbols::S;
 use vakint::{LoopNormalizationFactor, RustRedMasterMode, Vakint, VakintError, VakintSettings};
 
@@ -106,8 +107,9 @@ pub enum RustRedSide {
 /// RustRed's value of `input` on `engine` in every mode of [`MODES`], with
 /// the settings `rustred(mode)` and, given a `budget`, within it in total:
 /// each evaluation runs with the remaining time as its
-/// `rustred_resources.max_elapsed`, and a failure once the budget is spent is
-/// [`RustRedSide::OverBudget`]. Returns the values and RustRed's seconds.
+/// `rustred_resources.max_elapsed`. A failure once the budget is spent, or
+/// at a time or RSS limit of the settings, is [`RustRedSide::OverBudget`].
+/// Returns the values and RustRed's seconds.
 pub fn rustred_values(
     engine: &Vakint,
     input: &Atom,
@@ -132,8 +134,13 @@ pub fn rustred_values(
             Err(error) => {
                 let seconds = started.elapsed().as_secs_f64();
                 let spent = budget.is_some_and(|budget| started.elapsed() >= budget);
-                let limited = matches!(error, VakintError::ResourceLimit(_));
-                let side = if budget.is_some() && (spent || limited) {
+                let limited = matches!(
+                    error,
+                    VakintError::ResourceLimit(
+                        ResourceLimitError::Elapsed { .. } | ResourceLimitError::Memory { .. }
+                    )
+                );
+                let side = if spent || limited {
                     RustRedSide::OverBudget
                 } else {
                     RustRedSide::Failed(format!(
@@ -184,7 +191,9 @@ pub fn agreement4(
     match rustred_values(engine, input, rustred, None) {
         (Ok(values), seconds) => compare_with_forcer(&values, forcer).map(|()| seconds),
         (Err(RustRedSide::Failed(error)), _) => Err(Disagreement::Failed(error)),
-        (Err(RustRedSide::OverBudget), _) => unreachable!("no budget"),
+        (Err(RustRedSide::OverBudget), seconds) => Err(Disagreement::Failed(format!(
+            "RustRed at a resource limit of its settings after {seconds:.1} s"
+        ))),
     }
 }
 
@@ -215,6 +224,34 @@ pub fn capped_agreement(
             Capped::Done(Err(Disagreement::Failed(error)), seconds)
         }
     }
+}
+
+/// Resets this process's peak RSS (`VmHWM`) to its current RSS (Linux
+/// `/proc/self/clear_refs`, 5), so that [`peak_rss_gb`] then measures one
+/// case; false where unsupported.
+pub fn reset_peak_rss() -> bool {
+    std::fs::write("/proc/self/clear_refs", "5").is_ok()
+}
+
+/// This process's peak RSS (`VmHWM`) in GB (2^30 bytes) since the start or
+/// the last [`reset_peak_rss`]; `None` where unknown.
+pub fn peak_rss_gb() -> Option<f64> {
+    let status = std::fs::read_to_string("/proc/self/status").ok()?;
+    let kilobytes = status
+        .lines()
+        .find_map(|line| line.strip_prefix("VmHWM:"))?;
+    let kilobytes: f64 = kilobytes
+        .trim()
+        .trim_end_matches("kB")
+        .trim()
+        .parse()
+        .ok()?;
+    Some(kilobytes / (1024.0 * 1024.0))
+}
+
+/// [`peak_rss_gb`] as text, `?` where unknown.
+pub fn peak_rss_text() -> String {
+    peak_rss_gb().map_or("?".into(), |gb| format!("{gb:.1} GB"))
 }
 
 /// A frozen Forcer value that is an exact 0 (`p4l_grid.json` pins two): RustRed's
