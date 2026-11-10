@@ -15,6 +15,9 @@ mod expression;
 mod insertion_identity;
 mod insertions;
 mod integrate;
+mod massive;
+#[cfg(test)]
+mod massive_tests;
 #[cfg(test)]
 mod master_tests;
 #[cfg(test)]
@@ -47,6 +50,10 @@ pub use insertions::{
     PropagatorInsertionEvaluator,
 };
 pub use integrate::integrate_single_mass;
+pub use massive::{
+    MassiveVacuumSubdivergences, MassiveVacuumTerm, VacuumTopology, massive_vacuum_direct,
+    massive_vacuum_settings,
+};
 pub use physical::{PhysicalUvGroup, PhysicalUvKey, PreparedPhysicalUvTerm};
 pub use plan::*;
 pub use propagator::integrate_propagator;
