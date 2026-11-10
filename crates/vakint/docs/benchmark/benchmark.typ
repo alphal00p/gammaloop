@@ -40,6 +40,7 @@
   )
 }
 #let measured = if selected == none { () } else { gather(protocol) }
+#let runs-of-source = if selected == none { () } else { results.runs.filter(same-source-as(protocol)) }
 #if selected != none { check-cpus(protocol) }
 
 // The cited run (benchmark v1, M2-T10c): its source fills what the selected
@@ -211,15 +212,24 @@
   if found == none { none } else { found.n }
 }
 #let cold-ratio(cell, threads) = ratio(seconds(cell, "rustred", threads, "cold"), forcer-time(cell, threads))
+// A capped RustRed cold bounds its ratio from below: cap over Forcer.
+#let capped-ratio(cell, threads) = if seconds(cell, "rustred", threads, "cold") == none {
+  ratio(cap-of(cell, "rustred", threads, "cold"), forcer-time(cell, threads))
+}
+#let ratio-text(cell, threads) = {
+  let (r, low) = (cold-ratio(cell, threads), capped-ratio(cell, threads))
+  if r != none [×#fmt-ratio(r)] else if low != none [> ×#fmt-ratio(low)] else [—]
+}
 
 // One table cell: RustRed cold, Forcer, the ratio, the two warm states, the
 // exact mark and the integral count.
 #let cmp-cell(cell, loops, threads, dots: none, rank: none) = {
   let own = seconds(cell, "rustred", threads, "cold")
   let r = cold-ratio(cell, threads)
+  let low = capped-ratio(cell, threads)
   let n = cell-count(cell)
   let forcer = forcer-state(cell, threads)
-  table.cell(fill: ratio-fill(r), {
+  table.cell(fill: ratio-fill(if r != none { r } else { low }), {
     set par(leading: 0.3em, justify: false)
     if dots == none { text(size: 6.5pt, weight: "bold")[#loops L #h(2pt)] }
     if own == none and cap-of(cell, "rustred", threads, "cold") == none {
@@ -230,7 +240,7 @@
     exact-mark(loops, dots, rank)
     linebreak()
     text(size: 6.5pt, fill: luma(40))[F#if forcer == "warm" [w] #timing-text(cell, "forcer", threads, forcer)]
-    if r != none { text(size: 6.8pt, weight: "semibold")[#h(2pt)×#fmt-ratio(r)] }
+    if r != none or low != none { text(size: 6.8pt, weight: "semibold")[#h(2pt)#ratio-text(cell, threads)] }
     if own != none {
       linebreak()
       text(size: 5.6pt, fill: luma(45))[
@@ -311,8 +321,13 @@
 #let verdict(ok) = if ok == none { text(fill: luma(90))[—] } else if ok {
   text(fill: rgb("#1b7a3e"), weight: "bold")[met]
 } else { text(fill: rgb("#b2182b"), weight: "bold")[missed] }
-#let target-1(cell) = { let r = cold-ratio(cell, 1); if r == none { none } else { r <= par-tolerance } }
-#let target-16(cell) = { let r = cold-ratio(cell, 16); if r == none { none } else { r < 1 } }
+// A capped cell misses when its bound already exceeds the target, else it is undecided.
+#let target(cell, threads, limit, strict) = {
+  let (r, low) = (cold-ratio(cell, threads), capped-ratio(cell, threads))
+  if r != none { if strict { r < limit } else { r <= limit } } else if low != none and low > limit { false } else { none }
+}
+#let target-1(cell) = target(cell, 1, par-tolerance, false)
+#let target-16(cell) = target(cell, 16, 1, true)
 #let one-off(cell, threads) = {
   let (cold, warm) = (seconds(cell, "rustred", threads, "cold"), seconds(cell, "rustred", threads, "warm-same"))
   if is-num(cold) and is-num(warm) { calc.max(cold - warm, 0) } else { none }
@@ -333,17 +348,17 @@
   let field(name) = seconds(cell, "rustred", threads, "cold", field: name)
   let (evaluate, reduction) = (field("evaluate_seconds"), field("reduction_seconds"))
   let rest = if is-num(evaluate) and is-num(reduction) { calc.max(evaluate - reduction, 0) } else { none }
-  [#threads: #fmt(field("load_seconds")) / #fmt(reduction) / #fmt(rest) / #fmt(field("save_seconds"))]
+  let cap = cap-of(cell, "rustred", threads, "cold")
+  if evaluate == none and cap != none [#threads: capped (#over-cap(cap)), no breakdown] else [
+    #threads: #fmt(field("load_seconds")) / #fmt(reduction) / #fmt(rest) / #fmt(field("save_seconds"))]
 }
 #let target-table = {
   let rows = ()
   for cell in four-loop-cells {
     let misses = ((1, target-1(cell)), (16, target-16(cell))).filter(pair => pair.at(1) == false).map(pair => pair.at(0))
-    let r1 = cold-ratio(cell, 1)
-    let r16 = cold-ratio(cell, 16)
     rows.push(text(size: 7pt)[#cell.replace("_", " ")])
-    rows.push(text(size: 7pt)[#if r1 == none [—] else [×#fmt-ratio(r1)] #verdict(target-1(cell))])
-    rows.push(text(size: 7pt)[#if r16 == none [—] else [×#fmt-ratio(r16)] #verdict(target-16(cell))])
+    rows.push(text(size: 7pt)[#ratio-text(cell, 1) #verdict(target-1(cell))])
+    rows.push(text(size: 7pt)[#ratio-text(cell, 16) #verdict(target-16(cell))])
     rows.push(text(size: 7pt)[#fmt(cell-load(cell, 1)) / #fmt(one-off(cell, 1)) #verdict(target-load(cell))])
     rows.push(text(size: 6.5pt)[#misses.map(threads => breakdown(cell, threads)).join(linebreak())])
   }
@@ -411,7 +426,8 @@
   count. ✓: result exactly equal to Forcer's; n.c.: not exact-checked (cost; `p_exact.json`). n: integrals in the input. †: fewer repetitions than
   its run planned.
   #if cited-run != none [*Sources:* 4L RustRed measured on the scope 1-4 library (#library-name, #library-origin);
-    every Forcer row and RustRed at 1L-3L cited from benchmark v1 (run #raw(cited-run.id), gammaloop
+    every Forcer row#if measured.any(m => m.backend == "forcer") [ (except Forcer 4L at 1 thread, cold, one repetition: measured
+    here, v1 had none)] and RustRed at 1L-3L cited from benchmark v1 (run #raw(cited-run.id), gammaloop
     #cited-protocol.gammaloop_sha.slice(0, 9), built-in 1-3 library). Identity caveat: Forcer, FORM and vakint's
     Forcer path are unchanged since v1, and the built-in 1-3 route is unchanged; Table 6 measures 1L-3L under the
     1-4 program (one cell per loop count; the cross-program cost in full: M3-T19 S2).]
@@ -577,12 +593,13 @@
   same frontend and finalizer for both backends) in one fresh process per measurement, with the
   input parsed, the engine and library loaded and the 1L bubble with four dots (in no cell: vakint
   memoises Forcer's FORM runs per process) evaluated once beforehand, by either backend, on directories of its own; repetitions:
-  #protocol.at("repetitions", default: 3), median. RustRed cold: empty ordered-cache directory, shipped caches off#if measured.any(m => "save_seconds" in m) [; the cache is saved after the clock]. ws: a fresh
+  #if selected == none [3] else { runs-of-source.map(run => str(run.protocol.repetitions)).dedup().join(" or ") } (as each run planned; 4L: one), median. RustRed cold: empty ordered-cache directory, shipped caches off#if measured.any(m => "save_seconds" in m) [; the cache is saved after the clock]. ws: a fresh
   process on a read-only copy of the cache of its cold run. wc: per loop count, one chain over the
   cells in table order sharing one cache from empty, each cell measured once in the chain. Forcer
   cold: private empty materialisation directory; Forcer warm: materialised. Forcer has no result
   cache. The raw reference runs the generated FORM programs directly, one process per top. OS pages
-  are not flushed. #if protocol.at("cap_seconds", default: none) != none [Cap per measurement: #over-cap(protocol.cap_seconds).]
+  are not flushed. #let caps = runs-of-source.map(run => run.protocol.at("cap_seconds", default: none)).filter(is-num).dedup().sorted()
+  #if caps.len() > 0 [Cap per measurement: #caps.map(over-cap).join(", ") (by run; a capped cell shows the cap, its ratio the bound cap / Forcer).]
   #if cited-run != none [Cited 4L Forcer rows: 16 threads, warm, one repetition (benchmark v1).]
   Physics row: massless-quark (L-1)-rung gluon self-energy, Feynman gauge, transverse
   projector, external momentum kept.
