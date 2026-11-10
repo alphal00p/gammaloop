@@ -539,13 +539,17 @@ fn rerouted_two_and_three_loop_integrals_agree_with_forcer() {
 /// (B)), against a live Forcer, through the deepest depth (at most `ε^6`) at
 /// which Forcer's value finalizes. With the package, a missing FORM 5 fails.
 mod four_loops {
-    use super::p_backends::live_forcer_value;
+    use super::p_backends::{Disagreement, live_forcer_value};
     use super::p_integrals::{forcer_form, parse};
     use super::p_library4::PLibraryRoute;
-    use super::p_tierc4::{agreement4, live_terms, p_library4_engine, resource_stop, settings4};
+    use super::p_tierc4::{
+        Capped, LIMIT_MESSAGES, agreement4, capped_agreement, four_loop_cores, live_terms,
+        p_library4_engine, resource_stop, settings4,
+    };
     use std::time::Duration;
+    use symbolica::atom::Atom;
     use symbolica::utils::resources::ResourceLimitError;
-    use vakint::{RustRedEvaluationError, VakintError};
+    use vakint::{RustRedEvaluationError, RustRedMasterMode, VakintError};
 
     /// `(input, arithmetic, cores)`: an odd rank on a dotted top with the head
     /// written `-p(3)`; a dotted top and a two-loop kite of another head in
@@ -634,6 +638,65 @@ mod four_loops {
             ));
             assert!(!resource_stop(&untyped(unavailable.to_string()), spent));
             assert!(!resource_stop(&untyped("no route".into()), spent));
+        }
+    }
+
+    /// Both paths of a capped four-loop agreement (`p_tierc4::capped_agreement`,
+    /// as the exact writer and the grid's case limits use it) on the real p
+    /// path, with the Forcer side never asked (review vk-tierc4 round 1,
+    /// must-fix 2; coordinator ruling 2026-11-10T10:11Z): a request that fails
+    /// for another cause than a resource (zero cores: vakint's `InvalidNCores`)
+    /// FAILS with its message, it is never filed as a cost; a heavy top
+    /// (`bench_L4_d0_r4_P4L_NO1` of `p4l_grid.json`, minutes of RustRed) within
+    /// a 5 s budget is a resource stop, with Symbolica's limit message in its
+    /// text, whether vakint reports it typed or in its untyped "malformed p
+    /// library" form. A failure that arrives once the budget is spent cannot
+    /// be produced on demand here: `resource_stops_are_told_from_failures_by_their_cause`
+    /// covers it.
+    #[test]
+    fn four_loop_capped_agreements_tell_a_stop_from_a_failure() {
+        let what = "the capped four-loop agreement paths";
+        let Some(engine) = p_library4_engine(PLibraryRoute::Injected, what) else {
+            return;
+        };
+        let heavy = parse(
+            "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))\
+             *topo(P4L_NO1(p(1),1,1,1,1,1,1,1,1,1,1,1))",
+        );
+        let no_forcer = |mode: RustRedMasterMode| -> Result<Atom, String> {
+            panic!("the Forcer side was asked ({mode}) although RustRed did not finish")
+        };
+        // The failure first: a stop may leave the engine unusable for the
+        // payload it interrupted (review vk-tierc4 round 1, probe P2).
+        let budget = Duration::from_secs(600);
+        let zero_cores = |mode| settings4(mode, 10, None, 0);
+        match capped_agreement(&engine, &heavy, zero_cores, no_forcer, budget) {
+            Capped::Done(Err(Disagreement::Failed(error)), seconds) => {
+                assert!(
+                    error.starts_with("RustRed (retain, ") && error.contains("invalid n_cores = 0"),
+                    "{error}"
+                );
+                assert!(seconds < budget.as_secs_f64(), "{seconds} s");
+            }
+            other => panic!("a zero-core request is a failure, not {other:?}"),
+        }
+        let budget = Duration::from_secs(5);
+        let cores = four_loop_cores();
+        let capped = |mode| settings4(mode, 10, None, cores);
+        match capped_agreement(&engine, &heavy, capped, no_forcer, budget) {
+            Capped::OverBudget(seconds, error) => {
+                assert!(
+                    error.starts_with("RustRed (retain, ")
+                        && LIMIT_MESSAGES.iter().any(|message| error.contains(message)),
+                    "{error}"
+                );
+                assert!(
+                    (budget.as_secs_f64()..budget.as_secs_f64() + 120.0).contains(&seconds),
+                    "a stop of the {budget:?} budget after {seconds} s: {error}"
+                );
+                eprintln!("[tier C 4L] a {budget:?} stop after {seconds:.1} s: {error}");
+            }
+            other => panic!("a heavy top within {budget:?} is a resource stop, not {other:?}"),
         }
     }
 }

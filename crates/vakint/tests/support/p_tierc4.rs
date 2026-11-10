@@ -111,7 +111,7 @@ pub enum RustRedSide {
 
 /// Symbolica's messages of a time and of an RSS stop (the `Display` of
 /// `ResourceLimitError::Elapsed` and `::Memory`).
-const LIMIT_MESSAGES: [&str; 2] = ["reached the configured time budget", "exceeds RAM budget"];
+pub const LIMIT_MESSAGES: [&str; 2] = ["reached the configured time budget", "exceeds RAM budget"];
 
 /// Whether `error` is a resource stop: a time or RSS limit typed as such,
 /// `VakintError::ResourceLimit` or `RustRedEvaluationError::ResourceLimit`
