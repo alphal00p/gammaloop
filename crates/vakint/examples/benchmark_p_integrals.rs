@@ -1,12 +1,16 @@
-//! Benchmark v1 of the p-integrals: RustRed vs Forcer. Appends raw measurements
-//! to `docs/benchmark/data/p_results.json`, from which `docs/benchmark/benchmark.typ`
-//! builds the report (M2 plan, section 9). See `--help`.
+//! Benchmark of the p-integrals: RustRed vs Forcer at one to four loops.
+//! Appends raw measurements to `docs/benchmark/data/p_results.json`, from which
+//! `docs/benchmark/benchmark.typ` builds the report (M2 plan, section 9; M3
+//! plan, M3-V11). See `--help`.
 //!
 //! Every measurement is one fresh child process of this executable, one input
-//! at a time, under the thread count and CPU list of its table. A measurement
-//! already recorded for the same gammaloop and rustred shas, build profile and
-//! tree state is skipped, so an interrupted run resumes by running the same
-//! command (results committed in between do not count as a source change).
+//! at a time, under the thread count and CPU list of its table. RustRed reduces
+//! with the built-in p library or, with `--external-data`, with the library the
+//! `p_integral/` area of that root lists (the scope 1-4 library ships there).
+//! A measurement already recorded for the same gammaloop and rustred shas, p
+//! library identity, build profile and tree state is skipped, so an interrupted
+//! run resumes by running the same command (results committed in between do
+//! not count as a source change).
 //! SIGTERM and SIGINT kill the measuring process group before the harness
 //! exits: the group sits outside the harness's own, so it would survive.
 //!
@@ -44,9 +48,9 @@ mod harness {
     use sha2::{Digest, Sha256};
     use symbolica::atom::{AtomCore, AtomView};
     use vakint::{
-        EvaluationMethod, EvaluationOrder, ForcerOptions, OrderedCacheMode, OrderedCacheSettings,
-        OrderedCacheStatistics, OrderedWeightArithmetic, RustRedEvaluationOptions,
-        RustRedMasterMode, Vakint, VakintSettings,
+        EvaluationMethod, EvaluationOrder, ForcerOptions, OrderedCacheAutosave, OrderedCacheMode,
+        OrderedCacheSettings, OrderedCacheStatistics, OrderedWeightArithmetic,
+        RustRedEvaluationOptions, RustRedMasterMode, Vakint, VakintSettings,
         p_integral::{FORCER_UPSTREAM_COMMIT, forcer_benchmark},
         rustred_evaluation::experimental::capture_reduction_timing,
         vakint_parse,
@@ -62,9 +66,11 @@ mod harness {
     /// turn its measurement into a replay.
     const BUBBLE: &str = "topo(prop(1,edge(1,2),k(1),0,3)*prop(2,edge(2,1),k(1)-p(1),0,3))";
     const SCOPE: &str = "Wall time of Vakint::evaluate in Retain mode, in a fresh process, input \
-        parsed, engine (and RustRed p library: built in for 1L-3L, the scope 1-4 one vakint-external-data lists for 4L) loaded and the one-loop bubble with four dots (in no \
-        cell) evaluated once beforehand by either backend, on directories of its own: same frontend and finalizer for \
-        both backends. RustRed cold: empty ordered-cache directory, shipped caches off. \
+        parsed, engine (and RustRed p library: the source's p_library, the built-in 1L-3L one or the scope 1-4 \
+        one a vakint-external-data root lists) loaded and the one-loop bubble with four dots (in no cell) \
+        evaluated once beforehand by either backend, on directories of its own: same frontend and finalizer for \
+        both backends. RustRed cold: empty ordered-cache directory, shipped caches off; the \
+        cache is saved after the clock (save_seconds), never inside it. \
         Warm-same: fresh process replaying a read-only copy of the cache its cold run filled. \
         Warm-shared: per L one chain over the cells in table order sharing one cache from empty. \
         Forcer cold: private empty materialisation directory; warm: materialised (Forcer has no \
@@ -187,6 +193,8 @@ mod harness {
         read_only: bool,
         report: Option<PathBuf>,
         programs: Option<PathBuf>,
+        external_data: Option<PathBuf>,
+        cite: Option<String>,
     }
 
     fn list<T: std::str::FromStr>(text: &str) -> Result<Vec<T>>
@@ -209,10 +217,10 @@ mod harness {
         --cpus T=CPUS,...    taskset list of a thread count, e.g. 1=128,16=128-143\n\
         --numa-node N        numactl --cpunodebind=N --membind=N around every child\n\
         --numactl PATH       numactl executable (default: numactl on PATH)\n\
-        --loops LIST         grid loop counts (default: 1,2,3)\n\
+        --loops LIST         grid loop counts (default: 1,2,3,4)\n\
         --dots LIST          grid dots (default: 0,1,2)\n\
         --ranks LIST         grid ranks (default: 0,2,4,6,8)\n\
-        --physics LIST       physics cells by L (default: 2,3; empty for none)\n\
+        --physics LIST       physics cells by L (default: 2,3,4; empty for none)\n\
         --backends LIST      rustred,forcer (default: both)\n\
         --states LIST        rustred: cold,warm-same,warm-shared; forcer: cold,warm,raw (default: all)\n\
         --arithmetic LIST    RustRed Ordered weight arithmetics: exact,modular_polynomial,modular_sampled\n\
@@ -223,6 +231,10 @@ mod harness {
         --child-program PATH run PATH instead of this executable as the measuring child (harness tests,\n\
                              refused with --build-profile release)\n\
         --select-current     select this run for the report; recorded runs stay\n\
+        --cite RUN           cite the recorded run RUN (another source) in the report: its rows fill what\n\
+                             this source does not measure\n\
+        --external-data DIR  external-data root: RustRed reduces with the p library its p_integral/ area\n\
+                             lists (load_external_data; default: the built-in library)\n\
         A release measurement needs a clean tree (crates/vakint/docs/benchmark excepted) and a binary\n\
         of that tree, built by `just vakint-p-benchmark-build`.\n\
         Never removes anything outside its work directory; every Forcer run materialises under it.";
@@ -242,10 +254,10 @@ mod harness {
                 cpus: BTreeMap::new(),
                 numa_node: None,
                 numactl: "numactl".into(),
-                loops: vec![1, 2, 3],
+                loops: vec![1, 2, 3, 4],
                 dots: vec![0, 1, 2],
                 ranks: vec![0, 2, 4, 6, 8],
-                physics: vec![2, 3],
+                physics: vec![2, 3, 4],
                 backends: vec![Backend::RustRed, Backend::Forcer],
                 states: Vec::new(),
                 arithmetics: vec!["modular_polynomial".to_owned()],
@@ -261,6 +273,8 @@ mod harness {
                 read_only: false,
                 report: None,
                 programs: None,
+                external_data: None,
+                cite: None,
             };
             let mut args = std::env::args().skip(1);
             while let Some(arg) = args.next() {
@@ -329,6 +343,8 @@ mod harness {
                     "--cache" => result.cache = Some(value.into()),
                     "--report" => result.report = Some(value.into()),
                     "--programs" => result.programs = Some(value.into()),
+                    "--external-data" => result.external_data = Some(value.into()),
+                    "--cite" => result.cite = Some(value),
                     _ => bail!("unknown option {arg}; see --help"),
                 }
             }
@@ -397,7 +413,9 @@ mod harness {
     }
 
     /// The settings of one measurement; both backends retain the masters and
-    /// keep every other default but RustRed's arithmetic.
+    /// keep every other default but RustRed's arithmetic and the cache save,
+    /// which the child makes after the clock (`save_seconds`): an fsync stall
+    /// of the work directory is no reduction time (benchmark v1 follow-up F1).
     fn settings(options: &Options) -> Result<VakintSettings> {
         let retain = RustRedMasterMode::Retain;
         let (method, form) = match options.backend {
@@ -436,6 +454,7 @@ mod harness {
                 mode,
                 directory: options.cache.clone(),
                 shipped: false,
+                autosave: OrderedCacheAutosave::Never,
                 ..OrderedCacheSettings::off()
             },
             ..Default::default()
@@ -454,6 +473,9 @@ mod harness {
                 json!({
                     "loop_count": program.loop_count,
                     "program": program.program,
+                    "data_version": program.data_version,
+                    "directory": program.directory.as_ref().and_then(|path| path.file_name())
+                        .map(|name| name.to_string_lossy().into_owned()),
                     "mode": format!("{:?}", program.mode),
                     "shipped": program.shipped.as_ref().map(|shipped| format!("{shipped:?}")),
                     "hits": native.hits,
@@ -489,7 +511,12 @@ mod harness {
             .as_ref()
             .ok_or_else(|| eyre::eyre!("a child needs --report"))?;
         let started = Instant::now();
-        let engine = Vakint::new()?;
+        let mut engine = Vakint::new()?;
+        if let Some(root) = &options.external_data {
+            // The vacuum one-loop pack only: it makes the root this engine's
+            // external data, whose p_integral/ area lists the p library.
+            engine.load_external_data(root, 1)?;
+        }
         let input = vakint_parse!(&cell.input).map_err(eyre::Report::msg)?;
         let settings = settings(options)?;
         // One evaluate before the clock, on either backend: what a process does
@@ -516,6 +543,15 @@ mod harness {
         let evaluate_seconds = started.elapsed().as_secs_f64();
         let value = capture.result?;
         let (form, programs) = forcer_benchmark::take();
+        let save_seconds = if options.backend == Backend::RustRed
+            && settings.ordered_cache.mode == OrderedCacheMode::ReadWrite
+        {
+            let started = Instant::now();
+            engine.save_ordered_cache()?;
+            Some(started.elapsed().as_secs_f64())
+        } else {
+            None
+        };
         if let Some(directory) = &options.programs {
             write_programs(directory, &programs)?;
         }
@@ -553,6 +589,7 @@ mod harness {
                 );
                 record["arithmetic"] = json!(resolved.name());
                 record["arithmetic_resolved"] = json!(resolved.to_string());
+                record["save_seconds"] = json!(save_seconds);
                 record["cache"] = cache_record(&engine.ordered_cache_statistics());
                 record["adjoint_tail_env"] = json!(std::env::var(ADJOINT_TAIL).ok());
             }
@@ -623,6 +660,61 @@ mod harness {
             .ok_or_else(|| eyre::eyre!("Cargo.lock pins no rustred commit"))
     }
 
+    /// The RustRed p library of the children, as vakint resolves it (M3-V8):
+    /// the one entry of RustRed's schema the `p_integral/` area of the
+    /// external-data root lists, else the built-in library. A hand-made `p/`
+    /// area (no entry pins it) is refused: the benchmark measures a shipped
+    /// library. `identity` is part of the measured source.
+    fn p_library(crate_path: &Path, external_data: Option<&Path>) -> Result<Value> {
+        let read = |path: &Path| -> Result<Value> {
+            let file = File::open(path).with_context(|| path.display().to_string())?;
+            serde_json::from_reader(file).with_context(|| path.display().to_string())
+        };
+        if let Some(root) = external_data {
+            ensure!(
+                !root.join("p").exists(),
+                "{} has a hand-made p/ area; the benchmark measures a listed or the built-in library",
+                root.display()
+            );
+            let release = read(&root.join("manifest.json"))?;
+            if let Some(area) = release["p_integral"]["manifest"].as_str() {
+                let area = read(&root.join(area))?;
+                let listed = area["libraries"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter(|entry| entry["schema"] == rustred::propagator::P_LIBRARY_SCHEMA)
+                    .collect::<Vec<_>>();
+                ensure!(
+                    listed.len() <= 1,
+                    "{} lists several p libraries",
+                    root.display()
+                );
+                if let Some(entry) = listed.first() {
+                    let root = root.canonicalize()?;
+                    let head = command_output(
+                        "git",
+                        &["-C", &root.to_string_lossy(), "rev-parse", "HEAD"],
+                    )
+                    .ok();
+                    return Ok(json!({
+                        "origin": "external-data",
+                        "directory": entry["directory"],
+                        "identity": entry["identity"],
+                        "root": root,
+                        "root_head": head,
+                    }));
+                }
+            }
+        }
+        let manifest = read(&crate_path.join("data/p/manifest.json"))?;
+        Ok(json!({
+            "origin": "built-in",
+            "directory": manifest["library"],
+            "identity": manifest["identity"],
+        }))
+    }
+
     /// The thread variables of every child, explicit whatever the caller's
     /// environment holds.
     fn thread_environment(threads: usize) -> [(&'static str, String); 3] {
@@ -666,6 +758,8 @@ mod harness {
         outputs: BTreeMap<(String, String), String>,
         integrals: BTreeMap<String, usize>,
         work: PathBuf,
+        /// The p library the RustRed children must report ([`p_library`]).
+        p_library: Value,
     }
 
     /// Remove a directory of this harness, read-only copies included.
@@ -811,6 +905,9 @@ mod harness {
             }
             if backend == Backend::RustRed {
                 command.arg("--arithmetic").arg(arithmetic);
+                if let Some(root) = &self.options.external_data {
+                    command.arg("--external-data").arg(root);
+                }
             }
             if backend == Backend::Forcer {
                 command
@@ -872,6 +969,10 @@ mod harness {
                             *first == digest,
                             "{key:?} returned another result than the earlier measurements"
                         );
+                    }
+                    if key.backend == Backend::RustRed.name() {
+                        results::check_p_program(&report, &self.p_library)
+                            .with_context(|| format!("{key:?}"))?;
                     }
                     for (name, value) in report.as_object().expect("a child report is an object") {
                         measurement[name] = value.clone();
@@ -1250,6 +1351,11 @@ mod harness {
             .concat(),
         )?;
         let rustred = rustred_sha(crate_path)?;
+        let p_library = p_library(crate_path, options.external_data.as_deref())?;
+        let identity = p_library["identity"]
+            .as_str()
+            .ok_or_else(|| eyre::eyre!("the p library has no identity: {p_library}"))?
+            .to_owned();
         let dirty = !command_output(
             "git",
             &[&["-C", &root, "status", "--porcelain", "--"], &sources[..]].concat(),
@@ -1260,6 +1366,7 @@ mod harness {
             rustred_sha: &rustred,
             build_profile: &build_profile,
             source_dirty: dirty,
+            p_library: &identity,
         };
         results::check_build(source, BUILD_STAMP, options.child_program.is_some())?;
         let form = executable(&options.form)?;
@@ -1292,6 +1399,7 @@ mod harness {
         let protocol = json!({
             "gammaloop_sha": gammaloop_sha,
             "rustred_sha": rustred,
+            "p_library": p_library,
             "source_dirty": dirty,
             "build_profile": build_profile,
             "debug_assertions": cfg!(debug_assertions),
@@ -1347,6 +1455,20 @@ mod harness {
                 .filter(|(_, cells)| !cells.is_empty())
                 .collect::<BTreeMap<_, _>>()
         };
+        if options.backends.contains(&Backend::RustRed) {
+            let covered = protocol["p_library"]["directory"]
+                .as_str()
+                .and_then(|name| name.rsplit_once('-'))
+                .and_then(|(_, end)| end.parse::<usize>().ok())
+                .ok_or_else(|| eyre::eyre!("unexpected p library {}", protocol["p_library"]))?;
+            if let Some(&loops) = by_loops.keys().find(|&&loops| loops > covered) {
+                bail!(
+                    "RustRed at {loops} loops needs a library of that scope; {} covers up to {covered} \
+                    (pass --external-data, or --loops / --backends forcer)",
+                    protocol["p_library"]["directory"]
+                );
+            }
+        }
         Vakint::initialize_vakint_symbols();
         let mut integrals = BTreeMap::new();
         for cell in by_loops.values().flatten() {
@@ -1358,6 +1480,9 @@ mod harness {
         let outputs = results::outputs(&document, source);
         let run = format!("{started_utc}-{}", &binary_sha256[..12]);
         results::begin_run(&options.output, &run, &protocol, options.select_current)?;
+        if let Some(cited) = &options.cite {
+            results::cite_run(&options.output, cited)?;
+        }
         let output = options.output.canonicalize()?;
         let mut harness = Harness {
             options,
@@ -1369,6 +1494,7 @@ mod harness {
             outputs,
             integrals,
             work,
+            p_library: protocol["p_library"].clone(),
         };
         catch_stop_signals();
         let finished = harness.run(&by_loops)?;
