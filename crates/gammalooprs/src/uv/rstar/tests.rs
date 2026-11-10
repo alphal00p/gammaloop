@@ -354,3 +354,92 @@ fn two_loop_quadratic_scalar_matches_massive_r() -> Result<()> {
     assert!(!expected.is_zero());
     assert_same_counterterm(&actual, &expected)
 }
+
+#[test]
+fn embedded_massive_banana_counterterm_matches_standalone_polynomial() -> Result<()> {
+    test_initialise()?;
+    let model = load_generic_model("scalars");
+    // Mixed orientations reproduce the five-line vacuum banana. Its three-loop
+    // child has two boundary incidences of edge 4; its own nested children have
+    // several closing lines. Routing just one endpoint corrupts their p² terms.
+    let mut embedded: Graph = finalized_runtime_dot!(
+        digraph G {
+            graph [projector=0];
+            node [num=1];
+            edge [particle="scalar_1" num=1];
+            B -> A [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
+            B -> A [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
+            A -> B [id=2 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"];
+            A -> B [id=3 lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:3}"];
+            B -> A [id=4 lmb_id=3 source="{ufo_order:4}" sink="{ufo_order:4}"];
+        }, &model
+    )?;
+    let mut standalone: Graph = finalized_runtime_dot!(
+        digraph G {
+            graph [projector=0];
+            node [num=1];
+            edge [particle="scalar_1" num=1];
+            e [style=invis];
+            e -> A:0 [id=4 sink="{ufo_order:4}"];
+            B:1 -> e [id=5 source="{ufo_order:4}"];
+            A -> B [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
+            A -> B [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
+            A -> B [id=2 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"];
+            A -> B [id=3 lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:3}"];
+        }, &model
+    )?;
+    let mass = Atom::var(symbolica::symbol!("embedded_banana_mass"; Scalar));
+    for graph in [&mut embedded, &mut standalone] {
+        let edges = graph
+            .iter_edges()
+            .map(|(_, edge, _)| edge)
+            .collect::<Vec<_>>();
+        for edge in edges {
+            graph.underlying[edge].particle = graph[edge]
+                .particle
+                .clone()
+                .override_mass(Some(mass.clone()));
+        }
+    }
+    let mut settings = settings();
+    settings.generate_integrated = true;
+    settings.add_marker = false;
+    settings.vakint.evaluation_methods = vec!["rustred".into()];
+    let vakint = Vakint::new()?;
+    let plan = RStarPlan::new(&embedded, &model, EdgeIndex(0), &settings)?;
+    let child = plan
+        .counterterms
+        .iter()
+        .find(|call| {
+            call.argument.loops == 3
+                && embedded
+                    .iter_edges_of(&call.argument.support)
+                    .all(|(_, edge, _)| edge != EdgeIndex(4))
+        })
+        .expect("the four-line child is UV divergent");
+    let children = plan.evaluate_uv_children(&embedded, &model, &mass, &vakint, &settings)?;
+    let actual = canonical_tensor(&children[&child.argument.support])?;
+    let standalone_plan = RStarPlan::new(&standalone, &model, EdgeIndex(0), &settings)?;
+    let mut forest = standalone_plan.uv_forest(&standalone, &settings);
+    forest.integrate(&standalone, &model, &vakint, &settings)?;
+    let independent = forest
+        .counterterm_for_support(&standalone_plan.support)?
+        .replace(GS.m_uv_expansion)
+        .with(GS.m_uv_vacuum);
+    let momentum = function!(GS.emr_mom, 4, Minkowski {}.new_rep(GS.dim).to_symbolic([]));
+    let p2 = function!(SPENSO_TAG.dot, &momentum, &momentum);
+    let epsilon = Atom::var(GS.dim_epsilon);
+    let expected = (&mass.pow(2) * &p2 / Atom::num(2)
+        - mass.pow(4) / Atom::num(2)
+        - p2.pow(2) / Atom::num(36))
+        / &epsilon
+        + (-Atom::num(2) * mass.pow(2) * &p2 / Atom::num(3)
+            + Atom::num(10) * mass.pow(4) / Atom::num(3))
+            / epsilon.pow(2)
+        - Atom::num(2) * mass.pow(4) / epsilon.pow(3);
+    assert_same_counterterm(&independent, &expected)?;
+    assert_same_counterterm(&actual, &expected)?;
+    assert!(!actual.contains_symbol(GS.m_uv_vacuum));
+    assert!(!actual.contains_symbol(GS.m_uv_expansion));
+    Ok(())
+}
