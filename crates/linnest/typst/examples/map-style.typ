@@ -1,27 +1,11 @@
+#import "../src/curve.typ": mark
+
 #let massless = 0.5pt
 #let massive = 1pt
 #let edge-stroke = (paint: black, thickness: massless, cap: "round")
 
-#let fermion-mark = (
-  end: (
-    symbol: ">",
-    fill: black,
-    stroke: black + 0.2pt,
-    anchor: "center",
-    shorten-to: auto,
-  ),
-  scale: .5,
-)
-#let momentum-mark = (
-  end: (
-    symbol: "straight",
-    fill: black,
-    stroke: black + 0.4pt,
-    anchor: "center",
-    shorten-to: auto,
-  ),
-  scale: 0.50,
-)
+#let fermion-mark = mark.triangle(length: 0.10cm, width: 0.075cm)
+#let momentum-mark = mark.straight(length: 0.10cm, width: 0.075cm)
 
 #let fermion = (
   stroke: edge-stroke,
@@ -222,22 +206,18 @@
   node-radius: 0.08,
   node-line-width: auto,
   massive-line-width: auto,
-  fermion-arrow-line-width: auto,
   momentum-line-width: auto,
+  fermion-mark: fermion-mark,
+  momentum-mark: momentum-mark,
 ) = {
   // Preserve the original width ratios unless a component is explicitly overridden.
   if node-line-width == auto { node-line-width = line-width }
   if massive-line-width == auto { massive-line-width = 2 * line-width }
-  if fermion-arrow-line-width == auto {
-    fermion-arrow-line-width = 0.4 * line-width
-  }
   if momentum-line-width == auto { momentum-line-width = 0.8 * line-width }
   let stroke = edge-stroke + (thickness: line-width)
   let fermion = fermion
   fermion.stroke = stroke
-  fermion.mark.end.stroke = black + fermion-arrow-line-width
-  let momentum-mark = momentum-mark
-  momentum-mark.end.stroke = black + momentum-line-width
+  fermion.mark = fermion-mark
   let particle-styles = (:)
   for (name, style) in particles {
     style.stroke.thickness = if style == scalar { massive-line-width } else {

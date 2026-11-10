@@ -33,10 +33,10 @@ let
 
   docsTypst = typst015.withPackages (
     typstPackages: with typstPackages; [
-      # Linnest's marker batching uses the same reviewed CeTZ extension as
-      # the embedded renderer and Python wheels.
+      # Standalone drawing uses stock CeTZ; Kurvst owns marker geometry.
       (cetz_0_5_1.overrideAttrs (_: {
-        src = workspaceRoot + "/vendor/typst-packages/preview/cetz/0.5.1";
+        version = "0.5.2";
+        src = workspaceRoot + "/vendor/typst-packages/preview/cetz/0.5.2";
       }))
       mitex_0_2_6
       parsely_0_1_0

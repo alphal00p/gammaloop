@@ -3,8 +3,9 @@
 // Keep path constructors, geometry helpers, and emitters here. The implementation
 // lives in `impl.typ`.
 
-// Import each implementation directly so wrappers capture only the function
-// they use, rather than repeatedly hashing the complete implementation module.
+#import "mark.typ" as mark
+
+// Capture each implementation directly rather than hashing the full module.
 #import "impl.typ": (
   append as _impl-append,
   arc as _impl-arc,
@@ -24,13 +25,14 @@
   hobby-through as _impl-hobby-through,
   intersections as _impl-intersections,
   layer as _impl-layer,
-  layers as _impl-layers,
   layer-defaults as _impl-layer-defaults,
+  layers as _impl-layers,
   length as _impl-length,
   line as _impl-line,
   line-segment as _impl-line-segment,
   line-to as _impl-line-to,
   move-to as _impl-move-to,
+  outline as _impl-outline,
   outset-point as _impl-outset-point,
   parallel as _impl-parallel,
   path as _impl-path,
@@ -68,7 +70,8 @@
   parts,
   /// Number of equal arc-length regions. -> int
   regions: 4,
-  /// Coordinate scale applied before the maximum sampling step. -> int | float
+  /// Coordinate-scale magnitude used for sampling density; points stay unscaled.
+  /// -> int | float
   unit: 1,
   /// Maximum control-polygon step after scaling. -> int | float
   step: 4,
@@ -126,14 +129,17 @@
   )
 }
 
-/// Return `from` moved toward `toward` by `distance`.
+/// Move `from` along the line toward `toward`, without passing the target.
+///
+/// Positive distances are capped at the point separation. Negative
+/// distances move away without a cap. Coincident points return `from`.
 /// -> array
 #let outset-point(
   /// Point to move. -> array
   from,
   /// Target point that defines the direction. -> array
   toward,
-  /// Distance to move from `from` toward `toward`. -> int | float
+  /// Signed requested movement from `from` toward `toward`. -> int | float
   distance: 0,
 ) = _impl-outset-point(from, toward, distance: distance)
 
@@ -171,12 +177,11 @@
   end,
 ) = _impl-cubic-to(control-start, control-end, end)
 
-/// Build a `close` path element.
+/// Close the current subpath with a straight segment back to its start.
+///
+/// For curved closure, add explicit curve segments before calling `close`.
 /// -> dictionary
-#let close(
-  /// Native Typst curve close mode. -> string
-  mode: "straight",
-) = _impl-close(mode: mode)
+#let close() = _impl-close()
 
 /// Build a path dictionary from an existing element array.
 /// -> dictionary
@@ -331,7 +336,11 @@
   length: none,
   /// Relative target length as a fraction of `base-length`. -> none | int | float
   ratio: none,
-  /// Resolution strategy for fixed and relative targets. -> string | function
+  /// `"min"`/`"shorter"`, `"max"`/`"longer"`, `"length"`/`"fixed"`,
+  /// `"ratio"`/`"relative"`, or `"none"`/`"full"`. A callback receives one
+  /// dictionary with `base-length`, `length`, and `ratio`; the last two are
+  /// positive absolute lengths or `none`. Unknown strings are rejected.
+  /// -> string | function
   method: "min",
 ) = {
   _impl-resolve-length(
@@ -442,12 +451,12 @@
   /// lateral offset is nonzero at its endpoint phase. This is not an angle.
   /// Ignored for unanchored ends and patterns without endpoint ramping, including fitted coils. -> int | float
   endpoint-slope: 0,
-  /// Carrier arc distances at which to split the finished pattern into parts.
-  /// Sorted and clamped to the carrier length; repeated cuts keep empty parts.
-  /// The full path is unchanged. -> array
-  split-at: (),
   /// Geometry approximation accuracy passed to the Rust geometry engine. -> float
   accuracy: 0.001,
+  /// Arc distances along `path` at which to cut the result into `parts`, one
+  /// patterned path split into independently stylable pieces. Cuts are sorted and
+  /// clamped; repeated and endpoint cuts retain empty parts. -> array
+  split-at: (),
 ) = _impl-pattern(
   path,
   pattern: pattern,
@@ -459,8 +468,8 @@
   anchor-start: anchor-start,
   anchor-end: anchor-end,
   endpoint-slope: endpoint-slope,
-  split-at: split-at,
   accuracy: accuracy,
+  split-at: split-at,
 )
 
 /// Generate and draw a patterned path through CeTZ.
@@ -475,7 +484,7 @@
   style: (:),
   /// Geometry options accepted by pattern. -> arguments
   ..options,
-) = _impl-pattern-to-cetz(path, unit: unit, style: style, ..options.named())
+) = _impl-pattern-to-cetz(path, unit: unit, style: style, ..options)
 
 /// Generate a parallel path for a path.
 /// -> dictionary
@@ -490,8 +499,6 @@
   end-outset: 0,
   /// Geometry approximation accuracy passed to the Rust geometry engine. -> float
   accuracy: 0.001,
-  /// Let Kurbo simplify/optimize the fitted path. -> bool
-  optimize: true,
 ) = {
   _impl-parallel(
     path,
@@ -499,7 +506,6 @@
     start-outset: start-outset,
     end-outset: end-outset,
     accuracy: accuracy,
-    optimize: optimize,
   )
 }
 
@@ -534,8 +540,7 @@
 )
 
 /// Build a derived visible path layer.
-/// Returns drawable geometry and `offset`, the resolved signed offset before
-/// trimming. Reuse that value to apply the same side choice to path fragments.
+/// Returns drawable geometry and `offset`, the resolved signed offset before trimming.
 /// -> dictionary
 #let layer(
   /// Base Kurvst path dictionary. -> dictionary
@@ -558,8 +563,6 @@
   side-point: none,
   /// Geometry approximation accuracy passed to the Rust geometry engine. -> float
   accuracy: 0.001,
-  /// Let Kurbo simplify/optimize fitted parallel paths. -> bool
-  optimize: true,
 ) = _impl-layer(
   path,
   offset: offset,
@@ -571,12 +574,12 @@
   end-outset: end-outset,
   side-point: side-point,
   accuracy: accuracy,
-  optimize: optimize,
 )
 
 /// Build several shifted layers with one carrier preparation.
 /// Each result contains the normal layer `path` dictionary and its drawable
-/// cubic `segments`. Length resolution and offsetting match @layer.
+/// cubic `segments`. Length resolution and offsetting match @layer, including
+/// resolver validation for empty paths and empty batches.
 /// `format: "cbor"` returns encoded native layers and footprint paths with
 /// count, nonzero, supported, all-single and shared offset metadata. Native
 /// layer paths omit the shared offset field. `unit` affects footprint geometry
@@ -591,9 +594,9 @@
   offset: 0,
   /// Fixed target visible length. -> none | int | float
   length: none,
-  /// Relative target visible length. -> none | int | float
+  /// Relative target visible length as a fraction of the full offset path length. -> none | int | float
   ratio: none,
-  /// Resolution strategy for fixed and relative targets. -> string | function
+  /// Resolution policy accepted by resolve-length, or its dictionary callback. -> string | function
   resolve-length: "min",
   /// Arc length removed from the start. -> int | float
   start-outset: 0,
@@ -603,8 +606,6 @@
   side-point: none,
   /// Geometry approximation accuracy. -> float
   accuracy: 0.001,
-  /// Optimize fitted parallel paths. -> bool
-  optimize: true,
   /// Return decoded layers or an opaque geometry packet. -> string
   format: "array",
   /// Numeric scale for multi-segment footprint paths. -> int | float
@@ -613,7 +614,7 @@
   path, shifts, offset: offset, length: length, ratio: ratio,
   resolve-length: resolve-length, start-outset: start-outset,
   end-outset: end-outset, side-point: side-point, accuracy: accuracy,
-  optimize: optimize, format: format, unit: unit,
+  format: format, unit: unit,
 )
 
 /// Emit a Kurvst path as native Typst `curve` content.

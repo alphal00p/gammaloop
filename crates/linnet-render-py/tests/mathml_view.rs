@@ -77,6 +77,10 @@ fn fixture_scene(marker: &str) -> Scene {
                 flow: Some(index != 2),
                 momentum: false,
                 momentum_offset: EdgeDrawing::DEFAULT_MOMENTUM_OFFSET,
+                flow_arrow: EdgeDrawing::default_flow_arrow(),
+                momentum_arrow: EdgeDrawing::default_momentum_arrow(),
+                flow_arrow_paints: Vec::new(),
+                momentum_arrow_paints: Vec::new(),
                 label: Some(if index == 0 { 4 } else { 3 }),
                 details: [
                     ("fixture", marker.to_owned()),

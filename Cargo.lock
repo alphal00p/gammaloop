@@ -902,10 +902,12 @@ name = "clinnet"
 version = "0.1.8"
 dependencies = [
  "blake3",
+ "ciborium",
  "clap",
  "eyre",
  "include_dir",
  "indicatif",
+ "kurvst",
  "pathdiff",
  "rayon",
  "serde",
@@ -3795,6 +3797,7 @@ version = "0.1.0"
 dependencies = [
  "krilla",
  "krilla-svg",
+ "kurvst",
  "linnest",
  "linnet",
  "pyo3",

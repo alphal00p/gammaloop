@@ -1390,6 +1390,21 @@ title = "Design proposals"
 summary = "Possible changes that are deliberately kept separate from the implemented architecture."
 
 [[section.note]]
+id = "kurvst-arrowhead-engine"
+title = "Kurvst Arrowhead Engine"
+summary = "Shared native/Wasm marks and stock CeTZ 0.5.2; refreshed validation and performance acceptance remain explicit."
+source = "docs/architecture/kurvst-arrowhead-engine.typ"
+kind = "Accepted design plan"
+status = "WIP port · performance and image acceptance pending"
+lifecycle = "proposal"
+owner = "unassigned"
+reviewed_at = "2026-10-04"
+review_ref = "983da1d9310bf885fcebe5ba4cb8b47166f82fa0"
+products = ["linnet", "gammaloop"]
+topics = ["drawing", "geometry", "arrowheads", "performance"]
+review_triggers = ["crates/kurvst/**", "crates/linnest/**", "crates/linnet-render-py/**", "docs/architecture/kurvst-arrowhead-engine.typ"]
+
+[[section.note]]
 id = "gammaloop-roadmap"
 title = "GammaLoop architecture roadmap"
 summary = "Candidate service boundaries, cache sessions, pipeline unification, error handling, orchestration, and observability improvements."

@@ -68,6 +68,14 @@ fn staged(files: &[(&str, &str)]) -> (TempDir, TypstRenderer) {
     for (name, content) in files {
         let path = base.path().join(TEMPLATES).join(name);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let content = if *name == "map-style.typ" {
+            content.replace(
+                "\"../src/curve.typ\"",
+                "\"crates/linnest/typst/src/curve.typ\"",
+            )
+        } else {
+            (*content).to_owned()
+        };
         fs::write(path, content).unwrap();
     }
     (base, renderer)
@@ -230,6 +238,7 @@ fn stroke_spans(svg: &str, color: &str) -> Vec<(f64, f64)> {
     )
 }
 
+#[track_caller]
 fn assert_close(actual: f64, expected: f64, tolerance: f64) {
     assert!(
         (actual - expected).abs() <= tolerance,
@@ -414,12 +423,19 @@ fn public_linnest_arrow_shafts_and_crossing_gaps() {
     let shaft_span = shaft[0];
     let shaft_reference_span = shaft_reference[0];
     assert_close(shaft_span.0 - shaft_reference_span.0, 10.0, 1e-3);
-    assert_close(shaft_span.1, own_translation(arrow_head[0].1).0, 1e-3);
+    // A 9pt stealth with 40% inset stops at the notch. SVG's first
+    // polygon vertex is not the shared engine's shaft contact.
+    assert_close(
+        shaft_span.1,
+        shaft_reference_span.1 + 10.0 - 9.0 * (1.0 - 0.4),
+        1e-3,
+    );
 
     let crossing = stroke_spans(svg, "#dc2626");
     assert_eq!(crossing.len(), 2);
     let crossing_gap = crossing[1].0 - crossing[0].1;
-    let crossing_span = crossing[1].1 - crossing[0].0;
+    // The head shortens the final fragment, independently of the crossing gap.
+    let crossing_span = 6.0 * (shaft_span.0 - shaft_reference_span.0);
     assert_close(crossing_gap / crossing_span, 1.0 / 6.0, 5e-4);
     let gap_center = (crossing[0].1 + crossing[1].0) / 2.0;
     assert_close(
@@ -925,17 +941,11 @@ fn public_configurable_map_style_behavior_is_observable() {
     let output = base.path().join("map-style-case.svg");
     let mut default_svg = None;
     for (case, unit, radius, node_width, widths) in [
-        ("defaults", 13.5, 0.08, "0.5", ["0.2", "0.4", "0.5", "1"]),
-        ("reference", 13.5, 0.08, "0.5", ["0.2", "0.4", "0.5", "1"]),
-        ("scaled", 20.0, 0.3, "0.5", ["0.2", "0.4", "0.5", "1"]),
-        ("derived", 10.0, 0.3, "1.25", ["0.5", "1", "1.25", "2.5"]),
-        (
-            "overrides",
-            10.0,
-            0.3,
-            "1.75",
-            ["0.625", "0.875", "1.25", "3"],
-        ),
+        ("defaults", 13.5, 0.08, "0.5", ["0.4", "0.5", "1"]),
+        ("reference", 13.5, 0.08, "0.5", ["0.4", "0.5", "1"]),
+        ("scaled", 20.0, 0.3, "0.5", ["0.4", "0.5", "1"]),
+        ("derived", 10.0, 0.3, "1.25", ["1", "1.25", "2.5"]),
+        ("overrides", 10.0, 0.3, "1.75", ["0.875", "1.25", "3"]),
     ] {
         fs::write(
             &fixture,
@@ -1006,7 +1016,8 @@ fn public_weighted_cut_rejects_invalid_selections_and_stale_topology() {
 #set page(width: auto, height: auto)
 #import "crates/linnest/typst/src/lib.typ": graph, subgraph, layout, draw
 #import graph: node, edge, source, sink
-#import "map-style.typ": momentum
+#import "map-style.typ": momentum, graph-style
+#import "crates/linnest/typst/src/curve.typ" as curve
 #let g = graph.build({
   node(<a>); node(<b>); node(<c>)
   edge(<e>, source(<a>), sink(<b>))
@@ -1027,6 +1038,15 @@ fn public_weighted_cut_rejects_invalid_selections_and_stale_topology() {
     renderer.compile_template(&fixture, &output, &[]).unwrap();
 
     let mut cases = vec![
+        ("removed-fermion-arrow-line-width".to_owned(),
+         "#let _ = graph-style(fermion-arrow-line-width: 0.625pt)".to_owned(),
+         "unexpected argument"),
+        ("legacy-cetz-mark".to_owned(),
+         "#let _ = curve.mark.prepare((symbol: \">\", scale: 0.5))".to_owned(),
+         "replace CeTZ mark dictionaries"),
+        ("legacy-head-thickness".to_owned(),
+         "#let _ = curve.mark.triangle(stroke: black + 0.2pt)".to_owned(),
+         "set line thickness on the line"),
         (
             "overlap".to_owned(),
             "#let _ = graph.cut(g, left: left, right: left)".to_owned(),
@@ -1318,4 +1338,80 @@ fn public_native_curve_splits_layers_and_route_points_behave() {
 #include "route-points-behavior.typ"
 "#;
     render(&base, &renderer, "native-geometry.typ", source);
+}
+
+#[test]
+fn public_kurvst_marks_and_contracts_behave() {
+    let (base, renderer) = staged(&[
+        (
+            "crates/kurvst/typst/tests/mark-contract.typ",
+            include_str!("../../kurvst/typst/tests/mark-contract.typ"),
+        ),
+        (
+            "crates/kurvst/typst/tests/mark-geometry.typ",
+            include_str!("../../kurvst/typst/tests/mark-geometry.typ"),
+        ),
+        (
+            "crates/kurvst/typst/tests/path-packets.typ",
+            include_str!("../../kurvst/typst/tests/path-packets.typ"),
+        ),
+        (
+            "crates/linnest/typst/tests/identity-targets.typ",
+            include_str!("../../linnest/typst/tests/identity-targets.typ"),
+        ),
+        (
+            "crates/linnest/typst/tests/collision-lines.typ",
+            include_str!("../../linnest/typst/tests/collision-lines.typ"),
+        ),
+        (
+            "kurvst-public-contract.typ",
+            include_str!("resources/kurvst-public-contract.typ"),
+        ),
+        (
+            "kurvst-mark-drawing-behavior.typ",
+            include_str!("resources/kurvst-mark-drawing-behavior.typ"),
+        ),
+    ]);
+    render(
+        &base,
+        &renderer,
+        "mark-fixture.typ",
+        "#include \"crates/kurvst/typst/tests/mark-contract.typ\"",
+    );
+    render(
+        &base,
+        &renderer,
+        "mark-fixture.typ",
+        "#include \"crates/kurvst/typst/tests/mark-geometry.typ\"",
+    );
+    render(
+        &base,
+        &renderer,
+        "mark-fixture.typ",
+        "#include \"crates/kurvst/typst/tests/path-packets.typ\"",
+    );
+    render(
+        &base,
+        &renderer,
+        "mark-fixture.typ",
+        "#include \"crates/linnest/typst/tests/identity-targets.typ\"",
+    );
+    render(
+        &base,
+        &renderer,
+        "mark-fixture.typ",
+        "#include \"crates/linnest/typst/tests/collision-lines.typ\"",
+    );
+    render(
+        &base,
+        &renderer,
+        "mark-fixture.typ",
+        "#include \"kurvst-public-contract.typ\"",
+    );
+    render(
+        &base,
+        &renderer,
+        "mark-fixture.typ",
+        "#include \"kurvst-mark-drawing-behavior.typ\"",
+    );
 }

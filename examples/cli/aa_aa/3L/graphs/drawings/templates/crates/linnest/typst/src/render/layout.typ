@@ -34,10 +34,18 @@
   graph.map(
     g,
     graph: if graph-data == none { none } else { _ => graph-data },
-    node: node => _indexed(nodes, node.node),
-    edge: edge => _indexed(edges, edge.edge),
-    source: half-edge => _indexed(hedges, half-edge.hedge),
-    sink: half-edge => _indexed(hedges, half-edge.hedge),
+    node: if type(nodes) in (array, dictionary) and nodes.len() > 0 {
+      node => _indexed(nodes, node.node)
+    } else { none },
+    edge: if type(edges) in (array, dictionary) and edges.len() > 0 {
+      edge => _indexed(edges, edge.edge)
+    } else { none },
+    source: if type(hedges) in (array, dictionary) and hedges.len() > 0 {
+      half-edge => _indexed(hedges, half-edge.hedge)
+    } else { none },
+    sink: if type(hedges) in (array, dictionary) and hedges.len() > 0 {
+      half-edge => _indexed(hedges, half-edge.hedge)
+    } else { none },
   )
 }
 
@@ -101,65 +109,75 @@
 // Convert first-class per-element layout constraints to the statement names
 // consumed by Linnest's layered layout. Size bounds clamp graph.style's final
 // measured dimensions, so explicit labels and node styles still affect layout.
-#let _apply-element-layout-constraints(g) = graph.map(
-  g,
-  node: node => {
-    let data = _record-data(node)
-    let statements = (:)
-    if data.keys().contains("rank") and data.at("rank") != none {
-      statements.insert("layout-rank", _constraint-number(
-        data.at("rank"),
-        "NodeDrawing.rank",
-        integer: true,
-      ))
-    }
-    let minimum = _constraint-number(
-      data.at("minimum-size", default: none),
-      "NodeDrawing.minimum_size",
-    )
-    let maximum = _constraint-number(
-      data.at("maximum-size", default: none),
-      "NodeDrawing.maximum_size",
-    )
-    if minimum != none and maximum != none and minimum > maximum {
-      panic("NodeDrawing.minimum_size must not exceed maximum_size")
-    }
-    if minimum != none or maximum != none {
-      for key in ("layout-width", "layout-height") {
-        let value = _statement-number(node, key)
-        if minimum != none {
-          value = calc.max(value, minimum)
-        }
-        if maximum != none {
-          value = calc.min(value, maximum)
-        }
-        statements.insert(key, value)
+#let _apply-element-layout-constraints(g) = {
+  // These options live in native data; avoid hydrating structural records when
+  // no element asks for a layout adjustment. Explicit none remains a no-op.
+  let data = graph._impl._native-data(g)
+  let nodes = data.nodes.any(value => type(value) == dictionary and (
+    "rank", "minimum-size", "maximum-size",
+  ).any(key => value.at(key, default: none) != none))
+  let edges = data.edges.any(value => type(value) == dictionary
+    and value.at("minimum-length", default: none) != none)
+  graph.map(
+    g,
+    node: if not nodes { none } else { node => {
+      let data = _record-data(node)
+      let statements = (:)
+      if data.keys().contains("rank") and data.at("rank") != none {
+        statements.insert("layout-rank", _constraint-number(
+          data.at("rank"),
+          "NodeDrawing.rank",
+          integer: true,
+        ))
       }
-    }
-    if statements.len() == 0 { none } else { (statements: statements) }
-  },
-  edge: edge => {
-    let data = _record-data(edge)
-    if (
-      not data.keys().contains("minimum-length")
-        or data.at("minimum-length") == none
-    ) {
-      none
-    } else {
-      (
-        statements: (
-          minlen: _constraint-number(
-            data.at("minimum-length"),
-            "EdgeDrawing.minimum_length",
-            integer: true,
-          ),
-        ),
+      let minimum = _constraint-number(
+        data.at("minimum-size", default: none),
+        "NodeDrawing.minimum_size",
       )
-    }
-  },
-  source: none,
-  sink: none,
-)
+      let maximum = _constraint-number(
+        data.at("maximum-size", default: none),
+        "NodeDrawing.maximum_size",
+      )
+      if minimum != none and maximum != none and minimum > maximum {
+        panic("NodeDrawing.minimum_size must not exceed maximum_size")
+      }
+      if minimum != none or maximum != none {
+        for key in ("layout-width", "layout-height") {
+          let value = _statement-number(node, key)
+          if minimum != none {
+            value = calc.max(value, minimum)
+          }
+          if maximum != none {
+            value = calc.min(value, maximum)
+          }
+          statements.insert(key, value)
+        }
+      }
+      if statements.len() == 0 { none } else { (statements: statements) }
+    } },
+    edge: if not edges { none } else { edge => {
+      let data = _record-data(edge)
+      if (
+        not data.keys().contains("minimum-length")
+          or data.at("minimum-length") == none
+      ) {
+        none
+      } else {
+        (
+          statements: (
+            minlen: _constraint-number(
+              data.at("minimum-length"),
+              "EdgeDrawing.minimum_length",
+              integer: true,
+            ),
+          ),
+        )
+      }
+    } },
+    source: none,
+    sink: none,
+  )
+}
 
 #let _edge-rank-same(g) = {
   let groups = ()
@@ -225,9 +243,13 @@
 }
 
 // Label relaxation selects the side first. A per-edge offset then moves the
-// result farther along that radial direction; coincident labels use the left
-// normal of the oriented edge as a deterministic fallback.
+// result farther along that radial direction; fixed-gap labels adjust their
+// curve clearance instead. Coincident labels use the oriented edge's left normal.
 #let _apply-label-offsets(g) = {
+  if not graph._impl._native-data(g).edges.any(value => type(value) == dictionary
+    and value.at("label-offset", default: none) != none) {
+    return g
+  }
   let nodes = graph.nodes(g)
   graph.map(
     g,
@@ -244,7 +266,13 @@
         if type(offset) not in (int, float) {
           panic("EdgeDrawing.label_offset must be a number")
         }
-        (label-pos: _edge-label-offset-point(edge, nodes, offset))
+        let gap = _statement-number(edge, "layout-label-gap", default: none)
+        (
+          label-pos: _edge-label-offset-point(edge, nodes, offset),
+          statements: if gap == none { (:) } else {
+            (layout-label-gap: calc.max(0, gap + offset))
+          },
+        )
       }
     },
     source: none,
@@ -442,10 +470,16 @@
     "config.layout-defaults",
   )
   for pass in passes {
-    g = apply-layout(g, .._layout-pass(
+    let pass = _layout-pass(
       g,
       layout-defaults + _dictionary(pass, "config.layouts entry"),
-    ))
+    )
+    let algorithm = _dictionary(
+      pass.at("solver", default: (:)),
+      "layout solver",
+    ).at("algorithm", default: pass.at("layout-algo", default: "impred"))
+    pass.insert("layout-algo", algorithm)
+    g = apply-layout(g, ..pass)
   }
   g = _apply-label-offsets(g)
   draw(g, .._draw-options(config, g))

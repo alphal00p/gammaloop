@@ -261,7 +261,7 @@ def _(
                 return None
             return lp.HalfEdgeDrawing(
                 style={
-                    "mark": lp.Mark.straight(),
+                    "mark": lp.Mark("straight", length="0.16cm", width="0.12cm"),
                     "mark-position": lp.MarkPosition.CenterIfDangling,
                     "mark-orientation": lp.MarkOrientation.Edge,
                 }

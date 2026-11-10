@@ -563,6 +563,11 @@
       "crates/clinnet/tests/resources"
       "crates/kurvst/typst/tests/pattern-split.typ"
       "crates/kurvst/typst/tests/layer-offset.typ"
+      "crates/kurvst/typst/tests/mark-contract.typ"
+      "crates/kurvst/typst/tests/mark-geometry.typ"
+      "crates/kurvst/typst/tests/path-packets.typ"
+      "crates/linnest/typst/tests/identity-targets.typ"
+      "crates/linnest/typst/tests/collision-lines.typ"
       "crates/linnest/typst/examples/map-style.typ"
       "tests/resources/graphs/epemttbar.dot"
     ];
