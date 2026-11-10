@@ -22,7 +22,7 @@
 //!   A line of power `q` is a chain of `q` lines through two-point vertices
 //!   with unit numerators.
 
-use std::time::Instant;
+use std::{collections::BTreeMap, time::Instant};
 
 use eyre::{Result, WrapErr, ensure, eyre};
 use idenso::{
@@ -47,7 +47,10 @@ use crate::{
     utils::{GS, W_},
     uv::{
         ApproximationType, RenormalizationPrescriptionSettings, UVgenerationSettings,
-        UltravioletGraph, approx::integrated::to_vakint_integrand, uv_graph::UVE,
+        UltravioletGraph,
+        approx::{CutStructure, integrated::to_vakint_integrand},
+        hedge_poset::Wood,
+        uv_graph::UVE,
     },
 };
 
@@ -106,6 +109,7 @@ impl RStarPlan {
         vakint: &Vakint,
         uv_settings: &UVgenerationSettings,
         extra_terms: i64,
+        forest_extra_terms: i64,
     ) -> Result<MassiveVacuumSubdivergences> {
         ensure!(
             graph.external_filter::<SuBitGraph>().is_empty(),
@@ -113,11 +117,25 @@ impl RStarPlan {
         );
         let uv_settings = massive_vacuum_settings(uv_settings);
         let started = Instant::now();
+        let _ = mass;
         let children = if self.counterterms.is_empty() {
             Default::default()
         } else {
-            self.evaluate_uv_children(graph, model, mass, vakint, &uv_settings)
-                .wrap_err("while computing the proper UV counterterms with massive R")?
+            let supports = self
+                .counterterms
+                .iter()
+                .map(|call| call.argument.support.clone())
+                .collect::<Vec<_>>();
+            self.massive_forest_counterterms(
+                graph,
+                model,
+                vakint,
+                &uv_settings,
+                false,
+                forest_extra_terms,
+                &supports,
+            )
+            .wrap_err("while computing the proper UV counterterms with massive R")?
         };
         let children_ms = started.elapsed().as_millis();
         let base = uv_settings.vakint.true_settings();
@@ -194,22 +212,80 @@ impl RStarPlan {
         model: &Model,
         vakint: &Vakint,
         uv_settings: &UVgenerationSettings,
+        forest_extra_terms: i64,
     ) -> Result<Atom> {
         if graph.compute_dod(&self.support) < 0 {
             return Ok(Atom::Zero);
         }
+        let support = self.support.clone();
+        let mut values = self.massive_forest_counterterms(
+            graph,
+            model,
+            vakint,
+            &massive_vacuum_settings(uv_settings),
+            true,
+            forest_extra_terms,
+            std::slice::from_ref(&support),
+        )?;
+        Ok(values.remove(&support).unwrap_or_default().expand())
+    }
+
+    /// The ordinary massive R counterterms (Wood forest, MS, all-mass Taylor
+    /// kernel around `m_uv`) of the requested supports, with the lines' own
+    /// (physical) masses. Unlike `evaluate_uv_children`, the forest's Vakint
+    /// depth is `max_loops + forest_extra_terms` (the existing forest uses
+    /// `max_loops + 1`, needed for MUV finite parts only): every node then
+    /// asks its `l`-loop tadpoles through `eps^(max_loops - l - 1 + extra)`,
+    /// which is exactly what the outermost pole projection needs.
+    #[allow(clippy::too_many_arguments)]
+    pub fn massive_forest_counterterms(
+        &self,
+        graph: &Graph,
+        model: &Model,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+        include_root: bool,
+        forest_extra_terms: i64,
+        supports: &[SuBitGraph],
+    ) -> Result<BTreeMap<SuBitGraph, Atom>> {
         let settings = UVgenerationSettings {
             generate_integrated: true,
             add_marker: false,
             ..massive_vacuum_settings(uv_settings)
         };
-        let mut forest = self.uv_forest(graph, &settings);
+        let spinneys = self
+            .uv_catalogue()
+            .iter()
+            .filter(|spinney| include_root || spinney.filter() != &self.support)
+            .cloned()
+            .collect::<Vec<_>>();
+        let max_loops = spinneys
+            .iter()
+            .map(|spinney| graph.n_loops(spinney.filter()))
+            .max()
+            .unwrap_or(0);
+        let mut wood = Wood::from_spinneys(
+            spinneys,
+            graph,
+            CutStructure::empty(graph),
+            &settings.vakint,
+        );
+        wood.vakint_settings.number_of_terms_in_epsilon_expansion =
+            i64::try_from(max_loops)? + forest_extra_terms;
+        let mut forest = wood.unfold();
         forest.integrate(graph, model, vakint, &settings)?;
-        Ok(forest
-            .counterterm_for_support(&self.support)?
-            .replace(GS.m_uv_expansion)
-            .with(GS.m_uv_vacuum)
-            .expand())
+        supports
+            .iter()
+            .map(|support| {
+                Ok((
+                    support.clone(),
+                    forest
+                        .counterterm_for_support(support)?
+                        .replace(GS.m_uv_expansion)
+                        .with(GS.m_uv_vacuum),
+                ))
+            })
+            .collect()
     }
 }
 
