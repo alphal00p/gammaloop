@@ -100,7 +100,7 @@
           "description": "Smallest non-zero |t| for logarithmic spacing",
           "type": "number",
           "format": "double",
-          "default": 1e-06
+          "default": 1e-6
         },
         "momentum_space": {
           "description": "Interpret `--point` and every axis as spatial loop-momentum triplets",
@@ -330,14 +330,14 @@
         },
         "representation": {
           "description": "Three-dimensional representation to build.",
-          "$ref": "#/$defs/CliRepresentationMode",
+          "$ref": "#/$defs/RepresentationMode",
           "default": "cff"
         },
         "selection": {
           "$ref": "#/$defs/GraphSelectorArgs"
         },
         "show_details_for_orientation": {
-          "description": "Show detailed terms for the selected orientation.",
+          "description": "Show a residue/orientation by row id or label, optionally suffixed with `|N<map>|<variant>`.",
           "type": [
             "string",
             "null"
@@ -1169,7 +1169,7 @@
           "const": "Processes"
         },
         {
-          "description": "Show generated integrands, graph groups, resources, and selected detail tables.",
+          "description": "Show stored representations, graph groups, generation timings, and selected detail tables.",
           "type": "object",
           "properties": {
             "Integrands": {
@@ -1882,7 +1882,7 @@
           "$ref": "#/$defs/EvaluatorMethod"
         },
         "generate_events": {
-          "description": "Return generated events in addition to accumulating integration statistics.",
+          "description": "Request diagnostic events even without configured observables.\nObservable evaluation always retains the complete per-sample contribution.",
           "type": "boolean"
         },
         "integral_unit": {
