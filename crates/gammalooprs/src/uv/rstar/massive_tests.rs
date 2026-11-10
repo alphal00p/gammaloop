@@ -132,6 +132,10 @@ fn massive_vacuum_masters_reproduce_their_poles() -> Result<()> {
         .ok()
         .map(|v| v.parse().unwrap())
         .unwrap_or(0);
+    let forest_extra: i64 = std::env::var("RSTAR_MASSIVE_FOREST_EXTRA")
+        .ok()
+        .map(|v| v.parse().unwrap())
+        .unwrap_or(0);
     let out = std::env::var_os("RSTAR_MASSIVE_OUT").map(PathBuf::from);
     let selected = selection();
     let max_loops = selected.iter().map(|(l, _)| *l).max().unwrap_or(2).max(3);
@@ -150,6 +154,7 @@ fn massive_vacuum_masters_reproduce_their_poles() -> Result<()> {
             "omega": omega,
             "edges": topology.edges,
             "extra_terms": extra,
+            "forest_extra_terms": forest_extra,
         });
         let outcome = (|| -> Result<bool> {
             let t = Instant::now();
@@ -170,7 +175,7 @@ fn massive_vacuum_masters_reproduce_their_poles() -> Result<()> {
                 .count()
                 .into();
             let sub = plan.massive_vacuum_subdivergence_poles(
-                &graph, &model, &mass, &vakint, &settings, extra,
+                &graph, &model, &mass, &vakint, &settings, extra, forest_extra,
             )?;
             record["children_ms"] = (sub.children_ms as u64).into();
             record["subdivergences"] = sub.poles.to_string().into();
@@ -197,16 +202,28 @@ fn massive_vacuum_masters_reproduce_their_poles() -> Result<()> {
             let mut deltas = Vec::new();
             if routes.split(',').any(|r| r.trim() == "i") {
                 let t = Instant::now();
-                let delta = plan.massive_vacuum_counterterm(&graph, &model, &vakint, &settings)?;
-                record["delta_i_ms"] = (t.elapsed().as_millis() as u64).into();
-                record["delta_i"] = delta.to_string().into();
-                record["m_uv_in_delta_i"] = delta.contains_symbol(GS.m_uv_vacuum).into();
-                deltas.push(("i", delta));
+                match plan.massive_vacuum_counterterm(&graph, &model, &vakint, &settings, forest_extra) {
+                    Ok(delta) => {
+                        record["delta_i_ms"] = (t.elapsed().as_millis() as u64).into();
+                        record["delta_i"] = delta.to_string().into();
+                        record["m_uv_in_delta_i"] = delta.contains_symbol(GS.m_uv_vacuum).into();
+                        deltas.push(("i", delta));
+                    }
+                    Err(error) => {
+                        record["error_i"] = format!("{error:?}").into();
+                        ok = false;
+                    }
+                }
             }
             if routes.split(',').any(|r| r.trim() == "ii") {
                 let t = Instant::now();
-                let (delta, log) =
-                    topology.overall_counterterm_rstar(&model, &mass, &vakint, &settings)?;
+                let (delta, log) = match topology.overall_counterterm_rstar(&model, &mass, &vakint, &settings) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        record["error_ii"] = format!("{error:?}").into();
+                        return Ok(false);
+                    }
+                };
                 record["delta_ii_ms"] = (t.elapsed().as_millis() as u64).into();
                 record["delta_ii"] = delta.to_string().into();
                 record["delta_ii_terms"] = log
