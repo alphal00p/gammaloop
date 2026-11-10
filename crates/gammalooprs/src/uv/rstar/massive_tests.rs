@@ -20,6 +20,7 @@ use symbolica::{
 use vakint::Vakint;
 
 use crate::{
+    graph::parse::IntoFinalizedRuntimeGraph,
     initialisation::test_initialise,
     utils::{GS, load_generic_model},
 };
@@ -176,6 +177,7 @@ fn massive_vacuum_masters_reproduce_their_poles() -> Result<()> {
                 .into();
             let sub = plan.massive_vacuum_subdivergence_poles(
                 &graph, &model, &mass, &vakint, &settings, extra, forest_extra,
+                std::env::var("RSTAR_MASSIVE_CHILDREN").map(|v| v == "standalone").unwrap_or(true),
             )?;
             record["children_ms"] = (sub.children_ms as u64).into();
             record["subdivergences"] = sub.poles.to_string().into();
@@ -196,6 +198,18 @@ fn massive_vacuum_masters_reproduce_their_poles() -> Result<()> {
                 })
                 .collect::<Vec<_>>()
                 .into();
+            record["children"] = sub
+                .children
+                .iter()
+                .map(|(label, loops, value)| {
+                    serde_json::json!({"label": label, "loops": loops, "m_uv": value.contains_symbol(GS.m_uv_vacuum), "delta": value.expand().to_string()})
+                })
+                .collect::<Vec<_>>()
+                .into();
+            let implied = (&sub.poles - &direct).expand();
+            record["delta_implied"] = implied.to_string().into();
+            record["delta_implied_has_log"] = implied.contains_symbol(symbolica::atom::Symbol::LOG).into();
+            record["delta_implied_has_m_uv"] = implied.contains_symbol(GS.m_uv_vacuum).into();
             record["m_uv_in_subdivergences"] =
                 sub.poles.contains_symbol(GS.m_uv_vacuum).into();
             let mut ok = true;
@@ -276,5 +290,188 @@ fn massive_vacuum_masters_reproduce_their_poles() -> Result<()> {
         }
     }
     assert!(failures.is_empty(), "failed: {failures:?}");
+    Ok(())
+}
+
+/// Part (A) only, `-K sum_S Delta(S) G/S`, for topologies listed in the JSON
+/// file `RSTAR_PARTA_SPEC` (`[{"name":..,"loops":..,"edges":[[a,b,p],..]}]`,
+/// scalar numerators only), optionally restricted by `RSTAR_PARTA_NAMES`.
+/// Records (JSON lines) go to `RSTAR_PARTA_OUT`; each holds the Laurent
+/// coefficients eps^-L..eps^-1 of (A) at m = mu = 1 and per-term timings.
+#[test]
+#[ignore = "needs VAKINT_TEST_EXTERNAL_DATA and RSTAR_PARTA_SPEC"]
+fn massive_vacuum_part_a_from_spec() -> Result<()> {
+    test_initialise()?;
+    let model = load_generic_model("scalars");
+    let settings = super::tests::settings();
+    let spec: serde_json::Value = serde_json::from_slice(&std::fs::read(
+        std::env::var("RSTAR_PARTA_SPEC").expect("RSTAR_PARTA_SPEC"),
+    )?)?;
+    let names = std::env::var("RSTAR_PARTA_NAMES").ok().map(|v| {
+        v.split(',')
+            .map(|s| s.trim().to_owned())
+            .collect::<Vec<_>>()
+    });
+    let extra: i64 = std::env::var("RSTAR_MASSIVE_EXTRA")
+        .ok()
+        .map(|v| v.parse().unwrap())
+        .unwrap_or(0);
+    let forest_extra: i64 = std::env::var("RSTAR_MASSIVE_FOREST_EXTRA")
+        .ok()
+        .map(|v| v.parse().unwrap())
+        .unwrap_or(0);
+    let out = PathBuf::from(std::env::var("RSTAR_PARTA_OUT").expect("RSTAR_PARTA_OUT"));
+    let vakint = loaded_vakint(4)?;
+    let mass_symbol = symbol!("rstar_vacuum_mass"; Scalar);
+    let mass = Atom::var(mass_symbol);
+    for entry in spec.as_array().expect("a JSON list") {
+        let name = entry["name"].as_str().unwrap().to_owned();
+        if names.as_ref().is_some_and(|names| !names.contains(&name)) {
+            continue;
+        }
+        let topology = VacuumTopology {
+            name: format!("m5L_{name}"),
+            edges: entry["edges"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|e| {
+                    (
+                        e[0].as_u64().unwrap() as usize,
+                        e[1].as_u64().unwrap() as usize,
+                        e[2].as_u64().unwrap() as u32,
+                    )
+                })
+                .collect(),
+        };
+        let started = Instant::now();
+        let mut record = serde_json::json!({
+            "master": name,
+            "loops": topology.loops(),
+            "omega": topology.superficial_degree(),
+            "edges": topology.edges,
+            "extra_terms": extra,
+            "forest_extra_terms": forest_extra,
+        });
+        let outcome = (|| -> Result<()> {
+            let graph = topology.graph(&model, &mass)?;
+            let plan = RStarPlan::new(&graph, &model, EdgeIndex::from(0), &settings)?;
+            record["plan_ms"] = (started.elapsed().as_millis() as u64).into();
+            record["spinneys"] = plan
+                .ordinary_uv
+                .iter()
+                .filter(|term| !term.counterterms.is_empty())
+                .count()
+                .into();
+            let sub = plan.massive_vacuum_subdivergence_poles(
+                &graph, &model, &mass, &vakint, &settings, extra, forest_extra,
+                std::env::var("RSTAR_MASSIVE_CHILDREN").map(|v| v == "standalone").unwrap_or(true),
+            )?;
+            record["children_ms"] = (sub.children_ms as u64).into();
+            record["part_a"] = sub.poles.to_string().into();
+            let unit = unit_scales(&sub.poles, mass_symbol);
+            record["part_a_unit"] = unit.to_string().into();
+            let series = unit.series(GS.dim_epsilon, 0, -1)?;
+            let mut coefficients = serde_json::Map::new();
+            for (power, coefficient) in series.terms() {
+                coefficients.insert(power.to_string(), coefficient.expand().to_string().into());
+            }
+            record["part_a_coefficients"] = coefficients.into();
+            record["m_uv_in_part_a"] = sub.poles.contains_symbol(GS.m_uv_vacuum).into();
+            record["terms"] = sub
+                .terms
+                .iter()
+                .map(|term| {
+                    serde_json::json!({
+                        "label": term.label,
+                        "child_loops": term.child_loops,
+                        "quotient_loops": term.quotient_loops,
+                        "ms": term.elapsed_ms as u64,
+                    })
+                })
+                .collect::<Vec<_>>()
+                .into();
+            Ok(())
+        })();
+        record["total_ms"] = (started.elapsed().as_millis() as u64).into();
+        record["ok"] = outcome.is_ok().into();
+        if let Err(error) = outcome {
+            record["error"] = format!("{error:?}").into();
+        }
+        println!("RSTAR_PARTA {record}");
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&out)?;
+        writeln!(file, "{record}")?;
+    }
+    Ok(())
+}
+
+/// Diagnostic: the ordinary massive R counterterm of an all-massive banana
+/// two-point function (n parallel lines, external momentum through it) must
+/// be independent of m_uv. Writes `RSTAR_DIAG_OUT`.
+#[test]
+#[ignore = "diagnostic"]
+fn massive_banana_two_point_counterterms_are_m_uv_independent() -> Result<()> {
+    test_initialise()?;
+    let model = load_generic_model("scalars");
+    let settings = super::tests::settings();
+    let vakint = loaded_vakint(4)?;
+    let mass = Atom::var(symbol!("rstar_vacuum_mass"; Scalar));
+    let out = std::env::var("RSTAR_DIAG_OUT").ok().map(PathBuf::from);
+    let lines: Vec<usize> = std::env::var("RSTAR_DIAG_LINES")
+        .unwrap_or_else(|_| "2,3,4,5".into())
+        .split(',')
+        .map(|v| v.parse().unwrap())
+        .collect();
+    for n in lines {
+        let mut dot = String::from(
+            "digraph banana {\ngraph [projector=1]; node [num=1];\nedge [particle=\"scalar_1\" num=1]; e [style=invis];\n",
+        );
+        dot.push_str(&format!(
+            "e -> A:0 [id={n} sink=\"{{ufo_order:0}}\"];\nB:1 -> e [id={} source=\"{{ufo_order:0}}\"];\n",
+            n + 1
+        ));
+        for id in 0..n {
+            let basis = if id == 0 { String::new() } else { format!("lmb_id={}", id - 1) };
+            dot.push_str(&format!(
+                "A -> B [id={id} {basis} source=\"{{ufo_order:{}}}\" sink=\"{{ufo_order:{}}}\"];\n",
+                id + 1,
+                id + 1
+            ));
+        }
+        dot.push('}');
+        let mut graph: crate::graph::Graph = dot.into_finalized_runtime_graph(&model)?;
+        let edges: Vec<_> = graph.iter_edges().map(|(_, edge, _)| edge).collect();
+        for edge in edges {
+            let data = &mut graph.underlying[edge];
+            data.particle = data.particle.clone().override_mass(Some(mass.clone()));
+        }
+        let started = Instant::now();
+        let plan = RStarPlan::new(&graph, &model, EdgeIndex::from(0), &settings)?;
+        let result = plan.massive_forest_counterterms(
+            &graph,
+            &model,
+            &vakint,
+            &settings,
+            true,
+            0,
+            std::slice::from_ref(&plan.support),
+        );
+        let record = match result {
+            Ok(values) => {
+                let delta = values[&plan.support].expand();
+                serde_json::json!({"lines": n, "m_uv": delta.contains_symbol(GS.m_uv_vacuum),
+                    "delta": delta.to_string(), "ms": started.elapsed().as_millis() as u64})
+            }
+            Err(error) => serde_json::json!({"lines": n, "error": format!("{error:?}")}),
+        };
+        println!("RSTAR_DIAG {record}");
+        if let Some(out) = &out {
+            let mut file = std::fs::OpenOptions::new().create(true).append(true).open(out)?;
+            writeln!(file, "{record}")?;
+        }
+    }
     Ok(())
 }
