@@ -103,6 +103,7 @@ impl RStarPlan {
     /// requested through `epsilon^-1` of the complete product with its
     /// inserted poles, plus `extra_terms` further orders (for depth checks).
     /// The overall counterterm of the root is NOT included.
+    #[allow(clippy::too_many_arguments)]
     pub fn massive_vacuum_subdivergence_poles(
         &self,
         graph: &Graph,
@@ -112,7 +113,6 @@ impl RStarPlan {
         uv_settings: &UVgenerationSettings,
         extra_terms: i64,
         forest_extra_terms: i64,
-        standalone_children: bool,
         recursion: Option<&RecursionContext<'_>>,
     ) -> Result<MassiveVacuumSubdivergences> {
         ensure!(
@@ -140,23 +140,6 @@ impl RStarPlan {
                                 .child_counterterm(graph, support)
                                 .wrap_err("while computing a recursive child counterterm")?,
                         ),
-                    );
-                }
-                values
-            } else if standalone_children {
-                let mut values = BTreeMap::new();
-                for support in &supports {
-                    values.insert(
-                        support.clone(),
-                        standalone_child_counterterm(
-                            graph,
-                            model,
-                            support,
-                            vakint,
-                            &uv_settings,
-                            forest_extra_terms,
-                        )
-                        .wrap_err("while computing a standalone child counterterm")?,
                     );
                 }
                 values
@@ -418,7 +401,11 @@ pub(super) fn integrate_massive_vacuum(
     let contracted_internal = InternalSubGraph::try_new(contracted, &graph.underlying)
         .ok_or_else(|| eyre!("an insertion contains an unpaired half-edge"))?;
     let basis = graph
-        .shrunken_sub_lmb(&region.support, &contracted_internal, region.boundary.clone())
+        .shrunken_sub_lmb(
+            &region.support,
+            &contracted_internal,
+            region.boundary.clone(),
+        )
         .wrap_err("could not route a massive vacuum quotient")?;
     expression = expression.replace_multiple(graph.normal_emr_replacement(
         &region.remaining,
@@ -500,6 +487,10 @@ fn simplify(expression: &Atom) -> Result<Atom> {
         .to_dots()?;
     Ok(cooking.uncook(simplified.expression().as_view()))
 }
+
+/// One term of the mass expansion of `Delta(G)`: extra powers per line, its
+/// binomial weight, the massless R* counterterm and its wall time (ms).
+pub type DistributionTerm = (Vec<u32>, u64, Atom, u128);
 
 /// A scalar vacuum topology: lines `(a, b, power)` between vertices.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -654,21 +645,28 @@ impl VacuumTopology {
 
     /// The runtime graph of one numerator monomial: rank-1 momenta of the
     /// first chain segment of each line, `Q(e)^{mu_f}` with the factor's index.
-    pub fn monomial_graph(&self, model: &Model, mass: &Atom, attachments: &[Vec<usize>]) -> Result<Graph> {
+    pub fn monomial_graph(
+        &self,
+        model: &Model,
+        mass: &Atom,
+        attachments: &[Vec<usize>],
+    ) -> Result<Graph> {
         let mut graph = self.graph(model, mass)?;
         let mut first = 0usize;
         for (line, &(_, _, power)) in self.edges.iter().enumerate() {
             if let Some(factors) = attachments.get(line).filter(|f| !f.is_empty()) {
                 let mut numerator = Atom::one();
                 for f in factors {
-                    let index: Atom = crate::numerator::aind::Aind::Edge(4000 + *f as u16, 1).into();
+                    let index: Atom =
+                        crate::numerator::aind::Aind::Edge(4000 + *f as u16, 1).into();
                     numerator *= function!(
                         GS.emr_mom,
                         first,
                         Minkowski {}.new_rep(GS.dim).to_symbolic([index])
                     );
                 }
-                let data = &mut graph.underlying[linnet::half_edge::involution::EdgeIndex::from(first)];
+                let data =
+                    &mut graph.underlying[linnet::half_edge::involution::EdgeIndex::from(first)];
                 data.num = crate::graph::Autogen::explicit(numerator);
                 data.dod = crate::graph::Autogen::explicit(-2 + factors.len() as i32);
             }
@@ -726,12 +724,15 @@ impl VacuumTopology {
         mass: &Atom,
         vakint: &Vakint,
         uv_settings: &UVgenerationSettings,
-    ) -> Result<(Atom, Vec<(Vec<u32>, u64, Atom, u128)>)> {
+    ) -> Result<(Atom, Vec<DistributionTerm>)> {
         let omega = self.superficial_degree();
         if omega < 0 {
             return Ok((Atom::Zero, Vec::new()));
         }
-        ensure!(omega % 2 == 0, "odd superficial degree of a scalar vacuum graph");
+        ensure!(
+            omega % 2 == 0,
+            "odd superficial degree of a scalar vacuum graph"
+        );
         let n = u32::try_from(omega / 2)?;
         let mut total = Atom::Zero;
         let mut log = Vec::new();
@@ -743,7 +744,11 @@ impl VacuumTopology {
             );
             let dotted = VacuumTopology {
                 numerators: Vec::new(),
-                name: format!("{}_a{}", self.name, a.iter().map(u32::to_string).collect::<String>()),
+                name: format!(
+                    "{}_a{}",
+                    self.name,
+                    a.iter().map(u32::to_string).collect::<String>()
+                ),
                 edges: self
                     .edges
                     .iter()
@@ -756,7 +761,9 @@ impl VacuumTopology {
             let plan = RStarPlan::with_automatic_edge(&massless, model, uv_settings)?;
             let delta = plan
                 .counterterm(&massless, model, vakint, uv_settings)
-                .wrap_err_with(|| format!("while computing the R* counterterm of {}", dotted.name))?;
+                .wrap_err_with(|| {
+                    format!("while computing the R* counterterm of {}", dotted.name)
+                })?;
             total += Atom::num(weight as i64) * &delta;
             log.push((a, weight, delta, started.elapsed().as_millis()));
         }
@@ -764,127 +771,16 @@ impl VacuumTopology {
     }
 }
 
-/// `Delta(S)` of a CONNECTED proper child `S` of `graph`, computed on a
-/// standalone runtime graph: the lines of `S` (own masses) plus one external
-/// leg per boundary half-edge of `S`, all incoming. The leg momenta are then
-/// renamed to the momenta entering `S` through those half-edges: `+Q(e)` at
-/// the sink end of line `e`, `-Q(e)` at its source end (a self-loop at a
-/// vertex of `S` contributes `+Q(e) - Q(e) = 0`). The counterterm of `S`
-/// depends on `S` and its incoming momenta only, so this is the same object
-/// the in-graph forest computes, without its boundary bookkeeping.
-#[allow(clippy::too_many_arguments)]
-pub fn standalone_child_counterterm(
-    graph: &Graph,
-    model: &Model,
-    support: &SuBitGraph,
-    vakint: &Vakint,
-    uv_settings: &UVgenerationSettings,
-    forest_extra_terms: i64,
-) -> Result<Atom> {
-    use linnet::half_edge::{involution::{Flow, HedgePair}, subgraph::SubSetLike as _};
-    let mut nodes = Vec::new();
-    let mut internal = Vec::new();
-    for (pair, edge, data) in graph.iter_edges_of(support) {
-        let HedgePair::Paired { source, sink } = pair else {
-            return Err(eyre!("a child contains an unpaired half-edge"));
-        };
-        let (a, b) = (graph.node_id(source), graph.node_id(sink));
-        for node in [a, b] {
-            if !nodes.contains(&node) {
-                nodes.push(node);
-            }
-        }
-        internal.push((edge, a, b, data.data.mass_atom(model)));
-    }
-    let crown = graph.dummy_less_full_crown(support);
-    let mut boundary = Vec::new();
-    for hedge in crown.included_iter() {
-        let edge = graph[&hedge];
-        let node = graph.node_id(hedge);
-        ensure!(nodes.contains(&node), "a boundary half-edge outside the child");
-        let sign = match graph.flow(hedge) {
-            Flow::Sink => 1,
-            Flow::Source => -1,
-        };
-        boundary.push((edge, node, sign));
-    }
-    ensure!(!boundary.is_empty(), "a proper child of a vacuum graph has a boundary");
-    let index = |node| nodes.iter().position(|n| *n == node).unwrap();
-    let mut components = (0..nodes.len()).collect::<Vec<_>>();
-    let mut slots = vec![0usize; nodes.len()];
-    let mut loops = 0;
-    let mut dot = String::from(
-        "digraph child {\ngraph [projector=1]; node [num=1];\nedge [particle=\"scalar_1\" num=1];\next [style=invis];\n",
-    );
-    for (id, (_, a, b, _)) in internal.iter().enumerate() {
-        let (ia, ib) = (index(*a), index(*b));
-        let source = slots[ia];
-        slots[ia] += 1;
-        let sink = slots[ib];
-        slots[ib] += 1;
-        let basis = if components[ia] == components[ib] {
-            loops += 1;
-            format!("lmb_id={}", loops - 1)
-        } else {
-            let (from, into) = (components[ib], components[ia]);
-            for component in &mut components {
-                if *component == from {
-                    *component = into;
-                }
-            }
-            String::new()
-        };
-        dot.push_str(&format!(
-            "v{ia} -> v{ib} [id={id} {basis} source=\"{{ufo_order:{source}}}\" sink=\"{{ufo_order:{sink}}}\"];\n"
-        ));
-    }
-    let first_external = internal.len();
-    for (j, (_, node, _)) in boundary.iter().enumerate() {
-        let i = index(*node);
-        let sink = slots[i];
-        slots[i] += 1;
-        dot.push_str(&format!(
-            "ext -> v{i} [id={} sink=\"{{ufo_order:{sink}}}\"];\n",
-            first_external + j
-        ));
-    }
-    dot.push('}');
-    let mut child: Graph = dot
-        .into_finalized_runtime_graph(model)
-        .wrap_err("while building a standalone child graph")?;
-    for (id, (_, _, _, mass)) in internal.iter().enumerate() {
-        let data = &mut child.underlying[linnet::half_edge::involution::EdgeIndex::from(id)];
-        data.particle = data.particle.clone().override_mass(Some(mass.clone()));
-    }
-    let plan = RStarPlan::new(
-        &child,
-        model,
-        linnet::half_edge::involution::EdgeIndex::from(0),
-        uv_settings,
-    )?;
-    let support = plan.support.clone();
-    let mut values = plan.massive_forest_counterterms(
-        &child,
-        model,
-        vakint,
-        uv_settings,
-        true,
-        forest_extra_terms,
-        std::slice::from_ref(&support),
-    )?;
-    let value = values.remove(&support).unwrap_or_default();
-    let renames = boundary
-        .iter()
-        .enumerate()
-        .map(|(j, (edge, _, sign))| {
-            symbolica::id::Replacement::new(
-                function!(GS.emr_mom, first_external + j, W_.x___).to_pattern(),
-                Atom::num(*sign) * function!(GS.emr_mom, usize::from(*edge), W_.x___),
-            )
-        })
-        .collect::<Vec<_>>();
-    Ok(value.replace_multiple(&renames).expand())
-}
+// ---------------------------------------------------------------------------
+// WORKAROUND for a defect of the ordinary massive R forest, reproduced by the
+// tests of the companion test-only PR (`uv/rstar/massive_r_bug_tests.rs`,
+// branch `massive-r-multi-halfedge-child-bug`): some children with
+// momentum-dependent sub-counterterms receive wrong, m_uv-dependent
+// counterterms. `RecursionContext` recomputes every counterterm bottom-up
+// without in-forest children. Remove it once the forest is fixed: pass
+// `recursion = None` to `massive_vacuum_subdivergence_poles` to use the
+// ordinary forest.
+// ---------------------------------------------------------------------------
 
 /// Cache of recursively computed counterterms, keyed by the standalone DOT.
 pub type CountertermCache = std::collections::HashMap<String, Atom>;

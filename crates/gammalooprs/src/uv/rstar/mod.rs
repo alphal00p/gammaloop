@@ -31,7 +31,8 @@ mod uv;
 
 pub use integrate::integrate_single_mass;
 pub use massive::{
-    MassiveVacuumSubdivergences, MassiveVacuumTerm, VacuumTopology, massive_vacuum_direct,
+    CountertermCache, DistributionTerm, MassiveVacuumSubdivergences, MassiveVacuumTerm,
+    NumeratorMonomial, RecursionContext, VacuumTopology, massive_vacuum_direct,
     massive_vacuum_settings,
 };
 pub use plan::*;
