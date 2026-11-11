@@ -378,7 +378,9 @@ fn massive_vacuum_part_a_from_spec() -> Result<()> {
             let mut children = Vec::new();
             let mut terms = Vec::new();
             let mut children_ms = 0u128;
-            for monomial in &monomials {
+            // RSTAR_PARTA_DELTA_ONLY=1: skip part (A), compute only Delta(G) by R*.
+            let delta_only = std::env::var("RSTAR_PARTA_DELTA_ONLY").is_ok_and(|v| v == "1");
+            for monomial in monomials.iter().filter(|_| !delta_only) {
                 let graph = topology.monomial_graph(&model, &mass, &monomial.attachments)?;
                 let plan = RStarPlan::new(&graph, &model, EdgeIndex::from(0), &settings)?;
                 spinneys += plan
