@@ -3412,5 +3412,143 @@ class GalleryLaurentTests(unittest.TestCase):
         self.assertTrue(built)
 
 
+class GalleryBasisStatusTests(unittest.TestCase):
+    """Page 06: the status tables are the benchmark generator's own output."""
+
+    def setUp(self):
+        import basis_status
+
+        self.bs = basis_status
+        self.docs = basis_status.benchmark_docs()
+        if self.docs is None:
+            self.skipTest("no benchmark docs next to the notebooks")
+        self.overview = json.loads((self.docs / "data" / "overview.json").read_text())
+        self.tables = json.loads((self.docs / "data" / "tables.json").read_text())
+
+    def test_committed_source_without_configuration(self):
+        with patch.dict(os.environ, {}, clear=True):
+            status = self.bs.load_status(None)
+        self.assertEqual(status["origin"], "committed")
+        self.assertEqual(status["overview"], self.overview)
+        self.assertEqual(status["notes"], [])
+
+    def test_result_rows_follow_the_generator_table(self):
+        # Every cell is the generator's class and digits, never a literal.
+        rows, columns = self.bs.result_rows(self.overview)
+        self.assertEqual(columns[0], "loops")
+        for row, source in zip(rows, self.tables["table2"]):
+            for order in self.tables["orders_table2"]:
+                cell = source["cells"][str(order)]
+                text = row.get(self.bs.eps(order), "")
+                if cell.get("class"):
+                    expected = self.bs.class_label(cell["class"], cell.get("X"))
+                    self.assertTrue(text.startswith(expected), (row["loops"], order))
+                elif cell.get("na") == "partial":
+                    self.assertTrue(text.startswith("not every input"))
+
+    def test_result_notes_use_the_pdf_letters(self):
+        rows, _ = self.bs.result_rows(self.overview)
+        notes = dict(self.bs.result_notes(self.tables, rows))
+        self.assertIn("a", notes)
+        self.assertEqual(notes["a"], self.tables["notes_table2"][0])
+
+    def test_master_filter(self):
+        everything, columns = self.bs.master_rows(self.overview, 5)
+        self.assertEqual(
+            len(everything), sum(1 for r in self.overview["table1"] if r["loop"] == 5)
+        )
+        self.assertEqual(columns[0], "master")
+        numerical, _ = self.bs.master_rows(self.overview, 5, "numerical", 0)
+        self.assertTrue(numerical)
+        self.assertTrue(all(r["ε⁰"].startswith("N(") for r in numerical))
+        exact, _ = self.bs.master_rows(self.overview, 5, "exact", -5)
+        self.assertTrue(all(r["ε⁻⁵"] == "S" for r in exact))
+
+    def test_status_file_and_refused_tree(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        (root / "overview.json").write_text(json.dumps(self.overview))
+        with patch.dict(
+            os.environ,
+            {"VAKINT_GALLERY_STATUS": str(root / "overview.json")},
+            clear=True,
+        ):
+            status = self.bs.load_status(None)
+        self.assertEqual(status["origin"], "file")
+        self.assertIsNone(status["tables"])
+        # A directory that is no data tree: named, then the committed tables.
+        with patch.dict(
+            os.environ, {"VAKINT_GALLERY_WORK": str(root / "work")}, clear=True
+        ):
+            status = self.bs.load_status(root / "no-tree")
+        self.assertEqual(status["origin"], "committed")
+        self.assertIn("no-tree", status["notes"][0])
+
+    def test_shipped_inputs_are_checked(self):
+        manifest = self.bs.input_manifest()
+        for key, spec in self.bs.EXAMPLES.items():
+            with self.subTest(example=key):
+                dot, model, record = self.bs.example_graph(key)
+                self.assertEqual(record["loops"], spec["loops"])
+                self.assertIn("digraph", dot)
+                json.loads(model)
+        self.assertEqual(
+            {spec["graph"] for spec in self.bs.EXAMPLES.values()},
+            set(manifest["graphs"]),
+        )
+
+    def test_classification_of_vakint_output(self):
+        classify = self.bs.classify
+        self.assertEqual(classify("4*symbolica::zeta(5)")[0], "S")
+        self.assertEqual(classify("0")[0], "Z")
+        named = "2*vakint::RustRedConstant(rustred_data_ab,vakint::K5Moment(1))"
+        self.assertEqual(classify(named), ("S*", ["K5Moment(1)"]))
+        placeholder = "vakint::RustRedCoefficient(rustred_data_ab,x,0)"
+        self.assertEqual(classify(placeholder)[0], "N")
+        self.assertEqual(classify("1.2345678901e-3")[0], "N")
+
+    def test_example_selection(self):
+        quick = [
+            k
+            for k, v in self.bs.EXAMPLES.items()
+            if v["loops"] == 5 and not v.get("heavy")
+        ]
+        for setting, autorun, chosen in (
+            ("", False, quick),
+            ("0", False, quick),
+            ("1", True, quick),
+            ("all", True, [k for k, v in self.bs.EXAMPLES.items() if v["loops"] == 5]),
+            ("5L-P108", True, ["5L-P108"]),
+        ):
+            with (
+                self.subTest(setting=setting),
+                patch.dict(os.environ, {"VAKINT_GALLERY_RUN_EXAMPLES": setting}),
+            ):
+                self.assertEqual(self.bs.autorun(), autorun)
+                self.assertEqual(self.bs.default_examples(), chosen)
+        # The examples that show a BASIS-v3 property are skipped on other data.
+        self.assertEqual(
+            {k for k, v in self.bs.EXAMPLES.items() if v.get("needs") == "BASIS-v3"},
+            {"5L-P108", "5L-T1-8175"},
+        )
+
+    def test_data_basis(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        (root / "5L").mkdir()
+        (root / "manifest.json").write_text(json.dumps({"version": "v9"}))
+        for names, basis in (
+            (["P1", "P108"], "BASIS-v2"),
+            (["P1", "P135"], "BASIS-v3"),
+        ):
+            (root / "5L" / "manifest.json").write_text(
+                json.dumps({"masters": [{"name": n} for n in names]})
+            )
+            self.assertEqual(self.bs.data_basis(root), (basis, "v9"))
+        self.assertEqual(self.bs.data_basis(None), (None, None))
+
+
 if __name__ == "__main__":
     unittest.main()

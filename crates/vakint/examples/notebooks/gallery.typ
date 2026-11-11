@@ -1,12 +1,14 @@
 = Interactive Vakint field notes
 
-These five Marimo applications share the native HEPKit, tensor, graph and
+These six Marimo applications share the native HEPKit, tensor, graph and
 Symbolica types from one coherent host. They demonstrate graph dressing and
 efficient gamma/color contractions, precision-aware constant/master inspection,
 an explore-only view of the zero-momentum four-rung (five-loop) vacuum fixture
 with a recorded run, exact numerator/pinch closure, and end-to-end Ordered
 reductions of the three- and four-loop ladders in cancellable background jobs
-(or, in marimo's edit mode, in the notebook kernel with a live monitor).
+(or, in marimo's edit mode, in the notebook kernel with a live monitor), and
+the state of the one- to five-loop vacuum basis: which Laurent coefficients
+Vakint returns exactly and which only numerically.
 The source follows the native workflow of the
 #link("https://www.hepkit.org/gallery/notebooks/four_loop_numerator.py")[HEPKit numerator tutorial].
 
@@ -27,8 +29,8 @@ The server binds only to #raw("127.0.0.1:8417"). Configure
 to bind another address (for example a tailnet-only interface). A reverse proxy
 (such as a tailnet-only HTTPS mapping that an administrator adds) can expose
 that port; the notebook process never changes the tailnet or existing services
-itself. The five routes are #raw("/graphs/"), #raw("/inspect/"),
-#raw("/five-loop/"), #raw("/closure/") and #raw("/reduce/").
+itself. The six routes are #raw("/graphs/"), #raw("/inspect/"),
+#raw("/five-loop/"), #raw("/closure/"), #raw("/reduce/") and #raw("/basis/").
 The server uses application mode, with source editing disabled.
 
 To try the notebooks interactively, serve this directory with
@@ -302,3 +304,51 @@ formula rendering, lookup forms, source-limit warnings, exact closure controls
 and background status. A notebook source passing static checks does not by itself
 establish native runtime interoperability. Preserve the actual browser and
 producer receipts with the release validation evidence.
+
+== State of the basis (#raw("/basis/"))
+
+Page 06 reports, per loop count and order in ε, what Vakint returns for any
+single-scale vacuum integral: exact (S), exact in named constants known to a
+finite number of digits (S*(X)), numerical only (N(X), X digits; published
+digits are the measured claim minus one) or not available (Vakint then fails
+closed). A second table lists every five-loop master order by order, with
+filters by class and order; a third, the named constants with their
+definitions and the traditional forms (verified to the full stored digits, not
+yet adopted in the data).
+
+The page never retypes these numbers. They are the output of the benchmark
+generator (#raw("docs/benchmark/tools/overview.py") over
+#raw("precision_tables.py")), the code that writes the precision tables of
+#raw("benchmark.pdf"), taken from the first available source:
+#raw("VAKINT_GALLERY_STATUS") (an #raw("overview.json") written by the
+generator, with its #raw("tables.json") beside it, for example the PREVIEW
+edition that adds derived results not yet in a released tree); else the
+generator run in the page on the operator's data checkout
+(#raw("VAKINT_GALLERY_ARTIFACTS"), a few seconds, cached under
+#raw("VAKINT_GALLERY_WORK")); else the committed generator output
+#raw("docs/benchmark/data/overview.json"), which describes the released data of
+the committed #raw("benchmark.pdf"). A tree the generator refuses is named with
+the generator's reason before the fallback. A server that serves a copy of
+this directory sets #raw("VAKINT_GALLERY_BENCHMARK_DOCS") to the checkout's
+#raw("crates/vakint/docs/benchmark").
+
+Its live examples build their inputs from master graphs shipped in
+#raw("data/basis-status") (SHA-256 checked) with HEPKit and
+#raw("integral_from_diagram"), evaluate them with symbolic masters in the data's
+own normalization (FMFTandMATAD, unit mass) on whatever data the engine
+loaded, and read each order's class off Vakint's output: a four-loop dotted
+master whose reduction has spurious 1/ε poles while its ε⁻¹ coefficient comes
+back exact (about ten seconds), and, where the operator enabled the 5L
+catalogue, the five-loop master P1, master P1 with one dot, the former master
+P108 and T1-8175 (master P135 of BASIS-v3). On BASIS-v2 data (releases up to
+v0.2.3) the five-loop examples show what that release returns; the exact
+five-loop poles need BASIS-v3 with the adopted pole forms (v0.3.0). The
+examples run on the button, or without it when
+#raw("VAKINT_GALLERY_RUN_EXAMPLES") is set (headless runs and static exports):
+#raw("1") evaluates the quick ones, #raw("all") also the heavy ones, or a
+comma-separated list of example keys. Two five-loop examples are heavy and not
+selected by default: P1 with one dot (about 23 minutes on 4 cores on the
+v0.3.0 RC) and the former master P108 (its power difference, 11, lies outside
+the recorded five-loop entry predicates, so RustRed reduces it without a
+recorded route: over half an hour). The quick ones (P1, T1-8175) take seconds
+once the 5L catalogue is loaded.

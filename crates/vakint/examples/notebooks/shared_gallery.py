@@ -36,6 +36,7 @@ class Gallery:
         ("five-loop", "03", "Five-loop: explore", "03_five_loop_uv.py"),
         ("closure", "04", "Pinches & closure", "04_pinches_and_cache.py"),
         ("reduce", "05", "Reduce 3L & 4L", "05_ladder_reductions.py"),
+        ("basis", "06", "State of the basis", "06_basis_status.py"),
     )
     five_loop_fixture_directory = directory / "data" / "five-loop-q0"
     arithmetics = ("modular_polynomial", "modular_sampled", "exact")

@@ -1,4 +1,4 @@
-"""Serve the five interactive apps (marimo application mode).
+"""Serve the six interactive apps (marimo application mode).
 
 Binds 127.0.0.1:8417 by default, for a reverse proxy in front of it;
 VAKINT_GALLERY_HOST and VAKINT_GALLERY_PORT select another address (for example
@@ -45,6 +45,7 @@ def create_app():
         ("/five-loop", "03_five_loop_uv.py"),
         ("/closure", "04_pinches_and_cache.py"),
         ("/reduce", "05_ladder_reductions.py"),
+        ("/basis", "06_basis_status.py"),
     ]:
         builder = builder.with_app(path=route, root=str(directory / source))
     return Starlette(

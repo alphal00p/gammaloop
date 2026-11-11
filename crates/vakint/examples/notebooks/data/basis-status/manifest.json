@@ -1,0 +1,46 @@
+{
+ "schema": "vakint-gallery.basis-status-inputs.v1",
+ "what": "Master graphs (graph.dot, unchanged) used by page 06 to build its example inputs with HEPKit + integral_from_diagram; the page checks every SHA-256.",
+ "models": {
+  "scalar": {
+   "path": "scalar-model.json",
+   "sha256": "d2628bb5672b18807039be6f9218c07701cfcb80320458277cda2b9f0ef47bd1",
+   "source": "{4L,5L}/model.json of vakint-external-data v0.2.2 - v0.3.0 RC (identical)"
+  }
+ },
+ "graphs": {
+  "4L-P15": {
+   "path": "4L-P15.dot",
+   "sha256": "3e5afb6312ae0c7d6ebc9a7b6846e35544ce0fa816e66b84ef32808e94cf9623",
+   "loops": 4,
+   "master": "P15",
+   "model": "scalar",
+   "source": "4L/masters/P15/graph.dot of vakint-external-data v0.2.2 / v0.2.3 / v0.3.0 RC (identical graph)"
+  },
+  "5L-P1": {
+   "path": "5L-P1.dot",
+   "sha256": "b72ac86e5209c15af920c15b3c2d70d294f9d4a7942ae84b4e14949eeade1f76",
+   "loops": 5,
+   "master": "P1",
+   "model": "scalar",
+   "source": "5L/masters/P1/graph.dot of vakint-external-data v0.2.2 / v0.2.3 / v0.3.0 RC (identical graph)"
+  },
+  "5L-P108": {
+   "path": "5L-P108.dot",
+   "sha256": "c18cda5ad8bf4ca8e9b5193c8c8bb9cf012ef39fe48b112ec97ea82b71abd5ad",
+   "loops": 5,
+   "master": "P108",
+   "model": "scalar",
+   "source": "5L/masters/P108/graph.dot of vakint-external-data v0.2.2 / v0.2.3 (BASIS-v2 master; not a master of BASIS-v3)"
+  },
+  "5L-P135": {
+   "path": "5L-P135.dot",
+   "sha256": "0c185fa75bfddaabf8854c2c77ee1906e7fbe58a9a17ce7cfbbafdd711d26aec",
+   "loops": 5,
+   "master": "P135",
+   "model": "scalar",
+   "source": "5L/masters/P135/graph.dot of vakint-external-data v0.3.0 RC (BASIS-v3 master T1-8175; not a master of BASIS-v2)",
+   "design_name": "T1-8175"
+  }
+ }
+}
