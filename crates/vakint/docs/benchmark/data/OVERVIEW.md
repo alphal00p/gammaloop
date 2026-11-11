@@ -1,6 +1,6 @@
 # What vakint computes today (1L-5L single-scale vacuum): RELEASED
 
-Data tree vakint-external-data v0.2.2 (0faa1c795664) (v0.2.2, 5L basis BASIS-v2) · tables `b9e752afa83f2d8f` · generated 2026-11-11T01:05:56Z
+Data tree vakint-external-data v0.2.2 (0faa1c795664) (v0.2.2, 5L basis BASIS-v2) · tables `b9e752afa83f2d8f` · generated 2026-11-11T01:09:03Z
 
 S = exact (periods at any precision) · S*(X) = exact, contains periods known to X digits · N(X) = numerical only, X digits · 0 = structural zero · — = not held / not available.
 

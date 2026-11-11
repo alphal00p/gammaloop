@@ -1,6 +1,6 @@
 # Precision of vakint’s master coefficients and results
 
-**FINAL** · data tree vakint-external-data v0.2.2 (0faa1c795664) (git 0faa1c795664, tree b738993f1fe0) · v0.2.2 root manifest `5ce0e4a0abe8687c` · 4L constants `1338cfe501ffb516` · 5L values build 2026-11-07T02:24:15Z (producer-update `781d858170cd9127`) · generated 2026-11-11T01:05:55Z · tables `b9e752afa83f2d8f`
+**FINAL** · data tree vakint-external-data v0.2.2 (0faa1c795664) (git 0faa1c795664, tree b738993f1fe0) · v0.2.2 root manifest `5ce0e4a0abe8687c` · 4L constants `1338cfe501ffb516` · 5L values build 2026-11-07T02:24:15Z (producer-update `781d858170cd9127`) · generated 2026-11-11T01:09:02Z · tables `b9e752afa83f2d8f`
 
 🟢 **S** exact, in periods vakint evaluates at any requested precision · 🟠 **S\*(X)** exact, but contains periods vakint has to at most X digits · 🔴 **N(X)** numerical only, at most X digits · — not available. X = worst-case digits, rounded down.
 

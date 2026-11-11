@@ -13159,9 +13159,10 @@
   }
  ],
  "pending": [],
- "generated_utc": "2026-11-11T01:05:56Z",
+ "superseded_overlay_entries": [],
+ "generated_utc": "2026-11-11T01:09:03Z",
  "generator": {
   "path": "crates/vakint/docs/benchmark/tools/overview.py",
-  "sha256": "5fe0871a433ea6376857937af5407c87af51d0ee501af0494ac3bebd32e9f439"
+  "sha256": "461b130adfc3e9a8978057db8ea2a5235b317987e85644d39144d75de96a4d08"
  }
 }

@@ -300,6 +300,7 @@ def build(a):
         return {'class': cls, 'X': c.get('X') if cls in ('S*', 'N') else None}
 
     t1_rel = {(r['loop'], r['name']): r for r in T['table1']}
+    superseded = []
     orders1 = T['orders_table1']
 
     def row_of(m, pending_only=False):
@@ -313,12 +314,13 @@ def build(a):
                     raise SystemExit(f"{m['loop']}L/{m['name']} ε^{o}: tables.json says {bc}, the tree {rc}")
                 rc['marks'] = bc.get('marks') or []
             pc = ocells.get((m['loop'], m['name'], o))
+            if pc is not None and rc is not None and rank(pc) >= rank(rc):
+                superseded.append(f"{m['loop']}L/{m['name']} ε^{o}: overlay {label(pc)} ({pc['state']}), tree {label(rc)}")
+                pc = None                    # the tree already holds it as well (integrated): released, not pending
             if pc is not None:
                 e = dict(rc) if rc else {'class': None, 'X': None, 'marks': []}
                 e['pending'] = {'class': pc['class'], 'X': pc['X'], 'state': pc['state'], 'agreement_digits': pc['agreement_digits'],
                                 'claimed_digits': pc['claimed_digits'], 'kind': pc['kind']}
-                if rc is not None and rank(pc) > rank(rc):
-                    e['pending']['worse_than_released'] = True
                 cells[str(o)] = e
             else:
                 cells[str(o)] = rc
@@ -518,7 +520,9 @@ def build(a):
         'table1_counts': table1_counts(rows, eff),
         'result': res_rows, 'former': former,
         'constants': ctab, 'names': None if not a.names else {'path': str(a.names.resolve()), 'sha256': sha256_file(a.names)},
-        'method': method, 'pending': pend_list,
+        'method': method, 'pending': [p for p in pend_list if not any(x.startswith(f"{p['loop']}L/{p['master']} ε^{p['order']}:")
+                                                                      for x in superseded)],
+        'superseded_overlay_entries': sorted(set(superseded)),
         'generated_utc': dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
         'generator': {'path': 'crates/vakint/docs/benchmark/tools/overview.py', 'sha256': sha256_file(Path(__file__))},
     }
@@ -656,6 +660,9 @@ def markdown(O):
                        f"{p['agreement_digits'] if p['agreement_digits'] is not None else '—'} / {p['claimed_digits'] if p['claimed_digits'] is not None else '—'} | "
                        + '; '.join((['agreement below the claimed digits: check to full digits before adoption'] if p['below_claim'] else [])
                                    + p['flags']) + ' |')
+    if O.get('superseded_overlay_entries'):
+        out += ['', 'Overlay entries already held as well by the data tree (integrated; shown as released): '
+                + '; '.join(O['superseded_overlay_entries']) + '.']
     return '\n'.join(out) + '\n'
 
 
