@@ -304,3 +304,19 @@ fn numerator_straddling_a_disconnected_spinney() -> Result<()> {
         &[vec![(0, 1), (2, 1)]],
     )
 }
+
+/// `power_distributions` with a line of power 0: no underflow, the absent
+/// propagator takes no extra power, and the weights are the binomials of the
+/// other lines (`1/(k^2-m^2)^2 = sum_a (a+1) m^(2a) / (k^2)^(2+a)`).
+#[test]
+fn power_distributions_with_a_power_zero_line() {
+    let topology = super::VacuumTopology {
+        name: "power_zero_line".into(),
+        edges: vec![(0, 1, 2), (0, 1, 0), (1, 0, 1)],
+        numerators: Vec::new(),
+    };
+    let mut distributions = topology.power_distributions(1);
+    distributions.sort();
+    assert_eq!(distributions, vec![(vec![0, 0, 1], 1), (vec![1, 0, 0], 2)]);
+    assert_eq!(topology.power_distributions(0), vec![(vec![0, 0, 0], 1)]);
+}
