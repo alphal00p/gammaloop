@@ -630,9 +630,12 @@ impl VacuumTopology {
         out
     }
 
-    /// `Delta(G)` of the massive root by route (ii): massless log-divergent
-    /// dotted graphs through `RStarPlan::counterterm`, times
-    /// `(mass^2)^(omega/2)`. Returns `(Delta, per-distribution log)`.
+    /// `Delta(G)` of the massive root by route (ii): for every numerator
+    /// monomial (coefficient `c`, rank `r`, see [`Self::numerator_monomials`])
+    /// the mass expansion `c (m^2)^(w/2) sum_{|a| = w/2} prod_e binom(p_e+a_e-1, a_e)
+    /// Delta(G_0 with powers p+a and the monomial's edge numerators)` with
+    /// `w = 4L - 2 sum p + r`, each massless graph LOG-divergent and evaluated
+    /// by [`RStarPlan::counterterm`]. Returns `(Delta, per-graph log)`.
     pub fn overall_counterterm_rstar(
         &self,
         model: &Model,
@@ -640,48 +643,48 @@ impl VacuumTopology {
         vakint: &Vakint,
         uv_settings: &UVgenerationSettings,
     ) -> Result<(Atom, Vec<DistributionTerm>)> {
-        let omega = self.superficial_degree();
-        if omega < 0 {
-            return Ok((Atom::Zero, Vec::new()));
-        }
-        ensure!(
-            omega % 2 == 0,
-            "odd superficial degree of a scalar vacuum graph"
-        );
-        let n = u32::try_from(omega / 2)?;
         let mut total = Atom::Zero;
         let mut log = Vec::new();
-        for (a, weight) in self.power_distributions(n) {
-            let started = Instant::now();
+        for monomial in self.numerator_monomials(mass) {
+            let rank: usize = monomial.attachments.iter().map(Vec::len).sum();
+            let omega = self.superficial_degree() - self.numerator_degree() + rank as i64;
+            if omega < 0 {
+                continue;
+            }
             ensure!(
-                self.numerators.is_empty(),
-                "route (ii) is not implemented for numerator graphs"
+                omega % 2 == 0,
+                "odd superficial degree of a vacuum monomial"
             );
-            let dotted = VacuumTopology {
-                numerators: Vec::new(),
-                name: format!(
-                    "{}_a{}",
-                    self.name,
-                    a.iter().map(u32::to_string).collect::<String>()
-                ),
-                edges: self
-                    .edges
-                    .iter()
-                    .zip(&a)
-                    .map(|(&(x, y, p), &extra)| (x, y, p + extra))
-                    .collect(),
-            };
-            debug_assert_eq!(dotted.superficial_degree(), 0);
-            let massless = dotted.graph(model, &Atom::Zero)?;
-            let plan = RStarPlan::with_automatic_edge(&massless, model, uv_settings)?;
-            let delta = plan
-                .counterterm(&massless, model, vakint, uv_settings)
-                .wrap_err_with(|| {
-                    format!("while computing the R* counterterm of {}", dotted.name)
-                })?;
-            total += Atom::num(weight as i64) * &delta;
-            log.push((a, weight, delta, started.elapsed().as_millis()));
+            let n = u32::try_from(omega / 2)?;
+            let mut monomial_total = Atom::Zero;
+            for (a, weight) in self.power_distributions(n) {
+                let started = Instant::now();
+                let dotted = VacuumTopology {
+                    numerators: Vec::new(),
+                    name: format!(
+                        "{}_a{}",
+                        self.name,
+                        a.iter().map(u32::to_string).collect::<String>()
+                    ),
+                    edges: self
+                        .edges
+                        .iter()
+                        .zip(&a)
+                        .map(|(&(x, y, p), &extra)| (x, y, p + extra))
+                        .collect(),
+                };
+                let massless = dotted.monomial_graph(model, &Atom::Zero, &monomial.attachments)?;
+                let plan = RStarPlan::with_automatic_edge(&massless, model, uv_settings)?;
+                let delta = plan
+                    .counterterm(&massless, model, vakint, uv_settings)
+                    .wrap_err_with(|| {
+                        format!("while computing the R* counterterm of {}", dotted.name)
+                    })?;
+                monomial_total += Atom::num(weight as i64) * &delta;
+                log.push((a, weight, delta, started.elapsed().as_millis()));
+            }
+            total += &monomial.coefficient * monomial_total * mass.pow(Atom::num(omega));
         }
-        Ok(((total * mass.pow(Atom::num(omega))).expand(), log))
+        Ok((total.expand(), log))
     }
 }
