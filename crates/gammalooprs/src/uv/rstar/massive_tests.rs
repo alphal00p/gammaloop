@@ -378,7 +378,9 @@ fn massive_vacuum_part_a_from_spec() -> Result<()> {
             let mut children = Vec::new();
             let mut terms = Vec::new();
             let mut children_ms = 0u128;
-            for monomial in &monomials {
+            // RSTAR_PARTA_DELTA_ONLY=1: skip part (A), compute only Delta(G) by R*.
+            let delta_only = std::env::var("RSTAR_PARTA_DELTA_ONLY").is_ok_and(|v| v == "1");
+            for monomial in monomials.iter().filter(|_| !delta_only) {
                 let graph = topology.monomial_graph(&model, &mass, &monomial.attachments)?;
                 let plan = RStarPlan::new(&graph, &model, EdgeIndex::from(0), &settings)?;
                 spinneys += plan
@@ -475,6 +477,37 @@ fn massive_vacuum_part_a_from_spec() -> Result<()> {
                     Ok((delta, log)) => {
                         let unit = unit_scales(&delta, mass_symbol);
                         record["delta_ii"] = unit.to_string().into();
+                        let mut coefficients = serde_json::Map::new();
+                        let mut numeric = serde_json::Map::new();
+                        for (power, coefficient) in unit.series(GS.dim_epsilon, 0, -1)?.terms() {
+                            coefficients
+                                .insert(power.to_string(), coefficient.expand().to_string().into());
+                        }
+                        let mut numeric_settings = settings.vakint.true_settings();
+                        numeric_settings.run_time_decimal_precision = 120;
+                        if let Ok((value, _)) = vakint.numerical_evaluation(
+                            &numeric_settings,
+                            unit.as_view(),
+                            &Default::default(),
+                            &Default::default(),
+                            None,
+                        ) {
+                            for (power, coefficient) in value.coefficients() {
+                                numeric.insert(
+                                    power.to_string(),
+                                    format!("{:.125e}", coefficient.value().re).into(),
+                                );
+                            }
+                        }
+                        record["delta_ii_coefficients"] = coefficients.into();
+                        record["delta_ii_numeric"] = numeric.into();
+                        record["delta_ii_graphs"] = log.len().into();
+                        if validate {
+                            let direct = direct.series(GS.dim_epsilon, 0, -1)?.to_atom().expand();
+                            let difference = (&sub.poles - &delta - &direct).expand().together();
+                            record["difference_ii"] = difference.to_string().into();
+                            record["pass_ii"] = difference.is_zero().into();
+                        }
                         record["delta_ii_ms"] = (t.elapsed().as_millis() as u64).into();
                         record["delta_ii_terms"] = log
                             .iter()
@@ -513,6 +546,7 @@ fn massive_vacuum_part_a_from_spec() -> Result<()> {
         })();
         record["total_ms"] = (started.elapsed().as_millis() as u64).into();
         let mismatch = record["pass_i"].as_bool() == Some(false)
+            || record["pass_ii"].as_bool() == Some(false)
             || record["m_uv_in_part_a"].as_bool() == Some(true)
             || record["terms_with_m_uv"]
                 .as_array()
