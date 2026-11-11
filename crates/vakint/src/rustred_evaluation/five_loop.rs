@@ -962,9 +962,10 @@ impl Vakint {
             // The replaced package's cache is unreachable unless both share
             // their rule tables (a copy, or an options reload).
             if replaced.is_some() {
-                let mut programs = data.ordered_cache_programs()?;
+                let mut programs = data.decoded_ordered_cache_programs();
                 programs.push(application.ordered_cache_program().clone());
-                self.ordered_cache.detach_except(&programs);
+                self.ordered_cache
+                    .detach_except(&programs, &data.undecoded_lower_programs());
             }
         }
         let loaded = loaded
