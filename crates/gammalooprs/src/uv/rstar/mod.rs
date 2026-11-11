@@ -17,6 +17,8 @@ mod insertions;
 mod integrate;
 mod massive;
 #[cfg(test)]
+mod massive_regression_tests;
+#[cfg(test)]
 mod massive_tests;
 #[cfg(test)]
 mod master_tests;
@@ -51,9 +53,8 @@ pub use insertions::{
 };
 pub use integrate::integrate_single_mass;
 pub use massive::{
-    CountertermCache, DistributionTerm, MassiveVacuumSubdivergences, MassiveVacuumTerm,
-    NumeratorMonomial, RecursionContext, VacuumTopology, massive_vacuum_direct,
-    massive_vacuum_settings,
+    DistributionTerm, MassiveVacuumSubdivergences, MassiveVacuumTerm, NumeratorMonomial,
+    VacuumTopology, massive_vacuum_direct, massive_vacuum_settings,
 };
 pub use physical::{PhysicalUvGroup, PhysicalUvKey, PreparedPhysicalUvTerm};
 pub use plan::*;
