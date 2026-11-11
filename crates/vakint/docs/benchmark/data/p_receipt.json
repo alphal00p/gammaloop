@@ -1,0 +1,85 @@
+{
+ "schema": "vakint.p-benchmark-receipt.v1",
+ "data": "data/p_clean.json",
+ "data_sha256": "f2fd43a545452a0e18c986ee9c5c74d0ae76ed3530d9dbbbdee561392ff7515b",
+ "measured": {
+  "gammaloop": "05cd2781d0c5c5e64cc7bf6e24418b6f6bbc9384",
+  "rustred": "220ff62117501e6bec7a1d09ea5e521ed7c49189",
+  "binary_sha256": "79ee9255ffa2e5a08ddadb27666acb147d203a0dd87f601f54cec6415a4d1e7f",
+  "p_library_1_4_sha256sums_sha256": "94976a1862360d6031030702a2379fb0f282a46335bf4509df0da060722a6180",
+  "note": "local branch p_integral-bench-clean, never pushed: a2945f53f + 063763347 (pin rustred 220ff621, built-in data/p = combined p-library-1-3) + 05cd2781d (harness: peak RSS, in-process warm repeat)"
+ },
+ "published_with": {
+  "gammaloop": "a3d4f5e694546083ff2d1c862f7917d643554687",
+  "rustred": "a8dcfd679a098f8d03bf34ee3ab44d182dbf64f8",
+  "vakint_external_data": "85f2818f69384b90536f4695c050fe774488cb33"
+ },
+ "relation": "runtime-equivalent",
+ "evidence": {
+  "gammaloop_changed_paths": {
+   "Cargo.toml": "rustred and rustred-app rev 220ff621 -> a8dcfd67 (pin only)",
+   "Cargo.lock": "the same pin in the four rustred source lines only",
+   "crates/vakint/src/rustred_evaluation/p_data.rs": "inside mod tests only (one test literal)",
+   "crates/vakint/tests/p_integral_rustred_tests.rs": "test",
+   "crates/vakint/tests/p_library_shipping_tests.rs": "test"
+  },
+  "gammaloop_builtin_p_library_tree": "crates/vakint/data/p = git tree f1218cba30d82fc705fdead4c17e6032a0036a10 at both commits",
+  "rustred_changed_source_paths": {
+   "crates/rustred-app/src/application/propagator/package.rs": "p_library_differences / equivalent_p_libraries (package comparison; called by 'rustred p package' and tests, not on an evaluation path) + rustfmt",
+   "crates/rustred-app/src/application/propagator/assemble.rs": "rustfmt (0e1ac9c8)",
+   "crates/rustred-app/src/application/propagator/format.rs": "rustfmt (0e1ac9c8)",
+   "crates/rustred-core/src/propagator/scheme.rs": "rustfmt (0e1ac9c8; token-identical up to added braces) + clippy allow attributes (51926d74)",
+   "crates/rustred-app/src/application/campaign/plan/intern.rs": "clippy allow attribute",
+   "crates/rustred-app/src/application/propagator/mod.rs": "clippy allow attribute",
+   "crates/rustred-app/src/application/propagator/ordering.rs": "needless borrow removed (same value)",
+   "crates/rustred-core/src/propagator/basis.rs": "needless borrow removed + clippy allow attribute",
+   "crates/rustred-core/src/propagator/path_census.rs": "clippy allow attribute",
+   "crates/rustred-core/src/family/exact.rs": "RUNTIME-REACHABLE: the rational-constant fast path of invert_symbolic_matrix also requires diagnostics off (the default, ordinary execution) and every entry a coefficient of the context; ordinary execution takes the same path, plus one membership test per entry"
+  },
+  "rustred_other_changes": "tests, goldens, examples (scheme_check, scheme_replay)",
+  "p_library_1_4": "vakint-external-data 85f2818f p_integral/p-library-1-4: 472 files byte-identical (sha256) to the measured package artefacts/m5/combined/p-library-1-4",
+  "verification_of_the_tip": "vakint gate 1097/1097 and R* 60/60 on the pushed pin; Forcer cross-check of all 22 tops of L4 d0_r8 / d1_r8 through vakint (results, not timings)",
+  "spot_retime": {
+   "what": "the harness of the pushed tip (stamped release build of gammaloop a3d4f5e69 / rustred a8dcfd67, binary sha256 e440424254d5c6bb9479dc2961209314ffddaef5e7db8b58d47536b4dcbdd4c6) against the measured binary, RustRed, 1 thread, 3 repetitions, median evaluate seconds, 2026-11-11 11:07-11:16Z, same host",
+   "cells": [
+    {
+     "cell": "physics_L3",
+     "state": "cold",
+     "tip": 0.43,
+     "measured": 0.436,
+     "cpu": "342 both (run one after the other)"
+    },
+    {
+     "cell": "L4_d0_r4",
+     "state": "cold",
+     "tip": 2.375,
+     "measured": 2.451,
+     "cpu": "344 / 343 (concurrent)"
+    },
+    {
+     "cell": "L4_d0_r4",
+     "state": "warm-same",
+     "tip": 1.563,
+     "measured": 1.629,
+     "cpu": "344 / 343"
+    },
+    {
+     "cell": "L4_d1_r6",
+     "state": "cold",
+     "tip": 46.508,
+     "measured": 45.964,
+     "cpu": "344 / 343"
+    },
+    {
+     "cell": "L4_d1_r6",
+     "state": "warm-same",
+     "tip": 26.652,
+     "measured": 27.609,
+     "cpu": "344 / 343"
+    }
+   ],
+   "outputs": "byte-identical between the two binaries and to the data set's rows in every cell and state above",
+   "verdict": "equal within the host noise (ratios 0.96-1.01)"
+  }
+ }
+}
