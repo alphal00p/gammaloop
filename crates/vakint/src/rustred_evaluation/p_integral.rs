@@ -371,6 +371,45 @@ fn render(
         }))
 }
 
+/// The engine inputs of one channel: nonzero coefficients in the library's
+/// context.
+fn channel_inputs(
+    library: &rustred::propagator::library::PLibrary,
+    inputs: BTreeMap<(PresentationId, Vec<i64>), Rational>,
+    exact: ExactAlgebraLimits,
+) -> Result<Vec<(PresentationId, IntegralKey, Coefficient)>, RustRedEvaluationError> {
+    inputs
+        .into_iter()
+        .filter(|(_, value)| !value.is_zero())
+        .map(|((presentation, powers), value)| {
+            let key = IntegralKey::try_new(powers)
+                .map_err(|error| invalid(format!("integral key: {error}")))?;
+            Ok((
+                presentation,
+                key,
+                coefficient(library.coefficient_context(), &value, exact)?,
+            ))
+        })
+        .collect()
+}
+
+/// Whether a batch of `channels` requests on `threads` workers runs its
+/// requests side by side, each on one thread, instead of one after the
+/// other on all threads: when there are at least two requests per worker
+/// (many small requests pay a thread pool and a window dispatch each).
+/// `VAKINT_P_ACROSS_CHANNELS=on|off` overrides the choice (benchmarks).
+fn across_channels(threads: usize, channels: usize) -> bool {
+    static MODE: std::sync::OnceLock<Option<bool>> = std::sync::OnceLock::new();
+    let forced = *MODE.get_or_init(
+        || match std::env::var("VAKINT_P_ACROSS_CHANNELS").as_deref() {
+            Ok("on" | "1") => Some(true),
+            Ok("off" | "0") => Some(false),
+            _ => None,
+        },
+    );
+    threads > 1 && channels > 1 && forced.unwrap_or(channels >= 2 * threads)
+}
+
 /// The lowered inputs of a batch, by channel.
 type Channels = BTreeMap<Channel, ChannelInputs>;
 
@@ -463,26 +502,95 @@ pub(crate) fn reduce_requests(
     );
     let total = channels.len();
     let mut values = BTreeMap::<(usize, Atom), Vec<ReducedPropagatorValue>>::new();
+    let threads = settings.n_cores.max(1);
+    if across_channels(threads, total) {
+        // Many small requests (physics numerators: one per distinct
+        // coefficient): each on one thread, the requests spread over the
+        // workers, results consumed in channel order. A request returns the
+        // same terms on any thread count and whatever its step cache holds,
+        // so the values do not depend on the scheduling.
+        let jobs = channels
+            .into_iter()
+            .map(|(channel, ChannelInputs { inputs, integrals })| {
+                let inputs = convert.time(|| channel_inputs(library, inputs, exact))?;
+                Ok((channel, inputs, integrals))
+            })
+            .collect::<Result<Vec<_>, RustRedEvaluationError>>()?
+            .into_iter()
+            .filter(|(_, inputs, _)| !inputs.is_empty())
+            .collect::<Vec<_>>();
+        let single = PRequestOptions {
+            scheduler: OrderedSchedulerOptions {
+                threads: 1,
+                ..options.scheduler
+            },
+            ..options
+        };
+        let reductions = reduce.time(|| {
+            let _math = MathSpan::new();
+            super::parallel::map_ordered_by_cost(
+                threads,
+                &jobs,
+                |(_, inputs, _)| inputs.len(),
+                |index, (_, inputs, integrals)| {
+                    let started = phases::per_request().then(std::time::Instant::now);
+                    let reduction = library
+                        .reduce(p_reduction_request(
+                            &single,
+                            inputs.clone(),
+                            step_cache.clone(),
+                        ))
+                        .map_err(|error| reduction_error(error, integrals));
+                    if let (Some(started), Ok(reduction)) = (started, &reduction) {
+                        eprintln!(
+                            "vakint-p-request index={index} inputs={} terms={} seconds={:.6}",
+                            inputs.len(),
+                            reduction.terms.len(),
+                            started.elapsed().as_secs_f64()
+                        );
+                    }
+                    reduction
+                },
+            )
+        });
+        let reductions = reductions.into_iter().collect::<Result<Vec<_>, _>>()?;
+        for ((channel, _, _), reduction) in jobs.iter().zip(&reductions) {
+            if reduction.dimension != channel.loops as i64 {
+                return Err(invalid(format!(
+                    "a {}-loop request returned a reduction of dimension {}",
+                    channel.loops, reduction.dimension
+                ))
+                .into());
+            }
+        }
+        let rendered = rendering.time(|| {
+            super::parallel::map_ordered(threads, &reductions, |_, reduction| {
+                render(&handle, reduction, epsilon)
+            })
+        });
+        for ((channel, _, _), reduced) in jobs.into_iter().zip(rendered) {
+            values
+                .entry((channel.loops, channel.head))
+                .or_default()
+                .push(ReducedPropagatorValue {
+                    scale_power: channel.scale_power,
+                    reduced: reduced? * &channel.coefficient,
+                });
+        }
+        if let Some(progress) = progress {
+            progress.cohorts(total, total);
+        }
+        convert.report("p.input_coefficients");
+        reduce.report("p.rustred_reduce");
+        rendering.report("p.render");
+        return Ok(values);
+    }
     for (index, (channel, ChannelInputs { inputs, integrals })) in channels.into_iter().enumerate()
     {
         if let Some(progress) = progress {
             progress.cohorts(index, total);
         }
-        let inputs = convert.time(|| {
-            inputs
-                .into_iter()
-                .filter(|(_, value)| !value.is_zero())
-                .map(|((presentation, powers), value)| {
-                    let key = IntegralKey::try_new(powers)
-                        .map_err(|error| invalid(format!("integral key: {error}")))?;
-                    Ok((
-                        presentation,
-                        key,
-                        coefficient(library.coefficient_context(), &value, exact)?,
-                    ))
-                })
-                .collect::<Result<Vec<_>, RustRedEvaluationError>>()
-        })?;
+        let inputs = convert.time(|| channel_inputs(library, inputs, exact))?;
         if inputs.is_empty() {
             continue;
         }
