@@ -7,21 +7,30 @@
 #let pt-navy = rgb("173f65")
 #let pt-style = (
   "S": (fill: rgb("cdebc5"), ink: rgb("1b5e20")),
+  "Z": (fill: rgb("e4efe1"), ink: rgb("4a6b45")),
+  "P": (fill: rgb("e3dcf7"), ink: rgb("4b2a91")),
   "S*": (fill: rgb("fde0b4"), ink: rgb("8a4b00")),
   "N": (fill: rgb("f8c9c4"), ink: rgb("8e1b12")),
 )
 #let pt-na = rgb("f3f5f8")
 #let pt-key(o) = if o < 0 { "-" + str(-o) } else { str(o) }
 #let pt-eps(o) = [$epsilon^(#o)$]
-#let pt-text(c) = if c.class == "S" [S] else [#c.class\(#str(c.X)\)]
+#let pt-text(c) = if c.class == "S" [S] else if c.class == "Z" [0] else [#c.class\(#str(c.X)\)]
 #let pt-marks(c, size) = {
   let m = c.at("marks", default: ())
   if m.len() > 0 { text(size: size, weight: "regular", super(m.join(","))) }
 }
 
-// One table-1 cell: coloured class, '—' where the order is not held.
+// One table-1 cell: coloured class, '—' where the order is not held; '0' = structural zero (overview rows); a pending overlay
+// result (preview) = violet frame, its class with † (the released class in small grey when there is one).
 #let pt-cell1(c) = {
   if c == none { return table.cell(fill: pt-na, text(fill: luma(170))[—]) }
+  let p = c.at("pending", default: none)
+  if p != none and not p.at("worse_than_released", default: false) {
+    let s = pt-style.at(p.class)
+    return table.cell(fill: s.fill, stroke: 0.9pt + pt-style.P.ink, text(fill: s.ink, weight: "semibold")[#pt-text(p)#text(fill: pt-style.P.ink, weight: "bold")[†]#if c.class != none [ #text(size: 4.2pt, weight: "regular", fill: luma(90))[#pt-text(c)]]])
+  }
+  if c.class == none { return table.cell(fill: pt-na, text(fill: luma(170))[—]) }
   let s = pt-style.at(c.class)
   table.cell(fill: s.fill, text(fill: s.ink, weight: "semibold")[#pt-text(c)#pt-marks(c, 4.6pt)])
 }
@@ -53,8 +62,9 @@
   set text(7.6pt, font: pt-sans)
   let sw(k, body) = box(baseline: 2pt, rect(width: auto, height: 9pt, inset: (x: 3pt, y: 1.5pt), radius: 1.5pt,
     fill: pt-style.at(k).fill, text(size: 6.8pt, weight: "bold", fill: pt-style.at(k).ink, body)))
-  grid(columns: 4, column-gutter: 12pt, align: left + horizon,
+  grid(columns: 5, column-gutter: 12pt, align: left + horizon,
     [#sw("S")[S] exact, periods at any precision],
+    [#sw("Z")[0] structural zero (table 1)],
     [#sw("S*")[S\*(X)] exact, periods to at most X digits],
     [#sw("N")[N(X)] numerical only, at most X digits],
     [#box(baseline: 2pt, rect(height: 9pt, inset: (x: 3pt, y: 1.5pt), radius: 1.5pt, fill: pt-na, text(size: 6.8pt, fill: luma(130))[—])) not available],
@@ -80,15 +90,16 @@
   )
 }
 
-#let pt-table1(t) = {
+#let pt-table1(t, ov: none) = {
   let o1 = t.orders_table1
-  let counts = t.counts_table1
+  let counts = if ov != none { ov.table1_counts } else { t.counts_table1 }
+  let rows1 = if ov != none { ov.table1 } else { t.table1 }
   set text(font: pt-sans, size: 5.5pt)
   table(
     // wider columns where S*(X) labels occur
-    columns: (1.9cm,) + o1.map(o => if t.table1.any(r => {
+    columns: (1.9cm,) + o1.map(o => if rows1.any(r => {
       let c = r.cells.at(pt-key(o))
-      c != none and c.class == "S*"
+      c != none and (c.class == "S*" or c.at("pending", default: none) != none)
     }) { 1.75fr } else { 1fr }),
     align: (x, y) => if x == 0 { left + horizon } else { center + horizon },
     inset: (x: 1.4pt, y: 1.22pt),
@@ -100,16 +111,17 @@
     ..{
       let out = ()
       let last = none
-      for r in t.table1 {
+      for r in rows1 {
         if r.loop != last {
           let c = counts.at(str(r.loop) + "L")
-          let n = t.table1.filter(x => x.loop == r.loop).len()
+          let n = rows1.filter(x => x.loop == r.loop).len()
           out.push(table.cell(colspan: o1.len() + 1, fill: rgb("eaf2fa"),
-            text(weight: "bold", fill: pt-navy)[#r.loop\L · #n master#if n != 1 [s] · #c.at("S") S, #c.at("S*") S\*, #c.at("N") N]))
+            text(weight: "bold", fill: pt-navy)[#r.loop\L · #n master#if n != 1 [s] · #c.at("S") S, #if ov != none [#c.at("Z") zero, ]#c.at("S*") S\*, #c.at("N") N#if ov != none and c.pending > 0 [ · #text(fill: pt-style.P.ink)[#c.pending pending †#if c.pending_masters > 0 [ (#c.pending_masters new masters)]]]]))
           last = r.loop
         }
         let alias = r.at("name_640", default: none)
-        out.push(table.cell(text(fill: rgb("1d2733"))[#r.loop\L/#r.name#if alias != none [ #text(fill: luma(120))[(#alias)]]]))
+        let design = r.at("design_name", default: none)
+        out.push(table.cell(fill: if design != none { pt-style.P.fill } else { none }, text(fill: rgb("1d2733"))[#r.loop\L/#r.name#if alias != none [ #text(fill: luma(120))[(#alias)]]#if design != none [ #text(fill: pt-style.P.ink)[#design †]]]))
         for o in o1 { out.push(pt-cell1(r.cells.at(pt-key(o)))) }
       }
       out
@@ -118,7 +130,7 @@
 }
 
 // The whole section, on landscape pages: provenance line, legend, table 1 (two columns), table 2 with its notes, method.
-#let precision-section(t) = page(flipped: true, margin: (x: 11mm, top: 11mm, bottom: 13mm), {
+#let precision-section(t, ov: none) = page(flipped: true, margin: (x: 11mm, top: 11mm, bottom: 13mm), {
   let src = t.sources
   let f5 = src.five_loop_values
   let dg = t.at("data_git", default: none)
@@ -142,10 +154,10 @@
   v(0.2em)
   text(9pt, weight: "bold", fill: pt-navy)[Precision table 1. Master coefficients]
   text(7.4pt, fill: luma(80))[ — every master of the data tree (rows, by loop count; 5L: the 640-pack name in brackets) at every
-    Laurent order held (columns); — = not held. #super[p] X rests in part on a constant computed with two profiles of one code
+    Laurent order held (columns); — = not held#if ov != none [; 0 = structural zero (exact zero row)]#if ov != none and ov.mode == "preview" [; #text(fill: pt-style.P.ink)[violet frame †: pending overlay result (small grey: the released class it would replace); violet rows: masters of the new basis, entirely pending]]. #super[p] X rests in part on a constant computed with two profiles of one code
     beyond its independent confirmation; #super[n] Numerical mode returns more digits.]
   columns(2, gutter: 6mm, {
-    pt-table1(t)
+    pt-table1(t, ov: ov)
     set text(size: 6pt, font: pt-sans)
     set par(justify: false, leading: 0.4em)
     if t.two_profile_constants.len() > 0 [

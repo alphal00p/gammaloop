@@ -3,7 +3,7 @@
 #
 #   make-benchmark.sh DATA_ROOT BENCHMARK_BINARY OUT_DIR [--install [--accept-pending FILE]] [--draft]
 #                     [run_benchmarks.py options...]
-#   make-benchmark.sh DATA_ROOT - OUT_DIR --refresh-tables [--install]
+#   make-benchmark.sh DATA_ROOT - OUT_DIR --refresh-tables [--install | --overlay OVERLAY.json]
 #
 # DATA_ROOT         vakint-external-data checkout (1L-5L packs, with master values)
 # BENCHMARK_BINARY  the benchmark_suite example of this crate, built (with its build identity) by
@@ -25,6 +25,12 @@
 #                   tools/receipt.py refresh (refuses unless DATA_ROOT's reduction payloads equal the measured
 #                   tree's, receipt rule 2) installs tables.json, PRECISION-TABLES.md and docs/benchmark.pdf and
 #                   records the tables' data tree in the receipt (the timing provenance is kept).
+# Overview (tools/overview.py, after the precision tables): what vakint computes exactly / numerically and to what precision,
+#                   1L-5L (counts per loop and order, the L-loop result, named constants, method); overview.json + OVERVIEW.md
+#                   in OUT_DIR, installed with the tables (docs/benchmark/data/overview.json, OVERVIEW.md). OVERVIEW_NAMES=<names.json>
+#                   adds proposed traditional names of the constants.
+# --overlay FILE    PREVIEW edition (only with --refresh-tables, never with --install): the overview and table 1 also show the
+#                   pending results of FILE (schema vakint.precision-overlay.v1), marked and counted apart from the released ones.
 # --draft           DRAFT watermark (never installable)
 # Other options go to tools/run_benchmarks.py (--cpus, --skip-heavy, --heavy-only, --only, --cells, --repetitions,
 # --max-sibling-busy, --max-run-delay, --max-foreign-cpu, --contention-retries, --allow-shared-l3,
@@ -37,18 +43,26 @@ mkdir -p "$OUT"; OUT=$(realpath "$OUT")
 HERE=$(cd "$(dirname "$0")" && pwd); DOCS=$(dirname "$HERE")
 TYPST=${TYPST:-typst}
 command -v "$TYPST" > /dev/null || { echo "typst not found (put typst 0.15 on PATH or set TYPST=<path>)" >&2; exit 2; }
-INSTALL=0; DRAFT=false; REFRESH=0; PASS=(); ACCEPT=()
+INSTALL=0; DRAFT=false; REFRESH=0; PASS=(); ACCEPT=(); OVERLAY=()
 while (( $# )); do
   case $1 in
     --install) INSTALL=1;;
     --accept-pending) ACCEPT=(--accept-pending "$(realpath "$2")"); shift;;
     --draft) DRAFT=true; PASS+=(--draft);;
     --refresh-tables) REFRESH=1;;
+    --overlay) OVERLAY=(--overlay "$(realpath "$2")"); shift;;
     *) PASS+=("$1");;
   esac
   shift
 done
 if (( INSTALL )) && [[ $DRAFT == true ]]; then echo "--install refuses a --draft run" >&2; exit 2; fi
+if (( ${#OVERLAY[@]} )) && { (( INSTALL )) || (( ! REFRESH )); }; then
+  echo "--overlay (PREVIEW) only with --refresh-tables and never with --install" >&2; exit 2; fi
+NAMES=(); [[ -n ${OVERVIEW_NAMES:-} ]] && NAMES=(--names "$(realpath "$OVERVIEW_NAMES")")
+overview() { # the overview of OUT's tables (RELEASED, or PREVIEW with --overlay)
+  python3 -I "$HERE/tools/overview.py" --data-root "$ROOT" --tables "$OUT/tables.json" --json "$OUT/overview.json" \
+    --md "$OUT/OVERVIEW.md" "${NAMES[@]}" "${OVERLAY[@]}"
+}
 if (( REFRESH )); then
   if [[ $DRAFT == true ]] || (( ${#PASS[@]} )) || (( ${#ACCEPT[@]} )); then
     echo "--refresh-tables takes only --install (no measurement options)" >&2; exit 2; fi
@@ -60,14 +74,17 @@ if (( REFRESH )); then
   TSTATUS=provisional; (( INSTALL )) && TSTATUS=final
   python3 -I "$HERE/tools/precision_tables.py" --data-root "$ROOT" --json "$OUT/tables.json" --md "$OUT/PRECISION-TABLES.md" \
     --status $TSTATUS ${PRECISION_TABLES_LABEL:+--label "$PRECISION_TABLES_LABEL"}
+  overview
   "$TYPST" compile --root / --input results="$OUT/results.json" --input graphs="$HERE/data/graphs.json" \
-    --input tables="$OUT/tables.json" --input draft=false "$DOCS/benchmark.typ" "$OUT/benchmark.pdf"
-  echo "wrote $OUT/benchmark.pdf (timings: committed suite.json; tables: $ROOT)"
+    --input tables="$OUT/tables.json" --input overview="$OUT/overview.json" --input draft=false "$DOCS/benchmark.typ" "$OUT/benchmark.pdf"
+  echo "wrote $OUT/benchmark.pdf (timings: committed suite.json; tables: $ROOT${OVERLAY:+; PREVIEW overlay ${OVERLAY[1]}})"
   if (( INSTALL )); then
     # the gate part of 'refresh' runs before any install copy (a refusal leaves the docs untouched)
     python3 -I "$HERE/tools/receipt.py" refresh --out "$OUT" --data-root "$ROOT" --dry-run
     cp "$OUT/tables.json" "$HERE/data/tables.json"
     cp "$OUT/PRECISION-TABLES.md" "$HERE/data/PRECISION-TABLES.md"
+    cp "$OUT/overview.json" "$HERE/data/overview.json"
+    cp "$OUT/OVERVIEW.md" "$HERE/data/OVERVIEW.md"
     (cd "$DOCS" && "$TYPST" compile --input draft=false benchmark.typ benchmark.pdf)
     python3 -I "$HERE/tools/receipt.py" refresh --out "$OUT" --data-root "$ROOT" --pdf "$DOCS/benchmark.pdf" \
       --receipt "$HERE/data/receipt.json"
@@ -97,10 +114,11 @@ t=$EPOCHREALTIME
 TSTATUS=provisional; (( INSTALL )) && TSTATUS=final
 python3 -I "$HERE/tools/precision_tables.py" --data-root "$ROOT" --json "$OUT/tables.json" --md "$OUT/PRECISION-TABLES.md" \
   --status $TSTATUS ${PRECISION_TABLES_LABEL:+--label "$PRECISION_TABLES_LABEL"}
+overview
 step tables "$t"
 t=$EPOCHREALTIME
 "$TYPST" compile --root / --input results="$OUT/results.json" --input graphs="$OUT/graphs.json" \
-  --input tables="$OUT/tables.json" --input draft=$DRAFT "$DOCS/benchmark.typ" "$OUT/benchmark.pdf"
+  --input tables="$OUT/tables.json" --input overview="$OUT/overview.json" --input draft=$DRAFT "$DOCS/benchmark.typ" "$OUT/benchmark.pdf"
 step typst "$t"
 echo "wrote $OUT/benchmark.pdf"
 if (( INSTALL )); then
@@ -109,6 +127,8 @@ if (( INSTALL )); then
   cp "$OUT/graphs.json" "$HERE/data/graphs.json"
   cp "$OUT/tables.json" "$HERE/data/tables.json"
   cp "$OUT/PRECISION-TABLES.md" "$HERE/data/PRECISION-TABLES.md"
+  cp "$OUT/overview.json" "$HERE/data/overview.json"
+  cp "$OUT/OVERVIEW.md" "$HERE/data/OVERVIEW.md"
   # Rebuild from the installed copies so the committed PDF is reproducible from the repository.
   (cd "$DOCS" && "$TYPST" compile --input draft=$DRAFT benchmark.typ benchmark.pdf)
   python3 -I "$HERE/tools/receipt.py" write --out "$OUT" --data-root "$ROOT" --pdf "$DOCS/benchmark.pdf" \

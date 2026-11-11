@@ -1,12 +1,17 @@
 // Vakint reduction benchmark. Generated data only: regenerate with
 //   crates/vakint/docs/benchmark/make-benchmark.sh DATA_ROOT BENCHMARK_BINARY OUT_DIR [--install]
-// Inputs (typst --input): results=<results.json>, graphs=<graphs.json>, tables=<tables.json>, draft=true|false.
+// Inputs (typst --input): results=<results.json>, graphs=<graphs.json>, tables=<tables.json>, overview=<overview.json>,
+// draft=true|false.
 // tables.json: benchmark/tools/precision_tables.py on the same data root (precision of masters and results).
 
 #import "precision_tables.typ": precision-section
+#import "overview.typ": overview-section
 #let results = json(sys.inputs.at("results", default: "benchmark/data/suite.json"))
 #let graphs = json(sys.inputs.at("graphs", default: "benchmark/data/graphs.json"))
 #let tables = json(sys.inputs.at("tables", default: "benchmark/data/tables.json"))
+// overview.json: benchmark/tools/overview.py on the same tables (RELEASED, or PREVIEW with an overlay of pending results)
+#let overview = json(sys.inputs.at("overview", default: "benchmark/data/overview.json"))
+#let preview = overview.mode == "preview"
 #let draft = sys.inputs.at("draft", default: if results.at("draft", default: false) { "true" } else { "false" }) == "true"
 
 #let navy = rgb("173f65")
@@ -24,9 +29,11 @@
   paper: "a4",
   margin: (x: 16mm, top: 16mm, bottom: 16mm),
   footer: context align(right, text(size: 8pt, fill: rgb("687584"))[
-    Vakint reduction benchmark · #counter(page).display("1")]),
+    #if preview [#text(fill: rgb("4b2a91"), weight: "bold")[PREVIEW: includes pending results (†) not in any released data] · ]Vakint reduction benchmark · #counter(page).display("1")]),
   background: if draft {
     rotate(-32deg, text(size: 110pt, weight: "bold", fill: rgb(200, 40, 40, 28), font: sans)[DRAFT])
+  } else if preview {
+    rotate(-32deg, text(size: 96pt, weight: "bold", fill: rgb(75, 42, 145, 18), font: sans)[PREVIEW])
   },
 )
 #set text(font: "Libertinus Serif", size: 10.4pt, fill: ink, lang: "en")
@@ -157,10 +164,13 @@
   #v(0.2em)
   #text(22pt, weight: "bold", fill: navy)[Vakint reduction benchmark]
   #v(-0.35em)
-  #text(12pt, fill: luma(80))[RustRed versus alphaLoop, MATAD and FMFT · reduction graphs from one to five loops · precision of the results]
+  #text(12pt, fill: luma(80))[What vakint computes exactly or numerically, and to what precision · RustRed versus alphaLoop, MATAD and FMFT · reduction graphs from one to five loops]
   #v(0.15em)
   #text(9pt, fill: luma(110))[#day · #host.at("cpu_model", default: "") · #core-claim · vakint #ident.vakint_version]
 ]
+
+#overview-section(overview)
+#pagebreak(weak: true)
 
 #block(fill: pale, inset: 10pt, radius: 4pt, width: 100%)[
   #set text(9.3pt)
@@ -481,4 +491,4 @@ graphs) are merged by their factors; numbers count masters (one to three loops: 
 
 // ------------------------------------------------------------- precision --
 
-#precision-section(tables)
+#precision-section(tables, ov: overview)

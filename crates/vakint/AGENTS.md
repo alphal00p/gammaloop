@@ -67,14 +67,19 @@ complete scalar input as `prepared-input.json` plus authenticated
 input/condition payloads; `--prepared-input PATH` shares it across fresh
 processes. Keep native preparation timing separate from reduction timing.
 
-`docs/benchmark.typ` / `docs/benchmark.pdf` (RustRed against alphaLoop, MATAD
-and FMFT, the reduction graphs, the precision tables) are generated, never
+`docs/benchmark.typ` / `docs/benchmark.pdf` (an overview of what vakint
+computes exactly or numerically and to what precision, 1L-5L; RustRed against
+alphaLoop, MATAD and FMFT, the reduction graphs, the precision tables) are generated, never
 hand-edited: `docs/benchmark/make-benchmark.sh DATA_ROOT BINARY OUT --install`
 measures with the `benchmark_suite` example built by
 `docs/benchmark/build-benchmark-binary.sh` and installs the PDF with
 `docs/benchmark/data/{suite,graphs,tables,receipt}.json`; after a data release,
 `make-benchmark.sh DATA_ROOT - OUT --refresh-tables --install` refreshes the
-precision tables and keeps the timings. `docs/benchmark/tools/receipt.py check
+precision tables and the overview (`docs/benchmark/tools/overview.py`,
+`docs/overview.typ`, installed as `data/overview.json`) and keeps the timings;
+`--refresh-tables --overlay FILE` (never installable) builds a PREVIEW edition
+that also shows pending, not yet released results, marked and counted apart.
+`docs/benchmark/tools/receipt.py check
 --data-root TREE` verifies a checkout against the receipt. The earlier report,
 its merge adapters and provenance archives stay out of the repository.
 

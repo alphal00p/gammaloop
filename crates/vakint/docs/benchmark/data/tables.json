@@ -18,12 +18,12 @@
    "basis": "BASIS-v2 (pole-free, 131 masters: 111 kept + 20 new; basis-b/b3/BASIS-v2.json)"
   },
   "version": "v0.2.2",
-  "vakint_constants_rs_sha256": "4feefb48f9e69cf237287004554033d6577bd164a99b272829cb955066d2a43d",
+  "vakint_constants_rs_sha256": "f9d444f50a7685685c0910383a00cd25f7e5b6d63e025fddf8121610ed909cdd",
   "vakint_route_sources_sha256": {
    "inspection.rs": "7291373f93d3b2370f5e9298d2ca15be638f05fd1a2b4236459dc27cd3880e4c",
-   "inspection/registry.rs": "8ae5be72abd7f64e9bc53bf3b464e6a5ec1c9692c51738117d3722fc9346326c",
-   "rustred_evaluation/masters.rs": "a02e2318ab6fc97af6c7f0622f2b4b89fffd39579000a70b24f47b1c330efebe",
-   "rustred_evaluation/five_loop.rs": "8037e10d840394ee4b005b8535e7727b4478f25939b66d391d8187c982859975",
+   "inspection/registry.rs": "d3db32ee3b199a6ecb960f16b533f1f38c48da173bbdfac852e213a7b46a2f37",
+   "rustred_evaluation/masters.rs": "c0fa67ea97830140b5f159bb5141fbac44e8e389769aa35159f6d9717de17a28",
+   "rustred_evaluation/five_loop.rs": "2c5c1a77707e59eef78a2675fd709f5a176b5163c1ada613f4ef8e94e74b5253",
    "hpl.rs": "aa6270e254a177de404eac0b93cd2081019a828d7f0844060eb91d53b0d026fb"
   },
   "pole_depth_sha256": "4ad608642329a54e9560c1b34029d6b09b595d71d23c12b6b35342348014d223"
@@ -12698,9 +12698,9 @@
   "5L release tiers (5L/producer-update.json) checked against the rows: A 61, B 129, F 5, S 562, S* 29 (S -> S, S* -> S* with the same constants, numerical tiers -> N).",
   "RustRed backend only (vakint’s first backend); MATAD/FMFT/alphaLoop fallbacks are not part of these tables."
  ],
- "content_sha256": "0e2fc8ca25f526ec4c06535de959a1009469dbbacbbde273e99d39b08a5cbe52",
+ "content_sha256": "b9e752afa83f2d8f4e63b0de063f6f91a4faff54735c9fa77eb928b77aa2a0d2",
  "status": "final",
- "generated_utc": "2026-11-07T11:37:19Z",
+ "generated_utc": "2026-11-11T01:05:55Z",
  "data_root": "/shared/vhirschi/t3code/vakint/scratchpad/5l-pilot/basis-b/bench/data/ved-v0.2.2",
  "data_git": {
   "commit": "0faa1c79566456923a966cab3d012d47059ce4e5",
