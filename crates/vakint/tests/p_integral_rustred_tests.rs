@@ -647,7 +647,9 @@ mod four_loops {
     /// must-fix 2; coordinator ruling 2026-11-10T10:11Z): a request that fails
     /// for another cause than a resource (zero cores: vakint's `InvalidNCores`)
     /// FAILS with its message, it is never filed as a cost; a heavy top
-    /// (`bench_L4_d0_r4_P4L_NO1` of `p4l_grid.json`, minutes of RustRed) within
+    /// (`bench_L4_d1_r8_P4L_NO3` of `p4l_grid.json`, minutes of RustRed; it was
+    /// `bench_L4_d0_r4_P4L_NO1` until Forcer's scheme for no1 made that one a
+    /// matter of seconds, M5 combined) within
     /// a 5 s budget is a resource stop, with Symbolica's limit message in its
     /// text, whether vakint reports it typed or in its untyped "malformed p
     /// library" form. A failure that arrives once the budget is spent cannot
@@ -661,7 +663,8 @@ mod four_loops {
         };
         let heavy = parse(
             "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))\
-             *topo(P4L_NO1(p(1),1,1,1,1,1,1,1,1,1,1,1))",
+             *dot(k(1),p(1))*dot(k(4),p(1))*dot(k(2),k(3))\
+             *topo(P4L_NO3(p(1),2,1,1,1,1,1,1,1,1,1,1))",
         );
         let no_forcer = |mode: RustRedMasterMode| -> Result<Atom, String> {
             panic!("the Forcer side was asked ({mode}) although RustRed did not finish")
