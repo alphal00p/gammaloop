@@ -2,7 +2,7 @@
   "schema": "rustred.p-basis-layer.v1",
   "base": {
     "P_OWNER_LIBRARY_SEMANTICS": "rustred-p-owner-library-2026-11-05",
-    "P_CENSUS_VERSION": "1",
+    "P_CENSUS_VERSION": "2",
     "P_CLASS_KEY_VERSION": "1",
     "terminals": 3
   },

@@ -1,14 +1,14 @@
 {
   "files": [
     {
-      "bytes": 492355,
+      "bytes": 492295,
       "path": "census.json",
-      "sha256": "d292858e7d534a1bb2660b6b0ac945bb8a8df5116b6d78a59aa23081f618b41a"
+      "sha256": "d3304b167973ff0a45fccefb7e71dcaa7fd8d8ac82fafd95150c58b18428a033"
     },
     {
       "bytes": 59355,
       "path": "census.rrbin",
-      "sha256": "3c9994f73feefe93e1e4b7daa54acb08075568270ecc3d50d24a93106c07d4b3"
+      "sha256": "c626043e6d80b4e15da464faaddb5bd6a9e990cbfa377cce38005f3efdf8fdd3"
     },
     {
       "bytes": 1268,
@@ -248,12 +248,17 @@
     {
       "bytes": 1786,
       "path": "layer/p-layer.json",
-      "sha256": "4ee7989f011d1f7213c432c680cc00c294dcb3039897697f629d9173e400b4ad"
+      "sha256": "ca64a56897571ae14e9861fde237cc07ec44394b35872c00dca275e81228fdc3"
     },
     {
-      "bytes": 126859,
+      "bytes": 127020,
       "path": "library.json",
-      "sha256": "e986679be5768a282c721b0923e0a805d02a3f1e3dadacd34f89a54ed4aa91cd"
+      "sha256": "3533d47f04734e4d2ff924c73ecfeb4d915e97d80db6d7405d44d0f7e54003e1"
+    },
+    {
+      "bytes": 45013,
+      "path": "ordering.json",
+      "sha256": "b1f9c2b8385abbd85bbd914ee28066dede3de56183e1dc6c5812502167c0ad47"
     },
     {
       "bytes": 19368,
@@ -266,20 +271,25 @@
       "sha256": "874117811cf4a19032b97acb88ed3bde211589d96ff7e08d743e11eb861a8b95"
     },
     {
+      "bytes": 176010,
+      "path": "routes.rrbin",
+      "sha256": "68c09ba6fdeb1edb5ea64225604a2e4b1137eacc6da5edfa8dc889a210cf9d5f"
+    },
+    {
       "bytes": 85206,
       "path": "topology/p-topologies.json",
       "sha256": "ab1911534fb97c92ad49c1bead4ab3fdfcace0e9995121b2829d9ef353f5a122"
     }
   ],
-  "identity": "p-library:scope=1-3:P_OWNER_LIBRARY_SEMANTICS=rustred-p-owner-library-2026-11-05,P_CLASS_KEY_VERSION=1,P_CENSUS_VERSION=1,P_PRESENTATION_VERSION=1,P_FAMILIES_VERSION=1,P_GAMMA_TAG_VERSION=1,P_GAMMA_TAG_MAX_M=8,P_GAMMA_TAG_WIDTH=16,P_INSERTION_KERNEL_VERSION=1,P_CARPET_KERNEL_VERSION=1,P_TRIANGLE_TEMPLATE_VERSION=1,P_DIAMOND_TEMPLATE_VERSION=1,P_CUSTOM_OWNER_VERSION=1,P_LIBRARY_SCHEMA=rustred.p-owner-library.v1,P_FAMILIES_SCHEMA=rustred.p-families.v1,P_BASIS_LAYER_SCHEMA=rustred.p-basis-layer.v1,P_TOPOLOGY_VERSION=1",
+  "identity": "p-library:scope=1-3:P_OWNER_LIBRARY_SEMANTICS=rustred-p-owner-library-2026-11-05,P_CLASS_KEY_VERSION=1,P_CENSUS_VERSION=2,P_PRESENTATION_VERSION=2,P_FAMILIES_VERSION=1,P_GAMMA_TAG_VERSION=1,P_GAMMA_TAG_MAX_M=8,P_GAMMA_TAG_WIDTH=16,P_INSERTION_KERNEL_VERSION=1,P_CARPET_KERNEL_VERSION=1,P_TRIANGLE_TEMPLATE_VERSION=1,P_DIAMOND_TEMPLATE_VERSION=1,P_SCHEME_TEMPLATE_VERSION=2,P_CUSTOM_OWNER_VERSION=2,P_LIBRARY_SCHEMA=rustred.p-owner-library.v1,P_FAMILIES_SCHEMA=rustred.p-families.v1,P_BASIS_LAYER_SCHEMA=rustred.p-basis-layer.v1,P_TOPOLOGY_VERSION=1,P_ORDERING_VERSION=1:generation",
   "library": "p-library-1-3",
   "schema": "vakint.p-data.v1",
   "versions": {
     "P_BASIS_LAYER_SCHEMA": "rustred.p-basis-layer.v1",
     "P_CARPET_KERNEL_VERSION": "1",
-    "P_CENSUS_VERSION": "1",
+    "P_CENSUS_VERSION": "2",
     "P_CLASS_KEY_VERSION": "1",
-    "P_CUSTOM_OWNER_VERSION": "1",
+    "P_CUSTOM_OWNER_VERSION": "2",
     "P_DIAMOND_TEMPLATE_VERSION": "1",
     "P_FAMILIES_SCHEMA": "rustred.p-families.v1",
     "P_FAMILIES_VERSION": "1",
@@ -289,7 +299,8 @@
     "P_INSERTION_KERNEL_VERSION": "1",
     "P_LIBRARY_SCHEMA": "rustred.p-owner-library.v1",
     "P_OWNER_LIBRARY_SEMANTICS": "rustred-p-owner-library-2026-11-05",
-    "P_PRESENTATION_VERSION": "1",
+    "P_PRESENTATION_VERSION": "2",
+    "P_SCHEME_TEMPLATE_VERSION": "2",
     "P_TOPOLOGY_VERSION": "1",
     "P_TRIANGLE_TEMPLATE_VERSION": "1"
   }

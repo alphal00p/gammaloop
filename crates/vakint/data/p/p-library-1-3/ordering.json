@@ -1,0 +1,2051 @@
+{
+  "schema": "rustred.p-ordering.v1",
+  "version": 1,
+  "heuristic": "generation",
+  "parameters": {},
+  "owners": [
+    {
+      "class": "L2T05-001e279c3d892daf",
+      "lane": "triangle",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L3T06-00c99db10f58faf6",
+      "lane": "series_parallel",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L1T02-0f54c10f75ed1e71",
+      "lane": "series_parallel",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L3T05-15bcfc1aa5546a43",
+      "lane": "series_parallel",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L3T07-1881c6d1a44ffe19",
+      "lane": "insertion",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L3T05-2664f4a583ec888b",
+      "lane": "series_parallel",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L3T07-28806d3e18a52b2c",
+      "lane": "insertion",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L3T07-4f3f489a027f1572",
+      "lane": "triangle",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L3T06-5f7155fa1502296f",
+      "lane": "insertion",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L2T04-60363b6119d83c3a",
+      "lane": "series_parallel",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L2T03-61b48e1159bdb6a2",
+      "lane": "series_parallel",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L3T08-61cd69124cf81eb3",
+      "lane": "custom",
+      "dispatch": "first-valid",
+      "charts": [
+        {
+          "chart": 255,
+          "order": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "chart": 255,
+          "index": 0,
+          "affine": false,
+          "fixed": [],
+          "rhs_terms": 13,
+          "max_rank_change": -1,
+          "rank_raising_terms": 0,
+          "raised_lines": 96,
+          "lowered_lines": 247,
+          "raising_terms": 4,
+          "exceptions": 2,
+          "coefficient_bytes_max": 27,
+          "coefficient_bytes_total": 106,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 1,
+          "score": []
+        },
+        {
+          "chart": 255,
+          "index": 1,
+          "affine": false,
+          "fixed": [
+            [
+              7,
+              1
+            ]
+          ],
+          "rhs_terms": 14,
+          "max_rank_change": -1,
+          "rank_raising_terms": 0,
+          "raised_lines": 10,
+          "lowered_lines": 255,
+          "raising_terms": 4,
+          "exceptions": 2,
+          "coefficient_bytes_max": 28,
+          "coefficient_bytes_total": 136,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 1,
+          "score": []
+        },
+        {
+          "chart": 255,
+          "index": 2,
+          "affine": false,
+          "fixed": [
+            [
+              8,
+              0
+            ]
+          ],
+          "rhs_terms": 6,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 72,
+          "lowered_lines": 183,
+          "raising_terms": 4,
+          "exceptions": 1,
+          "coefficient_bytes_max": 39,
+          "coefficient_bytes_total": 83,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 1,
+          "score": []
+        },
+        {
+          "chart": 255,
+          "index": 3,
+          "affine": false,
+          "fixed": [
+            [
+              6,
+              1
+            ],
+            [
+              7,
+              1
+            ]
+          ],
+          "rhs_terms": 6,
+          "max_rank_change": -1,
+          "rank_raising_terms": 0,
+          "raised_lines": 132,
+          "lowered_lines": 105,
+          "raising_terms": 4,
+          "exceptions": 2,
+          "coefficient_bytes_max": 22,
+          "coefficient_bytes_total": 63,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 1,
+          "score": []
+        },
+        {
+          "chart": 255,
+          "index": 4,
+          "affine": false,
+          "fixed": [
+            [
+              7,
+              1
+            ],
+            [
+              8,
+              0
+            ]
+          ],
+          "rhs_terms": 6,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 6,
+          "lowered_lines": 249,
+          "raising_terms": 4,
+          "exceptions": 1,
+          "coefficient_bytes_max": 35,
+          "coefficient_bytes_total": 79,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 1,
+          "score": []
+        },
+        {
+          "chart": 255,
+          "index": 5,
+          "affine": false,
+          "fixed": [
+            [
+              5,
+              1
+            ],
+            [
+              6,
+              1
+            ],
+            [
+              7,
+              1
+            ]
+          ],
+          "rhs_terms": 13,
+          "max_rank_change": -1,
+          "rank_raising_terms": 0,
+          "raised_lines": 65,
+          "lowered_lines": 253,
+          "raising_terms": 4,
+          "exceptions": 2,
+          "coefficient_bytes_max": 24,
+          "coefficient_bytes_total": 101,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 1,
+          "score": []
+        },
+        {
+          "chart": 255,
+          "index": 6,
+          "affine": false,
+          "fixed": [
+            [
+              5,
+              1
+            ],
+            [
+              7,
+              1
+            ],
+            [
+              8,
+              0
+            ]
+          ],
+          "rhs_terms": 6,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 66,
+          "lowered_lines": 189,
+          "raising_terms": 4,
+          "exceptions": 1,
+          "coefficient_bytes_max": 39,
+          "coefficient_bytes_total": 83,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 1,
+          "score": []
+        },
+        {
+          "chart": 255,
+          "index": 7,
+          "affine": false,
+          "fixed": [
+            [
+              4,
+              1
+            ],
+            [
+              5,
+              1
+            ],
+            [
+              6,
+              1
+            ],
+            [
+              7,
+              1
+            ]
+          ],
+          "rhs_terms": 10,
+          "max_rank_change": -1,
+          "rank_raising_terms": 0,
+          "raised_lines": 68,
+          "lowered_lines": 63,
+          "raising_terms": 4,
+          "exceptions": 2,
+          "coefficient_bytes_max": 25,
+          "coefficient_bytes_total": 98,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 1,
+          "score": []
+        },
+        {
+          "chart": 255,
+          "index": 8,
+          "affine": false,
+          "fixed": [
+            [
+              4,
+              1
+            ],
+            [
+              5,
+              1
+            ],
+            [
+              7,
+              1
+            ],
+            [
+              8,
+              0
+            ]
+          ],
+          "rhs_terms": 6,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 12,
+          "lowered_lines": 243,
+          "raising_terms": 4,
+          "exceptions": 1,
+          "coefficient_bytes_max": 35,
+          "coefficient_bytes_total": 79,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 1,
+          "score": []
+        },
+        {
+          "chart": 255,
+          "index": 9,
+          "affine": false,
+          "fixed": [
+            [
+              0,
+              1
+            ],
+            [
+              4,
+              1
+            ],
+            [
+              5,
+              1
+            ],
+            [
+              7,
+              1
+            ],
+            [
+              8,
+              0
+            ]
+          ],
+          "rhs_terms": 15,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 83,
+          "lowered_lines": 237,
+          "raising_terms": 14,
+          "exceptions": 2,
+          "coefficient_bytes_max": 54,
+          "coefficient_bytes_total": 344,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 3,
+          "score": []
+        },
+        {
+          "chart": 255,
+          "index": 10,
+          "affine": false,
+          "fixed": [
+            [
+              3,
+              1
+            ],
+            [
+              4,
+              1
+            ],
+            [
+              5,
+              1
+            ],
+            [
+              6,
+              1
+            ],
+            [
+              7,
+              1
+            ]
+          ],
+          "rhs_terms": 13,
+          "max_rank_change": -1,
+          "rank_raising_terms": 0,
+          "raised_lines": 10,
+          "lowered_lines": 222,
+          "raising_terms": 4,
+          "exceptions": 2,
+          "coefficient_bytes_max": 19,
+          "coefficient_bytes_total": 96,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 1,
+          "score": []
+        },
+        {
+          "chart": 255,
+          "index": 11,
+          "affine": false,
+          "fixed": [
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              4,
+              1
+            ],
+            [
+              5,
+              1
+            ],
+            [
+              7,
+              1
+            ],
+            [
+              8,
+              0
+            ]
+          ],
+          "rhs_terms": 12,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 27,
+          "lowered_lines": 222,
+          "raising_terms": 12,
+          "exceptions": 1,
+          "coefficient_bytes_max": 39,
+          "coefficient_bytes_total": 279,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 3,
+          "score": []
+        },
+        {
+          "chart": 255,
+          "index": 12,
+          "affine": false,
+          "fixed": [
+            [
+              0,
+              1
+            ],
+            [
+              2,
+              1
+            ],
+            [
+              4,
+              1
+            ],
+            [
+              5,
+              1
+            ],
+            [
+              7,
+              1
+            ],
+            [
+              8,
+              0
+            ]
+          ],
+          "rhs_terms": 7,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 14,
+          "lowered_lines": 241,
+          "raising_terms": 7,
+          "exceptions": 2,
+          "coefficient_bytes_max": 45,
+          "coefficient_bytes_total": 167,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 2,
+          "score": []
+        },
+        {
+          "chart": 255,
+          "index": 13,
+          "affine": false,
+          "fixed": [
+            [
+              2,
+              1
+            ],
+            [
+              3,
+              1
+            ],
+            [
+              4,
+              1
+            ],
+            [
+              5,
+              1
+            ],
+            [
+              6,
+              1
+            ],
+            [
+              7,
+              1
+            ]
+          ],
+          "rhs_terms": 10,
+          "max_rank_change": -1,
+          "rank_raising_terms": 0,
+          "raised_lines": 68,
+          "lowered_lines": 175,
+          "raising_terms": 4,
+          "exceptions": 2,
+          "coefficient_bytes_max": 17,
+          "coefficient_bytes_total": 88,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 1,
+          "score": []
+        },
+        {
+          "chart": 255,
+          "index": 14,
+          "affine": false,
+          "fixed": [
+            [
+              3,
+              1
+            ],
+            [
+              4,
+              1
+            ],
+            [
+              5,
+              1
+            ],
+            [
+              6,
+              1
+            ],
+            [
+              7,
+              1
+            ],
+            [
+              8,
+              0
+            ]
+          ],
+          "rhs_terms": 6,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 12,
+          "lowered_lines": 243,
+          "raising_terms": 4,
+          "exceptions": 1,
+          "coefficient_bytes_max": 27,
+          "coefficient_bytes_total": 69,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 1,
+          "score": []
+        },
+        {
+          "chart": 255,
+          "index": 15,
+          "affine": true,
+          "fixed": [
+            [
+              0,
+              1
+            ],
+            [
+              2,
+              1
+            ],
+            [
+              4,
+              1
+            ],
+            [
+              5,
+              1
+            ],
+            [
+              7,
+              1
+            ],
+            [
+              8,
+              0
+            ]
+          ],
+          "rhs_terms": 16,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 78,
+          "lowered_lines": 255,
+          "raising_terms": 8,
+          "exceptions": 2,
+          "coefficient_bytes_max": 21,
+          "coefficient_bytes_total": 132,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 2,
+          "score": []
+        },
+        {
+          "chart": 255,
+          "index": 16,
+          "affine": false,
+          "fixed": [
+            [
+              0,
+              1
+            ],
+            [
+              2,
+              1
+            ],
+            [
+              4,
+              1
+            ],
+            [
+              5,
+              1
+            ],
+            [
+              6,
+              1
+            ],
+            [
+              7,
+              1
+            ],
+            [
+              8,
+              0
+            ]
+          ],
+          "rhs_terms": 26,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 93,
+          "lowered_lines": 255,
+          "raising_terms": 23,
+          "exceptions": 1,
+          "coefficient_bytes_max": 172,
+          "coefficient_bytes_total": 2119,
+          "d_in_denominator": true,
+          "dispatched_after_baseline": false,
+          "sources": 9,
+          "score": []
+        },
+        {
+          "chart": 255,
+          "index": 17,
+          "affine": false,
+          "fixed": [
+            [
+              0,
+              1
+            ],
+            [
+              3,
+              1
+            ],
+            [
+              4,
+              1
+            ],
+            [
+              5,
+              1
+            ],
+            [
+              6,
+              1
+            ],
+            [
+              7,
+              1
+            ],
+            [
+              8,
+              0
+            ]
+          ],
+          "rhs_terms": 15,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 83,
+          "lowered_lines": 237,
+          "raising_terms": 14,
+          "exceptions": 2,
+          "coefficient_bytes_max": 42,
+          "coefficient_bytes_total": 317,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 3,
+          "score": []
+        },
+        {
+          "chart": 255,
+          "index": 18,
+          "affine": false,
+          "fixed": [
+            [
+              1,
+              1
+            ],
+            [
+              2,
+              1
+            ],
+            [
+              3,
+              1
+            ],
+            [
+              4,
+              1
+            ],
+            [
+              5,
+              1
+            ],
+            [
+              6,
+              1
+            ],
+            [
+              7,
+              1
+            ]
+          ],
+          "rhs_terms": 6,
+          "max_rank_change": -1,
+          "rank_raising_terms": 0,
+          "raised_lines": 20,
+          "lowered_lines": 99,
+          "raising_terms": 4,
+          "exceptions": 2,
+          "coefficient_bytes_max": 16,
+          "coefficient_bytes_total": 55,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 1,
+          "score": []
+        },
+        {
+          "chart": 255,
+          "index": 19,
+          "affine": false,
+          "fixed": [
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              2,
+              1
+            ],
+            [
+              3,
+              1
+            ],
+            [
+              4,
+              1
+            ],
+            [
+              5,
+              1
+            ],
+            [
+              6,
+              1
+            ],
+            [
+              7,
+              1
+            ]
+          ],
+          "rhs_terms": 40,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 95,
+          "lowered_lines": 255,
+          "raising_terms": 36,
+          "exceptions": 1,
+          "coefficient_bytes_max": 64,
+          "coefficient_bytes_total": 1276,
+          "d_in_denominator": true,
+          "dispatched_after_baseline": false,
+          "sources": 8,
+          "score": []
+        },
+        {
+          "chart": 255,
+          "index": 20,
+          "affine": false,
+          "fixed": [
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              2,
+              1
+            ],
+            [
+              3,
+              1
+            ],
+            [
+              4,
+              1
+            ],
+            [
+              5,
+              1
+            ],
+            [
+              7,
+              1
+            ],
+            [
+              8,
+              0
+            ]
+          ],
+          "rhs_terms": 29,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 95,
+          "lowered_lines": 255,
+          "raising_terms": 29,
+          "exceptions": 1,
+          "coefficient_bytes_max": 83,
+          "coefficient_bytes_total": 1721,
+          "d_in_denominator": true,
+          "dispatched_after_baseline": false,
+          "sources": 12,
+          "score": []
+        },
+        {
+          "chart": 255,
+          "index": 21,
+          "affine": false,
+          "fixed": [
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              2,
+              1
+            ],
+            [
+              4,
+              1
+            ],
+            [
+              5,
+              1
+            ],
+            [
+              6,
+              1
+            ],
+            [
+              7,
+              1
+            ],
+            [
+              8,
+              0
+            ]
+          ],
+          "rhs_terms": 12,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 85,
+          "lowered_lines": 126,
+          "raising_terms": 12,
+          "exceptions": 1,
+          "coefficient_bytes_max": 18,
+          "coefficient_bytes_total": 139,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 2,
+          "score": []
+        },
+        {
+          "chart": 255,
+          "index": 22,
+          "affine": false,
+          "fixed": [
+            [
+              0,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              3,
+              1
+            ],
+            [
+              4,
+              1
+            ],
+            [
+              5,
+              1
+            ],
+            [
+              6,
+              1
+            ],
+            [
+              7,
+              1
+            ],
+            [
+              8,
+              0
+            ]
+          ],
+          "rhs_terms": 12,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 27,
+          "lowered_lines": 222,
+          "raising_terms": 12,
+          "exceptions": 1,
+          "coefficient_bytes_max": 18,
+          "coefficient_bytes_total": 139,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 3,
+          "score": []
+        },
+        {
+          "chart": 255,
+          "index": 23,
+          "affine": false,
+          "fixed": [
+            [
+              0,
+              1
+            ],
+            [
+              2,
+              1
+            ],
+            [
+              3,
+              1
+            ],
+            [
+              4,
+              1
+            ],
+            [
+              5,
+              1
+            ],
+            [
+              6,
+              1
+            ],
+            [
+              7,
+              1
+            ],
+            [
+              8,
+              0
+            ]
+          ],
+          "rhs_terms": 26,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 93,
+          "lowered_lines": 255,
+          "raising_terms": 23,
+          "exceptions": 1,
+          "coefficient_bytes_max": 108,
+          "coefficient_bytes_total": 1472,
+          "d_in_denominator": true,
+          "dispatched_after_baseline": false,
+          "sources": 9,
+          "score": []
+        },
+        {
+          "chart": 255,
+          "index": 24,
+          "affine": false,
+          "fixed": [
+            [
+              1,
+              1
+            ],
+            [
+              2,
+              1
+            ],
+            [
+              3,
+              1
+            ],
+            [
+              4,
+              1
+            ],
+            [
+              5,
+              1
+            ],
+            [
+              6,
+              1
+            ],
+            [
+              7,
+              1
+            ],
+            [
+              8,
+              0
+            ]
+          ],
+          "rhs_terms": 6,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 12,
+          "lowered_lines": 243,
+          "raising_terms": 4,
+          "exceptions": 1,
+          "coefficient_bytes_max": 19,
+          "coefficient_bytes_total": 59,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 1,
+          "score": []
+        }
+      ],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L2T04-61db0237c59ba9ce",
+      "lane": "series_parallel",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L1T02-64f4fabd2064500f",
+      "lane": "series_parallel",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L2T04-6fbb1c1aab298ade",
+      "lane": "series_parallel",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L3T07-72a95edcbcc7d714",
+      "lane": "insertion",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L2T05-810c5f0ff11c4c40",
+      "lane": "custom",
+      "dispatch": "first-valid",
+      "charts": [
+        {
+          "chart": 30,
+          "order": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ]
+        },
+        {
+          "chart": 31,
+          "order": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "chart": 30,
+          "index": 0,
+          "affine": false,
+          "fixed": [],
+          "rhs_terms": 4,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 4,
+          "lowered_lines": 26,
+          "raising_terms": 2,
+          "exceptions": 2,
+          "coefficient_bytes_max": 27,
+          "coefficient_bytes_total": 49,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 1,
+          "score": []
+        },
+        {
+          "chart": 30,
+          "index": 1,
+          "affine": false,
+          "fixed": [
+            [
+              0,
+              0
+            ]
+          ],
+          "rhs_terms": 4,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 0,
+          "lowered_lines": 22,
+          "raising_terms": 0,
+          "exceptions": 1,
+          "coefficient_bytes_max": 28,
+          "coefficient_bytes_total": 61,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 1,
+          "score": []
+        },
+        {
+          "chart": 30,
+          "index": 2,
+          "affine": false,
+          "fixed": [
+            [
+              4,
+              1
+            ]
+          ],
+          "rhs_terms": 4,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 2,
+          "lowered_lines": 28,
+          "raising_terms": 2,
+          "exceptions": 2,
+          "coefficient_bytes_max": 27,
+          "coefficient_bytes_total": 49,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 1,
+          "score": []
+        },
+        {
+          "chart": 30,
+          "index": 3,
+          "affine": false,
+          "fixed": [
+            [
+              0,
+              0
+            ],
+            [
+              4,
+              1
+            ]
+          ],
+          "rhs_terms": 4,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 0,
+          "lowered_lines": 14,
+          "raising_terms": 0,
+          "exceptions": 1,
+          "coefficient_bytes_max": 28,
+          "coefficient_bytes_total": 61,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 1,
+          "score": []
+        },
+        {
+          "chart": 30,
+          "index": 4,
+          "affine": false,
+          "fixed": [
+            [
+              3,
+              1
+            ],
+            [
+              4,
+              1
+            ]
+          ],
+          "rhs_terms": 4,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 0,
+          "lowered_lines": 28,
+          "raising_terms": 0,
+          "exceptions": 2,
+          "coefficient_bytes_max": 28,
+          "coefficient_bytes_total": 71,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 1,
+          "score": []
+        },
+        {
+          "chart": 30,
+          "index": 5,
+          "affine": false,
+          "fixed": [
+            [
+              0,
+              0
+            ],
+            [
+              3,
+              1
+            ],
+            [
+              4,
+              1
+            ]
+          ],
+          "rhs_terms": 4,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 0,
+          "lowered_lines": 28,
+          "raising_terms": 0,
+          "exceptions": 1,
+          "coefficient_bytes_max": 23,
+          "coefficient_bytes_total": 56,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 1,
+          "score": []
+        },
+        {
+          "chart": 30,
+          "index": 6,
+          "affine": false,
+          "fixed": [
+            [
+              2,
+              1
+            ],
+            [
+              3,
+              1
+            ],
+            [
+              4,
+              1
+            ]
+          ],
+          "rhs_terms": 4,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 0,
+          "lowered_lines": 26,
+          "raising_terms": 0,
+          "exceptions": 2,
+          "coefficient_bytes_max": 28,
+          "coefficient_bytes_total": 71,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 1,
+          "score": []
+        },
+        {
+          "chart": 30,
+          "index": 7,
+          "affine": false,
+          "fixed": [
+            [
+              0,
+              0
+            ],
+            [
+              2,
+              1
+            ],
+            [
+              3,
+              1
+            ],
+            [
+              4,
+              1
+            ]
+          ],
+          "rhs_terms": 4,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 0,
+          "lowered_lines": 26,
+          "raising_terms": 0,
+          "exceptions": 1,
+          "coefficient_bytes_max": 23,
+          "coefficient_bytes_total": 56,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 1,
+          "score": []
+        },
+        {
+          "chart": 30,
+          "index": 8,
+          "affine": false,
+          "fixed": [
+            [
+              1,
+              1
+            ],
+            [
+              2,
+              1
+            ],
+            [
+              3,
+              1
+            ],
+            [
+              4,
+              1
+            ]
+          ],
+          "rhs_terms": 9,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 20,
+          "lowered_lines": 30,
+          "raising_terms": 4,
+          "exceptions": 1,
+          "coefficient_bytes_max": 28,
+          "coefficient_bytes_total": 194,
+          "d_in_denominator": true,
+          "dispatched_after_baseline": false,
+          "sources": 3,
+          "score": []
+        },
+        {
+          "chart": 30,
+          "index": 9,
+          "affine": false,
+          "fixed": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              2,
+              1
+            ],
+            [
+              3,
+              1
+            ],
+            [
+              4,
+              1
+            ]
+          ],
+          "rhs_terms": 9,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 20,
+          "lowered_lines": 30,
+          "raising_terms": 4,
+          "exceptions": 0,
+          "coefficient_bytes_max": 18,
+          "coefficient_bytes_total": 124,
+          "d_in_denominator": true,
+          "dispatched_after_baseline": false,
+          "sources": 3,
+          "score": []
+        },
+        {
+          "chart": 31,
+          "index": 0,
+          "affine": false,
+          "fixed": [],
+          "rhs_terms": 7,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 10,
+          "lowered_lines": 21,
+          "raising_terms": 7,
+          "exceptions": 2,
+          "coefficient_bytes_max": 124,
+          "coefficient_bytes_total": 493,
+          "d_in_denominator": true,
+          "dispatched_after_baseline": false,
+          "sources": 1,
+          "score": []
+        },
+        {
+          "chart": 31,
+          "index": 1,
+          "affine": false,
+          "fixed": [
+            [
+              0,
+              2
+            ]
+          ],
+          "rhs_terms": 7,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 10,
+          "lowered_lines": 23,
+          "raising_terms": 6,
+          "exceptions": 1,
+          "coefficient_bytes_max": 79,
+          "coefficient_bytes_total": 338,
+          "d_in_denominator": true,
+          "dispatched_after_baseline": false,
+          "sources": 1,
+          "score": []
+        },
+        {
+          "chart": 31,
+          "index": 2,
+          "affine": false,
+          "fixed": [
+            [
+              0,
+              1
+            ]
+          ],
+          "rhs_terms": 7,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 14,
+          "lowered_lines": 30,
+          "raising_terms": 6,
+          "exceptions": 1,
+          "coefficient_bytes_max": 99,
+          "coefficient_bytes_total": 420,
+          "d_in_denominator": true,
+          "dispatched_after_baseline": false,
+          "sources": 4,
+          "score": []
+        },
+        {
+          "chart": 31,
+          "index": 3,
+          "affine": false,
+          "fixed": [
+            [
+              0,
+              2
+            ],
+            [
+              4,
+              1
+            ]
+          ],
+          "rhs_terms": 7,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 10,
+          "lowered_lines": 29,
+          "raising_terms": 6,
+          "exceptions": 1,
+          "coefficient_bytes_max": 71,
+          "coefficient_bytes_total": 306,
+          "d_in_denominator": true,
+          "dispatched_after_baseline": false,
+          "sources": 1,
+          "score": []
+        },
+        {
+          "chart": 31,
+          "index": 4,
+          "affine": false,
+          "fixed": [
+            [
+              0,
+              1
+            ],
+            [
+              4,
+              1
+            ]
+          ],
+          "rhs_terms": 4,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 2,
+          "lowered_lines": 28,
+          "raising_terms": 2,
+          "exceptions": 1,
+          "coefficient_bytes_max": 27,
+          "coefficient_bytes_total": 51,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 5,
+          "score": []
+        },
+        {
+          "chart": 31,
+          "index": 5,
+          "affine": false,
+          "fixed": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              1
+            ],
+            [
+              4,
+              1
+            ]
+          ],
+          "rhs_terms": 4,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 10,
+          "lowered_lines": 21,
+          "raising_terms": 4,
+          "exceptions": 0,
+          "coefficient_bytes_max": 18,
+          "coefficient_bytes_total": 70,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 1,
+          "score": []
+        },
+        {
+          "chart": 31,
+          "index": 6,
+          "affine": false,
+          "fixed": [
+            [
+              0,
+              1
+            ],
+            [
+              2,
+              1
+            ],
+            [
+              4,
+              1
+            ]
+          ],
+          "rhs_terms": 8,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 7,
+          "lowered_lines": 30,
+          "raising_terms": 6,
+          "exceptions": 1,
+          "coefficient_bytes_max": 71,
+          "coefficient_bytes_total": 449,
+          "d_in_denominator": true,
+          "dispatched_after_baseline": false,
+          "sources": 3,
+          "score": []
+        },
+        {
+          "chart": 31,
+          "index": 7,
+          "affine": false,
+          "fixed": [
+            [
+              0,
+              1
+            ],
+            [
+              2,
+              1
+            ],
+            [
+              3,
+              1
+            ],
+            [
+              4,
+              1
+            ]
+          ],
+          "rhs_terms": 4,
+          "max_rank_change": 0,
+          "rank_raising_terms": 0,
+          "raised_lines": 1,
+          "lowered_lines": 26,
+          "raising_terms": 2,
+          "exceptions": 1,
+          "coefficient_bytes_max": 23,
+          "coefficient_bytes_total": 56,
+          "d_in_denominator": false,
+          "dispatched_after_baseline": false,
+          "sources": 3,
+          "score": []
+        }
+      ],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L3T06-8372ef319969bb99",
+      "lane": "carpet",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L2T03-843ce779a63918b9",
+      "lane": "series_parallel",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L3T06-949012bf62f9cbd0",
+      "lane": "series_parallel",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L1T02-9676efc4b20ea9ac",
+      "lane": "series_parallel",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L3T08-96f2cf2d8f71f4fe",
+      "lane": "triangle",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L3T08-999162f8af475162",
+      "lane": "triangle",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L3T06-9dc5bd7ab7fc182c",
+      "lane": "series_parallel",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L3T06-9ec13b2813d25d62",
+      "lane": "series_parallel",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L3T06-a547ee63a298f5d7",
+      "lane": "insertion",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L2T05-bc4967a43b9afd81",
+      "lane": "triangle",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L3T07-bedbf189db8fabfc",
+      "lane": "triangle",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L3T07-c0a9514dc89b5320",
+      "lane": "carpet",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L3T06-c7316f3d1aaa67ba",
+      "lane": "series_parallel",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L2T04-ce0d35105dae83c5",
+      "lane": "series_parallel",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L3T04-df5f8c40d260746b",
+      "lane": "series_parallel",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L3T05-e3f6c3ad46ce9235",
+      "lane": "series_parallel",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L1T02-e9fb25c1b391b21b",
+      "lane": "series_parallel",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L2T04-eebc626223eb0cb1",
+      "lane": "series_parallel",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L3T05-fe625a5ba26905ae",
+      "lane": "series_parallel",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    },
+    {
+      "class": "L2T04-ff18b0aed3c3e3bb",
+      "lane": "series_parallel",
+      "dispatch": "template",
+      "charts": [],
+      "rules": [],
+      "provenance": {
+        "heuristic": "generation",
+        "parameters": {},
+        "census": null
+      }
+    }
+  ]
+}
