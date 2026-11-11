@@ -632,12 +632,19 @@ impl VacuumTopology {
         ) {
             if prefix.len() == edges.len() {
                 if left == 0 {
-                    let weight = edges
+                    // binom(p + a - 1, a); a line of power 0 (no propagator)
+                    // takes no extra power: weight 1 for a = 0, else 0.
+                    let weight: u64 = edges
                         .iter()
                         .zip(prefix.iter())
-                        .map(|(e, &a)| binomial((e.2 + a - 1) as u64, a as u64))
+                        .map(|(e, &a)| match e.2 {
+                            0 => u64::from(a == 0),
+                            p => binomial(u64::from(p + a - 1), u64::from(a)),
+                        })
                         .product();
-                    out.push((prefix.clone(), weight));
+                    if weight > 0 {
+                        out.push((prefix.clone(), weight));
+                    }
                 }
                 return;
             }
@@ -778,16 +785,19 @@ impl VacuumTopology {
         // their proper UV children: compute each child once (see
         // `memoised_children`).
         let mut cache = ChildCache::new();
+        // Every monomial has an even rank (a factor contributes two rank-1
+        // momenta or none), so one parity check covers them all.
+        let scalar_omega = self.superficial_degree() - self.numerator_degree();
+        ensure!(
+            scalar_omega % 2 == 0,
+            "odd superficial degree of a scalar vacuum graph"
+        );
         for monomial in self.numerator_monomials(mass) {
             let rank: usize = monomial.attachments.iter().map(Vec::len).sum();
-            let omega = self.superficial_degree() - self.numerator_degree() + rank as i64;
+            let omega = scalar_omega + rank as i64;
             if omega < 0 {
                 continue;
             }
-            ensure!(
-                omega % 2 == 0,
-                "odd superficial degree of a vacuum monomial"
-            );
             let n = u32::try_from(omega / 2)?;
             let mut monomial_total = Atom::Zero;
             for (a, weight) in self.power_distributions(n) {
