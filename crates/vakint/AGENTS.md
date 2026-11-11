@@ -78,7 +78,12 @@ measures with the `benchmark_suite` example built by
 precision tables and the overview (`docs/benchmark/tools/overview.py`,
 `docs/overview.typ`, installed as `data/overview.json`) and keeps the timings;
 `--refresh-tables --overlay FILE` (never installable) builds a PREVIEW edition
-that also shows pending, not yet released results, marked and counted apart.
+that also shows pending, not yet released results, marked and counted apart
+(`docs/benchmark-PREVIEW.pdf`). `data/r-operation-poles.json` records orders
+proven free of the 4L-only constants (R-operation, pinned to the 4L programs);
+`data/constant-names.json` / `CONSTANTS-TRADITIONAL.md` give the traditional
+forms of the constants (verified, not yet adopted in the data). Numerical
+digits are published as the validated claim minus one (user ruling).
 `docs/benchmark/tools/receipt.py check
 --data-root TREE` verifies a checkout against the receipt. The earlier report,
 its merge adapters and provenance archives stay out of the repository.

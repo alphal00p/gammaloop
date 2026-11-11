@@ -11,7 +11,7 @@
    "dirty_files": 0
   },
   "root_manifest_sha256": "5ce0e4a0abe8687cc3cf57ebd8e46a9bc105559deeddd8d4df06f5a1bb272826",
-  "tables_content_sha256": "b9e752afa83f2d8f4e63b0de063f6f91a4faff54735c9fa77eb928b77aa2a0d2",
+  "tables_content_sha256": "7c9148d895cb5b0efa41ea6e5c80e706d88c6f8ec30da2531f98f0aaf45ad1f0",
   "tables_status": "final",
   "five_loop_basis": "BASIS-v2",
   "five_loop_build": {
@@ -621,8 +621,8 @@
       "Z": 0
      },
      "sstar_digits": null,
-     "n_digits_min": 48,
-     "n_digits_median": 56.5
+     "n_digits_min": 47,
+     "n_digits_median": 55.5
     },
     "-2": {
      "held": 131,
@@ -637,8 +637,8 @@
       "Z": 0
      },
      "sstar_digits": null,
-     "n_digits_min": 47,
-     "n_digits_median": 65
+     "n_digits_min": 46,
+     "n_digits_median": 64
     },
     "-1": {
      "held": 131,
@@ -656,8 +656,8 @@
       2395,
       20000
      ],
-     "n_digits_min": 35,
-     "n_digits_median": 57.0
+     "n_digits_min": 34,
+     "n_digits_median": 56.0
     },
     "0": {
      "held": 131,
@@ -675,8 +675,8 @@
       2348,
       20000
      ],
-     "n_digits_min": 3,
-     "n_digits_median": 57.0
+     "n_digits_min": 2,
+     "n_digits_median": 56.0
     }
    },
    "basis": "BASIS-v2"
@@ -5883,17 +5883,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 67,
+     "X": 66,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 58,
+     "X": 57,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 59,
+     "X": 58,
      "marks": []
     },
     "1": null,
@@ -5926,17 +5926,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 83,
+     "X": 82,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 83,
+     "X": 82,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 75,
+     "X": 74,
      "marks": []
     },
     "1": null,
@@ -5969,17 +5969,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 69,
+     "X": 68,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 64,
+     "X": 63,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 61,
+     "X": 60,
      "marks": []
     },
     "1": null,
@@ -6012,17 +6012,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 65,
+     "X": 64,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 58,
+     "X": 57,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "1": null,
@@ -6055,17 +6055,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 65,
+     "X": 64,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 58,
+     "X": 57,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -6093,22 +6093,22 @@
     },
     "-3": {
      "class": "N",
-     "X": 65,
+     "X": 64,
      "marks": []
     },
     "-2": {
      "class": "N",
-     "X": 65,
+     "X": 64,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -6194,7 +6194,7 @@
     },
     "0": {
      "class": "N",
-     "X": 142,
+     "X": 141,
      "marks": []
     },
     "1": null,
@@ -6237,7 +6237,7 @@
     },
     "0": {
      "class": "N",
-     "X": 142,
+     "X": 141,
      "marks": []
     },
     "1": null,
@@ -6270,17 +6270,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 59,
+     "X": 58,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "1": null,
@@ -6452,7 +6452,7 @@
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -6495,7 +6495,7 @@
     },
     "0": {
      "class": "N",
-     "X": 59,
+     "X": 58,
      "marks": []
     },
     "1": null,
@@ -6571,17 +6571,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 59,
+     "X": 58,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "1": null,
@@ -6614,17 +6614,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 65,
+     "X": 64,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 62,
+     "X": 61,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 58,
+     "X": 57,
      "marks": []
     },
     "1": null,
@@ -6662,12 +6662,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 58,
+     "X": 57,
      "marks": []
     },
     "1": null,
@@ -6705,12 +6705,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 65,
+     "X": 64,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 61,
+     "X": 60,
      "marks": []
     },
     "1": null,
@@ -6786,17 +6786,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 65,
+     "X": 64,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "1": null,
@@ -6834,12 +6834,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 84,
+     "X": 83,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 75,
+     "X": 74,
      "marks": []
     },
     "1": null,
@@ -6877,12 +6877,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -6925,7 +6925,7 @@
     },
     "0": {
      "class": "N",
-     "X": 60,
+     "X": 59,
      "marks": []
     },
     "1": null,
@@ -6968,7 +6968,7 @@
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -7092,12 +7092,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "1": null,
@@ -7140,7 +7140,7 @@
     },
     "0": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "1": null,
@@ -7183,7 +7183,7 @@
     },
     "0": {
      "class": "N",
-     "X": 48,
+     "X": 47,
      "marks": []
     },
     "1": null,
@@ -7226,7 +7226,7 @@
     },
     "0": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "1": null,
@@ -7264,12 +7264,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 83,
+     "X": 82,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 75,
+     "X": 74,
      "marks": []
     },
     "1": null,
@@ -7307,12 +7307,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 83,
+     "X": 82,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 75,
+     "X": 74,
      "marks": []
     },
     "1": null,
@@ -7402,7 +7402,7 @@
     },
     "0": {
      "class": "N",
-     "X": 69,
+     "X": 68,
      "marks": []
     },
     "1": null,
@@ -7445,7 +7445,7 @@
     },
     "0": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "1": null,
@@ -7483,12 +7483,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 55,
+     "X": 54,
      "marks": []
     },
     "1": null,
@@ -7531,7 +7531,7 @@
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -7569,12 +7569,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 55,
+     "X": 54,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "1": null,
@@ -7617,7 +7617,7 @@
     },
     "0": {
      "class": "N",
-     "X": 43,
+     "X": 42,
      "marks": []
     },
     "1": null,
@@ -7660,7 +7660,7 @@
     },
     "0": {
      "class": "N",
-     "X": 58,
+     "X": 57,
      "marks": []
     },
     "1": null,
@@ -7698,12 +7698,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -7746,7 +7746,7 @@
     },
     "0": {
      "class": "N",
-     "X": 74,
+     "X": 73,
      "marks": []
     },
     "1": null,
@@ -7789,7 +7789,7 @@
     },
     "0": {
      "class": "N",
-     "X": 66,
+     "X": 65,
      "marks": []
     },
     "1": null,
@@ -7827,12 +7827,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 58,
+     "X": 57,
      "marks": []
     },
     "1": null,
@@ -7994,17 +7994,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "1": null,
@@ -8080,17 +8080,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 65,
+     "X": 64,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -8128,12 +8128,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 83,
+     "X": 82,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 75,
+     "X": 74,
      "marks": []
     },
     "1": null,
@@ -8171,12 +8171,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 82,
+     "X": 81,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 76,
+     "X": 75,
      "marks": []
     },
     "1": null,
@@ -8257,12 +8257,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 82,
+     "X": 81,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 74,
+     "X": 73,
      "marks": []
     },
     "1": null,
@@ -8300,12 +8300,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 82,
+     "X": 81,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 76,
+     "X": 75,
      "marks": []
     },
     "1": null,
@@ -8348,7 +8348,7 @@
     },
     "0": {
      "class": "N",
-     "X": 74,
+     "X": 73,
      "marks": []
     },
     "1": null,
@@ -8426,17 +8426,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 65,
+     "X": 64,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -8479,7 +8479,7 @@
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -8522,7 +8522,7 @@
     },
     "0": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "1": null,
@@ -8555,17 +8555,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 60,
+     "X": 59,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 51,
+     "X": 50,
      "marks": []
     },
     "1": null,
@@ -8608,7 +8608,7 @@
     },
     "0": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "1": null,
@@ -8651,7 +8651,7 @@
     },
     "0": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "1": null,
@@ -8684,17 +8684,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 66,
+     "X": 65,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 59,
+     "X": 58,
      "marks": []
     },
     "1": null,
@@ -8737,7 +8737,7 @@
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -8780,7 +8780,7 @@
     },
     "0": {
      "class": "N",
-     "X": 3,
+     "X": 2,
      "marks": []
     },
     "1": null,
@@ -8818,12 +8818,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 83,
+     "X": 82,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 74,
+     "X": 73,
      "marks": []
     },
     "1": null,
@@ -8861,12 +8861,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 82,
+     "X": 81,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 74,
+     "X": 73,
      "marks": []
     },
     "1": null,
@@ -8904,12 +8904,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 58,
+     "X": 57,
      "marks": []
     },
     "1": null,
@@ -8942,17 +8942,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 64,
+     "X": 63,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -8985,17 +8985,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 82,
+     "X": 81,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 82,
+     "X": 81,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 74,
+     "X": 73,
      "marks": []
     },
     "1": null,
@@ -9033,12 +9033,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 84,
+     "X": 83,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 75,
+     "X": 74,
      "marks": []
     },
     "1": null,
@@ -9076,12 +9076,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 58,
+     "X": 57,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -9119,12 +9119,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 83,
+     "X": 82,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 75,
+     "X": 74,
      "marks": []
     },
     "1": null,
@@ -9167,7 +9167,7 @@
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -9210,7 +9210,7 @@
     },
     "0": {
      "class": "N",
-     "X": 74,
+     "X": 73,
      "marks": []
     },
     "1": null,
@@ -9253,7 +9253,7 @@
     },
     "0": {
      "class": "N",
-     "X": 62,
+     "X": 61,
      "marks": []
     },
     "1": null,
@@ -9298,7 +9298,7 @@
     },
     "0": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "1": null,
@@ -9331,17 +9331,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 65,
+     "X": 64,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -9374,17 +9374,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 48,
+     "X": 47,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "1": null,
@@ -9422,12 +9422,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 82,
+     "X": 81,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 75,
+     "X": 74,
      "marks": []
     },
     "1": null,
@@ -9460,17 +9460,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "1": null,
@@ -9513,7 +9513,7 @@
     },
     "0": {
      "class": "N",
-     "X": 3,
+     "X": 2,
      "marks": []
     },
     "1": null,
@@ -9603,7 +9603,7 @@
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -9646,7 +9646,7 @@
     },
     "0": {
      "class": "N",
-     "X": 44,
+     "X": 43,
      "marks": []
     },
     "1": null,
@@ -9689,7 +9689,7 @@
     },
     "0": {
      "class": "N",
-     "X": 3,
+     "X": 2,
      "marks": []
     },
     "1": null,
@@ -9732,7 +9732,7 @@
     },
     "0": {
      "class": "N",
-     "X": 35,
+     "X": 34,
      "marks": []
     },
     "1": null,
@@ -9813,12 +9813,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -9899,12 +9899,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -9942,12 +9942,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 83,
+     "X": 82,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 75,
+     "X": 74,
      "marks": []
     },
     "1": null,
@@ -10027,17 +10027,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "1": null,
@@ -10082,7 +10082,7 @@
     },
     "0": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "1": null,
@@ -10125,7 +10125,7 @@
     },
     "0": {
      "class": "N",
-     "X": 53,
+     "X": 52,
      "marks": []
     },
     "1": null,
@@ -10163,12 +10163,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 82,
+     "X": 81,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 75,
+     "X": 74,
      "marks": []
     },
     "1": null,
@@ -10196,22 +10196,22 @@
     },
     "-3": {
      "class": "N",
-     "X": 48,
+     "X": 47,
      "marks": []
     },
     "-2": {
      "class": "N",
-     "X": 48,
+     "X": 47,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 48,
+     "X": 47,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 48,
+     "X": 47,
      "marks": []
     },
     "1": null,
@@ -10244,17 +10244,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "1": null,
@@ -10297,7 +10297,7 @@
     },
     "0": {
      "class": "N",
-     "X": 48,
+     "X": 47,
      "marks": []
     },
     "1": null,
@@ -10342,7 +10342,7 @@
     },
     "0": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "1": null,
@@ -10385,7 +10385,7 @@
     },
     "0": {
      "class": "N",
-     "X": 55,
+     "X": 54,
      "marks": []
     },
     "1": null,
@@ -10423,12 +10423,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 82,
+     "X": 81,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 74,
+     "X": 73,
      "marks": []
     },
     "1": null,
@@ -10466,12 +10466,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 46,
+     "X": 45,
      "marks": []
     },
     "1": null,
@@ -10509,12 +10509,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -10557,7 +10557,7 @@
     },
     "0": {
      "class": "N",
-     "X": 75,
+     "X": 74,
      "marks": []
     },
     "1": null,
@@ -10595,12 +10595,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 82,
+     "X": 81,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 75,
+     "X": 74,
      "marks": []
     },
     "1": null,
@@ -10643,7 +10643,7 @@
     },
     "0": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "1": null,
@@ -10686,7 +10686,7 @@
     },
     "0": {
      "class": "N",
-     "X": 55,
+     "X": 54,
      "marks": []
     },
     "1": null,
@@ -10724,12 +10724,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "1": null,
@@ -10772,7 +10772,7 @@
     },
     "0": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "1": null,
@@ -10815,7 +10815,7 @@
     },
     "0": {
      "class": "N",
-     "X": 43,
+     "X": 42,
      "marks": []
     },
     "1": null,
@@ -10858,7 +10858,7 @@
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -10896,12 +10896,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 35,
+     "X": 34,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 35,
+     "X": 34,
      "marks": []
     },
     "1": null,
@@ -10939,12 +10939,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -11068,12 +11068,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 82,
+     "X": 81,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 74,
+     "X": 73,
      "marks": []
     },
     "1": null,
@@ -11111,12 +11111,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 81,
+     "X": 80,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 74,
+     "X": 73,
      "marks": []
     },
     "1": null,
@@ -11159,7 +11159,7 @@
     },
     "0": {
      "class": "N",
-     "X": 62,
+     "X": 61,
      "marks": []
     },
     "1": null,
@@ -11202,7 +11202,7 @@
     },
     "0": {
      "class": "N",
-     "X": 75,
+     "X": 74,
      "marks": []
     },
     "1": null,
@@ -11245,7 +11245,7 @@
     },
     "0": {
      "class": "N",
-     "X": 3,
+     "X": 2,
      "marks": []
     },
     "1": null,
@@ -11288,7 +11288,7 @@
     },
     "0": {
      "class": "N",
-     "X": 61,
+     "X": 60,
      "marks": []
     },
     "1": null,
@@ -11326,12 +11326,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 82,
+     "X": 81,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 74,
+     "X": 73,
      "marks": []
     },
     "1": null,
@@ -11369,12 +11369,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "1": null,
@@ -11417,7 +11417,7 @@
     },
     "0": {
      "class": "N",
-     "X": 63,
+     "X": 62,
      "marks": []
     },
     "1": null,
@@ -11460,7 +11460,7 @@
     },
     "0": {
      "class": "N",
-     "X": 3,
+     "X": 2,
      "marks": []
     },
     "1": null,
@@ -11503,7 +11503,7 @@
     },
     "0": {
      "class": "N",
-     "X": 54,
+     "X": 53,
      "marks": []
     },
     "1": null,
@@ -11584,49 +11584,56 @@
      "class": "S",
      "X": null,
      "marks": [],
-     "others": null
+     "others": null,
+     "guaranteed": false
     },
     "0": {
      "state": "ok",
      "class": "S",
      "X": null,
      "marks": [],
-     "others": null
+     "others": null,
+     "guaranteed": false
     },
     "1": {
      "state": "ok",
      "class": "S",
      "X": null,
      "marks": [],
-     "others": null
+     "others": null,
+     "guaranteed": false
     },
     "2": {
      "state": "ok",
      "class": "S",
      "X": null,
      "marks": [],
-     "others": null
+     "others": null,
+     "guaranteed": false
     },
     "3": {
      "state": "ok",
      "class": "S",
      "X": null,
      "marks": [],
-     "others": null
+     "others": null,
+     "guaranteed": false
     },
     "4": {
      "state": "ok",
      "class": "S",
      "X": null,
      "marks": [],
-     "others": null
+     "others": null,
+     "guaranteed": false
     },
     "5": {
      "state": "ok",
      "class": "S",
      "X": null,
      "marks": [],
-     "others": null
+     "others": null,
+     "guaranteed": false
     }
    },
    "marks": [
@@ -11652,42 +11659,48 @@
      "class": "S",
      "X": null,
      "marks": [],
-     "others": null
+     "others": null,
+     "guaranteed": false
     },
     "-1": {
      "state": "ok",
      "class": "S",
      "X": null,
      "marks": [],
-     "others": null
+     "others": null,
+     "guaranteed": false
     },
     "0": {
      "state": "ok",
      "class": "S",
      "X": null,
      "marks": [],
-     "others": null
+     "others": null,
+     "guaranteed": false
     },
     "1": {
      "state": "ok",
      "class": "S",
      "X": null,
      "marks": [],
-     "others": null
+     "others": null,
+     "guaranteed": false
     },
     "2": {
      "state": "ok",
      "class": "S",
      "X": null,
      "marks": [],
-     "others": null
+     "others": null,
+     "guaranteed": false
     },
     "3": {
      "state": "ok",
      "class": "S",
      "X": null,
      "marks": [],
-     "others": null
+     "others": null,
+     "guaranteed": false
     },
     "4": {
      "state": "partial",
@@ -11720,35 +11733,40 @@
      "class": "S",
      "X": null,
      "marks": [],
-     "others": null
+     "others": null,
+     "guaranteed": false
     },
     "-2": {
      "state": "ok",
      "class": "S",
      "X": null,
      "marks": [],
-     "others": null
+     "others": null,
+     "guaranteed": false
     },
     "-1": {
      "state": "ok",
      "class": "S",
      "X": null,
      "marks": [],
-     "others": null
+     "others": null,
+     "guaranteed": false
     },
     "0": {
      "state": "ok",
      "class": "S",
      "X": null,
      "marks": [],
-     "others": null
+     "others": null,
+     "guaranteed": false
     },
     "1": {
      "state": "ok",
      "class": "S",
      "X": null,
      "marks": [],
-     "others": null
+     "others": null,
+     "guaranteed": false
     },
     "2": {
      "state": "partial",
@@ -11792,30 +11810,34 @@
      "class": "S",
      "X": null,
      "marks": [],
-     "others": null
+     "others": null,
+     "guaranteed": false
     },
     "-3": {
      "state": "ok",
      "class": "S",
      "X": null,
      "marks": [],
-     "others": null
+     "others": null,
+     "guaranteed": false
     },
     "-2": {
      "state": "ok",
      "class": "S",
      "X": null,
      "marks": [],
-     "others": null
+     "others": null,
+     "guaranteed": false
     },
     "-1": {
      "state": "ok",
-     "class": "S*",
-     "X": 20000,
+     "class": "S",
+     "X": null,
      "marks": [
       "f"
      ],
-     "others": null
+     "others": null,
+     "guaranteed": true
     },
     "0": {
      "state": "ok",
@@ -11824,7 +11846,8 @@
      "marks": [
       "g"
      ],
-     "others": null
+     "others": null,
+     "guaranteed": false
     },
     "1": {
      "state": "partial",
@@ -11868,43 +11891,46 @@
      "class": "S",
      "X": null,
      "marks": [],
-     "others": null
+     "others": null,
+     "guaranteed": false
     },
     "-4": {
      "state": "ok",
      "class": "N",
-     "X": 65,
+     "X": 64,
      "marks": [
       "m"
      ],
-     "others": "S"
+     "others": "S",
+     "guaranteed": false
     },
     "-3": {
      "state": "ok",
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": [
       "n"
      ],
-     "others": "N(48)"
+     "others": "N(47)",
+     "guaranteed": false
     },
     "-2": {
      "state": "partial",
-     "returned": "N(47)",
+     "returned": "N(46)",
      "marks": [
       "o"
      ]
     },
     "-1": {
      "state": "partial",
-     "returned": "N(35)",
+     "returned": "N(34)",
      "marks": [
       "p"
      ]
     },
     "0": {
      "state": "partial",
-     "returned": "N(3)",
+     "returned": "N(2)",
      "marks": [
       "q"
      ]
@@ -11932,6 +11958,22 @@
   }
  ],
  "former": [],
+ "r_operation_notes": [
+  {
+   "cell": "4L ε⁻¹",
+   "proof": "Proof: by the R-operation, K G = -Delta(G) - K sum_S Delta(S) G/S for any 4-loop single-scale (all lines of mass m) vacuum integral G with polynomial numerators; the counterterms Delta are polynomials in m² with pole coefficients in multiple zeta values (infrared rearrangement onto massless propagators of <= 3 loops), and the quotients G/S (<= 3 loops) enter only through ε^(3-L_q) (3L ε⁰, 2L ε¹, 1L ε²), all S (polylogarithms at sixth roots of unity, no 4L constant). So every pole coefficient of G is free of the 4L constants; vakint's exact assembly shows the coefficient of each one to be identically zero (exact rational arithmetic) on every record checked",
+   "evidence": "Verified exactly (coefficient of every 4L/constants.json constant at ε⁻⁴..ε⁻¹ = 0): all 286527 records of the shipped 4L caches (77724 with spurious poles, 1375 with 1/ε²), 2230 sampled keys of track LL and 514 fresh keys outside both (all four families, up to 6 dots and 4 numerator powers); 338832 pole x constant products cancel. The spurious-pole residue vectors span dimension x 6, h 5, bmw 5, fg 3 and every basis vector has zero 4L-constant content. vakint itself returns these orders beyond 20000 digits (4L/P15 + dot: ε⁻¹ to 20524 d in Symbolic, 20499 d of 20500 requested in Numerical mode; finite inputs P15, P17, P18 + dot: exact 0)",
+   "constants": [
+    "K5Moment(1)",
+    "K5Moment(3)"
+   ],
+   "cancelled_orders": [
+    "4L/P6 ε⁰",
+    "4L/P7 ε⁰",
+    "4L/P11 ε⁰"
+   ]
+  }
+ ],
  "constants": [
   {
    "code": "cl2",
@@ -11947,10 +11989,15 @@
     "5L": 114
    },
    "used_total": 391,
-   "traditional": null,
-   "traditional_terms": null,
-   "traditional_status": null,
-   "traditional_check": null,
+   "traditional": "Cl2(π/3)",
+   "traditional_terms": 1,
+   "traditional_status": "verified to the full stored digits; not yet adopted in the data",
+   "traditional_check": "agrees to 20004.3 d with the stored 20000 d",
+   "name_kind": "reduces",
+   "formula": "Cl2(π/3)",
+   "formula_terms": 1,
+   "definition_full": null,
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -11967,10 +12014,15 @@
     "5L": 37
    },
    "used_total": 202,
-   "traditional": null,
-   "traditional_terms": null,
-   "traditional_status": null,
-   "traditional_check": null,
+   "traditional": "Cl4(π/3)",
+   "traditional_terms": 1,
+   "traditional_status": "verified to the full stored digits; not yet adopted in the data",
+   "traditional_check": "agrees to 20005.8 d with the stored 20000 d",
+   "name_kind": "reduces",
+   "formula": "Cl4(π/3)",
+   "formula_terms": 1,
+   "definition_full": null,
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -11986,10 +12038,15 @@
     "5L": 18
    },
    "used_total": 83,
-   "traditional": null,
-   "traditional_terms": null,
-   "traditional_status": null,
-   "traditional_check": null,
+   "traditional": "17 terms in ζ, ln, π, classical Li_n, Clausen, Im/Re Li_n(i/√3), multiple polylogs",
+   "traditional_terms": 17,
+   "traditional_status": "verified to the full stored digits; not yet adopted in the data",
+   "traditional_check": "agrees to 20008.7 d with the stored 19998 d",
+   "name_kind": "reduces",
+   "formula": "- 4/3 ln2^4 ln3 + 4/3 ln2^2 ln3 π^2 - 14 ln2^2 ζ(3) - 1/15 ln3^5 + 2/9 ln3^3 π^2 + 4/15 ln3^2 π Cl2(π/3) + 29/45 ln3 π^4 - 32 ln3 Li4(1/2) + 68/135 π^3 Cl2(π/3) + 7/54 π^2 ζ(3) + 16/3 π Cl4(π/3) - 28 Li2(-1/2) ζ(3) - 64/5 Cl2(π/3) Im Li3(i/√3) - 2798/81 ζ(5) + 16 Li5(1/3) - 8 Li5(-1/3) - 32 Re -Li_{3,1,1}(-1,1,w)",
+   "formula_terms": 17,
+   "definition_full": null,
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12005,10 +12062,15 @@
     "5L": 9
    },
    "used_total": 39,
-   "traditional": null,
-   "traditional_terms": null,
-   "traditional_status": null,
-   "traditional_check": null,
+   "traditional": "111 terms in ζ, ln, π, classical Li_n, Clausen, Im/Re Li_n(i/√3), log-sine, multiple polylogs",
+   "traditional_terms": 111,
+   "traditional_status": "verified to the full stored digits; not yet adopted in the data",
+   "traditional_check": "agrees to 20008.0 d with the stored 19998 d",
+   "name_kind": "reduces",
+   "formula": null,
+   "formula_terms": 111,
+   "definition_full": null,
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12024,10 +12086,15 @@
     "5L": 6
    },
    "used_total": 16,
-   "traditional": null,
-   "traditional_terms": null,
-   "traditional_status": null,
-   "traditional_check": null,
+   "traditional": "34 terms in ζ, ln, π, classical Li_n, Clausen, Im/Re Li_n(i/√3), multiple polylogs",
+   "traditional_terms": 34,
+   "traditional_status": "verified to the full stored digits; not yet adopted in the data",
+   "traditional_check": "agrees to 20008.4 d with the stored 19998 d",
+   "name_kind": "reduces",
+   "formula": null,
+   "formula_terms": 34,
+   "definition_full": null,
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12043,10 +12110,15 @@
     "5L": 3
    },
    "used_total": 8,
-   "traditional": null,
-   "traditional_terms": null,
-   "traditional_status": null,
-   "traditional_check": null,
+   "traditional": "118 terms in ζ, ln, π, classical Li_n, Clausen, Im/Re Li_n(i/√3), log-sine, multiple polylogs",
+   "traditional_terms": 118,
+   "traditional_status": "verified to the full stored digits; not yet adopted in the data",
+   "traditional_check": "agrees to 20008.0 d with the stored 19998 d",
+   "name_kind": "reduces",
+   "formula": null,
+   "formula_terms": 118,
+   "definition_full": null,
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12067,6 +12139,11 @@
    "traditional_terms": null,
    "traditional_status": null,
    "traditional_check": null,
+   "name_kind": null,
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": null,
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12087,6 +12164,11 @@
    "traditional_terms": null,
    "traditional_status": null,
    "traditional_check": null,
+   "name_kind": null,
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": null,
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12107,6 +12189,11 @@
    "traditional_terms": null,
    "traditional_status": null,
    "traditional_check": null,
+   "name_kind": null,
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": null,
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12127,6 +12214,11 @@
    "traditional_terms": null,
    "traditional_status": null,
    "traditional_check": null,
+   "name_kind": null,
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": null,
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12148,6 +12240,11 @@
    "traditional_terms": null,
    "traditional_status": null,
    "traditional_check": null,
+   "name_kind": null,
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": null,
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12168,6 +12265,11 @@
    "traditional_terms": null,
    "traditional_status": null,
    "traditional_check": null,
+   "name_kind": null,
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": null,
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12187,6 +12289,11 @@
    "traditional_terms": null,
    "traditional_status": null,
    "traditional_check": null,
+   "name_kind": null,
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": null,
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12206,6 +12313,11 @@
    "traditional_terms": null,
    "traditional_status": null,
    "traditional_check": null,
+   "name_kind": null,
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": null,
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12226,6 +12338,11 @@
    "traditional_terms": null,
    "traditional_status": null,
    "traditional_check": null,
+   "name_kind": null,
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": null,
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12241,10 +12358,15 @@
     "5L": 6
    },
    "used_total": 32,
-   "traditional": null,
-   "traditional_terms": null,
-   "traditional_status": null,
-   "traditional_check": null,
+   "traditional": "8 terms in ζ, ln, π, classical Li_n",
+   "traditional_terms": 8,
+   "traditional_status": "verified to the full stored digits; not yet adopted in the data",
+   "traditional_check": "agrees to 20006.5 d with the stored 20000 d",
+   "name_kind": "reduces",
+   "formula": "1/208 ln2^6 - 1/208 ln2^4 π^2 + 1/156 ln2^2 π^4 + 89/58968 π^6 + 3/8 ζ(3)^2 + 126/13 Li6(1/2) + 162/13 Li6(-1/2) - 1/39 Li6(-1/8)",
+   "formula_terms": 8,
+   "definition_full": null,
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12261,10 +12383,15 @@
     "5L": 6
    },
    "used_total": 44,
-   "traditional": null,
-   "traditional_terms": null,
-   "traditional_status": null,
-   "traditional_check": null,
+   "traditional": "11 terms in ζ, ln, π, Clausen, Im/Re Li_n(i/√3), log-sine",
+   "traditional_terms": 11,
+   "traditional_status": "verified to the full stored digits; not yet adopted in the data",
+   "traditional_check": "agrees to 20003.9 d with the stored 19998 d",
+   "name_kind": "reduces",
+   "formula": "1/20 ln3^5 π - 3/4 ln3^4 Cl2(π/3) - 17/180 ln3^3 π^3 - 24/5 ln3^3 Im Li3(i/√3) + 42/5 ln3^2 Cl4(π/3) - 72/5 ln3^2 Im Li4(i/√3) + 19/120 ln3 π^5 + 3 ln3 Ls5^(0)(2π/3) + π^3 ζ(3) + 18 π ζ(5) - 6/5 Ls6^(0)(2π/3)",
+   "formula_terms": 11,
+   "definition_full": null,
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12286,6 +12413,11 @@
    "traditional_terms": null,
    "traditional_status": null,
    "traditional_check": null,
+   "name_kind": null,
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": null,
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12307,6 +12439,11 @@
    "traditional_terms": null,
    "traditional_status": null,
    "traditional_check": null,
+   "name_kind": null,
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": null,
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12326,6 +12463,11 @@
    "traditional_terms": null,
    "traditional_status": null,
    "traditional_check": null,
+   "name_kind": null,
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": null,
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12340,10 +12482,15 @@
     "5L": 26
    },
    "used_total": 91,
-   "traditional": null,
+   "traditional": "3 ∫₀^∞ t^1 K₀(t)⁵ (ln t + γ_E − ln 2) dt",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "3 int_0^inf t^1 K_0(t)^5 (ln t + gamma_E - ln 2) dt = 3 (d/ds c_(5,s))|_(s=1) + 3 (gamma_E - ln 2) c_(5,1)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12358,10 +12505,15 @@
     "5L": 26
    },
    "used_total": 91,
-   "traditional": null,
+   "traditional": "3 ∫₀^∞ t^3 K₀(t)⁵ (ln t + γ_E − ln 2) dt",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "3 int_0^inf t^3 K_0(t)^5 (ln t + gamma_E - ln 2) dt = 3 (d/ds c_(5,s))|_(s=3) + 3 (gamma_E - ln 2) c_(5,3)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12376,10 +12528,15 @@
     "5L": 29
    },
    "used_total": 121,
-   "traditional": null,
+   "traditional": "c₅,1 = ∫₀^∞ t^1 K₀(t)⁵ dt (Broadhurst)",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "c_(5,1) = int_0^inf t^1 K_0(t)^5 dt (Bessel moment, Broadhurst notation)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12394,10 +12551,15 @@
     "5L": 29
    },
    "used_total": 117,
-   "traditional": null,
+   "traditional": "c₅,3 = ∫₀^∞ t^3 K₀(t)⁵ dt (Broadhurst)",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "c_(5,3) = int_0^inf t^3 K_0(t)^5 dt (Bessel moment, Broadhurst notation)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12412,10 +12574,15 @@
     "5L": 1
    },
    "used_total": 2,
-   "traditional": null,
-   "traditional_terms": null,
-   "traditional_status": null,
-   "traditional_check": null,
+   "traditional": "14 terms in ζ, ln, π, Clausen, Im/Re Li_n(i/√3), log-sine",
+   "traditional_terms": 14,
+   "traditional_status": "verified to the full stored digits; not yet adopted in the data",
+   "traditional_check": "agrees to 20003.4 d with the stored 19998 d",
+   "name_kind": "reduces",
+   "formula": "- 1/48 ln3^6 π + 3/10 ln3^5 Cl2(π/3) + 17/720 ln3^4 π^3 + 9/5 ln3^4 Im Li3(i/√3) - 14/5 ln3^3 Cl4(π/3) + 24/5 ln3^3 Im Li4(i/√3) - 19/240 ln3^2 π^5 - 3/2 ln3^2 Ls5^(0)(2π/3) - ln3 π^3 ζ(3) - 18 ln3 π ζ(5) + 6/5 ln3 Ls6^(0)(2π/3) - 55/1008 π^7 - 6 π ζ(3)^2 - 2/5 Ls7^(0)(2π/3)",
+   "formula_terms": 14,
+   "definition_full": "T111bar(5) in the MATAD convention of vakint matad.rs: sum_k T111bar(k) eps^k = sqrt3 (1-2eps)(1-eps) Sunset2(eps)/G(eps)^2 - 3 sqrt3/(2 eps^2), G = exp(EulerGamma eps) Gamma(1+eps), Sunset2 = -miT111, miT111 = exp(2 EulerGamma eps) * integral d^dk d^dl/pi^d [(k^2+1)(l^2+1)((k+l)^2+1)]^-1 (Euclidean, d = 4-2eps); weight-7 coefficient at eps^5",
+   "note": "reduces to traditional constants (REPORT headline 5): could become a built-in (S)",
    "pending_uses": 0
   },
   {
@@ -12430,10 +12597,15 @@
     "5L": 2
    },
    "used_total": 6,
-   "traditional": null,
-   "traditional_terms": null,
-   "traditional_status": null,
-   "traditional_check": null,
+   "traditional": "13 terms in ζ, ln, π, classical Li_n, multiple polylogs",
+   "traditional_terms": 13,
+   "traditional_status": "verified to the full stored digits; not yet adopted in the data",
+   "traditional_check": "agrees to 19712.3 d with the stored 19706 d",
+   "name_kind": "reduces",
+   "formula": "- 768/35 ln2^7 + 384/5 ln2^5 π^2 + 1088/5 ln2^3 π^4 + 44640 ln2^2 ζ(5) + 2944/105 ln2 π^6 + 19520 ln2 ζ(3)^2 - 46080 ln2 Re Li5,1(-1,-1) - 688/3 π^4 ζ(3) - 9440/3 π^2 ζ(5) - 47373 ζ(7) + 110592 Li7(1/2) - 40960 Re -Li_{5,1,1}(-1,1,1) - 21760 Re -Li_{4,2,1}(-1,1,1)",
+   "formula_terms": 13,
+   "definition_full": "BNbar(5) in the MATAD convention of vakint matad.rs: miBN = exp(3 EulerGamma eps) Gamma(1+eps)^3 (4/eps^3 - 44/(3 eps^2) + sum_(k>=1) BNbar(k) eps^k)/((1-3eps)(2-3eps)(1-2eps)(1-eps)), miBN = exp(3 EulerGamma eps) * integral of the three-loop equal-mass banana (four unit-mass lines k1, k2, k3, k1+k2+k3; Euclidean, d^dk/pi^(d/2) per loop); weight-7 coefficient at eps^5",
+   "note": "reduces to traditional constants (REPORT headline 5): could become a built-in (S)",
    "pending_uses": 0
   },
   {
@@ -12448,10 +12620,15 @@
     "5L": 14
    },
    "used_total": 53,
-   "traditional": null,
+   "traditional": "[ε^2] of the D = 2−2ε four-loop banana in Bessel form (c₅,1 jet)",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[eps^2] e^(3 (gamma_E - ln 2) eps) int_0^inf t^(1+3eps) K_eps(t)^5 dt (ordinary Taylor coefficient; [eps^0] = K5Moment(1), [eps^1] = K5LogMoment(1))",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12466,10 +12643,15 @@
     "5L": 6
    },
    "used_total": 25,
-   "traditional": null,
+   "traditional": "[ε^3] of the D = 2−2ε four-loop banana in Bessel form (c₅,1 jet)",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[eps^3] e^(3 (gamma_E - ln 2) eps) int_0^inf t^(1+3eps) K_eps(t)^5 dt (ordinary Taylor coefficient; [eps^0] = K5Moment(1), [eps^1] = K5LogMoment(1))",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12484,10 +12666,15 @@
     "5L": 1
    },
    "used_total": 4,
-   "traditional": null,
+   "traditional": "[ε^4] of the D = 2−2ε four-loop banana in Bessel form (c₅,1 jet)",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[eps^4] e^(3 (gamma_E - ln 2) eps) int_0^inf t^(1+3eps) K_eps(t)^5 dt (ordinary Taylor coefficient; [eps^0] = K5Moment(1), [eps^1] = K5LogMoment(1))",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12502,10 +12689,15 @@
     "5L": 14
    },
    "used_total": 53,
-   "traditional": null,
+   "traditional": "[ε^2] of the D = 2−2ε four-loop banana in Bessel form (c₅,3 jet)",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[eps^2] e^(3 (gamma_E - ln 2) eps) int_0^inf t^(3+3eps) K_eps(t)^5 dt (ordinary Taylor coefficient; [eps^0] = K5Moment(3), [eps^1] = K5LogMoment(3))",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12520,10 +12712,15 @@
     "5L": 6
    },
    "used_total": 25,
-   "traditional": null,
+   "traditional": "[ε^3] of the D = 2−2ε four-loop banana in Bessel form (c₅,3 jet)",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[eps^3] e^(3 (gamma_E - ln 2) eps) int_0^inf t^(3+3eps) K_eps(t)^5 dt (ordinary Taylor coefficient; [eps^0] = K5Moment(3), [eps^1] = K5LogMoment(3))",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12538,10 +12735,15 @@
     "5L": 1
    },
    "used_total": 4,
-   "traditional": null,
+   "traditional": "[ε^4] of the D = 2−2ε four-loop banana in Bessel form (c₅,3 jet)",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[eps^4] e^(3 (gamma_E - ln 2) eps) int_0^inf t^(3+3eps) K_eps(t)^5 dt (ordinary Taylor coefficient; [eps^0] = K5Moment(3), [eps^1] = K5LogMoment(3))",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12556,10 +12758,15 @@
     "5L": 5
    },
    "used_total": 9,
-   "traditional": null,
+   "traditional": "[ε^2] of a 7-line four-loop vacuum integral in D = 4-2ε",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[ep^2] D=4-2eps; 1/( [(k1 -k2)^2+1] [(k1 -k3 +k4)^2+1] [(k1 -k3)^2+1] [(k2 -k3)^2+1] [(k1)^2+1] [(k3)^2+1] [(k4)^2+1] )  (7 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12574,10 +12781,15 @@
     "5L": 2
    },
    "used_total": 6,
-   "traditional": null,
+   "traditional": "MATAD D5bar(3), weight 7: UNDECIDED (no relation found; a decisive test needs ~12000 strict digits)",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "undecided: not in the cube-root or level-2 algebras; decisive test needs the weight-7 space at ~12000 strict digits (REPORT section 2.3)",
    "traditional_check": null,
+   "name_kind": "undecided",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "D5bar(3) in the MATAD convention of vakint matad.rs: miD5 = (D5bar(0) + eps D5bar(1) + eps^2 D5bar(2) + eps^3 D5bar(3) + ... + 2 zeta3/eps)/((1-2eps)(1-eps)), miD5 = exp(3 EulerGamma eps) * integral of the three-loop tetrahedron with five unit-mass lines and one massless line (Euclidean, d^dk/pi^(d/2) per loop, d = 4-2eps); weight-7 coefficient at eps^3",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12592,10 +12804,15 @@
     "5L": 1
    },
    "used_total": 2,
-   "traditional": null,
+   "traditional": "[ε^3] of a 7-line four-loop vacuum integral in D = 4-2ε",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[ep^3] D=4-2eps; 1/( [(k1 -k2)^2+1] [(k1 -k3 +k4)^2+1] [(k1 -k3)^2+1] [(k2 -k3)^2+1] [(k1)^2+1] [(k3)^2+1] [(k4)^2+1] )  (7 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12610,10 +12827,15 @@
     "5L": 2
    },
    "used_total": 6,
-   "traditional": null,
+   "traditional": "[δ^4] of a 6-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^4] D=2-2delta; 1/( [(k1 +k2 -k3 -k4)^2+1] [(k1 -k3 -k4)^2+1] [(k1 -k3)^2+1] [(k2 -k3 -k4)^2+1] [(k2 -k3)^2+1] [(k3)^2+1] )  (6 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12628,10 +12850,15 @@
     "5L": 25
    },
    "used_total": 86,
-   "traditional": null,
+   "traditional": "a 6-line four-loop vacuum integral in D = 2",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "(delta^0 value) D=2; 1/( [(k1 +k2 -k3 -k4)^2+1] [(k1 -k3 -k4)^2+1] [(k2 -k3 -k4)^2+1] [(k2 -k3)^2+1] [(k3)^2+1] [(k4)^2+1] )  (6 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12646,10 +12873,15 @@
     "5L": 24
    },
    "used_total": 71,
-   "traditional": null,
+   "traditional": "[δ^1] of a 6-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^1] D=2-2delta; 1/( [(k1 +k2 -k3 -k4)^2+1] [(k1 -k3 -k4)^2+1] [(k2 -k3 -k4)^2+1] [(k2 -k3)^2+1] [(k3)^2+1] [(k4)^2+1] )  (6 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12664,10 +12896,15 @@
     "5L": 13
    },
    "used_total": 50,
-   "traditional": null,
+   "traditional": "[δ^2] of a 6-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^2] D=2-2delta; 1/( [(k1 +k2 -k3 -k4)^2+1] [(k1 -k3 -k4)^2+1] [(k2 -k3 -k4)^2+1] [(k2 -k3)^2+1] [(k3)^2+1] [(k4)^2+1] )  (6 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12682,10 +12919,15 @@
     "5L": 6
    },
    "used_total": 25,
-   "traditional": null,
+   "traditional": "[δ^3] of a 6-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^3] D=2-2delta; 1/( [(k1 +k2 -k3 -k4)^2+1] [(k1 -k3 -k4)^2+1] [(k2 -k3 -k4)^2+1] [(k2 -k3)^2+1] [(k3)^2+1] [(k4)^2+1] )  (6 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12700,10 +12942,15 @@
     "5L": 1
    },
    "used_total": 4,
-   "traditional": null,
+   "traditional": "[δ^4] of a 6-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^4] D=2-2delta; 1/( [(k1 +k2 -k3 -k4)^2+1] [(k1 -k3 -k4)^2+1] [(k2 -k3 -k4)^2+1] [(k2 -k3)^2+1] [(k3)^2+1] [(k4)^2+1] )  (6 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12718,10 +12965,15 @@
     "5L": 23
    },
    "used_total": 68,
-   "traditional": null,
+   "traditional": "[δ^1] of a 7-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^1] D=2-2delta; 1/( [(k1 +k2 -k3 -k4)^2+1] [(k1 -k3 -k4)^2+1] [(k1 -k3)^2+1] [(k2 -k3 -k4)^2+1] [(k2 -k3)^2+1] [(k3)^2+1] [(k4)^2+1] )  (7 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12736,10 +12988,15 @@
     "5L": 14
    },
    "used_total": 53,
-   "traditional": null,
+   "traditional": "[δ^2] of a 7-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^2] D=2-2delta; 1/( [(k1 +k2 -k3 -k4)^2+1] [(k1 -k3 -k4)^2+1] [(k1 -k3)^2+1] [(k2 -k3 -k4)^2+1] [(k2 -k3)^2+1] [(k3)^2+1] [(k4)^2+1] )  (7 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12754,10 +13011,15 @@
     "5L": 6
    },
    "used_total": 25,
-   "traditional": null,
+   "traditional": "[δ^3] of a 7-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^3] D=2-2delta; 1/( [(k1 +k2 -k3 -k4)^2+1] [(k1 -k3 -k4)^2+1] [(k1 -k3)^2+1] [(k2 -k3 -k4)^2+1] [(k2 -k3)^2+1] [(k3)^2+1] [(k4)^2+1] )  (7 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12772,10 +13034,15 @@
     "5L": 14
    },
    "used_total": 51,
-   "traditional": null,
+   "traditional": "[δ^2] of a 7-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^2] D=2-2delta; 1/( [(k1 +k2 -k3 -k4)^2+1] [(k1 -k3 -k4)^2+1] [(k1 -k3)^2+1] [(k2 -k3 -k4)^2+1] [(k2 -k3)^2+1] [(k3)^2+1]^2 [(k4)^2+1] )  (7 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12790,10 +13057,15 @@
     "5L": 1
    },
    "used_total": 4,
-   "traditional": null,
+   "traditional": "[δ^4] of a 7-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^4] D=2-2delta; 1/( [(k1 +k2 -k3 -k4)^2+1] [(k1 -k3 -k4)^2+1] [(k1 -k3)^2+1] [(k2 -k3 -k4)^2+1] [(k2 -k3)^2+1] [(k3)^2+1] [(k4)^2+1] )  (7 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12808,10 +13080,15 @@
     "5L": 6
    },
    "used_total": 25,
-   "traditional": null,
+   "traditional": "[δ^3] of a 7-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^3] D=2-2delta; 1/( [(k1 +k2 -k3 -k4)^2+1] [(k1 -k3 -k4)^2+1] [(k1 -k3)^2+1] [(k2 -k3 -k4)^2+1] [(k2 -k3)^2+1] [(k3)^2+1]^2 [(k4)^2+1] )  (7 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12826,10 +13103,15 @@
     "5L": 1
    },
    "used_total": 4,
-   "traditional": null,
+   "traditional": "[δ^4] of a 7-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^4] D=2-2delta; 1/( [(k1 +k2 -k3 -k4)^2+1] [(k1 -k3 -k4)^2+1] [(k1 -k3)^2+1] [(k2 -k3 -k4)^2+1] [(k2 -k3)^2+1] [(k3)^2+1]^2 [(k4)^2+1] )  (7 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12844,10 +13126,15 @@
     "5L": 20
    },
    "used_total": 48,
-   "traditional": null,
+   "traditional": "[δ^1] of a 7-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^1] D=2-2delta; 1/( [(k1 +k2 -k3 -k4)^2+1] [(k1 -k3 -k4)^2+1] [(k1 -k3)^2+1] [(k2 -k3 -k4)^2+1] [(k2 -k3)^2+1] [(k2)^2+1] [(k4)^2+1] )  (7 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12862,10 +13149,15 @@
     "5L": 9
    },
    "used_total": 25,
-   "traditional": null,
+   "traditional": "[δ^2] of a 7-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^2] D=2-2delta; 1/( [(k1 +k2 -k3 -k4)^2+1] [(k1 -k3 -k4)^2+1] [(k1 -k3)^2+1] [(k2 -k3 -k4)^2+1] [(k2 -k3)^2+1] [(k2)^2+1] [(k4)^2+1] )  (7 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12880,10 +13172,15 @@
     "5L": 3
    },
    "used_total": 13,
-   "traditional": null,
+   "traditional": "[δ^3] of a 7-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^3] D=2-2delta; 1/( [(k1 +k2 -k3 -k4)^2+1] [(k1 -k3 -k4)^2+1] [(k1 -k3)^2+1] [(k2 -k3 -k4)^2+1] [(k2 -k3)^2+1] [(k2)^2+1] [(k4)^2+1] )  (7 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12898,10 +13195,15 @@
     "5L": 1
    },
    "used_total": 4,
-   "traditional": null,
+   "traditional": "[δ^4] of a 7-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^4] D=2-2delta; 1/( [(k1 +k2 -k3 -k4)^2+1] [(k1 -k3 -k4)^2+1] [(k1 -k3)^2+1] [(k2 -k3 -k4)^2+1] [(k2 -k3)^2+1] [(k2)^2+1] [(k4)^2+1] )  (7 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12916,10 +13218,15 @@
     "5L": 17
    },
    "used_total": 37,
-   "traditional": null,
+   "traditional": "[δ^1] of an 8-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^1] D=2-2delta; 1/( [(k1 +k2 -k3 -k4)^2+1] [(k1 -k3 -k4)^2+1] [(k1 -k3)^2+1] [(k2 -k3 -k4)^2+1] [(k2 -k3)^2+1] [(k2)^2+1]^2 [(k3)^2+1] [(k4)^2+1] )  (8 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12934,10 +13241,15 @@
     "5L": 8
    },
    "used_total": 19,
-   "traditional": null,
+   "traditional": "[δ^2] of an 8-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^2] D=2-2delta; 1/( [(k1 +k2 -k3 -k4)^2+1] [(k1 -k3 -k4)^2+1] [(k1 -k3)^2+1] [(k2 -k3 -k4)^2+1] [(k2 -k3)^2+1] [(k2)^2+1] [(k3)^2+1] [(k4)^2+1] )  (8 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12952,10 +13264,15 @@
     "5L": 3
    },
    "used_total": 13,
-   "traditional": null,
+   "traditional": "[δ^3] of an 8-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^3] D=2-2delta; 1/( [(k1 +k2 -k3 -k4)^2+1] [(k1 -k3 -k4)^2+1] [(k1 -k3)^2+1] [(k2 -k3 -k4)^2+1] [(k2 -k3)^2+1] [(k2)^2+1] [(k3)^2+1] [(k4)^2+1] )  (8 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12970,10 +13287,15 @@
     "5L": 1
    },
    "used_total": 4,
-   "traditional": null,
+   "traditional": "[δ^4] of an 8-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^4] D=2-2delta; 1/( [(k1 +k2 -k3 -k4)^2+1] [(k1 -k3 -k4)^2+1] [(k1 -k3)^2+1] [(k2 -k3 -k4)^2+1] [(k2 -k3)^2+1] [(k2)^2+1] [(k3)^2+1] [(k4)^2+1] )  (8 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -12988,10 +13310,15 @@
     "5L": 3
    },
    "used_total": 13,
-   "traditional": null,
+   "traditional": "[δ^3] of an 8-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^3] D=2-2delta; 1/( [(k1 +k2 -k3 -k4)^2+1] [(k1 -k3 -k4)^2+1] [(k1 -k3)^2+1] [(k2 -k3 -k4)^2+1] [(k2 -k3)^2+1] [(k2)^2+1]^2 [(k3)^2+1] [(k4)^2+1] )  (8 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -13006,10 +13333,15 @@
     "5L": 1
    },
    "used_total": 4,
-   "traditional": null,
+   "traditional": "[δ^4] of an 8-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^4] D=2-2delta; 1/( [(k1 +k2 -k3 -k4)^2+1] [(k1 -k3 -k4)^2+1] [(k1 -k3)^2+1] [(k2 -k3 -k4)^2+1] [(k2 -k3)^2+1] [(k2)^2+1]^2 [(k3)^2+1] [(k4)^2+1] )  (8 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -13024,10 +13356,15 @@
     "5L": 2
    },
    "used_total": 6,
-   "traditional": null,
+   "traditional": "[δ^1] of an 8-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^1] D=2-2delta; 1/( [(k1 -k2)^2+1] [(k1 -k3 +k4)^2+1] [(k1 -k3)^2+1] [(k2 -k3)^2+1] [(k1)^2+1] [(k2)^2+1] [(k3)^2+1] [(k4)^2+1] )  (8 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -13042,10 +13379,15 @@
     "5L": 5
    },
    "used_total": 9,
-   "traditional": null,
+   "traditional": "[δ^2] of an 8-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^2] D=2-2delta; 1/( [(k1 -k2)^2+1] [(k1 -k3 +k4)^2+1] [(k1 -k3)^2+1] [(k2 -k3)^2+1] [(k1)^2+1] [(k2)^2+1] [(k3)^2+1] [(k4)^2+1] )  (8 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -13060,10 +13402,15 @@
     "5L": 4
    },
    "used_total": 6,
-   "traditional": null,
+   "traditional": "[δ^2] of a 9-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^2] D=2-2delta; 1/( [(k1 -k3 -k4)^2+1] [(k1 -k3)^2+1] [(k2 -k3 -k4)^2+1] [(k2 -k3)^2+1] [(k3 +k4)^2+1] [(k1)^2+1] [(k2)^2+1] [(k3)^2+1] [(k4)^2+1] )  (9 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -13078,10 +13425,15 @@
     "5L": 1
    },
    "used_total": 2,
-   "traditional": null,
+   "traditional": "[δ^2] of a 9-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^2] D=2-2delta; 1/( [(k1 +k2 -k3 -k4)^2+1] [(k1 -k3 -k4)^2+1] [(k1 -k3)^2+1] [(k2 -k3 -k4)^2+1] [(k2 -k3)^2+1] [(k1)^2+1] [(k2)^2+1] [(k3)^2+1] [(k4)^2+1] )  (9 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -13096,10 +13448,15 @@
     "5L": 3
    },
    "used_total": 5,
-   "traditional": null,
+   "traditional": "[δ^1] of a 9-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^1] D=2-2delta; 1/( [(k1 +k2 -k3 -k4)^2+1] [(k1 -k3 -k4)^2+1] [(k1 -k3)^2+1] [(k2 -k3 -k4)^2+1] [(k2 -k3)^2+1] [(k1)^2+1] [(k2)^2+1] [(k3)^2+1] [(k4)^2+1] )  (9 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -13114,10 +13471,15 @@
     "5L": 1
    },
    "used_total": 2,
-   "traditional": null,
+   "traditional": "[δ^3] of an 8-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^3] D=2-2delta; 1/( [(k1 -k2)^2+1] [(k1 -k3 +k4)^2+1] [(k1 -k3)^2+1] [(k2 -k3)^2+1] [(k1)^2+1] [(k2)^2+1] [(k3)^2+1] [(k4)^2+1] )  (8 propagators)",
+   "note": null,
    "pending_uses": 0
   },
   {
@@ -13132,14 +13494,24 @@
     "5L": 1
    },
    "used_total": 2,
-   "traditional": null,
+   "traditional": "[δ^3] of a 9-line four-loop vacuum integral in D = 2-2δ",
    "traditional_terms": null,
-   "traditional_status": null,
+   "traditional_status": "explicit definition; no reduction to the level-6 basis (REPORT section 3)",
    "traditional_check": null,
+   "name_kind": "no reduction",
+   "formula": null,
+   "formula_terms": null,
+   "definition_full": "[delta^3] D=2-2delta; 1/( [(k1 -k3 -k4)^2+1] [(k1 -k3)^2+1] [(k2 -k3 -k4)^2+1] [(k2 -k3)^2+1] [(k3 +k4)^2+1] [(k1)^2+1] [(k2)^2+1] [(k3)^2+1] [(k4)^2+1] )  (9 propagators)",
+   "note": null,
    "pending_uses": 0
   }
  ],
- "names": null,
+ "names": {
+  "path": "/shared/vhirschi/t3code/vakint/scratchpad/5l-pilot/basis-b/v5lpar/rstar/bench/gl/crates/vakint/docs/benchmark/data/constant-names.json",
+  "sha256": "01ce5e6af25cf8e2b93542ed456a3b66847297aea90e3a4501966b4f0cce85f6",
+  "status": "verified to the full stored digits; not yet adopted in the data",
+  "convention": "Loop integrals (Euclidean, unit masses; every propagator 1/(q_e^2 + 1)^{a_e}; measure prod_l d^D k_l / pi^{D/2}; X_hat(delta) = e^{4 gamma_E delta} x integral in D = 2 - 2 delta; PRnD2EpsJ = [delta^J] X_hat; PRnD2 = X_hat(0); PR14epJ = [eps^J] of (-1)^{sum a} e^{4 gamma_E eps} x integral in D = 4 - 2 eps):"
+ },
  "method": [
   {
    "title": "Closed forms",
@@ -13151,18 +13523,24 @@
   },
   {
    "title": "R operation (preview)",
-   "text": "Pole coefficient K G = (A) − Δ: part (A) = −K Σ_S Δ(S) G/S from the subdivergences (ordinary massive R operation, exact, lower-loop coefficients of vakint); Δ = overall counterterm, a pure number: absent for ω < 0 (complete result), otherwise fitted as an integer relation of [numeric − (A)] in the basis 1, ζ3, π⁴, ζ5, π⁶, ζ3², ζ7, ζ3π⁴ (accepted at a margin ≥ 20 digits; to be confirmed by R*)."
+   "text": "Pole coefficient K G = (A) − Δ: part (A) = −K Σ_S Δ(S) G/S from the subdivergences (ordinary massive R operation, exact, lower-loop coefficients of vakint); Δ = overall counterterm, a pure number. Evidence classes: exact derivation (ω < 0: no overall counterterm, the result is complete); confirmed by R* (Δ derived by R*); fitted counterterm (Δ found as an integer relation of [numeric − (A)] in 1, ζ3, π⁴, ζ5, π⁶, ζ3², ζ7, ζ3π⁴, with its margin in digits). Fits below the acceptance margin are listed as marginal and not applied; poles whose Δ the fit did not identify, or without a part (A) yet, stay numerical and are listed."
+  },
+  {
+   "title": "4L poles",
+   "text": "From ε^-1 down the 4L result is exact and guaranteed: by the R-operation its pole coefficients are free of the 4L-only constants, verified exactly on vakint’s reduction data (footnote 2)."
   },
   {
    "title": "Numerical check",
-   "text": "Every symbolic form is compared with the numerical value it replaces, to that value’s full claimed digits (user ruling 2026-11-10), at adoption and again when the release tooling integrates it; a mismatch blocks the substitution. Pending entries list their digits of agreement; where they fall short of the claimed digits the entry is flagged."
+   "text": "Every symbolic form is compared with the numerical value it replaces, to that value’s claimed digits (user ruling 2026-11-10), at adoption and again when the release tooling integrates it; a mismatch blocks the substitution. Published digits of numerical values are the claim minus one digit (user ruling 2026-11-11), so discrepancies of up to one digit are absorbed; larger ones are flagged and listed."
   }
  ],
  "pending": [],
  "superseded_overlay_entries": [],
- "generated_utc": "2026-11-11T01:09:03Z",
+ "listed": [],
+ "digit_offset": 1,
+ "generated_utc": "2026-11-11T03:37:30Z",
  "generator": {
   "path": "crates/vakint/docs/benchmark/tools/overview.py",
-  "sha256": "461b130adfc3e9a8978057db8ea2a5235b317987e85644d39144d75de96a4d08"
+  "sha256": "29d93cd7597f649eb3c5d42c11c42641a540329993b0527701dee61bb6b96b23"
  }
 }

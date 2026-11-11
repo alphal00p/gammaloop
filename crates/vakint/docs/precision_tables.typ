@@ -66,7 +66,7 @@
     [#sw("S")[S] exact, periods at any precision],
     [#sw("Z")[0] structural zero (table 1)],
     [#sw("S*")[S\*(X)] exact, periods to at most X digits],
-    [#sw("N")[N(X)] numerical only, at most X digits],
+    [#sw("N")[N(X)] numerical only, X = validated digits − 1],
     [#box(baseline: 2pt, rect(height: 9pt, inset: (x: 3pt, y: 1.5pt), radius: 1.5pt, fill: pt-na, text(size: 6.8pt, fill: luma(130))[—])) not available],
   )
 }

@@ -26,7 +26,8 @@
    "rustred_evaluation/five_loop.rs": "2c5c1a77707e59eef78a2675fd709f5a176b5163c1ada613f4ef8e94e74b5253",
    "hpl.rs": "aa6270e254a177de404eac0b93cd2081019a828d7f0844060eb91d53b0d026fb"
   },
-  "pole_depth_sha256": "4ad608642329a54e9560c1b34029d6b09b595d71d23c12b6b35342348014d223"
+  "pole_depth_sha256": "4ad608642329a54e9560c1b34029d6b09b595d71d23c12b6b35342348014d223",
+  "r_operation_sha256": "355873895f2a9c0920a4881a116b2e097ac622a2d92ba8fb17b44fbb1aadce3b"
  },
  "orders_table1": [
   -5,
@@ -2746,7 +2747,7 @@
       "vakint::PR7D2",
       "vakint::K5LogMoment(1)"
      ],
-     "numerical_mode_digits": 20000
+     "numerical_mode_digits": 19999
     },
     "1": {
      "class": "S*",
@@ -2869,7 +2870,7 @@
       "vakint::PR7D2",
       "vakint::K5LogMoment(1)"
      ],
-     "numerical_mode_digits": 20000
+     "numerical_mode_digits": 19999
     },
     "1": {
      "class": "S*",
@@ -4553,7 +4554,7 @@
       "vakint::PR7D2",
       "vakint::K5LogMoment(1)"
      ],
-     "numerical_mode_digits": 20000
+     "numerical_mode_digits": 19999
     },
     "1": {
      "class": "S*",
@@ -5647,7 +5648,7 @@
       "vakint::PR7D2",
       "vakint::K5LogMoment(1)"
      ],
-     "numerical_mode_digits": 20000
+     "numerical_mode_digits": 19999
     },
     "1": {
      "class": "S*",
@@ -5708,7 +5709,7 @@
       "vakint::PR7D2",
       "vakint::K5LogMoment(1)"
      ],
-     "numerical_mode_digits": 20000
+     "numerical_mode_digits": 19999
     },
     "1": {
      "class": "S*",
@@ -5751,17 +5752,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 67,
+     "X": 66,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 58,
+     "X": 57,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 59,
+     "X": 58,
      "marks": []
     },
     "1": null,
@@ -5794,17 +5795,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 83,
+     "X": 82,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 83,
+     "X": 82,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 75,
+     "X": 74,
      "marks": []
     },
     "1": null,
@@ -5837,17 +5838,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 69,
+     "X": 68,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 64,
+     "X": 63,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 61,
+     "X": 60,
      "marks": []
     },
     "1": null,
@@ -5880,17 +5881,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 65,
+     "X": 64,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 58,
+     "X": 57,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "1": null,
@@ -5923,17 +5924,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 65,
+     "X": 64,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 58,
+     "X": 57,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -5961,22 +5962,22 @@
     },
     "-3": {
      "class": "N",
-     "X": 65,
+     "X": 64,
      "marks": []
     },
     "-2": {
      "class": "N",
-     "X": 65,
+     "X": 64,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -6062,7 +6063,7 @@
     },
     "0": {
      "class": "N",
-     "X": 142,
+     "X": 141,
      "marks": []
     },
     "1": null,
@@ -6105,7 +6106,7 @@
     },
     "0": {
      "class": "N",
-     "X": 142,
+     "X": 141,
      "marks": []
     },
     "1": null,
@@ -6138,17 +6139,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 59,
+     "X": 58,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "1": null,
@@ -6318,7 +6319,7 @@
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -6361,7 +6362,7 @@
     },
     "0": {
      "class": "N",
-     "X": 59,
+     "X": 58,
      "marks": []
     },
     "1": null,
@@ -6437,17 +6438,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 59,
+     "X": 58,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "1": null,
@@ -6480,17 +6481,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 65,
+     "X": 64,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 62,
+     "X": 61,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 58,
+     "X": 57,
      "marks": []
     },
     "1": null,
@@ -6528,12 +6529,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 58,
+     "X": 57,
      "marks": []
     },
     "1": null,
@@ -6571,12 +6572,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 65,
+     "X": 64,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 61,
+     "X": 60,
      "marks": []
     },
     "1": null,
@@ -6665,17 +6666,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 65,
+     "X": 64,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "1": null,
@@ -6713,12 +6714,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 84,
+     "X": 83,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 75,
+     "X": 74,
      "marks": []
     },
     "1": null,
@@ -6756,12 +6757,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -6804,7 +6805,7 @@
     },
     "0": {
      "class": "N",
-     "X": 60,
+     "X": 59,
      "marks": []
     },
     "1": null,
@@ -6855,7 +6856,7 @@
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -6979,12 +6980,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "1": null,
@@ -7027,7 +7028,7 @@
     },
     "0": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "1": null,
@@ -7070,7 +7071,7 @@
     },
     "0": {
      "class": "N",
-     "X": 48,
+     "X": 47,
      "marks": []
     },
     "1": null,
@@ -7113,7 +7114,7 @@
     },
     "0": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "1": null,
@@ -7151,12 +7152,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 83,
+     "X": 82,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 75,
+     "X": 74,
      "marks": []
     },
     "1": null,
@@ -7194,12 +7195,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 83,
+     "X": 82,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 75,
+     "X": 74,
      "marks": []
     },
     "1": null,
@@ -7305,7 +7306,7 @@
     },
     "0": {
      "class": "N",
-     "X": 69,
+     "X": 68,
      "marks": []
     },
     "1": null,
@@ -7348,7 +7349,7 @@
     },
     "0": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "1": null,
@@ -7386,12 +7387,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 55,
+     "X": 54,
      "marks": []
     },
     "1": null,
@@ -7442,7 +7443,7 @@
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -7480,12 +7481,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 55,
+     "X": 54,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "1": null,
@@ -7528,7 +7529,7 @@
     },
     "0": {
      "class": "N",
-     "X": 43,
+     "X": 42,
      "marks": []
     },
     "1": null,
@@ -7571,7 +7572,7 @@
     },
     "0": {
      "class": "N",
-     "X": 58,
+     "X": 57,
      "marks": []
     },
     "1": null,
@@ -7609,12 +7610,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -7657,7 +7658,7 @@
     },
     "0": {
      "class": "N",
-     "X": 74,
+     "X": 73,
      "marks": []
     },
     "1": null,
@@ -7700,7 +7701,7 @@
     },
     "0": {
      "class": "N",
-     "X": 66,
+     "X": 65,
      "marks": []
     },
     "1": null,
@@ -7738,12 +7739,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 58,
+     "X": 57,
      "marks": []
     },
     "1": null,
@@ -7915,17 +7916,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "1": null,
@@ -8011,17 +8012,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 65,
+     "X": 64,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -8059,12 +8060,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 83,
+     "X": 82,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 75,
+     "X": 74,
      "marks": []
     },
     "1": null,
@@ -8102,12 +8103,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 82,
+     "X": 81,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 76,
+     "X": 75,
      "marks": []
     },
     "1": null,
@@ -8204,12 +8205,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 82,
+     "X": 81,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 74,
+     "X": 73,
      "marks": []
     },
     "1": null,
@@ -8247,12 +8248,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 82,
+     "X": 81,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 76,
+     "X": 75,
      "marks": []
     },
     "1": null,
@@ -8295,7 +8296,7 @@
     },
     "0": {
      "class": "N",
-     "X": 74,
+     "X": 73,
      "marks": []
     },
     "1": null,
@@ -8389,17 +8390,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 65,
+     "X": 64,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -8442,7 +8443,7 @@
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -8485,7 +8486,7 @@
     },
     "0": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "1": null,
@@ -8518,17 +8519,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 60,
+     "X": 59,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 51,
+     "X": 50,
      "marks": []
     },
     "1": null,
@@ -8571,7 +8572,7 @@
     },
     "0": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "1": null,
@@ -8614,7 +8615,7 @@
     },
     "0": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "1": null,
@@ -8647,17 +8648,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 66,
+     "X": 65,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 59,
+     "X": 58,
      "marks": []
     },
     "1": null,
@@ -8700,7 +8701,7 @@
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -8743,7 +8744,7 @@
     },
     "0": {
      "class": "N",
-     "X": 3,
+     "X": 2,
      "marks": []
     },
     "1": null,
@@ -8781,12 +8782,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 83,
+     "X": 82,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 74,
+     "X": 73,
      "marks": []
     },
     "1": null,
@@ -8824,12 +8825,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 82,
+     "X": 81,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 74,
+     "X": 73,
      "marks": []
     },
     "1": null,
@@ -8867,12 +8868,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 58,
+     "X": 57,
      "marks": []
     },
     "1": null,
@@ -8904,17 +8905,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 64,
+     "X": 63,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -8946,17 +8947,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 82,
+     "X": 81,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 82,
+     "X": 81,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 74,
+     "X": 73,
      "marks": []
     },
     "1": null,
@@ -8994,12 +8995,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 84,
+     "X": 83,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 75,
+     "X": 74,
      "marks": []
     },
     "1": null,
@@ -9037,12 +9038,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 58,
+     "X": 57,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -9080,12 +9081,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 83,
+     "X": 82,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 75,
+     "X": 74,
      "marks": []
     },
     "1": null,
@@ -9128,7 +9129,7 @@
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -9171,7 +9172,7 @@
     },
     "0": {
      "class": "N",
-     "X": 74,
+     "X": 73,
      "marks": []
     },
     "1": null,
@@ -9214,7 +9215,7 @@
     },
     "0": {
      "class": "N",
-     "X": 62,
+     "X": 61,
      "marks": []
     },
     "1": null,
@@ -9267,7 +9268,7 @@
     },
     "0": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "1": null,
@@ -9300,17 +9301,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 65,
+     "X": 64,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -9342,17 +9343,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 48,
+     "X": 47,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "1": null,
@@ -9390,12 +9391,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 82,
+     "X": 81,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 75,
+     "X": 74,
      "marks": []
     },
     "1": null,
@@ -9428,17 +9429,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "1": null,
@@ -9481,7 +9482,7 @@
     },
     "0": {
      "class": "N",
-     "X": 3,
+     "X": 2,
      "marks": []
     },
     "1": null,
@@ -9587,7 +9588,7 @@
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -9630,7 +9631,7 @@
     },
     "0": {
      "class": "N",
-     "X": 44,
+     "X": 43,
      "marks": []
     },
     "1": null,
@@ -9673,7 +9674,7 @@
     },
     "0": {
      "class": "N",
-     "X": 3,
+     "X": 2,
      "marks": []
     },
     "1": null,
@@ -9716,7 +9717,7 @@
     },
     "0": {
      "class": "N",
-     "X": 35,
+     "X": 34,
      "marks": []
     },
     "1": null,
@@ -9797,12 +9798,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -9883,12 +9884,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -9926,12 +9927,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 83,
+     "X": 82,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 75,
+     "X": 74,
      "marks": []
     },
     "1": null,
@@ -10027,17 +10028,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "1": null,
@@ -10090,7 +10091,7 @@
     },
     "0": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "1": null,
@@ -10133,7 +10134,7 @@
     },
     "0": {
      "class": "N",
-     "X": 53,
+     "X": 52,
      "marks": []
     },
     "1": null,
@@ -10171,12 +10172,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 82,
+     "X": 81,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 75,
+     "X": 74,
      "marks": []
     },
     "1": null,
@@ -10204,22 +10205,22 @@
     },
     "-3": {
      "class": "N",
-     "X": 48,
+     "X": 47,
      "marks": []
     },
     "-2": {
      "class": "N",
-     "X": 48,
+     "X": 47,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 48,
+     "X": 47,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 48,
+     "X": 47,
      "marks": []
     },
     "1": null,
@@ -10252,17 +10253,17 @@
     },
     "-2": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "-1": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "1": null,
@@ -10305,7 +10306,7 @@
     },
     "0": {
      "class": "N",
-     "X": 48,
+     "X": 47,
      "marks": []
     },
     "1": null,
@@ -10358,7 +10359,7 @@
     },
     "0": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "1": null,
@@ -10401,7 +10402,7 @@
     },
     "0": {
      "class": "N",
-     "X": 55,
+     "X": 54,
      "marks": []
     },
     "1": null,
@@ -10439,12 +10440,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 82,
+     "X": 81,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 74,
+     "X": 73,
      "marks": []
     },
     "1": null,
@@ -10482,12 +10483,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 46,
+     "X": 45,
      "marks": []
     },
     "1": null,
@@ -10525,12 +10526,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -10581,7 +10582,7 @@
     },
     "0": {
      "class": "N",
-     "X": 75,
+     "X": 74,
      "marks": []
     },
     "1": null,
@@ -10619,12 +10620,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 82,
+     "X": 81,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 75,
+     "X": 74,
      "marks": []
     },
     "1": null,
@@ -10667,7 +10668,7 @@
     },
     "0": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "1": null,
@@ -10710,7 +10711,7 @@
     },
     "0": {
      "class": "N",
-     "X": 55,
+     "X": 54,
      "marks": []
     },
     "1": null,
@@ -10748,12 +10749,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "1": null,
@@ -10803,7 +10804,7 @@
     },
     "0": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "1": null,
@@ -10846,7 +10847,7 @@
     },
     "0": {
      "class": "N",
-     "X": 43,
+     "X": 42,
      "marks": []
     },
     "1": null,
@@ -10897,7 +10898,7 @@
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -10935,12 +10936,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 35,
+     "X": 34,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 35,
+     "X": 34,
      "marks": []
     },
     "1": null,
@@ -10978,12 +10979,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 57,
+     "X": 56,
      "marks": []
     },
     "1": null,
@@ -11139,12 +11140,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 82,
+     "X": 81,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 74,
+     "X": 73,
      "marks": []
     },
     "1": null,
@@ -11182,12 +11183,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 81,
+     "X": 80,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 74,
+     "X": 73,
      "marks": []
     },
     "1": null,
@@ -11230,7 +11231,7 @@
     },
     "0": {
      "class": "N",
-     "X": 62,
+     "X": 61,
      "marks": []
     },
     "1": null,
@@ -11281,7 +11282,7 @@
     },
     "0": {
      "class": "N",
-     "X": 75,
+     "X": 74,
      "marks": []
     },
     "1": null,
@@ -11324,7 +11325,7 @@
     },
     "0": {
      "class": "N",
-     "X": 3,
+     "X": 2,
      "marks": []
     },
     "1": null,
@@ -11367,7 +11368,7 @@
     },
     "0": {
      "class": "N",
-     "X": 61,
+     "X": 60,
      "marks": []
     },
     "1": null,
@@ -11405,12 +11406,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 82,
+     "X": 81,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 74,
+     "X": 73,
      "marks": []
     },
     "1": null,
@@ -11448,12 +11449,12 @@
     },
     "-1": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "0": {
      "class": "N",
-     "X": 56,
+     "X": 55,
      "marks": []
     },
     "1": null,
@@ -11495,7 +11496,7 @@
     },
     "0": {
      "class": "N",
-     "X": 63,
+     "X": 62,
      "marks": []
     },
     "1": null,
@@ -11538,7 +11539,7 @@
     },
     "0": {
      "class": "N",
-     "X": 3,
+     "X": 2,
      "marks": []
     },
     "1": null,
@@ -11581,7 +11582,7 @@
     },
     "0": {
      "class": "N",
-     "X": 54,
+     "X": 53,
      "marks": []
     },
     "1": null,
@@ -11894,16 +11895,24 @@
      "marks": []
     },
     "-1": {
-     "class": "S*",
-     "X": 20000,
+     "class": "S",
+     "X": null,
      "marks": [
       "f"
      ],
-     "binding": [
-      "4L/P11 ε^0 (alias route)",
-      "4L/P6 ε^0",
-      "4L/P7 ε^0"
-     ]
+     "r_operation": {
+      "cancelled_orders": [
+       "4L/P6 ε^0",
+       "4L/P7 ε^0",
+       "4L/P11 ε^0"
+      ],
+      "constants": [
+       "K5Moment(1)",
+       "K5Moment(3)"
+      ],
+      "proof": "Proof: by the R-operation, K G = -Delta(G) - K sum_S Delta(S) G/S for any 4-loop single-scale (all lines of mass m) vacuum integral G with polynomial numerators; the counterterms Delta are polynomials in m^2 with pole coefficients in multiple zeta values (infrared rearrangement onto massless propagators of <= 3 loops), and the quotients G/S (<= 3 loops) enter only through eps^(3-L_q) (3L eps^0, 2L eps^1, 1L eps^2), all S (polylogarithms at sixth roots of unity, no 4L constant). So every pole coefficient of G is free of the 4L constants; vakint's exact assembly shows the coefficient of each one to be identically zero (exact rational arithmetic) on every record checked.",
+      "evidence": "Verified exactly (coefficient of every 4L/constants.json constant at eps^-4..eps^-1 = 0): all 286527 records of the shipped 4L caches (77724 with spurious poles, 1375 with 1/eps^2), 2230 sampled keys of track LL and 514 fresh keys outside both (all four families, up to 6 dots and 4 numerator powers); 338832 pole x constant products cancel. The spurious-pole residue vectors span dimension x 6, h 5, bmw 5, fg 3 and every basis vector has zero 4L-constant content. vakint itself returns these orders beyond 20000 digits (4L/P15 + dot: eps^-1 to 20524 d in Symbolic, 20499 d of 20500 requested in Numerical mode; finite inputs P15, P17, P18 + dot: exact 0)."
+     }
     },
     "0": {
      "class": "S*",
@@ -12141,7 +12150,7 @@
     },
     "-4": {
      "class": "N",
-     "X": 65,
+     "X": 64,
      "marks": [
       "m"
      ],
@@ -12152,7 +12161,7 @@
     },
     "-3": {
      "class": "N",
-     "X": 47,
+     "X": 46,
      "marks": [
       "n"
      ],
@@ -12160,7 +12169,7 @@
       "5L/P50 (P357) ε^-2 (p = 1)",
       "5L/P84 (P440) ε^-2 (p = 1)"
      ],
-     "others": "N(48)"
+     "others": "N(47)"
     },
     "-2": {
      "class": null,
@@ -12169,7 +12178,7 @@
       "o"
      ],
      "na": "partial",
-     "returned": "N(47)",
+     "returned": "N(46)",
      "missing_masters": [],
      "missing_in_combination": [],
      "missing_measured_inputs": [
@@ -12183,7 +12192,7 @@
       "p"
      ],
      "na": "partial",
-     "returned": "N(35)",
+     "returned": "N(34)",
      "missing_masters": [],
      "missing_in_combination": [],
      "missing_measured_inputs": [
@@ -12197,7 +12206,7 @@
       "q"
      ],
      "na": "partial",
-     "returned": "N(3)",
+     "returned": "N(2)",
      "missing_masters": [],
      "missing_in_combination": [],
      "missing_measured_inputs": [
@@ -12238,18 +12247,18 @@
   "3L ε^2: not available for every input. Inputs reaching 3L/P1, 3L/P3, 3L/P6, 3L/P7, 3L/P9, 3L/P11 and 6 more get MissingMasterOrders (no value; vakint fails closed). The other inputs return S.",
   "3L ε^3: not available for every input. Inputs reaching 3L/P1, 3L/P2, 3L/P3, 3L/P5, 3L/P6, 3L/P7 and 11 more get MissingMasterOrders (no value; vakint fails closed). The other inputs return S.",
   "3L ε^4: not available for every input. Inputs reaching 3L/P1, 3L/P2, 3L/P3, 3L/P4, 3L/P5, 3L/P6 and 32 more get MissingMasterOrders (no value; vakint fails closed). Only inputs whose reduction coefficients have lower spurious-pole orders return it, e.g. the 3 masters that hold ε^4 (3L/P13, 3L/P21, 3L/P28) themselves: S.",
-  "4L ε^-1 S*(20000): set by 4L/P11 ε^0 (alias route), 4L/P6 ε^0, 4L/P7 ε^0; constant vakint::K5Moment(1), vakint::K5Moment(3); spurious poles up to 1/ε^1 make ε^-1 need ε^0 of these masters (the physical pole coefficients are polylogarithmic by the R-operation, so these constants should cancel; the data do not guarantee it).",
+  "4L ε^-1 S by the R-operation: spurious poles make ε^-1 need 4L/P6 ε^0, 4L/P7 ε^0, 4L/P11 ε^0 (finite-digit constants K5Moment(1), K5Moment(3)); their coefficients in the result cancel identically. Proof: by the R-operation, K G = -Delta(G) - K sum_S Delta(S) G/S for any 4-loop single-scale (all lines of mass m) vacuum integral G with polynomial numerators; the counterterms Delta are polynomials in m^2 with pole coefficients in multiple zeta values (infrared rearrangement onto massless propagators of <= 3 loops), and the quotients G/S (<= 3 loops) enter only through eps^(3-L_q) (3L eps^0, 2L eps^1, 1L eps^2), all S (polylogarithms at sixth roots of unity, no 4L constant). So every pole coefficient of G is free of the 4L constants; vakint's exact assembly shows the coefficient of each one to be identically zero (exact rational arithmetic) on every record checked. Verified exactly (coefficient of every 4L/constants.json constant at eps^-4..eps^-1 = 0): all 286527 records of the shipped 4L caches (77724 with spurious poles, 1375 with 1/eps^2), 2230 sampled keys of track LL and 514 fresh keys outside both (all four families, up to 6 dots and 4 numerator powers); 338832 pole x constant products cancel. The spurious-pole residue vectors span dimension x 6, h 5, bmw 5, fg 3 and every basis vector has zero 4L-constant content. vakint itself returns these orders beyond 20000 digits (4L/P15 + dot: eps^-1 to 20524 d in Symbolic, 20499 d of 20500 requested in Numerical mode; finite inputs P15, P17, P18 + dot: exact 0).",
   "4L ε^0 S*(2395): set by 4L/P18 ε^0; constant vakint::PR0D2Eps1; vakint::PR0D2Eps1 rests on two profiles of one code (2395 d; independent confirmation 48.5 d).",
   "4L ε^1: not available for every input. Inputs reaching 4L/P6, 4L/P7, 4L/P9, 4L/P10, 4L/P11, 4L/P16 and 15 more get MissingMasterOrders (no value; vakint fails closed). So do inputs that combine 4L/P5, 4L/P8, 4L/P15, 4L/P40, 4L/P43, 4L/P50 and 2 more with 4L/P35, 4L/P51 (whose alias route lacks orders, so vakint takes the direct route, which lacks the former's orders). The other inputs return S*(2348) (set by 4L/P70 ε^1).",
   "4L ε^2: not available for every input. Inputs reaching 4L/P1, 4L/P3, 4L/P5, 4L/P6, 4L/P7, 4L/P8 and 56 more get MissingMasterOrders (no value; vakint fails closed). The other inputs return S.",
   "4L ε^3: not available for every input. Inputs reaching 4L/P1, 4L/P2, 4L/P3, 4L/P4, 4L/P5, 4L/P6 and 68 more get MissingMasterOrders (no value; vakint fails closed). Only inputs whose reduction coefficients have lower spurious-pole orders return it, e.g. the 4 masters that hold ε^3 (4L/P2, 4L/P21, 4L/P37, 4L/P54) themselves: S.",
   "5L row, spurious poles: p = 0 for the 5L masters (pole-free basis BASIS-v2). Regular at d = 4 is proven exactly on the 2336 held-integral generators (the record: “exact proof on all held integrals”); admitted inputs outside them are only sampled (35030 coefficients, 0 with a pole). The top sector is not pole-free: the measured input 5L/P105 with one dot (powers 2,1,1,1,1,1,1,1,1,1,0,1,0,0,1): the 12-line top sector 5L·12b (benchmark full call (docs/benchmark case 5L-P105-dot, RustRed Numerical mode, data v0.2.1) started 2026-11-07T03:32:53Z, 19263 s: MissingMasterOrders at the requested order ε^0) has p = 1 on 59 5L masters and p up to 3 on its lower-loop product factors (4L/P59 p = 3, 4L/P66 p = 3); its orders are folded into this row. Other top-sector inputs are not validated: their spurious poles may be deeper, so for them the row is no bound. An input with a spurious pole of order q at ε^k needs ε^(k+q) of the 5L masters: no 5L master holds ε^1, so at ε^0 (or below, for q > 1 or deep factor poles) it gets MissingMasterOrders (no value, never a wrong one); otherwise it returns a value with those orders’ digits, which vakint reports.",
   "5L row, lower-loop products: vakint factorizes the 21 5L product terminals (VacuumProductReducer), so a 5L result can hold products of 1L-4L masters. Included here: a factor master of L_f loops is needed (alias route: its representatives) through ε^(k+5-L_f+p), with p the spurious-pole order of the factor images (measured, not proven: vakint-route factor images of the 19 kept product terminals (4L on the alias route: 435 images, all pole-free; the direct route reaches 2, e.g. P530) and exact factor images of the 2 new dotted products (p = 1 on 1L/P1, p = 1 on 2L/P2, p = 1 on 3L/P13)): 1L/P1 (p = 1), 2L/P2 (p = 1), 3L/P13 (p = 1), 3L/P14, 3L/P38, 4L/P3, 4L/P5, 4L/P6, 4L/P7, 4L/P8, 4L/P10, 4L/P11, 4L/P13, 4L/P14, 4L/P15, 4L/P17, 4L/P18, 4L/P19, 4L/P31, 4L/P34, 4L/P70; the measured input P105 + dot reaches further factor masters with deeper poles: 1L/P1 (p = 2), 3L/P38 (p = 1), 4L/P57 (p = 1), 4L/P59 (p = 3), 4L/P60 (p = 1), 4L/P62 (p = 1), 4L/P63 (p = 1), 4L/P65 (p = 1), 4L/P66 (p = 3), 4L/P67 (p = 1), 4L/P68 (p = 1), 4L/P71 (p = 1), 4L/P74 (p = 1).",
-  "5L ε^-4 N(65): set by the measured top-sector input P105 + dot: its spurious poles make ε^-4 need 5L/P6 (P60) ε^-3 (p = 1). The other inputs return S.",
-  "5L ε^-3 N(47): set by the measured top-sector input P105 + dot: its spurious poles make ε^-3 need 5L/P50 (P357) ε^-2 (p = 1), 5L/P84 (P440) ε^-2 (p = 1). The other inputs return N(48) (set by 5L/P101 (P462) ε^-3).",
-  "5L ε^-2: not available for every input. The measured top-sector input P105 + dot gets MissingMasterOrders (it needs ε^2 of 4L/P59, ε^2 of 4L/P66; vakint fails closed). The other inputs return N(47) (set by 5L/P102 (P463) ε^-2, 5L/P50 (P357) ε^-2, 5L/P84 (P440) ε^-2, 5L/P97 (P455) ε^-2).",
-  "5L ε^-1: not available for every input. The measured top-sector input P105 + dot gets MissingMasterOrders (it needs ε^3 of 4L/P59, ε^3 of 4L/P66; vakint fails closed). The other inputs return N(35) (set by 5L/P117 (P509) ε^-1).",
-  "5L ε^0: not available for every input. The measured top-sector input P105 + dot gets MissingMasterOrders (it needs ε^1 of 59 5L masters and ε^6 of 1L/P1, ε^3 of 3L/P38, ε^2 of 4L/P57, ε^4 of 4L/P59 and 9 more factors; vakint fails closed). The other inputs return N(3) (set by 5L/P125 (P551) ε^0, 5L/P130 (P632) ε^0, 5L/P68 (P400) ε^0, 5L/P85 (P441) ε^0)."
+  "5L ε^-4 N(64): set by the measured top-sector input P105 + dot: its spurious poles make ε^-4 need 5L/P6 (P60) ε^-3 (p = 1). The other inputs return S.",
+  "5L ε^-3 N(46): set by the measured top-sector input P105 + dot: its spurious poles make ε^-3 need 5L/P50 (P357) ε^-2 (p = 1), 5L/P84 (P440) ε^-2 (p = 1). The other inputs return N(47) (set by 5L/P101 (P462) ε^-3).",
+  "5L ε^-2: not available for every input. The measured top-sector input P105 + dot gets MissingMasterOrders (it needs ε^2 of 4L/P59, ε^2 of 4L/P66; vakint fails closed). The other inputs return N(46) (set by 5L/P102 (P463) ε^-2, 5L/P50 (P357) ε^-2, 5L/P84 (P440) ε^-2, 5L/P97 (P455) ε^-2).",
+  "5L ε^-1: not available for every input. The measured top-sector input P105 + dot gets MissingMasterOrders (it needs ε^3 of 4L/P59, ε^3 of 4L/P66; vakint fails closed). The other inputs return N(34) (set by 5L/P117 (P509) ε^-1).",
+  "5L ε^0: not available for every input. The measured top-sector input P105 + dot gets MissingMasterOrders (it needs ε^1 of 59 5L masters and ε^6 of 1L/P1, ε^3 of 3L/P38, ε^2 of 4L/P57, ε^4 of 4L/P59 and 9 more factors; vakint fails closed). The other inputs return N(2) (set by 5L/P125 (P551) ε^0, 5L/P130 (P632) ε^0, 5L/P68 (P400) ε^0, 5L/P85 (P441) ε^0)."
  ],
  "notes_table2_short": [
   "1L-4L: spurious-pole orders p measured on the shipped caches and samples (direct route up to 1L 0, 2L 0, 3L 1, 4L 2), not proven.",
@@ -12257,18 +12266,18 @@
   "3L ε^2: inputs reaching 3L/P1, 3L/P3, 3L/P6 +9 get MissingMasterOrders; others S.",
   "3L ε^3: inputs reaching 3L/P1, 3L/P2, 3L/P3 +14 get MissingMasterOrders; others S.",
   "3L ε^4: inputs reaching 3L/P1, 3L/P2, 3L/P3 +35 get MissingMasterOrders; only inputs with lower spurious poles, e.g. 3L/P13, 3L/P21, 3L/P28: S.",
-  "4L ε^-1 S*(20000): K5Moment(1), K5Moment(3) via 1/ε^1 poles.",
+  "4L ε^-1 S: the K5Moment(1), K5Moment(3) terms of spurious-pole orders cancel identically (R-operation; exact on all 286527 cache records and 2744 samples).",
   "4L ε^0 S*(2395): PR0D2Eps1 (two profiles of one code).",
   "4L ε^1: inputs reaching 4L/P6, 4L/P7, 4L/P9 +18 get MissingMasterOrders; so do 4L/P5, 4L/P8, 4L/P15 +5 combined with 4L/P35, 4L/P51; others S*(2348) (4L/P70 ε^1).",
   "4L ε^2: inputs reaching 4L/P1, 4L/P3, 4L/P5 +59 get MissingMasterOrders; others S.",
   "4L ε^3: inputs reaching 4L/P1, 4L/P2, 4L/P3 +71 get MissingMasterOrders; only inputs with lower spurious poles, e.g. 4L/P2, 4L/P21, 4L/P37 +1: S.",
   "5L: p = 0 (pole-free basis BASIS-v2) proven on the 2336 held integrals and sampled outside them. Not so in the top sector: the measured input P105 + dot has p = 1 on 59 5L masters and up to p = 3 on its 4L product factors; other top-sector inputs are not validated.",
   "5L results hold products of 1L-4L masters: a factor of L_f loops is needed through ε^(k+5−L_f+p) (p measured on the factor images).",
-  "5L ε^-4 N(65): P105 + dot needs 5L/P6 (P60) ε^-3; others S.",
-  "5L ε^-3 N(47): P105 + dot needs 5L/P50 (P357) ε^-2, 5L/P84 (P440) ε^-2; others N(48).",
-  "5L ε^-2: P105 + dot gets MissingMasterOrders; others N(47) (5L/P102 (P463) ε^-2, 5L/P50 (P357) ε^-2).",
-  "5L ε^-1: P105 + dot gets MissingMasterOrders; others N(35) (5L/P117 (P509) ε^-1).",
-  "5L ε^0: P105 + dot gets MissingMasterOrders; others N(3) (5L/P125 (P551) ε^0, 5L/P130 (P632) ε^0)."
+  "5L ε^-4 N(64): P105 + dot needs 5L/P6 (P60) ε^-3; others S.",
+  "5L ε^-3 N(46): P105 + dot needs 5L/P50 (P357) ε^-2, 5L/P84 (P440) ε^-2; others N(47).",
+  "5L ε^-2: P105 + dot gets MissingMasterOrders; others N(46) (5L/P102 (P463) ε^-2, 5L/P50 (P357) ε^-2).",
+  "5L ε^-1: P105 + dot gets MissingMasterOrders; others N(34) (5L/P117 (P509) ε^-1).",
+  "5L ε^0: P105 + dot gets MissingMasterOrders; others N(2) (5L/P125 (P551) ε^0, 5L/P130 (P632) ε^0)."
  ],
  "two_profile_constants": [
   "vakint::D5bar3 (9924 d; independent implementations agree to 5060 d): 4 orders",
@@ -12285,27 +12294,27 @@
   [
    "4L/P17 ε^0",
    5363,
-   20000
+   19999
   ],
   [
    "4L/P19 ε^0",
    5363,
-   20000
+   19999
   ],
   [
    "4L/P52 ε^0",
    5363,
-   20000
+   19999
   ],
   [
    "4L/P73 ε^0",
    5363,
-   20000
+   19999
   ],
   [
    "4L/P74 ε^0",
    5363,
-   20000
+   19999
   ]
  ],
  "counts_table1": {
@@ -12337,7 +12346,7 @@
  },
  "worst_table1": {
   "4L S*": 2348,
-  "5L N": 3,
+  "5L N": 2,
   "5L S*": 2348
  },
  "rule": {
@@ -12694,13 +12703,14 @@
   "5L results can contain products of 1L-4L masters: vakint factorizes the 21 5L product terminals (VacuumProductReducer); table 2 includes their factor masters through ε^(k+5-L_f+p) on the alias route (measured, not proven: vakint-route factor images of the 19 kept product terminals (4L on the alias route: 435 images, all pole-free; the direct route reaches 2, e.g. P530) and exact factor images of the 2 new dotted products (p = 1 on 1L/P1, p = 1 on 2L/P2, p = 1 on 3L/P13)).",
   "Some 1L-4L S rows (and the 5L product rows built on them) rest on numerical identities of the constant basis v4, checked to thousands of digits but not proven: ALIAS_PR11dep0 (4L 2 rows from ε^0; checked to 544 d, re-checked to 5364 d (at the shipped constants (precision lift))); BNBAR4_LEVEL2 (3L 3 rows from ε^4, 4L 24 rows from ε^0; checked to 19900 d); D2J0_PR10 (4L 57 rows from ε^0; checked to 18000 d); LI3_I_SQRT3_V1 (4L 51 rows from ε^0; checked to 3989 d); PR5D2EPS3_J8 (4L 1 row from ε^1; checked to 520 d); R1_PR11dD2Eps2 (4L 14 rows from ε^0; checked to 547 d, re-checked to 5361 d (at the shipped constants (precision lift))); X3_TI3 (2L 4 rows from ε^1, 3L 72 rows from ε^0, 4L 141 rows from ε^-1; checked to 5000 d, re-checked to 19999 d (independence audit archived with the precision lift)); X4_TI4 (2L 3 rows from ε^2, 3L 54 rows from ε^1, 4L 102 rows from ε^0; checked to 5000 d, re-checked to 19999 d (independence audit archived with the precision lift)). Above those digits such an S is exact only modulo the identity; vakint gives no warning for it.",
   "196 of the 591 exact (S/S*) 5L orders are PSLQ identifications (9 of them S*) and 4 are measured zeros, all passing the 40-excess-digit bar (numerical identifications, not proofs).",
+  "Published digits of numerical values (N(X), numerical payloads, finite literals) are the validated claim minus 1 digit (user ruling 2026-11-11: absorbs 0.3-1 digit discrepancies between a symbolic form and the stored claim); the digits of the lifted constants are their own.",
   "Digits lost to cancellations in the reduction coefficients are tracked and reported by vakint (PrecisionWarning), not included in X.",
   "5L release tiers (5L/producer-update.json) checked against the rows: A 61, B 129, F 5, S 562, S* 29 (S -> S, S* -> S* with the same constants, numerical tiers -> N).",
   "RustRed backend only (vakint’s first backend); MATAD/FMFT/alphaLoop fallbacks are not part of these tables."
  ],
- "content_sha256": "b9e752afa83f2d8f4e63b0de063f6f91a4faff54735c9fa77eb928b77aa2a0d2",
+ "content_sha256": "7c9148d895cb5b0efa41ea6e5c80e706d88c6f8ec30da2531f98f0aaf45ad1f0",
  "status": "final",
- "generated_utc": "2026-11-11T01:09:02Z",
+ "generated_utc": "2026-11-11T03:37:29Z",
  "data_root": "/shared/vhirschi/t3code/vakint/scratchpad/5l-pilot/basis-b/bench/data/ved-v0.2.2",
  "data_git": {
   "commit": "0faa1c79566456923a966cab3d012d47059ce4e5",
@@ -12710,6 +12720,6 @@
  "label": "vakint-external-data v0.2.2 (0faa1c795664)",
  "generator": {
   "path": "crates/vakint/docs/benchmark/tools/precision_tables.py",
-  "sha256": "9d0058bc7ea256eb4d21e5c9086b3728c86af36ff6d2f83b41d53f6975226986"
+  "sha256": "f6036fe4779d3ae5ec92ce32b0e3ca2cdd62eb152e6888af7145d1469f81fac5"
  }
 }

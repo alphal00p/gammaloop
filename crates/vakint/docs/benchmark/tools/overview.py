@@ -37,6 +37,8 @@ sys.path.insert(0, str(HERE))
 import precision_tables as pt  # noqa: E402  (same directory: the tree loader and route model of the precision tables)
 
 SCHEMA = 'vakint.benchmark-overview.v1'
+BELOW_CLAIM_TOLERANCE = 1.0      # digits (user ruling 2026-11-11)
+SUP = str.maketrans('-0123456789', '⁻⁰¹²³⁴⁵⁶⁷⁸⁹')
 OVERLAY_SCHEMA = 'vakint.precision-overlay.v1'
 RANK = {'S': 0, 'Z': 0, 'S*': 1, 'N': 2}
 
@@ -105,15 +107,21 @@ def load_overlay(path: Path, finite, tree_by_name):
     ov = json.loads(path.read_text())
     if ov.get('schema') != OVERLAY_SCHEMA:
         raise SystemExit(f'{path}: schema {ov.get("schema")!r} is not {OVERLAY_SCHEMA}')
-    cells = {}
+    cells, listed = {}, []
     for e in ov['entries']:
         where = f"overlay {e['loop']}L/{e['master']} ε^{e['order']}"
+        if e.get('apply', True) is False:            # marginal / not identified / pending: listed, never applied
+            listed.append({'loop': e['loop'], 'master': e['master'], 'order': int(e['order']), 'state': e['review_state'],
+                           'method': e.get('method'), 'evidence': e.get('evidence'), 'agreement_digits': e.get('agreement_digits'),
+                           'claimed_digits': (e.get('released') or {}).get('digits'), 'exact_form': e.get('exact_form'),
+                           'provenance': e.get('provenance'), 'flags': e.get('flags') or []})
+            continue
         if e.get('exact_form'):
             cls, X, consts = classify_form(e['exact_form'], finite, where)
             if e.get('status') and e['status'] != 'N' and {e['status'], cls} not in ({'S'}, {'S*'}, {'Z'}, {'S', 'Z'}):
                 raise SystemExit(f"{where}: status {e['status']} but the form classifies as {cls}")
-        elif e.get('status') == 'N':
-            cls, X, consts = 'N', int(e['digits']), {}
+        elif e.get('status') == 'N':                 # published digits = measured claim - 1 (pt.NUMERICAL_DIGIT_OFFSET)
+            cls, X, consts = 'N', int(e['digits']) - pt.NUMERICAL_DIGIT_OFFSET, {}
         else:
             raise SystemExit(f'{where}: neither an exact form nor numerical digits')
         if e['kind'] == 'override':
@@ -124,8 +132,8 @@ def load_overlay(path: Path, finite, tree_by_name):
             'class': cls, 'X': X, 'constants': sorted(consts), 'state': e['review_state'], 'agreement_digits': e.get('agreement_digits'),
             'claimed_digits': (e.get('released') or {}).get('digits'), 'exact_form': e.get('exact_form'), 'method': e.get('method'),
             'fit': e.get('fit'), 'provenance': e.get('provenance'), 'flags': e.get('flags') or [], 'also': e.get('also') or [],
-            'kind': e['kind']}
-    return ov, cells
+            'kind': e['kind'], 'evidence': e.get('evidence'), 'evidence_class': e.get('evidence_class')}
+    return ov, cells, listed
 
 
 # ---------------------------------------------------------------------------------------------------- constants --
@@ -248,7 +256,9 @@ def constants_table(root, B, finite, names, overlay_cells):
         rows.append({'code': name, 'display': nm.get('display'), 'kind': kind, 'definition': d, 'digits': digits,
                      'arbitrary_precision': arb, 'used_in': dict(sorted(by_loop.items())), 'used_total': sum(by_loop.values()),
                      'traditional': nm.get('traditional'), 'traditional_terms': nm.get('terms'),
-                     'traditional_status': nm.get('status'), 'traditional_check': nm.get('check')})
+                     'traditional_status': nm.get('status'), 'traditional_check': nm.get('check'),
+                     'name_kind': nm.get('kind'), 'formula': nm.get('formula') if (nm.get('terms') or 0) <= 20 else None,
+                     'formula_terms': nm.get('terms'), 'definition_full': nm.get('definition'), 'note': nm.get('note')})
     # constants that only overlay (pending) forms use
     pend = {}
     for (L, n, o), c in overlay_cells.items():
@@ -282,10 +292,12 @@ def build(a):
     tree_by_name = {(m['loop'], m['name']): m for m in masters}
     zeros = zero_rows(root)
     names = json.loads(a.names.read_text()) if a.names else None
+    names_status = names_conv = None
     if names is not None and 'names' in names:          # vakint.constant-names.v1 document
+        names_status, names_conv = names.get('status'), names.get('convention')
         names = names['names']
 
-    ov, ocells = (load_overlay(a.overlay, finite, tree_by_name) if a.overlay else (None, {}))
+    ov, ocells, olisted = (load_overlay(a.overlay, finite, tree_by_name) if a.overlay else (None, {}, []))
     mode = 'preview' if ov else 'released'
     basis = (ov or {}).get('basis')
 
@@ -398,7 +410,7 @@ def build(a):
 
     # ---------------------------------------------------------------- (c) result of any L-loop input
     orders2 = T['orders_table2']
-    res_rows = []
+    res_rows, rop_notes = [], []
     for r in T['table2']:
         cells = {}
         for o in orders2:
@@ -411,7 +423,15 @@ def build(a):
                 cells[str(o)] = {'state': 'partial', 'returned': c.get('returned'), 'marks': c.get('marks') or []}
             else:
                 cells[str(o)] = {'state': 'ok', 'class': c['class'], 'X': c.get('X'), 'marks': c.get('marks') or [],
-                                 'others': c.get('others')}
+                                 'others': c.get('others'), 'guaranteed': bool(c.get('r_operation'))}
+                if c.get('r_operation'):
+                    ro = c['r_operation']
+
+                    def tidy(t):
+                        t = re.sub(r'\beps\^', 'ε^', t.replace('1/eps^2', '1/ε²')).strip().rstrip('.')
+                        return re.sub(r'\^(-?\d+)', lambda mm: mm.group(1).translate(SUP), t)
+                    rop_notes.append({'cell': tidy(f"{r['loop']}L ε^{o}"), 'proof': tidy(ro['proof']), 'evidence': tidy(ro['evidence']),
+                                      'constants': ro['constants'], 'cancelled_orders': [tidy(x) for x in ro['cancelled_orders']]})
         res_rows.append({'label': f"{r['loop']}L", 'loop': r['loop'], 'kind': 'released', 'cells': cells, 'marks': r.get('marks') or []})
 
     former = []
@@ -476,7 +496,7 @@ def build(a):
                     cells[str(o)] = {'state': 'none'}
                     continue
                 if x['contributors'] is None:
-                    cells[str(o)] = {'state': 'numerical', 'v02x': f"N({int(x['v02x_digits'])})"}
+                    cells[str(o)] = {'state': 'numerical', 'v02x': f"N({int(x['v02x_digits']) - pt.NUMERICAL_DIGIT_OFFSET})"}
                     continue
                 open_rel = [f'{n}|{j}' for n, j in x['contributors']
                             if (eff_class.get((n, j)) or (None, None))[0] is None or eff_class[(n, j)][0]['class'] in ('N',)]
@@ -498,9 +518,10 @@ def build(a):
         pend_list.append({'loop': L, 'master': n, 'order': o, 'label': label(c), 'state': c['state'], 'kind': c['kind'],
                           'agreement_digits': c['agreement_digits'], 'claimed_digits': c['claimed_digits'], 'method': c['method'],
                           'fit': c['fit'], 'exact_form': c['exact_form'], 'provenance': c['provenance'], 'flags': c['flags'],
-                          'also': c['also'],
+                          'also': c['also'], 'evidence': c.get('evidence'), 'evidence_class': c.get('evidence_class'),
+                          # user ruling 2026-11-11: discrepancies up to 1 digit are absorbed by the -1 publication offset
                           'below_claim': (c['agreement_digits'] is not None and c['claimed_digits'] is not None
-                                          and c['agreement_digits'] < c['claimed_digits'])})
+                                          and c['agreement_digits'] < c['claimed_digits'] - BELOW_CLAIM_TOLERANCE)})
 
     src = T['sources']
     out = {
@@ -518,11 +539,14 @@ def build(a):
         'orders1': orders1, 'orders2': orders2,
         'summary': summary, 'table1': rows,
         'table1_counts': table1_counts(rows, eff),
-        'result': res_rows, 'former': former,
-        'constants': ctab, 'names': None if not a.names else {'path': str(a.names.resolve()), 'sha256': sha256_file(a.names)},
+        'result': res_rows, 'former': former, 'r_operation_notes': rop_notes,
+        'constants': ctab, 'names': None if not a.names else {'path': str(a.names.resolve()), 'sha256': sha256_file(a.names),
+                                                               'status': names_status, 'convention': names_conv},
         'method': method, 'pending': [p for p in pend_list if not any(x.startswith(f"{p['loop']}L/{p['master']} ε^{p['order']}:")
                                                                       for x in superseded)],
         'superseded_overlay_entries': sorted(set(superseded)),
+        'listed': sorted(olisted, key=lambda x: (x['loop'], int(re.sub(r'\D', '', x['master'])), x['order'])),
+        'digit_offset': pt.NUMERICAL_DIGIT_OFFSET,
         'generated_utc': dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
         'generator': {'path': 'crates/vakint/docs/benchmark/tools/overview.py', 'sha256': sha256_file(Path(__file__))},
     }
@@ -561,17 +585,23 @@ def method_paragraphs(T, ov, ocells):
          'measured zeros, each passing the 40-excess-digit bar (numerical identifications, not proofs). The other 5L orders are '
          'numerical (high-precision grids and dispersive gluing; digits = validated significant digits).'),
         ('R operation (preview)', 'Pole coefficient K G = (A) − Δ: part (A) = −K Σ_S Δ(S) G/S from the subdivergences (ordinary massive R '
-         'operation, exact, lower-loop coefficients of vakint); Δ = overall counterterm, a pure number: absent for ω < 0 (complete '
-         'result), otherwise fitted as an integer relation of [numeric − (A)] in the basis 1, ζ3, π⁴, ζ5, π⁶, ζ3², ζ7, ζ3π⁴ '
-         '(accepted at a margin ≥ 20 digits; to be confirmed by R*).'),
-        ('Numerical check', 'Every symbolic form is compared with the numerical value it replaces, to that value’s full claimed digits '
+         'operation, exact, lower-loop coefficients of vakint); Δ = overall counterterm, a pure number. Evidence classes: exact '
+         'derivation (ω < 0: no overall counterterm, the result is complete); confirmed by R* (Δ derived by R*); fitted counterterm '
+         '(Δ found as an integer relation of [numeric − (A)] in 1, ζ3, π⁴, ζ5, π⁶, ζ3², ζ7, ζ3π⁴, with its margin in digits). Fits '
+         'below the acceptance margin are listed as marginal and not applied; poles whose Δ the fit did not identify, or without a '
+         'part (A) yet, stay numerical and are listed.'),
+        ('4L poles', 'From ε^-1 down the 4L result is exact and guaranteed: by the R-operation its pole coefficients are free of the '
+         '4L-only constants, verified exactly on vakint’s reduction data (footnote 2).'),
+        ('Numerical check', 'Every symbolic form is compared with the numerical value it replaces, to that value’s claimed digits '
          '(user ruling 2026-11-10), at adoption and again when the release tooling integrates it; a mismatch blocks the substitution. '
-         'Pending entries list their digits of agreement; where they fall short of the claimed digits the entry is flagged.'),
+         'Published digits of numerical values are the claim minus one digit (user ruling 2026-11-11), so discrepancies of up to one '
+         'digit are absorbed; larger ones are flagged and listed.'),
     ]
     if ov:
         n = {s: sum(1 for c in ocells.values() if c['state'] == s) for s in {c['state'] for c in ocells.values()}}
         paras.append(('Pending (this PDF)', '; '.join(f'{v} {k}' for k, v in sorted(n.items())) + '. None of them is in the released '
-                      'data tree; they are counted apart and never as released.'))
+                      'data tree; they are counted apart and never as released. Marginal, unidentified and not-yet-derived poles are '
+                      'listed separately and stay numerical in every count.'))
     return [{'title': t, 'text': x} for t, x in paras]
 
 
@@ -637,7 +667,8 @@ def markdown(O):
             return 'exact' + (f" (S*({c['sstar_X']}))" if c.get('sstar_X') else '') + '†'
         if s == 'fails-closed':
             return f"fails closed ({c['open_pending']} of {c['n_contributors']} coefficients numerical; released data {c['open_released']})"
-        t = {'S': 'exact', 'S*': f"exact, X = {c['X']} d", 'N': f"numerical, ≥ {c['X']} d"}[c['class']]
+        t = {'S': 'exact' + (', guaranteed (R-operation)' if c.get('guaranteed') else ''), 'S*': f"exact, X = {c['X']} d",
+             'N': f"numerical, ≥ {c['X']} d"}[c['class']]
         return t + ('†' if c.get('pending') else '')
     for r in O['result'] + O['former']:
         out.append(f"| {r['label']} | " + ' | '.join(rc(r['cells'][str(o)]) for o in o2) + ' |')
@@ -660,6 +691,21 @@ def markdown(O):
                        f"{p['agreement_digits'] if p['agreement_digits'] is not None else '—'} / {p['claimed_digits'] if p['claimed_digits'] is not None else '—'} | "
                        + '; '.join((['agreement below the claimed digits: check to full digits before adoption'] if p['below_claim'] else [])
                                    + p['flags']) + ' |')
+    for n in O.get('r_operation_notes') or []:
+        out += ['', f"**{n['cell']} guaranteed exact.** {n['proof']} {n['evidence']} Cancelling: {', '.join(n['constants'])} "
+                f"(needed through spurious poles at {', '.join(n['cancelled_orders'])})."]
+    if O.get('listed'):
+        out += ['', '## Listed, not applied (marginal candidates, not identified, no candidate yet)', '',
+                '| coefficient | state | evidence / method | agreement / claimed digits |', '|---|---|---|---|']
+        for p in O['listed']:
+            out.append(f"| {p['loop']}L/{p['master']} ε^{p['order']} | {p['state']} | {p.get('evidence') or p.get('method') or ''} | "
+                       f"{p['agreement_digits'] if p.get('agreement_digits') is not None else '—'} / "
+                       f"{p['claimed_digits'] if p.get('claimed_digits') is not None else '—'} |")
+    big = [p for p in O['pending'] if p['below_claim']]
+    if O['pending']:
+        out += ['', f"Agreement more than 1 digit below the claimed digits ({len(big)}): "
+                + ('; '.join(f"{p['loop']}L/{p['master']} ε^{p['order']} {p['agreement_digits']} / {p['claimed_digits']}" for p in big)
+                   or 'none') + '. Discrepancies up to 1 digit are absorbed by the −1 publication offset (user ruling 2026-11-11).']
     if O.get('superseded_overlay_entries'):
         out += ['', 'Overlay entries already held as well by the data tree (integrated; shown as released): '
                 + '; '.join(O['superseded_overlay_entries']) + '.']

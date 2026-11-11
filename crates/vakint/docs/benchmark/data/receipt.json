@@ -129,10 +129,10 @@
  "pending_exception": null,
  "suite_sha256": "f0d7f572f9a9922ab711ddb22b2e506808c6336c4ec58ec7183ceb51217c01ae",
  "graphs_sha256": "25a2e8a0907f1e51c94795bae683bd949121bef9579002e83b91a2cf92a0722c",
- "tables_sha256": "df8c0b34a0934a0a4e28f1cebef295c49b7dc027c074e053db40d7c38b7b55d3",
- "tables_content_sha256": "b9e752afa83f2d8f4e63b0de063f6f91a4faff54735c9fa77eb928b77aa2a0d2",
- "tables_md_sha256": "35c7a6dd796282710d2dd7c645ba513f81e8be46dd9eba4e61b51619d60994d4",
- "pdf_sha256": "e71f541ed0446851696f228df2d18a790cff5334c03d3b448306649029ca2d4a",
+ "tables_sha256": "c4e92bdb96dec00a64942b7ad4cd6522c96f800e5c104eed4a1d8f0f0e7ed3e0",
+ "tables_content_sha256": "7c9148d895cb5b0efa41ea6e5c80e706d88c6f8ec30da2531f98f0aaf45ad1f0",
+ "tables_md_sha256": "ddf1e5c7dd091dbf4d67b61c51efcb07d657bbb4c9dd3025442655248464ebdd",
+ "pdf_sha256": "78f2d77ed363aa55fedcc8f51aa65c13d2f233c10d037f516881c83897937173",
  "tables_data_root": "/shared/vhirschi/t3code/vakint/scratchpad/5l-pilot/basis-b/bench/data/ved-v0.2.2",
  "tables_data_git": {
   "commit": "0faa1c79566456923a966cab3d012d47059ce4e5",
@@ -174,6 +174,28 @@
    },
    "root_manifest_sha256": "5ce0e4a0abe8687cc3cf57ebd8e46a9bc105559deeddd8d4df06f5a1bb272826",
    "tables_content_sha256": "b9e752afa83f2d8f4e63b0de063f6f91a4faff54735c9fa77eb928b77aa2a0d2"
+  },
+  {
+   "utc": "2026-11-11T03:36:31+00:00",
+   "data_git": {
+    "commit": "0faa1c79566456923a966cab3d012d47059ce4e5",
+    "describe": "v0.2.2",
+    "remote": "https://github.com/alphal00p/vakint-external-data.git",
+    "dirty_files": 0
+   },
+   "root_manifest_sha256": "5ce0e4a0abe8687cc3cf57ebd8e46a9bc105559deeddd8d4df06f5a1bb272826",
+   "tables_content_sha256": "7c9148d895cb5b0efa41ea6e5c80e706d88c6f8ec30da2531f98f0aaf45ad1f0"
+  },
+  {
+   "utc": "2026-11-11T03:37:38+00:00",
+   "data_git": {
+    "commit": "0faa1c79566456923a966cab3d012d47059ce4e5",
+    "describe": "v0.2.2",
+    "remote": "https://github.com/alphal00p/vakint-external-data.git",
+    "dirty_files": 0
+   },
+   "root_manifest_sha256": "5ce0e4a0abe8687cc3cf57ebd8e46a9bc105559deeddd8d4df06f5a1bb272826",
+   "tables_content_sha256": "7c9148d895cb5b0efa41ea6e5c80e706d88c6f8ec30da2531f98f0aaf45ad1f0"
   }
  ]
 }

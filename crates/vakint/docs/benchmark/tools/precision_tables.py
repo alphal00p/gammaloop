@@ -48,6 +48,10 @@ HERE = Path(__file__).resolve().parent
 BENCH = HERE.parent                      # crates/vakint/docs/benchmark
 CRATE = BENCH.parent.parent              # crates/vakint
 SCHEMA = 'vakint.precision-tables.v1'
+# User ruling 2026-11-11: every PUBLISHED digit figure of a numerical value (an N coefficient, a numerical payload, a finite
+# literal bound at a coefficient's digits) is its measured claim minus one digit, which absorbs 0.3-1 digit discrepancies between a
+# symbolic form and the stored claim. The lifted constants of 4L/constants.json (S* sources) keep their own digits.
+NUMERICAL_DIGIT_OFFSET = 1
 MARK = {'S': '🟢', 'S*': '🟠', 'N': '🔴'}
 INF = 10 ** 9
 
@@ -336,12 +340,12 @@ def load_tree(root: Path, B):
                         raise SystemExit(f'{where}: symbolic coefficient without a row')
                     src = finite_sources(sym[o], B, consts, where)
                     if FLOAT.search(sym[o]):        # bound as a finite literal at the coefficient's digits (bind_finite_literals)
-                        src[f'literal in {where}'] = c['significant_digits']
+                        src[f'literal in {where}'] = int(c['significant_digits']) - NUMERICAL_DIGIT_OFFSET
                     cell = {'class': 'S*', 'X': min(src.values()), 'constants': src} if src else {'class': 'S'}
                 else:
                     if not c.get('numerical') or not c.get('significant_digits'):
                         raise SystemExit(f'{where}: coefficient with neither a row nor validated digits')
-                    cell = {'class': 'N', 'X': int(c['significant_digits'])}
+                    cell = {'class': 'N', 'X': int(c['significant_digits']) - NUMERICAL_DIGIT_OFFSET}
                 cell['payload_digits'] = c.get('significant_digits') if c.get('numerical') else None
                 orders[o] = cell
             masters.append({'loop': L, 'name': m['name'], 'master_id': m['master_id'], 'expr': m.get('exact_basis_expression'),
@@ -492,6 +496,42 @@ def load_depths(root: Path, path: Path, masters, alias_map):
     return depth, d, five, factors, measured
 
 
+# ------------------------------------------------------------------------------------- R-operation overrides --
+
+def load_r_operation(root: Path, path: Path, masters):
+    """orders whose exact value is proven free of the listed finite-digit constants (docs/benchmark/data/
+    r-operation-poles.json, schema vakint.r-operation-poles.v1): there, master orders needed ONLY through spurious poles
+    (j > k) contribute their finite constants with coefficient exactly zero, so they do not cap the cell.  The record is
+    pinned to the reduction programs it was verified on (like pole-depth.json) and lists the constants that cancel;
+    a pole-needed order holding any other finite constant keeps capping the cell."""
+    if path is None or not path.exists():
+        return None
+    d = json.loads(path.read_text())
+    if d.get('schema') != 'vakint.r-operation-poles.v1':
+        raise SystemExit(f'{path}: unknown schema')
+    for L, rec in d['verified_on'].items():
+        for n, want in (rec.get('framed_program_sha256') or {}).items():
+            if framed_4l(root, n) != want:
+                raise SystemExit(f'4L/ibps/{n} differs from the reduction program the R-operation override was verified on ({path})')
+        for m, want in (rec.get('symbolic_sha256') or {}).items():
+            if sha256_file(root / f'{L}' / 'masters' / m / 'symbolic.json') != want:
+                raise SystemExit(f'{L}/masters/{m}/symbolic.json differs from the master data the override was verified on ({path})')
+    orders = {}
+    for o in d['overrides']:
+        orders.setdefault(int(o['loop']), {})[int(o['order'])] = o
+    return {'orders': orders, 'doc': d}
+
+
+def r_operation_applies(rop, L, k, m, j, cell, route):
+    """True if the R-operation record proves that master order (m, j) cancels from the L-loop result at eps^k"""
+    if rop is None or route == 'product' or m['loop'] != L or j <= k:
+        return False
+    o = rop['orders'].get(L, {}).get(k)
+    if o is None:
+        return False
+    return set((cell.get('constants') or {})) <= set(o['cancelling_constants'])
+
+
 # ---------------------------------------------------------------------------------------------------- tables --
 
 def needs(m, through):
@@ -520,7 +560,7 @@ def worst_of(entries):
     return w, who
 
 
-def table2_cell(L, k, ms, by_id, alias_map, depth, factors=()):
+def table2_cell(L, k, ms, by_id, alias_map, depth, factors=(), rop=None):
     """worst case over inputs of the L-loop result at eps^k (see the module docstring); factors (5L): the lower-loop factor
     masters of the 5L product terminals, each needed (on the alias route: its representatives) through eps^(k + offset)"""
     fac_entries, fac_missing = [], []
@@ -574,21 +614,27 @@ def table2_cell(L, k, ms, by_id, alias_map, depth, factors=()):
                              'route, whose product-factor pole orders the tables do not model; update precision_tables.py')
         entries += [e for i in info if i['D'] is not None for e in i['D']]
     entries += fac_entries
+    # R-operation: master orders needed only through spurious poles whose finite constants provably cancel
+    cancelled = sorted({(m['loop'], m['name'], j, s) for m, j, c, r in entries if c['class'] != 'S'
+                        and r_operation_applies(rop, L, k, m, j, c, r) for s in (c.get('constants') or {'(numerical)': 0})})
+    entries = [(m, j, {'class': 'S'} if c['class'] != 'S' and r_operation_applies(rop, L, k, m, j, c, r) else c, r)
+               for m, j, c, r in entries]
     w, who = worst_of([(m, j, c) for m, j, c, _ in entries]) if entries else (None, [])
     routes = {}
     for m, j, c, r in entries:
         routes.setdefault((m['master_id'], j), r)
     return {'missing': [i['m'] for i in alone], 'combo': [i['m'] for i in combo], 'breakers': [i['m'] for i in breakers],
             'missing_factors': fac_missing, 'returns': bool(entries), 'worst': w,
-            'who': [(m, j, c, routes.get((m['master_id'], j))) for m, j, c in who]}
+            'who': [(m, j, c, routes.get((m['master_id'], j))) for m, j, c in who], 'cancelled': cancelled}
 
 
-def build(root: Path, B, depth_path: Path, status: str, label_text: str | None):
+def build(root: Path, B, depth_path: Path, status: str, label_text: str | None, rop_path: Path | None = None):
     consts, labels, masters = load_tree(root, B)
     by_id = {m['master_id']: m for m in masters}
     checks = tier_check(root, by_id)
     alias_map = aliases(masters)
     depth, depth_doc, five, factors, measured = load_depths(root, depth_path, masters, alias_map)
+    rop = load_r_operation(root, rop_path, masters)
     all_orders = sorted({o for m in masters for o in m['orders']})
     orders = list(range(all_orders[0], all_orders[-1] + 1))
 
@@ -610,7 +656,7 @@ def build(root: Path, B, depth_path: Path, status: str, label_text: str | None):
             if c['class'] == 'S*':
                 best = max(best, c['X'])
             if c.get('payload_digits'):
-                best = max(best, int(c['payload_digits']))
+                best = max(best, int(c['payload_digits']) - NUMERICAL_DIGIT_OFFSET)
         return best
 
     def confirmed(s):
@@ -656,7 +702,7 @@ def build(root: Path, B, depth_path: Path, status: str, label_text: str | None):
     for L in range(1, 6):
         ms = [m for m in masters if m['loop'] == L]
         k_max[L] = max(o for m in ms for o in m['orders'])
-        t2.append((L, {k: table2_cell(L, k, ms, by_id, alias_map, depth, factors if L == 5 else ())
+        t2.append((L, {k: table2_cell(L, k, ms, by_id, alias_map, depth, factors if L == 5 else (), rop)
                        for k in range(-L, k_max[L] + 1)}))
     orders2 = list(range(-5, max(k_max.values()) + 1))
 
@@ -867,6 +913,17 @@ def build(root: Path, B, depth_path: Path, status: str, label_text: str | None):
                                                      if w['class'] == 'S*' else
                                                      ', '.join(binding[:3]) + (' and more' if len(binding) > 3 else '')) + '.'
                 e['marks'].append(note(f"{L}L ε^{k} {label(w)}: {why}.", short))
+            if c.get('cancelled') and not partial:
+                o = rop['orders'][L][k]
+                cm = sorted({f"{l}L/{n} ε^{j}" for l, n, j, s in c['cancelled']}, key=lambda x: (len(x), x))
+                cs = sorted({s.replace('vakint::', '') for l, n, j, s in c['cancelled']})
+                e['r_operation'] = {'cancelled_orders': cm, 'constants': cs, 'proof': o['proof'], 'evidence': o['evidence_summary']}
+                e['marks'].append(note(
+                    f"{L}L ε^{k} {label(wc)} by the R-operation: spurious poles make ε^{k} need {', '.join(cm[:6])}"
+                    f"{' and more' if len(cm) > 6 else ''} (finite-digit constants {', '.join(cs)}); their coefficients in the "
+                    f"result cancel identically. {o['proof']} {o['evidence_summary']}",
+                    f"{L}L ε^{k} {label(wc)}: the {', '.join(cs[:2])}{' …' if len(cs) > 2 else ''} terms of spurious-pole orders "
+                    f"cancel identically (R-operation; {o['evidence_short']})."))
             cells[str(k)] = e
         t2_rows.append({'loop': L, 'cells': cells, 'last_order': k_max[L], 'marks': row_marks})
 
@@ -905,6 +962,7 @@ def build(root: Path, B, depth_path: Path, status: str, label_text: str | None):
         'vakint_constants_rs_sha256': B['sha256'],
         'vakint_route_sources_sha256': B['route_sources'],
         'pole_depth_sha256': sha256_file(depth_path),
+        'r_operation_sha256': sha256_file(rop_path) if rop_path is not None and rop_path.exists() else None,
     }
     for L in range(1, 6):
         cb = json.loads((root / f'{L}L' / 'manifest.json').read_text()).get('constant_bindings')
@@ -1080,7 +1138,8 @@ def markdown(T):
     out = ['# Precision of vakint’s master coefficients and results', '', head, '',
            '🟢 **S** exact, in periods vakint evaluates at any requested precision · '
            '🟠 **S\\*(X)** exact, but contains periods vakint has to at most X digits · '
-           '🔴 **N(X)** numerical only, at most X digits · — not available. X = worst-case digits, rounded down.', '']
+           '🔴 **N(X)** numerical only, at most X digits · — not available. X = worst-case digits, rounded down; for numerical values X = '
+           'validated digits − 1 (user ruling 2026-11-11).', '']
     o1 = T['orders_table1']
     out += ['## Table 1: master coefficients (rows: masters, columns: Laurent orders the data hold)', '',
             '| master | ' + ' | '.join(eps(o) for o in o1) + ' |', '|---|' + '---|' * len(o1)]
@@ -1166,6 +1225,9 @@ def method_notes(T):
     notes.append(f"{q['pslq_orders']} of the {q['exact_orders']} exact (S/S*) 5L orders are PSLQ identifications ({q['pslq_sstar_orders']} "
                  f"of them S*) and {q['measured_zero_orders']} are measured zeros, all passing the 40-excess-digit bar (numerical "
                  'identifications, not proofs).')
+    notes.append(f'Published digits of numerical values (N(X), numerical payloads, finite literals) are the validated claim minus '
+                 f'{NUMERICAL_DIGIT_OFFSET} digit (user ruling 2026-11-11: absorbs 0.3-1 digit discrepancies between a symbolic form and the '
+                 'stored claim); the digits of the lifted constants are their own.')
     notes.append('Digits lost to cancellations in the reduction coefficients are tracked and reported by vakint (PrecisionWarning), not '
                  'included in X.')
     ch = T.get('checks') or {}
@@ -1193,6 +1255,8 @@ def main(argv):
                     help="vakint's src directory: constants.rs + the files of ROUTE_SOURCES (default: this crate's)")
     ap.add_argument('--constants-rs', type=Path, help='default: VAKINT_SRC/inspection/constants.rs')
     ap.add_argument('--pole-depth', type=Path, default=BENCH / 'data' / 'pole-depth.json')
+    ap.add_argument('--r-operation', type=Path, default=BENCH / 'data' / 'r-operation-poles.json',
+                    help='orders proven free of finite-digit constants (R-operation overrides); a missing file means none')
     ap.add_argument('--verify', type=Path, help='compare a committed tables JSON with a regeneration from --data-root')
     a = ap.parse_args(argv)
     root = a.data_root.resolve()
@@ -1200,7 +1264,7 @@ def main(argv):
     B['route_sources'] = read_route_sources(a.vakint_src)
     if a.verify:
         old = json.loads(a.verify.read_text())
-        new = build(root, B, a.pole_depth, 'provisional', None)
+        new = build(root, B, a.pole_depth, 'provisional', None, a.r_operation)
         if content_hash(old) != old.get('content_sha256'):
             print(f"precision tables MODIFIED: {a.verify} content differs from its own content_sha256")
             return 1
@@ -1210,7 +1274,7 @@ def main(argv):
             return 1
         print(f"precision tables OK: {a.verify} = regeneration from {root} (content {new['content_sha256'][:16]}, {old.get('status')})")
         return 0
-    T = build(root, B, a.pole_depth, a.status, a.label)
+    T = build(root, B, a.pole_depth, a.status, a.label, a.r_operation)
     if a.json:
         a.json.write_text(json.dumps(T, indent=1, ensure_ascii=False) + '\n')
     if a.md:

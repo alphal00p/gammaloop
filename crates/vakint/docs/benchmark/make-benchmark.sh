@@ -27,8 +27,8 @@
 #                   records the tables' data tree in the receipt (the timing provenance is kept).
 # Overview (tools/overview.py, after the precision tables): what vakint computes exactly / numerically and to what precision,
 #                   1L-5L (counts per loop and order, the L-loop result, named constants, method); overview.json + OVERVIEW.md
-#                   in OUT_DIR, installed with the tables (docs/benchmark/data/overview.json, OVERVIEW.md). OVERVIEW_NAMES=<names.json>
-#                   adds proposed traditional names of the constants.
+#                   in OUT_DIR, installed with the tables (docs/benchmark/data/overview.json, OVERVIEW.md). Traditional forms of
+#                   the constants: docs/benchmark/data/constant-names.json (or OVERVIEW_NAMES=<names.json>).
 # --overlay FILE    PREVIEW edition (only with --refresh-tables, never with --install): the overview and table 1 also show the
 #                   pending results of FILE (schema vakint.precision-overlay.v1), marked and counted apart from the released ones.
 # --draft           DRAFT watermark (never installable)
@@ -58,7 +58,9 @@ done
 if (( INSTALL )) && [[ $DRAFT == true ]]; then echo "--install refuses a --draft run" >&2; exit 2; fi
 if (( ${#OVERLAY[@]} )) && { (( INSTALL )) || (( ! REFRESH )); }; then
   echo "--overlay (PREVIEW) only with --refresh-tables and never with --install" >&2; exit 2; fi
-NAMES=(); [[ -n ${OVERVIEW_NAMES:-} ]] && NAMES=(--names "$(realpath "$OVERVIEW_NAMES")")
+NAMES=()
+if [[ -n ${OVERVIEW_NAMES:-} ]]; then NAMES=(--names "$(realpath "$OVERVIEW_NAMES")")
+elif [[ -f $HERE/data/constant-names.json ]]; then NAMES=(--names "$HERE/data/constant-names.json"); fi
 overview() { # the overview of OUT's tables (RELEASED, or PREVIEW with --overlay)
   python3 -I "$HERE/tools/overview.py" --data-root "$ROOT" --tables "$OUT/tables.json" --json "$OUT/overview.json" \
     --md "$OUT/OVERVIEW.md" "${NAMES[@]}" "${OVERLAY[@]}"
