@@ -500,8 +500,70 @@ pub(crate) fn reduce_requests(
         phases::Accumulator::default(),
         phases::Accumulator::default(),
     );
-    let total = channels.len();
+    if phases::enabled() {
+        let union = channels
+            .values()
+            .flat_map(|inputs| inputs.inputs.keys())
+            .collect::<BTreeSet<_>>();
+        let presentations = union.iter().map(|(id, _)| *id).collect::<BTreeSet<_>>();
+        let integrals = channels
+            .values()
+            .flat_map(|inputs| inputs.integrals.iter())
+            .collect::<BTreeSet<_>>();
+        eprintln!(
+            "vakint-phase-info p_batch requests={} channels={} inputs={} distinct_keys={} presentations={} vakint_integrals={}",
+            requests.len(),
+            channels.len(),
+            channels
+                .values()
+                .map(|inputs| inputs.inputs.len())
+                .sum::<usize>(),
+            union.len(),
+            presentations.len(),
+            integrals.len()
+        );
+    }
     let mut values = BTreeMap::<(usize, Atom), Vec<ReducedPropagatorValue>>::new();
+    let joint_mode = joint::mode();
+    if joint_mode != joint::JointMode::Off && !channels.is_empty() {
+        let groups = joint::groups(library, &channels, epsilon, exact)?;
+        let check = joint_mode == joint::JointMode::Check;
+        let reductions = reduce.time(|| {
+            joint::reduce_groups(
+                library,
+                &options,
+                &step_cache,
+                &groups,
+                &channels,
+                check,
+                exact,
+            )
+        })?;
+        if !check {
+            for (group, reduction) in groups.iter().zip(&reductions) {
+                if reduction.dimension != group.loops as i64 {
+                    return Err(invalid(format!(
+                        "a {}-loop request returned a reduction of dimension {}",
+                        group.loops, reduction.dimension
+                    ))
+                    .into());
+                }
+                let reduced =
+                    rendering.time(|| render(&handle, reduction, epsilon))? * &group.monomial;
+                values
+                    .entry((group.loops, group.head.clone()))
+                    .or_default()
+                    .push(ReducedPropagatorValue {
+                        scale_power: group.scale_power,
+                        reduced,
+                    });
+                for (channel, _) in &group.channels {
+                    channels.remove(channel);
+                }
+            }
+        }
+    }
+    let total = channels.len();
     let threads = settings.n_cores.max(1);
     if across_channels(threads, total) {
         // Many small requests (physics numerators: one per distinct
@@ -669,6 +731,9 @@ pub(crate) fn evaluate_ordered_batch(
     }
     Ok(result)
 }
+
+#[path = "p_joint.rs"]
+mod joint;
 
 #[cfg(test)]
 #[path = "p_integral_tests.rs"]
