@@ -129,11 +129,11 @@
  "pending_exception": null,
  "suite_sha256": "f0d7f572f9a9922ab711ddb22b2e506808c6336c4ec58ec7183ceb51217c01ae",
  "graphs_sha256": "25a2e8a0907f1e51c94795bae683bd949121bef9579002e83b91a2cf92a0722c",
- "tables_sha256": "a85be22c014b72d0a6605de65a5a731145b462668b5b9b26e1131401d496e4c0",
- "tables_content_sha256": "0e2fc8ca25f526ec4c06535de959a1009469dbbacbbde273e99d39b08a5cbe52",
- "tables_md_sha256": "d1461126811beecdb4a99098154abf2d86b58ff7c333425e890bded393758f3f",
- "pdf_sha256": "e9dae6a15576dda0ad38cdf341bfed94d324b91aacdab7889e1023ecb4a733af",
- "tables_data_root": "/shared/vhirschi/t3code/vakint/scratchpad/5l-pilot/basis-b/bench/data/ved-v0.2.2",
+ "tables_sha256": "afbb14bcdeadaafb5180e7f803cc5c7e707514dcb557b416b8dd342deadb6d3a",
+ "tables_content_sha256": "78e3c8802f94b570a4c685e850852c9f8f874836bf6ebaeaba56b3527e89bc4f",
+ "tables_md_sha256": "801f6b93cec410c7fd639e0840c2e113373824a6821c4d76f238358569cceaf7",
+ "pdf_sha256": "262af941675a600d6c4ff75debd3ba42a946d6c7ffebf068e58945328bbfcd15",
+ "tables_data_root": "/shared/vhirschi/t3code/vakint_dev/p_integral_dev/wt/ext-data-v022",
  "tables_data_git": {
   "commit": "0faa1c79566456923a966cab3d012d47059ce4e5",
   "describe": "v0.2.2",
@@ -152,6 +152,17 @@
    },
    "root_manifest_sha256": "5ce0e4a0abe8687cc3cf57ebd8e46a9bc105559deeddd8d4df06f5a1bb272826",
    "tables_content_sha256": "0e2fc8ca25f526ec4c06535de959a1009469dbbacbbde273e99d39b08a5cbe52"
+  },
+  {
+   "utc": "2026-11-11T10:47:49+00:00",
+   "data_git": {
+    "commit": "0faa1c79566456923a966cab3d012d47059ce4e5",
+    "describe": "v0.2.2",
+    "remote": "https://github.com/alphal00p/vakint-external-data.git",
+    "dirty_files": 0
+   },
+   "root_manifest_sha256": "5ce0e4a0abe8687cc3cf57ebd8e46a9bc105559deeddd8d4df06f5a1bb272826",
+   "tables_content_sha256": "78e3c8802f94b570a4c685e850852c9f8f874836bf6ebaeaba56b3527e89bc4f"
   }
  ]
 }

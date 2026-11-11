@@ -912,7 +912,7 @@ mod tests {
         // A different scope or version is a different directory.
         let other = identity.replacen("scope=1-1", "scope=1-3", 1);
         assert_ne!(directory(&other).unwrap(), name);
-        let bumped = identity.replacen("P_CENSUS_VERSION=1", "P_CENSUS_VERSION=2", 1);
+        let bumped = identity.replacen("P_CLASS_KEY_VERSION=1", "P_CLASS_KEY_VERSION=2", 1);
         assert_ne!(bumped, identity);
         assert_ne!(directory(&bumped).unwrap(), name);
         for malformed in ["", "p-library:1-3", "p-library:scope=1-3:P_X"] {

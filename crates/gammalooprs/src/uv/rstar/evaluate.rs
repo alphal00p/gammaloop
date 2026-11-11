@@ -41,7 +41,32 @@ impl RStarPlan {
         vakint: &Vakint,
         uv_settings: &UVgenerationSettings,
     ) -> Result<Atom> {
-        Evaluation::new(self, graph, model, vakint, uv_settings, None)?.counterterm()
+        Evaluation::new(self, graph, model, vakint, uv_settings, None, None)?.counterterm()
+    }
+
+    /// [`Self::counterterm`] with the proper UV children supplied by the caller
+    /// (the polynomials `evaluate_uv_children` would return for this graph and
+    /// this plan, keyed by support, with the reference mass
+    /// `sqrt(rstar_reference_mass_squared)` on the marked line). Lets a caller
+    /// that evaluates many related graphs reuse identical children.
+    pub fn counterterm_with_children(
+        &self,
+        graph: &Graph,
+        model: &Model,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+        children: BTreeMap<SuBitGraph, Atom>,
+    ) -> Result<Atom> {
+        Evaluation::new(
+            self,
+            graph,
+            model,
+            vakint,
+            uv_settings,
+            None,
+            Some(children),
+        )?
+        .counterterm()
     }
 
     /// Compute a root-projected local MS counterterm using the same R* forest.
@@ -74,6 +99,7 @@ impl RStarPlan {
             vakint,
             uv_settings,
             Some(root_projector),
+            None,
         )?
         .counterterm()
     }
@@ -102,7 +128,7 @@ impl RStarPlan {
             graph,
             &graph.external_filter::<SuBitGraph>(),
         )?;
-        let mut evaluation = Evaluation::new(self, graph, model, vakint, uv_settings, None)?;
+        let mut evaluation = Evaluation::new(self, graph, model, vakint, uv_settings, None, None)?;
         let mut result = -evaluation.counterterm()?;
         for term in self
             .ordinary_uv
@@ -165,6 +191,7 @@ impl<'a> Evaluation<'a> {
         vakint: &'a Vakint,
         uv_settings: &'a UVgenerationSettings,
         root_projector: Option<&'a RootProjector<'a>>,
+        precomputed_children: Option<BTreeMap<SuBitGraph, Atom>>,
     ) -> Result<Self> {
         let started = Instant::now();
         for (_, _, edge) in graph.iter_edges_of(&plan.support) {
@@ -180,7 +207,9 @@ impl<'a> Evaluation<'a> {
         let reference_mass_squared = symbol!("rstar_reference_mass_squared"; Scalar);
         let reference_mass = Atom::var(reference_mass_squared).sqrt();
         let children_started = Instant::now();
-        let children = if plan.counterterms.is_empty() {
+        let children = if let Some(children) = precomputed_children {
+            children
+        } else if plan.counterterms.is_empty() {
             BTreeMap::new()
         } else {
             plan.evaluate_uv_children(graph, model, &reference_mass, vakint, uv_settings)

@@ -326,11 +326,84 @@ impl LoopData {
     }
 }
 
+/// One 1L-3L closed vacuum program of a loaded pack, decoded on first use.
+///
+/// Loading a pack verifies the sha256 of every listed file and keeps the
+/// verified bytes of `ibps/rules.rrbin` (the snapshot does not depend on
+/// later changes of a mutable checkout); their structural decode, which
+/// dominates a vacuum pack load, waits until a vacuum reduction or an
+/// Ordered step-cache identity needs the program. A p-integral-only process
+/// therefore never decodes it. The cell is shared by every clone of the
+/// snapshot and by external data that inherit a vendored lower-loop pack, so
+/// one process decodes each pack at most once. A failed decode (resource
+/// limit, incompatible family) is reported to that caller and stays
+/// retryable.
+#[derive(Clone)]
+pub(super) struct LowerProgram {
+    family: ArtifactFamily,
+    data: Arc<LoopData>,
+    /// The verified rule bytes until the program is decoded.
+    bytes: Option<Arc<[u8]>>,
+    snapshot: Arc<OnceCell<ArtifactSnapshot>>,
+}
+
+impl LowerProgram {
+    fn new(family: ArtifactFamily, data: Arc<LoopData>) -> Result<Self, RustRedEvaluationError> {
+        let bytes = data.read("ibps/rules.rrbin")?;
+        Ok(Self {
+            family,
+            data,
+            bytes: Some(bytes.into()),
+            snapshot: Arc::default(),
+        })
+    }
+
+    fn loaded(family: ArtifactFamily, data: Arc<LoopData>, snapshot: ArtifactSnapshot) -> Self {
+        Self {
+            family,
+            data,
+            bytes: None,
+            snapshot: Arc::new(OnceCell::with_value(snapshot)),
+        }
+    }
+
+    /// The decoded program (decoding it now if this is its first use).
+    pub(super) fn snapshot(&self) -> Result<&ArtifactSnapshot, RustRedEvaluationError> {
+        self.snapshot.get_or_try_init(|| {
+            crate::execution::checkpoint()?;
+            let bytes = self
+                .bytes
+                .as_ref()
+                .ok_or_else(|| failure("lower-loop program without rule bytes"))?;
+            self.family.load_snapshot(bytes)
+        })
+    }
+
+    /// Whether the program has been decoded in this process.
+    pub(super) fn is_decoded(&self) -> bool {
+        self.snapshot.get().is_some()
+    }
+
+    /// The sha256 of the rule bytes as the verified manifest declares it
+    /// (equal to the decoded snapshot's source digest), without decoding.
+    pub(super) fn declared_source_digest(&self) -> Option<[u8; 32]> {
+        let declared = &self.data.manifest.files.get("ibps/rules.rrbin")?.sha256;
+        let mut digest = [0u8; 32];
+        if declared.len() != 64 {
+            return None;
+        }
+        for (index, byte) in digest.iter_mut().enumerate() {
+            *byte = u8::from_str_radix(declared.get(2 * index..2 * index + 2)?, 16).ok()?;
+        }
+        Some(digest)
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct RustRedData {
     pub(super) version: String,
     pub(super) loops: BTreeMap<usize, Arc<LoopData>>,
-    lower: BTreeMap<usize, ArtifactSnapshot>,
+    lower: BTreeMap<usize, LowerProgram>,
     pub(super) four_loop: Option<Arc<super::four_loop::FourLoopPrograms>>,
     pub(crate) masters: Arc<super::masters::MasterCatalog>,
 }
@@ -402,13 +475,28 @@ impl RustRedData {
         max_loop_count: usize,
     ) -> Result<Arc<Self>, RustRedEvaluationError> {
         let loops = Self::load_loops(&source, &manifest, max_loop_count)?;
+        // Lower-loop packs inherited from the vendored data (a 1L/2L external
+        // load) share the vendored programs, decoded at most once per process.
+        let vendored = if max_loop_count < 3 && !matches!(source, Source::Vendored) {
+            Some(Self::vendored()?)
+        } else {
+            None
+        };
         let mut lower = BTreeMap::new();
         for (&count, data) in loops.range(..=3) {
             let family = super::artifact::shipped_family_for_loop_count(count).unwrap();
-            lower.insert(
-                count,
-                family.load_snapshot(&data.read("ibps/rules.rrbin")?)?,
-            );
+            let inherited = vendored.as_ref().and_then(|vendored| {
+                vendored
+                    .lower
+                    .get(&count)
+                    .filter(|program| Arc::ptr_eq(&program.data, data))
+                    .cloned()
+            });
+            let program = match inherited {
+                Some(program) => program,
+                None => LowerProgram::new(family, Arc::clone(data))?,
+            };
+            lower.insert(count, program);
         }
         let four_loop = loops
             .get(&4)
@@ -531,10 +619,10 @@ impl RustRedData {
         &self,
     ) -> Result<Vec<super::cache::OrderedCacheProgram>, RustRedEvaluationError> {
         let mut programs = Vec::new();
-        for (loop_count, snapshot) in &self.lower {
+        for (loop_count, program) in &self.lower {
             let family = super::artifact::shipped_family_for_loop_count(*loop_count)
                 .ok_or_else(|| failure("lower-loop program without a registered family"))?;
-            programs.push(snapshot.ordered_cache_program(
+            programs.push(program.snapshot()?.ordered_cache_program(
                 *loop_count,
                 family.name(),
                 &self.version,
@@ -552,8 +640,44 @@ impl RustRedData {
     ) -> Result<ArtifactSnapshot, RustRedEvaluationError> {
         self.lower
             .get(&family.loop_count())
+            .ok_or_else(|| failure("missing lower-loop IBP program"))?
+            .snapshot()
             .cloned()
-            .ok_or_else(|| failure("missing lower-loop IBP program"))
+    }
+
+    /// The lower-loop programs not decoded yet, as (cache label, declared
+    /// rule-table digest): no cache can have been attached through them, but
+    /// a cache of byte-identical rules attached before a reload must be kept.
+    pub(super) fn undecoded_lower_programs(&self) -> Vec<(String, [u8; 32])> {
+        self.lower
+            .iter()
+            .filter(|(_, program)| !program.is_decoded())
+            .filter_map(|(&loop_count, program)| {
+                Some((
+                    super::cache::OrderedCacheProgram::label_for(loop_count, program.family.name()),
+                    program.declared_source_digest()?,
+                ))
+            })
+            .collect()
+    }
+
+    /// [`Self::ordered_cache_programs`] of the decoded lower-loop programs and
+    /// the four-loop programs only (nothing is decoded).
+    pub(super) fn decoded_ordered_cache_programs(&self) -> Vec<super::cache::OrderedCacheProgram> {
+        let mut programs = Vec::new();
+        for (loop_count, program) in &self.lower {
+            if let Some(snapshot) = program.snapshot.get() {
+                programs.push(snapshot.ordered_cache_program(
+                    *loop_count,
+                    program.family.name(),
+                    &self.version,
+                ));
+            }
+        }
+        if let Some(four_loop) = &self.four_loop {
+            programs.extend(four_loop.ordered_cache_programs());
+        }
+        programs
     }
 }
 
@@ -658,8 +782,10 @@ impl Vakint {
             path: format!("{loop_count}L/ibps/rules.rrbin"),
             bytes: bytes.into(),
         };
-        data.loops.insert(loop_count, Arc::new(pack));
-        data.lower.insert(loop_count, snapshot);
+        let pack = Arc::new(pack);
+        data.loops.insert(loop_count, Arc::clone(&pack));
+        data.lower
+            .insert(loop_count, LowerProgram::loaded(family, pack, snapshot));
         data.version = format!("local-{}", &digest[..16]);
         self.activate_external_data(Arc::new(data), n_cores)
     }

@@ -555,6 +555,37 @@ mod harness {
         if let Some(directory) = &options.programs {
             write_programs(directory, &programs)?;
         }
+        // Peak resident set of this process (load, warm-up, measurement and
+        // save) and of its waited-for children (FORM), read before the
+        // in-process repeat below.
+        let peak_rss_kb = max_rss_kb(libc::RUSAGE_SELF);
+        let cache_statistics = (options.backend == Backend::RustRed)
+            .then(|| cache_record(&engine.ordered_cache_statistics()));
+        let children_peak_rss_kb = max_rss_kb(libc::RUSAGE_CHILDREN);
+        // bench-clean: a RustRed child with a writable cache evaluates the
+        // same input once more in the same process, after the clock and the
+        // save: the warm repeat of the same process (in-memory cache).
+        let repeat = if options.backend == Backend::RustRed
+            && settings.ordered_cache.mode == OrderedCacheMode::ReadWrite
+        {
+            let started = Instant::now();
+            let capture = capture_reduction_timing(|| engine.evaluate(&settings, input.as_view()));
+            let seconds = started.elapsed().as_secs_f64();
+            let again = capture.result?.to_canonical_string();
+            let timing = capture.timing;
+            Some(json!({
+                "evaluate_seconds": seconds,
+                "reduction_seconds": results::reduction_seconds(
+                    timing.complete,
+                    timing.interval_count,
+                    timing.reduction_math.map(|math| math.as_secs_f64()),
+                ),
+                "output_sha256": format!("{:x}", Sha256::digest(again.as_bytes())),
+                "peak_rss_kb": max_rss_kb(libc::RUSAGE_SELF),
+            }))
+        } else {
+            None
+        };
         let timing = capture.timing;
         let reduction_seconds = match options.backend {
             Backend::RustRed => results::reduction_seconds(
@@ -576,7 +607,13 @@ mod harness {
             "form_runs": programs.len(),
             "output_sha256": format!("{:x}", Sha256::digest(output.as_bytes())),
             "output_terms": terms,
+            "peak_rss_kb": peak_rss_kb,
+            "children_peak_rss_kb": children_peak_rss_kb,
+            "harness_patch": "bench-clean v1 (peak RSS, in-process warm repeat)",
         });
+        if let Some(repeat) = repeat {
+            record["warm_process"] = repeat;
+        }
         match options.backend {
             Backend::RustRed => {
                 // The arithmetic as this child resolved it, which must be the
@@ -590,7 +627,7 @@ mod harness {
                 record["arithmetic"] = json!(resolved.name());
                 record["arithmetic_resolved"] = json!(resolved.to_string());
                 record["save_seconds"] = json!(save_seconds);
-                record["cache"] = cache_record(&engine.ordered_cache_statistics());
+                record["cache"] = cache_statistics.clone().unwrap_or(Value::Null);
                 record["adjoint_tail_env"] = json!(std::env::var(ADJOINT_TAIL).ok());
             }
             Backend::Forcer => record["arithmetic"] = json!(NO_ARITHMETIC),
@@ -603,6 +640,17 @@ mod harness {
         }
         serde_json::to_writer(File::create(report)?, &record)?;
         Ok(())
+    }
+
+    /// `ru_maxrss` (kB on Linux) of `who`.
+    fn max_rss_kb(who: libc::c_int) -> i64 {
+        let mut usage = std::mem::MaybeUninit::<libc::rusage>::zeroed();
+        // SAFETY: getrusage writes one rusage into the pointer it is given.
+        let usage = unsafe {
+            libc::getrusage(who, usage.as_mut_ptr());
+            usage.assume_init()
+        };
+        usage.ru_maxrss
     }
 
     /// Replace the program directory at once: a killed child leaves either the

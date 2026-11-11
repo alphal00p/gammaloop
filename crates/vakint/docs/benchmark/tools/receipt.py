@@ -16,6 +16,9 @@
       for publish.sh: the committed receipt, suite.json, graphs.json, tables.json, PRECISION-TABLES.md and
       benchmark.pdf agree with each other, with the data tree being published and with the repository (rules
       below). Exit 0 with 'benchmark receipt OK', else exit 1 with the reasons.
+  receipt.py attest  --kind runtime-equivalent --paths PATHS.json | --kind user-approved --approved-by user --decision REF
+      records a rule-1 attestation for HEAD in docs/benchmark/data/receipt.json (rule 1 below); refuses an
+      incomplete one (a changed path without a reason, a path that did not change, no user decision).
   receipt.py refresh --out OUT --data-root DATA_TREE (--pdf PDF --receipt FILE | --dry-run)
       make-benchmark.sh --refresh-tables --install (a data release after the timing run): the committed timing
       receipt (docs/benchmark/data/receipt.json) stays; refuses unless DATA_TREE's reduction payloads equal the measured tree's (rule 2), OUT's
@@ -31,6 +34,15 @@ Rules (receipt schema v4: timings measured once on the release line, later data 
      source digest (SHA-256 of `git ls-tree -r` without the neutral paths) of the build commit, recorded in the
      receipt, against HEAD, plus no modified non-neutral path in the work tree. The build commit need not be an
      ancestor of HEAD (a rebase onto a later pin commit keeps the digest); the check reports whether it is.
+     When the build commit is not in the repository, the check looks for a commit of HEAD's history with the
+     recorded digest (the measured source on this line) to name the paths HEAD changed since.
+     A HEAD that differs passes rule 1 only by an attestation recorded in the receipt for exactly HEAD's source
+     digest (receipt.py attest; both shas and digests are recorded and the check prints them):
+       runtime-equivalent  every non-neutral path changed since the measured source carries a reason why the timed
+                           calls run the same code; the check re-derives the changed paths (they must be exactly
+                           the attested ones), so it needs the build commit or its source-equivalent in history;
+       user-approved       the user accepts the timings for this HEAD without re-measuring (approved_by 'user' and
+                           the decision reference), like a pending-cell exception.
   2. Data. The data tree is the measured one (manifest SHA-256 of the root and of every loop pack), or differs
      from it only outside the reduction payloads: per loop pack, the payload digest covers the manifest's
      structure (families, master ids / powers / names, IBP / cache / route-preparation records) and every
@@ -146,25 +158,106 @@ def dirty_paths(repo):
     return non_neutral(paths)
 
 
-def source_reasons(repo, build_commit, recorded_digest=None):
+def source_equivalent_commit(repo, build_commit, digest, limit=3000):
+    """The build commit if REPO has it, else the newest commit of HEAD's history (at most LIMIT back) whose source
+    digest is DIGEST (the measured source on this line), else None."""
+    if git(repo, "cat-file", "-e", f"{build_commit}^{{commit}}") is not None:
+        return git(repo, "rev-parse", build_commit)
+    for commit in (git(repo, "rev-list", f"--max-count={limit}", "HEAD") or "").split():
+        if source_digest(repo, commit) == digest:
+            return commit
+    return None
+
+
+def changed_since(repo, base):
+    """Non-neutral paths that differ between BASE and HEAD."""
+    return sorted(non_neutral((git(repo, "diff", "--name-only", base, "HEAD") or "").splitlines()))
+
+
+def attestation_reasons(repo, att, head_digest, base, measured_digest):
+    """Rule 1 by an attestation for HEAD: (reasons, note)."""
+    head = git(repo, "rev-parse", "HEAD")
+    kind = att.get("kind")
+    what = (f"measured build {str(att.get('measured_build'))[:12]} (source {measured_digest[:12]}), HEAD {str(head)[:12]}"
+            f" (source {head_digest[:12]})")
+    if att.get("measured_source_digest") != measured_digest:
+        return [f"the source attestation is for another measured source ({str(att.get('measured_source_digest'))[:12]})"], ""
+    if kind == "user-approved":
+        if att.get("approved_by") != "user" or not att.get("decision"):
+            return ["a user-approved source attestation needs approved_by = 'user' and the decision reference"], ""
+        return [], f"timings NOT re-measured for this HEAD: {what}; user-approved ({att['decision']})"
+    if kind == "runtime-equivalent":
+        if base is None:
+            return ["a runtime-equivalent source attestation needs the measured source (build commit or a commit with "
+                    "its digest) in the history of HEAD to re-derive the changed paths"], ""
+        changed, attested = changed_since(repo, base), att.get("paths") or {}
+        missing = [p for p in changed if not str(attested.get(p) or "").strip()]
+        extra = sorted(set(attested) - set(changed))
+        reasons = []
+        if missing:
+            reasons.append(f"{len(missing)} changed paths without an attested reason, e.g. " + ", ".join(missing[:5]))
+        if extra:
+            reasons.append(f"the attestation lists {len(extra)} paths that did not change, e.g. " + ", ".join(extra[:5]))
+        return reasons, f"HEAD attested runtime-equivalent to the timed source: {what}; {len(changed)} changed paths, reasons in the receipt"
+    return [f"unknown source attestation kind {kind!r}"], ""
+
+
+def source_reasons(repo, build_commit, recorded_digest=None, attestations=()):
     """Rule 1 for HEAD of REPO: (reasons, note)."""
     reasons = []
     head = git(repo, "rev-parse", "HEAD")
     digest = recorded_digest or source_digest(repo, build_commit)
     if digest is None:
         return [f"build commit {build_commit[:12]} is not in {repo} and the receipt records no source digest"], ""
-    if source_digest(repo, "HEAD") != digest:
-        changed = (non_neutral((git(repo, "diff", "--name-only", build_commit, "HEAD") or "").splitlines())
-                   if git(repo, "cat-file", "-e", f"{build_commit}^{{commit}}") is not None else [])
-        reasons.append(f"HEAD {str(head)[:12]} differs from the measured build {build_commit[:12]} outside the neutral paths"
-                       + (" (" + ", ".join(changed[:5]) + ")" if changed else ""))
+    head_digest = source_digest(repo, "HEAD")
+    note = ""
+    if head_digest != digest:
+        base = source_equivalent_commit(repo, build_commit, digest)
+        att = [a for a in attestations if a.get("head_source_digest") == head_digest]
+        if att:
+            more, note = attestation_reasons(repo, att[-1], head_digest, base, digest)
+            reasons += more
+        else:
+            changed = changed_since(repo, base) if base else []
+            reasons.append(f"HEAD {str(head)[:12]} differs from the measured build {build_commit[:12]} outside the neutral paths"
+                           + (f" (measured source = {base[:12]} on this line; {len(changed)} paths changed since, e.g. "
+                              + ", ".join(changed[:5]) + ")" if base and base != build_commit else
+                              " (" + ", ".join(changed[:5]) + ")" if changed else "")
+                           + "; re-measure, or record an attestation (receipt.py attest)")
     dirty = dirty_paths(repo)
     if dirty:
         reasons.append(f"the work tree has {len(dirty)} modified non-neutral paths, e.g. " + ", ".join(dirty[:5]))
-    in_history = git(repo, "merge-base", "--is-ancestor", build_commit, "HEAD") is not None
-    note = ("build commit in the history of HEAD" if in_history else
-            "build commit not in the history of HEAD (rebased line); source tree equal outside the neutral paths")
+    if not note:
+        in_history = git(repo, "merge-base", "--is-ancestor", build_commit, "HEAD") is not None
+        note = ("build commit in the history of HEAD" if in_history else
+                "build commit not in the history of HEAD (rebased line); source tree equal outside the neutral paths")
     return reasons, note
+
+
+def attest(repo, rpath: Path, kind, paths_file, approved_by, decision):
+    """receipt.py attest: record a rule-1 attestation for HEAD in the receipt (refuses an incomplete one)."""
+    r = json.loads(rpath.read_text())
+    build = (r.get("build") or {}).get("commit")
+    digest = r.get("build_source_digest")
+    if not build or not digest:
+        return [f"{rpath} records no build commit or source digest"]
+    head, head_digest = git(repo, "rev-parse", "HEAD"), source_digest(repo, "HEAD")
+    if head_digest == digest:
+        return ["HEAD has the measured source digest: rule 1 holds without an attestation"]
+    base = source_equivalent_commit(repo, build, digest)
+    att = {"kind": kind, "utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+           "measured_build": build, "measured_source_digest": digest, "source_equivalent_commit": base,
+           "head_commit": head, "head_source_digest": head_digest}
+    if kind == "runtime-equivalent":
+        att["paths"] = json.loads(Path(paths_file).read_text()) if paths_file else {}
+    else:
+        att.update({"approved_by": approved_by, "decision": decision})
+    reasons, _ = attestation_reasons(repo, att, head_digest, base, digest)
+    if reasons:
+        return reasons
+    r["source_attestations"] = [a for a in r.get("source_attestations", []) if a.get("head_source_digest") != head_digest] + [att]
+    rpath.write_text(json.dumps(r, indent=1) + "\n")
+    return []
 
 
 def data_reasons(root: Path, measured_root_sha, measured_loops, measured_payload):
@@ -285,15 +378,31 @@ def refresh(out: Path, root: Path):
 
 def main(argv):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", choices=["gate", "write", "check", "refresh"])
+    ap.add_argument("command", choices=["gate", "write", "check", "refresh", "attest"])
     ap.add_argument("--out", type=Path)
-    ap.add_argument("--data-root", type=Path, required=True)
+    ap.add_argument("--data-root", type=Path, help="required by every command but attest")
     ap.add_argument("--pdf", type=Path)
     ap.add_argument("--receipt", type=Path)
     ap.add_argument("--accept-pending", type=Path)
     ap.add_argument("--repo", type=Path)
     ap.add_argument("--dry-run", action="store_true", help="refresh: the checks only, nothing written")
+    ap.add_argument("--kind", choices=["runtime-equivalent", "user-approved"], help="attest: the kind of the attestation")
+    ap.add_argument("--paths", type=Path, help="attest runtime-equivalent: JSON {changed path: reason}")
+    ap.add_argument("--approved-by", help="attest user-approved: 'user'")
+    ap.add_argument("--decision", help="attest user-approved: the user decision reference")
     a = ap.parse_args(argv)
+    if a.command == "attest":
+        repo = (a.repo or Path(git(BENCH, "rev-parse", "--show-toplevel") or BENCH)).resolve()
+        if not a.kind:
+            ap.error("attest needs --kind")
+        reasons = attest(repo, BENCH / "data" / "receipt.json", a.kind, a.paths, a.approved_by, a.decision)
+        if reasons:
+            print("source attestation REFUSED:\n- " + "\n- ".join(reasons))
+            return 1
+        print(f"recorded a {a.kind} source attestation for HEAD {git(repo, 'rev-parse', 'HEAD')} in docs/benchmark/data/receipt.json")
+        return 0
+    if a.data_root is None:
+        ap.error(f"{a.command} needs --data-root")
     root = a.data_root.resolve()
     if a.command == "refresh":
         reasons, r = refresh(a.out.resolve(), root)
@@ -393,7 +502,7 @@ def main(argv):
     elif not r.get("build_source_digest"):
         reasons.append("the receipt records no build source digest")
     else:
-        more, note = source_reasons(repo, build, r["build_source_digest"])
+        more, note = source_reasons(repo, build, r["build_source_digest"], r.get("source_attestations") or ())
         reasons += more
         notes.append(note)
     if reasons:
