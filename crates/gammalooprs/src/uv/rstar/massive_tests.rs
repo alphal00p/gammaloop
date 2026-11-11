@@ -376,6 +376,7 @@ fn massive_vacuum_part_a_from_spec() -> Result<()> {
             let mut delta_i = Atom::Zero;
             let mut spinneys = 0usize;
             let mut children = Vec::new();
+            let mut terms = Vec::new();
             let mut children_ms = 0u128;
             for monomial in &monomials {
                 let graph = topology.monomial_graph(&model, &mass, &monomial.attachments)?;
@@ -390,6 +391,7 @@ fn massive_vacuum_part_a_from_spec() -> Result<()> {
                 )?;
                 poles += &monomial.coefficient * &sub.poles;
                 children.extend(sub.children);
+                terms.extend(sub.terms);
                 children_ms += sub.children_ms;
                 if validate {
                     direct += &monomial.coefficient
@@ -401,7 +403,7 @@ fn massive_vacuum_part_a_from_spec() -> Result<()> {
             record["spinneys"] = spinneys.into();
             let sub = super::massive::MassiveVacuumSubdivergences {
                 poles: poles.series(GS.dim_epsilon, 0, -1)?.to_atom().expand(),
-                terms: Vec::new(),
+                terms,
                 children_ms,
                 children,
             };
@@ -483,13 +485,15 @@ fn massive_vacuum_part_a_from_spec() -> Result<()> {
                     Err(error) => record["delta_ii_error"] = format!("{error:?}").into(),
                 }
             }
-            record["children_with_m_uv"] = sub
-                .children
+            // Child polynomials are written in all boundary momentum labels without
+            // imposing momentum conservation, so terms that vanish by conservation
+            // may carry m_uv; the quotient integration imposes it. Check every
+            // integrated term contribution (and the total) instead.
+            record["terms_with_m_uv"] = sub
+                .terms
                 .iter()
-                .filter(|(_, _, _, value)| value.expand().contains_symbol(GS.m_uv_vacuum))
-                .map(|(label, loops, edges, value)| {
-                    serde_json::json!({"label": label, "loops": loops, "edges": edges, "delta": value.expand().to_string()})
-                })
+                .filter(|term| term.contribution.expand().contains_symbol(GS.m_uv_vacuum))
+                .map(|term| term.label.clone())
                 .collect::<Vec<_>>()
                 .into();
             record["terms"] = sub
@@ -510,9 +514,9 @@ fn massive_vacuum_part_a_from_spec() -> Result<()> {
         record["total_ms"] = (started.elapsed().as_millis() as u64).into();
         let mismatch = record["pass_i"].as_bool() == Some(false)
             || record["m_uv_in_part_a"].as_bool() == Some(true)
-            || record["children_with_m_uv"]
+            || record["terms_with_m_uv"]
                 .as_array()
-                .is_some_and(|children| !children.is_empty())
+                .is_some_and(|terms| !terms.is_empty())
             || record.get("delta_ii_error").is_some()
             || record.get("part_a_numeric_error").is_some();
         record["ok"] = (outcome.is_ok() && !mismatch).into();
