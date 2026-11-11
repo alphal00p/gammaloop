@@ -135,7 +135,11 @@
   }
   if st == "exact" {
     let s = if c.at("sstar_X", default: none) != none { ov-style.at("S*") } else { ov-style.S }
-    return table.cell(fill: s.fill, stroke: 1pt + ov-style.P.ink, text(size: 8pt, weight: "bold", fill: s.ink)[exact#ov-dag])
+    let v = if c.at("value", default: none) == "zero" [0] else if c.at("sstar_X", default: none) != none [S\*] else [exact]
+    return table.cell(fill: s.fill, stroke: 1pt + ov-style.P.ink, {
+      text(size: 8pt, weight: "bold", fill: s.ink)[#v#ov-dag]
+      if c.at("sstar_X", default: none) != none { linebreak(); text(size: 6.6pt, fill: s.ink)[#c.sstar_X d] }
+    })
   }
   if st == "fails-closed" {
     return table.cell(fill: ov-style.P.fill, text(size: 6.4pt, fill: ov-style.P.ink)[*fails closed* \ #text(size: 5.6pt)[#c.open_pending / #c.n_contributors entering coeff. numerical#if c.open_released != c.open_pending [ (#c.open_released w/o pending)]]])
@@ -216,7 +220,7 @@
       (
         [#p.loop\L/#p.master #ov-eps(p.order)],
         text(fill: ov-style.P.ink, weight: "semibold")[#p.label],
-        [#p.state#if p.at("evidence_class", default: none) != none [ #text(fill: ov-style.P.ink, weight: "bold")[#{("exact": "exact derivation", "fit": "fitted counterterm", "R*": "confirmed by R*").at(p.evidence_class)}]]],
+        [#if p.state.starts-with("adopted (derived") [adopted (reviews A, B)] else [#p.state]],
         [#if p.method != none [#p.method] else if p.kind == "new-master" [value of the new basis master] else [#p.kind]#if p.at("fit", default: none) != none and p.method == none [ · #p.fit]#if p.flags.len() > 0 [ · #text(fill: rgb("8e1b12"))[#p.flags.join("; ")]]],
         [#if p.agreement_digits != none [#text(fill: if low { rgb("8e1b12") } else { ov-style.S.ink }, weight: "semibold")[#p.agreement_digits]] else [—] / #if p.claimed_digits != none [#p.claimed_digits] else [—]#if low [ #text(fill: rgb("8e1b12"))[below claim]]],
       )
@@ -255,7 +259,7 @@
       single-scale vacuum integral are free of the 4L-only constants; verified exactly on vakint's own reduction data:
       #n.evidence. So the #n.constants.join(", ") terms that
       spurious poles bring in through #n.cancelled_orders.join(", ") cancel identically, and vakint already returns this order
-      free of them. Proof: #n.proof. #linebreak()]
+      free of them. #n.proof. #linebreak()]
   }
   if o.result.any(r => r.kind == "preview") {
     let r = o.result.filter(r => r.kind == "preview").first()
@@ -299,6 +303,8 @@
   if o.pending.len() > 0 or o.at("listed", default: ()).len() > 0 {
     pagebreak(weak: true)
     text(9pt, weight: "bold", fill: ov-style.P.ink)[Pending entries of this preview (#o.pending.len())]
+    text(7.2pt, fill: luma(80))[ — "adopted (reviews A, B)": adopted (derived + two independent reviews: review/A, review/B),
+      integration in the data pending.]
     text(7.2pt, fill: luma(80))[ — agreement = digits shared with the stored numerical value it would replace (claimed digits as
       measured, before the −1 publication offset); "below claim": more than one digit below that claim.]
     ov-pending(o)

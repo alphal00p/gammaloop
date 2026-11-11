@@ -103,6 +103,12 @@ def classify_form(form, finite, where):
     return ('S*', min(found.values()), found) if found else ('S', None, {})
 
 
+def vk_form(f):
+    """vakint spelling of a form (vakint::K5Moment(1) -> RRC(K5Moment(1)) for the classifier; symbolica:: / vakint:: dropped)"""
+    f = re.sub(r'vakint::((?:K5[A-Za-z]*|PR[0-9A-Za-z]+|T111bar5|BNbar5|D5bar3|s6weak)(?:\([0-9, ]+\))?)', r'RRC(\1)', f)
+    return f.replace('symbolica::', '').replace('vakint::', '').replace('𝜋', 'pi')
+
+
 def load_overlay(path: Path, finite, tree_by_name):
     ov = json.loads(path.read_text())
     if ov.get('schema') != OVERLAY_SCHEMA:
@@ -475,9 +481,17 @@ def build(a):
             else:
                 cells[str(o)] = {'state': 'ok', 'class': 'S' if w['class'] == 'Z' else w['class'], 'X': w.get('X'), 'marks': [],
                                  'pending': True, 'set_by_pending': wp}
-        res_rows.append({'label': f"{loops_basis}L {basis['name']}", 'loop': loops_basis, 'kind': 'preview', 'cells': cells,
-                         'marks': [], 'note': f"{basis['name']}: {basis['status']}; spurious-pole order p = 0 for its masters (pole-free "
-                                              'basis), lower-loop product factors as in the released row'})
+        ai = (ov or {}).get('after_integration') or {}
+        sim = ai.get('sim_row') or {}
+        diff = [f"ε^{k}: here {('S' if c.get('class') == 'S' else label(c)) if c['state'] == 'ok' else c['state']}, simulation {sim.get(k)}"
+                for k, c in cells.items() if k in sim and c['state'] == 'ok' and sim.get(k) not in (label(c), 'S' if c.get('class') == 'S' else None)]
+        res_rows.append({'label': f"{loops_basis}L {basis['name']} after integration", 'loop': loops_basis, 'kind': 'preview',
+                         'cells': cells, 'marks': [],
+                         'note': f"{basis['name']} after integration of the adopted forms (not in a released tree): {basis['status']}. "
+                                 + (f"Evidence: {ai['evidence']} ({ai['source']}). " if ai.get('evidence') else '')
+                                 + ('Simulated table 2 of the same tree: ' + ', '.join(f'ε^{k} {v}' for k, v in sim.items() if v != '—')
+                                    + ('; differences: ' + '; '.join(diff) if diff else '; identical classes') + '.' if sim else '')
+                                 + ' Lower-loop product factors as in the released row', 'sim_diff': diff})
         # former masters: exact where every numerical coefficient entering the order is exact, else fail closed
         eff_class = {}
         for r in br:
@@ -495,8 +509,14 @@ def build(a):
                 if x is None:
                     cells[str(o)] = {'state': 'none'}
                     continue
+                aft = x.get('after_adoption')
+                acls = classify_form(vk_form(aft['form']), finite, f"{d['name']} ε^{o} after adoption") if aft else None
                 if x['contributors'] is None:
-                    cells[str(o)] = {'state': 'numerical', 'v02x': f"N({int(x['v02x_digits']) - pt.NUMERICAL_DIGIT_OFFSET})"}
+                    if acls is not None:           # numerical in v0.2.x, exact in named constants after adoption (REPORT-5L)
+                        cells[str(o)] = {'state': 'exact', 'sstar_X': acls[1] if acls[0] == 'S*' else None, 'after': True,
+                                         'value': 'zero' if acls[0] == 'Z' else None, 'v02x': f"N({int(x['v02x_digits']) - pt.NUMERICAL_DIGIT_OFFSET})"}
+                    else:
+                        cells[str(o)] = {'state': 'numerical', 'v02x': f"N({int(x['v02x_digits']) - pt.NUMERICAL_DIGIT_OFFSET})"}
                     continue
                 open_rel = [f'{n}|{j}' for n, j in x['contributors']
                             if (eff_class.get((n, j)) or (None, None))[0] is None or eff_class[(n, j)][0]['class'] in ('N',)]
@@ -504,10 +524,13 @@ def build(a):
                              if (eff_class.get((n, j)) or (None, None))[1] is None or eff_class[(n, j)][1]['class'] in ('N',)]
                 sstar = [eff_class[(n, j)][1]['X'] for n, j in x['contributors']
                          if (eff_class.get((n, j)) or (None, None))[1] is not None and eff_class[(n, j)][1]['class'] == 'S*']
+                if acls is not None:               # the value itself (0, -zeta(3)/2): its class, not the contributors'
+                    sstar = [acls[1]] if acls[0] == 'S*' else []
                 cells[str(o)] = {'state': 'fails-closed' if open_pend else 'exact', 'open_released': len(open_rel),
                                  'open_pending': len(open_pend), 'n_contributors': len(x['contributors']),
-                                 'open_list': open_pend[:12], 'v02x': x['v02x'], 'sstar_X': min(sstar) if sstar else None}
-            former.append({'label': f"{d['name']} (former)", 'name': d['name'], 'replaced_by': d.get('replaced_by'), 'cells': cells})
+                                 'open_list': open_pend[:12], 'v02x': x['v02x'], 'sstar_X': min(sstar) if sstar else None,
+                                 'after': True, 'value': 'zero' if acls is not None and acls[0] == 'Z' else None}
+            former.append({'label': f"{d['name']} (former), after integration", 'name': d['name'], 'replaced_by': d.get('replaced_by'), 'cells': cells})
 
     # ---------------------------------------------------------------- (d) constants, (e) method
     ctab = constants_table(root, B, finite, names, ocells)
@@ -584,12 +607,13 @@ def method_paragraphs(T, ov, ocells):
          f"{q['exact_orders']} exact 5L orders are PSLQ identifications ({q['pslq_sstar_orders']} S*) and {q['measured_zero_orders']} "
          'measured zeros, each passing the 40-excess-digit bar (numerical identifications, not proofs). The other 5L orders are '
          'numerical (high-precision grids and dispersive gluing; digits = validated significant digits).'),
-        ('R operation (preview)', 'Pole coefficient K G = (A) − Δ: part (A) = −K Σ_S Δ(S) G/S from the subdivergences (ordinary massive R '
-         'operation, exact, lower-loop coefficients of vakint); Δ = overall counterterm, a pure number. Evidence classes: exact '
-         'derivation (ω < 0: no overall counterterm, the result is complete); confirmed by R* (Δ derived by R*); fitted counterterm '
-         '(Δ found as an integer relation of [numeric − (A)] in 1, ζ3, π⁴, ζ5, π⁶, ζ3², ζ7, ζ3π⁴, with its margin in digits). Fits '
-         'below the acceptance margin are listed as marginal and not applied; poles whose Δ the fit did not identify, or without a '
-         'part (A) yet, stay numerical and are listed.'),
+        ('5L poles (preview)', 'All 84 numerical 5L master poles have adopted exact forms (derived, then confirmed by two independent '
+         'reviews, review/A and review/B; integration in the data pending). Pole coefficient K G = (A) − Δ: part (A) = −K Σ_S Δ(S) G/S '
+         'from the subdivergences (ordinary massive R-operation, exact); Δ = overall counterterm. Evidence classes: exact R-operation '
+         '(ω < 0, no overall counterterm; 5 poles); R-operation + R* overall counterterm (exact; 77 poles); derived from the former '
+         'masters’ exact constraints, all inputs derived (P6 ε^-2, ε^-1). The overall counterterms were first found by fitting '
+         '[numeric − (A)] in a basis of multiple zeta values; review B derived every one of them by R*, identical to the fits, so no '
+         'pole rests on a fit.'),
         ('4L poles', 'From ε^-1 down the 4L result is exact and guaranteed: by the R-operation its pole coefficients are free of the '
          '4L-only constants, verified exactly on vakint’s reduction data (footnote 2).'),
         ('Numerical check', 'Every symbolic form is compared with the numerical value it replaces, to that value’s claimed digits '
@@ -600,8 +624,7 @@ def method_paragraphs(T, ov, ocells):
     if ov:
         n = {s: sum(1 for c in ocells.values() if c['state'] == s) for s in {c['state'] for c in ocells.values()}}
         paras.append(('Pending (this PDF)', '; '.join(f'{v} {k}' for k, v in sorted(n.items())) + '. None of them is in the released '
-                      'data tree; they are counted apart and never as released. Marginal, unidentified and not-yet-derived poles are '
-                      'listed separately and stay numerical in every count.'))
+                      'data tree; they are counted apart and never as released.'))
     return [{'title': t, 'text': x} for t, x in paras]
 
 

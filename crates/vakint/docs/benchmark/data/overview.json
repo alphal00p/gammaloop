@@ -11,7 +11,7 @@
    "dirty_files": 0
   },
   "root_manifest_sha256": "5ce0e4a0abe8687cc3cf57ebd8e46a9bc105559deeddd8d4df06f5a1bb272826",
-  "tables_content_sha256": "7c9148d895cb5b0efa41ea6e5c80e706d88c6f8ec30da2531f98f0aaf45ad1f0",
+  "tables_content_sha256": "74e9c38449378f31b323ee73e957900327e13b6e0c9c85f1f25771b220878d81",
   "tables_status": "final",
   "five_loop_basis": "BASIS-v2",
   "five_loop_build": {
@@ -11962,7 +11962,7 @@
   {
    "cell": "4L ε⁻¹",
    "proof": "Proof: by the R-operation, K G = -Delta(G) - K sum_S Delta(S) G/S for any 4-loop single-scale (all lines of mass m) vacuum integral G with polynomial numerators; the counterterms Delta are polynomials in m² with pole coefficients in multiple zeta values (infrared rearrangement onto massless propagators of <= 3 loops), and the quotients G/S (<= 3 loops) enter only through ε^(3-L_q) (3L ε⁰, 2L ε¹, 1L ε²), all S (polylogarithms at sixth roots of unity, no 4L constant). So every pole coefficient of G is free of the 4L constants; vakint's exact assembly shows the coefficient of each one to be identically zero (exact rational arithmetic) on every record checked",
-   "evidence": "Verified exactly (coefficient of every 4L/constants.json constant at ε⁻⁴..ε⁻¹ = 0): all 286527 records of the shipped 4L caches (77724 with spurious poles, 1375 with 1/ε²), 2230 sampled keys of track LL and 514 fresh keys outside both (all four families, up to 6 dots and 4 numerator powers); 338832 pole x constant products cancel. The spurious-pole residue vectors span dimension x 6, h 5, bmw 5, fg 3 and every basis vector has zero 4L-constant content. vakint itself returns these orders beyond 20000 digits (4L/P15 + dot: ε⁻¹ to 20524 d in Symbolic, 20499 d of 20500 requested in Numerical mode; finite inputs P15, P17, P18 + dot: exact 0)",
+   "evidence": "Verified exactly (coefficient of every 4L/constants.json constant at ε⁻⁴..ε⁻¹ = 0): all 286527 records of the shipped 4L caches (77724 with spurious poles, 1375 with 1/ε²), 2230 sampled keys of track LL and 615 fresh keys outside both (all four families, up to 6 dots and 4 numerator powers); 340512 pole x constant products cancel. The spurious-pole residue vectors span dimension x 6, h 5, bmw 5, fg 3 and every basis vector has zero 4L-constant content. vakint itself returns these orders beyond 20000 digits (4L/P15 + dot: ε⁻¹ to 20524 d in Symbolic, 20499 d of 20500 requested in Numerical mode; finite inputs P15, P17, P18 + dot: exact 0)",
    "constants": [
     "K5Moment(1)",
     "K5Moment(3)"
@@ -13522,8 +13522,8 @@
    "text": "Structural zeros from the UV forest bound and exact rows from pole cancellation; 196 of the 591 exact 5L orders are PSLQ identifications (9 S*) and 4 measured zeros, each passing the 40-excess-digit bar (numerical identifications, not proofs). The other 5L orders are numerical (high-precision grids and dispersive gluing; digits = validated significant digits)."
   },
   {
-   "title": "R operation (preview)",
-   "text": "Pole coefficient K G = (A) − Δ: part (A) = −K Σ_S Δ(S) G/S from the subdivergences (ordinary massive R operation, exact, lower-loop coefficients of vakint); Δ = overall counterterm, a pure number. Evidence classes: exact derivation (ω < 0: no overall counterterm, the result is complete); confirmed by R* (Δ derived by R*); fitted counterterm (Δ found as an integer relation of [numeric − (A)] in 1, ζ3, π⁴, ζ5, π⁶, ζ3², ζ7, ζ3π⁴, with its margin in digits). Fits below the acceptance margin are listed as marginal and not applied; poles whose Δ the fit did not identify, or without a part (A) yet, stay numerical and are listed."
+   "title": "5L poles (preview)",
+   "text": "All 84 numerical 5L master poles have adopted exact forms (derived, then confirmed by two independent reviews, review/A and review/B; integration in the data pending). Pole coefficient K G = (A) − Δ: part (A) = −K Σ_S Δ(S) G/S from the subdivergences (ordinary massive R-operation, exact); Δ = overall counterterm. Evidence classes: exact R-operation (ω < 0, no overall counterterm; 5 poles); R-operation + R* overall counterterm (exact; 77 poles); derived from the former masters’ exact constraints, all inputs derived (P6 ε^-2, ε^-1). The overall counterterms were first found by fitting [numeric − (A)] in a basis of multiple zeta values; review B derived every one of them by R*, identical to the fits, so no pole rests on a fit."
   },
   {
    "title": "4L poles",
@@ -13538,9 +13538,9 @@
  "superseded_overlay_entries": [],
  "listed": [],
  "digit_offset": 1,
- "generated_utc": "2026-11-11T03:37:30Z",
+ "generated_utc": "2026-11-11T09:13:41Z",
  "generator": {
   "path": "crates/vakint/docs/benchmark/tools/overview.py",
-  "sha256": "29d93cd7597f649eb3c5d42c11c42641a540329993b0527701dee61bb6b96b23"
+  "sha256": "28d73e1c5068e79dc5177ee54a17acf31341602f553cf5556544a4a3f0039b15"
  }
 }

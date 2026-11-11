@@ -145,8 +145,8 @@
     "vakint::s6weak"
    ],
    "proof": "Proof: by the R-operation, K G = -Delta(G) - K sum_S Delta(S) G/S for any 4-loop single-scale (all lines of mass m) vacuum integral G with polynomial numerators; the counterterms Delta are polynomials in m^2 with pole coefficients in multiple zeta values (infrared rearrangement onto massless propagators of <= 3 loops), and the quotients G/S (<= 3 loops) enter only through eps^(3-L_q) (3L eps^0, 2L eps^1, 1L eps^2), all S (polylogarithms at sixth roots of unity, no 4L constant). So every pole coefficient of G is free of the 4L constants; vakint's exact assembly shows the coefficient of each one to be identically zero (exact rational arithmetic) on every record checked.",
-   "evidence_summary": "Verified exactly (coefficient of every 4L/constants.json constant at eps^-4..eps^-1 = 0): all 286527 records of the shipped 4L caches (77724 with spurious poles, 1375 with 1/eps^2), 2230 sampled keys of track LL and 514 fresh keys outside both (all four families, up to 6 dots and 4 numerator powers); 338832 pole x constant products cancel. The spurious-pole residue vectors span dimension x 6, h 5, bmw 5, fg 3 and every basis vector has zero 4L-constant content. vakint itself returns these orders beyond 20000 digits (4L/P15 + dot: eps^-1 to 20524 d in Symbolic, 20499 d of 20500 requested in Numerical mode; finite inputs P15, P17, P18 + dot: exact 0).",
-   "evidence_short": "exact on all 286527 cache records and 2744 samples"
+   "evidence_summary": "Verified exactly (coefficient of every 4L/constants.json constant at eps^-4..eps^-1 = 0): all 286527 records of the shipped 4L caches (77724 with spurious poles, 1375 with 1/eps^2), 2230 sampled keys of track LL and 615 fresh keys outside both (all four families, up to 6 dots and 4 numerator powers); 340512 pole x constant products cancel. The spurious-pole residue vectors span dimension x 6, h 5, bmw 5, fg 3 and every basis vector has zero 4L-constant content. vakint itself returns these orders beyond 20000 digits (4L/P15 + dot: eps^-1 to 20524 d in Symbolic, 20499 d of 20500 requested in Numerical mode; finite inputs P15, P17, P18 + dot: exact 0).",
+   "evidence_short": "exact on all 286527 cache records and 2845 samples"
   },
   {
    "loop": 4,
@@ -204,8 +204,8 @@
     "vakint::s6weak"
    ],
    "proof": "Proof: by the R-operation, K G = -Delta(G) - K sum_S Delta(S) G/S for any 4-loop single-scale (all lines of mass m) vacuum integral G with polynomial numerators; the counterterms Delta are polynomials in m^2 with pole coefficients in multiple zeta values (infrared rearrangement onto massless propagators of <= 3 loops), and the quotients G/S (<= 3 loops) enter only through eps^(3-L_q) (3L eps^0, 2L eps^1, 1L eps^2), all S (polylogarithms at sixth roots of unity, no 4L constant). So every pole coefficient of G is free of the 4L constants; vakint's exact assembly shows the coefficient of each one to be identically zero (exact rational arithmetic) on every record checked.",
-   "evidence_summary": "Verified exactly (coefficient of every 4L/constants.json constant at eps^-4..eps^-1 = 0): all 286527 records of the shipped 4L caches (77724 with spurious poles, 1375 with 1/eps^2), 2230 sampled keys of track LL and 514 fresh keys outside both (all four families, up to 6 dots and 4 numerator powers); 338832 pole x constant products cancel. The spurious-pole residue vectors span dimension x 6, h 5, bmw 5, fg 3 and every basis vector has zero 4L-constant content. vakint itself returns these orders beyond 20000 digits (4L/P15 + dot: eps^-1 to 20524 d in Symbolic, 20499 d of 20500 requested in Numerical mode; finite inputs P15, P17, P18 + dot: exact 0).",
-   "evidence_short": "exact on all 286527 cache records and 2744 samples"
+   "evidence_summary": "Verified exactly (coefficient of every 4L/constants.json constant at eps^-4..eps^-1 = 0): all 286527 records of the shipped 4L caches (77724 with spurious poles, 1375 with 1/eps^2), 2230 sampled keys of track LL and 615 fresh keys outside both (all four families, up to 6 dots and 4 numerator powers); 340512 pole x constant products cancel. The spurious-pole residue vectors span dimension x 6, h 5, bmw 5, fg 3 and every basis vector has zero 4L-constant content. vakint itself returns these orders beyond 20000 digits (4L/P15 + dot: eps^-1 to 20524 d in Symbolic, 20499 d of 20500 requested in Numerical mode; finite inputs P15, P17, P18 + dot: exact 0).",
+   "evidence_short": "exact on all 286527 cache records and 2845 samples"
   },
   {
    "loop": 4,
@@ -263,8 +263,8 @@
     "vakint::s6weak"
    ],
    "proof": "Proof: by the R-operation, K G = -Delta(G) - K sum_S Delta(S) G/S for any 4-loop single-scale (all lines of mass m) vacuum integral G with polynomial numerators; the counterterms Delta are polynomials in m^2 with pole coefficients in multiple zeta values (infrared rearrangement onto massless propagators of <= 3 loops), and the quotients G/S (<= 3 loops) enter only through eps^(3-L_q) (3L eps^0, 2L eps^1, 1L eps^2), all S (polylogarithms at sixth roots of unity, no 4L constant). So every pole coefficient of G is free of the 4L constants; vakint's exact assembly shows the coefficient of each one to be identically zero (exact rational arithmetic) on every record checked.",
-   "evidence_summary": "Verified exactly (coefficient of every 4L/constants.json constant at eps^-4..eps^-1 = 0): all 286527 records of the shipped 4L caches (77724 with spurious poles, 1375 with 1/eps^2), 2230 sampled keys of track LL and 514 fresh keys outside both (all four families, up to 6 dots and 4 numerator powers); 338832 pole x constant products cancel. The spurious-pole residue vectors span dimension x 6, h 5, bmw 5, fg 3 and every basis vector has zero 4L-constant content. vakint itself returns these orders beyond 20000 digits (4L/P15 + dot: eps^-1 to 20524 d in Symbolic, 20499 d of 20500 requested in Numerical mode; finite inputs P15, P17, P18 + dot: exact 0).",
-   "evidence_short": "exact on all 286527 cache records and 2744 samples"
+   "evidence_summary": "Verified exactly (coefficient of every 4L/constants.json constant at eps^-4..eps^-1 = 0): all 286527 records of the shipped 4L caches (77724 with spurious poles, 1375 with 1/eps^2), 2230 sampled keys of track LL and 615 fresh keys outside both (all four families, up to 6 dots and 4 numerator powers); 340512 pole x constant products cancel. The spurious-pole residue vectors span dimension x 6, h 5, bmw 5, fg 3 and every basis vector has zero 4L-constant content. vakint itself returns these orders beyond 20000 digits (4L/P15 + dot: eps^-1 to 20524 d in Symbolic, 20499 d of 20500 requested in Numerical mode; finite inputs P15, P17, P18 + dot: exact 0).",
+   "evidence_short": "exact on all 286527 cache records and 2845 samples"
   },
   {
    "loop": 4,
@@ -322,8 +322,8 @@
     "vakint::s6weak"
    ],
    "proof": "Proof: by the R-operation, K G = -Delta(G) - K sum_S Delta(S) G/S for any 4-loop single-scale (all lines of mass m) vacuum integral G with polynomial numerators; the counterterms Delta are polynomials in m^2 with pole coefficients in multiple zeta values (infrared rearrangement onto massless propagators of <= 3 loops), and the quotients G/S (<= 3 loops) enter only through eps^(3-L_q) (3L eps^0, 2L eps^1, 1L eps^2), all S (polylogarithms at sixth roots of unity, no 4L constant). So every pole coefficient of G is free of the 4L constants; vakint's exact assembly shows the coefficient of each one to be identically zero (exact rational arithmetic) on every record checked.",
-   "evidence_summary": "Verified exactly (coefficient of every 4L/constants.json constant at eps^-4..eps^-1 = 0): all 286527 records of the shipped 4L caches (77724 with spurious poles, 1375 with 1/eps^2), 2230 sampled keys of track LL and 514 fresh keys outside both (all four families, up to 6 dots and 4 numerator powers); 338832 pole x constant products cancel. The spurious-pole residue vectors span dimension x 6, h 5, bmw 5, fg 3 and every basis vector has zero 4L-constant content. vakint itself returns these orders beyond 20000 digits (4L/P15 + dot: eps^-1 to 20524 d in Symbolic, 20499 d of 20500 requested in Numerical mode; finite inputs P15, P17, P18 + dot: exact 0).",
-   "evidence_short": "exact on all 286527 cache records and 2744 samples"
+   "evidence_summary": "Verified exactly (coefficient of every 4L/constants.json constant at eps^-4..eps^-1 = 0): all 286527 records of the shipped 4L caches (77724 with spurious poles, 1375 with 1/eps^2), 2230 sampled keys of track LL and 615 fresh keys outside both (all four families, up to 6 dots and 4 numerator powers); 340512 pole x constant products cancel. The spurious-pole residue vectors span dimension x 6, h 5, bmw 5, fg 3 and every basis vector has zero 4L-constant content. vakint itself returns these orders beyond 20000 digits (4L/P15 + dot: eps^-1 to 20524 d in Symbolic, 20499 d of 20500 requested in Numerical mode; finite inputs P15, P17, P18 + dot: exact 0).",
+   "evidence_short": "exact on all 286527 cache records and 2845 samples"
   }
  ],
  "evidence": {
@@ -344,11 +344,11 @@
    "missing": 0
   },
   "fresh_samples": {
-   "records": 514,
-   "with_poles": 381,
-   "p2": 83,
+   "records": 615,
+   "with_poles": 463,
+   "p2": 116,
    "nonzero": 0,
-   "pole_x_constant_products": 5945,
+   "pole_x_constant_products": 7625,
    "missing": 0
   },
   "span": {
@@ -372,7 +372,7 @@
   "files": {
    "cache.json": "1e10b13ae90f4b72fb7e1149f16d495fc00320e168185c6252be83bcefd0e442",
    "samples-ll.json": "a3933fa8b07771f62614e1010cc3dcbf7ce5cbaa8b407eeb8eef80cb71751e69",
-   "fresh.json": "1db3df49505e347df69100892ba7be6568a3981431145043685cbb8897d5a9e7"
+   "fresh.json": "d1bdd2c0e8b7286eb9a30937fa1116bb5168979e421c31743f362837238643b9"
   }
  },
  "scope": "not a statement about eps^0 (4L finite parts genuinely contain these constants) nor about 5L orders"

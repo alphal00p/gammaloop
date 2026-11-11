@@ -529,6 +529,8 @@ def r_operation_applies(rop, L, k, m, j, cell, route):
     o = rop['orders'].get(L, {}).get(k)
     if o is None:
         return False
+    if cell['class'] == 'N':     # an opaque decimal: vakint cannot see a cancellation across masters, so it keeps capping the cell
+        return False
     return set((cell.get('constants') or {})) <= set(o['cancelling_constants'])
 
 
