@@ -202,3 +202,105 @@ fn massive_r_child_with_both_ends_of_one_boundary_line() -> Result<()> {
     assert_banana(&actual, "in-graph banana child");
     Ok(())
 }
+
+/// The numerator-monomial path on 3-loop stress cases (built-in 1L-3L data):
+/// the identity `K G = -Delta(G) - K sum_S Delta(S) G/S` must equal Vakint's
+/// direct evaluation with `Delta(G)` from the ordinary forest AND from R*.
+fn assert_identity_with_numerators(
+    name: &str,
+    edges: &[(usize, usize, u32)],
+    numerators: &[Vec<(usize, i64)>],
+) -> Result<()> {
+    test_initialise()?;
+    let model = load_generic_model("scalars");
+    let settings = super::tests::settings();
+    let vakint = Vakint::new()?;
+    let topology = super::VacuumTopology {
+        name: name.into(),
+        edges: edges.to_vec(),
+        numerators: numerators.to_vec(),
+    };
+    let (mut poles, mut direct, mut delta_forest) = (Atom::Zero, Atom::Zero, Atom::Zero);
+    for monomial in topology.numerator_monomials(&mass()) {
+        let graph = topology.monomial_graph(&model, &mass(), &monomial.attachments)?;
+        let plan = RStarPlan::new(&graph, &model, EdgeIndex::from(0), &settings)?;
+        let sub = plan.massive_vacuum_subdivergence_poles(
+            &graph,
+            &model,
+            &mass(),
+            &vakint,
+            &settings,
+            0,
+        )?;
+        poles += &monomial.coefficient * &sub.poles;
+        direct += &monomial.coefficient
+            * super::massive_vacuum_direct(&graph, &model, &vakint, &settings, 0)?;
+        delta_forest += &monomial.coefficient
+            * plan.massive_vacuum_counterterm(&graph, &model, &vakint, &settings)?;
+    }
+    let direct = direct.series(GS.dim_epsilon, 0, -1)?.to_atom().expand();
+    let poles = poles.series(GS.dim_epsilon, 0, -1)?.to_atom().expand();
+    let (delta_rstar, _) =
+        topology.overall_counterterm_rstar(&model, &mass(), &vakint, &settings)?;
+    for (route, delta) in [("forest", delta_forest), ("R*", delta_rstar)] {
+        assert!(
+            !delta.contains_symbol(GS.m_uv_vacuum),
+            "{name}: Delta ({route}) depends on m_uv"
+        );
+        let difference = (&poles - &delta - &direct).expand().together();
+        assert!(
+            difference.is_zero(),
+            "{name}: identity with Delta ({route}) fails by {difference}"
+        );
+    }
+    Ok(())
+}
+
+/// n1: bubble crossed by q = Q_a + Q_b, whose loop dependence cancels.
+#[test]
+fn numerator_cancelling_inside_a_bubble() -> Result<()> {
+    assert_identity_with_numerators(
+        "n1_cancel_bubble",
+        &[(0, 1, 1), (0, 1, 1), (1, 2, 1), (1, 2, 1), (2, 0, 1)],
+        &[vec![(0, 1), (1, 1)]],
+    )
+}
+
+/// n3c: dotted self-loop with a cancelling bubble numerator.
+#[test]
+fn numerator_on_a_bubble_next_to_a_dotted_self_loop() -> Result<()> {
+    assert_identity_with_numerators(
+        "n3c_selfloop_dot_cancel",
+        &[(0, 0, 2), (0, 1, 1), (0, 1, 1), (1, 0, 1)],
+        &[vec![(1, 1), (2, 1)]],
+    )
+}
+
+/// n4: one-vertex-reducible subgraph (two bubbles at a cut vertex) with a
+/// numerator straddling both blocks.
+#[test]
+fn numerator_straddling_a_one_vertex_reducible_subgraph() -> Result<()> {
+    assert_identity_with_numerators(
+        "n4_1VR_straddle",
+        &[(0, 1, 1), (0, 1, 1), (1, 2, 1), (1, 2, 1), (2, 0, 1)],
+        &[vec![(0, 1), (2, 1)]],
+    )
+}
+
+/// n5: disconnected spinney (two vertex-disjoint bubbles) with a numerator
+/// straddling both components.
+#[test]
+fn numerator_straddling_a_disconnected_spinney() -> Result<()> {
+    assert_identity_with_numerators(
+        "n5_disconnected_straddle",
+        &[
+            (0, 1, 1),
+            (0, 1, 1),
+            (2, 3, 1),
+            (2, 3, 1),
+            (1, 2, 1),
+            (3, 0, 1),
+        ],
+        &[vec![(0, 1), (2, 1)]],
+    )
+}
