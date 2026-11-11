@@ -347,8 +347,8 @@ examples run on the button, or without it when
 #raw("VAKINT_GALLERY_RUN_EXAMPLES") is set (headless runs and static exports):
 #raw("1") evaluates the quick ones, #raw("all") also the heavy ones, or a
 comma-separated list of example keys. Two five-loop examples are heavy and not
-selected by default: P1 with one dot (about 23 minutes on 4 cores on the
+selected by default: P1 with one dot (23-32 minutes on 4 cores on the
 v0.3.0 RC) and the former master P108 (its power difference, 11, lies outside
 the recorded five-loop entry predicates, so RustRed reduces it without a
-recorded route: over half an hour). The quick ones (P1, T1-8175) take seconds
+recorded route: unfinished after 2 h 15 min on one core). The quick ones (P1, T1-8175) take seconds
 once the 5L catalogue is loaded.

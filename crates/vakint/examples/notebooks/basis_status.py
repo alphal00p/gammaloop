@@ -494,7 +494,7 @@ EXAMPLES = {
         "graph": "5L-P1",
         "dots": [0],
         "loops": 5,
-        "heavy": "about 23 minutes on 4 cores (measured on the v0.3.0 RC)",
+        "heavy": "23-32 minutes on 4 cores (measured on the v0.3.0 RC)",
         "point": (
             "A non-master input is reduced first. On BASIS-v3 its reduction "
             "coefficients have no pole at d = 4, so ε⁻⁵..ε⁻² stay exact, ε⁻¹ "
@@ -510,7 +510,7 @@ EXAMPLES = {
         "heavy": (
             "long: its power difference (11) lies outside the recorded 5L entry "
             "predicates (9 and 10), so RustRed reduces it without a recorded "
-            "route; over half an hour on the v0.3.0 RC"
+            "route; unfinished after 2 h 15 min on the v0.3.0 RC"
         ),
         "point": (
             "P108 was a master of BASIS-v2. On BASIS-v3 it reduces to the new "
