@@ -16,7 +16,7 @@
     "P_LIBRARY_SCHEMA": "rustred.p-owner-library.v1",
     "P_OWNER_LIBRARY_SEMANTICS": "rustred-p-owner-library-2026-11-05",
     "P_PRESENTATION_VERSION": "2",
-    "P_SCHEME_TEMPLATE_VERSION": "2",
+    "P_SCHEME_TEMPLATE_VERSION": "3",
     "P_TOPOLOGY_VERSION": "1",
     "P_TRIANGLE_TEMPLATE_VERSION": "1"
   },
