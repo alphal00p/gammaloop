@@ -209,6 +209,12 @@ fn p_library_versions_match_rustred() {
             .collect::<Vec<_>>()
             .join(",")
     );
+    // A shipped rule ordering (p artefact v2, `ordering.json`) is part of the
+    // identity, after the versions: `,P_ORDERING_VERSION=<version>:<heuristic>`.
+    let identity = match shipped().ordering() {
+        Some(tag) => format!("{identity},P_ORDERING_VERSION={tag}"),
+        None => identity,
+    };
     let versions: serde_json::Map<_, _> = (versions.into_iter())
         .map(|(name, value)| (name.to_owned(), value.into()))
         .collect();
@@ -344,8 +350,8 @@ fn a_library_of_another_version_fails_closed() {
         .join("library.json");
     let text = fs::read_to_string(&library).unwrap();
     let tampered = text.replacen(
-        "\"P_CENSUS_VERSION\": \"1\"",
-        "\"P_CENSUS_VERSION\": \"2\"",
+        "\"P_CLASS_KEY_VERSION\": \"1\"",
+        "\"P_CLASS_KEY_VERSION\": \"2\"",
         1,
     );
     assert_ne!(tampered, text);
@@ -361,7 +367,8 @@ fn a_library_of_another_version_fails_closed() {
         .unwrap_err()
         .to_string();
     assert!(
-        error.contains("P_CENSUS_VERSION") && error.contains("regenerate with rustred p-package"),
+        error.contains("P_CLASS_KEY_VERSION")
+            && error.contains("regenerate with rustred p-package"),
         "{error}"
     );
 }

@@ -396,15 +396,20 @@ impl OrderedCacheProgram {
     ) -> Self {
         Self {
             loop_count,
-            label: format!(
-                "{loop_count}L-{}",
-                file_name_safe(&name.replace(['.', '_'], "-"), true)
-            ),
+            label: Self::label_for(loop_count, name),
             data_version: file_name_safe(data_version, false),
             rule_tables,
             textual_tables: None,
             binding,
         }
+    }
+
+    /// The label [`Self::new`] gives the program `name` of `loop_count` loops.
+    pub(crate) fn label_for(loop_count: usize, name: &str) -> String {
+        format!(
+            "{loop_count}L-{}",
+            file_name_safe(&name.replace(['.', '_'], "-"), true)
+        )
     }
 
     /// A program of the textual tables variant (see `textual_tables`): the
@@ -797,13 +802,26 @@ impl OrderedCacheRegistry {
     /// data or five-loop application change), so their resident records are
     /// released. Records of a directory-backed cache are saved first unless
     /// its autosave policy is `Never`; a failed save is reported, not raised.
-    pub(crate) fn detach_except(&self, programs: &[OrderedCacheProgram]) {
+    ///
+    /// `tables` keeps, in addition, every cache with one of these (label,
+    /// rule tables): programs not decoded yet, whose binding stamp is fixed
+    /// by their (verified) rule bytes.
+    pub(crate) fn detach_except(
+        &self,
+        programs: &[OrderedCacheProgram],
+        tables: &[(String, [u8; 32])],
+    ) {
         let keep: BTreeSet<ProgramKey> = programs.iter().map(OrderedCacheProgram::key).collect();
         let detached: Vec<Attached> = {
             let mut attached = self.lock();
             let superseded: Vec<ProgramKey> = attached
                 .keys()
-                .filter(|key| !keep.contains(*key))
+                .filter(|key| {
+                    !keep.contains(*key)
+                        && !tables
+                            .iter()
+                            .any(|(label, digest)| key.0 == *label && key.1 == *digest)
+                })
                 .cloned()
                 .collect();
             superseded
@@ -957,13 +975,22 @@ impl Vakint {
     /// Detach the caches of programs this engine no longer has, after its
     /// data were replaced. Nothing is detached if the programs cannot be
     /// listed.
+    ///
+    /// Lower-loop programs that were not decoded yet are kept by their
+    /// declared rule tables rather than decoded here.
     pub(super) fn detach_superseded_ordered_caches(&self) {
-        if let Ok(mut programs) = self.ordered_cache_programs() {
-            // The p library the engine resolves to after the change (injected,
-            // external-data or built-in) keeps its cache.
-            programs.extend(self.loaded_p_library().map(|handle| handle.cache.clone()));
-            self.ordered_cache.detach_except(&programs);
+        let Ok(data) = self.rustred_data() else {
+            return;
+        };
+        let mut programs = data.decoded_ordered_cache_programs();
+        if let Ok(application) = self.loaded_application() {
+            programs.push(application.ordered_cache_program().clone());
         }
+        // The p library the engine resolves to after the change (injected,
+        // external-data or built-in) keeps its cache.
+        programs.extend(self.loaded_p_cache_program());
+        self.ordered_cache
+            .detach_except(&programs, &data.undecoded_lower_programs());
     }
 
     /// Every program currently loaded in this engine.
