@@ -18,12 +18,12 @@
    "basis": "BASIS-v2 (pole-free, 131 masters: 111 kept + 20 new; basis-b/b3/BASIS-v2.json)"
   },
   "version": "v0.2.2",
-  "vakint_constants_rs_sha256": "4feefb48f9e69cf237287004554033d6577bd164a99b272829cb955066d2a43d",
+  "vakint_constants_rs_sha256": "f9d444f50a7685685c0910383a00cd25f7e5b6d63e025fddf8121610ed909cdd",
   "vakint_route_sources_sha256": {
    "inspection.rs": "7291373f93d3b2370f5e9298d2ca15be638f05fd1a2b4236459dc27cd3880e4c",
-   "inspection/registry.rs": "8ae5be72abd7f64e9bc53bf3b464e6a5ec1c9692c51738117d3722fc9346326c",
-   "rustred_evaluation/masters.rs": "a02e2318ab6fc97af6c7f0622f2b4b89fffd39579000a70b24f47b1c330efebe",
-   "rustred_evaluation/five_loop.rs": "8037e10d840394ee4b005b8535e7727b4478f25939b66d391d8187c982859975",
+   "inspection/registry.rs": "d3db32ee3b199a6ecb960f16b533f1f38c48da173bbdfac852e213a7b46a2f37",
+   "rustred_evaluation/masters.rs": "c0fa67ea97830140b5f159bb5141fbac44e8e389769aa35159f6d9717de17a28",
+   "rustred_evaluation/five_loop.rs": "ba164ff86a1d7e6616f1366f60269ae6d48010b67ddb2db783b62b2e5cb48d8a",
    "hpl.rs": "aa6270e254a177de404eac0b93cd2081019a828d7f0844060eb91d53b0d026fb"
   },
   "pole_depth_sha256": "4ad608642329a54e9560c1b34029d6b09b595d71d23c12b6b35342348014d223"
@@ -12698,10 +12698,10 @@
   "5L release tiers (5L/producer-update.json) checked against the rows: A 61, B 129, F 5, S 562, S* 29 (S -> S, S* -> S* with the same constants, numerical tiers -> N).",
   "RustRed backend only (vakint’s first backend); MATAD/FMFT/alphaLoop fallbacks are not part of these tables."
  ],
- "content_sha256": "0e2fc8ca25f526ec4c06535de959a1009469dbbacbbde273e99d39b08a5cbe52",
+ "content_sha256": "78e3c8802f94b570a4c685e850852c9f8f874836bf6ebaeaba56b3527e89bc4f",
  "status": "final",
- "generated_utc": "2026-11-07T11:37:19Z",
- "data_root": "/shared/vhirschi/t3code/vakint/scratchpad/5l-pilot/basis-b/bench/data/ved-v0.2.2",
+ "generated_utc": "2026-11-11T10:47:43Z",
+ "data_root": "/shared/vhirschi/t3code/vakint_dev/p_integral_dev/wt/ext-data-v022",
  "data_git": {
   "commit": "0faa1c79566456923a966cab3d012d47059ce4e5",
   "tree": "b738993f1fe0bb5588eef185ffa7d7e5745c9ebf",

@@ -1,84 +1,48 @@
-// vakint p-integrals: RustRed vs Forcer (benchmark v1). Every number is read
-// from data/p_results.json (examples/benchmark_p_integrals.rs) and
-// data/p_exact.json (the exact-agreement tier of the Forcer battery).
+// vakint p-integrals: RustRed vs Forcer, the clean benchmark (bench-clean v1).
+// Every number is read from data/p_clean.json (one harness, one build, 1L-4L,
+// 1 and 16 threads; artefact bench-clean.v1 copied verbatim). data/p_results.json
+// (benchmark M3, gammaloop fd8b44641) is read only for its pinned outputs, and
+// data/p_exact.json (M3 exact-agreement tier) for the agreement marks.
 // Build: `just vakint-p-benchmark-pdf` in the dev shell (Typst 0.15.1).
 
-#let results = json("data/p_results.json")
+#let data = json("data/p_clean.json")
+#let pinned = json("data/p_results.json")
 #let exact = json("data/p_exact.json")
-#assert(results.schema == "vakint.p-benchmark.v1", message: "data/p_results.json is not vakint.p-benchmark.v1")
+#assert(data.schema == "bench-clean.v1", message: "data/p_clean.json is not bench-clean.v1")
+#assert(pinned.schema == "vakint.p-benchmark.v1", message: "data/p_results.json is not vakint.p-benchmark.v1")
 #assert(exact.schema == "vakint.p-exact.v1", message: "data/p_exact.json is not vakint.p-exact.v1")
 
-// The selected run and every run of the same source and build: a resumed run
-// continues the interrupted one. The source includes the identity of the
-// RustRed p library (the built-in one, or the one external data list).
-#let selected = results.runs.find(run => run.id == results.selected_run)
+// The measured build and the pushed tip it stands for (runtime equivalence:
+// section "Measured build and pushed tip"; the evidence is listed there).
+#let measured-gl = data.build.gammaloop_shas
+#let measured-rr = data.build.rustred_shas
+#assert(measured-gl.len() == 1 and measured-rr.len() == 1, message: "p_clean.json mixes builds")
+#let measured-gl = measured-gl.first()
+#let measured-rr = measured-rr.first()
+// data/p_receipt.json records both builds and the evidence of their equivalence.
+#let receipt = json("data/p_receipt.json")
+#assert(receipt.schema == "vakint.p-benchmark-receipt.v1", message: "data/p_receipt.json is not vakint.p-benchmark-receipt.v1")
 #assert(
-  selected != none or results.selected_run == none,
-  message: "data/p_results.json has no run " + repr(results.selected_run),
+  receipt.measured.gammaloop == measured-gl and receipt.measured.rustred == measured-rr
+    and (receipt.measured.binary_sha256,) == data.build.binary_sha256
+    and receipt.measured.p_library_1_4_sha256sums_sha256 == data.packages.at("p-library-1-4").sha256sums_sha256,
+  message: "data/p_receipt.json names another measured build than data/p_clean.json",
 )
-#let protocol = if selected == none { (:) } else { selected.protocol }
-#let library-of(p) = p.at("p_library", default: none)
-#let identity-of(p) = { let library = library-of(p); if library == none { none } else { library.identity } }
-#let same-source-as(base) = run => (
-  ("gammaloop_sha", "rustred_sha", "build_profile", "source_dirty").all(
-    name => run.protocol.at(name) == base.at(name),
-  )
-    and identity-of(run.protocol) == identity-of(base)
-)
-// Each measurement carries the repetitions its run planned (the dagger below).
-#let gather(base) = results.runs.filter(same-source-as(base)).map(run => run.measurements.map(
-  m => m + (planned: run.protocol.repetitions),
-)).flatten()
-// The provenance prints a run's CPUs for every run merged with it: each of
-// them must have pinned every thread count it measured.
-#let check-cpus(base) = for run in results.runs.filter(same-source-as(base)) {
+#assert(receipt.relation == "runtime-equivalent", message: "the receipt does not attest runtime equivalence")
+#let tip-gl = receipt.published_with.gammaloop
+#let tip-rr = receipt.published_with.rustred
+#let tip-xd = receipt.published_with.vakint_external_data
+#for row in data.rows {
   assert(
-    run.protocol.threads.all(t => (
-      str(t) in run.protocol.cpus and run.protocol.cpus.at(str(t)) == base.cpus.at(str(t), default: none)
-    )),
-    message: "run " + run.id + " has a thread count without --cpus, or CPUs other than those of " + repr(base.at("started_utc", default: none)),
-  )
-}
-#let measured = if selected == none { () } else { gather(protocol) }
-#let runs-of-source = if selected == none { () } else { results.runs.filter(same-source-as(protocol)) }
-#if selected != none { check-cpus(protocol) }
-
-// The cited run (benchmark v1, M2-T10c): its source fills what the selected
-// source does not measure: every Forcer row and RustRed at 1L-3L.
-#let cited-run = results.runs.find(run => run.id == results.at("cited_run", default: none))
-#assert(
-  cited-run != none or results.at("cited_run", default: none) == none,
-  message: "data/p_results.json cites no recorded run " + repr(results.at("cited_run", default: none)),
-)
-#let cited-protocol = if cited-run == none { none } else { cited-run.protocol }
-#let cited = if cited-run == none { () } else { gather(cited-protocol) }
-#if cited-run != none { check-cpus(cited-protocol) }
-#let measurements = measured + cited
-
-// A filled exact file marks only the source it was computed on: gammaloop_sha
-// is the last commit outside docs/benchmark, rustred_sha the Cargo.lock pin.
-#let exact-marks = selected != none and exact.at("stub", default: false) != true
-#if exact-marks {
-  for name in ("gammaloop_sha", "rustred_sha") {
-    let (found, measured) = (exact.at(name, default: none), protocol.at(name))
-    assert(
-      found == measured,
-      message: "p_exact.json has " + name + " " + repr(found) + ", the selected run " + measured,
-    )
-  }
-}
-
-// The deterministic date of the document: the start of the selected run.
-#let stamp = protocol.at("started_utc", default: none)
-#let date = if stamp == none { none } else {
-  datetime(
-    year: int(stamp.slice(0, 4)),
-    month: int(stamp.slice(5, 7)),
-    day: int(stamp.slice(8, 10)),
+    row.gammaloop_sha == (measured-gl,) and row.rustred_sha == (measured-rr,),
+    message: "row " + row.cell + " was not measured on the one build",
   )
 }
 
-#set document(title: "vakint p-integrals: RustRed vs Forcer", author: "Valentin Hirschi", date: date)
+#let stamp = data.date_range.last()
+#let date = datetime(year: int(stamp.slice(0, 4)), month: int(stamp.slice(5, 7)), day: int(stamp.slice(8, 10)))
+
+#set document(title: "vakint p-integrals: RustRed vs Forcer (clean benchmark)", author: "Valentin Hirschi", date: date)
 #set page(paper: "a4", margin: (x: 1.3cm, y: 1.4cm), numbering: "1 / 1")
 #set text(font: "Libertinus Serif", size: 10pt, lang: "en")
 #set par(justify: true, leading: 0.55em)
@@ -89,11 +53,12 @@
 #let navy = rgb("#1f3b63")
 #let pale = rgb("#eef3f9")
 #let grey = luma(232)
+#let red = rgb("#b2182b")
+#let green = rgb("#1b7a3e")
 
 // ---------------------------------------------------------------- helpers --
 
 #let is-num(x) = type(x) == int or type(x) == float
-
 #let fixed(x, d) = {
   let s = str(calc.round(x, digits: d))
   if d == 0 { return s }
@@ -101,7 +66,6 @@
   let frac = if parts.len() > 1 { parts.at(1) } else { "" }
   parts.at(0) + "." + frac + "0" * (d - frac.len())
 }
-
 // Significant figures suited to timings in seconds; never a printed zero.
 #let fmt(x) = {
   if not is-num(x) { return "—" }
@@ -109,512 +73,384 @@
   if a < 0.001 { return "< 0.001" }
   fixed(x, if a >= 100 { 0 } else if a >= 10 { 1 } else if a >= 1 { 2 } else { 3 })
 }
-#let fmt-ratio(r) = if r >= 10 { fixed(r, 0) } else if r >= 0.01 { fixed(r, 2) } else {
+#let fmt-ratio(r) = if not is-num(r) { "—" } else if r >= 10 { fixed(r, 1) } else if r >= 0.01 { fixed(r, 2) } else {
   "1/" + str(int(calc.round(1 / r)))
 }
-
+// Peak RSS in MiB (ru_maxrss); printed in MiB or GiB.
+#let fmt-mb(mb) = if not is-num(mb) { "—" } else if mb >= 1000 { fixed(mb / 1024, 1) + " GiB" } else {
+  str(int(calc.round(mb))) + " MiB"
+}
 #let median(values) = {
   let sorted = values.sorted()
   let n = sorted.len()
   if n == 0 { none } else { (sorted.at(int((n - 1) / 2)) + sorted.at(int(n / 2))) / 2 }
 }
-
-// RustRed's Ordered weight arithmetic of the tables; the exact series has a
-// table of its own. Forcer measurements carry "none".
-#let headline = "modular_polynomial"
-#let arithmetic-of(m) = { assert(m.backend != "rustred" or "arithmetic" in m, message: "RustRed record without arithmetic"); m.at("arithmetic", default: "none") }
-
-#let loops-of(cell) = if cell.starts-with("physics_L") { int(cell.slice(9)) } else { int(cell.slice(1, 2)) }
-// Where a cell of the tables comes from: RustRed at 1L-3L from the cited
-// source (the v1 grid, built-in 1-3 library), at 4L from the measured one;
-// Forcer from the measured source where it measured the cell, else the cited.
-// Without a cited run everything is the selected source's.
-#let rustred-rows(loops) = if loops < 4 and cited-run != none { cited } else { measured }
-#let pick(list, cell, backend, threads, state, arithmetic) = list.filter(
-  m => (
-    m.cell == cell and m.backend == backend and m.threads == threads and m.state == state
-      and (backend != "rustred" or arithmetic-of(m) == arithmetic)
-  ),
-)
-#let samples(cell, backend, threads, state, arithmetic: headline) = if backend == "rustred" {
-  pick(rustred-rows(loops-of(cell)), cell, backend, threads, state, arithmetic)
-} else {
-  let own = pick(measured, cell, backend, threads, state, arithmetic)
-  if own.len() > 0 or cited-run == none { own } else { pick(cited, cell, backend, threads, state, arithmetic) }
-}
-// Median over the repetitions; none without a complete measurement.
-#let median-of(list, field) = median(list.filter(m => m.status == "ok").map(m => m.at(field, default: none)).filter(is-num))
-#let seconds(cell, backend, threads, state, field: "evaluate_seconds", arithmetic: headline) = median-of(
-  samples(cell, backend, threads, state, arithmetic: arithmetic),
-  field,
-)
-// The cap a state went over, the longest when several ran; none if it did not.
-#let cap-of(cell, backend, threads, state) = {
-  let caps = samples(cell, backend, threads, state)
-    .filter(m => m.status == "capped")
-    .map(m => m.cap_seconds)
-  if caps.len() == 0 { none } else { calc.max(..caps) }
-}
-#let over-cap(seconds) = if seconds >= 60 {
-  "> " + str(int(calc.round(seconds / 60))) + " min"
-} else {
-  "> " + str(seconds) + " s"
-}
-// A dagger on a median over fewer repetitions than its run planned.
-#let partial(cell, backend, threads, state) = {
-  let all = samples(cell, backend, threads, state)
-  let done = all.filter(m => m.status == "ok").len()
-  if done > 0 and done < calc.max(..all.map(m => m.planned)) { "†" } else { "" }
-}
-
 #let ratio(a, b) = if is-num(a) and is-num(b) and a > 0 and b > 0 { a / b } else { none }
 
-// Diverging log2 palette: green (RustRed faster), white (parity), red (slower).
-#let palette = gradient.linear(
-  rgb("#5aae61"), rgb("#d9f0d3"), rgb("#ffffff"), rgb("#fddbc7"), rgb("#d6604d"),
+// ------------------------------------------------------------- the rows --
+
+#let key(cell, backend, threads, state) = cell + "|" + backend + "|" + str(threads) + "|" + state
+#let by-key = {
+  let d = (:)
+  for row in data.rows { d.insert(key(row.cell, row.backend, row.threads, row.state), row) }
+  d
+}
+#assert(by-key.len() == data.rows.len(), message: "p_clean.json has duplicate rows")
+#let row(cell, backend, threads, state) = by-key.at(key(cell, backend, threads, state), default: none)
+#let val(cell, backend, threads, state, field) = {
+  let r = row(cell, backend, threads, state)
+  if r == none { none } else { r.at(field, default: none) }
+}
+#let ranks = (0, 2, 4, 6, 8)
+#let grid-cells(loops) = (0, 1, 2).map(dots => ranks.map(rank => "L" + str(loops) + "_d" + str(dots) + "_r" + str(rank))).flatten()
+#let cells-of(loops) = grid-cells(loops) + if loops >= 2 { ("physics_L" + str(loops),) } else { () }
+#let all-cells = (1, 2, 3, 4).map(cells-of).flatten()
+
+// The ratios of the summary (RustRed over Forcer, medians over repetitions):
+// cold evaluate; whole cold process without RustRed's cache save over Forcer's
+// whole cold process; peak RSS: RustRed's measuring process against Forcer's
+// process plus its FORM subprocess (sum of the two peaks).
+#let ev-ratio(cell, t) = ratio(val(cell, "rustred", t, "cold", "evaluate"), val(cell, "forcer", t, "cold", "evaluate"))
+#let proc-ratio(cell, t) = ratio(
+  val(cell, "rustred", t, "cold", "process_excl_save"),
+  val(cell, "forcer", t, "cold", "process"),
 )
-#let ratio-fill(r) = {
-  if r == none { return none }
-  // log2 scale: x1/4 -> 0 %, x1 -> 50 %, x4 -> 100 %
-  palette.sample(calc.clamp(0.5 + calc.log(r, base: 2) / 4, 0, 1) * 100%)
+#let rss-rr(cell, t) = val(cell, "rustred", t, "cold", "peak_rss_mb")
+#let rss-f(cell, t) = {
+  let (own, kids) = (val(cell, "forcer", t, "cold", "peak_rss_mb"), val(cell, "forcer", t, "cold", "children_peak_rss_mb"))
+  if is-num(own) { own + if is-num(kids) { kids } else { 0 } } else { none }
+}
+#let rss-ratio(cell, t) = ratio(rss-rr(cell, t), rss-f(cell, t))
+#let slower(t) = all-cells.filter(cell => { let r = ev-ratio(cell, t); r != none and r > 1 })
+#let worst(cells, f) = {
+  let found = cells.filter(c => f(c) != none)
+  if found.len() == 0 { none } else { found.sorted(key: c => f(c)).last() }
 }
 
-// The mark of a grid cell, or of the physics cell of `loops` when `dots` is
-// none; n.c. for a cell the exact tier lists as not exact-checked (its cost).
+// --------------------------------------------- outputs against the pins --
+
+// The pinned outputs of benchmark M3 (and v1), per cell and backend.
+#let pins = {
+  let d = (:)
+  for run in pinned.runs {
+    for m in run.measurements {
+      let k = m.cell + "|" + m.backend
+      let h = m.at("output_sha256", default: none)
+      if h != none and m.status == "ok" { d.insert(k, d.at(k, default: ()) + (h,)) }
+    }
+  }
+  d
+}
+// Re-checked here: a row the data set calls identical has its output among the
+// committed pins, a row without a pin has none committed.
+#let identical-rows = data.rows.filter(r => r.output_check == "identical")
+#let unpinned-rows = data.rows.filter(r => r.output_check == "no pinned reference")
+#assert(identical-rows.len() + unpinned-rows.len() == data.rows.len(), message: "an output differs from its pin")
+#assert(data.output_failures.len() == 0, message: "p_clean.json records output failures")
+#for r in identical-rows {
+  assert(r.output_sha256 in pins.at(r.cell + "|" + r.backend, default: ()), message: "pin not in p_results.json: " + r.cell)
+}
+#for r in unpinned-rows {
+  assert(pins.at(r.cell + "|" + r.backend, default: ()).len() == 0, message: "unpinned row has a pin: " + r.cell)
+}
+#let unpinned-cells = unpinned-rows.map(r => r.cell).dedup()
+// Within one cell and backend every row (state, thread count, repetition median) gave one output.
+#let one-output = all-cells.all(cell => ("rustred", "forcer").all(b => (
+  data.rows.filter(r => r.cell == cell and r.backend == b).map(r => r.output_sha256).dedup().len() == 1
+)))
+
+// Exact-agreement marks of the M3 tier (RustRed = Forcer, exactly), carried
+// by the byte-identical outputs; n.c.: the tier did not check the cell (cost).
+#let parse-cell(cell) = if cell.starts-with("physics_L") { (int(cell.slice(9)), none, none) } else {
+  (int(cell.slice(1, 2)), int(cell.slice(4, 5)), int(cell.slice(7)))
+}
 #let same-cell(loops, dots, rank) = c => if dots == none {
   c.at("physics", default: none) not in (none, false) and c.L == loops
 } else {
   c.L == loops and c.at("dots", default: none) == dots and c.at("rank", default: none) == rank
 }
-#let exact-mark(loops, dots, rank) = {
-  let found = if exact-marks { exact.cells.find(same-cell(loops, dots, rank)) }
-  let unchecked = exact-marks and exact.at("not_exact_checked", default: ()).any(same-cell(loops, dots, rank))
+#let exact-mark(cell) = {
+  let (loops, dots, rank) = parse-cell(cell)
+  let found = exact.cells.find(same-cell(loops, dots, rank))
+  let unchecked = exact.at("not_exact_checked", default: ()).any(same-cell(loops, dots, rank))
   if found == none and unchecked { text(fill: luma(100), size: 6pt)[#h(2pt)n.c.] } else if found == none { [] } else if found.agree {
-    text(fill: rgb("#1b7a3e"), size: 7pt)[#h(2pt)✓]
-  } else {
-    text(fill: rgb("#b2182b"), size: 7pt, weight: "bold")[#h(2pt)✗]
-  }
+    text(fill: green, size: 7pt)[#h(2pt)✓]
+  } else { text(fill: red, size: 7pt, weight: "bold")[#h(2pt)✗] }
 }
 
-// The Forcer state of a cell: cold, against RustRed cold; warm where only
-// that was measured (v1 measured 4L warm only).
-#let forcer-state(cell, threads) = if seconds(cell, "forcer", threads, "cold") == none and seconds(cell, "forcer", threads, "warm") != none { "warm" } else { "cold" }
-#let forcer-time(cell, threads) = seconds(cell, "forcer", threads, forcer-state(cell, threads))
-#let timing-text(cell, backend, threads, state) = {
-  let value = seconds(cell, backend, threads, state)
-  let cap = cap-of(cell, backend, threads, state)
-  if value != none {
-    fmt(value) + partial(cell, backend, threads, state)
-  } else if cap != none { over-cap(cap) } else { "—" }
+// ----------------------------------------------------- foreign load (16t) --
+
+#let job-hygiene(r) = {
+  let found = r.jobs.map(j => data.hygiene.at(j, default: none)).filter(h => h != none)
+  if found.len() == 0 { none } else { found.first() }
 }
-#let cell-count(cell) = {
-  let found = measurements.find(m => m.cell == cell)
-  if found == none { none } else { found.n }
-}
-#let cold-ratio(cell, threads) = ratio(seconds(cell, "rustred", threads, "cold"), forcer-time(cell, threads))
-// A capped RustRed cold bounds its ratio from below: cap over Forcer.
-#let capped-ratio(cell, threads) = if seconds(cell, "rustred", threads, "cold") == none {
-  ratio(cap-of(cell, "rustred", threads, "cold"), forcer-time(cell, threads))
-}
-#let ratio-text(cell, threads) = {
-  let (r, low) = (cold-ratio(cell, threads), capped-ratio(cell, threads))
-  if r != none [×#fmt-ratio(r)] else if low != none [> ×#fmt-ratio(low)] else [—]
+#let hygiene-values(prefix, field) = data.hygiene.pairs().filter(p => p.at(0).starts-with(prefix)).map(p => p.at(1).at(field)).filter(is-num)
+#let foreign16 = hygiene-values("t16_", "median_total_foreign_cores")
+#let foreign16-max = hygiene-values("t16_", "max_total_foreign_cores")
+#let foreign1 = hygiene-values("t1_", "median_total_foreign_cores")
+#let foreign-of(cell, backend, t) = {
+  let r = row(cell, backend, t, "cold")
+  let h = if r == none { none } else { job-hygiene(r) }
+  if h == none { none } else { h.median_total_foreign_cores }
 }
 
-// One table cell: RustRed cold, Forcer, the ratio, the two warm states, the
-// exact mark and the integral count.
-#let cmp-cell(cell, loops, threads, dots: none, rank: none) = {
-  let own = seconds(cell, "rustred", threads, "cold")
-  let r = cold-ratio(cell, threads)
-  let low = capped-ratio(cell, threads)
-  let n = cell-count(cell)
-  let forcer = forcer-state(cell, threads)
-  table.cell(fill: ratio-fill(if r != none { r } else { low }), {
+// --------------------------------------------------------------- colours --
+
+// Diverging log2 palette: green (RustRed faster), white (parity), red (slower).
+#let palette = gradient.linear(rgb("#5aae61"), rgb("#d9f0d3"), rgb("#ffffff"), rgb("#fddbc7"), rgb("#d6604d"))
+#let ratio-fill(r) = if r == none { none } else { palette.sample(calc.clamp(0.5 + calc.log(r, base: 2) / 4, 0, 1) * 100%) }
+#let header(body) = text(font: "Roboto", size: 7.5pt, weight: "bold", fill: white, body)
+
+// A dagger on a median over fewer repetitions than the three planned.
+#let partial(cell, backend, t, state) = {
+  let r = row(cell, backend, t, state)
+  if r != none and r.n_reps < 3 { "†" } else { "" }
+}
+#let secs(cell, backend, t, state) = fmt(val(cell, backend, t, state, "evaluate")) + partial(cell, backend, t, state)
+
+// One table cell: RustRed cold, Forcer cold, the ratio, the warm states, the
+// peak-RSS ratio and the exact mark.
+#let cmp-cell(cell, t, physics: false) = {
+  let r = ev-ratio(cell, t)
+  let (loops, _, _) = parse-cell(cell)
+  table.cell(fill: ratio-fill(r), {
     set par(leading: 0.3em, justify: false)
-    if dots == none { text(size: 6.5pt, weight: "bold")[#loops L #h(2pt)] }
-    if own == none and cap-of(cell, "rustred", threads, "cold") == none {
-      text(size: 7pt, fill: luma(90))[pending]
-    } else {
-      text(weight: "bold", size: 8.2pt, timing-text(cell, "rustred", threads, "cold"))
-    }
-    exact-mark(loops, dots, rank)
+    if physics { text(size: 6.5pt, weight: "bold")[#loops L #h(2pt)] }
+    text(weight: "bold", size: 8.2pt, secs(cell, "rustred", t, "cold"))
+    exact-mark(cell)
     linebreak()
-    text(size: 6.5pt, fill: luma(40))[F#if forcer == "warm" [w] #timing-text(cell, "forcer", threads, forcer)]
-    if r != none or low != none { text(size: 6.8pt, weight: "semibold")[#h(2pt)#ratio-text(cell, threads)] }
-    if own != none {
-      linebreak()
-      text(size: 5.6pt, fill: luma(45))[
-        ws #timing-text(cell, "rustred", threads, "warm-same")
-        #h(1pt) wc #timing-text(cell, "rustred", threads, "warm-shared")
-      ]
-    }
-    if n != none {
-      linebreak()
-      text(size: 5.6pt, fill: luma(60))[n=#n]
-    }
+    text(size: 6.5pt, fill: luma(40))[F #secs(cell, "forcer", t, "cold")]
+    text(size: 6.8pt, weight: "semibold")[#h(2pt)×#fmt-ratio(r)]
+    linebreak()
+    text(size: 5.6pt, fill: luma(45))[ws #secs(cell, "rustred", t, "warm-same") #h(1pt) wp #secs(cell, "rustred", t, "warm-process") #h(1pt) Fw #secs(cell, "forcer", t, "warm")]
+    linebreak()
+    let m = rss-ratio(cell, t)
+    text(size: 5.6pt, fill: if m != none and m > 1 { red } else { luma(45) })[RSS #fmt-mb(rss-rr(cell, t)) ×#fmt-ratio(m)]
   })
 }
 
-#let header(body) = text(font: "Roboto", size: 7.5pt, weight: "bold", fill: white, body)
-
-#let timing-table(threads) = {
-  let ranks = (0, 2, 4, 6, 8)
+#let timing-table(t) = {
   let rows = ()
   for loops in (1, 2, 3, 4) {
     for dots in (0, 1, 2) {
-      if dots == 0 {
-        rows.push(table.cell(rowspan: 3, align: horizon, text(weight: "bold")[#loops L]))
-      }
+      if dots == 0 { rows.push(table.cell(rowspan: 3, align: horizon, text(weight: "bold")[#loops L])) }
       rows.push(text(size: 8pt)[#dots])
-      for rank in ranks {
-        rows.push(cmp-cell(
-          "L" + str(loops) + "_d" + str(dots) + "_r" + str(rank), loops, threads, dots: dots, rank: rank,
-        ))
-      }
+      for rank in ranks { rows.push(cmp-cell("L" + str(loops) + "_d" + str(dots) + "_r" + str(rank), t)) }
     }
   }
   rows.push(table.cell(colspan: 2, align: horizon, text(size: 8pt, weight: "bold")[phys.]))
-  for loops in (2, 3, 4) {
-    rows.push(cmp-cell("physics_L" + str(loops), loops, threads))
-  }
-  rows.push(table.cell(colspan: 2, align: horizon + center, fill: grey, text(size: 7pt, fill: luma(90))[5L canary: n/a]))
+  for loops in (2, 3, 4) { rows.push(cmp-cell("physics_L" + str(loops), t, physics: true)) }
+  rows.push(table.cell(colspan: 2, align: horizon + center, fill: grey, text(size: 7pt, fill: luma(90))[5L: not part of this benchmark]))
   table(
     columns: (1.05cm, 0.75cm, ..((1fr,) * 5)),
     align: (x, y) => if x < 2 { center + horizon } else { left + horizon },
     inset: (x: 3pt, y: 2.2pt),
     stroke: 0.4pt + luma(215),
     fill: (x, y) => if y == 0 { navy },
-    header[L], header[dots],
-    ..ranks.map(rank => header[rank #rank]),
+    header[L], header[dots], ..ranks.map(rank => header[rank #rank]),
     ..rows,
   )
 }
 
-// Ratios of the 3L cells of rank >= 4 at 16 threads (G10b of M2).
-#let g10b = {
-  let values = ()
-  for dots in (0, 1, 2) {
-    for rank in (4, 6, 8) {
-      let r = cold-ratio("L3_d" + str(dots) + "_r" + str(rank), 16)
-      if r != none { values.push(r) }
+// ---------------------------------------------------------------- summary --
+
+#let summary-table = {
+  let rows = ()
+  for loops in (1, 2, 3, 4) {
+    for t in (1, 16) {
+      let cells = cells-of(loops)
+      let stat(f) = {
+        let values = cells.map(c => f(c, t)).filter(is-num)
+        let w = worst(cells, c => f(c, t))
+        (median(values), if w == none { none } else { f(w, t) }, w)
+      }
+      let (ev, pr, rs) = (stat(ev-ratio), stat(proc-ratio), stat(rss-ratio))
+      let late = cells.filter(c => { let r = ev-ratio(c, t); r != none and r > 1 })
+      rows += (
+        text(size: 7pt)[#loops L], text(size: 7pt)[#t], text(size: 7pt)[#cells.len()],
+        text(size: 7pt)[×#fmt-ratio(ev.at(0))], text(size: 7pt)[×#fmt-ratio(ev.at(1)) #text(size: 6pt)[(#ev.at(2).replace("_", " "))]],
+        text(size: 7pt)[×#fmt-ratio(pr.at(0))], text(size: 7pt)[×#fmt-ratio(pr.at(1))],
+        text(size: 7pt)[×#fmt-ratio(rs.at(0))], text(size: 7pt)[×#fmt-ratio(rs.at(1)) #text(size: 6pt)[(#rs.at(2).replace("_", " "))]],
+        table.cell(fill: if late.len() > 0 { rgb("#fddbc7") }, text(size: 7pt, weight: if late.len() > 0 { "bold" } else { "regular" })[#if late.len() == 0 [none] else { late.map(c => c.replace("_", " ")).join(", ") }]),
+      )
     }
   }
-  values
-}
-// A capped or missing cell has no ratio, so the range says how many it covers.
-#let range-of(values, cells) = if values.len() == 0 { [pending] } else {
-  [×#fmt-ratio(calc.min(..values)) to ×#fmt-ratio(calc.max(..values)), #values.len() of #cells cells]
-}
-#let load-seconds(list) = (
-  list
-    .filter(m => m.backend == "rustred" and m.status == "ok" and arithmetic-of(m) == headline)
-    .map(m => m.at("load_seconds", default: none))
-    .filter(is-num)
-)
-
-// The 4L speed target (G10b of M3; recorded, blocking only in M5), per cell:
-// on par with Forcer at 1 thread, better at 16 threads, and a cold start
-// dominated by the artefact load (the load of a fresh process at least the
-// one-off cost of a cold evaluation over a warm one, cold - ws).
-#let par-tolerance = 1.1
-#let four-loop-cells = (0, 1, 2).map(dots => (0, 2, 4, 6, 8).map(rank => "L4_d" + str(dots) + "_r" + str(rank))).flatten() + ("physics_L4",)
-#let verdict(ok) = if ok == none { text(fill: luma(90))[—] } else if ok {
-  text(fill: rgb("#1b7a3e"), weight: "bold")[met]
-} else { text(fill: rgb("#b2182b"), weight: "bold")[missed] }
-// A capped cell misses when its bound already exceeds the target, else it is undecided.
-#let target(cell, threads, limit, strict) = {
-  let (r, low) = (cold-ratio(cell, threads), capped-ratio(cell, threads))
-  if r != none { if strict { r < limit } else { r <= limit } } else if low != none and low > limit { false } else { none }
-}
-#let target-1(cell) = target(cell, 1, par-tolerance, false)
-#let target-16(cell) = target(cell, 16, 1, true)
-#let one-off(cell, threads) = {
-  let (cold, warm) = (seconds(cell, "rustred", threads, "cold"), seconds(cell, "rustred", threads, "warm-same"))
-  if is-num(cold) and is-num(warm) { calc.max(cold - warm, 0) } else { none }
-}
-#let cell-load(cell, threads) = seconds(cell, "rustred", threads, "cold", field: "load_seconds")
-#let target-load(cell) = {
-  let (load, extra) = (cell-load(cell, 1), one-off(cell, 1))
-  if is-num(load) and is-num(extra) { load >= extra } else { none }
-}
-#let tally(check) = {
-  let found = four-loop-cells.map(check).filter(ok => ok != none)
-  if found.len() == 0 [pending] else [#found.filter(ok => ok).len() of #found.len() met]
-}
-// The breakdown of a missed thread count: load, reduction (RustRed's math
-// span), transport and the rest of evaluate (frontend, finalizer), and the
-// cache save made after the clock.
-#let breakdown(cell, threads) = {
-  let field(name) = seconds(cell, "rustred", threads, "cold", field: name)
-  let (evaluate, reduction) = (field("evaluate_seconds"), field("reduction_seconds"))
-  let rest = if is-num(evaluate) and is-num(reduction) { calc.max(evaluate - reduction, 0) } else { none }
-  let cap = cap-of(cell, "rustred", threads, "cold")
-  if evaluate == none and cap != none [#threads: capped (#over-cap(cap)), no breakdown] else [
-    #threads: #fmt(field("load_seconds")) / #fmt(reduction) / #fmt(rest) / #fmt(field("save_seconds"))]
-}
-#let target-table = {
-  let rows = ()
-  for cell in four-loop-cells {
-    let misses = ((1, target-1(cell)), (16, target-16(cell))).filter(pair => pair.at(1) == false).map(pair => pair.at(0))
-    rows.push(text(size: 7pt)[#cell.replace("_", " ")])
-    rows.push(text(size: 7pt)[#ratio-text(cell, 1) #verdict(target-1(cell))])
-    rows.push(text(size: 7pt)[#ratio-text(cell, 16) #verdict(target-16(cell))])
-    rows.push(text(size: 7pt)[#fmt(cell-load(cell, 1)) / #fmt(one-off(cell, 1)) #verdict(target-load(cell))])
-    rows.push(text(size: 6.5pt)[#misses.map(threads => breakdown(cell, threads)).join(linebreak())])
-  }
   table(
-    columns: (auto, auto, auto, auto, 1fr),
-    align: (x, y) => if x == 0 { left } else { right },
-    inset: (x: 3pt, y: 1.6pt),
+    columns: (auto, auto, auto, auto, auto, auto, auto, auto, auto, 1fr),
+    align: (x, y) => if x < 3 { center } else { left },
+    inset: (x: 3pt, y: 1.8pt),
     stroke: 0.4pt + luma(215),
-    fill: (x, y) => if y == 0 { navy },
-    header[cell], header[1 thread (≤ ×#par-tolerance)], header[16 threads (< ×1)], header[load / cold − ws, 1 thread],
-    header[misses: threads: load / reduction / rest / save (s, RustRed cold)],
+    fill: (x, y) => if y < 2 { navy },
+    table.cell(rowspan: 2, header[L]), table.cell(rowspan: 2, header[thr.]), table.cell(rowspan: 2, header[cells]),
+    table.cell(colspan: 2, header[cold evaluate]), table.cell(colspan: 2, header[cold process]),
+    table.cell(colspan: 2, header[peak RSS]), table.cell(rowspan: 2, header[slower than Forcer]),
+    header[median], header[worst], header[median], header[worst], header[median], header[worst],
     ..rows,
   )
 }
 
-// 1L-3L under the scope 1-4 program (one cell per loop count, 1 thread): the
-// measured RustRed cells against the cited ones of the built-in 1-3 program.
-#let cross-cells = measured.filter(m => m.backend == "rustred" and m.loops < 4 and m.threads == 1).map(m => m.cell).dedup()
-#let cross-table = {
+// 4L in detail: the cold runs of both backends, per thread count.
+#let detail-table = {
   let rows = ()
-  for cell in cross-cells {
-    let own(state, field) = median-of(pick(measured, cell, "rustred", 1, state, headline), field)
-    let old(state, field) = median-of(pick(cited, cell, "rustred", 1, state, headline), field)
-    rows.push(text(size: 7pt)[#cell.replace("_", " ")])
-    for value in (
-      own("cold", "evaluate_seconds"), own("warm-same", "evaluate_seconds"), old("cold", "evaluate_seconds"),
-      own("cold", "reduction_seconds"), old("cold", "reduction_seconds"),
-      own("cold", "load_seconds"), old("cold", "load_seconds"),
-    ) { rows.push(text(size: 7pt)[#fmt(value)]) }
+  for cell in cells-of(4) {
+    for t in (1, 16) {
+      let rr(field) = val(cell, "rustred", t, "cold", field)
+      let ff(field) = val(cell, "forcer", t, "cold", field)
+      let r = ev-ratio(cell, t)
+      let fc = foreign-of(cell, "rustred", t)
+      let ffc = foreign-of(cell, "forcer", t)
+      rows += (
+        text(size: 6.6pt)[#cell.replace("_", " ")], text(size: 6.6pt)[#t],
+        text(size: 6.6pt, weight: "bold")[#fmt(rr("evaluate"))#partial(cell, "rustred", t, "cold")], text(size: 6.6pt)[#fmt(rr("reduction"))],
+        text(size: 6.6pt)[#fmt(rr("load"))], text(size: 6.6pt)[#fmt(rr("save"))], text(size: 6.6pt)[#fmt(rr("process_excl_save"))],
+        text(size: 6.6pt, weight: "bold")[#fmt(ff("evaluate"))], text(size: 6.6pt)[#fmt(ff("process"))],
+        table.cell(fill: ratio-fill(r), text(size: 6.6pt, weight: "bold")[×#fmt-ratio(r)]),
+        table.cell(fill: ratio-fill(proc-ratio(cell, t)), text(size: 6.6pt)[×#fmt-ratio(proc-ratio(cell, t))]),
+        text(size: 6.6pt)[#fmt-mb(rss-rr(cell, t))], text(size: 6.6pt)[#fmt-mb(rss-f(cell, t))],
+        text(size: 6.6pt, fill: if rss-ratio(cell, t) > 1 { red } else { black })[×#fmt-ratio(rss-ratio(cell, t))],
+        text(size: 6.6pt)[#if t == 1 [—] else [#fixed(fc, 1) / #fixed(ffc, 1)]],
+      )
+    }
   }
   table(
-    columns: (auto, ..((1fr,) * 7)),
-    align: (x, y) => if x == 0 { left } else { right },
-    inset: (x: 3pt, y: 1.6pt),
+    columns: (auto, auto, ..((1fr,) * 13)),
+    align: (x, y) => if x < 2 { left } else { right },
+    inset: (x: 2.5pt, y: 1.5pt),
     stroke: 0.4pt + luma(215),
     fill: (x, y) => if y < 2 { navy },
-    table.cell(rowspan: 2, header[cell]), table.cell(colspan: 3, header[evaluate]),
-    table.cell(colspan: 2, header[reduction only]), table.cell(colspan: 2, header[load]),
-    header[1-4 cold], header[1-4 ws], header[1-3 cold], header[1-4], header[1-3], header[1-4], header[1-3],
+    table.cell(rowspan: 2, header[cell]), table.cell(rowspan: 2, header[thr.]),
+    table.cell(colspan: 5, header[RustRed cold (s)]), table.cell(colspan: 2, header[Forcer cold (s)]),
+    table.cell(colspan: 2, header[RustRed / Forcer]), table.cell(colspan: 3, header[peak RSS]),
+    table.cell(rowspan: 2, header[foreign cores RR / F]),
+    header[evaluate], header[reduction], header[load], header[save], header[process − save],
+    header[evaluate], header[process], header[evaluate], header[process],
+    header[RustRed], header[Forcer], header[ratio],
     ..rows,
   )
 }
 
 // ------------------------------------------------------------------ title --
 
-#let library = library-of(protocol)
-#let library-name = if library == none { "p-library-1-3" } else { library.directory }
-#let library-origin = if library == none { "built-in" } else { library.origin }
+#let n-measurements = data.raw_measurements
+#let pkg4 = data.packages.at("p-library-1-4")
+#let pkg3 = data.packages.at("p-library-1-3")
 
 #align(center)[
   #text(19pt, weight: "bold", fill: navy)[vakint p-integrals: RustRed vs Forcer]
   #v(-0.5em)
   #text(9pt, fill: luma(100))[
-    #if date == none [no selected run] else { date.display("[year]-[month]-[day]") }
-    #if selected != none [· #protocol.host · gammaloop #protocol.gammaloop_sha.slice(0, 9)#if protocol.source_dirty [ (dirty)] · rustred #protocol.rustred_sha.slice(0, 8) · #library-name (#library-origin)]
+    clean benchmark #raw(data.id) (#raw(data.schema)) · #date.display("[year]-[month]-[day]") · #data.host.join(", ") ·
+    pushed tip gammaloop #raw(tip-gl.slice(0, 9)), rustred #raw(tip-rr.slice(0, 8)) ·
+    measured build gammaloop #raw(measured-gl.slice(0, 9)), rustred #raw(measured-rr.slice(0, 8)) (runtime-equivalent: last section)
   ]
 ]
 
+#let worst4(t) = worst(cells-of(4), c => rss-ratio(c, t))
+#let pairs3 = (1, 2, 3).map(cells-of).flatten().map(c => ((c, 1), (c, 16))).flatten().chunks(2).filter(p => rss-ratio(..p) != none)
+#let low3 = pairs3.filter(p => rss-ratio(..p) < 1)
+#let high3 = pairs3.filter(p => rss-ratio(..p) >= 1)
+#let below4 = cells-of(4).filter(c => (1, 16).any(t => rss-ratio(c, t) <= 1))
 #block(fill: pale, inset: 7pt, radius: 3pt, width: 100%)[
   #set text(8.6pt)
-  *Reading guide.* Each cell is the sum over all tops of that loop count at the given dots, times a
-  numerator of that rank. Bold: RustRed cold (seconds, median). F: Forcer cold (Fw: warm, where
-  only that was measured). ×: the ratio RustRed cold over Forcer; green is RustRed faster.
-  ws, wc: RustRed warm on its own cache, and warm on one cache shared along the cells of that loop
-  count. ✓: result exactly equal to Forcer's; n.c.: not exact-checked (cost; `p_exact.json`). n: integrals in the input. †: fewer repetitions than
-  its run planned.
-  #if cited-run != none [*Sources:* 4L RustRed measured on the scope 1-4 library (#library-name, #library-origin);
-    every Forcer row#if measured.any(m => m.backend == "forcer") [ (except Forcer 4L at 1 thread, cold, one repetition: measured
-    here, v1 had none)] and RustRed at 1L-3L cited from benchmark v1 (run #raw(cited-run.id), gammaloop
-    #cited-protocol.gammaloop_sha.slice(0, 9), built-in 1-3 library). Identity caveat: Forcer, FORM and vakint's
-    Forcer path are unchanged since v1, and the built-in 1-3 route is unchanged; Table 6 measures 1L-3L under the
-    1-4 program (one cell per loop count; the cross-program cost in full: M3-T19 S2).]
-  *Caveat:* indicative timings on a shared, loaded host.
-  #if cited-run != none [Benchmark v1 (cited rows):] else [Benchmark v1:] median foreign share of the measuring CPUs 1L n/a (before the sampler), 2L 0.82, 3L 0.12, 4L 0.52; v1's RustRed cold and wc include the after-evaluation cache save (fsync on the ZFS work dir): 122 of 624 saving children stalled 2-18 s, none of the non-saving children nor Forcer at 1L-3L.
-  #if measured.any(m => "save_seconds" in m) [Measured rows save the cache after the clock (save seconds in Table 5 and the sub-lines).]
-  #if measured.len() > 0 [Measured rows (this run, window CPUs 128-143 of node 4): median foreign share of the measuring CPUs 1L 0.17, 2L 0.11, 3L 0.20, 4L 0.09 (4L: RustRed 1 thread 0.04, 16 threads 0.12, Forcer 1 thread 0.18); CPU 129 hosted two idle foreign pinned processes, and our own exact-tier writer ran on CPUs 148-151 of node 4 until 12:02Z, during the 1-thread 4L RustRed rows.]
+  *In short.* One harness, one build and one data set for every number: #data.rows.len() rows (cell × backend ×
+  threads × state, medians of #n-measurements measurements in #data.runs.len() runs, #data.date_range.first().slice(11, 16)–#data.date_range.last().slice(11, 16)Z),
+  1L–4L, RustRed (M5 combined package) against Forcer, at 1 and 16 threads, cold and warm, time and peak RSS. Older
+  benchmark rows are not mixed in.
+  - *Time.* RustRed is faster than Forcer in every 1L–3L cell at both thread counts. At 4L it is slower in
+    #slower(1).len() cell(s) at 1 thread (#slower(1).map(c => [#raw(c) ×#fmt-ratio(ev-ratio(c, 1))]).join(", "))
+    and in #slower(16).len() at 16 threads (#slower(16).map(c => [#raw(c) ×#fmt-ratio(ev-ratio(c, 16))]).join(", ")).
+    RustRed hardly gains from 16 threads at 4L; Forcer (`tform -w16`) does, notably on `physics_L4`.
+  - *16-thread numbers are upper bounds.* The host was shared and loaded: on the 16 CPUs of a 16-thread job
+    unpinned single-thread processes of other users took a median of #fmt(median(foreign16)) cores per job (median over
+    #foreign16.len() jobs; up to #fmt(calc.max(..foreign16-max)) cores in single samples). Both backends were exposed alike;
+    1-thread jobs ran on CPUs with a median foreign load of #fmt(median(foreign1)) cores.
+  - *Memory.* At 1L–3L RustRed's peak RSS is below Forcer's (process plus FORM) in #low3.len() of #pairs3.len() cells × thread
+    counts (median ×#fmt-ratio(median(pairs3.map(p => rss-ratio(..p))))#if high3.len() > 0 [; above: #high3.map(p => [#raw(p.at(0)) at #p.at(1) thread(s) ×#fmt-ratio(rss-ratio(..p))]).join(", ")]).
+    At 4L it is above Forcer's in #(cells-of(4).len() - below4.len()) of #cells-of(4).len() cells#if below4.len() > 0 [ (below: #below4.map(c => [#raw(c) ×#fmt-ratio(rss-ratio(c, 1)) / ×#fmt-ratio(rss-ratio(c, 16))]).join(", "))]: median ×#fmt-ratio(median(cells-of(4).map(c => rss-ratio(c, 1)).filter(is-num))) at 1 thread and
+    ×#fmt-ratio(median(cells-of(4).map(c => rss-ratio(c, 16)).filter(is-num))) at 16 threads, worst #raw(worst4(1))
+    (#fmt-mb(rss-rr(worst4(1), 1)) against #fmt-mb(rss-f(worst4(1), 1)), ×#fmt-ratio(rss-ratio(worst4(1), 1))) and
+    #raw(worst4(16)) at 16 threads (#fmt-mb(rss-rr(worst4(16), 16)) against #fmt-mb(rss-f(worst4(16), 16)), ×#fmt-ratio(rss-ratio(worst4(16), 16))).
+  - *Results.* All #identical-rows.len() rows with a pinned reference are byte-identical to it (the outputs pinned by
+    benchmark M3 in `data/p_results.json`, re-checked when this document is built); #unpinned-rows.len() RustRed rows
+    (#unpinned-cells.map(raw).join(", ")) have no pinned reference (M3 capped them)#if one-output [; every cell gave one
+    output per backend across states, thread counts and repetitions].
 ]
 
-#block(stroke: 0.6pt + luma(200), inset: 6pt, radius: 3pt, width: 100%)[
-  #set text(8.4pt)
-  *Performance gates* (recorded, not blocking; the 4L target blocks in M5). #h(1em)
-  4L per cell (Table 5): on par with Forcer at 1 thread (≤ ×#par-tolerance): #tally(target-1)\; better at 16 threads:
-  #tally(target-16)\; cold start dominated by loading: #tally(target-load). #h(1em)
-  Load of a fresh process: #let loads = load-seconds(measured); #if loads.len() == 0 [pending] else [#fmt(median(loads)) s (median, #library-name)]. #h(1em)
-  G10b of v1, 3L rank ≥ 4, 16 threads, RustRed cold ≤ Forcer: #range-of(g10b, 9).
-]
+#figure(summary-table, supplement: [Table], caption: [RustRed over Forcer per loop count and thread count, medians over
+  the cells (grid and physics cell) of the per-cell medians over repetitions. Cold evaluate: wall time of
+  `Vakint::evaluate`. Cold process: the whole RustRed process (load, warm-up, evaluate, exit) without its cache save, over
+  Forcer's whole process. Peak RSS: RustRed's process against Forcer's process plus its FORM subprocess. Slower: cold
+  evaluate ratio > 1.])
 
 #v(-0.3em)
 #align(center, stack(
   dir: ltr,
   spacing: 4pt,
   text(size: 7pt)[RustRed faster ×1/4],
-  box(width: 5cm, height: 7pt, fill: gradient.linear(
-    rgb("#5aae61"), rgb("#d9f0d3"), rgb("#ffffff"), rgb("#fddbc7"), rgb("#d6604d"),
-  )),
+  box(width: 5cm, height: 7pt, fill: gradient.linear(rgb("#5aae61"), rgb("#d9f0d3"), rgb("#ffffff"), rgb("#fddbc7"), rgb("#d6604d"))),
   text(size: 7pt)[×4 Forcer faster],
 ))
-#figure(timing-table(1), caption: [1 thread (`n_cores` 1, `form`); RustRed arithmetic #raw(headline).], supplement: [Table])
-#figure(timing-table(16), caption: [16 threads (`n_cores` 16, `tform -w16`); RustRed arithmetic #raw(headline).], supplement: [Table])
 
-// ------------------------------------------------- arithmetic and reuse --
+#block(fill: pale, inset: 6pt, radius: 3pt, width: 100%)[
+  #set text(8.2pt)
+  *Reading guide* (Tables 2 and 3). Each cell sums all tops of that loop count at the given dots, times a numerator of
+  that rank. Bold: RustRed cold (seconds, median of 3). F: Forcer cold; ×: RustRed cold over Forcer cold (colour); ws:
+  RustRed warm, a fresh process on its own cold cache; wp: the warm repeat inside the cold process; Fw: Forcer warm
+  (materialised). RSS: RustRed's cold peak RSS and its ratio to Forcer's (red: RustRed higher). ✓: result exactly equal to
+  Forcer's (M3 exact tier, `p_exact.json`, carried by the byte-identical outputs); n.c.: not exact-checked (cost).
+  †: two repetitions instead of three.
+]
 
-// Exact against modular_polynomial, RustRed cold, on three grid cells and the
-// physics cell per loop count.
-#let exact-cells = (1, 2, 3).map(loops => {
-  let names = ("d0_r0", "d1_r4", "d2_r8").map(cell => "L" + str(loops) + "_" + cell)
-  if loops >= 2 { names.push("physics_L" + str(loops)) }
-  names.map(name => (loops, name))
-}).flatten().chunks(2)
-#let gain(a, b) = { let r = ratio(a, b); if r == none { [—] } else { [×#fmt-ratio(r)] } }
-#let exact-table = {
-  let rows = ()
-  for (loops, cell) in exact-cells {
-    rows.push(text(size: 7pt)[#cell.replace("_", " ")])
-    for threads in (1, 16) {
-      let ex = seconds(cell, "rustred", threads, "cold", arithmetic: "exact", field: "reduction_seconds")
-      let mp = seconds(cell, "rustred", threads, "cold", field: "reduction_seconds")
-      rows.push(text(size: 7pt)[#fmt(ex)])
-      rows.push(text(size: 7pt)[#fmt(mp)])
-      rows.push(text(size: 7pt, weight: "semibold")[#gain(ex, mp)])
-    }
-  }
-  table(
-    columns: (auto, ..((1fr,) * 6)),
-    align: (x, y) => if x == 0 { left } else { right },
-    inset: (x: 3pt, y: 1.6pt),
-    stroke: 0.4pt + luma(215),
-    fill: (x, y) => if y < 2 { navy },
-    table.cell(rowspan: 2, header[cell]), table.cell(colspan: 3, header[1 thread]), table.cell(colspan: 3, header[16 threads]),
-    ..((header[exact], header[mod.], header[gain]) * 2),
-    ..rows,
-  )
-}
+#figure(timing-table(1), caption: [1 thread (`n_cores` 1, `form`); RustRed arithmetic #raw(data.harness.arithmetic).], supplement: [Table])
+#figure(timing-table(16), caption: [16 threads (`n_cores` 16, `tform -w16`) on 16 CPUs of one NUMA node; upper bounds (foreign load, Table 1 note); RustRed arithmetic #raw(data.harness.arithmetic).], supplement: [Table])
 
-// Measured vakint-level reuse per loop count: the sums of the medians of a
-// warm state over those of RustRed cold, on the cells where both exist.
-#let reuse-ratio(loops, threads, state) = {
-  let cells = rustred-rows(loops).filter(m => m.loops == loops and m.backend == "rustred").map(m => m.cell).dedup()
-  let pairs = cells
-    .map(cell => (seconds(cell, "rustred", threads, state), seconds(cell, "rustred", threads, "cold")))
-    .filter(pair => pair.all(is-num))
-  if pairs.len() == 0 { [—] } else {
-    let r = pairs.map(pair => pair.at(0)).sum() / pairs.map(pair => pair.at(1)).sum()
-    [×#fmt-ratio(r)]
-  }
-}
-// Cache counters of the RustRed children (headline arithmetic) of one loop count and state.
-#let children(loops, state) = rustred-rows(loops).filter(m => (
-  m.loops == loops and m.backend == "rustred" and m.state == state and m.status == "ok"
-    and arithmetic-of(m) == headline and m.at("cache", default: none) != none
-))
-// Warm-same replays its cold cache: no miss and no insert in any child.
-#let clean-replays(loops) = {
-  let all = children(loops, "warm-same")
-  if all.len() == 0 { [—] } else {
-    [#all.filter(m => m.cache.misses == 0 and m.cache.inserts == 0).len() / #all.len()]
-  }
-}
-// Warm-shared hits and misses summed over the chain of one loop count, the
-// median over repetitions, at 16 threads.
-#let chain-sum(loops, field) = {
-  let all = children(loops, "warm-shared").filter(m => m.threads == 16)
-  let sums = all.map(m => m.repetition).dedup().map(rep => all.filter(m => m.repetition == rep).map(m => m.cache.at(field)).sum())
-  if sums.len() == 0 { [—] } else { [#calc.round(median(sums))] }
-}
-#let reuse-table = table(
-  columns: (auto, ..((1fr,) * 6)),
-  align: (x, y) => if x == 0 { left } else { right },
-  inset: (x: 3pt, y: 1.6pt),
-  stroke: 0.4pt + luma(215),
-  fill: (x, y) => if y < 2 { navy },
-  table.cell(rowspan: 2, header[L]), table.cell(colspan: 2, header[1 thread]), table.cell(colspan: 2, header[16 threads]),
-  table.cell(rowspan: 2, header[ws clean]), table.cell(rowspan: 2, header[wc hits / misses]),
-  ..((header[ws/cold], header[wc/cold]) * 2),
-  ..(1, 2, 3, 4).map(loops => (
-    text(size: 7pt)[#loops L],
-    ..(1, 16).map(threads => ("warm-same", "warm-shared").map(state => text(size: 7pt)[#reuse-ratio(loops, threads, state)])).flatten(),
-    text(size: 7pt)[#clean-replays(loops)],
-    text(size: 7pt)[#chain-sum(loops, "hits") / #chain-sum(loops, "misses")],
-  )).flatten(),
-)
+#figure(detail-table, supplement: [Table], caption: [4L in detail, cold runs, medians. RustRed: evaluate (the timed
+  call), its reduction span, the load of engine and library before the clock, the cache save after the clock, and the
+  whole process without that save. Forcer: evaluate and its whole process. Foreign cores: median load of other users'
+  processes on the job's CPUs (16 threads only; 1-thread jobs had none to speak of).])
 
-#let v1 = if cited-run == none [] else [ (1L-3L: benchmark v1)]
-#block(breakable: false, grid(
-  columns: (1fr, 1fr),
-  column-gutter: 8pt,
-  figure(exact-table, supplement: [Table], caption: [RustRed cold, arithmetic `exact` against `modular_polynomial` (mod.), reduction-only seconds (median); gain = exact / mod.#v1]),
-  figure(reuse-table, supplement: [Table], caption: [Reuse, `modular_polynomial`: warm time over cold time per loop count (sums over the cells). ws clean: warm-same children with 0 misses and 0 inserts. wc: the chain's cache counters at 16 threads.#v1 #if cited-run != none [The 1L-3L ratios are dominated by the cache-save stalls of v1's cold runs (caveat).]]),
-))
+// ------------------------------------------------------------- equivalence --
 
-#figure(target-table, supplement: [Table], caption: [4L speed target per cell (G10b; recorded, not blocking): RustRed cold over Forcer#if cited-run != none [ (#if measured.any(m => m.backend == "forcer") [measured at 1 thread, ] cited at 16 threads)] at 1 and 16 threads; load of a fresh process against the one-off cost of a cold evaluation (cold − ws); for a missed thread count the breakdown of the cold run. Inside the reduction about a third is step generation and two thirds the ordered weight elimination (M3-T19 S2, 4 threads).])
-
-#figure(cross-table, supplement: [Table], caption: [1L-3L under the scope 1-4 program (#library-name), 1 thread, against the built-in 1-3 program of the cited rows; seconds (median). The 1-4 load is the price of one program for every loop count (M3 decision D-M3-1).])
+#heading(level: 2, numbering: none)[Measured build and pushed tip]
+#set text(8.6pt)
+The rows were measured with one frozen harness binary (sha256 #raw(data.build.binary_sha256.first().slice(0, 16))…) built
+from gammaloop #raw(measured-gl.slice(0, 9)) (local branch, never pushed) pinning rustred #raw(measured-rr.slice(0, 8)).
+They stand for the pushed tip — gammaloop #raw(tip-gl.slice(0, 9)), rustred #raw(tip-rr.slice(0, 8)), vakint-external-data
+#raw(tip-xd.slice(0, 8)) — because the two builds are runtime-equivalent for every timed call (path by path in
+`data/p_receipt.json`: #receipt.evidence.gammaloop_changed_paths.len() gammaloop paths,
+#receipt.evidence.rustred_changed_source_paths.len() rustred source files):
++ *gammaloop* #raw(measured-gl.slice(0, 9))..#raw(tip-gl.slice(0, 9)) (4 commits): outside the rustred pin in
+  `Cargo.toml`/`Cargo.lock`, only test code changes (`p_data.rs` inside `mod tests`, `tests/p_integral_rustred_tests.rs`,
+  `tests/p_library_shipping_tests.rs`); the built-in library `crates/vakint/data/p` (the 1L–3L program) is the same git tree.
++ *rustred* #raw(measured-rr.slice(0, 8))..#raw(tip-rr.slice(0, 8)) (5 commits): test files and goldens; the package
+  comparison `p_library_differences` (used by `rustred p package` and tests, never on an evaluation path); `rustfmt`
+  of the scheme lane (token-identical up to added braces); `clippy` attributes and two needless borrows. One change is
+  reachable at run time: the rational-constant fast path of `invert_symbolic_matrix` (`family/exact.rs`) is now also
+  conditional on diagnostics being off and on every entry being a coefficient of the context. Ordinary execution has
+  diagnostics off (the default) and only such coefficients, so it takes the same path; the added cost is one membership
+  test per matrix entry.
++ *4L library*: `p_integral/p-library-1-4` of vakint-external-data #raw(tip-xd.slice(0, 8)) is the measured package
+  (#raw(pkg4.sha256sums_sha256.slice(0, 16))…): all 472 files byte-identical by sha256. The 1L–3L library is the
+  built-in one, identical in both builds (identity ends #raw(pkg3.identity.split(",").last())).
++ The pushed tip passed the vakint gate (1097/1097 tests, R\* 60/60) and the Forcer cross-check of all 22 tops of
+  L4 d0_r8/d1_r8 through vakint; these verify results, not timings.
++ *Spot re-time*: #receipt.evidence.spot_retime.what. #receipt.evidence.spot_retime.cells.map(c => [#raw(c.cell) #c.state
+  #fmt(c.tip) s against #fmt(c.measured) s (×#fmt-ratio(c.tip / c.measured))]).join("; "). Outputs
+  #receipt.evidence.spot_retime.outputs.
 
 // ------------------------------------------------------------ methodology --
 
-// A sum over a part of the measured cells would read as the whole: a cell
-// without the sub-line (no math span measured) leaves a dash.
-#let per-loops(backend, state, field) = (1, 2, 3, 4).map(loops => {
-  let source = if backend == "rustred" { rustred-rows(loops) } else { measurements }
-  let cells = (
-    source
-      .filter(m => (
-        m.loops == loops and m.backend == backend and m.threads == 1 and m.state == state and m.status == "ok"
-          and (backend != "rustred" or arithmetic-of(m) == headline)
-      ))
-      .map(m => m.cell)
-      .dedup()
-  )
-  let values = cells
-    .map(cell => seconds(cell, backend, 1, state, field: field))
-    .filter(is-num)
-  if values.len() == 0 or values.len() < cells.len() { [—] } else { [#fmt(values.sum())] }
-})
+*Method.* #data.harness.clock. Work directory #data.harness.work_dir; #data.harness.placement. States: RustRed cold
+(empty ordered-cache directory, shipped caches off), warm-same (a fresh process on a read-only copy of its cold cache),
+warm-process (in the cold process, after the save); Forcer cold (private empty materialisation directory) and warm
+(materialised); Forcer has no result cache. Three repetitions per state (†: two), median; cap 3600 s per child (no row
+was capped or skipped). OS pages are not flushed. Physics row: massless-quark (L−1)-rung gluon self-energy, Feynman gauge,
+transverse projector, external momentum kept.
 
-#block(breakable: false)[
-  #set text(8.6pt)
-  *Sub-lines* (seconds, sum over the cells measured at 1 thread).
-  #table(
-    columns: (auto, 1fr, 1fr, 1fr, 1fr),
-    stroke: 0.4pt + luma(215),
-    inset: (x: 4pt, y: 2pt),
-    fill: (x, y) => if y == 0 { navy },
-    header[], ..(1, 2, 3, 4).map(loops => header[#loops L]),
-    [RustRed reduction only], ..per-loops("rustred", "cold", "reduction_seconds"),
-    [RustRed load (excluded)], ..per-loops("rustred", "cold", "load_seconds"),
-    [RustRed cache save (after the clock)], ..per-loops("rustred", "cold", "save_seconds"),
-    [Forcer FORM subprocess], ..per-loops("forcer", "cold", "reduction_seconds"),
-    [Raw FORM reference], ..per-loops("forcer", "raw", "evaluate_seconds"),
-  )
-
-  *Method.* Timed: the wall time of `Vakint::evaluate` in Retain mode (exact reduction onto masters,
-  same frontend and finalizer for both backends) in one fresh process per measurement, with the
-  input parsed, the engine and library loaded and the 1L bubble with four dots (in no cell: vakint
-  memoises Forcer's FORM runs per process) evaluated once beforehand, by either backend, on directories of its own; repetitions:
-  #if selected == none [3] else { runs-of-source.map(run => str(run.protocol.repetitions)).dedup().join(" or ") } (as each run planned; 4L: one), median. RustRed cold: empty ordered-cache directory, shipped caches off#if measured.any(m => "save_seconds" in m) [; the cache is saved after the clock]. ws: a fresh
-  process on a read-only copy of the cache of its cold run. wc: per loop count, one chain over the
-  cells in table order sharing one cache from empty, each cell measured once in the chain. Forcer
-  cold: private empty materialisation directory; Forcer warm: materialised. Forcer has no result
-  cache. The raw reference runs the generated FORM programs directly, one process per top. OS pages
-  are not flushed. #let caps = runs-of-source.map(run => run.protocol.at("cap_seconds", default: none)).filter(is-num).dedup().sorted()
-  #if caps.len() > 0 [Cap per measurement: #caps.map(over-cap).join(", ") (by run; a capped cell shows the cap, its ratio the bound cap / Forcer).]
-  #if cited-run != none [Cited 4L Forcer rows: 16 threads, warm, one repetition (benchmark v1).]
-  Physics row: massless-quark (L-1)-rung gluon self-energy, Feynman gauge, transverse
-  projector, external momentum kept.
-
-  *Provenance.* #if selected == none [No selected run.] else [
-    Run #raw(selected.id), profile #protocol.build_profile#if protocol.source_dirty [, dirty tree],
-    #raw(protocol.form_version.split("\n").first()), Forcer #protocol.forcer_commit.slice(0, 7),
-    #protocol.cpu_model on #protocol.host,
-    CPUs #protocol.cpus.pairs().map(pair => pair.at(0) + " thread: " + pair.at(1)).join("; "),
-    binding #if protocol.numactl == none [none] else { raw(protocol.numactl) },
-    RustRed arithmetic #raw(headline) in Tables 1, 2, 4-6, `exact` in Table 3 (each child records the arithmetic it resolved),
-    `RUSTRED_ORDERED_ADJOINT_TAIL` #if protocol.at("adjoint_tail_env", default: none) == none [unset] else [set],
-    #if library == none [no official external data loaded] else if library.origin == "built-in" [built-in p library, no official external data loaded] else [
-      p library #raw(library.directory) listed by the external data at #raw(str(library.root))#if library.at("root_head", default: none) != none [ (commit #raw(library.root_head.slice(0, 8)))], shipped caches off],
-    #raw(str(measured.len())) measurements in `data/p_results.json`#if cited-run != none [; cited: run #raw(cited-run.id), gammaloop #raw(cited-protocol.gammaloop_sha.slice(0, 9)), rustred #raw(cited-protocol.rustred_sha.slice(0, 8)), #raw(str(cited.len())) measurements].
-  ]
-]
+*Provenance.* `data/p_clean.json` = artefact #raw(data.id), written #raw(data.written_utc), copied verbatim; host #data.host.join(", ") (#data.cpu_model.join(", ")),
+#raw(data.form.first().split(" (").first()), Forcer #raw(data.forcer_commit.first().slice(0, 7))\; RustRed at 1L–3L with the
+built-in `p-library-1-3`, at 4L with `p-library-1-4` listed by external data. Outputs compared with the #data.reference.
+Exact tier: `data/p_exact.json` (gammaloop #raw(exact.gammaloop_sha.slice(0, 9)), rustred #raw(exact.rustred_sha.slice(0, 8)),
+#exact.cells.len() cells agree#if exact.cells.any(c => not c.agree) [, some do not]); of the 4L cells it marks n.c., the gate
+cross-check above covers the 22 tops of L4 d0_r8/d1_r8. The M3 benchmark rows remain in `data/p_results.json` for their
+pinned outputs only; none of their timings is used here.
