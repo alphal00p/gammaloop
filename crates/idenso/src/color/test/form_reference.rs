@@ -1935,3 +1935,29 @@ fn su_gloop_n3() {
 
     assert_snapshot!(result.to_bare_ordered_string(), @"0");
 }
+
+/// Five-loop background-field QCD self-energies leave this closed network
+/// (gammaloop issue #255): d_F^{d0 d1 d2} d_A^{d2 d3 d4 d5} (F^d0 F^d5 F^d1)_{d3 d4}.
+/// Transposing the odd chain between the symmetric legs d3, d4 reverses it
+/// with a sign; relabelling the symmetric legs d0, d1 restores it, so it is 0.
+/// Explicit SU(3) generators give 0 as well.
+#[test]
+fn odd_adjoint_chain_between_symmetric_legs_vanishes() {
+    test_initialize();
+    let expr = parse!(
+        "chain(coad(dA,d3),coad(dA,d4),f(coad(dA,d0),in,out),f(coad(dA,d5),in,out),f(coad(dA,d1),in,out))\
+         *trace(cof(Nc),sym(t(coad(dA,d0),in,out),t(coad(dA,d1),in,out),t(coad(dA,d2),in,out)))\
+         *trace(coad(dA),sym(f(coad(dA,d2),in,out),f(coad(dA,d3),in,out),f(coad(dA,d4),in,out),f(coad(dA,d5),in,out)))",
+        default_namespace = "spenso"
+    );
+    let settings = crate::tensor::AlgebraSettings {
+        color: Some(crate::color::ColorSimplifySettings::default().with_cof_dimension_invariants()),
+        contract: crate::tensor::AlgebraContraction::Dots,
+        ..Default::default()
+    };
+    let result = crate::tensor::SymbolicTensor::infer_indexed(expr)
+        .unwrap()
+        .simplify_algebra(&settings)
+        .unwrap();
+    assert!(result.expression().is_zero(), "{}", result.expression());
+}
