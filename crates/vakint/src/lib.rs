@@ -7022,6 +7022,60 @@ Evaluated (n_loops=1, mu_r=1) :
         }
     }
 
+    /// [`Self::dot_power_step`] of a product whose factors holding `dot_pow`
+    /// are plain `dot_pow(a,b,c)` (`a`, `b` symbols or functions, `c` a
+    /// positive integer): the first match of the product is its first such
+    /// factor (the other factors hold none), so the step runs on the product
+    /// of those factors alone and the rest is multiplied back once, instead
+    /// of matching through every factor (a term of the finalized sum carries
+    /// the whole rendered reduction as one factor). `Some(None)`: no change
+    /// (the fixed point); `None`: another shape, use the plain step.
+    fn dot_power_step_on_factors(term: AtomView, dummy: usize) -> Option<Option<Atom>> {
+        let AtomView::Mul(product) = term else {
+            return None;
+        };
+        let plain_dot_pow = |factor: AtomView| -> bool {
+            let AtomView::Fun(function) = factor else {
+                return false;
+            };
+            if function.get_symbol() != S.dot_pow || function.get_nargs() != 3 {
+                return false;
+            }
+            let mut arguments = function.iter();
+            let (a, b, c) = (
+                arguments.next().unwrap(),
+                arguments.next().unwrap(),
+                arguments.next().unwrap(),
+            );
+            matches!(a, AtomView::Var(_) | AtomView::Fun(_))
+                && matches!(b, AtomView::Var(_) | AtomView::Fun(_))
+                && !a.contains_symbol(S.dot_pow)
+                && !b.contains_symbol(S.dot_pow)
+                && get_integer_from_atom(c).is_some_and(|c| c > 0)
+        };
+        let (mut dotted, mut rest) = (Vec::new(), Vec::new());
+        for factor in product.iter() {
+            if !factor.contains_symbol(S.dot_pow) {
+                rest.push(factor);
+            } else if plain_dot_pow(factor) {
+                dotted.push(factor);
+            } else {
+                return None;
+            }
+        }
+        if dotted.is_empty() {
+            return Some(None);
+        }
+        let small = Atom::mul_many(dotted.iter().copied());
+        let stepped = Self::dot_power_step(small.as_view(), dummy);
+        if stepped == small {
+            return Some(None);
+        }
+        Some(Some(Atom::mul_many(
+            rest.into_iter().chain(std::iter::once(stepped.as_view())),
+        )))
+    }
+
     /// The fixed point of [`Self::dot_power_step`] computed on the terms of a
     /// sum instead of the whole expression, or `None` (use the whole
     /// expression) when `a` is not a sum, or a product whose only factor with
@@ -7036,6 +7090,24 @@ Evaluated (n_loops=1, mu_r=1) :
     /// a sum of ~600 channel values).
     fn expand_dot_powers_by_term(a: AtomView, mut dummy: usize) -> Option<(Atom, usize)> {
         let has_dot_pow = |view: AtomView| view.contains_symbol(S.dot_pow);
+        // One product whose dotted factors are all plain dot_pow: step on
+        // those factors alone.
+        if let AtomView::Mul(product) = a
+            && !product
+                .iter()
+                .any(|factor| matches!(factor, AtomView::Add(_)) && has_dot_pow(factor))
+            && Self::dot_power_step_on_factors(a, dummy).is_some()
+        {
+            let mut current = a.to_owned();
+            while let Some(Some(new)) = Self::dot_power_step_on_factors(current.as_view(), dummy) {
+                current = new;
+                dummy += 1;
+            }
+            if has_dot_pow(current.as_view()) {
+                return None;
+            }
+            return Some((current, dummy));
+        }
         let (others, sum) = match a {
             AtomView::Add(_) => (Vec::new(), a),
             AtomView::Mul(product) => {
@@ -7075,7 +7147,11 @@ Evaluated (n_loops=1, mu_r=1) :
             Some(pair_view.iter().next()? == x.as_view())
         };
         while let Some(index) = terms.iter().position(|(dotted, _)| *dotted) {
-            let new = Self::dot_power_step(terms[index].1.as_view(), dummy);
+            let new = match Self::dot_power_step_on_factors(terms[index].1.as_view(), dummy) {
+                Some(Some(new)) => new,
+                Some(None) => break,
+                None => Self::dot_power_step(terms[index].1.as_view(), dummy),
+            };
             if new == terms[index].1 {
                 break;
             }
