@@ -46,7 +46,7 @@ use super::{MatchedContribution, MathSpan, RustRedEvaluationError, RustRedMaster
 use crate::p_integral::parts::{self, Fraction, PDot, PMonomial};
 use crate::p_integral::{
     P_FAMILIES, P_INTEGRAL_LOOP_COUNTS, PropagatorRequest, ReducedPropagatorValue, external_head,
-    finalize, masters, p_gamma_symbol, p_master_symbol,
+    finalize, masters, p_gamma_symbol, p_master_symbol, phases,
 };
 use crate::utils::simplify_real;
 use crate::utils::vakint_macros::vk_symbol;
@@ -443,15 +443,24 @@ pub(crate) fn reduce_requests(
     let exact = options.limits.exact_algebra;
     let mut forms = BTreeMap::new();
     let mut channels = Channels::new();
+    let started = phases::start();
     for request in requests {
         add_request(&handle, request, &mut forms, &mut channels)?;
     }
+    phases::end("p.split_and_lower", started);
     let epsilon = vk_symbol!(&settings.epsilon_symbol);
-    let step_cache = if channels.is_empty() {
-        None
-    } else {
-        vakint.ordered_step_cache(settings, &handle.cache)?
-    };
+    let step_cache = phases::time("p.attach_step_cache", || {
+        if channels.is_empty() {
+            Ok(None)
+        } else {
+            vakint.ordered_step_cache(settings, &handle.cache)
+        }
+    })?;
+    let (mut convert, mut reduce, mut rendering) = (
+        phases::Accumulator::default(),
+        phases::Accumulator::default(),
+        phases::Accumulator::default(),
+    );
     let total = channels.len();
     let mut values = BTreeMap::<(usize, Atom), Vec<ReducedPropagatorValue>>::new();
     for (index, (channel, ChannelInputs { inputs, integrals })) in channels.into_iter().enumerate()
@@ -459,28 +468,39 @@ pub(crate) fn reduce_requests(
         if let Some(progress) = progress {
             progress.cohorts(index, total);
         }
-        let inputs = inputs
-            .into_iter()
-            .filter(|(_, value)| !value.is_zero())
-            .map(|((presentation, powers), value)| {
-                let key = IntegralKey::try_new(powers)
-                    .map_err(|error| invalid(format!("integral key: {error}")))?;
-                Ok((
-                    presentation,
-                    key,
-                    coefficient(library.coefficient_context(), &value, exact)?,
-                ))
-            })
-            .collect::<Result<Vec<_>, RustRedEvaluationError>>()?;
+        let inputs = convert.time(|| {
+            inputs
+                .into_iter()
+                .filter(|(_, value)| !value.is_zero())
+                .map(|((presentation, powers), value)| {
+                    let key = IntegralKey::try_new(powers)
+                        .map_err(|error| invalid(format!("integral key: {error}")))?;
+                    Ok((
+                        presentation,
+                        key,
+                        coefficient(library.coefficient_context(), &value, exact)?,
+                    ))
+                })
+                .collect::<Result<Vec<_>, RustRedEvaluationError>>()
+        })?;
         if inputs.is_empty() {
             continue;
         }
-        let reduction = {
+        let input_count = inputs.len();
+        let before = reduce.total;
+        let reduction = reduce.time(|| {
             let _math = MathSpan::new();
             library
                 .reduce(p_reduction_request(&options, inputs, step_cache.clone()))
-                .map_err(|error| reduction_error(error, &integrals))?
-        };
+                .map_err(|error| reduction_error(error, &integrals))
+        })?;
+        if phases::per_request() {
+            eprintln!(
+                "vakint-p-request index={index} inputs={input_count} terms={} seconds={:.6}",
+                reduction.terms.len(),
+                (reduce.total - before).as_secs_f64()
+            );
+        }
         if reduction.dimension != channel.loops as i64 {
             return Err(invalid(format!(
                 "a {}-loop request returned a reduction of dimension {}",
@@ -488,7 +508,8 @@ pub(crate) fn reduce_requests(
             ))
             .into());
         }
-        let reduced = render(&handle, &reduction, epsilon)? * &channel.coefficient;
+        let reduced =
+            rendering.time(|| render(&handle, &reduction, epsilon))? * &channel.coefficient;
         values
             .entry((channel.loops, channel.head))
             .or_default()
@@ -500,6 +521,9 @@ pub(crate) fn reduce_requests(
     if let Some(progress) = progress {
         progress.cohorts(total, total);
     }
+    convert.report("p.input_coefficients");
+    reduce.report("p.rustred_reduce");
+    rendering.report("p.render");
     Ok(values)
 }
 
@@ -513,6 +537,7 @@ pub(crate) fn evaluate_ordered_batch(
     mode: RustRedMasterMode,
     progress: Option<&super::monitor::CallerProgress>,
 ) -> Result<Atom, VakintError> {
+    let started = phases::start();
     let requests = contributions
         .iter()
         .map(|contribution| {
@@ -524,10 +549,15 @@ pub(crate) fn evaluate_ordered_batch(
                 })
         })
         .collect::<Result<Vec<_>, VakintError>>()?;
+    phases::end("p.propagator_requests", started);
     let mut result = Atom::Zero;
     for ((loops, head), values) in reduce_requests(vakint, settings, &requests, progress)? {
-        let finalized = finalize::finalize(&values, loops, &head, settings, mode, "RustRed")?;
-        result += simplify_real(finalized.as_view());
+        let finalized = phases::time("p.finalize", || {
+            finalize::finalize(&values, loops, &head, settings, mode, "RustRed")
+        })?;
+        result += phases::time("p.final_simplify_real", || {
+            simplify_real(finalized.as_view())
+        });
     }
     Ok(result)
 }

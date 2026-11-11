@@ -596,6 +596,11 @@ mod harness {
             Backend::Forcer => Some(form.as_secs_f64()),
         };
         let output = value.to_canonical_string();
+        // Profiling aid: the canonical output of the measured evaluate, written
+        // after the clock when VAKINT_BENCHMARK_DUMP_OUTPUT names a file.
+        if let Some(path) = std::env::var_os("VAKINT_BENCHMARK_DUMP_OUTPUT") {
+            fs::write(path, output.as_bytes())?;
+        }
         let terms = match value.as_view() {
             AtomView::Add(sum) => sum.get_nargs(),
             _ => 1,

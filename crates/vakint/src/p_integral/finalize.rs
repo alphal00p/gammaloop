@@ -204,9 +204,12 @@ pub(crate) fn finalize(
     ))
     .map_err(|error| VakintError::SymbolicaError(error.to_string()))?;
     let mut result = if mode == RustRedMasterMode::Retain {
-        let total =
-            Vakint::normalize_gamma_functions((&normalization * &measure * &reduced).as_view());
-        expand_exponents(&simplify_real(total.as_view()))
+        let total = super::phases::time("finalize.normalize_gamma", || {
+            Vakint::normalize_gamma_functions((&normalization * &measure * &reduced).as_view())
+        });
+        super::phases::time("finalize.simplify_expand_exp", || {
+            expand_exponents(&simplify_real(total.as_view()))
+        })
     } else {
         let target = settings.number_of_terms_in_epsilon_expansion - l - 1;
         let prefactor = Vakint::normalize_gamma_functions((normalization * measure).as_view());
@@ -221,7 +224,9 @@ pub(crate) fn finalize(
         simplify_real(expanded.as_view())
     };
     if !settings.use_dot_product_notation {
-        result = Vakint::convert_from_dot_notation(result.as_view());
+        result = super::phases::time("finalize.convert_from_dot", || {
+            Vakint::convert_from_dot_notation(result.as_view())
+        });
     }
     let mursq = Atom::var(vk_symbol!(&settings.mu_r_sq_symbol));
     let log_q = function!(Symbol::LOG, -square / &mursq);

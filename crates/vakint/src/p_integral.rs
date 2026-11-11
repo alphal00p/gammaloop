@@ -25,6 +25,7 @@ mod massive;
 pub(crate) mod masters;
 pub(crate) mod mzv;
 pub(crate) mod parts;
+pub(crate) mod phases;
 #[cfg(test)]
 mod rustred_battery_tests;
 
