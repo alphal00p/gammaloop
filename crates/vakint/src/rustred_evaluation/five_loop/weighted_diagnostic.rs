@@ -9,7 +9,17 @@ use std::{cell::RefCell, sync::Arc, thread::ThreadId, time::Instant};
 const MAX_RECORDS: usize = 100_000;
 const MAX_PAYLOAD_BYTES: usize = 2 * 1024 * 1024 * 1024;
 type Key = Vec<(IntegralKey, Atom)>;
-type Measurement<T> = (T, Arc<Vec<Record>>, Counts, usize, usize, usize, f64, usize);
+type Measurement<T> = (
+    T,
+    Arc<Vec<Record>>,
+    Counts,
+    usize,
+    usize,
+    usize,
+    usize,
+    f64,
+    usize,
+);
 
 #[derive(Clone)]
 enum Record {
@@ -232,9 +242,10 @@ pub(super) fn assert_thread(expected: Option<ThreadId>) -> Result<(), VakintErro
     }
     Ok(())
 }
-pub(super) fn before_lowering() -> Result<Option<Counts>, VakintError> {
+pub(super) fn before_lowering() -> Result<Option<(Counts, usize)>, VakintError> {
     with_state(|_| {
-        lowering_diagnostics::current().ok_or_else(|| error("missing scalar diagnostic scope"))
+        lowering_diagnostics::current_with_opaque()
+            .ok_or_else(|| error("missing scalar diagnostic scope"))
     })
 }
 pub(super) fn candidate(
@@ -243,13 +254,13 @@ pub(super) fn candidate(
     lowered: &WeightedScalarNumeratorLowering,
     rejected: Option<usize>,
     key: Option<&Key>,
-    before: Option<Counts>,
+    before: Option<(Counts, usize)>,
 ) -> Result<(), VakintError> {
-    let Some(before) = before else {
+    let Some((before, before_opaque)) = before else {
         return Ok(());
     };
     with_state(|state| {
-        let after = lowering_diagnostics::current()
+        let (after, after_opaque) = lowering_diagnostics::current_with_opaque()
             .ok_or_else(|| error("missing scalar diagnostic counts"))?;
         let rational = after
             .rational
@@ -263,7 +274,14 @@ pub(super) fn candidate(
             .grouped
             .checked_sub(before.grouped)
             .ok_or_else(|| error("diagnostic grouped counter regression"))?;
-        if rational + generic + grouped != 1 {
+        let exact = after
+            .exact
+            .checked_sub(before.exact)
+            .ok_or_else(|| error("diagnostic exact counter regression"))?;
+        let opaque = after_opaque
+            .checked_sub(before_opaque)
+            .ok_or_else(|| error("diagnostic opaque counter regression"))?;
+        if rational + generic + grouped + exact + opaque != 1 {
             return Err(error(
                 "candidate lowering did not execute exactly one conversion on the observed thread",
             ));
@@ -416,7 +434,7 @@ fn measured<T>(
             });
         }
     }
-    let (result, counts) = lowering_diagnostics::scoped(generic, || {
+    let (result, counts, opaque) = lowering_diagnostics::scoped_with_opaque(generic, || {
         STATE.with(|slot| {
             assert!(slot.borrow().is_none());
             *slot.borrow_mut() = Some(State {
@@ -448,25 +466,31 @@ fn measured<T>(
         ))
     });
     let (value, records, searches, candidates, rechecks, seconds, bytes) = result?;
-    if generic && (counts.rational != 0 || counts.grouped != 0)
-        || counts.rational + counts.generic + counts.grouped < candidates + rechecks
+    if generic && (counts.rational != 0 || counts.grouped != 0 || counts.exact != 0 || opaque != 0)
+        || counts.rational + counts.generic + counts.grouped + counts.exact + opaque
+            < candidates + rechecks
     {
         return Err(error(
             "weighted conversion counters do not cover the complete witness search",
         ));
     }
     Ok((
-        value, records, counts, searches, candidates, rechecks, seconds, bytes,
+        value, records, counts, opaque, searches, candidates, rechecks, seconds, bytes,
     ))
 }
 
-fn check_lane(generic: bool, counts: Counts) {
+fn check_lane(generic: bool, counts: Counts, opaque: usize) {
     assert!(
-        counts.rational + counts.generic + counts.grouped > 0,
+        counts.rational + counts.generic + counts.grouped + counts.exact + opaque > 0,
         "phase never exercised weighted conversion"
     );
     if generic {
+        assert_eq!(opaque, 0, "forced generic phase used opaque coefficients");
         assert_eq!(counts.rational, 0, "forced generic phase used Q");
+        assert_eq!(
+            counts.exact, 0,
+            "forced generic phase used exact coefficients"
+        );
         assert_eq!(
             counts.grouped, 0,
             "forced generic phase used the grouped lane"
@@ -507,19 +531,19 @@ fn actual_mixed_witness_generic_and_rational_pair() -> Result<(), Box<dyn std::e
             initialized.elapsed().as_secs_f64()
         );
         let started = Instant::now();
-        let (first, records, counts, searches, candidates, rechecks, observation, bytes) =
+        let (first, records, counts, opaque, searches, candidates, rechecks, observation, bytes) =
             measured(generic, reference.clone(), || {
                 engine.evaluate_rustred_symbolic(&settings, fixture.cancelled.as_view())
             })?;
         println!(
-            "weighted_vk phase=first_complete lane={} seconds={} observer_seconds={observation} searches={searches} candidates={candidates} rechecks={rechecks} rational={} generic={} charged_payload={bytes}",
+            "weighted_vk phase=first_complete lane={} seconds={} observer_seconds={observation} searches={searches} candidates={candidates} rechecks={rechecks} rational={} generic={} opaque={opaque} charged_payload={bytes}",
             if generic { "generic" } else { "rational" },
             started.elapsed().as_secs_f64(),
             counts.rational,
             counts.generic
         );
         assert!(!first.value.is_zero());
-        check_lane(generic, counts);
+        check_lane(generic, counts, opaque);
         if generic {
             reference = Some(records);
         } else {
@@ -533,11 +557,12 @@ fn actual_mixed_witness_generic_and_rational_pair() -> Result<(), Box<dyn std::e
         // Separately timed controls: no witness record is allowed to masquerade
         // as a first-application speedup or independent master evaluation.
         let started = Instant::now();
-        let (pinched, pinched_counts) = lowering_diagnostics::scoped(generic, || {
-            engine.evaluate_rustred_symbolic(&settings, fixture.pinched.as_view())
-        });
+        let (pinched, pinched_counts, pinched_opaque) =
+            lowering_diagnostics::scoped_with_opaque(generic, || {
+                engine.evaluate_rustred_symbolic(&settings, fixture.pinched.as_view())
+            });
         let pinched = pinched?;
-        check_lane(generic, pinched_counts);
+        check_lane(generic, pinched_counts, pinched_opaque);
         assert!(
             (&first.value - &pinched.value)
                 .expand()
@@ -547,17 +572,18 @@ fn actual_mixed_witness_generic_and_rational_pair() -> Result<(), Box<dyn std::e
         assert_eq!(first.nonzero_conditions, pinched.nonzero_conditions);
         assert_eq!(first.families, pinched.families);
         println!(
-            "weighted_vk phase=pinched_complete lane={} seconds={} counts={pinched_counts:?}",
+            "weighted_vk phase=pinched_complete lane={} seconds={} counts={pinched_counts:?} opaque={pinched_opaque}",
             if generic { "generic" } else { "rational" },
             started.elapsed().as_secs_f64()
         );
         let before_warm = engine.rustred_application_witness_cache_statistics()?;
         let started = Instant::now();
-        let (warm, warm_counts) = lowering_diagnostics::scoped(generic, || {
-            engine.evaluate_rustred_symbolic(&settings, fixture.cancelled.as_view())
-        });
+        let (warm, warm_counts, warm_opaque) =
+            lowering_diagnostics::scoped_with_opaque(generic, || {
+                engine.evaluate_rustred_symbolic(&settings, fixture.cancelled.as_view())
+            });
         let warm = warm?;
-        check_lane(generic, warm_counts);
+        check_lane(generic, warm_counts, warm_opaque);
         assert_eq!(warm.value, first.value);
         assert_eq!(warm.nonzero_conditions, first.nonzero_conditions);
         assert_eq!(warm.families, first.families);
@@ -575,7 +601,7 @@ fn actual_mixed_witness_generic_and_rational_pair() -> Result<(), Box<dyn std::e
             "warm admission invalidated the witness"
         );
         println!(
-            "weighted_vk phase=warm_complete lane={} seconds={} counts={warm_counts:?} witness_cache={:?}",
+            "weighted_vk phase=warm_complete lane={} seconds={} counts={warm_counts:?} opaque={warm_opaque} witness_cache={:?}",
             if generic { "generic" } else { "rational" },
             started.elapsed().as_secs_f64(),
             after_warm
@@ -613,8 +639,8 @@ mod protocol_tests {
         assert!(panic.is_err());
         assert!(lowering_diagnostics::current().is_none());
         assert!(STATE.with(|state| state.borrow().is_none()));
-        let (_, counts) = lowering_diagnostics::scoped(true, || {
-            assert!(lowering_diagnostics::current().is_some());
+        let (_, counts, opaque) = lowering_diagnostics::scoped_with_opaque(true, || {
+            assert_eq!(lowering_diagnostics::current_with_opaque().unwrap().1, 0);
             let nested = std::panic::catch_unwind(|| lowering_diagnostics::scoped(false, || ()));
             assert!(nested.is_err());
             assert!(lowering_diagnostics::current().is_some());
@@ -625,12 +651,14 @@ mod protocol_tests {
                     .unwrap()
             );
         });
+        assert_eq!(opaque, 0);
         assert_eq!(
             counts,
             Counts {
                 rational: 0,
                 generic: 0,
-                grouped: 0
+                grouped: 0,
+                exact: 0,
             }
         );
         assert!(lowering_diagnostics::current().is_none());

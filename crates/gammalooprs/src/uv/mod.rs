@@ -137,6 +137,8 @@ pub(crate) fn is_not_paired(pair: &HedgePair) -> bool {
     !pair.is_paired()
 }
 
+mod counterterm_cache;
+mod counterterm_identity;
 pub mod hedge_poset;
 mod marker;
 mod orchestrator;

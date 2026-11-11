@@ -142,72 +142,45 @@ pub fn replace_until_stable(
 }
 
 pub fn simplify_real(input: AtomView) -> Atom {
+    let symbols = &*crate::symbols::S;
+    let (left, right) = &symbols.real_simplification_rules[0];
     let mut res = replace_until_stable(
         input,
-        &vk_parse!("x_^y_").unwrap().to_pattern(),
-        &vk_parse!("1").unwrap().to_pattern(),
-        Some(&Condition::from((crate::vk_symbol!("y_"), eq_condition(0)))),
+        left,
+        right,
+        Some(&Condition::from((symbols.y_, eq_condition(0)))),
         None,
     );
-    res = replace_until_stable(
-        res.as_view(),
-        &vk_parse!("log(x__*exp(EulerGamma))").unwrap().to_pattern(),
-        &vk_parse!("EulerGamma+log(x__)").unwrap().to_pattern(),
-        None,
-        None,
-    );
-    res = replace_until_stable(
-        res.as_view(),
-        &vk_parse!("exp(x_)^p_").unwrap().to_pattern(),
-        &vk_parse!("exp(p_*x_)").unwrap().to_pattern(),
-        None,
-        None,
-    );
-    // res = replace_until_stable(
-    //     res.as_view(),
-    //     &vk_parse!("log(x__*𝜋)").unwrap().to_pattern(),
-    //     &vk_parse!("log(x__)+log(𝜋)").unwrap().to_pattern(),
-    //     None,
-    //     None,
-    // );
-    // res = replace_until_stable(
-    //     res.as_view(),
-    //     &vk_parse!("log(x__*𝜋^p_)").unwrap().to_pattern(),
-    //     &vk_parse!("log(x__)+p_*log(𝜋)").unwrap().to_pattern(),
-    //     None,
-    //     None,
-    // );
-    res = replace_until_stable(
-        res.as_view(),
-        &vk_parse!("log(exp(x_))").unwrap().to_pattern(),
-        &vk_parse!("x_").unwrap().to_pattern(),
-        None,
-        None,
-    );
-    res = replace_until_stable(
-        res.as_view(),
-        &vk_parse!("exp(log(x_))").unwrap().to_pattern(),
-        &vk_parse!("x_").unwrap().to_pattern(),
-        None,
-        None,
-    );
-    res = replace_until_stable(
-        res.as_view(),
-        &vk_parse!("log(x_^p_)").unwrap().to_pattern(),
-        &vk_parse!("p_*log(x_)").unwrap().to_pattern(),
-        None,
-        None,
-    );
-    res = replace_until_stable(
-        res.as_view(),
-        &vk_parse!("exp(x_)*exp(y_)").unwrap().to_pattern(),
-        &vk_parse!("exp(x_+y_)").unwrap().to_pattern(),
-        None,
-        None,
-    );
-    // Collect in EulerGamma to explicitly realise the MSbar cancellation
-    res = res.collect::<i8>(vakint_parse!("EulerGamma").unwrap());
-    res
+    for (left, right) in &symbols.real_simplification_rules[1..] {
+        res = replace_until_stable(res.as_view(), left, right, None, None);
+    }
+    // With no EulerGamma, exact collection only rebuilds the same coefficient.
+    // Powers of ordinary variables recombine after splitting exponent sums.
+    // Keep collection for other bases (including exp/log normalization on E)
+    // and floating/embedded coefficients, where the result can change.
+    if !res.contains_symbol(symbols.euler_gamma) {
+        let mut unchanged_by_collection = true;
+        res.visitor(&mut |part| {
+            unchanged_by_collection &= match part {
+                AtomView::Num(number) => matches!(
+                    number.get_coeff_view(),
+                    CoefficientView::Natural(..) | CoefficientView::Large(..)
+                ),
+                AtomView::Pow(power) => {
+                    let (base, exponent) = power.get_base_exp();
+                    !matches!(exponent, AtomView::Add(_))
+                        || matches!(base, AtomView::Var(variable) if variable.get_symbol() != Symbol::E)
+                }
+                _ => true,
+            };
+            unchanged_by_collection
+        });
+        if unchanged_by_collection {
+            return res;
+        }
+    }
+    // Collect in EulerGamma to explicitly realise the MSbar cancellation.
+    res.collect::<i8>(Atom::var(symbols.euler_gamma))
 }
 
 pub fn multi_string_replace(text: String, repls: &HashMap<String, String>) -> String {
@@ -376,4 +349,172 @@ fn test_set_precision_in_float_atom() {
             }
         )
     );
+}
+
+#[cfg(test)]
+mod simplify_real_tests {
+    use super::*;
+
+    /// The previous complete simplifier, including unconditional collection.
+    fn previous(input: AtomView) -> Atom {
+        let symbols = &*crate::symbols::S;
+        let (left, right) = &symbols.real_simplification_rules[0];
+        let mut result = replace_until_stable(
+            input,
+            left,
+            right,
+            Some(&Condition::from((symbols.y_, eq_condition(0)))),
+            None,
+        );
+        for (left, right) in &symbols.real_simplification_rules[1..] {
+            result = replace_until_stable(result.as_view(), left, right, None, None);
+        }
+        result.collect::<i8>(Atom::var(symbols.euler_gamma))
+    }
+
+    #[test]
+    fn exact_gamma_free_simplification_matches_previous_collector() {
+        crate::Vakint::initialize_vakint_symbols();
+        for input in [
+            "0",
+            "1",
+            "x+y+z",
+            "(x+y)*(a+b)",
+            "(x+y)^2",
+            "(x+y)^(4/3)",
+            "x^(a+b)",
+            "x^(2*a+4*b)",
+            "(m^-2)^(3*ep)*mu^(3*ep)*(x/(1-ep)+y/(1+ep))",
+            "(2+3*𝑖)*(x/(1-ep)+y/(1+ep))",
+            "123456789012345678901234567890123456789*x/7+y",
+            "opaque(x+y,(a+b)^2)*x^(1/2)",
+            "exp(log(x))+log(exp(y))+log(x^2)",
+        ] {
+            let input = vk_parse!(input).unwrap();
+            assert!(!input.contains_symbol(crate::symbols::S.euler_gamma));
+            assert_eq!(
+                simplify_real(input.as_view()),
+                previous(input.as_view()),
+                "{input}"
+            );
+        }
+        let symbols = &*crate::symbols::S;
+        let epsilon = Atom::var(symbols.form_epsilon);
+        let factor = vk_parse!("opaque_exact_sum").unwrap();
+        let input = Atom::add_many((1..=2048).map(|index| {
+            &factor * symbols.rustred_master.call((index,)) / (Atom::num(index) - &epsilon)
+        }));
+        assert!(!input.contains_symbol(symbols.euler_gamma));
+        assert_eq!(simplify_real(input.as_view()), input);
+        assert_eq!(simplify_real(input.as_view()), previous(input.as_view()));
+    }
+
+    #[test]
+    fn additive_mass_exponents_recombine_without_changing_the_result() {
+        crate::Vakint::initialize_vakint_symbols();
+        for input in [
+            "mUV^(4-6*ep)",
+            "mUV^(-2-3*ep)*mu^(6*ep)",
+            "mUV^(4/3-2*ep+3*ep^2)",
+            "mUV^(a/2+b/3+(2+3*𝑖)*ep)",
+            "x^(2*a+4*b)",
+            "𝜋^(1+a)",
+        ] {
+            let input = vk_parse!(input).unwrap();
+            assert_eq!(previous(input.as_view()), input, "{input}");
+            assert_eq!(simplify_real(input.as_view()), input, "{input}");
+        }
+
+        let mass_factor = vk_parse!("mUV^(4-6*ep)*mu^(6*ep-2)").unwrap();
+        let epsilon = Atom::var(crate::symbols::S.form_epsilon);
+        let input = Atom::add_many((1..=128).map(|index| {
+            &mass_factor * crate::symbols::S.rustred_master.call((index,))
+                / (Atom::num(index) - &epsilon)
+        }));
+        assert_eq!(previous(input.as_view()), input);
+        assert_eq!(simplify_real(input.as_view()), input);
+    }
+
+    #[test]
+    fn nonvariable_additive_powers_keep_the_collectors_structural_changes() {
+        crate::Vakint::initialize_vakint_symbols();
+        // Unlike an ordinary variable, a numeric or product base loses its
+        // identity when the exponent-one factor is normalized. Keep that path.
+        for (input, expected) in [("2^(1+a)", "2*2^a"), ("(x*y)^(1+a)", "x*y*(x*y)^a")] {
+            let input = vk_parse!(input).unwrap();
+            let expected = vk_parse!(expected).unwrap();
+            assert_ne!(input, expected);
+            assert_eq!(previous(input.as_view()), expected, "{input}");
+            assert_eq!(simplify_real(input.as_view()), expected, "{input}");
+        }
+
+        // Built-in E is a variable with its own exp/log rules; i is a numeric
+        // coefficient. Both retain collection when their exponent is a sum.
+        let exponential = Atom::var(Symbol::E).pow(vk_parse!("x+y").unwrap());
+        assert_eq!(
+            simplify_real(exponential.as_view()),
+            previous(exponential.as_view())
+        );
+        assert!(matches!(
+            vk_parse!("𝑖").unwrap().as_view(),
+            AtomView::Num(_)
+        ));
+        for input in ["exp(x+y)", "exp(log(x)+y)", "𝑖^(1+a)"] {
+            let input = vk_parse!(input).unwrap();
+            assert_eq!(
+                simplify_real(input.as_view()),
+                previous(input.as_view()),
+                "{input}"
+            );
+        }
+    }
+
+    #[test]
+    fn gamma_cancellation_and_hidden_occurrences_keep_previous_results() {
+        crate::Vakint::initialize_vakint_symbols();
+        for input in [
+            "EulerGamma*x+EulerGamma*y+x",
+            "(1+EulerGamma)^3-EulerGamma^3-3*EulerGamma^2-3*EulerGamma",
+            "opaque(EulerGamma,x)+x*EulerGamma",
+            "x^EulerGamma+opaque(x^(2*EulerGamma))",
+            "EulerGamma(x)+x",
+            "log(x*exp(EulerGamma))-EulerGamma",
+        ] {
+            let input = vk_parse!(input).unwrap();
+            assert!(input.contains_symbol(crate::symbols::S.euler_gamma));
+            assert_eq!(
+                simplify_real(input.as_view()),
+                previous(input.as_view()),
+                "{input}"
+            );
+        }
+        let normalization = vk_parse!("exp(-ep*EulerGamma)*exp(ep*EulerGamma)*(1+ep)").unwrap();
+        assert_eq!(
+            simplify_real(normalization.as_view()),
+            vk_parse!("1+ep").unwrap()
+        );
+        assert_eq!(
+            simplify_real(normalization.as_view()),
+            previous(normalization.as_view())
+        );
+    }
+
+    #[test]
+    fn floating_simplification_preserves_previous_rounding_and_structure() {
+        crate::Vakint::initialize_vakint_symbols();
+        for input in [
+            "0.1*x+0.2*x^2+0.3*y",
+            "(0.1+x)^3+0.2*x",
+            "(0.1*x+0.2*x^2)/(1-x)+0.3*y",
+            "opaque(0.5)*x+0.3*y",
+            "0.1*EulerGamma*x+0.2*EulerGamma*x",
+        ] {
+            let input = vk_parse!(input).unwrap();
+            assert_eq!(
+                simplify_real(input.as_view()),
+                previous(input.as_view()),
+                "{input}"
+            );
+        }
+    }
 }

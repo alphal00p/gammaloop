@@ -70,6 +70,7 @@ pub mod color;
 pub mod cook;
 pub mod dirac;
 pub mod epsilon;
+mod index_diagnostics;
 // pub mod parsing_ind;
 #[cfg(any(test, feature = "reference-cases"))]
 pub mod reference_cases;
@@ -192,6 +193,13 @@ pub enum CanonicalizationError {
 /// This trait provides methods for conjugating expressions, wrapping indices, and identifying
 /// external ("dangling") indices.
 pub trait IndexTooling {
+    /// Whether a term retains two compatible abstract Lorentz-index occurrences.
+    ///
+    /// This is a diagnostic, not a contraction. It distinguishes additive
+    /// alternatives, exact representation/dimension/index scopes and fixed
+    /// components. Call after tensor algebra when checking for unresolved sums.
+    fn has_repeated_lorentz_indices(&self) -> bool;
+
     fn canonize<Aind: AbsInd + ParseableAind + DummyAind>(
         &self,
         new_dummy: impl FnMut(usize) -> Aind,
@@ -261,6 +269,10 @@ pub trait IndexTooling {
 }
 
 impl IndexTooling for Atom {
+    fn has_repeated_lorentz_indices(&self) -> bool {
+        self.as_view().has_repeated_lorentz_indices()
+    }
+
     fn canonize<Aind: AbsInd + ParseableAind + DummyAind>(
         &self,
         new_dummy: impl FnMut(usize) -> Aind,
@@ -534,6 +546,10 @@ impl tensor::SymbolicTensor<PartialStructure> {
 }
 
 impl IndexTooling for AtomView<'_> {
+    fn has_repeated_lorentz_indices(&self) -> bool {
+        index_diagnostics::LorentzOccurrences::has_repeated(*self)
+    }
+
     fn spenso_print(&self, settings: &SpensoPrintSettings) -> AtomPrinter<'_> {
         self.printer(settings.nice_symbolica())
     }

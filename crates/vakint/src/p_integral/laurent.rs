@@ -19,6 +19,12 @@ use symbolica::transcendental::{euler_gamma, gamma, zeta};
 use super::{masters, p_gamma_symbol, p_master_symbol, pg_symbol};
 use crate::{VakintError, get_integer_from_atom};
 
+#[path = "rational_series.rs"]
+mod rational_series;
+#[cfg(test)]
+#[path = "rational_series_tests.rs"]
+mod rational_series_tests;
+
 fn failure(detail: impl std::fmt::Display) -> VakintError {
     VakintError::SymbolicaError(format!("p-integral expansion: {detail}"))
 }
@@ -325,6 +331,51 @@ fn split(expression: &Atom, epsilon: Symbol) -> Exponential {
     Exponential { rational, exponent }
 }
 
+/// Capture a generic input before expansion, so a stalled call remains replayable.
+fn trace_generic<T>(
+    expression: &Atom,
+    epsilon: Symbol,
+    monomial: &Atom,
+    order: i64,
+    phase: &'static str,
+    exact_plan_available: bool,
+    evaluate: impl FnOnce() -> Result<T, VakintError>,
+) -> Result<T, VakintError> {
+    if !tracing::enabled!(target: "vakint::p_integral::series_input", tracing::Level::INFO) {
+        return evaluate();
+    }
+    static NEXT_CALL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let call_id = NEXT_CALL.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let thread_id = std::thread::current().id();
+    tracing::info!(target: "vakint::p_integral::series_input",
+        stage = "generic_series_start",
+        call_id,
+        thread_id = ?thread_id,
+        phase,
+        target_order = order,
+        exact_plan_available,
+        input_bytes = expression.as_view().get_byte_size(),
+        file.expr = %expression.to_canonical_string(),
+        file.epsilon = %Atom::var(epsilon).to_canonical_string(),
+        file.master_monomial = %monomial.to_canonical_string(),
+        "Starting generic epsilon expansion"
+    );
+    let started = std::time::Instant::now();
+    let result = evaluate();
+    let seconds = started.elapsed().as_secs_f64();
+    tracing::info!(target: "vakint::p_integral::series_input",
+        stage = "generic_series_end",
+        call_id,
+        thread_id = ?thread_id,
+        phase,
+        target_order = order,
+        success = result.is_ok(),
+        seconds,
+        "Finished generic epsilon expansion"
+    );
+    result
+}
+
 /// The valuation of `expression` in `ε`, `None` for an exact zero.
 fn valuation(expression: &Atom, epsilon: Symbol) -> Result<Option<i64>, VakintError> {
     if expression.is_zero() {
@@ -383,10 +434,11 @@ pub(crate) fn expand(
     epsilon: Symbol,
     order: i64,
 ) -> Result<Atom, VakintError> {
+    let symbols = [pg_symbol(), p_master_symbol(), p_gamma_symbol()];
     let mut masters = Vec::new();
     reduced.visitor(&mut |part| {
         if let AtomView::Fun(function) = part
-            && [pg_symbol(), p_master_symbol(), p_gamma_symbol()].contains(&function.get_symbol())
+            && symbols.contains(&function.get_symbol())
         {
             masters.push(part.to_owned());
             return false;
@@ -395,12 +447,13 @@ pub(crate) fn expand(
     });
     masters.sort();
     masters.dedup();
-    let symbols = [pg_symbol(), p_master_symbol(), p_gamma_symbol()];
     let expanded = reduced.expand();
     if let Some(power) = unsupported_power(&expanded, &symbols) {
         return Err(failure(format!("{power} is not an i16 integer power")));
     }
     let mut total = Atom::Zero;
+    let mut exact_series = 0usize;
+    let mut generic_series = 0usize;
     for (monomial, coefficient) in expanded.coefficient_list::<i16>(&masters) {
         if symbols.iter().any(|s| coefficient.contains_symbol(*s)) {
             return Err(failure(format!(
@@ -424,7 +477,7 @@ pub(crate) fn expand(
                 _ => (factor.clone(), Some(1)),
             };
             if let AtomView::Fun(function) = base.as_view()
-                && function.get_symbol() == p_gamma_symbol()
+                && function.get_symbol() == symbols[2]
             {
                 // A Gamma tag: any nonzero integer power of Γ(1+mε), m ≠ 0.
                 let m = match function.iter().collect::<Vec<_>>().as_slice() {
@@ -447,7 +500,7 @@ pub(crate) fn expand(
                 }
                 return Err(failure(format!("unexpected master factor {factor}")));
             };
-            if function.get_symbol() == pg_symbol() {
+            if function.get_symbol() == symbols[0] {
                 let arguments = function
                     .iter()
                     .map(get_integer_from_atom)
@@ -475,7 +528,27 @@ pub(crate) fn expand(
             &crate::Vakint::normalize_gamma_functions(product.as_view()),
             epsilon,
         );
-        let Some(rational_valuation) = valuation(&split.rational, epsilon)? else {
+        let prepared_rational = {
+            let _stage = crate::stage_timing::StageSpan::new("vakint.p_integral.rational_prepare");
+            rational_series::RationalSeries::new(&split.rational, epsilon)
+        };
+        let rational_valuation = {
+            let _stage =
+                crate::stage_timing::StageSpan::new("vakint.p_integral.rational_valuation");
+            match &prepared_rational {
+                Some(prepared) => prepared.valuation(),
+                None => trace_generic(
+                    &split.rational,
+                    epsilon,
+                    &monomial,
+                    order - tabulated.as_ref().map_or(0, |t| t.valuation),
+                    "relative_valuation",
+                    false,
+                    || valuation(&split.rational, epsilon),
+                )?,
+            }
+        };
+        let Some(rational_valuation) = rational_valuation else {
             continue;
         };
         let tabulated_valuation = tabulated.as_ref().map_or(0, |t| t.valuation);
@@ -483,7 +556,30 @@ pub(crate) fn expand(
         if depth < 0 {
             continue;
         }
-        let rational = Laurent::series(&split.rational, epsilon, order - tabulated_valuation)?;
+        let rational = {
+            let _stage = crate::stage_timing::StageSpan::new("vakint.p_integral.rational_series");
+            match prepared_rational
+                .as_ref()
+                .and_then(|prepared| prepared.series(order - tabulated_valuation))
+            {
+                Some(series) => {
+                    exact_series += 1;
+                    series
+                }
+                None => {
+                    generic_series += 1;
+                    trace_generic(
+                        &split.rational,
+                        epsilon,
+                        &monomial,
+                        order - tabulated_valuation,
+                        "absolute_series",
+                        prepared_rational.is_some(),
+                        || Laurent::series(&split.rational, epsilon, order - tabulated_valuation),
+                    )?
+                }
+            }
+        };
         let exponential = Laurent::exp(&split.exponent(depth), depth);
         let mut term = rational.mul(&exponential, order - tabulated_valuation);
         if let Some(mut tabulated) = tabulated {
@@ -494,6 +590,16 @@ pub(crate) fn expand(
         }
         total += term.to_atom(epsilon);
     }
+    tracing::info!(
+        uv = true,
+        rstar = true,
+        timing = true,
+        exact_rational_series = exact_series,
+        generic_rational_series = generic_series,
+        target_order = order,
+        master_variables = masters.len(),
+        "Expanded p-integral Laurent coefficients"
+    );
     Ok(total.expand())
 }
 

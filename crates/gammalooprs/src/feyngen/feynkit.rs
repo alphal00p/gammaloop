@@ -491,9 +491,9 @@ mod tests {
             runtime
                 .numerator(&runtime.full_filter(), &runtime.empty_subgraph())
                 .get_single_atom()
-                .unwrap()
-                .expand(),
-            diagram.numerator().expression().expand()
+                .unwrap(),
+            *diagram.numerator().expression(),
+            "copied scalar fragments must preserve the exact factored numerator"
         );
 
         let routed_edge = runtime
@@ -508,6 +508,43 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![routed_edge]
         );
+    }
+
+    #[test]
+    fn direct_conversion_accepts_factored_fragments_with_expanded_numerator() {
+        let model = model();
+        let factored = atom("(x+y)*(x-y)");
+        let expanded = factored.expand();
+        assert_ne!(factored, expanded);
+        let diagram = diagram(&model, None)
+            .with_numerator(NumeratorInterface::admit(factored.clone(), None).unwrap())
+            .unwrap();
+        let mut builder = FeynmanDiagram::builder(Arc::clone(&model), "expanded_numerator")
+            .numerator(NumeratorInterface::admit(expanded.clone(), None).unwrap())
+            .loop_momentum_basis(diagram.loop_momentum_basis().clone());
+        for (_, vertex) in diagram.vertices() {
+            builder.add_vertex(vertex.clone());
+        }
+        for (_, endpoints, edge) in diagram.edges() {
+            builder
+                .add_edge_with_slots(
+                    endpoints.source,
+                    endpoints.target,
+                    edge.clone(),
+                    edge.source_slot(),
+                    edge.target_slot(),
+                )
+                .unwrap();
+        }
+        let diagram = builder.build().unwrap();
+        let runtime = diagram.to_gamma_loop_graph(None, true).unwrap();
+        let numerator = runtime
+            .numerator(&runtime.full_filter(), &runtime.empty_subgraph())
+            .get_single_atom()
+            .unwrap();
+        assert_eq!(numerator, factored);
+        assert_ne!(numerator, *diagram.numerator().expression());
+        assert_eq!(numerator.expand(), expanded);
     }
 
     #[test]

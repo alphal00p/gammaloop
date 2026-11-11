@@ -31,6 +31,7 @@ use std::sync::OnceLock;
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 
 use crate::rustred_evaluation::RustRedMasterMode;
+use crate::stage_timing::StageSpan;
 use crate::symbols::S;
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
 use crate::{
@@ -240,12 +241,12 @@ impl PFamilyData {
 /// `vakint::PG(x1,x2)`: Forcer's `GschemeConstants(x1,x2)`,
 /// `(1+x1+x2)·G(1+x1ε, 1+x2ε)/(ε·G(1,1))`.
 pub(crate) fn pg_symbol() -> Symbol {
-    vk_symbol!("PG")
+    S.pg
 }
 
 /// `vakint::PMaster(name)`: Forcer's `Master(name)`, in the G-scheme.
 pub(crate) fn p_master_symbol() -> Symbol {
-    vk_symbol!("PMaster")
+    S.p_master
 }
 
 /// `vakint::PGamma(m) = Γ(1+mε)` for a nonzero integer `m`, raised to integer
@@ -253,7 +254,7 @@ pub(crate) fn p_master_symbol() -> Symbol {
 /// `Retain` keeps it symbolic; `Symbolic` and `Numerical` expand it exactly to
 /// any depth (`laurent::expand`).
 pub(crate) fn p_gamma_symbol() -> Symbol {
-    vk_symbol!("PGamma")
+    S.p_gamma
 }
 
 /// The user's external head `p(i)` and the sign `σ` of `external = σ·p(i)`.
@@ -393,7 +394,7 @@ pub(crate) fn families() -> &'static [PFamily] {
                         PLine {
                             id: id as i64,
                             ends: (node("nl_"), node("nr_")),
-                            momentum: prop[&vk_symbol!("q_")].clone(),
+                            momentum: prop[&S.q_].clone(),
                             power: 1,
                         }
                     })
@@ -420,6 +421,7 @@ impl PFamily {
 /// external head `p(_)` or its short-form head is a p-family name. The Atom
 /// stays self-describing: vacuum matching rejects `p` in prop momenta.
 pub fn infer_kind(integral: AtomView) -> Result<IntegralKind, VakintError> {
+    let _stage = StageSpan::new("p_integral.kind_inference");
     Ok(if input::mentions_external_momentum(integral) {
         IntegralKind::Propagator
     } else {
@@ -482,6 +484,7 @@ pub(crate) fn replacement_rules(
     matched: PMatch,
     external: &Atom,
 ) -> Result<ReplacementRules, VakintError> {
+    let _stage = StageSpan::new("p_integral.match_transport");
     let mut rules = ReplacementRules {
         canonical_topology: topology.clone(),
         ..Default::default()
@@ -519,6 +522,7 @@ pub(crate) fn replacement_rules(
 /// contain other vectors; an open loop index or a loop momentum contracted
 /// with another external vector is a tensor p-integral and is rejected.
 pub(crate) fn scalar_numerator(numerator: AtomView, external: &Atom) -> Result<Atom, VakintError> {
+    let _stage = StageSpan::new("p_integral.scalar_admission");
     let scalar = crate::Vakint::convert_to_dot_notation(numerator);
     let mut tensor = None;
     scalar.visitor(&mut |view| {
@@ -573,6 +577,7 @@ impl VakintTerm {
     /// term (including a vacuum integral whose every mass is literally 0),
     /// whose numerator is then set to zero. Other vacuum terms are unchanged.
     pub(crate) fn normalize_propagator(&mut self) -> Result<bool, VakintError> {
+        let _stage = StageSpan::new("p_integral.normalize");
         if infer_kind(self.integral.as_view())? != IntegralKind::Propagator {
             // The same scaleless rule makes a massless vacuum integral zero.
             if input::is_massless_vacuum(self.integral.as_view()) {

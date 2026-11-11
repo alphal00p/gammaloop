@@ -20,6 +20,7 @@ use symbolica::{
     poly::series::Series,
 };
 use tracing::debug;
+use vakint::stage_timing::StageSpan;
 
 use crate::{
     graph::{Edge, FeynmanGraph, Graph, HedgeData, LMBext, LoopMomentumBasis, Vertex},
@@ -399,6 +400,7 @@ impl UltravioletGraph for Graph {
         model: &Model,
         edge_powers: T,
     ) -> Atom {
+        let _stage = StageSpan::new("gamma.feynman.denominator");
         let mut den = Atom::num(1);
 
         for (pair, eid, d) in self.underlying.iter_edges_of(subgraph) {
@@ -441,18 +443,21 @@ impl UltravioletGraph for Graph {
         subgraph: &S,
         without: &S,
     ) -> Numerator<AppliedFeynmanRule> {
+        let _stage = StageSpan::new("gamma.feynman.numerator");
         let num = Numerator::default();
 
         num.fill_in_reduced(self, subgraph, without)
     }
 
     fn compute_dod<S: SubGraphLike<Base = SuBitGraph> + SubSetOps>(&self, subgraph: &S) -> i32 {
+        let _stage = StageSpan::new("gamma.classification.power_counting");
         let lmb = self.lmb_of(subgraph);
         let empty = self.underlying.empty_subgraph();
         // Mass terms do not affect the leading UV degree. Building the power-
         // counting denominator with zero masses keeps this structural query
         // independent of model resolution while the physical denominator
         // remains explicitly model-aware.
+        let denominator_stage = StageSpan::new("gamma.feynman.denominator");
         let mut denominator = Atom::one();
         for (pair, edge_id, _) in self.underlying.iter_edges_of(subgraph) {
             if pair.is_paired() {
@@ -476,6 +481,7 @@ impl UltravioletGraph for Graph {
                 );
             }
         }
+        drop(denominator_stage);
         let integrand = self
             .numerator(subgraph, &empty)
             .to_d_dim(GS.dim)
@@ -483,8 +489,25 @@ impl UltravioletGraph for Graph {
             .unwrap()
             / denominator;
         let nloops: usize = self.n_loops(subgraph);
-        self.uv_rescaled(subgraph.included(), nloops, &lmb, &integrand)
-            .trailing_exponent()
+        let rescaled = self.uv_rescaled(subgraph.included(), nloops, &lmb, &integrand);
+        // Power counting predicts the leading term at rescale^-local_dod. The
+        // series through that order holds every lower order exactly, so a
+        // nonzero truncation has the same trailing exponent as the full
+        // series through rescale^1. Only a cancellation of the predicted
+        // order needs the full expansion, whose higher orders grow with every
+        // vertex rule: at five loops they dominated the working memory.
+        let predicted = -self.local_dod(subgraph);
+        match rescaled.series(GS.rescale, Atom::Zero, predicted.min(1)) {
+            Ok(series) if !series.is_zero() => {
+                let dod = series.get_trailing_exponent();
+                if dod.is_integer() {
+                    -(dod.numerator().to_i64().unwrap() as i32)
+                } else {
+                    panic!("{dod} for {rescaled}")
+                }
+            }
+            _ => rescaled.trailing_exponent(),
+        }
     }
 
     fn local_dod<S: SubGraphLike>(&self, subgraph: &S) -> i32 {

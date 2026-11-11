@@ -1,3 +1,4 @@
+use crate::symbols::{PERIOD_BINDINGS, S};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
@@ -32,15 +33,6 @@ fn invalid(detail: impl std::fmt::Display) -> VakintError {
 
 /// Decimal digits carried beyond a finite cap when a request exceeds it.
 const CAPPED_EVALUATION_GUARD_DIGITS: u32 = 64;
-
-// These names identify recorded coefficients, not independent decimal tables.
-const PERIOD_BINDINGS: [(&str, &str, i64); 5] = [
-    ("PR4fin", "PR4", 0),
-    ("PR4dfin", "PR4d", 0),
-    ("PR11dep0", "PR11d", 0),
-    ("PR4ep1", "PR4", 1),
-    ("PR4dep1", "PR4d", 1),
-];
 
 #[derive(Clone)]
 struct RecordedOrigin {
@@ -93,19 +85,10 @@ impl MasterCatalog {
             .masters
             .iter()
             .filter(|(_, master)| {
-                [
-                    master.identity.as_str(),
-                    master.metadata["name"].as_str().unwrap_or(""),
-                ]
-                .iter()
-                .any(|name| {
-                    !name.is_empty()
-                        && vk_parse!(name).is_ok_and(|atom| atom == requested.as_atom())
-                }) || master.metadata["exact_basis_expression"]
-                    .as_str()
-                    .is_some_and(|expression| {
-                        vk_parse!(expression).is_ok_and(|atom| atom == requested.as_atom())
-                    })
+                master.names().contains(requested.as_atom())
+                    || master
+                        .basis_expression()
+                        .is_some_and(|atom| atom == requested.as_atom())
             })
             .collect();
         match matches.as_slice() {
@@ -127,29 +110,30 @@ impl MasterCatalog {
 
     /// Finite period aliases are exact references to a recorded master coefficient.
     pub(crate) fn is_recorded_period(symbol: AtomView<'_>) -> bool {
-        PERIOD_BINDINGS
-            .iter()
-            .any(|(name, _, _)| symbol == Atom::var(vk_symbol!(name)).as_view())
+        matches!(symbol, AtomView::Var(variable) if S.period_bindings.iter()
+            .any(|(name, _, _)| variable.get_symbol() == *name))
     }
 
     pub(super) fn period_binding(&self, symbol: AtomView<'_>) -> Result<Option<Atom>, VakintError> {
         if let Some((symbol, _)) = self.constant_source(symbol)? {
             return Ok(Some(self.constant_symbol(symbol)));
         }
-        let binding = PERIOD_BINDINGS
+        let AtomView::Var(variable) = symbol else {
+            return Ok(None);
+        };
+        let binding = S
+            .period_bindings
             .into_iter()
             .find_map(|(name, basis, power)| {
-                (symbol == Atom::var(vk_symbol!(name)).as_view()).then_some((basis, power))
+                (variable.get_symbol() == name).then_some((basis, power))
             });
         let Some((basis, power)) = binding else {
             return Ok(None);
         };
-        let basis = Atom::var(vk_symbol!(basis));
+        let basis = Atom::var(basis);
         let candidate = self.masters.iter().find(|(_, master)| {
             master.loop_count == 4
-                && master.metadata["exact_basis_expression"]
-                    .as_str()
-                    .is_some_and(|value| vk_parse!(value).is_ok_and(|atom| atom == basis))
+                && master.basis_expression().is_some_and(|atom| *atom == basis)
                 && master.coefficients.get(&power).is_some_and(|coefficient| {
                     coefficient.numerical.is_some() || coefficient.exact.is_some()
                 })
@@ -187,9 +171,10 @@ impl MasterCatalog {
     /// A recorded period alias is the stated Laurent coefficient of its bound master.
     /// Authenticated family data define the integral; otherwise the FMFT basis name does.
     fn period_definition(&self, symbol: AtomView<'_>) -> Result<Option<Atom>, VakintError> {
-        let Some((_, basis, power)) = PERIOD_BINDINGS
+        let Some(((_, basis, power), _)) = PERIOD_BINDINGS
             .into_iter()
-            .find(|(name, _, _)| symbol == Atom::var(vk_symbol!(name)).as_view())
+            .zip(S.period_bindings)
+            .find(|(_, (name, _, _))| symbol == Atom::var(*name).as_view())
         else {
             return Ok(None);
         };
@@ -268,7 +253,8 @@ impl MasterCatalog {
 
     fn constant_symbol(&self, symbol: &Atom) -> Atom {
         // The same name in another snapshot may have different validated data.
-        vk_symbol!("RustRedConstant").call((self.coefficient_snapshot_tag(), symbol))
+        S.rustred_constant
+            .call((self.coefficient_snapshot_tag(), symbol))
     }
 
     fn constant_source(
@@ -276,7 +262,7 @@ impl MasterCatalog {
         symbol: AtomView<'_>,
     ) -> Result<Option<(&Atom, &FiniteSource)>, VakintError> {
         if let AtomView::Fun(function) = symbol
-            && function.get_symbol() == vk_symbol!("RustRedConstant")
+            && function.get_symbol() == S.rustred_constant
         {
             let arguments = function.iter().collect::<Vec<_>>();
             let [tag, identity] = arguments.as_slice() else {
@@ -306,9 +292,8 @@ impl MasterCatalog {
         master: &'a Master,
         power: i64,
     ) -> Vec<(Atom, &'a Master)> {
-        let Some(basis) = master.metadata["exact_basis_expression"]
-            .as_str()
-            .and_then(|value| vk_parse!(value).ok())
+        let Some(basis) = master
+            .basis_expression()
             .filter(|value| Self::finite_precision(value).is_none())
         else {
             return vec![(requested.clone(), master)];
@@ -319,9 +304,7 @@ impl MasterCatalog {
             .filter(|(_, other)| {
                 other.loop_count == master.loop_count
                     && other.coefficients.contains_key(&power)
-                    && other.metadata["exact_basis_expression"]
-                        .as_str()
-                        .is_some_and(|value| vk_parse!(value).is_ok_and(|value| value == basis))
+                    && other.basis_expression().is_some_and(|value| value == basis)
             })
             .map(|(symbol, master)| (self.coefficient_symbol(symbol, power), master))
             .collect();
@@ -431,8 +414,8 @@ impl MasterCatalog {
     pub(crate) fn constant_symbols(&self) -> Result<Vec<ConstantSymbol>, VakintError> {
         let mut symbols: BTreeSet<_> = constants::builtin_symbols().into_iter().collect();
         symbols.extend(self.constants.keys().cloned());
-        for (name, _, _) in PERIOD_BINDINGS {
-            let atom = Atom::var(vk_symbol!(name));
+        for (name, _, _) in S.period_bindings {
+            let atom = Atom::var(name);
             if self.period_binding(atom.as_view())?.is_some() {
                 symbols.insert(atom);
             }
@@ -513,38 +496,61 @@ impl MasterCatalog {
         let mut replacements = BTreeMap::new();
         let mut error = None;
         expression.visitor(&mut |part| {
-            if error.is_some() { return false }
+            if error.is_some() {
+                return false;
+            }
             let symbol = part.to_owned();
             // The arguments of tracked leaves are identity metadata, not
             // expression children or recursive coefficient definitions.
             if sources.contains_key(&symbol)
-                && !matches!(part, AtomView::Fun(fun) if fun.get_symbol() == vk_symbol!("RustRedCoefficient"))
-            { return false }
+                && !matches!(part, AtomView::Fun(fun) if fun.get_symbol() == S.rustred_coefficient)
+            {
+                return false;
+            }
             let replacement = (|| -> Result<Option<Atom>, VakintError> {
                 if let Some((identity, source)) = self.constant_source(part)? {
                     let key = self.constant_symbol(identity);
-                    origins.insert(key.clone(), RecordedOrigin {
-                        source: precision::PrecisionSource::from(source),
-                        dependencies: BTreeSet::from([key.clone()]),
-                    });
+                    origins.insert(
+                        key.clone(),
+                        RecordedOrigin {
+                            source: precision::PrecisionSource::from(source),
+                            dependencies: BTreeSet::from([key.clone()]),
+                        },
+                    );
                     sources.insert(key.clone(), source.clone());
                     return Ok(Some(key));
                 }
                 if let AtomView::Fun(function) = part
-                    && function.get_symbol() == vk_symbol!("RustRedFiniteLiteral")
+                    && function.get_symbol() == S.rustred_finite_literal
                 {
                     let arguments = function.iter().collect::<Vec<_>>();
-                    if arguments.len() != 3 { return Err(invalid("malformed finite coefficient literal")); }
+                    if arguments.len() != 3 {
+                        return Err(invalid("malformed finite coefficient literal"));
+                    }
                     let identity = arguments[0].to_owned();
                     let (master, coefficient, power) = self.coefficient(&identity)?;
-                    let formula = coefficient.exact.as_ref().ok_or_else(|| invalid("finite literal has no owning formula"))?;
+                    let formula = coefficient
+                        .exact
+                        .as_ref()
+                        .ok_or_else(|| invalid("finite literal has no owning formula"))?;
                     let mut recovered = BTreeMap::new();
-                    let _ = self.bind_finite_literals(vk_parse!(formula).map_err(invalid)?, &identity,
-                        coefficient.significant_digits, &self.provenance(master, Some(power)), &mut recovered)?;
-                    let source = recovered.remove(&symbol).ok_or_else(|| invalid("finite literal identity disagrees with its owning formula"))?;
-                    origins.insert(symbol.clone(), RecordedOrigin {
-                        source: precision::PrecisionSource::from(&source), dependencies: BTreeSet::from([symbol.clone()]),
-                    });
+                    let _ = self.bind_finite_literals(
+                        vk_parse!(formula).map_err(invalid)?,
+                        &identity,
+                        coefficient.significant_digits,
+                        &self.provenance(master, Some(power)),
+                        &mut recovered,
+                    )?;
+                    let source = recovered.remove(&symbol).ok_or_else(|| {
+                        invalid("finite literal identity disagrees with its owning formula")
+                    })?;
+                    origins.insert(
+                        symbol.clone(),
+                        RecordedOrigin {
+                            source: precision::PrecisionSource::from(&source),
+                            dependencies: BTreeSet::from([symbol.clone()]),
+                        },
+                    );
                     sources.insert(symbol.clone(), source);
                     return Ok(Some(symbol.clone()));
                 }
@@ -552,25 +558,34 @@ impl MasterCatalog {
                     if let Some(original) = precision::legacy::original_source(part)?
                         && self.period_binding(original.as_view())?.is_some()
                     {
-                        return self.prepare_inner(original, sources, visiting, origins).map(Some);
+                        return self
+                            .prepare_inner(original, sources, visiting, origins)
+                            .map(Some);
                     }
                     // Preserve historical payload and source identity together;
                     // none of the encoded arguments are expression children.
                     sources.extend(precision::legacy::collect_sources(part)?);
                     return Ok(Some(symbol.clone()));
                 }
-                if matches!(part, AtomView::Fun(fun) if fun.get_symbol() == vk_symbol!("RustRedCoefficient")) {
+                if matches!(part, AtomView::Fun(fun) if fun.get_symbol() == S.rustred_coefficient) {
                     let (master, _, power) = self.coefficient(&symbol)?;
-                    let value = self.prepare_coefficient(&symbol, master, power, sources, visiting, origins)?;
-                    origins.insert(symbol.clone(), RecordedOrigin {
-                        source: precision::PrecisionSource {
-                        identity: format!("{} epsilon^{power}", master.identity),
-                        master_id: Some(master.identity.clone()), epsilon_power: Some(power),
-                        available_decimal_precision: Self::dependency_precision(&value, sources),
-                        source_sha256: self.provenance(master, Some(power)).source_sha256,
+                    let value = self
+                        .prepare_coefficient(&symbol, master, power, sources, visiting, origins)?;
+                    origins.insert(
+                        symbol.clone(),
+                        RecordedOrigin {
+                            source: precision::PrecisionSource {
+                                identity: format!("{} epsilon^{power}", master.identity),
+                                master_id: Some(master.identity.clone()),
+                                epsilon_power: Some(power),
+                                available_decimal_precision: Self::dependency_precision(
+                                    &value, sources,
+                                ),
+                                source_sha256: self.provenance(master, Some(power)).source_sha256,
+                            },
+                            dependencies: dependencies(&value),
                         },
-                        dependencies: dependencies(&value),
-                    });
+                    );
                     return Ok(Some(value));
                 }
                 if let Some(binding) = self.period_binding(part)? {
@@ -579,43 +594,74 @@ impl MasterCatalog {
                     let value = self.prepare_inner(binding, sources, visiting, origins)?;
                     if let Some(source) = sources.get_mut(&value) {
                         let name = symbol.to_canonical_string();
-                        if !source.identity.contains(&name) { source.identity = format!("{name} ({})", source.identity); }
+                        if !source.identity.contains(&name) {
+                            source.identity = format!("{name} ({})", source.identity);
+                        }
                     }
-                    origins.insert(symbol.clone(), RecordedOrigin {
-                        source: precision::PrecisionSource {
-                            identity: symbol.to_canonical_string(), master_id: provenance.master_id,
-                            epsilon_power: Some(power), available_decimal_precision: Self::dependency_precision(&value, sources),
-                            source_sha256: provenance.source_sha256,
-                        }, dependencies: dependencies(&value),
-                    });
+                    origins.insert(
+                        symbol.clone(),
+                        RecordedOrigin {
+                            source: precision::PrecisionSource {
+                                identity: symbol.to_canonical_string(),
+                                master_id: provenance.master_id,
+                                epsilon_power: Some(power),
+                                available_decimal_precision: Self::dependency_precision(
+                                    &value, sources,
+                                ),
+                                source_sha256: provenance.source_sha256,
+                            },
+                            dependencies: dependencies(&value),
+                        },
+                    );
                     return Ok(Some(value));
                 }
                 if let Some(definition) = constants::builtin_definition(part)? {
                     let source = precision::PrecisionSource {
-                        identity: symbol.to_canonical_string(), master_id: None, epsilon_power: None,
+                        identity: symbol.to_canonical_string(),
+                        master_id: None,
+                        epsilon_power: None,
                         available_decimal_precision: None,
-                        source_sha256: format!("{:x}", Sha256::digest(definition.to_canonical_string().as_bytes())),
+                        source_sha256: format!(
+                            "{:x}",
+                            Sha256::digest(definition.to_canonical_string().as_bytes())
+                        ),
                     };
                     if definition == symbol {
-                        origins.entry(symbol.clone()).or_insert_with(|| RecordedOrigin {
-                            source, dependencies: dependencies(&symbol),
-                        });
+                        origins
+                            .entry(symbol.clone())
+                            .or_insert_with(|| RecordedOrigin {
+                                source,
+                                dependencies: dependencies(&symbol),
+                            });
                         return Ok(Some(symbol.clone()));
                     }
-                    if !visiting.insert(symbol.clone()) { return Err(invalid(format!("cyclic constant definition {symbol}"))) }
+                    if !visiting.insert(symbol.clone()) {
+                        return Err(invalid(format!("cyclic constant definition {symbol}")));
+                    }
                     let value = self.prepare_inner(definition, sources, visiting, origins)?;
                     visiting.remove(&symbol);
-                    origins.entry(symbol.clone()).or_insert_with(|| RecordedOrigin {
-                        source, dependencies: dependencies(&value),
-                    });
+                    origins
+                        .entry(symbol.clone())
+                        .or_insert_with(|| RecordedOrigin {
+                            source,
+                            dependencies: dependencies(&value),
+                        });
                     return Ok(Some(value));
                 }
                 Ok(None)
             })();
             match replacement {
-                Ok(Some(value)) => { if value != symbol { replacements.insert(symbol, value); } false }
+                Ok(Some(value)) => {
+                    if value != symbol {
+                        replacements.insert(symbol, value);
+                    }
+                    false
+                }
                 Ok(None) => true,
-                Err(value) => { error = Some(value); false }
+                Err(value) => {
+                    error = Some(value);
+                    false
+                }
             }
         });
         if let Some(error) = error {
@@ -681,7 +727,7 @@ impl MasterCatalog {
                 if !component.as_raw().is_finite() { error = Some(invalid("non-finite literal in exact coefficient formula")); return false }
                 if component.as_raw().is_zero() && index == 1 { continue }
                 let digest = format!("rustred_literal_{:x}", Sha256::digest(part.to_canonical_string().as_bytes()));
-                let key = vk_symbol!("RustRedFiniteLiteral").call((coefficient, Atom::var(vk_symbol!(&digest)), index as i64));
+                let key = S.rustred_finite_literal.call((coefficient, Atom::var(vk_symbol!(&digest)), index as i64));
                 let significant_digits = digits.min((f64::from(component.prec()) * std::f64::consts::LOG10_2).floor() as u32);
                 sources.insert(key.clone(), FiniteSource {
                     value: component.as_raw().to_string_radix(10, None), significant_digits,
@@ -690,7 +736,7 @@ impl MasterCatalog {
                     master_id: provenance.master_id.clone(), epsilon_power: provenance.epsilon_power,
                     data_version: provenance.version.clone(), source_sha256: provenance.source_sha256.clone(),
                 });
-                value += if index == 0 { key } else { key * vk_parse!("𝑖").unwrap() };
+                value += if index == 0 { key } else { key * Atom::i() };
             }
             replacements.insert(part.to_owned(), value);
             false
@@ -761,7 +807,7 @@ impl MasterCatalog {
             },
         );
         if let Some(binding) = self.period_binding(symbol.as_atom().as_view())?
-            && matches!(binding.as_view(), AtomView::Fun(function) if function.get_symbol() == vk_symbol!("RustRedCoefficient"))
+            && matches!(binding.as_view(), AtomView::Fun(function) if function.get_symbol() == S.rustred_coefficient)
         {
             let (master, _, power) = self.coefficient(&binding)?;
             provenance = self.provenance(master, Some(power));

@@ -1,0 +1,29 @@
+{
+  "schema": "vakint.exact-expression-fixture.v1",
+  "source_project": "qcd-background-beta",
+  "diagram": {
+    "loops": 4,
+    "index": 358
+  },
+  "purpose": "Exact endpoint regression for removing redundant grouped-reduction precombination. The captured expanded input is a proper-UV master expression, not the whole four-loop result.",
+  "capture": {
+    "binary_sha256": "c2861bbe1a97628712d80d63c7ed756752d7fbc57e7ce5f3c6e1139ea25348c5",
+    "source_fingerprint": "826d40bb1a02dcb27453d53b61d4f948c65ba0627445d203068ae839a83ddcc9",
+    "artifact": "results/uv-perf-v5/capture/logs/gammaloop-test-807624.jsonl",
+    "caller": "crates/vakint/src/lib.rs:5037",
+    "expanded_input_sha256": "0c0eebeec4df5f5081235bd870868e1bb798d87f13ec8ab5c64c3c0f1fb79cb5",
+    "expanded_input_terms": 1050,
+    "expanded_input_encoded_bytes": 342766,
+    "both_complete_pole_channels_exact_reference_match": true
+  },
+  "encoding": "gzip-compressed UTF-8 Symbolica canonical expression with trailing newline",
+  "decoded": {
+    "bytes": 893212,
+    "sha256": "921e92885e026c8c895afb97a228e5e11fa7d4381e3565146d3809a436b97671"
+  },
+  "compressed": {
+    "file": "qcd-l4-358-master-finalization.expr.gz",
+    "bytes": 11300,
+    "sha256": "f373d3884d0a57219470bbae2f82de1c78675e9ae367bba3ae0e0008eccc3a6c"
+  }
+}

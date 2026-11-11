@@ -22,7 +22,8 @@
 //! (M2 plan, conventions C3/C4): Forcer reduces Euclidean integrals, while the
 //! RustRed reduction already returns Minkowski-signed values.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
+use std::sync::OnceLock;
 
 use symbolica::atom::{Atom, AtomCore, AtomView};
 use symbolica::coefficient::CoefficientView;
@@ -56,6 +57,25 @@ impl CanonicalLine {
 
 /// The canonical lines of a registry family, in line order.
 pub(crate) fn canonical_lines(family: &PFamilyData) -> Result<Vec<CanonicalLine>, VakintError> {
+    // Cache only the immutable registry definitions. A caller-provided family
+    // with the same name but different lines must still be validated below.
+    static LINES: [OnceLock<Vec<CanonicalLine>>; super::P_FAMILIES.len()] =
+        [const { OnceLock::new() }; super::P_FAMILIES.len()];
+    let Some(index) = super::P_FAMILIES.iter().position(|registered| {
+        registered.name == family.name
+            && registered.loops == family.loops
+            && registered.lines == family.lines
+    }) else {
+        return canonical_lines_uncached(family);
+    };
+    if let Some(lines) = LINES[index].get() {
+        return Ok(lines.clone());
+    }
+    let lines = canonical_lines_uncached(family)?;
+    Ok(LINES[index].get_or_init(|| lines).clone())
+}
+
+fn canonical_lines_uncached(family: &PFamilyData) -> Result<Vec<CanonicalLine>, VakintError> {
     let invalid = |detail: String| {
         VakintError::InvalidGenericExpression(format!("{}: {detail}", family.name))
     };
@@ -522,6 +542,7 @@ pub(crate) fn split(
     loop_dots.sort();
     loop_dots.dedup();
     let mut groups = Vec::<((i64, Atom), Vec<(Fraction, PMonomial)>)>::new();
+    let mut group_indices = HashMap::<(i64, Atom), usize>::new();
     for (monomial, coefficient) in numerator.coefficient_list::<i8>(&loop_dots) {
         if coefficient.contains_symbol(S.k) {
             return Err(tensor_numerator(format!(
@@ -536,9 +557,13 @@ pub(crate) fn split(
             canonical,
         );
         let key = (term.1.degree(), rest);
-        match groups.iter_mut().find(|(group, _)| *group == key) {
-            Some((_, terms)) => terms.push(term),
-            None => groups.push((key, vec![term])),
+        // Keep first-seen part order and every polynomial's existing order;
+        // only the lookup uses hashing, never the emitted sequence.
+        if let Some(&index) = group_indices.get(&key) {
+            groups[index].1.push(term);
+        } else {
+            group_indices.insert(key.clone(), groups.len());
+            groups.push((key, vec![term]));
         }
     }
     let parts = groups
@@ -597,6 +622,163 @@ mod tests {
             external: parse(external),
         };
         split_parts(&request).unwrap()
+    }
+
+    #[test]
+    fn canonical_line_cache_preserves_every_registry_family() {
+        for family in &P_FAMILIES {
+            let expected = canonical_lines_uncached(family).unwrap();
+            assert_eq!(
+                canonical_lines(family).unwrap(),
+                expected,
+                "{}",
+                family.name
+            );
+            let mut local_copy = canonical_lines(family).unwrap();
+            local_copy[0].from += 100;
+            assert_eq!(
+                canonical_lines(family).unwrap(),
+                expected,
+                "{}",
+                family.name
+            );
+        }
+    }
+
+    #[test]
+    fn canonical_line_cache_does_not_alias_custom_families_or_errors() {
+        let registered = &P_FAMILIES[0];
+        let original = canonical_lines(registered).unwrap();
+        let custom = PFamilyData {
+            name: registered.name,
+            loops: 1,
+            forcer_topology: None,
+            vacuum_parent: "custom cache test",
+            lines: "topo(prop(1,edge(7,9),2*k(1),0,pow(1))*prop(2,edge(9,7),k(1)+p(1),0,pow(2)))",
+            isps: &[],
+        };
+        let expected = vec![
+            CanonicalLine {
+                from: 7,
+                to: 9,
+                loops: vec![2],
+                external: 0,
+            },
+            CanonicalLine {
+                from: 9,
+                to: 7,
+                loops: vec![1],
+                external: 1,
+            },
+        ];
+        assert_eq!(canonical_lines(&custom).unwrap(), expected);
+        assert_eq!(canonical_lines(&custom).unwrap(), expected);
+        for (loops, lines) in [
+            (2, registered.lines),
+            (1, "topo(prop(1,edge(1,2),k(1),0,pow(1)))"),
+            (
+                1,
+                "topo(prop(1,edge(1,2),k(1)/2,0,pow(1))*prop(2,edge(2,1),k(1)-p(1),0,pow(2)))",
+            ),
+        ] {
+            let invalid = PFamilyData {
+                loops,
+                lines,
+                ..custom
+            };
+            let cached = canonical_lines(&invalid).unwrap_err();
+            let uncached = canonical_lines_uncached(&invalid).unwrap_err();
+            assert_eq!(
+                std::mem::discriminant(&cached),
+                std::mem::discriminant(&uncached)
+            );
+            assert_eq!(cached.to_string(), uncached.to_string());
+        }
+        assert_eq!(canonical_lines(registered).unwrap(), original);
+    }
+
+    // Preserve the former linear grouping as a test oracle for both part
+    // ordering and polynomial term ordering. Routing and degree conventions
+    // are unchanged; input is the already expanded scalar numerator.
+    fn linear_parts(
+        numerator: &Atom,
+        external: &Atom,
+        loops: usize,
+        total_power: i64,
+    ) -> Vec<PPart> {
+        let (head, sigma) = external_head(external).unwrap();
+        let mut loop_dots = Vec::new();
+        numerator.visitor(&mut |part| {
+            if let AtomView::Fun(function) = part
+                && function.get_symbol() == S.dot
+                && part.contains_symbol(S.k)
+            {
+                scalar_product(part, &head, sigma, loops).unwrap();
+                loop_dots.push(part.to_owned());
+                return false;
+            }
+            true
+        });
+        loop_dots.sort();
+        loop_dots.dedup();
+        let mut groups = Vec::<((i64, Atom), Vec<(Fraction, PMonomial)>)>::new();
+        for (monomial, coefficient) in numerator.coefficient_list::<i8>(&loop_dots) {
+            let (sign, canonical) =
+                canonical_monomial(monomial.as_view(), &head, sigma, loops).unwrap();
+            let (value, rest) = split_rational(&coefficient);
+            let term = (Fraction::new(sign as i128, 1).mul(value), canonical);
+            let key = (term.1.degree(), rest);
+            match groups.iter_mut().find(|(group, _)| *group == key) {
+                Some((_, terms)) => terms.push(term),
+                None => groups.push((key, vec![term])),
+            }
+        }
+        groups
+            .into_iter()
+            .map(|((degree, coefficient), polynomial)| PPart {
+                scale_power: 2 * loops as i64 - total_power + degree,
+                wick_sign: if (total_power + degree) % 2 == 0 {
+                    1
+                } else {
+                    -1
+                },
+                coefficient,
+                polynomial,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn indexed_part_lookup_preserves_linear_order_with_spectators_and_negative_powers() {
+        let family = &P_FAMILIES[1];
+        let external = parse("-p(3)");
+        let first = parse("dot(k(1),p(3))");
+        let second = parse("dot(k(2),p(3))");
+        let epsilon = parse("ε");
+        let mut numerator = parse("3/7*dot(k(1),k(2)) - 2/5");
+        for index in 1..=32 {
+            let power = index;
+            let spectator = function!(S.x, index) * (Atom::one() + &epsilon * Atom::num(index));
+            numerator +=
+                spectator * (first.pow(power) / Atom::num(3) + second.pow(power) / Atom::num(3));
+        }
+        for (powers, extra_numerator) in [
+            ([1, 1, 1, 1, 2], Atom::one()),
+            ([-1, 1, 1, 1, 2], parse("dot(k(1),k(1))")),
+        ] {
+            let actual = split(family, &powers, numerator.as_view(), &external)
+                .unwrap()
+                .unwrap();
+            let total_power = powers.iter().filter(|power| **power > 0).sum();
+            let expanded = (&numerator * extra_numerator).expand();
+            let expected = linear_parts(&expanded, &external, family.loops, total_power);
+            assert!(
+                expected.len() > 16,
+                "fixture must exercise many distinct groups"
+            );
+            assert!(expected.iter().any(|part| part.polynomial.len() > 1));
+            assert_eq!(actual.parts, expected);
+        }
     }
 
     #[test]

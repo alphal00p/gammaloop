@@ -2,6 +2,7 @@
 
 use std::{
     collections::BTreeMap,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -24,9 +25,55 @@ use super::{
     CountertermCall, IrForestTerm, MassiveUvEvaluator, RStarPlan, UvPreparationTerm,
     expression::{RStarIntegrand, RootProjector},
     moments::hard_moments,
+    physical::PreparedPhysicalUvTerm,
 };
 
 impl RStarPlan {
+    /// Complete every original proper-UV child and prepare its physical
+    /// quotient without reducing or integrating the remaining loop tensors.
+    ///
+    /// The optional linear root projector acts on each complete quotient
+    /// numerator exactly once. Its coefficients must be independent of the
+    /// remaining loop momenta. Child Laurent products and their correlations
+    /// remain inside the terms, including when an independently grouped bare
+    /// amplitude vanishes. Group matching terms with [`super::PhysicalUvGroup`]
+    /// and apply the final `-K` to the resulting preparation plus bare poles.
+    pub fn prepare_physical_uv_terms(
+        &self,
+        graph: &Graph,
+        model: &Model,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+        root_projector: Option<&RootProjector<'_>>,
+    ) -> Result<Vec<PreparedPhysicalUvTerm>> {
+        let evaluation = Evaluation::new(self, graph, model, vakint, uv_settings, None)?;
+        let started = Instant::now();
+        let settings: Arc<str> = serde_json::to_string(&uv_settings.vakint)?.into();
+        let terms = self
+            .ordinary_uv
+            .iter()
+            .filter(|term| !term.counterterms.is_empty())
+            .map(|term| {
+                PreparedPhysicalUvTerm::new(
+                    evaluation.physical_remainder(term)?,
+                    model,
+                    Arc::clone(&settings),
+                    root_projector,
+                )
+            })
+            .collect::<Result<Vec<_>>>()?;
+        tracing::info!(
+            uv = true, rstar = true, timing = true,
+            stage = "rstar_prepare_physical_quotients",
+            graph = %graph.name,
+            prepared_quotients = terms.len(),
+            proper_uv_seconds = evaluation.proper_uv_elapsed.as_secs_f64(),
+            preparation_seconds = started.elapsed().as_secs_f64(),
+            "Prepared original-forest physical quotients before integration"
+        );
+        Ok(terms)
+    }
+
     /// Compute the local MS counterterm of a homogeneous massless graph.
     ///
     /// The result retains its open tensor indices and external edge momenta.
@@ -103,36 +150,62 @@ impl RStarPlan {
             &graph.external_filter::<SuBitGraph>(),
         )?;
         let mut evaluation = Evaluation::new(self, graph, model, vakint, uv_settings, None)?;
-        let mut result = -evaluation.counterterm()?;
-        for term in self
-            .ordinary_uv
-            .iter()
-            .filter(|term| !term.counterterms.is_empty())
-        {
-            let insertions = evaluation
-                .insertions(term)?
-                .into_iter()
-                .map(|insertion| insertion.replace(evaluation.reference_mass_squared).with(0))
-                .collect::<Vec<_>>();
-            let remainder = RStarIntegrand::new(
-                graph,
-                model,
-                &term.remainder,
-                &insertions,
-                self.marked_edge,
-                Atom::Zero,
-            )?;
-            evaluation.integration_id += 1;
-            let mut settings = evaluation.settings.clone();
-            settings.number_of_terms_in_epsilon_expansion = i64::try_from(term.remainder.loops)?;
-            result -= remainder.integrate_physical(
-                vakint,
-                uv_settings,
-                &settings,
-                evaluation.integration_id,
-            )?;
-        }
+        let result = -evaluation.counterterm()? - evaluation.physical_uv_preparation()?;
         evaluation.poles(&result.replace_multiple(&external_routing))
+    }
+
+    /// Recover the original local MS counterterm from independently known bare
+    /// poles: `Delta_U(G) = -K [K G + sum_{S != empty} Delta_U(S) G/S]`.
+    ///
+    /// This retains the original graph's proper UV forest. It therefore also
+    /// accepts bare poles obtained by integrating propagator insertions or
+    /// replacing them with normalized scalar bubbles: those substitutions need
+    /// not preserve the original subdivergences or their nested pole maps.
+    ///
+    /// `bare_poles` must describe this infrared-finite massless two-point graph,
+    /// in the supplied Vakint normalization, with its original open tensor
+    /// slots and external momentum labels. Exclude graph-wide prefactors and
+    /// external projectors, as in [`Self::pole_part`]. Boundary momenta are
+    /// identified using the same physical routing as that method. All proper
+    /// UV counterterms belong to the original graph; the root R*
+    /// counterterm is not evaluated.
+    pub fn counterterm_from_pole_part(
+        &self,
+        graph: &Graph,
+        model: &Model,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+        bare_poles: &Atom,
+    ) -> Result<Atom> {
+        Evaluation::new(self, graph, model, vakint, uv_settings, None)?
+            .counterterm_from_pole_part(bare_poles)
+    }
+
+    /// Project the complete physical preparation before its final pole map.
+    ///
+    /// This is [`Self::counterterm_from_pole_part`] with a linear root projector
+    /// whose coefficients are regular in epsilon and contain no loop momenta.
+    /// Proper UV children retain their open tensor boundaries. Contractions
+    /// and scalar dimensions introduced by the projector are completed before
+    /// `K`, including normalization factors such as `1/(d-1)`.
+    pub fn projected_counterterm_from_pole_part(
+        &self,
+        graph: &Graph,
+        model: &Model,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+        bare_poles: &Atom,
+        root_projector: &dyn Fn(&Atom) -> Result<Atom>,
+    ) -> Result<Atom> {
+        Evaluation::new(
+            self,
+            graph,
+            model,
+            vakint,
+            uv_settings,
+            Some(root_projector),
+        )?
+        .counterterm_from_pole_part(bare_poles)
     }
 }
 
@@ -177,7 +250,7 @@ impl<'a> Evaluation<'a> {
         let epsilon = parse!(&settings.epsilon_symbol)
             .get_symbol()
             .ok_or_else(|| eyre!("Vakint epsilon must be a symbol"))?;
-        let reference_mass_squared = symbol!("rstar_reference_mass_squared"; Scalar);
+        let reference_mass_squared = *super::REFERENCE_MASS_SQUARED;
         let reference_mass = Atom::var(reference_mass_squared).sqrt();
         let children_started = Instant::now();
         let children = if plan.counterterms.is_empty() {
@@ -187,6 +260,10 @@ impl<'a> Evaluation<'a> {
                 .wrap_err("while computing the proper UV counterterms with massive R")?
         };
         let proper_uv_elapsed = children_started.elapsed();
+        let mut uv = MassiveUvEvaluator::new(graph, model, vakint, uv_settings);
+        if let Some(cache) = &plan.counterterm_cache {
+            uv = uv.with_counterterm_cache(cache.clone());
+        }
         Ok(Self {
             plan,
             graph,
@@ -198,7 +275,7 @@ impl<'a> Evaluation<'a> {
             reference_mass_squared,
             auxiliary_mass_squared: Atom::var(symbol!("rstar_mass_squared"; Scalar)),
             children,
-            uv: MassiveUvEvaluator::new(graph, model, vakint, uv_settings),
+            uv,
             quotient_counterterms: BTreeMap::new(),
             integration_id: 0,
             root_projector,
@@ -287,6 +364,70 @@ impl<'a> Evaluation<'a> {
 
     fn poles(&self, expression: &Atom) -> Result<Atom> {
         Ok(expression.series(self.epsilon, 0, -1)?.to_atom().expand())
+    }
+
+    fn counterterm_from_pole_part(&mut self, bare_poles: &Atom) -> Result<Atom> {
+        let (_, external_routing) = RStarIntegrand::physical_external_routing(
+            self.graph,
+            &self.graph.external_filter::<SuBitGraph>(),
+        )?;
+        let mut prepared = bare_poles + self.physical_uv_preparation()?;
+        if let Some(projector) = self.root_projector {
+            prepared = projector(&prepared)?;
+        }
+        // The independent bare-pole provider and the root projector can both
+        // introduce tensor contractions with evanescent scalar coefficients.
+        // Complete them before K, just as for an ordinary integrated UV node.
+        let prepared = RStarIntegrand::finish_tensor(
+            prepared.replace_multiple(&external_routing),
+            self.integration_id + 1,
+        )?;
+        let result = -self.poles(&prepared)?;
+        self.log_timing();
+        Ok(result)
+    }
+
+    /// The physical, nonempty proper-UV sum, before the root pole projection.
+    /// Child counterterms remain in their original scopes and multiply their
+    /// quotients before the scalar integral's Laurent depth is determined.
+    fn physical_uv_preparation(&mut self) -> Result<Atom> {
+        let mut result = Atom::Zero;
+        for term in self
+            .plan
+            .ordinary_uv
+            .iter()
+            .filter(|term| !term.counterterms.is_empty())
+        {
+            let remainder = self.physical_remainder(term)?;
+            self.integration_id += 1;
+            let mut settings = self.settings.clone();
+            settings.number_of_terms_in_epsilon_expansion = i64::try_from(term.remainder.loops)?;
+            let started = Instant::now();
+            result += remainder.integrate_physical(
+                self.vakint,
+                self.uv_settings,
+                &settings,
+                self.integration_id,
+            )?;
+            self.integration_elapsed += started.elapsed();
+        }
+        Ok(result)
+    }
+
+    fn physical_remainder(&self, term: &UvPreparationTerm) -> Result<RStarIntegrand> {
+        let insertions = self
+            .insertions(term)?
+            .into_iter()
+            .map(|insertion| insertion.replace(self.reference_mass_squared).with(0))
+            .collect::<Vec<_>>();
+        RStarIntegrand::new(
+            self.graph,
+            self.model,
+            &term.remainder,
+            &insertions,
+            self.plan.marked_edge,
+            Atom::Zero,
+        )
     }
 
     fn insertions(&self, term: &UvPreparationTerm) -> Result<Vec<Atom>> {

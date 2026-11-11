@@ -100,9 +100,14 @@ clarabel = { git = "https://github.com/oxfordcontrol/Clarabel.rs", rev = "14ad0f
 typst-library = { git = "https://github.com/alphal00p/gammaloop", branch = "preserve-canonical-numerator-interfaces" }
 typst-svg = { git = "https://github.com/alphal00p/gammaloop", branch = "preserve-canonical-numerator-interfaces" }
 symbolica-typst-plugin = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "57b7455b37c30f4f87353c0073e49f5225e937ab" }
-graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "9cd57678d8817ec33c05cacba4925162f1c86b0b" }
-numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "9cd57678d8817ec33c05cacba4925162f1c86b0b" }
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "9cd57678d8817ec33c05cacba4925162f1c86b0b" }
+graphica = { path = "../../symbolica-beta-polynomial/lib/graphica" }
+numerica = { path = "../../symbolica-beta-polynomial/lib/numerica" }
+symbolica = { path = "../../symbolica-beta-polynomial" }
+
+[patch."https://github.com/alphal00p/rustred"]
+rustred = { path = "../../beta/.cache/rustred-performance-v23/crates/rustred-core" }
+rustred-app = { path = "../../beta/.cache/rustred-performance-v23/crates/rustred-app" }
+rustred-order = { path = "../../beta/.cache/rustred-performance-v23/crates/rustred-order" }
 
 # Share the maintained FeynKit owner with local GammaLoop consumers.
 [patch."https://github.com/alphal00p/gammaloop"]

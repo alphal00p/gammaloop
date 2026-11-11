@@ -19,6 +19,7 @@ pub mod precision;
 mod presentation;
 mod routing;
 pub mod rustred_evaluation;
+pub mod stage_timing;
 pub mod symbols;
 pub mod topologies;
 pub mod truncation_guard;
@@ -87,6 +88,7 @@ pub use rustred_evaluation::{
     ShippedOrderedCacheUse, ordered_cache_producer,
 };
 pub use rustred_evaluation::{RustRedEvaluationError, RustRedEvaluationOptions, RustRedMasterMode};
+use stage_timing::StageSpan;
 pub use truncation_guard::{MissingMasterOrder, MissingMasterOrders};
 
 use regex::Regex;
@@ -1056,12 +1058,17 @@ fn get_prop_with_id(
     expression: AtomView,
     prop_id: usize,
 ) -> Option<HashMap<symbolica::atom::Symbol, Atom>> {
-    let pattern: Pattern =
-        vk_parse!(format!("prop({},edge(nl_,nr_),q_,mUVsq_,pow_)", prop_id).as_str())
-            .unwrap()
-            .to_pattern();
-    let number_node_condition = Condition::from((vk_symbol!("nl_"), ge_condition(0)))
-        & Condition::from((vk_symbol!("nr_"), ge_condition(0)));
+    let pattern = function!(
+        S.prop,
+        prop_id,
+        function!(S.edge, S.nl_, S.nr_),
+        S.q_,
+        S.muvsq_,
+        S.pow_
+    )
+    .to_pattern();
+    let number_node_condition =
+        Condition::from((S.nl_, ge_condition(0))) & Condition::from((S.nr_, ge_condition(0)));
     expression
         .pattern_match(&pattern, Some(&number_node_condition), None)
         .next()
@@ -1083,7 +1090,7 @@ fn with_index_tail(head: AtomView) -> Result<Atom, VakintError> {
     for argument in function.iter() {
         builder = builder.add_arg(argument);
     }
-    Ok(builder.add_arg(vk_parse!("idx___").unwrap()).finish())
+    Ok(builder.add_arg(S.idx___).finish())
 }
 
 /// Attach the `idx___` index tail to every canonical loop momentum `k(i)`.
@@ -2433,6 +2440,10 @@ pub struct VakintSettings {
     /// order is resolved for the default path; after changing this path, use
     /// [`EvaluationOrder::available`] to resolve it for the new executable.
     pub form_exe_path: String,
+    /// Reuse raw FORCER reductions across requests and share in-flight results.
+    /// Disabling this cache recomputes every request, independently of the
+    /// RustRed step cache and any caller-owned counterterm caches.
+    pub forcer_cache: bool,
     /// Executable name or path used to invoke Python-based backends.
     pub python_exe_path: String,
     /// Whether canonicalization must account for every numerator factor.
@@ -2815,6 +2826,7 @@ impl Default for VakintSettings {
             mu_r_sq_symbol: format!("{}::mursq", NAMESPACE),
             evaluation_order: EvaluationOrder::available(&form_exe_path, &python_exe_path),
             form_exe_path,
+            forcer_cache: true,
             python_exe_path,
             verify_numerator_identification: false,
             run_time_decimal_precision: 32,
@@ -2986,11 +2998,14 @@ impl VakintTerm {
         settings: &VakintSettings,
         mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
     ) -> Result<ReplacementRules, VakintError> {
+        let _stage = StageSpan::new("vakint.topology.prepare_integral");
         MonitorContext::native_phase(observation.as_deref_mut(), "topology_matching", None);
         self.stage_numerical_inputs(vakint, settings)?;
-        let mut integral_specs = if let Some(replacement_rules) =
+        let matched = {
+            let _stage = StageSpan::new("vakint.topology.match");
             vakint.match_topologies_for_settings(settings, self.integral.as_view())?
-        {
+        };
+        let mut integral_specs = if let Some(replacement_rules) = matched {
             replacement_rules
         } else {
             return Err(VakintError::UnreckognizedIntegral(
@@ -3008,17 +3023,21 @@ impl VakintTerm {
         let scalar_five_loop =
             matches!(integral_specs.canonical_topology, Topology::FiveLoop(_)) && scalar_rustred;
         if scalar_five_loop {
+            let _stage = StageSpan::new("vakint.topology.routing_witness");
             MonitorContext::native_phase(observation, "routing_verification", None);
             integral_specs = vakint
                 .match_rustred_input(settings, self.integral.as_view(), self.numerator.as_view())?
                 .unwrap_or(integral_specs);
         }
 
-        integral_specs.apply_replacement_rules()?;
-        if scalar_rustred {
-            self.apply_scalar_numerator_replacement_rules(&integral_specs, settings)?;
-        } else {
-            self.apply_numerator_replacement_rules(&integral_specs, settings)?;
+        {
+            let _stage = StageSpan::new("vakint.topology.apply_rules");
+            integral_specs.apply_replacement_rules()?;
+            if scalar_rustred {
+                self.apply_scalar_numerator_replacement_rules(&integral_specs, settings)?;
+            } else {
+                self.apply_numerator_replacement_rules(&integral_specs, settings)?;
+            }
         }
 
         Ok(integral_specs)
@@ -3264,6 +3283,7 @@ impl VakintTerm {
         replacement_rules: &ReplacementRules,
         short_form: bool,
     ) -> Result<(), VakintError> {
+        let _stage = StageSpan::new("vakint.topology.canonicalize_term");
         self.integral = replacement_rules.canonical_topology.to_canonical(
             self.integral.as_view(),
             replacement_rules,
@@ -3335,6 +3355,7 @@ impl VakintTerm {
         vakint: &Vakint,
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
+        let _stage = StageSpan::new("vakint.tensor.reduce_term");
         // A p-integral numerator is never projected: its loop momenta are
         // contracted with the external momentum. It only takes scalar form.
         if let Some(external) = self.propagator_external()? {
@@ -3352,6 +3373,7 @@ impl VakintTerm {
         vakint: &Vakint,
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
+        let _stage = StageSpan::new("vakint.tensor.alphaloop");
         let mut form_numerator = self.numerator.clone();
         // Make sure to undo the dot product notation.
         // If it was not used, the command below will do nothing.
@@ -3617,6 +3639,7 @@ impl VakintTerm {
         settings: &VakintSettings,
         scalar_only: bool,
     ) -> Result<(), VakintError> {
+        let _stage = StageSpan::new("vakint.tensor.feynkit");
         initialize_spenso_reps();
         let epsilon = vk_parse!(&settings.epsilon_symbol).map_err(VakintError::SymbolicaError)?;
         let dimension = Atom::num(4) - Atom::num(2) * epsilon;
@@ -3632,8 +3655,10 @@ impl VakintTerm {
         // Close independent scalar contractions before the collector distributes
         // products of tensor sums. The checked reducer below still owns loop
         // projection, scalar-only admission, and the tensor rank limits.
-        let numerator =
-            lorentz::LorentzTensor::parse(self.numerator.as_view(), &dimension)?.expression;
+        let numerator = {
+            let _stage = StageSpan::new("vakint.tensor.lorentz_parse_and_contract");
+            lorentz::LorentzTensor::parse(self.numerator.as_view(), &dimension)?.expression
+        };
         let vakint_dots = numerator.replace_map(|term, _context, out| {
             let AtomView::Fun(function) = term else {
                 return;
@@ -3722,6 +3747,7 @@ impl VakintTerm {
         // Keep their original representation metadata together until each
         // selected sector enters the checked tensor reducer. Scalar coefficient
         // subtrees stay opaque in the existing filtered collector.
+        let collection = StageSpan::new("vakint.tensor.collect_sectors");
         let selected = indexed_numerator.collect_with_map(|value| match value {
             AtomView::Fun(function) => {
                 [S.k, S.p, S.g].contains(&function.get_symbol())
@@ -3741,7 +3767,9 @@ impl VakintTerm {
             }
             _ => false,
         });
+        drop(collection);
         let mut failure = None;
+        let projection = StageSpan::new("vakint.tensor.project_sectors");
         let mut reduced = selected
             .map_root(|root| {
                 root.map_collects(|collected, _, out| {
@@ -3765,9 +3793,11 @@ impl VakintTerm {
                 .unwrap_collect()
             })
             .into_inner();
+        drop(projection);
         if let Some(error) = failure {
             return Err(error);
         }
+        let _restoration = StageSpan::new("vakint.tensor.restore_coefficients");
         let mut restored = AliasedAtom::from(reduced);
         for (coefficient, alias) in coefficient_aliases {
             restored.register_alias(alias, coefficient);
@@ -4740,9 +4770,10 @@ impl VakintExpression {
         vakint: &Vakint,
         settings: &VakintSettings,
     ) -> Result<Self, VakintError> {
+        let topo = S.topo;
         let mut has_float = false;
         input.visitor(&mut |part| {
-            if matches!(part, AtomView::Fun(function) if function.get_symbol() == vk_symbol!("topo"))
+            if matches!(part, AtomView::Fun(function) if function.get_symbol() == topo)
                 || precision::legacy::is_source(part)
             {
                 return false;
@@ -4763,9 +4794,10 @@ impl VakintExpression {
             .map(|index| vk_symbol!(format!("input_coefficient_placeholder_{index}")))
             .find(|symbol| !input.contains_symbol(*symbol))
             .unwrap();
+        let epsilon = std::cell::LazyCell::new(|| vk_symbol!(&settings.epsilon_symbol));
         let mut literals = Vec::new();
         let lifted = input.replace_map(|part, _context, out| {
-            if matches!(part, AtomView::Fun(function) if function.get_symbol() == vk_symbol!("topo"))
+            if matches!(part, AtomView::Fun(function) if function.get_symbol() == topo)
                 || precision::legacy::is_source(part)
             {
                 **out = part.to_owned();
@@ -4790,14 +4822,9 @@ impl VakintExpression {
                 }
                 let value = if track {
                     precision::legacy::stage_table(
-                        function!(
-                            vk_symbol!("input_coefficient"),
-                            request_id,
-                            literal_id as i64
-                        )
-                        .as_view(),
+                        function!(S.input_coefficient, request_id, literal_id as i64).as_view(),
                         value.as_view(),
-                        vk_symbol!(&settings.epsilon_symbol),
+                        *epsilon,
                         "Input",
                     )?
                 } else {
@@ -4813,12 +4840,15 @@ impl VakintExpression {
 
     pub fn split_integrals(input: AtomView) -> Result<Vec<VakintTerm>, VakintError> {
         let mut res = vec![];
+        let topology = function!(S.topo, S.props_);
+        let topology_pattern = topology.to_pattern();
+        let topology_power_pattern = topology.pow(Atom::var(S.n_)).to_pattern();
 
         // An ordered set keeps the term order independent of hash seeds, so
         // repeated evaluations issue identically ordered native requests.
         let topo_variables = input
-            .pattern_match(&vk_parse!("topo(props_)").unwrap().to_pattern(), None, None)
-            .map(|m| function!(vk_symbol!("topo"), m.get(&vk_symbol!("props_")).unwrap()))
+            .pattern_match(&topology_pattern, None, None)
+            .map(|m| function!(S.topo, m.get(&S.props_).unwrap()))
             .collect::<std::collections::BTreeSet<_>>();
 
         for (integral, numerator) in
@@ -4827,10 +4857,7 @@ impl VakintExpression {
             if integral == Atom::num(1) {
                 return Err(VakintError::InvalidIntegralFormat(format!("{}", numerator)));
             }
-            if utils::could_match(
-                &vk_parse!("topo(props_)^n_").unwrap().to_pattern(),
-                integral.as_view(),
-            ) {
+            if utils::could_match(&topology_power_pattern, integral.as_view()) {
                 return Err(VakintError::InvalidIntegralFormat(format!("{}", integral)));
             }
             res.push(VakintTerm {
@@ -4864,12 +4891,17 @@ impl VakintExpression {
         short_form: bool,
         mut match_input: impl FnMut(AtomView) -> Result<Option<ReplacementRules>, VakintError>,
     ) -> Result<(), VakintError> {
+        let _stage = StageSpan::new("vakint.topology.canonicalize_expression");
         for term in self.0.iter_mut() {
             resources::checkpoint()?;
             if !term.normalize_propagator()? {
                 continue;
             }
-            if let Some(replacement_rules) = match_input(term.integral.as_view())? {
+            let matched = {
+                let _stage = StageSpan::new("vakint.topology.match");
+                match_input(term.integral.as_view())?
+            };
+            if let Some(replacement_rules) = matched {
                 //println!("replacement_rules = {}", replacement_rules,);
                 term.canonicalize(settings, &replacement_rules, short_form)?;
             } else {
@@ -4912,6 +4944,7 @@ impl VakintExpression {
         mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
         progress: Option<&CallerProgress>,
     ) -> Result<(), VakintError> {
+        let _stage = StageSpan::new("vakint.expression.evaluate_integral");
         settings.with_resource_budget(|| {
             MonitorContext::native_phase(observation.as_deref_mut(), "integral_reduction", None);
             let mut complete = Vec::new();
@@ -4922,6 +4955,7 @@ impl VakintExpression {
                 (usize, RustRedMasterMode),
                 Vec<rustred_evaluation::MatchedContribution>,
             >::new();
+            let preparation = StageSpan::new("vakint.expression.prepare_batches");
             for (source_id, term) in self.0.iter_mut().enumerate() {
                 resources::checkpoint()?;
                 if !term.normalize_propagator()? {
@@ -4967,17 +5001,19 @@ impl VakintExpression {
                     vectors.extend(term.vectors.iter().cloned());
                     continue;
                 }
-                term.numerator = simplify_real(
-                    method
-                        .reduce_integral(
+                term.numerator = {
+                    let reduced = {
+                        let _stage = StageSpan::new("vakint.expression.other_backend");
+                        method.reduce_integral(
                             vakint,
                             settings,
                             term.numerator.as_view(),
                             &matched,
                             source_id,
                         )?
-                        .as_view(),
-                );
+                    };
+                    simplify_real(reduced.as_view())
+                };
                 term.integral = Atom::one();
                 if method.numerical_output() {
                     numerical += &term.numerator;
@@ -4986,6 +5022,7 @@ impl VakintExpression {
                     complete.push(term.clone());
                 }
             }
+            drop(preparation);
             let batch_total = ordered.len();
             for (batch_index, (key, contributions)) in ordered.into_iter().enumerate() {
                 if let Some(progress) = progress {
@@ -5000,13 +5037,17 @@ impl VakintExpression {
                     "ordered_batch_preparation",
                     None,
                 );
-                let raw = vakint.rustred_reduce_ordered(
-                    settings,
-                    contributions,
-                    observation.as_deref_mut(),
-                    progress,
-                )?;
+                let raw = {
+                    let _stage = StageSpan::new("vakint.expression.ordered_batch");
+                    vakint.rustred_reduce_ordered(
+                        settings,
+                        contributions,
+                        observation.as_deref_mut(),
+                        progress,
+                    )?
+                };
                 {
+                    let _stage = StageSpan::new("vakint.expression.batch_accumulation");
                     let _math = MathSpan::new();
                     reductions
                         .get_mut(&key)
@@ -5029,13 +5070,9 @@ impl VakintExpression {
                     },
                     Some(raw.as_view()),
                 );
-                // Retention is combined by its catalogue owner. Substitution
-                // modes keep their existing precombination boundary.
-                let raw = if mode == RustRedMasterMode::Retain {
-                    raw
-                } else {
-                    rustred_evaluation::combine_exact(raw)
-                };
+                // The catalogue combines before checking coefficient availability
+                // and Laurent orders. Recombining here expands its factored
+                // input and repeats the same rational algebra before cooking.
                 let numerator = vakint.finalize_rustred(
                     raw,
                     settings,
@@ -5055,6 +5092,7 @@ impl VakintExpression {
                 }
             }
             if !numerical.is_zero() {
+                let _stage = StageSpan::new("vakint.expression.numerical_materialization");
                 MonitorContext::native_phase(
                     observation,
                     "numerical_materialization",
@@ -5209,11 +5247,13 @@ impl Vakint {
     /// expression is expanded. Native Laurent series then compute every order
     /// needed by surrounding poles, without introducing an artificial Gamma tail.
     pub(crate) fn normalize_gamma_functions(expression: AtomView) -> Atom {
+        let [(gamma, native_gamma), (euler_gamma, native_euler_gamma)] =
+            &S.gamma_normalization_rules;
         expression
-            .replace(vk_parse!("Gamma(x_)").unwrap().to_pattern())
-            .with(function!(symbolica::transcendental::gamma(), Atom::var(S.x_)).to_pattern())
-            .replace(vk_parse!("EulerGamma").unwrap().to_pattern())
-            .with(Atom::var(symbolica::transcendental::euler_gamma()).to_pattern())
+            .replace(gamma)
+            .with(native_gamma)
+            .replace(euler_gamma)
+            .with(native_euler_gamma)
     }
 
     pub fn initialize_vakint_symbols() {
@@ -7618,11 +7658,7 @@ Evaluated (n_loops=1, mu_r=1) :
             return Ok(input.to_owned());
         }
         precision::legacy::stage_table(
-            function!(
-                vk_symbol!("input_coefficient"),
-                Self::next_input_request_id()?
-            )
-            .as_view(),
+            function!(S.input_coefficient, Self::next_input_request_id()?).as_view(),
             input,
             vk_symbol!(&settings.epsilon_symbol),
             "Input",
@@ -7750,6 +7786,43 @@ mod tests {
     use symbolica::parse_lit;
 
     use super::*;
+
+    #[test]
+    fn cached_gamma_normalization_preserves_parser_matching() {
+        Vakint::initialize_vakint_symbols();
+        for input in [
+            "Gamma(1+eps)^2/Gamma(1-2*eps)*exp(EulerGamma)^eps",
+            "vakint::Gamma(vakint::x)+vakint::EulerGamma",
+            "Gamma(x+y)+Gamma(x_)+Gamma(f(a,b))+f(Gamma(x),EulerGamma)",
+            "Gamma(Gamma(x))+Gamma(EulerGamma)",
+            "gamma(x)+symbolica::gamma(x)+symbolica::euler_gamma",
+            "gamma_cache_other::Gamma(x)+gamma_cache_other::EulerGamma",
+            "GAMMA(x)+eulergamma+Gamma+EulerGamma(x)+Gamma()+Gamma(x,y)",
+        ] {
+            let input = vk_parse!(input).unwrap();
+            let legacy = input
+                .replace(vk_parse!("Gamma(x_)").unwrap().to_pattern())
+                .with(function!(symbolica::transcendental::gamma(), Atom::var(S.x_)).to_pattern())
+                .replace(vk_parse!("EulerGamma").unwrap().to_pattern())
+                .with(Atom::var(symbolica::transcendental::euler_gamma()).to_pattern());
+            assert_eq!(
+                Vakint::normalize_gamma_functions(input.as_view()),
+                legacy,
+                "{input}"
+            );
+        }
+    }
+
+    #[test]
+    fn cached_gamma_normalization_uses_native_symbols() {
+        Vakint::initialize_vakint_symbols();
+        let argument = vk_parse!("a+b").unwrap();
+        let native = function!(symbolica::transcendental::gamma(), argument)
+            + Atom::var(symbolica::transcendental::euler_gamma());
+        let input = vk_parse!("Gamma(a+b)+EulerGamma").unwrap();
+        assert_eq!(Vakint::normalize_gamma_functions(input.as_view()), native);
+        assert_eq!(Vakint::normalize_gamma_functions(native.as_view()), native);
+    }
 
     #[test]
     fn resource_errors_expose_the_original_standard_error_source() {
@@ -8993,6 +9066,136 @@ mod tests {
                 &base * &spectator * &second
             };
             assert!(rustred_evaluation::combine_exact(coefficient - expected).is_zero());
+        }
+    }
+
+    fn assert_master_finalization_matches_precombined(
+        engine: &Vakint,
+        settings: &VakintSettings,
+        raw: Atom,
+        loops: usize,
+        mode: RustRedMasterMode,
+    ) -> Result<Atom, String> {
+        let previous = engine
+            .finalize_rustred(
+                rustred_evaluation::combine_exact(raw.clone()),
+                settings,
+                loops,
+                mode,
+                None,
+            )
+            .map_err(|error| error.to_string());
+        let owned = engine
+            .finalize_rustred(raw, settings, loops, mode, None)
+            .map_err(|error| error.to_string());
+        assert_eq!(owned, previous, "{mode:?}");
+        owned
+    }
+
+    #[test]
+    fn master_finalization_owns_exact_cancellation_and_validation() {
+        use spenso::{
+            network::library::symbolic::ETS,
+            structure::representation::{BaseRepName, Minkowski, initialize},
+        };
+
+        let engine = Vakint::new().unwrap();
+        let settings = VakintSettings {
+            epsilon_symbol: "ep".into(),
+            number_of_terms_in_epsilon_expansion: 2,
+            evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
+                RustRedEvaluationOptions {
+                    master_mode: RustRedMasterMode::Retain,
+                },
+            )]),
+            integral_normalization_factor: LoopNormalizationFactor::FMFTandMATAD,
+            use_dot_product_notation: true,
+            ..Default::default()
+        };
+        let base = engine
+            .evaluate_integral(&settings, vk_parse!("topo(I1L(1,1))").unwrap().as_view())
+            .unwrap();
+        let unknown = vk_parse!("RustRedMaster(unavailable_fixture,1)").unwrap();
+        let zero = vk_parse!("ep^-2*((1-ep)^-1-1-ep)-(1-ep)^-1").unwrap();
+        initialize();
+        let dimension = vk_parse!("4-2*ep").unwrap();
+        let slot = |index| Minkowski::selfless_symbol().call((&dimension, index));
+        let metric = ETS.metric(slot(vk_symbol!("open_mu")), slot(vk_symbol!("open_nu")));
+        let cases = [
+            (
+                &base * vk_parse!("(1+ep)/(1-ep)").unwrap() + &zero * &unknown,
+                true,
+            ),
+            (&zero * &unknown, true),
+            (&unknown + &base, false),
+            (
+                &base * vk_parse!("exp(-ep*EulerGamma)*exp(ep*EulerGamma)*(1+ep)").unwrap(),
+                true,
+            ),
+            (&base * vk_parse!("0.5").unwrap(), true),
+            (&base * metric * vk_parse!("(1+ep)/(4-2*ep)").unwrap(), true),
+        ];
+        for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Numerical] {
+            for (raw, succeeds) in &cases {
+                let result = assert_master_finalization_matches_precombined(
+                    &engine,
+                    &settings,
+                    raw.clone(),
+                    1,
+                    mode,
+                );
+                if *succeeds {
+                    let _ = result.unwrap();
+                } else {
+                    let error = result.unwrap_err();
+                    assert!(error.contains("undeclared residual master"), "{error}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "captured four-loop proper-UV expression; exact master finalization without reductions"]
+    fn captured_qcd_master_finalization_matches_precombined() {
+        use sha2::{Digest, Sha256};
+        use std::io::Read;
+
+        let engine = Vakint::new().unwrap();
+        let provenance: serde_json::Value = serde_json::from_slice(include_bytes!(
+            "../tests/resources/rustred/qcd-l4-358-master-finalization.expr.provenance.json"
+        ))
+        .unwrap();
+        let compressed =
+            include_bytes!("../tests/resources/rustred/qcd-l4-358-master-finalization.expr.gz");
+        assert_eq!(
+            format!("{:x}", Sha256::digest(compressed)),
+            provenance["compressed"]["sha256"].as_str().unwrap()
+        );
+        let mut input = String::new();
+        flate2::read::GzDecoder::new(compressed.as_slice())
+            .read_to_string(&mut input)
+            .unwrap();
+        assert_eq!(
+            format!("{:x}", Sha256::digest(input.as_bytes())),
+            provenance["decoded"]["sha256"].as_str().unwrap()
+        );
+        let raw = vk_parse!(&input).unwrap();
+        assert_eq!(raw.as_view().nterms(), 1050);
+        let settings = VakintSettings {
+            epsilon_symbol: "gammalooprs::ε".into(),
+            number_of_terms_in_epsilon_expansion: 4,
+            use_dot_product_notation: true,
+            ..Default::default()
+        };
+        for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Numerical] {
+            let _ = assert_master_finalization_matches_precombined(
+                &engine,
+                &settings,
+                raw.clone(),
+                3,
+                mode,
+            )
+            .unwrap();
         }
     }
 

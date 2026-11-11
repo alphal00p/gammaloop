@@ -49,6 +49,7 @@ use symbolica::atom::{Atom, AtomCore};
 use tracing::instrument;
 use tracing::{debug, warn};
 use typed_index_collections::TiVec;
+use vakint::stage_timing::StageSpan;
 
 use super::{
     Autogen, Edge, Graph, HedgeData, LMBext, Vertex,
@@ -506,15 +507,19 @@ impl Graph {
             &result.loop_momentum_basis,
             initial_data.additional_params,
         );
+        let _numerator_check = StageSpan::new("gamma.graph.runtime_numerator_check");
         let runtime = result
             .numerator(&result.full_filter(), &result.empty_subgraph())
             .get_single_atom()?;
         let source = feynkit_numerator_atom(diagram.numerator())?;
-        if runtime.expand() != source.expand() {
-            return Err(eyre!(
-                "GammaLoop runtime conversion of FeynKit diagram '{}' did not preserve its finalized numerator",
-                diagram.name()
-            ));
+        if runtime != source {
+            let _expansion = StageSpan::new("gamma.graph.runtime_numerator_check.expand");
+            if runtime.expand() != source.expand() {
+                return Err(eyre!(
+                    "GammaLoop runtime conversion of FeynKit diagram '{}' did not preserve its finalized numerator",
+                    diagram.name()
+                ));
+            }
         }
         Ok(result)
     }

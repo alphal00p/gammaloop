@@ -1,5 +1,7 @@
 //! Lower-loop UV maps evaluated by the existing massive R operation.
 
+use std::sync::Arc;
+
 use eyre::{Result, WrapErr, ensure, eyre};
 use linnet::half_edge::{
     involution::EdgeIndex,
@@ -14,7 +16,8 @@ use crate::{
     utils::GS,
     uv::{
         ApproximationType, RenormalizationPrescriptionSettings, UVgenerationSettings,
-        UltravioletGraph, approx::CutStructure, hedge_poset::Wood,
+        UltravioletGraph, approx::CutStructure, counterterm_cache::CountertermCache,
+        hedge_poset::Wood,
     },
 };
 
@@ -23,14 +26,16 @@ use super::{CountertermCall, GraphRegion};
 /// Adapter from a scoped R* counterterm argument to the established UV forest.
 ///
 /// Contractions retain original edge and half-edge labels, so local insertions
-/// keep their momentum and tensor attachment identities. Each decorated graph
-/// receives its own forest: support alone cannot cache different polynomials.
+/// keep their momentum and tensor attachment identities. A decorated graph's
+/// complete numerator participates in its cache identity: support alone cannot
+/// distinguish different insertion polynomials.
 pub struct MassiveUvEvaluator<'a> {
     graph: &'a Graph,
     model: &'a Model,
     vakint: &'a Vakint,
     settings: UVgenerationSettings,
     reference_mass: Option<(EdgeIndex, Atom)>,
+    counterterm_cache: Option<Arc<CountertermCache>>,
 }
 
 impl<'a> MassiveUvEvaluator<'a> {
@@ -58,7 +63,16 @@ impl<'a> MassiveUvEvaluator<'a> {
             vakint,
             settings,
             reference_mass: None,
+            counterterm_cache: None,
         }
+    }
+
+    /// Share completed decorated UV maps between parent graphs. Insertions
+    /// participate in graph identity before lookup, including their epsilon
+    /// dependence and open tensor structure.
+    pub fn with_counterterm_cache(mut self, cache: Arc<CountertermCache>) -> Self {
+        self.counterterm_cache = Some(cache);
+        self
     }
 
     /// Use the parent's reference-family mass on this edge when it survives.
@@ -89,6 +103,12 @@ impl<'a> MassiveUvEvaluator<'a> {
 
         let graph = self.decorated_graph(&call.argument, insertions)?;
         let support = &call.argument.remaining;
+        if let Some(cache) = &self.counterterm_cache {
+            return Ok(cache
+                .counterterm(&graph, support, self.model, self.vakint, &self.settings)?
+                .replace(GS.m_uv_expansion)
+                .with(GS.m_uv_vacuum));
+        }
         if graph.compute_dod(support) < 0 {
             return Ok(Atom::Zero);
         }
@@ -190,9 +210,125 @@ mod tests {
         graph::parse::IntoFinalizedRuntimeGraph,
         initialisation::test_initialise,
         utils::load_generic_model,
-        uv::{rstar::RStarPlan, uv_graph::UVE},
+        uv::{
+            CTRenormalizationRule,
+            rstar::{CountertermScope, InsertionSlot, RStarPlan},
+            uv_graph::UVE,
+        },
     };
-    use symbolica::{parse, symbol};
+    use linnet::half_edge::subgraph::ModifySubSet;
+    use spenso::{
+        network::tags::SPENSO_TAG,
+        structure::representation::{Minkowski, RepName},
+    };
+    use symbolica::{function, parse, symbol};
+
+    #[test]
+    fn convergent_decorated_quotient_caches_zero_without_aliasing_divergent_insertion() -> Result<()>
+    {
+        test_initialise()?;
+        // Contracting the bubble leaves a one-loop triangle. Its constant
+        // insertion is convergent; a quadratic insertion makes it logarithmic.
+        let mut graph: Graph = finalized_runtime_dot!(
+            digraph G {
+                graph [projector=1];
+                node [num=1];
+                edge [particle="scalar_1" num=1];
+                A -> B [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
+                A -> B [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
+                B -> C [id=2 source="{ufo_order:2}" sink="{ufo_order:0}"];
+                C -> D [id=3 source="{ufo_order:1}" sink="{ufo_order:0}"];
+                D -> A [id=4 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:2}"];
+            }, "scalars"
+        )?;
+        let first = graph
+            .iter_nodes()
+            .find_map(|(node, _, data)| (data.name.value == "A").then_some(node))
+            .unwrap();
+        let hard = function!(GS.emr_mom, 0, Minkowski {}.new_rep(GS.dim).to_symbolic([]));
+        graph.underlying[first].num = Autogen::explicit(function!(SPENSO_TAG.dot, &hard, &hard));
+        graph.underlying[first].dod = Autogen::explicit(2);
+        let support = graph.full_filter();
+        let mut contracted = graph.empty_subgraph::<SuBitGraph>();
+        for edge in [0, 1] {
+            contracted.add(graph[&EdgeIndex::from(edge)].1);
+        }
+        let call = CountertermCall {
+            argument: GraphRegion {
+                remaining: support.subtract(&contracted),
+                insertions: vec![InsertionSlot {
+                    boundary: graph.dummy_less_full_crown(&contracted),
+                    support: contracted,
+                }],
+                boundary: graph.dummy_less_full_crown(&support),
+                support,
+                loops: 1,
+            },
+            taylor_order: 0,
+            scope: CountertermScope::InsertionMonomial,
+        };
+        let model = load_generic_model("scalars");
+        let settings = super::super::tests::settings();
+        let vakint = Vakint::new()?;
+        let cache = Arc::new(CountertermCache::default());
+        let ordinary = MassiveUvEvaluator::new(&graph, &model, &vakint, &settings);
+        let cached = MassiveUvEvaluator::new(&graph, &model, &vakint, &settings)
+            .with_counterterm_cache(cache.clone());
+        let constant = Atom::one();
+        let quotient = ordinary.decorated_graph(&call.argument, std::slice::from_ref(&constant))?;
+        assert_eq!(quotient.compute_dod(&call.argument.remaining), -2);
+        assert!(
+            ordinary
+                .counterterm(&call, std::slice::from_ref(&constant))?
+                .is_zero()
+        );
+        for _ in 0..2 {
+            assert!(
+                cached
+                    .counterterm(&call, std::slice::from_ref(&constant))?
+                    .is_zero()
+            );
+        }
+        assert_eq!(cache.stats().misses, 1);
+        assert_eq!(cache.stats().stores, 1);
+        assert_eq!(cache.stats().hits, 1);
+
+        let momentum = function!(GS.emr_mom, 2, Minkowski {}.new_rep(GS.dim).to_symbolic([]));
+        let quadratic = function!(SPENSO_TAG.dot, &momentum, &momentum);
+        let expected = ordinary.counterterm(&call, std::slice::from_ref(&quadratic))?;
+        assert!(!expected.is_zero());
+        let actual = cached.counterterm(&call, std::slice::from_ref(&quadratic))?;
+        super::super::tests::assert_same_counterterm(&actual, &expected)?;
+        let repeated = cached.counterterm(&call, std::slice::from_ref(&quadratic))?;
+        super::super::tests::assert_same_counterterm(&repeated, &expected)?;
+        assert_eq!(cache.stats().misses, 2);
+        assert_eq!(cache.stats().stores, 2);
+        assert_eq!(cache.stats().hits, 2);
+
+        // A convergent overall support is absent from the catalogue. Its own
+        // non-MS override must still be rejected before a zero can be stored.
+        let mut unsupported = settings;
+        unsupported
+            .renormalization_prescription
+            .overrides
+            .push(CTRenormalizationRule::new(
+                quotient.ct_identifier(&call.argument.remaining, &model),
+                ApproximationType::MUV,
+            ));
+        let invalid_cache = CountertermCache::default();
+        let error = invalid_cache
+            .counterterm(
+                &quotient,
+                &call.argument.remaining,
+                &model,
+                &vakint,
+                &unsupported,
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("pole-part subtraction"));
+        assert_eq!(invalid_cache.stats().stores, 0);
+        Ok(())
+    }
 
     #[test]
     fn decorated_quotient_preserves_labels_and_replaces_all_contracted_vertices() -> Result<()> {

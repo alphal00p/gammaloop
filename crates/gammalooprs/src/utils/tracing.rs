@@ -232,6 +232,7 @@ fn init_test_tracing_with_defaults(display_default: &str, file_default: &str) {
 
         let file_layer = fmt::layer()
             .json()
+            .with_thread_ids(true)
             .with_writer(file_writer)
             .with_filter(file_filter);
 

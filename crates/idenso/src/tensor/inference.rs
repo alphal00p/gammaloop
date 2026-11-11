@@ -3,7 +3,10 @@
 //! Cached interfaces retain raw logical ports. Only enclosing algebra contracts
 //! explicit pairs; unresolved port identities are canonicalized per occurrence.
 
-use std::collections::{HashMap, HashSet};
+use std::{
+    borrow::Borrow,
+    collections::{HashMap, HashSet},
+};
 
 use ahash::{AHashMap, AHashSet};
 use spenso::{
@@ -26,6 +29,7 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     domains::rational::Rational,
     evaluate::EvaluatorBuilder,
+    state::Workspace,
 };
 use thiserror::Error;
 
@@ -89,10 +93,47 @@ impl BorrowedTensorParts<'_> {
         if self.proofs.validated.get() == Some(&true) {
             return Ok(());
         }
+        self.validate_parts()?;
+        let _ = self.proofs.validated.set(true);
+        Ok(())
+    }
+
+    fn validate_parts(&self) -> InferenceResult<()> {
         #[cfg(feature = "reference-cases")]
         let _phase = crate::reference_cases::timing::scope(
             crate::reference_cases::timing::Phase::Validation,
         );
+        let mut inference = InterfaceInference::default();
+        if let AtomView::Fun(function) = self.expression.as_view()
+            && function.get_symbol().has_tag(&SPENSO_TAG.tensor)
+            && function.iter().all(|argument| {
+                inference
+                    .slots
+                    .parse::<LibraryRep, AbstractIndex>(argument)
+                    .is_ok_and(|slot| !matches!(slot.aind(), AbstractIndex::Open { .. }))
+            })
+        {
+            // An unchecked explicit leaf still needs validation, but its
+            // physical ports are readable without tree inference.
+            let occurrences = InterfaceInference::scoped_occurrences(
+                self.expression.as_view(),
+                &mut inference.slots,
+            )?;
+            inference.validate_tensor_syntax_after_scopes(self.expression.as_view())?;
+            let interface = inference
+                .direct_leaf_interface(function, LeafInference::Observe)
+                .ok_or_else(|| {
+                    TensorInferenceError::invalid("invalid explicit tensor interface")
+                })?;
+            let interface = InterfaceInference::merge_explicit_interface_sequence(&[interface])?;
+            occurrences.validate()?;
+            if !InterfaceInference::additive_interfaces_match(self.structure, &interface) {
+                return Err(TensorInferenceError::invalid(
+                    "transformed expression does not preserve a compatible tensor interface",
+                ));
+            }
+            return Ok(());
+        }
         let (_, occurrences) = SymbolicTensor::<PartialStructure>::validate_observed_interface(
             self.expression,
             self.structure,
@@ -105,9 +146,7 @@ impl BorrowedTensorParts<'_> {
                 &mut SlotMatcher::default(),
             )?,
         };
-        occurrences.validate()?;
-        let _ = self.proofs.validated.set(true);
-        Ok(())
+        occurrences.validate().map_err(Into::into)
     }
 
     pub(super) fn normalization_is_intrinsic(&self) -> bool {
@@ -118,57 +157,10 @@ impl BorrowedTensorParts<'_> {
     }
 
     pub(super) fn established_interface_is_valid(&self) -> bool {
-        *self.proofs.validated.get_or_init(|| {
-            let mut inference = InterfaceInference::default();
-            if let AtomView::Fun(function) = self.expression.as_view()
-                && function.get_symbol().has_tag(&SPENSO_TAG.tensor)
-                && function.iter().all(|argument| {
-                    inference
-                        .slots
-                        .parse::<LibraryRep, AbstractIndex>(argument)
-                        .is_ok_and(|slot| !matches!(slot.aind(), AbstractIndex::Open { .. }))
-                })
-            {
-                // An unchecked explicit leaf still needs validation, but its
-                // physical ports are already readable without tree inference.
-                let mut checked = || -> InferenceResult<bool> {
-                    let occurrences = InterfaceInference::scoped_occurrences(
-                        self.expression.as_view(),
-                        &mut inference.slots,
-                    )?;
-                    inference.validate_tensor_syntax_after_scopes(self.expression.as_view())?;
-                    let Some(interface) =
-                        inference.direct_leaf_interface(function, LeafInference::Observe)
-                    else {
-                        return Ok(false);
-                    };
-                    let interface =
-                        InterfaceInference::merge_explicit_interface_sequence(&[interface])?;
-                    occurrences.validate()?;
-                    Ok(InterfaceInference::additive_interfaces_match(
-                        self.structure,
-                        &interface,
-                    ))
-                };
-                return checked().unwrap_or(false);
-            }
-            let occurrences = match SymbolicTensor::<PartialStructure>::validate_observed_interface(
-                self.expression,
-                self.structure,
-                LeafInference::Observe,
-            ) {
-                Ok((_, Some(occurrences))) => occurrences,
-                Ok((_, None)) => match InterfaceInference::scoped_occurrences(
-                    self.expression.as_view(),
-                    &mut SlotMatcher::default(),
-                ) {
-                    Ok(occurrences) => occurrences,
-                    Err(_) => return false,
-                },
-                Err(_) => return false,
-            };
-            occurrences.validate().is_ok()
-        })
+        *self
+            .proofs
+            .validated
+            .get_or_init(|| self.validate_parts().is_ok())
     }
 
     pub(super) fn algebra_preserves_interface(&self) -> bool {
@@ -1124,7 +1116,56 @@ impl SymbolicTensor<PartialStructure> {
                 "addition requires compatible tensor interfaces",
             ));
         }
-        Self::checked_parts(&self.expression + &right.expression, self.structure.clone())
+        let left_expression = self.additive_operand()?;
+        let right_expression = right.additive_operand()?;
+        self.with_additive_result(left_expression.as_view() + right_expression.as_view())
+    }
+
+    /// Sum compatible tensors in bulk, retaining the first tensor's logical order.
+    ///
+    /// Validate each input before cancellation can hide invalid scopes or a
+    /// mismatched interface, including typed zeros. Established validation
+    /// proofs are reused: adding admitted terms changes only their coefficients,
+    /// so the result inherits the interface without another payload traversal.
+    /// An empty iterator is an error because it supplies no tensor interface;
+    /// include a typed zero to retain that interface when no other terms remain.
+    pub fn try_sum<T: Borrow<Self>>(terms: impl IntoIterator<Item = T>) -> InferenceResult<Self> {
+        let terms = terms.into_iter().collect::<Vec<_>>();
+        let first: &Self = terms
+            .first()
+            .ok_or_else(|| {
+                TensorInferenceError::invalid("cannot sum tensors without an interface")
+            })?
+            .borrow();
+        let mut expressions = Vec::with_capacity(terms.len());
+        for term in &terms {
+            let term: &Self = term.borrow();
+            if !InterfaceInference::additive_interfaces_match(&first.structure, &term.structure) {
+                return Err(TensorInferenceError::invalid(
+                    "addition requires compatible tensor interfaces",
+                ));
+            }
+            expressions.push(term.additive_operand()?);
+        }
+        if terms.len() == 1 {
+            let expression = expressions.pop().unwrap();
+            return if matches!(expression, AtomOrView::View(_)) {
+                Ok(first.clone())
+            } else {
+                first.with_additive_result(expression.into_owned())
+            };
+        }
+        first.with_additive_result(Atom::add_many(expressions))
+    }
+
+    /// Sum tensors with the checked bulk operation, retaining the first interface.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the iterator is empty or any input is invalid or has an
+    /// incompatible interface. Use [`Self::try_sum`] to handle these errors.
+    pub fn sum<T: Borrow<Self>>(terms: impl IntoIterator<Item = T>) -> Self {
+        Self::try_sum(terms).expect("cannot sum tensors: invalid inputs or incompatible interfaces")
     }
 
     /// Subtract tensors with compatible logical interfaces, retaining typed zero.
@@ -1134,7 +1175,44 @@ impl SymbolicTensor<PartialStructure> {
                 "subtraction requires compatible tensor interfaces",
             ));
         }
-        Self::checked_parts(&self.expression - &right.expression, self.structure.clone())
+        let left_expression = self.additive_operand()?;
+        let right_expression = right.additive_operand()?;
+        self.with_additive_result(left_expression.as_view() - right_expression.as_view())
+    }
+
+    /// Normalized addition copies tensor bodies without invoking their callbacks.
+    /// Dirty operands cross the checked rewrite boundary before they can cancel.
+    fn additive_operand(&self) -> InferenceResult<AtomOrView<'_>> {
+        self.ensure_validated()?;
+        if !self.expression.as_view().needs_normalization() {
+            return Ok(self.expression.as_view().into());
+        }
+        let mut expression = Atom::new();
+        Workspace::get_local().with(|workspace| {
+            self.expression
+                .as_view()
+                .normalize(workspace, &mut expression);
+        });
+        Ok(self
+            .with_checked_expression(expression)?
+            .into_expression()
+            .into())
+    }
+
+    /// Compatible admitted summands keep their branch-local contractions.
+    /// Numerical domain failures can still collapse a tensor to a nonzero scalar.
+    fn with_additive_result(&self, expression: Atom) -> InferenceResult<Self> {
+        if !self.is_scalar()
+            && matches!(expression.as_view(), AtomView::Num(number) if !number.is_zero())
+        {
+            return Err(TensorInferenceError::invalid(
+                "addition produced a nonzero scalar for a non-scalar tensor interface",
+            ));
+        }
+        Ok(Self::from_validated_parts(
+            expression,
+            self.structure.clone(),
+        ))
     }
 
     /// Validate index multiplicity and the scopes of chain and trace placeholders.
@@ -1220,17 +1298,28 @@ impl SymbolicTensor<PartialStructure> {
 }
 
 impl InterfaceInference {
+    /// Zeta's library normalizer performs pure scalar math. Its numerical
+    /// evaluator is not called by Atom normalization. Inspect descendants as
+    /// usual; this does not admit arbitrary normalizers or evaluators.
+    fn intrinsic_scalar_normalizer(symbol: Symbol) -> bool {
+        // Unrelated heads can be inspected during State initialization, before
+        // SpecialSymbols exists. Only its registered zeta handle may enter the
+        // existing cache; a user function in the same namespace is insufficient.
+        symbol.get_name() == "symbolica::zeta" && symbol == symbolica::transcendental::zeta()
+    }
+
     // These structural builtins cannot invoke user code themselves. Delta only
     // compares fixed components; cyclic only unwraps a sole sym projector.
     // Their descendants remain checked for user callbacks.
     pub(crate) fn intrinsic_normalization_head(symbol: Symbol) -> bool {
-        symbol.get_evaluation_info().is_none()
+        (symbol.get_evaluation_info().is_none()
             && (symbol == ETS.metric
                 || symbol == ETS.delta
                 || symbol == SPENSO_TAG.dot
                 || symbol.get_normalization_function().is_none()
                 || symbol == AIND_SYMBOLS.dind
-                || symbol == *shadowing::CYCLIC)
+                || symbol == *shadowing::CYCLIC))
+            || Self::intrinsic_scalar_normalizer(symbol)
     }
 
     /// Index substitution can retain a planned interface when reconstruction
@@ -1242,13 +1331,14 @@ impl InterfaceInference {
     fn intrinsic_head_with_metric(symbol: Symbol, metric: &mut Option<Symbol>) -> bool {
         #[cfg(test)]
         tests::INTRINSIC_HEAD_CHECKS.with(|count| count.set(count.get() + 1));
-        symbol.get_evaluation_info().is_none()
+        (symbol.get_evaluation_info().is_none()
             && (symbol == *metric.get_or_insert_with(|| ETS.metric)
                 || symbol == ETS.delta
                 || symbol == SPENSO_TAG.dot
                 || symbol.get_normalization_function().is_none()
                 || symbol == AIND_SYMBOLS.dind
-                || symbol == *shadowing::CYCLIC)
+                || symbol == *shadowing::CYCLIC))
+            || Self::intrinsic_scalar_normalizer(symbol)
     }
 
     fn normalization_is_intrinsic_with_metric(
@@ -3581,6 +3671,65 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn intrinsic_zeta_owner_retains_callback_and_evaluator_boundaries() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+        use symbolica::atom::{EvaluationInfo, SymbolBuilder};
+        crate::test_support::test_initialize();
+        let zeta = symbolica::transcendental::zeta();
+        assert!(zeta.get_normalization_function().is_some());
+        assert!(zeta.get_evaluation_info().is_some());
+        assert!(InterfaceInference::intrinsic_normalization_head(zeta));
+        let original = zeta.call(3);
+        let mut inference = InterfaceInference::default();
+        assert!(InterfaceInference::normalization_is_intrinsic(
+            original.as_view()
+        ));
+        assert!(inference.normalization_is_intrinsic_cached(original.as_view()));
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let lookalike = symbolica::symbol!(
+            "intrinsic_zeta_owner::zeta",
+            norm = move |_, _| {
+                observed.fetch_add(1, Ordering::Relaxed);
+            }
+        );
+        let observed = Arc::clone(&calls);
+        let same_namespace = symbolica::symbol!(
+            "symbolica::idenso_zeta_owner_callback",
+            norm = move |_, _| {
+                observed.fetch_add(1, Ordering::Relaxed);
+            }
+        );
+        let observed = Arc::clone(&calls);
+        let evaluator = SymbolBuilder::new(symbolica::wrap_symbol!(
+            "symbolica::idenso_zeta_owner_evaluator"
+        ))
+        .with_evaluation_info(EvaluationInfo::new().register(move |args: &[f64]| {
+            observed.fetch_add(1, Ordering::Relaxed);
+            args[0]
+        }))
+        .build()
+        .unwrap();
+        for head in [lookalike, same_namespace, evaluator] {
+            assert!(!InterfaceInference::intrinsic_normalization_head(head));
+            let payload = head.call(3);
+            let nested = zeta.call(&payload);
+            calls.store(0, Ordering::Relaxed);
+            for expression in [&payload, &nested] {
+                assert!(!InterfaceInference::normalization_is_intrinsic(
+                    expression.as_view()
+                ));
+                assert!(!inference.normalization_is_intrinsic_cached(expression.as_view()));
+            }
+            assert_eq!(calls.load(Ordering::Relaxed), 0);
+        }
+    }
+
+    #[test]
     fn intrinsic_subtree_cache_reuses_complete_normalized_functions() {
         let rep = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
         let p = FunctionBuilder::new(spenso::vector_symbol!("intrinsic_subtree_p"))
@@ -5185,6 +5334,290 @@ pub(crate) mod tests {
         );
         assert!(left.try_add(&scalar).is_err());
         assert!(left.try_sub(&scalar).is_err());
+    }
+
+    #[test]
+    fn checked_bulk_addition_retains_first_interface_and_reuses_validation() {
+        let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
+        let slots = [73121, 73123]
+            .map(|index| representation.slot(PartialIndex::Explicit(AbstractIndex::Normal(index))));
+        let expression = FunctionBuilder::new(spenso::tensor_symbol!("checked_bulk_tensor"))
+            .add_args(slots.map(composition::port_atom))
+            .finish();
+        let first = SymbolicTensor::<PartialStructure>::from_declared_parts(
+            expression.clone(),
+            PartialStructure::from_logical_slots(slots.into_iter().rev()),
+        )
+        .unwrap();
+        let second = SymbolicTensor::<PartialStructure>::from_declared_parts(
+            expression.clone(),
+            PartialStructure::from_logical_slots(slots),
+        )
+        .unwrap();
+        SCOPE_VALIDATIONS.with(|count| count.set(0));
+        let borrowed = SymbolicTensor::try_sum([&first, &second, &second]).unwrap();
+        assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
+        let owned = SymbolicTensor::sum([first.clone(), second.clone(), second.clone()]);
+        for result in [borrowed, owned] {
+            assert_eq!(result.expression, &expression * Atom::num(3));
+            assert_eq!(
+                result.structure.logical_slots(),
+                first.structure.logical_slots()
+            );
+        }
+        let opposite = -second;
+        let zero = SymbolicTensor::try_sum([&first, &opposite]).unwrap();
+        assert!(zero.expression.is_zero());
+        assert_eq!(
+            zero.structure.logical_slots(),
+            first.structure.logical_slots()
+        );
+        let singleton = SymbolicTensor::try_sum([&zero]).unwrap();
+        assert_eq!(singleton, zero);
+        assert!(
+            SymbolicTensor::<PartialStructure>::try_sum(std::iter::empty::<
+                SymbolicTensor<PartialStructure>,
+            >())
+            .is_err()
+        );
+        let scalar_zero = SymbolicTensor::infer(Atom::Zero).unwrap();
+        assert!(SymbolicTensor::try_sum([&zero, &scalar_zero]).is_err());
+    }
+
+    #[test]
+    fn checked_bulk_addition_validates_inputs_before_cancellation() {
+        let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
+        let slot = representation.slot(PartialIndex::Explicit(AbstractIndex::Normal(73131)));
+        let head = spenso::tensor_symbol!("invalid_bulk_tensor");
+        let scalar = PartialStructure::from_logical_slots([]);
+        let zero = SymbolicTensor::infer(Atom::Zero).unwrap();
+        for expression in [
+            FunctionBuilder::new(head)
+                .add_arg(composition::port_atom(slot))
+                .finish(),
+            FunctionBuilder::new(head)
+                .add_args([slot; 3].map(composition::port_atom))
+                .finish(),
+        ] {
+            let invalid = SymbolicTensor::new(expression.clone(), scalar.clone());
+            let opposite = SymbolicTensor::new(-expression, scalar.clone());
+            assert!((&invalid.expression + &opposite.expression).is_zero());
+            assert!(SymbolicTensor::try_sum([&zero, &invalid, &opposite]).is_err());
+            assert!(SymbolicTensor::try_sum([&invalid, &opposite]).is_err());
+            assert!(SymbolicTensor::try_sum([&invalid]).is_err());
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "cannot sum tensors")]
+    fn checked_bulk_addition_sum_panics_on_empty_input() {
+        SymbolicTensor::<PartialStructure>::sum(
+            std::iter::empty::<SymbolicTensor<PartialStructure>>(),
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "cannot sum tensors")]
+    fn checked_bulk_addition_sum_panics_on_incompatible_interfaces() {
+        let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
+        let zero = SymbolicTensor::infer(Atom::Zero).unwrap();
+        let typed_zero = SymbolicTensor::new(
+            Atom::Zero,
+            explicit_interface(representation, AbstractIndex::Normal(73141)),
+        );
+        SymbolicTensor::sum([zero, typed_zero]);
+    }
+
+    #[test]
+    fn checked_addition_propagates_validation_without_payload_scans() {
+        let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
+        let slot = representation.slot(PartialIndex::Explicit(AbstractIndex::Normal(73151)));
+        let expression = FunctionBuilder::new(spenso::tensor_symbol!("admitted_additive_tensor"))
+            .add_arg(composition::port_atom(slot))
+            .finish();
+        let source = SymbolicTensor::<PartialStructure>::from_declared_parts(
+            expression,
+            PartialStructure::from_logical_slots([slot]),
+        )
+        .unwrap();
+        INFERENCE_CALLS.with(|count| count.set(0));
+        SCOPE_VALIDATIONS.with(|count| count.set(0));
+        INTRINSIC_HEAD_CHECKS.with(|count| count.set(0));
+        let mut result = source.clone();
+        for _ in 0..16 {
+            result = result.try_add(&source).unwrap();
+            result = result.try_sub(&source).unwrap();
+            result = SymbolicTensor::try_sum([&result, &source]).unwrap();
+            result.ensure_validated().unwrap();
+        }
+        assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+        assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
+        assert_eq!(INTRINSIC_HEAD_CHECKS.with(|count| count.get()), 0);
+        assert_eq!(result.proofs.validated.get(), Some(&true));
+        assert_eq!(result.expression, Atom::num(17) * source.expression);
+    }
+
+    #[test]
+    fn checked_addition_preserves_branch_scopes_without_replaying_callbacks() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let callback = spenso::tensor_symbol!(
+            "additive_callback_tensor",
+            norm = move |_, _| {
+                observed.fetch_add(1, Ordering::Relaxed);
+            }
+        );
+        let plain = spenso::tensor_symbol!("additive_plain_tensor");
+        let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
+        let slot = representation.slot(PartialIndex::Explicit(AbstractIndex::Normal(73161)));
+        let term = |head| {
+            SymbolicTensor::<PartialStructure>::from_declared_parts(
+                FunctionBuilder::new(head)
+                    .add_args([slot; 2].map(composition::port_atom))
+                    .finish(),
+                PartialStructure::from_logical_slots([]),
+            )
+            .unwrap()
+        };
+        // Both closed branches deliberately reuse the same dummy name.
+        let first = term(callback);
+        let second = term(plain);
+        calls.store(0, Ordering::Relaxed);
+        SCOPE_VALIDATIONS.with(|count| count.set(0));
+        let sum = SymbolicTensor::try_sum([&first, &second]).unwrap();
+        let doubled = sum.try_add(&sum).unwrap();
+        let difference = doubled.try_sub(&sum).unwrap();
+        difference.ensure_validated().unwrap();
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+        assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
+        assert!(difference.is_scalar());
+        SymbolicTensor::validate_interface(&difference.expression, &difference.structure).unwrap();
+        SymbolicTensor::validate_atom(&difference.expression).unwrap();
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn checked_addition_checks_dirty_callbacks_before_cancellation() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
+        let slot = representation.slot(PartialIndex::Explicit(AbstractIndex::Normal(73171)));
+        let changed =
+            FunctionBuilder::new(spenso::tensor_symbol!("dirty_additive_callback_vector"))
+                .add_arg(composition::port_atom(slot))
+                .finish();
+        let observed = Arc::clone(&calls);
+        let keep = spenso::tensor_symbol!(
+            "dirty_additive_callback_keep",
+            norm = move |_, _| {
+                observed.fetch_add(1, Ordering::Relaxed);
+            }
+        );
+        let observed = Arc::clone(&calls);
+        let lose = spenso::tensor_symbol!(
+            "dirty_additive_callback_lose",
+            norm = move |_, output| {
+                observed.fetch_add(1, Ordering::Relaxed);
+                **output = changed.clone();
+            }
+        );
+        let structure = PartialStructure::from_logical_slots([]);
+        let dirty = |head| {
+            let mut expression = Atom::new();
+            // The public empty-function constructor leaves normalization pending.
+            // These scalar calls are valid before normalization; the invalid
+            // callback introduces a vector port and must fail before cancellation.
+            expression.to_fun(head);
+            assert!(expression.as_view().needs_normalization());
+            SymbolicTensor::from_normalized_parts(expression, structure.clone())
+        };
+        let valid = dirty(keep);
+        let invalid = dirty(lose);
+        let zero = SymbolicTensor::from_declared_parts(Atom::Zero, structure).unwrap();
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+        let normalized = SymbolicTensor::try_sum([&zero, &valid]).unwrap();
+        assert!(!normalized.expression.as_view().needs_normalization());
+        normalized.try_add(&normalized).unwrap();
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
+        assert!(invalid.try_add(&zero).is_err());
+        assert!(invalid.try_sub(&invalid).is_err());
+        assert!(SymbolicTensor::try_sum([&zero, &invalid, &invalid]).is_err());
+        assert_eq!(calls.load(Ordering::Relaxed), 4);
+    }
+
+    #[test]
+    fn checked_addition_rejects_numeric_domain_rank_loss() {
+        use symbolica::coefficient::Coefficient;
+
+        let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
+        let slot = representation.slot(PartialIndex::Explicit(AbstractIndex::Normal(73181)));
+        let expression = FunctionBuilder::new(spenso::tensor_symbol!("infinite_additive_tensor"))
+            .add_arg(composition::port_atom(slot))
+            .finish();
+        let infinity = Atom::num(Coefficient::positive_infinity());
+        let tensor = SymbolicTensor::<PartialStructure>::from_declared_parts(
+            &infinity * expression,
+            PartialStructure::from_logical_slots([slot]),
+        )
+        .unwrap();
+        assert!(tensor.try_sub(&tensor).is_err());
+        let opposite = -tensor.clone();
+        // Native bulk addition retains Indeterminate as a tensor coefficient;
+        // the open interface survives even though binary subtraction loses it.
+        let expected = Atom::add_many([&tensor.expression, &opposite.expression]);
+        let sum = SymbolicTensor::try_sum([&tensor, &opposite]).unwrap();
+        assert_eq!(sum.expression, expected);
+        assert_eq!(
+            sum.structure.logical_slots(),
+            tensor.structure.logical_slots()
+        );
+        SymbolicTensor::validate_interface(&sum.expression, &sum.structure).unwrap();
+        SymbolicTensor::validate_atom(&sum.expression).unwrap();
+        let scalar = SymbolicTensor::infer(infinity).unwrap();
+        assert!(scalar.try_sub(&scalar).unwrap().is_scalar());
+    }
+
+    #[test]
+    fn checked_addition_retains_positional_open_ports() {
+        let euclidean = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
+        let minkowski = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
+        let slots = [
+            minkowski.slot(PartialIndex::open(0)),
+            euclidean.slot(PartialIndex::open(1)),
+        ];
+        let head = spenso::tensor_symbol!("additive_open_port_tensor");
+        let make = |slots: [PartialSlot; 2]| {
+            SymbolicTensor::<PartialStructure>::from_declared_parts(
+                FunctionBuilder::new(head)
+                    .add_args(slots.map(composition::port_atom))
+                    .finish(),
+                PartialStructure::from_logical_slots(slots),
+            )
+            .unwrap()
+        };
+        let tensor = make(slots);
+        SCOPE_VALIDATIONS.with(|count| count.set(0));
+        let sum = SymbolicTensor::try_sum([&tensor, &tensor]).unwrap();
+        let zero = sum.try_sub(&sum).unwrap();
+        assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
+        assert_eq!(sum.structure.logical_slots(), slots);
+        assert_eq!(zero.structure.logical_slots(), slots);
+        assert!(zero.expression.is_zero());
+        let reversed = make([
+            euclidean.slot(PartialIndex::open(0)),
+            minkowski.slot(PartialIndex::open(1)),
+        ]);
+        assert!(tensor.try_add(&reversed).is_err());
+        assert!(SymbolicTensor::try_sum([&tensor, &reversed]).is_err());
     }
 
     #[test]

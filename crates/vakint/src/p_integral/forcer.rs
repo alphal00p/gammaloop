@@ -13,13 +13,18 @@ use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::{LazyLock, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
+use std::time::Instant;
 
 use colored::Colorize;
 use log::{debug, warn};
 use regex::Regex;
 use string_template_plus::{Render, RenderOptions, Template};
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
+use symbolica::domains::integer::{IntegerRing, Z};
+use symbolica::domains::rational::Q;
+use symbolica::domains::rational_polynomial::RationalPolynomial;
+use symbolica::poly::{PolyVariable, polynomial::MultivariatePolynomial};
 use symbolica::function;
 use version_compare::{Cmp, compare_to};
 
@@ -28,6 +33,7 @@ use super::parts::{Fraction, PDot, PMonomial, split};
 use super::{
     FORCER_UPSTREAM_COMMIT, MINIMAL_FORCER_FORM_VERSION, PFamilyData, ReducedPropagatorValue,
 };
+use crate::stage_timing::StageSpan;
 use crate::symbols::S;
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
 use crate::{
@@ -38,7 +44,12 @@ mod vendored {
     include!(concat!(env!("OUT_DIR"), "/vakint_forcer_sources.rs"));
 }
 
+mod batch;
 mod cache;
+
+pub(crate) use batch::reduce_inputs;
+
+static FORCER_CACHE: LazyLock<cache::ForcerRunCache> = LazyLock::new(Default::default);
 
 /// Name of the directory shared by the processes of the user `owner`.
 fn shared_directory_name(owner: u32) -> String {
@@ -245,6 +256,10 @@ pub(crate) struct ForcerPart {
 pub(crate) struct ForcerInput {
     pub program: String,
     pub parts: Vec<ForcerPart>,
+    loops: usize,
+    topology: String,
+    polynomials: Vec<String>,
+    substitutions: String,
 }
 
 /// `+p1`, `-2*Q` or `+1/2*p3`: a FORM factor of `vector`.
@@ -288,6 +303,283 @@ pub(crate) fn forcer_input(
     canonical_numerator: AtomView,
     external: &Atom,
 ) -> Result<Option<ForcerInput>, VakintError> {
+    forcer_input_in(family, powers, canonical_numerator, external, None)
+}
+
+/// [`forcer_input`] with every rational function of `epsilon` in the part
+/// coefficients reduced inside FORM, as `rat(N, D)` with Forcer's own `ep`
+/// (`d = 4 - 2 ep`, the same epsilon). See [`epsilon_channels`].
+pub(crate) fn forcer_input_with_epsilon(
+    family: &PFamilyData,
+    powers: &[i64],
+    canonical_numerator: AtomView,
+    external: &Atom,
+    epsilon: Symbol,
+) -> Result<Option<ForcerInput>, VakintError> {
+    forcer_input_in(family, powers, canonical_numerator, external, Some(epsilon))
+}
+
+type EpsilonRational = RationalPolynomial<IntegerRing, u32>;
+
+/// `coefficient = sum_j S_j R_j(epsilon)`: every `S_j` is free of `epsilon`
+/// and every `R_j` is a nonzero rational function of `epsilon` alone. Real
+/// rational numbers join `R_j`; other numbers stay in `S_j`. `None` when a
+/// factor mixes `epsilon` with other symbols.
+fn epsilon_coordinates(coefficient: &Atom, epsilon: Symbol) -> Option<Vec<(Atom, EpsilonRational)>> {
+    let expanded = coefficient.expand();
+    let terms = match expanded.as_view() {
+        AtomView::Add(sum) => sum.iter().collect::<Vec<_>>(),
+        term => vec![term],
+    };
+    let mut order = Vec::<Atom>::new();
+    let mut groups = HashMap::<Atom, Atom>::new();
+    for term in terms {
+        let factors = match term {
+            AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+            factor => vec![factor],
+        };
+        let mut spectator = Atom::num(1);
+        let mut rational = Atom::num(1);
+        for factor in factors {
+            if factor.contains_symbol(epsilon) {
+                if factor
+                    .get_all_symbols(true)
+                    .iter()
+                    .any(|symbol| *symbol != epsilon)
+                {
+                    return None;
+                }
+                rational *= factor.to_owned();
+            } else if matches!(factor, AtomView::Num(_)) && !factor.has_complex_coefficients() {
+                rational *= factor.to_owned();
+            } else {
+                spectator *= factor.to_owned();
+            }
+        }
+        match groups.get_mut(&spectator) {
+            Some(sum) => *sum += rational,
+            None => {
+                order.push(spectator.clone());
+                groups.insert(spectator, rational);
+            }
+        }
+    }
+    let variables = Arc::new(vec![PolyVariable::Symbol(epsilon)]);
+    let mut coordinates = Vec::with_capacity(order.len());
+    for spectator in order {
+        let rational: EpsilonRational = groups[&spectator]
+            .try_to_rational_polynomial(&Q, &Z, variables.clone())
+            .ok()?;
+        if rational.numerator.variables().as_ref() != variables.as_ref()
+            || rational.denominator.variables().as_ref() != variables.as_ref()
+        {
+            return None;
+        }
+        if !rational.numerator.is_zero() {
+            coordinates.push((spectator, rational));
+        }
+    }
+    Some(coordinates)
+}
+
+/// One FORCER channel of an epsilon-aware request: what stays outside FORM,
+/// and the polynomial reduced inside it.
+struct EpsilonChannel {
+    scale_power: i64,
+    sign: i64,
+    coefficient: Atom,
+    polynomial: String,
+}
+
+/// Few channels for the parts of one request, without elimination fill-in.
+/// Within each scale power (Forcer sets `Q.Q = 1`) and Wick sign, every part
+/// coefficient is a vector over its epsilon-free spectators `S_j` with
+/// rational functions of epsilon as entries. Parts with proportional vectors
+/// share a channel: its outside coefficient is `sum_j S_j r_j / r_first` and
+/// each part enters with `rat(r_first)`, so equal and proportional
+/// coefficients merge. When there are more directions than spectators, each
+/// spectator gets a channel instead, and each part enters it with its own
+/// entry `rat(r_j)`; transverse and longitudinal projections of arbitrary
+/// epsilon dependence then share two channels. Parts whose coefficients cannot
+/// be separated keep a channel of their own coefficient.
+fn epsilon_channels(parts: Vec<super::parts::PPart>, epsilon: Symbol) -> Vec<EpsilonChannel> {
+    let polynomial_of = |part: &super::parts::PPart| {
+        part.polynomial
+            .iter()
+            .map(|(value, monomial)| form_term(*value, &format!("({})", form_monomial(monomial))))
+            .collect::<String>()
+    };
+    let mut channels = Vec::<EpsilonChannel>::new();
+    let mut opaque = HashMap::<(i64, i64, Atom), usize>::new();
+    let mut classes = Vec::<((i64, i64), Vec<(String, Vec<(Atom, EpsilonRational)>)>)>::new();
+    for part in parts {
+        let polynomial = polynomial_of(&part);
+        let class = (part.scale_power, part.wick_sign);
+        match epsilon_coordinates(&part.coefficient, epsilon) {
+            Some(coordinates) if coordinates.is_empty() => {}
+            Some(coordinates) => match classes.iter_mut().find(|(key, _)| *key == class) {
+                Some((_, members)) => members.push((polynomial, coordinates)),
+                None => classes.push((class, vec![(polynomial, coordinates)])),
+            },
+            None => {
+                let key = (part.scale_power, part.wick_sign, part.coefficient);
+                if let Some(&index) = opaque.get(&key) {
+                    channels[index].polynomial.push_str(&polynomial);
+                } else {
+                    opaque.insert(key.clone(), channels.len());
+                    channels.push(EpsilonChannel {
+                        scale_power: key.0,
+                        sign: key.1,
+                        coefficient: key.2,
+                        polynomial,
+                    });
+                }
+            }
+        }
+    }
+    for ((scale_power, sign), members) in classes {
+        let mut spectators = Vec::<Atom>::new();
+        let mut index_of = HashMap::<Atom, usize>::new();
+        for (_, coordinates) in &members {
+            for (spectator, _) in coordinates {
+                if !index_of.contains_key(spectator) {
+                    index_of.insert(spectator.clone(), spectators.len());
+                    spectators.push(spectator.clone());
+                }
+            }
+        }
+        fn render(value: &EpsilonRational) -> String {
+            format!(
+                "rat({},{})",
+                form_epsilon_polynomial(&value.numerator),
+                form_epsilon_polynomial(&value.denominator)
+            )
+        }
+        fn add(channel: &mut EpsilonChannel, value: &EpsilonRational, polynomial: &str) {
+            if value.numerator.is_one() && value.denominator.is_one() {
+                channel.polynomial.push_str(polynomial);
+            } else {
+                channel
+                    .polynomial
+                    .push_str(&format!("+{}*({polynomial})", render(value)));
+            }
+        }
+        // Normalized directions; a sorted index list makes the key canonical.
+        let directions = members
+            .iter()
+            .map(|(_, coordinates)| {
+                let mut entries = coordinates
+                    .iter()
+                    .map(|(spectator, value)| (index_of[spectator], value))
+                    .collect::<Vec<_>>();
+                entries.sort_by_key(|(index, _)| *index);
+                let first = entries[0].1;
+                let normalized = entries
+                    .iter()
+                    .map(|(index, value)| (*index, *value / first))
+                    .collect::<Vec<_>>();
+                let key = normalized
+                    .iter()
+                    .map(|(index, value)| format!("{index}:{}", render(value)))
+                    .collect::<Vec<_>>()
+                    .join(";");
+                (key, normalized, first.clone())
+            })
+            .collect::<Vec<_>>();
+        let distinct = directions
+            .iter()
+            .map(|(key, _, _)| key.as_str())
+            .collect::<std::collections::HashSet<_>>()
+            .len();
+        if distinct <= spectators.len() {
+            let mut channel_of = HashMap::<String, usize>::new();
+            for ((polynomial, _), (key, normalized, first)) in members.iter().zip(directions) {
+                let channel = match channel_of.get(&key) {
+                    Some(&channel) => channel,
+                    None => {
+                        let coefficient = normalized
+                            .iter()
+                            .map(|(index, value)| {
+                                &spectators[*index]
+                                    * (value.numerator.to_expression()
+                                        / value.denominator.to_expression())
+                            })
+                            .fold(Atom::Zero, |sum, term| sum + term);
+                        channel_of.insert(key, channels.len());
+                        channels.push(EpsilonChannel {
+                            scale_power,
+                            sign,
+                            coefficient,
+                            polynomial: String::new(),
+                        });
+                        channels.len() - 1
+                    }
+                };
+                add(&mut channels[channel], &first, polynomial);
+            }
+        } else {
+            let offset = channels.len();
+            for spectator in &spectators {
+                channels.push(EpsilonChannel {
+                    scale_power,
+                    sign,
+                    coefficient: spectator.clone(),
+                    polynomial: String::new(),
+                });
+            }
+            for (polynomial, coordinates) in &members {
+                for (spectator, value) in coordinates {
+                    add(&mut channels[offset + index_of[spectator]], value, polynomial);
+                }
+            }
+        }
+    }
+    channels
+}
+
+/// Make `rat` the active PolyRatFun before the input is defined when the
+/// polynomials carry epsilon-rational coefficients. Otherwise `rat` is a plain
+/// function until `Forcer()` enables it, so equal integrals with different
+/// coefficients stay separate terms through the substitution and the first
+/// sorts: a measured four-loop request then needed 268 s and 2 GB instead of
+/// 28 s and 184 MB, with identical output.
+pub(crate) fn with_input_rat_coefficients(locals: String, polynomials: &[String]) -> String {
+    if polynomials.iter().any(|polynomial| polynomial.contains("rat(")) {
+        format!("PolyRatFun rat;\n{locals}")
+    } else {
+        locals
+    }
+}
+
+/// An integer polynomial in the single variable epsilon, as Forcer's `ep`.
+fn form_epsilon_polynomial(polynomial: &MultivariatePolynomial<IntegerRing, u32>) -> String {
+    if polynomial.is_zero() {
+        return "0".into();
+    }
+    let mut rendered = String::new();
+    for monomial in polynomial {
+        let coefficient = monomial.coefficient.to_string();
+        if !rendered.is_empty() && !coefficient.starts_with('-') {
+            rendered.push('+');
+        }
+        rendered.push_str(&coefficient);
+        match monomial.exponents.first().copied().unwrap_or(0) {
+            0 => {}
+            1 => rendered.push_str("*ep"),
+            power => rendered.push_str(&format!("*ep^{power}")),
+        }
+    }
+    rendered
+}
+
+fn forcer_input_in(
+    family: &PFamilyData,
+    powers: &[i64],
+    canonical_numerator: AtomView,
+    external: &Atom,
+    epsilon: Option<Symbol>,
+) -> Result<Option<ForcerInput>, VakintError> {
+    let _stage = StageSpan::new("p_integral.forcer.input_prepare");
     let Some(split) = split(family, powers, canonical_numerator, external)? else {
         return Ok(None);
     };
@@ -350,23 +642,38 @@ pub(crate) fn forcer_input(
         .collect::<Vec<_>>()
         .join("\n");
 
-    // Keep every homogeneous part independent, but reduce all channels in one
-    // Forcer expression: Forcer otherwise repeats its setup for each local.
-    let mut parts = Vec::new();
-    let mut polynomials = Vec::new();
-    for (index, part) in split.parts.into_iter().enumerate() {
-        let name = format!("F{}", index + 1);
-        let terms = part
-            .polynomial
-            .iter()
-            .map(|(value, monomial)| form_term(*value, &format!("({})", form_monomial(monomial))))
-            .collect::<String>();
-        polynomials.push(format!("({terms})"));
+    // Reduce all channels in one Forcer expression: Forcer otherwise repeats
+    // its setup for each local. Without an epsilon symbol, every distinct
+    // part coefficient keeps its own channel; with one, the coefficients'
+    // rational functions of epsilon are reduced inside FORM.
+    let channels = match epsilon {
+        Some(epsilon) => epsilon_channels(split.parts, epsilon),
+        None => split
+            .parts
+            .into_iter()
+            .map(|part| EpsilonChannel {
+                scale_power: part.scale_power,
+                sign: part.wick_sign,
+                polynomial: part
+                    .polynomial
+                    .iter()
+                    .map(|(value, monomial)| {
+                        form_term(*value, &format!("({})", form_monomial(monomial)))
+                    })
+                    .collect(),
+                coefficient: part.coefficient,
+            })
+            .collect(),
+    };
+    let mut parts = Vec::with_capacity(channels.len());
+    let mut polynomials = Vec::with_capacity(channels.len());
+    for (index, channel) in channels.into_iter().enumerate() {
+        polynomials.push(format!("({})", channel.polynomial));
         parts.push(ForcerPart {
-            name,
-            scale_power: part.scale_power,
-            sign: part.wick_sign,
-            coefficient: part.coefficient,
+            name: format!("F{}", index + 1),
+            scale_power: channel.scale_power,
+            sign: channel.sign,
+            coefficient: channel.coefficient,
         });
     }
     let channels = (0..parts.len())
@@ -388,6 +695,7 @@ pub(crate) fn forcer_input(
             channels.join(",")
         )
     };
+    let locals = with_input_rat_coefficients(locals, &polynomials);
     let mut writes = Vec::new();
     if parts.len() > 1 {
         // Scalar tags are bookkeeping only. Extract exact coefficients before
@@ -419,7 +727,7 @@ pub(crate) fn forcer_input(
                 .join(","),
         ),
         ("locals".to_string(), locals),
-        ("substitutions".to_string(), substitutions),
+        ("substitutions".to_string(), substitutions.clone()),
         ("writes".to_string(), writes.join("\n")),
     ]);
     let program = template
@@ -428,7 +736,14 @@ pub(crate) fn forcer_input(
             ..Default::default()
         })
         .map_err(|error| VakintError::InvalidGenericExpression(error.to_string()))?;
-    Ok(Some(ForcerInput { program, parts }))
+    Ok(Some(ForcerInput {
+        program,
+        parts,
+        loops,
+        topology,
+        polynomials,
+        substitutions,
+    }))
 }
 
 /// The exact Forcer output of one local in vakint's p-master basis: `rat(a,b)`
@@ -523,13 +838,19 @@ fn run_forcer(
 ) -> Result<Vec<String>, VakintError> {
     crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Form);
     crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Forcer);
-    static CACHE: LazyLock<cache::ForcerRunCache> = LazyLock::new(Default::default);
     // Keeping backend artifacts explicitly requests a fresh run directory.
-    let key = settings
-        .clean_tmp_dir
-        .then(|| cache::ForcerRunKey::new(&form_command(settings), program, locals))
-        .flatten();
-    CACHE.run(key, || run_forcer_uncached(settings, program, locals))
+    if !settings.forcer_cache || !settings.clean_tmp_dir {
+        let _stage = StageSpan::new("p_integral.forcer.cache.bypass");
+        return run_forcer_uncached(settings, program, locals);
+    }
+    // Child spans distinguish key construction, owned work, publication and
+    // actual peer waits from other cache bookkeeping.
+    let _stage = StageSpan::new("p_integral.forcer.cache_lookup_wait");
+    let key = {
+        let _stage = StageSpan::new("p_integral.forcer.cache_key");
+        cache::ForcerRunKey::new(&form_command(settings), program, locals)
+    };
+    FORCER_CACHE.run(key, || run_forcer_uncached(settings, program, locals))
 }
 
 fn run_forcer_uncached(
@@ -537,6 +858,7 @@ fn run_forcer_uncached(
     program: &str,
     locals: &[&str],
 ) -> Result<Vec<String>, VakintError> {
+    let _stage = StageSpan::new("p_integral.forcer.run_directory_io");
     let (run_directory, private_sources) = prepare_run_directory(settings)?;
     let results = run_forcer_in(settings, program, locals, &run_directory);
     match &results {
@@ -558,18 +880,29 @@ fn run_forcer_in(
     let mut command = form_command(settings);
     command.arg("run_forcer.frm").current_dir(run_directory);
     debug!("Running {} with command: {:?}", "Forcer".green(), command);
+    let started = Instant::now();
+    let output = {
+        let _stage = StageSpan::new("p_integral.forcer.subprocess");
+        command
+            .stderr(Stdio::piped())
+            .stdout(Stdio::piped())
+            .output()
+            .map_err(|error| VakintError::ForcerUnavailable {
+                form_exe_path: settings.form_exe_path.clone(),
+                reason: format!("could not be run ({error})"),
+            })?
+    };
+    let subprocess_elapsed = started.elapsed();
     #[cfg(feature = "experimental-rustred")]
-    let started = std::time::Instant::now();
-    let output = command
-        .stderr(Stdio::piped())
-        .stdout(Stdio::piped())
-        .output()
-        .map_err(|error| VakintError::ForcerUnavailable {
-            form_exe_path: settings.form_exe_path.clone(),
-            reason: format!("could not be run ({error})"),
-        })?;
-    #[cfg(feature = "experimental-rustred")]
-    benchmark::record(program, started.elapsed());
+    benchmark::record(program, subprocess_elapsed);
+    tracing::info!(
+        uv = true,
+        rstar = true,
+        timing = true,
+        locals = locals.len(),
+        form_subprocess_seconds = subprocess_elapsed.as_secs_f64(),
+        "Executed FORCER FORM subprocess"
+    );
     let failure = |stderr: String| {
         VakintError::FormError(
             stderr,
@@ -632,7 +965,13 @@ pub(crate) fn reduce_p(
     external: &Atom,
     settings: &VakintSettings,
 ) -> Result<Vec<ReducedPropagatorValue>, VakintError> {
-    let Some(input) = forcer_input(family, powers, canonical_numerator, external)? else {
+    let _stage = StageSpan::new("p_integral.forcer.reduce_dispatch");
+    let started = Instant::now();
+    let preparation_started = Instant::now();
+    let epsilon = vk_symbol!(&settings.epsilon_symbol);
+    let Some(input) =
+        forcer_input_with_epsilon(family, powers, canonical_numerator, external, epsilon)?
+    else {
         return Ok(Vec::new());
     };
     if input.parts.is_empty() {
@@ -643,9 +982,27 @@ pub(crate) fn reduce_p(
         .iter()
         .map(|part| part.name.as_str())
         .collect::<Vec<_>>();
+    let preparation_elapsed = preparation_started.elapsed();
+    let run_started = Instant::now();
     let outputs = run_forcer(settings, &input.program, &names)?;
-    let epsilon = vk_symbol!(&settings.epsilon_symbol);
-    combine_parts(&input.parts, &outputs, epsilon)
+    let run_elapsed = run_started.elapsed();
+    let parsing_started = Instant::now();
+    let result = combine_parts(&input.parts, &outputs, epsilon)?;
+    let parsing_elapsed = parsing_started.elapsed();
+    tracing::info!(
+        uv = true,
+        rstar = true,
+        timing = true,
+        loops = family.loops,
+        input_parts = input.parts.len(),
+        output_values = result.len(),
+        input_preparation_seconds = preparation_elapsed.as_secs_f64(),
+        run_or_cache_seconds = run_elapsed.as_secs_f64(),
+        output_parsing_seconds = parsing_elapsed.as_secs_f64(),
+        seconds = started.elapsed().as_secs_f64(),
+        "Reduced p-integral with FORCER"
+    );
+    Ok(result)
 }
 
 /// Attach the raw Forcer output of each part to its sign, scale power and
@@ -655,6 +1012,7 @@ pub(crate) fn combine_parts(
     outputs: &[String],
     epsilon: Symbol,
 ) -> Result<Vec<ReducedPropagatorValue>, VakintError> {
+    let _stage = StageSpan::new("p_integral.forcer.parse_combine");
     let mut values = BTreeMap::<i64, Atom>::new();
     for (part, output) in parts.iter().zip(outputs) {
         let reduced =
@@ -680,6 +1038,7 @@ impl Vakint {
         integral_specs: &ReplacementRules,
         options: &ForcerOptions,
     ) -> Result<Atom, VakintError> {
+        let _stage = StageSpan::new("p_integral.forcer.dispatch");
         let request = integral_specs
             .propagator_request(numerator)
             .ok_or_else(|| {
@@ -702,6 +1061,7 @@ impl Vakint {
             &request.external,
             settings,
         )?;
+        let _postprocess = StageSpan::new("p_integral.forcer.postprocess");
         super::finalize::finalize(
             &values,
             request.family.loops,

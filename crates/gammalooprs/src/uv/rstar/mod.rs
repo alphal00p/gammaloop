@@ -7,18 +7,24 @@
 //! UV maps. Their scalar hard integrals stay outside those maps, which reuse
 //! the ordinary massive R operation.
 
+#[cfg(test)]
+mod cache_tests;
 mod evaluate;
 mod expression;
+mod insertion_identity;
+mod insertions;
 mod integrate;
 #[cfg(test)]
 mod master_tests;
 #[cfg(test)]
 mod matter_tests;
 mod moments;
+mod physical;
 mod plan;
 #[cfg(test)]
 mod pole_tests;
 mod project;
+mod propagator;
 #[cfg(test)]
 mod scalar;
 mod taylor;
@@ -26,7 +32,21 @@ mod taylor;
 mod tests;
 mod uv;
 
+pub use crate::uv::counterterm_cache::{
+    CacheTimingStats, CountertermCache, CountertermCacheStats, CountertermPrewarmPlan,
+    CountertermRequest,
+};
+
+pub(super) static REFERENCE_MASS_SQUARED: std::sync::LazyLock<symbolica::atom::Symbol> =
+    std::sync::LazyLock::new(|| symbolica::symbol!("rstar_reference_mass_squared"; Scalar));
+pub use insertion_identity::{InsertionSkeletonIdentity, InsertionSkeletonKey};
+pub use insertions::{
+    GroupedInsertionPoleResult, InsertionPoleResult, PreparedInsertion, PreparedInsertionHole,
+    PropagatorInsertionEvaluator,
+};
 pub use integrate::integrate_single_mass;
+pub use physical::{PhysicalUvGroup, PhysicalUvKey, PreparedPhysicalUvTerm};
 pub use plan::*;
+pub use propagator::integrate_propagator;
 pub use taylor::TaylorExpansion;
 pub use uv::MassiveUvEvaluator;

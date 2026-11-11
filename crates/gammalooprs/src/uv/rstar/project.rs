@@ -2,20 +2,12 @@
 
 use eyre::{Result, WrapErr};
 use feynkit_tensor::TensorReducer;
-use idenso::{
-    CookMode, CookSettings,
-    dirac::GammaSimplifySettings,
-    shorthands::UndoShorthands,
-    tensor::{AlgebraSettings, SymbolicNetExt, SymbolicNetParse},
-};
+use idenso::{CookMode, CookSettings, dirac::GammaSimplifySettings, tensor::AlgebraSettings};
 use linnet::half_edge::involution::EdgeIndex;
-use spenso::{
-    network::parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing},
-    structure::representation::{Minkowski, RepName},
-};
+use spenso::structure::representation::{Minkowski, RepName};
 use symbolica::{atom::Atom, function};
 
-use crate::{numerator::aind::Aind, utils::GS, uv::approx::integrated::Integrated};
+use crate::{utils::GS, uv::approx::integrated::Integrated};
 
 /// Average hard loop directions while retaining their scalar integrals.
 ///
@@ -44,21 +36,7 @@ pub(super) fn project_hard_vacuum(expression: &Atom, hard_edges: &[EdgeIndex]) -
     // Expose them before counting tensor rank: k_mu slash(k) has rank two,
     // although only one vector is visible outside its compact gamma tensor.
     // Use the same native shorthand expansion as the vacuum-integral bridge.
-    let explicit = expression.undo_trace::<Aind>()?.undo_chain::<Aind>()?;
-    let explicit = explicit
-        .parse_to_symbolic_net::<Aind>(&ParseSettings {
-            shorthand_parsing: ShorthandParsing::Expand {
-                schoonschip: SchoonschipExpansionMode {
-                    inner_products: false,
-                    expand_inside_chains: true,
-                    expand_schoonship: true,
-                },
-                trace: true,
-                chain: true,
-            },
-            ..Default::default()
-        })?
-        .simple_execute::<()>()?;
+    let explicit = Integrated::materialize_tensor(expression)?;
     let source = reducer.admit(cooking.try_cook(explicit.as_view())?)?;
     let reduced = reducer
         .reduce(&source)

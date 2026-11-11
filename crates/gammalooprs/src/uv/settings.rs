@@ -9,6 +9,7 @@ use crate::utils::{
         IsDefault, is_default_form_path, is_default_pysecdec_relative_precision,
         is_default_python_path, is_default_vakint_evaluation_methods,
         is_default_vakint_normalization, is_false, is_minus_one_string, is_true, is_usize,
+        show_defaults_helper,
     },
 };
 use bincode_trait_derive::{Decode, Encode};
@@ -378,9 +379,15 @@ pub struct VakintSettings {
     /// FORM executable used by analytic Vakint evaluation backends.
     #[serde(skip_serializing_if = "is_default_form_path")]
     pub form_exe_path: String,
+    /// Reuse raw FORCER reductions and share in-flight requests.
+    #[serde(skip_serializing_if = "is_true")]
+    pub forcer_cache: bool,
     /// Python interpreter used to invoke pySecDec.
     #[serde(skip_serializing_if = "is_default_python_path")]
     pub python_exe_path: String,
+    /// Worker budget for each Vakint evaluation, including RustRed and FORM.
+    #[serde(skip_serializing_if = "VakintSettings::is_default_n_cores")]
+    pub n_cores: usize,
     /// Ordered Vakint evaluation backends tried for each matched vacuum integral.
     #[serde(skip_serializing_if = "is_default_vakint_evaluation_methods")]
     pub evaluation_methods: Vec<String>,
@@ -417,13 +424,18 @@ pub struct VakintSettings {
 }
 
 impl VakintSettings {
+    fn is_default_n_cores(value: &usize) -> bool {
+        show_defaults_helper(*value == vakint::default_n_cores())
+    }
+
     pub fn true_settings(&self) -> vakint::VakintSettings {
         vakint::VakintSettings {
             form_exe_path: self.form_exe_path.clone(),
+            forcer_cache: self.forcer_cache,
             python_exe_path: self.python_exe_path.clone(),
             rustred_artifact_path: None,
             rustred_resources: Default::default(),
-            n_cores: vakint::default_n_cores(),
+            n_cores: self.n_cores,
             ordered_weight_arithmetic: Default::default(),
             rustred_application_options: Default::default(),
             ordered_cache: Default::default(),
@@ -494,7 +506,9 @@ impl Default for VakintSettings {
     fn default() -> Self {
         Self {
             form_exe_path: "form".to_string(),
+            forcer_cache: true,
             python_exe_path: "python3".to_string(),
+            n_cores: vakint::default_n_cores(),
             // Forcer can be selected explicitly for massless propagator integrals.
             evaluation_methods: vec![
                 "alphaloop".to_string(),
@@ -654,6 +668,68 @@ mod tests {
 
     fn pdg_set(values: impl IntoIterator<Item = isize>) -> BTreeSet<isize> {
         values.into_iter().collect()
+    }
+
+    #[test]
+    fn forcer_cache_setting_roundtrips_and_maps_to_backend() {
+        let defaults: VakintSettings = toml::from_str("").unwrap();
+        assert!(defaults.forcer_cache);
+        assert!(defaults.true_settings().forcer_cache);
+        assert!(vakint::VakintSettings::default().forcer_cache);
+        {
+            let _guard = ShowDefaultsGuard::new(false);
+            assert!(!toml::to_string(&defaults).unwrap().contains("forcer_cache"));
+            let disabled: VakintSettings = toml::from_str("forcer_cache = false").unwrap();
+            assert!(!disabled.true_settings().forcer_cache);
+            let serialized = toml::to_string(&disabled).unwrap();
+            assert!(serialized.contains("forcer_cache = false"));
+            assert_eq!(
+                toml::from_str::<VakintSettings>(&serialized).unwrap(),
+                disabled
+            );
+        }
+        let _guard = ShowDefaultsGuard::new(true);
+        assert!(
+            toml::to_string(&defaults)
+                .unwrap()
+                .contains("forcer_cache = true")
+        );
+    }
+
+    #[test]
+    fn vakint_worker_budget_roundtrips_and_maps_to_backend() {
+        let defaults: VakintSettings = toml::from_str("").unwrap();
+        assert_eq!(defaults.n_cores, vakint::default_n_cores());
+        assert_eq!(defaults.true_settings().n_cores, vakint::default_n_cores());
+        let _guard = ShowDefaultsGuard::new(false);
+        for n_cores in [1, 10] {
+            let settings: VakintSettings = toml::from_str(&format!("n_cores = {n_cores}")).unwrap();
+            assert_eq!(settings.true_settings().n_cores, n_cores);
+            assert_eq!(
+                toml::from_str::<VakintSettings>(&toml::to_string(&settings).unwrap()).unwrap(),
+                settings
+            );
+        }
+        let different = VakintSettings {
+            n_cores: if defaults.n_cores == 1 { 2 } else { 1 },
+            ..defaults.clone()
+        };
+        assert_ne!(
+            serde_json::to_string(&different).unwrap(),
+            serde_json::to_string(&defaults).unwrap()
+        );
+    }
+
+    #[test]
+    fn vakint_worker_default_serialization_respects_show_defaults() {
+        let settings = VakintSettings::default();
+        {
+            let _guard = ShowDefaultsGuard::new(false);
+            assert!(!toml::to_string(&settings).unwrap().contains("n_cores"));
+        }
+        let _guard = ShowDefaultsGuard::new(true);
+        let serialized = toml::to_string(&settings).unwrap();
+        assert!(serialized.contains(&format!("n_cores = {}", vakint::default_n_cores())));
     }
 
     #[test]

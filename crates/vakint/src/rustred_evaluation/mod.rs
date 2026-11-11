@@ -63,7 +63,9 @@ use std::fmt;
 use symbolica::atom::{Atom, AtomView};
 use thiserror::Error;
 
-use crate::{ReplacementRules, Topology, Vakint, VakintError, VakintSettings};
+use crate::{
+    ReplacementRules, Topology, Vakint, VakintError, VakintSettings, stage_timing::StageSpan,
+};
 
 use matching::MatchedScalarFamily;
 
@@ -303,12 +305,18 @@ impl Vakint {
         mode: RustRedMasterMode,
         observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
     ) -> Result<Atom, VakintError> {
+        let _stage = StageSpan::new("vakint.finalize_rustred");
         // Ordered reduction combines all normalized contributions first, so
         // simplify real logarithms and zero powers once here, before master
         // substitution, rather than per contribution.
-        let raw = crate::utils::simplify_real(raw.as_view());
+        let raw = {
+            let _stage = StageSpan::new("vakint.finalize_rustred.simplify_real");
+            crate::utils::simplify_real(raw.as_view())
+        };
+        let catalogue_setup = StageSpan::new("vakint.finalize_rustred.catalogue_setup");
         let data = self.rustred_data()?;
         let announced = self.announced_bare_masters()?;
+        drop(catalogue_setup);
         let result = if mode == RustRedMasterMode::Retain {
             data.masters.retain(
                 raw,
@@ -318,6 +326,7 @@ impl Vakint {
             )
         } else {
             if !announced.is_empty() {
+                let _stage = StageSpan::new("vakint.finalize_rustred.announced_coefficients");
                 data.masters
                     .require_coefficients(&combine_exact(raw.clone()), &announced)?;
             }
@@ -325,6 +334,7 @@ impl Vakint {
         };
         // The catalogue checks its own substitution; every RustRed entry
         // point (single integral, ordered batch, term) passes here as well.
+        let truncation_guard = StageSpan::new("vakint.finalize_rustred.truncation_guard");
         crate::truncation_guard::ensure_known_orders(
             &result,
             crate::utils::vakint_macros::vk_symbol!(&settings.epsilon_symbol),
@@ -335,9 +345,11 @@ impl Vakint {
             "RustRed",
             crate::truncation_guard::plain_name,
         )?;
+        drop(truncation_guard);
         if settings.use_dot_product_notation {
             Ok(result)
         } else {
+            let _stage = StageSpan::new("vakint.finalize_rustred.restore_notation");
             let indexed = Vakint::convert_from_dot_notation(result.as_view());
             Ok(crate::VakintTerm::repair_expanded_spenso_vector_slots(
                 indexed.as_view(),
