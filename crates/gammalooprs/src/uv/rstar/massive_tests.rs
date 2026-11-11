@@ -20,7 +20,6 @@ use symbolica::{
 use vakint::Vakint;
 
 use crate::{
-    graph::parse::IntoFinalizedRuntimeGraph,
     initialisation::test_initialise,
     utils::{GS, load_generic_model},
 };
@@ -134,10 +133,6 @@ fn massive_vacuum_masters_reproduce_their_poles() -> Result<()> {
         .ok()
         .map(|v| v.parse().unwrap())
         .unwrap_or(0);
-    let forest_extra: i64 = std::env::var("RSTAR_MASSIVE_FOREST_EXTRA")
-        .ok()
-        .map(|v| v.parse().unwrap())
-        .unwrap_or(0);
     let out = std::env::var_os("RSTAR_MASSIVE_OUT").map(PathBuf::from);
     let selected = selection();
     let max_loops = selected.iter().map(|(l, _)| *l).max().unwrap_or(2).max(3);
@@ -145,9 +140,6 @@ fn massive_vacuum_masters_reproduce_their_poles() -> Result<()> {
     let mass_symbol = symbol!("rstar_vacuum_mass"; Scalar);
     let mass = Atom::var(mass_symbol);
     let mut failures = Vec::new();
-    let recursion = (std::env::var("RSTAR_MASSIVE_CHILDREN").as_deref() != Ok("standalone")
-        && std::env::var("RSTAR_MASSIVE_CHILDREN").as_deref() != Ok("forest"))
-    .then(|| super::massive::RecursionContext::new(&model, &vakint, &settings, extra));
     for (loops, master) in selected {
         let started = Instant::now();
         let topology = master_topology(loops, &master)?;
@@ -159,7 +151,6 @@ fn massive_vacuum_masters_reproduce_their_poles() -> Result<()> {
             "omega": omega,
             "edges": topology.edges,
             "extra_terms": extra,
-            "forest_extra_terms": forest_extra,
         });
         let outcome = (|| -> Result<bool> {
             let t = Instant::now();
@@ -180,9 +171,7 @@ fn massive_vacuum_masters_reproduce_their_poles() -> Result<()> {
                 .count()
                 .into();
             let sub = plan.massive_vacuum_subdivergence_poles(
-                &graph, &model, &mass, &vakint, &settings, extra, forest_extra,
-                std::env::var("RSTAR_MASSIVE_CHILDREN").map(|v| v == "standalone").unwrap_or(false),
-                recursion.as_ref(),
+                &graph, &model, &mass, &vakint, &settings, extra,
             )?;
             record["children_ms"] = (sub.children_ms as u64).into();
             record["subdivergences"] = sub.poles.to_string().into();
@@ -213,15 +202,15 @@ fn massive_vacuum_masters_reproduce_their_poles() -> Result<()> {
                 .into();
             let implied = (&sub.poles - &direct).expand();
             record["delta_implied"] = implied.to_string().into();
-            record["delta_implied_has_log"] = implied.contains_symbol(symbolica::atom::Symbol::LOG).into();
+            record["delta_implied_has_log"] =
+                implied.contains_symbol(symbolica::atom::Symbol::LOG).into();
             record["delta_implied_has_m_uv"] = implied.contains_symbol(GS.m_uv_vacuum).into();
-            record["m_uv_in_subdivergences"] =
-                sub.poles.contains_symbol(GS.m_uv_vacuum).into();
+            record["m_uv_in_subdivergences"] = sub.poles.contains_symbol(GS.m_uv_vacuum).into();
             let mut ok = true;
             let mut deltas = Vec::new();
             if routes.split(',').any(|r| r.trim() == "i") {
                 let t = Instant::now();
-                match plan.massive_vacuum_counterterm(&graph, &model, &vakint, &settings, forest_extra) {
+                match plan.massive_vacuum_counterterm(&graph, &model, &vakint, &settings) {
                     Ok(delta) => {
                         record["delta_i_ms"] = (t.elapsed().as_millis() as u64).into();
                         record["delta_i"] = delta.to_string().into();
@@ -234,33 +223,16 @@ fn massive_vacuum_masters_reproduce_their_poles() -> Result<()> {
                     }
                 }
             }
-            if routes.split(',').any(|r| r.trim() == "r") {
-                let t = Instant::now();
-                let context = super::massive::RecursionContext::new(&model, &vakint, &settings, extra);
-                match context.counterterm(&graph) {
-                    Ok(delta) => {
-                        let delta = super::massive::RecursionContext::identified(&delta);
-                        record["delta_r_ms"] = (t.elapsed().as_millis() as u64).into();
-                        record["delta_r"] = delta.to_string().into();
-                        record["m_uv_in_delta_r"] = delta.contains_symbol(GS.m_uv_vacuum).into();
-                        record["delta_r_calls"] = context.calls.get().into();
-                        deltas.push(("r", delta));
-                    }
-                    Err(error) => {
-                        record["error_r"] = format!("{error:?}").into();
-                        ok = false;
-                    }
-                }
-            }
             if routes.split(',').any(|r| r.trim() == "ii") {
                 let t = Instant::now();
-                let (delta, log) = match topology.overall_counterterm_rstar(&model, &mass, &vakint, &settings) {
-                    Ok(value) => value,
-                    Err(error) => {
-                        record["error_ii"] = format!("{error:?}").into();
-                        return Ok(false);
-                    }
-                };
+                let (delta, log) =
+                    match topology.overall_counterterm_rstar(&model, &mass, &vakint, &settings) {
+                        Ok(value) => value,
+                        Err(error) => {
+                            record["error_ii"] = format!("{error:?}").into();
+                            return Ok(false);
+                        }
+                    };
                 record["delta_ii_ms"] = (t.elapsed().as_millis() as u64).into();
                 record["delta_ii"] = delta.to_string().into();
                 record["delta_ii_terms"] = log
@@ -285,8 +257,12 @@ fn massive_vacuum_masters_reproduce_their_poles() -> Result<()> {
             }
             for a in 0..deltas.len() {
                 for b in a + 1..deltas.len() {
-                    record[format!("delta_{}_minus_{}", deltas[a].0, deltas[b].0)] =
-                        (&deltas[a].1 - &deltas[b].1).expand().together().to_string().into();
+                    record[format!("delta_{}_minus_{}", deltas[a].0, deltas[b].0)] = (&deltas[a].1
+                        - &deltas[b].1)
+                        .expand()
+                        .together()
+                        .to_string()
+                        .into();
                 }
             }
             Ok(ok)
@@ -341,17 +317,11 @@ fn massive_vacuum_part_a_from_spec() -> Result<()> {
         .ok()
         .map(|v| v.parse().unwrap())
         .unwrap_or(0);
-    let forest_extra: i64 = std::env::var("RSTAR_MASSIVE_FOREST_EXTRA")
-        .ok()
-        .map(|v| v.parse().unwrap())
-        .unwrap_or(0);
     let out = PathBuf::from(std::env::var("RSTAR_PARTA_OUT").expect("RSTAR_PARTA_OUT"));
     let vakint = loaded_vakint(4)?;
     let mass_symbol = symbol!("rstar_vacuum_mass"; Scalar);
     let mass = Atom::var(mass_symbol);
-    let recursion = (std::env::var("RSTAR_MASSIVE_CHILDREN").as_deref() != Ok("standalone")
-        && std::env::var("RSTAR_MASSIVE_CHILDREN").as_deref() != Ok("forest"))
-    .then(|| super::massive::RecursionContext::new(&model, &vakint, &settings, extra));
+    let mut failures = Vec::new();
     for entry in spec.as_array().expect("a JSON list") {
         let name = entry["name"].as_str().unwrap().to_owned();
         if names.as_ref().is_some_and(|names| !names.contains(&name)) {
@@ -396,7 +366,6 @@ fn massive_vacuum_part_a_from_spec() -> Result<()> {
             "omega": topology.superficial_degree(),
             "edges": topology.edges,
             "extra_terms": extra,
-            "forest_extra_terms": forest_extra,
         });
         let outcome = (|| -> Result<()> {
             let monomials = topology.numerator_monomials(&mass);
@@ -404,9 +373,10 @@ fn massive_vacuum_part_a_from_spec() -> Result<()> {
             let validate = std::env::var("RSTAR_PARTA_VALIDATE").is_ok_and(|v| v == "1");
             let mut poles = Atom::Zero;
             let mut direct = Atom::Zero;
-            let mut delta_r = Atom::Zero;
+            let mut delta_i = Atom::Zero;
             let mut spinneys = 0usize;
             let mut children = Vec::new();
+            let mut terms = Vec::new();
             let mut children_ms = 0u128;
             for monomial in &monomials {
                 let graph = topology.monomial_graph(&model, &mass, &monomial.attachments)?;
@@ -417,37 +387,35 @@ fn massive_vacuum_part_a_from_spec() -> Result<()> {
                     .filter(|term| !term.counterterms.is_empty())
                     .count();
                 let sub = plan.massive_vacuum_subdivergence_poles(
-                    &graph, &model, &mass, &vakint, &settings, extra, forest_extra,
-                    std::env::var("RSTAR_MASSIVE_CHILDREN").map(|v| v == "standalone").unwrap_or(false),
-                    recursion.as_ref(),
+                    &graph, &model, &mass, &vakint, &settings, extra,
                 )?;
                 poles += &monomial.coefficient * &sub.poles;
                 children.extend(sub.children);
+                terms.extend(sub.terms);
                 children_ms += sub.children_ms;
                 if validate {
                     direct += &monomial.coefficient
                         * massive_vacuum_direct(&graph, &model, &vakint, &settings, extra)?;
-                    let context = super::massive::RecursionContext::new(&model, &vakint, &settings, extra);
-                    delta_r += &monomial.coefficient
-                        * super::massive::RecursionContext::identified(&context.counterterm(&graph)?);
+                    delta_i += &monomial.coefficient
+                        * plan.massive_vacuum_counterterm(&graph, &model, &vakint, &settings)?;
                 }
             }
             record["spinneys"] = spinneys.into();
             let sub = super::massive::MassiveVacuumSubdivergences {
                 poles: poles.series(GS.dim_epsilon, 0, -1)?.to_atom().expand(),
-                terms: Vec::new(),
+                terms,
                 children_ms,
                 children,
             };
             if validate {
                 let direct = direct.series(GS.dim_epsilon, 0, -1)?.to_atom().expand();
-                let delta_r = delta_r.expand();
-                let difference = (&sub.poles - &delta_r - &direct).expand().together();
+                let delta_i = delta_i.expand();
+                let difference = (&sub.poles - &delta_i - &direct).expand().together();
                 record["direct"] = direct.to_string().into();
-                record["delta_r"] = delta_r.to_string().into();
-                record["m_uv_in_delta_r"] = delta_r.contains_symbol(GS.m_uv_vacuum).into();
-                record["difference_r"] = difference.to_string().into();
-                record["pass_r"] = difference.is_zero().into();
+                record["delta_i"] = delta_i.to_string().into();
+                record["m_uv_in_delta_i"] = delta_i.contains_symbol(GS.m_uv_vacuum).into();
+                record["difference_i"] = difference.to_string().into();
+                record["pass_i"] = difference.is_zero().into();
             }
             record["children_ms"] = (sub.children_ms as u64).into();
             record["part_a"] = sub.poles.to_string().into();
@@ -455,12 +423,28 @@ fn massive_vacuum_part_a_from_spec() -> Result<()> {
             record["part_a_unit"] = unit.to_string().into();
             let series = unit.series(GS.dim_epsilon, 0, -1)?;
             let mut coefficients = serde_json::Map::new();
+            let mut exact_file = serde_json::Map::new();
             for (power, coefficient) in series.terms() {
                 coefficients.insert(power.to_string(), coefficient.expand().to_string().into());
+                exact_file.insert(
+                    power.to_string(),
+                    symbolica::printer::AtomPrinter::new_with_options(
+                        coefficient.expand().as_view(),
+                        symbolica::printer::PrintOptions::file(),
+                    )
+                    .to_string()
+                    .into(),
+                );
             }
             record["part_a_coefficients"] = coefficients.into();
+            record["part_a_coefficients_file"] = exact_file.into();
             let mut numeric_settings = settings.vakint.true_settings();
-            numeric_settings.run_time_decimal_precision = 80;
+            let digits: u32 = std::env::var("RSTAR_NUMERIC_DIGITS")
+                .ok()
+                .map(|v| v.parse().unwrap())
+                .unwrap_or(120);
+            numeric_settings.run_time_decimal_precision = digits;
+            record["part_a_numeric_digits"] = digits.into();
             match vakint.numerical_evaluation(
                 &numeric_settings,
                 unit.as_view(),
@@ -473,7 +457,7 @@ fn massive_vacuum_part_a_from_spec() -> Result<()> {
                     for (power, coefficient) in value.coefficients() {
                         numeric.insert(
                             power.to_string(),
-                            format!("{:.70e}", coefficient.value().re).into(),
+                            format!("{:.*e}", digits as usize + 5, coefficient.value().re).into(),
                         );
                         numeric.insert(
                             format!("{power}_im"),
@@ -501,13 +485,15 @@ fn massive_vacuum_part_a_from_spec() -> Result<()> {
                     Err(error) => record["delta_ii_error"] = format!("{error:?}").into(),
                 }
             }
-            record["children_with_m_uv"] = sub
-                .children
+            // Child polynomials are written in all boundary momentum labels without
+            // imposing momentum conservation, so terms that vanish by conservation
+            // may carry m_uv; the quotient integration imposes it. Check every
+            // integrated term contribution (and the total) instead.
+            record["terms_with_m_uv"] = sub
+                .terms
                 .iter()
-                .filter(|(_, _, _, value)| value.expand().contains_symbol(GS.m_uv_vacuum))
-                .map(|(label, loops, edges, value)| {
-                    serde_json::json!({"label": label, "loops": loops, "edges": edges, "delta": value.expand().to_string()})
-                })
+                .filter(|term| term.contribution.expand().contains_symbol(GS.m_uv_vacuum))
+                .map(|term| term.label.clone())
                 .collect::<Vec<_>>()
                 .into();
             record["terms"] = sub
@@ -526,9 +512,19 @@ fn massive_vacuum_part_a_from_spec() -> Result<()> {
             Ok(())
         })();
         record["total_ms"] = (started.elapsed().as_millis() as u64).into();
-        record["ok"] = outcome.is_ok().into();
+        let mismatch = record["pass_i"].as_bool() == Some(false)
+            || record["m_uv_in_part_a"].as_bool() == Some(true)
+            || record["terms_with_m_uv"]
+                .as_array()
+                .is_some_and(|terms| !terms.is_empty())
+            || record.get("delta_ii_error").is_some()
+            || record.get("part_a_numeric_error").is_some();
+        record["ok"] = (outcome.is_ok() && !mismatch).into();
         if let Err(error) = outcome {
             record["error"] = format!("{error:?}").into();
+        }
+        if record["ok"] != true {
+            failures.push(name.clone());
         }
         println!("RSTAR_PARTA {record}");
         let mut file = std::fs::OpenOptions::new()
@@ -537,73 +533,9 @@ fn massive_vacuum_part_a_from_spec() -> Result<()> {
             .open(&out)?;
         writeln!(file, "{record}")?;
     }
-    Ok(())
-}
-
-/// Diagnostic: the ordinary massive R counterterm of an all-massive banana
-/// two-point function (n parallel lines, external momentum through it) must
-/// be independent of m_uv. Writes `RSTAR_DIAG_OUT`.
-#[test]
-#[ignore = "diagnostic"]
-fn massive_banana_two_point_counterterms_are_m_uv_independent() -> Result<()> {
-    test_initialise()?;
-    let model = load_generic_model("scalars");
-    let settings = super::tests::settings();
-    let vakint = loaded_vakint(4)?;
-    let mass = Atom::var(symbol!("rstar_vacuum_mass"; Scalar));
-    let out = std::env::var("RSTAR_DIAG_OUT").ok().map(PathBuf::from);
-    let lines: Vec<usize> = std::env::var("RSTAR_DIAG_LINES")
-        .unwrap_or_else(|_| "2,3,4,5".into())
-        .split(',')
-        .map(|v| v.parse().unwrap())
-        .collect();
-    for n in lines {
-        let mut dot = String::from(
-            "digraph banana {\ngraph [projector=1]; node [num=1];\nedge [particle=\"scalar_1\" num=1]; e [style=invis];\n",
-        );
-        dot.push_str(&format!(
-            "e -> A:0 [id={n} sink=\"{{ufo_order:0}}\"];\nB:1 -> e [id={} source=\"{{ufo_order:0}}\"];\n",
-            n + 1
-        ));
-        for id in 0..n {
-            let basis = if id == 0 { String::new() } else { format!("lmb_id={}", id - 1) };
-            dot.push_str(&format!(
-                "A -> B [id={id} {basis} source=\"{{ufo_order:{}}}\" sink=\"{{ufo_order:{}}}\"];\n",
-                id + 1,
-                id + 1
-            ));
-        }
-        dot.push('}');
-        let mut graph: crate::graph::Graph = dot.into_finalized_runtime_graph(&model)?;
-        let edges: Vec<_> = graph.iter_edges().map(|(_, edge, _)| edge).collect();
-        for edge in edges {
-            let data = &mut graph.underlying[edge];
-            data.particle = data.particle.clone().override_mass(Some(mass.clone()));
-        }
-        let started = Instant::now();
-        let plan = RStarPlan::new(&graph, &model, EdgeIndex::from(0), &settings)?;
-        let result = plan.massive_forest_counterterms(
-            &graph,
-            &model,
-            &vakint,
-            &settings,
-            true,
-            0,
-            std::slice::from_ref(&plan.support),
-        );
-        let record = match result {
-            Ok(values) => {
-                let delta = values[&plan.support].expand();
-                serde_json::json!({"lines": n, "m_uv": delta.contains_symbol(GS.m_uv_vacuum),
-                    "delta": delta.to_string(), "ms": started.elapsed().as_millis() as u64})
-            }
-            Err(error) => serde_json::json!({"lines": n, "error": format!("{error:?}")}),
-        };
-        println!("RSTAR_DIAG {record}");
-        if let Some(out) = &out {
-            let mut file = std::fs::OpenOptions::new().create(true).append(true).open(out)?;
-            writeln!(file, "{record}")?;
-        }
-    }
+    assert!(
+        failures.is_empty(),
+        "part (A) mismatches or errors: {failures:?}"
+    );
     Ok(())
 }
