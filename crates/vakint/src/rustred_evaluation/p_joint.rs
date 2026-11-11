@@ -18,13 +18,13 @@
 //! per-channel values returned; the profiler (`VAKINT_P_PHASES=2`) prints
 //! the work of both.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
 
 use rustred::algebra::{Coefficient, CoefficientContext, ExactAlgebraLimits};
 use rustred::family::IntegralKey;
 use rustred::propagator::PresentationId;
-use rustred::propagator::library::{PLibrary, PReduction};
+use rustred::propagator::library::{PLibrary, PReduction, PTerm};
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use symbolica::coefficient::CoefficientView;
 
@@ -262,7 +262,7 @@ pub(super) fn compare(
     context: &CoefficientContext,
     limits: ExactAlgebraLimits,
     separate: &[(Coefficient, PReduction)],
-    joint: &PReduction,
+    joint: &[PTerm],
 ) -> Result<(), RustRedEvaluationError> {
     let mut expected = Vec::<(String, Coefficient)>::new();
     let mut add = |key: String, value: Coefficient| -> Result<(), RustRedEvaluationError> {
@@ -284,7 +284,7 @@ pub(super) fn compare(
             add(format!("{:?}|{:?}", term.basis, term.tag), value)?;
         }
     }
-    for term in &joint.terms {
+    for term in joint {
         let value = context
             .try_neg(&term.coefficient, limits)
             .map_err(RustRedEvaluationError::from_native)?;
@@ -305,7 +305,9 @@ pub(super) fn compare(
 }
 
 /// Reduce every joint group and, in check mode, its channels one by one;
-/// compare; return the joint reductions in group order.
+/// compare; return the joint reductions in group order (`None`: the summed
+/// inputs cancel exactly, nothing to reduce, as a channel without inputs).
+/// A failing request names the vakint integrals of its channels.
 pub(super) fn reduce_groups(
     library: &PLibrary,
     options: &PRequestOptions,
@@ -314,28 +316,38 @@ pub(super) fn reduce_groups(
     channels: &Channels,
     check: bool,
     limits: ExactAlgebraLimits,
-) -> Result<Vec<PReduction>, RustRedEvaluationError> {
+) -> Result<Vec<Option<PReduction>>, RustRedEvaluationError> {
     let context = library.coefficient_context();
     let mut joint = Vec::with_capacity(groups.len());
     let (mut joint_seconds, mut separate_seconds) = (0.0, 0.0);
     for group in groups {
+        let integrals = group
+            .channels
+            .iter()
+            .flat_map(|(channel, _)| channels[channel].integrals.iter().cloned())
+            .collect::<BTreeSet<_>>();
         let inputs = group_inputs(group)?;
         let count = inputs.len();
-        let started = Instant::now();
-        let reduction = {
-            let _math = super::MathSpan::new();
-            library
-                .reduce(p_reduction_request(options, inputs, step_cache.clone()))
-                .map_err(RustRedEvaluationError::from_native)?
+        let reduction = if inputs.is_empty() {
+            None
+        } else {
+            let started = Instant::now();
+            let reduction = {
+                let _math = super::MathSpan::new();
+                library
+                    .reduce(p_reduction_request(options, inputs, step_cache.clone()))
+                    .map_err(|error| super::reduction_error(error, &integrals))?
+            };
+            let seconds = started.elapsed().as_secs_f64();
+            joint_seconds += seconds;
+            report(
+                &format!("joint scale_power={}", group.scale_power),
+                count,
+                &reduction,
+                seconds,
+            );
+            Some(reduction)
         };
-        let seconds = started.elapsed().as_secs_f64();
-        joint_seconds += seconds;
-        report(
-            &format!("joint scale_power={}", group.scale_power),
-            count,
-            &reduction,
-            seconds,
-        );
         if check {
             let mut separate = Vec::with_capacity(group.channels.len());
             for (channel, factor) in &group.channels {
@@ -348,13 +360,16 @@ pub(super) fn reduce_groups(
                 let started = Instant::now();
                 let reduction = library
                     .reduce(p_reduction_request(options, inputs, step_cache.clone()))
-                    .map_err(RustRedEvaluationError::from_native)?;
+                    .map_err(|error| super::reduction_error(error, &channels[channel].integrals))?;
                 let seconds = started.elapsed().as_secs_f64();
                 separate_seconds += seconds;
                 report("separate", count, &reduction, seconds);
                 separate.push((factor.clone(), reduction));
             }
-            compare(context, limits, &separate, &reduction)?;
+            let joint_terms = reduction
+                .as_ref()
+                .map_or(&[][..], |reduction| &reduction.terms);
+            compare(context, limits, &separate, joint_terms)?;
         }
         joint.push(reduction);
     }

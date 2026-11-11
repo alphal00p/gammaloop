@@ -541,6 +541,12 @@ pub(crate) fn reduce_requests(
         })?;
         if !check {
             for (group, reduction) in groups.iter().zip(&reductions) {
+                for (channel, _) in &group.channels {
+                    channels.remove(channel);
+                }
+                let Some(reduction) = reduction else {
+                    continue; // the summed inputs cancel: an exact zero
+                };
                 if reduction.dimension != group.loops as i64 {
                     return Err(invalid(format!(
                         "a {}-loop request returned a reduction of dimension {}",
@@ -557,9 +563,6 @@ pub(crate) fn reduce_requests(
                         scale_power: group.scale_power,
                         reduced,
                     });
-                for (channel, _) in &group.channels {
-                    channels.remove(channel);
-                }
             }
         }
     }
