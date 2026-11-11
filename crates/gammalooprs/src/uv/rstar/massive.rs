@@ -22,7 +22,7 @@
 //!   A line of power `q` is a chain of `q` lines through two-point vertices
 //!   with unit numerators.
 
-use std::time::Instant;
+use std::{collections::BTreeMap, time::Instant};
 
 use eyre::{Result, WrapErr, ensure, eyre};
 use idenso::{
@@ -37,7 +37,7 @@ use spenso::{
 };
 use symbolica::{
     atom::{Atom, AtomCore},
-    function,
+    function, symbol,
 };
 use vakint::{Vakint, VakintSettings};
 
@@ -101,6 +101,16 @@ impl RStarPlan {
     /// of the complete product with its inserted poles, plus `extra_terms`
     /// further orders (for depth checks). The overall counterterm of the root
     /// is NOT included (see [`Self::massive_vacuum_counterterm`]).
+    ///
+    /// Depth: `number_of_terms_in_epsilon_expansion = quotient loops` asks for
+    /// the complete product through `epsilon^-1`. This relies on Vakint
+    /// truncating the product of the integral WITH its numerator, including
+    /// the inserted counterterm poles (the master expansion depth is
+    /// `n - L - 1` for the product, so the masters are expanded deeper by the
+    /// insertion's pole order), and on its fail-closed guard
+    /// (`truncation_guard::ensure_known_orders`), which errors instead of
+    /// returning a result whenever a master order beyond the shipped data
+    /// would be needed (e.g. through a spurious `d = 4` pole).
     pub fn massive_vacuum_subdivergence_poles(
         &self,
         graph: &Graph,
@@ -403,6 +413,10 @@ fn simplify(expression: &Atom) -> Result<Atom> {
     Ok(cooking.uncook(simplified.expression().as_view()))
 }
 
+/// Proper UV children of R* plans keyed by their structural signature
+/// (see `VacuumTopology::memoised_children`).
+type ChildCache = std::collections::HashMap<String, Atom>;
+
 /// One term of the mass expansion of `Delta(G)`: extra powers per line, its
 /// binomial weight, the massless R* counterterm and its wall time (ms).
 pub type DistributionTerm = (Vec<u32>, u64, Atom, u128);
@@ -560,6 +574,10 @@ impl VacuumTopology {
 
     /// The runtime graph of one numerator monomial: rank-1 momenta of the
     /// first chain segment of each line, `Q(e)^{mu_f}` with the factor's index.
+    ///
+    /// The power-counting override `dod = -2 + #factors` on that segment
+    /// assumes a scalar propagator `1/(k^2 - m^2)` with unit numerator, as
+    /// [`Self::graph`] builds it; this is asserted before the override.
     pub fn monomial_graph(
         &self,
         model: &Model,
@@ -582,6 +600,10 @@ impl VacuumTopology {
                 }
                 let data =
                     &mut graph.underlying[linnet::half_edge::involution::EdgeIndex::from(first)];
+                ensure!(
+                    data.num.value == Atom::one() && data.dod.value == -2,
+                    "numerator monomials need scalar 1/(k^2 - m^2) lines with unit numerator"
+                );
                 data.num = crate::graph::Autogen::explicit(numerator);
                 data.dod = crate::graph::Autogen::explicit(-2 + factors.len() as i32);
             }
@@ -630,6 +652,113 @@ impl VacuumTopology {
         out
     }
 
+    /// `(line, segment)` of every runtime edge of [`Self::dot`] (a line of
+    /// power `q` is `q` consecutive segments).
+    fn segments(&self) -> Vec<(usize, usize)> {
+        self.edges
+            .iter()
+            .enumerate()
+            .flat_map(|(line, &(_, _, power))| (0..power as usize).map(move |seg| (line, seg)))
+            .collect()
+    }
+
+    /// The proper UV children of an R* plan of this (dotted, massless) graph,
+    /// as `RStarPlan::evaluate_uv_children` defines them, each computed once
+    /// per structural signature and reused across the dotted graphs of one
+    /// base topology. The signature fixes the child completely: its segments,
+    /// the powers of every line it or its boundary touches (which fix where
+    /// each segment ends), its boundary half-edges with their flows, the
+    /// marked segment if it lies inside, and the numerator factors on its
+    /// lines. Momentum labels are stored by `(line, segment)` and renamed to
+    /// the runtime edge ids of the graph at hand.
+    #[allow(clippy::too_many_arguments)]
+    fn memoised_children(
+        &self,
+        graph: &Graph,
+        plan: &RStarPlan,
+        attachments: &[Vec<usize>],
+        model: &Model,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+        cache: &mut ChildCache,
+    ) -> Result<BTreeMap<SuBitGraph, Atom>> {
+        use linnet::half_edge::{involution::Flow, subgraph::SubSetLike as _};
+        let segments = self.segments();
+        let segment_symbol = symbol!("rstar_massive_child_segment_momentum");
+        let reference_mass = Atom::var(symbol!("rstar_reference_mass_squared"; Scalar)).sqrt();
+        let marked = usize::from(plan.marked_edge);
+        let mut children = BTreeMap::new();
+        for call in &plan.counterterms {
+            let support = &call.argument.support;
+            let internal = graph
+                .iter_edges_of(support)
+                .map(|(_, edge, _)| segments[usize::from(edge)])
+                .collect::<std::collections::BTreeSet<_>>();
+            let boundary = graph
+                .dummy_less_full_crown(support)
+                .included_iter()
+                .map(|hedge| {
+                    let edge = usize::from(graph[&hedge]);
+                    (segments[edge], matches!(graph.flow(hedge), Flow::Sink))
+                })
+                .collect::<std::collections::BTreeSet<_>>();
+            let lines = internal
+                .iter()
+                .chain(boundary.iter().map(|(segment, _)| segment))
+                .map(|&(line, _)| (line, self.edges[line].2))
+                .collect::<std::collections::BTreeSet<_>>();
+            let numerators = internal
+                .iter()
+                .filter(|&&(_, seg)| seg == 0)
+                .map(|&(line, _)| (line, attachments.get(line).cloned().unwrap_or_default()))
+                .collect::<Vec<_>>();
+            let marked_inside = internal
+                .contains(&segments[marked])
+                .then_some(segments[marked]);
+            let key =
+                format!("{internal:?}|{boundary:?}|{lines:?}|{numerators:?}|{marked_inside:?}");
+            let stored = match cache.get(&key) {
+                Some(value) => value.clone(),
+                None => {
+                    let value = super::MassiveUvEvaluator::new(graph, model, vakint, uv_settings)
+                        .with_reference_mass(plan.marked_edge, reference_mass.clone())
+                        .counterterm(call, &[])
+                        .wrap_err("while computing a proper UV child with massive R")?;
+                    let to_segments = segments
+                        .iter()
+                        .enumerate()
+                        .map(|(edge, &(line, seg))| {
+                            symbolica::id::Replacement::new(
+                                function!(GS.emr_mom, edge, W_.x___).to_pattern(),
+                                function!(segment_symbol, line, seg, W_.x___).to_pattern(),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    let value = value.replace_multiple(&to_segments);
+                    cache.insert(key, value.clone());
+                    value
+                }
+            };
+            let to_edges = segments
+                .iter()
+                .enumerate()
+                .map(|(edge, &(line, seg))| {
+                    symbolica::id::Replacement::new(
+                        function!(segment_symbol, line, seg, W_.x___).to_pattern(),
+                        function!(GS.emr_mom, edge, W_.x___).to_pattern(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let value = stored.replace_multiple(&to_edges);
+            ensure!(
+                !value.contains_symbol(segment_symbol),
+                "a memoised child refers to a segment absent from this graph"
+            );
+            children.insert(support.clone(), value);
+        }
+        Ok(children)
+    }
+
     /// `Delta(G)` of the massive root by route (ii): for every numerator
     /// monomial (coefficient `c`, rank `r`, see [`Self::numerator_monomials`])
     /// the mass expansion `c (m^2)^(w/2) sum_{|a| = w/2} prod_e binom(p_e+a_e-1, a_e)
@@ -645,6 +774,10 @@ impl VacuumTopology {
     ) -> Result<(Atom, Vec<DistributionTerm>)> {
         let mut total = Atom::Zero;
         let mut log = Vec::new();
+        // The dotted graphs of all distributions and monomials share most of
+        // their proper UV children: compute each child once (see
+        // `memoised_children`).
+        let mut cache = ChildCache::new();
         for monomial in self.numerator_monomials(mass) {
             let rank: usize = monomial.attachments.iter().map(Vec::len).sum();
             let omega = self.superficial_degree() - self.numerator_degree() + rank as i64;
@@ -675,8 +808,17 @@ impl VacuumTopology {
                 };
                 let massless = dotted.monomial_graph(model, &Atom::Zero, &monomial.attachments)?;
                 let plan = RStarPlan::with_automatic_edge(&massless, model, uv_settings)?;
+                let children = dotted.memoised_children(
+                    &massless,
+                    &plan,
+                    &monomial.attachments,
+                    model,
+                    vakint,
+                    uv_settings,
+                    &mut cache,
+                )?;
                 let delta = plan
-                    .counterterm(&massless, model, vakint, uv_settings)
+                    .counterterm_with_children(&massless, model, vakint, uv_settings, children)
                     .wrap_err_with(|| {
                         format!("while computing the R* counterterm of {}", dotted.name)
                     })?;
