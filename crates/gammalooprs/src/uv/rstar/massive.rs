@@ -22,7 +22,7 @@
 //!   A line of power `q` is a chain of `q` lines through two-point vertices
 //!   with unit numerators.
 
-use std::{collections::BTreeMap, time::Instant};
+use std::time::Instant;
 
 use eyre::{Result, WrapErr, ensure, eyre};
 use idenso::{
@@ -47,10 +47,7 @@ use crate::{
     utils::{GS, W_},
     uv::{
         ApproximationType, RenormalizationPrescriptionSettings, UVgenerationSettings,
-        UltravioletGraph,
-        approx::{CutStructure, integrated::to_vakint_integrand},
-        hedge_poset::Wood,
-        uv_graph::UVE,
+        UltravioletGraph, approx::integrated::to_vakint_integrand, uv_graph::UVE,
     },
 };
 
@@ -98,12 +95,12 @@ impl RStarPlan {
     /// `-K sum_{S proper, non-empty} Delta(S) G/S` for a massive vacuum root.
     ///
     /// `mass` is the common physical mass of the root's lines (the mass
-    /// itself, not its square). It is used for the proper children exactly as
-    /// `evaluate_uv_children` uses its reference mass. Each quotient is
-    /// requested through `epsilon^-1` of the complete product with its
-    /// inserted poles, plus `extra_terms` further orders (for depth checks).
-    /// The overall counterterm of the root is NOT included.
-    #[allow(clippy::too_many_arguments)]
+    /// itself, not its square). The proper children `Delta(S)` are those of
+    /// the ordinary massive R operation (`evaluate_uv_children`, physical
+    /// masses on every line). Each quotient is requested through `epsilon^-1`
+    /// of the complete product with its inserted poles, plus `extra_terms`
+    /// further orders (for depth checks). The overall counterterm of the root
+    /// is NOT included (see [`Self::massive_vacuum_counterterm`]).
     pub fn massive_vacuum_subdivergence_poles(
         &self,
         graph: &Graph,
@@ -112,49 +109,24 @@ impl RStarPlan {
         vakint: &Vakint,
         uv_settings: &UVgenerationSettings,
         extra_terms: i64,
-        forest_extra_terms: i64,
-        recursion: Option<&RecursionContext<'_>>,
     ) -> Result<MassiveVacuumSubdivergences> {
         ensure!(
             graph.external_filter::<SuBitGraph>().is_empty(),
             "a massive vacuum root has no external legs"
         );
+        ensure!(
+            graph
+                .iter_edges_of(&self.support)
+                .all(|(_, _, data)| data.data.mass_atom(model) == *mass),
+            "every line of a massive vacuum root must carry the given mass"
+        );
         let uv_settings = massive_vacuum_settings(uv_settings);
         let started = Instant::now();
-        let _ = mass;
         let children = if self.counterterms.is_empty() {
             Default::default()
         } else {
-            let supports = self
-                .counterterms
-                .iter()
-                .map(|call| call.argument.support.clone())
-                .collect::<Vec<_>>();
-            if let Some(recursion) = recursion {
-                let mut values = BTreeMap::new();
-                for support in &supports {
-                    values.insert(
-                        support.clone(),
-                        RecursionContext::identified(
-                            &recursion
-                                .child_counterterm(graph, support)
-                                .wrap_err("while computing a recursive child counterterm")?,
-                        ),
-                    );
-                }
-                values
-            } else {
-                self.massive_forest_counterterms(
-                    graph,
-                    model,
-                    vakint,
-                    &uv_settings,
-                    false,
-                    forest_extra_terms,
-                    &supports,
-                )
+            self.evaluate_uv_children(graph, model, mass, vakint, &uv_settings)
                 .wrap_err("while computing the proper UV counterterms with massive R")?
-            }
         };
         let children_ms = started.elapsed().as_millis();
         let base = uv_settings.vakint.true_settings();
@@ -240,89 +212,32 @@ impl RStarPlan {
         })
     }
 
-    /// `Delta(G)` of the massive root by the ordinary massive R operation
-    /// (route (i)): the Wood forest of the complete catalogue, root included,
-    /// with `L`-loop `m_uv` tadpoles. Returns the MS counterterm `-K R' G`.
+    /// `Delta(G)` of the massive root by the ordinary massive R operation:
+    /// the forest of the complete catalogue, root included, with `L`-loop
+    /// `m_uv` tadpoles (so only up to the loop count of Vakint's vacuum data).
+    /// Returns the MS counterterm `-K R' G`.
     pub fn massive_vacuum_counterterm(
         &self,
         graph: &Graph,
         model: &Model,
         vakint: &Vakint,
         uv_settings: &UVgenerationSettings,
-        forest_extra_terms: i64,
     ) -> Result<Atom> {
         if graph.compute_dod(&self.support) < 0 {
             return Ok(Atom::Zero);
         }
-        let support = self.support.clone();
-        let mut values = self.massive_forest_counterterms(
-            graph,
-            model,
-            vakint,
-            &massive_vacuum_settings(uv_settings),
-            true,
-            forest_extra_terms,
-            std::slice::from_ref(&support),
-        )?;
-        Ok(values.remove(&support).unwrap_or_default().expand())
-    }
-
-    /// The ordinary massive R counterterms (Wood forest, MS, all-mass Taylor
-    /// kernel around `m_uv`) of the requested supports, with the lines' own
-    /// (physical) masses. Unlike `evaluate_uv_children`, the forest's Vakint
-    /// depth is `max_loops + forest_extra_terms` (the existing forest uses
-    /// `max_loops + 1`, needed for MUV finite parts only): every node then
-    /// asks its `l`-loop tadpoles through `eps^(max_loops - l - 1 + extra)`,
-    /// which is exactly what the outermost pole projection needs.
-    #[allow(clippy::too_many_arguments)]
-    pub fn massive_forest_counterterms(
-        &self,
-        graph: &Graph,
-        model: &Model,
-        vakint: &Vakint,
-        uv_settings: &UVgenerationSettings,
-        include_root: bool,
-        forest_extra_terms: i64,
-        supports: &[SuBitGraph],
-    ) -> Result<BTreeMap<SuBitGraph, Atom>> {
         let settings = UVgenerationSettings {
             generate_integrated: true,
             add_marker: false,
             ..massive_vacuum_settings(uv_settings)
         };
-        let spinneys = self
-            .uv_catalogue()
-            .iter()
-            .filter(|spinney| include_root || spinney.filter() != &self.support)
-            .cloned()
-            .collect::<Vec<_>>();
-        let max_loops = spinneys
-            .iter()
-            .map(|spinney| graph.n_loops(spinney.filter()))
-            .max()
-            .unwrap_or(0);
-        let mut wood = Wood::from_spinneys(
-            spinneys,
-            graph,
-            CutStructure::empty(graph),
-            &settings.vakint,
-        );
-        wood.vakint_settings.number_of_terms_in_epsilon_expansion =
-            i64::try_from(max_loops)? + forest_extra_terms;
-        let mut forest = wood.unfold();
+        let mut forest = self.uv_forest(graph, &settings);
         forest.integrate(graph, model, vakint, &settings)?;
-        supports
-            .iter()
-            .map(|support| {
-                Ok((
-                    support.clone(),
-                    forest
-                        .counterterm_for_support(support)?
-                        .replace(GS.m_uv_expansion)
-                        .with(GS.m_uv_vacuum),
-                ))
-            })
-            .collect()
+        Ok(forest
+            .counterterm_for_support(&self.support)?
+            .replace(GS.m_uv_expansion)
+            .with(GS.m_uv_vacuum)
+            .expand())
     }
 }
 
@@ -769,321 +684,4 @@ impl VacuumTopology {
         }
         Ok(((total * mass.pow(Atom::num(omega))).expand(), log))
     }
-}
-
-// ---------------------------------------------------------------------------
-// WORKAROUND for a defect of the ordinary massive R forest, reproduced by the
-// tests of the companion test-only PR (`uv/rstar/massive_r_bug_tests.rs`,
-// branch `massive-r-multi-halfedge-child-bug`): some children with
-// momentum-dependent sub-counterterms receive wrong, m_uv-dependent
-// counterterms. `RecursionContext` recomputes every counterterm bottom-up
-// without in-forest children. Remove it once the forest is fixed: pass
-// `recursion = None` to `massive_vacuum_subdivergence_poles` to use the
-// ordinary forest.
-// ---------------------------------------------------------------------------
-
-/// Cache of recursively computed counterterms, keyed by the standalone DOT.
-pub type CountertermCache = std::collections::HashMap<String, Atom>;
-
-/// Settings shared by the explicit recursion.
-pub struct RecursionContext<'a> {
-    pub model: &'a Model,
-    pub vakint: &'a Vakint,
-    pub settings: UVgenerationSettings,
-    pub extra_terms: i64,
-    pub cache: std::cell::RefCell<CountertermCache>,
-    pub calls: std::cell::Cell<usize>,
-}
-
-impl<'a> RecursionContext<'a> {
-    pub fn new(
-        model: &'a Model,
-        vakint: &'a Vakint,
-        uv_settings: &UVgenerationSettings,
-        extra_terms: i64,
-    ) -> Self {
-        Self {
-            model,
-            vakint,
-            settings: UVgenerationSettings {
-                generate_integrated: true,
-                add_marker: false,
-                ..massive_vacuum_settings(uv_settings)
-            },
-            extra_terms,
-            cache: Default::default(),
-            calls: Default::default(),
-        }
-    }
-
-    /// `Delta(S)` of a connected subgraph `support` of `parent`, as a
-    /// polynomial in the parent's momentum labels. The child is computed on
-    /// a standalone graph with ONE incoming leg per boundary vertex carrying
-    /// the total momentum `P_v` entering there (a counterterm depends only on
-    /// these), then `Q(leg_v) -> P_v` = signed sum of the boundary half-edge
-    /// momenta at `v` (sink end `+Q(e)`, source end `-Q(e)`; legs of the
-    /// parent are unpaired sink half-edges). Vertices with no boundary or a
-    /// vanishing net momentum get no leg.
-    pub fn child_counterterm(&self, parent: &Graph, support: &SuBitGraph) -> Result<Atom> {
-        use linnet::half_edge::{
-            involution::{EdgeIndex, Flow, HedgePair},
-            subgraph::SubSetLike as _,
-        };
-        let mut nodes = Vec::new();
-        let mut internal = Vec::new();
-        for (pair, edge, data) in parent.iter_edges_of(support) {
-            let HedgePair::Paired { source, sink } = pair else {
-                return Err(eyre!("a child contains an unpaired half-edge"));
-            };
-            let (a, b) = (parent.node_id(source), parent.node_id(sink));
-            for node in [a, b] {
-                if !nodes.contains(&node) {
-                    nodes.push(node);
-                }
-            }
-            internal.push((edge, a, b, data.data.mass_atom(self.model)));
-        }
-        let mut net = vec![Atom::Zero; nodes.len()];
-        let mut net_terms: Vec<Vec<(i64, usize)>> = vec![Vec::new(); nodes.len()];
-        for hedge in parent.dummy_less_full_crown(support).included_iter() {
-            let edge = parent[&hedge];
-            let node = parent.node_id(hedge);
-            let index = nodes
-                .iter()
-                .position(|n| *n == node)
-                .ok_or_else(|| eyre!("a boundary half-edge outside the child"))?;
-            let sign = match parent.flow(hedge) {
-                Flow::Sink => 1,
-                Flow::Source => -1,
-            };
-            net[index] += Atom::num(sign) * function!(GS.emr_mom, usize::from(edge));
-            net_terms[index].push((sign, usize::from(edge)));
-        }
-        let legs = net
-            .iter()
-            .enumerate()
-            .filter(|(_, p)| !p.expand().is_zero())
-            .map(|(i, p)| (i, p.expand()))
-            .collect::<Vec<_>>();
-        let mut components = (0..nodes.len()).collect::<Vec<_>>();
-        let mut slots = vec![0usize; nodes.len()];
-        let mut loops = 0;
-        let mut dot = String::from(
-            "digraph child {\ngraph [projector=1]; node [num=1];\nedge [particle=\"scalar_1\" num=1];\next [style=invis];\n",
-        );
-        let mut masses = Vec::new();
-        for (id, (_, a, b, mass)) in internal.iter().enumerate() {
-            let ia = nodes.iter().position(|n| n == a).unwrap();
-            let ib = nodes.iter().position(|n| n == b).unwrap();
-            let source = slots[ia];
-            slots[ia] += 1;
-            let sink = slots[ib];
-            slots[ib] += 1;
-            let basis = if components[ia] == components[ib] {
-                loops += 1;
-                format!("lmb_id={}", loops - 1)
-            } else {
-                let (from, into) = (components[ib], components[ia]);
-                for component in &mut components {
-                    if *component == from {
-                        *component = into;
-                    }
-                }
-                String::new()
-            };
-            masses.push(mass.clone());
-            dot.push_str(&format!(
-                "v{ia} -> v{ib} [id={id} {basis} source=\"{{ufo_order:{source}}}\" sink=\"{{ufo_order:{sink}}}\"];\n"
-            ));
-        }
-        let first_leg = internal.len();
-        for (j, (i, _)) in legs.iter().enumerate() {
-            let sink = slots[*i];
-            slots[*i] += 1;
-            dot.push_str(&format!(
-                "ext -> v{i} [id={} sink=\"{{ufo_order:{sink}}}\"];\n",
-                first_leg + j
-            ));
-        }
-        dot.push('}');
-        let numerators = internal
-            .iter()
-            .enumerate()
-            .map(|(id, (edge, _, _, _))| {
-                parent.underlying[*edge]
-                    .num
-                    .value
-                    .replace(function!(GS.emr_mom, usize::from(*edge), W_.x___))
-                    .with(function!(GS.emr_mom, id, W_.x___))
-                    .to_string()
-            })
-            .collect::<Vec<_>>();
-        let key = format!("{dot}\n{masses:?}\n{numerators:?}");
-        let cached = self.cache.borrow().get(&key).cloned();
-        let value = match cached {
-            Some(value) => value,
-            None => {
-                let mut child: Graph = dot
-                    .clone()
-                    .into_finalized_runtime_graph(self.model)
-                    .wrap_err("while building a standalone child graph")?;
-                for (id, mass) in masses.iter().enumerate() {
-                    let data = &mut child.underlying[EdgeIndex::from(id)];
-                    data.particle = data.particle.clone().override_mass(Some(mass.clone()));
-                    let parent_edge = internal[id].0;
-                    let parent_data = &parent.underlying[parent_edge];
-                    data.num = crate::graph::Autogen::explicit(
-                        parent_data
-                            .num
-                            .value
-                            .replace(function!(GS.emr_mom, usize::from(parent_edge), W_.x___))
-                            .with(function!(GS.emr_mom, id, W_.x___)),
-                    );
-                    data.dod = crate::graph::Autogen::explicit(parent_data.dod.value);
-                }
-                let value = self.counterterm(&child)?;
-                self.cache.borrow_mut().insert(key, value.clone());
-                value
-            }
-        };
-        let renames = legs
-            .iter()
-            .enumerate()
-            .map(|(j, (i, _))| {
-                // P_v keeps the slot arguments of the replaced leg momentum.
-                let rhs = net_terms[*i].iter().fold(Atom::Zero, |sum, (sign, edge)| {
-                    sum + Atom::num(*sign) * function!(GS.emr_mom, *edge, W_.x___)
-                });
-                symbolica::id::Replacement::new(
-                    function!(GS.emr_mom, first_leg + j, W_.x___).to_pattern(),
-                    rhs.to_pattern(),
-                )
-            })
-            .collect::<Vec<_>>();
-        Ok(value.replace_multiple(&renames).expand())
-    }
-
-    /// `Delta(G) = sum_{S spinney of G, incl. empty} -K T_G[ prod Delta(S_i) * G/S ]`
-    /// for a connected 1PI graph (standalone child or vacuum root): every
-    /// insertion from this recursion, every term a decorated quotient on which
-    /// ONLY the overall Taylor operation and integration act (a Wood holding the
-    /// root spinney alone).
-    /// The RAW counterterm (m_uv_expansion not yet identified with m_uv);
-    /// use [`Self::identified`] for the final, m_uv-free polynomial.
-    pub fn counterterm(&self, graph: &Graph) -> Result<Atom> {
-        self.calls.set(self.calls.get() + 1);
-        let first = graph
-            .iter_edges()
-            .find_map(|(pair, edge, _)| pair.is_paired().then_some(edge))
-            .ok_or_else(|| eyre!("a counterterm graph without internal lines"))?;
-        let plan = RStarPlan::new(graph, self.model, first, &self.settings)?;
-        if graph.compute_dod(&plan.support) < 0 {
-            return Ok(Atom::Zero);
-        }
-        let mut total = Atom::Zero;
-        for term in &plan.ordinary_uv {
-            let insertions = term
-                .counterterms
-                .iter()
-                .map(|call| self.child_counterterm(graph, &call.argument.support))
-                .collect::<Result<Vec<_>>>()?;
-            if insertions.iter().any(|i| i.is_zero()) {
-                continue;
-            }
-            total += self.root_only(graph, &term.remainder, &insertions)?;
-        }
-        Ok(total.expand())
-    }
-
-    /// Identify the auxiliary masses: the final counterterm.
-    pub fn identified(value: &Atom) -> Atom {
-        value
-            .replace(GS.m_uv_expansion)
-            .with(GS.m_uv_vacuum)
-            .expand()
-    }
-
-    fn root_only(&self, graph: &Graph, region: &GraphRegion, insertions: &[Atom]) -> Result<Atom> {
-        ensure!(
-            region.loops > 0,
-            "a spinney swallowing every loop of a 1PI graph is not expected"
-        );
-        // Insertions are RAW counterterms (m_uv and m_uv_expansion still
-        // distinct), exactly what the ordinary forest inserts: m_uv is a hard
-        // scale of the enclosing Taylor operation, physical masses and
-        // m_uv_expansion are not rescaled. Identify them only at the end.
-        let decorated = decorated_graph(graph, region, insertions)?;
-        let catalogue = decorated.classified_spinneys(
-            &region.remaining,
-            self.model,
-            &self.settings,
-            &decorated.loop_momentum_basis,
-        );
-        let Some(root) = catalogue
-            .into_iter()
-            .find(|spinney| spinney.filter() == &region.remaining)
-        else {
-            // No overall divergence of this decorated term: T at t^<=0 is zero.
-            return Ok(Atom::Zero);
-        };
-        let mut wood = Wood::from_spinneys(
-            vec![root],
-            &decorated,
-            CutStructure::empty(&decorated),
-            &self.settings.vakint,
-        );
-        wood.vakint_settings.number_of_terms_in_epsilon_expansion =
-            i64::try_from(region.loops)? + self.extra_terms;
-        let mut forest = wood.unfold();
-        forest.integrate(&decorated, self.model, self.vakint, &self.settings)?;
-        let value = forest.counterterm_for_support(&region.remaining)?;
-        Ok(value.expand())
-    }
-}
-
-/// The decorated quotient of `MassiveUvEvaluator::decorated_graph` (copied:
-/// that one is private): contracted supports become one vertex each, carrying
-/// the inserted polynomial as its numerator; original labels are kept.
-fn decorated_graph(graph: &Graph, region: &GraphRegion, insertions: &[Atom]) -> Result<Graph> {
-    let mut decorated = graph.clone();
-    let mut contracted: SuBitGraph = decorated.empty_subgraph();
-    for slot in &region.insertions {
-        contracted.union_with(&slot.support);
-    }
-    ensure!(
-        region.support.subtract(&contracted) == region.remaining,
-        "remaining edges do not match the contracted supports"
-    );
-    let contracted = InternalSubGraph::try_new(contracted, &decorated.underlying)
-        .ok_or_else(|| eyre!("a contracted support contains an unpaired half-edge"))?;
-    decorated.loop_momentum_basis = graph
-        .shrunken_sub_lmb(&region.support, &contracted, region.boundary.clone())
-        .wrap_err("could not route the decorated quotient")?;
-    for (slot, polynomial) in region.insertions.iter().zip(insertions) {
-        let nodes = decorated
-            .iter_nodes_of(&slot.support)
-            .map(|(node, _, _)| node)
-            .collect::<Vec<_>>();
-        let first = nodes
-            .first()
-            .ok_or_else(|| eyre!("an insertion support contains no vertices"))?;
-        let mut vertex = decorated.underlying[*first].clone();
-        vertex.num = crate::graph::Autogen::explicit(polynomial.clone());
-        vertex.vertex_rule = None;
-        vertex.dod = crate::graph::Autogen::explicit(graph.local_dod(&slot.support).max(0));
-        decorated.underlying.identify_nodes(&nodes, vertex);
-    }
-    decorated.underlying.forget_identification_history();
-    let consumed = decorated
-        .iter_edges_of(&contracted)
-        .map(|(_, edge, _)| edge)
-        .collect::<Vec<_>>();
-    for edge in consumed {
-        decorated.underlying[edge].is_dummy = true;
-    }
-    ensure!(
-        decorated.n_loops(&region.remaining) == region.loops,
-        "decorated quotient has an inconsistent loop count"
-    );
-    Ok(decorated)
 }
