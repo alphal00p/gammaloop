@@ -1,6 +1,6 @@
 {
   "schema": "vakint.external-data.loop.v1",
-  "version": "v0.2.2",
+  "version": "v0.2.3",
   "loop_count": 3,
   "dimension": "4-2*epsilon",
   "normalization": "FMFTandMATAD",
