@@ -1,4 +1,11 @@
 #![allow(mixed_script_confusables)]
+
+/// M5 batch 2: mimalloc serves the Rust allocations of every binary linking vakint
+/// (default feature `mimalloc`; see Cargo.toml).
+#[cfg(feature = "mimalloc")]
+#[global_allocator]
+static VAKINT_GLOBAL_ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 pub mod alphaloop_numerics;
 mod citations;
 #[cfg(feature = "feynkit-ingress")]

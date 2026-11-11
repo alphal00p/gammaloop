@@ -11,6 +11,7 @@ keywords = ["QFT", "integral", "physics", "vaccuum"]
 categories = ["science"]
 
 [dependencies]
+mimalloc = { version = "0.1.52", default-features = false, optional = true }
 pyo3 = { workspace = true, features = ["anyhow"], optional = true }
 pyo3-stub-gen = { workspace = true, default-features = false, optional = true }
 pyo3-stub-gen-derive = { workspace = true, optional = true }
@@ -72,6 +73,16 @@ test-log = "0.2.19"
 libc = "0.2"
 
 [features]
+default = ["mimalloc"]
+# M5 batch 2 (rr-prof): mimalloc as the Rust global allocator of every binary
+# that links vakint (its tests and examples, gammaloop): -27..-40 % time of a
+# RustRed p reduction at 1 thread, -14..-30 % at 16, values byte-identical.
+# Rust allocations only: vakint is also a Python extension module, so the C
+# malloc family is not replaced by default (`mimalloc-override` does that for
+# standalone binaries). Conflicts with Symbolica's own `faster_alloc` (one
+# global allocator per binary): build with `--no-default-features` there.
+mimalloc = ["dep:mimalloc"]
+mimalloc-override = ["mimalloc", "mimalloc/override"]
 progress-tui = ["dep:ratatui", "dep:crossterm", "rustix/termios", "rustix/process"]
 feynkit-ingress = []
 # Expose candidate diagnostics and offline validation helpers.
