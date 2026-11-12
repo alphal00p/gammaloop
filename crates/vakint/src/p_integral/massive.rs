@@ -67,6 +67,38 @@ pub(crate) fn rustred_max_rank_physical() -> Option<usize> {
     *RANK
 }
 
+/// Diagnostic (`BETA_RUSTRED_DUMP_DIR`): write the p-integrals of a RustRed
+/// reduction slower than one second as one vakint expression per line, with
+/// its reduction time, so they can be replayed against Forcer.
+fn dump_slow_rustred_requests(requests: &[super::PropagatorRequest], elapsed: std::time::Duration) {
+    static DIRECTORY: std::sync::LazyLock<Option<std::path::PathBuf>> =
+        std::sync::LazyLock::new(|| std::env::var_os("BETA_RUSTRED_DUMP_DIR").map(Into::into));
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let Some(directory) = DIRECTORY.as_ref() else {
+        return;
+    };
+    if elapsed.as_secs_f64() < 1.0 {
+        return;
+    }
+    let index = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let mut text = format!("# rustred_seconds {:.3}\n", elapsed.as_secs_f64());
+    for request in requests {
+        let powers = request
+            .powers
+            .iter()
+            .map(|power| power.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+        text.push_str(&format!(
+            "({})*topo({}({},{powers}))\n",
+            request.canonical_numerator.to_canonical_string(),
+            request.family.name,
+            request.external.to_canonical_string(),
+        ));
+    }
+    let _ = std::fs::write(directory.join(format!("closure-{index:05}.txt")), text);
+}
+
 impl MassiveClosure {
     fn validated_head(&self, settings: &crate::VakintSettings) -> Result<Atom, VakintError> {
         let (head, _) = external_head(&self.momentum)?;
@@ -268,9 +300,11 @@ impl MassiveClosure {
                     .collect::<Vec<_>>();
                 // One closure has one external head; its values are summed
                 // per loop count before the radial integration.
+                let started = std::time::Instant::now();
                 let reduced = crate::rustred_evaluation::p_integral::reduce_requests(
                     vakint, settings, &requests, None,
                 )?;
+                dump_slow_rustred_requests(&requests, started.elapsed());
                 for ((loops, _), values) in reduced {
                     let value = inputs[owner]
                         .0
