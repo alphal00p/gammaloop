@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use eyre::Result;
 use idenso::{CookMode, CookSettings, tensor::SymbolicTensor};
-use linnet::half_edge::involution::EdgeIndex;
+use linnet::half_edge::{involution::EdgeIndex, subgraph::SubSetLike};
 use spenso::{
     network::library::symbolic::ETS,
     structure::{
@@ -88,6 +88,46 @@ fn disjoint_bubbles() -> Result<Graph> {
             D -> A [id=5 lmb_id=2 source="{ufo_order:2}" sink="{ufo_order:2}"];
         }, "scalars"
     )?))
+}
+
+/// Scalar bubbles in series, A = {0, 1}, B = {2, 3} and optionally C = {4, 5},
+/// like the scalar-bubble surrogate of a propagator insertion. Vertex `A`
+/// joins the incoming external edge to the first bubble only.
+fn bubble_chain(bubbles: usize) -> Result<Graph> {
+    let graph = match bubbles {
+        2 => finalized_runtime_dot!(
+            digraph G {
+                graph [projector=1];
+                node [num=1];
+                edge [particle="scalar_1" num=1];
+                e [style=invis];
+                e -> A [id=4 sink="{ufo_order:0}"];
+                C -> e [id=5 source="{ufo_order:2}"];
+                A -> B [id=0 source="{ufo_order:1}" sink="{ufo_order:0}"];
+                A -> B [id=1 lmb_id=0 source="{ufo_order:2}" sink="{ufo_order:1}"];
+                B -> C [id=2 source="{ufo_order:2}" sink="{ufo_order:0}"];
+                B -> C [id=3 lmb_id=1 source="{ufo_order:3}" sink="{ufo_order:1}"];
+            }, "scalars"
+        )?,
+        3 => finalized_runtime_dot!(
+            digraph G {
+                graph [projector=1];
+                node [num=1];
+                edge [particle="scalar_1" num=1];
+                e [style=invis];
+                e -> A [id=6 sink="{ufo_order:0}"];
+                D -> e [id=7 source="{ufo_order:2}"];
+                A -> B [id=0 source="{ufo_order:1}" sink="{ufo_order:0}"];
+                A -> B [id=1 lmb_id=0 source="{ufo_order:2}" sink="{ufo_order:1}"];
+                B -> C [id=2 source="{ufo_order:2}" sink="{ufo_order:0}"];
+                B -> C [id=3 lmb_id=1 source="{ufo_order:3}" sink="{ufo_order:1}"];
+                C -> D [id=4 source="{ufo_order:2}" sink="{ufo_order:0}"];
+                C -> D [id=5 lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:1}"];
+            }, "scalars"
+        )?,
+        _ => unreachable!("only two- and three-bubble chains are defined"),
+    };
+    Ok(massless(graph))
 }
 
 fn assert_same_open_tensor(actual: &Atom, expected: &Atom) -> Result<()> {
@@ -373,6 +413,72 @@ fn cached_local_epsilon_coefficient_stays_inside_each_pole_projection() -> Resul
     let actual = cache.counterterm(&graph, &dressed_plan.support, &model, &vakint, &settings)?;
     assert_same_counterterm(&actual, &expected)?;
     assert!(!(&actual - &plain).expand().is_zero());
+    Ok(())
+}
+
+/// An `O(epsilon)` coefficient on the first bubble of a chain, as on the
+/// scalar-bubble surrogate of an insertion whose leading epsilon coefficient
+/// vanishes, gives Delta(A) = -K[epsilon (1/epsilon + ...)] = 0. Every
+/// support containing A then has Delta = Delta(A) Delta(rest) = 0, but its
+/// forest still sums nonzero terms such as K[c I_A I_B] and K[Delta(B) c I_A].
+/// Without normalisation, e.g. Delta(A u B) came back as
+/// `(x+y)/epsilon + (-x-y)/epsilon` and the three-bubble Delta with
+/// uncancelled mass logarithms. Parents and R* preparation terms drop
+/// vanishing children by `is_zero`; such an unexpanded zero kept contracted
+/// hard vectors in a hard part of B_self_energy_L5_105327's surrogate, which
+/// then failed the hard-moment projection check.
+#[test]
+fn vanishing_chain_delta_is_a_literal_zero_and_others_are_unchanged() -> Result<()> {
+    test_initialise()?;
+    let model = load_generic_model("scalars");
+    let settings = settings();
+    let vakint = Vakint::new()?;
+    let epsilon = Atom::var(GS.dim_epsilon);
+    let x = Atom::var(symbol!("vanishing_chain_x"; Scalar));
+    let y = Atom::var(symbol!("vanishing_chain_y"; Scalar));
+    for bubbles in [2, 3] {
+        for coefficient in [
+            epsilon.clone(),
+            &epsilon * (&x + &y),
+            &epsilon * (Atom::one() + &epsilon),
+        ] {
+            let mut graph = bubble_chain(bubbles)?;
+            let vertex = graph
+                .iter_nodes()
+                .find_map(|(node, _, data)| (data.name.value == "A").then_some(node))
+                .unwrap();
+            graph.underlying[vertex].num = Autogen::explicit(coefficient.clone());
+            let plan = RStarPlan::new(&graph, &model, EdgeIndex::from(0), &settings)?;
+            assert_eq!(graph.n_loops(&plan.support), bubbles);
+            let cache = CountertermCache::default();
+            let mut forest = plan.uv_forest(&graph, &settings);
+            forest.integrate(&graph, &model, &vakint, &settings)?;
+            let supports = plan
+                .counterterms
+                .iter()
+                .map(|call| &call.argument.support)
+                .chain(std::iter::once(&plan.support));
+            for support in supports {
+                let cached = cache.counterterm(&graph, support, &model, &vakint, &settings)?;
+                let unfolded = forest.counterterm_for_support(support)?;
+                let contains_a = graph
+                    .iter_edges_of(support)
+                    .any(|(_, edge, _)| edge == EdgeIndex::from(0));
+                if contains_a {
+                    assert!(
+                        cached.is_zero() && unfolded.is_zero(),
+                        "Delta({}) of {bubbles} bubbles with {coefficient} must be a literal zero: \
+                         cached {cached}, forest {unfolded}",
+                        support.string_label()
+                    );
+                } else {
+                    // Supports without the coefficient keep their nonzero Delta.
+                    assert!(!cached.expand().is_zero());
+                    assert_same_counterterm(&cached, &unfolded)?;
+                }
+            }
+        }
+    }
     Ok(())
 }
 

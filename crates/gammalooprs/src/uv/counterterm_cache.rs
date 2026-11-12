@@ -27,6 +27,7 @@ use crate::{
         },
         counterterm_identity::{CountertermIdentity, CountertermKey},
         hedge_poset::ForestNode,
+        literal_zero_if_vanishing,
     },
 };
 
@@ -667,7 +668,9 @@ impl CountertermCache {
                 .run(&local, &ctx, &current, &given, &current, &given)?
                 .physical_pole_atom();
         }
-        Ok(result)
+        // Store an exact zero literally: parents then skip every spinney that
+        // contains this support, and R* drops the preparation terms using it.
+        Ok(literal_zero_if_vanishing(result))
     }
 }
 
