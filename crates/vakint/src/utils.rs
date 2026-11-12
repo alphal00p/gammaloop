@@ -356,6 +356,163 @@ pub fn split_linear_atom(a: AtomView, variable: AtomView) -> (Atom, Atom) {
     }
 }
 
+/// Whether every number in `atom` is an exact (complex) rational.
+pub(crate) fn has_only_exact_numbers(atom: AtomView) -> bool {
+    let mut exact = true;
+    atom.visitor(&mut |part| {
+        if let AtomView::Num(number) = part {
+            exact &= matches!(
+                number.get_coeff_view(),
+                CoefficientView::Natural(..) | CoefficientView::Large(..)
+            );
+        }
+        exact
+    });
+    exact
+}
+
+/// The left fold `0 + t_1 + ... + t_n` of normalized atoms under Symbolica's
+/// `+`, bit for bit, with one n-way merge ([`Atom::add_many`]) per run of
+/// terms instead of one renormalization of the growing sum per term.
+///
+/// The fold and one merge of the same terms can differ in two ways only.
+/// `+` keeps an identical sum factored, `(a+b) + (a+b) = 2*(a+b)`, which
+/// requires the next term to be a sum equal to the running sum; and inexact
+/// numbers may round differently in another merge order. A term that is a
+/// sum or holds an inexact number is therefore added with `+` itself, after
+/// the run before it is merged, and once the running sum holds an inexact
+/// number every later term is added with `+`.
+pub(crate) struct ExactSum {
+    total: Atom,
+    exact_total: bool,
+    pending: Vec<Atom>,
+}
+
+impl ExactSum {
+    pub(crate) fn new() -> Self {
+        Self {
+            total: Atom::Zero,
+            exact_total: true,
+            pending: Vec::new(),
+        }
+    }
+
+    pub(crate) fn push(&mut self, term: Atom) {
+        if self.exact_total
+            && !matches!(term.as_view(), AtomView::Add(_))
+            && has_only_exact_numbers(term.as_view())
+        {
+            self.pending.push(term);
+            return;
+        }
+        self.flush();
+        self.exact_total &= has_only_exact_numbers(term.as_view());
+        self.total += term;
+    }
+
+    fn flush(&mut self) {
+        if self.pending.is_empty() {
+            return;
+        }
+        let total = std::mem::take(&mut self.total);
+        self.total = Atom::add_many(std::iter::once(total).chain(self.pending.drain(..)));
+    }
+
+    pub(crate) fn finish(mut self) -> Atom {
+        self.flush();
+        self.total
+    }
+}
+
+#[cfg(test)]
+mod exact_sum_tests {
+    use symbolica::atom::{Atom, AtomCore};
+
+    use super::ExactSum;
+    use crate::utils::vakint_macros::vk_parse;
+
+    fn fold(terms: &[Atom]) -> Atom {
+        let mut total = Atom::zero();
+        for term in terms {
+            total += term.clone();
+        }
+        total
+    }
+
+    fn merged(terms: &[Atom]) -> Atom {
+        let mut sum = ExactSum::new();
+        for term in terms {
+            sum.push(term.clone());
+        }
+        sum.finish()
+    }
+
+    fn assert_same(sources: &[&str]) {
+        let terms = sources
+            .iter()
+            .map(|source| vk_parse!(source).unwrap())
+            .collect::<Vec<_>>();
+        let expected = fold(&terms);
+        let actual = merged(&terms);
+        assert_eq!(
+            actual.to_canonical_string(),
+            expected.to_canonical_string(),
+            "{sources:?}"
+        );
+        assert_eq!(actual, expected, "{sources:?}");
+    }
+
+    #[test]
+    fn exact_sum_reproduces_the_left_fold() {
+        let cases: &[&[&str]] = &[
+            &[],
+            &["0"],
+            &["x"],
+            &["x", "y", "-x", "z^2", "2*y"],
+            &["3", "1/2", "-7/2"],
+            &["x", "-x"],
+            &["(a+b)/2", "a", "(a+b)/2"],
+            &["(a+b)/2", "(a+b)/2", "-a"],
+            &["2*(a+b)", "-2*(a+b)", "c"],
+            // Merged terms that become a sum are flattened.
+            &["3*(a+b)", "-2*(a+b)", "c"],
+            &["c", "3*(a+b)", "-2*(a+b)"],
+            &["2*(a+b)*x", "-(a+b)*x", "y"],
+            &["x", "y", "-x", "-y"],
+            // `+` keeps an identical running sum factored.
+            &["a+b", "a+b", "c"],
+            &["a", "b", "a+b", "c"],
+            &["a", "b", "a+b", "-2*a", "-2*b"],
+            &["a+b", "c", "a+b+c", "d"],
+            &["a+b", "-a-b", "x"],
+            &[
+                "dot(k(1),k(1))*nf",
+                "dot(k(1),k(2))*(1+ep)",
+                "-dot(k(1),k(1))*nf",
+            ],
+            &["1.5*x", "2*x", "y"],
+            &["x", "1.5*x", "y", "a+b", "a+b", "3*y"],
+            &["1𝑖*x", "2*x", "-1𝑖*x"],
+            &["f(a+b)", "f(a+b)", "g(1,2)*x^-1", "x^-1*g(1,2)"],
+        ];
+        for case in cases {
+            assert_same(case);
+        }
+        // A long run with many merges, sums in between and a factored repeat.
+        let mut long = Vec::new();
+        for i in 0..200 {
+            long.push(format!("{}*x^{}*y^{}", i % 7 - 3, i % 5, i % 3));
+            if i % 37 == 0 {
+                long.push(format!("x^{i}+y"));
+            }
+        }
+        long.push("x^0+y".to_string());
+        long.push("x^0+y".to_string());
+        let long = long.iter().map(String::as_str).collect::<Vec<_>>();
+        assert_same(&long);
+    }
+}
+
 #[test]
 fn test_set_precision_in_float_atom() {
     println!(

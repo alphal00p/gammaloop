@@ -6,7 +6,7 @@ use feynkit_tensor::{OrthogonalWeingarten, TensorReductionError};
 use spenso::network::tags::SPENSO_TAG;
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder};
 
-use crate::{VakintError, VakintTerm, symbols::S};
+use crate::{VakintError, VakintTerm, symbols::S, utils::ExactSum};
 
 /// Original multiplicities survive contraction: a scalar power cannot hide an
 /// index from a consumer in its enclosing product.
@@ -290,7 +290,7 @@ impl LorentzTensor {
     fn sum(terms: Vec<Self>) -> Result<Self, VakintError> {
         let mut indices = BTreeMap::new();
         let mut external = None;
-        let mut expression = Atom::zero();
+        let mut sum = ExactSum::new();
         let mut native = false;
         let mut mixed_interface = false;
         for term in terms {
@@ -311,11 +311,11 @@ impl LorentzTensor {
                 let original = indices.entry(index).or_insert(0_u8);
                 *original = (*original).max(count);
             }
-            expression += term.expression;
+            sum.push(term.expression);
             native |= term.native;
         }
         Ok(Self {
-            expression,
+            expression: sum.finish(),
             indices,
             native: native || mixed_interface,
         })
