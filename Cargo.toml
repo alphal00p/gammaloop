@@ -88,7 +88,7 @@ tracing-indicatif = "0.3.13"
 tracing-subscriber = "0.3.23"
 symbolica-typst-plugin = { version = "0.1.0", default-features = false }
 typed-index-collections = "3.5.0"
-vakint = { path = "crates/vakint/" }
+vakint = { path = "crates/vakint/", default-features = false }
 walkdir = "2.5.0"
 
 which = "8.0.0"
