@@ -5794,7 +5794,7 @@ dependencies = [
 [[package]]
 name = "rustred"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?rev=3ece68fbfbbc6905b427d5461ec06dfa559b34a0#3ece68fbfbbc6905b427d5461ec06dfa559b34a0"
+source = "git+https://github.com/alphal00p/rustred?rev=6992e2ddda0f9cb5332a4e09bdf7f8c4cd4a82a1#6992e2ddda0f9cb5332a4e09bdf7f8c4cd4a82a1"
 dependencies = [
  "bincode 2.0.1",
  "blake3",
@@ -5814,7 +5814,7 @@ dependencies = [
 [[package]]
 name = "rustred-app"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?rev=3ece68fbfbbc6905b427d5461ec06dfa559b34a0#3ece68fbfbbc6905b427d5461ec06dfa559b34a0"
+source = "git+https://github.com/alphal00p/rustred?rev=6992e2ddda0f9cb5332a4e09bdf7f8c4cd4a82a1#6992e2ddda0f9cb5332a4e09bdf7f8c4cd4a82a1"
 dependencies = [
  "bincode 2.0.1",
  "blake3",
@@ -5830,12 +5830,12 @@ dependencies = [
 [[package]]
 name = "rustred-order"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?rev=3ece68fbfbbc6905b427d5461ec06dfa559b34a0#3ece68fbfbbc6905b427d5461ec06dfa559b34a0"
+source = "git+https://github.com/alphal00p/rustred?rev=6992e2ddda0f9cb5332a4e09bdf7f8c4cd4a82a1#6992e2ddda0f9cb5332a4e09bdf7f8c4cd4a82a1"
 
 [[package]]
 name = "rustred-topology"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?rev=3ece68fbfbbc6905b427d5461ec06dfa559b34a0#3ece68fbfbbc6905b427d5461ec06dfa559b34a0"
+source = "git+https://github.com/alphal00p/rustred?rev=6992e2ddda0f9cb5332a4e09bdf7f8c4cd4a82a1#6992e2ddda0f9cb5332a4e09bdf7f8c4cd4a82a1"
 dependencies = [
  "graphica",
  "serde",
