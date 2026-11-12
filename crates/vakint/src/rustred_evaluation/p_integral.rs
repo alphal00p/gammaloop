@@ -46,7 +46,7 @@ use super::{MatchedContribution, MathSpan, RustRedEvaluationError, RustRedMaster
 use crate::p_integral::parts::{self, Fraction, PDot, PMonomial};
 use crate::p_integral::{
     P_FAMILIES, P_INTEGRAL_LOOP_COUNTS, PropagatorRequest, ReducedPropagatorValue, external_head,
-    finalize, masters, p_gamma_symbol, p_master_symbol,
+    finalize, masters, p_gamma_symbol, p_master_symbol, phases,
 };
 use crate::utils::simplify_real;
 use crate::utils::vakint_macros::vk_symbol;
@@ -371,6 +371,45 @@ fn render(
         }))
 }
 
+/// The engine inputs of one channel: nonzero coefficients in the library's
+/// context.
+fn channel_inputs(
+    library: &rustred::propagator::library::PLibrary,
+    inputs: BTreeMap<(PresentationId, Vec<i64>), Rational>,
+    exact: ExactAlgebraLimits,
+) -> Result<Vec<(PresentationId, IntegralKey, Coefficient)>, RustRedEvaluationError> {
+    inputs
+        .into_iter()
+        .filter(|(_, value)| !value.is_zero())
+        .map(|((presentation, powers), value)| {
+            let key = IntegralKey::try_new(powers)
+                .map_err(|error| invalid(format!("integral key: {error}")))?;
+            Ok((
+                presentation,
+                key,
+                coefficient(library.coefficient_context(), &value, exact)?,
+            ))
+        })
+        .collect()
+}
+
+/// Whether a batch of `channels` requests on `threads` workers runs its
+/// requests side by side, each on one thread, instead of one after the
+/// other on all threads: when there are at least two requests per worker
+/// (many small requests pay a thread pool and a window dispatch each).
+/// `VAKINT_P_ACROSS_CHANNELS=on|off` overrides the choice (benchmarks).
+fn across_channels(threads: usize, channels: usize) -> bool {
+    static MODE: std::sync::OnceLock<Option<bool>> = std::sync::OnceLock::new();
+    let forced = *MODE.get_or_init(
+        || match std::env::var("VAKINT_P_ACROSS_CHANNELS").as_deref() {
+            Ok("on" | "1") => Some(true),
+            Ok("off" | "0") => Some(false),
+            _ => None,
+        },
+    );
+    threads > 1 && channels > 1 && forced.unwrap_or(channels >= 2 * threads)
+}
+
 /// The lowered inputs of a batch, by channel.
 type Channels = BTreeMap<Channel, ChannelInputs>;
 
@@ -443,44 +482,198 @@ pub(crate) fn reduce_requests(
     let exact = options.limits.exact_algebra;
     let mut forms = BTreeMap::new();
     let mut channels = Channels::new();
+    let started = phases::start();
     for request in requests {
         add_request(&handle, request, &mut forms, &mut channels)?;
     }
+    phases::end("p.split_and_lower", started);
     let epsilon = vk_symbol!(&settings.epsilon_symbol);
-    let step_cache = if channels.is_empty() {
-        None
-    } else {
-        vakint.ordered_step_cache(settings, &handle.cache)?
-    };
-    let total = channels.len();
+    let step_cache = phases::time("p.attach_step_cache", || {
+        if channels.is_empty() {
+            Ok(None)
+        } else {
+            vakint.ordered_step_cache(settings, &handle.cache)
+        }
+    })?;
+    let (mut convert, mut reduce, mut rendering) = (
+        phases::Accumulator::default(),
+        phases::Accumulator::default(),
+        phases::Accumulator::default(),
+    );
+    if phases::enabled() {
+        let union = channels
+            .values()
+            .flat_map(|inputs| inputs.inputs.keys())
+            .collect::<BTreeSet<_>>();
+        let presentations = union.iter().map(|(id, _)| *id).collect::<BTreeSet<_>>();
+        let integrals = channels
+            .values()
+            .flat_map(|inputs| inputs.integrals.iter())
+            .collect::<BTreeSet<_>>();
+        eprintln!(
+            "vakint-phase-info p_batch requests={} channels={} inputs={} distinct_keys={} presentations={} vakint_integrals={}",
+            requests.len(),
+            channels.len(),
+            channels
+                .values()
+                .map(|inputs| inputs.inputs.len())
+                .sum::<usize>(),
+            union.len(),
+            presentations.len(),
+            integrals.len()
+        );
+    }
     let mut values = BTreeMap::<(usize, Atom), Vec<ReducedPropagatorValue>>::new();
+    let joint_mode = joint::mode();
+    if joint_mode != joint::JointMode::Off && !channels.is_empty() {
+        let groups = joint::groups(library, &channels, epsilon, exact)?;
+        let check = joint_mode == joint::JointMode::Check;
+        let reductions = reduce.time(|| {
+            joint::reduce_groups(
+                library,
+                &options,
+                &step_cache,
+                &groups,
+                &channels,
+                check,
+                exact,
+            )
+        })?;
+        if !check {
+            for (group, reduction) in groups.iter().zip(&reductions) {
+                for (channel, _) in &group.channels {
+                    channels.remove(channel);
+                }
+                let Some(reduction) = reduction else {
+                    continue; // the summed inputs cancel: an exact zero
+                };
+                if reduction.dimension != group.loops as i64 {
+                    return Err(invalid(format!(
+                        "a {}-loop request returned a reduction of dimension {}",
+                        group.loops, reduction.dimension
+                    ))
+                    .into());
+                }
+                let reduced =
+                    rendering.time(|| render(&handle, reduction, epsilon))? * &group.monomial;
+                values
+                    .entry((group.loops, group.head.clone()))
+                    .or_default()
+                    .push(ReducedPropagatorValue {
+                        scale_power: group.scale_power,
+                        reduced,
+                    });
+            }
+        }
+    }
+    let total = channels.len();
+    let threads = settings.n_cores.max(1);
+    if across_channels(threads, total) {
+        // Many small requests (physics numerators: one per distinct
+        // coefficient): each on one thread, the requests spread over the
+        // workers, results consumed in channel order. A request returns the
+        // same terms on any thread count and whatever its step cache holds,
+        // so the values do not depend on the scheduling.
+        let jobs = channels
+            .into_iter()
+            .map(|(channel, ChannelInputs { inputs, integrals })| {
+                let inputs = convert.time(|| channel_inputs(library, inputs, exact))?;
+                Ok((channel, inputs, integrals))
+            })
+            .collect::<Result<Vec<_>, RustRedEvaluationError>>()?
+            .into_iter()
+            .filter(|(_, inputs, _)| !inputs.is_empty())
+            .collect::<Vec<_>>();
+        let single = PRequestOptions {
+            scheduler: OrderedSchedulerOptions {
+                threads: 1,
+                ..options.scheduler
+            },
+            ..options
+        };
+        let reductions = reduce.time(|| {
+            let _math = MathSpan::new();
+            super::parallel::map_ordered_by_cost(
+                threads,
+                &jobs,
+                |(_, inputs, _)| inputs.len(),
+                |index, (_, inputs, integrals)| {
+                    let started = phases::per_request().then(std::time::Instant::now);
+                    let reduction = library
+                        .reduce(p_reduction_request(
+                            &single,
+                            inputs.clone(),
+                            step_cache.clone(),
+                        ))
+                        .map_err(|error| reduction_error(error, integrals));
+                    if let (Some(started), Ok(reduction)) = (started, &reduction) {
+                        eprintln!(
+                            "vakint-p-request index={index} inputs={} terms={} seconds={:.6}",
+                            inputs.len(),
+                            reduction.terms.len(),
+                            started.elapsed().as_secs_f64()
+                        );
+                    }
+                    reduction
+                },
+            )
+        });
+        let reductions = reductions.into_iter().collect::<Result<Vec<_>, _>>()?;
+        for ((channel, _, _), reduction) in jobs.iter().zip(&reductions) {
+            if reduction.dimension != channel.loops as i64 {
+                return Err(invalid(format!(
+                    "a {}-loop request returned a reduction of dimension {}",
+                    channel.loops, reduction.dimension
+                ))
+                .into());
+            }
+        }
+        let rendered = rendering.time(|| {
+            super::parallel::map_ordered(threads, &reductions, |_, reduction| {
+                render(&handle, reduction, epsilon)
+            })
+        });
+        for ((channel, _, _), reduced) in jobs.into_iter().zip(rendered) {
+            values
+                .entry((channel.loops, channel.head))
+                .or_default()
+                .push(ReducedPropagatorValue {
+                    scale_power: channel.scale_power,
+                    reduced: reduced? * &channel.coefficient,
+                });
+        }
+        if let Some(progress) = progress {
+            progress.cohorts(total, total);
+        }
+        convert.report("p.input_coefficients");
+        reduce.report("p.rustred_reduce");
+        rendering.report("p.render");
+        return Ok(values);
+    }
     for (index, (channel, ChannelInputs { inputs, integrals })) in channels.into_iter().enumerate()
     {
         if let Some(progress) = progress {
             progress.cohorts(index, total);
         }
-        let inputs = inputs
-            .into_iter()
-            .filter(|(_, value)| !value.is_zero())
-            .map(|((presentation, powers), value)| {
-                let key = IntegralKey::try_new(powers)
-                    .map_err(|error| invalid(format!("integral key: {error}")))?;
-                Ok((
-                    presentation,
-                    key,
-                    coefficient(library.coefficient_context(), &value, exact)?,
-                ))
-            })
-            .collect::<Result<Vec<_>, RustRedEvaluationError>>()?;
+        let inputs = convert.time(|| channel_inputs(library, inputs, exact))?;
         if inputs.is_empty() {
             continue;
         }
-        let reduction = {
+        let input_count = inputs.len();
+        let before = reduce.total;
+        let reduction = reduce.time(|| {
             let _math = MathSpan::new();
             library
                 .reduce(p_reduction_request(&options, inputs, step_cache.clone()))
-                .map_err(|error| reduction_error(error, &integrals))?
-        };
+                .map_err(|error| reduction_error(error, &integrals))
+        })?;
+        if phases::per_request() {
+            eprintln!(
+                "vakint-p-request index={index} inputs={input_count} terms={} seconds={:.6}",
+                reduction.terms.len(),
+                (reduce.total - before).as_secs_f64()
+            );
+        }
         if reduction.dimension != channel.loops as i64 {
             return Err(invalid(format!(
                 "a {}-loop request returned a reduction of dimension {}",
@@ -488,7 +681,8 @@ pub(crate) fn reduce_requests(
             ))
             .into());
         }
-        let reduced = render(&handle, &reduction, epsilon)? * &channel.coefficient;
+        let reduced =
+            rendering.time(|| render(&handle, &reduction, epsilon))? * &channel.coefficient;
         values
             .entry((channel.loops, channel.head))
             .or_default()
@@ -500,6 +694,9 @@ pub(crate) fn reduce_requests(
     if let Some(progress) = progress {
         progress.cohorts(total, total);
     }
+    convert.report("p.input_coefficients");
+    reduce.report("p.rustred_reduce");
+    rendering.report("p.render");
     Ok(values)
 }
 
@@ -513,6 +710,7 @@ pub(crate) fn evaluate_ordered_batch(
     mode: RustRedMasterMode,
     progress: Option<&super::monitor::CallerProgress>,
 ) -> Result<Atom, VakintError> {
+    let started = phases::start();
     let requests = contributions
         .iter()
         .map(|contribution| {
@@ -524,13 +722,21 @@ pub(crate) fn evaluate_ordered_batch(
                 })
         })
         .collect::<Result<Vec<_>, VakintError>>()?;
+    phases::end("p.propagator_requests", started);
     let mut result = Atom::Zero;
     for ((loops, head), values) in reduce_requests(vakint, settings, &requests, progress)? {
-        let finalized = finalize::finalize(&values, loops, &head, settings, mode, "RustRed")?;
-        result += simplify_real(finalized.as_view());
+        let finalized = phases::time("p.finalize", || {
+            finalize::finalize(&values, loops, &head, settings, mode, "RustRed")
+        })?;
+        result += phases::time("p.final_simplify_real", || {
+            simplify_real(finalized.as_view())
+        });
     }
     Ok(result)
 }
+
+#[path = "p_joint.rs"]
+mod joint;
 
 #[cfg(test)]
 #[path = "p_integral_tests.rs"]

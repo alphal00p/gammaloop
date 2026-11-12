@@ -5033,6 +5033,7 @@ impl VakintExpression {
                     std::collections::BTreeSet<(String, i64)>,
                 ),
             >::new();
+            let match_phase = p_integral::phases::start();
             for (source_id, term) in self.0.iter_mut().enumerate() {
                 crate::execution::checkpoint()?;
                 if !term.normalize_propagator()? {
@@ -5112,6 +5113,7 @@ impl VakintExpression {
                     complete.push(term.clone());
                 }
             }
+            p_integral::phases::end("eval.match_terms", match_phase);
             let batch_total = ordered.len() + p_ordered.len();
             for (batch_index, (key, contributions)) in ordered.into_iter().enumerate() {
                 if let Some(progress) = progress {
@@ -6897,6 +6899,288 @@ Evaluated (n_loops=1, mu_r=1) :
         Ok(evaluated_integral)
     }
 
+    /// One step of [`Self::convert_from_dot_notation`]: the first
+    /// `dot_pow(a,b,c)` of `atom` (Symbolica's replacement order) becomes
+    /// `a(dummy)*b(dummy)*dot_pow(a,b,c-1)`, and `dot_pow(a,b,0)` becomes 1.
+    fn dot_power_step(atom: AtomView, dummy: usize) -> Atom {
+        let dummy_wrapped = S.dot_dummy_ind(dummy);
+        atom.replace(S.dot_pow(S.a_, S.b_, S.c_))
+            .once()
+            .with_map(move |m| {
+                let Match::Single(a) = m.get(S.a_).unwrap() else {
+                    unreachable!()
+                };
+                let Match::Single(b) = m.get(S.b_).unwrap() else {
+                    unreachable!()
+                };
+                let rest = S
+                    .dot_pow(S.a_, S.b_, Atom::var(S.c_) - 1)
+                    .to_pattern()
+                    .replace_wildcards_with_matches(m);
+
+                // if let (Ok(a), Ok(b)) =
+                //     (FunctionBuilder::try_from(m.get(S.a_)), FunctionBuilder::try_from(b))
+                // {
+                //     a.add_arg(dummy).finish() * b.add_arg(dummy).finish() * rest
+                // }
+                match (a, b) {
+                    (AtomView::Var(a), AtomView::Var(b)) => {
+                        FunctionBuilder::new(a.get_symbol())
+                            .add_arg(&dummy_wrapped)
+                            .finish()
+                            * FunctionBuilder::new(b.get_symbol())
+                                .add_arg(&dummy_wrapped)
+                                .finish()
+                            * rest
+                    }
+                    (AtomView::Var(a), AtomView::Fun(b)) => {
+                        FunctionBuilder::new(a.get_symbol())
+                            .add_arg(&dummy_wrapped)
+                            .finish()
+                            * FunctionBuilder::new(b.get_symbol())
+                                .add_args(b.iter().collect::<Vec<_>>())
+                                .add_arg(&dummy_wrapped)
+                                .finish()
+                            * rest
+                    }
+                    (AtomView::Fun(a), AtomView::Var(b)) => {
+                        FunctionBuilder::new(a.get_symbol())
+                            .add_args(a.iter().collect::<Vec<_>>())
+                            .add_arg(&dummy_wrapped)
+                            .finish()
+                            * FunctionBuilder::new(b.get_symbol())
+                                .add_arg(&dummy_wrapped)
+                                .finish()
+                            * rest
+                    }
+                    (AtomView::Fun(a), AtomView::Fun(b)) => {
+                        FunctionBuilder::new(a.get_symbol())
+                            .add_args(a.iter().collect::<Vec<_>>())
+                            .add_arg(&dummy_wrapped)
+                            .finish()
+                            * FunctionBuilder::new(b.get_symbol())
+                                .add_args(b.iter().collect::<Vec<_>>())
+                                .add_arg(&dummy_wrapped)
+                                .finish()
+                            * rest
+                    }
+                    _ => S
+                        .dot_pow(S.a_, S.b_, S.c_)
+                        .to_pattern()
+                        .replace_wildcards_with_matches(m),
+                }
+            })
+            .replace(S.dot_pow(S.a_, S.b_, 0))
+            .with(1)
+    }
+
+    /// Expand every `dot_pow(a,b,c)` of `a` into `c` contractions, each with
+    /// its own dummy index from `dummy` on, in the order of
+    /// [`Self::dot_power_step`] repeated to a fixed point. `VAKINT_DOT_CONVERSION`
+    /// selects `fast` (the default: the same steps applied term by term of
+    /// the one sum that holds every `dot_pow`, see
+    /// [`Self::expand_dot_powers_by_term`]), `slow` (the steps on the whole
+    /// expression) or `check` (both, panicking on any difference).
+    fn expand_dot_powers(a: &mut Atom, dummy: &mut usize) {
+        fn slow(a: &mut Atom, dummy: &mut usize) {
+            loop {
+                let new = Vakint::dot_power_step(a.as_view(), *dummy);
+                if new == *a {
+                    break;
+                }
+                *a = new;
+                *dummy += 1;
+            }
+        }
+        static MODE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+        let mode = MODE.get_or_init(|| {
+            std::env::var("VAKINT_DOT_CONVERSION").unwrap_or_else(|_| "fast".to_owned())
+        });
+        match mode.as_str() {
+            "slow" => slow(a, dummy),
+            "check" => {
+                let (mut reference, mut reference_dummy) = (a.clone(), *dummy);
+                slow(&mut reference, &mut reference_dummy);
+                if let Some((fast, fast_dummy)) =
+                    Self::expand_dot_powers_by_term(a.as_view(), *dummy)
+                {
+                    assert!(
+                        fast == reference && fast_dummy == reference_dummy,
+                        "VAKINT_DOT_CONVERSION=check: the term-wise dot expansion differs"
+                    );
+                }
+                *a = reference;
+                *dummy = reference_dummy;
+            }
+            _ => match Self::expand_dot_powers_by_term(a.as_view(), *dummy) {
+                Some((fast, fast_dummy)) => {
+                    *a = fast;
+                    *dummy = fast_dummy;
+                }
+                None => slow(a, dummy),
+            },
+        }
+    }
+
+    /// [`Self::dot_power_step`] of a product whose factors holding `dot_pow`
+    /// are plain `dot_pow(a,b,c)` (`a`, `b` symbols or functions, `c` a
+    /// positive integer): the first match of the product is its first such
+    /// factor (the other factors hold none), so the step runs on the product
+    /// of those factors alone and the rest is multiplied back once, instead
+    /// of matching through every factor (a term of the finalized sum carries
+    /// the whole rendered reduction as one factor). `Some(None)`: no change
+    /// (the fixed point); `None`: another shape, use the plain step.
+    fn dot_power_step_on_factors(term: AtomView, dummy: usize) -> Option<Option<Atom>> {
+        let AtomView::Mul(product) = term else {
+            return None;
+        };
+        let plain_dot_pow = |factor: AtomView| -> bool {
+            let AtomView::Fun(function) = factor else {
+                return false;
+            };
+            if function.get_symbol() != S.dot_pow || function.get_nargs() != 3 {
+                return false;
+            }
+            let mut arguments = function.iter();
+            let (a, b, c) = (
+                arguments.next().unwrap(),
+                arguments.next().unwrap(),
+                arguments.next().unwrap(),
+            );
+            matches!(a, AtomView::Var(_) | AtomView::Fun(_))
+                && matches!(b, AtomView::Var(_) | AtomView::Fun(_))
+                && !a.contains_symbol(S.dot_pow)
+                && !b.contains_symbol(S.dot_pow)
+                && get_integer_from_atom(c).is_some_and(|c| c > 0)
+        };
+        let (mut dotted, mut rest) = (Vec::new(), Vec::new());
+        for factor in product.iter() {
+            if !factor.contains_symbol(S.dot_pow) {
+                rest.push(factor);
+            } else if plain_dot_pow(factor) {
+                dotted.push(factor);
+            } else {
+                return None;
+            }
+        }
+        if dotted.is_empty() {
+            return Some(None);
+        }
+        let small = Atom::mul_many(dotted.iter().copied());
+        let stepped = Self::dot_power_step(small.as_view(), dummy);
+        if stepped == small {
+            return Some(None);
+        }
+        Some(Some(Atom::mul_many(
+            rest.into_iter().chain(std::iter::once(stepped.as_view())),
+        )))
+    }
+
+    /// The fixed point of [`Self::dot_power_step`] computed on the terms of a
+    /// sum instead of the whole expression, or `None` (use the whole
+    /// expression) when `a` is not a sum, or a product whose only factor with
+    /// `dot_pow` is a sum. Exactly the same steps: the first match of the
+    /// whole expression lies in the first term (in the sum's order) that
+    /// holds a `dot_pow`, a step changes that term only, and the changed term
+    /// is put back where the normalized sum orders it (each step adds a fresh
+    /// dummy index, so it never merges with another term; if it would, or a
+    /// term stops being a plain term, this returns `None`). The terms are
+    /// summed and multiplied back once at the end. Cost: one term per step
+    /// instead of the whole expression (physics_L4: thousands of steps over
+    /// a sum of ~600 channel values).
+    fn expand_dot_powers_by_term(a: AtomView, mut dummy: usize) -> Option<(Atom, usize)> {
+        let has_dot_pow = |view: AtomView| view.contains_symbol(S.dot_pow);
+        // One product whose dotted factors are all plain dot_pow: step on
+        // those factors alone.
+        if let AtomView::Mul(product) = a
+            && !product
+                .iter()
+                .any(|factor| matches!(factor, AtomView::Add(_)) && has_dot_pow(factor))
+            && Self::dot_power_step_on_factors(a, dummy).is_some()
+        {
+            let mut current = a.to_owned();
+            while let Some(Some(new)) = Self::dot_power_step_on_factors(current.as_view(), dummy) {
+                current = new;
+                dummy += 1;
+            }
+            if has_dot_pow(current.as_view()) {
+                return None;
+            }
+            return Some((current, dummy));
+        }
+        let (others, sum) = match a {
+            AtomView::Add(_) => (Vec::new(), a),
+            AtomView::Mul(product) => {
+                let mut sum = None;
+                let mut others = Vec::new();
+                for factor in product.iter() {
+                    if !has_dot_pow(factor) {
+                        others.push(factor);
+                    } else if matches!(factor, AtomView::Add(_)) && sum.is_none() {
+                        sum = Some(factor);
+                    } else {
+                        return None;
+                    }
+                }
+                (others, sum?)
+            }
+            _ => return None,
+        };
+        let AtomView::Add(terms_view) = sum else {
+            return None;
+        };
+        let plain = |term: AtomView| !matches!(term, AtomView::Add(_) | AtomView::Num(_));
+        let mut terms = terms_view
+            .iter()
+            .map(|term| (has_dot_pow(term), term.to_owned()))
+            .collect::<Vec<_>>();
+        // The order of two distinct terms in a normalized sum, or `None` when
+        // they would merge.
+        let before = |x: &Atom, y: &Atom| -> Option<bool> {
+            let pair = x + y;
+            let AtomView::Add(pair_view) = pair.as_view() else {
+                return None;
+            };
+            if pair_view.get_nargs() != 2 {
+                return None;
+            }
+            Some(pair_view.iter().next()? == x.as_view())
+        };
+        while let Some(index) = terms.iter().position(|(dotted, _)| *dotted) {
+            let new = match Self::dot_power_step_on_factors(terms[index].1.as_view(), dummy) {
+                Some(Some(new)) => new,
+                Some(None) => break,
+                None => Self::dot_power_step(terms[index].1.as_view(), dummy),
+            };
+            if new == terms[index].1 {
+                break;
+            }
+            if !plain(new.as_view()) {
+                return None;
+            }
+            drop(terms.remove(index));
+            // Binary search for the first term ordered after `new`.
+            let (mut low, mut high) = (0, terms.len());
+            while low < high {
+                let middle = (low + high) / 2;
+                if before(&terms[middle].1, &new)? {
+                    low = middle + 1;
+                } else {
+                    high = middle;
+                }
+            }
+            terms.insert(low, (has_dot_pow(new.as_view()), new));
+            dummy += 1;
+        }
+        let sum = Atom::add_many(terms.iter().map(|(_, term)| term.as_view()));
+        let result = if others.is_empty() {
+            sum
+        } else {
+            Atom::mul_many(others.into_iter().chain(std::iter::once(sum.as_view())))
+        };
+        Some((result, dummy))
+    }
+
     pub fn convert_from_dot_notation(atom: AtomView) -> Atom {
         let dummy_pat = function!(S.dot_dummy_ind, S.a_).to_pattern();
 
@@ -6921,84 +7205,7 @@ Evaluated (n_loops=1, mu_r=1) :
                 let first_new_dummy = dummy;
 
                 let mut a = a.to_owned();
-                loop {
-                    let dummy_wrapped = S.dot_dummy_ind(dummy);
-                    let new = a
-                        .replace(S.dot_pow(S.a_, S.b_, S.c_))
-                        .once()
-                        .with_map(move |m| {
-                            let Match::Single(a) = m.get(S.a_).unwrap() else {
-                                unreachable!()
-                            };
-                            let Match::Single(b) = m.get(S.b_).unwrap() else {
-                                unreachable!()
-                            };
-                            let rest = S
-                                .dot_pow(S.a_, S.b_, Atom::var(S.c_) - 1)
-                                .to_pattern()
-                                .replace_wildcards_with_matches(m);
-
-                            // if let (Ok(a), Ok(b)) =
-                            //     (FunctionBuilder::try_from(m.get(S.a_)), FunctionBuilder::try_from(b))
-                            // {
-                            //     a.add_arg(dummy).finish() * b.add_arg(dummy).finish() * rest
-                            // }
-                            match (a, b) {
-                                (AtomView::Var(a), AtomView::Var(b)) => {
-                                    FunctionBuilder::new(a.get_symbol())
-                                        .add_arg(&dummy_wrapped)
-                                        .finish()
-                                        * FunctionBuilder::new(b.get_symbol())
-                                            .add_arg(&dummy_wrapped)
-                                            .finish()
-                                        * rest
-                                }
-                                (AtomView::Var(a), AtomView::Fun(b)) => {
-                                    FunctionBuilder::new(a.get_symbol())
-                                        .add_arg(&dummy_wrapped)
-                                        .finish()
-                                        * FunctionBuilder::new(b.get_symbol())
-                                            .add_args(b.iter().collect::<Vec<_>>())
-                                            .add_arg(&dummy_wrapped)
-                                            .finish()
-                                        * rest
-                                }
-                                (AtomView::Fun(a), AtomView::Var(b)) => {
-                                    FunctionBuilder::new(a.get_symbol())
-                                        .add_args(a.iter().collect::<Vec<_>>())
-                                        .add_arg(&dummy_wrapped)
-                                        .finish()
-                                        * FunctionBuilder::new(b.get_symbol())
-                                            .add_arg(&dummy_wrapped)
-                                            .finish()
-                                        * rest
-                                }
-                                (AtomView::Fun(a), AtomView::Fun(b)) => {
-                                    FunctionBuilder::new(a.get_symbol())
-                                        .add_args(a.iter().collect::<Vec<_>>())
-                                        .add_arg(&dummy_wrapped)
-                                        .finish()
-                                        * FunctionBuilder::new(b.get_symbol())
-                                            .add_args(b.iter().collect::<Vec<_>>())
-                                            .add_arg(&dummy_wrapped)
-                                            .finish()
-                                        * rest
-                                }
-                                _ => S
-                                    .dot_pow(S.a_, S.b_, S.c_)
-                                    .to_pattern()
-                                    .replace_wildcards_with_matches(m),
-                            }
-                        })
-                        .replace(S.dot_pow(S.a_, S.b_, 0))
-                        .with(1);
-
-                    if new == a {
-                        break;
-                    }
-                    a = new;
-                    dummy += 1;
-                }
+                Self::expand_dot_powers(&mut a, &mut dummy);
                 // Each copy of a powered scalar sum owns independent dummy
                 // contractions. Keep those copies factorized: expanding the
                 // numerator before conversion would hide index capture.
@@ -7863,7 +8070,10 @@ Evaluated (n_loops=1, mu_r=1) :
                 Some(input),
             );
             self.validate_settings(settings)?;
+            let phase = p_integral::phases::start();
             let mut vakint_expr = VakintExpression::prepare_evaluation(input, self, settings)?;
+            p_integral::phases::end("front.prepare_evaluation", phase);
+            let phase = p_integral::phases::start();
             MonitorContext::native_phase(observation.as_deref_mut(), "canonicalization", None);
             // A four-loop scalar integral equal to a shipped four-loop master is
             // written in its program's slot order before the legacy matcher,
@@ -7887,21 +8097,36 @@ Evaluated (n_loops=1, mu_r=1) :
                     )?;
                 }
             }
+            p_integral::phases::end("front.master_transport", phase);
+            let phase = p_integral::phases::start();
             vakint_expr.canonicalize_with(settings, false, |input| {
                 self.match_topologies_for_settings(settings, input)
             })?;
+            p_integral::phases::end("front.canonicalize", phase);
+            let phase = p_integral::phases::start();
             MonitorContext::native_phase(observation.as_deref_mut(), "tensor_prepass", None);
             for term in &mut vakint_expr.0 {
                 crate::execution::checkpoint()?;
                 term.tensor_reduce_for_evaluation(self, settings)?;
             }
+            p_integral::phases::end("front.tensor_prepass", phase);
+            if p_integral::phases::enabled() {
+                eprintln!(
+                    "vakint-phase-info terms_after_prepass {}",
+                    vakint_expr.0.len()
+                );
+            }
+            let phase = p_integral::phases::start();
             vakint_expr.evaluate_integral_observed(
                 self,
                 settings,
                 observation.as_deref_mut(),
                 progress,
             )?;
+            p_integral::phases::end("eval.evaluate_integral_observed", phase);
+            let phase = p_integral::phases::start();
             let result: Atom = vakint_expr.into();
+            p_integral::phases::end("eval.into_atom", phase);
             // Every backend checks its own truncation; this is the final net.
             truncation_guard::ensure_known_orders(
                 &result,
