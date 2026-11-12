@@ -87,17 +87,38 @@ pub(crate) fn has_p_data(vakint: &Vakint, loops: usize) -> bool {
 }
 
 /// The engine options of every p request: the Ordered weight arithmetic of
-/// the settings (default `modular_polynomial`, the `Z_p(d)` replay), the
-/// Ordered scheduler on `n_cores` threads and the native reduction limits.
+/// the settings (default `modular_polynomial`, the `Z_p(d)` replay, the
+/// fastest up to four loops), the arithmetic of five-loop requests
+/// ([`super::five_loop_ordered_weight_arithmetic`]: `modular_sampled` under
+/// the default selection), the Ordered scheduler on `n_cores` threads and the
+/// native reduction limits.
 pub(super) struct PRequestOptions {
     pub arithmetic: OrderedWeightArithmetic,
+    pub five_loop_arithmetic: OrderedWeightArithmetic,
     pub scheduler: OrderedSchedulerOptions,
     pub limits: ReductionLimits,
+}
+
+impl PRequestOptions {
+    /// The arithmetic of a request of `loops` loops: five-loop p requests take
+    /// `five_loop_arithmetic` (measured, notes arith-5l: `modular_sampled`
+    /// 1.06-1.65x faster than `modular_polynomial` on 5L cells and the only
+    /// one whose replay of a heavy 5L top finishes), one to four loops
+    /// `arithmetic` (`modular_polynomial` 1.08-1.27x faster at 4L). Every
+    /// arithmetic returns the same exact result.
+    pub fn arithmetic_for(&self, loops: usize) -> OrderedWeightArithmetic {
+        if loops == 5 {
+            self.five_loop_arithmetic
+        } else {
+            self.arithmetic
+        }
+    }
 }
 
 pub(super) fn request_options(settings: &VakintSettings) -> PRequestOptions {
     PRequestOptions {
         arithmetic: settings.rustred_ordered_weight_arithmetic(),
+        five_loop_arithmetic: super::five_loop_ordered_weight_arithmetic(settings),
         scheduler: super::ordered_scheduler(settings),
         limits: settings.rustred_application_options.reduction_limits,
     }
@@ -108,12 +129,13 @@ pub(super) fn request_options(settings: &VakintSettings) -> PRequestOptions {
 /// rejected, reduced onto the masters (module documentation).
 fn p_reduction_request<'a>(
     options: &PRequestOptions,
+    loops: usize,
     inputs: Vec<(PresentationId, IntegralKey, Coefficient)>,
     step_cache: Option<Arc<OrderedStepCache>>,
 ) -> PReductionRequest<'a> {
     PReductionRequest {
         inputs,
-        arithmetic: options.arithmetic,
+        arithmetic: options.arithmetic_for(loops),
         scheduler: options.scheduler,
         step_cache,
         uncovered: PUncoveredPolicy::Reject,
@@ -597,11 +619,12 @@ pub(crate) fn reduce_requests(
                 threads,
                 &jobs,
                 |(_, inputs, _)| inputs.len(),
-                |index, (_, inputs, integrals)| {
+                |index, (channel, inputs, integrals)| {
                     let started = phases::per_request().then(std::time::Instant::now);
                     let reduction = library
                         .reduce(p_reduction_request(
                             &single,
+                            channel.loops,
                             inputs.clone(),
                             step_cache.clone(),
                         ))
@@ -664,7 +687,12 @@ pub(crate) fn reduce_requests(
         let reduction = reduce.time(|| {
             let _math = MathSpan::new();
             library
-                .reduce(p_reduction_request(&options, inputs, step_cache.clone()))
+                .reduce(p_reduction_request(
+                    &options,
+                    channel.loops,
+                    inputs,
+                    step_cache.clone(),
+                ))
                 .map_err(|error| reduction_error(error, &integrals))
         })?;
         if phases::per_request() {

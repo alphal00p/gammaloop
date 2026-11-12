@@ -344,7 +344,7 @@ fn the_settings_arithmetic_is_used_and_exact_agrees() {
     let modular = settings(RustRedMasterMode::Retain, None);
     let exact = settings(RustRedMasterMode::Retain, Some("exact"));
     for (settings, arithmetic) in [(&modular, "modular_polynomial"), (&exact, "exact")] {
-        let request = p_reduction_request(&request_options(settings), Vec::new(), None);
+        let request = p_reduction_request(&request_options(settings), 4, Vec::new(), None);
         assert_eq!(request.arithmetic.name(), arithmetic);
         assert_eq!(
             request.arithmetic,
@@ -366,6 +366,51 @@ fn the_settings_arithmetic_is_used_and_exact_agrees() {
             engine.evaluate(&exact, input.as_view()).unwrap(),
             "{name}"
         );
+    }
+}
+
+/// Five-loop p requests take the five-loop arithmetic (M5 batch 5, notes
+/// arith-5l): under the default selection `modular_sampled` on the same
+/// workers, while one to four loops keep the settings' `modular_polynomial`;
+/// an explicit selection (also an explicit `modular_polynomial`) is sent at
+/// every loop count.
+#[test]
+fn five_loop_p_requests_default_to_modular_sampled() {
+    use crate::OrderedWeightArithmetic;
+
+    let mut default = VakintSettings {
+        n_cores: 3,
+        ..settings(RustRedMasterMode::Retain, None)
+    };
+    default.ordered_weight_arithmetic = OrderedWeightArithmetic::default();
+    let options = request_options(&default);
+    for loops in 1..=4 {
+        let request = p_reduction_request(&options, loops, Vec::new(), None);
+        assert_eq!(request.arithmetic.name(), "modular_polynomial", "{loops}L");
+        assert_eq!(request.arithmetic, default.rustred_ordered_weight_arithmetic());
+    }
+    let request = p_reduction_request(&options, 5, Vec::new(), None);
+    assert_eq!(
+        (request.arithmetic.name(), request.arithmetic.threads()),
+        ("modular_sampled", 3)
+    );
+    for explicit in [
+        OrderedWeightArithmetic::modular_polynomial(),
+        OrderedWeightArithmetic::exact(),
+    ] {
+        let settings = VakintSettings {
+            ordered_weight_arithmetic: explicit,
+            ..default.clone()
+        };
+        let options = request_options(&settings);
+        for loops in 1..=5 {
+            let request = p_reduction_request(&options, loops, Vec::new(), None);
+            assert_eq!(
+                request.arithmetic,
+                settings.rustred_ordered_weight_arithmetic(),
+                "{loops}L"
+            );
+        }
     }
 }
 
@@ -1039,7 +1084,7 @@ fn every_arithmetic_is_sent_with_real_inputs() {
                 })
                 .collect::<Vec<_>>();
             assert!(!inputs.is_empty());
-            let request = p_reduction_request(&options, inputs, None);
+            let request = p_reduction_request(&options, channel.loops, inputs, None);
             assert_eq!(request.arithmetic.name(), arithmetic);
             let reduction = handle.library.reduce(request).unwrap();
             *sent.entry(channel.scale_power).or_default() +=

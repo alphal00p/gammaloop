@@ -268,8 +268,9 @@ pub const MAX_DEFAULT_N_CORES: usize = 10;
 /// Ordered weight arithmetic selected by [`crate::VakintSettings::default`]
 /// and the Python bindings, in the text form of [`OrderedWeightArithmetic`].
 /// Changing this constant changes the default of every Vakint entry point.
-/// `modular_polynomial` is the fastest arithmetic (at five loops about 28 times
-/// less replay CPU than `modular_sampled`); every arithmetic returns the same
+/// `modular_polynomial` is the fastest arithmetic up to four loops; five-loop
+/// requests (vacuum and p) default to `modular_sampled`, see
+/// `five_loop_ordered_weight_arithmetic`; every arithmetic returns the same
 /// exact result.
 pub const DEFAULT_ORDERED_WEIGHT_ARITHMETIC: &str = "modular_polynomial";
 

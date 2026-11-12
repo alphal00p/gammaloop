@@ -335,7 +335,12 @@ pub(super) fn reduce_groups(
             let reduction = {
                 let _math = super::MathSpan::new();
                 library
-                    .reduce(p_reduction_request(options, inputs, step_cache.clone()))
+                    .reduce(p_reduction_request(
+                        options,
+                        group.loops,
+                        inputs,
+                        step_cache.clone(),
+                    ))
                     .map_err(|error| super::reduction_error(error, &integrals))?
             };
             let seconds = started.elapsed().as_secs_f64();
@@ -359,7 +364,12 @@ pub(super) fn reduce_groups(
                 let count = inputs.len();
                 let started = Instant::now();
                 let reduction = library
-                    .reduce(p_reduction_request(options, inputs, step_cache.clone()))
+                    .reduce(p_reduction_request(
+                        options,
+                        channel.loops,
+                        inputs,
+                        step_cache.clone(),
+                    ))
                     .map_err(|error| super::reduction_error(error, &channels[channel].integrals))?;
                 let seconds = started.elapsed().as_secs_f64();
                 separate_seconds += seconds;
