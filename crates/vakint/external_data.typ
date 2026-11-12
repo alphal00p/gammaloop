@@ -102,7 +102,7 @@ missing packs into the test process's current directory; subsequent processes
 reuse the validated installation without network access. Cargo normally runs a
 test binary from its package directory. Set `VAKINT_TEST_EXTERNAL_DATA` to an
 existing checkout to override that location. That checkout must be the release tag
-the vendored manifest declares (`v0.2.2` for this version): tests that request this
+the vendored manifest declares (`v0.2.3` for this version): tests that request this
 explicit version reject a checkout declaring another identity, and the
 external-data `main` branch declares the next development version after a
 release. To run the tests against a checkout of another release (for
@@ -287,7 +287,7 @@ closed when a result needs it.
 
 Run `python3 tools/vendor_external_data.py /path/to/vakint-external-data` from the
 Vakint crate, with a checkout of the release tag to vendor (the snapshot is
-v0.2.2). The tool validates input hashes and copies all available 1L–3L
+v0.2.3). The tool validates input hashes and copies all available 1L–3L
 coefficients, graphs and programs byte for byte. It excludes caches by design:
 the depth-first caches of older releases and the shipped Ordered step caches,
 whose entries it removes from the copied loop manifests. Vakint uses shipped
