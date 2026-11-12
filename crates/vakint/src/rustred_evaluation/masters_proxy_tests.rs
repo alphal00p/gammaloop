@@ -191,10 +191,10 @@ fn five_loop_retained_post_processing_breakdown() {
         };
         println!(
             "coefficient {index}: {terms} terms, expand {expand_seconds:.3} s, shared {} {:.3} s",
-            shared.is_ok(),
+            shared.is_some(),
             started.elapsed().as_secs_f64() - expand_seconds
         );
-        if shared.is_err() {
+        if shared.is_none() {
             let distinct: BTreeSet<_> = match inner.as_view() {
                 AtomView::Add(add) => add
                     .iter()
