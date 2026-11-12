@@ -387,7 +387,10 @@ fn five_loop_p_requests_default_to_modular_sampled() {
     for loops in 1..=4 {
         let request = p_reduction_request(&options, loops, Vec::new(), None);
         assert_eq!(request.arithmetic.name(), "modular_polynomial", "{loops}L");
-        assert_eq!(request.arithmetic, default.rustred_ordered_weight_arithmetic());
+        assert_eq!(
+            request.arithmetic,
+            default.rustred_ordered_weight_arithmetic()
+        );
     }
     let request = p_reduction_request(&options, 5, Vec::new(), None);
     assert_eq!(
