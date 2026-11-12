@@ -22,7 +22,9 @@
 //! (M2 plan, conventions C3/C4): Forcer reduces Euclidean integrals, while the
 //! RustRed reduction already returns Minkowski-signed values.
 
+use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap};
+use std::rc::Rc;
 use std::sync::OnceLock;
 
 use symbolica::atom::{Atom, AtomCore, AtomView};
@@ -466,14 +468,112 @@ fn canonical_monomial(
     Ok((sign, PMonomial(dots)))
 }
 
+/// The directory of the opt-in `VAKINT_DUMP_SPLIT_INPUTS` diagnostic, read
+/// once per process.
+fn split_dump_directory() -> Option<&'static std::path::Path> {
+    static DIRECTORY: std::sync::LazyLock<Option<std::path::PathBuf>> =
+        std::sync::LazyLock::new(|| std::env::var_os("VAKINT_DUMP_SPLIT_INPUTS").map(Into::into));
+    DIRECTORY.as_deref()
+}
+
+/// Write one [`split`] input and its time to the dump directory, as
+/// `split-<pid>-<n>.txt` with one `key value` line per field; the numerator
+/// and the external momentum are canonical strings (they parse back).
+fn dump_split_input(
+    directory: &std::path::Path,
+    family: &PFamilyData,
+    powers: &[i64],
+    canonical_numerator: AtomView,
+    external: &Atom,
+    elapsed: std::time::Duration,
+) {
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let index = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let powers = powers
+        .iter()
+        .map(i64::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
+    let text = format!(
+        "seconds {:.6}\nfamily {}\npowers {powers}\nexternal {}\nnumerator {}\n",
+        elapsed.as_secs_f64(),
+        family.name,
+        external.to_canonical_string(),
+        canonical_numerator.to_canonical_string(),
+    );
+    let path = directory.join(format!("split-{}-{index:07}.txt", std::process::id()));
+    let _ = std::fs::write(path, text);
+}
+
 /// The split of `topo(NAME(external, powers...))` with a scalar numerator in
 /// the canonical `k(j)` and the user's head; `None` when the sector is
 /// scaleless (an exact zero).
+///
+/// With `VAKINT_DUMP_SPLIT_INPUTS=<dir>` every input is also written to
+/// `<dir>` (a diagnostic corpus for the split tests; off by default).
 pub(crate) fn split(
     family: &PFamilyData,
     powers: &[i64],
     canonical_numerator: AtomView,
     external: &Atom,
+) -> Result<Option<PSplit>, VakintError> {
+    let Some(directory) = split_dump_directory() else {
+        return split_with(
+            family,
+            powers,
+            canonical_numerator,
+            external,
+            numerator_parts,
+        );
+    };
+    let started = std::time::Instant::now();
+    let result = split_with(
+        family,
+        powers,
+        canonical_numerator,
+        external,
+        numerator_parts,
+    );
+    dump_split_input(
+        directory,
+        family,
+        powers,
+        canonical_numerator,
+        external,
+        started.elapsed(),
+    );
+    result
+}
+
+/// [`split`] with the parts of [`expanded_parts`] only: the reference of the
+/// grouped split.
+#[cfg(test)]
+pub(crate) fn split_reference(
+    family: &PFamilyData,
+    powers: &[i64],
+    canonical_numerator: AtomView,
+    external: &Atom,
+) -> Result<Option<PSplit>, VakintError> {
+    split_with(
+        family,
+        powers,
+        canonical_numerator,
+        external,
+        expanded_parts,
+    )
+}
+
+/// How the parts of a numerator are computed from it, its negative-power
+/// factors and the labels of its sector.
+type NumeratorParts = fn(AtomView, &[Atom], &PartCollector) -> Result<Vec<PPart>, VakintError>;
+
+/// [`split`] with the parts of `parts`.
+fn split_with(
+    family: &PFamilyData,
+    powers: &[i64],
+    canonical_numerator: AtomView,
+    external: &Atom,
+    parts: NumeratorParts,
 ) -> Result<Option<PSplit>, VakintError> {
     let lines = canonical_lines(family)?;
     if powers.len() != lines.len() {
@@ -488,13 +588,15 @@ pub(crate) fn split(
     let loops = family.loops;
 
     // A negative power is a numerator factor in the user's momenta.
-    let mut numerator = canonical_numerator.to_owned();
-    for (line, &power) in lines.iter().zip(powers) {
-        if power < 0 {
+    let negative_powers = lines
+        .iter()
+        .zip(powers)
+        .filter(|(_, power)| **power < 0)
+        .map(|(line, &power)| {
             let momentum = line.momentum(external);
-            numerator *= function!(S.dot, &momentum, &momentum).pow(Atom::num(-power));
-        }
-    }
+            function!(S.dot, &momentum, &momentum).pow(Atom::num(-power))
+        })
+        .collect::<Vec<_>>();
     let pinched = powers.iter().map(|&power| power <= 0).collect::<Vec<_>>();
     let graph = ContractedGraph::new(&lines, &pinched);
     let remaining = powers
@@ -513,77 +615,469 @@ pub(crate) fn split(
     let Some(loop_momenta) = loop_momenta_in_lines(&remaining_lines, loops) else {
         return Ok(None);
     };
-    let total_power: i64 = remaining.iter().map(|(_, power)| power).sum();
-
-    // Homogeneous parts: loop-momentum monomials, grouped by degree and by
-    // the non-rational factor of their coefficient.
-    let numerator = Vakint::convert_to_dot_notation(numerator.as_view()).expand();
-    let mut loop_dots = Vec::new();
-    let mut error = None;
-    numerator.visitor(&mut |part| {
-        if error.is_some() {
-            return false;
-        }
-        if let AtomView::Fun(function) = part
-            && function.get_symbol() == S.dot
-            && part.contains_symbol(S.k)
-        {
-            match scalar_product(part, &head, sigma, loops) {
-                Ok(_) => loop_dots.push(part.to_owned()),
-                Err(e) => error = Some(e),
-            }
-            return false;
-        }
-        true
-    });
-    if let Some(error) = error {
-        return Err(error);
-    }
-    loop_dots.sort();
-    loop_dots.dedup();
-    let mut groups = Vec::<((i64, Atom), Vec<(Fraction, PMonomial)>)>::new();
-    let mut group_indices = HashMap::<(i64, Atom), usize>::new();
-    for (monomial, coefficient) in numerator.coefficient_list::<i8>(&loop_dots) {
-        if coefficient.contains_symbol(S.k) {
-            return Err(tensor_numerator(format!(
-                "the loop momenta must appear in scalar products only, found {coefficient}"
-            )));
-        }
-        let (monomial_sign, canonical) =
-            canonical_monomial(monomial.as_view(), &head, sigma, loops)?;
-        let (value, rest) = split_rational(&coefficient);
-        let term = (
-            Fraction::new(monomial_sign as i128, 1).mul(value),
-            canonical,
-        );
-        let key = (term.1.degree(), rest);
-        // Keep first-seen part order and every polynomial's existing order;
-        // only the lookup uses hashing, never the emitted sequence.
-        if let Some(&index) = group_indices.get(&key) {
-            groups[index].1.push(term);
-        } else {
-            group_indices.insert(key.clone(), groups.len());
-            groups.push((key, vec![term]));
-        }
-    }
-    let parts = groups
-        .into_iter()
-        .map(|((degree, coefficient), polynomial)| {
-            let exponent = total_power + degree;
-            PPart {
-                scale_power: 2 * loops as i64 - total_power + degree,
-                wick_sign: if exponent % 2 == 0 { 1 } else { -1 },
-                coefficient,
-                polynomial,
-            }
-        })
-        .collect();
+    let collector = PartCollector {
+        head: &head,
+        sigma,
+        loops,
+        total_power: remaining.iter().map(|(_, power)| power).sum(),
+    };
+    let parts = parts(canonical_numerator, &negative_powers, &collector)?;
     Ok(Some(PSplit {
         lines,
         remaining,
         loop_momenta,
         parts,
     }))
+}
+
+/// How the parts of one sector are labelled: the user's head `σ·Q`, the loop
+/// count and the total power `Σa` of the remaining lines.
+struct PartCollector<'a> {
+    head: &'a Atom,
+    sigma: i64,
+    loops: usize,
+    total_power: i64,
+}
+
+impl PartCollector<'_> {
+    /// The loop-dependent scalar products of `expressions`, sorted, each
+    /// checked to be a canonical scalar product.
+    fn loop_dots<'b>(
+        &self,
+        expressions: impl IntoIterator<Item = AtomView<'b>>,
+    ) -> Result<Vec<Atom>, VakintError> {
+        let mut loop_dots = Vec::new();
+        let mut error = None;
+        for expression in expressions {
+            expression.visitor(&mut |part| {
+                if error.is_some() {
+                    return false;
+                }
+                if let AtomView::Fun(function) = part
+                    && function.get_symbol() == S.dot
+                    && part.contains_symbol(S.k)
+                {
+                    match scalar_product(part, self.head, self.sigma, self.loops) {
+                        Ok(_) => loop_dots.push(part.to_owned()),
+                        Err(e) => error = Some(e),
+                    }
+                    return false;
+                }
+                true
+            });
+            if let Some(error) = error {
+                return Err(error);
+            }
+        }
+        loop_dots.sort();
+        loop_dots.dedup();
+        Ok(loop_dots)
+    }
+
+    /// Homogeneous parts of `Σ coefficient·monomial`: loop-momentum
+    /// monomials, grouped by degree and by the non-rational factor of their
+    /// coefficient.
+    fn parts(
+        &self,
+        monomials: impl IntoIterator<Item = (Atom, Atom)>,
+    ) -> Result<Vec<PPart>, VakintError> {
+        let mut groups = Vec::<((i64, Atom), Vec<(Fraction, PMonomial)>)>::new();
+        let mut group_indices = HashMap::<(i64, Atom), usize>::new();
+        for (monomial, coefficient) in monomials {
+            if coefficient.contains_symbol(S.k) {
+                return Err(tensor_numerator(format!(
+                    "the loop momenta must appear in scalar products only, found {coefficient}"
+                )));
+            }
+            let (monomial_sign, canonical) =
+                canonical_monomial(monomial.as_view(), self.head, self.sigma, self.loops)?;
+            let (value, rest) = split_rational(&coefficient);
+            let term = (
+                Fraction::new(monomial_sign as i128, 1).mul(value),
+                canonical,
+            );
+            let key = (term.1.degree(), rest);
+            // Keep first-seen part order and every polynomial's existing order;
+            // only the lookup uses hashing, never the emitted sequence.
+            if let Some(&index) = group_indices.get(&key) {
+                groups[index].1.push(term);
+            } else {
+                group_indices.insert(key.clone(), groups.len());
+                groups.push((key, vec![term]));
+            }
+        }
+        Ok(groups
+            .into_iter()
+            .map(|((degree, coefficient), polynomial)| {
+                let exponent = self.total_power + degree;
+                PPart {
+                    scale_power: 2 * self.loops as i64 - self.total_power + degree,
+                    wick_sign: if exponent % 2 == 0 { 1 } else { -1 },
+                    coefficient,
+                    polynomial,
+                }
+            })
+            .collect())
+    }
+}
+
+/// The parts of [`grouped_parts`] where it applies, else those of
+/// [`expanded_parts`]: the same parts either way.
+fn numerator_parts(
+    canonical_numerator: AtomView,
+    negative_powers: &[Atom],
+    collector: &PartCollector,
+) -> Result<Vec<PPart>, VakintError> {
+    match grouped_parts(canonical_numerator, negative_powers, collector) {
+        Some(parts) => Ok(parts),
+        None => expanded_parts(canonical_numerator, negative_powers, collector),
+    }
+}
+
+/// The original parts: expand the whole numerator with its negative-power
+/// factors, then collect it by loop-momentum monomial.
+fn expanded_parts(
+    canonical_numerator: AtomView,
+    negative_powers: &[Atom],
+    collector: &PartCollector,
+) -> Result<Vec<PPart>, VakintError> {
+    let mut numerator = canonical_numerator.to_owned();
+    for factor in negative_powers {
+        numerator *= factor.clone();
+    }
+    let numerator = Vakint::convert_to_dot_notation(numerator.as_view()).expand();
+    let loop_dots = collector.loop_dots([numerator.as_view()])?;
+    collector.parts(numerator.coefficient_list::<i8>(&loop_dots))
+}
+
+/// The parts of [`expanded_parts`], without expanding the whole numerator:
+/// the numerator is converted to a polynomial in the loop dots
+/// ([`LoopPolynomials`]), with each distinct loop factor and product of loop
+/// factors converted once and the loop-free factors of a sum's terms summed
+/// and expanded once per loop factor.
+///
+/// Every coefficient is the canonical (normalized, merged) sum of the same
+/// products of terms that the expansion in [`expanded_parts`] forms, and the
+/// monomials are listed in the lexicographic exponent order of
+/// `coefficient_list`, so the parts are those of [`expanded_parts`] when
+/// - all numbers are exact and every power has a number exponent, an integer
+///   one on a sum or product: then normalized products are
+///   associative and never form a sum factor ([`admits_loop_polynomials`]);
+/// - every coefficient term expands to itself: the second expansion in
+///   [`expanded_parts`] changes nothing;
+/// - no dot-notation pass applies to a coefficient;
+/// - every loop dot is a canonical scalar product, the loop momenta appear in
+///   loop dots to positive integer powers only, and the parts can be
+///   collected (the errors of [`expanded_parts`]).
+///
+/// `None` (use [`expanded_parts`]) when one of these does not hold.
+fn grouped_parts(
+    canonical_numerator: AtomView,
+    negative_powers: &[Atom],
+    collector: &PartCollector,
+) -> Option<Vec<PPart>> {
+    if !admits_loop_polynomials(canonical_numerator) {
+        return None;
+    }
+    let loop_dots = collector
+        .loop_dots(
+            std::iter::once(canonical_numerator).chain(negative_powers.iter().map(Atom::as_view)),
+        )
+        .ok()?;
+    let mut polynomials = LoopPolynomials {
+        loop_dots: &loop_dots,
+        factors: HashMap::new(),
+        products: HashMap::new(),
+    };
+    let mut polynomial = polynomials.sum(sum_terms(canonical_numerator))?;
+    for factor in negative_powers {
+        let factor = polynomials.factor(factor.as_view())?;
+        polynomial = polynomials.mul(&polynomial, &factor)?;
+    }
+    let mut monomials = polynomial.into_iter().collect::<Vec<_>>();
+    monomials.sort_by(|(left, _), (right, _)| left.cmp(right));
+    let mut fixed_factors = Vec::new();
+    let mut coefficients = Vec::with_capacity(monomials.len());
+    for (exponents, coefficient) in monomials {
+        if !sum_terms(coefficient.as_view())
+            .into_iter()
+            .all(|term| expands_to_itself(term, &mut fixed_factors))
+            || Vakint::dot_notation_passes_may_apply(coefficient.as_view())
+        {
+            return None;
+        }
+        // The monomial as `coefficient_list` writes it.
+        let mut monomial = Atom::num(1);
+        for (&exponent, dot) in exponents.iter().zip(&loop_dots) {
+            if exponent != 0 {
+                monomial = monomial * dot.pow(Atom::num(i64::from(exponent)));
+            }
+        }
+        coefficients.push((monomial, coefficient));
+    }
+    collector.parts(coefficients).ok()
+}
+
+/// Whether all numbers of `expression` are exact and every power has a
+/// number exponent, an integer one on a sum or product. Normalized products
+/// of its terms then merge powers of equal bases by adding exact exponents
+/// (renormalizing a number or product that this forms, as in
+/// `3^(1/2)*3^(1/2) = 3`), which is associative and never forms a sum
+/// factor.
+fn admits_loop_polynomials(expression: AtomView) -> bool {
+    if !crate::utils::has_only_exact_numbers(expression) {
+        return false;
+    }
+    let mut admitted = true;
+    expression.visitor(&mut |part| {
+        if let AtomView::Pow(power) = part {
+            let (base, exponent) = power.get_base_exp();
+            admitted &= match exponent {
+                AtomView::Num(number) => {
+                    !matches!(base, AtomView::Add(_) | AtomView::Mul(_))
+                        || matches!(
+                            number.get_coeff_view(),
+                            CoefficientView::Natural(_, 1, 0, _)
+                        )
+                }
+                _ => false,
+            };
+        }
+        admitted
+    });
+    admitted
+}
+
+/// The exponents of a monomial over the sorted loop dots.
+type Exponents = Vec<u8>;
+
+/// A polynomial in the loop dots: nonzero coefficients that are expanded
+/// loop-free sums.
+type LoopPolynomial = HashMap<Exponents, Atom>;
+
+/// The loop-dot polynomials of the subexpressions of one numerator, each
+/// distinct loop factor (by its bytes) and product of loop factors converted
+/// once.
+struct LoopPolynomials<'a> {
+    loop_dots: &'a [Atom],
+    factors: HashMap<&'a [u8], Rc<LoopPolynomial>>,
+    products: HashMap<Vec<&'a [u8]>, Rc<LoopPolynomial>>,
+}
+
+/// The polynomial of products collected by monomial: each coefficient is
+/// the one canonical sum of its products.
+fn collect_products(products: HashMap<Exponents, Vec<Atom>>) -> LoopPolynomial {
+    let mut polynomial = HashMap::with_capacity(products.len());
+    for (exponents, products) in products {
+        let coefficient = match <[Atom; 1]>::try_from(products) {
+            Ok([product]) => product,
+            Err(products) => Atom::add_many(products.iter()),
+        };
+        if !coefficient.is_zero() {
+            polynomial.insert(exponents, coefficient);
+        }
+    }
+    polynomial
+}
+
+impl<'a> LoopPolynomials<'a> {
+    /// `dot^exponent` for a loop dot `dot`.
+    fn monomial(&self, dot: AtomView, exponent: u8) -> Option<LoopPolynomial> {
+        let index = self.loop_dots.binary_search(&dot.to_owned()).ok()?;
+        let mut exponents = vec![0; self.loop_dots.len()];
+        exponents[index] = exponent;
+        Some(HashMap::from([(exponents, Atom::num(1))]))
+    }
+
+    fn mul(&self, left: &LoopPolynomial, right: &LoopPolynomial) -> Option<LoopPolynomial> {
+        let mut products = HashMap::<Exponents, Vec<Atom>>::new();
+        for (left_exponents, left_coefficient) in left {
+            let left_terms = sum_terms(left_coefficient.as_view());
+            for (right_exponents, right_coefficient) in right {
+                // `coefficient_list` stores the exponents as `i8`.
+                let exponents = left_exponents
+                    .iter()
+                    .zip(right_exponents)
+                    .map(|(left, right)| left.checked_add(*right).filter(|sum| *sum <= 127))
+                    .collect::<Option<Exponents>>()?;
+                let right_terms = sum_terms(right_coefficient.as_view());
+                let products = products.entry(exponents).or_default();
+                for &left in &left_terms {
+                    for &right in &right_terms {
+                        products.push(left * right);
+                    }
+                }
+            }
+        }
+        Some(collect_products(products))
+    }
+
+    /// The polynomial of a factor that holds a loop momentum: a loop dot, a
+    /// sum, or a positive integer power of either.
+    fn factor(&mut self, factor: AtomView<'a>) -> Option<Rc<LoopPolynomial>> {
+        if let Some(polynomial) = self.factors.get(factor.get_data()) {
+            return Some(polynomial.clone());
+        }
+        let polynomial = match factor {
+            AtomView::Fun(function) if function.get_symbol() == S.dot => {
+                self.monomial(factor, 1)?
+            }
+            AtomView::Add(_) | AtomView::Mul(_) => self.sum(sum_terms(factor))?,
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                let exponent = match exponent {
+                    AtomView::Num(number) => match number.get_coeff_view() {
+                        CoefficientView::Natural(exponent, 1, 0, _) => u8::try_from(exponent)
+                            .ok()
+                            .filter(|exponent| (1..=127).contains(exponent))?,
+                        _ => return None,
+                    },
+                    _ => return None,
+                };
+                match base {
+                    AtomView::Fun(function) if function.get_symbol() == S.dot => {
+                        self.monomial(base, exponent)?
+                    }
+                    AtomView::Add(_) => {
+                        let base = self.factor(base)?;
+                        let mut power = (*base).clone();
+                        for _ in 1..exponent {
+                            power = self.mul(&power, &base)?;
+                        }
+                        power
+                    }
+                    _ => return None,
+                }
+            }
+            _ => return None,
+        };
+        let polynomial = Rc::new(polynomial);
+        self.factors.insert(factor.get_data(), polynomial.clone());
+        Some(polynomial)
+    }
+
+    /// The polynomial of a product of loop factors.
+    fn product(&mut self, factors: &[AtomView<'a>]) -> Option<Rc<LoopPolynomial>> {
+        let key = factors.iter().map(AtomView::get_data).collect::<Vec<_>>();
+        if let Some(polynomial) = self.products.get(&key) {
+            return Some(polynomial.clone());
+        }
+        let polynomial = match factors {
+            [] => Rc::new(HashMap::from([(
+                vec![0; self.loop_dots.len()],
+                Atom::num(1),
+            )])),
+            [factor] => self.factor(*factor)?,
+            [rest @ .., last] => {
+                let rest = self.product(rest)?;
+                let last = self.factor(*last)?;
+                Rc::new(self.mul(&rest, &last)?)
+            }
+        };
+        self.products.insert(key, polynomial.clone());
+        Some(polynomial)
+    }
+
+    /// The polynomial of a sum: its terms grouped by their loop factors, the
+    /// loop-free factors of each group summed and expanded once, and every
+    /// coefficient one canonical sum of the products of the terms of those
+    /// sums with the coefficient terms of the group's loop factors.
+    fn sum(&mut self, terms: Vec<AtomView<'a>>) -> Option<LoopPolynomial> {
+        let mut groups = Vec::<(Vec<AtomView<'a>>, Vec<Atom>)>::new();
+        let mut group_indices = HashMap::<Vec<&'a [u8]>, usize>::new();
+        for term in terms {
+            let (loop_factors, spectators): (Vec<_>, Vec<_>) = product_factors(term)
+                .into_iter()
+                .partition(|factor| factor.contains_symbol(S.k));
+            let spectator = if spectators.is_empty() {
+                Atom::num(1)
+            } else {
+                Atom::mul_many(spectators)
+            };
+            let key = loop_factors.iter().map(AtomView::get_data).collect();
+            match group_indices.entry(key) {
+                Entry::Occupied(entry) => groups[*entry.get()].1.push(spectator),
+                Entry::Vacant(entry) => {
+                    entry.insert(groups.len());
+                    groups.push((loop_factors, vec![spectator]));
+                }
+            }
+        }
+        let mut products = HashMap::<Exponents, Vec<Atom>>::new();
+        for (loop_factors, spectators) in groups {
+            let spectators = Atom::add_many(spectators.iter()).expand();
+            if spectators.is_zero() {
+                continue;
+            }
+            let spectator_terms = sum_terms(spectators.as_view());
+            for (exponents, coefficient) in self.product(&loop_factors)?.iter() {
+                let coefficient_terms = sum_terms(coefficient.as_view());
+                let products = products.entry(exponents.clone()).or_default();
+                for &spectator in &spectator_terms {
+                    for &term in &coefficient_terms {
+                        products.push(spectator * term);
+                    }
+                }
+            }
+        }
+        Some(collect_products(products))
+    }
+}
+
+/// The terms of a sum, or the expression itself.
+fn sum_terms(expression: AtomView) -> Vec<AtomView> {
+    match expression {
+        AtomView::Add(sum) => sum.iter().collect(),
+        term => vec![term],
+    }
+}
+
+/// The factors of a product, or the expression itself.
+fn product_factors(expression: AtomView) -> Vec<AtomView> {
+    match expression {
+        AtomView::Mul(product) => product.iter().collect(),
+        factor => vec![factor],
+    }
+}
+
+/// Whether expanding the term `term` (no sum, no sum factor) returns it
+/// unchanged: every factor does. A number, symbol, function or power of a
+/// symbol or function to a number is kept as is; other factors, such as a
+/// power of a sum, are expanded once and remembered in `fixed` (a short
+/// list: a numerator has a few distinct denominators; `false` beyond).
+fn expands_to_itself(term: AtomView, fixed: &mut Vec<Atom>) -> bool {
+    const MAX_FIXED_FACTORS: usize = 64;
+    let mut factor_expands_to_itself = |factor: AtomView| match factor {
+        AtomView::Num(_) | AtomView::Var(_) | AtomView::Fun(_) => true,
+        AtomView::Add(_) | AtomView::Mul(_) => false,
+        AtomView::Pow(power)
+            if matches!(
+                power.get_base_exp(),
+                (AtomView::Var(_) | AtomView::Fun(_), AtomView::Num(_))
+            ) =>
+        {
+            true
+        }
+        AtomView::Pow(_) => {
+            if fixed.iter().any(|known| known.as_view() == factor) {
+                return true;
+            }
+            if fixed.len() == MAX_FIXED_FACTORS {
+                return false;
+            }
+            let expanded = factor.expand();
+            if expanded.as_view() != factor {
+                return false;
+            }
+            fixed.push(expanded);
+            true
+        }
+    };
+    match term {
+        AtomView::Add(_) => false,
+        AtomView::Mul(product) => product.iter().all(factor_expands_to_itself),
+        factor => factor_expands_to_itself(factor),
+    }
 }
 
 /// The homogeneous parts of a backend request, `None` when it is scaleless.
@@ -853,6 +1347,362 @@ mod tests {
         assert_eq!(
             parts("P2L", &[1, 0, 0, 1, 1], "dot(k(1),p(1))", "p(1)"),
             None
+        );
+    }
+
+    type SplitSummary = Result<
+        Option<(
+            Vec<CanonicalLine>,
+            Vec<(usize, i64)>,
+            Vec<Vec<Fraction>>,
+            Vec<PPart>,
+        )>,
+        String,
+    >;
+
+    fn summary(split: Result<Option<PSplit>, VakintError>) -> SplitSummary {
+        split
+            .map(|split| {
+                split.map(|split| {
+                    (
+                        split.lines,
+                        split.remaining,
+                        split.loop_momenta,
+                        split.parts,
+                    )
+                })
+            })
+            .map_err(|error| error.to_string())
+    }
+
+    /// The split by [`grouped_parts`] alone, an error where it does not apply.
+    fn split_grouped_only(
+        family: &PFamilyData,
+        powers: &[i64],
+        numerator: AtomView,
+        external: &Atom,
+    ) -> SplitSummary {
+        summary(split_with(
+            family,
+            powers,
+            numerator,
+            external,
+            |numerator, negative_powers, collector| {
+                grouped_parts(numerator, negative_powers, collector).ok_or_else(|| {
+                    VakintError::InvalidNumerator("the grouped split does not apply".into())
+                })
+            },
+        ))
+    }
+
+    /// [`split`] equals [`split_reference`], errors included; with `grouped`
+    /// the grouped parts apply and are the reference parts, else they defer
+    /// to the reference.
+    fn assert_split_matches_reference(
+        family: &PFamilyData,
+        powers: &[i64],
+        numerator: AtomView,
+        external: &Atom,
+        grouped: bool,
+    ) -> SplitSummary {
+        let reference = summary(split_reference(family, powers, numerator, external));
+        assert_eq!(
+            summary(split(family, powers, numerator, external)),
+            reference,
+            "{} {powers:?} {numerator}",
+            family.name
+        );
+        let grouped_only = split_grouped_only(family, powers, numerator, external);
+        if grouped {
+            assert_eq!(grouped_only, reference, "{} {powers:?}", family.name);
+        } else {
+            assert!(
+                grouped_only.is_err(),
+                "{} {powers:?} {numerator}",
+                family.name
+            );
+        }
+        reference
+    }
+
+    fn family(name: &str) -> &'static PFamilyData {
+        P_FAMILIES
+            .iter()
+            .find(|family| family.name == name)
+            .unwrap()
+    }
+
+    #[test]
+    fn grouped_split_equals_the_expanded_split() {
+        let cases: &[(&str, &[i64], &str, &str, bool)] = &[
+            ("P1L", &[1, 1], "0", "p(1)", true),
+            ("P1L", &[1, 1], "1", "p(1)", true),
+            (
+                "P2L",
+                &[1, 1, 1, 1, 2],
+                "dot(k(1),p(3))^2*dot(k(2),k(2))+3*dot(k(1),p(3))+(1+ε)*dot(k(2),p(3))-1/2",
+                "-p(3)",
+                true,
+            ),
+            // Repeated loop factors with different spectators, and a negative power.
+            (
+                "P2L",
+                &[-2, 1, 1, 1, 1],
+                "x*(dot(k(1),p(1))+dot(k(2),p(1)))^2+y*(dot(k(1),p(1))+dot(k(2),p(1)))^2\
+                 +(x+y)*dot(k(1),k(2))+z",
+                "p(1)",
+                true,
+            ),
+            // Spectator sums and powers of sums.
+            (
+                "P2L",
+                &[1, 1, 1, 1, 1],
+                "(1+ε)^2*(dot(k(1),p(1))+dot(p(1),p(1)))*dot(k(2),p(1))\
+                 +(nf+ε)*(dot(k(1),p(1))+dot(p(1),p(1)))*dot(k(2),p(1))\
+                 +(nf+ε)*(2-ε)^-1*dot(k(1),k(1))",
+                "p(1)",
+                true,
+            ),
+            // The loop dot k(1)·p(1) cancels: the reference never sees it.
+            (
+                "P2L",
+                &[1, 1, 1, 1, 1],
+                "(dot(k(1),p(1))+y)*x-x*dot(k(1),p(1))+dot(k(2),k(2))",
+                "p(1)",
+                true,
+            ),
+            // One monomial from several loop factors; a product and a power
+            // at the top.
+            (
+                "P2L",
+                &[1, 1, 1, 1, 2],
+                "x*(dot(k(1),p(1))+dot(k(2),p(1)))^2+y*dot(k(1),p(1))^2+z",
+                "-p(1)",
+                true,
+            ),
+            (
+                "P2L",
+                &[1, 1, 1, 1, 1],
+                "x*(dot(k(1),p(1))+dot(p(1),p(1)))^3",
+                "-p(1)",
+                true,
+            ),
+            (
+                "P2L",
+                &[1, 1, 1, 1, 1],
+                "(dot(k(1),p(1))+ε)^2",
+                "p(1)",
+                true,
+            ),
+            // Nested sums of products with loop-free factors at every level,
+            // a repeated inner loop factor and a merged rational power.
+            (
+                "P2L",
+                &[-1, 1, 1, 1, 1],
+                "((dot(k(1),p(1))+dot(k(2),p(1)))*ε^2*x+(dot(k(1),p(1))+dot(k(2),p(1)))*(1+ε)*y\
+                 +z*dot(k(1),k(1)))*(dot(k(2),k(2))+(2-ε)^-1*dot(p(1),p(1)))\
+                 *(dot(k(1),k(2))+nf)+(dot(k(1),p(1))+dot(k(2),p(1)))^2*(ε-1)",
+                "-p(1)",
+                true,
+            ),
+            (
+                "P2L",
+                &[1, 1, 1, 1, 1],
+                "x^(1/2)*dot(k(1),p(1))*(x^(1/2)*dot(k(2),p(1))+1)",
+                "p(1)",
+                true,
+            ),
+            // Indexed vectors that no dot-notation pass matches.
+            (
+                "P2L",
+                &[1, 1, 1, 1, 1],
+                "p(0,mu)*p(0,nu)*dot(k(1),p(1))*ε+g(mu,nu)*dot(p(0),p(0))*dot(k(1),k(1))",
+                "p(1)",
+                true,
+            ),
+            // Deferred: a product squares a denominator, which the second
+            // expansion rewrites; a product squares an indexed vector, which a
+            // pass contracts; inexact numbers; a non-integer power of a sum.
+            (
+                "P2L",
+                &[1, 1, 1, 1, 1],
+                "(2-ε)^-1*(dot(k(1),p(1))*(2-ε)^-1+1)*dot(k(2),k(2))",
+                "p(1)",
+                false,
+            ),
+            (
+                "P2L",
+                &[1, 1, 1, 1, 1],
+                "p(0,mu)*(p(0,mu)*dot(k(1),p(1))+dot(k(2),p(1)))",
+                "p(1)",
+                false,
+            ),
+            ("P2L", &[1, 1, 1, 1, 1], "1.5*dot(k(1),p(1))", "p(1)", false),
+            (
+                "P2L",
+                &[1, 1, 1, 1, 1],
+                "(1+ε)^(1/2)*dot(k(1),p(1))",
+                "p(1)",
+                false,
+            ),
+            // Deferred errors: a loop momentum outside a scalar product and a
+            // loop momentum contracted with another external vector.
+            (
+                "P2L",
+                &[1, 1, 1, 1, 1],
+                "f(dot(k(1),p(1)))*dot(k(2),p(1))",
+                "p(1)",
+                false,
+            ),
+            ("P2L", &[1, 1, 1, 1, 1], "dot(k(1),p(2))", "p(1)", false),
+        ];
+        for &(name, powers, numerator, external, grouped) in cases {
+            let numerator = parse(numerator);
+            let _ = assert_split_matches_reference(
+                family(name),
+                powers,
+                numerator.as_view(),
+                &parse(external),
+                grouped,
+            );
+        }
+    }
+
+    /// A [`split`] input as `dump_split_input` writes it.
+    fn split_record(text: &str) -> (&'static PFamilyData, Vec<i64>, Atom, Atom) {
+        let field = |key: &str| {
+            text.lines()
+                .find_map(|line| line.strip_prefix(key)?.strip_prefix(' '))
+                .unwrap_or_else(|| panic!("a split record without {key}"))
+        };
+        let powers = field("powers")
+            .split(',')
+            .map(|power| power.parse().unwrap())
+            .collect();
+        (
+            family(field("family")),
+            powers,
+            parse(field("external")),
+            parse(field("numerator")),
+        )
+    }
+
+    /// Real five-loop inputs: requests of the nf^3 self-energy diagrams
+    /// 58440, 58844 and 59566 on the RustRed path, written by
+    /// `VAKINT_DUMP_SPLIT_INPUTS` (records separated by `---` lines).
+    #[test]
+    fn grouped_split_reproduces_five_loop_requests() {
+        let records = include_str!("../../tests/fixtures/p_split_requests.txt")
+            .split("\n---\n")
+            .collect::<Vec<_>>();
+        assert!(records.len() >= 10);
+        for record in records {
+            let (family, powers, external, numerator) = split_record(record);
+            let split = assert_split_matches_reference(
+                family,
+                &powers,
+                numerator.as_view(),
+                &external,
+                true,
+            );
+            assert!(split.unwrap().is_some_and(|split| !split.3.is_empty()));
+        }
+    }
+
+    /// The same on a whole `VAKINT_DUMP_SPLIT_INPUTS` directory named by
+    /// `VAKINT_SPLIT_CORPUS` (opt-in: real corpora are far too large to
+    /// vendor). Also checks that the dot-notation passes skipped there and
+    /// the second expansion of the reference are no-ops, and prints timings.
+    #[test]
+    fn grouped_split_reproduces_a_dumped_corpus() {
+        let Some(directory) = std::env::var_os("VAKINT_SPLIT_CORPUS") else {
+            eprintln!("VAKINT_SPLIT_CORPUS is not set: no corpus to compare");
+            return;
+        };
+        let mut paths = std::fs::read_dir(directory)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect::<Vec<_>>();
+        paths.sort();
+        let seconds = |started: std::time::Instant| started.elapsed().as_secs_f64();
+        let mut totals = [0.0; 5];
+        let (mut skipped, mut second_expansion_changed) = (0, 0);
+        let mut declined = Vec::new();
+        for path in &paths {
+            let (family, powers, external, numerator) =
+                split_record(&std::fs::read_to_string(path).unwrap());
+            let started = std::time::Instant::now();
+            let reference = summary(split_reference(
+                family,
+                &powers,
+                numerator.as_view(),
+                &external,
+            ));
+            let reference_seconds = seconds(started);
+            let started = std::time::Instant::now();
+            let actual = summary(split(family, &powers, numerator.as_view(), &external));
+            let split_seconds = seconds(started);
+            assert_eq!(actual, reference, "{}", path.display());
+            let grouped = split_grouped_only(family, &powers, numerator.as_view(), &external);
+            if grouped != reference {
+                assert!(grouped.is_err(), "{}", path.display());
+                declined.push(path.file_name().unwrap().to_string_lossy().into_owned());
+            }
+            // The stages of the reference after its first expansion.
+            let mut product = numerator.clone();
+            for (line, &power) in canonical_lines(family).unwrap().iter().zip(&powers) {
+                if power < 0 {
+                    let momentum = line.momentum(&external);
+                    product *= function!(S.dot, &momentum, &momentum).pow(Atom::num(-power));
+                }
+            }
+            let started = std::time::Instant::now();
+            let expanded = product.expand();
+            let expand_seconds = seconds(started);
+            let started = std::time::Instant::now();
+            if !Vakint::dot_notation_passes_may_apply(expanded.as_view()) {
+                skipped += 1;
+                assert_eq!(
+                    Vakint::dot_notation_passes(expanded.clone()),
+                    expanded,
+                    "{}",
+                    path.display()
+                );
+            }
+            let passes_seconds = seconds(started);
+            let started = std::time::Instant::now();
+            second_expansion_changed += usize::from(expanded.expand() != expanded);
+            let second_expansion_seconds = seconds(started);
+            for (total, value) in totals.iter_mut().zip([
+                reference_seconds,
+                split_seconds,
+                expand_seconds,
+                passes_seconds,
+                second_expansion_seconds,
+            ]) {
+                *total += value;
+            }
+            eprintln!(
+                "{}: reference {reference_seconds:.4} s, split {split_seconds:.4} s \
+                 (expansion {expand_seconds:.4} s, passes {passes_seconds:.4} s, \
+                 second expansion {second_expansion_seconds:.4} s)",
+                path.file_name().unwrap().to_string_lossy()
+            );
+        }
+        eprintln!(
+            "{} requests: reference {:.3} s, split {:.3} s; in the reference: expansion {:.3} s, \
+             passes {:.3} s, second expansion {:.3} s; passes skipped on {skipped}, \
+             second expansion changed {second_expansion_changed}",
+            paths.len(),
+            totals[0],
+            totals[1],
+            totals[2],
+            totals[3],
+            totals[4]
+        );
+        assert!(
+            declined.is_empty(),
+            "the grouped split does not apply to {declined:?}"
         );
     }
 }
