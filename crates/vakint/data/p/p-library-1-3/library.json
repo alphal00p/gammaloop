@@ -1022,7 +1022,7 @@
     "routes": "routes.rrbin",
     "topology": "topology/p-topologies.json"
   },
-  "identity": "p-library:scope=1-3:P_OWNER_LIBRARY_SEMANTICS=rustred-p-owner-library-2026-11-05,P_CLASS_KEY_VERSION=1,P_CENSUS_VERSION=2,P_PRESENTATION_VERSION=2,P_FAMILIES_VERSION=1,P_GAMMA_TAG_VERSION=1,P_GAMMA_TAG_MAX_M=8,P_GAMMA_TAG_WIDTH=16,P_INSERTION_KERNEL_VERSION=1,P_CARPET_KERNEL_VERSION=1,P_TRIANGLE_TEMPLATE_VERSION=1,P_DIAMOND_TEMPLATE_VERSION=1,P_SCHEME_TEMPLATE_VERSION=4,P_CUSTOM_OWNER_VERSION=2,P_LIBRARY_SCHEMA=rustred.p-owner-library.v1,P_FAMILIES_SCHEMA=rustred.p-families.v1,P_BASIS_LAYER_SCHEMA=rustred.p-basis-layer.v1,P_TOPOLOGY_VERSION=1,P_ORDERING_VERSION=1:generation",
+  "identity": "p-library:scope=1-3:P_OWNER_LIBRARY_SEMANTICS=rustred-p-owner-library-2026-11-05,P_CLASS_KEY_VERSION=1,P_CENSUS_VERSION=2,P_PRESENTATION_VERSION=3,P_FAMILIES_VERSION=1,P_GAMMA_TAG_VERSION=1,P_GAMMA_TAG_MAX_M=8,P_GAMMA_TAG_WIDTH=16,P_INSERTION_KERNEL_VERSION=1,P_CARPET_KERNEL_VERSION=1,P_TRIANGLE_TEMPLATE_VERSION=1,P_DIAMOND_TEMPLATE_VERSION=1,P_SCHEME_TEMPLATE_VERSION=4,P_CUSTOM_OWNER_VERSION=2,P_LIBRARY_SCHEMA=rustred.p-owner-library.v1,P_FAMILIES_SCHEMA=rustred.p-families.v1,P_BASIS_LAYER_SCHEMA=rustred.p-basis-layer.v1,P_TOPOLOGY_VERSION=1,P_ORDERING_VERSION=1:generation",
   "nodes": [
     {
       "fallback": null,
@@ -3625,8 +3625,8 @@
             ],
             "right": [
               0,
-              1,
               0,
+              1,
               0
             ]
           }
@@ -4479,24 +4479,8 @@
         {
           "isp": {
             "left": [
-              1,
-              0,
-              0,
-              0
-            ],
-            "right": [
               0,
               1,
-              0,
-              0
-            ]
-          }
-        },
-        {
-          "isp": {
-            "left": [
-              1,
-              0,
               0,
               0
             ],
@@ -4518,9 +4502,25 @@
             ],
             "right": [
               0,
+              -1,
+              0,
+              -1
+            ]
+          }
+        },
+        {
+          "isp": {
+            "left": [
+              1,
               0,
               0,
-              1
+              0
+            ],
+            "right": [
+              0,
+              0,
+              1,
+              0
             ]
           }
         }
@@ -5374,8 +5374,8 @@
             "right": [
               0,
               0,
-              1,
-              0
+              0,
+              1
             ]
           }
         },
@@ -5384,13 +5384,13 @@
             "left": [
               0,
               1,
-              0,
-              0
+              1,
+              -1
             ],
             "right": [
               0,
-              0,
               1,
+              0,
               0
             ]
           }
@@ -5529,16 +5529,16 @@
         {
           "isp": {
             "left": [
+              0,
+              0,
+              1,
+              -1
+            ],
+            "right": [
               1,
               0,
               0,
               0
-            ],
-            "right": [
-              0,
-              0,
-              0,
-              1
             ]
           }
         }
@@ -6788,7 +6788,7 @@
   "producer": {
     "name": "RustRed",
     "rustred_version": "0.1.0",
-    "symbolica_version": "symbolica-v3.0.1-110-g9cd57678d"
+    "symbolica_version": "symbolica-v3.0.1-110-g9cd5767"
   },
   "schema": "rustred.p-owner-library.v1",
   "scope": [
@@ -6842,7 +6842,7 @@
     "P_INSERTION_KERNEL_VERSION": "1",
     "P_LIBRARY_SCHEMA": "rustred.p-owner-library.v1",
     "P_OWNER_LIBRARY_SEMANTICS": "rustred-p-owner-library-2026-11-05",
-    "P_PRESENTATION_VERSION": "2",
+    "P_PRESENTATION_VERSION": "3",
     "P_SCHEME_TEMPLATE_VERSION": "4",
     "P_TOPOLOGY_VERSION": "1",
     "P_TRIANGLE_TEMPLATE_VERSION": "1"
