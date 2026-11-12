@@ -1,14 +1,14 @@
 {
   "files": [
     {
-      "bytes": 492299,
+      "bytes": 492291,
       "path": "census.json",
-      "sha256": "2c41c7ead11bc0ff11a9552ee6141b638c66e5c522c97fa4220c54d46b2dd2f8"
+      "sha256": "0636a37c4b114d7bb9b671ad637cc8007e55e0d11f81b5bc69b6d8e500fd1219"
     },
     {
       "bytes": 59355,
       "path": "census.rrbin",
-      "sha256": "07a739d2ae7e69975afd4075db6d1e819eee70dfc562deb74f458cb1cc6f288f"
+      "sha256": "45f5259fe2494ffd0206a5cdeb8f92fee568c299decc2ecd27a7784d99784eb8"
     },
     {
       "bytes": 1268,
@@ -88,7 +88,7 @@
     {
       "bytes": 1463,
       "path": "families/p_node_01030001010001010000020200000102020000.rrbin",
-      "sha256": "f5bd0b98e97be6d3606c8563289a4874138e7e4ac5d0e6cd95261d2114a43d91"
+      "sha256": "da2c2778003690075c6fa7f65c827ee6407258de7af464fdc2f3c4ed25d6592d"
     },
     {
       "bytes": 1451,
@@ -251,14 +251,14 @@
       "sha256": "ca64a56897571ae14e9861fde237cc07ec44394b35872c00dca275e81228fdc3"
     },
     {
-      "bytes": 127053,
+      "bytes": 127052,
       "path": "library.json",
-      "sha256": "54ab4e4bfb134f253469ca7e82734bd45f356be0c7fe68d20c689b3887032ba3"
+      "sha256": "541dc2c80333c258b1752e28e395973257eee35de3ad3ec1ae7910f1d0574e27"
     },
     {
       "bytes": 5925,
       "path": "orbits.rrbin",
-      "sha256": "f71514cb265b4730b4b96223bda86b6c78a07a584cdb4b57e00b9cf44709a359"
+      "sha256": "e2da802b154e9a79e2368c90f8ad43d9cfdca552f720586b5aec79c6ce5117ca"
     },
     {
       "bytes": 45013,
@@ -276,9 +276,9 @@
       "sha256": "874117811cf4a19032b97acb88ed3bde211589d96ff7e08d743e11eb861a8b95"
     },
     {
-      "bytes": 175880,
+      "bytes": 176071,
       "path": "routes.rrbin",
-      "sha256": "dfd5d34fbc8aaab1dd366912b4dbec58d757e7f0162c3f5bdcd5480aad3dbd22"
+      "sha256": "cf4b9b1f95fc00b1532232c2715248a34ccf0a21b4c253960430d5aae58358bc"
     },
     {
       "bytes": 85206,
@@ -286,7 +286,7 @@
       "sha256": "ab1911534fb97c92ad49c1bead4ab3fdfcace0e9995121b2829d9ef353f5a122"
     }
   ],
-  "identity": "p-library:scope=1-3:P_OWNER_LIBRARY_SEMANTICS=rustred-p-owner-library-2026-11-05,P_CLASS_KEY_VERSION=1,P_CENSUS_VERSION=2,P_PRESENTATION_VERSION=3,P_FAMILIES_VERSION=1,P_GAMMA_TAG_VERSION=1,P_GAMMA_TAG_MAX_M=8,P_GAMMA_TAG_WIDTH=16,P_INSERTION_KERNEL_VERSION=1,P_CARPET_KERNEL_VERSION=1,P_TRIANGLE_TEMPLATE_VERSION=1,P_DIAMOND_TEMPLATE_VERSION=1,P_SCHEME_TEMPLATE_VERSION=4,P_CUSTOM_OWNER_VERSION=2,P_LIBRARY_SCHEMA=rustred.p-owner-library.v1,P_FAMILIES_SCHEMA=rustred.p-families.v1,P_BASIS_LAYER_SCHEMA=rustred.p-basis-layer.v1,P_TOPOLOGY_VERSION=1,P_ORDERING_VERSION=1:generation",
+  "identity": "p-library:scope=1-3:P_OWNER_LIBRARY_SEMANTICS=rustred-p-owner-library-2026-11-05,P_CLASS_KEY_VERSION=1,P_CENSUS_VERSION=2,P_PRESENTATION_VERSION=4,P_FAMILIES_VERSION=1,P_GAMMA_TAG_VERSION=1,P_GAMMA_TAG_MAX_M=8,P_GAMMA_TAG_WIDTH=16,P_INSERTION_KERNEL_VERSION=1,P_CARPET_KERNEL_VERSION=1,P_TRIANGLE_TEMPLATE_VERSION=1,P_DIAMOND_TEMPLATE_VERSION=1,P_SCHEME_TEMPLATE_VERSION=4,P_CUSTOM_OWNER_VERSION=2,P_LIBRARY_SCHEMA=rustred.p-owner-library.v1,P_FAMILIES_SCHEMA=rustred.p-families.v1,P_BASIS_LAYER_SCHEMA=rustred.p-basis-layer.v1,P_TOPOLOGY_VERSION=1,P_ORDERING_VERSION=1:generation",
   "library": "p-library-1-3",
   "schema": "vakint.p-data.v1",
   "versions": {
@@ -304,7 +304,7 @@
     "P_INSERTION_KERNEL_VERSION": "1",
     "P_LIBRARY_SCHEMA": "rustred.p-owner-library.v1",
     "P_OWNER_LIBRARY_SEMANTICS": "rustred-p-owner-library-2026-11-05",
-    "P_PRESENTATION_VERSION": "3",
+    "P_PRESENTATION_VERSION": "4",
     "P_SCHEME_TEMPLATE_VERSION": "4",
     "P_TOPOLOGY_VERSION": "1",
     "P_TRIANGLE_TEMPLATE_VERSION": "1"
