@@ -5060,6 +5060,22 @@ impl VakintExpression {
                                 - 1,
                         )
                     })?;
+                // Experimental hybrid: above BETA_RUSTRED_MAX_RANK a p-integral
+                // goes to the order's Forcer entry instead of RustRed.
+                let method = if propagator
+                    && matches!(method, EvaluationMethod::RustRed(_))
+                    && p_integral::massive::rustred_max_rank().is_some_and(|max| {
+                        p_integral::massive::loop_rank(term.numerator.as_view()) > max
+                    }) {
+                    settings
+                        .evaluation_order
+                        .0
+                        .iter()
+                        .find(|candidate| matches!(candidate, EvaluationMethod::Forcer(_)))
+                        .unwrap_or(method)
+                } else {
+                    method
+                };
                 if propagator && let EvaluationMethod::RustRed(options) = method {
                     let (contributions, vectors) = p_ordered
                         .entry((
@@ -6919,85 +6935,55 @@ Evaluated (n_loops=1, mu_r=1) :
                 dummy += 1;
                 let first_new_dummy = dummy;
 
-                let mut a = a.to_owned();
-                loop {
-                    let dummy_wrapped = S.dot_dummy_ind(dummy);
-                    let new = a
-                        .replace(S.dot_pow(S.a_, S.b_, S.c_))
-                        .once()
-                        .with_map(move |m| {
-                            let Match::Single(a) = m.get(S.a_).unwrap() else {
-                                unreachable!()
-                            };
-                            let Match::Single(b) = m.get(S.b_).unwrap() else {
-                                unreachable!()
-                            };
-                            let rest = S
-                                .dot_pow(S.a_, S.b_, Atom::var(S.c_) - 1)
-                                .to_pattern()
-                                .replace_wildcards_with_matches(m);
-
-                            // if let (Ok(a), Ok(b)) =
-                            //     (FunctionBuilder::try_from(m.get(S.a_)), FunctionBuilder::try_from(b))
-                            // {
-                            //     a.add_arg(dummy).finish() * b.add_arg(dummy).finish() * rest
-                            // }
-                            match (a, b) {
-                                (AtomView::Var(a), AtomView::Var(b)) => {
-                                    FunctionBuilder::new(a.get_symbol())
-                                        .add_arg(&dummy_wrapped)
-                                        .finish()
-                                        * FunctionBuilder::new(b.get_symbol())
-                                            .add_arg(&dummy_wrapped)
-                                            .finish()
-                                        * rest
-                                }
-                                (AtomView::Var(a), AtomView::Fun(b)) => {
-                                    FunctionBuilder::new(a.get_symbol())
-                                        .add_arg(&dummy_wrapped)
-                                        .finish()
-                                        * FunctionBuilder::new(b.get_symbol())
-                                            .add_args(b.iter().collect::<Vec<_>>())
-                                            .add_arg(&dummy_wrapped)
-                                            .finish()
-                                        * rest
-                                }
-                                (AtomView::Fun(a), AtomView::Var(b)) => {
-                                    FunctionBuilder::new(a.get_symbol())
-                                        .add_args(a.iter().collect::<Vec<_>>())
-                                        .add_arg(&dummy_wrapped)
-                                        .finish()
-                                        * FunctionBuilder::new(b.get_symbol())
-                                            .add_arg(&dummy_wrapped)
-                                            .finish()
-                                        * rest
-                                }
-                                (AtomView::Fun(a), AtomView::Fun(b)) => {
-                                    FunctionBuilder::new(a.get_symbol())
-                                        .add_args(a.iter().collect::<Vec<_>>())
-                                        .add_arg(&dummy_wrapped)
-                                        .finish()
-                                        * FunctionBuilder::new(b.get_symbol())
-                                            .add_args(b.iter().collect::<Vec<_>>())
-                                            .add_arg(&dummy_wrapped)
-                                            .finish()
-                                        * rest
-                                }
-                                _ => S
-                                    .dot_pow(S.a_, S.b_, S.c_)
-                                    .to_pattern()
-                                    .replace_wildcards_with_matches(m),
-                            }
-                        })
-                        .replace(S.dot_pow(S.a_, S.b_, 0))
-                        .with(1);
-
-                    if new == a {
-                        break;
+                // Open every dot_pow(a, b, n) with integer n >= 0 into n pairs
+                // a(d) b(d) with fresh dummies d, in one structural pass. The
+                // former loop re-matched and rebuilt the term once per opened
+                // product; at five loops that dominated the tensor reduction.
+                let next_dummy = std::cell::Cell::new(dummy);
+                let with_index = |vector: AtomView, index: &Atom| -> Option<Atom> {
+                    match vector {
+                        AtomView::Var(variable) => Some(
+                            FunctionBuilder::new(variable.get_symbol())
+                                .add_arg(index)
+                                .finish(),
+                        ),
+                        AtomView::Fun(function) => Some(
+                            FunctionBuilder::new(function.get_symbol())
+                                .add_args(function.iter().collect::<Vec<_>>())
+                                .add_arg(index)
+                                .finish(),
+                        ),
+                        _ => None,
                     }
-                    a = new;
-                    dummy += 1;
-                }
+                };
+                let a = a.replace_map(|view, _context, out| {
+                    let AtomView::Fun(function) = view else {
+                        return;
+                    };
+                    if function.get_symbol() != S.dot_pow || function.get_nargs() != 3 {
+                        return;
+                    }
+                    let arguments = function.iter().collect::<Vec<_>>();
+                    let Ok(power) = i64::try_from(arguments[2]) else {
+                        return;
+                    };
+                    if power < 0
+                        || !matches!(arguments[0], AtomView::Var(_) | AtomView::Fun(_))
+                        || !matches!(arguments[1], AtomView::Var(_) | AtomView::Fun(_))
+                    {
+                        return;
+                    }
+                    let mut product = Atom::num(1);
+                    for _ in 0..power {
+                        let index = S.dot_dummy_ind(next_dummy.get());
+                        next_dummy.set(next_dummy.get() + 1);
+                        product = product
+                            * with_index(arguments[0], &index).unwrap()
+                            * with_index(arguments[1], &index).unwrap();
+                    }
+                    **out = product;
+                });
+                dummy = next_dummy.get();
                 // Each copy of a powered scalar sum owns independent dummy
                 // contractions. Keep those copies factorized: expanding the
                 // numerator before conversion would hide index capture.

@@ -27,6 +27,34 @@ pub struct MassiveClosure {
     pub power: i64,
 }
 
+/// Highest power of loop momenta in a scalar p-integral numerator: `dot(k,k)`
+/// counts two, `dot(k,p)` one (an upper bound for nested sums).
+pub(crate) fn loop_rank(view: AtomView) -> usize {
+    match view {
+        AtomView::Add(sum) => sum.iter().map(loop_rank).max().unwrap_or(0),
+        AtomView::Mul(product) => product.iter().map(loop_rank).sum(),
+        AtomView::Pow(power) => {
+            let (base, exponent) = power.get_base_exp();
+            let exponent = crate::get_integer_from_atom(exponent).filter(|n| *n > 0).unwrap_or(0);
+            exponent as usize * loop_rank(base)
+        }
+        AtomView::Fun(function) if function.get_symbol() == S.dot => {
+            function.iter().filter(|argument| argument.contains_symbol(S.k)).count()
+        }
+        _ => 0,
+    }
+}
+
+/// Experimental hybrid (`BETA_RUSTRED_MAX_RANK`): with RustRed selected, a
+/// massive-closure p-integral of higher numerator rank goes to Forcer, where
+/// RustRed's reduction is slower.
+pub(crate) fn rustred_max_rank() -> Option<usize> {
+    static RANK: std::sync::LazyLock<Option<usize>> = std::sync::LazyLock::new(|| {
+        std::env::var("BETA_RUSTRED_MAX_RANK").ok().and_then(|value| value.parse().ok())
+    });
+    *RANK
+}
+
 impl MassiveClosure {
     fn validated_head(&self, settings: &crate::VakintSettings) -> Result<Atom, VakintError> {
         let (head, _) = external_head(&self.momentum)?;
@@ -154,6 +182,28 @@ impl MassiveClosure {
                         .expect("a p-integral match has a propagator request");
                     match method {
                         Some(EvaluationMethod::Forcer(options)) => {
+                            if options.master_mode != mode {
+                                return Err(super::invalid(
+                                    "batched massive closures need one master mode",
+                                ));
+                            }
+                            if let Some(input) = forcer::forcer_input_with_epsilon(
+                                request.family,
+                                request.powers,
+                                request.canonical_numerator,
+                                &request.external,
+                                vk_symbol!(&settings.epsilon_symbol),
+                            )? && !input.parts.is_empty()
+                            {
+                                forcer_requests.push(input);
+                                forcer_owners.push((owner, request.family.loops));
+                            }
+                        }
+                        Some(EvaluationMethod::RustRed(options))
+                            if rustred_max_rank().is_some_and(|max| {
+                                loop_rank(request.canonical_numerator) > max
+                            }) =>
+                        {
                             if options.master_mode != mode {
                                 return Err(super::invalid(
                                     "batched massive closures need one master mode",

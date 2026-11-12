@@ -21,7 +21,7 @@ pub(crate) mod forcer;
 mod frontend_tests;
 mod input;
 mod laurent;
-mod massive;
+pub(crate) mod massive;
 pub(crate) mod masters;
 pub(crate) mod mzv;
 pub(crate) mod parts;

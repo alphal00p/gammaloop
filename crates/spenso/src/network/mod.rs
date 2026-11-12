@@ -4189,6 +4189,7 @@ where
 
     const MIN_ATOM_ADD_MANY_LEAVES: usize = 4;
     const MIN_STREAMED_SUM_LEAVES: usize = 32;
+    const MIN_STREAMED_SUM_BYTES: usize = 1 << 30;
     if targets.len() < MIN_ATOM_ADD_MANY_LEAVES {
         return None;
     }
@@ -4217,7 +4218,12 @@ where
 
     let start = profile::enabled().then(std::time::Instant::now);
 
-    let result = if targets.len() >= MIN_STREAMED_SUM_LEAVES {
+    // Stream only sums too large to normalize comfortably in memory: every
+    // TermStreamer builds its own thread pool and buffers, which dominated
+    // the many moderate sums of local UV counterterms. Both paths give the
+    // same normalized sum.
+    let bytes: usize = atoms.iter().map(|atom| atom.as_view().get_byte_size()).sum();
+    let result = if targets.len() >= MIN_STREAMED_SUM_LEAVES && bytes >= MIN_STREAMED_SUM_BYTES {
         if profile::enabled() {
             eprintln!(
                 "spenso_profile execute.sum_term_stream_start leaves={}",
@@ -4227,6 +4233,7 @@ where
 
         let mut stream = TermStreamer::<BufWriter<File>>::new(
             TermStreamerConfig::new()
+                .cores(1)
                 .path(std::env::temp_dir().to_string_lossy().into_owned())
                 .max_mem_bytes(usize::try_from(4_u64 * 1024 * 1024 * 1024).unwrap_or(usize::MAX)),
         );
