@@ -55,6 +55,18 @@ pub(crate) fn rustred_max_rank() -> Option<usize> {
     *RANK
 }
 
+/// The same threshold for the physical (non-closure) p-integrals,
+/// `BETA_RUSTRED_MAX_RANK_PHYSICAL`; unset keeps RustRed for every rank there,
+/// which measured faster on the four-loop sample.
+pub(crate) fn rustred_max_rank_physical() -> Option<usize> {
+    static RANK: std::sync::LazyLock<Option<usize>> = std::sync::LazyLock::new(|| {
+        std::env::var("BETA_RUSTRED_MAX_RANK_PHYSICAL")
+            .ok()
+            .and_then(|value| value.parse().ok())
+    });
+    *RANK
+}
+
 impl MassiveClosure {
     fn validated_head(&self, settings: &crate::VakintSettings) -> Result<Atom, VakintError> {
         let (head, _) = external_head(&self.momentum)?;

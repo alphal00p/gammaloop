@@ -5060,11 +5060,11 @@ impl VakintExpression {
                                 - 1,
                         )
                     })?;
-                // Experimental hybrid: above BETA_RUSTRED_MAX_RANK a p-integral
+                // Experimental hybrid: above BETA_RUSTRED_MAX_RANK_PHYSICAL a p-integral
                 // goes to the order's Forcer entry instead of RustRed.
                 let method = if propagator
                     && matches!(method, EvaluationMethod::RustRed(_))
-                    && p_integral::massive::rustred_max_rank().is_some_and(|max| {
+                    && p_integral::massive::rustred_max_rank_physical().is_some_and(|max| {
                         p_integral::massive::loop_rank(term.numerator.as_view()) > max
                     }) {
                     settings
