@@ -87,6 +87,10 @@ mod admission_census_tests;
 mod entry_probe_diagnostics;
 
 #[cfg(test)]
+#[path = "five_loop/exact_zero_orders_tests.rs"]
+mod exact_zero_orders_tests;
+
+#[cfg(test)]
 #[path = "five_loop/test_profiles.rs"]
 mod test_profiles;
 

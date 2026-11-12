@@ -1317,8 +1317,8 @@ impl MasterCatalog {
                 ))
         {
             let replacements = exact_values
-                .into_iter()
-                .map(|(source, value)| Replacement::new(source, value))
+                .iter()
+                .map(|(source, value)| Replacement::new(source.clone(), value.clone()))
                 .collect::<Vec<_>>();
             let started = super::phase_start();
             result = combine_exact(result.replace_multiple(&replacements));
@@ -1331,6 +1331,12 @@ impl MasterCatalog {
             &self.guard_backend(),
             |master| self.describe_master(master),
         )?;
+        if mode == RustRedMasterMode::Numerical {
+            let started = super::phase_start();
+            result =
+                Self::drop_identically_vanishing_orders(result, epsilon, &exact_values, threads);
+            super::log_phase("independent_exact_zero_orders", started);
+        }
         self.check_coefficients(&result, mode == RustRedMasterMode::Numerical)?;
         if mode == RustRedMasterMode::Numerical {
             let started = super::phase_start();
@@ -1344,6 +1350,59 @@ impl MasterCatalog {
             result = self.bind_period_references(result)?;
         }
         Ok(cooking.uncook(result.as_view()))
+    }
+
+    /// Numerical mode keeps exact master coefficients behind their tracked
+    /// placeholders (for precision diagnostics), so a Laurent order whose
+    /// exact formulas cancel identically, as the Symbolic finalize shows,
+    /// would be evaluated from cancelling finite approximations and refused as
+    /// an uncertain zero. Remove exactly the orders whose every coefficient
+    /// reference has an exact formula without finite constants and which
+    /// vanish identically once those formulas are substituted. Every other
+    /// order, including an exact order with a nonzero value and any order with
+    /// a numerical-only or finite-precision coefficient, is kept unchanged and
+    /// remains subject to the precision check; without such an order the
+    /// expression itself is returned unchanged.
+    fn drop_identically_vanishing_orders(
+        result: Atom,
+        epsilon: Symbol,
+        exact_values: &BTreeMap<Atom, Atom>,
+        threads: usize,
+    ) -> Atom {
+        if exact_values.is_empty() || result.is_zero() {
+            return result;
+        }
+        let terms = result.coefficient_list::<i32>(&[Atom::var(epsilon)]);
+        let vanishing = super::parallel::map_ordered(threads, &terms, |_, (_, coefficient)| {
+            let references = Self::coefficient_references(coefficient);
+            if references.is_empty()
+                || coefficient.contains_symbol(epsilon)
+                || !references
+                    .iter()
+                    .all(|reference| exact_values.contains_key(reference))
+            {
+                return false;
+            }
+            let replacements = references
+                .iter()
+                .map(|reference| {
+                    Replacement::new(reference.clone(), exact_values[reference].clone())
+                })
+                .collect::<Vec<_>>();
+            combine_exact(coefficient.replace_multiple(&replacements)).is_zero()
+        });
+        if !vanishing.iter().any(|zero| *zero) {
+            return result;
+        }
+        // One term per epsilon order: a plain sum, which is also zero when
+        // every order vanishes.
+        terms
+            .into_iter()
+            .zip(vanishing)
+            .filter(|(_, zero)| !zero)
+            .fold(Atom::Zero, |sum, ((monomial, coefficient), _)| {
+                sum + monomial * coefficient
+            })
     }
 
     /// The master monomials of `raw` with their exactly combined scalar
@@ -2924,6 +2983,113 @@ mod tests {
         assert!(issues[0].contains(&expected));
         assert!(issues[0].contains("no unique parent inferred"));
         assert!(expected.contains(&format!("/blob/{}/1L/", package.manifest.version)));
+    }
+
+    /// Two masters whose 1/ep coefficients have exact formulas in a finite
+    /// period (30 digits) and independent 50-digit numerical values, so that
+    /// tracked evaluation prefers the numerical values. The input is
+    /// `2*first - second`; `second_exact` is the exact 1/ep formula of the
+    /// second master (`None`: numerical only).
+    fn cancelling_exact_pole(second_exact: Option<&str>) -> (MasterCatalog, Atom) {
+        let (mut catalog, first) = catalog(None, 50);
+        let period = vk_parse!("K5Moment(1)").unwrap();
+        catalog.constants.insert(
+            period.clone(),
+            crate::inspection::FiniteSource {
+                value: "1.25".into(),
+                significant_digits: 30,
+                absolute_error: Some("1e-31".into()),
+                error_is_bounded: true,
+                identity: period.to_canonical_string(),
+                master_id: None,
+                epsilon_power: None,
+                data_version: catalog.version.clone(),
+                source_sha256: "certified-test-moment".into(),
+            },
+        );
+        let pole = catalog
+            .masters
+            .get_mut(&first)
+            .unwrap()
+            .coefficients
+            .get_mut(&-1)
+            .unwrap();
+        pole.exact = Some("K5Moment(1)".into());
+        pole.numerical = Some("1.25".into());
+        let (duplicate, _) = self::catalog(None, 50);
+        let mut second_data = duplicate.masters.into_values().next().unwrap();
+        second_data.identity = "second-master".into();
+        let pole = second_data.coefficients.get_mut(&-1).unwrap();
+        pole.exact = second_exact.map(str::to_owned);
+        pole.numerical = Some("2.5".into());
+        let second = catalog.symbol("test-family", &[2]);
+        catalog.masters.insert(second.clone(), second_data);
+        (catalog, Atom::num(2) * first - second)
+    }
+
+    fn laurent_order(result: &Atom, power: i64) -> Option<Atom> {
+        let monomial = vk_parse!("ep").unwrap().pow(Atom::num(power));
+        result
+            .coefficient_list::<i32>(&[vk_parse!("ep").unwrap()])
+            .into_iter()
+            .find(|(candidate, _)| *candidate == monomial)
+            .map(|(_, coefficient)| coefficient)
+    }
+
+    #[test]
+    fn identically_vanishing_exact_orders_are_exact_zeros_in_numerical_mode() {
+        let (catalog, raw) = cancelling_exact_pole(Some("2*K5Moment(1)"));
+        let symbolic = catalog
+            .finalize(
+                raw.clone(),
+                &settings(40, 2),
+                1,
+                RustRedMasterMode::Symbolic,
+            )
+            .unwrap();
+        assert!(laurent_order(&symbolic, -1).is_none(), "{symbolic}");
+        let numerical = catalog
+            .finalize(raw, &settings(40, 2), 1, RustRedMasterMode::Numerical)
+            .unwrap();
+        // The pole order is absent (an exact zero), not a cancelling sum of
+        // independently rounded coefficient values.
+        assert!(laurent_order(&numerical, -1).is_none(), "{numerical}");
+        let value = evaluate(&catalog, numerical, &settings(40, 2))
+            .to_atom(vk_symbol!("ep"))
+            .unwrap();
+        assert!(laurent_order(&value, -1).is_none(), "{value}");
+        let finite = laurent_order(&value, 0)
+            .unwrap()
+            .evaluate_with_prec(&HashMap::<Atom, Complex<Float>>::new(), 128)
+            .unwrap();
+        assert!((finite.re - Float::with_val(128, 2.5)).norm() < Float::with_val(128, 1e-35));
+    }
+
+    #[test]
+    fn numerical_noise_at_orders_that_are_not_identically_zero_is_still_refused() {
+        // Numerical-only data, and an exact formula that does not cancel
+        // (by 10^-60, far below the 50 available digits): the pole order is
+        // kept and its evaluation has no reliable digit.
+        for second_exact in [None, Some("2*K5Moment(1)+10^-60")] {
+            let (catalog, raw) = cancelling_exact_pole(second_exact);
+            let numerical = catalog
+                .finalize(raw, &settings(40, 2), 1, RustRedMasterMode::Numerical)
+                .unwrap();
+            assert!(
+                laurent_order(&numerical, -1).is_some(),
+                "{second_exact:?}: {numerical}"
+            );
+            let error = evaluate(&catalog, numerical, &settings(40, 2))
+                .to_atom(vk_symbol!("ep"))
+                .unwrap_err();
+            assert!(matches!(error, VakintError::NumericalPrecision(_)));
+            assert!(
+                error
+                    .to_string()
+                    .contains("no reliable significant decimal digit"),
+                "{second_exact:?}: {error}"
+            );
+        }
     }
 
     #[test]
