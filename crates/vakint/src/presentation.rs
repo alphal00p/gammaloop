@@ -230,6 +230,20 @@ impl fmt::Display for AvailablePrecision {
     }
 }
 
+/// An error radius to three significant digits: its size is what a reader
+/// needs (the exact binary radius stays available as `absolute_error`).
+fn error_radius(radius: &symbolica::domains::float::Float) -> Content {
+    use symbolica::domains::float::RealLike;
+    let value = radius.to_f64();
+    if value == 0.0 {
+        "0".into()
+    } else if value.is_finite() && value.abs() >= f64::MIN_POSITIVE {
+        format!("{value:.2e}").into()
+    } else {
+        Content::Expression(Atom::num(radius.clone()))
+    }
+}
+
 impl Present for AvailablePrecision {
     fn presentation(&self) -> Presentation {
         let mut card = Presentation::new("Available precision");
@@ -242,10 +256,7 @@ impl Present for ComponentPrecision {
     fn presentation(&self) -> Presentation {
         let mut card = Presentation::new("Component precision");
         card.field("Achieved", digits(self));
-        card.field(
-            "Absolute error",
-            Content::Expression(Atom::num(self.absolute_error().clone())),
-        );
+        card.field("Absolute error", error_radius(self.absolute_error()));
         card.field("Error quality", format!("{:?}", self.quality()));
         card.field("Exact zero", self.exact_zero().to_string());
         card
@@ -262,7 +273,7 @@ impl Present for CoefficientPrecision {
             card.rows.push(vec![
                 name.into(),
                 digits(precision).into(),
-                Content::Expression(Atom::num(precision.absolute_error().clone())),
+                error_radius(precision.absolute_error()),
                 format!("{:?}", precision.quality()).into(),
             ]);
         }
@@ -449,7 +460,7 @@ impl Present for VakintConstant {
         );
         card.field(
             "Absolute error",
-            Content::Expression(Atom::num(self.precision().real().absolute_error().clone())),
+            error_radius(self.precision().real().absolute_error()),
         );
         card.field("Data version", self.provenance().version());
         card.field("Source SHA-256", self.provenance().source_sha256());
@@ -495,7 +506,7 @@ impl Present for MasterCoefficient {
         );
         card.field(
             "Absolute error",
-            Content::Expression(Atom::num(self.precision().real().absolute_error().clone())),
+            error_radius(self.precision().real().absolute_error()),
         );
         card.fields
             .extend(self.symbolic_expression().presentation().fields);

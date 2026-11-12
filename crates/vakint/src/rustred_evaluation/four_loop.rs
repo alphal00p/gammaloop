@@ -60,7 +60,21 @@ struct Input {
 struct Descriptor {
     label: &'static str,
     physical_momenta: Vec<Atom>,
+    /// Incidence (edge_from, edge_to) of each physical slot.
+    physical_edges: Vec<(i64, i64)>,
     family_fingerprint: String,
+}
+
+/// One scalar four-loop package master in its own contracted long form (unit
+/// mass), for master recognition (see `five_loop::master_transport`).
+pub(super) struct FourLoopMasterForm {
+    pub(super) program: usize,
+    pub(super) powers: Vec<i64>,
+    /// Power-colored profile of its line matroid.
+    pub(super) profile: crate::topologies::MatroidProfile,
+    /// Its denominators: sorted (line momentum up to sign, power).
+    pub(super) lines: Vec<(Vec<i128>, i64)>,
+    pub(super) contracted: Atom,
 }
 
 // Each parent program owns its native candidate rules and terminal
@@ -77,6 +91,8 @@ pub(super) struct FourLoopPrograms {
     inputs: Vec<Input>,
     descriptors: Vec<Descriptor>,
     programs: Vec<LoadedProgram>,
+    /// Package masters in contracted form, prepared on first use.
+    pub(super) master_forms: std::sync::OnceLock<Vec<FourLoopMasterForm>>,
 }
 
 impl FourLoopPrograms {
@@ -124,12 +140,18 @@ impl FourLoopPrograms {
             .zip(&descriptors)
             .map(|(input, descriptor)| load(input, descriptor, data_version))
             .collect::<Result<Vec<_>, _>>()
-            .map_err(super::data::failure)?;
+            .map_err(|error| match error {
+                // Cancellation and engine limits keep their type.
+                LoadError::Resource(error) => RustRedEvaluationError::ResourceLimit(error),
+                LoadError::Program(detail) => super::data::failure(detail),
+            })?;
+        crate::execution::checkpoint()?;
         Ok(Self {
             #[cfg(test)]
             inputs,
             descriptors,
             programs,
+            master_forms: std::sync::OnceLock::new(),
         })
     }
 
@@ -148,6 +170,13 @@ impl FourLoopPrograms {
             .iter()
             .map(|program| program.step_cache.clone())
             .collect()
+    }
+
+    /// Program label (`four-loop-h`, ...) and physical incidence of program `index`.
+    pub(super) fn physical_edges(&self, index: usize) -> Option<(&'static str, &[(i64, i64)])> {
+        self.descriptors
+            .get(index)
+            .map(|descriptor| (descriptor.label, descriptor.physical_edges.as_slice()))
     }
 
     pub(super) fn physical_momenta(&self, index: usize) -> Option<&[Atom]> {
@@ -173,6 +202,7 @@ impl Vakint {
 
 fn descriptor(label: &'static str, source: &str) -> Result<Descriptor, String> {
     let mut physical_momenta = Vec::new();
+    let mut physical_edges = Vec::new();
     let mut propagators = Vec::new();
     let mut auxiliary_seen = false;
     for line in source
@@ -216,6 +246,7 @@ fn descriptor(label: &'static str, source: &str) -> Result<Descriptor, String> {
         });
         if !auxiliary {
             physical_momenta.push(momentum);
+            physical_edges.push((row[0], row[1]));
         }
     }
     if propagators.len() != 10 || physical_momenta.is_empty() {
@@ -240,17 +271,43 @@ fn descriptor(label: &'static str, source: &str) -> Result<Descriptor, String> {
     Ok(Descriptor {
         label,
         physical_momenta,
+        physical_edges,
         family_fingerprint: family.fingerprint().to_owned(),
     })
+}
+
+/// Why one shipped program did not load.
+enum LoadError {
+    /// A checkpoint between the load steps failed (a cancelled request, or
+    /// the engine's time or memory limit).
+    Resource(symbolica::utils::resources::ResourceLimitError),
+    /// The program itself is unusable.
+    Program(String),
+}
+
+impl From<String> for LoadError {
+    fn from(detail: String) -> Self {
+        Self::Program(detail)
+    }
+}
+
+impl From<&str> for LoadError {
+    fn from(detail: &str) -> Self {
+        Self::Program(detail.to_owned())
+    }
 }
 
 fn load(
     input: &Input,
     descriptor: &Descriptor,
     data_version: &str,
-) -> Result<LoadedProgram, String> {
+) -> Result<LoadedProgram, LoadError> {
+    // A cancelled request stops between the load steps of a program.
+    let checkpoint = || crate::execution::checkpoint().map_err(LoadError::Resource);
+    checkpoint()?;
     let bytes = super::experimental::compressed::decode(&input.program, MAX_PROGRAM_BYTES)
         .map_err(|error| format!("decompress {}: {error}", input.label))?;
+    checkpoint()?;
     let limits = CandidateBundleLimits {
         max_bundle_bytes: MAX_PROGRAM_BYTES,
         max_collection_entries: 8_000_000,
@@ -263,18 +320,21 @@ fn load(
     if family.fingerprint() != descriptor.family_fingerprint {
         return Err("shipped program differs from its physical/auxiliary descriptor".into());
     }
+    checkpoint()?;
     let catalog = OfflineTerminalCatalog::decode_generated_compressed(
         &input.catalog,
         family.fingerprint(),
         family.denominator_count(),
         catalog_limits(),
     )?;
+    checkpoint()?;
     let mut native = NativeCandidate::from_reducer_with_terminal_normalization(
         Arc::new(family),
         descriptor.physical_momenta.clone(),
         reducer,
         &input.normalization,
     )?;
+    checkpoint()?;
     catalog.require_complete()?;
     catalog.require_exact_keys(native.output_terminals())?;
     native.preserve_unresolved()?;

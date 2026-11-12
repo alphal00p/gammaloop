@@ -22,9 +22,8 @@ mod vendored {
     include!(concat!(env!("OUT_DIR"), "/vakint_vendored_data.rs"));
 }
 
-/// The vendored 1L-3L data files (relative path, bytes), for tests that need
-/// a writable external-data directory.
-#[cfg(test)]
+/// The embedded `data/` files (relative path, bytes): the vendored 1L-3L data
+/// and the built-in p data (`p_data`).
 pub(super) fn vendored_files() -> &'static [(&'static str, &'static [u8])] {
     vendored::FILES
 }
@@ -195,7 +194,7 @@ pub(super) fn validate_loop_directory(
 
 impl Source {
     fn read(&self, path: &str) -> Result<Vec<u8>, RustRedEvaluationError> {
-        resources::checkpoint()?;
+        crate::execution::checkpoint()?;
         let relative = relative_path(path)?;
         match self {
             Self::Override {
@@ -274,7 +273,7 @@ impl LoopData {
             if data.manifest.is_unused_at_runtime(path) {
                 continue;
             }
-            resources::checkpoint()?;
+            crate::execution::checkpoint()?;
             data.read(path)?;
         }
         let coverage: serde_json::Value =
@@ -327,11 +326,84 @@ impl LoopData {
     }
 }
 
+/// One 1L-3L closed vacuum program of a loaded pack, decoded on first use.
+///
+/// Loading a pack verifies the sha256 of every listed file and keeps the
+/// verified bytes of `ibps/rules.rrbin` (the snapshot does not depend on
+/// later changes of a mutable checkout); their structural decode, which
+/// dominates a vacuum pack load, waits until a vacuum reduction or an
+/// Ordered step-cache identity needs the program. A p-integral-only process
+/// therefore never decodes it. The cell is shared by every clone of the
+/// snapshot and by external data that inherit a vendored lower-loop pack, so
+/// one process decodes each pack at most once. A failed decode (resource
+/// limit, incompatible family) is reported to that caller and stays
+/// retryable.
+#[derive(Clone)]
+pub(super) struct LowerProgram {
+    family: ArtifactFamily,
+    data: Arc<LoopData>,
+    /// The verified rule bytes until the program is decoded.
+    bytes: Option<Arc<[u8]>>,
+    snapshot: Arc<OnceCell<ArtifactSnapshot>>,
+}
+
+impl LowerProgram {
+    fn new(family: ArtifactFamily, data: Arc<LoopData>) -> Result<Self, RustRedEvaluationError> {
+        let bytes = data.read("ibps/rules.rrbin")?;
+        Ok(Self {
+            family,
+            data,
+            bytes: Some(bytes.into()),
+            snapshot: Arc::default(),
+        })
+    }
+
+    fn loaded(family: ArtifactFamily, data: Arc<LoopData>, snapshot: ArtifactSnapshot) -> Self {
+        Self {
+            family,
+            data,
+            bytes: None,
+            snapshot: Arc::new(OnceCell::with_value(snapshot)),
+        }
+    }
+
+    /// The decoded program (decoding it now if this is its first use).
+    pub(super) fn snapshot(&self) -> Result<&ArtifactSnapshot, RustRedEvaluationError> {
+        self.snapshot.get_or_try_init(|| {
+            crate::execution::checkpoint()?;
+            let bytes = self
+                .bytes
+                .as_ref()
+                .ok_or_else(|| failure("lower-loop program without rule bytes"))?;
+            self.family.load_snapshot(bytes)
+        })
+    }
+
+    /// Whether the program has been decoded in this process.
+    pub(super) fn is_decoded(&self) -> bool {
+        self.snapshot.get().is_some()
+    }
+
+    /// The sha256 of the rule bytes as the verified manifest declares it
+    /// (equal to the decoded snapshot's source digest), without decoding.
+    pub(super) fn declared_source_digest(&self) -> Option<[u8; 32]> {
+        let declared = &self.data.manifest.files.get("ibps/rules.rrbin")?.sha256;
+        let mut digest = [0u8; 32];
+        if declared.len() != 64 {
+            return None;
+        }
+        for (index, byte) in digest.iter_mut().enumerate() {
+            *byte = u8::from_str_radix(declared.get(2 * index..2 * index + 2)?, 16).ok()?;
+        }
+        Some(digest)
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct RustRedData {
     pub(super) version: String,
     pub(super) loops: BTreeMap<usize, Arc<LoopData>>,
-    lower: BTreeMap<usize, ArtifactSnapshot>,
+    lower: BTreeMap<usize, LowerProgram>,
     pub(super) four_loop: Option<Arc<super::four_loop::FourLoopPrograms>>,
     pub(crate) masters: Arc<super::masters::MasterCatalog>,
 }
@@ -365,7 +437,7 @@ impl RustRedData {
         manifest: &ReleaseManifest,
         max_loop_count: usize,
     ) -> Result<BTreeMap<usize, Arc<LoopData>>, RustRedEvaluationError> {
-        resources::checkpoint()?;
+        crate::execution::checkpoint()?;
         if manifest.schema != RELEASE_SCHEMA || !(1..=5).contains(&max_loop_count) {
             return Err(failure(
                 "unsupported external-data schema or loop count (expected 1 through 5)",
@@ -403,13 +475,28 @@ impl RustRedData {
         max_loop_count: usize,
     ) -> Result<Arc<Self>, RustRedEvaluationError> {
         let loops = Self::load_loops(&source, &manifest, max_loop_count)?;
+        // Lower-loop packs inherited from the vendored data (a 1L/2L external
+        // load) share the vendored programs, decoded at most once per process.
+        let vendored = if max_loop_count < 3 && !matches!(source, Source::Vendored) {
+            Some(Self::vendored()?)
+        } else {
+            None
+        };
         let mut lower = BTreeMap::new();
         for (&count, data) in loops.range(..=3) {
             let family = super::artifact::shipped_family_for_loop_count(count).unwrap();
-            lower.insert(
-                count,
-                family.load_snapshot(&data.read("ibps/rules.rrbin")?)?,
-            );
+            let inherited = vendored.as_ref().and_then(|vendored| {
+                vendored
+                    .lower
+                    .get(&count)
+                    .filter(|program| Arc::ptr_eq(&program.data, data))
+                    .cloned()
+            });
+            let program = match inherited {
+                Some(program) => program,
+                None => LowerProgram::new(family, Arc::clone(data))?,
+            };
+            lower.insert(count, program);
         }
         let four_loop = loops
             .get(&4)
@@ -428,7 +515,7 @@ impl RustRedData {
             four_loop,
             masters,
         });
-        resources::checkpoint()?;
+        crate::execution::checkpoint()?;
         Ok(data)
     }
 
@@ -515,14 +602,14 @@ impl RustRedData {
     ) -> Result<Arc<Self>, RustRedEvaluationError> {
         // A constrained first caller must not poison offline construction for
         // every later engine. Only a fully validated snapshot is shared.
-        resources::checkpoint()?;
+        crate::execution::checkpoint()?;
         let data = cell.get_or_try_init(|| {
             let source = Source::Vendored;
             let manifest =
                 serde_json::from_slice(&source.read("manifest.json")?).map_err(failure)?;
             Self::load(source, manifest, 3)
         })?;
-        resources::checkpoint()?;
+        crate::execution::checkpoint()?;
         Ok(Arc::clone(data))
     }
 
@@ -532,10 +619,10 @@ impl RustRedData {
         &self,
     ) -> Result<Vec<super::cache::OrderedCacheProgram>, RustRedEvaluationError> {
         let mut programs = Vec::new();
-        for (loop_count, snapshot) in &self.lower {
+        for (loop_count, program) in &self.lower {
             let family = super::artifact::shipped_family_for_loop_count(*loop_count)
                 .ok_or_else(|| failure("lower-loop program without a registered family"))?;
-            programs.push(snapshot.ordered_cache_program(
+            programs.push(program.snapshot()?.ordered_cache_program(
                 *loop_count,
                 family.name(),
                 &self.version,
@@ -553,8 +640,44 @@ impl RustRedData {
     ) -> Result<ArtifactSnapshot, RustRedEvaluationError> {
         self.lower
             .get(&family.loop_count())
+            .ok_or_else(|| failure("missing lower-loop IBP program"))?
+            .snapshot()
             .cloned()
-            .ok_or_else(|| failure("missing lower-loop IBP program"))
+    }
+
+    /// The lower-loop programs not decoded yet, as (cache label, declared
+    /// rule-table digest): no cache can have been attached through them, but
+    /// a cache of byte-identical rules attached before a reload must be kept.
+    pub(super) fn undecoded_lower_programs(&self) -> Vec<(String, [u8; 32])> {
+        self.lower
+            .iter()
+            .filter(|(_, program)| !program.is_decoded())
+            .filter_map(|(&loop_count, program)| {
+                Some((
+                    super::cache::OrderedCacheProgram::label_for(loop_count, program.family.name()),
+                    program.declared_source_digest()?,
+                ))
+            })
+            .collect()
+    }
+
+    /// [`Self::ordered_cache_programs`] of the decoded lower-loop programs and
+    /// the four-loop programs only (nothing is decoded).
+    pub(super) fn decoded_ordered_cache_programs(&self) -> Vec<super::cache::OrderedCacheProgram> {
+        let mut programs = Vec::new();
+        for (loop_count, program) in &self.lower {
+            if let Some(snapshot) = program.snapshot.get() {
+                programs.push(snapshot.ordered_cache_program(
+                    *loop_count,
+                    program.family.name(),
+                    &self.version,
+                ));
+            }
+        }
+        if let Some(four_loop) = &self.four_loop {
+            programs.extend(four_loop.ordered_cache_programs());
+        }
+        programs
     }
 }
 
@@ -659,8 +782,10 @@ impl Vakint {
             path: format!("{loop_count}L/ibps/rules.rrbin"),
             bytes: bytes.into(),
         };
-        data.loops.insert(loop_count, Arc::new(pack));
-        data.lower.insert(loop_count, snapshot);
+        let pack = Arc::new(pack);
+        data.loops.insert(loop_count, Arc::clone(&pack));
+        data.lower
+            .insert(loop_count, LowerProgram::loaded(family, pack, snapshot));
         data.version = format!("local-{}", &digest[..16]);
         self.activate_external_data(Arc::new(data), n_cores)
     }
@@ -681,7 +806,7 @@ impl Vakint {
                 ..Default::default()
             })?;
         }
-        resources::checkpoint()?;
+        crate::execution::checkpoint()?;
         *self = staged;
         // Programs whose rule tables changed are no longer reachable.
         self.detach_superseded_ordered_caches();
@@ -1178,9 +1303,24 @@ mod tests {
         let symbol = metadata["master_id"].as_str().unwrap().parse().unwrap();
         let master = engine.get_master(&symbol, 20).unwrap();
         assert_eq!(master.loop_count(), 1);
+        // Every Laurent order the vendored manifest lists for the tadpole: -1..4
+        // up to data v0.2.0, -1..5 from v0.2.1 on (read off the snapshot, so
+        // re-vendoring a release needs no test change). The orders are
+        // contiguous from the leading pole and cover at least those of v0.2.0.
+        let listed: Vec<i64> =
+            serde_json::from_value(metadata["available_epsilon_powers"].clone()).unwrap();
+        assert!(
+            listed.starts_with(&[-1, 0, 1, 2, 3, 4])
+                && listed.windows(2).all(|pair| pair[1] == pair[0] + 1),
+            "vendored tadpole orders {listed:?}"
+        );
+        assert_eq!(
+            metadata["epsilon_range"],
+            serde_json::json!([listed[0], *listed.last().unwrap()])
+        );
         assert_eq!(
             master.coefficients().keys().copied().collect::<Vec<_>>(),
-            vec![-1, 0, 1, 2, 3, 4]
+            listed
         );
         assert_eq!(master.requested_decimal_precision(), 20);
         master.graph().validate().unwrap();
@@ -1240,8 +1380,22 @@ mod tests {
                 assert!(master.is_computed());
             } else {
                 assert!(!master.graph().numerator().expression().is_one());
-                assert!(!master.is_computed());
-                assert!(master.coefficients().is_empty());
+                // Up to v0.2.0 the five-loop masters are uncomputed terminals; from
+                // v0.2.1 on the manifest entry lists the master's Laurent orders.
+                // Either way the inspected master carries exactly the orders its
+                // loaded manifest entry lists.
+                let listed: Vec<i64> = metadata["available_epsilon_powers"]
+                    .as_array()
+                    .map_or_else(Vec::new, |orders| {
+                        orders.iter().map(|order| order.as_i64().unwrap()).collect()
+                    });
+                let computed = !listed.is_empty();
+                assert_eq!(master.is_computed(), computed);
+                assert_eq!(master.coefficients().is_empty(), !computed);
+                assert_eq!(
+                    master.coefficients().keys().copied().collect::<Vec<_>>(),
+                    listed
+                );
                 #[cfg(feature = "feynkit-ingress")]
                 {
                     use symbolica::atom::AtomCore;
@@ -1270,7 +1424,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "requires the authenticated 640-master 5L pack; no IBP application is loaded"]
+    #[ignore = "requires an authenticated 5L external-data pack; no IBP application is loaded"]
     fn authentic_five_loop_declared_terminals_remain_uncomputed() {
         Vakint::initialize_vakint_symbols();
         let source = Source::Directory(
@@ -1289,26 +1443,53 @@ mod tests {
         // Authenticate the real 5L pack and its payloads without constructing
         // an IBP application, attaching caches, or loading lower-loop packs.
         let data = Arc::new(LoopData::load(source, pack, &release.version).unwrap());
-        assert_eq!(data.manifest.masters.len(), 640);
+        // Every declared terminal is either uncomputed (the 640 terminals of
+        // the v0.2.0 campaign) or a known master with published coefficients.
+        assert!(!data.manifest.masters.is_empty());
         for terminal in &data.manifest.masters {
-            assert_eq!(terminal["kind"], "uncomputed-terminal");
-            assert_eq!(terminal["status"], "not_computed");
-            assert!(terminal["coefficients"].as_array().unwrap().is_empty());
-            assert!(
+            let uncomputed = terminal["status"] == "not_computed";
+            if uncomputed {
+                assert_eq!(terminal["kind"], "uncomputed-terminal");
+            } else {
+                assert_eq!(terminal["status"], "accepted");
+                assert_eq!(terminal["kind"], "known-master");
+            }
+            assert_eq!(
+                terminal["coefficients"].as_array().unwrap().is_empty(),
+                uncomputed
+            );
+            assert_eq!(
                 terminal["available_epsilon_powers"]
                     .as_array()
                     .unwrap()
-                    .is_empty()
+                    .is_empty(),
+                uncomputed
             );
         }
-        let terminal = &data.manifest.masters[0];
+        // The first uncomputed terminal, else the first declared one; the
+        // declared-terminal errors below need an uncomputed terminal.
+        let uncomputed = data
+            .manifest
+            .masters
+            .iter()
+            .find(|terminal| terminal["status"] == "not_computed");
+        let terminal = uncomputed.unwrap_or(&data.manifest.masters[0]);
         let identity = terminal["master_id"].as_str().unwrap();
-        assert_eq!(
-            identity,
-            "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_m4_p1_p1_p0_p0_p1_p1_p1_m4_p1_p1_p0_p1_m1_p0"
-        );
         let powers: Vec<i64> = serde_json::from_value(terminal["powers"].clone()).unwrap();
-        assert_eq!(powers, [-4, 1, 1, 0, 0, 1, 1, 1, -4, 1, 1, 0, 1, -1, 0]);
+        // The signed-index identity encodes the indices (m = minus, p = plus).
+        let indices = powers
+            .iter()
+            .map(|power| {
+                if *power < 0 {
+                    format!("m{}", -power)
+                } else {
+                    format!("p{power}")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("_");
+        assert!(identity.starts_with("L5_"), "{identity}");
+        assert!(identity.ends_with(&format!("_{indices}")), "{identity}");
         let family = data
             .manifest
             .families
@@ -1334,30 +1515,35 @@ mod tests {
             .finalize(master.clone(), &settings, 5, RustRedMasterMode::Retain)
             .unwrap();
         assert_eq!(retained, master);
-        let direct_error = catalog
-            .finalize(master.clone(), &settings, 5, RustRedMasterMode::Numerical)
-            .unwrap_err()
-            .to_string();
-        let symbolic_error = catalog
-            .finalize(master.clone(), &settings, 5, RustRedMasterMode::Symbolic)
-            .unwrap_err()
-            .to_string();
-        let retained_error = catalog
-            .resolve_numerical(retained, &settings)
-            .unwrap_err()
-            .to_string();
-        for error in [&direct_error, &symbolic_error, &retained_error] {
-            assert!(error.contains(identity), "{error}");
-            assert!(
-                error.contains("declared terminal has no computed coefficients"),
-                "{error}"
-            );
-            assert!(error.contains(&release.version), "{error}");
-            assert!(error.contains(graph.to_str().unwrap()), "{error}");
-            assert!(!error.contains("undeclared residual master"), "{error}");
+        let mut direct_error = String::new();
+        let mut retained_error = String::new();
+        if uncomputed.is_some() {
+            direct_error = catalog
+                .finalize(master.clone(), &settings, 5, RustRedMasterMode::Numerical)
+                .unwrap_err()
+                .to_string();
+            let symbolic_error = catalog
+                .finalize(master.clone(), &settings, 5, RustRedMasterMode::Symbolic)
+                .unwrap_err()
+                .to_string();
+            retained_error = catalog
+                .resolve_numerical(retained, &settings)
+                .unwrap_err()
+                .to_string();
+            for error in [&direct_error, &symbolic_error, &retained_error] {
+                assert!(error.contains(identity), "{error}");
+                assert!(
+                    error.contains("declared terminal has no computed coefficients"),
+                    "{error}"
+                );
+                assert!(error.contains(&release.version), "{error}");
+                assert!(error.contains(graph.to_str().unwrap()), "{error}");
+                assert!(!error.contains("undeclared residual master"), "{error}");
+            }
         }
-        // The common-family graph is a powered P640 representative, not a
-        // certified parent for an arbitrary residual in that family. Reuse the
+        // The common-family graph is a powered representative (P640 of the
+        // v0.2.0 campaign), not a certified parent for an arbitrary residual
+        // in that family. Reuse the
         // authenticated metadata's maximal-parent references without inferring
         // another routing from positive slots alone.
         let parent_references = data
@@ -1383,10 +1569,15 @@ mod tests {
             .path(family["graph"].as_str().unwrap())
             .unwrap()
             .unwrap();
-        assert_eq!(
-            fs::read(&family_graph).unwrap(),
-            data.read("masters/P640/graph.dot").unwrap()
-        );
+        let family_bytes = fs::read(&family_graph).unwrap();
+        assert!(data.manifest.masters.iter().any(|declared| {
+            data.read(&format!(
+                "{}/graph.dot",
+                declared["directory"].as_str().unwrap()
+            ))
+            .unwrap()
+                == family_bytes
+        }));
         let mut dotted_powers = powers.clone();
         dotted_powers[1] += 1;
         let unknown = catalog.symbol(family["fingerprint"].as_str().unwrap(), &dotted_powers);

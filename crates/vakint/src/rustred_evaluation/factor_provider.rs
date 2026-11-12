@@ -14,7 +14,7 @@ use rustred::reduction::{Reducer, ReductionLimits, ReductionStatistics};
 use rustred::sector::{Mask, symmetry};
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::prelude::{Q, Z};
-use symbolica::utils::resources::{self, ResourceLimitError, ResourceLimits};
+use symbolica::utils::resources::{ResourceLimitError, ResourceLimits};
 
 use super::{artifact::shipped_family_for_loop_count, data::RustRedData};
 use crate::symbols::S;
@@ -60,7 +60,7 @@ fn error(value: impl std::error::Error + 'static) -> FactorProviderError {
 }
 
 fn share_family(family: &IntegralFamily) -> Result<Arc<IntegralFamily>, FactorProviderError> {
-    resources::checkpoint()?;
+    crate::execution::checkpoint()?;
     let shared = IntegralFamily::new_with_limits(
         family.name(),
         family.loop_momenta().to_vec(),
@@ -92,7 +92,7 @@ fn momentum_family(
     family: &IntegralFamily,
     slots: &[usize],
 ) -> Result<MomentumFamily, FactorProviderError> {
-    resources::checkpoint()?;
+    crate::execution::checkpoint()?;
     if family.external_count() != 0 {
         return Err("lower factor is not a vacuum family".into());
     }
@@ -124,7 +124,7 @@ fn momentum_family(
 }
 
 fn physical_family(momenta: &[Atom], loops: usize) -> Result<MomentumFamily, FactorProviderError> {
-    resources::checkpoint()?;
+    crate::execution::checkpoint()?;
     let (basis, kinematics) = kinematics(loops)?;
     let denominators = momenta
         .iter()
@@ -136,6 +136,24 @@ fn physical_family(momenta: &[Atom], loops: usize) -> Result<MomentumFamily, Fac
         })
         .collect::<Result<Vec<_>, _>>()?;
     MomentumFamily::new(basis, Vec::new(), denominators, &kinematics).map_err(error)
+}
+
+/// Exact matroid profile of a list of line momenta (integer coefficient
+/// vectors over the loop momenta): the number of linearly independent
+/// `loops`-subsets and, sorted, the number of such subsets containing each
+/// line. A momentum map onto another family sends every line to a line (up to
+/// sign) by an invertible linear map, so two line sets of equal size with
+/// different profiles have no such map. `None` when a coefficient is not an
+/// integer or the profile is not defined.
+fn basis_profile(momenta: &[Atom], loops: usize) -> Option<(usize, Vec<usize>)> {
+    let variables = (1..=loops).map(|axis| S.k.call(axis)).collect::<Vec<_>>();
+    let vectors = momenta
+        .iter()
+        .map(|momentum| crate::topologies::integer_line_vector(momentum, &variables))
+        .collect::<Option<Vec<_>>>()?;
+    let (total, mut per_line) = crate::topologies::matroid_basis_counts(&vectors, loops)?;
+    per_line.sort_unstable();
+    Some((total, per_line))
 }
 
 fn mapped_key(
@@ -446,14 +464,38 @@ impl VacuumFactorProvider for ShippedFactorProvider {
                 },
             ));
         };
+        // Line momenta of the factor's positive slots, for the exact profile
+        // pre-check below (a program whose physical lines have another profile
+        // admits no momentum map, so its exhaustive search is skipped).
+        let source_profile = (0..slots.len())
+            .map(|index| {
+                source
+                    .quadratic_denominator(index)
+                    .ok()
+                    .flatten()
+                    .map(|quadratic| quadratic.momentum().clone())
+            })
+            .collect::<Option<Vec<_>>>()
+            .and_then(|momenta| basis_profile(&momenta, family.loop_count()));
         let mut index = 0;
         while let Some(momenta) = programs.physical_momenta(index) {
             if family.loop_count() != 4 {
                 break;
             }
             let destination = physical_family(momenta, family.loop_count())?;
-            if let Some((mapped, mapping)) = mapped_key(&source, &destination, &slots, target, 10)?
-            {
+            let mapping_started = std::time::Instant::now();
+            let excluded = momenta.len() == slots.len()
+                && source_profile.as_ref().is_some_and(|source_profile| {
+                    basis_profile(momenta, family.loop_count())
+                        .is_some_and(|profile| &profile != source_profile)
+                });
+            let found = if excluded {
+                None
+            } else {
+                mapped_key(&source, &destination, &slots, target, 10)?
+            };
+            log::debug!(target: "vakint::saved_application", "phase=lower_factor_mapping program={index} found={} excluded_by_profile={excluded} target={:?} elapsed_seconds={:.6}", found.is_some(), target.powers(), mapping_started.elapsed().as_secs_f64());
+            if let Some((mapped, mapping)) = found {
                 let (native, _) = programs
                     .native_program(index)
                     .ok_or("missing shipped candidate program")?;
@@ -471,8 +513,10 @@ impl VacuumFactorProvider for ShippedFactorProvider {
                         .reduce_transported_unit_mass_guarded(&transport, target, limits)
                         .map_err(FactorProviderError::from);
                 }
+                let reduce_started = std::time::Instant::now();
                 let (reduced, conditions, work) =
                     native.reduce_unit_mass_guarded(&mapped, limits)?;
+                log::debug!(target: "vakint::saved_application", "phase=lower_factor_reduce program={index} mapped={:?} terms={} conditions={} elapsed_seconds={:.6}", mapped.powers(), reduced.terms().len(), conditions.len(), reduce_started.elapsed().as_secs_f64());
                 return Ok(result(
                     native.family_shared(),
                     reduced.terms(),
@@ -528,7 +572,7 @@ mod tests {
         assert!(!ShippedFactorProvider::error_is_missing_coverage(&refusal));
         // Inspect the original error after leaving the constrained scope; a
         // fresh global poll would succeed here and lose the actual cause.
-        assert!(resources::checkpoint().is_ok());
+        assert!(symbolica::utils::resources::checkpoint().is_ok());
         assert!(FactorProviderError::find_resource(&refusal).is_some());
         let recovered = provider
             .reduce(family, &target, Default::default())

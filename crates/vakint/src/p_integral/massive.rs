@@ -4,8 +4,6 @@
 //! the p-integral first would turn the necessary epsilon-dependent power of
 //! the hard momentum into logarithms and lose the simple Gamma integral.
 
-use std::time::{Duration, Instant};
-
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use symbolica::function;
 use symbolica::transcendental::gamma;
@@ -50,9 +48,10 @@ impl MassiveClosure {
         Ok(head)
     }
 
-    /// Evaluate independent closures in bounded batches. Exact scalar
-    /// reductions may share a FORCER invocation, but every closure keeps its
-    /// own mass, power, external momentum and Laurent expansion. Spectator
+    /// Evaluate independent closures in bounded batches. Forcer reductions of
+    /// exact scalar requests share FORCER invocations; RustRed reduces each
+    /// request through its p library. Every closure keeps its own mass,
+    /// power, external momentum and Laurent expansion. Spectator
     /// coefficients, including epsilon poles, remain attached to their
     /// original homogeneous channels until that expansion.
     pub fn evaluate_batch(
@@ -62,10 +61,9 @@ impl MassiveClosure {
     ) -> Result<Vec<Atom>, VakintError> {
         let mut results = Vec::with_capacity(inputs.len());
         for chunk in inputs.chunks(32) {
-            results
-                .extend(settings.with_resource_budget(|| {
-                    Self::evaluate_batch_inner(vakint, settings, chunk)
-                })?);
+            results.extend(
+                settings.with_resource_budget(|| Self::evaluate_batch_inner(vakint, settings, chunk))?,
+            );
         }
         Ok(results)
     }
@@ -75,34 +73,31 @@ impl MassiveClosure {
         settings: &crate::VakintSettings,
         inputs: &[(Self, Atom)],
     ) -> Result<Vec<Atom>, VakintError> {
-        let started = Instant::now();
-        let mut preparation = Duration::ZERO;
-        let mut finalization = Duration::ZERO;
-        let mut combination = Duration::ZERO;
-        let mut numerical = Duration::ZERO;
-        let mut local_terms = 0_usize;
-        let mut scaleless_terms = 0_usize;
-        let mut source_terms = 0_usize;
-        let mut cut_loops_max = 0_usize;
+        let _stage = crate::stage_timing::StageSpan::new("vakint.massive.closure_batch");
         let mode = settings
             .evaluation_order
             .0
             .iter()
             .find_map(|method| match method {
+                EvaluationMethod::RustRed(options) => Some(options.master_mode),
                 EvaluationMethod::Forcer(options) => Some(options.master_mode),
                 _ => None,
             })
             .unwrap_or(RustRedMasterMode::Symbolic);
         let mut results = vec![Atom::Zero; inputs.len()];
+        let mut numerical = vec![Atom::Zero; inputs.len()];
         let mut heads = Vec::with_capacity(inputs.len());
-        let mut requests = Vec::new();
-        let mut owners = Vec::new();
+        let mut forcer_requests = Vec::new();
+        let mut forcer_owners = Vec::new();
+        // RustRed requests borrow their match; keep each closure's matches so
+        // that all of its requests are reduced together.
+        let mut rustred_jobs: Vec<Vec<(crate::ReplacementRules, Atom)>> =
+            (0..inputs.len()).map(|_| Vec::new()).collect();
+        let mut rustred_mode = None;
         for (owner, (closure, input)) in inputs.iter().enumerate() {
-            let preparation_started = Instant::now();
             let head = closure.validated_head(settings)?;
             heads.push(head.clone());
             if input.is_zero() {
-                preparation += preparation_started.elapsed();
                 continue;
             }
             settings.validate_execution()?;
@@ -118,30 +113,28 @@ impl MassiveClosure {
             });
             topologies.sort();
             topologies.dedup();
-            let coefficients = input.coefficient_list::<i16>(&topologies);
-            source_terms += coefficients.len();
-            preparation += preparation_started.elapsed();
-            for (topology, numerator) in coefficients {
-                let preparation_started = Instant::now();
+            for (topology, numerator) in input.coefficient_list::<i16>(&topologies) {
                 if topology == Atom::one() {
-                    let values = [ReducedPropagatorValue {
-                        scale_power: 0,
-                        reduced: Vakint::convert_to_dot_notation(numerator.as_view()),
-                    }];
-                    preparation += preparation_started.elapsed();
-                    let finalization_started = Instant::now();
-                    let value = closure.finalize(&values, 0, &head, settings, mode)?;
-                    finalization += finalization_started.elapsed();
-                    let combination_started = Instant::now();
-                    results[owner] += value;
-                    combination += combination_started.elapsed();
-                    local_terms += 1;
+                    let value = closure.finalize(
+                        &[ReducedPropagatorValue {
+                            scale_power: 0,
+                            reduced: Vakint::convert_to_dot_notation(numerator.as_view()),
+                        }],
+                        0,
+                        &head,
+                        settings,
+                        mode,
+                    )?;
+                    if mode == RustRedMasterMode::Numerical {
+                        numerical[owner] += value;
+                    } else {
+                        results[owner] += value;
+                    }
                     continue;
                 }
                 let mut expression = VakintExpression::try_from(topology * numerator)?;
                 for term in &mut expression.0 {
                     if !term.normalize_propagator()? {
-                        scaleless_terms += 1;
                         continue;
                     }
                     vakint.validate_settings(settings)?;
@@ -155,89 +148,113 @@ impl MassiveClosure {
                     }
                     term.numerator = scalar_numerator(term.numerator.as_view(), &head)?;
                     let matched = term.prepare_integral_specs(vakint, settings, None)?;
-                    if !matches!(
-                        vakint.evaluation_method(settings, &matched.canonical_topology),
-                        Some(EvaluationMethod::Forcer(_))
-                    ) {
-                        return Err(super::invalid(
-                            "massive closure of a p-integral requires the Forcer backend",
-                        ));
-                    }
+                    let method = vakint.evaluation_method(settings, &matched.canonical_topology);
                     let request = matched
                         .propagator_request(term.numerator.as_view())
                         .expect("a p-integral match has a propagator request");
-                    if let Some(input) = forcer::forcer_input_with_epsilon(
-                        request.family,
-                        request.powers,
-                        request.canonical_numerator,
-                        &request.external,
-                        vk_symbol!(&settings.epsilon_symbol),
-                    )? && !input.parts.is_empty()
-                    {
-                        cut_loops_max = cut_loops_max.max(request.family.loops);
-                        requests.push(input);
-                        owners.push((owner, request.family.loops));
+                    match method {
+                        Some(EvaluationMethod::Forcer(options)) => {
+                            if options.master_mode != mode {
+                                return Err(super::invalid(
+                                    "batched massive closures need one master mode",
+                                ));
+                            }
+                            if let Some(input) = forcer::forcer_input_with_epsilon(
+                                request.family,
+                                request.powers,
+                                request.canonical_numerator,
+                                &request.external,
+                                vk_symbol!(&settings.epsilon_symbol),
+                            )? && !input.parts.is_empty()
+                            {
+                                forcer_requests.push(input);
+                                forcer_owners.push((owner, request.family.loops));
+                            }
+                        }
+                        Some(EvaluationMethod::RustRed(options)) => {
+                            if *rustred_mode.get_or_insert(options.master_mode) != options.master_mode {
+                                return Err(super::invalid(
+                                    "batched massive closures need one master mode",
+                                ));
+                            }
+                            drop(request);
+                            let numerator = term.numerator.clone();
+                            rustred_jobs[owner].push((matched, numerator));
+                        }
+                        _ => {
+                            return Err(super::invalid(
+                                "massive closure of a p-integral requires the RustRed or Forcer \
+                                 backend",
+                            ));
+                        }
                     }
                 }
-                preparation += preparation_started.elapsed();
             }
         }
-        let reduction_started = Instant::now();
-        let values = forcer::reduce_inputs(&requests, settings)?;
-        let reduction = reduction_started.elapsed();
-        for ((owner, loops), values) in owners.iter().copied().zip(values) {
-            let finalization_started = Instant::now();
+        if let Some(rustred_mode) = rustred_mode {
+            for (owner, jobs) in rustred_jobs.iter().enumerate() {
+                if jobs.is_empty() {
+                    continue;
+                }
+                let requests = jobs
+                    .iter()
+                    .map(|(matched, numerator)| {
+                        matched
+                            .propagator_request(numerator.as_view())
+                            .expect("a p-integral match has a propagator request")
+                    })
+                    .collect::<Vec<_>>();
+                // One closure has one external head; its values are summed
+                // per loop count before the radial integration.
+                let reduced = crate::rustred_evaluation::p_integral::reduce_requests(
+                    vakint, settings, &requests, None,
+                )?;
+                for ((loops, _), values) in reduced {
+                    let value = inputs[owner]
+                        .0
+                        .finalize(&values, loops, &heads[owner], settings, rustred_mode)?;
+                    if rustred_mode == RustRedMasterMode::Numerical {
+                        numerical[owner] += value;
+                    } else {
+                        results[owner] += value;
+                    }
+                }
+            }
+        }
+        let values = forcer::reduce_inputs(&forcer_requests, settings)?;
+        for ((owner, loops), values) in forcer_owners.iter().copied().zip(values) {
             let value = inputs[owner]
                 .0
                 .finalize(&values, loops, &heads[owner], settings, mode)?;
-            finalization += finalization_started.elapsed();
-            let combination_started = Instant::now();
-            results[owner] += value;
-            combination += combination_started.elapsed();
+            if mode == RustRedMasterMode::Numerical {
+                numerical[owner] += value;
+            } else {
+                results[owner] += value;
+            }
         }
-        for ((_, input), result) in inputs.iter().zip(&mut results) {
+        for ((result, numerical), (_, input)) in results.iter_mut().zip(numerical).zip(inputs) {
             if input.is_zero() {
                 continue;
             }
-            if mode == RustRedMasterMode::Numerical {
-                let numerical_started = Instant::now();
-                *result = vakint.resolve_rustred_numerical(std::mem::take(result), settings)?;
-                numerical += numerical_started.elapsed();
+            if !numerical.is_zero() {
+                *result += vakint.resolve_rustred_numerical(numerical, settings)?;
             }
-            let combination_started = Instant::now();
             *result = result.expand();
-            combination += combination_started.elapsed();
         }
-        tracing::info!(
-            uv = true,
-            rstar = true,
-            timing = true,
-            closure_requests = inputs.len(),
-            source_terms = source_terms,
-            local_terms = local_terms,
-            scaleless_terms = scaleless_terms,
-            propagator_terms = requests.len(),
-            cut_loops_max = cut_loops_max,
-            preparation_seconds = preparation.as_secs_f64(),
-            forcer_reduction_seconds = reduction.as_secs_f64(),
-            radial_master_laurent_seconds = finalization.as_secs_f64(),
-            result_combination_seconds = combination.as_secs_f64(),
-            numerical_resolution_seconds = numerical.as_secs_f64(),
-            seconds = started.elapsed().as_secs_f64(),
-            "Evaluated massive p-integral closure batch"
-        );
         Ok(results)
     }
 
     /// Evaluate scalar p-integrals and loop-free powers of `dot(p,p)`, including
-    /// sums of both. The configured Forcer backend reduces the p-integrals;
-    /// loop-free terms need no external backend. Tensor dependence on the hard
-    /// momentum is rejected rather than discarded.
+    /// sums of both. The p backend the evaluation order selects for a
+    /// p-integral (RustRed with a p library covering its loop count, else
+    /// Forcer) reduces it; loop-free terms need no external backend. Tensor
+    /// dependence on the hard momentum is rejected rather than discarded.
     ///
     /// The Laurent depth counts the closing loop as well: a cut with `L` loops
     /// is expanded through `number_of_terms_in_epsilon_expansion - L - 2`.
-    /// Forcer's master mode selects retained or expanded output; without a
-    /// Forcer entry, loop-free terms use symbolic expansion.
+    /// The master mode of the selecting backend gives retained or expanded
+    /// output; loop-free terms use the mode of the first RustRed or Forcer
+    /// entry of the order, else symbolic expansion.
     pub fn evaluate(
         &self,
         vakint: &Vakint,
@@ -245,18 +262,22 @@ impl MassiveClosure {
         input: AtomView,
     ) -> Result<Atom, VakintError> {
         settings.with_resource_budget(|| {
-            let started = Instant::now();
-            let mut preparation = Duration::ZERO;
-            let mut reduction = Duration::ZERO;
-            let mut finalization = Duration::ZERO;
-            let mut combination = Duration::ZERO;
-            let mut numerical = Duration::ZERO;
-            let mut local_terms = 0_usize;
-            let mut scaleless_terms = 0_usize;
-            let mut propagator_terms = 0_usize;
-            let mut cut_loops_max = 0_usize;
-            let preparation_started = Instant::now();
-            let head = self.validated_head(settings)?;
+            let (head, _) = external_head(&self.momentum)?;
+            if self.mass_squared.contains_symbol(S.k)
+                || self.mass_squared.contains_symbol(S.p)
+                || self
+                    .mass_squared
+                    .contains_symbol(vk_symbol!(&settings.epsilon_symbol))
+            {
+                return Err(super::invalid(
+                    "the closing mass must be independent of momenta and epsilon",
+                ));
+            }
+            if self.power <= 0 || self.mass_squared.is_zero() {
+                return Err(super::invalid(
+                    "the closing propagator needs a positive power and a nonzero mass squared",
+                ));
+            }
             if input.is_zero() {
                 return Ok(Atom::Zero);
             }
@@ -266,6 +287,7 @@ impl MassiveClosure {
                 .0
                 .iter()
                 .find_map(|method| match method {
+                    EvaluationMethod::RustRed(options) => Some(options.master_mode),
                     EvaluationMethod::Forcer(options) => Some(options.master_mode),
                     _ => None,
                 })
@@ -286,35 +308,32 @@ impl MassiveClosure {
             });
             topologies.sort();
             topologies.dedup();
-            let coefficients = input.coefficient_list::<i16>(&topologies);
-            let source_terms = coefficients.len();
-            preparation += preparation_started.elapsed();
+            // Terms finalized in `Numerical` mode get their constants
+            // substituted together at the end.
             let mut result = Atom::Zero;
-            for (topology, numerator) in coefficients {
+            let mut numerical = Atom::Zero;
+            for (topology, numerator) in input.coefficient_list::<i16>(&topologies) {
                 if topology == Atom::one() {
-                    let preparation_started = Instant::now();
-                    let values = [ReducedPropagatorValue {
-                        scale_power: 0,
-                        reduced: Vakint::convert_to_dot_notation(numerator.as_view()),
-                    }];
-                    preparation += preparation_started.elapsed();
-                    let finalization_started = Instant::now();
-                    let integrated = self.finalize(&values, 0, &head, settings, mode)?;
-                    finalization += finalization_started.elapsed();
-                    let combination_started = Instant::now();
-                    result += integrated;
-                    combination += combination_started.elapsed();
-                    local_terms += 1;
+                    let value = self.finalize(
+                        &[ReducedPropagatorValue {
+                            scale_power: 0,
+                            reduced: Vakint::convert_to_dot_notation(numerator.as_view()),
+                        }],
+                        0,
+                        &head,
+                        settings,
+                        mode,
+                    )?;
+                    if mode == RustRedMasterMode::Numerical {
+                        numerical += value;
+                    } else {
+                        result += value;
+                    }
                     continue;
                 }
-                let preparation_started = Instant::now();
                 let mut expression = VakintExpression::try_from(topology * numerator)?;
-                preparation += preparation_started.elapsed();
                 for term in &mut expression.0 {
-                    let preparation_started = Instant::now();
                     if !term.normalize_propagator()? {
-                        preparation += preparation_started.elapsed();
-                        scaleless_terms += 1;
                         continue;
                     }
                     vakint.validate_settings(settings)?;
@@ -328,64 +347,52 @@ impl MassiveClosure {
                     }
                     term.numerator = scalar_numerator(term.numerator.as_view(), &head)?;
                     let matched = term.prepare_integral_specs(vakint, settings, None)?;
-                    if !matches!(
-                        vakint.evaluation_method(settings, &matched.canonical_topology),
-                        Some(EvaluationMethod::Forcer(_))
-                    ) {
-                        return Err(super::invalid(
-                            "massive closure of a p-integral requires the Forcer backend",
-                        ));
-                    }
+                    let method = vakint.evaluation_method(settings, &matched.canonical_topology);
+                    let term_mode = match method {
+                        Some(EvaluationMethod::Forcer(options)) => options.master_mode,
+                        Some(EvaluationMethod::RustRed(options)) => options.master_mode,
+                        _ => {
+                            return Err(super::invalid(
+                                "massive closure of a p-integral requires the RustRed or Forcer \
+                                 backend",
+                            ));
+                        }
+                    };
                     let request = matched
                         .propagator_request(term.numerator.as_view())
                         .expect("a p-integral match has a propagator request");
-                    preparation += preparation_started.elapsed();
-                    cut_loops_max = cut_loops_max.max(request.family.loops);
-                    let reduction_started = Instant::now();
-                    let values = forcer::reduce_p(
-                        request.family,
-                        request.powers,
-                        request.canonical_numerator,
-                        &request.external,
-                        settings,
-                    )?;
-                    reduction += reduction_started.elapsed();
-                    let finalization_started = Instant::now();
-                    let integrated =
-                        self.finalize(&values, request.family.loops, &head, settings, mode)?;
-                    finalization += finalization_started.elapsed();
-                    let combination_started = Instant::now();
-                    result += integrated;
-                    combination += combination_started.elapsed();
-                    propagator_terms += 1;
+                    let values = if matches!(method, Some(EvaluationMethod::Forcer(_))) {
+                        forcer::reduce_p(
+                            request.family,
+                            request.powers,
+                            request.canonical_numerator,
+                            &request.external,
+                            settings,
+                        )?
+                    } else {
+                        crate::rustred_evaluation::p_integral::reduce_requests(
+                            vakint,
+                            settings,
+                            std::slice::from_ref(&request),
+                            None,
+                        )?
+                        .into_values()
+                        .flatten()
+                        .collect()
+                    };
+                    let value =
+                        self.finalize(&values, request.family.loops, &head, settings, term_mode)?;
+                    if term_mode == RustRedMasterMode::Numerical {
+                        numerical += value;
+                    } else {
+                        result += value;
+                    }
                 }
             }
-            if mode == RustRedMasterMode::Numerical {
-                let numerical_started = Instant::now();
-                result = vakint.resolve_rustred_numerical(result, settings)?;
-                numerical += numerical_started.elapsed();
+            if !numerical.is_zero() {
+                result += vakint.resolve_rustred_numerical(numerical, settings)?;
             }
-            let combination_started = Instant::now();
-            let result = result.expand();
-            combination += combination_started.elapsed();
-            tracing::info!(
-                uv = true,
-                rstar = true,
-                timing = true,
-                source_terms = source_terms,
-                local_terms = local_terms,
-                scaleless_terms = scaleless_terms,
-                propagator_terms = propagator_terms,
-                cut_loops_max = cut_loops_max,
-                preparation_seconds = preparation.as_secs_f64(),
-                forcer_reduction_seconds = reduction.as_secs_f64(),
-                radial_master_laurent_seconds = finalization.as_secs_f64(),
-                result_combination_seconds = combination.as_secs_f64(),
-                numerical_resolution_seconds = numerical.as_secs_f64(),
-                seconds = started.elapsed().as_secs_f64(),
-                "Evaluated massive p-integral closure"
-            );
-            Ok(result)
+            Ok(result.expand())
         })
     }
 
@@ -513,6 +520,9 @@ impl MassiveClosure {
 #[cfg(test)]
 mod tests {
     use std::sync::LazyLock;
+
+    use ahash::HashMap;
+    use symbolica::domains::float::Float;
 
     use super::*;
     use crate::{EvaluationOrder, ForcerOptions, LoopNormalizationFactor, VakintSettings};
@@ -747,47 +757,80 @@ mod tests {
         );
     }
 
+    /// The default order after the built-in 1L-3L library (grant U1): with
+    /// `[RustRed, Forcer]` the closures of a 1L bubble, the 2L kite and the 3L
+    /// NO top go to RustRed and equal the Forcer-only closures, exactly in
+    /// `Symbolic` mode and within 1e-30 in `Numerical` mode (40 digits).
     #[test]
-    fn closure_batch_matches_serial_with_masses_powers_poles_and_local_terms() {
-        let mut settings = settings(5);
-        if forcer::forcer_form_version(&settings.form_exe_path).is_err() {
-            eprintln!("skipping live massive closure batch: FORM 5 is unavailable");
+    fn massive_closures_through_rustred_equal_the_forcer_closures() {
+        let base = VakintSettings {
+            run_time_decimal_precision: 40,
+            ..settings(5)
+        };
+        if forcer::forcer_form_version(&base.form_exe_path).is_err() {
+            assert_ne!(
+                std::env::var("VAKINT_REQUIRE_FORM5").as_deref(),
+                Ok("1"),
+                "FORM 5 is unavailable, but VAKINT_REQUIRE_FORM5=1 requires it"
+            );
+            eprintln!("skipping the massive closures through RustRed: FORM 5 is unavailable");
             return;
         }
-        let directory = tempfile::tempdir().unwrap();
-        settings.clean_tmp_dir = false;
-        settings.temporary_directory = Some(directory.path().display().to_string());
-        settings.evaluation_order =
-            EvaluationOrder(vec![EvaluationMethod::Forcer(ForcerOptions {
-                master_mode: RustRedMasterMode::Symbolic,
-            })]);
-        let inputs = vec![
-            (closure(2), parse("(1+ε)/ε*topo(P1L(p(1),1,1))+1/ε^2")),
-            (
-                MassiveClosure {
-                    momentum: parse("p(3)"),
-                    mass_squared: parse("mass_squared"),
-                    power: 3,
-                },
-                parse("(2-ε)/ε^2*dot(k(1),p(3))^2*topo(P1L(p(3),2,1))"),
-            ),
-            (closure(1), parse("topo(P1L(p(1),1,0))")),
-            (closure(4), parse("dot(p(1),p(1))/ε")),
-            (closure(2), Atom::Zero),
-        ];
-        for master_mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Numerical] {
-            settings.evaluation_order =
-                EvaluationOrder(vec![EvaluationMethod::Forcer(ForcerOptions {
-                    master_mode,
-                })]);
-            let actual = MassiveClosure::evaluate_batch(&VAKINT, &settings, &inputs).unwrap();
-            for ((closure, input), actual) in inputs.iter().zip(actual) {
-                let expected = closure
-                    .evaluate(&VAKINT, &settings, input.as_view())
-                    .unwrap();
-                assert_equal(&actual, &expected);
+        let massive = closure(2);
+        let mursq = HashMap::from_iter([(
+            base.mu_r_sq_symbol.clone(),
+            Float::with_val(base.get_binary_precision(), 1),
+        )]);
+        for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Numerical] {
+            let forcer = EvaluationMethod::Forcer(ForcerOptions { master_mode: mode });
+            let rustred =
+                EvaluationMethod::RustRed(crate::RustRedEvaluationOptions { master_mode: mode });
+            let both = VakintSettings {
+                evaluation_order: EvaluationOrder(vec![rustred, forcer.clone()]),
+                ..base.clone()
+            };
+            let forcer_only = VakintSettings {
+                evaluation_order: EvaluationOrder(vec![forcer]),
+                ..base.clone()
+            };
+            for input in [
+                "topo(P1L(p(1),1,1))",
+                "topo(P2L(p(1),1,1,1,1,1))",
+                "topo(P3L_NO(p(1),1,1,1,1,1,1,1,1))",
+            ] {
+                let input = parse(input);
+                let value = |settings| massive.evaluate(&VAKINT, settings, input.as_view());
+                let (actual, expected) = (value(&both).unwrap(), value(&forcer_only).unwrap());
+                if mode == RustRedMasterMode::Symbolic {
+                    assert_equal(&actual, &expected);
+                    continue;
+                }
+                let number = |value: &Atom| {
+                    VAKINT
+                        .numerical_evaluation(
+                            &both,
+                            value.as_view(),
+                            &mursq,
+                            &Default::default(),
+                            None,
+                        )
+                        .unwrap()
+                        .0
+                };
+                let (agree, diagnostic) =
+                    number(&actual).does_approx_match(&number(&expected), None, 1e-30, 5.0);
+                assert!(agree, "{input}: {diagnostic}");
             }
         }
+        // RustRed reduced them: the built-in program's cache recorded steps.
+        let statistics = VAKINT.ordered_cache_statistics();
+        assert!(
+            statistics
+                .programs
+                .iter()
+                .any(|program| program.data_version == "built-in" && program.native.inserts > 0),
+            "{statistics:?}"
+        );
     }
 
     #[test]

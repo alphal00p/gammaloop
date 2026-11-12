@@ -1,4 +1,5 @@
 use super::*;
+use symbolica::domains::rational::Rational;
 
 fn settings(digits: u32) -> VakintSettings {
     VakintSettings {
@@ -947,5 +948,431 @@ fn tracked_imaginary_alias_does_not_retry_a_limited_tracked_callback() {
         warnings
             .iter()
             .any(|warning| warning.achieved_decimal_precision.is_some())
+    );
+}
+
+fn zero_consistent_imaginary_warning(warnings: &[PrecisionWarning]) -> Option<&PrecisionWarning> {
+    warnings.iter().find(|warning| {
+        warning
+            .message
+            .starts_with("imaginary part consistent with zero within its tracked error")
+    })
+}
+
+#[test]
+fn imaginary_part_consistent_with_zero_is_exported_as_zero_with_a_warning() {
+    Vakint::initialize_vakint_symbols();
+    let sources = BTreeMap::from([
+        source("precision_im_left", "1", 50),
+        source("precision_im_right", "1", 50),
+    ]);
+    for (input, real) in [
+        (
+            "𝑖*(precision_im_left-precision_im_right)",
+            Rational::from(0),
+        ),
+        (
+            "𝑖*(precision_im_left-precision_im_right)+3/4",
+            Rational::from((3, 4)),
+        ),
+    ] {
+        let expression = vk_parse!(input).unwrap();
+        let (coefficient, warnings) = evaluate_coefficient(
+            expression.as_view(),
+            &sources,
+            &HashMap::new(),
+            &settings(40),
+        )
+        .unwrap();
+        // The precision record keeps the uncertain zero and its error.
+        assert!(coefficient.value().im.is_zero(), "{input}");
+        assert!(!coefficient.precision().imaginary().exact_zero(), "{input}");
+        assert!(
+            !coefficient
+                .precision()
+                .imaginary()
+                .absolute_error()
+                .is_zero(),
+            "{input}"
+        );
+        assert!(coefficient.imaginary_consistent_with_zero(), "{input}");
+        // 50-digit sources at 40 requested digits: the uncertainty is
+        // negligible against the unit terms it comes from.
+        assert!(coefficient.imaginary_negligible_zero(), "{input}");
+        let warning = zero_consistent_imaginary_warning(&warnings)
+            .unwrap_or_else(|| panic!("{input}: no zero-consistent warning in {warnings:?}"));
+        assert!(warning.message.contains("absolute uncertainty"), "{input}");
+        assert!(
+            warning.message.contains(
+                "negligible at the requested 40 digits against its largest term contribution"
+            ),
+            "{input}: {}",
+            warning.message
+        );
+        assert!(
+            warning
+                .sources
+                .iter()
+                .any(|source| source.identity == "precision_im_left"),
+            "{input}"
+        );
+        // The real component is exact: no shortfall is reported for it.
+        assert!(
+            warnings
+                .iter()
+                .all(|warning| warning.achieved_decimal_precision.is_none()),
+            "{input}: {warnings:?}"
+        );
+        let exported = coefficient.to_atom().unwrap();
+        if real.is_zero() {
+            assert_eq!(exported, Atom::Zero, "{input}");
+        } else {
+            let value = exported
+                .evaluate_with_prec(&ahash::HashMap::<Atom, Complex<Float>>::default(), 128)
+                .unwrap();
+            assert_eq!(value.re.to_rational(), real, "{input}");
+            assert!(value.im.is_zero(), "{input}");
+        }
+    }
+    // Independent finite literals inside an unexpanded polynomial cancel
+    // only up to their errors: the same uncertain imaginary zero through the
+    // public series path, with the warning attached to its order.
+    let result = NumericalEvaluationResult::from_atom(
+        vk_parse!("𝑖*((1.25`30+z3)^2-z3^2-1.5625`30-2.5`30*z3)*ep^-1+2")
+            .unwrap()
+            .as_view(),
+        vk_symbol!("ep"),
+        &settings(20),
+    )
+    .unwrap();
+    assert!(result.coefficients()[&-1].imaginary_consistent_with_zero());
+    assert!(result.coefficients()[&-1].imaginary_negligible_zero());
+    assert!(
+        zero_consistent_imaginary_warning(result.warnings())
+            .is_some_and(|warning| { warning.epsilon_power == Some(-1) })
+    );
+    let exported = result.to_atom(vk_symbol!("ep")).unwrap();
+    assert!(!exported.contains_symbol(vk_symbol!("ep")), "{exported}");
+}
+
+#[test]
+fn imaginary_part_without_a_digit_that_excludes_zero_is_still_rejected() {
+    Vakint::initialize_vakint_symbols();
+    // Two with three binary digits: its enclosure excludes zero, but it has
+    // no reliable decimal digit. It is nonzero and must not become zero.
+    let weak =
+        NumericalCoefficient::from_value(Complex::new(Float::new(3), Float::with_val(3, 2)), 16);
+    assert!(!weak.precision().imaginary().exact_zero());
+    assert!(
+        weak.precision()
+            .imaginary()
+            .significant_digits()
+            .is_none_or(|digits| digits == 0)
+    );
+    assert!(!weak.imaginary_consistent_with_zero());
+    let error = weak.to_atom().unwrap_err().to_string();
+    assert!(
+        error.contains("imaginary component has no reliable"),
+        "{error}"
+    );
+    // A determined nonzero imaginary part is exported unchanged.
+    let determined = NumericalCoefficient::from_value(
+        Complex::new(Float::new(200), Float::parse("2.5", Some(200)).unwrap()),
+        40,
+    );
+    assert!(!determined.imaginary_consistent_with_zero());
+    let value = determined
+        .to_atom()
+        .unwrap()
+        .evaluate_with_prec(&ahash::HashMap::<Atom, Complex<Float>>::default(), 128)
+        .unwrap();
+    assert_eq!(value.im.to_rational(), Rational::from((5, 2)));
+    // Two independent estimates that differ by more than their errors:
+    // 1.5 to two digits minus 1 leaves 0.5 with an error of a few hundredths.
+    let sources = BTreeMap::from([
+        source("precision_im_high", "1.5", 2),
+        source("precision_im_low", "1", 50),
+    ]);
+    let (separated, warnings) = evaluate_coefficient(
+        vk_parse!("𝑖*(precision_im_high-precision_im_low)")
+            .unwrap()
+            .as_view(),
+        &sources,
+        &HashMap::new(),
+        &settings(30),
+    )
+    .unwrap();
+    assert!(!separated.imaginary_consistent_with_zero(), "{separated:?}");
+    assert!(!separated.imaginary_negligible_zero(), "{separated:?}");
+    assert!(zero_consistent_imaginary_warning(&warnings).is_none());
+    // The two-digit source leaves 0.5 with an uncertainty of several
+    // hundredths: no decimal digit, but an enclosure that excludes zero.
+    assert!(
+        separated
+            .precision()
+            .imaginary()
+            .significant_digits()
+            .is_none_or(|digits| digits == 0),
+        "{separated:?}"
+    );
+    let error = separated.to_atom().unwrap_err().to_string();
+    assert!(
+        error.contains("imaginary component has no reliable"),
+        "{error}"
+    );
+    assert!(!error.contains("consistent with zero"), "{error}");
+    assert!(
+        warnings
+            .iter()
+            .any(|warning| warning.achieved_decimal_precision == Some(0)),
+        "{warnings:?}"
+    );
+}
+
+#[test]
+fn real_part_digit_loss_is_still_reported_beside_a_zero_consistent_imaginary_part() {
+    Vakint::initialize_vakint_symbols();
+    let sources = BTreeMap::from([
+        source("precision_real_lossy", "2.5", 10),
+        source("precision_zero_a", "1", 50),
+        source("precision_zero_b", "1", 50),
+    ]);
+    let evaluate = |input: &str| {
+        evaluate_coefficient(
+            vk_parse!(input).unwrap().as_view(),
+            &sources,
+            &HashMap::new(),
+            &settings(40),
+        )
+        .unwrap()
+    };
+    // Partial loss in the real part: reported with the real part's digits,
+    // not with the zero digits of the uncertain imaginary zero.
+    let (lossy, warnings) = evaluate("precision_real_lossy+𝑖*(precision_zero_a-precision_zero_b)");
+    assert!(lossy.imaginary_consistent_with_zero());
+    assert!(lossy.imaginary_negligible_zero());
+    assert!(zero_consistent_imaginary_warning(&warnings).is_some());
+    let achieved = warnings
+        .iter()
+        .find_map(|warning| warning.achieved_decimal_precision)
+        .expect("the real part's shortfall is reported");
+    let real_digits = lossy.precision().real().significant_digits().unwrap();
+    assert_eq!(achieved, real_digits);
+    assert!((1..40).contains(&achieved), "{achieved}");
+    let value = lossy
+        .to_atom()
+        .unwrap()
+        .evaluate_with_prec(&ahash::HashMap::<Atom, Complex<Float>>::default(), 128)
+        .unwrap();
+    assert!(value.im.is_zero());
+    let tolerance = Rational::from((1, 1000));
+    assert!((value.re.to_rational() - Rational::from((5, 2))).abs() < tolerance);
+    // No reliable digit in the real part is still an error, whatever the
+    // imaginary part: the relaxation never applies to the real component.
+    let (lost, warnings) =
+        evaluate("(precision_zero_a-precision_zero_b)+𝑖*(precision_zero_a-precision_zero_b)");
+    assert!(lost.imaginary_consistent_with_zero());
+    assert!(
+        warnings
+            .iter()
+            .any(|warning| warning.achieved_decimal_precision == Some(0))
+    );
+    let error = lost.to_atom().unwrap_err().to_string();
+    assert!(error.contains("real component has no reliable"), "{error}");
+    let (lost_real, _) = evaluate("precision_zero_a-precision_zero_b");
+    assert!(lost_real.to_atom().is_err());
+}
+
+/// An imaginary part whose enclosure contains zero, but whose uncertainty is
+/// not negligible at the requested precision against the terms it comes from:
+/// a possibly nonzero value. Its export fails, and its evaluation reports the
+/// shortfall with zero digits.
+fn assert_wide_imaginary_zero_is_rejected(
+    label: &str,
+    coefficient: &NumericalCoefficient,
+    warnings: &[PrecisionWarning],
+) {
+    assert!(
+        coefficient.imaginary_consistent_with_zero(),
+        "{label}: {coefficient:?}"
+    );
+    assert!(
+        !coefficient.imaginary_negligible_zero(),
+        "{label}: {coefficient:?}"
+    );
+    assert!(
+        zero_consistent_imaginary_warning(warnings).is_none(),
+        "{label}: {warnings:?}"
+    );
+    assert!(
+        warnings
+            .iter()
+            .any(|warning| warning.achieved_decimal_precision == Some(0)),
+        "{label}: {warnings:?}"
+    );
+    let error = coefficient.to_atom().unwrap_err().to_string();
+    assert!(
+        error.contains("imaginary component has no reliable"),
+        "{label}: {error}"
+    );
+    assert!(
+        error.contains("consistent with zero, but not negligible at the requested"),
+        "{label}: {error}"
+    );
+}
+
+#[test]
+fn wide_imaginary_enclosure_that_contains_zero_is_still_rejected() {
+    Vakint::initialize_vakint_symbols();
+    let sources = BTreeMap::from([
+        // Genuinely different values, each known to two digits.
+        source("precision_wide_a", "1.0", 2),
+        source("precision_wide_b", "0.97", 2),
+        // 5L-like magnitudes: three- and four-digit masters that differ by
+        // 5e-14, like the low-digit published 5L eps^0 entries.
+        source("precision_wide_m1", "3.07e-11", 3),
+        source("precision_wide_m2", "3.065e-11", 4),
+        source("precision_wide_one", "1", 50),
+    ]);
+    for (label, input) in [
+        // (A) purely imaginary, true value 0.03 i, enclosure 0.03 +- 0.11.
+        ("A", "𝑖*(precision_wide_a-precision_wide_b)"),
+        // (B) an exact real part beside the same imaginary enclosure.
+        (
+            "B",
+            "precision_wide_one+𝑖*(precision_wide_a-precision_wide_b)",
+        ),
+        // (C) 5L-like purely imaginary coefficient, true value 5e-14 i.
+        ("C", "𝑖*(precision_wide_m1-precision_wide_m2)"),
+        // (E) the dropped imaginary part would be three times the real part.
+        (
+            "E",
+            "1/100*precision_wide_one+𝑖*(precision_wide_a-precision_wide_b)",
+        ),
+    ] {
+        let (coefficient, warnings) = evaluate_coefficient(
+            vk_parse!(input).unwrap().as_view(),
+            &sources,
+            &HashMap::new(),
+            &settings(32),
+        )
+        .unwrap();
+        assert_wide_imaginary_zero_is_rejected(label, &coefficient, &warnings);
+    }
+    // The same through the public series path. Two-digit binary literals
+    // leave 0.03 +- 0.008: no digit, an enclosure that excludes zero.
+    let result = NumericalEvaluationResult::from_atom(
+        vk_parse!("𝑖*(1.0`2-0.97`2)*ep^-1+2").unwrap().as_view(),
+        vk_symbol!("ep"),
+        &settings(20),
+    )
+    .unwrap();
+    assert!(!result.coefficients()[&-1].imaginary_consistent_with_zero());
+    let error = result.to_atom(vk_symbol!("ep")).unwrap_err().to_string();
+    assert!(
+        error.contains("coefficient epsilon^-1")
+            && error.contains("imaginary component has no reliable")
+            && !error.contains("consistent with zero"),
+        "{error}"
+    );
+    // Three-digit literals that cancel exactly in value leave an uncertain
+    // zero as wide as their own rounding: consistent with zero, not
+    // negligible at 20 digits against the terms of order one.
+    let result = NumericalEvaluationResult::from_atom(
+        vk_parse!("𝑖*((1.25`3+z3)^2-z3^2-1.5625`3-2.5`3*z3)*ep^-1+2")
+            .unwrap()
+            .as_view(),
+        vk_symbol!("ep"),
+        &settings(20),
+    )
+    .unwrap();
+    assert!(result.coefficients()[&-1].imaginary_consistent_with_zero());
+    assert!(!result.coefficients()[&-1].imaginary_negligible_zero());
+    assert!(zero_consistent_imaginary_warning(result.warnings()).is_none());
+    let error = result.to_atom(vk_symbol!("ep")).unwrap_err().to_string();
+    assert!(
+        error.contains("coefficient epsilon^-1") && error.contains("not negligible"),
+        "{error}"
+    );
+    // A coefficient without an evaluated term scale (declared values) is
+    // never relaxed: an uncertain zero imported as such fails its export.
+    let imported = NumericalEvaluationResult::from_values(
+        vec![
+            (0, Complex::new(Float::new(64), Float::with_val(64, 1))),
+            (0, Complex::new(Float::new(64), Float::with_val(64, -1))),
+        ],
+        16,
+    );
+    let coefficient = &imported.coefficients()[&0];
+    assert!(coefficient.imaginary_consistent_with_zero());
+    assert!(!coefficient.imaginary_negligible_zero());
+    assert!(coefficient.to_atom().is_err());
+}
+
+#[test]
+fn imaginary_zero_is_negligible_only_below_the_requested_precision_of_its_terms() {
+    Vakint::initialize_vakint_symbols();
+    let evaluate = |digits: u32, requested: u32| {
+        // The 5L P63 + dot eps^-1 magnitude: two independently rounded
+        // copies of the same value cancel to an uncertain imaginary zero.
+        let sources = BTreeMap::from([
+            source("precision_scale_left", "3.0702369106699746e-11", digits),
+            source("precision_scale_right", "3.0702369106699746e-11", digits),
+        ]);
+        evaluate_coefficient(
+            vk_parse!("𝑖*(precision_scale_left-precision_scale_right)")
+                .unwrap()
+                .as_view(),
+            &sources,
+            &HashMap::new(),
+            &settings(requested),
+        )
+        .unwrap()
+    };
+    // Sources well beyond the request: the zero is negligible against the
+    // 3e-11 terms, exported as zero, with a note and no shortfall.
+    let (accepted, warnings) = evaluate(60, 32);
+    assert!(accepted.imaginary_negligible_zero(), "{accepted:?}");
+    let scale = accepted.imaginary_term_scale.as_deref().unwrap();
+    assert!(*scale > (3i64, 100_000_000_000i64), "{scale:?}");
+    assert!(*scale < (4i64, 100_000_000_000i64), "{scale:?}");
+    assert_eq!(accepted.to_atom().unwrap(), Atom::Zero);
+    let note = zero_consistent_imaginary_warning(&warnings).expect("a zero note");
+    assert!(
+        note.message
+            .contains("negligible at the requested 32 digits"),
+        "{}",
+        note.message
+    );
+    assert!(
+        note.sources
+            .iter()
+            .any(|source| source.identity == "precision_scale_left")
+    );
+    assert!(
+        warnings
+            .iter()
+            .all(|warning| warning.achieved_decimal_precision.is_none()),
+        "{warnings:?}"
+    );
+    // Sources below the request: the same cancellation only resolves the
+    // zero to their own digits, which is not negligible at 32 digits.
+    let (short, warnings) = evaluate(20, 32);
+    assert_wide_imaginary_zero_is_rejected("20 of 32 digits", &short, &warnings);
+    // At a request the sources support, the same zero is negligible again,
+    // and a presentation cap keeps that verdict.
+    let (supported, _) = evaluate(20, 16);
+    assert!(supported.imaginary_negligible_zero(), "{supported:?}");
+    assert!(
+        supported
+            .capped_decimal_precision(8)
+            .imaginary_negligible_zero()
+    );
+    assert_eq!(supported.to_atom().unwrap(), Atom::Zero);
+    // A presentation cap never lowers the bar below what was evaluated.
+    assert!(
+        !short
+            .capped_decimal_precision(40)
+            .imaginary_negligible_zero()
     );
 }

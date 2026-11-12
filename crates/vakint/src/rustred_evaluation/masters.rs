@@ -3,21 +3,19 @@
 //! Input masters are unit-mass integrals in the package's FMFT/MATAD convention.
 //! The caller restores target mass powers and measure normalization exactly once.
 
-use crate::{stage_timing::StageSpan, symbols::S};
-
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::{Arc, OnceLock};
+use std::sync::OnceLock;
+use std::sync::Arc;
 
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use symbolica::coefficient::CoefficientView;
-use symbolica::domains::atom::AtomField;
 use symbolica::domains::integer::Z;
 use symbolica::domains::rational::{Q, Rational};
 use symbolica::id::Replacement;
 use symbolica::poly::factor::Factorize;
-use symbolica::poly::series::{Series, SeriesDepth};
+use symbolica::poly::series::SeriesDepth;
 
 use super::data::{FileReference, LoopData, checked_bytes, failure};
 use super::experimental::timing::MathSpan;
@@ -98,6 +96,7 @@ impl Master {
             .collect()
         })
     }
+
     /// The lowest Laurent order of the master: `ε^-L` for an `L`-loop
     /// vacuum master, or a lower order shipped by its data.
     fn leading_power(&self) -> Result<i64, RustRedEvaluationError> {
@@ -132,13 +131,6 @@ pub(crate) struct MasterCatalog {
     basis_aliases: BTreeMap<Atom, Atom>,
 }
 
-struct MasterSeriesTerm {
-    monomial: Atom,
-    coefficient: Atom,
-    multiplicities: BTreeMap<Atom, i64>,
-    leading: Series<AtomField>,
-}
-
 /// A declaration read from a native application's authenticated terminal inventory.
 /// It supplies declarations only, never numerical coefficients or invented graphs.
 #[derive(Clone, Debug)]
@@ -148,135 +140,19 @@ pub(crate) struct BareMasterDeclaration {
 
 pub(crate) type BareMasterDeclarations = BTreeMap<Atom, BareMasterDeclaration>;
 
-#[track_caller]
 pub(crate) fn combine_exact(expression: Atom) -> Atom {
-    // These diagnostic tags intentionally differ from the outer UV timers:
-    // capturing exact inputs should not accompany ordinary phase timing.
-    let caller = std::panic::Location::caller();
-    let capture = tracing::event_enabled!(
-        tracing::Level::INFO,
-        vakint,
-        rustred,
-        timing,
-        trace,
-        stage,
-        caller_file,
-        caller_line,
-        input_terms,
-        input_bytes,
-        expanded_input_terms,
-        expanded_input_bytes,
-        output_terms,
-        output_bytes,
-        fastpath,
-        seconds,
-        file.input
-    )
-    .then(|| {
-        (
-            std::time::Instant::now(),
-            expression.as_view().nterms(),
-            expression.as_view().get_byte_size(),
-        )
-    });
     let expression = expression.expand();
-    let record = |result: &Atom, fastpath: &str| {
-        if let Some((started, input_terms, input_bytes)) = capture {
-            let elapsed = started.elapsed();
-            tracing::info!(
-                vakint = true,
-                rustred = true,
-                timing = true,
-                trace = true,
-                stage = "rustred_combine_exact",
-                caller_file = caller.file(),
-                caller_line = caller.line(),
-                input_terms,
-                input_bytes,
-                expanded_input_terms = expression.as_view().nterms(),
-                expanded_input_bytes = expression.as_view().get_byte_size(),
-                output_terms = result.as_view().nterms(),
-                output_bytes = result.as_view().get_byte_size(),
-                fastpath,
-                seconds = elapsed.as_secs_f64(),
-                file.input = (elapsed > std::time::Duration::from_millis(50))
-                    .then(|| expression.to_canonical_string()),
-                "Combined exact master expression"
-            );
-        }
-    };
     // Symbolica's rational canonicalization requires exact coefficients.
     // In particular, `together` currently corrupts powers in sums with
     // floating coefficients, so numerical expressions stay expanded.
     if MasterCatalog::has_floating_coefficients(&expression) {
-        record(&expression, "floating_coefficients");
         expression
     } else {
-        let (result, fastpath) = match together_over_shared_remainder(&expression) {
-            Ok(result) => (result, "shared_remainder"),
-            Err(reason) => match together_over_denominator_groups(&expression) {
-                Ok(result) => (result, "denominator_groups"),
-                Err(_) => (expression.together(), reason),
-            },
-        };
-        record(&result, fastpath);
-        result
+        together_over_shared_remainder(&expression)
+            .or_else(|| together_gaussian_laurent(&expression))
+            .or_else(|| together_over_denominator_groups(&expression).ok())
+            .unwrap_or_else(|| expression.together())
     }
-}
-
-/// `together` of an expanded sum whose terms differ only by rational multiples
-/// of powers of one symbol, computed from a single term.
-///
-/// `together` converts every term separately and factors each polynomial
-/// denominator it meets, over Q(i) when the measure contributes the imaginary
-/// unit. An exact coefficient expanded in the regulator repeats one large
-/// denominator in every term, which is then factored once per regulator power.
-/// Here the terms are first summed into one polynomial times their common
-/// remainder, whose univariate denominators are factored once over Z.
-///
-/// The normal form depends on the variable order only through the sign and
-/// leading coefficient of multivariate numerators and denominator factors.
-/// Both are order independent when the numerator is a univariate polynomial
-/// times a monomial and every polynomial denominator is univariate and
-/// nonzero, which is required here. Otherwise returns the rejected condition
-/// for diagnostics without repeating any polynomial work.
-fn together_over_shared_remainder(expanded: &Atom) -> Result<Atom, &'static str> {
-    let AtomView::Add(sum) = expanded.as_view() else {
-        return Err("not_sum");
-    };
-    let terms: Vec<_> = sum.iter().map(SplitTerm::new).collect();
-    // Every term must share its remainder; exactly one symbol carries the
-    // varying integer powers.
-    let mut varying = None;
-    for term in &terms[1..] {
-        if term.remainder != terms[0].remainder {
-            return Err("distinct_remainder");
-        }
-        for (symbol, _) in term.powers.iter().chain(&terms[0].powers) {
-            if term.power(*symbol) != terms[0].power(*symbol) {
-                match varying {
-                    None => varying = Some(*symbol),
-                    Some(variable) if variable == *symbol => {}
-                    Some(_) => return Err("multiple_varying_symbols"),
-                }
-            }
-        }
-    }
-    let variable = varying.ok_or("no_varying_symbol")?;
-    let mut remainder = Vec::with_capacity(terms[0].remainder.len());
-    for factor in &terms[0].remainder {
-        remainder.push(univariate_denominator_factors(*factor).ok_or("unsupported_denominator")?);
-    }
-    let polynomial = Atom::add_many(terms.iter().map(|term| {
-        term.coefficient.to_owned() * Atom::var(variable).pow(Atom::num(term.power(variable)))
-    }));
-    let fixed = terms[0]
-        .powers
-        .iter()
-        .filter(|(symbol, _)| *symbol != variable)
-        .map(|(symbol, power)| Atom::var(*symbol).pow(Atom::num(*power)));
-    let combined = Atom::mul_many(std::iter::once(polynomial).chain(fixed).chain(remainder));
-    Ok(combined.together())
 }
 
 /// Keep the variable order and coefficient field of the original conversion
@@ -532,11 +408,189 @@ fn together_over_denominator_groups(expanded: &Atom) -> Result<Atom, &'static st
     ExactDenominatorGroups::new(expanded)?.combine()
 }
 
-/// Reuse the master finalizer's exact real-quotient check when a common
-/// numeric complex phase is moved outside a rational coefficient calculation.
-pub(crate) fn common_exact_numeric_phase(expression: &Atom) -> Atom {
-    ExactDenominatorGroups::common_phase(expression)
+/// `together` of an expanded Laurent polynomial with Gaussian rational
+/// coefficients, assembled without converting it term by term.
+///
+/// `together` converts a sum into a factorized rational polynomial one term
+/// at a time; every addition multiplies by the cofactors and tries to divide
+/// the growing numerator by each denominator factor. For the Laurent series
+/// of a five-loop result in its symbolic master coefficients (function
+/// indeterminates, so Symbolica's direct polynomial conversion does not
+/// apply) that is quadratic in the number of terms and takes hours.
+///
+/// With an imaginary coefficient, `together` works over Q(i), where its normal
+/// form normalizes neither the numerator nor the overall constants, and
+/// monomial denominator factors are already monic. Its result is therefore
+/// `expand(e·D)/D` for the least monomial `D` that clears every negative power:
+/// for each symbol of `D` some term of `e·D` is free of it, so nothing
+/// cancels. The value is assembled exactly as `together` assembles its normal
+/// form. Returns `None` unless the sum has an imaginary coefficient and every
+/// term is a product of exact numbers, symbols and function calls raised to
+/// integer powers, with negative powers on symbols only.
+fn together_gaussian_laurent(expanded: &Atom) -> Option<Atom> {
+    let AtomView::Add(sum) = expanded.as_view() else {
+        return None;
+    };
+    if !expanded.as_view().has_complex_coefficients() {
+        return None;
+    }
+    let mut clearing = BTreeMap::<Symbol, i64>::new();
+    for term in sum.iter() {
+        let factors: Vec<_> = match term {
+            AtomView::Mul(product) => product.iter().collect(),
+            view => vec![view],
+        };
+        for factor in factors {
+            match factor {
+                AtomView::Num(number) => {
+                    if !matches!(
+                        number.get_coeff_view(),
+                        CoefficientView::Natural(..) | CoefficientView::Large(..)
+                    ) {
+                        return None;
+                    }
+                }
+                AtomView::Var(_) | AtomView::Fun(_) => {}
+                AtomView::Pow(power) => {
+                    let (base, exponent) = power.get_base_exp();
+                    let exponent = get_integer_from_atom(exponent)?;
+                    if exponent == 0 || exponent.unsigned_abs() > u64::from(u32::MAX) {
+                        return None;
+                    }
+                    match base {
+                        AtomView::Var(variable) if exponent < 0 => {
+                            let power = clearing.entry(variable.get_symbol()).or_insert(0);
+                            *power = (*power).max(-exponent);
+                        }
+                        AtomView::Var(_) | AtomView::Fun(_) if exponent > 0 => {}
+                        _ => return None,
+                    }
+                }
+                AtomView::Add(_) | AtomView::Mul(_) => return None,
+            }
+        }
+    }
+    let numerator = if clearing.is_empty() {
+        expanded.clone()
+    } else {
+        let mut clearing_monomial = Atom::num(1);
+        for (symbol, power) in &clearing {
+            clearing_monomial *= Atom::var(*symbol).pow(Atom::num(*power));
+        }
+        Atom::add_many(sum.iter().map(|term| term.to_owned() * &clearing_monomial))
+    };
+    // `together_into` over Q(i): numer_coeff · numerator / (denom_coeff · ∏ factor^power)
+    // with both coefficients one.
+    let one = || {
+        Atom::num(symbolica::domains::float::Complex::new(
+            Rational::from(1),
+            Rational::from(0),
+        ))
+    };
+    let num = one() * numerator;
+    let mut den = one();
+    for (symbol, power) in clearing {
+        den *= Atom::var(symbol).pow(Atom::num(power));
+    }
+    Some(num / den)
 }
+
+/// `together` of an expanded sum whose terms differ only by rational multiples
+/// of powers of one symbol, computed from a single term.
+///
+/// `together` converts every term separately and factors each polynomial
+/// denominator it meets, over Q(i) when the measure contributes the imaginary
+/// unit. An exact coefficient expanded in the regulator repeats one large
+/// denominator in every term, which is then factored once per regulator power.
+/// Here the terms are first summed into one polynomial times their common
+/// remainder, whose univariate denominators are factored once over Z.
+///
+/// The normal form depends on the variable order only through the sign and
+/// leading coefficient of multivariate numerators and denominator factors.
+/// Both are order independent when the numerator is a univariate polynomial
+/// times a monomial and every polynomial denominator is univariate and
+/// nonzero, which is required here. Returns `None` otherwise.
+fn together_over_shared_remainder(expanded: &Atom) -> Option<Atom> {
+    let AtomView::Add(sum) = expanded.as_view() else {
+        return None;
+    };
+    let terms: Vec<_> = sum.iter().map(SplitTerm::new).collect();
+    // Every term must share its remainder; exactly one symbol carries the
+    // varying integer powers.
+    let mut varying = None;
+    for term in &terms[1..] {
+        if term.remainder != terms[0].remainder {
+            return None;
+        }
+        for (symbol, _) in term.powers.iter().chain(&terms[0].powers) {
+            if term.power(*symbol) != terms[0].power(*symbol) {
+                match varying {
+                    None => varying = Some(*symbol),
+                    Some(variable) if variable == *symbol => {}
+                    Some(_) => return None,
+                }
+            }
+        }
+    }
+    let variable = varying?;
+    let mut remainder = Vec::with_capacity(terms[0].remainder.len());
+    for factor in &terms[0].remainder {
+        remainder.push(univariate_denominator_factors(*factor)?);
+    }
+    let polynomial = Atom::add_many(terms.iter().map(|term| {
+        term.coefficient.to_owned() * Atom::var(variable).pow(Atom::num(term.power(variable)))
+    }));
+    let fixed = terms[0]
+        .powers
+        .iter()
+        .filter(|(symbol, _)| *symbol != variable)
+        .map(|(symbol, power)| Atom::var(*symbol).pow(Atom::num(*power)));
+    let combined = Atom::mul_many(std::iter::once(polynomial).chain(fixed).chain(remainder));
+    Some(combined.together())
+}
+
+/// The common numeric phase of an exact expression: `i` when dividing by it
+/// leaves real coefficients, else the complex leading coefficient when that
+/// does, else one. Inexact coefficients have no phase to factor out.
+pub(crate) fn common_exact_numeric_phase(expanded: &Atom) -> Atom {
+    let mut exact = true;
+    expanded.visitor(&mut |part| {
+        if let AtomView::Num(number) = part {
+            exact &= matches!(
+                number.get_coeff_view(),
+                CoefficientView::Natural(..) | CoefficientView::Large(..)
+            );
+        }
+        exact
+    });
+    if !exact {
+        return Atom::num(1);
+    }
+    let real_quotient = |phase: &Atom| {
+        !(expanded / phase)
+            .expand()
+            .as_view()
+            .has_complex_coefficients()
+    };
+    let imaginary = Atom::num(symbolica::domains::float::Complex::new(
+        Rational::from(0),
+        Rational::from(1),
+    ));
+    if real_quotient(&imaginary) {
+        return imaginary;
+    }
+    let first = match expanded.as_view() {
+        AtomView::Add(sum) => sum.iter().next().unwrap(),
+        term => term,
+    };
+    let phase = SplitTerm::new(first).coefficient;
+    if !phase.is_zero() && phase.as_view().has_complex_coefficients() && real_quotient(&phase) {
+        phase
+    } else {
+        Atom::num(1)
+    }
+}
+
 
 /// One expanded term: its rational coefficient, its integer powers of bare
 /// symbols, and all remaining factors in canonical order.
@@ -700,13 +754,12 @@ impl MasterCatalog {
                     .get(&metadata.family_sha256)
                     .ok_or_else(|| failure("master references an undeclared family"))?;
                 let symbol = catalog.symbol(fingerprint, &metadata.powers);
-                let parsed_basis = metadata
-                    .exact_basis_expression
-                    .as_ref()
-                    .map(|expression| vk_parse!(expression).map_err(failure))
-                    .transpose()?;
-                if let Some(expression) = &parsed_basis {
-                    basis_expressions.push((count, symbol.clone(), expression.clone()));
+                if let Some(expression) = &metadata.exact_basis_expression {
+                    basis_expressions.push((
+                        count,
+                        symbol.clone(),
+                        vk_parse!(expression).map_err(failure)?,
+                    ));
                 }
                 let symbolic = Self::read_coefficients(data, metadata.files.get("symbolic.json"))?;
                 let numerical =
@@ -785,7 +838,7 @@ impl MasterCatalog {
                     graph: Self::graph_location(data, &metadata.parent_graph)?,
                     metadata: value.clone(),
                     data: Some(Arc::clone(data)),
-                    parsed_basis: OnceLock::from(parsed_basis),
+                    parsed_basis: OnceLock::new(),
                     parsed_names: OnceLock::new(),
                 };
                 parent_graphs
@@ -853,7 +906,7 @@ impl MasterCatalog {
                     || head.get_namespace() == "symbolica"
                     || head.get_evaluation_info().is_some()
                     || crate::symbols::SYMBOL_REGISTRY.contains(&head)
-                    || head == S.numerical_source
+                    || head == vk_symbol!("NumericalSource")
                     || crate::inspection::definitions::is_definition_head(head)
                     || (head.get_namespace() == crate::NAMESPACE
                         && head.get_stripped_name().starts_with("RustRed"))
@@ -971,7 +1024,7 @@ impl MasterCatalog {
     }
 
     fn load_basis_aliases(&mut self, expressions: Vec<(usize, Atom, Atom)>) {
-        let epsilon = Atom::var(S.form_epsilon);
+        let epsilon = Atom::var(vk_symbol!("ep"));
         let mut identical = BTreeMap::new();
         let mut primitives = BTreeMap::new();
         for (loops, master, expression) in &expressions {
@@ -1076,12 +1129,11 @@ impl MasterCatalog {
     pub(super) fn symbol(&self, family_fingerprint: &str, powers: &[i64]) -> Atom {
         let mut arguments = vec![Self::family_symbol(family_fingerprint)];
         arguments.extend(powers.iter().copied().map(Atom::num));
-        S.rustred_master.call(&arguments)
+        vk_symbol!("RustRedMaster").call(&arguments)
     }
 
     pub(crate) fn coefficient_symbol(&self, master: &Atom, power: i64) -> Atom {
-        S.rustred_coefficient
-            .call((&self.coefficient_tag, master, power))
+        vk_symbol!("RustRedCoefficient").call((&self.coefficient_tag, master, power))
     }
 
     pub(crate) fn coefficient_snapshot_tag(&self) -> &Atom {
@@ -1089,14 +1141,13 @@ impl MasterCatalog {
     }
 
     fn referenced_masters(expression: &Atom) -> BTreeSet<Atom> {
-        let (coefficient_head, master_head) = (S.rustred_coefficient, S.rustred_master);
         let mut result = BTreeSet::new();
         expression.visitor(&mut |part| {
             if let AtomView::Fun(function) = part {
-                if function.get_symbol() == coefficient_head {
+                if function.get_symbol() == vk_symbol!("RustRedCoefficient") {
                     return false;
                 }
-                if function.get_symbol() == master_head {
+                if function.get_symbol() == vk_symbol!("RustRedMaster") {
                     result.insert(part.to_owned());
                     return false;
                 }
@@ -1147,26 +1198,14 @@ impl MasterCatalog {
     /// Combine the scalar coefficient of every master product exactly, on up
     /// to `threads` workers. Coefficients are combined independently and
     /// summed in collection order, so the result is independent of `threads`.
-    fn combine_master_coefficients(raw: Atom, threads: usize) -> Atom {
-        let _stage = StageSpan::new("vakint.masters.combine_retained_coefficients");
-        let raw = {
-            let _stage = StageSpan::new("vakint.masters.retain.expand");
-            Self::expand_on(&raw, threads)
-        };
+    pub(crate) fn combine_master_coefficients(raw: Atom, threads: usize) -> Atom {
+        let raw = Self::expand_on(&raw, threads);
         // Keep the same whole-expression Float policy as combine_exact.
         if Self::has_floating_coefficients(&raw) {
             return raw;
         }
-        let symbols = {
-            let _stage = StageSpan::new("vakint.masters.retain.master_discovery");
-            Self::referenced_masters(&raw)
-                .into_iter()
-                .collect::<Vec<_>>()
-        };
-        let terms = {
-            let _stage = StageSpan::new("vakint.masters.retain.coefficient_list");
-            raw.coefficient_list::<i32>(&symbols)
-        };
+        let symbols: Vec<_> = Self::referenced_masters(&raw).into_iter().collect();
+        let terms = raw.coefficient_list::<i32>(&symbols);
         // Collection leaves opaque functions and composite denominators in the
         // coefficients. Master-dependent coefficients are not independent, so
         // their cancellations still require general rational combination.
@@ -1174,17 +1213,14 @@ impl MasterCatalog {
             .iter()
             .any(|(_, coefficient)| !Self::referenced_masters(coefficient).is_empty())
         {
-            let _stage = StageSpan::new("vakint.masters.retain.global_combine_exact");
             return combine_exact(raw);
         }
         // Terminal products are independent indeterminates. Combine their
         // scalar coefficients before classifying any surviving unknowns,
         // without rationalizing the whole polynomial in those terminals.
         let combined = super::parallel::map_ordered(threads, &terms, |_, (_, coefficient)| {
-            let _stage = StageSpan::new("vakint.masters.retain.coefficient_combine_exact");
             combine_exact(coefficient.clone())
         });
-        let _stage = StageSpan::new("vakint.masters.retain.assemble");
         Atom::add_many(
             terms
                 .into_iter()
@@ -1242,7 +1278,6 @@ impl MasterCatalog {
         mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
         threads: usize,
     ) -> Atom {
-        let _stage = StageSpan::new("vakint.masters.retain");
         let started = std::time::Instant::now();
         MonitorContext::native_phase(
             observation.as_deref_mut(),
@@ -1260,7 +1295,6 @@ impl MasterCatalog {
             "retained_catalogue_classification",
             Some(raw.as_view()),
         );
-        let _classification = StageSpan::new("vakint.masters.retain.classification");
         let unresolved = self.unresolved(&raw, false, announced);
         if !unresolved.is_empty() {
             log::warn!(
@@ -1278,7 +1312,6 @@ impl MasterCatalog {
         expression: &Atom,
         announced: &BareMasterDeclarations,
     ) -> Result<(), VakintError> {
-        let _stage = StageSpan::new("vakint.masters.require_coefficients");
         let unresolved = self.unresolved(expression, true, announced);
         if unresolved.is_empty() {
             Ok(())
@@ -1301,15 +1334,16 @@ impl MasterCatalog {
         loop_count: usize,
         mode: RustRedMasterMode,
     ) -> Result<Atom, VakintError> {
-        let _stage = StageSpan::new("vakint.masters.finalize");
         // User normalization factors can introduce finite literals after the
         // frontend staged the original input. Bind those remaining literals
         // before rational algebra; an exact zero prefactor must not launch an
         // unbounded search for its first nonzero Laurent coefficient.
+        let started = super::phase_start();
         let raw = if mode == RustRedMasterMode::Numerical {
-            let _stage = StageSpan::new("vakint.masters.stage_finite_literals");
             crate::precision::legacy::stage_table(
-                S.rustred_input.call(loop_count as i64).as_view(),
+                vk_symbol!("rustred_input")
+                    .call(loop_count as i64)
+                    .as_view(),
                 raw.as_view(),
                 vk_symbol!(&settings.epsilon_symbol),
                 "Input",
@@ -1317,43 +1351,105 @@ impl MasterCatalog {
         } else {
             raw
         };
-        let direct = self.finalize_independent(raw.clone(), settings, loop_count, mode);
-        if matches!(&direct, Err(error) if !Self::lacks_master_data(error))
-            || mode == RustRedMasterMode::Retain
-            || self.basis_aliases.is_empty()
-        {
+        super::log_phase("finalize_input_staging", started);
+        let threads = super::postprocessing_threads(settings);
+        if threads <= 1 || mode == RustRedMasterMode::Retain || self.basis_aliases.is_empty() {
+            let started = super::phase_start();
+            let direct = self.finalize_independent(raw.clone(), settings, loop_count, mode);
+            super::log_phase("finalize_direct", started);
+            if matches!(&direct, Err(error) if !Self::lacks_master_data(error))
+                || mode == RustRedMasterMode::Retain
+                || self.basis_aliases.is_empty()
+            {
+                return direct;
+            }
+            return match self.finalize_aliased(&raw, settings, loop_count, mode) {
+                None => direct,
+                Some(Err(error)) if Self::lacks_master_data(&error) => direct,
+                Some(result) => result,
+            };
+        }
+        // The direct pass and the alias pass are independent: with several
+        // workers they run concurrently, and the direct result decides exactly
+        // as in the sequential order above. They share the `n_cores` budget
+        // (results never depend on the worker count): the alias pass, which
+        // combines twice (its normalization and its catalogue pass), gets
+        // about two thirds of it.
+        let direct_threads = (threads / 3).max(1);
+        let budget = |threads: usize| VakintSettings {
+            n_cores: threads,
+            ..settings.clone()
+        };
+        let direct_settings = budget(direct_threads);
+        let aliased_settings = budget((threads - direct_threads).max(1));
+        let mut outcomes = super::parallel::map_ordered(2, &[false, true], |_, aliased| {
+            if *aliased {
+                self.finalize_aliased(&raw, &aliased_settings, loop_count, mode)
+            } else {
+                let started = super::phase_start();
+                let direct =
+                    self.finalize_independent(raw.clone(), &direct_settings, loop_count, mode);
+                super::log_phase("finalize_direct", started);
+                Some(direct)
+            }
+        });
+        let aliased = outcomes.pop().expect("alias pass");
+        let direct = outcomes
+            .pop()
+            .flatten()
+            .expect("the direct pass always runs");
+        if matches!(&direct, Err(error) if !Self::lacks_master_data(error)) {
             return direct;
         }
-        // Prefer authenticated exact relations even when independently rounded
-        // coefficient rows are available: a large prefactor must not amplify
-        // their rounding differences in a mathematically zero combination.
-        // Keep direct data as a fallback when an alias has additional orders.
-        // Corruption, parsing and algebra errors are never hidden by this path.
-        let alias_substitution = StageSpan::new("vakint.masters.alias_substitution");
-        let epsilon = Atom::var(vk_symbol!(&settings.epsilon_symbol));
+        match aliased {
+            None => direct,
+            Some(Err(error)) if Self::lacks_master_data(&error) => direct,
+            Some(result) => result,
+        }
+    }
+
+    /// The catalogue pass after the authenticated basis aliases replaced
+    /// their masters, or `None` when no alias occurs in `raw`.
+    ///
+    /// Prefer authenticated exact relations even when independently rounded
+    /// coefficient rows are available: a large prefactor must not amplify
+    /// their rounding differences in a mathematically zero combination.
+    /// [`Self::finalize`] keeps direct data as a fallback when an alias has
+    /// additional orders. Corruption, parsing and algebra errors are never
+    /// hidden by this path.
+    fn finalize_aliased(
+        &self,
+        raw: &Atom,
+        settings: &VakintSettings,
+        loop_count: usize,
+        mode: RustRedMasterMode,
+    ) -> Option<Result<Atom, VakintError>> {
         let replacements: Vec<_> = self
             .basis_aliases
             .iter()
             .map(|(master, basis)| {
                 let basis = basis
-                    .replace(Atom::var(S.form_epsilon).to_pattern())
-                    .with(epsilon.clone());
+                    .replace(vk_parse!("ep").unwrap().to_pattern())
+                    .with(Atom::var(vk_symbol!(&settings.epsilon_symbol)));
                 Replacement::new(master.clone(), basis)
             })
             .collect();
-        let normalized = raw.replace_multiple(&replacements);
-        drop(alias_substitution);
-        let normalized = {
-            let _stage = StageSpan::new("vakint.masters.alias_combine_exact");
-            combine_exact(normalized)
-        };
-        if normalized == raw {
-            return direct;
+        let started = super::phase_start();
+        // Master by master, as the direct path combines; a raw expression that
+        // its caller already combined this way and that holds no alias is
+        // returned unchanged, so the direct result stands.
+        let normalized = Self::combine_master_coefficients(
+            raw.replace_multiple(&replacements),
+            super::postprocessing_threads(settings),
+        );
+        super::log_phase("finalize_alias_normalization", started);
+        if normalized == *raw {
+            return None;
         }
-        match self.finalize_independent(normalized, settings, loop_count, mode) {
-            Err(error) if Self::lacks_master_data(&error) => direct,
-            result => result,
-        }
+        let started = super::phase_start();
+        let aliased = self.finalize_independent(normalized, settings, loop_count, mode);
+        super::log_phase("finalize_aliased", started);
+        Some(aliased)
     }
 
     /// Missing master data, as opposed to corruption, parsing or algebra errors.
@@ -1390,7 +1486,6 @@ impl MasterCatalog {
         loop_count: usize,
         mode: RustRedMasterMode,
     ) -> Result<Atom, VakintError> {
-        let _stage = StageSpan::new("vakint.masters.finalize_independent");
         if mode == RustRedMasterMode::Retain {
             return Ok(self.retain(
                 raw,
@@ -1403,16 +1498,13 @@ impl MasterCatalog {
         // representations. Their dimensions label tensor interfaces rather
         // than scalar epsilon dependence, so hold that metadata fixed during
         // both valuation and Laurent expansion, then restore it on return.
-        let cook = StageSpan::new("vakint.masters.cook");
         let cooking = idenso::CookSettings::reversible().with_representation_payloads(false, true);
         let raw = cooking.try_cook(raw.as_view()).map_err(failure)?;
-        drop(cook);
-        let raw = {
-            let _stage = StageSpan::new("vakint.masters.initial_combine_exact");
-            combine_exact(raw)
-        };
+        let threads = super::postprocessing_threads(settings);
+        let started = super::phase_start();
+        let (raw, terms) = Self::independent_terms(raw, threads);
+        super::log_phase("independent_combination", started);
         self.require_coefficients(&raw, &BTreeMap::new())?;
-        let order_setup = StageSpan::new("vakint.masters.order_setup");
         let epsilon = vk_symbol!(&settings.epsilon_symbol);
         let target = settings
             .number_of_terms_in_epsilon_expansion
@@ -1443,43 +1535,22 @@ impl MasterCatalog {
                 .into());
             }
         }
-        drop(order_setup);
-        let symbols = {
-            let _stage = StageSpan::new("vakint.masters.master_discovery");
-            Self::referenced_masters(&raw)
-                .into_iter()
-                .collect::<Vec<_>>()
-        };
-        let terms = {
-            let _stage = StageSpan::new("vakint.masters.coefficient_list");
-            raw.coefficient_list::<i32>(&symbols)
-        };
+        let started = super::phase_start();
+        // The leading epsilon power of every coefficient, independently on up
+        // to `threads` workers; the loop below consumes them in term order, so
+        // its validation order and its errors are those of a sequential pass.
+        let valuations = super::parallel::map_ordered(threads, &terms, |_, (_, coefficient)| {
+            (!coefficient.is_zero()).then(|| Self::epsilon_valuation(coefficient, epsilon))
+        });
         let mut required = BTreeMap::<Atom, i64>::new();
-        let mut planned = Vec::with_capacity(terms.len());
-        for (monomial, coefficient) in terms {
-            let coefficient = {
-                let _stage = StageSpan::new("vakint.masters.coefficient_combine_exact");
-                combine_exact(coefficient)
-            };
-            if coefficient.is_zero() {
+        let mut known = Atom::Zero;
+        for ((monomial, coefficient), valuation) in terms.into_iter().zip(valuations) {
+            let Some(valuation) = valuation else {
                 continue;
-            }
-            let valuation_timing = StageSpan::new("vakint.masters.coefficient_valuation");
+            };
             let mut multiplicities = BTreeMap::new();
             Self::master_multiplicities(monomial.as_view(), &mut multiplicities)?;
-            let series = coefficient
-                .series(epsilon, Atom::Zero.as_view(), SeriesDepth::relative(1))
-                .map_err(failure)?;
-            let exponent = series.get_trailing_exponent();
-            if !exponent.is_integer() {
-                return Err(failure("fractional epsilon power in reduction coefficient").into());
-            }
-            let valuation = exponent
-                .numerator()
-                .to_i64()
-                .ok_or_else(|| failure("epsilon valuation exceeds integer range"))?;
-            drop(valuation_timing);
-            let order_planning = StageSpan::new("vakint.masters.coefficient_order_planning");
+            let valuation = valuation?;
             let minimum = multiplicities
                 .iter()
                 .try_fold(0_i64, |sum, (symbol, power)| {
@@ -1503,18 +1574,12 @@ impl MasterCatalog {
                     .and_modify(|current| *current = (*current).max(last))
                     .or_insert(last);
             }
-            drop(order_planning);
-            planned.push(MasterSeriesTerm {
-                monomial,
-                coefficient,
-                multiplicities,
-                leading: series,
-            });
+            known += monomial * coefficient;
         }
+        super::log_phase("independent_coefficients", started);
+        let started = super::phase_start();
         let mut exact_values = BTreeMap::new();
-        let mut expansions = BTreeMap::new();
         for (symbol, last) in required {
-            let _stage = StageSpan::new("vakint.masters.master_expansion");
             let master = &self.masters[&symbol];
             let first = master.leading_power()?;
             // Substitute the available coefficients the planned depth needs
@@ -1534,21 +1599,11 @@ impl MasterCatalog {
                 if let Some(coefficient) = master.coefficients.get(&power)
                     && let Some(formula) = &coefficient.exact
                 {
-                    let exact = {
-                        let _stage = StageSpan::new("vakint.masters.formula_parse");
-                        vk_parse!(formula).map_err(failure)?
-                    };
+                    let exact = vk_parse!(formula).map_err(failure)?;
                     // Keep finite embedded constants behind a named coefficient
                     // until their precision has been checked in numerical mode.
-                    let finite_precision = {
-                        let _stage = StageSpan::new("vakint.masters.formula_precision");
-                        Self::finite_precision(&exact)
-                    };
-                    if finite_precision.is_none() {
-                        let exact = {
-                            let _stage = StageSpan::new("vakint.masters.formula_normalization");
-                            crate::hpl::normalize_constants(exact.as_view())?
-                        };
+                    if Self::finite_precision(&exact).is_none() {
+                        let exact = crate::hpl::normalize_constants(exact.as_view())?;
                         // Numerical evaluation needs the original coefficient
                         // identity for precision diagnostics. Exact zeros must
                         // still disappear before epsilon availability checks.
@@ -1557,24 +1612,28 @@ impl MasterCatalog {
                 }
                 expansion += placeholder * Atom::var(epsilon).pow(Atom::num(power));
             }
-            expansions.insert(symbol, expansion);
+            known = known.replace(symbol.to_pattern()).with(expansion);
         }
-        let result = {
-            let _stage = StageSpan::new("vakint.masters.epsilon_series");
-            Self::expand_master_series(planned, expansions, &exact_values, epsilon, target, mode)?
-        };
-        let result = {
-            let _stage = StageSpan::new("vakint.masters.series_to_atom");
-            result.to_atom()
-        };
-        let mut result = {
-            let _stage = StageSpan::new("vakint.masters.final_combine_exact");
-            combine_exact(result)
-        };
+        // Exact zero coefficients and exact relations must cancel before an
+        // absent/high-order or low-precision coefficient can cause an error.
+        for (source, value) in &exact_values {
+            if mode == RustRedMasterMode::Symbolic || value.is_zero() {
+                known = known.replace(source.to_pattern()).with(value.clone());
+            }
+        }
+        super::log_phase("independent_master_substitution", started);
+        let started = super::phase_start();
+        let series = known
+            .series(epsilon, Atom::Zero.as_view(), Rational::from(target))
+            .map_err(failure)?
+            .to_atom();
+        super::log_phase("independent_series", started);
+        let started = super::phase_start();
+        let mut result = combine_exact(series);
+        super::log_phase("independent_series_combination", started);
         // Keeping exact coefficient identities improves diagnostics, but an
         // unavailable order can multiply a provably zero combination of known
         // lower orders. Resolve that algebraic question before rejecting it.
-        let numerical_availability = StageSpan::new("vakint.masters.numerical_availability");
         if mode == RustRedMasterMode::Numerical
             && (crate::truncation_guard::has_unknown_tail(result.as_view())
                 || matches!(
@@ -1584,18 +1643,14 @@ impl MasterCatalog {
                     ))
                 ))
         {
-            let substitution = StageSpan::new("vakint.masters.numerical_exact_substitution");
             let replacements = exact_values
                 .into_iter()
                 .map(|(source, value)| Replacement::new(source, value))
                 .collect::<Vec<_>>();
-            result = result.replace_multiple(&replacements);
-            drop(substitution);
-            let _stage = StageSpan::new("vakint.masters.numerical_exact_combine_exact");
-            result = combine_exact(result);
+            let started = super::phase_start();
+            result = combine_exact(result.replace_multiple(&replacements));
+            super::log_phase("independent_exact_value_retry", started);
         }
-        drop(numerical_availability);
-        let validation = StageSpan::new("vakint.masters.remaining_validation");
         crate::truncation_guard::ensure_known_orders(
             &result,
             epsilon,
@@ -1604,196 +1659,85 @@ impl MasterCatalog {
             |master| self.describe_master(master),
         )?;
         self.check_coefficients(&result, mode == RustRedMasterMode::Numerical)?;
-        drop(validation);
         if mode == RustRedMasterMode::Numerical {
+            let started = super::phase_start();
             result = self.resolve_numerical(result, settings)?;
+            super::log_phase("independent_numerical_resolution", started);
         }
         if mode == RustRedMasterMode::Symbolic {
-            let _stage = StageSpan::new("vakint.masters.bind_period_references");
             // An exact formula can still depend on snapshot-local finite
             // periods. Bind those leaves before returning a symbolic result,
             // so loading another release cannot silently change its value.
             result = self.bind_period_references(result)?;
         }
-        let _stage = StageSpan::new("vakint.masters.uncook");
         Ok(cooking.uncook(result.as_view()))
     }
 
-    /// Assemble independently planned terms without materializing their large
-    /// substituted sum. Series precision is relative to the *actual* leading
-    /// order after exact zero coefficients have disappeared, not the catalogue
-    /// lower bound used to request coefficients. Every factor of a product needs
-    /// the same relative depth to retain all powers through `target`.
-    fn expand_master_series(
-        mut terms: Vec<MasterSeriesTerm>,
-        expansions: BTreeMap<Atom, Atom>,
-        exact_values: &BTreeMap<Atom, Atom>,
-        epsilon: Symbol,
-        target: i64,
-        mode: RustRedMasterMode,
-    ) -> Result<Series<AtomField>, VakintError> {
-        let selected = exact_values
-            .iter()
-            .filter(|(_, value)| mode == RustRedMasterMode::Symbolic || value.is_zero())
-            .collect::<Vec<_>>();
-        let substitute_coefficients = |mut expression: Atom| {
-            let _stage = StageSpan::new("vakint.masters.coefficient_substitution");
-            if expression.contains_symbol(S.rustred_coefficient) {
-                for &(source, value) in &selected {
-                    expression = expression.replace(source.to_pattern()).with(value.clone());
-                }
-            }
-            expression
-        };
-
-        // Distributing floating sums changes rounding. Epsilon-dependent
-        // formulae can also cancel singularities (e.g. exp(1/epsilon)) between
-        // masters before expansion. Those expressions must cancel as a whole.
-        // Overlapping or epsilon-dependent terminal labels likewise require
-        // the original ordered substitution, including their metadata.
-        let cancel_before_expansion = terms
-            .iter()
-            .any(|term| Self::has_floating_coefficients(&term.coefficient))
-            || selected.iter().any(|(_, value)| {
-                value.contains_symbol(epsilon) || Self::has_floating_coefficients(value)
-            })
-            || expansions.keys().any(|symbol| {
-                symbol.contains_symbol(epsilon)
-                    || matches!(symbol.as_view(), AtomView::Fun(function)
-                        if function.iter().any(|arg| arg.contains_symbol(S.rustred_master)))
-            });
-        if cancel_before_expansion {
-            let mut known = Atom::Zero;
-            {
-                let _stage = StageSpan::new("vakint.masters.scalar_assembly");
-                for term in terms {
-                    known += term.monomial * term.coefficient;
-                }
-            }
-            {
-                let _stage = StageSpan::new("vakint.masters.master_substitution");
-                for (symbol, expansion) in expansions {
-                    known = known.replace(symbol.to_pattern()).with(expansion);
-                }
-            }
-            known = substitute_coefficients(known);
-            let _stage = StageSpan::new("vakint.masters.scalar_series");
-            return known
-                .series(epsilon, Atom::Zero.as_view(), Rational::from(target))
-                .map_err(|error| failure(error).into());
-        }
-
-        let mut masters = BTreeMap::new();
+    /// The master monomials of `raw` with their exactly combined scalar
+    /// coefficients (in collection order), and `raw` itself combined.
+    ///
+    /// This is the coefficient list of `combine_exact(raw)` with every
+    /// coefficient combined once more, computed per coefficient instead of
+    /// over one common denominator of the whole sum: terminal products are
+    /// independent indeterminates, so each coefficient's normal form is that
+    /// of its own value (over Q(i), as at five loops, `together` normalizes
+    /// neither the numerator nor the constants and keeps monic irreducible
+    /// denominators). The coefficients are combined on up to `threads`
+    /// workers and returned in collection order. Floating coefficients keep
+    /// the expanded sum, and coefficients that still reference masters keep
+    /// the whole-sum combination, as before.
+    fn independent_terms(raw: Atom, threads: usize) -> (Atom, Vec<(Atom, Atom)>) {
+        let expanded = Self::expand_on(&raw, threads);
+        let floating = Self::has_floating_coefficients(&expanded);
+        let symbols: Vec<_> = Self::referenced_masters(&expanded).into_iter().collect();
+        let terms = expanded.coefficient_list::<i32>(&symbols);
+        if !floating
+            && terms
+                .iter()
+                .any(|(_, coefficient)| !Self::referenced_masters(coefficient).is_empty())
         {
-            let _stage = StageSpan::new("vakint.masters.series_valuation");
-            for (symbol, expansion) in &expansions {
-                let expansion = substitute_coefficients(expansion.clone());
-                let leading = expansion
-                    .series(epsilon, Atom::Zero.as_view(), SeriesDepth::relative(1))
-                    .map_err(failure)?;
-                masters.insert(symbol.clone(), (expansion, leading));
-            }
-            for term in &mut terms {
-                // Collection can leave masters inside an opaque coefficient.
-                // Apply the same substitutions there before finding its order.
-                if term.coefficient.contains_symbol(S.rustred_master)
-                    || term.coefficient.contains_symbol(S.rustred_coefficient)
-                {
-                    let mut coefficient = term.coefficient.clone();
-                    if coefficient.contains_symbol(S.rustred_master) {
-                        let _stage = StageSpan::new("vakint.masters.master_substitution");
-                        for (symbol, expansion) in &expansions {
-                            coefficient = coefficient
-                                .replace(symbol.to_pattern())
-                                .with(expansion.clone());
-                        }
-                    }
-                    coefficient = substitute_coefficients(coefficient);
-                    if coefficient != term.coefficient {
-                        term.leading = coefficient
-                            .series(epsilon, Atom::Zero.as_view(), SeriesDepth::relative(1))
-                            .map_err(failure)?;
-                        term.coefficient = coefficient;
-                    }
-                }
-            }
+            let combined = combine_exact(expanded);
+            let symbols: Vec<_> = Self::referenced_masters(&combined).into_iter().collect();
+            let terms = combined
+                .coefficient_list::<i32>(&symbols)
+                .into_iter()
+                .map(|(monomial, coefficient)| (monomial, combine_exact(coefficient)))
+                .collect();
+            return (combined, terms);
         }
-
-        let end = Rational::from(target) + Rational::from(1);
-        let mut depths = BTreeMap::<Atom, Rational>::new();
-        let mut products = Vec::with_capacity(terms.len());
-        'terms: for term in terms {
-            if term.leading.is_zero() {
-                continue;
-            }
-            let mut valuation = term.leading.get_trailing_exponent();
-            for (symbol, power) in &term.multiplicities {
-                let leading = &masters[symbol].1;
-                if leading.is_zero() {
-                    continue 'terms;
-                }
-                valuation += leading.get_trailing_exponent() * Rational::from(*power);
-            }
-            let depth = (&end - &valuation).max(Rational::from(1));
-            for symbol in term.multiplicities.keys() {
-                depths
-                    .entry(symbol.clone())
-                    .and_modify(|required| *required = required.clone().max(depth.clone()))
-                    .or_insert_with(|| depth.clone());
-            }
-            products.push((term, depth));
-        }
-
-        let mut master_series = BTreeMap::new();
-        {
-            let _stage = StageSpan::new("vakint.masters.master_series");
-            for (symbol, depth) in depths {
-                let (expansion, leading) = masters.remove(&symbol).unwrap();
-                let series = if depth <= leading.relative_order() {
-                    leading
-                } else {
-                    expansion
-                        .series(epsilon, Atom::Zero.as_view(), SeriesDepth::relative(depth))
-                        .map_err(failure)?
-                };
-                master_series.insert(symbol, series);
-            }
-        }
-        let mut result = Vec::with_capacity(products.len());
-        for (term, depth) in products {
-            let mut product = {
-                let _stage = StageSpan::new("vakint.masters.coefficient_series");
-                if depth <= term.leading.relative_order() {
-                    term.leading
-                } else {
-                    term.coefficient
-                        .series(epsilon, Atom::Zero.as_view(), SeriesDepth::relative(depth))
-                        .map_err(failure)?
-                }
-            };
-            {
-                let _stage = StageSpan::new("vakint.masters.series_multiply");
-                for (symbol, power) in term.multiplicities {
-                    let master = &master_series[&symbol];
-                    product = if power == 1 {
-                        product * master
-                    } else {
-                        product * &master.npow(usize::try_from(power).map_err(failure)?)
-                    };
-                }
-                debug_assert!(product.absolute_order() >= end);
-                product.truncate_absolute_order(end.clone());
-            }
-            result.push(product);
-        }
-        let _stage = StageSpan::new("vakint.masters.series_sum");
-        if result.is_empty() {
-            Atom::Zero
-                .series(epsilon, Atom::Zero.as_view(), Rational::from(target))
-                .map_err(|error| failure(error).into())
+        let coefficients = super::parallel::map_ordered(threads, &terms, |_, (_, coefficient)| {
+            combine_exact(coefficient.clone())
+        });
+        let terms: Vec<_> = terms
+            .into_iter()
+            .zip(coefficients)
+            .map(|((monomial, _), coefficient)| (monomial, coefficient))
+            .collect();
+        let combined = if floating {
+            expanded
         } else {
-            Ok(Series::sum(result))
+            Atom::add_many(
+                terms
+                    .iter()
+                    .map(|(monomial, coefficient)| monomial * coefficient),
+            )
+        };
+        (combined, terms)
+    }
+
+    /// The trailing epsilon power of a nonzero reduction coefficient.
+    fn epsilon_valuation(coefficient: &Atom, epsilon: Symbol) -> Result<i64, VakintError> {
+        let series = coefficient
+            .series(epsilon, Atom::Zero.as_view(), SeriesDepth::relative(1))
+            .map_err(failure)?;
+        let exponent = series.get_trailing_exponent();
+        if !exponent.is_integer() {
+            return Err(failure("fractional epsilon power in reduction coefficient").into());
         }
+        Ok(exponent
+            .numerator()
+            .to_i64()
+            .ok_or_else(|| failure("epsilon valuation exceeds integer range"))?)
     }
 
     fn master_multiplicities(
@@ -1801,7 +1745,7 @@ impl MasterCatalog {
         output: &mut BTreeMap<Atom, i64>,
     ) -> Result<(), RustRedEvaluationError> {
         match value {
-            AtomView::Fun(function) if function.get_symbol() == S.rustred_master => {
+            AtomView::Fun(function) if function.get_symbol() == vk_symbol!("RustRedMaster") => {
                 *output.entry(value.to_owned()).or_default() += 1;
             }
             AtomView::Mul(product) => {
@@ -1816,7 +1760,7 @@ impl MasterCatalog {
                     .ok_or_else(|| {
                         failure("master expressions must be polynomials in terminal integrals")
                     })?;
-                if !matches!(base, AtomView::Fun(function) if function.get_symbol() == S.rustred_master)
+                if !matches!(base, AtomView::Fun(function) if function.get_symbol() == vk_symbol!("RustRedMaster"))
                 {
                     return Err(failure("unexpected factor in master monomial"));
                 }
@@ -1833,16 +1777,12 @@ impl MasterCatalog {
     }
 
     fn coefficient_references(expression: &Atom) -> BTreeSet<Atom> {
-        let coefficient_head = S.rustred_coefficient;
         let mut references = BTreeSet::new();
         expression.visitor(&mut |part| {
-            if matches!(part, AtomView::Fun(function) if function.get_symbol() == coefficient_head)
-            {
+            if matches!(part, AtomView::Fun(function) if function.get_symbol() == vk_symbol!("RustRedCoefficient")) {
                 references.insert(part.to_owned());
                 false
-            } else {
-                true
-            }
+            } else { true }
         });
         references
     }
@@ -1935,12 +1875,7 @@ impl MasterCatalog {
         expression: Atom,
         _settings: &VakintSettings,
     ) -> Result<Atom, VakintError> {
-        let _stage = StageSpan::new("vakint.masters.resolve_numerical");
-        let result = {
-            let _stage = StageSpan::new("vakint.masters.resolve_numerical.combine_exact");
-            combine_exact(expression)
-        };
-        let _validation = StageSpan::new("vakint.masters.resolve_numerical.validation");
+        let result = combine_exact(expression);
         let unresolved = self.unresolved(&result, true, &BTreeMap::new());
         if !unresolved.is_empty() {
             return Err(RustRedEvaluationError::MasterCapability {
@@ -1970,14 +1905,6 @@ impl MasterCatalog {
         Ok(result)
     }
 }
-
-#[cfg(test)]
-#[path = "masters_grouping_tests.rs"]
-mod grouping_tests;
-
-#[cfg(test)]
-#[path = "masters_series_tests.rs"]
-mod series_tests;
 
 #[cfg(test)]
 #[path = "masters_acceptance_tests.rs"]
@@ -2013,8 +1940,6 @@ mod tests {
                 graph: "test-parent.dot".into(),
                 metadata: serde_json::Value::Null,
                 data: None,
-                parsed_basis: OnceLock::new(),
-                parsed_names: OnceLock::new(),
                 coefficients: BTreeMap::from([
                     (
                         -1,
@@ -2037,6 +1962,8 @@ mod tests {
                         },
                     ),
                 ]),
+                parsed_basis: OnceLock::new(),
+                parsed_names: OnceLock::new(),
             },
         );
         (catalog, symbol)
@@ -2049,45 +1976,6 @@ mod tests {
             number_of_terms_in_epsilon_expansion: terms,
             ..Default::default()
         }
-    }
-
-    #[test]
-    fn parsed_master_metadata_is_local_to_each_immutable_record() {
-        let (mut first, first_symbol) = catalog(None, 30);
-        let first_master = first.masters.get_mut(&first_symbol).unwrap();
-        first_master.identity = "cache_identity_a".into();
-        first_master.metadata = serde_json::json!({
-            "name": "cache_public_a", "exact_basis_expression": "PR4",
-        });
-        let (mut second, second_symbol) = catalog(None, 30);
-        let second_master = second.masters.get_mut(&second_symbol).unwrap();
-        second_master.identity = "cache_identity_b".into();
-        second_master.metadata = serde_json::json!({
-            "name": "cache_public_b", "exact_basis_expression": "PR4d",
-        });
-        let first = &first.masters[&first_symbol];
-        let second = &second.masters[&second_symbol];
-        assert_eq!(first.basis_expression(), Some(&vk_parse!("PR4").unwrap()));
-        assert_eq!(second.basis_expression(), Some(&vk_parse!("PR4d").unwrap()));
-        assert_ne!(first.names(), second.names());
-        assert!(
-            first
-                .names()
-                .contains(&vk_parse!("cache_public_a").unwrap())
-        );
-        let basis = first.basis_expression().unwrap();
-        let names = first.names();
-        std::thread::scope(|scope| {
-            for _ in 0..8 {
-                scope.spawn(|| {
-                    for _ in 0..128 {
-                        assert!(std::ptr::eq(first.basis_expression().unwrap(), basis));
-                        assert!(std::ptr::eq(first.names(), names));
-                        assert_ne!(first.basis_expression(), second.basis_expression());
-                    }
-                });
-            }
-        });
     }
 
     #[test]
@@ -2267,7 +2155,7 @@ mod tests {
         {
             let expression = vk_parse!(input).unwrap();
             assert_eq!(
-                together_over_shared_remainder(&expression.expand()).is_ok(),
+                together_over_shared_remainder(&expression.expand()).is_some(),
                 combined,
                 "{input}"
             );
@@ -2282,29 +2170,6 @@ mod tests {
             combine_exact(floating.clone()),
             proxy_tests::reference_combine_exact(floating)
         );
-    }
-
-    #[test]
-    fn shared_remainder_diagnostics_identify_the_rejected_condition() {
-        crate::Vakint::initialize_vakint_symbols();
-        for (input, reason) in [
-            ("x", "not_sum"),
-            ("x+y", "multiple_varying_symbols"),
-            ("(1-ep)^-1-1", "distinct_remainder"),
-            ("(1+ep)*(x-ep)^-1", "unsupported_denominator"),
-        ] {
-            let expression = vk_parse!(input).unwrap();
-            assert_eq!(
-                together_over_shared_remainder(&expression.expand()),
-                Err(reason),
-                "{input}"
-            );
-            assert_eq!(
-                combine_exact(expression.clone()),
-                proxy_tests::reference_combine_exact(expression),
-                "{input}"
-            );
-        }
     }
 
     #[test]
@@ -3095,7 +2960,7 @@ mod tests {
     }
 
     #[test]
-    fn declared_basis_relations_cancel_missing_orders_without_discarding_richer_alias_data() {
+    fn alias_and_direct_passes_agree_for_every_worker_count() {
         let (mut catalog, master) = catalog(Some("2"), 80);
         let alias = catalog.symbol("test-family", &[2]);
         catalog.masters.insert(
@@ -3106,8 +2971,6 @@ mod tests {
                 graph: "test-parent.dot".into(),
                 metadata: serde_json::Value::Null,
                 data: None,
-                parsed_basis: OnceLock::new(),
-                parsed_names: OnceLock::new(),
                 coefficients: BTreeMap::from([
                     (
                         -1,
@@ -3130,6 +2993,81 @@ mod tests {
                         },
                     ),
                 ]),
+                parsed_basis: OnceLock::new(),
+                parsed_names: OnceLock::new(),
+            },
+        );
+        catalog.load_basis_aliases(vec![
+            (1, master.clone(), vk_parse!("test_basis").unwrap()),
+            (1, alias.clone(), vk_parse!("(3-4*ep)*test_basis").unwrap()),
+        ]);
+        let raws = [
+            (alias.clone() - vk_parse!("3-4*ep").unwrap() * &master) / vk_parse!("ep").unwrap(),
+            alias.clone() / vk_parse!("ep").unwrap(),
+            alias.clone() * vk_parse!("2+ep").unwrap() + master.clone(),
+            master.clone(),
+            alias.clone(),
+        ];
+        let outcome = |raw: &Atom, mode, n_cores| {
+            let request = VakintSettings {
+                n_cores,
+                ..settings(80, 2)
+            };
+            match catalog.finalize(raw.clone(), &request, 1, mode) {
+                Ok(value) => format!("ok {}", value.to_canonical_string()),
+                Err(error) => format!("error {error}"),
+            }
+        };
+        for raw in &raws {
+            for mode in [
+                RustRedMasterMode::Retain,
+                RustRedMasterMode::Symbolic,
+                RustRedMasterMode::Numerical,
+            ] {
+                let sequential = outcome(raw, mode, 1);
+                for n_cores in [2, 4] {
+                    assert_eq!(outcome(raw, mode, n_cores), sequential, "{raw} {mode:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn declared_basis_relations_cancel_missing_orders_without_discarding_richer_alias_data() {
+        let (mut catalog, master) = catalog(Some("2"), 80);
+        let alias = catalog.symbol("test-family", &[2]);
+        catalog.masters.insert(
+            alias.clone(),
+            Master {
+                identity: "test-alias".into(),
+                loop_count: 1,
+                graph: "test-parent.dot".into(),
+                metadata: serde_json::Value::Null,
+                data: None,
+                coefficients: BTreeMap::from([
+                    (
+                        -1,
+                        Coefficient {
+                            exact: Some("3".into()),
+                            numerical: Some("3".into()),
+                            significant_digits: Some(80),
+                            absolute_error: None,
+                            error_is_bounded: false,
+                        },
+                    ),
+                    (
+                        0,
+                        Coefficient {
+                            exact: Some("2".into()),
+                            numerical: Some("2".into()),
+                            significant_digits: Some(80),
+                            absolute_error: None,
+                            error_is_bounded: false,
+                        },
+                    ),
+                ]),
+                parsed_basis: OnceLock::new(),
+                parsed_names: OnceLock::new(),
             },
         );
         catalog.load_basis_aliases(vec![
@@ -3551,5 +3489,92 @@ mod tests {
             )
             .is_ok()
         );
+    }
+}
+
+#[cfg(test)]
+mod laurent_together_tests {
+    use super::*;
+
+    /// Gaussian rational Laurent polynomials in symbols and opaque functions,
+    /// from a fixed linear congruential sequence.
+    fn generated(seed: u64, terms: usize) -> Atom {
+        let mut state = seed;
+        let mut next = move |modulus: u64| {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            (state >> 33) % modulus
+        };
+        let symbols = ["ep", "mUV", "x"];
+        let functions = [
+            "RustRedCoefficient(tag,RustRedMaster(fam,1,1),-2)",
+            "RustRedCoefficient(tag,RustRedMaster(fam,1,2),0)",
+            "log(𝜋)",
+            "f(1,2)",
+        ];
+        let mut sum = Atom::Zero;
+        for _ in 0..terms {
+            let re = next(41) as i64 - 20;
+            let im = next(41) as i64 - 20;
+            let den = next(9) as i64 + 1;
+            let mut term = vk_parse!(format!("({re}+{im}*𝑖)/{den}")).unwrap();
+            for symbol in symbols {
+                let power = next(7) as i64 - 3;
+                term *= vk_parse!(symbol).unwrap().pow(Atom::num(power));
+            }
+            for function in functions {
+                let power = next(4) as i64;
+                term *= vk_parse!(function).unwrap().pow(Atom::num(power));
+            }
+            sum += term;
+        }
+        sum.expand()
+    }
+
+    #[test]
+    fn gaussian_laurent_assembly_equals_symbolica_together() {
+        crate::Vakint::initialize_vakint_symbols();
+        let mut inputs: Vec<Atom> = [
+            "(3/4+2*𝑖)*ep^-3*f(1)+𝑖*ep^-1*f(2)*x^2+5*f(1)*f(2)*ep^2-7/3*𝑖*x^-2*ep^-1+11",
+            "𝑖*RustRedCoefficient(t,RustRedMaster(a,1),-2)*ep^-2+(1/2-𝑖/3)*RustRedCoefficient(t,RustRedMaster(a,1),-1)*ep^-1*mUV^-2+log(x)*EulerGamma*ep",
+            "𝑖*f(1)+f(2)^2*x+1",
+            "(123456789012345678901234567890/7+𝑖)*ep^-5*y^-1+2*ep^-4+𝑖*y*f(3)^3",
+            "𝑖*ep^-2*f(1)+ep^-2*f(2)",
+            "𝑖*ep^-2*f(1)+ep^-1*f(2)+ep^-2*f(2)",
+        ]
+        .into_iter()
+        .map(|input| vk_parse!(input).unwrap().expand())
+        .collect();
+        inputs.extend((0..12).map(|seed| generated(seed, 5 + 7 * seed as usize)));
+        for input in inputs {
+            let fast = together_gaussian_laurent(&input)
+                .unwrap_or_else(|| panic!("fast path declined {input}"));
+            assert_eq!(fast, input.together(), "{input}");
+            assert_eq!(combine_exact(input.clone()), input.together(), "{input}");
+        }
+    }
+
+    #[test]
+    fn gaussian_laurent_assembly_declines_other_shapes() {
+        crate::Vakint::initialize_vakint_symbols();
+        for input in [
+            // no imaginary coefficient: the integer normal form differs
+            "ep^-1*f(1)+ep^-2",
+            // polynomial and negative function denominators
+            "𝑖*(1+ep)^-1+ep",
+            "𝑖*f(1)^-1+ep",
+            // non-integer and symbolic exponents
+            "𝑖*x^(1/2)+x",
+            "𝑖*x^ep+1",
+            // a single term
+            "𝑖*ep^-2",
+        ] {
+            let expanded = vk_parse!(input).unwrap().expand();
+            assert!(together_gaussian_laurent(&expanded).is_none(), "{input}");
+            assert_eq!(combine_exact(expanded.clone()), {
+                together_over_shared_remainder(&expanded).unwrap_or_else(|| expanded.together())
+            });
+        }
     }
 }

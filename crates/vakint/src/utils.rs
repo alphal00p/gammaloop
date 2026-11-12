@@ -15,7 +15,14 @@ use crate::{
 };
 
 pub(crate) mod vakint_macros {
+    /// Parse `$s` in the vakint namespace. A string literal is parsed once per
+    /// call site and cloned afterwards; symbols never change once created.
     macro_rules! vk_parse {
+        ($s: literal) => {{
+            static PARSED: std::sync::LazyLock<Result<symbolica::atom::Atom, String>> =
+                std::sync::LazyLock::new(|| symbolica::try_parse!($s, default_namespace = crate::NAMESPACE));
+            PARSED.clone()
+        }};
         ($s: expr) => {{ symbolica::try_parse!($s, default_namespace = crate::NAMESPACE) }};
         ($s: expr, $ns: expr) => {{ symbolica::try_parse!($s, default_namespace = $ns) }};
     }
@@ -29,7 +36,19 @@ pub(crate) mod vakint_macros {
     //     }};
     // }
 
+    /// The symbol `$s` in the vakint namespace. A string literal is parsed once
+    /// per call site: hot visitors and predicates name fixed symbols, and the
+    /// parser (with two formatted strings) dominated them.
     macro_rules! vk_symbol {
+        ($s: literal) => {{
+            static SYMBOL: std::sync::LazyLock<symbolica::atom::Symbol> =
+                std::sync::LazyLock::new(|| $crate::utils::vakint_macros::vk_symbol_uncached!($s));
+            *SYMBOL
+        }};
+        ($s: expr) => {{ $crate::utils::vakint_macros::vk_symbol_uncached!($s) }};
+    }
+
+    macro_rules! vk_symbol_uncached {
         ($s: expr) => {{
             if format!("{}", $s).starts_with(format!("{}::", crate::NAMESPACE).as_str()) {
                 match symbolica::try_parse!($s) {
@@ -52,7 +71,7 @@ pub(crate) mod vakint_macros {
         }};
     }
 
-    pub(crate) use {vk_parse, vk_symbol};
+    pub(crate) use {vk_parse, vk_symbol, vk_symbol_uncached};
 }
 
 #[macro_export]

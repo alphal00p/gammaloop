@@ -13,6 +13,7 @@ pub(crate) mod data;
 pub(crate) mod masters;
 pub(crate) use experimental::timing::MathSpan;
 pub(crate) use masters::combine_exact;
+pub(crate) use parallel::map_ordered;
 #[cfg(all(unix, not(target_arch = "wasm32")))]
 mod official;
 #[cfg(all(unix, not(target_arch = "wasm32")))]
@@ -34,6 +35,7 @@ pub use shipped_cache::{
 mod factor_projection;
 mod factor_provider;
 pub(crate) mod five_loop;
+pub(crate) use five_loop::rustred_evaluates_loop;
 mod four_loop;
 mod mass_channels;
 mod matching;
@@ -41,7 +43,14 @@ mod materialize;
 pub(crate) mod monitor;
 mod numerator;
 mod ordered;
-mod parallel;
+pub(crate) mod p_data;
+pub(crate) mod p_integral;
+pub(crate) mod p_shipped_cache;
+#[cfg(test)]
+mod p_shipped_cache_tests;
+pub(crate) mod parallel;
+#[cfg(test)]
+mod postprocessing_profile_tests;
 mod request_dump;
 #[cfg(test)]
 mod terminal;
@@ -63,9 +72,7 @@ use std::fmt;
 use symbolica::atom::{Atom, AtomView};
 use thiserror::Error;
 
-use crate::{
-    ReplacementRules, Topology, Vakint, VakintError, VakintSettings, stage_timing::StageSpan,
-};
+use crate::{EvaluationMethod, ReplacementRules, Topology, Vakint, VakintError, VakintSettings};
 
 use matching::MatchedScalarFamily;
 
@@ -209,6 +216,25 @@ impl RustRedEvaluationError {
     }
 }
 
+/// Debug wall time of one post-reduction phase, logged at `debug` level with
+/// target `vakint::postprocessing` (`RUST_LOG=vakint::postprocessing=debug`).
+/// Nothing is measured or printed unless that level is enabled.
+pub(crate) fn log_phase(phase: &str, started: Option<std::time::Instant>) {
+    if let Some(started) = started {
+        log::debug!(
+            target: "vakint::postprocessing",
+            "phase={phase} elapsed_seconds={:.6}",
+            started.elapsed().as_secs_f64()
+        );
+    }
+}
+
+/// The start of a phase timed by [`log_phase`]; `None` when the log level is off.
+pub(crate) fn phase_start() -> Option<std::time::Instant> {
+    log::log_enabled!(target: "vakint::postprocessing", log::Level::Debug)
+        .then(std::time::Instant::now)
+}
+
 /// Worker threads for the independent caller-side work around a native
 /// reduction: guard and retained-coefficient materialization and the retained
 /// catalogue combination. Each item is computed exactly as on one thread and
@@ -240,6 +266,7 @@ pub(crate) fn supports(
     MatchedScalarFamily::try_from_topology(topology).is_ok()
         || four_loop::supports(topology)
         || five_loop::supports(topology)
+        || p_integral::supports(topology)
 }
 
 /// Native application options of one request. Vakint always reduces with
@@ -254,17 +281,50 @@ pub(crate) fn application_options(
     rustred_app::SavedApplicationOptions {
         reduction_strategy: rustred::reduction::ReductionStrategy::Ordered,
         unresolved_policy: rustred::solver::UnresolvedPolicy::Preserve,
-        ordered_weight_arithmetic: settings.rustred_ordered_weight_arithmetic(),
+        ordered_weight_arithmetic: five_loop_ordered_weight_arithmetic(settings),
         ordered_scheduler: ordered_scheduler(settings),
         preparation_workers: settings.n_cores,
         ..settings.rustred_application_options
     }
 }
 
+/// Ordered weight arithmetic of five-loop saved-application requests.
+///
+/// RustRed composes the raw terminals of a modular request with the package's
+/// published terminal rows modulo every prime, before the rational
+/// reconstruction (compose before lift), so only the coefficients on the
+/// masters are reconstructed. Their degree in `d` is far below the degree of
+/// the raw terminal coefficients: `modular_sampled` replays the recorded walk
+/// at as many points as that degree needs, while `modular_polynomial` carries
+/// weights of the raw-terminal size through every replay. With the default
+/// selection ([`crate::OrderedWeightArithmetic::is_default_selection`]),
+/// five-loop requests therefore use `modular_sampled` on the same workers; an
+/// explicit selection, including an explicit `modular_polynomial`, is kept.
+/// Every arithmetic returns the same exact result.
+pub(crate) fn five_loop_ordered_weight_arithmetic(
+    settings: &VakintSettings,
+) -> crate::RustRedOrderedWeightArithmetic {
+    let selection = settings.ordered_weight_arithmetic;
+    if !selection.is_default_selection() {
+        return settings.rustred_ordered_weight_arithmetic();
+    }
+    let sampled = crate::OrderedWeightArithmetic::modular_sampled();
+    match selection.threads() {
+        Some(threads) => sampled.with_threads(threads),
+        None => sampled,
+    }
+    .resolve(settings.n_cores)
+}
+
 /// Whether the data needed to reduce a supported topology is loaded. One to
 /// three loops use the vendored artifacts; four and five loops need external
-/// data or, at five loops, a configured application package.
+/// data or, at five loops, a configured application package. A p-integral
+/// needs a p library whose scope contains its loop count (`p_data`); without
+/// one it goes to Forcer.
 pub(crate) fn has_data(vakint: &Vakint, settings: &VakintSettings, topology: &Topology) -> bool {
+    if let Topology::Propagator(integral) = topology {
+        return p_integral::has_p_data(vakint, integral.n_loops);
+    }
     match topology.get_integral().n_loops {
         4 => vakint
             .rustred_data
@@ -273,6 +333,22 @@ pub(crate) fn has_data(vakint: &Vakint, settings: &VakintSettings, topology: &To
         5 => settings.rustred_artifact_path.is_some() || vakint.has_rustred_loop(5),
         _ => true,
     }
+}
+
+/// Whether `method` is RustRed for a p-integral that no p library of the
+/// engine covers. `Vakint::evaluation_method` never falls back to such a
+/// method: the p-integral keeps Forcer's error (`ForcerUnavailable` without
+/// FORM 5, else `NoEvaluationMethodFound`), as before the p backend existed
+/// (`docs/p_integrals.md`, section 5).
+pub(crate) fn p_integral_without_library(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    topology: &Topology,
+    method: &EvaluationMethod,
+) -> bool {
+    matches!(topology, Topology::Propagator(_))
+        && matches!(method, EvaluationMethod::RustRed(_))
+        && !has_data(vakint, settings, topology)
 }
 
 impl Vakint {
@@ -305,18 +381,14 @@ impl Vakint {
         mode: RustRedMasterMode,
         observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
     ) -> Result<Atom, VakintError> {
-        let _stage = StageSpan::new("vakint.finalize_rustred");
         // Ordered reduction combines all normalized contributions first, so
         // simplify real logarithms and zero powers once here, before master
         // substitution, rather than per contribution.
-        let raw = {
-            let _stage = StageSpan::new("vakint.finalize_rustred.simplify_real");
-            crate::utils::simplify_real(raw.as_view())
-        };
-        let catalogue_setup = StageSpan::new("vakint.finalize_rustred.catalogue_setup");
+        let started = phase_start();
+        let raw = crate::utils::simplify_real(raw.as_view());
+        log_phase("finalize_simplify_real", started);
         let data = self.rustred_data()?;
         let announced = self.announced_bare_masters()?;
-        drop(catalogue_setup);
         let result = if mode == RustRedMasterMode::Retain {
             data.masters.retain(
                 raw,
@@ -326,15 +398,20 @@ impl Vakint {
             )
         } else {
             if !announced.is_empty() {
-                let _stage = StageSpan::new("vakint.finalize_rustred.announced_coefficients");
-                data.masters
-                    .require_coefficients(&combine_exact(raw.clone()), &announced)?;
+                let started = phase_start();
+                data.masters.require_coefficients(
+                    &masters::MasterCatalog::combine_master_coefficients(
+                        raw.clone(),
+                        postprocessing_threads(settings),
+                    ),
+                    &announced,
+                )?;
+                log_phase("finalize_announced_check", started);
             }
             data.masters.finalize(raw, settings, loop_count, mode)?
         };
         // The catalogue checks its own substitution; every RustRed entry
         // point (single integral, ordered batch, term) passes here as well.
-        let truncation_guard = StageSpan::new("vakint.finalize_rustred.truncation_guard");
         crate::truncation_guard::ensure_known_orders(
             &result,
             crate::utils::vakint_macros::vk_symbol!(&settings.epsilon_symbol),
@@ -345,11 +422,9 @@ impl Vakint {
             "RustRed",
             crate::truncation_guard::plain_name,
         )?;
-        drop(truncation_guard);
         if settings.use_dot_product_notation {
             Ok(result)
         } else {
-            let _stage = StageSpan::new("vakint.finalize_rustred.restore_notation");
             let indexed = Vakint::convert_from_dot_notation(result.as_view());
             Ok(crate::VakintTerm::repair_expanded_spenso_vector_slots(
                 indexed.as_view(),
@@ -451,5 +526,54 @@ mod selection_tests {
             bare.evaluation_method(&with_matad, &three_loop),
             Some(EvaluationMethod::RustRed(_))
         ));
+    }
+}
+
+#[cfg(test)]
+mod five_loop_arithmetic_tests {
+    use super::five_loop_ordered_weight_arithmetic;
+    use crate::{OrderedWeightArithmetic, VakintSettings};
+
+    /// Only the default selection switches five-loop requests to
+    /// `modular_sampled` (on `n_cores` workers, or on the workers it fixes);
+    /// an explicit selection is kept, also an explicit `modular_polynomial`.
+    #[test]
+    fn five_loop_requests_use_modular_sampled_only_for_the_default_selection() {
+        let base = VakintSettings {
+            n_cores: 3,
+            ..Default::default()
+        };
+        let resolved = five_loop_ordered_weight_arithmetic(&base);
+        assert_eq!(
+            (resolved.name(), resolved.threads()),
+            ("modular_sampled", 3)
+        );
+        let fixed = VakintSettings {
+            ordered_weight_arithmetic: OrderedWeightArithmetic::default().with_threads(2),
+            ..base.clone()
+        };
+        let resolved = five_loop_ordered_weight_arithmetic(&fixed);
+        assert_eq!(
+            (resolved.name(), resolved.threads()),
+            ("modular_sampled", 2)
+        );
+        for explicit in [
+            OrderedWeightArithmetic::modular_polynomial(),
+            "modular_polynomial".parse().unwrap(),
+            OrderedWeightArithmetic::exact(),
+        ] {
+            let settings = VakintSettings {
+                ordered_weight_arithmetic: explicit,
+                ..base.clone()
+            };
+            assert_eq!(
+                five_loop_ordered_weight_arithmetic(&settings),
+                settings.rustred_ordered_weight_arithmetic()
+            );
+            assert_ne!(
+                five_loop_ordered_weight_arithmetic(&settings).name(),
+                "modular_sampled"
+            );
+        }
     }
 }

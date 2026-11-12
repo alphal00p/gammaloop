@@ -1,12 +1,16 @@
-//! Benchmark v1 of the p-integrals: RustRed vs Forcer. Appends raw measurements
-//! to `docs/benchmark/data/p_results.json`, from which `docs/benchmark/benchmark.typ`
-//! builds the report (M2 plan, section 9). See `--help`.
+//! Benchmark of the p-integrals: RustRed vs Forcer at one to four loops.
+//! Appends raw measurements to `docs/benchmark/data/p_results.json`, from which
+//! `docs/benchmark/benchmark.typ` builds the report (M2 plan, section 9; M3
+//! plan, M3-V11). See `--help`.
 //!
 //! Every measurement is one fresh child process of this executable, one input
-//! at a time, under the thread count and CPU list of its table. A measurement
-//! already recorded for the same gammaloop and rustred shas, build profile and
-//! tree state is skipped, so an interrupted run resumes by running the same
-//! command (results committed in between do not count as a source change).
+//! at a time, under the thread count and CPU list of its table. RustRed reduces
+//! with the built-in p library or, with `--external-data`, with the library the
+//! `p_integral/` area of that root lists (the scope 1-4 library ships there).
+//! A measurement already recorded for the same gammaloop and rustred shas, p
+//! library identity, build profile and tree state is skipped, so an interrupted
+//! run resumes by running the same command (results committed in between do
+//! not count as a source change).
 //! SIGTERM and SIGINT kill the measuring process group before the harness
 //! exits: the group sits outside the harness's own, so it would survive.
 //!
@@ -44,27 +48,38 @@ mod harness {
     use sha2::{Digest, Sha256};
     use symbolica::atom::{AtomCore, AtomView};
     use vakint::{
-        EvaluationMethod, EvaluationOrder, ForcerOptions, OrderedCacheMode, OrderedCacheSettings,
+        EvaluationMethod, EvaluationOrder, ForcerOptions, OrderedCacheAutosave, OrderedCacheMode,
+        OrderedCacheSettings, OrderedCacheStatistics, OrderedWeightArithmetic,
         RustRedEvaluationOptions, RustRedMasterMode, Vakint, VakintSettings,
         p_integral::{FORCER_UPSTREAM_COMMIT, forcer_benchmark},
         rustred_evaluation::experimental::capture_reduction_timing,
         vakint_parse,
     };
 
-    use super::results::{self, Key, Source};
+    use super::results::{self, Key, NO_ARITHMETIC, Source};
 
     const GRID: &str = include_str!("../tests/fixtures/benchmark_p_integrals.json");
     const PHYSICS: &str = include_str!("../tests/fixtures/benchmark_p_physics.json");
-    const BUBBLE: &str = "topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))";
+    /// The integral of the pre-run: the one-loop bubble with four dots, which
+    /// no cell holds (at most two dots), because vakint memoises Forcer's FORM
+    /// runs per process by program: a pre-run of a measured integral would
+    /// turn its measurement into a replay.
+    const BUBBLE: &str = "topo(prop(1,edge(1,2),k(1),0,3)*prop(2,edge(2,1),k(1)-p(1),0,3))";
     const SCOPE: &str = "Wall time of Vakint::evaluate in Retain mode, in a fresh process, input \
-        parsed, engine (and RustRed library) loaded and the one-loop bubble evaluated once \
-        beforehand by either backend, on directories of its own: same frontend and finalizer for \
-        both backends. RustRed cold: empty ordered-cache directory, shipped caches off. \
+        parsed, engine (and RustRed p library: the source's p_library, the built-in 1L-3L one or the scope 1-4 \
+        one a vakint-external-data root lists) loaded and the one-loop bubble with four dots (in no cell) \
+        evaluated once beforehand by either backend, on directories of its own: same frontend and finalizer for \
+        both backends. RustRed cold: empty ordered-cache directory, shipped caches off; the \
+        cache is saved after the clock (save_seconds), never inside it. \
         Warm-same: fresh process replaying a read-only copy of the cache its cold run filled. \
         Warm-shared: per L one chain over the cells in table order sharing one cache from empty. \
         Forcer cold: private empty materialisation directory; warm: materialised (Forcer has no \
         result cache). Raw: the generated FORM programs run directly, one FORM process each. OS \
         pages are not flushed.";
+
+    /// The variable that swaps RustRed's Ordered adjoint tail; recorded per
+    /// RustRed child, never set by the harness.
+    const ADJOINT_TAIL: &str = "RUSTRED_ORDERED_ADJOINT_TAIL";
 
     /// The source this binary was built from; see `results::check_build`.
     const BUILD_STAMP: Option<&str> = option_env!("VAKINT_P_BENCHMARK_SOURCE");
@@ -165,6 +180,8 @@ mod harness {
         physics: Vec<usize>,
         backends: Vec<Backend>,
         states: Vec<String>,
+        arithmetics: Vec<String>,
+        cell_names: Vec<String>,
         cap_seconds: Option<f64>,
         stop_file: Option<PathBuf>,
         select_current: bool,
@@ -176,6 +193,8 @@ mod harness {
         read_only: bool,
         report: Option<PathBuf>,
         programs: Option<PathBuf>,
+        external_data: Option<PathBuf>,
+        cite: Option<String>,
     }
 
     fn list<T: std::str::FromStr>(text: &str) -> Result<Vec<T>>
@@ -198,17 +217,24 @@ mod harness {
         --cpus T=CPUS,...    taskset list of a thread count, e.g. 1=128,16=128-143\n\
         --numa-node N        numactl --cpunodebind=N --membind=N around every child\n\
         --numactl PATH       numactl executable (default: numactl on PATH)\n\
-        --loops LIST         grid loop counts (default: 1,2,3)\n\
+        --loops LIST         grid loop counts (default: 1,2,3,4)\n\
         --dots LIST          grid dots (default: 0,1,2)\n\
         --ranks LIST         grid ranks (default: 0,2,4,6,8)\n\
-        --physics LIST       physics cells by L (default: 2,3; empty for none)\n\
+        --physics LIST       physics cells by L (default: 2,3,4; empty for none)\n\
         --backends LIST      rustred,forcer (default: both)\n\
         --states LIST        rustred: cold,warm-same,warm-shared; forcer: cold,warm,raw (default: all)\n\
+        --arithmetic LIST    RustRed Ordered weight arithmetics: exact,modular_polynomial,modular_sampled\n\
+                             (default: modular_polynomial); Forcer is measured once, whatever the list\n\
+        --cells LIST         only these cells (names as in the fixtures) of the selected loop counts\n\
         --cap-seconds S      stop a measurement after S seconds and record it as capped\n\
         --stop-file PATH     stop cleanly between measurements when PATH exists (exit status 3)\n\
         --child-program PATH run PATH instead of this executable as the measuring child (harness tests,\n\
                              refused with --build-profile release)\n\
         --select-current     select this run for the report; recorded runs stay\n\
+        --cite RUN           cite the recorded run RUN (another source) in the report: its rows fill what\n\
+                             this source does not measure\n\
+        --external-data DIR  external-data root: RustRed reduces with the p library its p_integral/ area\n\
+                             lists (load_external_data; default: the built-in library)\n\
         A release measurement needs a clean tree (crates/vakint/docs/benchmark excepted) and a binary\n\
         of that tree, built by `just vakint-p-benchmark-build`.\n\
         Never removes anything outside its work directory; every Forcer run materialises under it.";
@@ -228,12 +254,14 @@ mod harness {
                 cpus: BTreeMap::new(),
                 numa_node: None,
                 numactl: "numactl".into(),
-                loops: vec![1, 2, 3],
+                loops: vec![1, 2, 3, 4],
                 dots: vec![0, 1, 2],
                 ranks: vec![0, 2, 4, 6, 8],
-                physics: vec![2, 3],
+                physics: vec![2, 3, 4],
                 backends: vec![Backend::RustRed, Backend::Forcer],
                 states: Vec::new(),
+                arithmetics: vec!["modular_polynomial".to_owned()],
+                cell_names: Vec::new(),
                 cap_seconds: None,
                 stop_file: None,
                 select_current: false,
@@ -245,6 +273,8 @@ mod harness {
                 read_only: false,
                 report: None,
                 programs: None,
+                external_data: None,
+                cite: None,
             };
             let mut args = std::env::args().skip(1);
             while let Some(arg) = args.next() {
@@ -302,6 +332,8 @@ mod harness {
                             .collect::<Result<_>>()?;
                     }
                     "--states" => result.states = list(&value)?,
+                    "--arithmetic" => result.arithmetics = list(&value)?,
+                    "--cells" => result.cell_names = list(&value)?,
                     "--cap-seconds" => result.cap_seconds = Some(value.parse()?),
                     "--stop-file" => result.stop_file = Some(value.into()),
                     "--child" => result.child = Some(value),
@@ -311,10 +343,20 @@ mod harness {
                     "--cache" => result.cache = Some(value.into()),
                     "--report" => result.report = Some(value.into()),
                     "--programs" => result.programs = Some(value.into()),
+                    "--external-data" => result.external_data = Some(value.into()),
+                    "--cite" => result.cite = Some(value),
                     _ => bail!("unknown option {arg}; see --help"),
                 }
             }
             ensure!(result.repetitions > 0, "repetitions must be positive");
+            ensure!(!result.arithmetics.is_empty(), "--arithmetic needs a mode");
+            for name in &result.arithmetics {
+                let selection: OrderedWeightArithmetic = name.parse()?;
+                ensure!(
+                    selection.name() == name,
+                    "--arithmetic takes mode names (exact, modular_polynomial, modular_sampled), not {name}"
+                );
+            }
             ensure!(
                 result.child.is_some() || result.build_profile.is_some(),
                 "declare the actual Cargo profile with --build-profile release or ci-optim"
@@ -337,8 +379,20 @@ mod harness {
                 && (self.states.is_empty() || self.states.iter().any(|name| name == state))
         }
 
-        /// The selected cells of one L in table order: the grid, then physics.
+        /// The selected cells of one L in table order: the grid, then physics;
+        /// with `--cells`, exactly the named cells of that L.
         fn cells(&self, cells: &[Cell], loops: usize) -> Vec<Cell> {
+            if !self.cell_names.is_empty() {
+                return cells
+                    .iter()
+                    .filter(|cell| {
+                        cell.loops == loops
+                            && self.loops.contains(&loops)
+                            && self.cell_names.contains(&cell.name)
+                    })
+                    .cloned()
+                    .collect();
+            }
             let grid = cells.iter().filter(|cell| {
                 cell.loops == loops
                     && self.loops.contains(&loops)
@@ -359,8 +413,10 @@ mod harness {
     }
 
     /// The settings of one measurement; both backends retain the masters and
-    /// keep every other default.
-    fn settings(options: &Options) -> VakintSettings {
+    /// keep every other default but RustRed's arithmetic and the cache save,
+    /// which the child makes after the clock (`save_seconds`): an fsync stall
+    /// of the work directory is no reduction time (benchmark v1 follow-up F1).
+    fn settings(options: &Options) -> Result<VakintSettings> {
         let retain = RustRedMasterMode::Retain;
         let (method, form) = match options.backend {
             Backend::RustRed => (
@@ -381,8 +437,13 @@ mod harness {
             (Some(_), true) => OrderedCacheMode::ReadOnly,
             (Some(_), false) => OrderedCacheMode::ReadWrite,
         };
-        VakintSettings {
+        let ordered_weight_arithmetic = match options.backend {
+            Backend::RustRed => options.arithmetics[0].parse()?,
+            Backend::Forcer => OrderedWeightArithmetic::default(),
+        };
+        Ok(VakintSettings {
             evaluation_order: EvaluationOrder(vec![method]),
+            ordered_weight_arithmetic,
             form_exe_path: form,
             temporary_directory: options
                 .base
@@ -393,10 +454,49 @@ mod harness {
                 mode,
                 directory: options.cache.clone(),
                 shipped: false,
+                autosave: OrderedCacheAutosave::Never,
                 ..OrderedCacheSettings::off()
             },
             ..Default::default()
-        }
+        })
+    }
+
+    /// The cache counters of a RustRed child after its measured evaluate: the
+    /// totals, and per attached program its own with how a shipped cache was
+    /// used (`null`: none, as the harness turns shipped caches off).
+    fn cache_record(statistics: &OrderedCacheStatistics) -> Value {
+        let programs = statistics
+            .programs
+            .iter()
+            .map(|program| {
+                let native = &program.native;
+                json!({
+                    "loop_count": program.loop_count,
+                    "program": program.program,
+                    "data_version": program.data_version,
+                    "directory": program.directory.as_ref().and_then(|path| path.file_name())
+                        .map(|name| name.to_string_lossy().into_owned()),
+                    "mode": format!("{:?}", program.mode),
+                    "shipped": program.shipped.as_ref().map(|shipped| format!("{shipped:?}")),
+                    "hits": native.hits,
+                    "misses": native.misses,
+                    "inserts": native.inserts,
+                    "records": native.records,
+                    "file_bytes": native.file_bytes,
+                    "loaded_shards": native.loaded_shards,
+                    "load_seconds": native.load_seconds,
+                })
+            })
+            .collect::<Vec<_>>();
+        json!({
+            "hits": statistics.hits,
+            "misses": statistics.misses,
+            "inserts": statistics.inserts,
+            "records": statistics.records,
+            "file_bytes": statistics.file_bytes,
+            "resident_bytes": statistics.resident_bytes,
+            "programs": programs,
+        })
     }
 
     /// One measurement in this fresh process.
@@ -411,9 +511,14 @@ mod harness {
             .as_ref()
             .ok_or_else(|| eyre::eyre!("a child needs --report"))?;
         let started = Instant::now();
-        let engine = Vakint::new()?;
+        let mut engine = Vakint::new()?;
+        if let Some(root) = &options.external_data {
+            // The vacuum one-loop pack only: it makes the root this engine's
+            // external data, whose p_integral/ area lists the p library.
+            engine.load_external_data(root, 1)?;
+        }
         let input = vakint_parse!(&cell.input).map_err(eyre::Report::msg)?;
-        let settings = settings(options);
+        let settings = settings(options)?;
         // One evaluate before the clock, on either backend: what a process does
         // once (the RustRed library load, the FORM version probe, tables built
         // on first use) stays out of the measurement. It touches no directory
@@ -438,9 +543,49 @@ mod harness {
         let evaluate_seconds = started.elapsed().as_secs_f64();
         let value = capture.result?;
         let (form, programs) = forcer_benchmark::take();
+        let save_seconds = if options.backend == Backend::RustRed
+            && settings.ordered_cache.mode == OrderedCacheMode::ReadWrite
+        {
+            let started = Instant::now();
+            engine.save_ordered_cache()?;
+            Some(started.elapsed().as_secs_f64())
+        } else {
+            None
+        };
         if let Some(directory) = &options.programs {
             write_programs(directory, &programs)?;
         }
+        // Peak resident set of this process (load, warm-up, measurement and
+        // save) and of its waited-for children (FORM), read before the
+        // in-process repeat below.
+        let peak_rss_kb = max_rss_kb(libc::RUSAGE_SELF);
+        let cache_statistics = (options.backend == Backend::RustRed)
+            .then(|| cache_record(&engine.ordered_cache_statistics()));
+        let children_peak_rss_kb = max_rss_kb(libc::RUSAGE_CHILDREN);
+        // bench-clean: a RustRed child with a writable cache evaluates the
+        // same input once more in the same process, after the clock and the
+        // save: the warm repeat of the same process (in-memory cache).
+        let repeat = if options.backend == Backend::RustRed
+            && settings.ordered_cache.mode == OrderedCacheMode::ReadWrite
+        {
+            let started = Instant::now();
+            let capture = capture_reduction_timing(|| engine.evaluate(&settings, input.as_view()));
+            let seconds = started.elapsed().as_secs_f64();
+            let again = capture.result?.to_canonical_string();
+            let timing = capture.timing;
+            Some(json!({
+                "evaluate_seconds": seconds,
+                "reduction_seconds": results::reduction_seconds(
+                    timing.complete,
+                    timing.interval_count,
+                    timing.reduction_math.map(|math| math.as_secs_f64()),
+                ),
+                "output_sha256": format!("{:x}", Sha256::digest(again.as_bytes())),
+                "peak_rss_kb": max_rss_kb(libc::RUSAGE_SELF),
+            }))
+        } else {
+            None
+        };
         let timing = capture.timing;
         let reduction_seconds = match options.backend {
             Backend::RustRed => results::reduction_seconds(
@@ -462,7 +607,31 @@ mod harness {
             "form_runs": programs.len(),
             "output_sha256": format!("{:x}", Sha256::digest(output.as_bytes())),
             "output_terms": terms,
+            "peak_rss_kb": peak_rss_kb,
+            "children_peak_rss_kb": children_peak_rss_kb,
+            "harness_patch": "bench-clean v1 (peak RSS, in-process warm repeat)",
         });
+        if let Some(repeat) = repeat {
+            record["warm_process"] = repeat;
+        }
+        match options.backend {
+            Backend::RustRed => {
+                // The arithmetic as this child resolved it, which must be the
+                // requested mode.
+                let resolved = settings.rustred_ordered_weight_arithmetic();
+                ensure!(
+                    resolved.name() == options.arithmetics[0],
+                    "asked for {}, resolved {resolved}",
+                    options.arithmetics[0]
+                );
+                record["arithmetic"] = json!(resolved.name());
+                record["arithmetic_resolved"] = json!(resolved.to_string());
+                record["save_seconds"] = json!(save_seconds);
+                record["cache"] = cache_statistics.clone().unwrap_or(Value::Null);
+                record["adjoint_tail_env"] = json!(std::env::var(ADJOINT_TAIL).ok());
+            }
+            Backend::Forcer => record["arithmetic"] = json!(NO_ARITHMETIC),
+        }
         if options.backend == Backend::RustRed {
             record["reduction_gross_seconds"] = json!(timing.gross.as_secs_f64());
             record["reduction_interval_count"] = json!(timing.interval_count);
@@ -471,6 +640,17 @@ mod harness {
         }
         serde_json::to_writer(File::create(report)?, &record)?;
         Ok(())
+    }
+
+    /// `ru_maxrss` (kB on Linux) of `who`.
+    fn max_rss_kb(who: libc::c_int) -> i64 {
+        let mut usage = std::mem::MaybeUninit::<libc::rusage>::zeroed();
+        // SAFETY: getrusage writes one rusage into the pointer it is given.
+        let usage = unsafe {
+            libc::getrusage(who, usage.as_mut_ptr());
+            usage.assume_init()
+        };
+        usage.ru_maxrss
     }
 
     /// Replace the program directory at once: a killed child leaves either the
@@ -528,6 +708,61 @@ mod harness {
             .ok_or_else(|| eyre::eyre!("Cargo.lock pins no rustred commit"))
     }
 
+    /// The RustRed p library of the children, as vakint resolves it (M3-V8):
+    /// the one entry of RustRed's schema the `p_integral/` area of the
+    /// external-data root lists, else the built-in library. A hand-made `p/`
+    /// area (no entry pins it) is refused: the benchmark measures a shipped
+    /// library. `identity` is part of the measured source.
+    fn p_library(crate_path: &Path, external_data: Option<&Path>) -> Result<Value> {
+        let read = |path: &Path| -> Result<Value> {
+            let file = File::open(path).with_context(|| path.display().to_string())?;
+            serde_json::from_reader(file).with_context(|| path.display().to_string())
+        };
+        if let Some(root) = external_data {
+            ensure!(
+                !root.join("p").exists(),
+                "{} has a hand-made p/ area; the benchmark measures a listed or the built-in library",
+                root.display()
+            );
+            let release = read(&root.join("manifest.json"))?;
+            if let Some(area) = release["p_integral"]["manifest"].as_str() {
+                let area = read(&root.join(area))?;
+                let listed = area["libraries"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter(|entry| entry["schema"] == rustred::propagator::P_LIBRARY_SCHEMA)
+                    .collect::<Vec<_>>();
+                ensure!(
+                    listed.len() <= 1,
+                    "{} lists several p libraries",
+                    root.display()
+                );
+                if let Some(entry) = listed.first() {
+                    let root = root.canonicalize()?;
+                    let head = command_output(
+                        "git",
+                        &["-C", &root.to_string_lossy(), "rev-parse", "HEAD"],
+                    )
+                    .ok();
+                    return Ok(json!({
+                        "origin": "external-data",
+                        "directory": entry["directory"],
+                        "identity": entry["identity"],
+                        "root": root,
+                        "root_head": head,
+                    }));
+                }
+            }
+        }
+        let manifest = read(&crate_path.join("data/p/manifest.json"))?;
+        Ok(json!({
+            "origin": "built-in",
+            "directory": manifest["library"],
+            "identity": manifest["identity"],
+        }))
+    }
+
     /// The thread variables of every child, explicit whatever the caller's
     /// environment holds.
     fn thread_environment(threads: usize) -> [(&'static str, String); 3] {
@@ -558,6 +793,9 @@ mod harness {
         Ok(())
     }
 
+    /// Forcer, which has no arithmetic to choose.
+    const FORCER: (Backend, &str) = (Backend::Forcer, NO_ARITHMETIC);
+
     struct Harness<'a> {
         options: &'a Options,
         form: PathBuf,
@@ -568,6 +806,8 @@ mod harness {
         outputs: BTreeMap<(String, String), String>,
         integrals: BTreeMap<String, usize>,
         work: PathBuf,
+        /// The p library the RustRed children must report ([`p_library`]).
+        p_library: Value,
     }
 
     /// Remove a directory of this harness, read-only copies included.
@@ -591,17 +831,23 @@ mod harness {
                 .is_some_and(|path| path.exists())
         }
 
+        /// `arithmetic` of RustRed; Forcer's is always [`NO_ARITHMETIC`].
         fn key(
             &self,
             cell: &Cell,
-            backend: Backend,
+            (backend, arithmetic): (Backend, &str),
             threads: usize,
             state: &str,
             rep: usize,
         ) -> Key {
+            let arithmetic = match backend {
+                Backend::RustRed => arithmetic,
+                Backend::Forcer => NO_ARITHMETIC,
+            };
             Key {
                 cell: cell.name.clone(),
                 backend: backend.name().into(),
+                arithmetic: arithmetic.into(),
                 threads,
                 state: state.into(),
                 repetition: rep,
@@ -672,7 +918,7 @@ mod harness {
         fn run_child(
             &self,
             cell: &Cell,
-            backend: Backend,
+            (backend, arithmetic): (Backend, &str),
             threads: usize,
             placement: &Placement,
             label: &str,
@@ -705,6 +951,12 @@ mod harness {
             if placement.read_only {
                 command.arg("--read-only");
             }
+            if backend == Backend::RustRed {
+                command.arg("--arithmetic").arg(arithmetic);
+                if let Some(root) = &self.options.external_data {
+                    command.arg("--external-data").arg(root);
+                }
+            }
             if backend == Backend::Forcer {
                 command
                     .arg("--programs")
@@ -731,6 +983,7 @@ mod harness {
                 "rank": cell.rank,
                 "n": self.integrals[&cell.name],
                 "backend": key.backend,
+                "arithmetic": key.arithmetic,
                 "threads": key.threads,
                 "state": key.state,
                 "repetition": key.repetition,
@@ -765,13 +1018,18 @@ mod harness {
                             "{key:?} returned another result than the earlier measurements"
                         );
                     }
+                    if key.backend == Backend::RustRed.name() {
+                        results::check_p_program(&report, &self.p_library)
+                            .with_context(|| format!("{key:?}"))?;
+                    }
                     for (name, value) in report.as_object().expect("a child report is an object") {
                         measurement[name] = value.clone();
                     }
                     eprintln!(
-                        "{} {} {} threads {} repetition {}: {} s",
+                        "{} {} {} {} threads {} repetition {}: {} s",
                         key.cell,
                         key.backend,
+                        key.arithmetic,
                         key.state,
                         key.threads,
                         key.repetition,
@@ -809,8 +1067,7 @@ mod harness {
                     read_only: false,
                 };
                 let label = "forcer-warm-fill";
-                let filled =
-                    self.run_child(&smallest, Backend::Forcer, threads, &placement, label)?;
+                let filled = self.run_child(&smallest, FORCER, threads, &placement, label)?;
                 ensure!(filled.is_some(), "the warm-state fill hit the cap");
             }
             Ok(base)
@@ -819,7 +1076,7 @@ mod harness {
         fn forcer(&mut self, cell: &Cell, threads: usize, rep: usize) -> Result<()> {
             let scratch = self.work.join("forcer-cold");
             if self.options.selected(Backend::Forcer, "cold") {
-                let key = self.key(cell, Backend::Forcer, threads, "cold", rep);
+                let key = self.key(cell, FORCER, threads, "cold", rep);
                 if !self.recorded.contains(&key) {
                     let base = scratch.join(format!("{}-{threads}-{rep}", cell.name));
                     remove_tree(&base)?;
@@ -830,14 +1087,13 @@ mod harness {
                         read_only: false,
                     };
                     let label = format!("{}-forcer-cold-{threads}-{rep}", cell.name);
-                    let measured =
-                        self.run_child(cell, Backend::Forcer, threads, &placement, &label)?;
+                    let measured = self.run_child(cell, FORCER, threads, &placement, &label)?;
                     self.record(key, cell, measured)?;
                     remove_tree(&base)?;
                 }
             }
             if self.options.selected(Backend::Forcer, "warm") {
-                let key = self.key(cell, Backend::Forcer, threads, "warm", rep);
+                let key = self.key(cell, FORCER, threads, "warm", rep);
                 if !self.recorded.contains(&key) {
                     let placement = Placement {
                         base: self.warm_base(threads)?,
@@ -845,13 +1101,12 @@ mod harness {
                         read_only: false,
                     };
                     let label = format!("{}-forcer-warm-{threads}-{rep}", cell.name);
-                    let measured =
-                        self.run_child(cell, Backend::Forcer, threads, &placement, &label)?;
+                    let measured = self.run_child(cell, FORCER, threads, &placement, &label)?;
                     self.record(key, cell, measured)?;
                 }
             }
             if self.options.selected(Backend::Forcer, "raw") {
-                let key = self.key(cell, Backend::Forcer, threads, "raw", rep);
+                let key = self.key(cell, FORCER, threads, "raw", rep);
                 if !self.recorded.contains(&key) {
                     let measured = self.raw(cell, threads, rep)?;
                     self.record(key, cell, measured)?;
@@ -873,7 +1128,7 @@ mod harness {
                 };
                 let label = format!("{}-forcer-programs-{threads}-{rep}", cell.name);
                 if self
-                    .run_child(cell, Backend::Forcer, threads, &placement, &label)?
+                    .run_child(cell, FORCER, threads, &placement, &label)?
                     .is_none()
                 {
                     return Ok(None);
@@ -935,9 +1190,16 @@ mod harness {
             )))
         }
 
-        fn rustred(&mut self, cell: &Cell, threads: usize, rep: usize) -> Result<()> {
-            let cold_key = self.key(cell, Backend::RustRed, threads, "cold", rep);
-            let warm_key = self.key(cell, Backend::RustRed, threads, "warm-same", rep);
+        fn rustred(
+            &mut self,
+            cell: &Cell,
+            arithmetic: &str,
+            threads: usize,
+            rep: usize,
+        ) -> Result<()> {
+            let backend = (Backend::RustRed, arithmetic);
+            let cold_key = self.key(cell, backend, threads, "cold", rep);
+            let warm_key = self.key(cell, backend, threads, "warm-same", rep);
             let want_cold = self.options.selected(Backend::RustRed, "cold")
                 && !self.recorded.contains(&cold_key);
             let want_warm = self.options.selected(Backend::RustRed, "warm-same")
@@ -948,7 +1210,7 @@ mod harness {
             let directory = self
                 .work
                 .join("rustred")
-                .join(format!("{}-{threads}-{rep}", cell.name));
+                .join(format!("{}-{arithmetic}-{threads}-{rep}", cell.name));
             let cache = directory.join("cache");
             remove_tree(&directory)?;
             fs::create_dir_all(&cache)?;
@@ -957,8 +1219,8 @@ mod harness {
                 cache: Some(cache.clone()),
                 read_only: false,
             };
-            let label = format!("{}-rustred-cold-{threads}-{rep}", cell.name);
-            let measured = self.run_child(cell, Backend::RustRed, threads, &placement, &label)?;
+            let label = format!("{}-rustred-{arithmetic}-cold-{threads}-{rep}", cell.name);
+            let measured = self.run_child(cell, backend, threads, &placement, &label)?;
             let capped = measured.is_none();
             if want_cold {
                 self.record(cold_key, cell, measured)?;
@@ -984,9 +1246,11 @@ mod harness {
                     cache: Some(copy),
                     read_only: true,
                 };
-                let label = format!("{}-rustred-warm-same-{threads}-{rep}", cell.name);
-                let measured =
-                    self.run_child(cell, Backend::RustRed, threads, &placement, &label)?;
+                let label = format!(
+                    "{}-rustred-{arithmetic}-warm-same-{threads}-{rep}",
+                    cell.name
+                );
+                let measured = self.run_child(cell, backend, threads, &placement, &label)?;
                 self.record(warm_key, cell, measured)?;
             }
             remove_tree(&directory)
@@ -998,8 +1262,14 @@ mod harness {
         /// its recorded cells unmeasured. A capped cell leaves a partial cache,
         /// so it ends the chain: the cells after it are recorded as skipped,
         /// and it stays in flight for a later run under a longer cap.
-        fn chain(&mut self, cells: &[Cell], threads: usize, rep: usize) -> Result<()> {
-            let backend = Backend::RustRed;
+        fn chain(
+            &mut self,
+            cells: &[Cell],
+            arithmetic: &str,
+            threads: usize,
+            rep: usize,
+        ) -> Result<()> {
+            let backend = (Backend::RustRed, arithmetic);
             let measured = |harness: &Self, cell: &Cell| {
                 harness
                     .recorded
@@ -1012,7 +1282,7 @@ mod harness {
             let directory = self
                 .work
                 .join("chains")
-                .join(format!("L{loops}-{threads}-{rep}"));
+                .join(format!("L{loops}-{arithmetic}-{threads}-{rep}"));
             let cache = directory.join("cache");
             let ledger_path = directory.join("chain.json");
             let mut ledger: Value = if ledger_path.exists() {
@@ -1049,7 +1319,7 @@ mod harness {
                     cache: Some(cache.clone()),
                     read_only: false,
                 };
-                let label = format!("{}-rustred-chain-{threads}-{rep}", cell.name);
+                let label = format!("{}-rustred-{arithmetic}-chain-{threads}-{rep}", cell.name);
                 let result = self.run_child(cell, backend, threads, &placement, &label)?;
                 let capped = result.is_none();
                 if !measured(self, cell) {
@@ -1077,24 +1347,28 @@ mod harness {
         }
 
         fn run(&mut self, by_loops: &BTreeMap<usize, Vec<Cell>>) -> Result<bool> {
-            for &threads in &self.options.threads {
-                for rep in 0..self.options.repetitions {
-                    for cells in by_loops.values() {
-                        for cell in cells {
-                            if self.stop_requested() {
-                                return Ok(false);
+            // Forcer's keys carry no arithmetic: it is measured under the first.
+            let arithmetics = self.options.arithmetics.clone();
+            for arithmetic in &arithmetics {
+                for &threads in &self.options.threads {
+                    for rep in 0..self.options.repetitions {
+                        for cells in by_loops.values() {
+                            for cell in cells {
+                                if self.stop_requested() {
+                                    return Ok(false);
+                                }
+                                // Alternate the order of the backends between repetitions.
+                                if rep % 2 == 0 {
+                                    self.forcer(cell, threads, rep)?;
+                                    self.rustred(cell, arithmetic, threads, rep)?;
+                                } else {
+                                    self.rustred(cell, arithmetic, threads, rep)?;
+                                    self.forcer(cell, threads, rep)?;
+                                }
                             }
-                            // Alternate the order of the backends between repetitions.
-                            if rep % 2 == 0 {
-                                self.forcer(cell, threads, rep)?;
-                                self.rustred(cell, threads, rep)?;
-                            } else {
-                                self.rustred(cell, threads, rep)?;
-                                self.forcer(cell, threads, rep)?;
+                            if self.options.selected(Backend::RustRed, "warm-shared") {
+                                self.chain(cells, arithmetic, threads, rep)?;
                             }
-                        }
-                        if self.options.selected(Backend::RustRed, "warm-shared") {
-                            self.chain(cells, threads, rep)?;
                         }
                     }
                 }
@@ -1125,6 +1399,11 @@ mod harness {
             .concat(),
         )?;
         let rustred = rustred_sha(crate_path)?;
+        let p_library = p_library(crate_path, options.external_data.as_deref())?;
+        let identity = p_library["identity"]
+            .as_str()
+            .ok_or_else(|| eyre::eyre!("the p library has no identity: {p_library}"))?
+            .to_owned();
         let dirty = !command_output(
             "git",
             &[&["-C", &root, "status", "--porcelain", "--"], &sources[..]].concat(),
@@ -1135,6 +1414,7 @@ mod harness {
             rustred_sha: &rustred,
             build_profile: &build_profile,
             source_dirty: dirty,
+            p_library: &identity,
         };
         results::check_build(source, BUILD_STAMP, options.child_program.is_some())?;
         let form = executable(&options.form)?;
@@ -1167,6 +1447,7 @@ mod harness {
         let protocol = json!({
             "gammaloop_sha": gammaloop_sha,
             "rustred_sha": rustred,
+            "p_library": p_library,
             "source_dirty": dirty,
             "build_profile": build_profile,
             "debug_assertions": cfg!(debug_assertions),
@@ -1193,10 +1474,20 @@ mod harness {
                     .map(|(name, value)| (name.to_owned(), value))
                     .collect::<BTreeMap<_, _>>())
             }).collect::<BTreeMap<_, _>>(),
-            "ordered_weight_arithmetic": options.threads.iter().map(|&threads| {
-                let settings = VakintSettings { n_cores: threads, ..Default::default() };
-                (threads.to_string(), format!("{:?}", settings.rustred_ordered_weight_arithmetic()))
+            "arithmetics": options.arithmetics,
+            "ordered_weight_arithmetic": options.arithmetics.iter().map(|name| {
+                let by_threads = options.threads.iter().map(|&threads| {
+                    let settings = VakintSettings {
+                        n_cores: threads,
+                        ordered_weight_arithmetic: name.parse().expect("checked by parse"),
+                        ..Default::default()
+                    };
+                    (threads.to_string(), settings.rustred_ordered_weight_arithmetic().to_string())
+                }).collect::<BTreeMap<_, _>>();
+                (name.clone(), by_threads)
             }).collect::<BTreeMap<_, _>>(),
+            "adjoint_tail_env": std::env::var(ADJOINT_TAIL).ok(),
+            "cells": options.cell_names,
             "repetitions": options.repetitions,
             "cap_seconds": options.cap_seconds,
             "work_filesystem": command_output(
@@ -1212,6 +1503,20 @@ mod harness {
                 .filter(|(_, cells)| !cells.is_empty())
                 .collect::<BTreeMap<_, _>>()
         };
+        if options.backends.contains(&Backend::RustRed) {
+            let covered = protocol["p_library"]["directory"]
+                .as_str()
+                .and_then(|name| name.rsplit_once('-'))
+                .and_then(|(_, end)| end.parse::<usize>().ok())
+                .ok_or_else(|| eyre::eyre!("unexpected p library {}", protocol["p_library"]))?;
+            if let Some(&loops) = by_loops.keys().find(|&&loops| loops > covered) {
+                bail!(
+                    "RustRed at {loops} loops needs a library of that scope; {} covers up to {covered} \
+                    (pass --external-data, or --loops / --backends forcer)",
+                    protocol["p_library"]["directory"]
+                );
+            }
+        }
         Vakint::initialize_vakint_symbols();
         let mut integrals = BTreeMap::new();
         for cell in by_loops.values().flatten() {
@@ -1223,6 +1528,9 @@ mod harness {
         let outputs = results::outputs(&document, source);
         let run = format!("{started_utc}-{}", &binary_sha256[..12]);
         results::begin_run(&options.output, &run, &protocol, options.select_current)?;
+        if let Some(cited) = &options.cite {
+            results::cite_run(&options.output, cited)?;
+        }
         let output = options.output.canonicalize()?;
         let mut harness = Harness {
             options,
@@ -1234,6 +1542,7 @@ mod harness {
             outputs,
             integrals,
             work,
+            p_library: protocol["p_library"].clone(),
         };
         catch_stop_signals();
         let finished = harness.run(&by_loops)?;

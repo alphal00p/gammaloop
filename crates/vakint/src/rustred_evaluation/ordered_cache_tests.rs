@@ -450,7 +450,7 @@ fn caches_are_keyed_by_program_rule_tables_and_binding_stamp() {
     expected.insert(entry("1L-unit-mass-vacuum-k1", "v0.1.2", &edited));
     assert_eq!(reported(), expected);
     // Superseded programs are detached; the others keep their cache.
-    registry.detach_except(&[next_release.clone(), other_program.clone()]);
+    registry.detach_except(&[next_release.clone(), other_program.clone()], &[]);
     assert_eq!(
         reported(),
         kept.into_iter().collect::<std::collections::BTreeSet<_>>()

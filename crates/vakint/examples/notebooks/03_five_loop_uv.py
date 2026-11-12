@@ -1,4 +1,4 @@
-"""Explore the five-loop zero-momentum QCD fixture: input, plan and saved result.
+"""Explore the five-loop zero-momentum QCD fixture: input, plan and a recorded run.
 
 Explore-only: opening or using this page never starts a five-loop reduction.
 A server operator can enable one bounded, cancellable zero-momentum run with
@@ -13,7 +13,7 @@ __generated_with = "0.25.2"
 app = marimo.App(width="full", app_title="Vakint · Five-loop: explore")
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _():
     import marimo as mo
     from shared_gallery import Gallery
@@ -29,14 +29,30 @@ def _(Gallery, mo):
         "five-loop",
         "Explore a five-loop zero-momentum reduction",
         "One closed massless quark trace and four gluon rungs. Inspect the input, "
-        "the Ordered reduction plan and the saved exact result. This page never "
-        "starts a five-loop reduction by itself.",
+        "the Ordered reduction plan and a recorded run with its exact retained "
+        "result. This page never starts a five-loop reduction by itself.",
     )
     return
 
 
 @app.cell(hide_code=True)
 def _(Gallery, mo):
+    # Catalogue counts come from the configured (or installed) data, never literals.
+    _catalogue = Gallery.catalogue_summary() or {}
+    _five = _catalogue.get("loops", {}).get(5)
+    _masters = (
+        [
+            (
+                _five["masters"],
+                (
+                    f"5L catalogue masters ({_five['computed']} with numerical "
+                    f"values) · data {_catalogue.get('version')}"
+                ),
+            )
+        ]
+        if _five
+        else []
+    )
     mo.vstack(
         [
             Gallery.metrics(
@@ -46,7 +62,7 @@ def _(Gallery, mo):
                     ("14", "total denominator powers"),
                     ("5", "original momentum rank"),
                     ("9", "zero-momentum input: A − r_mom"),
-                    ("640", "declared 5L campaign masters; uncomputed"),
+                    *_masters,
                 ],
             ),
             Gallery.section(
@@ -57,7 +73,7 @@ def _(Gallery, mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(FeynmanDiagram, Gallery, Model):
     qcd_model = Model.qcd()
     ladder = FeynmanDiagram.from_dot(qcd_model, Gallery.ladder_dot(5))
@@ -78,7 +94,8 @@ def _(Gallery, mo):
         Insert $M_{\mathrm{UV}}$ only in the vacuum denominators; the quark
         slash numerators stay massless. Native diagram factors are included once.
         """),
-            mo.ui.table(
+            Gallery.table(
+                mo,
                 [
                     {
                         "contribution": "Complete zero-momentum contraction",
@@ -87,9 +104,7 @@ def _(Gallery, mo):
                         "A − r_mom": 9,
                     },
                 ],
-                selection=None,
-                pagination=False,
-                show_download=False,
+                numeric=("A", "r_mom", "A − r_mom"),
             ),
             Gallery.note(
                 mo,
@@ -158,25 +173,39 @@ def _(Gallery, mo):
 
 @app.cell(hide_code=True)
 def _(Gallery, mo):
-    mo.vstack(
-        [
-            Gallery.section(
-                mo,
-                "03 / measurements",
-                "Ordered reduction of the saved input",
-                "Verified scalar-input loading, external data and native ordered reduction are measured separately. Fresh scientific preparation is independent validation.",
-            ),
+    try:
+        _measured = Gallery.receipt("zero-momentum") is not None
+    except (OSError, ValueError):
+        _measured = True  # the card below reports the problem
+    _section = Gallery.section(
+        mo,
+        "03 / measurements",
+        "Ordered reduction of the saved input",
+        "Verified scalar-input loading, external data and native ordered reduction are measured separately. Fresh scientific preparation is independent validation.",
+    )
+    if _measured:
+        _body = [
             Gallery.evidence_card(
                 mo,
                 "zero-momentum",
                 "Complete zero-momentum physical reduction",
-                optional=True,
             ),
             mo.md(
                 "Final comparisons use three fresh processes per configuration with the same verified scalar input, medians and ranges, fixed workers/affinity, and exact result/guard checks. Original graph and numerator preparation are reported separately. Warm in-process reuse is reported separately."
             ),
         ]
-    )
+    else:
+        _body = [
+            Gallery.note(
+                mo,
+                "One recorded run, shown in full below",
+                "This evidence set has no multi-process timing comparison. Its "
+                "zero-momentum reduction of the saved input is section 06 / recorded "
+                "run: the native monitor at completion, the measured stages and the "
+                "exact retained result, recorded with the current 131-master basis.",
+            )
+        ]
+    mo.vstack([_section, *_body])
     return
 
 
@@ -190,7 +219,7 @@ def _(Gallery, mo):
             "Set VAKINT_GALLERY_ARTIFACTS to a vakint-external-data checkout to "
             "list the plan. Only its JSON index, 5L/ibps/selection.json (a few "
             "MB), is read; no IBP payload is decoded and nothing is downloaded. "
-            "A 5L pack already installed in the gallery's data cache is used too.",
+            "A 5L pack already installed in the download cache is used too.",
             pending=True,
         )
     else:
@@ -211,11 +240,14 @@ def _(Gallery, mo):
                         (five_loop_plan["version"], "external-data version"),
                     ],
                 ),
-                mo.ui.table(
+                Gallery.table(
+                    mo,
                     five_loop_plan["supports"],
-                    selection=None,
-                    pagination=False,
-                    show_download=False,
+                    numeric=(
+                        "owner support (lines)",
+                        "owners",
+                        "rule bundles (MiB)",
+                    ),
                 ),
             ]
         )
@@ -246,46 +278,42 @@ def _(Gallery, mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(Gallery, mo):
-    _enabled = Gallery.five_loop_runs_enabled()
-    run_benchmark = mo.ui.run_button(
-        label="Run the five-loop zero-momentum reduction",
-        kind="warn",
-        disabled=not _enabled,
-    )
-    mo.vstack(
-        [
-            Gallery.note(
-                mo,
-                "Explore-only unless the operator enables it",
-                "A five-loop reduction takes minutes on many cores and over 10 GB "
-                "of memory. This server does not allow it: explore the plan above "
-                "and the saved result below instead. Operators enable one bounded, "
-                "cancellable zero-momentum run with VAKINT_GALLERY_ALLOW_5L=1 and a "
-                "configured runner.",
-                pending=True,
-            )
-            if not _enabled
-            else Gallery.note(
-                mo,
-                "Enabled on this server · substantial cost",
-                f"The run reduces the verified zero-momentum input with the Ordered "
-                f"engine on at most {Gallery.max_cores()} cores, at low priority, "
-                f"with a {Gallery.max_seconds():g} s deadline. Cancel stops every "
-                "process of the run. The quadratic fixture has no Run action.",
-                pending=True,
-            ),
-            run_benchmark,
-        ]
-    )
+    if Gallery.five_loop_runs_enabled():
+        run_benchmark = mo.ui.run_button(
+            label="Run the five-loop zero-momentum reduction", kind="warn"
+        )
+        _note = Gallery.note(
+            mo,
+            "Enabled on this server · substantial cost",
+            f"The run reduces the verified zero-momentum input with the Ordered "
+            f"engine on at most {Gallery.max_cores()} cores, at low priority, "
+            f"with a {Gallery.max_seconds():g} s deadline. Cancel stops every "
+            "process of the run. The quadratic fixture has no Run action.",
+            pending=True,
+        )
+    else:
+        # No disabled button: the note says why and what to look at instead.
+        run_benchmark = None
+        _note = Gallery.note(
+            mo,
+            "Explore-only on this server",
+            "A five-loop reduction takes minutes on several cores and about 15 GB "
+            "of memory, so this server does not run it. The recorded run below "
+            "shows its monitor, timings and exact retained result. Operators "
+            "enable one bounded, cancellable zero-momentum run with "
+            "VAKINT_GALLERY_ALLOW_5L=1 and a configured runner.",
+            pending=True,
+        )
+    mo.vstack([_note, run_benchmark] if run_benchmark is not None else [_note])
     return (run_benchmark,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(Gallery, mo, run_benchmark):
     benchmark_job = None
-    if run_benchmark.value:
+    if run_benchmark is not None and run_benchmark.value:
         try:
             benchmark_job = Gallery.start_benchmark("zero-momentum")
         except (OSError, ValueError, RuntimeError) as _error:
@@ -296,7 +324,7 @@ def _(Gallery, mo, run_benchmark):
     return (benchmark_job,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(Gallery, benchmark_job, mo):
     cancel_benchmark = mo.ui.button(
         label="Cancel the five-loop run",
@@ -317,10 +345,13 @@ def _(Gallery, benchmark_job, cancel_benchmark, job_refresh, mo):
     _report = cancel_benchmark.value or Gallery.cancel_report(benchmark_job)
     mo.vstack(
         [
+            Gallery.job_monitor_card(
+                mo, interactive_status, benchmark_job, title="Five-loop run"
+            ),
             Gallery.note(
                 mo,
-                f"Five-loop run {str(interactive_status['state']).replace('_', ' ')}",
-                "The run is a separate process group; only one gallery job runs at a time."
+                "A separate process group",
+                "Only one gallery job runs at a time; Cancel stops all of its processes."
                 + (
                     f" Cancel signalled {len(_report['signalled'])} process(es); "
                     + (
@@ -333,15 +364,6 @@ def _(Gallery, benchmark_job, cancel_benchmark, job_refresh, mo):
                 ),
                 pending=interactive_status["state"] != "complete",
             ),
-            mo.ui.table(
-                [
-                    {"": label, "value": value}
-                    for label, value in Gallery.progress_rows(interactive_status)
-                ],
-                selection=None,
-                pagination=False,
-                show_download=False,
-            ),
             mo.accordion(
                 {"Raw job status": mo.json(Gallery.display_receipt(interactive_status))}
             ),
@@ -352,97 +374,135 @@ def _(Gallery, benchmark_job, cancel_benchmark, job_refresh, mo):
 
 @app.cell(hide_code=True)
 def _(Gallery, mo):
+    five_loop_fixture = Gallery.five_loop_fixture()
+    mo.stop(
+        five_loop_fixture is None,
+        Gallery.note(
+            mo,
+            "No recorded five-loop run in this evidence directory",
+            "data/five-loop-q0 is listed in data/manifest.json of the gallery "
+            "sources; a VAKINT_GALLERY_EVIDENCE directory without it shows nothing here.",
+            pending=True,
+        ),
+    )
+    _report = five_loop_fixture["report"]
+    _closure = _report.get("catalogue_closure") or {}
+    _memory = _report.get("memory_after_retained_reduction") or {}
+    _data = _report.get("data") or {}
+    _execution = _report.get("execution") or {}
+    _cache = _report.get("ordered_step_cache") or {}
+    _provenance = _report.get("gallery_provenance") or {}
     mo.vstack(
         [
             Gallery.section(
                 mo,
-                "06 / saved coefficients",
-                "Load the result without repeating its reduction",
-                "The exact retained Atom and 300-digit scalar coefficients are available offline in the companion example.",
+                "06 / recorded run",
+                "The zero-momentum reduction, as it ran",
+                "One complete release-build run of the saved input in the current "
+                "131-master basis: its native monitor at completion, timings and "
+                "exact retained result. Nothing is recomputed here.",
             ),
             Gallery.metrics(
                 mo,
                 [
-                    ("55", "individual master identities"),
-                    ("58", "formal master products"),
-                    ("449", "scalar Laurent coefficients"),
-                    ("300", "validated exported decimal digits"),
+                    (
+                        f"{_closure.get('master_count')} · "
+                        + ("closed" if _closure.get("closed") else "NOT closed"),
+                        "catalogue masters in the result",
+                    ),
+                    (
+                        f"{_report.get('retained_reduction_seconds', 0):,.0f} s",
+                        "retained reduction (whole public call)",
+                    ),
+                    (
+                        f"{_report.get('loading_seconds', 0):,.0f} s",
+                        "external data and saved input loading",
+                    ),
+                    (
+                        Gallery.gib(_memory.get("process_peak_rss_bytes")),
+                        "peak memory (whole process)",
+                    ),
+                    *Gallery.execution_metrics(
+                        f"{_execution.get('ordered_weight_arithmetic')} · "
+                        f"{_execution.get('n_cores')} cores"
+                    ),
                 ],
+            ),
+            Gallery.monitor_card(
+                mo,
+                five_loop_fixture["model"],
+                title="Recorded monitor at completion",
             ),
             Gallery.note(
                 mo,
-                "Masters remain formal",
-                "The scalar coefficients use unit mass and renormalization scale, retain GC_11^10, and include epsilon^5 with a coefficientwise O(epsilon^6) remainder. Five-loop master values are not evaluated; their own poles prevent interpreting this as a complete amplitude expansion through epsilon^5.",
+                "What this run establishes",
+                f"Data {_data.get('version')} (manifest sha256 "
+                f"{str(_data.get('manifest_sha256'))[:16]}…), {_report.get('guards', {}).get('count', 0):,} "
+                "exported nonzero guards, "
+                f"an Ordered step cache with {_cache.get('misses', 0):,} misses "
+                f"and {_cache.get('hits', 0):,} hits after the call (a cold "
+                "in-memory cache; the monitor's census above counts the Ordered "
+                "schedule's own lookups, up to its last phase). The "
+                "masters stay formal symbols; the result is the exact retained "
+                "linear combination, identical for every core count and Ordered "
+                "weight arithmetic. Recorded "
+                f"{_provenance.get('recorded', 'by the integration gate')}.",
             ),
-            mo.md("""
-            From the repository root, verify all saved values without IBPs:
-
-            ```sh
-            python crates/vakint/examples/five_loop_q0_coefficients.py verify
-            ```
-
-            Native Atom and exact-ratio JSON preserve component precision.
-            Numerical `.expr` is a human display.
-
-            [Retained native Atom](https://github.com/alphal00p/gammaloop/raw/refs/heads/vakint_rustred/crates/vakint/examples/data/five_loop_q0/q0-retained.atom)
-            · [Coefficient records](https://github.com/alphal00p/gammaloop/blob/vakint_rustred/crates/vakint/examples/data/five_loop_q0/coefficient-table.json)
-            · [Conventions and commands](https://github.com/alphal00p/gammaloop/blob/vakint_rustred/crates/vakint/docs/five_loop_q0_coefficients.pdf)
-            """),
+            Gallery.evidence_links(mo, "five-loop-q0"),
         ]
     )
-    return
+    return (five_loop_fixture,)
 
 
-@app.cell
-def _(mo):
+@app.cell(hide_code=True)
+def _(five_loop_fixture, mo):
     inspect_saved = mo.ui.run_button(
-        label="Inspect the saved result here (offline, no reduction)", kind="success"
+        label="Show the exact retained result (offline, no reduction)",
+        kind="success",
     )
+    mo.stop(five_loop_fixture["retained"] is None)
     inspect_saved
     return (inspect_saved,)
 
 
 @app.cell(hide_code=True)
-def _(Gallery, inspect_saved, mo):
+def _(Gallery, five_loop_fixture, inspect_saved, mo):
     mo.stop(not inspect_saved.value)
-    saved_result = Gallery.saved_five_loop_result()
-    _summary = saved_result.summary()
-    _products = saved_result.coefficient_table["products"]
-    _rows = []
-    for _row in _products[:12]:
-        _leading = min(_row["coefficients"], key=lambda number: number["epsilon_power"])
-        _rows.append(
-            {
-                "formal master product": _row["master_product"][:90]
-                + ("…" if len(_row["master_product"]) > 90 else ""),
-                "leading ε power": _leading["epsilon_power"],
-                "leading coefficient (real, 30 digits)": _leading["real"][
-                    "display_300_significant_digits"
-                ][:32],
-            }
-        )
+    from symbolica import E as _E
+
+    _path, _digest = five_loop_fixture["retained"]
+    saved_result = _E(Gallery.checked_bytes(_path, _digest).decode())
+    # The live pager is this cell's own output: page through all terms and
+    # open the numbered omission markers.
     mo.vstack(
         [
-            Gallery.metrics(
+            Gallery.formula(mo, saved_result),
+            Gallery.legend(
                 mo,
-                [
-                    (_summary["master_symbols"], "individual master identities"),
-                    (_summary["master_products"], "formal master products"),
-                    (_summary["scalar_coefficients"], "scalar Laurent coefficients"),
-                    (
-                        f"ε^{_summary['epsilon_minimum']} … ε^{_summary['epsilon_maximum']}",
-                        "recorded orders per product",
-                    ),
-                ],
-            ),
-            mo.ui.table(_rows, selection=None, pagination=False, show_download=False),
-            mo.md(
-                f"First 12 of {len(_products)} products; every file was checked "
-                "against its recorded sha256. The masters themselves stay formal."
+                "RustRedMaster(rustred_family_…, powers) are the formal catalogue "
+                "masters; GC_11 is the UFO strong coupling, mursq = μ_R², mUV the "
+                "auxiliary UV mass and ε the dimensional regulator (d = 4 − 2ε). "
+                f"sha256 {_digest} verified before parsing.",
             ),
         ]
     )
     return (saved_result,)
+
+
+@app.cell(hide_code=True)
+def _(Gallery, mo, saved_result):
+    saved_term = Gallery.term_selector(mo, saved_result)
+    mo.stop(saved_term is None)
+    saved_term
+    return (saved_term,)
+
+
+@app.cell(hide_code=True)
+def _(Gallery, mo, saved_result, saved_term):
+    # One term at a time: its masters, prefactor and coefficient in its own
+    # pager (the full result's pager shows oversized products as markers).
+    Gallery.term_view(mo, saved_result, saved_term.value)
+    return
 
 
 @app.cell(hide_code=True)

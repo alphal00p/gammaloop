@@ -252,7 +252,10 @@ pub struct OrderedCacheProgramStatistics {
     /// reported only, not part of the cache identity).
     pub data_version: String,
     /// Hexadecimal identity of the program's rule tables (part of the cache
-    /// identity, see the module documentation).
+    /// identity, see the module documentation). Zero for the RustRed p
+    /// library, a program identified by version constants only: its directory
+    /// name is their textual rendering (`p-library-<a>-<b>_...`, see
+    /// `directory`) instead of `<program>.<rule tables>.<stamp>`.
     pub rule_tables: String,
     /// Hexadecimal binding stamp of the cache.
     pub stamp: String,
@@ -332,6 +335,12 @@ pub(crate) struct OrderedCacheProgram {
     /// `application.json`, which pins every payload, with the pack's families
     /// and masters).
     pub rule_tables: [u8; 32],
+    /// The textual tables variant: a program identified by version constants
+    /// only (the RustRed p library, [`super::p_data::p_cache_directory_name`])
+    /// has no rule-table digest (`rule_tables` is zero) and this text is its
+    /// whole directory name. Such a program never uses a shipped cache of a
+    /// vacuum loop pack.
+    pub textual_tables: Option<String>,
     pub binding: OrderedStepCacheBinding,
 }
 
@@ -387,19 +396,47 @@ impl OrderedCacheProgram {
     ) -> Self {
         Self {
             loop_count,
-            label: format!(
-                "{loop_count}L-{}",
-                file_name_safe(&name.replace(['.', '_'], "-"), true)
-            ),
+            label: Self::label_for(loop_count, name),
             data_version: file_name_safe(data_version, false),
             rule_tables,
+            textual_tables: None,
             binding,
         }
     }
 
-    /// Registry key: one cache per program, rule tables and binding stamp.
+    /// The label [`Self::new`] gives the program `name` of `loop_count` loops.
+    pub(crate) fn label_for(loop_count: usize, name: &str) -> String {
+        format!(
+            "{loop_count}L-{}",
+            file_name_safe(&name.replace(['.', '_'], "-"), true)
+        )
+    }
+
+    /// A program of the textual tables variant (see `textual_tables`): the
+    /// label is kept as given (file-name safe), the directory is `directory`.
+    pub(crate) fn textual(
+        loop_count: usize,
+        label: &str,
+        data_version: &str,
+        directory: String,
+        binding: OrderedStepCacheBinding,
+    ) -> Self {
+        Self {
+            loop_count,
+            label: file_name_safe(label, true),
+            data_version: file_name_safe(data_version, false),
+            rule_tables: [0; 32],
+            textual_tables: Some(directory),
+            binding,
+        }
+    }
+
+    /// Registry key: one cache per program, rule tables and binding stamp. A
+    /// program of the textual tables variant is keyed by its whole directory
+    /// name (which tells an injected library from a loaded one).
     fn key(&self) -> ProgramKey {
-        (self.label.clone(), self.rule_tables, self.binding.stamp())
+        let label = self.textual_tables.as_ref().unwrap_or(&self.label);
+        (label.clone(), self.rule_tables, self.binding.stamp())
     }
 }
 
@@ -561,7 +598,10 @@ impl OrderedCacheRegistry {
             return Ok(None);
         }
         let shipped = match data {
-            Some(data) if settings.shipped => self.shipped(data, program)?,
+            Some(data) if settings.shipped && program.textual_tables.is_none() => {
+                self.shipped(data, program)?
+            }
+            Some(data) if settings.shipped => super::p_shipped_cache::shipped(data, program)?,
             _ => ShippedOrderedCache::None,
         };
         let key = program.key();
@@ -762,13 +802,26 @@ impl OrderedCacheRegistry {
     /// data or five-loop application change), so their resident records are
     /// released. Records of a directory-backed cache are saved first unless
     /// its autosave policy is `Never`; a failed save is reported, not raised.
-    pub(crate) fn detach_except(&self, programs: &[OrderedCacheProgram]) {
+    ///
+    /// `tables` keeps, in addition, every cache with one of these (label,
+    /// rule tables): programs not decoded yet, whose binding stamp is fixed
+    /// by their (verified) rule bytes.
+    pub(crate) fn detach_except(
+        &self,
+        programs: &[OrderedCacheProgram],
+        tables: &[(String, [u8; 32])],
+    ) {
         let keep: BTreeSet<ProgramKey> = programs.iter().map(OrderedCacheProgram::key).collect();
         let detached: Vec<Attached> = {
             let mut attached = self.lock();
             let superseded: Vec<ProgramKey> = attached
                 .keys()
-                .filter(|key| !keep.contains(*key))
+                .filter(|key| {
+                    !keep.contains(*key)
+                        && !tables
+                            .iter()
+                            .any(|(label, digest)| key.0 == *label && key.1 == *digest)
+                })
                 .cloned()
                 .collect();
             superseded
@@ -805,8 +858,12 @@ impl Drop for OrderedCacheRegistry {
 
 /// `<label>.<first 16 hex digits of the rule tables>.<first 16 hex digits of
 /// the stamp>`: the program's directory in a cache directory and in a loop
-/// pack's shipped `ordered-cache/`.
+/// pack's shipped `ordered-cache/`. A program of the textual tables variant
+/// uses its text instead.
 pub(super) fn program_directory_name(program: &OrderedCacheProgram) -> String {
+    if let Some(directory) = &program.textual_tables {
+        return directory.clone();
+    }
     format!(
         "{}.{}.{}",
         program.label,
@@ -918,10 +975,22 @@ impl Vakint {
     /// Detach the caches of programs this engine no longer has, after its
     /// data were replaced. Nothing is detached if the programs cannot be
     /// listed.
+    ///
+    /// Lower-loop programs that were not decoded yet are kept by their
+    /// declared rule tables rather than decoded here.
     pub(super) fn detach_superseded_ordered_caches(&self) {
-        if let Ok(programs) = self.ordered_cache_programs() {
-            self.ordered_cache.detach_except(&programs);
+        let Ok(data) = self.rustred_data() else {
+            return;
+        };
+        let mut programs = data.decoded_ordered_cache_programs();
+        if let Ok(application) = self.loaded_application() {
+            programs.push(application.ordered_cache_program().clone());
         }
+        // The p library the engine resolves to after the change (injected,
+        // external-data or built-in) keeps its cache.
+        programs.extend(self.loaded_p_cache_program());
+        self.ordered_cache
+            .detach_except(&programs, &data.undecoded_lower_programs());
     }
 
     /// Every program currently loaded in this engine.
@@ -931,6 +1000,7 @@ impl Vakint {
         if let Ok(application) = self.loaded_application() {
             programs.push(application.ordered_cache_program().clone());
         }
+        programs.extend(self.loaded_p_cache_program());
         Ok(programs)
     }
 }

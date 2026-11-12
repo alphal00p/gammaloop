@@ -11,7 +11,6 @@ use spenso::structure::representation::{BaseRepName, Minkowski};
 use symbolica::atom::{AtomCore, AtomView, FunctionBuilder};
 use symbolica::id::Replacement;
 use symbolica::prelude::{Q, Z};
-use symbolica::utils::resources;
 
 use super::RustRedEvaluationError;
 use crate::{Vakint, VakintTerm, initialize_spenso_reps, symbols::S};
@@ -28,7 +27,7 @@ fn error(error: impl std::error::Error + 'static) -> RustRedEvaluationError {
 pub(super) fn project(
     input: &VacuumTensorProjectionInput,
 ) -> Result<VacuumTensorProjection, RustRedEvaluationError> {
-    resources::checkpoint()?;
+    crate::execution::checkpoint()?;
     initialize_spenso_reps();
     let labels = input
         .component_loop_momenta
@@ -57,7 +56,7 @@ pub(super) fn project(
     let mut nonzero_conditions = BTreeSet::new();
     let mut offset = 0;
     for component in &input.component_loop_momenta {
-        resources::checkpoint()?;
+        crate::execution::checkpoint()?;
         let mut reducer = TensorReducer::new(input.dimension.clone());
         for axis in offset..offset + component.len() {
             reducer = reducer
@@ -128,7 +127,7 @@ pub(super) fn project(
                     .finish();
             }
         });
-    resources::checkpoint()?;
+    crate::execution::checkpoint()?;
     Ok(VacuumTensorProjection {
         numerator,
         nonzero_conditions: nonzero_conditions.into_iter().collect(),

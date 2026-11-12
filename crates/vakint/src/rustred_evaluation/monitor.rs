@@ -17,6 +17,7 @@ use model::{
 mod model;
 mod publication;
 mod runtime;
+mod sink;
 #[cfg(test)]
 mod tests;
 #[cfg(feature = "progress-tui")]
@@ -24,6 +25,9 @@ mod tui;
 mod viewer;
 pub(crate) use runtime::{CallerProgress, MonitorContext};
 pub use runtime::{RustRedMonitorScope, RustRedMonitorWork};
+#[cfg(feature = "symbolica_community_module")]
+pub(crate) use sink::ProgressMetrics;
+pub use sink::RustRedProgressSink;
 pub use viewer::RustRedSnapshotViewer;
 
 /// Optional diagnostics for a single call or an explicitly scoped caller job.
@@ -37,6 +41,10 @@ pub struct RustRedMonitorOptions {
     /// Minimum native safe-boundary interval, not a CAS heartbeat deadline.
     pub interval: Duration,
     pub no_color: bool,
+    /// In-memory latest model for an in-process consumer (e.g. a notebook
+    /// progress display). A sink enables monitoring on its own, without a
+    /// file or terminal output.
+    pub progress_sink: Option<RustRedProgressSink>,
 }
 
 impl Default for RustRedMonitorOptions {
@@ -46,6 +54,7 @@ impl Default for RustRedMonitorOptions {
             progress_snapshot: None,
             interval: Duration::from_secs(1),
             no_color: false,
+            progress_sink: None,
         }
     }
 }
@@ -60,7 +69,9 @@ pub enum RustRedMonitorDisplay {
 
 impl RustRedMonitorOptions {
     pub fn enabled(&self) -> bool {
-        self.display != RustRedMonitorDisplay::Off || self.progress_snapshot.is_some()
+        self.display != RustRedMonitorDisplay::Off
+            || self.progress_snapshot.is_some()
+            || self.progress_sink.is_some()
     }
 
     pub fn validate(&self) -> io::Result<()> {

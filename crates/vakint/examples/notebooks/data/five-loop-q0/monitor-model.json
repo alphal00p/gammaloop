@@ -1,0 +1,328 @@
+{
+ "api_status": "Succeeded",
+ "batch": {
+  "completed": 1,
+  "label": "5L / Retain",
+  "total": 1
+ },
+ "cohort": {
+  "completed": 1,
+  "label": "",
+  "total": 1
+ },
+ "details": {
+  "caller_expression": {
+   "bytes": 430632,
+   "stage": "catalogue_classification",
+   "summands": 82
+  },
+  "current_degrees": null,
+  "current_key": null,
+  "event_age_seconds": 0.050393396,
+  "native_observation_age_seconds": 28.218392586
+ },
+ "dfs": null,
+ "elapsed_seconds": 233.874829666,
+ "events": [
+  "request finished · terminal substitution · succeeded",
+  "request finished · caller · succeeded"
+ ],
+ "memory": {
+  "available_bytes": 169679380480,
+  "cpu_percent": 98.97364153773296,
+  "guard": null,
+  "peak_rss_bytes": 14983520256,
+  "rss_bytes": 12799688704,
+  "sample_age_seconds": 0.828287797,
+  "total_bytes": 1216967950336,
+  "verified": true
+ },
+ "ordered": {
+  "census_age_seconds": 28.218392586,
+  "frontier": {
+   "keys": 0,
+   "monomials": 0,
+   "peak_keys": 174856,
+   "peak_monomials": 174856
+  },
+  "grouping": {
+   "cancelled": 66651,
+   "emitted": 8801455,
+   "merged": 7705180,
+   "output_cancelled": 0,
+   "output_merged": 0
+  },
+  "input_keys": 1750,
+  "output": {
+   "keys": 149,
+   "monomials": 149,
+   "peak_keys": 149,
+   "peak_monomials": 149
+  },
+  "phase": {
+   "active": false,
+   "index": 83,
+   "keys": 0,
+   "kind": "done",
+   "owner": null,
+   "seconds": null,
+   "step_cache_hits": 0,
+   "step_cache_misses": 0,
+   "support": null,
+   "total": 83
+  },
+  "phases": [
+   {
+    "frontier_keys": 30424,
+    "frontier_monomials": 30424,
+    "index": 54,
+    "keys": 1090,
+    "kind": "apply",
+    "owner": 18,
+    "seconds": 0.096323746,
+    "step_cache_hits": 0,
+    "step_cache_misses": 1090,
+    "support": 8
+   },
+   {
+    "frontier_keys": 32911,
+    "frontier_monomials": 32911,
+    "index": 58,
+    "keys": 947,
+    "kind": "apply",
+    "owner": 37,
+    "seconds": 0.126776134,
+    "step_cache_hits": 0,
+    "step_cache_misses": 947,
+    "support": 8
+   },
+   {
+    "frontier_keys": 72963,
+    "frontier_monomials": 72963,
+    "index": 62,
+    "keys": 70311,
+    "kind": "route",
+    "owner": null,
+    "seconds": 2.881388037,
+    "step_cache_hits": 0,
+    "step_cache_misses": 17011,
+    "support": 7
+   },
+   {
+    "frontier_keys": 80628,
+    "frontier_monomials": 80628,
+    "index": 63,
+    "keys": 5293,
+    "kind": "apply",
+    "owner": 2,
+    "seconds": 0.672216051,
+    "step_cache_hits": 0,
+    "step_cache_misses": 5293,
+    "support": 7
+   },
+   {
+    "frontier_keys": 82133,
+    "frontier_monomials": 82133,
+    "index": 64,
+    "keys": 2267,
+    "kind": "apply",
+    "owner": 3,
+    "seconds": 0.329380095,
+    "step_cache_hits": 0,
+    "step_cache_misses": 2267,
+    "support": 7
+   },
+   {
+    "frontier_keys": 83594,
+    "frontier_monomials": 83594,
+    "index": 65,
+    "keys": 2777,
+    "kind": "apply",
+    "owner": 4,
+    "seconds": 0.273190785,
+    "step_cache_hits": 0,
+    "step_cache_misses": 2777,
+    "support": 7
+   },
+   {
+    "frontier_keys": 87084,
+    "frontier_monomials": 87084,
+    "index": 67,
+    "keys": 10002,
+    "kind": "apply",
+    "owner": 11,
+    "seconds": 0.706339504,
+    "step_cache_hits": 0,
+    "step_cache_misses": 10002,
+    "support": 7
+   },
+   {
+    "frontier_keys": 90494,
+    "frontier_monomials": 90494,
+    "index": 68,
+    "keys": 8352,
+    "kind": "apply",
+    "owner": 27,
+    "seconds": 0.568732009,
+    "step_cache_hits": 0,
+    "step_cache_misses": 8352,
+    "support": 7
+   },
+   {
+    "frontier_keys": 102237,
+    "frontier_monomials": 102237,
+    "index": 69,
+    "keys": 16169,
+    "kind": "apply",
+    "owner": 34,
+    "seconds": 1.780452863,
+    "step_cache_hits": 0,
+    "step_cache_misses": 16169,
+    "support": 7
+   },
+   {
+    "frontier_keys": 150749,
+    "frontier_monomials": 150749,
+    "index": 71,
+    "keys": 241043,
+    "kind": "route",
+    "owner": null,
+    "seconds": 10.809324732,
+    "step_cache_hits": 0,
+    "step_cache_misses": 41437,
+    "support": 6
+   },
+   {
+    "frontier_keys": 167898,
+    "frontier_monomials": 167898,
+    "index": 72,
+    "keys": 35573,
+    "kind": "apply",
+    "owner": 1,
+    "seconds": 19.081150124,
+    "step_cache_hits": 0,
+    "step_cache_misses": 35573,
+    "support": 6
+   },
+   {
+    "frontier_keys": 142842,
+    "frontier_monomials": 142842,
+    "index": 73,
+    "keys": 40102,
+    "kind": "apply",
+    "owner": 6,
+    "seconds": 3.105141048,
+    "step_cache_hits": 0,
+    "step_cache_misses": 40102,
+    "support": 6
+   },
+   {
+    "frontier_keys": 136451,
+    "frontier_monomials": 136451,
+    "index": 74,
+    "keys": 14362,
+    "kind": "apply",
+    "owner": 8,
+    "seconds": 1.193859775,
+    "step_cache_hits": 0,
+    "step_cache_misses": 14362,
+    "support": 6
+   },
+   {
+    "frontier_keys": 129033,
+    "frontier_monomials": 129033,
+    "index": 75,
+    "keys": 15614,
+    "kind": "apply",
+    "owner": 24,
+    "seconds": 1.312281796,
+    "step_cache_hits": 0,
+    "step_cache_misses": 15614,
+    "support": 6
+   },
+   {
+    "frontier_keys": 90384,
+    "frontier_monomials": 90384,
+    "index": 76,
+    "keys": 379133,
+    "kind": "route",
+    "owner": null,
+    "seconds": 29.259945409,
+    "step_cache_hits": 0,
+    "step_cache_misses": 41649,
+    "support": 5
+   },
+   {
+    "frontier_keys": 0,
+    "frontier_monomials": 0,
+    "index": 77,
+    "keys": 95492,
+    "kind": "apply",
+    "owner": 0,
+    "seconds": 11.303476686,
+    "step_cache_hits": 0,
+    "step_cache_misses": 95492,
+    "support": 5
+   }
+  ],
+  "processed_keys": 964574,
+  "recent_rate": null,
+  "request": 2,
+  "request_rate": {
+   "keys": 964574,
+   "seconds": 153.020926173
+  },
+  "step_cache_hits": 0,
+  "step_cache_misses": 361435
+ },
+ "run": {
+  "arithmetic": "modular_polynomial",
+  "n_cores": 4,
+  "step_cache": "read-write (in memory)"
+ },
+ "scope": "job",
+ "snapshot_age_seconds": null,
+ "stage": {
+  "activity": null,
+  "id": "report_serialization",
+  "kind": "output",
+  "seconds": 10.709888625,
+  "work": null
+ },
+ "stages": [
+  {
+   "kind": "setup",
+   "seconds": 0.008790745
+  },
+  {
+   "kind": "data_load",
+   "seconds": 51.286509705
+  },
+  {
+   "kind": "ingress",
+   "seconds": 1.042848568
+  },
+  {
+   "kind": "lowering",
+   "seconds": 0.273818077
+  },
+  {
+   "kind": "native",
+   "seconds": 153.103894997
+  },
+  {
+   "kind": "post_processing",
+   "seconds": 14.133111397
+  },
+  {
+   "kind": "output",
+   "seconds": 13.951345698
+  },
+  {
+   "kind": "other",
+   "seconds": 0.07450991
+  }
+ ],
+ "status": "Succeeded",
+ "schema": "vakint.monitor.v2"
+}

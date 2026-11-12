@@ -51,17 +51,47 @@ dot(k(1),p(3))^2 * topo(prop(1,edge(1,3),k(1),0,2)*prop(2,edge(1,4),p(3)-k(1),0,
 Kind inference (no flag):
 - The integral is a p-integral (`IntegralKind::Propagator`) iff some prop momentum contains a head `p(_)`, or its
   short-form head is a p family name. Otherwise it is a vacuum integral (`IntegralKind::Vacuum`), exactly as today.
-- This is unambiguous: vacuum matching already rejects `p` in prop momenta (`Integral::new`). Under `allow_unknown_integrals` a
-  `topo` with `p` in its momenta is validated as a p-integral and an invalid one is an error, not `UNKNOWN`.
-  The Atom therefore stays self-describing without a `topo(...)` argument.
+- This is unambiguous: no vacuum topology has `p` in its prop momenta, and the vacuum `UNKNOWN` matcher refuses them.
+  The Atom therefore stays self-describing without a flag argument.
+- Out of domain (M1 review F1): a `topo` with `p` in its momenta that is well formed but not a p-integral vakint
+  covers is an unknown integral under `allow_unknown_integrals` (the default), like any integral vakint does not know,
+  and an error (items 1, 2, 4 and 8 below) otherwise. Out of domain means: a massive line (item 1), several external
+  heads (item 2), a non-integer power (item 4), more than four loops or a graph outside the registry (item 8). The
+  unknown integral is `topo(UNKNOWN(...))` of the long form (after the exact normalization of items 5-6 when only item
+  8 applies); its momenta keep `p(i)` (only this fallback admits them; at base 64090b527 the `UNKNOWN` matcher refused
+  `p` heads) and its loop count is the number of `k(j)`. The `UNKNOWN` matcher needs the prop ids `1..N`: an input
+  whose ids have a gap, also when the normalization merged a line that is not the last one, fails closed with that
+  matcher's error ("UNKNOWN integrals must have propagator ids ranging from 1 to ..."). No backend evaluates an
+  unknown integral with `p(i)` (pySecDec takes external momenta only in numerators), so evaluating it, or matching
+  the `topo(UNKNOWN(...))` output again, is the error "out-of-domain p-integral (...): an unknown integral with an
+  external momentum p(i), which no backend evaluates"; `to_canonical` passes it through once. `Vakint::tensor_reduce`
+  refuses it with the same error: a vacuum projection of its numerator would be wrong, and zero at odd rank.
+  `Vakint::evaluate` reports this error whatever the numerator, with one exception: an input with a tree line and a
+  float coefficient may stop earlier at `MalformedGraph` (the input coefficients are staged on the raw graph), which
+  is an error all the same. `Vakint::evaluate_integral` does not canonicalize, so a raw input reports it for item 8,
+  and the error of its own item for items 1, 2 and 4; no evaluation method is reached. A short form out
+  of domain (a non-integer power) is no unknown integral and keeps its error. Malformed inputs (not a `prop`, a bad edge or vertex id, repeated prop ids, no external head,
+  broken momentum conservation, a loop-count mismatch, a momentum that is not an integer combination of heads, a
+  non-unimodular routing) are errors under any setting, also when the input is out of domain as well: malformed
+  wins, every structural check runs before an out-of-domain reason is returned. With several external heads,
+  conservation means that every vertex balance is free of `k(j)` (the heads injected at a vertex are arbitrary).
+  A non-unimodular routing of a graph in the registry is rejected by its affine routing (Matching); for an
+  out-of-domain input or a graph outside the registry it is checked on the chords of a spanning tree (their loop
+  momentum coefficients must have determinant ±1). The numerator of an unknown integral is not inspected (as for a
+  vacuum `UNKNOWN`): a tensor numerator is an error (item 7) only on a p-integral in the domain.
+- In code: `p_integral::input::PRejection { OutOfDomain(String), Malformed(VakintError) }`; the fallback is
+  `Topologies::match_propagator(input, allow_unknown_integrals)`.
 - Inference lives in `p_integral::infer_kind(integral: AtomView) -> Result<IntegralKind, VakintError>`.
   `Vakint::match_topologies_for_settings` dispatches on it before any vacuum or five-loop matcher runs.
 
-Validation, in this order. Every error is `VakintError::InvalidIntegralFormat("p-integral: ...")` unless stated:
+Validation, in this order. Every error is `VakintError::InvalidIntegralFormat("p-integral: ...")` unless stated.
+The order is that of the checks, not of the reports: the out-of-domain reasons (items 1, 2, the non-integer power of
+item 4) are only recorded, and reported after the structural checks passed (malformed wins, see "Out of domain"):
 1. A nonzero mass in any prop: "p-integrals are massless; prop {id} has mass {m}".
 2. More than one external head, e.g. `p(1)` and `p(2)`: "a p-integral has one external momentum; found {heads}".
    A sum `p(1)+p(2)` injected at one vertex is rejected the same way: define `q` as a single head.
-3. Vertex balances not of the form above: "momentum conservation: {vertex} -> {balance}".
+3. Vertex balances not of the form above: "momentum conservation: {vertex} -> {balance}". With several heads
+   (item 2, out of domain), a vertex balance that contains a loop momentum.
 4. Non-integer power: "powers must be integers". A cycle rank different from the number of distinct `k(j)` heads:
    "the routing does not match the graph's loop count".
 5. Normalization (exact, before matching):
@@ -81,7 +111,8 @@ Validation, in this order. Every error is `VakintError::InvalidIntegralFormat("p
    The tensor prepass (`tensor_reduce_for_evaluation`) must not project p-integral terms; it only puts them in
    scalar-product form.
 8. More than 4 loops, or a graph that is in no catalogue (section 2): `VakintError::UnreckognizedIntegral`, with the
-   note "p-integral not covered by the 1L-4L registry".
+   note "p-integral not covered by the 1L-4L registry", without `allow_unknown_integrals`; with it, the unknown
+   integral of "Out of domain" above (after its routing passed the unimodularity check).
 
 ## 2. Topology registry and matching
 
@@ -168,7 +199,8 @@ Matching of a normalized input:
    - a new field `propagator: Option<PropagatorWitness>`. The witness also carries `powers` (the matched power of
      every canonical line, 0 for pinched ones), so the glue reads the backend `powers` and `external`
      (`canonical_external() = σ·p(i)`) from it directly.
-5. No graph match: `UnreckognizedIntegral`. There is no quadric-search fallback in M1. Normalization (merging
+5. No graph match: as section 1 item 8 (`UnreckognizedIntegral` without `allow_unknown_integrals`, with it the
+   unknown integral). There is no quadric-search fallback in M1. Normalization (merging
    identical quadrics, contracting pinched lines) turns self-energy-insertion graphs into contractions of the tops.
    The census test of section 7 proves coverage, and any uncovered graph is added as a new data family, never as
    special code.
@@ -326,8 +358,9 @@ p-master table (`PMaster` values):
   permission.
 
 Exact backend comparison:
-- Retain-mode results are compared coefficient by coefficient over the master monomials (products of
-  `PMaster`/`PG`): `(c_A - c_B).together() == 0`.
+- Retain-mode results are compared in the tag basis (`p_integral::compare::tag_basis`, section 6): `PG` and
+  `PGamma` factors become products of `Γ(1+mε)`, then the coefficients of the monomials `Π Γ(1+mε)^e × Π PMaster`
+  are compared: `(c_A - c_B).together() == 0`.
 - Numerical results are compared at `p(i) = (0,0,0,1)` (`Q^2 = 1`) and `mursq = 1`, to `1e-30` relative.
 - Both backends share the same finalizer, so a disagreement is a reduction disagreement.
 
@@ -355,7 +388,9 @@ finalizer.
 ### Forcer backend (`EvaluationMethod::Forcer(ForcerOptions)`; `ForcerOptions { master_mode }`)
 
 Wiring:
-- `supports`: `Topology::Propagator` with `1 <= L <= 4`.
+- `supports`: `Topology::Propagator` with `1 <= L <= 4`, and FORM >= 5 at `form_exe_path` (a per-process probe,
+  `lib.rs::forcer_form_probe`): a host without FORM 5 never runs Forcer code. `validate_settings` requires FORM 5
+  up front only when the evaluation order is Forcer alone; in a mixed order Forcer then simply supports nothing.
 - `dependencies() = [VakintDependency::Forcer]`: FORM at `form_exe_path` with version `>= 5.0.0`
   (`MINIMAL_FORCER_FORM_VERSION`), probed once per process like FORM today.
 - `EvaluationOrder::all()` = [RustRed, Forcer, AlphaLoop, MATAD, FMFT, PySecDec]. `available()` drops Forcer without
@@ -419,65 +454,181 @@ Output parsing:
 
 ### RustRed backend
 
-`EvaluationMethod::RustRed`, unchanged options:
-- `supports` for `Topology::Propagator` is true when the p data of that loop count is loaded: 1L-3L built in, 4L from
-  external data. Otherwise it yields to Forcer, exactly as 4L vacuum yields to FMFT.
-- It returns the same `ReducedPropagatorValue`s; see section 6.
+`EvaluationMethod::RustRed`, unchanged options (`master_mode`); no new option, setting or Python API:
+- `supports` (structural): `Topology::Propagator` with `1 <= L <= 4`.
+- `has_data` for a p-integral: the engine's RustRed p library (section 6) has a scope containing `L`. RustRed is
+  the default for 1L-4L p-integrals whenever its library is available; Forcer is the fallback. Without a library
+  for `L` the p-integral goes to the next method of the order, Forcer, exactly as 4L vacuum yields to FMFT. When no other
+  method supports it either, the error stays `ForcerUnavailable` (no FORM 5) or `NoEvaluationMethodFound`: RustRed
+  is never chosen for a p-integral it has no library for (`Vakint::evaluation_method` falls back to RustRed only to
+  report missing vacuum data), on the expression path and the term path alike.
+- It returns the same `ReducedPropagatorValue`s as Forcer and uses the same finalizer; see section 6.
 
-## 6. RustRed backend outline (M2; no implementation in M1)
+## 6. RustRed backend (one RustRed p library program: 1L-3L built in, 1L-4L from vakint-external-data)
 
-vakint side:
-- New `src/rustred_evaluation/p_integral.rs`.
-- Numerator lowering generalizes `MatchedScalarInput::prepare` to families with coordinates `k_i·k_j` and `k_i·q`.
-  It produces an `IntegralKey` over the family slots (lines, then ISPs; ISP numerators become negative powers).
-- One saved application per loop count ("p<L>L"). All families of that loop count share its owner classes.
-- Calls into `rustred_app` per request: `PreparedSavedApplication::<N>::route_entry_to_owner`, then
-  `reduce_routed_linear_combination` under the Ordered scheduler (`ordered_scheduler(settings)`), with
-  `OrderedWeightArithmetic::ModularPolynomial` (Z_p(d) replay) by default.
-- All p contributions of one loop count in a request share one frontier, as for vacuum.
-- Arity: `N = 2, 5, 9, 14` for L = 1..4, dispatched over RustRed's compiled arities by a const-generic match. Never
-  hard-code 16; 5L needs 20.
+Code: `src/rustred_evaluation/p_integral.rs` (dispatch, lowering, rendering), `src/rustred_evaluation/p_data.rs`
+(the library of an engine), RustRed's `rustred::propagator` (the library program, plan M2 sections 3-4). Crate entry
+points of `rustred_evaluation::p_integral`: `supports` and `has_p_data` (dispatch), `evaluate_ordered_batch` (a batch
+of matched contributions, finalized) and `reduce_requests` (backend requests in, the reduced values per external head
+and scale power out, before the finalizer: the level at which tests compare with Forcer's `combine_parts`).
 
-Family identity:
-- vakint `P_FAMILIES[i]` maps to the RustRed family compiled from the same denominators: Minkowski, massless,
-  `externals(q)`, `gram(q,q,-1)` (Euclidean `Q^2 = 1`, field Q(d)), slots in vakint order.
-- The data manifest lists `name -> fingerprint`. vakint validates it at load, and a test recomputes it.
-- vakint never handles owner ids. RustRed routes a family sector to its owner class (marked-matroid class, shared
-  across families) through signed affine maps with q -> ±q.
+The library program:
+- RustRed reduces p-integrals with ONE library program per release scope (a range of loop counts): one census of
+  owner classes over all families of the scope, one rule cascade (Forcer's: insertion, series-parallel, carpet,
+  triangle, custom owners), one step cache for every loop count. Its identity is `PLibrary::identity()`, the scope
+  and every `P_*` version constant of RustRed; no digest.
+- An engine takes its library from, in this order:
+  1. a library injected into the engine (`Vakint::inject_p_library`, hidden from the documentation; tests inject
+     RustRed's one-loop reference library `rustred::propagator::testing::one_loop_reference_library()`);
+  2. the external data the engine loaded (`load_external_data`): the directory `<root>/p/p-library-<a>-<b>/` written
+     by `rustred p-package` for the scope `a..=b`, loaded through `rustred_app::propagator::load_p_library`
+     (`PLibrarySource::Directory`). Exactly one library directory may exist under `p/`; a `p/` area without one, with
+     several, or holding a file or a symlink in their place is an error, and so is a library whose scope differs
+     from its directory name;
+  3. else the library the external data's `p_integral/` area lists (`<root>/p_integral/p-library-<a>-<b>/`, an entry
+     of `libraries` in `p_integral/manifest.json`; see "Four-loop library" below): how vakint-external-data ships the
+     scope 1-4 library;
+  4. the built-in 1L-3L library embedded from `data/p/` (`PLibrarySource::Memory`; see "Built-in library" below).
+- Every library is checked once before first use: the coefficient context is `{d}`; every vakint family of the
+  scope has a top presentation (`PLibrary::top_presentation(P_FAMILIES[i].name)`) whose line slots are vakint's
+  canonical lines in order (momenta up to an overall sign, no eps units), followed by ISP slots only; every
+  terminal maps onto `1` or a Forcer master that `Masters.prc` tabulates (without a basis map only the unit
+  terminal may exist). Any failure is a typed error, never a silent fallback to Forcer.
+- A `p/` area that is present but broken counts as data: its p-integrals fail closed with its error.
 
-Shareable cache:
-- One Ordered step cache per p program. Its records are keyed by (owner class, owner-local `IntegralKey`, RustRed
-  step-semantics version), so they are independent of the family and the route the request came from.
-- Directory `p<L>L-<program>.<rule tables>.<stamp>`, with version constants and no digests of sources. Shipped
-  caches use the same layout.
+Built-in library (M2-V4):
+- `data/p/p-library-1-3/` is the directory `rustred p-package --max-loops 3` writes at the pinned RustRed revision
+  (scope 1-3: the 5 vakint tops of 1-3 loops, 43 DAG nodes, the Custom owners NO and t1star05, the basis layer
+  `layer/p-layer.json` onto Forcer's masters `no` and `t105`; 54 files, about 0.9 MB). `data/p/manifest.json`
+  (schema `vakint.p-data.v1`) records the library directory, its identity and versions (copied from its
+  `library.json`) and every file with its size and sha256. `build.rs` embeds `data/p/` with the vendored data; the
+  vacuum `data/manifest.json` and loop packs do not change.
+- On first use the embedded files are checked against the manifest (a missing, extra or altered file fails) and
+  loaded once per process through `load_p_library(PLibrarySource::Memory)`, without re-running the descent
+  certificate: `rustred p-package` certified the files when it wrote them (it loads its output back with the
+  certificate), their sha256 pins them, and the shipping tests compare them with the current RustRed assembly. The
+  library's identity must be the manifest's.
+- Default order: `EvaluationOrder::all()` puts RustRed before Forcer, so with the built-in library alone 1L-3L
+  p-integrals go to RustRed and 4L p-integrals (outside its scope) to Forcer. Massive closures
+  (`p_integral::MassiveClosure`) follow the same dispatch.
+- Fail closed: a `p/` area of the loaded external data that cannot be resolved (no or several library directories,
+  a file or symlink in their place) counts as data for every loop count, so its error also stops 4L p-integrals
+  from going to Forcer. A built-in library that fails its checks fails every p-integral of its scope.
+- Regeneration (after a RustRed pin that changes a `P_*` version or the assembly): run `rustred p-package
+  --max-loops 3 --out crates/vakint/data/p/p-library-1-3` with the pinned RustRed, then rewrite the manifest with
+  `VAKINT_P_DATA=write` on the test `the_p_data_manifest_lists_the_shipped_library_files`
+  (`tests/p_library_shipping_tests.rs`). The shipping tests check the versions and identity against RustRed, the
+  shipped families against vakint's and RustRed's, the library against `assemble_p_package` with the shipped Custom
+  payloads (`equivalent_p_libraries`, never bytes), the DAG keys against `rustred_topology` run in vakint's build
+  (graphica skew), and the terminals against `{1, PMaster(no), PMaster(t105)}`.
 
-Data layout:
-- Built-in `crates/vakint/data/p1L`, `p2L`, `p3L`; `p4L` in vakint-external-data. The release manifest gains
-  `propagator_packs`, with the same `LoopPack` fields.
-- Loop manifest `vakint.external-data.loop.v1` with:
-  - `"integral_kind": "propagator"`, `"external_momenta": ["q"]`, `"gram": [["-1"]]`;
-  - coordinates of kind `loop_loop` and `loop_external`;
-  - `"normalization": "Forcer-GScheme-Euclidean-Q2=1"`;
-  - terminal records whose `exact_basis_expression` is written in the common basis (`PMaster`, `PG`, exact in d);
-  - `ibps/` packages and `ordered_cache/` as for vacuum.
-- `load_official_external_data(4)` also installs `p4L` when present.
+Four-loop library (M3):
+- RustRed is the default for 1L-4L p-integrals whenever its library is available; Forcer is the fallback. The
+  library of scope 1-4 is reachable through vakint-external-data's `p_integral` branch (unreleased until M4): after
+  `load_external_data` of such a checkout, 4L p-integrals go to RustRed; otherwise 4L stays on Forcer. There is no
+  order code: the dispatch asks only whether the engine's library covers `L` (`has_p_data`).
+- The library is `rustred p-package --max-loops 4 --reuse-custom <owners>` at the pinned RustRed: the 16 vakint tops
+  of 1-4 loops (all eleven 4L families), 438 DAG nodes with Forcer's actions (the four diamond nodes d384, d394, d399
+  and no3 as Custom owners), 25 Custom owners with their stored LP counts, and the basis layer onto Forcer's 16
+  masters (`P_BASIS_MASTERS_1_TO_4`: no, t105 and the 14 four-loop masters). 470 files, about 50 MB raw, the largest
+  `census.json` at about 22.6 MB, so no file needs compression or splitting (the area's per-file rule: below 100 MB,
+  compressed or split above 50 MB). It does not fit the vakint crate (crates.io limit about 10 MB), so it is not
+  vendored (user ruling, 2026-11-09).
+- vakint-external-data lists it in `p_integral/manifest.json` as `{"directory": "p-library-1-4", "schema":
+  "rustred.p-owner-library.v1", "scope": [1, 4], "identity": <PLibrary::identity()>, "files": {<path>: {"sha256",
+  "bytes"}}}` (`tools/p_integral_area.py stage-library --package <dir>`); the root key pins the area manifest by
+  sha256. vakint adopts exactly one listed library of the supported `P_LIBRARY_SCHEMA`: each file is checked against
+  its entry, the library loads without re-running the descent certificate (as the built-in one) and must carry the
+  identity its entry records. An unlisted library directory, an entry of another schema and an area manifest of
+  another schema are ignored with one stderr line each; a listed supported library that fails a check fails every
+  p-integral of its scope closed, never falls back to the built-in library or to Forcer.
+- One program per engine: the listed 1-4 library supersedes the built-in 1-3 library for every loop count (one stderr
+  line when it loads), so 1L-3L inputs reduce in the 1-4 program too, with the same values. It loads once per process
+  (about 4 s, mostly the family decode of the 4L nodes, against about 0.13 s for 1-3).
+- Fail closed after selection: a 4L input that the library does not cover is a typed error naming the integral;
+  there is no Forcer retry after a RustRed error (a silent retry would hide a coverage hole).
+- Tests: `p_integrals_go_to_rustred_within_the_library_scope_else_to_forcer` (the dispatch with and without a listed
+  4L library), `the_default_path_with_external_data_matches_forcer_at_four_loops` (the default path through
+  `load_external_data` against frozen Forcer values; needs `VAKINT_TEST_P_LIBRARY_1_4`), the ignored
+  `the_one_to_four_library_regenerates_from_its_payloads` (certificate, LP recount, assembly) and the four-loop
+  Tier A battery against Forcer (full profile).
+- Regeneration (after a RustRed pin that changes a `P_*` version or the assembly): `rustred p-package --max-loops 4
+  --reuse-custom <owners> --out <dir>`, then `tools/p_integral_area.py stage-library --package <dir> --replace` and a
+  re-prepared shipped cache (below) in one data commit of vakint-external-data.
 
-What RustRed must provide (for the RustRed agents):
-1. Families with one external momentum (`externals(q)`, numeric `gram(q,q,-1)`) through every vacuum-only gate of
-   plan section 3.3: source port, app admission, scalar-numerator service with `k·q` coordinates and q^2
-   homogeneity, terminal normalization, relations and products. Fingerprints stay stable (`E1;1:q`).
-2. Sector symmetry that colours the two external vertices alike. q reversal is a symmetry with q -> -q.
-3. A zero analyzer that agrees with vakint's scaleless rule on every sector of the 16 families (test).
-4. Saved application packages for p owners: closure by construction, routes with q -> ±q and Whitney twists, the
-   Ordered engine, Z_p(d) replay and an `OrderedStepCacheBinding` per program.
-5. An analytic insertion lane:
-   - recursively one-loop sectors return exact `PG` products in Forcer's canonical `GschemeConstants` form, with
-     the same product identities Forcer applies;
-   - insertion masters with ε-power lines map to `PMaster`.
-6. Exact-in-d terminal -> master relations onto the common basis: built-in for 1L-3L, the M4 Kira basis change for
-   4L.
-7. Runtime arities 2, 5, 9 and 14 now, and 20 for 5L.
-8. `SavedApplicationReduction` terms with exact Q(d) coefficients, plus the unresolved set. No FORM.
+Evaluation (`p_integral::evaluate_ordered_batch`):
+- The matched p contributions of one loop count and master mode form one ordered batch (key: loop count, master
+  mode), kept in a map of their own next to the vacuum batches, whose keys and order are unchanged; the p batches run
+  after the vacuum batches and are labelled `<L>L / <mode> / p` in the progress monitor. The direct entry points
+  (`EvaluationMethod::evaluate_integral`, `VakintTerm::evaluate_integral`) run the same path with one contribution.
+- Each contribution's backend request (section 5) is split by the shared `p_integral::parts` (the split Forcer
+  renders): homogeneous parts with scale power `w`, the non-rational coefficient and a polynomial in the canonical
+  scalar products `k(i)·k(j)` and `k(i)·Q`. A scaleless sector is an exact zero.
+- Channels: (loop count, external head `p(i)`, `w`, non-rational coefficient). All families of the loop count share
+  one request per channel (one frontier); different `w` or coefficients never share one, so the coefficient
+  context stays `{d}` for the `Z_p(d)` replay.
+- Lowering: every scalar product of a monomial is the top presentation's affine form in its slots
+  (`Presentation::express_scalar_product`, Minkowski with `q·q = -1`); a slot factor `D_s^m` lowers the slot power by
+  `m`. The line slots carry the positive line powers (a negative power is already a numerator factor of the part),
+  ISPs appear at negative powers. Inputs are `(top presentation, IntegralKey over lines then ISPs, rational
+  coefficient)`.
+- One `PReductionRequest` per channel: `arithmetic = settings.rustred_ordered_weight_arithmetic()` (default
+  `modular_polynomial`, the `Z_p(d)` replay; `exact` gives the same result), `scheduler = ordered_scheduler(settings)`
+  (`n_cores` threads), the library's step cache under the settings' `ordered_cache`, `uncovered = Reject`,
+  `onto_masters = true`, the native reduction limits. The request runs inside a reduction-math timing span. A key
+  the library does not cover (`PError::Uncovered`, `MissingOwner`) fails closed with an error that names the vakint
+  integrals of the channel (family and line powers, e.g. `P2L(1,1,1,1,1)`) next to RustRed's owner class and key.
+- The result is `(εG(1,1))^-L Σ c·I_M(x)` at `Q² = 1` (plan convention C3), which is exactly `reduced =
+  (-1)^(Σa+r)·C_G`: the part's Wick sign `(-1)^(Σa+r)` belongs to the Forcer path only and is never applied again.
+  Terms are rendered as `Σ coefficient(d = 4-2ε) · Π PGamma(m)^e · (1 | PMaster(name))` (convention C4), where
+  `vakint::PGamma(m) = Γ(1+mε)`; the coefficient of each tag and master is one simplified rational function of `ε`.
+  A residual terminal, an untabulated master or a nonzero condition that vanishes at `d = 4-2ε` fails closed.
+- The values of each (loop count, external head) are finalized by the shared p-finalizer with the backend name
+  `RustRed` (normalization, `(Q²)^w`, Laurent expansion and the `Oep` guard; Retain keeps `PGamma` and `PMaster`
+  symbolic). The finalized batch joins the expression without RustRed's vacuum master substitution; Numerical mode
+  goes through the same numerical boundary as Forcer's values.
+- Exact comparison with Forcer uses the tag basis (`p_integral::compare::tag_basis`): `PG` and `PGamma` are both
+  products of `Γ(1+mε)` with rational coefficients in `ε`.
+
+Step cache:
+- One Ordered step cache per library program, shared by every loop count of its scope, in the engine's
+  `ordered_cache` settings (off, read-only, read-write; in memory or under `directory`).
+- Its directory under `directory` is a textual rendering of the library identity: `p-library-<a>-<b>_<value>_...`
+  with the value of every `P_*` version constant and of RustRed's `ORDERED_STEP_CACHE_SCHEMA` and
+  `ORDERED_STEP_SEMANTICS`, each without its `rustred` prefix (`PLibrary::identity()` itself is about 490 bytes,
+  above `NAME_MAX`). A version bump names a new directory; RustRed's binding stamp check still guards the files.
+  An injected library adds `_injected`: it is any program a caller built, so scope and versions do not tell it from
+  the shipped library of the same scope, and it never shares that library's directory or in-memory cache. External
+  data and the built-in library of one identity are the same program and share one directory.
+- The cache statistics report the program `p-library-<a>-<b>`, its origin (`injected`, `external-data`,
+  `built-in`) as data version, zero `rule_tables` (64 hexadecimal digits; the p program has no rule-table digest)
+  and, when the cache has a directory, `directory = <ordered_cache.directory>/<the textual name above>` instead of
+  `<program>.<rule tables>.<stamp>`. The p program never uses a shipped cache of a vacuum loop pack.
+- Shipped p cache (`rustred_evaluation/p_shipped_cache.rs`): an external-data root read from a directory may carry a
+  top-level `p_integral/` area, declared by the root-manifest key `p_integral` (`manifest`, `manifest_sha256`; area
+  schema `vakint.external-data.p-integral.v1`, metadata `p_integral/ordered-cache.json` of schema
+  `vakint.external-data.p-ordered-cache.v1`). It holds a light Ordered step cache of the default program, the
+  scope 1-4 library the area lists (RustRed's manifest, shards and tail table), recorded on a fixed workload tuned to
+  the benchmark and test batteries (`tests/support/p_cache.rs`: the 1L-3L benchmark grid, the 2L/3L physics cells,
+  the Forcer batteries, the anchors and the 4L anchors; the 4L benchmark cells would take hours and gigabytes). It is
+  recorded under `exact`: RustRed records the same steps under the three weight arithmetics, so one cache serves
+  them all (`p_cache_maintenance replay` checks 0 misses under each). Its cache files stay within the light budget
+  of 16,000,000 bytes. Validity is by versions only: the cache
+  is used iff its label, directory name, library identity, binding stamp and tail versions are those of the running
+  build and every listed file matches its sha256 and size; otherwise the program reports `Rejected` (one stderr line)
+  and reduces cold, with the same values. Only a resource limit propagates. An injected library, a root without the
+  area and a packed release (the key, no area) ship no p cache. Read-only settings use the area in place, a
+  read-write directory installs a copy. The branch `p_integral` of vakint-external-data carries the area; it is not
+  released. Regeneration: the example `p_cache_maintenance prepare --artifacts <checkout>` (cold read-write run of
+  the workload with the library the checkout lists, then `export_ordered_caches`), `tools/p_integral_area.py stage
+  --replace` in vakint-external-data, then `p_cache_maintenance check` and `replay --arithmetic
+  exact,modular_polynomial,modular_sampled`.
+- Once a p library is loaded (`Vakint::loaded_p_library`; listing never loads one), its program is part of
+  `load_ordered_cache`, `shipped_ordered_caches` and `export_ordered_caches` (written as `p_integral/` of the export).
+
+Not yet: caller families (`register_family`, run-time key computation) and `LocusPolicy` plumbing; the release of
+the `p_integral` area of vakint-external-data (M4); phase-level progress of a p request (the monitor counts its
+channels as cohorts).
 
 ## 7. Test plan
 
@@ -485,12 +636,36 @@ Rules:
 - Every test is one short call of a shared helper in the new `tests/support/p_integrals.rs`. Helpers:
   `forcer_settings()`, `rustred_p_settings()`, `assert_p_backends_agree(input, laurent_terms)` (exact Retain
   comparison plus Numerical to 1e-30), `assert_p_routing_invariant(input, seeds)`, `assert_p_dot_round_trip(atom)`,
-  `assert_p_scaleless(input)`, `assert_p_error(input, fragment)`.
+  `assert_p_scaleless(input)`, `assert_p_error(input, fragment)` (with `allow_unknown_integrals: false`),
+  `assert_p_malformed(input, fragment)` (an error under either setting), `assert_p_unknown(input, fragment)` (section 1,
+  "Out of domain": `topo(UNKNOWN(input))` by default, the error otherwise, never a value),
+  `assert_p_identity(lhs, rhs)` (exact live Forcer equality of a non-zero value, symbolic masters, G-scheme, through
+  `ε^(5-L)`: an identity between finite four-loop integrals needs `ε^0`), `p_identity_sides(lhs, rhs, normalization)`
+  (the two values, for a test that an identity can fail), `fake_form(version)` (a FORM that only reports its version)
+  and `fake_python(version)` (the same for the Python of pySecDec).
+- `tests/vacuum_byte_identity.rs` renders every public step on vacuum inputs on the RustRed, alphaLoop, MATAD and
+  all-backends lanes and compares the bytes with `tests/fixtures/vacuum_byte_identity.txt`, written by the same test
+  at the base of M2-V1. The shared paths edited for p-integrals must not change it. The report also holds the symbol
+  table, to read by hand: the test skips it, because a later symbol moves no term of any output, and the order of the
+  numerical source symbols of the FORM lanes differs between processes.
 - Forcer battery data are frozen in `tests/fixtures/forcer/p{L}l_battery.json`: the canonical input (family, powers,
   numerator, external), the raw exact Forcer output of each homogeneous part, FORM version and Forcer commit.
   Without FORM, they test the input generation, the parser, the finalizer and RustRed.
 - With FORM 5 (`VAKINT_TEST_FORM5=/path/to/form`, or the default `form` when it is FORM 5, as in the dev shell and
   CI) every case also runs live and must reproduce the fixture; `VAKINT_FORCER_FIXTURES=write` regenerates them.
+- Four-loop Forcer data (M3-V7; one parse test per file in `tests/p_fixtures4_tests.rs`): `p4l_anchors.json` (every
+  master of Forcer's four-loop basis at its Forcer definition, with the source path:line, frozen for M3-T17),
+  `p4l_battery.json` (all eleven families: top, ISP at rank 2, rank 3 with `p(1)`, a dot; M2's three-loop `Oep`
+  boundary in `boundary`; the nodes Forcer cannot check whole-family, T147, T152 and T153, in `forcer_blind`) and
+  `p4l_grid.json` (the 165 four-loop benchmark tops and a seeded sample of labelled sectors). Each battery and grid
+  case records its `depth`: the most Laurent terms (at most 16) at which its frozen value finalizes in `Symbolic` mode
+  (G-scheme), that order, the masters whose `ALARM` orders stop one term more, and the value there as unit-scale
+  Laurent coefficients from `ε^-L` (`Q² = μ² = 1`; the raw outputs stay in the file). Battery cases also record
+  `eleven_terms`: the 11-term value (I-7), or the expected `MissingMasterOrders` of an `Oep` case. Depths come from
+  the frozen outputs without FORM (`VAKINT_FORCER_FIXTURES=depths`; the ignored
+  `every_four_loop_grid_depth_is_the_finalizers` recomputes all grid depths); the files are written once with
+  `VAKINT_FORCER_FIXTURES=write VAKINT_FORCER_FIXTURES_WORKERS=4` (`tform -w4`), one test at a time. Only the M1
+  four-loop cases run live in the gate.
 - Fast gate (`just test_vakint`): everything at 1L-3L plus a few frozen 4L cases. Slow 4L RustRed cases go in the
   `test_vakint` profile's default-filter (never in `slow::` modules); `test_vakint_full` runs everything.
 
@@ -512,8 +687,29 @@ Per loop count:
   - `Oep` guard, at 3L and 4L (1L-2L have only exact `PG`): a case where a `1/ε^k` coefficient pulls a `PMaster`
     tail into the requested order gives `MissingMasterOrders`, and the same request one order lower passes.
   - Error cases of section 1: massive line, two heads, broken conservation, non-integer power, tensor numerator,
-    5L input.
-  - Normalization: tree line, merged identical quadrics, negative power.
+    5L input, non-unimodular routing; the same out-of-domain inputs are `UNKNOWN` under `allow_unknown_integrals`, the
+    malformed ones stay errors (also when they are out of domain as well), and unknown vacuum integrals are unchanged.
+  - Normalization: tree line, merged identical quadrics, negative power; evaluated (live Forcer): tree lines of power 1
+    and 2, a negative short-form power, a negative long-form power (`-1` and `-2`), a reversed short-form head, and a
+    bubble chain through a cut vertex (`1/ε^2`, not scaleless).
+  - Analytic identities (live Forcer, `tests/p_integral_forcer_tests.rs::identities`): odd and even rank and the
+    reversed external momentum (`σ = -1`) at 1L-4L (`k·q = (k² + q² - (k-q)²)/2` and its partial fractions on the
+    bubble, the kite, `NO` and `LA4`); index notation and linear `dot` arguments (also FORM-free on canonical forms).
+  - The `Oep` guard through `Vakint::evaluate` at 4L (`P4L_NO1`, symbolic and numerical masters): 10 Laurent terms
+    pass and 11 give `MissingMasterOrders`, in both modes.
+  - G-scheme on vacuum integrals (FORM-free, RustRed: the massive tadpole is `1/ε - 2 + ζ2 ε`) and on a vacuum plus a
+    p-integral (FORM 5).
+  - FORM older than 5 (fake FORM 4.3.1, FORM-free): the Forcer check of the settings validation passes for a mixed
+    order (`EvaluationOrder::all()` may still fail on a missing pySecDec, so `all()` without pySecDec is the order
+    asserted to validate), a vacuum integral evaluates, a p-integral reports `ForcerUnavailable`, and an order of
+    Forcer alone fails validation.
+  - The MZV evaluator (`src/p_integral/mzv.rs`): stuffle relations at weights 8-12, one for every multiple constant
+    of the master table (`ζ(5,3)`, `ζ(7,3)`, `ζ(9,3)`, `ζ(5,3,3)`, and `ζ(6)ζ(4,1,1)` with `ζ(6) = π^6/945` for
+    `ζ(6,4,1,1)`), and duality for every `ζ(n)` and `MZV(...)` of the master table, directly and through the numerical
+    evaluator. Duality only tests the word and index handling: the Hölder convolution gives a word and its dual the
+    same split products, so it holds even with a wrong `Li(1/2)`; the stuffles are the value checks.
+  - Forcer sources: a foreign or modified materialized directory is never used
+    (`forcer::tests::untrusted_source_directories_are_never_used`).
 - Registry and catalogue:
   - the `src/p_integral.rs` data tests;
   - catalogue determinism;

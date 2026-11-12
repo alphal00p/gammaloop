@@ -181,6 +181,7 @@ fn tracked_mzv(indices: &[i64], bits: u32) -> Result<TrackedComplex, String> {
 
 #[cfg(test)]
 mod tests {
+    use symbolica::atom::AtomCore;
     use symbolica::domains::float::RealLike;
 
     use super::*;
@@ -212,5 +213,161 @@ mod tests {
         assert!(relative_difference(stuffle, &(value(&[3]) * &value(&[5]))) < 1e-55);
         // Duality: ζ(2,1) = ζ(3).
         assert!(relative_difference(value(&[2, 1]), &value(&[3])) < 1e-55);
+    }
+
+    /// The dual index list of the duality `ζ(w) = ζ(τ(w))`: reverse the
+    /// `{0,1}` word and exchange its letters.
+    fn dual(indices: &[i64]) -> Vec<i64> {
+        let letters = indices
+            .iter()
+            .flat_map(|&n| std::iter::repeat_n(0_u8, n as usize - 1).chain([1]))
+            .collect::<Vec<_>>();
+        let dual = letters
+            .iter()
+            .rev()
+            .map(|letter| 1 - letter)
+            .collect::<Vec<_>>();
+        word_indices(&dual).into_iter().map(|n| n as i64).collect()
+    }
+
+    /// Every `ζ(n)` and `MZV(...)` of the Forcer master table, as index lists.
+    fn master_table_constants() -> std::collections::BTreeSet<Vec<i64>> {
+        let mzv = crate::utils::vakint_macros::vk_symbol!("MZV");
+        let mut constants = std::collections::BTreeSet::new();
+        for expansion in crate::p_integral::masters::p_master_table()
+            .unwrap()
+            .values()
+        {
+            expansion.visitor(&mut |part| {
+                if let AtomView::Fun(function) = part
+                    && [mzv, symbolica::transcendental::zeta()].contains(&function.get_symbol())
+                {
+                    constants.insert(function.iter().map(|n| i64::try_from(n).unwrap()).collect());
+                    return false;
+                }
+                true
+            });
+        }
+        constants
+    }
+
+    #[test]
+    fn stuffle_relations_hold_at_weights_eight_to_twelve() {
+        let value = |indices: &[i64]| mzv_float(indices, 200).unwrap();
+        for n in [5, 7, 9] {
+            // ζ(n)ζ(3) = ζ(n,3) + ζ(3,n) + ζ(n+3).
+            let stuffle = value(&[n, 3]) + &value(&[3, n]) + &value(&[n + 3]);
+            assert!(relative_difference(stuffle, &(value(&[n]) * &value(&[3]))) < 1e-55);
+        }
+        // ζ(5,3)ζ(3) = ζ(3,5,3) + 2ζ(5,3,3) + ζ(8,3) + ζ(5,6).
+        let stuffle = value(&[3, 5, 3])
+            + &(value(&[5, 3, 3]) * &Float::with_val(200, 2))
+            + &value(&[8, 3])
+            + &value(&[5, 6]);
+        assert!(relative_difference(stuffle, &(value(&[5, 3]) * &value(&[3]))) < 1e-55);
+    }
+
+    /// The independent value check of `ζ(6,4,1,1)` (duality cannot be one,
+    /// see [`every_master_table_constant_satisfies_duality`]): the stuffle
+    /// `ζ(6)ζ(4,1,1) = ζ(6,4,1,1) + ζ(4,6,1,1) + ζ(4,1,6,1) + ζ(4,1,1,6)
+    /// + ζ(10,1,1) + ζ(4,7,1) + ζ(4,1,7)` with the literal `ζ(6) = π^6/945`.
+    #[test]
+    fn the_weight_twelve_depth_four_constant_satisfies_a_stuffle() {
+        let value = |indices: &[i64]| mzv_float(indices, 200).unwrap();
+        let pi = Float::parse(
+            "3.14159265358979323846264338327950288419716939937510582097494459230781640628620899862803482534211706798",
+            Some(200),
+        )
+        .unwrap();
+        let pi_squared = pi.clone() * &pi;
+        let zeta6 = pi_squared.clone() * &pi_squared * &pi_squared / Float::with_val(200, 945);
+        // ζ(6) itself, against the literal.
+        assert!(relative_difference(value(&[6]), &zeta6) < 1e-55);
+        let stuffle = [
+            vec![6, 4, 1, 1],
+            vec![4, 6, 1, 1],
+            vec![4, 1, 6, 1],
+            vec![4, 1, 1, 6],
+            vec![10, 1, 1],
+            vec![4, 7, 1],
+            vec![4, 1, 7],
+        ]
+        .iter()
+        .fold(Float::new(200), |sum, indices| sum + &value(indices));
+        let difference = relative_difference(stuffle, &(zeta6 * &value(&[4, 1, 1])));
+        assert!(difference < 1e-55, "{difference}");
+    }
+
+    /// Duality `ζ(w) = ζ(τ(w))` through [`mzv_float`] only tests the word and
+    /// index handling: the Hölder convolution gives the dual word the same
+    /// split products (term `j` becomes term `n - j`), so it holds even with a
+    /// wrong `polylog_at_half`. The values are checked by the stuffles above.
+    #[test]
+    fn every_master_table_constant_satisfies_duality() {
+        let constants = master_table_constants();
+        // The odd ζ(n) and the five datamine products (the even ζ(2n) are
+        // written through π^(2n)). The exact set: a new multiple constant of
+        // the table fails here until it has its stuffle in the tests above
+        // (docs/p_integrals.md, section 7).
+        assert_eq!(
+            constants,
+            std::collections::BTreeSet::from([
+                vec![3],
+                vec![5],
+                vec![7],
+                vec![9],
+                vec![11],
+                vec![5, 3],
+                vec![7, 3],
+                vec![9, 3],
+                vec![5, 3, 3],
+                vec![6, 4, 1, 1],
+            ])
+        );
+        for indices in &constants {
+            let dual = dual(indices);
+            assert_ne!(&dual, indices, "self-dual {indices:?} proves nothing");
+            let difference = relative_difference(
+                mzv_float(indices, 200).unwrap(),
+                &mzv_float(&dual, 200).unwrap(),
+            );
+            assert!(
+                difference < 1e-55,
+                "ζ{indices:?} vs ζ{dual:?}: {difference}"
+            );
+        }
+    }
+
+    #[test]
+    fn every_master_table_constant_evaluates_numerically() {
+        // Through vakint's numerical evaluator at 40 digits: 1 + 10^25·(ζ(w)
+        // - ζ(τ(w))) is 1 to double precision iff the two agree to ~1e-35.
+        // Like the duality test above, this checks that the evaluator reaches
+        // `mzv_float` with the right indices, not the values themselves.
+        let settings = crate::VakintSettings {
+            run_time_decimal_precision: 40,
+            ..Default::default()
+        };
+        let mzv = |indices: &[i64]| crate::p_integral::masters::mzv(indices);
+        for indices in master_table_constants() {
+            let check = Atom::num(1)
+                + Atom::num(10).pow(Atom::num(25)) * (mzv(&indices) - mzv(&dual(&indices)));
+            let value = crate::Vakint::partial_numerical_evaluation(
+                &settings,
+                check.as_view(),
+                &Default::default(),
+                &Default::default(),
+                None,
+            )
+            .unwrap();
+            let value: f64 = value
+                .to_string()
+                .split('`')
+                .next()
+                .unwrap()
+                .parse()
+                .unwrap_or_else(|_| panic!("ζ{indices:?}: {value} is not a number"));
+            assert!((value - 1.0).abs() < 1e-9, "ζ{indices:?}: {value}");
+        }
     }
 }

@@ -282,6 +282,9 @@ impl ShippedOrderedCache {
         data: &RustRedData,
         program: &OrderedCacheProgram,
     ) -> Result<Self, RustRedEvaluationError> {
+        if program.textual_tables.is_some() {
+            return super::p_shipped_cache::resolve(data, program);
+        }
         let Some(pack) = data.loops.get(&program.loop_count) else {
             return Ok(Self::None);
         };
@@ -559,6 +562,11 @@ pub struct OrderedCacheExportReport {
     pub packs: BTreeMap<usize, Vec<ShippedOrderedCacheProgram>>,
     /// Program caches of this engine with no directory in the cache root.
     pub missing: Vec<String>,
+    /// The exported cache of the RustRed p library, written as
+    /// `p_integral/ordered-cache/<directory>/` and
+    /// `p_integral/ordered-cache.json` (see `p_shipped_cache`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub p_integral: Option<ShippedOrderedCacheProgram>,
 }
 
 /// The producer description of exports by this build.
@@ -631,6 +639,15 @@ impl Vakint {
         }
         let mut report = OrderedCacheExportReport::default();
         for program in self.ordered_cache_programs()? {
+            if program.textual_tables.is_some() {
+                match super::p_shipped_cache::export(
+                    cache_root, output, &program, &producer, &workload,
+                )? {
+                    Some(entry) => report.p_integral = Some(entry),
+                    None => report.missing.push(program_directory_name(&program)),
+                }
+                continue;
+            }
             let name = program_directory_name(&program);
             let source = cache_root.join(&name);
             let manifest_path = source.join(RUSTRED_MANIFEST);
@@ -691,7 +708,7 @@ impl Vakint {
                     trim: None,
                 });
         }
-        if report.packs.is_empty() {
+        if report.packs.is_empty() && report.p_integral.is_none() {
             return Err(failure(format!(
                 "{} holds no Ordered step cache of the loaded programs",
                 cache_root.display()

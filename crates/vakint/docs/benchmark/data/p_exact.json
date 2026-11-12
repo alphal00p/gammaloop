@@ -1,7 +1,509 @@
 {
-  "schema": "vakint.p-exact.v1",
-  "stub": true,
-  "gammaloop_sha": null,
-  "rustred_sha": null,
-  "cells": []
+  "cells": [
+    {
+      "L": 1,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 0,
+      "rank": 0,
+      "terms": 5
+    },
+    {
+      "L": 1,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 0,
+      "rank": 2,
+      "terms": 5
+    },
+    {
+      "L": 1,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 0,
+      "rank": 4,
+      "terms": 5
+    },
+    {
+      "L": 1,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 0,
+      "rank": 6,
+      "terms": 5
+    },
+    {
+      "L": 1,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 0,
+      "rank": 8,
+      "terms": 5
+    },
+    {
+      "L": 1,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 1,
+      "rank": 0,
+      "terms": 5
+    },
+    {
+      "L": 1,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 1,
+      "rank": 2,
+      "terms": 5
+    },
+    {
+      "L": 1,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 1,
+      "rank": 4,
+      "terms": 5
+    },
+    {
+      "L": 1,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 1,
+      "rank": 6,
+      "terms": 5
+    },
+    {
+      "L": 1,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 1,
+      "rank": 8,
+      "terms": 5
+    },
+    {
+      "L": 1,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 2,
+      "rank": 0,
+      "terms": 5
+    },
+    {
+      "L": 1,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 2,
+      "rank": 2,
+      "terms": 5
+    },
+    {
+      "L": 1,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 2,
+      "rank": 4,
+      "terms": 5
+    },
+    {
+      "L": 1,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 2,
+      "rank": 6,
+      "terms": 5
+    },
+    {
+      "L": 1,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 2,
+      "rank": 8,
+      "terms": 5
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 0,
+      "rank": 0,
+      "terms": 7
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 0,
+      "rank": 2,
+      "terms": 7
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 0,
+      "rank": 4,
+      "terms": 7
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 0,
+      "rank": 6,
+      "terms": 7
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 0,
+      "rank": 8,
+      "terms": 7
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 1,
+      "rank": 0,
+      "terms": 7
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 1,
+      "rank": 2,
+      "terms": 7
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 1,
+      "rank": 4,
+      "terms": 7
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 1,
+      "rank": 6,
+      "terms": 7
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 1,
+      "rank": 8,
+      "terms": 7
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 2,
+      "rank": 0,
+      "terms": 7
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 2,
+      "rank": 2,
+      "terms": 7
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 2,
+      "rank": 4,
+      "terms": 7
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 2,
+      "rank": 6,
+      "terms": 7
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 2,
+      "rank": 8,
+      "terms": 7
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 0,
+      "rank": 0,
+      "terms": 9
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 0,
+      "rank": 2,
+      "terms": 9
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 0,
+      "rank": 4,
+      "terms": 9
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 0,
+      "rank": 6,
+      "terms": 9
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 0,
+      "rank": 8,
+      "terms": 9
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 1,
+      "rank": 0,
+      "terms": 9
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 1,
+      "rank": 2,
+      "terms": 9
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 1,
+      "rank": 4,
+      "terms": 9
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 1,
+      "rank": 6,
+      "terms": 9
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 1,
+      "rank": 8,
+      "terms": 9
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 2,
+      "rank": 0,
+      "terms": 9
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 2,
+      "rank": 2,
+      "terms": 9
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 2,
+      "rank": 4,
+      "terms": 9
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 2,
+      "rank": 6,
+      "terms": 9
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "dots": 2,
+      "rank": 8,
+      "terms": 9
+    },
+    {
+      "L": 2,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "physics": true,
+      "terms": 7
+    },
+    {
+      "L": 3,
+      "agree": true,
+      "arithmetic": "modular_polynomial",
+      "physics": true,
+      "terms": 9
+    },
+    {
+      "L": 4,
+      "agree": true,
+      "arithmetic": "exact",
+      "dots": 0,
+      "rank": 0,
+      "rustred_seconds": 19.1,
+      "terms": 10
+    },
+    {
+      "L": 4,
+      "agree": true,
+      "arithmetic": "exact",
+      "dots": 0,
+      "rank": 2,
+      "rustred_seconds": 207.5,
+      "terms": 10
+    },
+    {
+      "L": 4,
+      "agree": true,
+      "arithmetic": "exact",
+      "dots": 1,
+      "rank": 0,
+      "rustred_seconds": 30.1,
+      "terms": 10
+    },
+    {
+      "L": 4,
+      "agree": true,
+      "arithmetic": "exact",
+      "dots": 1,
+      "rank": 2,
+      "rustred_seconds": 249.8,
+      "terms": 10
+    },
+    {
+      "L": 4,
+      "agree": true,
+      "arithmetic": "exact",
+      "dots": 2,
+      "rank": 0,
+      "rustred_seconds": 65.6,
+      "terms": 10
+    },
+    {
+      "L": 4,
+      "agree": true,
+      "arithmetic": "exact",
+      "dots": 2,
+      "rank": 2,
+      "rustred_seconds": 96.9,
+      "terms": 10
+    },
+    {
+      "L": 4,
+      "agree": true,
+      "arithmetic": "exact",
+      "physics": true,
+      "rustred_seconds": 305.2,
+      "terms": 10
+    }
+  ],
+  "exact_4l": {
+    "arithmetic": "exact",
+    "cell_cap_seconds": 600,
+    "rustred_seconds": 1575.0,
+    "total_cap_seconds": 7200
+  },
+  "gammaloop_sha": "1a8862a977f885cfe3679b82ccc53db1a3cc1043",
+  "not_exact_checked": [
+    {
+      "L": 4,
+      "dots": 0,
+      "note": "not exact-checked (cost > 600 s)",
+      "rank": 4
+    },
+    {
+      "L": 4,
+      "dots": 0,
+      "note": "not exact-checked (cost > 600 s, like L4_d0_r4, which has no more dots and no higher rank)",
+      "rank": 6
+    },
+    {
+      "L": 4,
+      "dots": 0,
+      "note": "not exact-checked (cost > 600 s, like L4_d0_r4, which has no more dots and no higher rank)",
+      "rank": 8
+    },
+    {
+      "L": 4,
+      "dots": 1,
+      "note": "not exact-checked (cost > 600 s, like L4_d0_r4, which has no more dots and no higher rank)",
+      "rank": 4
+    },
+    {
+      "L": 4,
+      "dots": 1,
+      "note": "not exact-checked (cost > 600 s, like L4_d0_r4, which has no more dots and no higher rank)",
+      "rank": 6
+    },
+    {
+      "L": 4,
+      "dots": 1,
+      "note": "not exact-checked (cost > 600 s, like L4_d0_r4, which has no more dots and no higher rank)",
+      "rank": 8
+    },
+    {
+      "L": 4,
+      "dots": 2,
+      "note": "not exact-checked (cost > 600 s, like L4_d0_r4, which has no more dots and no higher rank)",
+      "rank": 4
+    },
+    {
+      "L": 4,
+      "dots": 2,
+      "note": "not exact-checked (cost > 600 s, like L4_d0_r4, which has no more dots and no higher rank)",
+      "rank": 6
+    },
+    {
+      "L": 4,
+      "dots": 2,
+      "note": "not exact-checked (cost > 600 s, like L4_d0_r4, which has no more dots and no higher rank)",
+      "rank": 8
+    }
+  ],
+  "p_library_1_4": {
+    "identity": "p-library:scope=1-4:P_OWNER_LIBRARY_SEMANTICS=rustred-p-owner-library-2026-11-05,P_CLASS_KEY_VERSION=1,P_CENSUS_VERSION=1,P_PRESENTATION_VERSION=1,P_FAMILIES_VERSION=1,P_GAMMA_TAG_VERSION=1,P_GAMMA_TAG_MAX_M=8,P_GAMMA_TAG_WIDTH=16,P_INSERTION_KERNEL_VERSION=1,P_CARPET_KERNEL_VERSION=1,P_TRIANGLE_TEMPLATE_VERSION=1,P_CUSTOM_OWNER_VERSION=1,P_LIBRARY_SCHEMA=rustred.p-owner-library.v1,P_FAMILIES_SCHEMA=rustred.p-families.v1,P_BASIS_LAYER_SCHEMA=rustred.p-basis-layer.v1,P_TOPOLOGY_VERSION=1",
+    "library_sha256": "44c35b3a8112a335e0303570d7d9212b825a413a447e9447f997587802a273f6"
+  },
+  "rustred_sha": "b7fd9f2bec5a9ed417240ea997112e5e31400023",
+  "schema": "vakint.p-exact.v1"
 }

@@ -24,9 +24,101 @@ pub(crate) mod five_loop;
 pub(crate) use catalogue::FiveLoopCatalogue;
 pub use catalogue::FiveLoopCatalogueStatistics;
 mod momentum_mapping;
+
+/// Canonical power-colored incidence graph of a long-form `topo(prop(...)*...)`
+/// input with `loop_count` loop momenta, or `None` when the input is not such a
+/// long form or a power is not a positive integer.
+pub(crate) fn power_colored_canonical_graph(
+    input: AtomView,
+    loop_count: usize,
+) -> Result<Option<symbolica::graph::Graph<u8, symbolica::graph::Empty>>, VakintError> {
+    match momentum_mapping::MomentumInput::from_expression(input, loop_count)? {
+        Some(source) => source.power_colored_canonical_graph(),
+        None => Ok(None),
+    }
+}
+
+/// The verified power-preserving unimodular loop-momentum maps from the long
+/// form `source` onto the long form `target`, offered to `accept` one at a time
+/// until it returns `true` (`Some(true)`); `None` when either input is not such
+/// a long form.
+pub(crate) fn find_power_preserving_momentum_map(
+    source: AtomView,
+    target: AtomView,
+    loop_count: usize,
+    accept: impl FnMut(&[Atom]) -> Result<bool, VakintError>,
+) -> Result<Option<bool>, VakintError> {
+    let (Some(source), Some(target)) = (
+        momentum_mapping::MomentumInput::from_expression(source, loop_count)?,
+        momentum_mapping::MomentumInput::from_expression(target, loop_count)?,
+    ) else {
+        return Ok(None);
+    };
+    source.find_power_preserving_map(&target, accept)
+}
+
+/// Every verified power-preserving unimodular loop-momentum map from the
+/// long form `source` onto the long form `target` (images of the source loop
+/// momenta in the target's), or `None` when either is not such a long form.
+/// Used by the tests; evaluation stops at the first accepted map
+/// ([`find_power_preserving_momentum_map`]).
+#[cfg(test)]
+pub(crate) fn power_preserving_momentum_maps(
+    source: AtomView,
+    target: AtomView,
+    loop_count: usize,
+) -> Result<Option<Vec<Vec<Atom>>>, VakintError> {
+    let (Some(source), Some(target)) = (
+        momentum_mapping::MomentumInput::from_expression(source, loop_count)?,
+        momentum_mapping::MomentumInput::from_expression(target, loop_count)?,
+    ) else {
+        return Ok(None);
+    };
+    source.power_preserving_maps(&target)
+}
+
+pub(crate) use momentum_mapping::{MatroidProfile, integer_line_vector, matroid_basis_counts};
+
+/// The power-colored line-matroid profile of a long-form input (see
+/// [`MatroidProfile`]), or `None` when it is not such a long form, a power is
+/// not a positive integer or a momentum coefficient is not an integer.
+pub(crate) fn power_colored_matroid_profile(
+    input: AtomView,
+    loop_count: usize,
+) -> Result<Option<MatroidProfile>, VakintError> {
+    Ok(
+        momentum_mapping::MomentumInput::from_expression(input, loop_count)?
+            .and_then(|source| source.power_colored_matroid_profile()),
+    )
+}
+
+/// The verified power-preserving maps between two long forms at the level of
+/// their line matroids (the incidence graphs may differ by Whitney twists),
+/// offered to `accept` one at a time until it returns `true` (`Some(true)`);
+/// `None` when either input is not such a long form.
+pub(crate) fn find_power_preserving_matroid_momentum_map(
+    source: AtomView,
+    target: AtomView,
+    loop_count: usize,
+    accept: impl FnMut(&[Atom]) -> Result<bool, VakintError>,
+) -> Result<Option<bool>, VakintError> {
+    let (Some(source), Some(target)) = (
+        momentum_mapping::MomentumInput::from_expression(source, loop_count)?,
+        momentum_mapping::MomentumInput::from_expression(target, loop_count)?,
+    ) else {
+        return Ok(None);
+    };
+    source.find_power_preserving_matroid_map(&target, accept)
+}
 pub use momentum_mapping::MomentumMatchLimits;
 #[cfg(test)]
 pub(crate) use momentum_mapping::first_minimal_acceptance;
+
+/// The error of evaluating (or re-matching) the unknown integral of an
+/// out-of-domain p-integral: no backend evaluates it.
+pub(crate) const OUT_OF_DOMAIN_P_INTEGRAL: &str = "out-of-domain p-integral (docs/p_integrals.md, \
+     section 1, \"Out of domain\"): an unknown integral with an external momentum p(i), which no \
+     backend evaluates";
 
 pub enum TopologyContractions {
     Custom(Vec<Vec<usize>>),
@@ -362,7 +454,7 @@ impl Topologies {
         allow_unknown_integrals: bool,
     ) -> Result<Option<ReplacementRules>, VakintError> {
         if p_integral::infer_kind(input)? == IntegralKind::Propagator {
-            return self.match_propagator(input);
+            return self.match_propagator(input, allow_unknown_integrals);
         }
         let match_started = std::time::Instant::now();
         // The optional five-loop parser must not narrow the legacy Unknown
@@ -423,12 +515,32 @@ impl Topologies {
     /// (docs/p_integrals.md, section 2). The input is normalized for matching
     /// only: callers apply the normalization factor to the numerator
     /// ([`crate::VakintTerm::normalize_propagator`]). A scaleless input has no
-    /// witness (`None`); a graph outside the registry is an error.
+    /// witness (`None`). An input outside the p-integral domain (a massive
+    /// line, a non-integer power, several external heads, more than four loops
+    /// or a graph outside the registry) is an unknown integral under
+    /// `allow_unknown_integrals` and an error otherwise; a malformed input is
+    /// always an error (section 1, "Out of domain").
     pub(crate) fn match_propagator(
         &self,
         input: AtomView,
+        allow_unknown_integrals: bool,
     ) -> Result<Option<ReplacementRules>, VakintError> {
-        let graph = match PGraph::parse(input)?.normalize()? {
+        let graph = match PGraph::parse_checked(input) {
+            Ok(graph) => graph,
+            Err(rejection) if rejection.is_out_of_domain() => {
+                return self.match_unknown_propagator(
+                    input,
+                    allow_unknown_integrals,
+                    rejection.into(),
+                );
+            }
+            Err(rejection) => return Err(rejection.into()),
+        };
+        // A registry match checks the routing through its change of loop
+        // momenta; a graph outside the registry is checked here, so that a
+        // malformed routing never becomes an unknown integral.
+        let unimodular = graph.check_unimodular();
+        let graph = match graph.normalize()? {
             Normalized::Zero => return Ok(None),
             Normalized::Graph { graph, .. } => graph,
         };
@@ -438,7 +550,8 @@ impl Topologies {
             ))
         };
         let Some(matched) = p_integral::match_graph(&graph)? else {
-            return Err(uncovered());
+            unimodular?;
+            return self.match_unknown_propagator(input, allow_unknown_integrals, uncovered());
         };
         let name = P_FAMILIES[matched.family].name;
         let topology = self
@@ -449,6 +562,29 @@ impl Topologies {
             })
             .ok_or_else(uncovered)?;
         p_integral::replacement_rules(topology, matched, &graph.external).map(Some)
+    }
+
+    /// An out-of-domain p-integral is the unknown integral of its long form
+    /// under `allow_unknown_integrals`, like any integral vakint does not know;
+    /// otherwise, or when it is no unknown integral either (a short form),
+    /// `rejection` is the error.
+    fn match_unknown_propagator(
+        &self,
+        input: AtomView,
+        allow_unknown_integrals: bool,
+        rejection: VakintError,
+    ) -> Result<Option<ReplacementRules>, VakintError> {
+        if allow_unknown_integrals {
+            for topology in &self.0 {
+                if let Topology::Unknown(_) = topology
+                    && let Some(replacement) =
+                        topology.match_topology_to_user_input_with(input, true)?
+                {
+                    return Ok(Some(replacement));
+                }
+            }
+        }
+        Err(rejection)
     }
 
     /// Scope-aware exact witness selection for long-form five-loop inputs.
@@ -946,6 +1082,18 @@ impl Topology {
         &self,
         input: AtomView,
     ) -> Result<Option<ReplacementRules>, VakintError> {
+        self.match_topology_to_user_input_with(input, false)
+    }
+
+    /// [`Self::match_topology_to_user_input`]; with `external_momenta`, the
+    /// unknown integral also admits external heads `p(i)` in its momenta (an
+    /// out-of-domain p-integral, [`Topologies::match_propagator`]). Its loop
+    /// count is still the number of loop momenta `k(j)`.
+    fn match_topology_to_user_input_with(
+        &self,
+        input: AtomView,
+        external_momenta: bool,
+    ) -> Result<Option<ReplacementRules>, VakintError> {
         match self {
             Topology::Unknown(unknown_integral) => {
                 // println!(
@@ -1004,6 +1152,16 @@ impl Topology {
                         )?
                         .iter()
                         {
+                            if *mom_symbol == S.p {
+                                if external_momenta {
+                                    continue;
+                                }
+                                // The unknown integral of an out-of-domain
+                                // p-integral (`Topologies::match_propagator`).
+                                return Err(VakintError::InvalidIntegralFormat(
+                                    OUT_OF_DOMAIN_P_INTEGRAL.to_owned(),
+                                ));
+                            }
                             if *mom_symbol != S.k {
                                 return Err(VakintError::InvalidIntegralFormat(format!(
                                     "Unknown integrals must have only loop momenta with symbol {}: {}",
@@ -1031,6 +1189,10 @@ impl Topology {
                             "Unknown integrals must have loop momenta ids ranging from 1 to their maximal number of loop momenta, not {:?}",
                             sorted_loop_momenta_ids
                         )));
+                    }
+                    if external_momenta && sorted_loop_momenta_ids.is_empty() {
+                        // Only external momenta: no loop integral at all.
+                        return Ok(None);
                     }
                     let n_loops = *sorted_loop_momenta_ids.last().unwrap();
                     //println!("Found a match!");

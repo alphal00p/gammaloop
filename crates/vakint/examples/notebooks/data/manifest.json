@@ -4,6 +4,20 @@
     "warning-controls": {
       "path": "warning-controls.json",
       "sha256": "531ef0da0945039e26fe72fa6a71308426fdb6f947f59369459dcbcdb5387694"
+    },
+    "five-loop-q0": {
+      "path": "five-loop-q0/report.json",
+      "sha256": "4c9c05309a5ee434bd658baa0cf3e91d564f834dbd904eb52faa9e80afd5ee2d",
+      "artifacts": [
+        {
+          "path": "five-loop-q0/retained.symbolica",
+          "sha256": "4dc39e683ec0a777a270168dc07fea306b9bd493d8ecf53b2455b6414cc98f0a"
+        },
+        {
+          "path": "five-loop-q0/monitor-model.json",
+          "sha256": "11526a8592121f6f974b8555aa54b3111aa69bead84208fe52a1c08d9441313e"
+        }
+      ]
     }
   }
 }

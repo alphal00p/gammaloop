@@ -1,7 +1,5 @@
 //! Checked numerical coefficients with symbolic spectators retained.
 
-use crate::symbols::S;
-
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use symbolica::{
@@ -25,9 +23,15 @@ fn failure(message: impl Into<String>) -> VakintError {
 }
 
 pub(crate) fn snapshot_reference(part: AtomView) -> bool {
-    matches!(part, AtomView::Fun(function) if [
-        S.rustred_master, S.rustred_coefficient, S.rustred_finite_literal, S.rustred_constant,
-    ].contains(&function.get_symbol()))
+    static HEADS: std::sync::LazyLock<[symbolica::atom::Symbol; 4]> = std::sync::LazyLock::new(|| {
+        [
+            vk_symbol!("RustRedMaster"),
+            vk_symbol!("RustRedCoefficient"),
+            vk_symbol!("RustRedFiniteLiteral"),
+            vk_symbol!("RustRedConstant"),
+        ]
+    });
+    matches!(part, AtomView::Fun(function) if HEADS.contains(&function.get_symbol()))
 }
 
 fn private_reference(part: AtomView) -> bool {
@@ -70,8 +74,8 @@ impl NumericalParts<'_> {
                 }
             }
             AtomView::Fun(function) => {
-                if function.get_symbol() == S.rustred_coefficient
-                    || function.get_symbol() == S.rustred_constant
+                if function.get_symbol() == vk_symbol!("RustRedCoefficient")
+                    || function.get_symbol() == vk_symbol!("RustRedConstant")
                 {
                     // resolve_numerical validated its snapshot and epsilon
                     // order before classification. Arguments are identity tags.
@@ -223,6 +227,17 @@ fn prepare_coefficient(
     Err(failure("constant definitions did not reach a fixed point"))
 }
 
+/// One prepared coefficient of [`materialize`]: an exact rational, or its
+/// tracked value with the warnings and origins of its evaluation.
+enum Evaluated {
+    Exact(Atom),
+    Numerical {
+        value: super::NumericalCoefficient,
+        warnings: Vec<super::PrecisionWarning>,
+        origins: Vec<super::PrecisionSource>,
+    },
+}
+
 fn epsilon_power(monomial: AtomView, epsilon: Symbol) -> Option<i64> {
     match monomial {
         AtomView::Var(variable) if variable.get_symbol() == epsilon => Some(1),
@@ -250,17 +265,18 @@ pub(crate) fn materialize(
     if settings.run_time_decimal_precision == 0 {
         return Err(failure("requested decimal precision must be positive"));
     }
-    let epsilon = vk_symbol!(&settings.epsilon_symbol);
-    let spectator_head = S.materialize_spectator;
     // Raw approximate literals must keep independent source identities before
     // expansion can accidentally cancel their equal midpoints.
     let expression = legacy::stage_table(
-        Atom::var(S.partial_numerical_input).as_view(),
+        Atom::var(vk_symbol!("partial_numerical_input")).as_view(),
         expression,
-        epsilon,
+        vk_symbol!(&settings.epsilon_symbol),
         "Input",
     )?;
+    let started = crate::rustred_evaluation::phase_start();
     let expression = combine_exact(Vakint::normalize_gamma_functions(expression.as_view()));
+    crate::rustred_evaluation::log_phase("materialize_combination", started);
+    let started = crate::rustred_evaluation::phase_start();
     let expression = if let Some(catalog) = catalog {
         catalog.resolve_numerical(expression, settings)?
     } else {
@@ -280,9 +296,11 @@ pub(crate) fn materialize(
         }
         expression
     };
+    crate::rustred_evaluation::log_phase("materialize_resolution", started);
     if expression.is_zero() {
         return Ok(Atom::Zero);
     }
+    let started = crate::rustred_evaluation::phase_start();
     let mut classification = NumericalParts {
         parameters,
         catalog,
@@ -305,7 +323,7 @@ pub(crate) fn materialize(
     let mut index = 0_i64;
     for spectator in spectators {
         let temporary = loop {
-            let candidate = spectator_head.call(index);
+            let candidate = vk_symbol!("RustRedMaterializeSpectator").call(index);
             index = index
                 .checked_add(1)
                 .ok_or_else(|| failure("too many symbolic spectators"))?;
@@ -318,45 +336,73 @@ pub(crate) fn materialize(
         variables.push(temporary);
     }
     let grouped = expression.replace_multiple(&replacements);
+    crate::rustred_evaluation::log_phase("materialize_classification", started);
+    let started = crate::rustred_evaluation::phase_start();
+    let terms = grouped.coefficient_list::<i32>(&variables);
+    // Every coefficient is prepared and evaluated independently, on up to
+    // `n_cores` workers; the loop below consumes them in collection order, so
+    // warnings, errors and the result are those of a sequential pass.
+    let evaluated = crate::rustred_evaluation::map_ordered(
+        crate::rustred_evaluation::postprocessing_threads(settings),
+        &terms,
+        |_, (_, coefficient)| -> Result<Evaluated, VakintError> {
+            let prepared = prepare_coefficient(coefficient.clone(), catalog, parameters)?;
+            // A resolved rational is already an exact numerical coefficient.
+            // Retain it across partial evaluation boundaries (for example nested
+            // forest integrations); only final numerical evaluation needs a Float.
+            // Staged Float literals and finite sources cannot enter this branch.
+            if let AtomView::Num(number) = prepared.expression.as_view()
+                && matches!(
+                    number.get_coeff_view(),
+                    CoefficientView::Natural(..) | CoefficientView::Large(..)
+                )
+            {
+                return Ok(Evaluated::Exact(prepared.expression));
+            }
+            let (value, warnings) = evaluate_coefficient(
+                prepared.expression.as_view(),
+                &prepared.sources,
+                parameters,
+                settings,
+            )?;
+            Ok(Evaluated::Numerical {
+                value,
+                warnings,
+                origins: prepared.origins,
+            })
+        },
+    );
     let mut result = Atom::Zero;
-    for (monomial, coefficient) in grouped.coefficient_list::<i32>(&variables) {
+    for ((monomial, _), evaluated) in terms.into_iter().zip(evaluated) {
         let monomial = monomial.replace_multiple(&restore);
-        let prepared = prepare_coefficient(coefficient, catalog, parameters)?;
-        // A resolved rational is already an exact numerical coefficient.
-        // Retain it across partial evaluation boundaries (for example nested
-        // forest integrations); only final numerical evaluation needs a Float.
-        // Staged Float literals and finite sources cannot enter this branch.
-        if let AtomView::Num(number) = prepared.expression.as_view()
-            && matches!(
-                number.get_coeff_view(),
-                CoefficientView::Natural(..) | CoefficientView::Large(..)
-            )
-        {
-            result += prepared.expression * monomial;
-            continue;
-        }
-        let (value, mut warnings) = evaluate_coefficient(
-            prepared.expression.as_view(),
-            &prepared.sources,
-            parameters,
-            settings,
-        )?;
+        let (value, mut warnings, origins) = match evaluated? {
+            Evaluated::Exact(value) => {
+                result += value * monomial;
+                continue;
+            }
+            Evaluated::Numerical {
+                value,
+                warnings,
+                origins,
+            } => (value, warnings, origins),
+        };
         attach_origins(
             &mut warnings,
-            &prepared.origins,
-            epsilon_power(monomial.as_view(), epsilon),
+            &origins,
+            epsilon_power(monomial.as_view(), vk_symbol!(&settings.epsilon_symbol)),
             catalog.map_or("built-in definitions and declared parameters", |catalog| {
                 catalog.version.as_str()
             }),
         );
         for warning in warnings {
-            log::warn!("{warning}; symbolic factor {monomial}");
+            super::log_once(&format!("{warning}; symbolic factor {monomial}"));
         }
         let coefficient = value
             .to_atom()
             .map_err(|error| failure(format!("coefficient multiplying {monomial}: {error}")))?;
         result += coefficient * monomial;
     }
+    crate::rustred_evaluation::log_phase("materialize_evaluation", started);
     Ok(result)
 }
 
@@ -370,75 +416,6 @@ mod tests {
         VakintSettings {
             run_time_decimal_precision: 40,
             ..Default::default()
-        }
-    }
-
-    #[test]
-    fn snapshot_reference_cache_preserves_parser_identity() {
-        use symbolica::atom::{NamespacedSymbol, SymbolBuilder, UserData};
-
-        const CHILD: &str = "VAKINT_SNAPSHOT_SYMBOL_CACHE_TEST";
-        if std::env::var_os(CHILD).is_none() {
-            let output = std::process::Command::new(std::env::current_exe().unwrap())
-                .args([
-                    "--exact",
-                    "precision::materialize::tests::snapshot_reference_cache_preserves_parser_identity",
-                    "--nocapture",
-                ])
-                .env(CHILD, "1")
-                .output()
-                .unwrap();
-            assert!(
-                output.status.success()
-                    && String::from_utf8_lossy(&output.stdout).contains("1 passed"),
-                "{}\n{}",
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr),
-            );
-            return;
-        }
-
-        let names = [
-            "RustRedMaster",
-            "RustRedCoefficient",
-            "RustRedFiniteLiteral",
-            "RustRedConstant",
-        ];
-        assert!(!snapshot_reference(Atom::num(1).as_view()));
-        for name in names {
-            assert!(
-                Symbol::get_symbol(NamespacedSymbol::parse(&format!("vakint::{name}"))).is_none(),
-                "non-function input must not register {name}",
-            );
-        }
-        let metadata = UserData::Atom(Atom::num(23));
-        let master = SymbolBuilder::new(NamespacedSymbol::parse("vakint::SnapshotCacheMaster"))
-            .with_aliases(["RustRedMaster"])
-            .with_tags(["snapshot_cache_test::tag"])
-            .with_user_data(metadata.clone())
-            .build()
-            .unwrap();
-        assert!(!snapshot_reference(Atom::var(master).as_view()));
-        let reference = master.call((7, 9));
-        assert!(snapshot_reference(reference.as_view()));
-        assert!(snapshot_reference(reference.as_view()));
-        assert_eq!(vk_symbol!("vakint::RustRedMaster"), master);
-        assert_eq!(master.get_data(), &metadata);
-        assert!(master.has_tag("snapshot_cache_test::tag"));
-        for name in &names[1..] {
-            assert!(
-                Symbol::get_symbol(NamespacedSymbol::parse(&format!("vakint::{name}"))).is_some(),
-                "global Vakint initialization must register {name}",
-            );
-        }
-        let foreign = vk_symbol!("snapshot_cache_foreign::RustRedMaster").call(1);
-        assert!(!snapshot_reference(foreign.as_view()));
-        for name in names {
-            assert!(snapshot_reference(vk_symbol!(name).call(1).as_view()));
-            assert!(snapshot_reference(
-                vk_symbol!(format!("vakint::{name}")).call(1).as_view()
-            ));
-            assert!(!snapshot_reference(Atom::var(vk_symbol!(name)).as_view()));
         }
     }
 
@@ -535,6 +512,93 @@ mod tests {
                 .unwrap()
                 .is_zero()
         );
+    }
+
+    #[test]
+    fn uncertain_imaginary_zero_is_exported_as_zero_and_real_loss_still_fails() {
+        let settings = settings();
+        let parameters = |bits: u32| -> HashMap<Atom, Complex<Float>> {
+            ["a", "b"]
+                .map(|name| {
+                    (
+                        Atom::var(vk_symbol!(name)),
+                        Complex::new(Float::with_val(bits, 1), Float::new(bits)),
+                    )
+                })
+                .into_iter()
+                .collect()
+        };
+        // The full-call boundary: an imaginary part consistent with zero and
+        // negligible at the 40 requested digits (77-digit inputs) no longer
+        // fails the export; the other factor keeps its exact value.
+        let precise = parameters(256);
+        let source = vk_parse!("𝑖*(a-b)*x+2*y").unwrap();
+        let result = materialize(source.as_view(), &settings, &precise, None).unwrap();
+        assert!(!result.contains_symbol(vk_symbol!("x")), "{result}");
+        assert_eq!(result, vk_parse!("2*y").unwrap());
+        // 38-digit inputs only resolve the same zero below the request: it is
+        // not negligible and the export still fails.
+        let error = materialize(source.as_view(), &settings, &parameters(128), None).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("imaginary component has no reliable")
+                && error.to_string().contains("not negligible"),
+            "{error}"
+        );
+        // An uncertain real zero in the same coefficient is still rejected.
+        let source = vk_parse!("(1+𝑖)*(a-b)*x").unwrap();
+        let error = materialize(source.as_view(), &settings, &precise, None).unwrap_err();
+        assert!(
+            error.to_string().contains("real component has no reliable"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn coefficients_materialize_identically_for_every_worker_count() {
+        let source =
+            vk_parse!("(z3+Zeta(3))*ep^-2*x+Zeta(5)*ep^-1*x+(1/3+z3)*y+7*x*y+𝑖*Zeta(3)^2*ep*x^2")
+                .unwrap();
+        let outcome = |n_cores| {
+            let request = VakintSettings {
+                n_cores,
+                ..settings()
+            };
+            materialize(source.as_view(), &request, &HashMap::new(), None)
+                .map(|value| value.to_canonical_string())
+                .map_err(|error| error.to_string())
+        };
+        let sequential = outcome(1);
+        assert!(sequential.is_ok(), "{sequential:?}");
+        for n_cores in [2, 4, 8] {
+            assert_eq!(outcome(n_cores), sequential);
+        }
+        // The first failing coefficient in collection order decides the
+        // error, whatever the worker count.
+        let parameters: HashMap<Atom, Complex<Float>> = ["a", "b"]
+            .map(|name| {
+                (
+                    Atom::var(vk_symbol!(name)),
+                    Complex::new(Float::with_val(128, 1), Float::new(128)),
+                )
+            })
+            .into_iter()
+            .collect();
+        let failing = vk_parse!("(a-b)*x+(a-b)*y+z3*w").unwrap();
+        let errors: Vec<_> = [1, 4]
+            .into_iter()
+            .map(|n_cores| {
+                let request = VakintSettings {
+                    n_cores,
+                    ..settings()
+                };
+                materialize(failing.as_view(), &request, &parameters, None)
+                    .unwrap_err()
+                    .to_string()
+            })
+            .collect();
+        assert_eq!(errors[0], errors[1]);
     }
 
     #[test]

@@ -2,16 +2,21 @@
 //! This test deliberately loads the complete local pack, including its graph
 //! and IBP metadata, and never contacts a producer workspace or the network.
 //!
-//! The data-dependent expectations below (`D2_DIGITS`, the 520-digit cap of the
-//! `P19`/`P73` ε¹ rows, and the floors `MIN_D2_DEPENDENT_CELLS` and 739
-//! published formulas) hold for `vakint-external-data` `main` at `f51bc5a2`
-//! (the closed 4L formulas with 520-digit D = 2 periods) and for its rewrite of
-//! every 1L–4L coefficient in the constant basis v4, released as v0.2.0 (and
-//! re-validated on that release). Which coefficient cells depend on a D = 2
-//! period, and which constants the formulas name, are read off the loaded data,
-//! because the two data states write the same coefficients in different
-//! constants. Earlier packs such as `ca49f328` cap the D = 2 periods at 215
-//! digits and fail these assertions; update them together with the data.
+//! The data-dependent expectations below (the floor `MIN_D2_DIGITS`, the caps of
+//! the D = 2 periods and of the `P19`/`P73` ε¹ rows, and the floors
+//! `MIN_D2_DEPENDENT_CELLS` and 739 published formulas) hold for
+//! `vakint-external-data` `main` at `f51bc5a2` (the closed 4L formulas with
+//! 520-digit D = 2 periods), for its rewrite of every 1L–4L coefficient in the
+//! constant basis v4, released as v0.2.0 (and re-validated on that release),
+//! and for v0.2.1, whose `4L/constants.json` lifts the D = 2 periods, jets and
+//! the other finite constants to 2348–19997 digits (adapter
+//! `precision-lift-4l-v4`). Which coefficient cells depend on a D = 2 period,
+//! which constants the formulas name and how many digits each constant
+//! publishes are read off the loaded data, because the data states write the
+//! same coefficients in different constants and at different precision; a cap
+//! is the smallest `significant_digits` of the constants a formula contains.
+//! Earlier packs such as `ca49f328` cap the D = 2 periods at 215 digits and fail
+//! the `MIN_D2_DIGITS` floor; update the floors together with the data.
 
 use std::{fs, path::PathBuf};
 
@@ -25,14 +30,51 @@ use crate::{
 };
 
 const CERTIFIED_DIGITS: u32 = 20_000;
-/// Validated digits of the independently computed D = 2 periods and their jets.
-const D2_DIGITS: u32 = 520;
+/// Floor on the validated digits of the independently computed D = 2 periods
+/// and their jets (520 up to v0.2.0; the exact caps are read off the data).
+const MIN_D2_DIGITS: u32 = 520;
 /// Lower bound on the 4L coefficient cells whose formula contains a D = 2
 /// period or jet. The cells themselves are read off the loaded formulas:
 /// `f51bc5a2` has 62 (the original 15 plus the 43 closed formulas' cells); the
 /// basis v4 rewrite also writes the `P19`/`P73` ε⁰ rows, previously
 /// `-PR11dep0 - 5 ζ(5)`, in D = 2 periods, giving 64.
 const MIN_D2_DEPENDENT_CELLS: usize = 62;
+
+/// Published `significant_digits` of every finite constant of the loaded 4L
+/// pack (`4L/constants.json` through the manifest's constant binding).
+fn constant_caps(root: &std::path::Path, manifest: &Value) -> Vec<(ConstantSymbol, u32)> {
+    let path = manifest["constant_bindings"]["path"].as_str().unwrap();
+    let entries: Vec<Value> =
+        serde_json::from_slice(&fs::read(root.join("4L").join(path)).unwrap()).unwrap();
+    entries
+        .iter()
+        .map(|entry| {
+            (
+                entry["symbol"].as_str().unwrap().parse().unwrap(),
+                u32::try_from(entry["significant_digits"].as_u64().unwrap()).unwrap(),
+            )
+        })
+        .collect()
+}
+
+/// The cap a published formula inherits: the smallest `significant_digits` of
+/// the finite constants it contains (`None` for a formula without any).
+fn formula_cap(formula: &symbolica::atom::Atom, caps: &[(ConstantSymbol, u32)]) -> Option<u32> {
+    use symbolica::atom::AtomCore;
+    caps.iter()
+        .filter(|(symbol, _)| formula.contains(symbol.as_atom()))
+        .map(|(_, digits)| *digits)
+        .min()
+}
+
+/// The published cap of one finite constant.
+fn constant_cap(caps: &[(ConstantSymbol, u32)], name: &str) -> u32 {
+    let symbol: ConstantSymbol = name.parse().unwrap();
+    caps.iter()
+        .find(|(candidate, _)| *candidate == symbol)
+        .unwrap_or_else(|| panic!("{name} is not a finite constant of the pack"))
+        .1
+}
 
 /// Parse a finite decimal as an exact rational. In particular, this comparison
 /// never rounds a 20,008-digit reference or its tiny error radius to f64.
@@ -347,7 +389,10 @@ fn public_engine_certified_periods_at_20000_digits() {
 
     // Exact definitions containing a finite period inherit its capability;
     // neither their symbolic names nor unrelated archived fallbacks make
-    // them arbitrary precision. Higher orders keep their own finite limits.
+    // them arbitrary precision. Higher orders keep their own finite limits:
+    // the ε¹ row is capped by the least precise constant it contains (520
+    // digits up to v0.2.0), unless its archived value is more accurate.
+    let caps = constant_caps(&root, &manifest);
     for name in ["P19", "P73"] {
         let metadata = manifest["masters"]
             .as_array()
@@ -362,9 +407,24 @@ fn public_engine_certified_periods_at_20000_digits() {
             AvailablePrecision::FixedPrecision(CERTIFIED_DIGITS),
             "{name} epsilon^0"
         );
+        let symbolic_path = metadata["files"]["symbolic.json"]["path"].as_str().unwrap();
+        let formulas: Vec<(i64, String)> =
+            serde_json::from_slice(&fs::read(root.join("4L").join(symbolic_path)).unwrap())
+                .unwrap();
+        let formula =
+            vk_parse!(&formulas.iter().find(|(power, _)| *power == 1).unwrap().1).unwrap();
+        let cap = formula_cap(&formula, &caps).expect("the epsilon^1 row contains a finite period");
+        assert!(cap >= MIN_D2_DIGITS, "{name} epsilon^1 cap {cap}");
+        let archived = metadata["coefficients"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|coefficient| coefficient["epsilon_power"].as_i64() == Some(1))
+            .and_then(|coefficient| coefficient["significant_digits"].as_u64())
+            .map_or(0, |digits| u32::try_from(digits).unwrap());
         assert_eq!(
             master.coefficients()[&1].available_precision(),
-            AvailablePrecision::FixedPrecision(D2_DIGITS),
+            AvailablePrecision::FixedPrecision(cap.max(archived)),
             "{name} epsilon^1"
         );
     }
@@ -399,6 +459,7 @@ fn public_engine_independent_d2_periods_and_formula_inventory() {
             d2_constants.push(symbol.as_atom().clone());
         }
     }
+    let caps = constant_caps(&root, &manifest);
     for name in ["PR7D2", "PR10D2", "PR15D2"] {
         let symbol: ConstantSymbol = name.parse().unwrap();
         assert!(inventory.contains(&symbol));
@@ -406,11 +467,13 @@ fn public_engine_independent_d2_periods_and_formula_inventory() {
             d2_constants.contains(symbol.as_atom()),
             "{name} is not defined as a D = 2 period"
         );
-        for requested in [16, D2_DIGITS + 1] {
+        let cap = constant_cap(&caps, name);
+        assert!(cap >= MIN_D2_DIGITS, "{name} publishes {cap} digits");
+        for requested in [16, cap + 1] {
             let constant = engine.get_constant(&symbol, requested).unwrap();
             assert_eq!(
                 constant.available_precision(),
-                AvailablePrecision::FixedPrecision(D2_DIGITS)
+                AvailablePrecision::FixedPrecision(cap)
             );
             assert_eq!(
                 constant.precision().real().quality(),
@@ -419,16 +482,16 @@ fn public_engine_independent_d2_periods_and_formula_inventory() {
             assert!(constant.precision().imaginary().exact_zero());
             assert_eq!(constant.provenance().version(), version);
             assert!(constant.to_atom().is_ok());
-            if requested > D2_DIGITS {
+            if requested > cap {
                 assert!(constant.warnings().iter().any(|warning| {
                     warning.requested_decimal_precision == requested
                         && warning.data_version == version
                         && warning.sources.iter().any(|source| {
                             source.identity.contains(name)
-                                && source.available_decimal_precision == Some(D2_DIGITS)
+                                && source.available_decimal_precision == Some(cap)
                         })
                 }));
-                assert!(constant.numerical_value().prec() <= decimal_bits(D2_DIGITS));
+                assert!(constant.numerical_value().prec() <= decimal_bits(cap));
             }
         }
     }
@@ -473,11 +536,14 @@ fn public_engine_independent_d2_periods_and_formula_inventory() {
             let label = format!("{identity} epsilon^{power}");
             let coefficient = &master.coefficients()[&power];
             // A D2 period caps the formula; a better archived value may win.
+            let formula =
+                vk_parse!(&formulas.iter().find(|(p, _)| *p == power).unwrap().1).unwrap();
+            let cap = formula_cap(&formula, &caps).unwrap();
             let available = coefficient.available_precision();
             assert!(
                 matches!(available,
-                    AvailablePrecision::FixedPrecision(digits) if digits >= D2_DIGITS),
-                "{label}: {available}"
+                    AvailablePrecision::FixedPrecision(digits) if digits >= cap && cap >= MIN_D2_DIGITS),
+                "{label}: {available} (formula cap {cap})"
             );
             let reference = exact_decimal(&references.iter().find(|(p, _)| *p == power).unwrap().1);
             assert_agrees_to_70_digits(
@@ -491,7 +557,7 @@ fn public_engine_independent_d2_periods_and_formula_inventory() {
             // unless a more accurate archived value won (the 20,000-digit
             // ε⁰ rows of P17/P52/P74, and in basis v4 also P19/P73). Then it
             // is the reference itself, and the formula is evaluated here.
-            if available != AvailablePrecision::FixedPrecision(D2_DIGITS) {
+            if available != AvailablePrecision::FixedPrecision(cap) {
                 let MasterSymbolicExpression::Expression(formula) =
                     coefficient.symbolic_expression()
                 else {

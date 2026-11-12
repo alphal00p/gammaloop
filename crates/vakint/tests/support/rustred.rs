@@ -34,13 +34,33 @@ pub fn external_data_checkout() -> Option<PathBuf> {
     std::env::var_os("VAKINT_TEST_EXTERNAL_DATA").map(PathBuf::from)
 }
 
+/// The release the test data must declare: the one the vendored manifest
+/// pins, unless `VAKINT_TEST_EXTERNAL_DATA_VERSION` names another one for an
+/// explicit `VAKINT_TEST_EXTERNAL_DATA` checkout (for example the next release
+/// before it is vendored). The loader still rejects a checkout that declares a
+/// different version than the one requested.
+#[cfg(all(unix, not(target_arch = "wasm32")))]
+pub fn pinned_version() -> String {
+    match std::env::var("VAKINT_TEST_EXTERNAL_DATA_VERSION") {
+        Ok(version) if !version.is_empty() => {
+            assert!(
+                external_data_checkout().is_some(),
+                "VAKINT_TEST_EXTERNAL_DATA_VERSION applies to an explicit VAKINT_TEST_EXTERNAL_DATA checkout only"
+            );
+            version
+        }
+        _ => external_data_fixture::required_version(),
+    }
+}
+
 /// Load options for the external-data release that the vendored manifest
-/// pins: read from the `VAKINT_TEST_EXTERNAL_DATA` checkout when it is set,
-/// otherwise installed (or reused) from the published release.
+/// pins (see [`pinned_version`]): read from the `VAKINT_TEST_EXTERNAL_DATA`
+/// checkout when it is set, otherwise installed (or reused) from the
+/// published release.
 #[cfg(all(unix, not(target_arch = "wasm32")))]
 pub fn pinned_release() -> vakint::OfficialExternalDataOptions {
     vakint::OfficialExternalDataOptions {
-        version: external_data_fixture::required_version(),
+        version: pinned_version(),
         local_artifacts_path: external_data_checkout(),
         ..Default::default()
     }

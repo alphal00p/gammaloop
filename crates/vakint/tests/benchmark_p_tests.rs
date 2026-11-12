@@ -407,13 +407,13 @@ mod results_file {
     use super::results::{self, Key, Source};
 
     fn measurement(cell: &str, repetition: usize) -> Value {
-        json!({"cell": cell, "backend": "forcer", "threads": 1, "state": "cold",
-               "repetition": repetition, "status": "ok", "evaluate_seconds": 0.5})
+        json!({"cell": cell, "backend": "forcer", "arithmetic": "none", "threads": 1,
+               "state": "cold", "repetition": repetition, "status": "ok", "evaluate_seconds": 0.5})
     }
 
     fn protocol(gammaloop: &str, rustred: &str) -> Value {
         json!({"gammaloop_sha": gammaloop, "rustred_sha": rustred, "build_profile": "ci-optim",
-               "source_dirty": false})
+               "source_dirty": false, "p_library": {"identity": "p-library:scope=1-3"}})
     }
 
     fn source<'a>(gammaloop: &'a str, rustred: &'a str, build_profile: &'a str) -> Source<'a> {
@@ -422,6 +422,7 @@ mod results_file {
             rustred_sha: rustred,
             build_profile,
             source_dirty: false,
+            p_library: "p-library:scope=1-3",
         }
     }
 
@@ -441,6 +442,7 @@ mod results_file {
         let key = |cell: &str, repetition| Key {
             cell: cell.into(),
             backend: "forcer".into(),
+            arithmetic: "none".into(),
             threads: 1,
             state: "cold".into(),
             repetition,
@@ -470,12 +472,74 @@ mod results_file {
     }
 
     #[test]
+    fn the_p_library_is_part_of_the_source_and_a_child_must_have_used_it() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("p_results.json");
+        results::begin_run(&path, "m2", &protocol("aaa", "bbb"), false)?;
+        results::append(&path, "m2", measurement("L4_d0_r0", 0))?;
+        let mut listed = protocol("aaa", "bbb");
+        listed["p_library"]["identity"] = json!("p-library:scope=1-4");
+        results::begin_run(&path, "m3", &listed, true)?;
+        assert!(results::cite_run(&path, "missing").is_err());
+        results::cite_run(&path, "m2")?;
+
+        let document = results::read(&path)?;
+        assert_eq!(document["cited_run"], "m2");
+        let one_to_four = Source {
+            p_library: "p-library:scope=1-4",
+            ..source("aaa", "bbb", "ci-optim")
+        };
+        assert!(results::recorded(&document, one_to_four, None)?.is_empty());
+        let built_in = results::recorded(&document, source("aaa", "bbb", "ci-optim"), None)?;
+        assert_eq!(built_in.len(), 1);
+
+        let library = json!({"origin": "external-data", "directory": "p-library-1-4"});
+        let child = |program: &str, origin: &str| {
+            json!({"cache": {"programs": [
+                {"program": "1L-unit-mass-vacuum", "data_version": "v0.2.2"},
+                {"program": program, "data_version": origin}]}})
+        };
+        assert!(
+            results::check_p_program(&child("p-library-1-4", "external-data"), &library).is_ok()
+        );
+        assert!(results::check_p_program(&child("p-library-1-3", "built-in"), &library).is_err());
+        assert!(results::check_p_program(&child("p-library-1-4", "built-in"), &library).is_err());
+        assert!(results::check_p_program(&json!({"cache": {"programs": []}}), &library).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn the_arithmetic_is_part_of_what_a_rerun_skips() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("p_results.json");
+        results::begin_run(&path, "run", &protocol("aaa", "bbb"), true)?;
+        let rustred = |arithmetic: &str| {
+            json!({"cell": "L3_d1_r4", "backend": "rustred", "arithmetic": arithmetic,
+                   "threads": 16, "state": "cold", "repetition": 0, "status": "ok"})
+        };
+        results::append(&path, "run", rustred("exact"))?;
+        results::append(&path, "run", rustred("modular_polynomial"))?;
+        let mut without = rustred("exact");
+        without.as_object_mut().unwrap().remove("arithmetic");
+        assert!(results::append(&path, "run", without).is_err());
+
+        let document = results::read(&path)?;
+        let recorded = results::recorded(&document, source("aaa", "bbb", "ci-optim"), None)?;
+        let arithmetics = recorded
+            .iter()
+            .map(|key| key.arithmetic.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(arithmetics, ["exact", "modular_polynomial"]);
+        Ok(())
+    }
+
+    #[test]
     fn a_capped_record_is_final_only_up_to_its_cap() -> Result<()> {
         let directory = tempfile::tempdir()?;
         let path = directory.path().join("p_results.json");
         results::begin_run(&path, "run", &protocol("aaa", "bbb"), true)?;
         let capped = |cell, status| {
-            json!({"cell": cell, "backend": "forcer", "threads": 16, "state": "warm",
+            json!({"cell": cell, "backend": "forcer", "arithmetic": "none", "threads": 16, "state": "warm",
                    "repetition": 0, "status": status, "cap_seconds": 100.0})
         };
         results::append(&path, "run", capped("L4_d0_r0", "capped"))?;

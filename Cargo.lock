@@ -2613,6 +2613,7 @@ dependencies = [
 [[package]]
 name = "graphica"
 version = "3.0.1"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=9cd57678d8817ec33c05cacba4925162f1c86b0b#9cd57678d8817ec33c05cacba4925162f1c86b0b"
 dependencies = [
  "ahash 0.8.12",
  "dyn-clone",
@@ -4293,6 +4294,7 @@ dependencies = [
 [[package]]
 name = "numerica"
 version = "3.0.1"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=9cd57678d8817ec33c05cacba4925162f1c86b0b#9cd57678d8817ec33c05cacba4925162f1c86b0b"
 dependencies = [
  "ahash 0.8.12",
  "astro-float",
@@ -5774,6 +5776,7 @@ dependencies = [
 [[package]]
 name = "rustred"
 version = "0.1.0"
+source = "git+https://github.com/alphal00p/rustred?rev=a8dcfd679a098f8d03bf34ee3ab44d182dbf64f8#a8dcfd679a098f8d03bf34ee3ab44d182dbf64f8"
 dependencies = [
  "bincode 2.0.1",
  "blake3",
@@ -5782,12 +5785,17 @@ dependencies = [
  "rand 0.9.4",
  "rayon",
  "rustred-order",
+ "rustred-topology",
+ "serde",
+ "serde_json",
+ "smallvec",
  "symbolica",
 ]
 
 [[package]]
 name = "rustred-app"
 version = "0.1.0"
+source = "git+https://github.com/alphal00p/rustred?rev=a8dcfd679a098f8d03bf34ee3ab44d182dbf64f8#a8dcfd679a098f8d03bf34ee3ab44d182dbf64f8"
 dependencies = [
  "bincode 2.0.1",
  "blake3",
@@ -5803,6 +5811,18 @@ dependencies = [
 [[package]]
 name = "rustred-order"
 version = "0.1.0"
+source = "git+https://github.com/alphal00p/rustred?rev=a8dcfd679a098f8d03bf34ee3ab44d182dbf64f8#a8dcfd679a098f8d03bf34ee3ab44d182dbf64f8"
+
+[[package]]
+name = "rustred-topology"
+version = "0.1.0"
+source = "git+https://github.com/alphal00p/rustred?rev=a8dcfd679a098f8d03bf34ee3ab44d182dbf64f8#a8dcfd679a098f8d03bf34ee3ab44d182dbf64f8"
+dependencies = [
+ "graphica",
+ "serde",
+ "serde_json",
+ "smallvec",
+]
 
 [[package]]
 name = "rustversion"
@@ -6579,6 +6599,7 @@ dependencies = [
 [[package]]
 name = "symbolica"
 version = "3.0.1"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=9cd57678d8817ec33c05cacba4925162f1c86b0b#9cd57678d8817ec33c05cacba4925162f1c86b0b"
 dependencies = [
  "ahash 0.8.12",
  "append-only-vec",
@@ -8257,7 +8278,6 @@ dependencies = [
  "tempfile",
  "test-log",
  "thiserror 2.0.18",
- "tracing",
  "ureq",
  "version-compare",
 ]

@@ -93,6 +93,8 @@ and (not test(/(^|::)(slow|failing)::/) or test(/^rustred_evaluation::five_loop:
 and not (binary(ordered_reduction_rungs) and test(/^four_loop_/))
 and not binary(rustred_five_loop_closure_tests)
 and not test(/^rustred_evaluation::five_loop::partial_acceptance::/)
+and not binary(p_integral_rustred_full)
+and not binary(p_integral_rustred_battery4)
 """
 
 [profile.test_vakint.junit]
@@ -161,6 +163,13 @@ test-group = "symbolica-singleton"
 filter = "test(/^uv::hedge_poset::tests::bugblatter$/) or test(/^aaa$/)"
 test-group = "gammalooprs-diagnostics"
 slow-timeout = { period = "5m", terminate-after = 2 }
+
+[[profile.ci_gammaloop.overrides]]
+# The four-loop Tiers C of the full p binary (M3-V9c; they run only with a
+# scope 1-4 p library in VAKINT_TEST_P_LIBRARY_1_4, otherwise they skip):
+# one grid part takes minutes to hours, far beyond the ci profile's 240 s.
+filter = "binary(p_integral_rustred_full) and test(/four_loop/)"
+slow-timeout = { period = "600s" }
 
 [[profile.ci.overrides]]
 # In CI, be extra conservative with timeouts

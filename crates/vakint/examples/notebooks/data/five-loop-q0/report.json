@@ -1,0 +1,143 @@
+{
+ "cache_policy": {
+  "depth_first_intrinsic_memoization": false,
+  "ordered_result_cache": "not supported",
+  "ordered_step_cache": "one-step records only (see ordered_step_cache); replayed steps are identical to checked ones",
+  "prepared_cache_loaded": false,
+  "previous_run_cache_restored": false
+ },
+ "catalogue_closure": {
+  "closed": true,
+  "master_count": 79,
+  "unknown": [],
+  "unknown_count": 0
+ },
+ "completed_seconds": 223.156630109,
+ "completed_seconds_scope": "loading, retained evaluation, artifact serialization and optional numerical reference; scalar input preparation is recorded separately",
+ "contributions": 1,
+ "data": {
+  "manifest_sha256": "2eae53952fd0a22faef88b9cb80c7f020bbbb815731da95dd8b13befcfb750e1",
+  "version": "v0.2.1",
+  "source": "staged external-data checkout (local path removed)"
+ },
+ "dimension_binding": {
+  "scope": "exact fixture trace dimension; all public evaluations share this binding",
+  "source": "rustred::{}::d",
+  "target": "-2*vakint::{}::ε+4"
+ },
+ "epsilon_symbol": "vakint::ε",
+ "evaluated_input_sha256": "6c61be1e363c100206a70b6fa297dd0a93995c0d5e6464dbd48187cbbbe65d68",
+ "execution": {
+  "n_cores": 4,
+  "native_ordered_weight_arithmetic": "modular_polynomial:threads=4,seed=0x6f72646572656421,verification_primes=1,max_primes=256,cross_check_exact=false,lanes=4,denominators=factorized,max_degree=16384",
+  "ordered_weight_arithmetic": "modular_polynomial",
+  "scheduler_threads": 4,
+  "scope": "identical results for every core count and arithmetic; n_cores sets the scheduler (4L/5L), modular, frontend, post-processing and route-verification workers; with more than one scheduler thread the 5L reduction_math_seconds is not reported"
+ },
+ "gluon_rungs": 4,
+ "guards": {
+  "count": 144804,
+  "payload": {
+   "bytes": 122266109,
+   "file": "nonzero-conditions.symbolica",
+   "sha256": "cc965afc49bb66ed4efb4f7433371d19c5056d78f9f6129844736eed1c7bbb56",
+   "shipped": false,
+   "note": "122 MB; not copied into the gallery (count and sha256 only)"
+  },
+  "scope": "sufficient conditions, including scalar preparation; exact exceptional-domain equality is not inferred from equal results"
+ },
+ "input_sha256": "9814c3b49a1b486b9790bbe5458d8bc582c3fb3c299ba6a1a0362db8ba71cb16",
+ "intrinsic_memoization": false,
+ "intrinsic_memoization_scope": "Ordered has no completed-result memo; checked opaque factorization may use a fresh isolated internal memo",
+ "loading_seconds": 50.840212135,
+ "loop_count": 5,
+ "memory_after_retained_reduction": {
+  "process_peak_rss_bytes": 14983520256,
+  "rss_bytes": 14862266368,
+  "scope": "Linux whole-process RSS; peak includes preparation/loading and earlier stages"
+ },
+ "monitoring_enabled": true,
+ "mu_r_sq_symbol": "vakint::mursq",
+ "normalization": "MSbar",
+ "numerical_reference": null,
+ "ordered_step_cache": {
+  "autosave": "after-evaluation",
+  "directory": null,
+  "file_bytes": 0,
+  "hits": 0,
+  "inserts": 366748,
+  "last_autosave_error": null,
+  "max_resident_bytes": 8589934592,
+  "misses": 366748,
+  "mode": "read-write",
+  "programs": [
+   {
+    "data_version": "v0.2.1",
+    "directory": null,
+    "file_bytes": 0,
+    "hits": 0,
+    "inserts": 366748,
+    "load_seconds": 0.0,
+    "loaded_shards": 0,
+    "misses": 366748,
+    "program": "5L-tide-five-loop-common-basis",
+    "records": 366748,
+    "resident_bytes": 157380392,
+    "rule_tables": "ef671fbc9e869a1dbd7b6f8d3896265491df3aa29f5d8b0df71eb5e08f9450f4",
+    "shards": 32,
+    "shipped": null,
+    "stamp": "b5648b4aed2d6a76eee19ef6b901a1bc2d63317dc90b07d63bd5f2b8aef2b934"
+   }
+  ],
+  "records": 366748,
+  "resident_bytes": 157380392,
+  "shipped_setting": false
+ },
+ "ordered_weight_arithmetic": "modular_polynomial",
+ "persistent_cache": false,
+ "preparation": {
+  "current_run_seconds": 0.0,
+  "historical_seconds": 0.49339697,
+  "reused_authenticated_bundle": true,
+  "timing_scope": "scalar preparation precedes retained evaluation; loaded-bundle historical work is not added to current timing",
+  "timings": {
+   "angular_seconds": 0.0,
+   "graph_generation_seconds": 0.193814645,
+   "ingress_seconds": 0.154826506,
+   "scalar_contraction_seconds": 0.10019787,
+   "taylor_seconds": 0.0,
+   "total_seconds": 0.493252849
+  }
+ },
+ "projection": "zero-momentum-metric",
+ "reduction_completed": true,
+ "reduction_math_seconds": null,
+ "reduction_math_timing": {
+  "complete": false,
+  "gross_seconds": null,
+  "incompleteness_reason": "build lacks the experimental-rustred timing capture feature",
+  "interval_count": 0,
+  "measured_owner_preparation_seconds": null,
+  "scope_id": "vakint.rustred.reduction-math.v1"
+ },
+ "retained": {
+  "bytes": 882976,
+  "file": "retained.symbolica",
+  "sha256": "4dc39e683ec0a777a270168dc07fea306b9bd493d8ecf53b2455b6414cc98f0a"
+ },
+ "retained_reduction_seconds": 168.992774682,
+ "retained_reduction_seconds_scope": "complete retained public call, including frontend and finalization; separate from reduction math",
+ "schema": "vakint.ordered-rung-comparison.v1",
+ "strategy": "Ordered",
+ "worker_policy": {
+  "owner_preparation_workers": 1,
+  "scope": "single owner preparation worker required for native timing subtraction"
+ },
+ "gallery_provenance": {
+  "recorded": "on 2026-11-06 by the vakint integration gate (vakint commit fa3d27d2f, release build, staged data v0.2.1)",
+  "gate": "gl.pass-fa3d27d2f-1106 / fixture-q0-evidence",
+  "source_report_sha256": "a82ba8dd98f7cfdb68367f617005d30e241c0e0e816313ecd60ba73f2e104c04",
+  "source_monitor_sha256": "f6cd523f85fbc7f8c1b2cae6c4982ccdf34c9e2bf38a02f681b455ed73f478fa",
+  "sanitized": "local data path and worker pid removed; every measurement unchanged"
+ }
+}

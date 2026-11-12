@@ -8,7 +8,7 @@ __generated_with = "0.25.2"
 app = marimo.App(width="full", app_title="HEPKit · Graphs & numerators")
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _():
     from pathlib import Path
     from time import perf_counter
@@ -42,12 +42,12 @@ def _(Gallery, mo):
         "01 / geometry",
         "Choose the graph",
         "Start small: the bubble and the three- and four-loop ladders contract "
-        "here in about a second; the five-loop ladder is shown as geometry.",
+        "here in under a second; the five-loop ladder is shown as geometry.",
     )
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     graph_choice = mo.ui.dropdown(
         {
@@ -64,7 +64,7 @@ def _(mo):
     return (graph_choice,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(FeynmanDiagram, Gallery, Model, graph_choice):
     model = Model.qcd()
     if graph_choice.value == 1:
@@ -83,6 +83,8 @@ def _(FeynmanDiagram, Gallery, Model, graph_choice):
 
 @app.cell(hide_code=True)
 def _(Gallery, diagram, mo):
+    # The interactive FeynKit drawing runs its own script; inside an iframe it
+    # never touches the notebook's DOM, so changing the topology redraws it.
     mo.vstack(
         [
             Gallery.metrics(
@@ -93,31 +95,33 @@ def _(Gallery, diagram, mo):
                     (len(diagram.external_edges), "external gluons"),
                 ],
             ),
-            mo.as_html(diagram.render(momenta=True)),
+            Gallery.diagram_frame(mo, diagram),
         ]
     )
     return
 
 
 @app.cell(hide_code=True)
-def _(diagram, mo, topology):
+def _(Gallery, diagram, mo, topology):
+    # Static MathML: an accordion unmounts closed panels, which would dispose
+    # a live pager's widget model.
     mo.accordion(
         {
-            "Native routing and propagators": mo.ui.table(
+            "Native routing and propagators": Gallery.table(
+                mo,
                 [
                     {
                         "edge": edge.id,
                         "particle": edge.particle_name,
-                        "momentum": mo.as_html(edge.momentum_expression(in_lmb=True)),
+                        "momentum": Gallery.static_formula(
+                            mo, edge.momentum_expression(in_lmb=True)
+                        ),
                     }
                     for edge in diagram.internal_edges
                 ],
-                selection=None,
-                show_download=False,
             ),
-            "Compact source DOT": mo.ui.code_editor(
-                topology, language="dot", disabled=True
-            ),
+            # Plain text: marimo's editor has no DOT grammar.
+            "Compact source DOT": Gallery.dot_source(mo, topology),
         }
     )
     return
@@ -134,7 +138,7 @@ def _(Gallery, mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(Gallery, graph_choice, mo):
     _interactive = graph_choice.value <= 4
     contract_button = mo.ui.run_button(
@@ -153,9 +157,9 @@ def _(Gallery, graph_choice, mo):
                 "background job."
                 if _interactive
                 else "The five-loop numerator takes about 16 s of tensor algebra "
-                "(longer on a busy server) that a page cannot interrupt, so this "
-                "page only shows its geometry. Page 03 explores the five-loop "
-                "reduction without running it.",
+                "(longer on a busy server) inside one native call that a page "
+                "cannot interrupt, so this page only shows its geometry. Page 03 "
+                "explores the five-loop reduction and its recorded run.",
                 pending=not _interactive,
             ),
             contract_button,
@@ -164,7 +168,7 @@ def _(Gallery, graph_choice, mo):
     return (contract_button,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     S,
     TensorExpression,
@@ -205,6 +209,18 @@ def _(
 
 @app.cell(hide_code=True)
 def _(Gallery, contraction_seconds, mo, numerator, projected, projector, reduced):
+    contraction_views = {
+        "Scalar dot products": reduced,
+        "Projector": projector,
+        "Tensor numerator": numerator,
+        "Projected tensor": projected,
+    }
+    view_choice = mo.ui.radio(
+        list(contraction_views),
+        value="Scalar dot products",
+        inline=True,
+        label="Show",
+    )
     mo.vstack(
         [
             Gallery.metrics(
@@ -216,13 +232,35 @@ def _(Gallery, contraction_seconds, mo, numerator, projected, projector, reduced
                     )
                 ],
             ),
-            mo.ui.tabs(
-                {
-                    "Scalar dot products": Gallery.native_formula(mo, reduced),
-                    "Projector": Gallery.native_formula(mo, projector),
-                    "Tensor numerator": Gallery.native_formula(mo, numerator),
-                    "Projected tensor": Gallery.native_formula(mo, projected),
-                }
+            view_choice,
+        ]
+    )
+    return contraction_views, view_choice
+
+
+@app.cell(hide_code=True)
+def _(Gallery, contraction_views, mo, view_choice):
+    # A fresh live pager per selection, as this cell's own output: prev/next
+    # pages, page size, numbered omission markers, + / - / 0 zoom. A single
+    # long product does not wrap there (it scrolls sideways): its factors are
+    # also listed one per line.
+    _value = contraction_views[view_choice.value]
+    _factors = Gallery.product_factors(_value)
+    mo.vstack(
+        [
+            Gallery.formula(mo, _value),
+            *(
+                [
+                    mo.accordion(
+                        {
+                            f"The {len(_factors)} factors of this product, one per line (index names are local to each line)": Gallery.factor_list(
+                                mo, _factors
+                            )
+                        }
+                    )
+                ]
+                if _factors
+                else []
             ),
             Gallery.note(
                 mo,

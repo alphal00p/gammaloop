@@ -243,6 +243,23 @@ pub fn external_vakint() -> Vakint {
     external_dataset().0.clone()
 }
 
+/// The data root of the engine [`get_vakint`] returns: the external dataset once a test
+/// of this process has loaded it, otherwise the vendored 1L–3L snapshot. The engine and
+/// its root are read consistently (the external dataset is set at most once).
+#[allow(dead_code)]
+pub fn get_vakint_with_data_root(vakint_settings: VakintSettings) -> (TestVakint, PathBuf) {
+    loop {
+        let before = EXTERNAL_DATASET.get().map(|(_, path)| path.clone());
+        let vakint = get_vakint(vakint_settings.clone());
+        let after = EXTERNAL_DATASET.get().map(|(_, path)| path.clone());
+        if before == after {
+            let root =
+                after.unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data"));
+            return (vakint, root);
+        }
+    }
+}
+
 /// The public retained result now uses family-qualified integral identities.
 /// Project through the archived exact map only for the MATAD coefficient oracle.
 #[allow(dead_code)]
