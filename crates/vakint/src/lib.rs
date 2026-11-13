@@ -4930,10 +4930,11 @@ impl VakintExpression {
             ) {
                 return Err(VakintError::InvalidIntegralFormat(format!("{}", integral)));
             }
+            let vectors = VakintTerm::identify_vectors_in_numerator(numerator.as_view())?;
             res.push(VakintTerm {
-                integral: integral.to_owned().clone(),
-                numerator: numerator.to_owned().clone(),
-                vectors: VakintTerm::identify_vectors_in_numerator(numerator.as_view())?,
+                integral,
+                numerator,
+                vectors,
             });
         }
 

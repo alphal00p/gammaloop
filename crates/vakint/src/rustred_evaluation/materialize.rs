@@ -132,15 +132,19 @@ pub(super) fn evaluate_ordered_batch(
         }
         // MATAD finalization reserves this exact internal regulator symbol.
         let dimensions = StageSpan::new("rustred.lower.dimension_mapping");
-        let numerator = input
-            .numerator
-            .replace(Atom::var(S.form_epsilon).to_pattern())
-            .with(epsilon.to_pattern());
-        input.numerator = super::numerator::MatchedScalarInput::numerator_in_family_dimension(
-            numerator.as_view(),
-            settings,
-            &rustred_dimension,
-        );
+        // The intermediate numerator is dropped before the old one is
+        // replaced, so only the mapped numerator is alive in the lowering.
+        input.numerator = {
+            let numerator = input
+                .numerator
+                .replace(Atom::var(S.form_epsilon).to_pattern())
+                .with(epsilon.to_pattern());
+            super::numerator::MatchedScalarInput::numerator_in_family_dimension(
+                numerator.as_view(),
+                settings,
+                &rustred_dimension,
+            )
+        };
         drop(dimensions);
         let lowering = {
             let _stage = StageSpan::new("rustred.lower.scalar_lowering");
