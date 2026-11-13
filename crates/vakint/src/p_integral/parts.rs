@@ -778,6 +778,23 @@ fn grouped_parts(
     negative_powers: &[Atom],
     collector: &PartCollector,
 ) -> Option<Vec<PPart>> {
+    grouped_parts_with(
+        canonical_numerator,
+        negative_powers,
+        collector,
+        PENDING_PRODUCT_BYTES,
+    )
+}
+
+/// [`grouped_parts`], merging the pending products of a polynomial operation
+/// once they exceed `pending_bound` bytes ([`ProductSums`]; `usize::MAX`
+/// merges every monomial once, at the end).
+fn grouped_parts_with(
+    canonical_numerator: AtomView,
+    negative_powers: &[Atom],
+    collector: &PartCollector,
+    pending_bound: usize,
+) -> Option<Vec<PPart>> {
     if !admits_loop_polynomials(canonical_numerator) {
         return None;
     }
@@ -790,6 +807,7 @@ fn grouped_parts(
         loop_dots: &loop_dots,
         factors: HashMap::new(),
         products: HashMap::new(),
+        pending_bound,
     };
     let mut polynomial = polynomials.sum(sum_terms(canonical_numerator))?;
     for factor in negative_powers {
@@ -873,22 +891,106 @@ struct LoopPolynomials<'a> {
     loop_dots: &'a [Atom],
     factors: HashMap<&'a [u8], Rc<LoopPolynomial>>,
     products: HashMap<Vec<&'a [u8]>, Rc<LoopPolynomial>>,
+    /// The bound of [`ProductSums`].
+    pending_bound: usize,
 }
 
-/// The polynomial of products collected by monomial: each coefficient is
-/// the one canonical sum of its products.
-fn collect_products(products: HashMap<Exponents, Vec<Atom>>) -> LoopPolynomial {
-    let mut polynomial = HashMap::with_capacity(products.len());
-    for (exponents, products) in products {
-        let coefficient = match <[Atom; 1]>::try_from(products) {
-            Ok([product]) => product,
-            Err(products) => Atom::add_many(products.iter()),
-        };
-        if !coefficient.is_zero() {
-            polynomial.insert(exponents, coefficient);
+/// The products of one polynomial operation that [`ProductSums`] holds
+/// unmerged, in bytes, before it merges them (at least the size of what it
+/// holds already, so every merge at least doubles what it has merged).
+const PENDING_PRODUCT_BYTES: usize = 64 << 20;
+
+/// The products of a polynomial operation collected by monomial: each
+/// coefficient is the one canonical sum of its products ([`Atom::add_many`];
+/// a single product is kept as it is).
+///
+/// Once the pending products exceed the bound, every monomial with a merged
+/// sum or more than one pending product is merged into its running sum, so
+/// the unmerged products of a large operation are never all held at once.
+/// Merging in batches gives the one merge of all products: the products are
+/// products of terms of expanded sums with exact numbers
+/// ([`admits_loop_polynomials`]), so no merge turns a term into a sum (that
+/// needs a number times one sum, [`crate::utils::ExactSum`]) and the exact
+/// coefficients of the terms with the same non-number part add up to the
+/// same number in any grouping. A product that is a number times one sum
+/// stops the batches: everything after it is merged once, at the end.
+struct ProductSums {
+    /// The merged sum and the pending products of each monomial.
+    monomials: HashMap<Exponents, (Atom, Vec<Atom>)>,
+    pending_bound: usize,
+    pending_bytes: usize,
+    held_bytes: usize,
+    batches: bool,
+}
+
+impl ProductSums {
+    fn new(pending_bound: usize) -> Self {
+        Self {
+            monomials: HashMap::new(),
+            pending_bound,
+            pending_bytes: 0,
+            held_bytes: 0,
+            batches: pending_bound != usize::MAX,
         }
     }
-    polynomial
+
+    fn push(&mut self, exponents: &Exponents, product: Atom) {
+        if self.batches && crate::utils::is_scaled_sum(product.as_view()) {
+            self.batches = false;
+        }
+        self.pending_bytes += product.as_view().get_byte_size();
+        match self.monomials.get_mut(exponents) {
+            Some((_, pending)) => pending.push(product),
+            None => {
+                self.monomials
+                    .insert(exponents.clone(), (Atom::Zero, vec![product]));
+            }
+        }
+        if self.batches && self.pending_bytes > self.pending_bound.max(self.held_bytes) {
+            self.merge();
+        }
+    }
+
+    /// Merge the pending products of every monomial that has a merged sum or
+    /// more than one of them.
+    fn merge(&mut self) {
+        let mut held_bytes = 0;
+        for (merged, pending) in self.monomials.values_mut() {
+            if !merged.is_zero() || pending.len() > 1 {
+                let sum = std::mem::take(merged);
+                *merged = Atom::add_many(std::iter::once(sum).chain(pending.drain(..)));
+            }
+            held_bytes += merged.as_view().get_byte_size()
+                + pending
+                    .iter()
+                    .map(|product| product.as_view().get_byte_size())
+                    .sum::<usize>();
+        }
+        self.held_bytes = held_bytes;
+        self.pending_bytes = 0;
+    }
+
+    fn finish(self) -> LoopPolynomial {
+        let mut polynomial = HashMap::with_capacity(self.monomials.len());
+        for (exponents, (merged, pending)) in self.monomials {
+            let coefficient = if !merged.is_zero() {
+                if pending.is_empty() {
+                    merged
+                } else {
+                    Atom::add_many(std::iter::once(merged).chain(pending))
+                }
+            } else {
+                match <[Atom; 1]>::try_from(pending) {
+                    Ok([product]) => product,
+                    Err(products) => Atom::add_many(products.iter()),
+                }
+            };
+            if !coefficient.is_zero() {
+                polynomial.insert(exponents, coefficient);
+            }
+        }
+        polynomial
+    }
 }
 
 impl<'a> LoopPolynomials<'a> {
@@ -901,7 +1003,7 @@ impl<'a> LoopPolynomials<'a> {
     }
 
     fn mul(&self, left: &LoopPolynomial, right: &LoopPolynomial) -> Option<LoopPolynomial> {
-        let mut products = HashMap::<Exponents, Vec<Atom>>::new();
+        let mut products = ProductSums::new(self.pending_bound);
         for (left_exponents, left_coefficient) in left {
             let left_terms = sum_terms(left_coefficient.as_view());
             for (right_exponents, right_coefficient) in right {
@@ -912,15 +1014,14 @@ impl<'a> LoopPolynomials<'a> {
                     .map(|(left, right)| left.checked_add(*right).filter(|sum| *sum <= 127))
                     .collect::<Option<Exponents>>()?;
                 let right_terms = sum_terms(right_coefficient.as_view());
-                let products = products.entry(exponents).or_default();
                 for &left in &left_terms {
                     for &right in &right_terms {
-                        products.push(left * right);
+                        products.push(&exponents, left * right);
                     }
                 }
             }
         }
-        Some(collect_products(products))
+        Some(products.finish())
     }
 
     /// The polynomial of a factor that holds a loop momentum: a loop dot, a
@@ -1014,7 +1115,7 @@ impl<'a> LoopPolynomials<'a> {
                 }
             }
         }
-        let mut products = HashMap::<Exponents, Vec<Atom>>::new();
+        let mut products = ProductSums::new(self.pending_bound);
         for (loop_factors, spectators) in groups {
             let spectators = Atom::add_many(spectators.iter()).expand();
             if spectators.is_zero() {
@@ -1023,15 +1124,14 @@ impl<'a> LoopPolynomials<'a> {
             let spectator_terms = sum_terms(spectators.as_view());
             for (exponents, coefficient) in self.product(&loop_factors)?.iter() {
                 let coefficient_terms = sum_terms(coefficient.as_view());
-                let products = products.entry(exponents.clone()).or_default();
                 for &spectator in &spectator_terms {
                     for &term in &coefficient_terms {
-                        products.push(spectator * term);
+                        products.push(exponents, spectator * term);
                     }
                 }
             }
         }
-        Some(collect_products(products))
+        Some(products.finish())
     }
 }
 
@@ -1386,24 +1486,42 @@ mod tests {
             .map_err(|error| error.to_string())
     }
 
-    /// The split by [`grouped_parts`] alone, an error where it does not apply.
+    /// [`split`] with the grouped parts only, an error where they do not
+    /// apply. The grouped parts are the same whether their products are
+    /// merged in the production batches, after every doubling of the pending
+    /// products (bound 0) or once at the end (`usize::MAX`, the merge before
+    /// the batches).
     fn split_grouped_only(
         family: &PFamilyData,
         powers: &[i64],
         numerator: AtomView,
         external: &Atom,
     ) -> SplitSummary {
-        summary(split_with(
-            family,
-            powers,
-            numerator,
-            external,
-            |numerator, negative_powers, collector| {
-                grouped_parts(numerator, negative_powers, collector).ok_or_else(|| {
-                    VakintError::InvalidNumerator("the grouped split does not apply".into())
-                })
-            },
-        ))
+        let with_bound = |bound: usize| {
+            let parts: NumeratorParts = match bound {
+                0 => |numerator, negative_powers, collector| {
+                    grouped_parts_with(numerator, negative_powers, collector, 0)
+                        .ok_or_else(not_grouped)
+                },
+                usize::MAX => |numerator, negative_powers, collector| {
+                    grouped_parts_with(numerator, negative_powers, collector, usize::MAX)
+                        .ok_or_else(not_grouped)
+                },
+                _ => |numerator, negative_powers, collector| {
+                    grouped_parts(numerator, negative_powers, collector).ok_or_else(not_grouped)
+                },
+            };
+            summary(split_with(family, powers, numerator, external, parts))
+        };
+        let grouped = with_bound(PENDING_PRODUCT_BYTES);
+        for bound in [0, usize::MAX] {
+            assert_eq!(with_bound(bound), grouped, "bound {bound}: {numerator}");
+        }
+        grouped
+    }
+
+    fn not_grouped() -> VakintError {
+        VakintError::InvalidNumerator("the grouped split does not apply".into())
     }
 
     /// The parts of [`split`] before the grouped split and the skip of the
@@ -1760,6 +1878,92 @@ mod tests {
         found
     }
 
+    /// Opt-in diagnostic: one dumped request named by `VAKINT_SPLIT_RECORD`,
+    /// split in the mode `VAKINT_SPLIT_RECORD_MODE` (`split` by default,
+    /// `grouped`, `grouped_unbounded` (one merge per monomial), `reference`, `expand` or `expand_merging` of the numerator
+    /// with its negative powers), with the time and the process high-water
+    /// mark printed (one mode per process: the mark only grows).
+    #[test]
+    fn split_one_dumped_request() {
+        let Some(path) = std::env::var_os("VAKINT_SPLIT_RECORD") else {
+            return;
+        };
+        let high_water_mark = || {
+            std::fs::read_to_string("/proc/self/status")
+                .ok()
+                .and_then(|status| {
+                    status
+                        .lines()
+                        .find_map(|line| Some(line.strip_prefix("VmHWM:")?.trim().to_string()))
+                })
+                .unwrap_or_default()
+        };
+        let (family, powers, external, numerator) =
+            split_record(&std::fs::read_to_string(path).unwrap());
+        let mode = std::env::var("VAKINT_SPLIT_RECORD_MODE").unwrap_or_else(|_| "split".into());
+        eprintln!(
+            "{} {powers:?}: numerator {} bytes, high-water mark {}",
+            family.name,
+            numerator.as_view().get_byte_size(),
+            high_water_mark()
+        );
+        let started = std::time::Instant::now();
+        let outcome = match mode.as_str() {
+            "split" => format!(
+                "{} parts",
+                summary(split(family, &powers, numerator.as_view(), &external))
+                    .map_or(0, |split| split.map_or(0, |split| split.3.len()))
+            ),
+            "grouped" | "grouped_unbounded" => {
+                let parts: NumeratorParts = if mode == "grouped" {
+                    |numerator, negative_powers, collector| {
+                        grouped_parts(numerator, negative_powers, collector).ok_or_else(not_grouped)
+                    }
+                } else {
+                    |numerator, negative_powers, collector| {
+                        grouped_parts_with(numerator, negative_powers, collector, usize::MAX)
+                            .ok_or_else(not_grouped)
+                    }
+                };
+                format!(
+                    "applies {}",
+                    split_with(family, &powers, numerator.as_view(), &external, parts).is_ok()
+                )
+            }
+            "reference" => format!(
+                "{} parts",
+                summary(split_reference(
+                    family,
+                    &powers,
+                    numerator.as_view(),
+                    &external
+                ))
+                .map_or(0, |split| split.map_or(0, |split| split.3.len()))
+            ),
+            "expand" | "expand_merging" => {
+                let mut product = numerator.clone();
+                for (line, &power) in canonical_lines(family).unwrap().iter().zip(&powers) {
+                    if power < 0 {
+                        let momentum = line.momentum(&external);
+                        product *= function!(S.dot, &momentum, &momentum).pow(Atom::num(-power));
+                    }
+                }
+                let expanded = if mode == "expand" {
+                    product.expand()
+                } else {
+                    crate::utils::expand_merging(product.as_view())
+                };
+                format!("{} bytes", expanded.as_view().get_byte_size())
+            }
+            other => panic!("unknown mode {other}"),
+        };
+        eprintln!(
+            "{mode}: {outcome} in {:.1} s, high-water mark {}",
+            started.elapsed().as_secs_f64(),
+            high_water_mark()
+        );
+    }
+
     /// The same on a whole `VAKINT_DUMP_SPLIT_INPUTS` directory named by
     /// `VAKINT_SPLIT_CORPUS` (opt-in: real corpora are far too large to
     /// vendor), against the original split ([`original_parts`], run stage by
@@ -1796,6 +2000,12 @@ mod tests {
             let started = std::time::Instant::now();
             let expanded = product.expand();
             let expand_seconds = seconds(started);
+            assert_eq!(
+                crate::utils::expand_merging(product.as_view()),
+                expanded,
+                "{}",
+                path.display()
+            );
             let started = std::time::Instant::now();
             let passed = Vakint::dot_notation_passes(expanded.clone());
             let passes_seconds = seconds(started);

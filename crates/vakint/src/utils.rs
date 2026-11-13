@@ -439,7 +439,7 @@ impl ExactSum {
 
 /// Whether `term` is a number times one sum, `c*(a+b)`: a term that a merge
 /// of coefficients can turn into a sum ([`ExactSum`]).
-fn is_scaled_sum(term: AtomView) -> bool {
+pub(crate) fn is_scaled_sum(term: AtomView) -> bool {
     let AtomView::Mul(product) = term else {
         return false;
     };
@@ -450,6 +450,143 @@ fn is_scaled_sum(term: AtomView) -> bool {
         (factors.next(), factors.next()),
         (Some(AtomView::Add(_)), None)
     )
+}
+
+/// The expanded summands that [`expand_merging`] holds unmerged, in bytes,
+/// before it merges them into its running sum (at least the size of the
+/// running sum, so every merge at least doubles what it merges).
+const EXPAND_MERGING_PENDING_BYTES: usize = 64 << 20;
+
+/// `expression.expand()`, with the summands of a top-level sum expanded one
+/// at a time and merged into a running sum by one n-way merge
+/// ([`Atom::add_many`]) per batch of pending summands, so the unmerged
+/// expansion of the whole sum is never held at once.
+///
+/// `expand` of a sum normalizes the concatenated unmerged expansions of its
+/// summands once; here each summand's expansion is normalized and the
+/// normalized pieces are merged. Both sort the same terms canonically and
+/// add the number coefficients of the terms with the same non-number part,
+/// which with exact numbers gives the same coefficients in any grouping (a
+/// coefficient 1 leaves that non-number part, 0 removes the term). They
+/// could differ only where a merged term becomes a sum, which needs a term
+/// that is a number times one sum ([`is_scaled_sum`]) and which an
+/// expansion never leaves; and with inexact numbers, which may round
+/// differently. In both cases the whole expression is expanded at once
+/// instead.
+pub(crate) fn expand_merging(expression: AtomView) -> Atom {
+    expand_merging_with(expression, EXPAND_MERGING_PENDING_BYTES)
+}
+
+/// [`expand_merging`] with a merge once more than `pending_bound` bytes
+/// (and more than the running sum) are pending.
+fn expand_merging_with(expression: AtomView, pending_bound: usize) -> Atom {
+    let AtomView::Add(sum) = expression else {
+        return expression.expand();
+    };
+    if !has_only_exact_numbers(expression) {
+        return expression.expand();
+    }
+    let mut total = Atom::Zero;
+    let mut total_bytes = 0;
+    let mut pending = Vec::<Atom>::new();
+    let mut pending_bytes = 0;
+    let merge = |total: Atom, pending: &mut Vec<Atom>| {
+        Atom::add_many(std::iter::once(total).chain(pending.drain(..)))
+    };
+    for summand in sum.iter() {
+        let expanded = summand.expand();
+        let has_scaled_sum = match expanded.as_view() {
+            AtomView::Add(terms) => terms.iter().any(is_scaled_sum),
+            term => is_scaled_sum(term),
+        };
+        if has_scaled_sum {
+            return expression.expand();
+        }
+        pending_bytes += expanded.as_view().get_byte_size();
+        pending.push(expanded);
+        if pending_bytes > pending_bound.max(total_bytes) {
+            total = merge(total, &mut pending);
+            total_bytes = total.as_view().get_byte_size();
+            pending_bytes = 0;
+        }
+    }
+    merge(total, &mut pending)
+}
+
+#[cfg(test)]
+mod expand_merging_tests {
+    use symbolica::atom::AtomCore;
+
+    use super::{expand_merging, expand_merging_with};
+    use crate::utils::vakint_macros::vk_parse;
+
+    fn assert_same(source: &str) {
+        let expression = vk_parse!(source).unwrap();
+        let expected = expression.expand();
+        for actual in [
+            expand_merging(expression.as_view()),
+            expand_merging_with(expression.as_view(), 0),
+        ] {
+            assert!(
+                actual == expected
+                    && actual.to_canonical_string() == expected.to_canonical_string(),
+                "{source}: expand {expected}, merged {actual}"
+            );
+        }
+    }
+
+    #[test]
+    fn expand_merging_equals_expand() {
+        for source in [
+            "0",
+            "x",
+            "(x+y)^2",
+            "(x+y)^2-(x-y)^2",
+            "(x+y)^2-x^2-2*x*y-y^2",
+            "(a+b)*(c+d)+(a-b)*(c-d)+2*a*c",
+            "(a+b)/2+(a+b)/2",
+            "x*(a+b)/2+x*(a+b)/2+(a+b)*x",
+            "(1/2+1𝑖)*(x+y)^2+(1/2-1𝑖)*(x+y)^2-(x+y)^2",
+            "f(x+y)*(x+1)+f(x+y)*(1-x)",
+            "(x+y)^-1*(x+1)+(x+y)^-1*(x-1)+2^(1/2)*(x+y)^2+2^(1/2)*x",
+            "(x^(1/3)+y)^3+x^(2/3)*(y+1)",
+            "1.5*(x+y)+(x+y)^2",
+            "(dot(k(1),p(1))+dot(k(2),p(1)))^3-dot(k(1),p(1))^3+3*(x+dot(k(1),k(2)))^2",
+        ] {
+            assert_same(source);
+        }
+    }
+
+    /// Random sums of products of powers of sums, with cancellations and
+    /// merges across summands.
+    #[test]
+    fn expand_merging_equals_expand_on_random_sums() {
+        let pool = "x y -x 2 1/3 -5/7 2𝑖 (x+y) (x-y) (1+x) (y+z) (x+y)^2 (x-y)^2 (1+x)^3 \
+            f(x+y) (x+y)^-1 x^(1/2) 2^(1/2) (2^(1/2)*x+1) (x+y)/2 (x^2+2*x*y+y^2) z^-2";
+        let factors = pool.split_whitespace().collect::<Vec<_>>();
+        let mut state = 0x9e37_79b9_7f4a_7c15_u64;
+        let mut below = |n: usize| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            (state % n as u64) as usize
+        };
+        for _ in 0..3000 {
+            let mut sum = String::new();
+            for summand in 0..1 + below(8) {
+                if summand > 0 {
+                    sum.push_str(if below(3) == 0 { "-" } else { "+" });
+                }
+                for factor in 0..1 + below(4) {
+                    if factor > 0 {
+                        sum.push('*');
+                    }
+                    sum.push_str(factors[below(factors.len())]);
+                }
+            }
+            assert_same(&sum);
+        }
+    }
 }
 
 #[cfg(test)]

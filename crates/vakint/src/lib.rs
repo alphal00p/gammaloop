@@ -7122,7 +7122,9 @@ Evaluated (n_loops=1, mu_r=1) :
     }
 
     pub fn convert_to_dot_notation(atom: AtomView) -> Atom {
-        let expanded = atom.to_owned().expand();
+        // One summand at a time: the unmerged expansion of a large sum is
+        // many times the size of the merged one.
+        let expanded = crate::utils::expand_merging(atom);
         // Input the passes cannot match, such as a p-integral numerator that
         // is in dot notation already, is returned unchanged.
         if !Self::dot_notation_passes_may_apply(expanded.as_view()) {
