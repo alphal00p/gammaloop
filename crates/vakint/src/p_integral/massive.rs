@@ -35,12 +35,15 @@ pub(crate) fn loop_rank(view: AtomView) -> usize {
         AtomView::Mul(product) => product.iter().map(loop_rank).sum(),
         AtomView::Pow(power) => {
             let (base, exponent) = power.get_base_exp();
-            let exponent = crate::get_integer_from_atom(exponent).filter(|n| *n > 0).unwrap_or(0);
+            let exponent = crate::get_integer_from_atom(exponent)
+                .filter(|n| *n > 0)
+                .unwrap_or(0);
             exponent as usize * loop_rank(base)
         }
-        AtomView::Fun(function) if function.get_symbol() == S.dot => {
-            function.iter().filter(|argument| argument.contains_symbol(S.k)).count()
-        }
+        AtomView::Fun(function) if function.get_symbol() == S.dot => function
+            .iter()
+            .filter(|argument| argument.contains_symbol(S.k))
+            .count(),
         _ => 0,
     }
 }
@@ -50,7 +53,9 @@ pub(crate) fn loop_rank(view: AtomView) -> usize {
 /// RustRed's reduction is slower.
 pub(crate) fn rustred_max_rank() -> Option<usize> {
     static RANK: std::sync::LazyLock<Option<usize>> = std::sync::LazyLock::new(|| {
-        std::env::var("BETA_RUSTRED_MAX_RANK").ok().and_then(|value| value.parse().ok())
+        std::env::var("BETA_RUSTRED_MAX_RANK")
+            .ok()
+            .and_then(|value| value.parse().ok())
     });
     *RANK
 }
@@ -112,7 +117,11 @@ fn write_fold_record(path: &std::path::Path, record: serde_json::Value) {
     use std::io::Write;
     static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
     let _guard = LOCK.lock();
-    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
         let _ = writeln!(file, "{record}");
     }
 }
@@ -151,7 +160,9 @@ impl MassiveClosure {
         let base = reset_peak();
         let started = std::time::Instant::now();
         let reduced = match fold {
-            rr::FoldMode::Off => rr::reduce_requests_unfolded(vakint, settings, requests, None, true)?,
+            rr::FoldMode::Off => {
+                rr::reduce_requests_unfolded(vakint, settings, requests, None, true)?
+            }
             fold => rr::reduce_requests_folded(vakint, settings, requests, None, fold, true)?,
         };
         let reduce_seconds = started.elapsed().as_secs_f64();
@@ -200,9 +211,26 @@ impl MassiveClosure {
         use crate::rustred_evaluation::p_integral::FoldMode;
         let fold = match std::env::var("VAKINT_P_FOLD_CHECK_MODE").as_deref() {
             Ok("coefficient") => FoldMode::Coefficient,
-            _ => FoldMode::Basis,
+            Ok("basis") => FoldMode::Basis,
+            Ok("off") => FoldMode::Off,
+            _ => FoldMode::DEFAULT,
         };
         let order = std::env::var("VAKINT_P_FOLD_CHECK_ORDER").unwrap_or_default();
+        if order == "only" {
+            // One mode alone (cold caches), for timing; the caller compares
+            // the canonical values of separate runs.
+            let (value, stats) =
+                self.reduce_and_finalize(vakint, settings, requests, head, mode, fold)?;
+            let record = serde_json::json!({
+                "pid": std::process::id(),
+                "requests": requests.len(),
+                "families": requests.iter().map(|r| r.family.name).collect::<Vec<_>>(),
+                "loops": requests.first().map(|r| r.family.loops),
+                "epsilon_terms": settings.number_of_terms_in_epsilon_expansion,
+                "only": stats,
+            });
+            return Ok((value, record));
+        }
         let (today, folded) = if order == "fold-first" {
             let folded = self.reduce_and_finalize(vakint, settings, requests, head, mode, fold)?;
             let today =
@@ -217,7 +245,8 @@ impl MassiveClosure {
         let comparing = std::time::Instant::now();
         let difference = (&today.0 - &folded.0).expand();
         let equal = difference.is_zero() || difference.together().is_zero();
-        let identical = today.0.expand().to_canonical_string() == folded.0.expand().to_canonical_string();
+        let identical =
+            today.0.expand().to_canonical_string() == folded.0.expand().to_canonical_string();
         let record = serde_json::json!({
             "pid": std::process::id(),
             "requests": requests.len(),
@@ -271,9 +300,10 @@ impl MassiveClosure {
     ) -> Result<Vec<Atom>, VakintError> {
         let mut results = Vec::with_capacity(inputs.len());
         for chunk in inputs.chunks(32) {
-            results.extend(
-                settings.with_resource_budget(|| Self::evaluate_batch_inner(vakint, settings, chunk))?,
-            );
+            results
+                .extend(settings.with_resource_budget(|| {
+                    Self::evaluate_batch_inner(vakint, settings, chunk)
+                })?);
         }
         Ok(results)
     }
@@ -405,7 +435,9 @@ impl MassiveClosure {
                             }
                         }
                         Some(EvaluationMethod::RustRed(options)) => {
-                            if *rustred_mode.get_or_insert(options.master_mode) != options.master_mode {
+                            if *rustred_mode.get_or_insert(options.master_mode)
+                                != options.master_mode
+                            {
                                 return Err(super::invalid(
                                     "batched massive closures need one master mode",
                                 ));
@@ -1124,10 +1156,92 @@ mod tests {
         );
     }
 
-    /// The default order after the built-in 1L-3L library (grant U1): with
-    /// `[RustRed, Forcer]` the closures of a 1L bubble, the 2L kite and the 3L
-    /// NO top go to RustRed and equal the Forcer-only closures, exactly in
-    /// `Symbolic` mode and within 1e-30 in `Numerical` mode (40 digits).
+    /// Folded input poles and cancellations must survive the extra radial
+    /// pole. Spectators outside the rational fast path must give the same
+    /// Laurent series as multiplying the whole coefficient before finalizing.
+    #[test]
+    fn folded_closures_preserve_poles_cancellations_and_fallback_spectators() {
+        use crate::rustred_evaluation::p_integral as rr;
+
+        let mut engine = Vakint::new().unwrap();
+        engine
+            .inject_p_library(rustred::propagator::testing::one_loop_reference_library().unwrap())
+            .unwrap();
+        let family = super::super::forcer::fixtures::registry_family("P1L").unwrap();
+        let massive = closure(2);
+        let head = parse("p(1)");
+        let cases: &[&[&str]] = &[
+            &["T/ε^2+L/(ε*(3-2*ε))"],
+            &["T/(3-2*ε)"],
+            &["T/(1-ε)", "-T*ε/(1-ε)", "-T"],
+            &["T*exp(ε)/(3-2*ε)"],
+            &["T/(muvsq-ε)"],
+        ];
+        for epsilon_symbol in ["ε", "gammalooprs::{}::ε"] {
+            let settings = VakintSettings {
+                epsilon_symbol: epsilon_symbol.into(),
+                integral_normalization_factor: LoopNormalizationFactor::MSbar,
+                ..settings(6)
+            };
+            let epsilon = Atom::var(vk_symbol!(&settings.epsilon_symbol));
+            for coefficients in cases {
+                let numerators = coefficients
+                    .iter()
+                    .map(|text| {
+                        parse(text)
+                            .replace(parse("ε").to_pattern())
+                            .with(epsilon.to_pattern())
+                            .replace(parse("T").to_pattern())
+                            .with(parse("beta_projection::transverse").to_pattern())
+                            .replace(parse("L").to_pattern())
+                            .with(parse("beta_projection::longitudinal").to_pattern())
+                    })
+                    .collect::<Vec<_>>();
+                let requests = numerators
+                    .iter()
+                    .map(|numerator| super::super::PropagatorRequest {
+                        family,
+                        powers: &[1, 1],
+                        canonical_numerator: numerator.as_view(),
+                        external: head.clone(),
+                    })
+                    .collect::<Vec<_>>();
+                let finalize = |values: std::collections::BTreeMap<
+                    (usize, Atom),
+                    Vec<ReducedPropagatorValue>,
+                >| {
+                    values
+                        .into_iter()
+                        .fold(Atom::Zero, |sum, ((loops, _), values)| {
+                            sum + massive
+                                .finalize(
+                                    &values,
+                                    loops,
+                                    &head,
+                                    &settings,
+                                    RustRedMasterMode::Symbolic,
+                                )
+                                .unwrap()
+                        })
+                };
+                let reference = finalize(
+                    rr::reduce_requests_unfolded(&engine, &settings, &requests, None, false)
+                        .unwrap(),
+                );
+                for mode in [rr::FoldMode::Basis, rr::FoldMode::Coefficient] {
+                    let actual = finalize(
+                        rr::reduce_requests_folded(&engine, &settings, &requests, None, mode, true)
+                            .unwrap(),
+                    );
+                    assert_equal(&actual, &reference);
+                }
+                if coefficients.len() == 3 {
+                    assert!(reference.expand().is_zero(), "cancellation: {reference}");
+                }
+            }
+        }
+    }
+
     /// Closure-level paired replay of dumped requests (`FOLD_REPLAY_INPUT`,
     /// comma separated `(numerator)*topo(FAMILY(ext,powers))` files, one
     /// closure per file): today's path and the folded one, finalized as a
@@ -1143,15 +1257,21 @@ mod tests {
         let mut engine = Vakint::new().unwrap();
         let library = rustred_app::propagator::load_p_library(
             rustred_app::propagator::PLibrarySource::Directory(
-                std::env::var_os("VAKINT_TEST_P_LIBRARY_1_4").unwrap().into(),
+                std::env::var_os("VAKINT_TEST_P_LIBRARY_1_4")
+                    .unwrap()
+                    .into(),
             ),
-            &rustred_app::propagator::PLibraryOptions { verify_descent: false },
+            &rustred_app::propagator::PLibraryOptions {
+                verify_descent: false,
+            },
         )
         .unwrap();
         engine.inject_p_library(library).unwrap();
         let settings = VakintSettings {
             evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
-                crate::RustRedEvaluationOptions { master_mode: RustRedMasterMode::Symbolic },
+                crate::RustRedEvaluationOptions {
+                    master_mode: RustRedMasterMode::Symbolic,
+                },
             )]),
             integral_normalization_factor: LoopNormalizationFactor::MSbar,
             epsilon_symbol: "gammalooprs::{}::ε".into(),
@@ -1177,7 +1297,8 @@ mod tests {
                     let numerator = parse(&line[..at]);
                     let tail = &line[at + 6..line.len() - 1];
                     let open = tail.find('(').unwrap();
-                    let family = super::super::forcer::fixtures::registry_family(&tail[..open]).unwrap();
+                    let family =
+                        super::super::forcer::fixtures::registry_family(&tail[..open]).unwrap();
                     let inner = &tail[open + 1..tail.len() - 1];
                     let mut depth = 0i32;
                     let mut cut = inner.len();
@@ -1192,29 +1313,52 @@ mod tests {
                             _ => {}
                         }
                     }
-                    let powers: Vec<i64> =
-                        inner[cut + 1..].split(',').map(|p| p.trim().parse().unwrap()).collect();
+                    let powers: Vec<i64> = inner[cut + 1..]
+                        .split(',')
+                        .map(|p| p.trim().parse().unwrap())
+                        .collect();
                     (family, powers, parse(&inner[..cut]), numerator)
                 })
                 .collect::<Vec<_>>();
             let requests = records
                 .iter()
-                .map(|(family, powers, external, numerator)| super::super::PropagatorRequest {
-                    family,
-                    powers,
-                    canonical_numerator: numerator.as_view(),
-                    external: external.clone(),
-                })
+                .map(
+                    |(family, powers, external, numerator)| super::super::PropagatorRequest {
+                        family,
+                        powers,
+                        canonical_numerator: numerator.as_view(),
+                        external: external.clone(),
+                    },
+                )
                 .collect::<Vec<_>>();
-            let (_, mut record) = massive
-                .fold_check(&engine, &settings, &requests, &head, RustRedMasterMode::Symbolic)
+            let (value, mut record) = massive
+                .fold_check(
+                    &engine,
+                    &settings,
+                    &requests,
+                    &head,
+                    RustRedMasterMode::Symbolic,
+                )
                 .unwrap();
             record["dump"] = serde_json::json!(path);
+            if let Some(directory) = std::env::var_os("FOLD_REPLAY_VALUES") {
+                // The canonical expanded value, for comparing separate runs.
+                let name = std::path::Path::new(path).file_name().unwrap();
+                std::fs::write(
+                    std::path::Path::new(&directory).join(name),
+                    value.expand().to_canonical_string(),
+                )
+                .unwrap();
+            }
             eprintln!("{record}");
             write_fold_record(&log, record);
         }
     }
 
+    /// The default order after the built-in 1L-3L library (grant U1): with
+    /// `[RustRed, Forcer]` the closures of a 1L bubble, the 2L kite and the 3L
+    /// NO top go to RustRed and equal the Forcer-only closures, exactly in
+    /// `Symbolic` mode and within 1e-30 in `Numerical` mode (40 digits).
     #[test]
     fn massive_closures_through_rustred_equal_the_forcer_closures() {
         let base = VakintSettings {

@@ -4,11 +4,13 @@
 //!
 //! A batch of matched p contributions is split into the homogeneous parts of
 //! the shared numerator split (`p_integral::parts`, the one Forcer renders),
-//! grouped into channels keyed by (loop count, external head `p(i)`, scale
-//! power `w`, non-rational coefficient), lowered onto the slots of the family's
+//! grouped initially by (loop count, external head `p(i)`, scale power `w`,
+//! non-rational coefficient), then folded by spectator monomial: rational
+//! functions of ε enter the reduction as rational functions of d = 4-2ε.
+//! Inputs are lowered onto the slots of the family's
 //! top presentation (lines, then ISPs; a numerator scalar product is the
 //! presentation's own affine form in its slots, Minkowski with `q·q = -1`) and
-//! reduced with ONE [`PReductionRequest`] per channel onto the masters:
+//! reduced with one [`PReductionRequest`] per folded channel onto the masters:
 //! `PReduction` is `(εG(1,1))^-L Σ c·I_M(x)` at `Q² = 1` (convention C3), which
 //! is exactly vakint's `reduced = (-1)^(Σa+r)·C_G`. The Wick sign of a part
 //! (`PPart::wick_sign`) belongs to the Forcer path only and is never applied
@@ -623,9 +625,10 @@ fn reduce_channel(
 /// first ([`reduce_requests_eager`]): rational sums are exact, and lowering
 /// fails only where [`prepare_part`] fails, in the same order.
 ///
-/// With `VAKINT_P_FOLD` set to `basis` (or `on`) or `coefficient`, the
-/// channels are folded first ([`reduce_requests_folded`]); `off` or unset
-/// keeps one reduction per non-rational coefficient.
+/// The channels are folded first ([`reduce_requests_folded`]) unless
+/// `VAKINT_P_FOLD` is `off` (`0`, `false`), which keeps one reduction per
+/// non-rational coefficient; `basis` and `coefficient` pick the fold mode
+/// ([`FoldMode::DEFAULT`] when unset).
 pub(crate) fn reduce_requests(
     vakint: &Vakint,
     settings: &VakintSettings,
@@ -676,11 +679,19 @@ pub(crate) enum FoldMode {
 }
 
 pub(crate) fn fold_mode() -> FoldMode {
-    match std::env::var("VAKINT_P_FOLD").as_deref() {
-        Ok("basis" | "on" | "1") => FoldMode::Basis,
-        Ok("coefficient") => FoldMode::Coefficient,
-        _ => FoldMode::Off,
-    }
+    static MODE: std::sync::LazyLock<FoldMode> =
+        std::sync::LazyLock::new(|| match std::env::var("VAKINT_P_FOLD").as_deref() {
+            Ok("off" | "0" | "false") => FoldMode::Off,
+            Ok("basis") => FoldMode::Basis,
+            Ok("coefficient") => FoldMode::Coefficient,
+            _ => FoldMode::DEFAULT,
+        });
+    *MODE
+}
+
+impl FoldMode {
+    /// The mode when `VAKINT_P_FOLD` is unset (or `on`).
+    pub(crate) const DEFAULT: FoldMode = FoldMode::Coefficient;
 }
 
 /// What the last [`reduce_requests`] call on this thread did (diagnostics).
@@ -715,7 +726,6 @@ pub(crate) fn reduce_requests_unfolded(
     settings: &VakintSettings,
     requests: &[PropagatorRequest],
     progress: Option<&super::monitor::CallerProgress>,
-) -> Result<BTreeMap<(usize, Atom), Vec<ReducedPropagatorValue>>, VakintError> {
     factored: bool,
 ) -> Result<BTreeMap<(usize, Atom), Vec<ReducedPropagatorValue>>, VakintError> {
     with_stats(|stats| *stats = PReduceStats::default());
@@ -887,11 +897,15 @@ fn epsilon_coefficient(
                 total = context.try_mul(&total, &base, limits).map_err(native)?;
             }
             if exponent < 0 {
-                total = context.try_div(&context.one(), &total, limits).map_err(native)?;
+                total = context
+                    .try_div(&context.one(), &total, limits)
+                    .map_err(native)?;
             }
             Ok(total)
         }
-        _ => Err(invalid(format!("not a rational function of epsilon: {view}"))),
+        _ => Err(invalid(format!(
+            "not a rational function of epsilon: {view}"
+        ))),
     }
 }
 
@@ -1020,14 +1034,26 @@ pub(crate) fn reduce_requests_folded(
             .parameter(&handle.dimension.to_canonical_string())
             .or_else(|| context.parameter("d"))
             .ok_or_else(|| invalid("the p library has no dimension parameter"))?;
-        let four_minus_d = context.try_sub(&context.integer(4), &d, exact).map_err(native)?;
+        let four_minus_d = context
+            .try_sub(&context.integer(4), &d, exact)
+            .map_err(native)?;
         context
             .try_div(&four_minus_d, &context.integer(2), exact)
             .map_err(native)?
     };
     let total = folded.len();
     let mut values = BTreeMap::<(usize, Atom), Vec<ReducedPropagatorValue>>::new();
-    for (index, (channel, FoldedInputs { by_basis, integrals })) in folded.into_iter().enumerate() {
+    for (
+        index,
+        (
+            channel,
+            FoldedInputs {
+                by_basis,
+                integrals,
+            },
+        ),
+    ) in folded.into_iter().enumerate()
+    {
         if let Some(progress) = progress {
             progress.cohorts(index, total);
         }
@@ -1036,8 +1062,13 @@ pub(crate) fn reduce_requests_folded(
                 let preparing = std::time::Instant::now();
                 let mut inputs = BTreeMap::<(PresentationId, Vec<i64>), Coefficient>::new();
                 for (basis, lowered) in by_basis {
-                    let weight =
-                        epsilon_coefficient(context, basis.as_view(), epsilon, &epsilon_at_d, exact)?;
+                    let weight = epsilon_coefficient(
+                        context,
+                        basis.as_view(),
+                        epsilon,
+                        &epsilon_at_d,
+                        exact,
+                    )?;
                     for (key, value) in lowered {
                         if value.is_zero() {
                             continue;
@@ -1046,7 +1077,9 @@ pub(crate) fn reduce_requests_folded(
                             .try_mul(&weight, &coefficient(context, &value, exact)?, exact)
                             .map_err(native)?;
                         match inputs.get_mut(&key) {
-                            Some(sum) => *sum = context.try_add(sum, &term, exact).map_err(native)?,
+                            Some(sum) => {
+                                *sum = context.try_add(sum, &term, exact).map_err(native)?
+                            }
                             None => {
                                 inputs.insert(key, term);
                             }
