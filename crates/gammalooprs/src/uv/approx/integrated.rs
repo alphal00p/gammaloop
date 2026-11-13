@@ -44,7 +44,7 @@ use crate::{
     utils::{GS, W_},
     uv::{
         ApproximationType, UltravioletGraph,
-        approx::{ForestNodeLike, Rooted, UVCtx, local_4d::Local4dCts},
+        approx::{ForestNodeLike, Rooted, UVCtx, local_4d::Local4dCts, streamed},
         marker::{UvMarker, UvOperation},
         settings::VakintSettings,
         uv_graph::UVE,
@@ -466,7 +466,47 @@ impl Integrated<'_> {
     /// Chain endpoints survive and newly opened contractions receive fresh
     /// dummy indices. Materialize before tensor-interface validation because
     /// an identically zero antisymmetric chain may have apparent open slots.
+    ///
+    /// Materialization is additive over summands and multiplicative over
+    /// factors that share no index, so a large expression is materialized in
+    /// pieces (see [`streamed::map_multilinear`]) instead of as one tensor
+    /// network, which holds about fifty times the bytes of its input. Pieces
+    /// that are pure scalars without shorthands are kept as they are, which
+    /// is what the parser does with them. If a piece introduces a dummy index
+    /// (numbered over the whole expression), the whole expression is
+    /// materialized at once.
     pub(crate) fn materialize_tensor(expression: &Atom) -> Result<Atom> {
+        Self::materialize_tensor_view(expression.as_view())
+    }
+
+    pub(crate) fn materialize_tensor_view(expression: AtomView<'_>) -> Result<Atom> {
+        let limit = streamed::piece_limit();
+        let materialized = if streamed::nothing_to_materialize(expression) {
+            expression.to_owned()
+        } else if expression.get_byte_size() >= limit
+            && let Some(materialized) = streamed::map_multilinear(
+                expression,
+                limit,
+                &streamed::nothing_to_materialize,
+                &Self::materialize_whole,
+            )?
+        {
+            materialized
+        } else {
+            return Self::materialize_whole(expression);
+        };
+        // The streamed result has no new dummy index, so the whole one is
+        // repeatable and must be identical.
+        if streamed::check_streamed(expression) {
+            let whole = Self::materialize_whole(expression)?;
+            streamed::report_check("materialize", expression, &materialized, &whole);
+        }
+        Ok(materialized)
+    }
+
+    /// One tensor network of the whole expression: the reference for
+    /// [`Self::materialize_tensor`].
+    fn materialize_whole(expression: AtomView<'_>) -> Result<Atom> {
         let explicit = expression.undo_trace::<Aind>()?.undo_chain::<Aind>()?;
         Ok(explicit
             .parse_to_symbolic_net::<Aind>(&ParseSettings {
