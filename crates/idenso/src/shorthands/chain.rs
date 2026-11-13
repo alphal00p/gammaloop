@@ -20,6 +20,8 @@ use symbolica_utils::PatternReplacement;
 
 use crate::W_;
 #[cfg(test)]
+mod reference;
+#[cfg(test)]
 thread_local! {
     pub(crate) static CHAINIFY_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
@@ -383,6 +385,12 @@ impl<'a> Chain for AtomView<'a> {
         // Both endpoints must use this representation. Terminal metric/epsilon
         // expressions often have no such slots; avoid building a replacement
         // and invoking its matcher at every unrelated function in that case.
+        // Every chainify reached by a test is compared with the previous,
+        // matcher-only implementation; see `reference`.
+        #[cfg(test)]
+        if let Some(chained) = reference::intercept(*self, representation) {
+            return chained;
+        }
         #[cfg(test)]
         CHAINIFY_CALLS.with(|count| count.set(count.get() + 1));
         if !self.contains_symbol(representation.symbol()) {
@@ -397,20 +405,24 @@ impl<'a> Chain for AtomView<'a> {
         let existing_chain = chain!(&in_index, &out_index, W_.a___).to_pattern();
         // An unchanged pruning assignment in replace_map rebuilds ancestors
         // and invokes their normalizers. Keep borrowed children until this
-        // existing chain rule actually changes a node.
+        // existing chain rule actually changes a node. `apply` returns `None`
+        // for a function it leaves unchanged; both callbacks share `slots`.
         fn rewrite<'a>(
             atom: AtomView<'a>,
             slots: &mut SlotMatcher,
             opaque_heads: &[Symbol],
-            apply: &impl Fn(AtomView<'_>) -> Atom,
-            open: &impl Fn(symbolica::atom::representation::FunView<'_>) -> Option<Atom>,
+            apply: &impl Fn(AtomView<'_>, &mut SlotMatcher) -> Option<Atom>,
+            open: &impl Fn(
+                symbolica::atom::representation::FunView<'_>,
+                &mut SlotMatcher,
+            ) -> Option<Atom>,
         ) -> AtomOrView<'a> {
             if !matches!(slots.classify(atom), SlotMatch::Other) {
                 return atom.into();
             }
             let children = match atom {
                 AtomView::Fun(function) => {
-                    if let Some(opened) = open(function) {
+                    if let Some(opened) = open(function, slots) {
                         return rewrite(opened.as_view(), slots, opaque_heads, apply, open)
                             .into_owned()
                             .into();
@@ -418,8 +430,9 @@ impl<'a> Chain for AtomView<'a> {
                     if opaque_heads.contains(&function.get_symbol()) {
                         return atom.into();
                     }
-                    let changed = apply(atom);
-                    if changed.as_view() != atom {
+                    if let Some(changed) = apply(atom, slots)
+                        && changed.as_view() != atom
+                    {
                         return changed.into();
                     }
                     function.iter().collect::<Vec<_>>()
@@ -461,12 +474,30 @@ impl<'a> Chain for AtomView<'a> {
             *self,
             &mut SlotMatcher::default(),
             &opaque_heads,
-            &|atom| match chainified_slot_function(atom, representation) {
-                Some(chained) => chained.unwrap_or_else(|| atom.to_owned()),
-                None => atom.replace_multiple([&replacement]),
+            &|atom, slots| match chainified_slot_function_with(atom, representation, slots) {
+                Some(chained) => chained,
+                None => {
+                    // Without a candidate endpoint pair the rule's matcher
+                    // cannot succeed: replace_multiple would return `atom`.
+                    let may_match = chainify_rule_may_match(atom, representation, slots);
+                    #[cfg(test)]
+                    reference::count(|counts| counts.rule[usize::from(may_match)] += 1);
+                    may_match.then(|| atom.replace_multiple([&replacement]))
+                }
             },
-            &|function| {
+            &|function, slots| {
                 if function.get_symbol() != T.dot && function.get_symbol() != ETS.metric {
+                    return None;
+                }
+                // The operands below are this function's two arguments.
+                // Neither selection pattern can match anywhere inside them
+                // without a candidate function, so none would be selected.
+                let may_match = function
+                    .iter()
+                    .any(|argument| chainify_selection_may_match(argument, representation, slots));
+                #[cfg(test)]
+                reference::count(|counts| counts.selection[usize::from(may_match)] += 1);
+                if !may_match {
                     return None;
                 }
                 let (left, right, _, _) = spenso::structure::slot::SlotMatcher::default()
@@ -545,6 +576,80 @@ impl<'a> Chain for AtomView<'a> {
     }
 }
 
+/// The function-name filter of [`chainify_rule`].
+fn chainify_rule_head(head: Symbol) -> bool {
+    head != T.chain && head != T.trace && head != ETS.metric && !T.is_scalar_metadata(head)
+}
+
+/// Whether two distinct arguments of `function` can bind `i_` and `j_` of
+/// [`chainify_endpoints`]: a port of `representation` and a port of its dual
+/// of the same dimension. The matcher binds the start before the end, except
+/// for heads whose arguments it permutes; for those any two positions count.
+fn has_chainify_endpoint_pair(
+    function: symbolica::atom::representation::FunView<'_>,
+    representation: LibraryRep,
+    slots: &mut SlotMatcher,
+) -> bool {
+    let head = function.get_symbol();
+    let ordered = !(head.is_symmetric() || head.is_antisymmetric() || head.is_cyclesymmetric());
+    let dual = representation.dual();
+    let mut starts = Vec::new();
+    let mut ends = Vec::new();
+    for (position, argument) in function.iter().enumerate() {
+        let Some((rep, dimension)) = slots.port_representation(argument) else {
+            continue;
+        };
+        if rep == representation {
+            starts.push((position, dimension));
+        }
+        if rep == dual {
+            ends.push((position, dimension));
+        }
+    }
+    starts.iter().any(|&(start, dimension)| {
+        ends.iter()
+            .any(|&(end, other)| end != start && (!ordered || end > start) && other == dimension)
+    })
+}
+
+/// A necessary condition for [`chainify_rule`] to match `atom`. The rule has
+/// `max_level(0)`, so at a function it only tests that function itself:
+/// its head filter and endpoint condition must both admit it. Whatever this
+/// accepts is still decided by the matcher.
+fn chainify_rule_may_match(
+    atom: AtomView<'_>,
+    representation: LibraryRep,
+    slots: &mut SlotMatcher,
+) -> bool {
+    let AtomView::Fun(function) = atom else {
+        // Factors of a product or sum share its function level.
+        return true;
+    };
+    chainify_rule_head(function.get_symbol())
+        && has_chainify_endpoint_pair(function, representation, slots)
+}
+
+/// A necessary condition for chainify's inner-product selection to match
+/// anywhere in `operand`. It matches [`chainify_rule`] and an existing chain
+/// with [`chainify_endpoints`] at every level, so some function inside must
+/// pass the rule's head filter or be a chain, and have an endpoint pair.
+fn chainify_selection_may_match(
+    operand: AtomView<'_>,
+    representation: LibraryRep,
+    slots: &mut SlotMatcher,
+) -> bool {
+    let mut found = false;
+    operand.visitor(&mut |node| {
+        if !found && let AtomView::Fun(function) = node {
+            let head = function.get_symbol();
+            found = (head == T.chain || chainify_rule_head(head))
+                && has_chainify_endpoint_pair(function, representation, slots);
+        }
+        !found
+    });
+    found
+}
+
 /// chainify's endpoints: a port of the representation and one of its dual,
 /// of one dimension. A port may be an explicit slot, an unresolved
 /// representation or a supplied compact rank-one tensor.
@@ -606,11 +711,9 @@ fn chainify_rule(representation: LibraryRep) -> Replacement {
     )
     .when(
         chainify_endpoints(representation)
-            & W_.a_.filter_match(move |a| {
-                matches!(a, Match::FunctionName(a)
-                if *a != T.chain && *a != T.trace && *a != ETS.metric
-                    && !T.is_scalar_metadata(*a))
-            })
+            & W_.a_.filter_match(
+                move |a| matches!(a, Match::FunctionName(a) if chainify_rule_head(*a)),
+            )
             & W_.a___.filter_match(no_ports)
             & W_.b___.filter_match(no_ports)
             & W_.c___.filter_match(no_ports),
@@ -623,9 +726,21 @@ fn chainify_rule(representation: LibraryRep) -> Replacement {
 /// of the representation that a later slot of the same dimension follows,
 /// and the rightmost such later slot. `Some(None)` when nothing matches;
 /// `None` when the rule must decide.
+#[cfg(test)]
 fn chainified_slot_function(
     atom: AtomView<'_>,
     representation: LibraryRep,
+) -> Option<Option<Atom>> {
+    chainified_slot_function_with(atom, representation, &mut SlotMatcher::default())
+}
+
+/// [`chainified_slot_function`] with the caller's slot matcher. Its caches
+/// hold only symbol classifications and successful representation lookups,
+/// which do not change, so the result is that of a fresh matcher.
+fn chainified_slot_function_with(
+    atom: AtomView<'_>,
+    representation: LibraryRep,
+    slots: &mut SlotMatcher,
 ) -> Option<Option<Atom>> {
     let AtomView::Fun(function) = atom else {
         return None;
@@ -640,7 +755,6 @@ fn chainified_slot_function(
     {
         return None;
     }
-    let mut slots = SlotMatcher::default();
     let arguments = function.iter().collect::<Vec<_>>();
     if !arguments
         .iter()
@@ -1104,7 +1218,10 @@ mod tests {
         );
         let input = function!(callback, &raw);
         calls.lock().unwrap().clear();
-        let result = input.chainify(Bispinor {}.into());
+        // The reference comparison would invoke the callback again; compare last.
+        let result = reference::with_mode(reference::Mode::PreChecked, || {
+            input.chainify(Bispinor {}.into())
+        });
         // The one changed argument invokes its containing callback once.
         assert_eq!(calls.lock().unwrap().len(), 1);
         // Undo preserves Scalar-tagged wrappers as opaque. Check the changed
@@ -1115,6 +1232,10 @@ mod tests {
         let body = wrapped.iter().next().unwrap();
         assert_eq!(body.undo_chain::<AbstractIndex>().unwrap(), raw);
         assert_eq!(*calls.lock().unwrap(), vec![result.clone()]);
+        assert_eq!(
+            result,
+            reference::chainify(&input.as_view(), Bispinor {}.into())
+        );
     }
 
     #[test]
@@ -1147,9 +1268,16 @@ mod tests {
         });
         let expected_calls = std::mem::take(&mut *calls.lock().unwrap());
         assert_eq!(expected_calls.len(), 1);
-        let actual = input.chainify(Bispinor {}.into());
+        // The reference comparison would invoke the callback again; compare last.
+        let actual = reference::with_mode(reference::Mode::PreChecked, || {
+            input.chainify(Bispinor {}.into())
+        });
         assert_eq!(actual, expected);
         assert_eq!(*calls.lock().unwrap(), expected_calls);
+        assert_eq!(
+            actual,
+            reference::chainify(&input.as_view(), Bispinor {}.into())
+        );
     }
 
     #[test]
