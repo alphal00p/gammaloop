@@ -300,7 +300,7 @@ impl<'a> Evaluation<'a> {
                 continue;
             }
             let remainder = self.remainder(term)?;
-            prepared += self.integrate(&remainder, &remainder.expression)?;
+            prepared += self.integrate(&remainder, remainder.expression()?)?;
         }
         for correction in &self.plan.ir {
             for term in &correction.preparation {

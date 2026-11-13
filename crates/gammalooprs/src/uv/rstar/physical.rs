@@ -81,7 +81,7 @@ impl PreparedPhysicalUvTerm {
             remainder.region.loops <= 4,
             "physical quotient grouping supports at most four remaining loops"
         );
-        let numerator = remainder.physical_numerator();
+        let numerator = remainder.physical_numerator()?;
         let numerator = if let Some(projector) = projector {
             projector(&numerator)?
         } else {

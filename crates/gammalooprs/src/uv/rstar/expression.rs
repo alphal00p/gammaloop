@@ -1,6 +1,11 @@
 //! Explicit hard Taylor coefficients with the existing UV tensor conventions.
 
-use std::{borrow::Cow, collections::BTreeSet, sync::LazyLock, time::Instant};
+use std::{
+    borrow::Cow,
+    collections::BTreeSet,
+    sync::{LazyLock, OnceLock},
+    time::Instant,
+};
 
 use eyre::{Result, WrapErr, ensure, eyre};
 use feynkit_tensor::TensorReducer;
@@ -126,11 +131,25 @@ impl IntegrationTimings {
     }
 }
 
+/// `GAMMALOOP_HARD_TAYLOR_CHECK=1` also runs the contracted hard Taylor path on
+/// every hard component and reports `HARD_TAYLOR_CHECK ... equal=...` on stderr.
+fn hard_taylor_check() -> bool {
+    static CHECK: LazyLock<bool> =
+        LazyLock::new(|| std::env::var_os("GAMMALOOP_HARD_TAYLOR_CHECK").is_some());
+    *CHECK
+}
+
 /// The original tensor slots and loop carriers survive all graph contractions.
 /// Only propagator endpoints are identified in the converter's graph.
 pub(super) struct RStarIntegrand {
     pub region: GraphRegion,
-    pub expression: Atom,
+    /// The routed product of the remaining numerator, insertions and
+    /// denominators, before any index contraction. A hard component is only
+    /// ever Taylor projected, and its truncation keeps a tiny fraction of the
+    /// contracted terms: it is contracted after the Taylor step.
+    routed: Atom,
+    /// [`Self::routed`] contracted to dots, built on first use.
+    contracted: OnceLock<Atom>,
     graph: Graph,
     basis: LoopMomentumBasis,
     soft_edges: Vec<EdgeIndex>,
@@ -239,11 +258,10 @@ impl RStarIntegrand {
         }
         converter_graph.underlying.forget_identification_history();
         drop(routing_stage);
-        let _algebra = StageSpan::new("gamma.remainder.algebra");
         Ok(Self {
             region: region.clone(),
-            expression: Self::simplify(&expression)
-                .wrap_err("while preparing the routed R* tensor expression")?,
+            routed: expression,
+            contracted: OnceLock::new(),
             graph: converter_graph,
             basis,
             soft_edges,
@@ -252,6 +270,27 @@ impl RStarIntegrand {
 
     pub fn soft_edges(&self) -> &[EdgeIndex] {
         &self.soft_edges
+    }
+
+    /// The routed expression contracted to dots, as the outer and physical
+    /// paths consume it. It is contracted once, on first use.
+    pub fn expression(&self) -> Result<&Atom> {
+        if let Some(contracted) = self.contracted.get() {
+            return Ok(contracted);
+        }
+        let contracted = {
+            let _algebra = StageSpan::new("gamma.remainder.algebra");
+            Self::simplify(&self.routed)
+                .wrap_err("while preparing the routed R* tensor expression")?
+        };
+        Ok(self.contracted.get_or_init(|| contracted))
+    }
+
+    /// Mutable access to the contracted expression, for tests decorating it.
+    #[cfg(test)]
+    pub fn expression_mut(&mut self) -> Result<&mut Atom> {
+        self.expression()?;
+        Ok(self.contracted.get_mut().expect("contracted above"))
     }
 
     /// Express a two-point amplitude in its first boundary momentum, keeping
@@ -307,7 +346,7 @@ impl RStarIntegrand {
         unique_id: usize,
     ) -> Result<Atom> {
         self.integrate_physical_numerator(
-            self.physical_numerator(),
+            self.physical_numerator()?,
             vakint,
             uv_settings,
             vakint_settings,
@@ -315,10 +354,11 @@ impl RStarIntegrand {
         )
     }
 
-    pub(super) fn physical_numerator(&self) -> Atom {
-        self.expression
+    pub(super) fn physical_numerator(&self) -> Result<Atom> {
+        Ok(self
+            .expression()?
             .replace(function!(GS.den, W_.x___))
-            .with(Atom::one())
+            .with(Atom::one()))
     }
 
     /// Certify a closed numerator in one canonical denominator frame.
@@ -565,9 +605,46 @@ impl RStarIntegrand {
 
     /// Hard Taylor expansion leaves the reference mass fixed. These momenta
     /// are external to this component, even when they are loops of its parent.
+    ///
+    /// The scaling and the truncation act on the routed product before any
+    /// index is contracted, so only the kept Taylor terms are contracted
+    /// (as `approx::local_4d` does for local counterterms). Contraction is
+    /// linear and the parameter is a scalar, so this is the Taylor
+    /// polynomial of the contracted expression, [`Self::taylor_contracted`].
     pub fn taylor(&self, degree: usize) -> Result<Atom> {
+        let _stage = StageSpan::new("gamma.remainder.hard_taylor");
         let parameter = symbol!("rstar_hard_taylor"; Scalar);
-        let scaled = Self::scale_edges(&self.expression, &self.soft_edges, parameter);
+        let scaled = Self::scale_edges(&self.routed, &self.soft_edges, parameter);
+        let expanded = TaylorExpansion::new(parameter, degree).evaluate(&scaled)?;
+        drop(scaled);
+        let truncated = {
+            let _algebra = StageSpan::new("gamma.remainder.hard_taylor_algebra");
+            Self::simplify(&expanded).wrap_err("while simplifying the R* hard Taylor polynomial")?
+        };
+        if cfg!(test) || hard_taylor_check() {
+            let reference = self.taylor_contracted(degree)?;
+            let identical = truncated == reference;
+            let equal = identical || (&truncated - &reference).expand().is_zero();
+            if cfg!(test) {
+                assert!(
+                    equal,
+                    "hard Taylor before contraction differs from the contracted path\nnew: {truncated}\nold: {reference}"
+                );
+            } else {
+                eprintln!(
+                    "HARD_TAYLOR_CHECK loops={} degree={degree} identical={identical} equal={equal}",
+                    self.region.loops
+                );
+            }
+        }
+        Ok(truncated)
+    }
+
+    /// The previous hard Taylor path: contract the whole routed expression,
+    /// then scale and truncate it. Kept as the reference for [`Self::taylor`].
+    fn taylor_contracted(&self, degree: usize) -> Result<Atom> {
+        let parameter = symbol!("rstar_hard_taylor"; Scalar);
+        let scaled = Self::scale_edges(self.expression()?, &self.soft_edges, parameter);
         let expanded = TaylorExpansion::new(parameter, degree).evaluate(&scaled)?;
         Self::simplify(&expanded).wrap_err("while simplifying the R* hard Taylor polynomial")
     }
@@ -1034,6 +1111,73 @@ mod tests {
         Ok(())
     }
 
+    /// Hard Taylor before contraction against the contracted reference, on
+    /// every hard preparation term of gluonic two- and three-loop graphs,
+    /// bare and with completed counterterm insertions, at every order up to
+    /// the one the plan uses.
+    #[test]
+    fn hard_taylor_before_contraction_matches_the_contracted_path() -> Result<()> {
+        use crate::uv::rstar::tests::{gluon_self_energy, parallel_pair, settings};
+
+        test_initialise()?;
+        let model = load_generic_model("sm");
+        let settings = settings();
+        let vakint = Vakint::new()?;
+        let mass_squared = symbol!("rstar_hard_check_mass_squared"; Scalar);
+        let graphs = [
+            gluon_self_energy(&model, 2, 4, "V_36", |graph| parallel_pair(graph).is_some())?,
+            gluon_self_energy(&model, 3, 6, "V_36", |graph| parallel_pair(graph).is_some())?,
+        ];
+        let mut compared = 0;
+        let mut with_insertions = 0;
+        for graph in &graphs {
+            let marked = parallel_pair(graph).unwrap()[0];
+            let plan = RStarPlan::new(graph, &model, marked, &settings)?;
+            let children = plan.evaluate_uv_children(
+                graph,
+                &model,
+                &Atom::var(mass_squared).sqrt(),
+                &vakint,
+                &settings,
+            )?;
+            for correction in &plan.ir {
+                for term in &correction.preparation {
+                    if term.remainder.is_scaleless(graph, plan.marked_edge) {
+                        continue;
+                    }
+                    let Some(insertions) = term
+                        .counterterms
+                        .iter()
+                        .map(|child| children.get(&child.argument.support).cloned())
+                        .collect::<Option<Vec<_>>>()
+                    else {
+                        continue;
+                    };
+                    let hard = RStarIntegrand::new(
+                        graph,
+                        &model,
+                        &term.remainder,
+                        &insertions,
+                        plan.marked_edge,
+                        Atom::var(mass_squared),
+                    )?;
+                    for degree in 0..=correction.taylor_order as usize {
+                        let new = hard.taylor(degree)?;
+                        let old = hard.taylor_contracted(degree)?;
+                        assert!(
+                            (&new - &old).expand().is_zero(),
+                            "hard Taylor order {degree} differs:\nnew: {new}\nold: {old}"
+                        );
+                        compared += 1;
+                    }
+                    with_insertions += usize::from(!insertions.is_empty());
+                }
+            }
+        }
+        assert!(compared > 0 && with_insertions > 0, "{compared} {with_insertions}");
+        Ok(())
+    }
+
     #[test]
     fn hard_taylor_preserves_the_single_mass_squared_in_the_existing_bridge() -> Result<()> {
         test_initialise()?;
@@ -1135,7 +1279,7 @@ mod tests {
                 Atom::var(mass_squared),
             )?;
             assert!(
-                (preserved.expression - &input.expression * factor)
+                (preserved.expression()? - input.expression()? * &factor)
                     .together()
                     .is_zero()
             );
@@ -1197,7 +1341,7 @@ mod tests {
             Atom::Zero,
         )?;
         let epsilon = Atom::var(GS.dim_epsilon);
-        input.expression /= epsilon.pow(2);
+        *input.expression_mut()? /= epsilon.pow(2);
         let mut integration = settings.vakint.true_settings();
         integration.integral_normalization_factor = vakint::LoopNormalizationFactor::GScheme;
         integration.number_of_terms_in_epsilon_expansion = 1;
@@ -1234,8 +1378,8 @@ mod tests {
             usize::from(input.basis.loop_edges.raw[0]),
             Minkowski {}.new_rep(GS.dim).to_symbolic([])
         );
-        let original = input.expression.clone();
-        input.expression *= function!(SPENSO_TAG.dot, &loop_momentum, &external)
+        let original = input.expression()?.clone();
+        *input.expression_mut()? *= function!(SPENSO_TAG.dot, &loop_momentum, &external)
             / function!(SPENSO_TAG.dot, &external, &external)
             * &metric;
         let actual_scalar = input.integrate_physical(&vakint, &settings, &integration, 5433)?;
@@ -1245,18 +1389,19 @@ mod tests {
             (&actual_scalar - &expected_scalar).expand().is_zero(),
             "physical scalar products and their tensor spectators must survive ingress: actual={actual_scalar}, expected={expected_scalar}"
         );
-        input.expression = original;
+        *input.expression_mut()? = original;
         // A vacuum projector would wrongly discard this odd loop tensor.
         // With the physical external momentum, symmetry of the two lines
         // instead gives integral k^mu = p^mu/2 times the scalar bubble.
         let slot = Minkowski {}
             .new_rep(GS.dim)
             .to_symbolic([Aind::Hedge(86, 0).to_atom()]);
-        input.expression *= function!(
+        let loop_vector = function!(
             GS.emr_mom,
             usize::from(input.basis.loop_edges.raw[0]),
             &slot
         );
+        *input.expression_mut()? *= loop_vector;
         let actual_tensor = input.integrate_physical(&vakint, &settings, &integration, 5432)?;
         let actual_tensor = super::super::tests::canonical_tensor(&actual_tensor)?;
         let expected_tensor = expected
