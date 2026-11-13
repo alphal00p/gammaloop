@@ -7464,7 +7464,7 @@ Evaluated (n_loops=1, mu_r=1) :
     /// merge). The first match therefore lies in the shortest sum still
     /// holding a `dot_pow` until all sums are done, each one stepping term by
     /// term exactly as [`Self::expand_dot_powers_in_sum`]; then in the plain
-    /// powers ([`Self::dot_power_step_on_factors`]). The other factors are
+    /// powers ([`Self::open_plain_dot_powers`]). The other factors are
     /// multiplied back once. `None` for any other shape (two sums of equal
     /// length, a powered sum, ...) or no sum at all.
     fn expand_dot_powers_by_sums(a: AtomView, mut dummy: usize) -> Option<(Atom, usize)> {
@@ -7493,19 +7493,13 @@ Evaluated (n_loops=1, mu_r=1) :
             others.push(expanded);
         }
         let mut current = Atom::mul_many(others.iter().map(Atom::as_view));
-        loop {
-            match Self::dot_power_step_on_factors(current.as_view(), dummy) {
-                Some(Some(new)) => {
-                    current = new;
-                    dummy += 1;
-                }
-                Some(None) => break,
-                // No product left (a single factor): the plain step.
-                None => {
-                    Self::expand_dot_powers_stepwise(&mut current, &mut dummy);
-                    break;
-                }
+        match Self::open_plain_dot_powers(current.as_view(), dummy) {
+            Some((opened, next)) => {
+                current = opened;
+                dummy = next;
             }
+            // No product left (a single factor): the plain step.
+            None => Self::expand_dot_powers_stepwise(&mut current, &mut dummy),
         }
         if current.as_view().contains_symbol(S.dot_pow) {
             return None;
@@ -7549,6 +7543,66 @@ Evaluated (n_loops=1, mu_r=1) :
         )))
     }
 
+    /// The fixed point of [`Self::dot_power_step_on_factors`] in one
+    /// structural pass: every plain `dot_pow(a,b,c)` factor of the product
+    /// `term` becomes its `c` pairs `a(d)*b(d)`, with fresh dummies `d` from
+    /// `dummy` on, in the order of the product's factors; the other factors
+    /// are multiplied back once. Exactly the steps' result: the first match
+    /// is the first plain power, and a step leaves `dot_pow(a,b,c-1)` where
+    /// `dot_pow(a,b,c)` was (functions are ordered by their arguments from
+    /// the left, and only `c` changed, downwards), so the steps open the
+    /// powers one after another with consecutive dummies. The steps rebuilt
+    /// the dotted factors once per pair, quadratic in the number of pairs.
+    /// `None` unless `term` is a product whose factors holding `dot_pow` are
+    /// all plain ([`Self::is_plain_dot_pow`]).
+    fn open_plain_dot_powers(term: AtomView, mut dummy: usize) -> Option<(Atom, usize)> {
+        let AtomView::Mul(product) = term else {
+            return None;
+        };
+        let with_index = |vector: AtomView, index: &Atom| match vector {
+            AtomView::Var(variable) => FunctionBuilder::new(variable.get_symbol())
+                .add_arg(index)
+                .finish(),
+            AtomView::Fun(function) => FunctionBuilder::new(function.get_symbol())
+                .add_args(function.iter().collect::<Vec<_>>())
+                .add_arg(index)
+                .finish(),
+            _ => unreachable!("plain dot_pow operands are symbols or functions"),
+        };
+        let (mut opened, mut rest) = (Vec::new(), Vec::new());
+        for factor in product.iter() {
+            if !factor.contains_symbol(S.dot_pow) {
+                rest.push(factor);
+                continue;
+            }
+            if !Self::is_plain_dot_pow(factor) {
+                return None;
+            }
+            let AtomView::Fun(function) = factor else {
+                unreachable!()
+            };
+            let mut arguments = function.iter();
+            let (a, b, c) = (
+                arguments.next().unwrap(),
+                arguments.next().unwrap(),
+                arguments.next().unwrap(),
+            );
+            for _ in 0..get_integer_from_atom(c).unwrap() {
+                let index = S.dot_dummy_ind(dummy);
+                dummy += 1;
+                opened.push(with_index(a, &index));
+                opened.push(with_index(b, &index));
+            }
+        }
+        if opened.is_empty() {
+            return Some((term.to_owned(), dummy));
+        }
+        Some((
+            Atom::mul_many(rest.into_iter().chain(opened.iter().map(Atom::as_view))),
+            dummy,
+        ))
+    }
+
     /// The fixed point of [`Self::dot_power_step`] computed on the terms of a
     /// sum instead of the whole expression, or `None` (use the whole
     /// expression) when `a` is not a sum, or a product whose only factor with
@@ -7561,25 +7615,12 @@ Evaluated (n_loops=1, mu_r=1) :
     /// summed and multiplied back once at the end. Cost: one term per step
     /// instead of the whole expression (physics_L4: thousands of steps over
     /// a sum of ~600 channel values).
-    fn expand_dot_powers_by_term(a: AtomView, mut dummy: usize) -> Option<(Atom, usize)> {
+    fn expand_dot_powers_by_term(a: AtomView, dummy: usize) -> Option<(Atom, usize)> {
         let has_dot_pow = |view: AtomView| view.contains_symbol(S.dot_pow);
-        // One product whose dotted factors are all plain dot_pow: step on
-        // those factors alone.
-        if let AtomView::Mul(product) = a
-            && !product
-                .iter()
-                .any(|factor| matches!(factor, AtomView::Add(_)) && has_dot_pow(factor))
-            && Self::dot_power_step_on_factors(a, dummy).is_some()
-        {
-            let mut current = a.to_owned();
-            while let Some(Some(new)) = Self::dot_power_step_on_factors(current.as_view(), dummy) {
-                current = new;
-                dummy += 1;
-            }
-            if has_dot_pow(current.as_view()) {
-                return None;
-            }
-            return Some((current, dummy));
+        // One product whose dotted factors are all plain dot_pow: open them
+        // in one pass.
+        if let Some(opened) = Self::open_plain_dot_powers(a, dummy) {
+            return Some(opened);
         }
         let (others, sum) = match a {
             AtomView::Add(_) => (Vec::new(), a),
@@ -8887,6 +8928,15 @@ mod tests {
                     dot("2", "k(3)", 1)
                 )
             },
+            // Plain powers only, opened in one pass: symbol and function
+            // operands, several powers sharing a vector, high powers.
+            format!(
+                "{coefficient}*{metric}*dot_pow(v,w,2)*dot_pow(k(1),f(y),1)*{}*{}*{}*{}",
+                dot("1", "p(1)", 4),
+                dot("1", "k(2)", 3),
+                dot("2", "k(2)", 2),
+                dot("3", "v", 5)
+            ),
         ];
         for (index, input) in inputs.iter().enumerate() {
             let input = vk_parse!(input).unwrap();
@@ -9356,6 +9406,76 @@ mod tests {
                     assert_eq!(scalar_only.numerator, input);
                 }
             }
+        }
+    }
+
+    #[test]
+    fn dot_notation_opens_powers_with_fresh_distinct_dummies() {
+        Vakint::initialize_vakint_symbols();
+        // The expected forms are those of the former per-product rematch loop,
+        // including the order in which dummies are assigned.
+        for (input, expected) in [
+            (
+                "dot(k(1),p(1))",
+                "k(1,dot_dummy_ind(2))*p(1,dot_dummy_ind(2))",
+            ),
+            (
+                "dot(k(1),k(2))^2",
+                "k(1,dot_dummy_ind(2))*k(1,dot_dummy_ind(3))\
+                 *k(2,dot_dummy_ind(2))*k(2,dot_dummy_ind(3))",
+            ),
+            (
+                "dot(k(1),p(1))^3*dot(k(2),k(2))",
+                "k(1,dot_dummy_ind(2))*k(1,dot_dummy_ind(3))*k(1,dot_dummy_ind(4))\
+                 *p(1,dot_dummy_ind(2))*p(1,dot_dummy_ind(3))*p(1,dot_dummy_ind(4))\
+                 *k(2,dot_dummy_ind(5))^2",
+            ),
+            // Plain symbols and functions as operands.
+            (
+                "dot(v,k(1))^2*dot(w,u)",
+                "w(dot_dummy_ind(2))*u(dot_dummy_ind(2))\
+                 *v(dot_dummy_ind(3))*k(1,dot_dummy_ind(3))\
+                 *v(dot_dummy_ind(4))*k(1,dot_dummy_ind(4))",
+            ),
+            // Each term of a sum numbers its dummies independently.
+            (
+                "dot(k(1),p(1))+dot(k(2),p(1))^2",
+                "k(1,dot_dummy_ind(2))*p(1,dot_dummy_ind(2))\
+                 +k(2,dot_dummy_ind(2))*k(2,dot_dummy_ind(3))\
+                 *p(1,dot_dummy_ind(2))*p(1,dot_dummy_ind(3))",
+            ),
+            // Copies of a powered sum receive their own dummies.
+            (
+                "(dot(k(1),p(1))+m)^2*dot(k(1),k(1))",
+                "(m+k(1,dot_dummy_ind(4))*p(1,dot_dummy_ind(4)))\
+                 *(m+k(1,dot_dummy_ind(5))*p(1,dot_dummy_ind(5)))\
+                 *k(1,dot_dummy_ind(3))^2",
+            ),
+            // Dummies already present in the term are not reused.
+            (
+                "k(1,dot_dummy_ind(5))*p(1,dot_dummy_ind(5))*dot(k(2),k(2))^2",
+                "k(1,dot_dummy_ind(5))*p(1,dot_dummy_ind(5))\
+                 *k(2,dot_dummy_ind(6))^2*k(2,dot_dummy_ind(7))^2",
+            ),
+            (
+                "dot(k(1),p(1))^-2*dot(k(2),p(2))",
+                "k(2,dot_dummy_ind(4))*p(2,dot_dummy_ind(4))\
+                 /(k(1,dot_dummy_ind(2))*k(1,dot_dummy_ind(3))\
+                 *p(1,dot_dummy_ind(2))*p(1,dot_dummy_ind(3)))",
+            ),
+            // Dots nested inside function arguments are opened as well.
+            (
+                "f(dot(k(1),p(1))^2)",
+                "f(k(1,dot_dummy_ind(2))*k(1,dot_dummy_ind(3))\
+                 *p(1,dot_dummy_ind(2))*p(1,dot_dummy_ind(3)))",
+            ),
+        ] {
+            let input = vk_parse!(input).unwrap();
+            assert_eq!(
+                Vakint::convert_from_dot_notation(input.as_view()),
+                vk_parse!(expected).unwrap(),
+                "converting {input}"
+            );
         }
     }
 
