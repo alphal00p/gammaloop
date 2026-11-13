@@ -1105,6 +1105,54 @@ fn lazy_scalar_tensors_add_scalars_in_either_order() {
 
 #[cfg(feature = "shadowing")]
 #[test]
+fn streamed_and_in_memory_scalar_sums_agree() {
+    use symbolica::{atom::Atom, parse};
+
+    use super::{sum_scalar_atoms, use_streamed_scalar_sum};
+
+    // Only sums that are large in both leaf count and size are streamed.
+    assert!(!use_streamed_scalar_sum(31, usize::MAX));
+    assert!(!use_streamed_scalar_sum(32, (1 << 30) - 1));
+    assert!(!use_streamed_scalar_sum(10_000, 1 << 20));
+    assert!(use_streamed_scalar_sum(32, 1 << 30));
+
+    // Both paths must give the same normalized sum, including like terms
+    // spread over leaves, unexpanded factors, exact cancellation and zeros.
+    let pool = [
+        parse!("x^2+2*x*y+y^2"),
+        parse!("-x*y+3*z"),
+        parse!("(a+b)^2*(x+y)"),
+        parse!("-(a+b)^2*(x+y)"),
+        parse!("f(x,y)*z"),
+        parse!("5/3*x^2"),
+        parse!("-y^2"),
+        Atom::Zero,
+        parse!("2*f(x,y)*z+x"),
+    ];
+    for count in [4, 31, 32, 100] {
+        let atoms = (0..count)
+            .map(|index| pool[(7 * index) % pool.len()].clone())
+            .collect::<Vec<_>>();
+        let streamed = sum_scalar_atoms(atoms.clone(), true);
+        let in_memory = sum_scalar_atoms(atoms.clone(), false);
+        assert_eq!(streamed, in_memory, "{count} leaves");
+        assert_eq!(in_memory, Atom::add_many(atoms));
+    }
+
+    // Sums that vanish identically are a literal zero on both paths.
+    for atoms in [
+        vec![Atom::Zero; 40],
+        (0..40)
+            .map(|index| pool[2 + index % 2].clone())
+            .collect::<Vec<_>>(),
+    ] {
+        assert_eq!(sum_scalar_atoms(atoms.clone(), true), Atom::Zero);
+        assert_eq!(sum_scalar_atoms(atoms, false), Atom::Zero);
+    }
+}
+
+#[cfg(feature = "shadowing")]
+#[test]
 fn bulk_atom_sum_accepts_closed_tensor_leaves_and_preserves_aliases() {
     use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
     use std::collections::HashMap;
