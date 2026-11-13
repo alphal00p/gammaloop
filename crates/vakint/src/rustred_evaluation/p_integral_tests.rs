@@ -600,8 +600,11 @@ fn a_boxed_node_returns_its_terminals_as_presidual_and_refuses_numbers() {
     .unwrap();
     let reduced = by_scale_power(values.into_values().flatten());
     assert_eq!(reduced.len(), 1, "{reduced:?}");
-    assert!(
-        crate::p_integral::finalize::unevaluated_terminals(&reduced[&0]) == vec![residual.clone()],
+    // One scale power (w = 2L - Σa = -1 for the corner).
+    let (_, value) = reduced.iter().next().unwrap();
+    assert_eq!(
+        crate::p_integral::finalize::unevaluated_terminals(value),
+        vec![residual.clone()],
         "{reduced:?}"
     );
     for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Numerical] {

@@ -1684,6 +1684,18 @@ mod tests {
                     for (entry, pivot_entry) in row.iter_mut().zip(&pivot_row) {
                         *entry = a * *entry - b * pivot_entry;
                     }
+                    // Keep the entries small (20 x 20 at five loops overflowed
+                    // without it): divide the row by the gcd of its entries.
+                    let gcd = row.iter().fold(0_i128, |g, &x| {
+                        let (mut a, mut b) = (g.abs(), x.abs());
+                        while b != 0 {
+                            (a, b) = (b, a % b);
+                        }
+                        a
+                    });
+                    if gcd > 1 {
+                        row.iter_mut().for_each(|entry| *entry /= gcd);
+                    }
                 }
             }
             rank += 1;
