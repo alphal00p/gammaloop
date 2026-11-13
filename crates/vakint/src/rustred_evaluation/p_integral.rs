@@ -570,8 +570,8 @@ struct ChannelReducer<'h> {
     epsilon: Symbol,
 }
 
-/// Reduce the lowered `inputs` of one channel onto the masters (`None` when
-/// no input is left).
+/// Reduce the lowered `inputs` of one channel onto the masters, without the
+/// channel coefficient (`None` when no input is left).
 fn reduce_channel(
     reducer: &ChannelReducer,
     channel: &Channel,
@@ -613,9 +613,7 @@ fn reduce_channel(
         ))
         .into());
     }
-    Ok(Some(
-        render(reducer.handle, &reduction, reducer.epsilon)? * &channel.coefficient,
-    ))
+    Ok(Some(render(reducer.handle, &reduction, reducer.epsilon)?))
 }
 
 /// The reduced values of a batch of backend requests (`docs/p_integrals.md`,
@@ -636,6 +634,29 @@ pub(crate) fn reduce_requests(
     settings: &VakintSettings,
     requests: &[PropagatorRequest],
     progress: Option<&super::monitor::CallerProgress>,
+) -> Result<BTreeMap<(usize, Atom), Vec<ReducedPropagatorValue>>, VakintError> {
+    reduce_requests_with(vakint, settings, requests, progress, false)
+}
+
+/// [`reduce_requests`] with every value factored: `reduced` is the rendered
+/// reduction of a channel and `spectator` its coefficient, so that a caller
+/// can expand both apart ([`ReducedPropagatorValue`]). The product of the two
+/// is the value of [`reduce_requests`].
+pub(crate) fn reduce_requests_factored(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    requests: &[PropagatorRequest],
+    progress: Option<&super::monitor::CallerProgress>,
+) -> Result<BTreeMap<(usize, Atom), Vec<ReducedPropagatorValue>>, VakintError> {
+    reduce_requests_with(vakint, settings, requests, progress, true)
+}
+
+fn reduce_requests_with(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    requests: &[PropagatorRequest],
+    progress: Option<&super::monitor::CallerProgress>,
+    factored: bool,
 ) -> Result<BTreeMap<(usize, Atom), Vec<ReducedPropagatorValue>>, VakintError> {
     let handle = vakint.p_library()?;
     let mut forms = BTreeMap::new();
@@ -663,13 +684,26 @@ pub(crate) fn reduce_requests(
         let Some(reduced) = reduce_channel(&reducer, &channel, inputs, &integrals)? else {
             continue;
         };
-        values
-            .entry((channel.loops, channel.head))
-            .or_default()
-            .push(ReducedPropagatorValue {
-                scale_power: channel.scale_power,
+        let Channel {
+            loops,
+            head,
+            scale_power,
+            coefficient,
+        } = channel;
+        let value = if factored {
+            ReducedPropagatorValue {
+                scale_power,
                 reduced,
-            });
+                spectator: Some(coefficient),
+            }
+        } else {
+            ReducedPropagatorValue {
+                scale_power,
+                reduced: reduced * &coefficient,
+                spectator: None,
+            }
+        };
+        values.entry((loops, head)).or_default().push(value);
     }
     if let Some(progress) = progress {
         progress.cohorts(total, total);
@@ -717,7 +751,8 @@ pub(crate) fn reduce_requests_eager(
             .or_default()
             .push(ReducedPropagatorValue {
                 scale_power: channel.scale_power,
-                reduced,
+                reduced: reduced * &channel.coefficient,
+                spectator: None,
             });
     }
     if let Some(progress) = progress {

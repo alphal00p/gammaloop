@@ -420,6 +420,188 @@ pub(crate) fn unsupported_power(expression: &Atom, symbols: &[Symbol]) -> Option
     unsupported
 }
 
+/// The functions `PG`, `PMaster` and `PGamma` of the master basis.
+fn master_symbols() -> [Symbol; 3] {
+    [pg_symbol(), p_master_symbol(), p_gamma_symbol()]
+}
+
+/// The master functions of `reduced`, sorted and deduplicated, and
+/// `reduced` expanded; an unsupported power of a master function fails.
+fn masters_and_expansion(
+    reduced: &Atom,
+    symbols: &[Symbol; 3],
+) -> Result<(Vec<Atom>, Atom), VakintError> {
+    let mut masters = Vec::new();
+    reduced.visitor(&mut |part| {
+        if let AtomView::Fun(function) = part
+            && symbols.contains(&function.get_symbol())
+        {
+            masters.push(part.to_owned());
+            return false;
+        }
+        true
+    });
+    masters.sort();
+    masters.dedup();
+    let expanded = reduced.expand();
+    if let Some(power) = unsupported_power(&expanded, symbols) {
+        return Err(failure(format!("{power} is not an i16 integer power")));
+    }
+    Ok((masters, expanded))
+}
+
+/// How the rational factors of one expansion were expanded.
+#[derive(Default)]
+struct SeriesCounts {
+    exact: usize,
+    generic: usize,
+}
+
+/// The Laurent series through `ε^order` of `prefactor × coefficient ×
+/// monomial` for one master monomial of [`expand`], `None` when it is an
+/// exact zero or starts above `order`.
+fn monomial_term(
+    prefactor: &Atom,
+    monomial: &Atom,
+    coefficient: &Atom,
+    symbols: &[Symbol; 3],
+    epsilon: Symbol,
+    order: i64,
+    counts: &mut SeriesCounts,
+) -> Result<Option<Laurent>, VakintError> {
+    if symbols.iter().any(|s| coefficient.contains_symbol(*s)) {
+        return Err(failure(format!(
+            "{coefficient} is not free of PG, PMaster and PGamma"
+        )));
+    }
+    // The Γ form of the PG factors joins the prefactor; PMaster factors
+    // are tabulated Laurent polynomials.
+    let mut product = prefactor * coefficient;
+    let mut tabulated: Option<Laurent> = None;
+    let factors = match monomial.as_view() {
+        AtomView::Mul(product) => product.iter().map(|f| f.to_owned()).collect(),
+        _ => vec![monomial.clone()],
+    };
+    for factor in factors {
+        let (base, power) = match factor.as_view() {
+            AtomView::Pow(pow) => {
+                let (base, exponent) = pow.get_base_exp();
+                (base.to_owned(), get_integer_from_atom(exponent))
+            }
+            _ => (factor.clone(), Some(1)),
+        };
+        if let AtomView::Fun(function) = base.as_view()
+            && function.get_symbol() == symbols[2]
+        {
+            // A Gamma tag: any nonzero integer power of Γ(1+mε), m ≠ 0.
+            let m = match function.iter().collect::<Vec<_>>().as_slice() {
+                [m] => get_integer_from_atom(*m).filter(|m| *m != 0),
+                _ => None,
+            };
+            let (Some(m), Some(power)) = (m, power) else {
+                return Err(failure(format!("invalid Gamma tag {factor}")));
+            };
+            product *=
+                super::finalize::gamma_one_plus(m, &Atom::var(epsilon)).pow(Atom::num(power));
+            continue;
+        }
+        let power = power
+            .filter(|p| *p > 0)
+            .ok_or_else(|| failure(format!("invalid master power {factor}")))?;
+        let AtomView::Fun(function) = base.as_view() else {
+            if base == Atom::num(1) {
+                continue;
+            }
+            return Err(failure(format!("unexpected master factor {factor}")));
+        };
+        if function.get_symbol() == symbols[0] {
+            let arguments = function
+                .iter()
+                .map(get_integer_from_atom)
+                .collect::<Option<Vec<_>>>();
+            let Some([x1, x2]) = arguments.as_deref() else {
+                return Err(failure(format!("invalid {base}")));
+            };
+            product *= super::finalize::pg_value(*x1, *x2, epsilon).pow(Atom::num(power));
+        } else {
+            let name = masters::p_master_name(base.as_view())
+                .ok_or_else(|| failure(format!("invalid {base}")))?;
+            let value =
+                Laurent::from_polynomial(&masters::p_master_expansion(&name, epsilon)?, epsilon)?;
+            for _ in 0..power {
+                tabulated = Some(match tabulated {
+                    None => value.clone(),
+                    Some(tabulated) => tabulated.mul(&value, i64::MAX / 4),
+                });
+            }
+        }
+    }
+    let split = split(
+        &crate::Vakint::normalize_gamma_functions(product.as_view()),
+        epsilon,
+    );
+    let prepared_rational = {
+        let _stage = crate::stage_timing::StageSpan::new("vakint.p_integral.rational_prepare");
+        rational_series::RationalSeries::new(&split.rational, epsilon)
+    };
+    let rational_valuation = {
+        let _stage = crate::stage_timing::StageSpan::new("vakint.p_integral.rational_valuation");
+        match &prepared_rational {
+            Some(prepared) => prepared.valuation(),
+            None => trace_generic(
+                &split.rational,
+                epsilon,
+                monomial,
+                order - tabulated.as_ref().map_or(0, |t| t.valuation),
+                "relative_valuation",
+                false,
+                || valuation(&split.rational, epsilon),
+            )?,
+        }
+    };
+    let Some(rational_valuation) = rational_valuation else {
+        return Ok(None);
+    };
+    let tabulated_valuation = tabulated.as_ref().map_or(0, |t| t.valuation);
+    let depth = order - rational_valuation - tabulated_valuation;
+    if depth < 0 {
+        return Ok(None);
+    }
+    let rational = {
+        let _stage = crate::stage_timing::StageSpan::new("vakint.p_integral.rational_series");
+        match prepared_rational
+            .as_ref()
+            .and_then(|prepared| prepared.series(order - tabulated_valuation))
+        {
+            Some(series) => {
+                counts.exact += 1;
+                series
+            }
+            None => {
+                counts.generic += 1;
+                trace_generic(
+                    &split.rational,
+                    epsilon,
+                    monomial,
+                    order - tabulated_valuation,
+                    "absolute_series",
+                    prepared_rational.is_some(),
+                    || Laurent::series(&split.rational, epsilon, order - tabulated_valuation),
+                )?
+            }
+        }
+    };
+    let exponential = Laurent::exp(&split.exponent(depth), depth);
+    let mut term = rational.mul(&exponential, order - tabulated_valuation);
+    if let Some(mut tabulated) = tabulated {
+        // Through ε^(order - rational_valuation); a tabulated unknown
+        // tail inside that range survives as its Oep marker.
+        tabulated.coefficients.truncate(depth as usize + 1);
+        term = term.mul(&tabulated, order);
+    }
+    Ok(Some(term))
+}
+
 /// The Laurent expansion through `ε^order` of `prefactor × reduced`, where
 /// `reduced` is a polynomial in the masters `PG(x1,x2)` (replaced by
 /// `pg_value`) and `PMaster(name)` (replaced by its tabulated expansion and
@@ -434,173 +616,143 @@ pub(crate) fn expand(
     epsilon: Symbol,
     order: i64,
 ) -> Result<Atom, VakintError> {
-    let symbols = [pg_symbol(), p_master_symbol(), p_gamma_symbol()];
-    let mut masters = Vec::new();
-    reduced.visitor(&mut |part| {
-        if let AtomView::Fun(function) = part
-            && symbols.contains(&function.get_symbol())
-        {
-            masters.push(part.to_owned());
-            return false;
-        }
-        true
-    });
-    masters.sort();
-    masters.dedup();
-    let expanded = reduced.expand();
-    if let Some(power) = unsupported_power(&expanded, &symbols) {
-        return Err(failure(format!("{power} is not an i16 integer power")));
-    }
+    let symbols = master_symbols();
+    let (masters, expanded) = masters_and_expansion(reduced, &symbols)?;
     let mut total = Atom::Zero;
-    let mut exact_series = 0usize;
-    let mut generic_series = 0usize;
+    let mut counts = SeriesCounts::default();
     for (monomial, coefficient) in expanded.coefficient_list::<i16>(&masters) {
-        if symbols.iter().any(|s| coefficient.contains_symbol(*s)) {
-            return Err(failure(format!(
-                "{coefficient} is not free of PG, PMaster and PGamma"
-            )));
-        }
-        // The Γ form of the PG factors joins the prefactor; PMaster factors
-        // are tabulated Laurent polynomials.
-        let mut product = prefactor * &coefficient;
-        let mut tabulated: Option<Laurent> = None;
-        let factors = match monomial.as_view() {
-            AtomView::Mul(product) => product.iter().map(|f| f.to_owned()).collect(),
-            _ => vec![monomial.clone()],
-        };
-        for factor in factors {
-            let (base, power) = match factor.as_view() {
-                AtomView::Pow(pow) => {
-                    let (base, exponent) = pow.get_base_exp();
-                    (base.to_owned(), get_integer_from_atom(exponent))
-                }
-                _ => (factor.clone(), Some(1)),
-            };
-            if let AtomView::Fun(function) = base.as_view()
-                && function.get_symbol() == symbols[2]
-            {
-                // A Gamma tag: any nonzero integer power of Γ(1+mε), m ≠ 0.
-                let m = match function.iter().collect::<Vec<_>>().as_slice() {
-                    [m] => get_integer_from_atom(*m).filter(|m| *m != 0),
-                    _ => None,
-                };
-                let (Some(m), Some(power)) = (m, power) else {
-                    return Err(failure(format!("invalid Gamma tag {factor}")));
-                };
-                product *=
-                    super::finalize::gamma_one_plus(m, &Atom::var(epsilon)).pow(Atom::num(power));
-                continue;
-            }
-            let power = power
-                .filter(|p| *p > 0)
-                .ok_or_else(|| failure(format!("invalid master power {factor}")))?;
-            let AtomView::Fun(function) = base.as_view() else {
-                if base == Atom::num(1) {
-                    continue;
-                }
-                return Err(failure(format!("unexpected master factor {factor}")));
-            };
-            if function.get_symbol() == symbols[0] {
-                let arguments = function
-                    .iter()
-                    .map(get_integer_from_atom)
-                    .collect::<Option<Vec<_>>>();
-                let Some([x1, x2]) = arguments.as_deref() else {
-                    return Err(failure(format!("invalid {base}")));
-                };
-                product *= super::finalize::pg_value(*x1, *x2, epsilon).pow(Atom::num(power));
-            } else {
-                let name = masters::p_master_name(base.as_view())
-                    .ok_or_else(|| failure(format!("invalid {base}")))?;
-                let value = Laurent::from_polynomial(
-                    &masters::p_master_expansion(&name, epsilon)?,
-                    epsilon,
-                )?;
-                for _ in 0..power {
-                    tabulated = Some(match tabulated {
-                        None => value.clone(),
-                        Some(tabulated) => tabulated.mul(&value, i64::MAX / 4),
-                    });
-                }
-            }
-        }
-        let split = split(
-            &crate::Vakint::normalize_gamma_functions(product.as_view()),
+        if let Some(term) = monomial_term(
+            prefactor,
+            &monomial,
+            &coefficient,
+            &symbols,
             epsilon,
-        );
-        let prepared_rational = {
-            let _stage = crate::stage_timing::StageSpan::new("vakint.p_integral.rational_prepare");
-            rational_series::RationalSeries::new(&split.rational, epsilon)
-        };
-        let rational_valuation = {
-            let _stage =
-                crate::stage_timing::StageSpan::new("vakint.p_integral.rational_valuation");
-            match &prepared_rational {
-                Some(prepared) => prepared.valuation(),
-                None => trace_generic(
-                    &split.rational,
-                    epsilon,
-                    &monomial,
-                    order - tabulated.as_ref().map_or(0, |t| t.valuation),
-                    "relative_valuation",
-                    false,
-                    || valuation(&split.rational, epsilon),
-                )?,
-            }
-        };
-        let Some(rational_valuation) = rational_valuation else {
-            continue;
-        };
-        let tabulated_valuation = tabulated.as_ref().map_or(0, |t| t.valuation);
-        let depth = order - rational_valuation - tabulated_valuation;
-        if depth < 0 {
-            continue;
+            order,
+            &mut counts,
+        )? {
+            total += term.to_atom(epsilon);
         }
-        let rational = {
-            let _stage = crate::stage_timing::StageSpan::new("vakint.p_integral.rational_series");
-            match prepared_rational
-                .as_ref()
-                .and_then(|prepared| prepared.series(order - tabulated_valuation))
-            {
-                Some(series) => {
-                    exact_series += 1;
-                    series
-                }
-                None => {
-                    generic_series += 1;
-                    trace_generic(
-                        &split.rational,
-                        epsilon,
-                        &monomial,
-                        order - tabulated_valuation,
-                        "absolute_series",
-                        prepared_rational.is_some(),
-                        || Laurent::series(&split.rational, epsilon, order - tabulated_valuation),
-                    )?
-                }
-            }
-        };
-        let exponential = Laurent::exp(&split.exponent(depth), depth);
-        let mut term = rational.mul(&exponential, order - tabulated_valuation);
-        if let Some(mut tabulated) = tabulated {
-            // Through ε^(order - rational_valuation); a tabulated unknown
-            // tail inside that range survives as its Oep marker.
-            tabulated.coefficients.truncate(depth as usize + 1);
-            term = term.mul(&tabulated, order);
-        }
-        total += term.to_atom(epsilon);
     }
     tracing::info!(
         uv = true,
         rstar = true,
         timing = true,
-        exact_rational_series = exact_series,
-        generic_rational_series = generic_series,
+        exact_rational_series = counts.exact,
+        generic_rational_series = counts.generic,
         target_order = order,
         master_variables = masters.len(),
         "Expanded p-integral Laurent coefficients"
     );
     Ok(total.expand())
+}
+
+/// A spectator of [`expand_factored`]: an exact rational function of `ε`
+/// (spectator symbols allowed) without Γ functions or exponentials, prepared
+/// once for its exact valuation and series.
+pub(crate) struct Spectator(rational_series::RationalSeries);
+
+impl Spectator {
+    /// `None` when `spectator` is not such a rational function (the caller
+    /// then expands the product with [`expand`]).
+    pub(crate) fn new(spectator: &Atom, epsilon: Symbol) -> Option<Self> {
+        let split = split(
+            &crate::Vakint::normalize_gamma_functions(spectator.as_view()),
+            epsilon,
+        );
+        if !split.exponent.is_empty() {
+            return None;
+        }
+        let _stage = crate::stage_timing::StageSpan::new("vakint.p_integral.spectator_prepare");
+        rational_series::RationalSeries::new(&split.rational, epsilon).map(Self)
+    }
+}
+
+/// [`expand`]`(prefactor, reduced · spectator, ε, order)` with the factors
+/// expanded apart: `prefactor × reduced` through `ε^(order - v_S)` and the
+/// spectator through `ε^(order - v_R)`, where `v_S` and `v_R` are the
+/// valuations of the spectator and of that inner series, and the truncated
+/// series multiplied through `ε^order`. Both valuations are lower bounds
+/// (a valuation moves up only on a proof that a coefficient vanishes, and
+/// a sum takes the lower valuation of its terms), so each factor is exact
+/// through every order the product needs and the result equals the exact
+/// expansion of the product.
+///
+/// `None` (the caller then uses [`expand`] on the product) when a term of
+/// the inner series ends below `ε^(order - v_S)`, which only a tabulated
+/// master's unknown tail does, or when the spectator series exceeds its
+/// bounds.
+pub(crate) fn expand_factored(
+    prefactor: &Atom,
+    reduced: &Atom,
+    spectator: &Spectator,
+    epsilon: Symbol,
+    order: i64,
+) -> Result<Option<Atom>, VakintError> {
+    let Some(spectator_valuation) = spectator.0.valuation() else {
+        return Ok(Some(Atom::Zero));
+    };
+    let inner_order = order - spectator_valuation;
+    let symbols = master_symbols();
+    let (masters, expanded) = masters_and_expansion(reduced, &symbols)?;
+    let mut counts = SeriesCounts::default();
+    // Coefficients of the inner series by power of ε.
+    let mut inner = std::collections::BTreeMap::<i64, Vec<Atom>>::new();
+    for (monomial, coefficient) in expanded.coefficient_list::<i16>(&masters) {
+        let Some(term) = monomial_term(
+            prefactor,
+            &monomial,
+            &coefficient,
+            &symbols,
+            epsilon,
+            inner_order,
+            &mut counts,
+        )?
+        else {
+            continue;
+        };
+        if term.order() < inner_order {
+            return Ok(None);
+        }
+        for (index, coefficient) in term.coefficients.into_iter().enumerate() {
+            if !coefficient.is_zero() {
+                inner
+                    .entry(term.valuation + index as i64)
+                    .or_default()
+                    .push(coefficient);
+            }
+        }
+    }
+    tracing::info!(
+        uv = true,
+        rstar = true,
+        timing = true,
+        exact_rational_series = counts.exact,
+        generic_rational_series = counts.generic,
+        target_order = inner_order,
+        master_variables = masters.len(),
+        spectator_valuation,
+        "Expanded p-integral Laurent coefficients"
+    );
+    let Some(inner_valuation) = inner.first_key_value().map(|(power, _)| *power) else {
+        return Ok(Some(Atom::Zero));
+    };
+    let inner = Laurent {
+        valuation: inner_valuation,
+        coefficients: (inner_valuation..=inner_order)
+            .map(|power| {
+                inner
+                    .remove(&power)
+                    .map_or(Atom::Zero, |parts| Atom::add_many(parts.iter()).expand())
+            })
+            .collect(),
+    };
+    let Some(outer) = ({
+        let _stage = crate::stage_timing::StageSpan::new("vakint.p_integral.spectator_series");
+        spectator.0.series(order - inner_valuation)
+    }) else {
+        return Ok(None);
+    };
+    Ok(Some(inner.mul(&outer, order).to_atom(epsilon).expand()))
 }
 
 #[cfg(test)]
@@ -681,6 +833,63 @@ mod tests {
             valuation(&(Atom::num(3) / ep.pow(Atom::num(2))), e).unwrap(),
             Some(-2)
         );
+    }
+
+    /// The factored expansion is the same atom as the expansion of the
+    /// product: masters with spurious poles, tabulated masters and Gamma
+    /// tags against spectators with poles, zeros, spectator symbols and a
+    /// projector denominator, at several depths.
+    #[test]
+    fn factored_expansion_is_the_expansion_of_the_product() {
+        Vakint::initialize_vakint_symbols();
+        let e = vk_symbol!("ε");
+        let ep = Atom::var(e);
+        let pg = |x1: i64, x2: i64| function!(pg_symbol(), Atom::num(x1), Atom::num(x2));
+        let no = function!(p_master_symbol(), Atom::var(vk_symbol!("no")));
+        let tag = |m: i64| function!(p_gamma_symbol(), Atom::num(m));
+        let masters = [
+            (Atom::num(1) - Atom::num(2) * &ep) / ep.pow(Atom::num(2)) * pg(0, 0).pow(Atom::num(2))
+                + (Atom::num(3) * &ep - Atom::num(1)) / (Atom::num(2) - Atom::num(3) * &ep)
+                    * pg(0, 0)
+                    * pg(1, 0)
+                + Atom::num(5) / (Atom::num(4) * &ep) * tag(2).pow(Atom::num(-1)) * pg(2, 1),
+            Atom::num(7) / ((Atom::num(1) - &ep) * &ep) * &no
+                + (Atom::num(1) + &ep) / ep.pow(Atom::num(3)) * tag(-1) * pg(1, 1),
+            Atom::Zero,
+        ];
+        let spectators = [
+            Atom::num(1),
+            Atom::num(-3) / ep.pow(Atom::num(3)) + Atom::num(2) / &ep,
+            vk_parse!("(nf*ε^2-2*ca)/(3-2*ε)").unwrap(),
+            vk_parse!("ε*(1+ε)/(1-2*ε)^2+mass^2").unwrap(),
+            Atom::num(-1) / Atom::num(3),
+        ];
+        let prefactor = Vakint::normalize_gamma_functions(
+            vk_parse!("(Gamma(1+ε)*Gamma(1-ε)^2/Gamma(2-2*ε))^3*exp(-logMassiveClosure)^(4*ε)*Gamma(2-4*ε)*Gamma(1+4*ε)")
+                .unwrap()
+                .as_view(),
+        );
+        for masters in &masters {
+            for spectator in &spectators {
+                let prepared = super::Spectator::new(spectator, e).unwrap();
+                for order in [-3, -1, 0, 1] {
+                    let product = (masters * spectator).expand();
+                    let old = expand(&prefactor, &product, e, order).unwrap();
+                    match super::expand_factored(&prefactor, masters, &prepared, e, order).unwrap()
+                    {
+                        Some(new) => assert_eq!(
+                            old.to_canonical_string(),
+                            new.to_canonical_string(),
+                            "{masters} · {spectator} at order {order}"
+                        ),
+                        // Only an unknown master tail inside the range declines.
+                        None => assert!(crate::truncation_guard::has_unknown_tail(old.as_view())),
+                    }
+                }
+            }
+        }
+        // Γ functions in the spectator are not admitted.
+        assert!(super::Spectator::new(&vk_parse!("Gamma(1+ε)/ε").unwrap(), e).is_none());
     }
 
     #[test]

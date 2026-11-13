@@ -191,6 +191,7 @@ impl MassiveClosure {
                         &[ReducedPropagatorValue {
                             scale_power: 0,
                             reduced: Vakint::convert_to_dot_notation(numerator.as_view()),
+                            spectator: None,
                         }],
                         0,
                         &head,
@@ -301,14 +302,18 @@ impl MassiveClosure {
                 // One closure has one external head; its values are summed
                 // per loop count before the radial integration.
                 let started = std::time::Instant::now();
-                let reduced = crate::rustred_evaluation::p_integral::reduce_requests(
+                let reduced = crate::rustred_evaluation::p_integral::reduce_requests_factored(
                     vakint, settings, &requests, None,
                 )?;
                 dump_slow_rustred_requests(&requests, started.elapsed());
                 for ((loops, _), values) in reduced {
-                    let value = inputs[owner]
-                        .0
-                        .finalize(&values, loops, &heads[owner], settings, rustred_mode)?;
+                    let value = inputs[owner].0.finalize(
+                        &values,
+                        loops,
+                        &heads[owner],
+                        settings,
+                        rustred_mode,
+                    )?;
                     if rustred_mode == RustRedMasterMode::Numerical {
                         numerical[owner] += value;
                     } else {
@@ -414,6 +419,7 @@ impl MassiveClosure {
                         &[ReducedPropagatorValue {
                             scale_power: 0,
                             reduced: Vakint::convert_to_dot_notation(numerator.as_view()),
+                            spectator: None,
                         }],
                         0,
                         &head,
@@ -466,7 +472,7 @@ impl MassiveClosure {
                             settings,
                         )?
                     } else {
-                        crate::rustred_evaluation::p_integral::reduce_requests(
+                        crate::rustred_evaluation::p_integral::reduce_requests_factored(
                             vakint,
                             settings,
                             std::slice::from_ref(&request),
@@ -492,6 +498,58 @@ impl MassiveClosure {
         })
     }
 
+    /// The coefficients of the powers of the closing square `dot(head,
+    /// head)` in the expanded `expression`, by power. They must be free of
+    /// loop momenta and of the hard momentum and use only known master
+    /// symbols.
+    fn radial_terms(expression: &Atom, head: &Atom) -> Result<Vec<(i64, Atom)>, VakintError> {
+        let square = function!(S.dot, head, head);
+        let mut terms = Vec::new();
+        for (monomial, coefficient) in
+            expression.coefficient_list::<i16>(std::slice::from_ref(&square))
+        {
+            let radial_power = if monomial == Atom::one() {
+                0
+            } else if monomial == square {
+                1
+            } else if let AtomView::Pow(power) = monomial.as_view()
+                && power.get_base_exp().0 == square.as_view()
+                && let Some(power) = crate::get_integer_from_atom(power.get_base_exp().1)
+            {
+                power
+            } else {
+                return Err(super::invalid(format!(
+                    "the closing momentum needs integer powers of its square: {monomial}"
+                )));
+            };
+            Self::check_scalar(&coefficient, head)?;
+            terms.push((radial_power, coefficient));
+        }
+        Ok(terms)
+    }
+
+    /// `coefficient` is free of loop momenta and of the hard momentum and
+    /// uses only known master symbols.
+    fn check_scalar(coefficient: &Atom, head: &Atom) -> Result<(), VakintError> {
+        let mut hard_dependence = coefficient.contains_symbol(S.k);
+        coefficient.visitor(&mut |part| {
+            if let AtomView::Fun(function) = part
+                && function.get_symbol() == S.p
+                && let AtomView::Fun(external) = head.as_view()
+                && function.iter().next() == external.iter().next()
+            {
+                hard_dependence = true;
+            }
+            !hard_dependence
+        });
+        if hard_dependence {
+            return Err(VakintError::InvalidNumerator(format!(
+                "massive closure requires scalar dependence on the hard momentum: {coefficient}"
+            )));
+        }
+        super::compare::check_symbols(coefficient)
+    }
+
     fn finalize(
         &self,
         values: &[ReducedPropagatorValue],
@@ -501,61 +559,40 @@ impl MassiveClosure {
         mode: RustRedMasterMode,
     ) -> Result<Atom, VakintError> {
         let epsilon = vk_symbol!(&settings.epsilon_symbol);
-        let square = function!(S.dot, head, head);
         let loops = cut_loops as i64 + 1;
         let target = settings.number_of_terms_in_epsilon_expansion - loops - 1;
         let mut result = Atom::Zero;
+        // The radial prefactor depends only on the scale power.
+        let mut prefactors = std::collections::BTreeMap::<i64, Atom>::new();
         for value in values {
+            if mode != RustRedMasterMode::Retain
+                && let Some(spectator) = &value.spectator
+                && let Some(finalized) = self.finalize_factored(
+                    &value.reduced,
+                    spectator,
+                    value.scale_power,
+                    cut_loops,
+                    head,
+                    settings,
+                    &mut prefactors,
+                )?
+            {
+                result += finalized;
+                continue;
+            }
             // The backend has already reduced a scalar numerator. Its PG(x,y)
             // factors are scalar master tags, not two-index vectors for the
             // generic tensor notation converter.
-            let reduced = value.reduced.expand();
-            for (monomial, coefficient) in
-                reduced.coefficient_list::<i16>(std::slice::from_ref(&square))
-            {
-                let radial_power = if monomial == Atom::one() {
-                    0
-                } else if monomial == square {
-                    1
-                } else if let AtomView::Pow(power) = monomial.as_view()
-                    && power.get_base_exp().0 == square.as_view()
-                    && let Some(power) = crate::get_integer_from_atom(power.get_base_exp().1)
-                {
-                    power
-                } else {
-                    return Err(super::invalid(format!(
-                        "the closing momentum needs integer powers of its square: {monomial}"
-                    )));
-                };
-                let mut hard_dependence = coefficient.contains_symbol(S.k);
-                coefficient.visitor(&mut |part| {
-                    if let AtomView::Fun(function) = part
-                        && function.get_symbol() == S.p
-                        && let AtomView::Fun(external) = head.as_view()
-                        && function.iter().next() == external.iter().next()
-                    {
-                        hard_dependence = true;
-                    }
-                    !hard_dependence
-                });
-                if hard_dependence {
-                    return Err(VakintError::InvalidNumerator(format!(
-                        "massive closure requires scalar dependence on the hard momentum: {coefficient}"
-                    )));
-                }
-                super::compare::check_symbols(&coefficient)?;
+            let reduced = value.value().expand();
+            for (radial_power, coefficient) in Self::radial_terms(&reduced, head)? {
                 let scale_power = value.scale_power + radial_power;
-                let sign = if (self.power + radial_power) % 2 == 0 {
-                    1
-                } else {
-                    -1
-                };
-                let prefactor = self.radial_prefactor(settings, cut_loops, scale_power)?;
-                let coefficient = Atom::num(sign) * coefficient;
+                let prefactor =
+                    self.memoised_prefactor(&mut prefactors, settings, cut_loops, scale_power)?;
+                let coefficient = Atom::num(self.radial_sign(radial_power)) * coefficient;
                 result += if mode == RustRedMasterMode::Retain {
                     simplify_real((prefactor * coefficient).as_view())
                 } else {
-                    laurent::expand(&prefactor, &coefficient, epsilon, target)?
+                    laurent::expand(prefactor, &coefficient, epsilon, target)?
                 };
             }
         }
@@ -574,6 +611,80 @@ impl MassiveClosure {
             .with(function!(Symbol::LOG, &self.mass_squared).to_pattern())
             .replace(Atom::var(vk_symbol!("log_mu_sq")).to_pattern())
             .with(function!(Symbol::LOG, mu).to_pattern()))
+    }
+
+    /// The Laurent expansion of one factored value `masters · spectator`,
+    /// with the masters and every radial coefficient of the spectator
+    /// expanded apart ([`laurent::expand_factored`]); the same atom as the
+    /// expansion of the product. `None` when a radial coefficient is not an
+    /// admitted rational spectator or an expansion declines, and the caller
+    /// expands the product.
+    #[allow(clippy::too_many_arguments)]
+    fn finalize_factored(
+        &self,
+        masters: &Atom,
+        spectator: &Atom,
+        scale_power: i64,
+        cut_loops: usize,
+        head: &Atom,
+        settings: &crate::VakintSettings,
+        prefactors: &mut std::collections::BTreeMap<i64, Atom>,
+    ) -> Result<Option<Atom>, VakintError> {
+        let epsilon = vk_symbol!(&settings.epsilon_symbol);
+        let loops = cut_loops as i64 + 1;
+        let target = settings.number_of_terms_in_epsilon_expansion - loops - 1;
+        let terms = Self::radial_terms(&spectator.expand(), head)?;
+        if terms.is_empty() {
+            return Ok(Some(Atom::Zero));
+        }
+        Self::check_scalar(masters, head)?;
+        let mut spectators = Vec::with_capacity(terms.len());
+        for (radial_power, coefficient) in terms {
+            let coefficient = Atom::num(self.radial_sign(radial_power)) * coefficient;
+            let Some(prepared) = laurent::Spectator::new(&coefficient, epsilon) else {
+                return Ok(None);
+            };
+            spectators.push((radial_power, prepared));
+        }
+        let mut result = Atom::Zero;
+        for (radial_power, prepared) in spectators {
+            let prefactor = self.memoised_prefactor(
+                prefactors,
+                settings,
+                cut_loops,
+                scale_power + radial_power,
+            )?;
+            let Some(value) =
+                laurent::expand_factored(prefactor, masters, &prepared, epsilon, target)?
+            else {
+                return Ok(None);
+            };
+            result += value;
+        }
+        Ok(Some(result))
+    }
+
+    /// The sign `(-1)^(power + radial_power)` of a radial term.
+    fn radial_sign(&self, radial_power: i64) -> i64 {
+        if (self.power + radial_power) % 2 == 0 {
+            1
+        } else {
+            -1
+        }
+    }
+
+    /// [`Self::radial_prefactor`], computed once per scale power.
+    fn memoised_prefactor<'p>(
+        &self,
+        prefactors: &'p mut std::collections::BTreeMap<i64, Atom>,
+        settings: &crate::VakintSettings,
+        cut_loops: usize,
+        scale_power: i64,
+    ) -> Result<&'p Atom, VakintError> {
+        if let std::collections::btree_map::Entry::Vacant(entry) = prefactors.entry(scale_power) {
+            entry.insert(self.radial_prefactor(settings, cut_loops, scale_power)?);
+        }
+        Ok(&prefactors[&scale_power])
     }
 
     fn radial_prefactor(
@@ -763,6 +874,7 @@ mod tests {
                 &[ReducedPropagatorValue {
                     scale_power: 0,
                     reduced: parse("1/ε"),
+                    spectator: None,
                 }],
                 1,
                 &parse("p(1)"),
@@ -809,6 +921,7 @@ mod tests {
                 &[ReducedPropagatorValue {
                     scale_power: 0,
                     reduced,
+                    spectator: None,
                 }],
                 2,
                 &parse("p(1)"),
@@ -823,6 +936,7 @@ mod tests {
                 &[ReducedPropagatorValue {
                     scale_power: 0,
                     reduced: gamma_value,
+                    spectator: None,
                 }],
                 2,
                 &parse("p(1)"),
@@ -840,6 +954,7 @@ mod tests {
                 &[ReducedPropagatorValue {
                     scale_power: 0,
                     reduced: parse("PMaster(no)"),
+                    spectator: None,
                 }],
                 3,
                 &parse("p(1)"),
@@ -947,6 +1062,7 @@ mod tests {
                 &[ReducedPropagatorValue {
                     scale_power: 0,
                     reduced: parse("1/ε"),
+                    spectator: None,
                 }],
                 1,
                 &massive.momentum,
@@ -970,3 +1086,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "massive_replay_tests.rs"]
+mod replay_tests;

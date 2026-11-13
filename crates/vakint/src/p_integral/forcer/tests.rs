@@ -519,6 +519,7 @@ fn assert_guard(
             .map(|value| ReducedPropagatorValue {
                 scale_power: value.scale_power,
                 reduced: &value.reduced * e.pow(Atom::num(-pole)),
+                spectator: None,
             })
             .collect::<Vec<_>>();
         finalize(

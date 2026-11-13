@@ -344,11 +344,28 @@ impl ReplacementRules {
 /// with `Q² = -dot(p(i),p(i))`, the configured per-loop normalization `F`,
 /// `G(1,1) = Γ(ε)Γ(1-ε)²/Γ(2-2ε)` and `reduced` exact in `ε`, written in the
 /// common p-master basis (`PMaster(name)` and products of `PG(x1,x2)`).
+///
+/// With a `spectator` (RustRed values of [`crate::rustred_evaluation::p_integral::reduce_requests_factored`])
+/// the reduced value is `reduced · spectator`: `reduced` holds the masters and
+/// their coefficients, `spectator` the channel coefficient (tensor projector
+/// factors, poles of integrated insertions, powers of the external square).
 #[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ReducedPropagatorValue {
     pub scale_power: i64,
     pub reduced: Atom,
+    pub spectator: Option<Atom>,
+}
+
+impl ReducedPropagatorValue {
+    /// The reduced value, `reduced · spectator` with a spectator.
+    #[allow(dead_code)]
+    pub(crate) fn value(&self) -> std::borrow::Cow<'_, Atom> {
+        match &self.spectator {
+            Some(spectator) => std::borrow::Cow::Owned(&self.reduced * spectator),
+            None => std::borrow::Cow::Borrowed(&self.reduced),
+        }
+    }
 }
 
 /// Options of the Forcer backend (`EvaluationMethod::Forcer`).

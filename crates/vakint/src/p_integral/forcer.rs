@@ -1024,6 +1024,7 @@ pub(crate) fn combine_parts(
         .map(|(scale_power, reduced)| ReducedPropagatorValue {
             scale_power,
             reduced,
+            spectator: None,
         })
         .collect())
 }
