@@ -1594,13 +1594,13 @@ fn four_generator_trace_terminal() {
     assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"(𝑖/2)*f(coad(dA,a),coad(dA,b),coad(dA,d_0))*trace(cof(Nc),sym(t(coad(dA,c),in,out),t(coad(dA,d),in,out),t(coad(dA,d_0),in,out)))+(𝑖/2)*f(coad(dA,c),coad(dA,d),coad(dA,d_0))*trace(cof(Nc),sym(t(coad(dA,a),in,out),t(coad(dA,b),in,out),t(coad(dA,d_0),in,out)))+-1/3*chain(coad(dA,c),coad(dA,d),f(coad(dA,b),in,out),f(coad(dA,a),in,out))*idx(2,cof(Nc))+1/6*chain(coad(dA,c),coad(dA,d),f(coad(dA,a),in,out),f(coad(dA,b),in,out))*idx(2,cof(Nc))+trace(cof(Nc),sym(t(coad(dA,a),in,out),t(coad(dA,b),in,out),t(coad(dA,c),in,out),t(coad(dA,d),in,out)))");
 }
 
-// FORM's repository includes a valgrind-oriented size-5 port of color.h's
-// tloop.frm check:
-// https://github.com/form-dev/form/blob/fdf6af0ce520f7da2dfe0b0b61bf4cef396770be/check/extra/color.frm
-//
-// These ignored tests keep the upstream expressions and expected invariant
-// families close to the implementation. They require higher symmetric
-// invariant reductions than the current chain/trace simplifier provides.
+// FORM color.h reference families. The expressions follow FORM's color.frm
+// size-5 port of color.h's tloop.frm
+// (https://github.com/form-dev/form/blob/fdf6af0ce520f7da2dfe0b0b61bf4cef396770be/check/extra/color.frm),
+// and tloop.frm and su.frm of color.tar.gz
+// (https://www.nikhef.nl/~form/maindir/packages/color/). Every reference is
+// FORM 5.0.0 running color.h (docolor) or SUn.prc on the same input; the
+// closed networks reduce at once with the closed-network reducer.
 
 fn form_color_tloop_q10(r: &TestReps) -> Atom {
     trace!(
@@ -1677,58 +1677,127 @@ fn form_color_tloop_gg5(r: &TestReps) -> Atom {
         * fco!(r, k5, k1, j5)
 }
 
+fn simplify_closed_reference(expr: Atom) -> Atom {
+    crate::tensor::SymbolicTensor::infer(expr)
+        .unwrap()
+        .simplify_algebra(&crate::tensor::AlgebraSettings {
+            color: Some(crate::color::ColorSimplifySettings::default()),
+            ..Default::default()
+        })
+        .unwrap()
+        .contract(crate::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
+        .unwrap()
+        .into_expression()
+        .expand()
+}
+
+/// color.h's scalar notation in idenso's invariants: NA, I2R, cR, cA, and the
+/// named invariants by color.h name and argument representations (`A` adjoint).
+fn color_h_reference(r: &TestReps, form: &str) -> Atom {
+    let fundamental = r.cof_nc.to_symbolic([]);
+    let adjoint = r.coad_da.to_symbolic([]);
+    let mut text = form.to_string();
+    // Named invariants first: d44(R1,A1) -> named_invariant("d44", [R, A]).
+    let mut out = String::new();
+    while let Some(start) = text.find(|c: char| c == 'd') {
+        let (head, rest) = text.split_at(start);
+        out.push_str(head);
+        let name_end = rest.find('(').unwrap();
+        let close = rest.find(')').unwrap();
+        let name = &rest[..name_end];
+        let adjoint_args: Vec<bool> = rest[name_end + 1..close].split(',').map(|arg| arg.starts_with('A')).collect();
+        let value = crate::color::network::named_invariant(name, &adjoint_args, fundamental.clone(), adjoint.clone())
+            .unwrap_or_else(|| panic!("unknown invariant {name}"));
+        out.push_str(&format!("({})", value.to_canonical_string()));
+        text = rest[close + 1..].to_string();
+    }
+    out.push_str(&text);
+    let replacements = [
+        ("NA", r.coad_da.dim.to_symbolic().to_canonical_string()),
+        ("I2R", color_idx!(2, &fundamental).to_canonical_string()),
+        ("cR", color_cas!(2, &fundamental).to_canonical_string()),
+        ("cA", color_cas!(2, &adjoint).to_canonical_string()),
+    ];
+    for (token, value) in replacements {
+        out = out.replace(token, &format!("({value})"));
+    }
+    symbolica::try_parse!(&out.replace("i_", "𝑖")).unwrap()
+}
+
+fn assert_matches_color_h(r: &TestReps, actual: &Atom, form: &str) {
+    let reference = color_h_reference(r, form);
+    TestReps::assert_color_invariant_equivalence(
+        actual,
+        &reference,
+        &r.cof_nc.to_symbolic([]),
+        &r.coad_da.to_symbolic([]),
+    );
+}
+
 #[test]
-#[ignore = "pending FORM color.frm size-5 Q10 invariant-family reduction"]
 fn form_github_color_tloop_q10_size_5() {
     test_initialize();
     let r = TestReps::new();
-    let expr = form_color_tloop_q10(&r);
-
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().expand().to_bare_ordered_string(), @"trace(cof(Nc),cyclic(t(coad(dA,j1),in,out),t(coad(dA,j2),in,out),t(coad(dA,j3),in,out),t(coad(dA,j4),in,out),t(coad(dA,j5),in,out),t(coad(dA,j1),in,out),t(coad(dA,j2),in,out),t(coad(dA,j3),in,out),t(coad(dA,j4),in,out),t(coad(dA,j5),in,out)))");
+    let actual = simplify_closed_reference(form_color_tloop_q10(&r));
+    assert_matches_color_h(
+        &r,
+        &actual,
+        "NA*I2R*cR^4-5*NA*I2R*cA*cR^3+35/4*NA*I2R*cA^2*cR^2-155/24*NA*I2R*cA^3*cR+125/72*NA*I2R*cA^4+5*d44(R1,A1)*cR-6*d44(R1,A1)*cA+1/3*d44(A1,A2)*I2R",
+    );
+    assert_snapshot!(actual.to_bare_ordered_string(), @"(cas(2,coad(dA)))^2*(cas(2,cof(Nc)))^3*35/4*Nc+(cas(2,coad(dA)))^3*(cas(2,cof(Nc)))^2*-155/24*Nc+(cas(2,coad(dA)))^4*125/72*Nc*cas(2,cof(Nc))+(cas(2,cof(Nc)))^4*-5*Nc*cas(2,coad(dA))+(cas(2,cof(Nc)))^5*Nc+-6*cas(2,coad(dA))*gram(4,coad(dA),cof(Nc))+1/3*gram(4,coad(dA),coad(dA))*idx(2,cof(Nc))+5*cas(2,cof(Nc))*gram(4,coad(dA),cof(Nc))");
 }
 
 #[test]
-#[ignore = "pending FORM color.frm size-5 G10 invariant-family reduction"]
 fn form_github_color_tloop_g10_size_5() {
     test_initialize();
     let r = TestReps::new();
-    let expr = form_color_tloop_g10(&r);
-
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().expand().to_bare_ordered_string(), @"f(coad(dA,i1),coad(dA,i10),coad(dA,j5))*f(coad(dA,i1),coad(dA,i2),coad(dA,j1))*f(coad(dA,i10),coad(dA,i9),coad(dA,j4))*f(coad(dA,i2),coad(dA,i3),coad(dA,j2))*f(coad(dA,i3),coad(dA,i4),coad(dA,j3))*f(coad(dA,i4),coad(dA,i5),coad(dA,j4))*f(coad(dA,i5),coad(dA,i6),coad(dA,j5))*f(coad(dA,i6),coad(dA,i7),coad(dA,j1))*f(coad(dA,i7),coad(dA,i8),coad(dA,j2))*f(coad(dA,i8),coad(dA,i9),coad(dA,j3))");
+    let actual = simplify_closed_reference(form_color_tloop_g10(&r));
+    assert_matches_color_h(&r, &actual, "-1/36*NA*cA^5+2/3*d44(A1,A2)*cA");
+    assert_snapshot!(actual.to_bare_ordered_string(), @"(cas(2,coad(dA)))^5*-1/36*dA+2/3*cas(2,coad(dA))*gram(4,coad(dA),coad(dA))");
 }
 
 #[test]
-#[ignore = "pending FORM color.frm size-5 QQ5 invariant-family reduction"]
 fn form_github_color_tloop_qq5_size_5() {
     test_initialize();
     let r = TestReps::new();
-    let expr = form_color_tloop_qq5(&r);
-
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().expand().to_bare_ordered_string(), @"(trace(cof(Nc),cyclic(t(coad(dA,j1),in,out),t(coad(dA,j2),in,out),t(coad(dA,j3),in,out),t(coad(dA,j4),in,out),t(coad(dA,j5),in,out))))^2");
+    let actual = simplify_closed_reference(form_color_tloop_qq5(&r));
+    assert_matches_color_h(
+        &r,
+        &actual,
+        "-5/144*NA*I2R^2*cA^3+11/48*d33(R1,R2)*cA^2-5/6*d44(R1,R2)*cA+1/6*d44(R1,A1)*I2R+d55(R1,R2)",
+    );
+    assert_snapshot!(actual.to_bare_ordered_string(), @"(cas(2,coad(dA)))^2*11/48*gram(3,cof(Nc),cof(Nc))+(cas(2,coad(dA)))^3*-5/144*Nc*cas(2,cof(Nc))*idx(2,cof(Nc))+-5/6*cas(2,coad(dA))*gram(4,cof(Nc),cof(Nc))+1/6*gram(4,coad(dA),cof(Nc))*idx(2,cof(Nc))+gram(5,cof(Nc),cof(Nc))");
 }
 
 #[test]
-#[ignore = "pending FORM color.frm size-5 QG5 invariant-family reduction"]
 fn form_github_color_tloop_qg5_size_5() {
     test_initialize();
     let r = TestReps::new();
-    let expr = form_color_tloop_qg5(&r);
-
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().expand().to_bare_ordered_string(), @"-1*f(coad(dA,j1),coad(dA,k1),coad(dA,k2))*f(coad(dA,j2),coad(dA,k2),coad(dA,k3))*f(coad(dA,j3),coad(dA,k3),coad(dA,k4))*f(coad(dA,j4),coad(dA,k4),coad(dA,k5))*f(coad(dA,j5),coad(dA,k1),coad(dA,k5))*trace(cof(Nc),cyclic(t(coad(dA,j1),in,out),t(coad(dA,j2),in,out),t(coad(dA,j3),in,out),t(coad(dA,j4),in,out),t(coad(dA,j5),in,out)))");
+    let actual = simplify_closed_reference(form_color_tloop_qg5(&r));
+    assert_matches_color_h(
+        &r,
+        &actual,
+        "-5/144*i_*NA*I2R*cA^4-3/4*d44(R1,A1)*i_*cA+1/12*d44(A1,A2)*i_*I2R",
+    );
+    assert_snapshot!(actual.to_bare_ordered_string(), @"(-3𝑖/4)*cas(2,coad(dA))*gram(4,coad(dA),cof(Nc))+(-5𝑖/144)*(cas(2,coad(dA)))^4*Nc*cas(2,cof(Nc))+(𝑖/12)*gram(4,coad(dA),coad(dA))*idx(2,cof(Nc))");
 }
 
 #[test]
-#[ignore = "pending FORM color.frm size-5 GG5 invariant-family reduction"]
 fn form_github_color_tloop_gg5_size_5() {
     test_initialize();
     let r = TestReps::new();
-    let expr = form_color_tloop_gg5(&r);
-
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().expand().to_bare_ordered_string(), @"f(coad(dA,i1),coad(dA,i2),coad(dA,j1))*f(coad(dA,i1),coad(dA,i5),coad(dA,j5))*f(coad(dA,i2),coad(dA,i3),coad(dA,j2))*f(coad(dA,i3),coad(dA,i4),coad(dA,j3))*f(coad(dA,i4),coad(dA,i5),coad(dA,j4))*f(coad(dA,j1),coad(dA,k1),coad(dA,k2))*f(coad(dA,j2),coad(dA,k2),coad(dA,k3))*f(coad(dA,j3),coad(dA,k3),coad(dA,k4))*f(coad(dA,j4),coad(dA,k4),coad(dA,k5))*f(coad(dA,j5),coad(dA,k1),coad(dA,k5))");
+    let actual = simplify_closed_reference(form_color_tloop_gg5(&r));
+    assert_matches_color_h(&r, &actual, "5/144*NA*cA^5+2/3*d44(A1,A2)*cA");
+    assert_snapshot!(actual.to_bare_ordered_string(), @"(cas(2,coad(dA)))^5*5/144*dA+2/3*cas(2,coad(dA))*gram(4,coad(dA),coad(dA))");
 }
 
+/// color.h's simpli reduces f's in an environment of invariants; here the
+/// environment is a foreign function of the two open adjoint labels.
 #[test]
-#[ignore = "pending color.h simpli strategy over invariant environments"]
 fn simpli_contracts_projected_f_pair() {
     test_initialize();
     let expr = parse_lit!(
@@ -1741,199 +1810,332 @@ fn simpli_contracts_projected_f_pair() {
     assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"cas(2,coad(dA))*g(coad(dA,a),coad(dA,b))*invariant_environment(a,b)");
 }
 
+// color.tar.gz tloop.frm with SIZE = 3.
+
 #[test]
-#[ignore = "pending color.tar.gz tloop qloop size 3 family"]
 fn tloop_qloop_size_3() {
     test_initialize();
-    let result = parse_lit!(
-        dA * idx(2, cof(Nc)) * cas(2, cof(Nc))
-            ^ 2 - 3 / 2 * dA * idx(2, cof(Nc)) * cas(2, coad(dA)) * cas(2, cof(Nc))
-                + 1 / 2 * dA * idx(2, cof(Nc)) * cas(2, coad(dA))
-            ^ 2,
-        default_namespace = "spenso"
-    );
-
-    assert_snapshot!(result.to_bare_ordered_string(), @"(cas(2,coad(dA)))^2*1/2*dA*idx(2,cof(Nc))+(cas(2,cof(Nc)))^2*dA*idx(2,cof(Nc))+-3/2*cas(2,coad(dA))*cas(2,cof(Nc))*dA*idx(2,cof(Nc))");
+    let r = TestReps::new();
+    let expr = trace!(&r.cof_nc, tco!(r, j1), tco!(r, j2), tco!(r, j3), tco!(r, j1), tco!(r, j2), tco!(r, j3));
+    let actual = simplify_closed_reference(expr);
+    assert_matches_color_h(&r, &actual, "NA*I2R*cR^2-3/2*NA*I2R*cA*cR+1/2*NA*I2R*cA^2");
+    assert_snapshot!(actual.to_bare_ordered_string(), @"(cas(2,coad(dA)))^2*1/2*Nc*cas(2,cof(Nc))+(cas(2,cof(Nc)))^2*-3/2*Nc*cas(2,coad(dA))+(cas(2,cof(Nc)))^3*Nc");
 }
 
 #[test]
-#[ignore = "pending color.tar.gz tloop gloop size 3 family"]
 fn tloop_gloop_size_3() {
     test_initialize();
-    let result = parse_lit!(0);
-
-    assert_snapshot!(result.to_bare_ordered_string(), @"0");
+    let r = TestReps::new();
+    let expr = fco!(r, i1, i2, j1)
+        * fco!(r, i2, i3, j2)
+        * fco!(r, i3, i4, j3)
+        * fco!(r, i4, i5, j1)
+        * fco!(r, i5, i6, j2)
+        * fco!(r, i6, i1, j3);
+    assert_snapshot!(simplify_closed_reference(expr).to_bare_ordered_string(), @"0");
 }
 
 #[test]
-#[ignore = "pending color.tar.gz tloop qqloop size 3 family"]
 fn tloop_qqloop_size_3() {
     test_initialize();
-    let result = parse_lit!(
-        -1 / 4 * dA * idx(2, cof(Nc)) ^ 2 * cas(2, coad(dA)) + d33(R1, R2),
-        default_namespace = "spenso"
-    );
-
-    assert_snapshot!(result.to_bare_ordered_string(), @"(idx(2,cof(Nc)))^2*-1/4*cas(2,coad(dA))*dA+d33(R1,R2)");
+    let r = TestReps::new();
+    let expr = trace!(&r.cof_nc, tco!(r, j1), tco!(r, j2), tco!(r, j3))
+        * trace!(&r.cof_nc, tco!(r, j1), tco!(r, j2), tco!(r, j3));
+    let actual = simplify_closed_reference(expr);
+    assert_matches_color_h(&r, &actual, "-1/4*NA*I2R^2*cA+d33(R1,R2)");
+    assert_snapshot!(actual.to_bare_ordered_string(), @"-1/4*Nc*cas(2,coad(dA))*cas(2,cof(Nc))*idx(2,cof(Nc))+gram(3,cof(Nc),cof(Nc))");
 }
 
 #[test]
-#[ignore = "pending color.tar.gz tloop qgloop size 3 family"]
 fn tloop_qgloop_size_3() {
     test_initialize();
-    let result = parse_lit!(
-        1𝑖 / 4 * dA * idx(2, cof(Nc)) * cas(2, coad(dA)) ^ 2,
-        default_namespace = "spenso"
-    );
-
-    assert_snapshot!(result.to_bare_ordered_string(), @"(cas(2,coad(dA)))^2*dA*idx(2,cof(Nc))*𝑖/4");
+    let r = TestReps::new();
+    let expr = trace!(&r.cof_nc, tco!(r, j1), tco!(r, j2), tco!(r, j3))
+        * fco!(r, k1, k2, j1)
+        * fco!(r, k2, k3, j2)
+        * fco!(r, k3, k1, j3);
+    let actual = simplify_closed_reference(expr);
+    assert_matches_color_h(&r, &actual, "1/4*i_*NA*I2R*cA^2");
+    assert_snapshot!(actual.to_bare_ordered_string(), @"(cas(2,coad(dA)))^2*(𝑖/4)*Nc*cas(2,cof(Nc))");
 }
 
 #[test]
-#[ignore = "pending color.tar.gz tloop ggloop size 3 family"]
 fn tloop_ggloop_size_3() {
     test_initialize();
-    let result = parse_lit!(
-        1 / 4 * dA * cas(2, coad(dA)) ^ 3,
-        default_namespace = "spenso"
-    );
-
-    assert_snapshot!(result.to_bare_ordered_string(), @"(cas(2,coad(dA)))^3*1/4*dA");
+    let r = TestReps::new();
+    let expr = fco!(r, i1, i2, j1)
+        * fco!(r, i2, i3, j2)
+        * fco!(r, i3, i1, j3)
+        * fco!(r, k1, k2, j1)
+        * fco!(r, k2, k3, j2)
+        * fco!(r, k3, k1, j3);
+    let actual = simplify_closed_reference(expr);
+    assert_matches_color_h(&r, &actual, "1/4*NA*cA^3");
+    assert_snapshot!(actual.to_bare_ordered_string(), @"(cas(2,coad(dA)))^3*1/4*dA");
 }
 
+/// The Coxeter (Heawood) graph: 14 structure constants, girth six.
 #[test]
-#[ignore = "pending color.tar.gz fixed g14 family"]
 fn tloop_g14() {
     test_initialize();
-    let result = parse_lit!(
-        1 / 648 * dA * cas(2, coad(dA))
-            ^ 7 - 8 / 15 * d444(A1, A2, A3) * cas(2, coad(dA)) + 16 / 9 * d644(A1, A2, A3),
-        default_namespace = "spenso"
-    );
-
-    assert_snapshot!(result.to_bare_ordered_string(), @"(cas(2,coad(dA)))^7*1/648*dA+-8/15*cas(2,coad(dA))*d444(A1,A2,A3)+16/9*d644(A1,A2,A3)");
+    let r = TestReps::new();
+    let expr = fco!(r, i1, i2, i3)
+        * fco!(r, i1, i4, i5)
+        * fco!(r, i2, i6, i7)
+        * fco!(r, i3, i8, i9)
+        * fco!(r, i4, i10, i11)
+        * fco!(r, i5, i12, i13)
+        * fco!(r, i6, i14, i15)
+        * fco!(r, i7, i16, i17)
+        * fco!(r, i8, i18, i19)
+        * fco!(r, i9, i20, i21)
+        * fco!(r, i10, i21, i15)
+        * fco!(r, i13, i19, i14)
+        * fco!(r, i17, i11, i18)
+        * fco!(r, i12, i16, i20);
+    let actual = simplify_closed_reference(expr);
+    assert_matches_color_h(&r, &actual, "1/648*NA*cA^7-8/15*d444(A1,A2,A3)*cA+16/9*d644(A1,A2,A3)");
+    assert_snapshot!(actual.to_bare_ordered_string(), @"(cas(2,coad(dA)))^7*1/648*dA+-8/15*cas(2,coad(dA))*d444(coad(dA),coad(dA),coad(dA))+16/9*d644(coad(dA),coad(dA),coad(dA))");
 }
 
+/// Five quark loops and eight gluons (16 vertices).
 #[test]
-#[ignore = "pending color.tar.gz fixed fiveq family"]
 fn tloop_fiveq() {
     test_initialize();
-    let result = parse_lit!(
-        1 / 192 * dA * idx(2, cof(Nc))
-            ^ 5 * cas(2, coad(dA))
-            ^ 3 + 1 / 4 * d33(R1, R2) * idx(2, cof(Nc))
-            ^ 3 * cas(2, coad(dA))
-            ^ 2 + 5 / 48 * d33(R1, R2) * d33(R3, R4) * dA
-            ^ -1 * idx(2, cof(Nc)) * cas(2, coad(dA)) + 5 / 48 * d33(R1, R3) * d33(R2, R4) * dA
-            ^ -1 * idx(2, cof(Nc)) * cas(2, coad(dA)) + 1 / 8 * d33(R1, R4) * d33(R2, R3) * dA
-            ^ -1 * idx(2, cof(Nc)) * cas(2, coad(dA)) + 1 / 16 * d44(R1, A1) * idx(2, cof(Nc))
-            ^ 4 + 3 / 8 * d433(R3, R1, R2) * idx(2, cof(Nc))
-            ^ 2 * cas(2, coad(dA))
-                + 1 / 2 * d3333(R1, R2, R3, R4) * idx(2, cof(Nc)) * cas(2, coad(dA))
-                + d43333a(R5, R2, R1, R4, R3),
-        default_namespace = "spenso"
+    let r = TestReps::new();
+    let expr = trace!(&r.cof_nc, tco!(r, j1), tco!(r, j2), tco!(r, j3))
+        * trace!(&r.cof_nc, tco!(r, j2), tco!(r, j4), tco!(r, j5))
+        * trace!(&r.cof_nc, tco!(r, j4), tco!(r, j6), tco!(r, j7))
+        * trace!(&r.cof_nc, tco!(r, j6), tco!(r, j1), tco!(r, j8))
+        * trace!(&r.cof_nc, tco!(r, j3), tco!(r, j5), tco!(r, j7), tco!(r, j8));
+    let actual = simplify_closed_reference(expr);
+    assert_matches_color_h(
+        &r,
+        &actual,
+        "1/192*NA*I2R^5*cA^3+1/4*d33(R1,R2)*I2R^3*cA^2+5/48*d33(R1,R2)*d33(R3,R4)*NA^-1*I2R*cA+5/48*d33(R1,R3)*d33(R2,R4)*NA^-1*I2R*cA+1/8*d33(R1,R4)*d33(R2,R3)*NA^-1*I2R*cA+1/16*d44(R1,A1)*I2R^4+3/8*d433(R3,R1,R2)*I2R^2*cA+1/2*d3333(R1,R2,R3,R4)*I2R*cA+d43333a(R5,R2,R1,R4,R3)",
     );
+    assert_snapshot!(actual.to_bare_ordered_string(), @"(cas(2,coad(dA)))^2*(idx(2,cof(Nc)))^3*1/4*gram(3,cof(Nc),cof(Nc))+(cas(2,coad(dA)))^3*(idx(2,cof(Nc)))^4*1/192*Nc*cas(2,cof(Nc))+(gram(3,cof(Nc),cof(Nc)))^2*1/3*cas(2,coad(dA))*dA^(-1)*idx(2,cof(Nc))+(idx(2,cof(Nc)))^2*3/8*cas(2,coad(dA))*d433(cof(Nc),cof(Nc),cof(Nc))+(idx(2,cof(Nc)))^4*1/16*gram(4,coad(dA),cof(Nc))+1/2*cas(2,coad(dA))*d3333(cof(Nc),cof(Nc),cof(Nc),cof(Nc))*idx(2,cof(Nc))+d43333a(cof(Nc),cof(Nc),cof(Nc),cof(Nc),cof(Nc))");
+}
 
-    assert_snapshot!(result.to_bare_ordered_string(), @"(cas(2,coad(dA)))^2*(idx(2,cof(Nc)))^3*1/4*d33(R1,R2)+(cas(2,coad(dA)))^3*(idx(2,cof(Nc)))^5*1/192*dA+(idx(2,cof(Nc)))^2*3/8*cas(2,coad(dA))*d433(R3,R1,R2)+(idx(2,cof(Nc)))^4*1/16*d44(R1,A1)+1/2*cas(2,coad(dA))*d3333(R1,R2,R3,R4)*idx(2,cof(Nc))+1/8*cas(2,coad(dA))*d33(R1,R4)*d33(R2,R3)*dA^(-1)*idx(2,cof(Nc))+5/48*cas(2,coad(dA))*d33(R1,R2)*d33(R3,R4)*dA^(-1)*idx(2,cof(Nc))+5/48*cas(2,coad(dA))*d33(R1,R3)*d33(R2,R4)*dA^(-1)*idx(2,cof(Nc))+d43333a(R5,R2,R1,R4,R3)");
+// color.tar.gz su.frm (SIMPLE, n = 3): SU(NF) with Tr(T^a T^b) = a delta^{ab}
+// and nf per closed fundamental trace, from SUn.prc.
+
+/// The generic result in SU(NF) for Tr(T^a T^b) = a: the T_F = 1/2 values,
+/// times (2a)^(V/2) for V generators and structure constants, and nf per trace.
+fn su_n_reference_value(actual: &Atom, r: &TestReps, vertices: i64, traces: i64) -> Atom {
+    use crate::color::ColorSimplifier;
+    let nf_dim = Atom::var(symbol!("color_su_reference::NF"));
+    let a = Atom::var(symbol!("color_su_reference::a"));
+    let nf = Atom::var(symbol!("color_su_reference::nf"));
+    let fundamental = r.cof_nc.to_symbolic([]);
+    let adjoint = r.coad_da.to_symbolic([]);
+    let replacements = [
+        symbolica::id::Replacement::new(fundamental.to_pattern(), ColorFundamental {}.to_symbolic([nf_dim.clone()]).to_pattern()),
+        symbolica::id::Replacement::new(adjoint.to_pattern(), ColorAdjoint {}.to_symbolic([nf_dim.clone().pow(Atom::num(2)) - Atom::num(1)]).to_pattern()),
+        symbolica::id::Replacement::new(r.cof_nc.dim.to_symbolic().to_pattern(), nf_dim.to_pattern()),
+        symbolica::id::Replacement::new(r.coad_da.dim.to_symbolic().to_pattern(), (nf_dim.clone().pow(Atom::num(2)) - Atom::num(1)).to_pattern()),
+    ];
+    let value = actual.replace_multiple(&replacements).to_cof_dimension_invariants();
+    let scale = (Atom::num(2) * a).pow(Atom::num(vertices) / Atom::num(2)) * nf.pow(Atom::num(traces));
+    (value * scale).expand()
+}
+
+fn assert_su_reference(actual: &Atom, r: &TestReps, vertices: i64, traces: i64, form: &str) {
+    let expected = symbolica::try_parse!(&form.replace("i_", "𝑖"), default_namespace = "color_su_reference").unwrap();
+    let value = su_n_reference_value(actual, r, vertices, traces);
+    assert!((value.clone() - &expected).expand().is_zero(), "{value} != {expected}");
+}
+
+fn adjoint_matrix(r: &TestReps, index: Symbol) -> Atom {
+    CS.structure_f(
+        r.coad_da.to_symbolic([Atom::var(index)]),
+        Atom::var(spenso::network::tags::SPENSO_TAG.chain_in),
+        Atom::var(spenso::network::tags::SPENSO_TAG.chain_out),
+    )
+}
+
+fn sym_fundamental_trace(r: &TestReps, indices: &[Symbol]) -> Atom {
+    CS.symmetric_generator_trace(r.cof_nc.to_symbolic([]), indices.iter().map(|i| r.coad_da.to_symbolic([Atom::var(*i)])))
+}
+
+fn sym_adjoint_trace(r: &TestReps, indices: &[Symbol]) -> Atom {
+    spenso::shadowing::trace_sym(r.coad_da.to_symbolic([]), indices.iter().map(|i| adjoint_matrix(r, *i)))
+}
+
+fn adjoint_trace(r: &TestReps, indices: &[Symbol]) -> Atom {
+    trace!(r.coad_da.to_symbolic([]); indices.iter().map(|i| adjoint_matrix(r, *i)))
+}
+
+fn fundamental_trace(r: &TestReps, indices: &[Symbol]) -> Atom {
+    trace!(r.cof_nc.to_symbolic([]); indices.iter().map(|i| color_t!(r.coad_da.to_symbolic([Atom::var(*i)]))))
+}
+
+fn su_indices<const N: usize>() -> [Symbol; N] {
+    std::array::from_fn(|k| symbol!(&format!("color_su_reference::j{}", k + 1)))
 }
 
 #[test]
-#[ignore = "pending color.tar.gz su.frm F3F3 case"]
 fn su_f3f3() {
     test_initialize();
-    let result = parse_lit!(2 * a ^ 3 * NF ^ -1 - 5 / 2 * a ^ 3 * NF + 1 / 2 * a ^ 3 * NF ^ 3);
-
-    assert_snapshot!(result.to_bare_ordered_string(), @"-5/2*NF*a^3+1/2*NF^3*a^3+2*NF^(-1)*a^3");
+    let r = TestReps::new();
+    let j = su_indices::<3>();
+    let actual = simplify_closed_reference(sym_fundamental_trace(&r, &j) * fundamental_trace(&r, &j));
+    // (Tr(j1,j2,j3)+Tr(j1,j3,j2))/2*Tr(j1,j2,j3)/nf^2
+    assert_su_reference(&actual, &r, 6, 0, "2*a^3*NF^-1-5/2*a^3*NF+1/2*a^3*NF^3");
+    assert_snapshot!(actual.to_bare_ordered_string(), @"gram(3,cof(Nc),cof(Nc))");
 }
 
 #[test]
-#[ignore = "pending color.tar.gz su.frm F4F4 case"]
 fn su_f4f4() {
     test_initialize();
-    let result = parse_lit!(
-        -3 * a
-            ^ 4 * nf
-            ^ 2 * NF
-            ^ -2 + 4 * a
-            ^ 4 * nf
-            ^ 2 - 7 / 6 * a
-            ^ 4 * nf
-            ^ 2 * NF
-            ^ 2 + 1 / 6 * a
-            ^ 4 * nf
-            ^ 2 * NF
-            ^ 4
-    );
-
-    assert_snapshot!(result.to_bare_ordered_string(), @"-3*NF^(-2)*a^4*nf^2+-7/6*NF^2*a^4*nf^2+1/6*NF^4*a^4*nf^2+4*a^4*nf^2");
+    let r = TestReps::new();
+    let j = su_indices::<4>();
+    let actual = simplify_closed_reference(sym_fundamental_trace(&r, &j) * fundamental_trace(&r, &j));
+    assert_su_reference(&actual, &r, 8, 2, "-3*a^4*nf^2*NF^-2+4*a^4*nf^2-7/6*a^4*nf^2*NF^2+1/6*a^4*nf^2*NF^4");
+    assert_snapshot!(actual.to_bare_ordered_string(), @"gram(4,cof(Nc),cof(Nc))");
 }
 
 #[test]
-#[ignore = "pending color.tar.gz su.frm F4A4 case"]
 fn su_f4a4() {
     test_initialize();
-    let result = parse_lit!(
-        -2 * a ^ 4 * nf * NF + 5 / 3 * a ^ 4 * nf * NF ^ 3 + 1 / 3 * a ^ 4 * nf * NF ^ 5
-    );
-
-    assert_snapshot!(result.to_bare_ordered_string(), @"-2*NF*a^4*nf+1/3*NF^5*a^4*nf+5/3*NF^3*a^4*nf");
+    let r = TestReps::new();
+    let j = su_indices::<4>();
+    let actual = simplify_closed_reference(sym_fundamental_trace(&r, &j) * adjoint_trace(&r, &j));
+    assert_su_reference(&actual, &r, 8, 1, "-2*a^4*nf*NF+5/3*a^4*nf*NF^3+1/3*a^4*nf*NF^5");
+    assert_snapshot!(actual.to_bare_ordered_string(), @"gram(4,coad(dA),cof(Nc))");
 }
 
 #[test]
-#[ignore = "pending color.tar.gz su.frm A4A4 case"]
 fn su_a4a4() {
     test_initialize();
-    let result =
-        parse_lit!(-24 * a ^ 4 * NF ^ 2 + 70 / 3 * a ^ 4 * NF ^ 4 + 2 / 3 * a ^ 4 * NF ^ 6);
-
-    assert_snapshot!(result.to_bare_ordered_string(), @"-24*NF^2*a^4+2/3*NF^6*a^4+70/3*NF^4*a^4");
+    let r = TestReps::new();
+    let j = su_indices::<4>();
+    let actual = simplify_closed_reference(sym_adjoint_trace(&r, &j) * adjoint_trace(&r, &j));
+    assert_su_reference(&actual, &r, 8, 0, "-24*a^4*NF^2+70/3*a^4*NF^4+2/3*a^4*NF^6");
+    assert_snapshot!(actual.to_bare_ordered_string(), @"gram(4,coad(dA),coad(dA))");
 }
 
 #[test]
-#[ignore = "pending color.tar.gz su.frm FnFn n=3 case"]
 fn su_fnfn_n3() {
     test_initialize();
-    let result = parse_lit!(2 * a ^ 3 * nf ^ 2 * NF ^ -1 - 2 * a ^ 3 * nf ^ 2 * NF);
-
-    assert_snapshot!(result.to_bare_ordered_string(), @"-2*NF*a^3*nf^2+2*NF^(-1)*a^3*nf^2");
+    let r = TestReps::new();
+    let j = su_indices::<3>();
+    let actual = simplify_closed_reference(fundamental_trace(&r, &j) * fundamental_trace(&r, &j));
+    assert_su_reference(&actual, &r, 6, 2, "2*a^3*nf^2*NF^-1-2*a^3*nf^2*NF");
+    assert_snapshot!(actual.to_bare_ordered_string(), @"-1/4*Nc*cas(2,coad(dA))*cas(2,cof(Nc))*idx(2,cof(Nc))+gram(3,cof(Nc),cof(Nc))");
 }
 
 #[test]
-#[ignore = "pending color.tar.gz su.frm FnAn n=3 case"]
 fn su_fnan_n3() {
     test_initialize();
-    let result = parse_lit!(-1𝑖 * a ^ 3 * nf * NF ^ 2 + 1𝑖 * a ^ 3 * nf * NF ^ 4);
-
-    // Keep the exact reference independent of Symbolica's imaginary-unit printer.
-    assert_eq!(result, parse!("-1𝑖*NF^2*a^3*nf+1𝑖*NF^4*a^3*nf"));
-    assert_snapshot!(result.to_bare_ordered_string(), @"-𝑖*NF^2*a^3*nf+NF^4*a^3*nf*𝑖");
+    let r = TestReps::new();
+    let j = su_indices::<3>();
+    let actual = simplify_closed_reference(fundamental_trace(&r, &j) * adjoint_trace(&r, &j));
+    assert_su_reference(&actual, &r, 6, 1, "-i_*a^3*nf*NF^2+i_*a^3*nf*NF^4");
+    assert_snapshot!(actual.to_bare_ordered_string(), @"(cas(2,coad(dA)))^2*(𝑖/4)*Nc*cas(2,cof(Nc))");
 }
 
 #[test]
-#[ignore = "pending color.tar.gz su.frm AnAn n=3 case"]
 fn su_anan_n3() {
     test_initialize();
-    let result = parse_lit!(-2 * a ^ 3 * NF ^ 3 + 2 * a ^ 3 * NF ^ 5);
-
-    assert_snapshot!(result.to_bare_ordered_string(), @"-2*NF^3*a^3+2*NF^5*a^3");
+    let r = TestReps::new();
+    let j = su_indices::<3>();
+    let actual = simplify_closed_reference(adjoint_trace(&r, &j) * adjoint_trace(&r, &j));
+    assert_su_reference(&actual, &r, 6, 0, "-2*a^3*NF^3+2*a^3*NF^5");
+    assert_snapshot!(actual.to_bare_ordered_string(), @"(cas(2,coad(dA)))^3*1/4*dA");
 }
 
 #[test]
-#[ignore = "pending color.tar.gz su.frm qloop n=3 case"]
 fn su_qloop_n3() {
     test_initialize();
-    let result = parse_lit!(-a ^ 3 * nf * NF ^ -2 + a ^ 3 * nf * NF ^ 2);
-
-    assert_snapshot!(result.to_bare_ordered_string(), @"-1*NF^(-2)*a^3*nf+NF^2*a^3*nf");
+    let r = TestReps::new();
+    let [j1, j2, j3] = su_indices::<3>();
+    let actual = simplify_closed_reference(fundamental_trace(&r, &[j1, j2, j3, j1, j2, j3]));
+    assert_su_reference(&actual, &r, 6, 1, "-a^3*nf*NF^-2+a^3*nf*NF^2");
+    assert_snapshot!(actual.to_bare_ordered_string(), @"(cas(2,coad(dA)))^2*1/2*Nc*cas(2,cof(Nc))+(cas(2,cof(Nc)))^2*-3/2*Nc*cas(2,coad(dA))+(cas(2,cof(Nc)))^3*Nc");
 }
 
 #[test]
-#[ignore = "pending color.tar.gz su.frm gloop n=3 case"]
 fn su_gloop_n3() {
     test_initialize();
-    let result = parse_lit!(0);
+    let r = TestReps::new();
+    let [j1, j2, j3] = su_indices::<3>();
+    let actual = simplify_closed_reference(adjoint_trace(&r, &[j1, j2, j3, j1, j2, j3]));
+    assert_su_reference(&actual, &r, 6, 0, "0");
+    assert_snapshot!(actual.to_bare_ordered_string(), @"0");
+}
 
-    assert_snapshot!(result.to_bare_ordered_string(), @"0");
+/// The value of a generic result in SU(n) with T_F = 1/2.
+fn su_n_number(actual: &Atom, r: &TestReps, n: i64) -> Atom {
+    use crate::color::ColorSimplifier;
+    let replacements = [
+        symbolica::id::Replacement::new(r.cof_nc.to_symbolic([]).to_pattern(), ColorFundamental {}.to_symbolic([Atom::num(n)]).to_pattern()),
+        symbolica::id::Replacement::new(r.coad_da.to_symbolic([]).to_pattern(), ColorAdjoint {}.to_symbolic([Atom::num(n * n - 1)]).to_pattern()),
+        symbolica::id::Replacement::new(r.cof_nc.dim.to_symbolic().to_pattern(), Atom::num(n).to_pattern()),
+        symbolica::id::Replacement::new(r.coad_da.dim.to_symbolic().to_pattern(), Atom::num(n * n - 1).to_pattern()),
+    ];
+    actual.replace_multiple(&replacements).to_cof_dimension_invariants().expand()
+}
+
+/// d6433a(R,R,R,R) = d_R^{a1..a6} d_R^{a1a2a7a8} d_R^{a3a4a5} d_R^{a6a7a8}
+/// (16 vertices) reaches color.h's d6433a relation, whose d433 term has
+/// -1/40 (color.h's makeds writes -1/4). Explicit SU(3) and SU(4)
+/// generators give 103/20736 and 915/8192.
+#[test]
+fn d6433a_network_has_its_su_n_value() {
+    test_initialize();
+    let r = TestReps::new();
+    let [j1, j2, j3, j4, j5, j6, j7, j8] = su_indices::<8>();
+    let expr = sym_fundamental_trace(&r, &[j1, j2, j3, j4, j5, j6])
+        * sym_fundamental_trace(&r, &[j1, j2, j7, j8])
+        * sym_fundamental_trace(&r, &[j3, j4, j5])
+        * sym_fundamental_trace(&r, &[j6, j7, j8]);
+    let actual = simplify_closed_reference(expr);
+    assert_eq!(su_n_number(&actual, &r, 3), Atom::num(103) / Atom::num(20736), "{actual}");
+    assert_eq!(su_n_number(&actual, &r, 4), Atom::num(915) / Atom::num(8192), "{actual}");
+}
+
+/// d_R^{a a b1..b5} d_R^{b1..b5}: color.h's contract of a rank-7 d_R with a
+/// summed pair gives (cR - 5/12 cA) d_R^(5) plus pure-number multiples of
+/// d_R^(3) d_A^(4) (color.h writes I2R/120). Explicit SU(3) and SU(4)
+/// generators give 35/324 and 3115/4096.
+#[test]
+fn rank_seven_contracted_pair_has_its_su_n_value() {
+    test_initialize();
+    let r = TestReps::new();
+    let [a, b1, b2, b3, b4, b5] = su_indices::<6>();
+    let expr = sym_fundamental_trace(&r, &[a, a, b1, b2, b3, b4, b5]) * sym_fundamental_trace(&r, &[b1, b2, b3, b4, b5]);
+    let actual = simplify_closed_reference(expr);
+    assert_eq!(su_n_number(&actual, &r, 3), Atom::num(35) / Atom::num(324), "{actual}");
+    assert_eq!(su_n_number(&actual, &r, 4), Atom::num(3115) / Atom::num(4096), "{actual}");
+}
+
+/// A colour factor the closed-network reducer does not read (here explicit
+/// symmetric tensors beside a closed f loop) keeps the term with the local
+/// rules instead of being passed through as a spectator.
+#[test]
+fn colour_spectators_of_a_closed_network_are_reduced() {
+    test_initialize();
+    let expr = parse_lit!(
+        f(coad(dA, a), coad(dA, b), coad(dA, c))
+            ^ 2 * d(cof(Nc), coad(dA, e), coad(dA, g), coad(dA, h))
+                * d(cof(Nc), coad(dA, e), coad(dA, g), coad(dA, k))
+                * g(coad(dA, h), coad(dA, k)),
+        default_namespace = "spenso"
+    );
+    let simplify = |settings: crate::color::ColorSimplifySettings| {
+        crate::tensor::SymbolicTensor::infer(expr.clone())
+            .unwrap()
+            .simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(settings), ..Default::default() })
+            .unwrap()
+            .into_expression()
+            .expand()
+    };
+    let with = simplify(crate::color::ColorSimplifySettings::default());
+    let without = simplify(crate::color::ColorSimplifySettings::default().without_closed_networks());
+    assert_eq!(with, without);
+    let printed = with.to_bare_ordered_string();
+    assert!(printed.contains("gram(3,cof(Nc),cof(Nc))") && !printed.contains("d(cof"), "{printed}");
 }
 
 /// Five-loop background-field QCD self-energies leave this closed network

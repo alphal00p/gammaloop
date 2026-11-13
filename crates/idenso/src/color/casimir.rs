@@ -194,7 +194,39 @@ impl CofDimensionInvariantRewriter {
             return self.rewrite_gram(args[0], args[1], args[2]);
         }
 
+        if let Some(name) = super::network::invariant_name(f.get_symbol()) {
+            let args = f.iter().collect::<Vec<_>>();
+            return self.rewrite_named(name, &args);
+        }
+
         None
+    }
+
+    /// A named invariant of the closed-network reducer, or a Gram invariant
+    /// of degree five or six, from its SU(N) table.
+    fn rewrite_named(&self, name: &str, args: &[AtomView<'_>]) -> Option<Atom> {
+        let mut n: Option<Atom> = None;
+        let mut adjoint = Vec::with_capacity(args.len());
+        for arg in args {
+            let candidate = if let Some(dimension) = Self::fundamental_dimension(*arg) {
+                adjoint.push(false);
+                dimension
+            } else {
+                let dimension = Self::adjoint_dimension(*arg)?;
+                adjoint.push(true);
+                Self::fundamental_dimension_from_adjoint_dimension(dimension.as_view())?
+            };
+            match &n {
+                Some(existing) if *existing != candidate => return None,
+                Some(_) => {}
+                None => n = Some(candidate),
+            }
+        }
+        let n = n?;
+        let terms = super::network::su_n_terms(name, &adjoint)?;
+        Some(Atom::add_many(terms.iter().map(|&(power, num, den)| {
+            Atom::num(symbolica::domains::rational::Rational::new(num, den)) * n.clone().pow(Atom::num(power as i64))
+        })))
     }
 
     fn rewrite_index(&self, degree: AtomView<'_>, rep: AtomView<'_>) -> Option<Atom> {
@@ -225,6 +257,21 @@ impl CofDimensionInvariantRewriter {
         right_rep: AtomView<'_>,
     ) -> Option<Atom> {
         let degree = Self::positive_integer(degree)?;
+        if let Some(name) = match degree {
+            5 => Some("d55"),
+            6 => Some("d66"),
+            7 => Some("d77"),
+            8 => Some("d88"),
+            _ => None,
+        } {
+            // Adjoint first, as the closed-network reducer writes them.
+            let (l, r) = if Self::adjoint_dimension(right_rep).is_some() && Self::fundamental_dimension(left_rep).is_some() {
+                (right_rep, left_rep)
+            } else {
+                (left_rep, right_rep)
+            };
+            return self.rewrite_named(name, &[l, r]);
+        }
         if let (Some(left), Some(right)) = (
             Self::fundamental_dimension(left_rep),
             Self::fundamental_dimension(right_rep),
