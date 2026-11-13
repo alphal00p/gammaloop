@@ -1070,3 +1070,120 @@ fn every_arithmetic_is_sent_with_real_inputs() {
         );
     }
 }
+
+/// The records of a `VAKINT_DUMP_SPLIT_INPUTS` dump (`family`, `powers`,
+/// `external` and `numerator` lines): family, powers, external, numerator.
+fn request_records(
+    text: &str,
+) -> Vec<(
+    &'static crate::p_integral::PFamilyData,
+    Vec<i64>,
+    Atom,
+    Atom,
+)> {
+    text.split("\n---\n")
+        .filter(|record| !record.trim().is_empty())
+        .map(|record| {
+            let field = |key: &str| {
+                record
+                    .lines()
+                    .find_map(|line| line.strip_prefix(key)?.strip_prefix(' '))
+                    .unwrap_or_else(|| panic!("a request record without {key}"))
+            };
+            (
+                registry_family(field("family")).unwrap(),
+                field("powers")
+                    .split(',')
+                    .map(|power| power.parse().unwrap())
+                    .collect(),
+                parse(field("external")),
+                parse(field("numerator")),
+            )
+        })
+        .collect()
+}
+
+/// The built-in p library (one to three loops), or the scope 1-4 package
+/// named by `VAKINT_TEST_P_LIBRARY_1_4`.
+fn library_engine() -> Vakint {
+    let mut engine = Vakint::new().unwrap();
+    if let Some(directory) = std::env::var_os("VAKINT_TEST_P_LIBRARY_1_4") {
+        let library = rustred_app::propagator::load_p_library(
+            rustred_app::propagator::PLibrarySource::Directory(directory.into()),
+            &rustred_app::propagator::PLibraryOptions {
+                verify_descent: false,
+            },
+        )
+        .unwrap();
+        engine.inject_p_library(library).unwrap();
+    }
+    engine
+}
+
+/// The lazy lowering of [`reduce_requests`] (one channel lowered just before
+/// its reduction) gives the values, in the same order, and the errors of the
+/// eager table of [`reduce_requests_eager`], request by request and on the
+/// whole batch at once: the real five-loop requests of
+/// `p_split_requests.txt` within the library's scope, and with
+/// `VAKINT_P_REQUEST_CORPUS` a directory of dumped requests (one per file).
+#[test]
+fn lazy_channel_lowering_reproduces_the_eager_table() {
+    let engine = library_engine();
+    let settings = settings(RustRedMasterMode::Symbolic, None);
+    let mut texts = vec![include_str!("../../tests/fixtures/p_split_requests.txt").to_string()];
+    if let Some(directory) = std::env::var_os("VAKINT_P_REQUEST_CORPUS") {
+        let mut paths = std::fs::read_dir(directory)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect::<Vec<_>>();
+        paths.sort();
+        texts.extend(
+            paths
+                .iter()
+                .map(|path| std::fs::read_to_string(path).unwrap()),
+        );
+    }
+    let records = texts
+        .iter()
+        .flat_map(|text| request_records(text))
+        .filter(|(family, ..)| has_p_data(&engine, family.loops))
+        .collect::<Vec<_>>();
+    assert!(records.len() >= 5, "{} records in scope", records.len());
+    let requests = records
+        .iter()
+        .map(|(family, powers, external, numerator)| PropagatorRequest {
+            family,
+            powers,
+            canonical_numerator: numerator.as_view(),
+            external: external.clone(),
+        })
+        .collect::<Vec<_>>();
+    let same = |requests: &[PropagatorRequest]| {
+        let lazy = reduce_requests(&engine, &settings, requests, None);
+        let eager = reduce_requests_eager(&engine, &settings, requests, None);
+        match (&lazy, &eager) {
+            (Ok(lazy), Ok(eager)) => {
+                assert_eq!(lazy, eager);
+                assert_eq!(format!("{lazy:?}"), format!("{eager:?}"));
+            }
+            _ => assert_eq!(
+                lazy.as_ref().map_err(ToString::to_string).err(),
+                eager.as_ref().map_err(ToString::to_string).err()
+            ),
+        }
+        lazy.map_or(0, |values| values.values().map(Vec::len).sum::<usize>())
+    };
+    let mut values = 0;
+    for request in &requests {
+        values += same(std::slice::from_ref(request));
+    }
+    assert!(values > 0);
+    assert!(same(&requests) > 0);
+    // Batches whose requests share channels.
+    let doubled = requests
+        .iter()
+        .chain(&requests)
+        .cloned()
+        .collect::<Vec<_>>();
+    assert!(same(&doubled) > 0);
+}
