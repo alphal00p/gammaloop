@@ -7333,10 +7333,25 @@ Evaluated (n_loops=1, mu_r=1) :
             .with(1)
     }
 
+    /// Whether [`Self::convert_from_dot_notation`] opens every `dot_pow` in
+    /// one structural pass (the default: `VAKINT_DOT_CONVERSION` unset or
+    /// `onepass`) or through [`Self::expand_dot_powers`] (`fast`, `slow` or
+    /// `check`: the former stepwise loop's exact output, its dummy labels
+    /// included). Both give the same value.
+    fn dot_conversion_in_one_pass() -> bool {
+        static ONE_PASS: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        *ONE_PASS.get_or_init(|| match std::env::var("VAKINT_DOT_CONVERSION") {
+            Ok(mode) => mode == "onepass",
+            Err(_) => true,
+        })
+    }
+
     /// Expand every `dot_pow(a,b,c)` of `a` into `c` contractions, each with
     /// its own dummy index from `dummy` on, in the order of
-    /// [`Self::dot_power_step`] repeated to a fixed point. `VAKINT_DOT_CONVERSION`
-    /// selects `fast` (the default: the same steps applied term by term of
+    /// [`Self::dot_power_step`] repeated to a fixed point (used by
+    /// [`Self::convert_from_dot_notation`] when `VAKINT_DOT_CONVERSION` is set
+    /// to one of the modes below). `VAKINT_DOT_CONVERSION`
+    /// selects `fast` (the default here: the same steps applied term by term of
     /// the one sum that holds every `dot_pow`, or to the factors of a product
     /// that hold one, see [`Self::expand_dot_powers_fast`]), `slow` (the steps
     /// on the whole expression) or `check` (both, panicking on any difference).
@@ -7689,8 +7704,65 @@ Evaluated (n_loops=1, mu_r=1) :
                 dummy += 1;
                 let first_new_dummy = dummy;
 
-                let mut a = a.to_owned();
-                Self::expand_dot_powers(&mut a, &mut dummy);
+                // Open every dot_pow(a, b, n) with integer n >= 0 into n pairs
+                // a(d) b(d) with fresh dummies d, in one structural pass. The
+                // former loop re-matched and rebuilt the term once per opened
+                // product; at five loops that dominated the tensor reduction.
+                // VAKINT_DOT_CONVERSION=fast|slow|check keeps the former loop's
+                // exact output instead (Self::expand_dot_powers): the same value
+                // with the former dummy labels.
+                let a = if Self::dot_conversion_in_one_pass() {
+                    let next_dummy = std::cell::Cell::new(dummy);
+                    let with_index = |vector: AtomView, index: &Atom| -> Option<Atom> {
+                        match vector {
+                            AtomView::Var(variable) => Some(
+                                FunctionBuilder::new(variable.get_symbol())
+                                    .add_arg(index)
+                                    .finish(),
+                            ),
+                            AtomView::Fun(function) => Some(
+                                FunctionBuilder::new(function.get_symbol())
+                                    .add_args(function.iter().collect::<Vec<_>>())
+                                    .add_arg(index)
+                                    .finish(),
+                            ),
+                            _ => None,
+                        }
+                    };
+                    let a = a.replace_map(|view, _context, out| {
+                        let AtomView::Fun(function) = view else {
+                            return;
+                        };
+                        if function.get_symbol() != S.dot_pow || function.get_nargs() != 3 {
+                            return;
+                        }
+                        let arguments = function.iter().collect::<Vec<_>>();
+                        let Ok(power) = i64::try_from(arguments[2]) else {
+                            return;
+                        };
+                        if power < 0
+                            || !matches!(arguments[0], AtomView::Var(_) | AtomView::Fun(_))
+                            || !matches!(arguments[1], AtomView::Var(_) | AtomView::Fun(_))
+                        {
+                            return;
+                        }
+                        let mut product = Atom::num(1);
+                        for _ in 0..power {
+                            let index = S.dot_dummy_ind(next_dummy.get());
+                            next_dummy.set(next_dummy.get() + 1);
+                            product = product
+                                * with_index(arguments[0], &index).unwrap()
+                                * with_index(arguments[1], &index).unwrap();
+                        }
+                        **out = product;
+                    });
+                    dummy = next_dummy.get();
+                    a
+                } else {
+                    let mut a = a.to_owned();
+                    Self::expand_dot_powers(&mut a, &mut dummy);
+                    a
+                };
                 // Each copy of a powered scalar sum owns independent dummy
                 // contractions. Keep those copies factorized: expanding the
                 // numerator before conversion would hide index capture.
@@ -9354,6 +9426,76 @@ mod tests {
                     assert_eq!(scalar_only.numerator, input);
                 }
             }
+        }
+    }
+
+    #[test]
+    fn dot_notation_opens_powers_with_fresh_distinct_dummies() {
+        Vakint::initialize_vakint_symbols();
+        // The expected forms are those of the former per-product rematch loop,
+        // including the order in which dummies are assigned.
+        for (input, expected) in [
+            (
+                "dot(k(1),p(1))",
+                "k(1,dot_dummy_ind(2))*p(1,dot_dummy_ind(2))",
+            ),
+            (
+                "dot(k(1),k(2))^2",
+                "k(1,dot_dummy_ind(2))*k(1,dot_dummy_ind(3))\
+                 *k(2,dot_dummy_ind(2))*k(2,dot_dummy_ind(3))",
+            ),
+            (
+                "dot(k(1),p(1))^3*dot(k(2),k(2))",
+                "k(1,dot_dummy_ind(2))*k(1,dot_dummy_ind(3))*k(1,dot_dummy_ind(4))\
+                 *p(1,dot_dummy_ind(2))*p(1,dot_dummy_ind(3))*p(1,dot_dummy_ind(4))\
+                 *k(2,dot_dummy_ind(5))^2",
+            ),
+            // Plain symbols and functions as operands.
+            (
+                "dot(v,k(1))^2*dot(w,u)",
+                "w(dot_dummy_ind(2))*u(dot_dummy_ind(2))\
+                 *v(dot_dummy_ind(3))*k(1,dot_dummy_ind(3))\
+                 *v(dot_dummy_ind(4))*k(1,dot_dummy_ind(4))",
+            ),
+            // Each term of a sum numbers its dummies independently.
+            (
+                "dot(k(1),p(1))+dot(k(2),p(1))^2",
+                "k(1,dot_dummy_ind(2))*p(1,dot_dummy_ind(2))\
+                 +k(2,dot_dummy_ind(2))*k(2,dot_dummy_ind(3))\
+                 *p(1,dot_dummy_ind(2))*p(1,dot_dummy_ind(3))",
+            ),
+            // Copies of a powered sum receive their own dummies.
+            (
+                "(dot(k(1),p(1))+m)^2*dot(k(1),k(1))",
+                "(m+k(1,dot_dummy_ind(4))*p(1,dot_dummy_ind(4)))\
+                 *(m+k(1,dot_dummy_ind(5))*p(1,dot_dummy_ind(5)))\
+                 *k(1,dot_dummy_ind(3))^2",
+            ),
+            // Dummies already present in the term are not reused.
+            (
+                "k(1,dot_dummy_ind(5))*p(1,dot_dummy_ind(5))*dot(k(2),k(2))^2",
+                "k(1,dot_dummy_ind(5))*p(1,dot_dummy_ind(5))\
+                 *k(2,dot_dummy_ind(6))^2*k(2,dot_dummy_ind(7))^2",
+            ),
+            (
+                "dot(k(1),p(1))^-2*dot(k(2),p(2))",
+                "k(2,dot_dummy_ind(4))*p(2,dot_dummy_ind(4))\
+                 /(k(1,dot_dummy_ind(2))*k(1,dot_dummy_ind(3))\
+                 *p(1,dot_dummy_ind(2))*p(1,dot_dummy_ind(3)))",
+            ),
+            // Dots nested inside function arguments are opened as well.
+            (
+                "f(dot(k(1),p(1))^2)",
+                "f(k(1,dot_dummy_ind(2))*k(1,dot_dummy_ind(3))\
+                 *p(1,dot_dummy_ind(2))*p(1,dot_dummy_ind(3)))",
+            ),
+        ] {
+            let input = vk_parse!(input).unwrap();
+            assert_eq!(
+                Vakint::convert_from_dot_notation(input.as_view()),
+                vk_parse!(expected).unwrap(),
+                "converting {input}"
+            );
         }
     }
 
