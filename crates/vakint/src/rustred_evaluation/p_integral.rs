@@ -314,6 +314,16 @@ fn render(
     reduction: &PReduction,
     epsilon: Symbol,
 ) -> Result<Atom, RustRedEvaluationError> {
+    Ok(collect_terms(render_terms(handle, reduction, epsilon)?))
+}
+
+/// The terms of [`render`]: per tag and master, the coefficient at
+/// `d = 4 - 2ε`, not yet simplified.
+fn render_terms(
+    handle: &PLibraryHandle,
+    reduction: &PReduction,
+    epsilon: Symbol,
+) -> Result<BTreeMap<Atom, Atom>, RustRedEvaluationError> {
     let dimension = Atom::num(4) - Atom::num(2) * Atom::var(epsilon);
     let at_dimension = |coefficient: &Coefficient| {
         coefficient
@@ -365,11 +375,7 @@ fn render(
         }
         *coefficients.entry(tag * basis).or_default() += at_dimension(&term.coefficient);
     }
-    Ok(coefficients
-        .into_iter()
-        .fold(Atom::Zero, |reduced, (monomial, coefficient)| {
-            reduced + coefficient.together() * monomial
-        }))
+    Ok(coefficients)
 }
 
 /// The lowered inputs of a batch, by channel (the eager table of
@@ -596,24 +602,11 @@ fn reduce_channel(
     if inputs.is_empty() {
         return Ok(None);
     }
-    let reduction = {
-        let _math = MathSpan::new();
-        library
-            .reduce(p_reduction_request(
-                &reducer.options,
-                inputs,
-                reducer.step_cache.clone(),
-            ))
-            .map_err(|error| reduction_error(error, integrals))?
-    };
-    if reduction.dimension != channel.loops as i64 {
-        return Err(invalid(format!(
-            "a {}-loop request returned a reduction of dimension {}",
-            channel.loops, reduction.dimension
-        ))
-        .into());
-    }
-    Ok(Some(render(reducer.handle, &reduction, reducer.epsilon)?))
+    let reduction = reduce_inputs(reducer, channel, inputs, integrals)?;
+    let rendering = std::time::Instant::now();
+    let rendered = render(reducer.handle, &reduction, reducer.epsilon)?;
+    with_stats(|stats| stats.render_seconds += rendering.elapsed().as_secs_f64());
+    Ok(Some(rendered))
 }
 
 /// The reduced values of a batch of backend requests (`docs/p_integrals.md`,
@@ -629,6 +622,10 @@ fn reduce_channel(
 /// values, their order and the errors are those of lowering every channel
 /// first ([`reduce_requests_eager`]): rational sums are exact, and lowering
 /// fails only where [`prepare_part`] fails, in the same order.
+///
+/// With `VAKINT_P_FOLD` set to `basis` (or `on`) or `coefficient`, the
+/// channels are folded first ([`reduce_requests_folded`]); `off` or unset
+/// keeps one reduction per non-rational coefficient.
 pub(crate) fn reduce_requests(
     vakint: &Vakint,
     settings: &VakintSettings,
@@ -658,12 +655,81 @@ fn reduce_requests_with(
     progress: Option<&super::monitor::CallerProgress>,
     factored: bool,
 ) -> Result<BTreeMap<(usize, Atom), Vec<ReducedPropagatorValue>>, VakintError> {
+    match fold_mode() {
+        FoldMode::Off => reduce_requests_unfolded(vakint, settings, requests, progress, factored),
+        mode => reduce_requests_folded(vakint, settings, requests, progress, mode, factored),
+    }
+}
+
+/// How [`reduce_requests`] forms its reductions (`VAKINT_P_FOLD`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum FoldMode {
+    /// One reduction per (loops, head, scale power, non-rational coefficient).
+    Off,
+    /// One reduction per (loops, head, scale power, spectator monomial,
+    /// epsilon basis function), with rational inputs; the basis functions are
+    /// multiplied in after the reduction.
+    Basis,
+    /// One reduction per (loops, head, scale power, spectator monomial), with
+    /// the epsilon-rational parts in the inputs as rational functions of `d`.
+    Coefficient,
+}
+
+pub(crate) fn fold_mode() -> FoldMode {
+    match std::env::var("VAKINT_P_FOLD").as_deref() {
+        Ok("basis" | "on" | "1") => FoldMode::Basis,
+        Ok("coefficient") => FoldMode::Coefficient,
+        _ => FoldMode::Off,
+    }
+}
+
+/// What the last [`reduce_requests`] call on this thread did (diagnostics).
+#[derive(Clone, Debug, Default)]
+pub(crate) struct PReduceStats {
+    pub channels: usize,
+    pub reductions: usize,
+    pub pairs: usize,
+    pub split_seconds: f64,
+    pub lower_seconds: f64,
+    pub prepare_seconds: f64,
+    pub library_seconds: f64,
+    pub render_seconds: f64,
+}
+
+thread_local! {
+    static STATS: std::cell::RefCell<PReduceStats> = std::cell::RefCell::new(PReduceStats::default());
+}
+
+/// The statistics of the last [`reduce_requests`] call on this thread.
+pub(crate) fn last_stats() -> PReduceStats {
+    STATS.with(|stats| stats.borrow().clone())
+}
+
+fn with_stats(update: impl FnOnce(&mut PReduceStats)) {
+    STATS.with(|stats| update(&mut stats.borrow_mut()));
+}
+
+/// [`reduce_requests`] without folding.
+pub(crate) fn reduce_requests_unfolded(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    requests: &[PropagatorRequest],
+    progress: Option<&super::monitor::CallerProgress>,
+) -> Result<BTreeMap<(usize, Atom), Vec<ReducedPropagatorValue>>, VakintError> {
+    factored: bool,
+) -> Result<BTreeMap<(usize, Atom), Vec<ReducedPropagatorValue>>, VakintError> {
+    with_stats(|stats| *stats = PReduceStats::default());
+    let started = std::time::Instant::now();
     let handle = vakint.p_library()?;
     let mut forms = BTreeMap::new();
     let mut channels = PendingChannels::new();
     for request in requests {
         split_request(&handle, request, &mut forms, &mut channels)?;
     }
+    with_stats(|stats| {
+        stats.split_seconds = started.elapsed().as_secs_f64();
+        stats.channels = channels.len();
+    });
     let reducer = ChannelReducer {
         handle: &handle,
         options: request_options(settings),
@@ -680,7 +746,12 @@ fn reduce_requests_with(
         if let Some(progress) = progress {
             progress.cohorts(index, total);
         }
+        let lowering = std::time::Instant::now();
         let inputs = lower_channel(&handle, parts, &mut forms)?;
+        with_stats(|stats| {
+            stats.lower_seconds += lowering.elapsed().as_secs_f64();
+            stats.pairs += inputs.len();
+        });
         let Some(reduced) = reduce_channel(&reducer, &channel, inputs, &integrals)? else {
             continue;
         };
@@ -709,6 +780,365 @@ fn reduce_requests_with(
         progress.cohorts(total, total);
     }
     Ok(values)
+}
+
+/// A term `value · basis(ε) · monomial` of a channel coefficient: `monomial`
+/// holds the factors free of `ε` (and, as a fallback, any factor that is not
+/// a rational function of `ε` alone), `basis` the product of the factors that
+/// are rational functions of `ε` alone, `value` the rational number.
+fn spectator_terms(coefficient: &Atom, epsilon: Symbol) -> Vec<(Atom, Atom, Rational)> {
+    use symbolica::atom::AtomView;
+    use symbolica::coefficient::CoefficientView;
+    fn epsilon_rational(view: AtomView, epsilon: Symbol) -> bool {
+        match view {
+            AtomView::Num(_) => parts::rational(view).is_some(),
+            AtomView::Var(var) => var.get_symbol() == epsilon,
+            AtomView::Add(sum) => sum.iter().all(|term| epsilon_rational(term, epsilon)),
+            AtomView::Mul(product) => product.iter().all(|f| epsilon_rational(f, epsilon)),
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                crate::get_integer_from_atom(exponent).is_some() && epsilon_rational(base, epsilon)
+            }
+            _ => false,
+        }
+    }
+    let expanded = coefficient.expand();
+    let mut terms = Vec::new();
+    let mut add = |term: AtomView| {
+        let mut value = Rational::one();
+        let mut basis = Atom::num(1);
+        let mut monomial = Atom::num(1);
+        let factors = match term {
+            AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+            other => vec![other],
+        };
+        for factor in factors {
+            if let Some(number) = parts::rational(factor) {
+                value *= &fraction(number);
+            } else if let AtomView::Num(number) = factor
+                && let CoefficientView::Natural(0, _, imaginary, denominator) =
+                    number.get_coeff_view()
+                && imaginary != 0
+            {
+                // A purely imaginary number: its rational magnitude goes to
+                // the value and the unit to the monomial.
+                let magnitude = Rational::from((imaginary, denominator));
+                monomial *= factor.to_owned() / Atom::num(magnitude.clone());
+                value *= &magnitude;
+            } else if !factor.contains_symbol(epsilon) {
+                monomial *= factor.to_owned();
+            } else if epsilon_rational(factor, epsilon) {
+                basis *= factor.to_owned();
+            } else {
+                monomial *= factor.to_owned();
+            }
+        }
+        if !value.is_zero() {
+            terms.push((monomial, basis, value));
+        }
+    };
+    match expanded.as_view() {
+        AtomView::Add(sum) => sum.iter().for_each(&mut add),
+        other => add(other),
+    }
+    terms
+}
+
+/// A rational function of `ε` alone ([`spectator_terms`]) as a coefficient of
+/// the library's context at `ε = (4 - d)/2`.
+fn epsilon_coefficient(
+    context: &CoefficientContext,
+    view: symbolica::atom::AtomView,
+    epsilon: Symbol,
+    epsilon_at_d: &Coefficient,
+    limits: ExactAlgebraLimits,
+) -> Result<Coefficient, RustRedEvaluationError> {
+    use symbolica::atom::AtomView;
+    let native = RustRedEvaluationError::from_native;
+    match view {
+        AtomView::Num(_) => {
+            let value = parts::rational(view).ok_or_else(|| invalid(format!("number {view}")))?;
+            coefficient(context, &fraction(value), limits)
+        }
+        AtomView::Var(var) if var.get_symbol() == epsilon => Ok(epsilon_at_d.clone()),
+        AtomView::Add(sum) => {
+            let mut total = context.zero();
+            for term in sum.iter() {
+                let term = epsilon_coefficient(context, term, epsilon, epsilon_at_d, limits)?;
+                total = context.try_add(&total, &term, limits).map_err(native)?;
+            }
+            Ok(total)
+        }
+        AtomView::Mul(product) => {
+            let mut total = context.one();
+            for factor in product.iter() {
+                let factor = epsilon_coefficient(context, factor, epsilon, epsilon_at_d, limits)?;
+                total = context.try_mul(&total, &factor, limits).map_err(native)?;
+            }
+            Ok(total)
+        }
+        AtomView::Pow(power) => {
+            let (base, exponent) = power.get_base_exp();
+            let exponent = crate::get_integer_from_atom(exponent)
+                .ok_or_else(|| invalid(format!("power {view}")))?;
+            let base = epsilon_coefficient(context, base, epsilon, epsilon_at_d, limits)?;
+            let mut total = context.one();
+            for _ in 0..exponent.unsigned_abs() {
+                total = context.try_mul(&total, &base, limits).map_err(native)?;
+            }
+            if exponent < 0 {
+                total = context.try_div(&context.one(), &total, limits).map_err(native)?;
+            }
+            Ok(total)
+        }
+        _ => Err(invalid(format!("not a rational function of epsilon: {view}"))),
+    }
+}
+
+/// The lowered inputs of one folded channel, by epsilon basis function.
+#[derive(Default)]
+struct FoldedInputs {
+    by_basis: BTreeMap<Atom, BTreeMap<(PresentationId, Vec<i64>), Rational>>,
+    integrals: BTreeSet<String>,
+}
+
+/// [`reduce_requests`] with the channels folded: every channel coefficient is
+/// written as `Σ value · basis(ε) · monomial` ([`spectator_terms`]), and the
+/// channel key keeps only the monomial. The value of a folded channel is
+/// `Σ_basis basis(ε) · R(Σ value · inputs) · monomial`, by linearity the sum
+/// of the values of the channels it folds. In [`FoldMode::Basis`] every basis
+/// function is reduced apart with rational inputs and multiplied in at the
+/// render level; in [`FoldMode::Coefficient`] the basis functions enter the
+/// inputs as rational functions of `d` and each folded channel is reduced once.
+pub(crate) fn reduce_requests_folded(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    requests: &[PropagatorRequest],
+    progress: Option<&super::monitor::CallerProgress>,
+    mode: FoldMode,
+    factored: bool,
+) -> Result<BTreeMap<(usize, Atom), Vec<ReducedPropagatorValue>>, VakintError> {
+    with_stats(|stats| *stats = PReduceStats::default());
+    let started = std::time::Instant::now();
+    let epsilon = vk_symbol!(&settings.epsilon_symbol);
+    let handle = vakint.p_library()?;
+    let mut forms = BTreeMap::new();
+    let mut pending = PendingChannels::new();
+    for request in requests {
+        split_request(&handle, request, &mut forms, &mut pending)?;
+    }
+    with_stats(|stats| {
+        stats.split_seconds = started.elapsed().as_secs_f64();
+        stats.channels = pending.len();
+    });
+    let lowering = std::time::Instant::now();
+    // Lower every part once and distribute it over the folded channels of its
+    // coefficient's terms.
+    let mut folded = BTreeMap::<Channel, FoldedInputs>::new();
+    for (channel, ChannelParts { parts, integrals }) in pending {
+        let lowered = lower_channel(&handle, parts, &mut forms)?;
+        if lowered.is_empty() {
+            continue;
+        }
+        for (monomial, basis, value) in spectator_terms(&channel.coefficient, epsilon) {
+            let target = folded
+                .entry(Channel {
+                    loops: channel.loops,
+                    head: channel.head.clone(),
+                    scale_power: channel.scale_power,
+                    coefficient: monomial,
+                })
+                .or_default();
+            target.integrals.extend(integrals.iter().cloned());
+            let inputs = target.by_basis.entry(basis).or_default();
+            for (key, lowered_value) in &lowered {
+                let product = lowered_value * &value;
+                match inputs.get_mut(key) {
+                    Some(sum) => *sum += &product,
+                    None => {
+                        inputs.insert(key.clone(), product);
+                    }
+                }
+            }
+        }
+    }
+    with_stats(|stats| stats.lower_seconds = lowering.elapsed().as_secs_f64());
+    let reducer = ChannelReducer {
+        handle: &handle,
+        options: request_options(settings),
+        step_cache: if folded.is_empty() {
+            None
+        } else {
+            vakint.ordered_step_cache(settings, &handle.cache)?
+        },
+        epsilon,
+    };
+    let library = &handle.library;
+    let context = library.coefficient_context();
+    let exact = reducer.options.limits.exact_algebra;
+    let native = RustRedEvaluationError::from_native;
+    let epsilon_at_d = {
+        let d = context
+            .parameter(&handle.dimension.to_canonical_string())
+            .or_else(|| context.parameter("d"))
+            .ok_or_else(|| invalid("the p library has no dimension parameter"))?;
+        let four_minus_d = context.try_sub(&context.integer(4), &d, exact).map_err(native)?;
+        context
+            .try_div(&four_minus_d, &context.integer(2), exact)
+            .map_err(native)?
+    };
+    let total = folded.len();
+    let mut values = BTreeMap::<(usize, Atom), Vec<ReducedPropagatorValue>>::new();
+    for (index, (channel, FoldedInputs { by_basis, integrals })) in folded.into_iter().enumerate() {
+        if let Some(progress) = progress {
+            progress.cohorts(index, total);
+        }
+        let reduced = match mode {
+            FoldMode::Coefficient => {
+                let preparing = std::time::Instant::now();
+                let mut inputs = BTreeMap::<(PresentationId, Vec<i64>), Coefficient>::new();
+                for (basis, lowered) in by_basis {
+                    let weight =
+                        epsilon_coefficient(context, basis.as_view(), epsilon, &epsilon_at_d, exact)?;
+                    for (key, value) in lowered {
+                        if value.is_zero() {
+                            continue;
+                        }
+                        let term = context
+                            .try_mul(&weight, &coefficient(context, &value, exact)?, exact)
+                            .map_err(native)?;
+                        match inputs.get_mut(&key) {
+                            Some(sum) => *sum = context.try_add(sum, &term, exact).map_err(native)?,
+                            None => {
+                                inputs.insert(key, term);
+                            }
+                        }
+                    }
+                }
+                with_stats(|stats| {
+                    stats.prepare_seconds += preparing.elapsed().as_secs_f64();
+                    stats.pairs += inputs.len();
+                });
+                let inputs = inputs
+                    .into_iter()
+                    .filter(|(_, value)| !value.is_zero())
+                    .map(|((presentation, powers), value)| {
+                        let key = IntegralKey::try_new(powers)
+                            .map_err(|error| invalid(format!("integral key: {error}")))?;
+                        Ok((presentation, key, value))
+                    })
+                    .collect::<Result<Vec<_>, RustRedEvaluationError>>()?;
+                if inputs.is_empty() {
+                    continue;
+                }
+                let reduction = reduce_inputs(&reducer, &channel, inputs, &integrals)?;
+                let rendering = std::time::Instant::now();
+                let terms = render_terms(&handle, &reduction, epsilon)?;
+                let reduced = collect_terms(terms);
+                with_stats(|stats| stats.render_seconds += rendering.elapsed().as_secs_f64());
+                reduced
+            }
+            _ => {
+                let mut combined = BTreeMap::<Atom, Atom>::new();
+                for (basis, lowered) in by_basis {
+                    with_stats(|stats| stats.pairs += lowered.len());
+                    let inputs = lowered
+                        .into_iter()
+                        .filter(|(_, value)| !value.is_zero())
+                        .map(|((presentation, powers), value)| {
+                            let key = IntegralKey::try_new(powers)
+                                .map_err(|error| invalid(format!("integral key: {error}")))?;
+                            Ok((presentation, key, coefficient(context, &value, exact)?))
+                        })
+                        .collect::<Result<Vec<_>, RustRedEvaluationError>>()?;
+                    if inputs.is_empty() {
+                        continue;
+                    }
+                    let reduction = reduce_inputs(&reducer, &channel, inputs, &integrals)?;
+                    let rendering = std::time::Instant::now();
+                    for (monomial, value) in render_terms(&handle, &reduction, epsilon)? {
+                        *combined.entry(monomial).or_default() += value * &basis;
+                    }
+                    with_stats(|stats| stats.render_seconds += rendering.elapsed().as_secs_f64());
+                }
+                let rendering = std::time::Instant::now();
+                let reduced = collect_terms(combined);
+                with_stats(|stats| stats.render_seconds += rendering.elapsed().as_secs_f64());
+                reduced
+            }
+        };
+        if reduced.is_zero() {
+            continue;
+        }
+        let Channel {
+            loops,
+            head,
+            scale_power,
+            coefficient,
+        } = channel;
+        let value = if factored {
+            ReducedPropagatorValue {
+                scale_power,
+                reduced,
+                spectator: Some(coefficient),
+            }
+        } else {
+            ReducedPropagatorValue {
+                scale_power,
+                reduced: reduced * &coefficient,
+                spectator: None,
+            }
+        };
+        values.entry((loops, head)).or_default().push(value);
+    }
+    if let Some(progress) = progress {
+        progress.cohorts(total, total);
+    }
+    Ok(values)
+}
+
+/// One library reduction of `inputs` for `channel` (the checks of
+/// [`reduce_channel`]), timed into the statistics.
+fn reduce_inputs(
+    reducer: &ChannelReducer,
+    channel: &Channel,
+    inputs: Vec<(PresentationId, IntegralKey, Coefficient)>,
+    integrals: &BTreeSet<String>,
+) -> Result<PReduction, VakintError> {
+    let reducing = std::time::Instant::now();
+    let reduction = {
+        let _math = MathSpan::new();
+        reducer
+            .handle
+            .library
+            .reduce(p_reduction_request(
+                &reducer.options,
+                inputs,
+                reducer.step_cache.clone(),
+            ))
+            .map_err(|error| reduction_error(error, integrals))?
+    };
+    with_stats(|stats| {
+        stats.library_seconds += reducing.elapsed().as_secs_f64();
+        stats.reductions += 1;
+    });
+    if reduction.dimension != channel.loops as i64 {
+        return Err(invalid(format!(
+            "a {}-loop request returned a reduction of dimension {}",
+            channel.loops, reduction.dimension
+        ))
+        .into());
+    }
+    Ok(reduction)
+}
+
+/// `Σ coefficient.together() · monomial` of [`render_terms`]: [`render`].
+fn collect_terms(terms: BTreeMap<Atom, Atom>) -> Atom {
+    terms
+        .into_iter()
+        .fold(Atom::Zero, |reduced, (monomial, coefficient)| {
+            reduced + coefficient.together() * monomial
+        })
 }
 
 /// [`reduce_requests`] as it was before the lazy lowering: every channel is

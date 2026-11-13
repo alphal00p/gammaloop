@@ -99,7 +99,145 @@ fn dump_slow_rustred_requests(requests: &[super::PropagatorRequest], elapsed: st
     let _ = std::fs::write(directory.join(format!("closure-{index:05}.txt")), text);
 }
 
+/// `VAKINT_P_FOLD_CHECK=<file>`: run every RustRed closure job today's way
+/// and folded (`VAKINT_P_FOLD_CHECK_MODE`, default `basis`), compare the
+/// finalized values and append one JSON line per job to the file.
+fn fold_check_log() -> Option<&'static std::path::PathBuf> {
+    static LOG: std::sync::LazyLock<Option<std::path::PathBuf>> =
+        std::sync::LazyLock::new(|| std::env::var_os("VAKINT_P_FOLD_CHECK").map(Into::into));
+    LOG.as_ref()
+}
+
+fn write_fold_record(path: &std::path::Path, record: serde_json::Value) {
+    use std::io::Write;
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = LOCK.lock();
+    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(file, "{record}");
+    }
+}
+
+fn status_kib(field: &str) -> u64 {
+    std::fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|status| {
+            status.lines().find_map(|line| {
+                line.strip_prefix(field)
+                    .and_then(|rest| rest.trim().trim_end_matches("kB").trim().parse().ok())
+            })
+        })
+        .unwrap_or(0)
+}
+
+/// Restart the peak (`VmHWM`) at the current RSS and return the RSS (KiB).
+fn reset_peak() -> u64 {
+    let _ = std::fs::write("/proc/self/clear_refs", "5");
+    status_kib("VmRSS:")
+}
+
 impl MassiveClosure {
+    /// Reduce `requests` in `fold` mode and finalize them: the value, and
+    /// the times, counts and memory of the two stages.
+    fn reduce_and_finalize(
+        &self,
+        vakint: &Vakint,
+        settings: &crate::VakintSettings,
+        requests: &[super::PropagatorRequest],
+        head: &Atom,
+        mode: RustRedMasterMode,
+        fold: crate::rustred_evaluation::p_integral::FoldMode,
+    ) -> Result<(Atom, serde_json::Value), VakintError> {
+        use crate::rustred_evaluation::p_integral as rr;
+        let base = reset_peak();
+        let started = std::time::Instant::now();
+        let reduced = match fold {
+            rr::FoldMode::Off => rr::reduce_requests_unfolded(vakint, settings, requests, None, true)?,
+            fold => rr::reduce_requests_folded(vakint, settings, requests, None, fold, true)?,
+        };
+        let reduce_seconds = started.elapsed().as_secs_f64();
+        let stats = rr::last_stats();
+        let reduce_peak = status_kib("VmHWM:").saturating_sub(base);
+        let base = reset_peak();
+        let finalizing = std::time::Instant::now();
+        let mut value = Atom::Zero;
+        let mut values = 0;
+        for ((loops, _), list) in reduced {
+            values += list.len();
+            value += self.finalize(&list, loops, head, settings, mode)?;
+        }
+        let finalize_seconds = finalizing.elapsed().as_secs_f64();
+        let finalize_peak = status_kib("VmHWM:").saturating_sub(base);
+        Ok((
+            value,
+            serde_json::json!({
+                "fold": format!("{fold:?}"),
+                "reduce_seconds": reduce_seconds,
+                "split_seconds": stats.split_seconds,
+                "lower_seconds": stats.lower_seconds,
+                "prepare_seconds": stats.prepare_seconds,
+                "library_seconds": stats.library_seconds,
+                "render_seconds": stats.render_seconds,
+                "channels_split": stats.channels,
+                "reductions": stats.reductions,
+                "pairs": stats.pairs,
+                "values": values,
+                "finalize_seconds": finalize_seconds,
+                "reduce_peak_kib": reduce_peak,
+                "finalize_peak_kib": finalize_peak,
+            }),
+        ))
+    }
+
+    /// [`Self::reduce_and_finalize`] today's way and folded, compared.
+    fn fold_check(
+        &self,
+        vakint: &Vakint,
+        settings: &crate::VakintSettings,
+        requests: &[super::PropagatorRequest],
+        head: &Atom,
+        mode: RustRedMasterMode,
+    ) -> Result<(Atom, serde_json::Value), VakintError> {
+        use crate::rustred_evaluation::p_integral::FoldMode;
+        let fold = match std::env::var("VAKINT_P_FOLD_CHECK_MODE").as_deref() {
+            Ok("coefficient") => FoldMode::Coefficient,
+            _ => FoldMode::Basis,
+        };
+        let order = std::env::var("VAKINT_P_FOLD_CHECK_ORDER").unwrap_or_default();
+        let (today, folded) = if order == "fold-first" {
+            let folded = self.reduce_and_finalize(vakint, settings, requests, head, mode, fold)?;
+            let today =
+                self.reduce_and_finalize(vakint, settings, requests, head, mode, FoldMode::Off)?;
+            (today, folded)
+        } else {
+            let today =
+                self.reduce_and_finalize(vakint, settings, requests, head, mode, FoldMode::Off)?;
+            let folded = self.reduce_and_finalize(vakint, settings, requests, head, mode, fold)?;
+            (today, folded)
+        };
+        let comparing = std::time::Instant::now();
+        let difference = (&today.0 - &folded.0).expand();
+        let equal = difference.is_zero() || difference.together().is_zero();
+        let identical = today.0.expand().to_canonical_string() == folded.0.expand().to_canonical_string();
+        let record = serde_json::json!({
+            "pid": std::process::id(),
+            "requests": requests.len(),
+            "families": requests.iter().map(|r| r.family.name).collect::<Vec<_>>(),
+            "loops": requests.first().map(|r| r.family.loops),
+            "epsilon_terms": settings.number_of_terms_in_epsilon_expansion,
+            "today": today.1,
+            "folded": folded.1,
+            "equal": equal,
+            "identical_expanded_string": identical,
+            "compare_seconds": comparing.elapsed().as_secs_f64(),
+        });
+        if !equal {
+            return Err(super::invalid(format!(
+                "VAKINT_P_FOLD_CHECK: the folded closure differs from today's: {record}"
+            )));
+        }
+        Ok((today.0, record))
+    }
+
     fn validated_head(&self, settings: &crate::VakintSettings) -> Result<Atom, VakintError> {
         let (head, _) = external_head(&self.momentum)?;
         if self.mass_squared.contains_symbol(S.k)
@@ -301,6 +439,24 @@ impl MassiveClosure {
                     .collect::<Vec<_>>();
                 // One closure has one external head; its values are summed
                 // per loop count before the radial integration.
+                if let Some(log) = fold_check_log() {
+                    // Paired check: today's path, then the folded one, on the
+                    // same requests; today's value is returned.
+                    let (value, record) = inputs[owner].0.fold_check(
+                        vakint,
+                        settings,
+                        &requests,
+                        &heads[owner],
+                        rustred_mode,
+                    )?;
+                    write_fold_record(log, record);
+                    if rustred_mode == RustRedMasterMode::Numerical {
+                        numerical[owner] += value;
+                    } else {
+                        results[owner] += value;
+                    }
+                    continue;
+                }
                 let started = std::time::Instant::now();
                 let reduced = crate::rustred_evaluation::p_integral::reduce_requests_factored(
                     vakint, settings, &requests, None,
@@ -972,6 +1128,93 @@ mod tests {
     /// `[RustRed, Forcer]` the closures of a 1L bubble, the 2L kite and the 3L
     /// NO top go to RustRed and equal the Forcer-only closures, exactly in
     /// `Symbolic` mode and within 1e-30 in `Numerical` mode (40 digits).
+    /// Closure-level paired replay of dumped requests (`FOLD_REPLAY_INPUT`,
+    /// comma separated `(numerator)*topo(FAMILY(ext,powers))` files, one
+    /// closure per file): today's path and the folded one, finalized as a
+    /// massive closure `p(1)`, `rstar_mass_squared`, power 1 with the
+    /// production epsilon symbol and `FOLD_REPLAY_TERMS` epsilon terms
+    /// (default 6), compared exactly. Writes JSON lines to `VAKINT_P_FOLD_CHECK`.
+    #[test]
+    #[ignore]
+    fn fold_replay_dumps() {
+        let inputs = std::env::var("FOLD_REPLAY_INPUT").unwrap();
+        let log = std::path::PathBuf::from(std::env::var("VAKINT_P_FOLD_CHECK").unwrap());
+        let terms = std::env::var("FOLD_REPLAY_TERMS").map_or(6, |t| t.parse().unwrap());
+        let mut engine = Vakint::new().unwrap();
+        let library = rustred_app::propagator::load_p_library(
+            rustred_app::propagator::PLibrarySource::Directory(
+                std::env::var_os("VAKINT_TEST_P_LIBRARY_1_4").unwrap().into(),
+            ),
+            &rustred_app::propagator::PLibraryOptions { verify_descent: false },
+        )
+        .unwrap();
+        engine.inject_p_library(library).unwrap();
+        let settings = VakintSettings {
+            evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
+                crate::RustRedEvaluationOptions { master_mode: RustRedMasterMode::Symbolic },
+            )]),
+            integral_normalization_factor: LoopNormalizationFactor::MSbar,
+            epsilon_symbol: "gammalooprs::{}::ε".into(),
+            mu_r_sq_symbol: "gammalooprs::{}::mu_r_sq".into(),
+            number_of_terms_in_epsilon_expansion: terms,
+            use_dot_product_notation: true,
+            n_cores: 1,
+            ..Default::default()
+        };
+        let massive = MassiveClosure {
+            momentum: parse("p(1)"),
+            mass_squared: parse("gammalooprs::{scalar}::rstar_mass_squared"),
+            power: 1,
+        };
+        let head = massive.validated_head(&settings).unwrap();
+        for path in inputs.split(',') {
+            let text = std::fs::read_to_string(path).unwrap();
+            let records = text
+                .lines()
+                .filter(|line| !line.starts_with('#') && !line.trim().is_empty())
+                .map(|line| {
+                    let at = line.rfind("*topo(").unwrap();
+                    let numerator = parse(&line[..at]);
+                    let tail = &line[at + 6..line.len() - 1];
+                    let open = tail.find('(').unwrap();
+                    let family = super::super::forcer::fixtures::registry_family(&tail[..open]).unwrap();
+                    let inner = &tail[open + 1..tail.len() - 1];
+                    let mut depth = 0i32;
+                    let mut cut = inner.len();
+                    for (position, character) in inner.char_indices() {
+                        match character {
+                            '(' | '{' => depth += 1,
+                            ')' | '}' => depth -= 1,
+                            ',' if depth == 0 => {
+                                cut = position;
+                                break;
+                            }
+                            _ => {}
+                        }
+                    }
+                    let powers: Vec<i64> =
+                        inner[cut + 1..].split(',').map(|p| p.trim().parse().unwrap()).collect();
+                    (family, powers, parse(&inner[..cut]), numerator)
+                })
+                .collect::<Vec<_>>();
+            let requests = records
+                .iter()
+                .map(|(family, powers, external, numerator)| super::super::PropagatorRequest {
+                    family,
+                    powers,
+                    canonical_numerator: numerator.as_view(),
+                    external: external.clone(),
+                })
+                .collect::<Vec<_>>();
+            let (_, mut record) = massive
+                .fold_check(&engine, &settings, &requests, &head, RustRedMasterMode::Symbolic)
+                .unwrap();
+            record["dump"] = serde_json::json!(path);
+            eprintln!("{record}");
+            write_fold_record(&log, record);
+        }
+    }
+
     #[test]
     fn massive_closures_through_rustred_equal_the_forcer_closures() {
         let base = VakintSettings {

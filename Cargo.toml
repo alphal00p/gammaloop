@@ -105,9 +105,9 @@ numerica = { path = "../../symbolica-beta-polynomial/lib/numerica" }
 symbolica = { path = "../../symbolica-beta-polynomial" }
 
 [patch."https://github.com/alphal00p/rustred"]
-rustred = { path = "../../beta/.cache/rustred-performance-v23/crates/rustred-core" }
-rustred-app = { path = "../../beta/.cache/rustred-performance-v23/crates/rustred-app" }
-rustred-order = { path = "../../beta/.cache/rustred-performance-v23/crates/rustred-order" }
+rustred = { path = "../../rustred-rr/crates/rustred-core" }
+rustred-app = { path = "../../rustred-rr/crates/rustred-app" }
+rustred-order = { path = "../../rustred-rr/crates/rustred-order" }
 
 # Share the maintained FeynKit owner with local GammaLoop consumers.
 [patch."https://github.com/alphal00p/gammaloop"]
