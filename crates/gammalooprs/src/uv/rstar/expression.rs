@@ -1,6 +1,6 @@
 //! Explicit hard Taylor coefficients with the existing UV tensor conventions.
 
-use std::{collections::BTreeSet, sync::LazyLock, time::Instant};
+use std::{borrow::Cow, collections::BTreeSet, sync::LazyLock, time::Instant};
 
 use eyre::{Result, WrapErr, ensure, eyre};
 use feynkit_tensor::TensorReducer;
@@ -37,7 +37,10 @@ use crate::{
     utils::{GS, W_},
     uv::{
         UVgenerationSettings, UltravioletGraph,
-        approx::integrated::{Integrated, to_vakint_integrand},
+        approx::{
+            integrated::{Integrated, to_vakint_integrand},
+            streamed,
+        },
         uv_graph::UVE,
     },
 };
@@ -592,14 +595,14 @@ impl RStarIntegrand {
         // Quotient UV maps return original Q labels. Route newly introduced
         // component edges, preserving this component's independent hard loops.
         let routed = if self.region.loops == 0 {
-            expression.clone()
+            Cow::Borrowed(expression)
         } else {
-            expression.replace_multiple(self.graph.normal_emr_replacement(
+            Cow::Owned(expression.replace_multiple(self.graph.normal_emr_replacement(
                 &self.region.remaining,
                 &self.basis,
                 &[W_.x___],
                 HedgePair::is_paired,
-            ))
+            )))
         };
         let allowed_edges = self
             .basis
@@ -626,13 +629,19 @@ impl RStarIntegrand {
         timing.routing = timing.lap();
         let parameter = symbol!("rstar_outer_taylor"; Scalar);
         let taylor = TaylorExpansion::new(parameter, degree);
+        // Each intermediate is dropped as soon as its successor exists: on the
+        // largest diagrams each of them is hundreds of megabytes.
         let scaled = Self::scale_edges(&routed, &root_edges, parameter);
+        drop(routed);
         let compensated =
             taylor.compensate_mass(&scaled, reference_mass_squared, auxiliary_mass_squared);
-        let expanded = taylor.evaluate(&compensated)?;
+        drop(scaled);
+        let polynomial = taylor.evaluate(&compensated)?;
+        drop(compensated);
         timing.taylor = timing.lap();
-        let expanded = Self::simplify(&expanded)
+        let expanded = Self::simplify_summands(polynomial.as_view())
             .wrap_err("while simplifying the compensated R* outer Taylor polynomial")?;
+        drop(polynomial);
         timing.algebra = timing.lap();
         // The root is the only boundary which may be projected here. Child
         // and quotient pole maps are already complete, and no later pole map
@@ -642,6 +651,7 @@ impl RStarIntegrand {
         let expanded = if let Some(projector) = root_projector {
             let projected = projector(&expanded)
                 .wrap_err("while projecting the complete R* outer Taylor polynomial")?;
+            drop(expanded);
             Integrated::dimensionally_regularized(&projected)
         } else {
             expanded
@@ -650,8 +660,9 @@ impl RStarIntegrand {
         let integrated = if self.region.loops == 0 {
             expanded
         } else {
+            // By value: to_vakint drops it once it has been materialized.
             let input = to_vakint_integrand(
-                &expanded,
+                expanded,
                 &self.graph.underlying,
                 &self.region.remaining,
                 &self.graph.empty_subgraph::<SuBitGraph>(),
@@ -744,6 +755,42 @@ impl RStarIntegrand {
             log.expression = expression,
             "Preparing an explicit R* expression for native tensor algebra"
         );
+        Self::simplify_view(expression.as_view())
+    }
+
+    /// [`Self::simplify`] summand by summand: the simplification acts on
+    /// every summand alone, and a normalized sum is canonical. A large sum
+    /// is simplified in chunks of summands and added up once, unless a chunk
+    /// introduces a dummy index, which makes the whole sum be simplified.
+    fn simplify_summands(expression: AtomView<'_>) -> Result<Atom> {
+        let limit = streamed::piece_limit();
+        if expression.get_byte_size() < limit || !matches!(expression, AtomView::Add(_)) {
+            return Self::simplify_view(expression);
+        }
+        let mut accumulated = streamed::SumAccumulator::default();
+        let mut introduced = false;
+        let outcome = streamed::for_each_summand_chunk(expression, limit, &mut |chunk| {
+            let simplified = Self::simplify_view(chunk)?;
+            if streamed::introduces_dummies(chunk, simplified.as_view()) {
+                introduced = true;
+                return Err(eyre!("a simplification introduced a dummy index"));
+            }
+            accumulated.push(simplified);
+            Ok(())
+        });
+        let simplified = match outcome {
+            Ok(()) => accumulated.finish(),
+            Err(_) if introduced => return Self::simplify_view(expression),
+            Err(error) => return Err(error),
+        };
+        if streamed::check_streamed(expression) {
+            let whole = Self::simplify_view(expression)?;
+            streamed::report_check("rstar_simplify", expression, &simplified, &whole);
+        }
+        Ok(simplified)
+    }
+
+    fn simplify_view(expression: AtomView<'_>) -> Result<Atom> {
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
@@ -751,7 +798,7 @@ impl RStarIntegrand {
         // Reduce color identities after the quotient has closed their indices.
         // Leave trace/chain powers intact for the same reason as finish_tensor:
         // their internal spinor sums must remain independent between copies.
-        let simplified = SymbolicTensor::infer_indexed(cooking.try_cook(expression.as_view())?)?
+        let simplified = SymbolicTensor::infer_indexed(cooking.try_cook(expression)?)?
             .simplify_algebra(&AlgebraSettings {
                 gamma: Some(GammaSimplifySettings::canonical()),
                 epsilon: true,
