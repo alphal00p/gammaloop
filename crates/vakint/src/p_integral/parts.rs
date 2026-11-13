@@ -27,7 +27,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
 use std::sync::OnceLock;
 
-use symbolica::atom::{Atom, AtomCore, AtomView};
+use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use symbolica::coefficient::CoefficientView;
 use symbolica::function;
 
@@ -760,9 +760,11 @@ fn expanded_parts(
 /// products of terms that the expansion in [`expanded_parts`] forms, and the
 /// monomials are listed in the lexicographic exponent order of
 /// `coefficient_list`, so the parts are those of [`expanded_parts`] when
-/// - all numbers are exact and every power has a number exponent, an integer
-///   one on a sum or product: then normalized products are
-///   associative and never form a sum factor ([`admits_loop_polynomials`]);
+/// - all numbers are exact, every power is a real rational power of a
+///   symbol or function or an integer power of a sum or product (no power
+///   of a number), and there is no `abs`: then normalized products are
+///   associative, multiply powers as the expansion does and never form a
+///   sum factor ([`admits_loop_polynomials`]);
 /// - every coefficient term expands to itself: the second expansion in
 ///   [`expanded_parts`] changes nothing;
 /// - no dot-notation pass applies to a coefficient;
@@ -819,30 +821,39 @@ fn grouped_parts(
 }
 
 /// Whether all numbers of `expression` are exact and every power has a
-/// number exponent, an integer one on a sum or product. Normalized products
-/// of its terms then merge powers of equal bases by adding exact exponents
-/// (renormalizing a number or product that this forms, as in
-/// `3^(1/2)*3^(1/2) = 3`), which is associative and never forms a sum
-/// factor.
+/// real rational exponent on a symbol or function, or an integer one on a
+/// sum or product. Normalized products of its terms then merge powers of
+/// equal bases by adding the exponents, `x^a*x^b = x^(a+b)` (`x^0 = 1`,
+/// `x^1 = x`), as the powers `t^n` of terms in the expansion multiply them,
+/// `(x^a)^n = x^(n*a)`; this is associative and never forms a sum factor.
+///
+/// The two simplifications of a power that a product does not make are not
+/// admitted: a power of a number (or of a power), since a product merges
+/// `2^(1/3)*2^(1/3) = 2^(2/3)` but a power renormalizes the number,
+/// `(2^(1/3))^2 = 4^(1/3)`; and `abs`, whose even powers of a real argument
+/// a power rewrites, `abs(x)^2 = x^2`, but a product keeps,
+/// `abs(x)*abs(x) = abs(x)^2`.
 fn admits_loop_polynomials(expression: AtomView) -> bool {
     if !crate::utils::has_only_exact_numbers(expression) {
         return false;
     }
     let mut admitted = true;
     expression.visitor(&mut |part| {
-        if let AtomView::Pow(power) = part {
-            let (base, exponent) = power.get_base_exp();
-            admitted &= match exponent {
-                AtomView::Num(number) => {
-                    !matches!(base, AtomView::Add(_) | AtomView::Mul(_))
-                        || matches!(
-                            number.get_coeff_view(),
-                            CoefficientView::Natural(_, 1, 0, _)
-                        )
-                }
+        admitted &= match part {
+            AtomView::Pow(power) => match power.get_base_exp() {
+                (AtomView::Var(_) | AtomView::Fun(_), AtomView::Num(number)) => matches!(
+                    number.get_coeff_view(),
+                    CoefficientView::Natural(_, _, 0, _)
+                ),
+                (AtomView::Add(_) | AtomView::Mul(_), AtomView::Num(number)) => matches!(
+                    number.get_coeff_view(),
+                    CoefficientView::Natural(_, 1, 0, _)
+                ),
                 _ => false,
-            };
-        }
+            },
+            AtomView::Fun(function) => function.get_symbol() != Symbol::ABS,
+            _ => true,
+        };
         admitted
     });
     admitted
@@ -1395,9 +1406,56 @@ mod tests {
         ))
     }
 
-    /// [`split`] equals [`split_reference`], errors included; with `grouped`
-    /// the grouped parts apply and are the reference parts, else they defer
-    /// to the reference.
+    /// The parts of [`split`] before the grouped split and the skip of the
+    /// dot-notation passes: expand the numerator with its negative-power
+    /// factors, always run the passes, expand again and collect with
+    /// `coefficient_list`.
+    fn original_parts(
+        canonical_numerator: AtomView,
+        negative_powers: &[Atom],
+        collector: &PartCollector,
+    ) -> Result<Vec<PPart>, VakintError> {
+        let mut numerator = canonical_numerator.to_owned();
+        for factor in negative_powers {
+            numerator *= factor.clone();
+        }
+        let numerator = Vakint::dot_notation_passes(numerator.expand()).expand();
+        collected_parts(numerator.as_view(), &[], collector)
+    }
+
+    /// The last stage of [`original_parts`]: the parts of a numerator that is
+    /// multiplied by its negative-power factors, expanded and in dot notation
+    /// already (`negative_powers` is ignored).
+    fn collected_parts(
+        numerator: AtomView,
+        _negative_powers: &[Atom],
+        collector: &PartCollector,
+    ) -> Result<Vec<PPart>, VakintError> {
+        let loop_dots = collector.loop_dots([numerator])?;
+        collector.parts(numerator.coefficient_list::<i8>(&loop_dots))
+    }
+
+    /// The split before the grouped split and the skip of the dot-notation
+    /// passes ([`original_parts`]).
+    fn split_original(
+        family: &PFamilyData,
+        powers: &[i64],
+        numerator: AtomView,
+        external: &Atom,
+    ) -> SplitSummary {
+        summary(split_with(
+            family,
+            powers,
+            numerator,
+            external,
+            original_parts,
+        ))
+    }
+
+    /// [`split`] equals [`split_reference`] and the original split
+    /// ([`split_original`]), errors included; with `grouped` the grouped
+    /// parts apply and are the reference parts, else they defer to the
+    /// reference.
     fn assert_split_matches_reference(
         family: &PFamilyData,
         powers: &[i64],
@@ -1406,6 +1464,12 @@ mod tests {
         grouped: bool,
     ) -> SplitSummary {
         let reference = summary(split_reference(family, powers, numerator, external));
+        assert_eq!(
+            split_original(family, powers, numerator, external),
+            reference,
+            "{} {powers:?} {numerator}",
+            family.name
+        );
         assert_eq!(
             summary(split(family, powers, numerator, external)),
             reference,
@@ -1434,6 +1498,7 @@ mod tests {
 
     #[test]
     fn grouped_split_equals_the_expanded_split() {
+        let _real = symbolica::symbol!("vakint::parts_real_spectator"; Real);
         let cases: &[(&str, &[i64], &str, &str, bool)] = &[
             ("P1L", &[1, 1], "0", "p(1)", true),
             ("P1L", &[1, 1], "1", "p(1)", true),
@@ -1512,6 +1577,23 @@ mod tests {
                 "p(1)",
                 true,
             ),
+            // Rational powers of symbols and functions multiply as in the
+            // expansion's powers of terms, (x^(1/3))^3 = x.
+            (
+                "P2L",
+                &[1, 1, 1, 1, 1],
+                "(x^(1/3)*dot(k(1),p(1))+1)^3",
+                "p(1)",
+                true,
+            ),
+            (
+                "P2L",
+                &[1, 1, 1, -1, 1],
+                "x^(2/3)*(x^(1/3)*dot(k(1),p(1))+x^(-1/3)*dot(k(2),p(1))+f(y)^(-1/3))^2\
+                 *(f(y)^(1/3)*dot(k(1),k(2))+1)",
+                "-p(1)",
+                true,
+            ),
             // Indexed vectors that no dot-notation pass matches.
             (
                 "P2L",
@@ -1542,6 +1624,63 @@ mod tests {
                 "P2L",
                 &[1, 1, 1, 1, 1],
                 "(1+ε)^(1/2)*dot(k(1),p(1))",
+                "p(1)",
+                false,
+            ),
+            // Deferred: powers of numbers, which a product merges as
+            // 2^(1/3)*2^(1/3) = 2^(2/3) but the expansion's power of a term
+            // as (2^(1/3))^2 = 4^(1/3); also square roots, and complex
+            // exponents.
+            (
+                "P2L",
+                &[1, 1, 1, 1, 1],
+                "(2^(1/3)*dot(k(1),p(1))+1)^2",
+                "p(1)",
+                false,
+            ),
+            (
+                "P2L",
+                &[1, 1, 1, 1, 1],
+                "(3^(1/2)*dot(k(1),k(2))+dot(k(2),p(1))*2^(1/3))^3",
+                "p(1)",
+                false,
+            ),
+            (
+                "P2L",
+                &[1, 1, 1, 1, 1],
+                "(2^(1/2)*dot(k(1),p(1))+2^(1/3))^3",
+                "p(1)",
+                false,
+            ),
+            (
+                "P2L",
+                &[1, 1, 1, 1, 1],
+                "3^(1/2)*dot(k(1),p(1))*(3^(1/2)*dot(k(2),p(1))+1)",
+                "p(1)",
+                false,
+            ),
+            (
+                "P2L",
+                &[1, 1, 1, 1, 1],
+                "x^(2𝑖)*dot(k(1),p(1))*(x^(2𝑖)*dot(k(2),p(1))+1)",
+                "p(1)",
+                false,
+            ),
+            // Deferred: `abs`, whose even powers of a real argument a power
+            // of a term rewrites, (abs(r))^2 = r^2, but a product keeps,
+            // abs(r)*abs(r) = abs(r)^2.
+            (
+                "P2L",
+                &[1, 1, 1, 1, 1],
+                "(abs(parts_real_spectator)*dot(k(1),p(1))+abs(x))^2",
+                "p(1)",
+                false,
+            ),
+            (
+                "P2L",
+                &[1, 1, 1, 1, 1],
+                "abs(parts_real_spectator)*dot(k(1),p(1))\
+                 *(abs(parts_real_spectator)*dot(k(2),p(1))+1)",
                 "p(1)",
                 false,
             ),
@@ -1609,10 +1748,25 @@ mod tests {
         }
     }
 
+    /// Whether `expression` holds a power of a number, such as `3^(1/2)`,
+    /// which the grouped parts defer to the expanded parts.
+    fn has_number_power(expression: AtomView) -> bool {
+        let mut found = false;
+        expression.visitor(&mut |part| {
+            found |= matches!(part, AtomView::Pow(power)
+                if matches!(power.get_base_exp().0, AtomView::Num(_)));
+            !found
+        });
+        found
+    }
+
     /// The same on a whole `VAKINT_DUMP_SPLIT_INPUTS` directory named by
     /// `VAKINT_SPLIT_CORPUS` (opt-in: real corpora are far too large to
-    /// vendor). Also checks that the dot-notation passes skipped there and
-    /// the second expansion of the reference are no-ops, and prints timings.
+    /// vendor), against the original split ([`original_parts`], run stage by
+    /// stage). The grouped parts must apply to every request without a power
+    /// of a number. Also checks that the dot-notation passes are no-ops where
+    /// they are skipped, counts where the second expansion changes anything,
+    /// and prints timings.
     #[test]
     fn grouped_split_reproduces_a_dumped_corpus() {
         let Some(directory) = std::env::var_os("VAKINT_SPLIT_CORPUS") else {
@@ -1626,29 +1780,12 @@ mod tests {
         paths.sort();
         let seconds = |started: std::time::Instant| started.elapsed().as_secs_f64();
         let mut totals = [0.0; 5];
-        let (mut skipped, mut second_expansion_changed) = (0, 0);
+        let (mut skipped, mut second_expansion_changed, mut number_powers) = (0, 0, 0);
         let mut declined = Vec::new();
         for path in &paths {
             let (family, powers, external, numerator) =
                 split_record(&std::fs::read_to_string(path).unwrap());
-            let started = std::time::Instant::now();
-            let reference = summary(split_reference(
-                family,
-                &powers,
-                numerator.as_view(),
-                &external,
-            ));
-            let reference_seconds = seconds(started);
-            let started = std::time::Instant::now();
-            let actual = summary(split(family, &powers, numerator.as_view(), &external));
-            let split_seconds = seconds(started);
-            assert_eq!(actual, reference, "{}", path.display());
-            let grouped = split_grouped_only(family, &powers, numerator.as_view(), &external);
-            if grouped != reference {
-                assert!(grouped.is_err(), "{}", path.display());
-                declined.push(path.file_name().unwrap().to_string_lossy().into_owned());
-            }
-            // The stages of the reference after its first expansion.
+            // The original split, stage by stage.
             let mut product = numerator.clone();
             for (line, &power) in canonical_lines(family).unwrap().iter().zip(&powers) {
                 if power < 0 {
@@ -1660,21 +1797,41 @@ mod tests {
             let expanded = product.expand();
             let expand_seconds = seconds(started);
             let started = std::time::Instant::now();
+            let passed = Vakint::dot_notation_passes(expanded.clone());
+            let passes_seconds = seconds(started);
             if !Vakint::dot_notation_passes_may_apply(expanded.as_view()) {
                 skipped += 1;
-                assert_eq!(
-                    Vakint::dot_notation_passes(expanded.clone()),
-                    expanded,
-                    "{}",
-                    path.display()
-                );
+                assert_eq!(passed, expanded, "{}", path.display());
             }
-            let passes_seconds = seconds(started);
             let started = std::time::Instant::now();
-            second_expansion_changed += usize::from(expanded.expand() != expanded);
+            let reexpanded = passed.expand();
             let second_expansion_seconds = seconds(started);
+            second_expansion_changed += usize::from(reexpanded != passed);
+            let started = std::time::Instant::now();
+            let original = summary(split_with(
+                family,
+                &powers,
+                reexpanded.as_view(),
+                &external,
+                collected_parts,
+            ));
+            let original_seconds =
+                expand_seconds + passes_seconds + second_expansion_seconds + seconds(started);
+            let started = std::time::Instant::now();
+            let actual = summary(split(family, &powers, numerator.as_view(), &external));
+            let split_seconds = seconds(started);
+            assert_eq!(actual, original, "{}", path.display());
+            let grouped = split_grouped_only(family, &powers, numerator.as_view(), &external);
+            if grouped != original {
+                assert!(grouped.is_err(), "{}", path.display());
+                if has_number_power(numerator.as_view()) {
+                    number_powers += 1;
+                } else {
+                    declined.push(path.file_name().unwrap().to_string_lossy().into_owned());
+                }
+            }
             for (total, value) in totals.iter_mut().zip([
-                reference_seconds,
+                original_seconds,
                 split_seconds,
                 expand_seconds,
                 passes_seconds,
@@ -1683,16 +1840,17 @@ mod tests {
                 *total += value;
             }
             eprintln!(
-                "{}: reference {reference_seconds:.4} s, split {split_seconds:.4} s \
+                "{}: original {original_seconds:.4} s, split {split_seconds:.4} s \
                  (expansion {expand_seconds:.4} s, passes {passes_seconds:.4} s, \
                  second expansion {second_expansion_seconds:.4} s)",
                 path.file_name().unwrap().to_string_lossy()
             );
         }
         eprintln!(
-            "{} requests: reference {:.3} s, split {:.3} s; in the reference: expansion {:.3} s, \
+            "{} requests: original {:.3} s, split {:.3} s; in the original: expansion {:.3} s, \
              passes {:.3} s, second expansion {:.3} s; passes skipped on {skipped}, \
-             second expansion changed {second_expansion_changed}",
+             second expansion changed {second_expansion_changed}, deferred for a power of \
+             a number {number_powers}",
             paths.len(),
             totals[0],
             totals[1],
@@ -1704,5 +1862,126 @@ mod tests {
             declined.is_empty(),
             "the grouped split does not apply to {declined:?}"
         );
+    }
+
+    /// Random nested two-loop numerators: sums of products of loop dots,
+    /// their powers and sums with loop-free factors (complex rationals,
+    /// rational powers of numbers, symbols and functions, denominators,
+    /// functions of sums, indexed vectors), with negative line powers and
+    /// `±p(1)`. [`split`] equals the original split, whether or not the
+    /// grouped parts apply.
+    #[test]
+    fn split_equals_the_original_split_on_random_numerators() {
+        const DOTS: &[&str] = &[
+            "dot(k(1),k(1))",
+            "dot(k(1),k(2))",
+            "dot(k(2),k(2))",
+            "dot(k(1),p(1))",
+            "dot(k(2),p(1))",
+        ];
+        const SPECTATORS: &[&str] = &[
+            "x",
+            "y",
+            "nf",
+            "ε",
+            "ε^2",
+            "ε^-1",
+            "(2-ε)^-1",
+            "(1-2*ε)^-1",
+            "(3+ε+ε^2)^-1",
+            "dot(p(1),p(1))",
+            "dot(p(1),p(1))^-1",
+            "1/3",
+            "-2",
+            "5/7",
+            "2𝑖",
+            "(1/2+3𝑖/4)",
+            "x^(1/2)",
+            "x^(-1/2)",
+            "x^(1/3)",
+            "x^(-2/3)",
+            "f(y)^(1/3)",
+            "2^(1/2)",
+            "3^(1/2)",
+            "2^(1/3)",
+            "4^(1/3)",
+            "f(x+y)",
+            "g(mu,nu)",
+            "p(0,mu)*p(0,nu)",
+            "(1+ε)",
+            "(x+y)",
+            "(1+ε)^2",
+            "dot(p(0),p(0))",
+            "𝜋^-2",
+        ];
+        struct Random(u64);
+        impl Random {
+            fn below(&mut self, n: usize) -> usize {
+                self.0 ^= self.0 << 13;
+                self.0 ^= self.0 >> 7;
+                self.0 ^= self.0 << 17;
+                (self.0 % n as u64) as usize
+            }
+            fn pick(&mut self, items: &[&'static str]) -> &'static str {
+                items[self.below(items.len())]
+            }
+            /// A sum of one to three products of one to three factors,
+            /// nested to `depth` further levels.
+            fn numerator(&mut self, depth: usize) -> String {
+                let mut sum = String::new();
+                for term in 0..1 + self.below(3) {
+                    if term > 0 {
+                        sum.push(if self.below(3) == 0 { '-' } else { '+' });
+                    }
+                    for factor in 0..1 + self.below(3) {
+                        if factor > 0 {
+                            sum.push('*');
+                        }
+                        let factor = match self.below(if depth == 0 { 6 } else { 10 }) {
+                            0 | 1 => self.pick(SPECTATORS).to_string(),
+                            2 | 3 => self.pick(DOTS).to_string(),
+                            4 => format!("{}^{}", self.pick(DOTS), 2 + self.below(2)),
+                            5 => format!("({}+{})", self.pick(DOTS), self.pick(SPECTATORS)),
+                            8 if depth == 1 => format!("({})^2", self.numerator(0)),
+                            8 => format!("({}+{})^2", self.pick(DOTS), self.pick(SPECTATORS)),
+                            _ => format!("({})", self.numerator(depth - 1)),
+                        };
+                        sum.push_str(&factor);
+                    }
+                }
+                sum
+            }
+        }
+        let powers: &[&[i64]] = &[
+            &[1, 1, 1, 1, 1],
+            &[-1, 1, 1, 1, 1],
+            &[1, 1, 1, 1, -2],
+            &[1, 2, 1, 1, 1],
+            &[1, 1, -1, 1, 1],
+        ];
+        let externals = [parse("p(1)"), parse("-p(1)")];
+        let mut random = Random(0x9e37_79b9_7f4a_7c15);
+        let (cases, mut grouped) = (600, 0);
+        for _ in 0..cases {
+            let numerator = parse(&random.numerator(2));
+            let powers = powers[random.below(powers.len())];
+            let external = &externals[random.below(externals.len())];
+            let family = family("P2L");
+            let original = split_original(family, powers, numerator.as_view(), external);
+            assert_eq!(
+                summary(split(family, powers, numerator.as_view(), external)),
+                original,
+                "{powers:?} {external} {numerator}"
+            );
+            let grouped_only = split_grouped_only(family, powers, numerator.as_view(), external);
+            if grouped_only.is_ok() {
+                assert_eq!(grouped_only, original, "{powers:?} {external} {numerator}");
+                grouped += 1;
+            }
+        }
+        // Many cases exercise the grouped parts (about half: powers of
+        // numbers, indexed vectors that a pass contracts and squared
+        // denominators defer).
+        assert!(3 * grouped > cases, "{grouped} of {cases} grouped");
     }
 }
