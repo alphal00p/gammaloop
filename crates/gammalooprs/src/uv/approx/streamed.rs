@@ -265,3 +265,194 @@ fn collect_interface(
         true
     });
 }
+
+/// Whether a power of a composite base with an exponent other than a positive
+/// integer occurs outside function arguments. `expand` keeps such a power as
+/// an opaque factor, which a distributed part could cancel against
+/// (`(x+y)*(1/(x+y)+z)`) in a product that `expand` never forms.
+fn has_opaque_composite_power(expression: AtomView<'_>) -> bool {
+    let mut found = false;
+    expression.visitor(&mut |part| {
+        if found {
+            return false;
+        }
+        match part {
+            AtomView::Fun(_) => false,
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                if matches!(base, AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_))
+                    && !i64::try_from(exponent).is_ok_and(|exponent| exponent > 0)
+                {
+                    found = true;
+                }
+                !found
+            }
+            _ => true,
+        }
+    });
+    found
+}
+
+/// Pass the expansion of `expression` to `sink` in pieces whose sum is
+/// `expression.expand()`. Each piece is an expanded, normalized atom.
+///
+/// Symbolica expands a product of sums by concatenating every distributed
+/// term and normalizing once, so a product whose expansion merges heavily
+/// holds many times its result. Here a sum is expanded in chunks of
+/// consecutive summands and a product is distributed over parts of its
+/// largest sum factor, recursively, down to pieces below `limit`. The
+/// expansion of a normalized sum is canonical (sorted monomials, like terms
+/// merged with exact coefficients, zeros dropped), so adding the pieces gives
+/// the atom `expand` returns. An expression with an opaque composite power
+/// is expanded as a whole.
+pub(crate) fn expand_in_pieces(
+    expression: AtomView<'_>,
+    limit: usize,
+    sink: &mut dyn FnMut(Atom) -> Result<()>,
+) -> Result<()> {
+    if expression.get_byte_size() < limit || has_opaque_composite_power(expression) {
+        return sink(expression.expand());
+    }
+    expand_pieces_unchecked(expression, limit, sink)
+}
+
+fn expand_pieces_unchecked(
+    expression: AtomView<'_>,
+    limit: usize,
+    sink: &mut dyn FnMut(Atom) -> Result<()>,
+) -> Result<()> {
+    const PARTS: usize = 16;
+    if expression.get_byte_size() < limit {
+        return sink(expression.expand());
+    }
+    match expression {
+        AtomView::Add(sum) => {
+            let mut chunk = Vec::new();
+            let mut chunk_bytes = 0;
+            let flush = |chunk: &mut Vec<AtomView<'_>>,
+                             sink: &mut dyn FnMut(Atom) -> Result<()>|
+             -> Result<()> {
+                match chunk[..] {
+                    [] => Ok(()),
+                    [term] => expand_pieces_unchecked(term, limit, sink),
+                    _ => sink(Atom::add_many(chunk.iter().copied()).expand()),
+                }
+                .map(|()| chunk.clear())
+            };
+            for term in sum.iter() {
+                let bytes = term.get_byte_size();
+                if chunk_bytes + bytes >= limit {
+                    flush(&mut chunk, sink)?;
+                    chunk_bytes = 0;
+                }
+                chunk.push(term);
+                chunk_bytes += bytes;
+            }
+            flush(&mut chunk, sink)
+        }
+        AtomView::Mul(product) => {
+            let factors = product.iter().collect::<Vec<_>>();
+            let Some((split, sum)) = factors
+                .iter()
+                .enumerate()
+                .filter_map(|(index, factor)| match factor {
+                    AtomView::Add(sum) => Some((index, *sum)),
+                    _ => None,
+                })
+                .max_by_key(|(_, sum)| sum.as_view().get_byte_size())
+            else {
+                return sink(expression.expand());
+            };
+            let terms = sum.iter().collect::<Vec<_>>();
+            for part in terms.chunks(terms.len().div_ceil(PARTS)) {
+                let part = Atom::add_many(part.iter().copied());
+                let distributed = Atom::mul_many(factors.iter().enumerate().map(|(index, factor)| {
+                    if index == split {
+                        part.as_view()
+                    } else {
+                        *factor
+                    }
+                }));
+                drop(part);
+                expand_pieces_unchecked(distributed.as_view(), limit, sink)?;
+            }
+            Ok(())
+        }
+        _ => sink(expression.expand()),
+    }
+}
+
+/// Visit the summands of `expression` (itself, if it is not a sum) in chunks
+/// of consecutive summands of about `limit` bytes. A chunk of several
+/// summands is passed as their normalized sum.
+pub(crate) fn for_each_summand_chunk(
+    expression: AtomView<'_>,
+    limit: usize,
+    visit: &mut dyn FnMut(AtomView<'_>) -> Result<()>,
+) -> Result<()> {
+    let AtomView::Add(sum) = expression else {
+        return visit(expression);
+    };
+    if expression.get_byte_size() < limit {
+        return visit(expression);
+    }
+    let mut chunk = Vec::new();
+    let mut chunk_bytes = 0;
+    let flush = |chunk: &mut Vec<AtomView<'_>>,
+                     visit: &mut dyn FnMut(AtomView<'_>) -> Result<()>|
+     -> Result<()> {
+        match chunk[..] {
+            [] => Ok(()),
+            [term] => visit(term),
+            _ => visit(Atom::add_many(chunk.iter().copied()).as_view()),
+        }
+        .map(|()| chunk.clear())
+    };
+    for term in sum.iter() {
+        let bytes = term.get_byte_size();
+        if chunk_bytes + bytes >= limit {
+            flush(&mut chunk, visit)?;
+            chunk_bytes = 0;
+        }
+        chunk.push(term);
+        chunk_bytes += bytes;
+    }
+    flush(&mut chunk, visit)
+}
+
+/// A running sum of normalized atoms. Pending summands are merged into the
+/// accumulated sum whenever they outgrow it, so that the unmerged part never
+/// holds much more than the result. A normalized sum is canonical, so the
+/// result is `Atom::add_many` of all pushed atoms.
+#[derive(Default)]
+pub(crate) struct SumAccumulator {
+    accumulated: Atom,
+    pending: Vec<Atom>,
+    pending_bytes: usize,
+}
+
+impl SumAccumulator {
+    pub(crate) fn push(&mut self, summand: Atom) {
+        self.pending_bytes += summand.as_view().get_byte_size();
+        self.pending.push(summand);
+        if self.pending_bytes > self.accumulated.as_view().get_byte_size().max(64 << 20) {
+            self.merge();
+        }
+    }
+
+    fn merge(&mut self) {
+        let merged = Atom::add_many(
+            std::iter::once(&self.accumulated).chain(self.pending.iter()),
+        );
+        self.pending.clear();
+        self.pending_bytes = 0;
+        self.accumulated = merged;
+    }
+
+    pub(crate) fn finish(mut self) -> Atom {
+        if !self.pending.is_empty() {
+            self.merge();
+        }
+        self.accumulated
+    }
+}

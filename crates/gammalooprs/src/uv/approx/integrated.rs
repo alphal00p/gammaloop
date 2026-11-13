@@ -1,4 +1,4 @@
-use std::{collections::HashMap, time::Instant};
+use std::{borrow::Cow, collections::HashMap, time::Instant};
 
 use color_eyre::Result;
 use eyre::{WrapErr, eyre};
@@ -19,7 +19,7 @@ use linnet::half_edge::{
 use spenso::{
     network::{
         library::symbolic::ETS,
-        parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing},
+        parsing::{AtomStructureExt, ParseSettings, SchoonschipExpansionMode, ShorthandParsing},
         tags::SPENSO_TAG,
     },
     shadowing::symbolica_utils::LogPrint,
@@ -595,15 +595,240 @@ impl Integrated<'_> {
     }
 }
 
+/// An integrand passed to [`to_vakint_integrand`] by reference, or by value
+/// so that it can be dropped as soon as it has been materialized.
+pub(crate) trait IntoIntegrand<'a> {
+    fn into_integrand(self) -> Cow<'a, Atom>;
+}
+
+impl<'a> IntoIntegrand<'a> for &'a Atom {
+    fn into_integrand(self) -> Cow<'a, Atom> {
+        Cow::Borrowed(self)
+    }
+}
+
+impl IntoIntegrand<'static> for Atom {
+    fn into_integrand(self) -> Cow<'static, Atom> {
+        Cow::Owned(self)
+    }
+}
+
+/// The summand-local rewrites of [`to_vakint_integrand`] after expansion.
+struct TermRewrites {
+    propagators: HashMap<usize, (usize, Atom)>,
+    contracted_nodes: HashMap<usize, usize>,
+    substitute_masses_to_m_uv: bool,
+}
+
+impl TermRewrites {
+    // Nested counterterms can expose a boundary metric next to the propagator
+    // metric of the reduced graph. Contract those metric-only structures before
+    // the expression is split into Vakint terms.
+    fn contract_metrics(integrand: AtomView<'_>) -> Result<Atom> {
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let contracted = SymbolicTensor::infer_indexed(cooking.try_cook(integrand)?)?.contract(
+            ContractSettings {
+                rank_one: false,
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            },
+        )?;
+        Ok(cooking.uncook(contracted.expression().as_view()))
+    }
+
+    /// [`Self::contract_metrics`], skipped when the expression has neither a
+    /// metric nor a repeated explicit index, so that nothing can contract.
+    fn contract_metrics_if_any(integrand: AtomView<'_>) -> Result<Atom> {
+        if !integrand.contains_symbol(ETS.metric) && !integrand.has_repeated_explicit_indices() {
+            return Ok(integrand.to_owned());
+        }
+        Self::contract_metrics(integrand)
+    }
+
+    // Denominator identities do not overlap. Visit the expression once rather
+    // than rebuilding its complete numerator for every graph edge. Normalize
+    // powers after all leaves have been replaced, using the same rule as before.
+    fn denominators_to_propagators(&self, integrand: Atom) -> Atom {
+        if self.propagators.is_empty() {
+            return integrand;
+        }
+        let vk_prop = vakint::symbols::S.prop;
+        let integrand = integrand.replace_map(|part, _, out| {
+            let AtomView::Fun(denominator) = part else {
+                return;
+            };
+            if denominator.get_symbol() != GS.den || denominator.get_nargs() < 3 {
+                return;
+            }
+            let Ok(edge) = usize::try_from(denominator.get(0)) else {
+                return;
+            };
+            let Some((id, endpoints)) = self.propagators.get(&edge) else {
+                return;
+            };
+            let mass = if self.substitute_masses_to_m_uv {
+                Atom::var(GS.m_uv_vacuum)
+            } else {
+                denominator.get(2).to_owned()
+            };
+            **out = function!(vk_prop, *id, endpoints, denominator.get(1), mass, 1);
+        });
+        integrand
+            .replace(function!(vk_prop, W_.x___, 1).pow(Atom::var(W_.e_)))
+            .with(function!(vk_prop, W_.x___, -Atom::var(W_.e_)))
+    }
+
+    fn shrink_subgraph(&self, integrand: Atom) -> Atom {
+        if self.contracted_nodes.is_empty() {
+            return integrand;
+        }
+        let vk_prop = vakint::symbols::S.prop;
+        let vk_edge = vakint_symbol!("edge");
+        integrand.replace_map(|part, _, out| {
+            let AtomView::Fun(propagator) = part else {
+                return;
+            };
+            if propagator.get_symbol() != vk_prop || propagator.get_nargs() < 2 {
+                return;
+            }
+            let AtomView::Fun(endpoints) = propagator.get(1) else {
+                return;
+            };
+            if endpoints.get_symbol() != vk_edge || endpoints.get_nargs() != 2 {
+                return;
+            }
+            let node = |original: AtomView<'_>| {
+                usize::try_from(original)
+                    .ok()
+                    .and_then(|id| self.contracted_nodes.get(&id).copied())
+                    .map_or_else(|| original.to_owned(), Atom::num)
+            };
+            let edge = function!(vk_edge, node(endpoints.get(0)), node(endpoints.get(1)));
+            **out = FunctionBuilder::new(vk_prop)
+                .add_arg(propagator.get(0))
+                .add_arg(edge)
+                .add_args(propagator.iter().skip(2))
+                .finish();
+        })
+    }
+
+    fn flip_and_fuse(integrand: Atom) -> Atom {
+        let vk_prop = vakint::symbols::S.prop;
+        let vk_edge = vakint_symbol!("edge");
+        // flip edges to positive momentum
+        // FIXME: how will this work for sums of momenta?
+        let integrand = integrand
+            .replace(function!(
+                vk_prop,
+                W_.x_,
+                function!(vk_edge, W_.a_, W_.b_),
+                -Atom::var(W_.y_),
+                W_.e___
+            ))
+            .repeat()
+            .with(function!(
+                vk_prop,
+                W_.x_,
+                function!(vk_edge, W_.b_, W_.a_),
+                W_.y_,
+                W_.e___
+            ));
+
+        // fuse raised edges
+        integrand
+            .replace(
+                function!(
+                    vk_prop,
+                    W_.x_,
+                    function!(vk_edge, W_.a_, W_.b_),
+                    W_.x___,
+                    W_.e_
+                ) * function!(
+                    vk_prop,
+                    W_.y_,
+                    function!(vk_edge, W_.b_, W_.c_),
+                    W_.x___,
+                    W_.f_
+                ),
+            )
+            .repeat()
+            .with(function!(
+                vk_prop,
+                W_.y_,
+                function!(vk_edge, W_.a_, W_.c_),
+                W_.x___,
+                W_.e_ + W_.f_
+            ))
+    }
+
+    fn wrap_topologies(integrand: &Atom) -> Atom {
+        let vk_prop = vakint::symbols::S.prop;
+        let vk_topo = vakint_symbol!("topo");
+        integrand
+            .replace(function!(vk_prop, W_.x__))
+            .with(function!(vk_topo, function!(vk_prop, W_.x__)))
+            .replace(function!(vk_topo, W_.x_) * function!(vk_topo, W_.y_))
+            .repeat()
+            .with(function!(vk_topo, W_.x_ * W_.y_))
+    }
+
+    /// Every rewrite after the metric contraction.
+    fn after_contraction(&self, integrand: Atom) -> Atom {
+        let integrand = self.denominators_to_propagators(integrand);
+        let integrand = self.shrink_subgraph(integrand);
+        let integrand = Self::flip_and_fuse(integrand);
+        Self::wrap_topologies(&integrand)
+    }
+
+    /// The whole map from the materialized integrand to the Vakint input, as
+    /// one expression: the reference for [`Self::streamed`].
+    fn whole(&self, materialized: AtomView<'_>) -> Result<Atom> {
+        let expanded = materialized.expand();
+        let contracted = Self::contract_metrics(expanded.as_view())?;
+        drop(expanded);
+        Ok(self.after_contraction(contracted))
+    }
+
+    /// [`Self::whole`] on pieces of the expansion of `materialized`, in
+    /// chunks of summands, added up once at the end. Expansion, contraction
+    /// and the rewrites act on every summand alone and are linear in its
+    /// coefficient, and normalized sums are canonical, so this is the whole
+    /// map. Returns `None` if a contraction introduces a dummy index.
+    fn streamed(&self, materialized: AtomView<'_>, limit: usize) -> Result<Option<Atom>> {
+        let mut accumulated = streamed::SumAccumulator::default();
+        let mut introduced = false;
+        let outcome = streamed::expand_in_pieces(materialized, limit, &mut |piece| {
+            streamed::for_each_summand_chunk(piece.as_view(), limit, &mut |chunk| {
+                let contracted = Self::contract_metrics_if_any(chunk)?;
+                if streamed::introduces_dummies(chunk, contracted.as_view()) {
+                    introduced = true;
+                    return Err(eyre!("a metric contraction introduced a dummy index"));
+                }
+                accumulated.push(self.after_contraction(contracted));
+                Ok(())
+            })
+        });
+        match outcome {
+            Ok(()) => Ok(Some(accumulated.finish())),
+            Err(_) if introduced => Ok(None),
+            Err(error) => Err(error),
+        }
+    }
+}
+
 #[debug_instrument]
 pub(crate) fn to_vakint_integrand<
+    'a,
     E: UVE,
     V,
     H,
     S: SubGraphLike + SubSetLike<Base = SuBitGraph>,
     SS: SubGraphLike,
 >(
-    integrand: &Atom,
+    integrand: impl IntoIntegrand<'a>,
     graph: &HedgeGraph<E, V, H>,
     reduced: &S,
     dependent_subgraph: &SS,
@@ -615,7 +840,10 @@ pub(crate) fn to_vakint_integrand<
     let reduced_label = reduced.string_label();
     let dependent_subgraph_label = dependent_subgraph.string_label();
     let materialization_stage = StageSpan::new("gamma.adaptor.materialize_tensor");
-    let mut integrand_vakint = Integrated::materialize_tensor(integrand)?;
+    let integrand = integrand.into_integrand();
+    let materialized = Integrated::materialize_tensor(&integrand)?;
+    // An integrand passed by value is not needed any more.
+    drop(integrand);
     let materialization_seconds = started.elapsed().as_secs_f64();
     drop(materialization_stage);
     debug_tags!(#uv, #integrated, #vakint, #trace;
@@ -623,54 +851,12 @@ pub(crate) fn to_vakint_integrand<
         reduced = %reduced_label,
         dependent_subgraph = %dependent_subgraph_label,
         substitute_masses_to_m_uv = substitute_masses_to_m_uv,
-        log.integrand = integrand_vakint,
+        log.integrand = materialized,
         "Vakint trace after undo shorthands"
     );
-    let expansion_started = Instant::now();
-    let expansion_stage = StageSpan::new("gamma.adaptor.expand");
-    integrand_vakint = integrand_vakint.expand();
-    let expansion_seconds = expansion_started.elapsed().as_secs_f64();
-    drop(expansion_stage);
-    debug_tags!(#uv, #integrated, #vakint, #trace;
-        stage = "to_vakint_integrand_after_den_strip_expand",
-        reduced = %reduced_label,
-        dependent_subgraph = %dependent_subgraph_label,
-        log.integrand = integrand_vakint,
-        "Vakint trace after denominator strip and expand"
-    );
 
-    // Nested counterterms can expose a boundary metric next to the propagator
-    // metric of the reduced graph. Contract those metric-only structures before
-    // the expression is split into Vakint terms.
-    let metrics_started = Instant::now();
-    let metric_stage = StageSpan::new("gamma.adaptor.metric_contraction");
-    let cooking = CookSettings::indices()
-        .with_mode(CookMode::ReversibleEncoding)
-        .with_representation_payloads(true, true);
-    let contracted = SymbolicTensor::infer_indexed(cooking.try_cook(integrand_vakint.as_view())?)?
-        .contract(ContractSettings {
-            rank_one: false,
-            collect_chains: false,
-            collect_traces: false,
-            ..Default::default()
-        })?;
-    integrand_vakint = cooking.uncook(contracted.expression().as_view());
-    let metric_seconds = metrics_started.elapsed().as_secs_f64();
-    drop(metric_stage);
-    debug_tags!(#uv, #integrated, #vakint, #trace;
-        stage = "to_vakint_integrand_after_simplify_metrics",
-        reduced = %reduced_label,
-        dependent_subgraph = %dependent_subgraph_label,
-        log.integrand = integrand_vakint,
-        "Vakint trace after metric simplification"
-    );
-
-    let topology_started = Instant::now();
-    let topology_stage = StageSpan::new("gamma.adaptor.propagator_topology");
     let vk_prop = vakint::symbols::S.prop;
     let vk_edge = vakint_symbol!("edge");
-    let vk_topo = vakint_symbol!("topo");
-
     debug_tags!(#uv, #integrated, #vakint, #graph, #dump;
         reduced = %graph.dot(reduced),
         "Den to prop for"
@@ -691,42 +877,6 @@ pub(crate) fn to_vakint_integrand<
             );
         }
     }
-    // Denominator identities do not overlap. Visit the expression once rather
-    // than rebuilding its complete numerator for every graph edge. Normalize
-    // powers after all leaves have been replaced, using the same rule as before.
-    if !propagators.is_empty() {
-        integrand_vakint = integrand_vakint.replace_map(|part, _, out| {
-            let AtomView::Fun(denominator) = part else {
-                return;
-            };
-            if denominator.get_symbol() != GS.den || denominator.get_nargs() < 3 {
-                return;
-            }
-            let Ok(edge) = usize::try_from(denominator.get(0)) else {
-                return;
-            };
-            let Some((id, endpoints)) = propagators.get(&edge) else {
-                return;
-            };
-            let mass = if substitute_masses_to_m_uv {
-                Atom::var(GS.m_uv_vacuum)
-            } else {
-                denominator.get(2).to_owned()
-            };
-            **out = function!(vk_prop, *id, endpoints, denominator.get(1), mass, 1);
-        });
-        integrand_vakint = integrand_vakint
-            .replace(function!(vk_prop, W_.x___, 1).pow(Atom::var(W_.e_)))
-            .with(function!(vk_prop, W_.x___, -Atom::var(W_.e_)));
-    }
-    debug_tags!(#uv, #integrated, #vakint, #trace;
-        stage = "to_vakint_integrand_after_den_to_prop",
-        reduced = %reduced_label,
-        dependent_subgraph = %dependent_subgraph_label,
-        log.integrand = integrand_vakint,
-        "Vakint trace after denominator-to-propagator conversion"
-    );
-
     debug_tags!(#uv, #integrated, #vakint, #graph, #dump;
         reduced = %graph.dot(dependent_subgraph),
         "Shrinking subgraph for vakint"
@@ -750,115 +900,105 @@ pub(crate) fn to_vakint_integrand<
             }
         }
     }
-    if !contracted_nodes.is_empty() {
-        integrand_vakint = integrand_vakint.replace_map(|part, _, out| {
-            let AtomView::Fun(propagator) = part else {
-                return;
-            };
-            if propagator.get_symbol() != vk_prop || propagator.get_nargs() < 2 {
-                return;
-            }
-            let AtomView::Fun(endpoints) = propagator.get(1) else {
-                return;
-            };
-            if endpoints.get_symbol() != vk_edge || endpoints.get_nargs() != 2 {
-                return;
-            }
-            let node = |original: AtomView<'_>| {
-                usize::try_from(original)
-                    .ok()
-                    .and_then(|id| contracted_nodes.get(&id).copied())
-                    .map_or_else(|| original.to_owned(), Atom::num)
-            };
-            let edge = function!(vk_edge, node(endpoints.get(0)), node(endpoints.get(1)));
-            **out = FunctionBuilder::new(vk_prop)
-                .add_arg(propagator.get(0))
-                .add_arg(edge)
-                .add_args(propagator.iter().skip(2))
-                .finish();
-        });
-    }
-    debug_tags!(#uv, #integrated, #vakint, #trace;
-        stage = "to_vakint_integrand_after_shrink_subgraph",
-        reduced = %reduced_label,
-        dependent_subgraph = %dependent_subgraph_label,
-        log.integrand = integrand_vakint,
-        "Vakint trace after shrinking subgraph"
-    );
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let rewrites = TermRewrites {
+        propagators,
+        contracted_nodes,
+        substitute_masses_to_m_uv,
+    };
 
-    // flip edges to positive momentum
-    // FIXME: how will this work for sums of momenta?
-    integrand_vakint = integrand_vakint
-        .replace(function!(
-            vk_prop,
-            W_.x_,
-            function!(vk_edge, W_.a_, W_.b_),
-            -Atom::var(W_.y_),
-            W_.e___
-        ))
-        .repeat()
-        .with(function!(
-            vk_prop,
-            W_.x_,
-            function!(vk_edge, W_.b_, W_.a_),
-            W_.y_,
-            W_.e___
-        ));
+    // A large integrand is expanded, contracted and rewritten in pieces, so
+    // that neither its unmerged expansion nor a cooked copy, observation map
+    // or contraction of the whole expansion is alive at once.
+    let limit = streamed::piece_limit();
+    let streamed_input = if materialized.as_view().get_byte_size() >= limit {
+        let expansion_stage = StageSpan::new("gamma.adaptor.expand");
+        let streamed_input = rewrites.streamed(materialized.as_view(), limit)?;
+        drop(expansion_stage);
+        if let Some(streamed_input) = &streamed_input
+            && streamed::check_streamed(materialized.as_view())
+        {
+            let whole = rewrites.whole(materialized.as_view())?;
+            streamed::report_check("to_vakint", materialized.as_view(), streamed_input, &whole);
+        }
+        streamed_input
+    } else {
+        None
+    };
+    let (vakint_input_atom, expansion_seconds, metric_seconds, topology_seconds) =
+        if let Some(streamed_input) = streamed_input {
+            drop(materialized);
+            let seconds = started.elapsed().as_secs_f64() - materialization_seconds;
+            (streamed_input, seconds, 0.0, 0.0)
+        } else {
+            let expansion_started = Instant::now();
+            let expansion_stage = StageSpan::new("gamma.adaptor.expand");
+            let integrand_vakint = materialized.expand();
+            drop(materialized);
+            let expansion_seconds = expansion_started.elapsed().as_secs_f64();
+            drop(expansion_stage);
+            debug_tags!(#uv, #integrated, #vakint, #trace;
+                stage = "to_vakint_integrand_after_den_strip_expand",
+                reduced = %reduced_label,
+                dependent_subgraph = %dependent_subgraph_label,
+                log.integrand = integrand_vakint,
+                "Vakint trace after denominator strip and expand"
+            );
 
-    // fuse raised edges
-    integrand_vakint = integrand_vakint
-        .replace(
-            function!(
-                vk_prop,
-                W_.x_,
-                function!(vk_edge, W_.a_, W_.b_),
-                W_.x___,
-                W_.e_
-            ) * function!(
-                vk_prop,
-                W_.y_,
-                function!(vk_edge, W_.b_, W_.c_),
-                W_.x___,
-                W_.f_
-            ),
-        )
-        .repeat()
-        .with(function!(
-            vk_prop,
-            W_.y_,
-            function!(vk_edge, W_.a_, W_.c_),
-            W_.x___,
-            W_.e_ + W_.f_
-        ));
-    debug_tags!(#uv, #integrated, #vakint, #trace;
-        stage = "to_vakint_integrand_after_flip_fuse",
-        reduced = %reduced_label,
-        dependent_subgraph = %dependent_subgraph_label,
-        log.integrand = integrand_vakint,
-        "Vakint trace after edge flip and fuse"
-    );
+            let metrics_started = Instant::now();
+            let metric_stage = StageSpan::new("gamma.adaptor.metric_contraction");
+            let contracted = TermRewrites::contract_metrics(integrand_vakint.as_view())?;
+            drop(integrand_vakint);
+            let integrand_vakint = contracted;
+            let metric_seconds = metrics_started.elapsed().as_secs_f64();
+            drop(metric_stage);
+            debug_tags!(#uv, #integrated, #vakint, #trace;
+                stage = "to_vakint_integrand_after_simplify_metrics",
+                reduced = %reduced_label,
+                dependent_subgraph = %dependent_subgraph_label,
+                log.integrand = integrand_vakint,
+                "Vakint trace after metric simplification"
+            );
 
-    // println!(
-    //     "Integrand pre vakint: {:}",
-    //     VakintExpression::try_from(
-    //         integrand_vakint
-    //             .replace(function!(vk_prop, W_.x__))
-    //             .with(function!(vk_topo, function!(vk_prop, W_.x__)))
-    //             .replace(function!(vk_topo, W_.x_) * function!(vk_topo, W_.y_))
-    //             .repeat()
-    //             .with(function!(vk_topo, W_.x_ * W_.y_))
-    //     )
-    //     .unwrap()
-    // );
-
-    let vakint_input_atom = integrand_vakint
-        .replace(function!(vk_prop, W_.x__))
-        .with(function!(vk_topo, function!(vk_prop, W_.x__)))
-        .replace(function!(vk_topo, W_.x_) * function!(vk_topo, W_.y_))
-        .repeat()
-        .with(function!(vk_topo, W_.x_ * W_.y_));
-    let topology_seconds = topology_started.elapsed().as_secs_f64();
-    drop(topology_stage);
+            let topology_started = Instant::now();
+            let topology_stage = StageSpan::new("gamma.adaptor.propagator_topology");
+            let integrand_vakint = rewrites.denominators_to_propagators(integrand_vakint);
+            debug_tags!(#uv, #integrated, #vakint, #trace;
+                stage = "to_vakint_integrand_after_den_to_prop",
+                reduced = %reduced_label,
+                dependent_subgraph = %dependent_subgraph_label,
+                log.integrand = integrand_vakint,
+                "Vakint trace after denominator-to-propagator conversion"
+            );
+            let integrand_vakint = rewrites.shrink_subgraph(integrand_vakint);
+            debug_tags!(#uv, #integrated, #vakint, #trace;
+                stage = "to_vakint_integrand_after_shrink_subgraph",
+                reduced = %reduced_label,
+                dependent_subgraph = %dependent_subgraph_label,
+                log.integrand = integrand_vakint,
+                "Vakint trace after shrinking subgraph"
+            );
+            let integrand_vakint = TermRewrites::flip_and_fuse(integrand_vakint);
+            debug_tags!(#uv, #integrated, #vakint, #trace;
+                stage = "to_vakint_integrand_after_flip_fuse",
+                reduced = %reduced_label,
+                dependent_subgraph = %dependent_subgraph_label,
+                log.integrand = integrand_vakint,
+                "Vakint trace after edge flip and fuse"
+            );
+            let vakint_input_atom = TermRewrites::wrap_topologies(&integrand_vakint);
+            drop(integrand_vakint);
+            let topology_seconds = topology_started.elapsed().as_secs_f64();
+            drop(topology_stage);
+            (
+                vakint_input_atom,
+                expansion_seconds,
+                metric_seconds,
+                topology_seconds,
+            )
+        };
     debug_tags!(#uv, #integrated, #vakint, #trace;
         stage = "to_vakint_integrand_before_split_terms",
         reduced = %reduced_label,
