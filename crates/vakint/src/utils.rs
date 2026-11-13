@@ -375,13 +375,25 @@ pub(crate) fn has_only_exact_numbers(atom: AtomView) -> bool {
 /// `+`, bit for bit, with one n-way merge ([`Atom::add_many`]) per run of
 /// terms instead of one renormalization of the growing sum per term.
 ///
-/// The fold and one merge of the same terms can differ in two ways only.
-/// `+` keeps an identical sum factored, `(a+b) + (a+b) = 2*(a+b)`, which
-/// requires the next term to be a sum equal to the running sum; and inexact
-/// numbers may round differently in another merge order. A term that is a
-/// sum or holds an inexact number is therefore added with `+` itself, after
-/// the run before it is merged, and once the running sum holds an inexact
-/// number every later term is added with `+`.
+/// Both merge a term into the sum by adding its number coefficient to that
+/// of the term with the same non-number part. They differ only where the
+/// order of these merges shows:
+/// - a coefficient that becomes exactly 1 on a single sum factor, as in
+///   `c*(a+b)`, leaves the sum `a+b`, which `+` flattens into the running
+///   sum at once, so later `c'*(a+b)` no longer merge with it:
+///   `(a+b)/2 + (a+b)/2 + (a+b)/2 = a+b+1/2*(a+b)`, where one merge of the
+///   three terms gives `3/2*(a+b)`;
+/// - `+` keeps an identical sum factored, `(a+b) + (a+b) = 2*(a+b)`, which
+///   requires the next term to be a sum equal to the running sum;
+/// - inexact numbers may round differently in another merge order.
+///
+/// A term that is a sum, a number times one sum ([`is_scaled_sum`]) or
+/// holds an inexact number is therefore added with `+` itself, after the run
+/// before it is merged, and once the running sum holds an inexact number
+/// every later term is added with `+`. The non-number part of any other term
+/// is not a single sum, so no merge with it forms a sum (a coefficient 1
+/// leaves that non-number part, 0 removes the term), and its exact
+/// coefficients add up to the same number in any order.
 pub(crate) struct ExactSum {
     total: Atom,
     exact_total: bool,
@@ -400,6 +412,7 @@ impl ExactSum {
     pub(crate) fn push(&mut self, term: Atom) {
         if self.exact_total
             && !matches!(term.as_view(), AtomView::Add(_))
+            && !is_scaled_sum(term.as_view())
             && has_only_exact_numbers(term.as_view())
         {
             self.pending.push(term);
@@ -422,6 +435,21 @@ impl ExactSum {
         self.flush();
         self.total
     }
+}
+
+/// Whether `term` is a number times one sum, `c*(a+b)`: a term that a merge
+/// of coefficients can turn into a sum ([`ExactSum`]).
+fn is_scaled_sum(term: AtomView) -> bool {
+    let AtomView::Mul(product) = term else {
+        return false;
+    };
+    let mut factors = product
+        .iter()
+        .filter(|factor| !matches!(factor, AtomView::Num(_)));
+    matches!(
+        (factors.next(), factors.next()),
+        (Some(AtomView::Add(_)), None)
+    )
 }
 
 #[cfg(test)]
@@ -479,6 +507,17 @@ mod exact_sum_tests {
             &["c", "3*(a+b)", "-2*(a+b)"],
             &["2*(a+b)*x", "-(a+b)*x", "y"],
             &["x", "y", "-x", "-y"],
+            // A coefficient that becomes 1 leaves the sum, which `+` flattens:
+            // later multiples of the sum no longer merge with it.
+            &["(a+b)/2", "(a+b)/2", "(a+b)/2"],
+            &["(a+b)/3", "2*(a+b)/3", "(a+b)/3"],
+            &["(a+b)/2", "(a+b)/2", "-(a+b)/2"],
+            &["x", "(a+b)/2", "y", "(a+b)/2", "x", "(a+b)/2", "-y"],
+            &["(1/2+1𝑖)*(a+b)", "(1/2-1𝑖)*(a+b)", "2*(a+b)", "c"],
+            &["(x+(a+b)/2)/2", "(x+(a+b)/2)/2", "(a+b)/2", "x", "(a+b)/2"],
+            // With another factor the merged coefficient never leaves a sum.
+            &["x*(a+b)/2", "x*(a+b)/2", "x*(a+b)/2"],
+            &["(a+b)^2/2", "(a+b)^2/2", "(a+b)^2/2"],
             // `+` keeps an identical running sum factored.
             &["a+b", "a+b", "c"],
             &["a", "b", "a+b", "c"],
@@ -510,6 +549,44 @@ mod exact_sum_tests {
         long.push("x^0+y".to_string());
         let long = long.iter().map(String::as_str).collect::<Vec<_>>();
         assert_same(&long);
+    }
+
+    /// Random sequences of terms that merge with each other and into sums:
+    /// sums, multiples of sums (also nested and complex), roots, functions
+    /// and cancellations.
+    #[test]
+    fn exact_sum_reproduces_the_left_fold_on_random_sequences() {
+        let pool = "x -x 2*x a b -a -b c 0 1 -1 1/2 x^2 -x^2 x*y a+b -a-b a+b+c c+x -c-x \
+            (a+b)/2 -(a+b)/2 2*(a+b) -(a+b) 3*(a+b) x*(a+b) -x*(a+b) (1/3)*(c+x) -(1/3)*(c+x) \
+            (2/3)*(c+x) (1/3)*(x+c)*y (2/3)*(x+c)*y (1/2+1𝑖)*(a+b) (1/2-1𝑖)*(a+b) (1/2)*(x+y) \
+            x+(a+b)/2 (x+(a+b)/2)/2 -(x+(a+b)/2)/2 (1/2)*(x+y+(a+b)/2) x+y+(a+b)/2 (a+b)/2+c \
+            2^(1/2) -2^(1/2) x*2^(1/2) 3^(1/2) 2*3^(1/2) f(a+b) -f(a+b) (a+b)^-1 -(a+b)^-1 \
+            2𝑖*x -2𝑖*x (a+b)^2 -(a+b)^2 a^2+2*a*b+b^2";
+        let terms = pool
+            .split_whitespace()
+            .map(|source| vk_parse!(source).unwrap())
+            .collect::<Vec<_>>();
+        let mut state = 0x2545_f491_4f6c_dd1d_u64;
+        let mut below = |n: usize| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            (state % n as u64) as usize
+        };
+        for case in 0..20_000 {
+            let length = 1 + below(10);
+            let sequence = (0..length)
+                .map(|_| terms[below(terms.len())].clone())
+                .collect::<Vec<_>>();
+            let expected = fold(&sequence);
+            let actual = merged(&sequence);
+            assert!(
+                actual == expected
+                    && actual.to_canonical_string() == expected.to_canonical_string(),
+                "case {case}: {:?}: fold {expected}, merged {actual}",
+                sequence.iter().map(Atom::to_string).collect::<Vec<_>>()
+            );
+        }
     }
 }
 
