@@ -21,7 +21,7 @@ use symbolica::transcendental::gamma;
 
 use super::finalize::{gamma_one_plus, pg_value};
 use super::laurent::unsupported_power;
-use super::{masters, p_gamma_symbol, p_master_symbol, pg_symbol};
+use super::{masters, p_gamma_symbol, p_master_symbol, p_residual_symbol, pg_symbol};
 use crate::symbols::S;
 use crate::{VakintError, get_integer_from_atom};
 
@@ -142,6 +142,14 @@ pub(crate) fn check_symbols_with(expression: &Atom, extra: &[&str]) -> Result<()
                 integers.is_some_and(|m| m.len() == 1 && m[0] != 0)
             } else if function.get_symbol() == p_master_symbol() {
                 masters::p_master_name(part).is_some_and(|name| known.contains(&name.as_str()))
+            } else if function.get_symbol() == p_residual_symbol() {
+                // PResidual(node, k_1, ..., k_n): a node symbol, then integers.
+                let mut arguments = function.iter();
+                arguments
+                    .next()
+                    .is_some_and(|node| matches!(node, AtomView::Var(_)))
+                    && function.get_nargs() >= 2
+                    && arguments.all(|power| get_integer_from_atom(power).is_some())
             } else {
                 return malformed.is_none();
             };

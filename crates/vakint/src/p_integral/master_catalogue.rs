@@ -64,7 +64,7 @@ use symbolica::domains::float::Float;
 use symbolica::id::Replacement;
 use symbolica::transcendental::zeta;
 
-use super::{masters, p_gamma_symbol, p_master_symbol, pg_symbol};
+use super::{masters, p_gamma_symbol, p_master_symbol, p_residual_symbol, pg_symbol};
 use crate::rustred_evaluation::RustRedMasterMode;
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
 use crate::{VakintError, get_integer_from_atom};
@@ -83,12 +83,6 @@ pub const P_MASTER_NORMALISATION: &str = "g-scheme";
 /// At most this many entries are named in one error message.
 const NAMED: usize = 8;
 
-/// `vakint::PResidual(node, k_1, ..., k_n)`: a residual terminal of the RustRed
-/// p reduction (WP4 renders it; the same symbol as `p_integral::p_residual_symbol`
-/// of the boxed-node branch).
-pub(crate) fn p_residual_symbol() -> Symbol {
-    vk_symbol!("PResidual")
-}
 
 /// `vakint::PMasterValue(master, k)`: the `ε^k` coefficient of a catalogue
 /// master that is known numerically only (or embeds a finite constant), kept

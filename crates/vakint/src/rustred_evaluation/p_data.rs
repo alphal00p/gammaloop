@@ -61,7 +61,8 @@ use super::cache::OrderedCacheProgram;
 use super::data::{checked_bytes, vendored_files};
 use super::p_shipped_cache::{self, ListedLibrary};
 use crate::Vakint;
-use crate::p_integral::{P_FAMILIES, P_INTEGRAL_LOOP_COUNTS, masters, parts};
+use crate::p_integral::{P_FAMILIES, P_INTEGRAL_LOOP_COUNTS, masters, p_residual_symbol, parts};
+use crate::utils::vakint_macros::vk_symbol;
 
 /// Directory of the p area under an external-data root.
 pub(crate) const P_DATA_DIRECTORY: &str = "p";
@@ -123,8 +124,12 @@ pub(crate) struct PTop {
 pub(crate) struct PLibraryHandle {
     pub library: Arc<PLibrary>,
     pub origin: PLibraryOrigin,
-    /// One entry per [`P_FAMILIES`] entry; `None` outside the scope.
+    /// One entry per [`P_FAMILIES`] entry; `None` outside the scope (and for
+    /// a five-loop family whose top the library does not hold).
     tops: Vec<Option<PTop>>,
+    /// t162-export: the `PResidual(node, k..)` symbol of each residual
+    /// terminal met so far (named once, after the reduction that met it).
+    residuals: Mutex<BTreeMap<u32, Atom>>,
     /// The library's dimension parameter `d` as an expression.
     pub dimension: Atom,
     /// The step-cache program of this library (one for every loop count).
@@ -232,6 +237,14 @@ impl PLibraryHandle {
                 tops.push(None);
                 continue;
             }
+            // t162-export: a five-loop package may hold only some of the 64
+            // five-loop tops (the campaign assembles them top by top); a
+            // missing one is "no family" on request. One to four loops stay
+            // complete.
+            if family.loops >= 5 && library.top_presentation(family.name).is_none() {
+                tops.push(None);
+                continue;
+            }
             tops.push(Some(Self::check_top(&library, family)?));
         }
         Self::check_terminals(&library)?;
@@ -254,6 +267,7 @@ impl PLibraryHandle {
             library,
             origin,
             tops,
+            residuals: Mutex::new(BTreeMap::new()),
             dimension,
             cache,
         })
@@ -329,20 +343,40 @@ pub(crate) fn check_top_presentation(
 }
 
 impl PLibraryHandle {
-    /// Every terminal maps onto `1` or a tabulated Forcer master: without a
-    /// basis map only the unit terminal may exist, and a residual never
-    /// reaches vakint (convention C4).
+    /// Every terminal maps onto `1` or a tabulated Forcer master (convention
+    /// C4), except residual terminals that stay symbols `PResidual(node, k..)`
+    /// (t162-export): without a basis map, a library whose scope reaches five
+    /// loops may end on any residual (no basis map onto masters exists there
+    /// yet) and a one- to four-loop library only on the terminals of BOXED
+    /// nodes (unknown integrals); any other residual is refused at load.
     fn check_terminals(library: &PLibrary) -> Result<(), RustRedEvaluationError> {
         let names = masters::p_master_names().map_err(|error| data_failure(error.to_string()))?;
         let terminals = library.terminals().len();
         let Some(map) = library.basis_map() else {
-            return if terminals == 1 {
-                Ok(())
-            } else {
-                Err(data_failure(format!(
-                    "{terminals} terminals but no basis map onto the Forcer masters"
-                )))
-            };
+            let five = *library.scope().end() >= 5;
+            for id in 1..terminals {
+                let terminal = rustred::propagator::PTerminalId(
+                    u32::try_from(id).map_err(|_| data_failure("terminal index overflow"))?,
+                );
+                let accepted = if five {
+                    matches!(
+                        library.terminals()[id],
+                        rustred::propagator::library::PTerminal::Residual { .. }
+                    )
+                } else {
+                    library
+                        .residual_terminal(terminal)
+                        .map_err(RustRedEvaluationError::from_native)?
+                        .is_some_and(|residual| residual.boxed)
+                };
+                if !accepted {
+                    return Err(data_failure(format!(
+                        "{terminals} terminals but no basis map onto the Forcer masters \
+                         (terminal {id} is no boxed-node terminal)"
+                    )));
+                }
+            }
+            return Ok(());
         };
         for id in 0..terminals {
             let terminal = rustred::propagator::PTerminalId(
@@ -382,6 +416,35 @@ impl PLibraryHandle {
 
     pub(crate) fn scope(&self) -> RangeInclusive<u8> {
         self.library.scope()
+    }
+
+    /// `PResidual(node, k_1, ..., k_n)` of the residual terminal `terminal`
+    /// (t162-export; `node` the boxed node or the owner family, the key in
+    /// the owner presentation's slots), named once per terminal.
+    pub(crate) fn residual_atom(
+        &self,
+        terminal: rustred::propagator::PTerminalId,
+    ) -> Result<Atom, RustRedEvaluationError> {
+        let mut named = self
+            .residuals
+            .lock()
+            .map_err(|_| RustRedEvaluationError::CacheLockPoisoned)?;
+        if let Some(atom) = named.get(&terminal.0) {
+            return Ok(atom.clone());
+        }
+        let residual = self
+            .library
+            .residual_terminal(terminal)
+            .map_err(RustRedEvaluationError::from_native)?
+            .ok_or_else(|| data_failure(format!("terminal {} is no residual", terminal.0)))?;
+        let mut builder = symbolica::atom::FunctionBuilder::new(p_residual_symbol())
+            .add_arg(Atom::var(vk_symbol!(residual.node.as_str())));
+        for &power in residual.key.powers() {
+            builder = builder.add_arg(Atom::num(power));
+        }
+        let atom = builder.finish();
+        named.insert(terminal.0, atom.clone());
+        Ok(atom)
     }
 
     /// The top of the [`P_FAMILIES`] entry `family`.
@@ -1118,18 +1181,25 @@ mod tests {
     /// vakint family of its scope.
     #[test]
     fn p_families_match_library() {
-        use rustred::propagator::families::{P_FAMILIES_V1_JSON, PFamiliesFile};
+        use rustred::propagator::families::{
+            P_FAMILIES_5L_V1_JSON, P_FAMILIES_V1_JSON, PFamiliesFile,
+        };
         let rustred: PFamiliesFile = serde_json::from_str(P_FAMILIES_V1_JSON).unwrap();
+        // t162-export: the 64 five-loop entries are RustRed's five-loop file.
+        let five: PFamiliesFile = serde_json::from_str(P_FAMILIES_5L_V1_JSON).unwrap();
+        let all = (rustred.families.iter())
+            .chain(&five.families)
+            .collect::<Vec<_>>();
         assert_eq!(
             (P_FAMILIES.iter())
                 .map(|family| (family.name, family.loops))
                 .collect::<Vec<_>>(),
-            (rustred.families.iter())
+            (all.iter())
                 .map(|entry| (entry.name.as_str(), usize::from(entry.loops)))
                 .collect::<Vec<_>>()
         );
         let context = rustred::algebra::CoefficientContext::try_new(["d"]).unwrap();
-        for (index, (family, entry)) in P_FAMILIES.iter().zip(&rustred.families).enumerate() {
+        for (index, (family, entry)) in P_FAMILIES.iter().zip(all).enumerate() {
             let id = PresentationId(index as u32);
             check_top_presentation(&entry.presentation(id, &context).unwrap(), id, family)
                 .unwrap_or_else(|error| panic!("{}: {error}", family.name));

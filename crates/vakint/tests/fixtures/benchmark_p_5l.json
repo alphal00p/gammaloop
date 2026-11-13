@@ -1,0 +1,462 @@
+{
+  "schema": "vakint.p-benchmark-inputs.v1",
+  "generator": "crates/vakint/tools/p_benchmark/generate_inputs.py --five-loop",
+  "grid": {
+    "loops": [
+      5
+    ],
+    "dots": [
+      0,
+      1,
+      2
+    ],
+    "ranks": [
+      0,
+      2,
+      4,
+      6,
+      8
+    ],
+    "tops": [
+      "P3dc41bbf2115e501_e15"
+    ]
+  },
+  "master_mode": "retain",
+  "cells": [
+    {
+      "name": "L5_P3dc41bbf2115e501_e15_d0_r0",
+      "loops": 5,
+      "dots": 0,
+      "rank": 0,
+      "numerator": "1",
+      "tops": [
+        {
+          "family": "P3dc41bbf2115e501_e15",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(1)*topo(P3dc41bbf2115e501_e15(p(1),1,1,1,1,1,1,1,1,1,1,1,1,1,1))"
+    },
+    {
+      "name": "L5_P3dc41bbf2115e501_e15_d0_r2",
+      "loops": 5,
+      "dots": 0,
+      "rank": 2,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))",
+      "tops": [
+        {
+          "family": "P3dc41bbf2115e501_e15",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1)))*topo(P3dc41bbf2115e501_e15(p(1),1,1,1,1,1,1,1,1,1,1,1,1,1,1))"
+    },
+    {
+      "name": "L5_P3dc41bbf2115e501_e15_d0_r4",
+      "loops": 5,
+      "dots": 0,
+      "rank": 4,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))",
+      "tops": [
+        {
+          "family": "P3dc41bbf2115e501_e15",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(P3dc41bbf2115e501_e15(p(1),1,1,1,1,1,1,1,1,1,1,1,1,1,1))"
+    },
+    {
+      "name": "L5_P3dc41bbf2115e501_e15_d0_r6",
+      "loops": 5,
+      "dots": 0,
+      "rank": 6,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))",
+      "tops": [
+        {
+          "family": "P3dc41bbf2115e501_e15",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(P3dc41bbf2115e501_e15(p(1),1,1,1,1,1,1,1,1,1,1,1,1,1,1))"
+    },
+    {
+      "name": "L5_P3dc41bbf2115e501_e15_d0_r8",
+      "loops": 5,
+      "dots": 0,
+      "rank": 8,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(1),k(5))",
+      "tops": [
+        {
+          "family": "P3dc41bbf2115e501_e15",
+          "powers": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(1),k(5)))*topo(P3dc41bbf2115e501_e15(p(1),1,1,1,1,1,1,1,1,1,1,1,1,1,1))"
+    },
+    {
+      "name": "L5_P3dc41bbf2115e501_e15_d1_r0",
+      "loops": 5,
+      "dots": 1,
+      "rank": 0,
+      "numerator": "1",
+      "tops": [
+        {
+          "family": "P3dc41bbf2115e501_e15",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(1)*topo(P3dc41bbf2115e501_e15(p(1),2,1,1,1,1,1,1,1,1,1,1,1,1,1))"
+    },
+    {
+      "name": "L5_P3dc41bbf2115e501_e15_d1_r2",
+      "loops": 5,
+      "dots": 1,
+      "rank": 2,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))",
+      "tops": [
+        {
+          "family": "P3dc41bbf2115e501_e15",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1)))*topo(P3dc41bbf2115e501_e15(p(1),2,1,1,1,1,1,1,1,1,1,1,1,1,1))"
+    },
+    {
+      "name": "L5_P3dc41bbf2115e501_e15_d1_r4",
+      "loops": 5,
+      "dots": 1,
+      "rank": 4,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))",
+      "tops": [
+        {
+          "family": "P3dc41bbf2115e501_e15",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(P3dc41bbf2115e501_e15(p(1),2,1,1,1,1,1,1,1,1,1,1,1,1,1))"
+    },
+    {
+      "name": "L5_P3dc41bbf2115e501_e15_d1_r6",
+      "loops": 5,
+      "dots": 1,
+      "rank": 6,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))",
+      "tops": [
+        {
+          "family": "P3dc41bbf2115e501_e15",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(P3dc41bbf2115e501_e15(p(1),2,1,1,1,1,1,1,1,1,1,1,1,1,1))"
+    },
+    {
+      "name": "L5_P3dc41bbf2115e501_e15_d1_r8",
+      "loops": 5,
+      "dots": 1,
+      "rank": 8,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(1),k(5))",
+      "tops": [
+        {
+          "family": "P3dc41bbf2115e501_e15",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(1),k(5)))*topo(P3dc41bbf2115e501_e15(p(1),2,1,1,1,1,1,1,1,1,1,1,1,1,1))"
+    },
+    {
+      "name": "L5_P3dc41bbf2115e501_e15_d2_r0",
+      "loops": 5,
+      "dots": 2,
+      "rank": 0,
+      "numerator": "1",
+      "tops": [
+        {
+          "family": "P3dc41bbf2115e501_e15",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        }
+      ],
+      "input": "(1)*topo(P3dc41bbf2115e501_e15(p(1),2,1,1,1,1,1,1,1,1,1,1,1,1,2))"
+    },
+    {
+      "name": "L5_P3dc41bbf2115e501_e15_d2_r2",
+      "loops": 5,
+      "dots": 2,
+      "rank": 2,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))",
+      "tops": [
+        {
+          "family": "P3dc41bbf2115e501_e15",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1)))*topo(P3dc41bbf2115e501_e15(p(1),2,1,1,1,1,1,1,1,1,1,1,1,1,2))"
+    },
+    {
+      "name": "L5_P3dc41bbf2115e501_e15_d2_r4",
+      "loops": 5,
+      "dots": 2,
+      "rank": 4,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))",
+      "tops": [
+        {
+          "family": "P3dc41bbf2115e501_e15",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3)))*topo(P3dc41bbf2115e501_e15(p(1),2,1,1,1,1,1,1,1,1,1,1,1,1,2))"
+    },
+    {
+      "name": "L5_P3dc41bbf2115e501_e15_d2_r6",
+      "loops": 5,
+      "dots": 2,
+      "rank": 6,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))",
+      "tops": [
+        {
+          "family": "P3dc41bbf2115e501_e15",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1)))*topo(P3dc41bbf2115e501_e15(p(1),2,1,1,1,1,1,1,1,1,1,1,1,1,2))"
+    },
+    {
+      "name": "L5_P3dc41bbf2115e501_e15_d2_r8",
+      "loops": 5,
+      "dots": 2,
+      "rank": 8,
+      "numerator": "dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(1),k(5))",
+      "tops": [
+        {
+          "family": "P3dc41bbf2115e501_e15",
+          "powers": [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            2
+          ]
+        }
+      ],
+      "input": "(dot(k(1),p(1))*dot(k(2),p(1))*dot(k(1),k(3))*dot(k(1),p(1))*dot(k(4),p(1))*dot(k(1),k(5)))*topo(P3dc41bbf2115e501_e15(p(1),2,1,1,1,1,1,1,1,1,1,1,1,1,2))"
+    }
+  ]
+}

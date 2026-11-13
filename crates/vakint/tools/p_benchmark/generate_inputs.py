@@ -2,6 +2,7 @@
 """Write the frozen inputs of the p-integral benchmark grid.
 
     python3 tools/p_benchmark/generate_inputs.py [--check]
+    python3 tools/p_benchmark/generate_inputs.py --five-loop [TOP,...] [--check]
 
 from `crates/vakint` (or any directory: paths are relative to this file). The
 output is `tests/fixtures/benchmark_p_integrals.json`; `--check` only verifies
@@ -25,6 +26,15 @@ in registry order) of `(N_r)*top(dots)`, every top in its canonical long form
 
 The strings are frozen: the benchmark, the Forcer grid fixtures and the
 exact-agreement marks all refer to them. Never edit the JSON by hand.
+
+`--five-loop` (t162-export, V7 preparation) writes the five-loop cells to
+`tests/fixtures/benchmark_p_5l.json` instead (the frozen grid is untouched):
+L = 5 x the same dots and ranks, one input per cell and top (default the s1
+package's top `P3dc41bbf2115e501_e15`; a comma-separated list of registry
+names otherwise), in the SHORT form `topo(NAME(p(1), a_1, ..., a_14))`: a
+five-loop long form is not matched onto the registry yet (plan V1b). RustRed
+only (Forcer has no five-loop topologies); the values end on PResidual
+terminals, so the harness must run them with master_mode=retain.
 """
 import json
 import pathlib
@@ -35,6 +45,8 @@ HERE = pathlib.Path(__file__).resolve().parent
 CRATE = HERE.parent.parent
 REGISTRY = CRATE / "src" / "p_integral.rs"
 OUTPUT = CRATE / "tests" / "fixtures" / "benchmark_p_integrals.json"
+OUTPUT_5L = CRATE / "tests" / "fixtures" / "benchmark_p_5l.json"
+DEFAULT_5L_TOPS = ["P3dc41bbf2115e501_e15"]
 
 LOOPS = [1, 2, 3, 4]
 DOTS = [0, 1, 2]
@@ -49,8 +61,9 @@ def families():
         source,
         re.S,
     )
-    if len(entries) != 16:
-        raise SystemExit(f"expected 16 registry families in {REGISTRY}, found {len(entries)}")
+    # 16 families of one to four loops, then 64 of five loops (t162-export).
+    if len(entries) != 80 or sum(1 for _, loops, _ in entries if int(loops) <= 4) != 16:
+        raise SystemExit(f"expected 16 + 64 registry families in {REGISTRY}, found {len(entries)}")
     return [(name, int(loops), lines) for name, loops, lines in entries]
 
 
@@ -111,6 +124,41 @@ def cells():
     return result
 
 
+def cells_5l(tops):
+    registry = {name: int(loops) for name, loops, _ in families()}
+    for top in tops:
+        if registry.get(top) != 5:
+            raise SystemExit(f"{top} is no five-loop registry family")
+    result = []
+    for top in tops:
+        for dots in DOTS:
+            for rank in RANKS:
+                p = powers(5, dots)
+                n = numerator(5, rank)
+                result.append(
+                    {
+                        "name": f"L5_{top}_d{dots}_r{rank}",
+                        "loops": 5,
+                        "dots": dots,
+                        "rank": rank,
+                        "numerator": n,
+                        "tops": [{"family": top, "powers": p}],
+                        "input": f"({n})*topo({top}(p(1),{','.join(map(str, p))}))",
+                    }
+                )
+    return result
+
+
+def document_5l(tops):
+    return {
+        "schema": "vakint.p-benchmark-inputs.v1",
+        "generator": "crates/vakint/tools/p_benchmark/generate_inputs.py --five-loop",
+        "grid": {"loops": [5], "dots": DOTS, "ranks": RANKS, "tops": tops},
+        "master_mode": "retain",
+        "cells": cells_5l(tops),
+    }
+
+
 def document():
     return {
         "schema": "vakint.p-benchmark-inputs.v1",
@@ -121,14 +169,21 @@ def document():
 
 
 def main():
-    text = json.dumps(document(), indent=2) + "\n"
-    if "--check" in sys.argv[1:]:
-        if OUTPUT.read_text() != text:
-            raise SystemExit(f"{OUTPUT} differs from the generator output")
-        print(f"{OUTPUT}: up to date")
+    arguments = sys.argv[1:]
+    output, document_text = OUTPUT, None
+    if "--five-loop" in arguments:
+        index = arguments.index("--five-loop")
+        following = arguments[index + 1] if index + 1 < len(arguments) else ""
+        tops = following.split(",") if following and not following.startswith("--") else DEFAULT_5L_TOPS
+        output, document_text = OUTPUT_5L, json.dumps(document_5l(tops), indent=2) + "\n"
+    text = document_text or json.dumps(document(), indent=2) + "\n"
+    if "--check" in arguments:
+        if output.read_text() != text:
+            raise SystemExit(f"{output} differs from the generator output")
+        print(f"{output}: up to date")
         return
-    OUTPUT.write_text(text)
-    print(f"wrote {OUTPUT} ({len(text)} bytes)")
+    output.write_text(text)
+    print(f"wrote {output} ({len(text)} bytes)")
 
 
 if __name__ == "__main__":

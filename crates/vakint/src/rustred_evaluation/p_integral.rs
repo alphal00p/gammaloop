@@ -169,12 +169,13 @@ struct ChannelInputs {
 const NAMED_INTEGRALS: usize = 8;
 
 /// A failed p reduction. A key the library does not cover (`Uncovered`,
-/// `MissingOwner`) names the vakint integrals of the channel next to RustRed's
-/// owner class and key; any other error maps as for the vacuum programs.
+/// `MissingOwner`, or `OutsideBox`: a key of a boxed node outside its box)
+/// names the vakint integrals of the channel next to RustRed's owner class and
+/// key; any other error maps as for the vacuum programs.
 fn reduction_error(error: PError, integrals: &BTreeSet<String>) -> RustRedEvaluationError {
     if !matches!(
         error,
-        PError::Uncovered { .. } | PError::MissingOwner { .. }
+        PError::Uncovered { .. } | PError::MissingOwner { .. } | PError::OutsideBox { .. }
     ) {
         return RustRedEvaluationError::from_native(error);
     }
@@ -326,9 +327,10 @@ fn coefficient(
 
 /// The reduction in vakint's basis (convention C4): every coefficient at
 /// `d = 4 - 2ε`, the tag as `Π PGamma(m)^e`, `PBasis::Unit` as `1` and
-/// `PBasis::Master(name)` as `PMaster(name)` for a tabulated Forcer master;
+/// `PBasis::Master(name)` as `PMaster(name)` for a tabulated Forcer master and
+/// `PBasis::Residual` as `PResidual(node, k..)` (t162-export);
 /// the coefficient of each tag and master is one simplified rational function
-/// of `ε` (`together`). A residual terminal or an unknown master fails closed,
+/// of `ε` (`together`). An unknown master fails closed,
 /// and so does a nonzero condition that vanishes identically at
 /// `d = 4 - 2ε`.
 fn render(
@@ -370,14 +372,10 @@ fn render(
                     ),
                 });
             }
-            PBasis::Residual(terminal) => {
-                return Err(RustRedEvaluationError::MasterCapability {
-                    detail: format!(
-                        "RustRed returned the residual p terminal {} instead of Forcer masters",
-                        terminal.0
-                    ),
-                });
-            }
+            // t162-export: a residual terminal no basis map evaluates (a boxed
+            // node's unknown integral, a five-loop LP master) stays a symbol;
+            // the finalizer refuses it unless master_mode=retain.
+            PBasis::Residual(terminal) => handle.residual_atom(*terminal)?,
         };
         let mut tag = Atom::num(1);
         for &(m, e) in term.tag.exponents() {

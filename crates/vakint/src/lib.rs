@@ -2123,7 +2123,7 @@ impl EvaluationMethod {
                     .0
                     .iter()
                     .any(|m| matches!(m, EvaluationMethod::Forcer(_)))
-                    && p_integral::P_INTEGRAL_LOOP_COUNTS.contains(&topology.get_integral().n_loops)
+                    && p_integral::P_FORCER_LOOP_COUNTS.contains(&topology.get_integral().n_loops)
                     // A host without FORM 5 never runs Forcer code (the
                     // settings validation requires FORM 5 only of an order
                     // made of Forcer alone).

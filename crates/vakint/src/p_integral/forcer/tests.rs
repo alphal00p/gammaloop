@@ -876,7 +876,11 @@ fn pinched_sectors_keep_the_cubic_family_graph() {
     // four momenta per vertex): contracting pinched lines would merge
     // vertices into five or more momenta, so every sector is the family graph
     // with the pinched lines left without propagator.
-    for family in &P_FAMILIES {
+    // (Forcer's families: one to four loops; t162-export added five.)
+    for family in P_FAMILIES
+        .iter()
+        .filter(|family| crate::p_integral::P_FORCER_LOOP_COUNTS.contains(&family.loops))
+    {
         let n = family.line_count();
         let input = |powers: &[i64]| {
             forcer_input(family, powers, Atom::num(1).as_view(), &parse("p(1)")).unwrap()

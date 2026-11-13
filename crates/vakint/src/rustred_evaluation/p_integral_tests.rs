@@ -547,6 +547,79 @@ fn uncovered_keys_name_the_vakint_integrals() {
     );
     let other = reduction_error(PError::MixedDimension, &one).to_string();
     assert!(!other.contains("P2L"), "{other}");
+    // t162-export: a key of a boxed node outside its box names them too.
+    let outside = PError::OutsideBox {
+        class: OwnerClassId(9),
+        key: IntegralKey::try_new(vec![3, 1, 1, 1, 1]).unwrap(),
+        node: "KITE".to_owned(),
+        definition: "box d1".to_owned(),
+    };
+    let error = reduction_error(outside, &one).to_string();
+    assert!(error.contains("(boxed node KITE)"), "{error}");
+    assert!(
+        error.contains("P2L(1,1,1,1,1) with the RustRed p library"),
+        "{error}"
+    );
+}
+
+/// t162-export V6: a library with a BOXED node (RustRed's toy
+/// `testing::boxed_kite_library`: scope 1-2, P2L owned by the boxed kite
+/// table, whose corner is a boxed terminal, an unknown integral). The corner
+/// comes back as `PResidual(KITE,1,1,1,1,1)` (coefficient 1 in the G-scheme
+/// reduction) under `master_mode=retain`; `symbolic` and `numerical` refuse
+/// it with `UnevaluatedTerminal` naming it; a key outside the box is a
+/// reduction error naming RustRed's box and the vakint integral.
+#[test]
+fn a_boxed_node_returns_its_terminals_as_presidual_and_refuses_numbers() {
+    let mut engine = Vakint::new().unwrap();
+    engine
+        .inject_p_library(rustred::propagator::testing::boxed_kite_library().unwrap())
+        .unwrap();
+    let corner = parse("topo(P2L(p(1),1,1,1,1,1))");
+    let residual = parse("PResidual(KITE,1,1,1,1,1)").to_string();
+    let retain = settings(RustRedMasterMode::Retain, None);
+    let kept = engine.evaluate(&retain, corner.as_view()).unwrap();
+    assert_eq!(
+        crate::p_integral::finalize::unevaluated_terminals(&kept),
+        vec![residual.clone()],
+        "{kept}"
+    );
+    // The reduced value itself is the terminal alone (tag basis, w = 0).
+    let p2l = registry_family("P2L").unwrap();
+    let values = reduce_requests(
+        &engine,
+        &retain,
+        &[PropagatorRequest {
+            family: p2l,
+            powers: &[1, 1, 1, 1, 1],
+            canonical_numerator: Atom::num(1).as_view(),
+            external: parse("p(1)"),
+        }],
+        None,
+    )
+    .unwrap();
+    let reduced = by_scale_power(values.into_values().flatten());
+    assert_eq!(reduced.len(), 1, "{reduced:?}");
+    assert!(
+        crate::p_integral::finalize::unevaluated_terminals(&reduced[&0]) == vec![residual.clone()],
+        "{reduced:?}"
+    );
+    for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Numerical] {
+        let error = engine
+            .evaluate(&settings(mode, None), corner.as_view())
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("unevaluated terminals"), "{mode}: {error}");
+        assert!(error.contains(&residual), "{mode}: {error}");
+        assert!(error.contains("master_mode=retain"), "{mode}: {error}");
+    }
+    let outside = engine
+        .evaluate(&retain, parse("topo(P2L(p(1),3,1,1,1,1))").as_view())
+        .unwrap_err()
+        .to_string();
+    assert!(outside.contains("(boxed node KITE)"), "{outside}");
+    assert!(outside.contains("outside its box"), "{outside}");
+    assert!(outside.contains("P2L(3,1,1,1,1)"), "{outside}");
 }
 
 /// The direct entry points (`EvaluationMethod::evaluate_integral` and
@@ -720,15 +793,24 @@ fn rendering_fails_closed_outside_the_forcer_basis() {
         render(&handle, &split, epsilon).unwrap(),
         parse("(3-2*ε)/(-2*ε)").together()
     );
-    for basis in [
-        PBasis::Master("no7".into()),
-        PBasis::Residual(rustred::propagator::PTerminalId(1)),
-    ] {
-        assert!(matches!(
-            render(&handle, &reduction(basis, None), epsilon),
-            Err(RustRedEvaluationError::MasterCapability { .. })
-        ));
-    }
+    assert!(matches!(
+        render(
+            &handle,
+            &reduction(PBasis::Master("no7".into()), None),
+            epsilon
+        ),
+        Err(RustRedEvaluationError::MasterCapability { .. })
+    ));
+    // t162-export: a residual renders as PResidual(..) when the library has
+    // it; the reference library has none (terminal 1 does not exist).
+    assert!(matches!(
+        render(
+            &handle,
+            &reduction(PBasis::Residual(rustred::propagator::PTerminalId(1)), None),
+            epsilon
+        ),
+        Err(RustRedEvaluationError::ExternalData { .. })
+    ));
     assert!(matches!(
         render(
             &handle,
@@ -916,18 +998,29 @@ fn without_p_data_rustred_is_never_the_fallback_of_a_p_integral() {
     ));
 }
 
-/// Every family of RustRed's families file has vakint's canonical lines as its
-/// line slots (all 16, one to four loops), and random numerator polynomials
+/// Every family of RustRed's families files has vakint's canonical lines as its
+/// line slots (all 80: 16 of one to four loops, 64 of five loops, t162-export),
+/// and random numerator polynomials
 /// lower exactly onto lines and ISPs: at a random point of the scalar
 /// products, `Σ c Π (k·k, k·q)^e = Σ c' Π D_s^(-key_s)` (`q·q = -1`).
 #[test]
 fn numerators_lower_exactly_onto_the_slots_of_every_family() {
     use crate::p_integral::P_FAMILIES;
-    use rustred::propagator::families::{P_FAMILIES_V1_JSON, load_p_families};
+    use rustred::propagator::families::{
+        P_FAMILIES_5L_V1_JSON, P_FAMILIES_V1_JSON, load_p_families,
+    };
     use rustred::propagator::presentation::Slot;
 
     let (file, presentations) = load_p_families(P_FAMILIES_V1_JSON).unwrap();
-    assert_eq!(file.families.len(), P_FAMILIES.len());
+    let (five, five_presentations) = load_p_families(P_FAMILIES_5L_V1_JSON).unwrap();
+    let names = (file.families.iter())
+        .chain(&five.families)
+        .map(|entry| entry.name.clone())
+        .collect::<Vec<_>>();
+    let presentations = (presentations.into_iter())
+        .chain(five_presentations)
+        .collect::<Vec<_>>();
+    assert_eq!(names.len(), P_FAMILIES.len());
     let mut state = 0x2545_f491_4f6c_dd1d_u64;
     let mut next = |bound: u64| {
         state = state
@@ -936,11 +1029,7 @@ fn numerators_lower_exactly_onto_the_slots_of_every_family() {
         (state >> 33) % bound
     };
     for family in &P_FAMILIES {
-        let index = file
-            .families
-            .iter()
-            .position(|entry| entry.name == family.name)
-            .unwrap();
+        let index = names.iter().position(|name| name == family.name).unwrap();
         let presentation = &presentations[index];
         let top =
             super::super::p_data::check_top_presentation(presentation, presentation.id, family)
@@ -1117,4 +1206,62 @@ fn every_arithmetic_is_sent_with_real_inputs() {
             invalid.name()
         );
     }
+}
+
+/// t162-export V6: five-loop smoke test on a scope 1-5 package that
+/// `VAKINT_TEST_P_LIBRARY_1_5` names (skipped when unset): the package loads
+/// as vakint loads a library (no descent certificate), passes the handle's
+/// checks (tops of 1-4 complete, five-loop tops optional, residual terminals
+/// accepted), and the short form `topo(TOP(p(1), a_1..a_14))` of the top
+/// `VAKINT_TEST_P_5L_TOP` (default `P3dc41bbf2115e501_e15`, the s1 package's
+/// top) with the powers `VAKINT_TEST_P_5L_POWERS` (comma separated, default
+/// all 1) reduces with `master_mode=retain`; the result is printed with its
+/// `PResidual` terminals and the wall time.
+#[test]
+fn five_loop_smoke_on_a_one_to_five_package() {
+    let Some(directory) = std::env::var_os("VAKINT_TEST_P_LIBRARY_1_5") else {
+        eprintln!("five_loop_smoke: VAKINT_TEST_P_LIBRARY_1_5 unset, skipped");
+        return;
+    };
+    let started = std::time::Instant::now();
+    let library = rustred_app::propagator::load_p_library(
+        rustred_app::propagator::PLibrarySource::Directory(directory.clone().into()),
+        &rustred_app::propagator::PLibraryOptions {
+            verify_descent: false,
+        },
+    )
+    .unwrap_or_else(|error| panic!("{}: {error}", directory.display()));
+    assert_eq!(*library.scope().end(), 5);
+    let mut engine = Vakint::new().unwrap();
+    engine.inject_p_library(library).unwrap();
+    let loaded = started.elapsed().as_secs_f64();
+    let top = std::env::var("VAKINT_TEST_P_5L_TOP")
+        .unwrap_or_else(|_| "P3dc41bbf2115e501_e15".to_owned());
+    let family = registry_family(&top).unwrap();
+    assert_eq!(family.loops, 5);
+    let handle = engine.p_library().unwrap();
+    let index = crate::p_integral::P_FAMILIES
+        .iter()
+        .position(|entry| entry.name == top)
+        .unwrap();
+    handle
+        .top(index)
+        .unwrap_or_else(|error| panic!("{top}: {error}"));
+    let powers = std::env::var("VAKINT_TEST_P_5L_POWERS").map_or_else(
+        |_| vec!["1".to_owned(); family.line_count()],
+        |powers| powers.split(',').map(str::to_owned).collect(),
+    );
+    assert_eq!(powers.len(), family.line_count());
+    let input = parse(&format!("topo({top}(p(1),{}))", powers.join(",")));
+    let started = std::time::Instant::now();
+    let value = engine
+        .evaluate(&settings(RustRedMasterMode::Retain, None), input.as_view())
+        .unwrap_or_else(|error| panic!("{input}: {error}"));
+    let residuals = crate::p_integral::finalize::unevaluated_terminals(&value);
+    eprintln!(
+        "five_loop_smoke: {input}: load {loaded:.1} s, evaluate {:.1} s, {} PResidual terminals {residuals:?}",
+        started.elapsed().as_secs_f64(),
+        residuals.len()
+    );
+    assert!(!value.is_zero(), "{input}");
 }

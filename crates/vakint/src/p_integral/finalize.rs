@@ -12,7 +12,7 @@
 //! `logmUVmu`/`log_mu_sq` split, so that normalizations carrying
 //! `exp(log_mu_sq)^(εL)` (MSbar, GScheme) cancel `(μ²)^(-Lε)` symbolically.
 
-use symbolica::atom::{Atom, AtomCore, Symbol};
+use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use symbolica::function;
 use symbolica::transcendental::gamma;
 
@@ -273,6 +273,33 @@ pub(crate) fn finalize_with(
         .with(log_q.to_pattern())
         .replace(Atom::var(log_mu()).to_pattern())
         .with(function!(Symbol::LOG, mursq).to_pattern()))
+}
+
+/// At most this many `PResidual` symbols are named (test helper).
+#[cfg(test)]
+const NAMED_RESIDUALS: usize = 8;
+
+/// The distinct `PResidual(..)` symbols of `expression` (at most
+/// [`NAMED_RESIDUALS`], then a count). The finalizer itself resolves them
+/// through [`super::master_catalogue::PMasterSource::resolve_terminals`].
+#[cfg(test)]
+pub(crate) fn unevaluated_terminals(expression: &Atom) -> Vec<String> {
+    let mut found = std::collections::BTreeSet::new();
+    expression.visitor(&mut |part| {
+        if let AtomView::Fun(function) = part
+            && function.get_symbol() == p_residual_symbol()
+        {
+            found.insert(part.to_owned().to_string());
+            return false;
+        }
+        true
+    });
+    let total = found.len();
+    let mut named = found.into_iter().take(NAMED_RESIDUALS).collect::<Vec<_>>();
+    if total > NAMED_RESIDUALS {
+        named.push(format!("{} more", total - NAMED_RESIDUALS));
+    }
+    named
 }
 
 #[cfg(test)]
