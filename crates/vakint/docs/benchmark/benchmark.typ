@@ -28,7 +28,14 @@
     and receipt.measured.p_library_1_4_sha256sums_sha256 == data.packages.at("p-library-1-4").sha256sums_sha256,
   message: "data/p_receipt.json names another measured build than data/p_clean.json",
 )
-#assert(receipt.relation == "runtime-equivalent", message: "the receipt does not attest runtime equivalence")
+#assert(receipt.relation in ("runtime-equivalent", "identical", "measured-on-parent"),
+  message: "the receipt attests neither identity, runtime equivalence nor a stated parent build")
+#let same-build = receipt.relation == "identical"
+#let parent-build = receipt.relation == "measured-on-parent"
+#assert(
+  not same-build or (receipt.published_with.gammaloop == measured-gl and receipt.published_with.rustred == measured-rr),
+  message: "receipt says identical but names another pushed build",
+)
 #let tip-gl = receipt.published_with.gammaloop
 #let tip-rr = receipt.published_with.rustred
 #let tip-xd = receipt.published_with.vakint_external_data
@@ -308,7 +315,7 @@
         table.cell(fill: ratio-fill(proc-ratio(cell, t)), text(size: 6.6pt)[×#fmt-ratio(proc-ratio(cell, t))]),
         text(size: 6.6pt)[#fmt-mb(rss-rr(cell, t))], text(size: 6.6pt)[#fmt-mb(rss-f(cell, t))],
         text(size: 6.6pt, fill: if rss-ratio(cell, t) > 1 { red } else { black })[×#fmt-ratio(rss-ratio(cell, t))],
-        text(size: 6.6pt)[#if t == 1 [—] else [#fixed(fc, 1) / #fixed(ffc, 1)]],
+        text(size: 6.6pt)[#if t == 1 [—] else [#if is-num(fc) { fixed(fc, 1) } else { "<30 s" } / #if is-num(ffc) { fixed(ffc, 1) } else { "<30 s" }]],
       )
     }
   }
@@ -340,8 +347,8 @@
   #v(-0.5em)
   #text(9pt, fill: luma(100))[
     clean benchmark #raw(data.id) (#raw(data.schema)) · #date.display("[year]-[month]-[day]") · #data.host.join(", ") ·
-    pushed tip gammaloop #raw(tip-gl.slice(0, 9)), rustred #raw(tip-rr.slice(0, 8)) ·
-    measured build gammaloop #raw(measured-gl.slice(0, 9)), rustred #raw(measured-rr.slice(0, 8)) (runtime-equivalent: last section)
+    document commit base gammaloop #raw(tip-gl.slice(0, 9)), rustred #raw(tip-rr.slice(0, 8)) ·
+    measured build gammaloop #raw(measured-gl.slice(0, 9)), rustred #raw(measured-rr.slice(0, 8)) (#receipt.relation.replace("-", " "): last section)
   ]
 ]
 
@@ -354,16 +361,18 @@
   #set text(8.6pt)
   *In short.* One harness, one build and one data set for every number: #data.rows.len() rows (cell × backend ×
   threads × state, medians of #n-measurements measurements in #data.runs.len() runs, #data.date_range.first().slice(11, 16)–#data.date_range.last().slice(11, 16)Z),
-  1L–4L, RustRed (M5 combined package) against Forcer, at 1 and 16 threads, cold and warm, time and peak RSS. Older
+  1L–4L, RustRed (#receipt.at("package_label", default: "M5 combined package")) against Forcer, at 1 and 16 threads, cold and warm, time and peak RSS. Older
   benchmark rows are not mixed in.
-  - *Time.* RustRed is faster than Forcer in every 1L–3L cell at both thread counts. At 4L it is slower in
-    #slower(1).len() cell(s) at 1 thread (#slower(1).map(c => [#raw(c) ×#fmt-ratio(ev-ratio(c, 1))]).join(", "))
-    and in #slower(16).len() at 16 threads (#slower(16).map(c => [#raw(c) ×#fmt-ratio(ev-ratio(c, 16))]).join(", ")).
-    RustRed hardly gains from 16 threads at 4L; Forcer (`tform -w16`) does, notably on `physics_L4`.
+  - *Time.* RustRed is slower than Forcer (cold evaluate) in #slower(1).len() of #all-cells.len() cells at 1 thread#if slower(1).len() > 0 [
+    (#slower(1).map(c => [#raw(c) ×#fmt-ratio(ev-ratio(c, 1))]).join(", "))] and in #slower(16).len() at 16 threads#if slower(16).len() > 0 [
+    (#slower(16).map(c => [#raw(c) ×#fmt-ratio(ev-ratio(c, 16))]).join(", "))]; in every other cell it is faster.
+    From 1 to 16 threads the 4L cold evaluate changes by a median ×#fmt-ratio(median(cells-of(4).map(c => ratio(val(c, "rustred", 16, "cold", "evaluate"), val(c, "rustred", 1, "cold", "evaluate"))).filter(is-num)))
+    for RustRed and ×#fmt-ratio(median(cells-of(4).map(c => ratio(val(c, "forcer", 16, "cold", "evaluate"), val(c, "forcer", 1, "cold", "evaluate"))).filter(is-num)))
+    for Forcer (`tform -w16`).
   - *16-thread numbers are upper bounds.* The host was shared and loaded: on the 16 CPUs of a 16-thread job
     unpinned single-thread processes of other users took a median of #fmt(median(foreign16)) cores per job (median over
     #foreign16.len() jobs; up to #fmt(calc.max(..foreign16-max)) cores in single samples). Both backends were exposed alike;
-    1-thread jobs ran on CPUs with a median foreign load of #fmt(median(foreign1)) cores.
+    1-thread jobs ran with their SMT sibling held idle; other users' load on that sibling: median #fmt(median(foreign1)) cores.
   - *Memory.* At 1L–3L RustRed's peak RSS is below Forcer's (process plus FORM) in #low3.len() of #pairs3.len() cells × thread
     counts (median ×#fmt-ratio(median(pairs3.map(p => rss-ratio(..p))))#if high3.len() > 0 [; above: #high3.map(p => [#raw(p.at(0)) at #p.at(1) thread(s) ×#fmt-ratio(rss-ratio(..p))]).join(", ")]).
     At 4L it is above Forcer's in #(cells-of(4).len() - below4.len()) of #cells-of(4).len() cells#if below4.len() > 0 [ (below: #below4.map(c => [#raw(c) ×#fmt-ratio(rss-ratio(c, 1)) / ×#fmt-ratio(rss-ratio(c, 16))]).join(", "))]: median ×#fmt-ratio(median(cells-of(4).map(c => rss-ratio(c, 1)).filter(is-num))) at 1 thread and
@@ -413,6 +422,23 @@
 
 #heading(level: 2, numbering: none)[Measured build and pushed tip]
 #set text(8.6pt)
+#if parent-build [
+The rows were measured on the pushed tip of #receipt.measured.at("label", default: "the measured build"): one frozen harness binary
+(sha256 #raw(data.build.binary_sha256.first().slice(0, 16))…) built with `just vakint-p-benchmark-build` from gammaloop
+#raw(measured-gl.slice(0, 9)) (stamp = that commit, clean tree) pinning rustred #raw(measured-rr.slice(0, 8)); the 4L library
+is `p_integral/p-library-1-4` of vakint-external-data #raw(tip-xd.slice(0, 8)) (#receipt.at("ext_data_tag", default: ""))
+read through `--external-data` (#raw(pkg4.sha256sums_sha256.slice(0, 16))…), the 1L–3L library the built-in one (identity
+ends #raw(pkg3.identity.split(",").last())). This document is committed on gammaloop #raw(tip-gl.slice(0, 9)) (rustred
+#raw(tip-rr.slice(0, 8))). #receipt.evidence.pin_change *These timings are therefore not those of the commit that carries
+this document*; #receipt.evidence.at("next_build", default: "")
+] else if same-build [
+The rows were measured with the pushed tip itself: one frozen harness binary (sha256 #raw(data.build.binary_sha256.first().slice(0, 16))…)
+built with `just vakint-p-benchmark-build` from gammaloop #raw(measured-gl.slice(0, 9)) (stamp = that commit, clean tree)
+pinning rustred #raw(measured-rr.slice(0, 8)); the 4L library is `p_integral/p-library-1-4` of vakint-external-data
+#raw(tip-xd.slice(0, 8)) (#receipt.at("ext_data_tag", default: "")) read through `--external-data` (#raw(pkg4.sha256sums_sha256.slice(0, 16))…,
+#receipt.evidence.at("p_library_1_4", default: "")), the 1L–3L library the built-in one (identity ends
+#raw(pkg3.identity.split(",").last())). No equivalence argument is needed. #receipt.evidence.at("verification_of_the_tip", default: "")
+] else [
 The rows were measured with one frozen harness binary (sha256 #raw(data.build.binary_sha256.first().slice(0, 16))…) built
 from gammaloop #raw(measured-gl.slice(0, 9)) (local branch, never pushed) pinning rustred #raw(measured-rr.slice(0, 8)).
 They stand for the pushed tip — gammaloop #raw(tip-gl.slice(0, 9)), rustred #raw(tip-rr.slice(0, 8)), vakint-external-data
@@ -437,14 +463,17 @@ They stand for the pushed tip — gammaloop #raw(tip-gl.slice(0, 9)), rustred #r
 + *Spot re-time*: #receipt.evidence.spot_retime.what. #receipt.evidence.spot_retime.cells.map(c => [#raw(c.cell) #c.state
   #fmt(c.tip) s against #fmt(c.measured) s (×#fmt-ratio(c.tip / c.measured))]).join("; "). Outputs
   #receipt.evidence.spot_retime.outputs.
+]
 
 // ------------------------------------------------------------ methodology --
 
 *Method.* #data.harness.clock. Work directory #data.harness.work_dir; #data.harness.placement. States: RustRed cold
 (empty ordered-cache directory, shipped caches off), warm-same (a fresh process on a read-only copy of its cold cache),
 warm-process (in the cold process, after the save); Forcer cold (private empty materialisation directory) and warm
-(materialised); Forcer has no result cache. Three repetitions per state (†: two), median; cap 3600 s per child (no row
-was capped or skipped). OS pages are not flushed. Physics row: massless-quark (L−1)-rung gluon self-energy, Feynman gauge,
+(materialised); Forcer has no result cache. Three repetitions per state (†: two), median; cap 3600 s per child (#{
+  let capped = data.rows.filter(r => r.n_capped > 0 or r.n_skipped > 0).len()
+  if capped == 0 [no row was capped or skipped] else [#capped rows capped or skipped]
+}). OS pages are not flushed. Physics row: massless-quark (L−1)-rung gluon self-energy, Feynman gauge,
 transverse projector, external momentum kept.
 
 *Provenance.* `data/p_clean.json` = artefact #raw(data.id), written #raw(data.written_utc), copied verbatim; host #data.host.join(", ") (#data.cpu_model.join(", ")),

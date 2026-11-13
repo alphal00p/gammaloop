@@ -1,23 +1,23 @@
 {
  "schema": "vakint.precision-tables.v1",
  "sources": {
-  "data_root_manifest_sha256": "5ce0e4a0abe8687cc3cf57ebd8e46a9bc105559deeddd8d4df06f5a1bb272826",
+  "data_root_manifest_sha256": "d2a1c58217e732f7fc7f3b90f2ad3a0765b9c4c2018a60c9f4838ebba0f9cd13",
   "loop_manifest_sha256": {
-   "1L": "217060bc31dc283f76824b48ffca7d67fd410ad3953b75ff97fa528afb063fbc",
-   "2L": "2ae12054d2502d501f49362faae24c43c9da2240d04f4149e8f2a1dd530ea298",
-   "3L": "20144447e247971347a15370833dbd659d8f3453debcf8692db45ca5edb2bdf2",
-   "4L": "eda0c68284bdc28d142c4961c9fcab8d15856a568448106c52f8ef2ad90ae1c3",
-   "5L": "96698196f57d0359e37489d03daf26bc30566b42734d2b7ef5a17517d1a0da13"
+   "1L": "b70b1226f6ae0a733b80db410dfc528a55d0e81b7d2294e1aa56332fbbbccdf7",
+   "2L": "37072f91e8d5bbfeb08b9548e5027316110a45e620b61bf1ce60943a6d1b9afe",
+   "3L": "c4d0f5dd769dc6cbda86945d4f92a5f42250c065df532c7d8ff2022b77f70608",
+   "4L": "fa338c3df8412f449f16fa2c6ea5897254749987bba06cfb342ea1d540dbcebd",
+   "5L": "8804ffcc86543da7a6a1f4a95cc426d1d439779bb0ae7c3fa00d767424d90636"
   },
   "constants_sha256": {
    "4L": "1338cfe501ffb5167c9aad7b0a751de6e2fe1bcaa7aed6acb0019775d055c95a"
   },
   "five_loop_values": {
-   "producer_update_sha256": "781d858170cd9127ab79cf7dfc502298d33c83647c64f68f36ade1321f60b425",
-   "build_utc": "2026-11-07T02:24:15Z",
+   "producer_update_sha256": "7123159fa77a963d5c9e9a65b7eab41b91d90b4aa483c50796d7b144ab366388",
+   "build_utc": "2026-11-10T07:24:14Z",
    "basis": "BASIS-v2 (pole-free, 131 masters: 111 kept + 20 new; basis-b/b3/BASIS-v2.json)"
   },
-  "version": "v0.2.2",
+  "version": "v0.2.3",
   "vakint_constants_rs_sha256": "f9d444f50a7685685c0910383a00cd25f7e5b6d63e025fddf8121610ed909cdd",
   "vakint_route_sources_sha256": {
    "inspection.rs": "7291373f93d3b2370f5e9298d2ca15be638f05fd1a2b4236459dc27cd3880e4c",
@@ -8743,7 +8743,7 @@
     },
     "0": {
      "class": "N",
-     "X": 3,
+     "X": 33,
      "marks": []
     },
     "1": null,
@@ -9481,7 +9481,7 @@
     },
     "0": {
      "class": "N",
-     "X": 3,
+     "X": 39,
      "marks": []
     },
     "1": null,
@@ -9673,7 +9673,7 @@
     },
     "0": {
      "class": "N",
-     "X": 3,
+     "X": 32,
      "marks": []
     },
     "1": null,
@@ -11324,7 +11324,7 @@
     },
     "0": {
      "class": "N",
-     "X": 3,
+     "X": 40,
      "marks": []
     },
     "1": null,
@@ -11538,7 +11538,7 @@
     },
     "0": {
      "class": "N",
-     "X": 3,
+     "X": 40,
      "marks": []
     },
     "1": null,
@@ -12197,7 +12197,7 @@
       "q"
      ],
      "na": "partial",
-     "returned": "N(3)",
+     "returned": "N(32)",
      "missing_masters": [],
      "missing_in_combination": [],
      "missing_measured_inputs": [
@@ -12249,7 +12249,7 @@
   "5L ε^-3 N(47): set by the measured top-sector input P105 + dot: its spurious poles make ε^-3 need 5L/P50 (P357) ε^-2 (p = 1), 5L/P84 (P440) ε^-2 (p = 1). The other inputs return N(48) (set by 5L/P101 (P462) ε^-3).",
   "5L ε^-2: not available for every input. The measured top-sector input P105 + dot gets MissingMasterOrders (it needs ε^2 of 4L/P59, ε^2 of 4L/P66; vakint fails closed). The other inputs return N(47) (set by 5L/P102 (P463) ε^-2, 5L/P50 (P357) ε^-2, 5L/P84 (P440) ε^-2, 5L/P97 (P455) ε^-2).",
   "5L ε^-1: not available for every input. The measured top-sector input P105 + dot gets MissingMasterOrders (it needs ε^3 of 4L/P59, ε^3 of 4L/P66; vakint fails closed). The other inputs return N(35) (set by 5L/P117 (P509) ε^-1).",
-  "5L ε^0: not available for every input. The measured top-sector input P105 + dot gets MissingMasterOrders (it needs ε^1 of 59 5L masters and ε^6 of 1L/P1, ε^3 of 3L/P38, ε^2 of 4L/P57, ε^4 of 4L/P59 and 9 more factors; vakint fails closed). The other inputs return N(3) (set by 5L/P125 (P551) ε^0, 5L/P130 (P632) ε^0, 5L/P68 (P400) ε^0, 5L/P85 (P441) ε^0)."
+  "5L ε^0: not available for every input. The measured top-sector input P105 + dot gets MissingMasterOrders (it needs ε^1 of 59 5L masters and ε^6 of 1L/P1, ε^3 of 3L/P38, ε^2 of 4L/P57, ε^4 of 4L/P59 and 9 more factors; vakint fails closed). The other inputs return N(32) (set by 5L/P89 (P445) ε^0)."
  ],
  "notes_table2_short": [
   "1L-4L: spurious-pole orders p measured on the shipped caches and samples (direct route up to 1L 0, 2L 0, 3L 1, 4L 2), not proven.",
@@ -12268,7 +12268,7 @@
   "5L ε^-3 N(47): P105 + dot needs 5L/P50 (P357) ε^-2, 5L/P84 (P440) ε^-2; others N(48).",
   "5L ε^-2: P105 + dot gets MissingMasterOrders; others N(47) (5L/P102 (P463) ε^-2, 5L/P50 (P357) ε^-2).",
   "5L ε^-1: P105 + dot gets MissingMasterOrders; others N(35) (5L/P117 (P509) ε^-1).",
-  "5L ε^0: P105 + dot gets MissingMasterOrders; others N(3) (5L/P125 (P551) ε^0, 5L/P130 (P632) ε^0)."
+  "5L ε^0: P105 + dot gets MissingMasterOrders; others N(32) (5L/P89 (P445) ε^0)."
  ],
  "two_profile_constants": [
   "vakint::D5bar3 (9924 d; independent implementations agree to 5060 d): 4 orders",
@@ -12337,7 +12337,7 @@
  },
  "worst_table1": {
   "4L S*": 2348,
-  "5L N": 3,
+  "5L N": 32,
   "5L S*": 2348
  },
  "rule": {
@@ -12678,8 +12678,7 @@
  "checks": {
   "five_loop_tiers": {
    "A": 61,
-   "B": 129,
-   "F": 5,
+   "B": 134,
    "S": 562,
    "S*": 29
   },
@@ -12695,19 +12694,19 @@
   "Some 1L-4L S rows (and the 5L product rows built on them) rest on numerical identities of the constant basis v4, checked to thousands of digits but not proven: ALIAS_PR11dep0 (4L 2 rows from ε^0; checked to 544 d, re-checked to 5364 d (at the shipped constants (precision lift))); BNBAR4_LEVEL2 (3L 3 rows from ε^4, 4L 24 rows from ε^0; checked to 19900 d); D2J0_PR10 (4L 57 rows from ε^0; checked to 18000 d); LI3_I_SQRT3_V1 (4L 51 rows from ε^0; checked to 3989 d); PR5D2EPS3_J8 (4L 1 row from ε^1; checked to 520 d); R1_PR11dD2Eps2 (4L 14 rows from ε^0; checked to 547 d, re-checked to 5361 d (at the shipped constants (precision lift))); X3_TI3 (2L 4 rows from ε^1, 3L 72 rows from ε^0, 4L 141 rows from ε^-1; checked to 5000 d, re-checked to 19999 d (independence audit archived with the precision lift)); X4_TI4 (2L 3 rows from ε^2, 3L 54 rows from ε^1, 4L 102 rows from ε^0; checked to 5000 d, re-checked to 19999 d (independence audit archived with the precision lift)). Above those digits such an S is exact only modulo the identity; vakint gives no warning for it.",
   "196 of the 591 exact (S/S*) 5L orders are PSLQ identifications (9 of them S*) and 4 are measured zeros, all passing the 40-excess-digit bar (numerical identifications, not proofs).",
   "Digits lost to cancellations in the reduction coefficients are tracked and reported by vakint (PrecisionWarning), not included in X.",
-  "5L release tiers (5L/producer-update.json) checked against the rows: A 61, B 129, F 5, S 562, S* 29 (S -> S, S* -> S* with the same constants, numerical tiers -> N).",
+  "5L release tiers (5L/producer-update.json) checked against the rows: A 61, B 134, S 562, S* 29 (S -> S, S* -> S* with the same constants, numerical tiers -> N).",
   "RustRed backend only (vakint’s first backend); MATAD/FMFT/alphaLoop fallbacks are not part of these tables."
  ],
- "content_sha256": "78e3c8802f94b570a4c685e850852c9f8f874836bf6ebaeaba56b3527e89bc4f",
+ "content_sha256": "80266da44069c73497bb80a57afae66127c75e1f73f55859354a383b91961ad6",
  "status": "final",
- "generated_utc": "2026-11-11T10:47:43Z",
- "data_root": "/shared/vhirschi/t3code/vakint_dev/p_integral_dev/wt/ext-data-v022",
+ "generated_utc": "2026-11-13T03:03:07Z",
+ "data_root": "/shared/vhirschi/t3code/vakint_dev/p_integral_dev/wt/bench-refresh-xd",
  "data_git": {
-  "commit": "0faa1c79566456923a966cab3d012d47059ce4e5",
-  "tree": "b738993f1fe0bb5588eef185ffa7d7e5745c9ebf",
+  "commit": "1be01449faa147961261d805280fc207afe5293e",
+  "tree": "e1fefefae5d037946a85b6fbee4f44290929899c",
   "dirty_files": 0
  },
- "label": "vakint-external-data v0.2.2 (0faa1c795664)",
+ "label": null,
  "generator": {
   "path": "crates/vakint/docs/benchmark/tools/precision_tables.py",
   "sha256": "9d0058bc7ea256eb4d21e5c9086b3728c86af36ff6d2f83b41d53f6975226986"

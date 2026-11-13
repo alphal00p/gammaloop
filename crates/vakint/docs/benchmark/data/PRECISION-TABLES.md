@@ -1,6 +1,6 @@
 # Precision of vakint’s master coefficients and results
 
-**FINAL** · data tree vakint-external-data v0.2.2 (0faa1c795664) (git 0faa1c795664, tree b738993f1fe0) · v0.2.2 root manifest `5ce0e4a0abe8687c` · 4L constants `1338cfe501ffb516` · 5L values build 2026-11-07T02:24:15Z (producer-update `781d858170cd9127`) · generated 2026-11-11T10:47:43Z · tables `78e3c8802f94b570`
+**FINAL** · data tree /shared/vhirschi/t3code/vakint_dev/p_integral_dev/wt/bench-refresh-xd (git 1be01449faa1, tree e1fefefae5d0) · v0.2.3 root manifest `d2a1c58217e732f7` · 4L constants `1338cfe501ffb516` · 5L values build 2026-11-10T07:24:14Z (producer-update `7123159fa77a963d`) · generated 2026-11-13T03:03:07Z · tables `80266da44069c734`
 
 🟢 **S** exact, in periods vakint evaluates at any requested precision · 🟠 **S\*(X)** exact, but contains periods vakint has to at most X digits · 🔴 **N(X)** numerical only, at most X digits · — not available. X = worst-case digits, rounded down.
 
@@ -195,7 +195,7 @@
 | 5L/P65 (P391) | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🔴 N(56) | — | — | — | — | — |
 | 5L/P66 (P398) | 🟢 S | 🟢 S | 🟢 S | 🔴 N(66) | 🔴 N(57) | 🔴 N(59) | — | — | — | — | — |
 | 5L/P67 (P399) | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🔴 N(57) | — | — | — | — | — |
-| 5L/P68 (P400) | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🔴 N(3) | — | — | — | — | — |
+| 5L/P68 (P400) | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🔴 N(33) | — | — | — | — | — |
 | 5L/P69 (P413) | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🔴 N(83) | 🔴 N(74) | — | — | — | — | — |
 | 5L/P70 (P418) | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🔴 N(82) | 🔴 N(74) | — | — | — | — | — |
 | 5L/P71 | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🔴 N(57) | 🔴 N(58) | — | — | — | — | — |
@@ -212,11 +212,11 @@
 | 5L/P82 (P435) | 🟢 S | 🟢 S | 🟢 S | 🔴 N(48) | 🔴 N(47) | 🔴 N(47) | — | — | — | — | — |
 | 5L/P83 (P436) | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🔴 N(82) | 🔴 N(75) | — | — | — | — | — |
 | 5L/P84 (P440) | 🟢 S | 🟢 S | 🟢 S | 🔴 N(47) | 🔴 N(47) | 🔴 N(47) | — | — | — | — | — |
-| 5L/P85 (P441) | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🔴 N(3) | — | — | — | — | — |
+| 5L/P85 (P441) | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🔴 N(39) | — | — | — | — | — |
 | 5L/P86 (P442) | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🟠 S*(2395) [p] | 🟠 S*(2395) [p] | — | — | — | — | — |
 | 5L/P87 (P443) | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🔴 N(57) | — | — | — | — | — |
 | 5L/P88 (P444) | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🔴 N(44) | — | — | — | — | — |
-| 5L/P89 (P445) | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🔴 N(3) | — | — | — | — | — |
+| 5L/P89 (P445) | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🔴 N(32) | — | — | — | — | — |
 | 5L/P90 (P446) | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🔴 N(35) | — | — | — | — | — |
 | 5L/P91 (P447) | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🟢 S | — | — | — | — | — |
 | 5L/P92 (P448) | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🔴 N(57) | 🔴 N(57) | — | — | — | — | — |
@@ -252,12 +252,12 @@
 | 5L/P122 (P536) | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🔴 N(81) | 🔴 N(74) | — | — | — | — | — |
 | 5L/P123 (P539) | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🔴 N(62) | — | — | — | — | — |
 | 5L/P124 (P550) | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🟠 S*(5363) | 🔴 N(75) | — | — | — | — | — |
-| 5L/P125 (P551) | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🔴 N(3) | — | — | — | — | — |
+| 5L/P125 (P551) | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🔴 N(40) | — | — | — | — | — |
 | 5L/P126 (P553) | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🔴 N(61) | — | — | — | — | — |
 | 5L/P127 (P560) | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🔴 N(82) | 🔴 N(74) | — | — | — | — | — |
 | 5L/P128 | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🔴 N(56) | 🔴 N(56) | — | — | — | — | — |
 | 5L/P129 (P631) | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🔴 N(63) | — | — | — | — | — |
-| 5L/P130 (P632) | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🔴 N(3) | — | — | — | — | — |
+| 5L/P130 (P632) | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🔴 N(40) | — | — | — | — | — |
 | 5L/P131 (P634) | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🟢 S | 🔴 N(54) | — | — | — | — | — |
 
 [p] Part of the X digits rests on a constant computed with two profiles of one code beyond its independent confirmation (constant, its digits, its independent confirmation, orders affected): vakint::D5bar3 (9924 d; independent implementations agree to 5060 d): 4 orders; vakint::PR0D2Eps1 (2395 d; independent confirmation 48.5 d): 5 orders; vakint::PR0D2Eps2 (2396 d; independent confirmation 51.2 d): 2 orders; vakint::PR12D2Eps2 (2600 d; independent confirmation 48.7 d): 6 orders; vakint::PR12D2Eps3 (2348 d; independent confirmation 421 d): 2 orders; vakint::PR15D2Eps1 (2805 d; independent confirmation 794.27 d): 6 orders; vakint::PR15D2Eps2 (2601 d; independent confirmation 794.42 d): 9 orders; vakint::PR15D2Eps3 (2351 d; independent confirmation 793.39 d): 2 orders; vakint::PR5D2Eps4 (9923 d; independent implementations agree to 5060 d): 4 orders.
@@ -291,7 +291,7 @@ Worst case over the admitted inputs, with the spurious-pole orders the row notes
 [n] 5L ε^-3 N(47): set by the measured top-sector input P105 + dot: its spurious poles make ε^-3 need 5L/P50 (P357) ε^-2 (p = 1), 5L/P84 (P440) ε^-2 (p = 1). The other inputs return N(48) (set by 5L/P101 (P462) ε^-3).
 [o] 5L ε^-2: not available for every input. The measured top-sector input P105 + dot gets MissingMasterOrders (it needs ε^2 of 4L/P59, ε^2 of 4L/P66; vakint fails closed). The other inputs return N(47) (set by 5L/P102 (P463) ε^-2, 5L/P50 (P357) ε^-2, 5L/P84 (P440) ε^-2, 5L/P97 (P455) ε^-2).
 [p] 5L ε^-1: not available for every input. The measured top-sector input P105 + dot gets MissingMasterOrders (it needs ε^3 of 4L/P59, ε^3 of 4L/P66; vakint fails closed). The other inputs return N(35) (set by 5L/P117 (P509) ε^-1).
-[q] 5L ε^0: not available for every input. The measured top-sector input P105 + dot gets MissingMasterOrders (it needs ε^1 of 59 5L masters and ε^6 of 1L/P1, ε^3 of 3L/P38, ε^2 of 4L/P57, ε^4 of 4L/P59 and 9 more factors; vakint fails closed). The other inputs return N(3) (set by 5L/P125 (P551) ε^0, 5L/P130 (P632) ε^0, 5L/P68 (P400) ε^0, 5L/P85 (P441) ε^0).
+[q] 5L ε^0: not available for every input. The measured top-sector input P105 + dot gets MissingMasterOrders (it needs ε^1 of 59 5L masters and ε^6 of 1L/P1, ε^3 of 3L/P38, ε^2 of 4L/P57, ε^4 of 4L/P59 and 9 more factors; vakint fails closed). The other inputs return N(32) (set by 5L/P89 (P445) ε^0).
 
 ## How the tables are made
 
@@ -304,6 +304,6 @@ Worst case over the admitted inputs, with the spurious-pole orders the row notes
 - Some 1L-4L S rows (and the 5L product rows built on them) rest on numerical identities of the constant basis v4, checked to thousands of digits but not proven: ALIAS_PR11dep0 (4L 2 rows from ε^0; checked to 544 d, re-checked to 5364 d (at the shipped constants (precision lift))); BNBAR4_LEVEL2 (3L 3 rows from ε^4, 4L 24 rows from ε^0; checked to 19900 d); D2J0_PR10 (4L 57 rows from ε^0; checked to 18000 d); LI3_I_SQRT3_V1 (4L 51 rows from ε^0; checked to 3989 d); PR5D2EPS3_J8 (4L 1 row from ε^1; checked to 520 d); R1_PR11dD2Eps2 (4L 14 rows from ε^0; checked to 547 d, re-checked to 5361 d (at the shipped constants (precision lift))); X3_TI3 (2L 4 rows from ε^1, 3L 72 rows from ε^0, 4L 141 rows from ε^-1; checked to 5000 d, re-checked to 19999 d (independence audit archived with the precision lift)); X4_TI4 (2L 3 rows from ε^2, 3L 54 rows from ε^1, 4L 102 rows from ε^0; checked to 5000 d, re-checked to 19999 d (independence audit archived with the precision lift)). Above those digits such an S is exact only modulo the identity; vakint gives no warning for it.
 - 196 of the 591 exact (S/S*) 5L orders are PSLQ identifications (9 of them S*) and 4 are measured zeros, all passing the 40-excess-digit bar (numerical identifications, not proofs).
 - Digits lost to cancellations in the reduction coefficients are tracked and reported by vakint (PrecisionWarning), not included in X.
-- 5L release tiers (5L/producer-update.json) checked against the rows: A 61, B 129, F 5, S 562, S* 29 (S -> S, S* -> S* with the same constants, numerical tiers -> N).
+- 5L release tiers (5L/producer-update.json) checked against the rows: A 61, B 134, S 562, S* 29 (S -> S, S* -> S* with the same constants, numerical tiers -> N).
 - RustRed backend only (vakint’s first backend); MATAD/FMFT/alphaLoop fallbacks are not part of these tables.
 
