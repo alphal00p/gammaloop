@@ -24,7 +24,7 @@
 //! compare the RustRed p path with Forcer's frozen values per scale power
 //! (M2-V5 Tier A).
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
 use rustred::algebra::{Coefficient, CoefficientContext, ExactAlgebraLimits};
@@ -932,16 +932,33 @@ pub(crate) fn reduce_requests_folded(
         stats.channels = pending.len();
     });
     let lowering = std::time::Instant::now();
-    // Lower every part once and distribute it over the folded channels of its
-    // coefficient's terms.
-    let mut folded = BTreeMap::<Channel, FoldedInputs>::new();
+    // Lower every channel once and distribute its lowered inputs, scaled by
+    // the value of each term of its coefficient, over the folded channels and
+    // basis functions. The integral keys are numbered once, and every folded
+    // basis accumulates into a dense vector indexed by key number.
+    let mut key_ids = HashMap::<(PresentationId, Vec<i64>), usize>::new();
+    let mut keys = Vec::<(PresentationId, Vec<i64>)>::new();
+    let mut buckets = Vec::<Vec<Rational>>::new();
+    let mut targets = BTreeMap::<Channel, (BTreeMap<Atom, usize>, BTreeSet<String>)>::new();
     for (channel, ChannelParts { parts, integrals }) in pending {
         let lowered = lower_channel(&handle, parts, &mut forms)?;
         if lowered.is_empty() {
             continue;
         }
+        let lowered = lowered
+            .into_iter()
+            .filter(|(_, value)| !value.is_zero())
+            .map(|(key, value)| {
+                let next = keys.len();
+                let id = *key_ids.entry(key.clone()).or_insert_with(|| {
+                    keys.push(key);
+                    next
+                });
+                (id, value)
+            })
+            .collect::<Vec<_>>();
         for (monomial, basis, value) in spectator_terms(&channel.coefficient, epsilon) {
-            let target = folded
+            let target = targets
                 .entry(Channel {
                     loops: channel.loops,
                     head: channel.head.clone(),
@@ -949,17 +966,38 @@ pub(crate) fn reduce_requests_folded(
                     coefficient: monomial,
                 })
                 .or_default();
-            target.integrals.extend(integrals.iter().cloned());
-            let inputs = target.by_basis.entry(basis).or_default();
-            for (key, lowered_value) in &lowered {
-                let product = lowered_value * &value;
-                match inputs.get_mut(key) {
-                    Some(sum) => *sum += &product,
-                    None => {
-                        inputs.insert(key.clone(), product);
-                    }
+            target.1.extend(integrals.iter().cloned());
+            let next = buckets.len();
+            let bucket = *target.0.entry(basis).or_insert_with(|| {
+                buckets.push(Vec::new());
+                next
+            });
+            let bucket = &mut buckets[bucket];
+            if bucket.len() < keys.len() {
+                bucket.resize(keys.len(), Rational::zero());
+            }
+            let unit = value == Rational::one();
+            for (id, lowered_value) in &lowered {
+                if unit {
+                    bucket[*id] += lowered_value;
+                } else {
+                    bucket[*id] += &(lowered_value * &value);
                 }
             }
+        }
+    }
+    let mut folded = BTreeMap::<Channel, FoldedInputs>::new();
+    for (channel, (by_basis, integrals)) in targets {
+        let target = folded.entry(channel).or_default();
+        target.integrals = integrals;
+        for (basis, bucket) in by_basis {
+            let inputs = std::mem::take(&mut buckets[bucket])
+                .into_iter()
+                .enumerate()
+                .filter(|(_, value)| !value.is_zero())
+                .map(|(id, value)| (keys[id].clone(), value))
+                .collect::<BTreeMap<_, _>>();
+            target.by_basis.insert(basis, inputs);
         }
     }
     with_stats(|stats| stats.lower_seconds = lowering.elapsed().as_secs_f64());
