@@ -678,6 +678,41 @@ impl Spectator {
     /// harmless symbolic monomial denominators rather than assuming a more
     /// general normalization identity.
     fn epsilon_denominators(expression: AtomView, epsilon: Symbol) -> bool {
+        Self::scalar_denominators(expression, epsilon, false)
+    }
+
+    /// Inner factors also admit symbolic monomial denominator content. An
+    /// integer inverse of `c*x^a*y^b` normalizes to `c^-1*x^-a*y^-b`, so its
+    /// numerical content combines identically before or after factorization.
+    /// A symbolic sum such as `3*nf-6` has no such normalization rule.
+    fn scalar_denominators(
+        expression: AtomView,
+        epsilon: Symbol,
+        symbolic_monomials: bool,
+    ) -> bool {
+        fn epsilon_only(base: AtomView, epsilon: Symbol) -> bool {
+            let mut only = true;
+            base.visitor(&mut |factor| {
+                only &= match factor {
+                    AtomView::Var(variable) => variable.get_symbol() == epsilon,
+                    AtomView::Fun(_) => false,
+                    _ => true,
+                };
+                only
+            });
+            only
+        }
+        fn monomial_factor(factor: AtomView, epsilon: Symbol) -> bool {
+            match factor {
+                AtomView::Num(_) | AtomView::Var(_) => true,
+                AtomView::Pow(power) => {
+                    let (base, exponent) = power.get_base_exp();
+                    (matches!(base, AtomView::Var(_)) && get_integer_from_atom(exponent).is_some())
+                        || epsilon_only(factor, epsilon)
+                }
+                _ => epsilon_only(factor, epsilon),
+            }
+        }
         let mut safe = true;
         expression.visitor(&mut |part| {
             if !safe {
@@ -694,15 +729,17 @@ impl Spectator {
             }
             if let AtomView::Pow(power) = part {
                 let (base, exponent) = power.get_base_exp();
-                if !get_integer_from_atom(exponent).is_some_and(|n| n >= 0) {
-                    base.visitor(&mut |factor| {
-                        safe &= match factor {
-                            AtomView::Var(variable) => variable.get_symbol() == epsilon,
-                            AtomView::Fun(_) => false,
-                            _ => true,
-                        };
-                        safe
-                    });
+                let integer = get_integer_from_atom(exponent);
+                if !integer.is_some_and(|n| n >= 0) {
+                    safe = epsilon_only(base, epsilon)
+                        || (symbolic_monomials
+                            && integer.is_some()
+                            && match base {
+                                AtomView::Mul(product) => product
+                                    .iter()
+                                    .all(|factor| monomial_factor(factor, epsilon)),
+                                _ => monomial_factor(base, epsilon),
+                            });
                 }
             }
             safe
@@ -722,8 +759,8 @@ impl Spectator {
 /// expansion of the product.
 ///
 /// `None` (the caller then uses [`expand`] on the product) when a
-/// rational denominator of `prefactor` or a master coefficient depends on
-/// a symbol other than ε, when a term of the inner series ends
+/// rational denominator of `prefactor` or a master coefficient has
+/// non-monomial content in symbols other than ε, when a term of the inner series ends
 /// below `ε^(order - v_S)`, which only a tabulated master's unknown tail
 /// does, or when the spectator series exceeds its bounds.
 pub(crate) fn expand_factored(
@@ -738,7 +775,8 @@ pub(crate) fn expand_factored(
     };
     // Gamma functions and scale exponentials are handled by the existing
     // split, not mistaken for symbolic rational denominators.
-    if !Spectator::epsilon_denominators(split(prefactor, epsilon).rational.as_view(), epsilon) {
+    if !Spectator::scalar_denominators(split(prefactor, epsilon).rational.as_view(), epsilon, true)
+    {
         return Ok(None);
     }
     let inner_order = order - spectator_valuation;
@@ -748,7 +786,7 @@ pub(crate) fn expand_factored(
     // Coefficients of the inner series by power of ε.
     let mut inner = std::collections::BTreeMap::<i64, Vec<Atom>>::new();
     for (monomial, coefficient) in expanded.coefficient_list::<i16>(&masters) {
-        if !Spectator::epsilon_denominators(coefficient.as_view(), epsilon) {
+        if !Spectator::scalar_denominators(coefficient.as_view(), epsilon, true) {
             return Ok(None);
         }
         let Some(term) = monomial_term(
@@ -982,6 +1020,16 @@ mod tests {
         ] {
             let expression = vk_parse!(expression).unwrap();
             assert!(super::Spectator::new(&expression, e).is_none());
+        }
+        for expression in [
+            "ε/(3-2*ε)+ca/(nf-2*ca)",
+            "1/f(nf)",
+            "1/(nf*(nf-2))",
+            "1/(nf+ε)",
+            "nf^(-1/2)",
+            "1/(nf^-2+ca^-1)",
+        ] {
+            let expression = vk_parse!(expression).unwrap();
             let spectator = super::Spectator::new(&vk_parse!("1/(3-2*ε)").unwrap(), e).unwrap();
             assert!(
                 super::expand_factored(&prefactor, &(&masters * &expression), &spectator, e, -1)
@@ -1014,6 +1062,53 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+
+    #[test]
+    fn factored_expansion_preserves_inner_symbolic_monomial_denominators() {
+        Vakint::initialize_vakint_symbols();
+        let e = vk_symbol!("ε");
+        let masters = vk_parse!("PG(0,0)^2/(3-2*ε)+PG(1,0)/(ε*(6-4*ε))").unwrap();
+        let one = Atom::num(1);
+        let spectators = [
+            vk_parse!("(nf+1)/(ε*(3-2*ε))").unwrap(),
+            vk_parse!("mass^2*nf^2/(ε*(3-2*ε))").unwrap(),
+        ];
+        // Include the pi denominator of the production MSbar normalization,
+        // symbolic masses, numeric content and the review's complex monomial.
+        for factor in [
+            "1/(1024*𝜋^10)",
+            "1/(3*mass^2*nf^2)",
+            "(2+𝑖)*nf^-2",
+            "1/(mass^2*(3-2*ε))",
+            "1/mass^2+1/nf^2",
+        ] {
+            let factor = vk_parse!(factor).unwrap();
+            assert!(super::Spectator::new(&factor, e).is_none());
+            assert!(super::Spectator::scalar_denominators(
+                factor.as_view(),
+                e,
+                true
+            ));
+            for spectator in &spectators {
+                let prepared = super::Spectator::new(spectator, e).unwrap();
+                for (prefactor, reduced) in [(&factor, masters.clone()), (&one, &factor * &masters)]
+                {
+                    for order in [-1, 0, 1] {
+                        let old =
+                            expand(prefactor, &(&reduced * spectator).expand(), e, order).unwrap();
+                        let new = super::expand_factored(prefactor, &reduced, &prepared, e, order)
+                            .unwrap()
+                            .unwrap();
+                        assert_eq!(
+                            old.to_canonical_string(),
+                            new.to_canonical_string(),
+                            "{factor} times {spectator} at order {order}"
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[test]
