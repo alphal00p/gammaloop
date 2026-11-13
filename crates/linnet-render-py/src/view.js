@@ -357,7 +357,7 @@ export default {
         mountAbort?.abort();
         frame?.remove();
         const mounted = owner.doc.createElement('iframe');
-        mounted.setAttribute('sandbox', 'allow-same-origin');
+        mounted.setAttribute('sandbox', 'allow-same-origin allow-scripts');
         mountAbort = new owner.win.AbortController();
         const signal = mountAbort.signal;
         frame = mounted;
@@ -369,7 +369,9 @@ export default {
           try {
             if (disposed || current !== revision || frame !== mounted || !mounted.contentDocument) return;
             const doc = mounted.contentDocument;
-            // The sandbox blocks all document scripts, including imported markup.
+            // CSP blocks document scripts and inline handlers from imported markup.
+            // WebKit also blocks parent-installed event callbacks when the sandbox
+            // disallows scripts, so retain sandbox isolation with script-src 'none'.
             // Controls come from Rust templates before label substitution. Run
             // only exact trusted sources in the parent, also for lazy children.
             const trusted = new Set(model.get('scripts') || []);
@@ -428,7 +430,7 @@ export default {
             }
           }
         }, { once: true, signal });
-        mounted.srcdoc = `<!doctype html><html><head><meta charset="utf-8"><style>html{overflow:hidden}body{margin:0;display:flow-root}</style></head><body data-linnet-frame-owner>${result.html}</body></html>`;
+        mounted.srcdoc = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="script-src 'none'; object-src 'none'; base-uri 'none'"><style>html{overflow:hidden}body{margin:0;display:flow-root}</style></head><body data-linnet-frame-owner>${result.html}</body></html>`;
         el.replaceChildren(mounted);
       } catch (error) { fail(error); }
     };

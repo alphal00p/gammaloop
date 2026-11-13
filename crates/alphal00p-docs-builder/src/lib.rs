@@ -48,7 +48,7 @@ const PRODUCT_IDS: [&str; 6] = [
     "vakint",
     "feynkit",
 ];
-const PORTAL_SCHEMA_VERSION: u32 = 2;
+const PORTAL_SCHEMA_VERSION: u32 = 3;
 const TALKS_SCHEMA_VERSION: u32 = 1;
 const DEVELOPER_SCHEMA_VERSION: u32 = 3;
 const LEGACY_PROSE_SCHEMA_VERSION: u32 = 1;
@@ -304,7 +304,9 @@ struct PortalConfig {
     #[serde(default)]
     graphs: Vec<String>,
     #[serde(default)]
-    task: Vec<PortalTask>,
+    topic: Vec<PortalTopic>,
+    #[serde(default)]
+    example: Vec<PortalExample>,
     #[serde(default)]
     pillar: Vec<PortalPillar>,
     #[serde(default)]
@@ -314,10 +316,34 @@ struct PortalConfig {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-struct PortalTask {
-    label: String,
+struct PortalDestination {
     product: String,
-    role: String,
+    page: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct PortalTopic {
+    id: String,
+    title: String,
+    summary: String,
+    products: Vec<String>,
+    guide: PortalDestination,
+    examples: PortalDestination,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct PortalExample {
+    title: String,
+    summary: String,
+    target: PortalDestination,
+    runtime: NotebookRuntime,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum NotebookRuntime {
+    Browser,
+    Native,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -1121,21 +1147,58 @@ impl SiteBuilder {
                 && !self.portal.graphs.is_empty(),
             "portal must define research pillars, people, affiliations, and graph assets"
         );
-        let task_products = self
+        let topic_products = self
             .portal
-            .task
+            .topic
             .iter()
-            .map(|task| task.product.as_str())
+            .flat_map(|topic| topic.products.iter().map(String::as_str))
             .collect::<BTreeSet<_>>();
         ensure!(
-            task_products == ids && self.portal.task.len() == ids.len(),
-            "portal tasks must cover every product exactly once"
+            topic_products == ids,
+            "portal topics must cover every registered library"
         );
-        for task in &self.portal.task {
+        let mut topic_ids = BTreeSet::new();
+        for topic in &self.portal.topic {
+            validate_route_segment(&topic.id)?;
             ensure!(
-                !task.label.trim().is_empty() && !task.role.trim().is_empty(),
-                "portal task for {} is incomplete",
-                task.product
+                topic_ids.insert(&topic.id),
+                "duplicate portal topic {}",
+                topic.id
+            );
+            ensure!(
+                !topic.title.trim().is_empty()
+                    && !topic.summary.trim().is_empty()
+                    && !topic.products.is_empty()
+                    && topic.products.iter().collect::<BTreeSet<_>>().len() == topic.products.len(),
+                "portal topic {} is incomplete or repeats a library",
+                topic.id
+            );
+        }
+        ensure!(
+            !self.portal.example.is_empty(),
+            "portal must define worked examples"
+        );
+        for example in &self.portal.example {
+            ensure!(
+                !example.title.trim().is_empty() && !example.summary.trim().is_empty(),
+                "portal example metadata must not be empty"
+            );
+        }
+        for destination in self
+            .portal
+            .topic
+            .iter()
+            .flat_map(|topic| [&topic.guide, &topic.examples])
+            .chain(self.portal.example.iter().map(|example| &example.target))
+        {
+            ensure!(
+                self.registry.product.iter().any(|product| {
+                    product.id == destination.product
+                        && product.pages.iter().any(|page| page.id == destination.page)
+                }),
+                "portal destination {}/{} is not a registered page",
+                destination.product,
+                destination.page
             );
         }
         ensure!(
@@ -1290,6 +1353,16 @@ impl SiteBuilder {
             );
         }
         self.require_file(Path::new("docs/assets/site.css"))?;
+        self.require_file(Path::new("docs/assets/fonts.css"))?;
+        self.require_file(Path::new("docs/assets/code.css"))?;
+        self.require_file(Path::new("docs/assets/documentation-full.css"))?;
+        self.require_file(Path::new("docs/assets/code-blocks.js"))?;
+        self.require_file(Path::new("docs/assets/alphalooplogo-light.svg"))?;
+        self.require_file(Path::new("docs/assets/alphalooplogo-dark.svg"))?;
+        ensure!(
+            self.root.join("docs/assets/fonts").is_dir(),
+            "documentation fonts directory is missing"
+        );
         self.require_file(Path::new("docs/assets/site.js"))?;
         self.require_file(Path::new("docs/assets/showcase.css"))?;
         self.require_file(Path::new("docs/assets/showcase.js"))?;
@@ -1305,6 +1378,7 @@ impl SiteBuilder {
             "docs/portal/shared.typ",
             "docs/portal/components.typ",
             "docs/portal/index.typ",
+            "docs/portal/libraries.typ",
             "docs/portal/about.typ",
             "docs/portal/people.typ",
             "docs/portal/talks.typ",
@@ -2203,6 +2277,28 @@ impl SiteBuilder {
             self.write_rust_reference_with_availability(product, &site, options.include_rustdoc)?;
             self.write_reference_hub(product, &site)?;
         }
+        if options.include_rustdoc {
+            // Refresh presentation even when the Rustdoc or reference tree is reused.
+            let theme = site.join("reference/rust/theme.css");
+            fs::remove_file(&theme)?;
+            fs::copy(self.root.join("docs/assets/rustdoc.css"), theme)?;
+            let script = r#"<script type="module" data-source-frames>import(new URL("../../assets/code-blocks.js", new URL(document.querySelector('meta[name="rustdoc-vars"]').dataset.rootPath, location.href))).then(module => module.initializeRustdoc());</script>"#;
+            for entry in WalkDir::new(site.join("reference/rust")) {
+                let entry = entry?;
+                let path = entry.path();
+                if !entry.file_type().is_file()
+                    || path.extension().is_none_or(|value| value != "html")
+                {
+                    continue;
+                }
+                let html = fs::read_to_string(path)?;
+                if html.contains("class=\"rustdoc") && !html.contains("data-source-frames") {
+                    let updated = html.replacen("</body>", &format!("{script}</body>"), 1);
+                    fs::remove_file(path)?;
+                    fs::write(path, updated)?;
+                }
+            }
+        }
         self.decorate_site_pages_with_generated(
             product,
             &metadata,
@@ -2301,6 +2397,21 @@ impl SiteBuilder {
         fs::create_dir_all(&assets)?;
         for (source, name) in [
             ("docs/assets/site.css", "site.css"),
+            ("docs/assets/fonts.css", "fonts.css"),
+            ("docs/assets/code.css", "code.css"),
+            (
+                "docs/assets/documentation-full.css",
+                "documentation-full.css",
+            ),
+            ("docs/assets/code-blocks.js", "code-blocks.js"),
+            (
+                "docs/assets/alphalooplogo-light.svg",
+                "alphalooplogo-light.svg",
+            ),
+            (
+                "docs/assets/alphalooplogo-dark.svg",
+                "alphalooplogo-dark.svg",
+            ),
             ("docs/assets/site.js", "site.js"),
             ("docs/assets/showcase.css", "showcase.css"),
             ("docs/assets/showcase.js", "showcase.js"),
@@ -2345,6 +2456,7 @@ impl SiteBuilder {
             fs::copy(self.root.join(source), target)
                 .wrap_err_with(|| format!("failed to copy documentation asset {source}"))?;
         }
+        replace_cached_tree(&self.root.join("docs/assets/fonts"), &assets.join("fonts"))?;
         for asset in about_assets() {
             let target = assets.join(&asset);
             match fs::remove_file(&target) {
@@ -3505,10 +3617,10 @@ impl SiteBuilder {
             BuildChannel::Latest => format!("{docs_root}../../../"),
             BuildChannel::Snapshot => format!("{docs_root}../../../../"),
         };
-        let site_home = if scope == BuildScope::FullSite {
-            &portal
+        let documentation_home = if scope == BuildScope::FullSite {
+            format!("{portal}libraries/")
         } else {
-            product_root
+            product_root.to_owned()
         };
         let version = match metadata.channel {
             BuildChannel::Latest => "latest".to_owned(),
@@ -3603,7 +3715,7 @@ impl SiteBuilder {
         };
         let favicon = favicon_links(&format!("{docs_root}assets/"));
         let html = format!(
-            "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"description\" content=\"{}\">{favicon}<title>{} · {}</title><link rel=\"stylesheet\" href=\"{}assets/site.css\"><script defer src=\"{}assets/site.js\"></script></head><body data-reference-language=\"{}\" data-has-toc=\"{}\" data-docs-root=\"{}\" data-search-index=\"{}search-index.json\" data-search-root=\"{}\"><a class=\"skip-link\" href=\"#main-content\">Skip to content</a><header class=\"site-header\"><button class=\"header-button menu-button\" type=\"button\" data-menu-toggle aria-label=\"Open navigation\" aria-controls=\"docs-sidebar\" aria-expanded=\"false\">☰</button><a class=\"site-brand\" href=\"{}\"><span class=\"site-brand-mark\">α</span><span class=\"site-brand-name\">αLoop docs</span></a><div class=\"site-header-tools\"><select class=\"product-select\" data-product-select aria-label=\"Select project\">{}</select><button class=\"header-button\" type=\"button\" data-search-open aria-label=\"Search all documentation\"><span class=\"header-search-label\">Search</span> <span class=\"header-button-label\">⌘K</span><span class=\"header-search-icon\" aria-hidden=\"true\">⌕</span></button><button class=\"header-button\" type=\"button\" data-theme-toggle aria-label=\"Toggle color theme\">◐</button></div></header><div class=\"docs-shell\">{sidebar}<main class=\"docs-main\" id=\"main-content\"><nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\"><a href=\"{}\">{}</a> / {}{}</nav>{inline_toc}<article class=\"docs-article\">{body}</article>{page_navigation}{feedback}<footer class=\"page-footer\">{} · <a href=\"{}manual.pdf\">Complete PDF manual</a> · documented revision <code>{}</code></footer></main>{toc_markup}</div><button class=\"sidebar-backdrop\" type=\"button\" data-sidebar-backdrop aria-label=\"Close navigation\"></button><dialog class=\"search-dialog\" data-search-dialog><form class=\"search-form\" method=\"dialog\"><input class=\"search-input\" type=\"search\" data-search-input placeholder=\"Search all projects and developer notes\" aria-label=\"Search all documentation\"><button class=\"header-button\" value=\"close\">Close</button></form><ul class=\"search-results\" data-search-results aria-live=\"polite\"></ul></dialog></body></html>",
+            "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"description\" content=\"{}\">{favicon}<title>{} · {}</title><link rel=\"stylesheet\" href=\"{}assets/site.css\"><script defer src=\"{}assets/site.js\"></script></head><body data-reference-language=\"{}\" data-has-toc=\"{}\" data-docs-root=\"{}\" data-search-index=\"{}search-index.json\" data-search-root=\"{}\"><a class=\"skip-link\" href=\"#main-content\">Skip to content</a><header class=\"site-header\"><button class=\"header-button menu-button\" type=\"button\" data-menu-toggle aria-label=\"Open navigation\" aria-controls=\"docs-sidebar\" aria-expanded=\"false\">☰</button><a class=\"site-brand\" href=\"{}\" aria-label=\"Documentation home\"><span class=\"site-brand-name\">Documentation</span></a><div class=\"site-header-tools\"><select class=\"product-select\" data-product-select aria-label=\"Select project\">{}</select><button class=\"header-button\" type=\"button\" data-search-open aria-label=\"Search all documentation\" title=\"Search (⌘/Ctrl+K)\"><span class=\"header-search-label\">Search</span> <span class=\"header-button-label\">⌘K</span><span class=\"header-search-icon\" aria-hidden=\"true\">⌕</span></button><button class=\"header-button\" type=\"button\" data-theme-toggle aria-label=\"Toggle color theme\">◐</button></div></header><div class=\"docs-shell\">{sidebar}<main class=\"docs-main\" id=\"main-content\"><nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\"><a href=\"{}\">{}</a> / {}{}</nav>{inline_toc}<article class=\"docs-article\">{body}</article>{page_navigation}{feedback}<footer class=\"page-footer\">{} · <a href=\"{}manual.pdf\">Complete PDF manual</a> · documented revision <code>{}</code></footer></main>{toc_markup}</div><button class=\"sidebar-backdrop\" type=\"button\" data-sidebar-backdrop aria-label=\"Close navigation\"></button><dialog class=\"search-dialog\" data-search-dialog><form class=\"search-form\" method=\"dialog\"><input class=\"search-input\" type=\"search\" data-search-input placeholder=\"Search all projects and developer notes\" aria-label=\"Search all documentation\"><button class=\"header-button\" value=\"close\">Close</button></form><ul class=\"search-results\" data-search-results aria-live=\"polite\"></ul></dialog></body></html>",
             escape_html(&format!("{} — {}", product.tagline, page.title)),
             escape_html(&product.title),
             escape_html(&page.title),
@@ -3614,7 +3726,7 @@ impl SiteBuilder {
             escape_html(&docs_root),
             escape_html(search_root),
             escape_html(search_root),
-            escape_html(site_home),
+            escape_html(&documentation_home),
             product_options,
             escape_html(product_root),
             escape_html(&product.title),
@@ -4660,7 +4772,7 @@ impl SiteBuilder {
             escape_html(&issue_url),
         );
         let main = format!(
-            "<nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\"><a href=\"../\">αLoop</a> / Developers</nav><article class=\"docs-article developer-article\"><header class=\"developer-hero\"><span class=\"developer-hero-logo\" role=\"img\" aria-label=\"Construction of the GammaLoop logo\"></span><p class=\"product-eyebrow\">For developers</p><h1>{}</h1><p>{}</p><aside class=\"developer-audience\" aria-label=\"Documentation audience\"><strong>Looking for usage documentation?</strong><span>Product guides and reference live with each research project. This area documents implementation details, design work, and engineering investigations for contributors.</span><a href=\"../#projects\">Browse project documentation <span aria-hidden=\"true\">→</span></a></aside></header>{sections}</article>{feedback}<footer class=\"page-footer\">{} classified notes · documented revision <code>{}</code></footer>",
+            "<nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\"><a href=\"../\">αLoop</a> / Developers</nav><article class=\"docs-article developer-article\"><header class=\"developer-hero\"><span class=\"developer-hero-logo\" role=\"img\" aria-label=\"Construction of the GammaLoop logo\"></span><p class=\"product-eyebrow\">For developers</p><h1>{}</h1><p>{}</p><aside class=\"developer-audience\" aria-label=\"Documentation audience\"><strong>Looking for usage documentation?</strong><span>Product guides and reference live with each research project. This area documents implementation details, design work, and engineering investigations for contributors.</span><a href=\"../libraries/\">Browse project documentation <span aria-hidden=\"true\">→</span></a></aside></header>{sections}</article>{feedback}<footer class=\"page-footer\">{} classified notes · documented revision <code>{}</code></footer>",
             escape_html(&self.developers.title),
             escape_html(&self.developers.summary),
             self.developers
@@ -4725,7 +4837,7 @@ impl SiteBuilder {
             ));
         }
         format!(
-            "<aside class=\"docs-sidebar developer-sidebar\" id=\"docs-sidebar\" aria-label=\"Developer architecture\">{navigation}<p class=\"sidebar-meta\"><strong>For developers</strong><br>Implementation and engineering notes.<br><a href=\"{}../#projects\">Product guides and reference</a></p></aside>",
+            "<aside class=\"docs-sidebar developer-sidebar\" id=\"docs-sidebar\" aria-label=\"Developer architecture\">{navigation}<p class=\"sidebar-meta\"><strong>For developers</strong><br>Implementation and engineering notes.<br><a href=\"{}../libraries/\">Product guides and reference</a></p></aside>",
             escape_html(docs_root),
         )
     }
@@ -4782,6 +4894,7 @@ impl SiteBuilder {
             "people/index.html",
             "talks/index.html",
             "publications/index.html",
+            "libraries/index.html",
         ] {
             ensure!(
                 bundle.join(page).is_file(),
@@ -5293,6 +5406,13 @@ impl SiteBuilder {
     }
 }
 
+fn site_brand_logo(asset_root: &str) -> String {
+    let asset_root = escape_html(asset_root);
+    format!(
+        "<span aria-hidden=\"true\"><img class=\"site-brand-logo site-brand-logo-light\" src=\"{asset_root}alphalooplogo-light.svg\" alt=\"\"><img class=\"site-brand-logo site-brand-logo-dark\" src=\"{asset_root}alphalooplogo-dark.svg\" alt=\"\"></span>"
+    )
+}
+
 fn favicon_links(asset_root: &str) -> String {
     let asset_root = escape_html(asset_root);
     format!(
@@ -5627,8 +5747,9 @@ fn developer_document(
         docs_root
     };
     let favicon = favicon_links(&format!("{docs_root}assets/"));
+    let brand_logo = site_brand_logo(&format!("{docs_root}assets/"));
     format!(
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"description\" content=\"{}\"><meta name=\"theme-color\" content=\"#f9f6f0\">{favicon}<title>{}</title><link rel=\"stylesheet\" href=\"{}assets/site.css\">{extra_head}<script defer src=\"{}assets/site.js\"></script></head><body class=\"developer-body\" data-docs-root=\"{}\" data-search-index=\"{}search-index.json\" data-search-root=\"{}\"><a class=\"skip-link\" href=\"#main-content\">Skip to content</a><header class=\"site-header\"><button class=\"header-button menu-button\" type=\"button\" data-menu-toggle aria-label=\"Open navigation\" aria-controls=\"docs-sidebar\" aria-expanded=\"false\">☰</button><a class=\"site-brand\" href=\"{}\"><span class=\"site-brand-mark\">α</span><span class=\"site-brand-name\">Developer notes</span></a><div class=\"site-header-tools\"><a class=\"header-button header-link\" href=\"{}\" aria-label=\"Research documentation\"><span class=\"header-link-label\">Research docs</span><span aria-hidden=\"true\">←</span></a><button class=\"header-button\" type=\"button\" data-search-open aria-label=\"Search all documentation\"><span class=\"header-search-label\">Search</span> <span class=\"header-button-label\">⌘K</span><span class=\"header-search-icon\" aria-hidden=\"true\">⌕</span></button><button class=\"header-button\" type=\"button\" data-theme-toggle aria-label=\"Toggle color theme\">◐</button></div></header><div class=\"docs-shell\">{sidebar}<main class=\"docs-main developer-main\" id=\"main-content\">{main}</main>{toc}</div><button class=\"sidebar-backdrop\" type=\"button\" data-sidebar-backdrop aria-label=\"Close navigation\"></button><dialog class=\"search-dialog\" data-search-dialog><form class=\"search-form\" method=\"dialog\"><input class=\"search-input\" type=\"search\" data-search-input placeholder=\"Search all projects and developer notes\" aria-label=\"Search all documentation\"><button class=\"header-button\" value=\"close\">Close</button></form><ul class=\"search-results\" data-search-results aria-live=\"polite\"></ul></dialog></body></html>",
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"description\" content=\"{}\"><meta name=\"theme-color\" content=\"#f9f6f0\">{favicon}<title>{}</title><link rel=\"stylesheet\" href=\"{}assets/site.css\">{extra_head}<script defer src=\"{}assets/site.js\"></script></head><body class=\"developer-body\" data-docs-root=\"{}\" data-search-index=\"{}search-index.json\" data-search-root=\"{}\"><a class=\"skip-link\" href=\"#main-content\">Skip to content</a><header class=\"site-header\"><button class=\"header-button menu-button\" type=\"button\" data-menu-toggle aria-label=\"Open navigation\" aria-controls=\"docs-sidebar\" aria-expanded=\"false\">☰</button><a class=\"site-brand\" href=\"{}\" aria-label=\"αLoop developer notes home\">{brand_logo}<span class=\"site-brand-name\">αLoop developer notes</span></a><div class=\"site-header-tools\"><a class=\"header-button header-link\" href=\"{}\" aria-label=\"αLoop home\" title=\"αLoop home\"><span class=\"header-link-label\">αLoop home</span><span aria-hidden=\"true\">←</span></a><button class=\"header-button\" type=\"button\" data-search-open aria-label=\"Search all documentation\" title=\"Search (⌘/Ctrl+K)\"><span class=\"header-search-label\">Search</span> <span class=\"header-button-label\">⌘K</span><span class=\"header-search-icon\" aria-hidden=\"true\">⌕</span></button><button class=\"header-button\" type=\"button\" data-theme-toggle aria-label=\"Toggle color theme\">◐</button></div></header><div class=\"docs-shell\">{sidebar}<main class=\"docs-main developer-main\" id=\"main-content\">{main}</main>{toc}</div><button class=\"sidebar-backdrop\" type=\"button\" data-sidebar-backdrop aria-label=\"Close navigation\"></button><dialog class=\"search-dialog\" data-search-dialog><form class=\"search-form\" method=\"dialog\"><input class=\"search-input\" type=\"search\" data-search-input placeholder=\"Search all projects and developer notes\" aria-label=\"Search all documentation\"><button class=\"header-button\" value=\"close\">Close</button></form><ul class=\"search-results\" data-search-results aria-live=\"polite\"></ul></dialog></body></html>",
         escape_html(description),
         escape_html(title),
         escape_html(docs_root),
@@ -7280,7 +7401,16 @@ fn render_doc_text_omitting_parameters(
         );
     }
 
-    let render_paragraphs = |lines: &[&str]| render_prose_blocks(lines, docs.format);
+    let render_paragraphs = |lines: &[&str]| {
+        if lines
+            .iter()
+            .any(|line| line.trim_start().starts_with(">>>"))
+        {
+            render_python_example(lines)
+        } else {
+            render_prose_blocks(lines, docs.format)
+        }
+    };
 
     let lines = docs.body.lines().collect::<Vec<_>>();
     let mut sections = vec![];
@@ -10486,6 +10616,21 @@ mod tests {
     }
 
     #[test]
+    fn python_doctests_without_an_examples_heading_render_as_source() {
+        let rendered = render_doc_text(
+            &alphal00p_docs_schema::DocText::new(
+                DocFormat::PythonDocstring,
+                "Call with a value:\n\n>>> value = 2\n>>> value * value\n4",
+            ),
+            3,
+        );
+
+        assert!(rendered.contains("<p>Call with a value:</p>"));
+        assert!(rendered.contains("<code data-lang=\"python\">value = 2\nvalue * value</code>"));
+        assert!(!rendered.contains("&gt;&gt;&gt;"));
+    }
+
+    #[test]
     fn python_doctest_main_remains_at_module_scope() {
         let rendered = render_doc_text(
             &alphal00p_docs_schema::DocText::new(
@@ -12483,6 +12628,24 @@ mod tests {
             .find(|page| page.id == "quickstart")
             .unwrap();
         quickstart.id = "getting-started".to_owned();
+        // Keep portal links valid so this fixture reaches the quickstart invariant.
+        for destination in builder
+            .portal
+            .topic
+            .iter_mut()
+            .flat_map(|topic| [&mut topic.guide, &mut topic.examples])
+            .chain(
+                builder
+                    .portal
+                    .example
+                    .iter_mut()
+                    .map(|example| &mut example.target),
+            )
+        {
+            if destination.product == "gammaloop" && destination.page == "quickstart" {
+                destination.page = "getting-started".to_owned();
+            }
+        }
 
         let error = builder.check().unwrap_err();
         assert!(format!("{error:#}").contains("has no quickstart page"));
@@ -12513,10 +12676,46 @@ mod tests {
     }
 
     #[test]
+    fn developer_brand_assets_follow_the_local_shell_root() {
+        for docs_root in ["", "../../"] {
+            let html = developer_document(
+                ("Developer notes", "Architecture"),
+                docs_root,
+                "../../../",
+                "",
+                "",
+                "<h1>Architecture</h1>",
+                "",
+            );
+            for theme in ["light", "dark"] {
+                assert!(html.contains(&format!(
+                    "src=\"{docs_root}assets/alphalooplogo-{theme}.svg\""
+                )));
+            }
+            assert!(html.contains("aria-label=\"αLoop developer notes home\""));
+            assert!(html.contains("data-search-open"));
+            assert!(html.contains("data-menu-toggle"));
+        }
+    }
+
+    #[test]
     fn site_assets_replace_read_only_generated_files() {
         let builder = SiteBuilder::discover().unwrap();
         let output = tempfile::tempdir().unwrap();
         builder.write_site_assets(output.path()).unwrap();
+        let source_fonts = builder.root.join("docs/assets/fonts");
+        for entry in WalkDir::new(&source_fonts) {
+            let entry = entry.unwrap();
+            if entry.file_type().is_file() {
+                let relative = entry.path().strip_prefix(&source_fonts).unwrap();
+                let copied = output.path().join("assets/fonts").join(relative);
+                assert_eq!(fs::read(&copied).unwrap(), fs::read(entry.path()).unwrap());
+                let mut permissions = fs::metadata(&copied).unwrap().permissions();
+                permissions.set_readonly(true);
+                fs::set_permissions(&copied, permissions).unwrap();
+            }
+        }
+        fs::write(output.path().join("assets/fonts/obsolete.woff2"), "stale").unwrap();
         let font = output.path().join("assets/STIXTwoMath-Regular.woff2");
         let mut permissions = fs::metadata(&font).unwrap().permissions();
         permissions.set_readonly(true);
@@ -12524,6 +12723,17 @@ mod tests {
 
         builder.write_site_assets(output.path()).unwrap();
 
+        assert!(!output.path().join("assets/fonts/obsolete.woff2").exists());
+        for entry in WalkDir::new(&source_fonts) {
+            let entry = entry.unwrap();
+            if entry.file_type().is_file() {
+                let relative = entry.path().strip_prefix(&source_fonts).unwrap();
+                assert_eq!(
+                    fs::read(output.path().join("assets/fonts").join(relative)).unwrap(),
+                    fs::read(entry.path()).unwrap()
+                );
+            }
+        }
         assert_eq!(
             fs::read(font).unwrap(),
             fs::read(
@@ -12652,6 +12862,7 @@ mod tests {
             "people/index.html",
             "talks/index.html",
             "publications/index.html",
+            "libraries/index.html",
         ] {
             let html = fs::read_to_string(output.path().join(page)).unwrap();
             assert!(html.contains("assets/site.css"));
@@ -12674,6 +12885,12 @@ mod tests {
             "spensologo.svg",
             "STIXTwoMath-Regular.woff2",
             "STIX-Two-OFL.txt",
+            "fonts.css",
+            "code.css",
+            "documentation-full.css",
+            "code-blocks.js",
+            "alphalooplogo-light.svg",
+            "alphalooplogo-dark.svg",
             "publications.json",
         ] {
             assert!(output.path().join("assets").join(asset).is_file());
@@ -12732,7 +12949,7 @@ mod tests {
     }
 
     #[test]
-    fn portal_task_chooser_routes_each_goal_to_the_registered_quickstart() {
+    fn portal_topics_and_examples_follow_registered_pages_in_each_channel() {
         let builder = SiteBuilder::discover().unwrap();
         for (channel, tag, channel_route) in [
             (BuildChannel::Latest, None, "latest"),
@@ -12741,26 +12958,72 @@ mod tests {
             let output = tempfile::tempdir().unwrap();
             write_test_portal(&builder, output.path(), channel, tag);
             let html = fs::read_to_string(output.path().join("index.html")).unwrap();
-
-            for task in &builder.portal.task {
-                let product_id = &task.product;
+            assert!(html.contains("Software for perturbative quantum field theory"));
+            assert_eq!(
+                html.matches("class=\"portal-topic-card\"").count(),
+                builder.portal.topic.len()
+            );
+            for example in &builder.portal.example {
+                let (runtime, label) = match example.runtime {
+                    NotebookRuntime::Browser => ("browser", "Browser example"),
+                    NotebookRuntime::Native => ("native", "Run locally"),
+                };
+                assert!(html.contains(&format!("data-runtime=\"{runtime}\"")));
+                assert!(html.contains(label));
+            }
+            for destination in builder
+                .portal
+                .topic
+                .iter()
+                .flat_map(|topic| [&topic.guide, &topic.examples])
+                .chain(builder.portal.example.iter().map(|example| &example.target))
+            {
                 let product = builder
                     .registry
                     .product
                     .iter()
-                    .find(|product| product.id == task.product)
+                    .find(|product| product.id == destination.product)
                     .unwrap();
-                let quickstart = product
+                let page = product
                     .pages
                     .iter()
-                    .find(|page| page.id == "quickstart")
+                    .find(|page| page.id == destination.page)
                     .unwrap();
                 assert!(html.contains(&format!(
-                    "href=\"products/{product_id}/{channel_route}/{}\"",
-                    quickstart.route
+                    "href=\"products/{}/{channel_route}/{}\"",
+                    product.id, page.route
                 )));
             }
+            let libraries = fs::read_to_string(output.path().join("libraries/index.html")).unwrap();
+            for product in &builder.registry.product {
+                for route in ["quickstart/", "reference/rust/", "reference/python/"] {
+                    assert!(libraries.contains(&format!(
+                        "href=\"../products/{}/{channel_route}/{route}\"",
+                        product.id
+                    )));
+                }
+            }
         }
+    }
+
+    #[test]
+    fn portal_topics_reject_unknown_destinations_and_duplicate_ids() {
+        let mut builder = SiteBuilder::discover().unwrap();
+        builder.portal.topic[0].guide.page = "missing-page".to_owned();
+        assert!(format!("{:#}", builder.check().unwrap_err()).contains("is not a registered page"));
+
+        let mut builder = SiteBuilder::discover().unwrap();
+        builder.portal.topic[0]
+            .products
+            .push("missing-library".to_owned());
+        assert!(
+            format!("{:#}", builder.check().unwrap_err())
+                .contains("must cover every registered library")
+        );
+
+        let mut builder = SiteBuilder::discover().unwrap();
+        builder.portal.topic[1].id = builder.portal.topic[0].id.clone();
+        assert!(format!("{:#}", builder.check().unwrap_err()).contains("duplicate portal topic"));
     }
 
     #[test]
@@ -13173,6 +13436,13 @@ mod tests {
             let rendered = fs::read_to_string(destination.join("index.html")).unwrap();
             assert!(rendered.contains(&format!("data-search-index=\"{expected_search}\"")));
             assert!(!rendered.contains("citations/"));
+            assert!(rendered.contains("aria-label=\"Documentation home\""));
+            assert!(rendered.contains("<span class=\"site-brand-name\">Documentation</span>"));
+            assert!(!rendered.contains("site-brand-logo"));
+            let expected_home = expected_search.replace("search-index.json", "libraries/");
+            assert!(rendered.contains(&format!(
+                "href=\"{expected_home}\" aria-label=\"Documentation home\""
+            )));
             assert!(rendered.contains(&format!(
                 "https://github.com/alphal00p/gammaloop/blob/0123456789abcdef/{expected_source}"
             )));

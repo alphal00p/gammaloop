@@ -1,6 +1,12 @@
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["marimo==0.24.0", "docstring-to-markdown>=0.17,<1", "ty>=0.0.75", "numpy", "matplotlib"]
+# dependencies = [
+#     "marimo==0.25.1",
+#     "symbolica==3.0.1",
+#     "anywidget>=0.9,<1",
+#     "numpy",
+#     "matplotlib",
+# ]
 # ///
 
 # ruff: noqa: B018, PLR1711 -- marimo uses final expressions and explicit cell returns.
@@ -33,7 +39,6 @@ def _():
         Symbol,
     )
     from symbolica.community import hepkit as hep
-    from symbolica.community.hepkit import oneloop
 
     return (
         E,
@@ -47,7 +52,6 @@ def _():
         hep,
         mo,
         np,
-        oneloop,
         perf_counter,
         plt,
         prod,
@@ -565,6 +569,40 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
+def _(integrable, mass, mo, np, p, q):
+    import importlib.util
+    import sys
+
+    _available = "symbolica.community.hepkit_oneloop_native" in sys.modules or (
+        importlib.util.find_spec("symbolica.community.hepkit_oneloop_native")
+        is not None
+    )
+    reference = None
+    if _available and integrable:
+        from symbolica.community.hepkit import oneloop
+
+        _finite, _pole, _double_pole = oneloop.c0(
+            p.mass_squared,
+            q.mass_squared,
+            (p + q).mass_squared,
+            *([mass.value**2] * 3),
+            backend="expression",
+        )
+        assert abs(_pole) < 1e-12 and abs(_double_pole) < 1e-12
+        assert abs(_finite.imag) < 1e-10 * max(1, abs(_finite.real))
+        reference = -_finite.real / (16 * np.pi**2)
+
+    mo.md(
+        "The independent **OneLOop** reference is available."
+        if _available
+        else "The multiloop gallery, symbolic CFF/LTD checks, plots and sampling run here. "
+        "Only the independent **OneLOop reference** requires the native host: the pinned "
+        "adapter currently links native code generation and SymJIT. No replacement reference is used."
+    )
+    return (reference,)
+
+
+@app.cell(hide_code=True)
 def _(
     NumericalIntegrator,
     cff_evaluator,
@@ -577,7 +615,7 @@ def _(
     mass,
     mo,
     np,
-    oneloop,
+    reference,
     p,
     perf_counter,
     q,
@@ -594,16 +632,6 @@ def _(
         mo.md("Select **Run integration comparison** to sample."),
     )
     _settings = integration_settings.value
-    _finite, _pole, _double_pole = oneloop.c0(
-        p.mass_squared,
-        q.mass_squared,
-        (p + q).mass_squared,
-        *([mass.value**2] * 3),
-        backend="expression",
-    )
-    assert abs(_pole) < 1e-12 and abs(_double_pole) < 1e-12
-    assert abs(_finite.imag) < 1e-10 * max(1, abs(_finite.real))
-    reference = -_finite.real / (16 * np.pi**2)
     methods = [
         "Uniform Cartesian",
         "Uniform spherical",
@@ -673,14 +701,21 @@ def _(
                     "estimate": _mean,
                     "standard error": _error,
                     "evaluations": _count,
-                    "deviation / error": (_mean - reference) / _error,
+                    "deviation / error": (
+                        (_mean - reference) / _error if reference is not None else None
+                    ),
                     "max |weight|": max(abs(_negative), _positive),
                     "seconds": perf_counter() - _start,
                 }
             )
     mo.vstack(
         [
-            mo.md(f"**OneLOop reference:** {reference:.12g}"),
+            mo.md(
+                f"**OneLOop reference:** {reference:.12g}"
+                if reference is not None
+                else "**OneLOop reference unavailable in this browser build.** "
+                "Sampling uses the actual CFF integrand; no substitute reference is used."
+            ),
             mo.ui.table(summaries, pagination=False, selection=None),
         ]
     )
@@ -689,22 +724,26 @@ def _(
 
 @app.cell(hide_code=True)
 def _(distributions, histories, methods, mo, np, plt, reference):
+    _normalization = reference if reference is not None else 1.0
     _figure, _axes = plt.subplots(1, 3, figsize=(12, 3.4), layout="constrained")
     for _method in methods:
         _history = [row for row in histories if row["method"] == _method]
         _n = [row["evaluations"] for row in _history]
         _axes[0].errorbar(
             _n,
-            [row["mean"] / reference - 1 for row in _history],
-            yerr=[row["error"] / abs(reference) for row in _history],
+            [
+                row["mean"] / _normalization - (reference is not None)
+                for row in _history
+            ],
+            yerr=[row["error"] / abs(_normalization) for row in _history],
             marker=".",
             capsize=2,
             label=_method,
         )
         _axes[1].loglog(
-            _n, [row["error"] / abs(reference) for row in _history], marker="."
+            _n, [row["error"] / abs(_normalization) for row in _history], marker="."
         )
-        _weights = np.abs(distributions[_method]) / abs(reference)
+        _weights = np.abs(distributions[_method]) / abs(_normalization)
         _axes[2].hist(
             np.log10(_weights[_weights > 0]),
             bins=45,
@@ -712,11 +751,25 @@ def _(distributions, histories, methods, mo, np, plt, reference):
             histtype="step",
             label=_method,
         )
-    _axes[0].axhline(0, color="black", linewidth=0.8)
-    _axes[0].set(xlabel="Evaluations", ylabel="Estimate / reference − 1")
+    if reference is not None:
+        _axes[0].axhline(0, color="black", linewidth=0.8)
+    _axes[0].set(
+        xlabel="Evaluations",
+        ylabel="Estimate / reference − 1"
+        if reference is not None
+        else "Integral estimate",
+    )
     _axes[0].legend(fontsize=7)
-    _axes[1].set(xlabel="Evaluations", ylabel="Relative standard error")
-    _axes[2].set(xlabel="log₁₀(|weight| / |reference|)", ylabel="Density")
+    _axes[1].set(
+        xlabel="Evaluations",
+        ylabel="Relative standard error" if reference is not None else "Standard error",
+    )
+    _axes[2].set(
+        xlabel="log₁₀(|weight| / |reference|)"
+        if reference is not None
+        else "log₁₀(|weight|)",
+        ylabel="Density",
+    )
     plt.close(_figure)
     mo.vstack(
         [
@@ -727,6 +780,14 @@ def _(distributions, histories, methods, mo, np, plt, reference):
                 "try **massless spacelike** kinematics."
             ),
         ]
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(cff, ltd, mo):
+    mo.Html(
+        '<p data-notebook-ready="08_numerical_cff_ltd_marimo">CFF and LTD ready.</p>'
     )
     return
 

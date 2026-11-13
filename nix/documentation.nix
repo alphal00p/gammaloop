@@ -11,6 +11,7 @@
   ciArgs,
   ciCargoProfile,
   nativeCargoArtifacts,
+  notebookCargoArtifacts,
   dummyCargoTarget,
   normalizeWorkspaceHackBuildScriptTimestampScript,
   workspacePackageSrcFor,
@@ -46,6 +47,237 @@ let
   );
 
   linnetPython = docsPkgs.python313;
+
+  # Match the islands runtime used by the published notebooks. Keep this
+  # exporter independent of the native Cargo producer and the browser wheel.
+  # Python 3.14 can read the Zstandard-compressed browser wheel metadata.
+  notebookMarimo =
+    python:
+    python.marimo.overridePythonAttrs (_: {
+      version = "0.25.1";
+      src = docsPkgs.fetchPypi {
+        pname = "marimo";
+        version = "0.25.1";
+        hash = "sha256-k02yzrbCuMmuNRSnoi5rIuz1T6vqC2E4rtGYD48VNv8=";
+      };
+    });
+  # Keep the upstream islands bundle and worker together. Preloading uses
+  # Pyodide's package API; it does not remove runtime packages or wheel features.
+  notebookRuntimeSource = lib.fileset.toSource {
+    root = workspaceRoot;
+    fileset = lib.fileset.unions [
+      (workspaceRoot + "/crates/linnet-py/examples/prepare_runtime.py")
+      (workspaceRoot + "/crates/linnet-py/examples/native-loader.js")
+    ];
+  };
+  notebookRuntimeLock = pkgs.fetchurl {
+    url = "https://wasm.marimo.app/pyodide-lock.json?v=0.25.1&pyodide=v314.0.0";
+    hash = "sha256-WYu6E1MKQ3B2FesJJH5csJu/W/m1C/nJ9E1xT0YUdgc=";
+  };
+  notebookStdlib = pkgs.fetchurl {
+    url = "https://cdn.jsdelivr.net/pyodide/v314.0.0/full/python_stdlib.zip";
+    hash = "sha256-EhXNI5onDBOj7LGoTIS3syQbr36n9UYV8A15/2nIJ4c=";
+  };
+  notebookRuntimePackages = (builtins.fromJSON (builtins.readFile notebookRuntimeLock)).packages;
+  notebookRuntimeClosure = builtins.genericClosure {
+    startSet = map (key: { inherit key; }) [
+      "micropip"
+      "msgspec"
+      "marimo-base"
+      "markdown"
+      "pymdown-extensions"
+      "narwhals"
+      "packaging"
+      "pygments"
+      "pyodide-http"
+      "jedi"
+      "docutils"
+      "anywidget"
+      "ipython"
+      "numpy"
+    ];
+    operator =
+      item:
+      map (key: { key = lib.replaceStrings [ "_" ] [ "-" ] key; }) (
+        notebookRuntimePackages.${item.key}.depends or [ ]
+      );
+  };
+  notebookRuntimeWheels = map (
+    item:
+    let
+      package = notebookRuntimePackages.${item.key};
+    in
+    pkgs.fetchurl {
+      url =
+        if lib.hasPrefix "https://" package.file_name then
+          package.file_name
+        else
+          "https://cdn.jsdelivr.net/pyodide/v314.0.0/full/${package.file_name}";
+      sha256 = package.sha256;
+    }
+  ) notebookRuntimeClosure;
+  notebookIslands =
+    pkgs.runCommand "notebook-islands-0.25.1"
+      {
+        src = pkgs.fetchurl {
+          url = "https://registry.npmjs.org/@marimo-team/islands/-/islands-0.25.1.tgz";
+          hash = "sha256-/gn0jSRlnujG4yUk+FxC08BfZvgprJ4N0aO2xiyRUKc=";
+        };
+        nativeBuildInputs = [ docsPkgs.python314 ];
+      }
+      ''
+        tar xf "$src" package/dist
+        mkdir -p "$out"
+        cp -r package/dist/. "$out/"
+        chmod -R u+w "$out"
+        python ${notebookRuntimeSource}/crates/linnet-py/examples/prepare_runtime.py "$out" \
+          ${self.packages.${pkgs.stdenv.hostPlatform.system}.notebook-wasm-wheel}/*.whl \
+          ${notebookRuntimeLock} ${notebookStdlib} ${lib.escapeShellArgs (map toString notebookRuntimeWheels)}
+      '';
+
+  notebookPython = docsPkgs.python314.withPackages (python: [
+    python.playwright
+    (notebookMarimo python)
+  ]);
+  nativeNotebookPython = docsPkgs.python313.withPackages (python: [
+    (notebookMarimo python)
+    python.numpy
+    python.matplotlib
+    python.anywidget
+  ]);
+
+  notebookSources = lib.fileset.toSource {
+    root = workspaceRoot;
+    fileset = lib.fileset.unions [
+      (workspaceRoot + "/crates/linnet-py/examples")
+      (workspaceRoot + "/crates/feynkit-py/examples")
+      (lib.fileset.difference (lib.fileset.fileFilter (file: file.hasExt "py") (
+        workspaceRoot + "/examples/notebooks"
+      )) (workspaceRoot + "/examples/notebooks/symbolica-host"))
+      (workspaceRoot + "/docs/api/python/spynso3.pyi")
+      (workspaceRoot + "/assets/models/ufo/scalars")
+      (workspaceRoot + "/docs/products/linnet/content/quickstart-python.typ")
+    ];
+  };
+
+  alphal00pDocsNotebooks = pkgs.writeShellApplication {
+    name = "alphal00p-docs-notebooks";
+    runtimeInputs = [ pkgs.uv ];
+    text = ''
+      exec ${notebookPython}/bin/python \
+        ${notebookSources}/crates/linnet-py/examples/export_wasm.py --runtime ${notebookIslands} "$@"
+    '';
+  };
+
+  alphal00pDocsNotebookProfile = pkgs.writeShellApplication {
+    name = "profile-notebook-startup";
+    text = ''
+      exec ${notebookPython}/bin/python \
+        ${notebookSources}/crates/linnet-py/examples/profile_wasm.py "$@" ${pkgs.chromium}/bin/chromium
+    '';
+  };
+
+  notebookUfoWheel =
+    let
+      packages =
+        (builtins.fromTOML (builtins.readFile (workspaceRoot + "/nix/ufo-runtime/uv.lock"))).package;
+      loader = lib.findFirst (package: package.name == "ufo-model-loader") null packages;
+      source = pkgs.fetchurl { inherit (builtins.head loader.wheels) url hash; };
+      filename = builtins.baseNameOf (builtins.head loader.wheels).url;
+    in
+    pkgs.runCommand "notebook-ufo-wheel-${loader.version}"
+      {
+        passthru = { inherit filename; };
+      }
+      ''
+        mkdir -p "$out"
+        cp ${source} "$out/${filename}"
+      '';
+
+  # Native rendering uses the invoking user's license. The portable wheels and
+  # exporter are separate Nix outputs, reused across documentation edits.
+  documentationCells = import ./documentation-cells.nix {
+    inherit
+      pkgs
+      workspaceRoot
+      docsTypst
+      docsFontPath
+      ;
+    notebookWheel = self.packages.${pkgs.stdenv.hostPlatform.system}.notebook-wasm-wheel;
+    linnestWasm = self.packages.${pkgs.stdenv.hostPlatform.system}.linnest-wasm;
+  };
+
+  alphal00pDocsCells = pkgs.writeShellApplication {
+    name = "alphal00p-docs-cells";
+    text = ''
+      exec ${docsPkgs.python314}/bin/python \
+        ${documentationCells.source}/scripts/prepare-documentation-cells.py \
+        --bundle ${documentationCells} --runtime ${notebookIslands} --site "$1"
+    '';
+  };
+
+  alphal00pDocsCellsTest = pkgs.writeShellApplication {
+    name = "test-documentation-cells";
+    text = ''
+      if [[ $# -lt 1 || $# -gt 2 ]]; then
+        echo "Usage: test-documentation-cells OUTPUT [GENERATED_SITE]" >&2
+        exit 2
+      fi
+      ${notebookPython}/bin/python \
+        ${documentationCells.source}/scripts/check-documentation-cells-browser.py \
+        --bundle ${documentationCells} --runtime ${notebookIslands} \
+        --chromium ${docsPkgs.chromium}/bin/chromium --output "$1"
+      if [[ $# -eq 2 ]]; then
+        ${notebookPython}/bin/python \
+          ${documentationCells.source}/scripts/check-documentation-editors-browser.py \
+          --site "$2" --output "$1/editors" --chromium ${docsPkgs.chromium}/bin/chromium
+        ${notebookPython}/bin/python \
+          ${documentationCells.source}/scripts/check-notebook-startup-browser.py \
+          --site "$2" --output "$1/startup" --chromium ${docsPkgs.chromium}/bin/chromium
+      fi
+    '';
+  };
+
+  alphal00pDocsPublication = pkgs.writeShellApplication {
+    name = "alphal00p-docs-publication";
+    runtimeInputs = [ pkgs.coreutils ];
+    text = ''
+      if [[ $# -ne 1 ]]; then
+        echo "Usage: alphal00p-docs-publication OUTPUT_DIRECTORY" >&2
+        exit 2
+      fi
+      output=$(realpath -m -- "$1")
+      wheels=( ${self.packages.${pkgs.stdenv.hostPlatform.system}.notebook-wasm-wheel}/*.whl )
+      test "''${#wheels[@]}" -eq 1
+      wheel=''${wheels[0]}
+      ufo_wheel=${notebookUfoWheel}/${notebookUfoWheel.filename}
+      # Reject missing or wrong-platform inputs before the licensed site render.
+      ${notebookPython}/bin/python - "$wheel" "$ufo_wheel" <<'PY'
+      import runpy
+      import sys
+      from pathlib import Path
+
+      exporter = runpy.run_path("${notebookSources}/crates/linnet-py/examples/export_wasm.py")
+      exporter["validate_notebook_wheel"](Path(sys.argv[1]))
+      exporter["validate_notebook_wheel"](Path(sys.argv[2]), "ufo-model-loader")
+      PY
+      ${alphal00pDocsPages}/bin/alphal00p-docs-pages "$output"
+      channel=latest
+      if [[ "''${ALPHAL00P_DOCS_CHANNEL:-latest}" == snapshot ]]; then
+        channel="snapshots/''${ALPHAL00P_DOCS_SNAPSHOT_TAG}"
+      fi
+      for product in linnet gammaloop spenso idenso feynkit; do
+        dependencies=()
+        if [[ "$product" == feynkit ]]; then
+          dependencies=(--dependency-wheel "$ufo_wheel")
+        fi
+        ${alphal00pDocsNotebooks}/bin/alphal00p-docs-notebooks \
+          --docs "$product" --wheel "$wheel" "''${dependencies[@]}" \
+          --output "$output/products/$product/$channel/assets/notebooks"
+      done
+      ${alphal00pDocsCells}/bin/alphal00p-docs-cells "$output"
+    '';
+  };
 
   docsFontPath = "${docsPkgs.roboto}/share/fonts/truetype";
 
@@ -101,6 +333,7 @@ let
         # The GammaLoop marks import the logo geometry from this Kurvst example.
         (workspaceRoot + "/crates/kurvst/typst/examples/knot-logo.typ")
         (workspaceRoot + "/scripts/update-docs-pages.sh")
+        (workspaceRoot + "/scripts/prepare-documentation-cells.py")
         (workspaceRoot + "/examples/api/python")
         (workspaceRoot + "/examples/notebooks")
         (workspaceRoot + "/examples/cli/aa_aa/2L/graphs/GL00.dot")
@@ -190,13 +423,20 @@ let
       EOF
       install -D -m 0644 ${dummyCargoTarget} ${workspacePrebuildPackageDir}/build.rs
       touch -d @0 ${workspacePrebuildPackageDir}/Cargo.toml ${workspacePrebuildPackageDir}/src/lib.rs ${workspacePrebuildPackageDir}/build.rs
-      ${lib.concatMapStringsSep "\n" (package: ''
-        cat >> crates/${package}/Cargo.toml <<'EOF'
-        [dependencies.${workspacePrebuildPackage}]
-        path = "../${workspacePrebuildPackage}"
-        EOF
-        touch -d @0 crates/${package}/Cargo.toml
-      '') ["alphal00p-docs-builder" "alphal00p-docs-examples" "alphal00p-docs-python-exporter"]}
+      ${lib.concatMapStringsSep "\n"
+        (package: ''
+          cat >> crates/${package}/Cargo.toml <<'EOF'
+          [dependencies.${workspacePrebuildPackage}]
+          path = "../${workspacePrebuildPackage}"
+          EOF
+          touch -d @0 crates/${package}/Cargo.toml
+        '')
+        [
+          "alphal00p-docs-builder"
+          "alphal00p-docs-examples"
+          "alphal00p-docs-python-exporter"
+        ]
+      }
       install -D -m 0644 ${documentationCatalogCargoToml} crates/alphal00p-docs-catalogs/Cargo.toml
       touch -d @0 crates/alphal00p-docs-catalogs/Cargo.toml
     '';
@@ -205,39 +445,56 @@ let
       cargo update --offline --workspace
     '';
   };
-  documentationNativeCargoToml = workspaceAnchorCargoTomlFor workspacePrebuildPackage
-    (lib.filter (package:
-      !lib.hasPrefix "alphal00p-docs-" package
-      && package != "gammaloop-integration-tests"
-      && package != "clinnet") workspacePrebuildDependencyPackages)
-    craneCiFeaturesFor;
+  documentationNativeCargoToml = workspaceAnchorCargoTomlFor workspacePrebuildPackage (lib.filter (
+    package:
+    !lib.hasPrefix "alphal00p-docs-" package
+    && package != "gammaloop-integration-tests"
+    && package != "clinnet"
+  ) workspacePrebuildDependencyPackages) craneCiFeaturesFor;
   # The examples build script uses neutral catalogs. Keep the native anchor
   # out of that host dependency graph until a reference exporter needs it.
   documentationCatalogCargoToml =
     let
-      manifest = builtins.fromTOML (builtins.readFile (workspaceRoot + "/crates/alphal00p-docs-catalogs/Cargo.toml"));
+      manifest = builtins.fromTOML (
+        builtins.readFile (workspaceRoot + "/crates/alphal00p-docs-catalogs/Cargo.toml")
+      );
     in
-    (pkgs.formats.toml {}).generate "alphal00p-docs-catalogs-Cargo.toml" (manifest // {
-      dependencies = manifest.dependencies // {
-        ${workspacePrebuildPackage} = {
-          path = "../${workspacePrebuildPackage}";
-          optional = true;
+    (pkgs.formats.toml { }).generate "alphal00p-docs-catalogs-Cargo.toml" (
+      manifest
+      // {
+        dependencies = manifest.dependencies // {
+          ${workspacePrebuildPackage} = {
+            path = "../${workspacePrebuildPackage}";
+            optional = true;
+          };
         };
-      };
-      features = manifest.features // lib.genAttrs ["gammaloop-reference" "vakint-reference"]
-        (feature: manifest.features.${feature} ++ ["dep:${workspacePrebuildPackage}"]);
-    });
+        features =
+          manifest.features
+          // lib.genAttrs [ "gammaloop-reference" "vakint-reference" ] (
+            feature: manifest.features.${feature} ++ [ "dep:${workspacePrebuildPackage}" ]
+          );
+      }
+    );
   documentationRustComponents = lib.concatMap (
     product: product.rust_components or [ ]
   ) documentationRegistry.product;
   documentationCatalogFeatures = "gammaloop-reference,vakint-reference";
   # Products can share a Python owner (Idenso uses Spenso's binding module).
   # Prebuild the exporter's actual feature contexts once each.
-  documentationPythonExporterBuildCommands = lib.concatMapStringsSep "\n" (feature: ''
-    cargoWithProfile build --locked -p alphal00p-docs-python-exporter --features ${lib.escapeShellArg feature}
-  '') (builtins.attrNames (builtins.removeAttrs
-    (builtins.fromTOML (builtins.readFile (workspaceRoot + "/crates/alphal00p-docs-python-exporter/Cargo.toml"))).features
-    ["default"]));
+  documentationPythonExporterBuildCommands =
+    lib.concatMapStringsSep "\n"
+      (feature: ''
+        cargoWithProfile build --locked -p alphal00p-docs-python-exporter --features ${lib.escapeShellArg feature}
+      '')
+      (
+        builtins.attrNames (
+          builtins.removeAttrs
+            (builtins.fromTOML (
+              builtins.readFile (workspaceRoot + "/crates/alphal00p-docs-python-exporter/Cargo.toml")
+            )).features
+            [ "default" ]
+        )
+      );
   documentationRustdocBuildCommands = lib.concatMapStringsSep "\n" (
     component:
     let
@@ -328,6 +585,14 @@ let
   alphal00pDocsDerivationArgs = alphal00pDocsRealCargoArgs // {
     cargoArtifacts = alphal00pDocsCargoArtifacts;
     src = documentationSrc;
+    # Native Tidy/manual rendering and browser cells must use the same plugin
+    # built from the current Rust source, never the checked-in WASM snapshot.
+    postPatch = alphal00pDocsRealCargoArgs.postPatch + ''
+      plugin=${self.packages.${pkgs.stdenv.hostPlatform.system}.linnest-wasm}
+      install -m 0644 "$plugin/linnest.wasm" crates/linnest/typst/linnest.wasm
+      install -m 0644 "$plugin/ec-layout.wasm" crates/linnest/typst/ec-layout.wasm
+      install -m 0644 "$plugin/kurvst.wasm" crates/kurvst/typst/kurvst.wasm
+    '';
     nativeBuildInputs = (alphal00pDocsCargoArgs.nativeBuildInputs or [ ]) ++ [
       docsTypst
       pkgs.gitMinimal
@@ -347,21 +612,11 @@ let
     installPhaseCommand = "";
   };
 
-  alphal00pDocsValidationCommands = ''
-    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-catalogs --features ${lib.escapeShellArg documentationCatalogFeatures} --bin alphal00p-docs-gammaloop-reference -- --check
-    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-catalogs --features ${lib.escapeShellArg documentationCatalogFeatures} --bin alphal00p-docs-vakint-reference -- --check
-    cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-examples
-    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop -- gammaloop-python docs/api/python/gammaloop-python.pyi --check
-    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features linnet -- linnet-graph docs/api/python/linnet-graph.pyi --check
-    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features spenso -- spynso3 docs/api/python/spynso3.pyi --check
-    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features vakint -- vakint-community docs/api/python/vakint-community.pyi --check
-    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features feynkit -- feynkit-community docs/api/python/feynkit-community.pyi --check
-    cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop
-    cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features linnet
+  alphal00pDocsInstalledWheelCommands = ''
     linnet_python="$TMPDIR/alphal00p-docs-linnet-graph"
     export UV_CACHE_DIR="$TMPDIR/alphal00p-docs-uv-cache"
     export UV_OFFLINE=true
-    uv venv "$linnet_python" --python "${linnetPython}/bin/python3" --system-site-packages
+    uv venv "$linnet_python" --python "${nativeNotebookPython}/bin/python3" --system-site-packages
     linnet_wheels="$TMPDIR/alphal00p-docs-linnet-wheels"
     maturin build \
       --offline \
@@ -390,6 +645,24 @@ let
         path.chmod(path.stat().st_mode | stat.S_IWUSR)
     PY
     "$linnet_python/bin/python" -m unittest discover -s crates/linnet-py/tests -p 'test_*.py'
+    "$linnet_python/bin/python" crates/feynkit-py/tests/installed_four_loop_showcase.py
+    export MPLBACKEND=Agg
+    "$linnet_python/bin/python" crates/feynkit-py/tests/installed_numerical_showcase.py \
+      2>&1 | tee "$TMPDIR/native-notebook-tests.log"
+  '';
+
+  alphal00pDocsValidationCommands = ''
+    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-catalogs --features ${lib.escapeShellArg documentationCatalogFeatures} --bin alphal00p-docs-gammaloop-reference -- --check
+    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-catalogs --features ${lib.escapeShellArg documentationCatalogFeatures} --bin alphal00p-docs-vakint-reference -- --check
+    cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-examples
+    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop -- gammaloop-python docs/api/python/gammaloop-python.pyi --check
+    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features linnet -- linnet-graph docs/api/python/linnet-graph.pyi --check
+    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features spenso -- spynso3 docs/api/python/spynso3.pyi --check
+    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features vakint -- vakint-community docs/api/python/vakint-community.pyi --check
+    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features feynkit -- feynkit-community docs/api/python/feynkit-community.pyi --check
+    cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop
+    cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features linnet
+    ${alphal00pDocsInstalledWheelCommands}
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- check
     svg_assets="$TMPDIR/alphal00p-svg-assets"
     bash scripts/render-docs-svg-assets.sh "$svg_assets"
@@ -506,12 +779,16 @@ let
       docs_pages_test="$TMPDIR/alphal00p-docs-pages-test"
       mkdir -p "$docs_pages_test/products/gammaloop/snapshots/legacy"
       mkdir -p "$docs_pages_test/developers"
+      mkdir -p "$docs_pages_test/libraries"
       mkdir -p "$docs_pages_test/.git"
       printf 'historical snapshot\n' > "$docs_pages_test/products/gammaloop/snapshots/legacy/.note"
       printf 'removed developer route\n' > "$docs_pages_test/developers/old.txt"
+      printf 'removed library route\n' > "$docs_pages_test/libraries/old.txt"
       mv "$docs_first/search-index.json" "$TMPDIR/federated-search-index.json"
       if bash ${
-        (workspaceRoot + "/scripts/update-docs-pages.sh")
+        (workspaceRoot + "/scripts/update-docs-pages.sh") (
+          workspaceRoot + "/scripts/prepare-documentation-cells.py"
+        )
       } latest "$docs_first" "$docs_pages_test" \
         2> "$TMPDIR/missing-federated-search-index.err"; then
         missing_search_status=0
@@ -522,19 +799,42 @@ let
       test "$missing_search_status" -ne 0
       grep -Fq 'latest build has no federated search index' \
         "$TMPDIR/missing-federated-search-index.err"
-      bash ${(workspaceRoot + "/scripts/update-docs-pages.sh")} latest "$docs_first" "$docs_pages_test"
+      mv "$docs_first/libraries/index.html" "$TMPDIR/libraries-index.html"
+      if bash ${
+        (workspaceRoot + "/scripts/update-docs-pages.sh") (
+          workspaceRoot + "/scripts/prepare-documentation-cells.py"
+        )
+      } latest "$docs_first" "$docs_pages_test" \
+        2> "$TMPDIR/missing-libraries-index.err"; then
+        echo "Publication accepted an incomplete libraries page" >&2
+        exit 1
+      fi
+      mv "$TMPDIR/libraries-index.html" "$docs_first/libraries/index.html"
+      grep -Fq 'latest build has no libraries page' "$TMPDIR/missing-libraries-index.err"
+      test -s "$docs_pages_test/libraries/old.txt"
+      bash ${
+        (workspaceRoot + "/scripts/update-docs-pages.sh") (
+          workspaceRoot + "/scripts/prepare-documentation-cells.py"
+        )
+      } latest "$docs_first" "$docs_pages_test"
       cmp "$docs_pages_test/search-index.json" "$docs_first/search-index.json"
+      cmp "$docs_pages_test/libraries/index.html" "$docs_first/libraries/index.html"
+      test ! -e "$docs_pages_test/libraries/old.txt"
       test -s "$docs_pages_test/products/gammaloop/snapshots/legacy/.note"
       test ! -e "$docs_pages_test/developers/old.txt"
       test -s "$docs_pages_test/developers/architecture/gammaloop-architecture/index.html"
       test -s "$docs_pages_test/developers/architecture/documentation-improvement-plan/index.html"
       cp "$docs_pages_test/index.html" "$TMPDIR/portal-before-snapshot.html"
+      cp "$docs_pages_test/libraries/index.html" "$TMPDIR/libraries-before-snapshot.html"
       cp "$docs_pages_test/developers/.note" "$TMPDIR/developers-before-snapshot.note"
       cp "$docs_pages_test/products/gammaloop/latest/.note" "$TMPDIR/latest-before-snapshot.note"
       bash ${
-        (workspaceRoot + "/scripts/update-docs-pages.sh")
+        (workspaceRoot + "/scripts/update-docs-pages.sh") (
+          workspaceRoot + "/scripts/prepare-documentation-cells.py"
+        )
       } snapshot "$docs_snapshot" "$docs_pages_test" v0.3.4
       cmp "$docs_pages_test/index.html" "$TMPDIR/portal-before-snapshot.html"
+      cmp "$docs_pages_test/libraries/index.html" "$TMPDIR/libraries-before-snapshot.html"
       cmp "$docs_pages_test/developers/.note" "$TMPDIR/developers-before-snapshot.note"
       cmp "$docs_pages_test/products/gammaloop/latest/.note" "$TMPDIR/latest-before-snapshot.note"
       for product in gammaloop linnet spenso idenso vakint feynkit; do
@@ -545,6 +845,7 @@ let
       cp -R "$docs_first"/. "$out"/
 
       test -s "$out/index.html"
+      test -s "$out/libraries/index.html"
       test -e "$out/.nojekyll"
       test -s "$out/assets/site.css"
       test -s "$out/assets/site.js"
@@ -605,6 +906,9 @@ let
       done
       test -s "$out/products/feynkit/latest/reference/python/feynkit-community/index.html"
       test -s "$out/products/gammaloop/latest/reference/rust/theme.css"
+      for product in gammaloop linnet spenso idenso vakint feynkit; do
+        cmp docs/assets/rustdoc.css "$out/products/$product/latest/reference/rust/theme.css"
+      done
       grep -Fq 'href="../theme.css"' \
         "$out/products/gammaloop/latest/reference/rust/gammalooprs/index.html"
       grep -Fq 'class="alphal00p-rustdoc-bar"' \
@@ -626,8 +930,26 @@ let
         "$out/products/linnet/latest/search-index.json"
       grep -Fq 'href="../../../../gammaloop/latest/guides/kurvst/"' \
         "$out/products/linnet/latest/reference/typst/index.html"
+      ${
+        self.packages.${pkgs.stdenv.hostPlatform.system}.test-notebook-examples
+      }/bin/test-notebook-examples \
+        "$out/notebook-tests" "$out"
     '';
   };
+
+  alphal00pDocsNativeNotebooks = mkCargoRuntime (
+    alphal00pDocsDerivationArgs
+    // {
+      pname = "test-native-notebook-examples";
+      cargoArtifacts = notebookCargoArtifacts;
+      buildPhaseCargoCommand = ''
+        ${alphal00pDocsInstalledWheelCommands}
+        cargo clippy --offline --locked --profile ${docsCargoProfile} \
+          -p feynkit-py --features oneloop --lib -- --deny warnings
+        cp "$TMPDIR/native-notebook-tests.log" "$out/"
+      '';
+    }
+  );
 
   alphal00pDocsPages = mkCargoRuntime (
     alphal00pDocsDerivationArgs
@@ -681,6 +1003,13 @@ in
     linnetPython
     documentationDeveloperScopeSources
     alphal00pDocsCargoArtifacts
+    alphal00pDocsNotebooks
+    alphal00pDocsCells
+    alphal00pDocsCellsTest
+    alphal00pDocsNotebookProfile
+    alphal00pDocsNativeNotebooks
+    notebookUfoWheel
+    alphal00pDocsPublication
     alphal00pDocsPages
     alphal00pDocsSnapshotFixture
     alphal00pDocsCheck

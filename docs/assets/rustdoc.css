@@ -1,6 +1,14 @@
+@import url("../../assets/code.css");
+@import url("../../assets/fonts.css");
+
+:root {
+  --font-ui: "Inter", Arial, sans-serif;
+  --font-heading: "Literata", Georgia, serif;
+}
+
 :root[data-theme="light"],
 :root:not([data-theme]) {
-  --font-family: "Fira Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-family: "Atkinson Hyperlegible", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --alphal00p-heading-color: #3d2645;
   --main-background-color: #f9f6f0;
   --main-color: #333;
@@ -28,7 +36,7 @@
 }
 
 :root[data-theme="dark"] {
-  --font-family: "Fira Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-family: "Atkinson Hyperlegible", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --alphal00p-heading-color: #f8effa;
   --main-background-color: #211a23;
   --main-color: #eee8ef;
@@ -69,7 +77,12 @@ body.rustdoc {
 
 body.rustdoc :where(h1, h2, h3, h4, h5, h6) {
   color: var(--alphal00p-heading-color);
+  font-family: var(--font-heading);
+  font-weight: 500;
 }
+
+body.rustdoc :where(code, pre, .item-decl) { font-family: var(--font-mono); }
+body.rustdoc :where(button, select, input, .sidebar, .out-of-band) { font-family: var(--font-ui); }
 
 body.rustdoc :where(a, button, input, select, summary):focus-visible {
   border-radius: 2px;
@@ -83,7 +96,7 @@ body.rustdoc :where(a, button, input, select, summary):focus-visible {
   border-bottom: 1px solid var(--border-color);
   color: var(--main-color);
   display: flex;
-  font: 0.8125rem/1.2 "Fira Sans", Arial, sans-serif;
+  font: 0.8125rem/1.2 var(--font-ui);
   gap: 0.55rem;
   height: 2.25rem;
   left: 0;
@@ -127,7 +140,7 @@ body.rustdoc pre,
 body.rustdoc .item-decl,
 body.rustdoc .example-wrap pre {
   border: 1px solid var(--border-color);
-  border-radius: 5px;
+  border-radius: 0;
   box-shadow: none;
 }
 
@@ -161,3 +174,15 @@ body.rustdoc .sidebar {
     padding-top: 0;
   }
 }
+
+/* Fenced source shares the same font, palette and frame as documentation cells. */
+:root { --hairline: var(--border-color); --surface: var(--code-block-background-color); --ink-muted: var(--sidebar-link-color); }
+body.rustdoc .docblock pre { font: 400 var(--code-size)/var(--code-leading) var(--font-mono); border-radius: 0; }
+body.rustdoc .docblock pre > code { font: inherit; }
+body.rustdoc .rust :is(.kw, .kw-2, .bool, .self, .op) { color: var(--syntax-keyword); }
+body.rustdoc .rust :is(.string, .string-continuation) { color: var(--syntax-string); }
+body.rustdoc .rust :is(.comment, .doccomment) { color: var(--syntax-comment); }
+body.rustdoc .rust .number { color: var(--syntax-number); }
+body.rustdoc .rust :is(.fn, .macro, .macro-nonterminal) { color: var(--syntax-call); }
+body.rustdoc .rust :is(.attribute, .lifetime) { color: var(--syntax-property); }
+body.rustdoc .example-wrap { overflow: visible; margin-left: var(--code-gutter); }

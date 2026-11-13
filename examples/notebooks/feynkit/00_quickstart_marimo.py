@@ -2,7 +2,7 @@
 # requires-python = ">=3.11"
 # dependencies = [
 #     "anywidget>=0.9,<1",
-#     "marimo==0.24.0",
+#     "marimo==0.25.1",
 #     "symbolica==3.0.1",
 # ]
 # ///
@@ -106,9 +106,7 @@ def _(mo):
 
 @app.cell
 def _(model, table):
-    generated = model.generate_diagrams(
-        incoming=["phi"],
-        outgoing=["phi", "phi"],
+    generated = model.process(["phi"], ["phi", "phi"]).generate_diagrams(
         loops=1,
         max_vertices=3,
         allow_self_loops=True,

@@ -112,6 +112,29 @@ fn parsed_dot_layout_keys_do_not_configure_layout() {
 }
 
 #[test]
+fn parsed_dot_layout_keys_survive_graph_info() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph { steps=1; seed=99; graph [subtitle="nested"]; a -> b }"#,
+    )
+    .unwrap();
+    let graphs = decode_graphs(&parsed);
+    let info: TypstDotGraphInfo = decode_cbor(&graph_info_bytes(&graphs[0]).unwrap());
+
+    assert_eq!(
+        info.global_statements.get("steps").map(String::as_str),
+        Some("1")
+    );
+    assert_eq!(
+        info.global_statements.get("seed").map(String::as_str),
+        Some("99")
+    );
+    assert_eq!(
+        info.global_statements.get("subtitle").map(String::as_str),
+        Some("nested")
+    );
+}
+
+#[test]
 fn explicit_layout_figment_configures_layout() {
     assert_eq!(
         crate::LayoutConfig::default().subgraph_mode,

@@ -276,8 +276,7 @@ docs-notebooks WHEEL PRODUCT="linnet" OUTPUT="docs/generated/notebooks" DEPENDEN
     if [ -n "$dependency_wheel" ]; then
         args+=(--dependency-wheel "$dependency_wheel")
     fi
-    uv run --no-project --with marimo==0.24.0 python \
-        crates/linnet-py/examples/export_wasm.py --docs {{ quote(PRODUCT) }} \
+    nix run .#alphal00p-docs-notebooks -- --docs {{ quote(PRODUCT) }} \
         --wheel {{ quote(WHEEL) }} \
         --output {{ quote(OUTPUT + "/products/" + PRODUCT + "/latest/assets/notebooks") }} \
         "${args[@]}"
@@ -286,26 +285,21 @@ docs-notebooks WHEEL PRODUCT="linnet" OUTPUT="docs/generated/notebooks" DEPENDEN
 notebook NAME="spenso_idenso_display" PYTHON="python":
     {{ quote(PYTHON) }} -m marimo edit {{ quote("examples/notebooks/" + NAME + ".py") }}
 
-# Download the pinned pure Python UFO loader wheel for browser showcases.
+# Export the pinned pure Python UFO loader wheel from the Nix store.
 notebook-ufo-wheel OUTPUT="target/notebook-ufo-wheel":
-    uv tool run --from pip pip wheel --no-deps \
-        'ufo-model-loader==1.0.1' \
-        --wheel-dir {{ quote(OUTPUT) }}
+    #!/usr/bin/env bash
+    set -euo pipefail
+    wheel=$(nix build --no-link --print-out-paths .#notebook-ufo-wheel)
+    mkdir -p {{ quote(OUTPUT) }}
+    cp "$wheel/"*.whl {{ quote(OUTPUT) }}/
 
 # Build the shared Symbolica/FeynKit/Spenso/Idenso wheel for browser showcases.
 notebook-wheel OUTPUT="target/notebook-wheels":
     #!/usr/bin/env bash
     set -euo pipefail
-    notebook_toolchain=$(nix build --no-link --print-out-paths .#notebook-wasm-toolchain)
-    export PATH="$notebook_toolchain/bin:$PATH"
-    export RUSTC="$notebook_toolchain/bin/rustc"
-    export CARGO="$notebook_toolchain/bin/cargo"
-    if [ -n "${NIX_SSL_CERT_FILE:-}" ]; then
-        export SSL_CERT_FILE="${SSL_CERT_FILE:-$NIX_SSL_CERT_FILE}"
-    fi
-    CIBW_BUILD=cp314-pyodide_wasm32 uv run --no-project --with cibuildwheel==4.2.0 python \
-        -m cibuildwheel examples/notebooks/symbolica-host --platform pyodide \
-        --output-dir {{ quote(OUTPUT) }}
+    wheels=$(nix build --no-link --print-out-paths .#notebook-wasm-wheel)
+    mkdir -p {{ quote(OUTPUT) }}
+    cp "$wheels/"*.whl {{ quote(OUTPUT) }}/
 
 # Validate the documentation registry and generated inputs.
 docs-check:

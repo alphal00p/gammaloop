@@ -2,7 +2,7 @@
 # requires-python = ">=3.10"
 # dependencies = [
 #     "symbolica==3.0.1",
-#     "marimo==0.24.0",
+#     "marimo==0.25.1",
 #     "anywidget>=0.9,<1",
 # ]
 # ///
@@ -84,17 +84,13 @@ def _(lp, mo):
         value=False,
         label="Custom Python line theme (optional)",
     )
-    show_half_edge_ids = mo.ui.checkbox(
-        value=False,
-        label="Half-edge IDs (optional)",
-    )
     controls = mo.hstack(
-        [node_store, layout_algorithm, custom_theme, show_half_edge_ids],
+        [node_store, layout_algorithm, custom_theme],
         justify="start",
         gap=1.5,
     )
     controls
-    return custom_theme, layout_algorithm, node_store, show_half_edge_ids
+    return custom_theme, layout_algorithm, node_store
 
 
 @app.cell
@@ -107,7 +103,6 @@ def _(
     lp,
     mo,
     node_store,
-    show_half_edge_ids,
 ):
     runtime_context = object()
     receive_data = TaskRecord("platform", 3, runtime_context)
@@ -230,7 +225,6 @@ def _(
     graph.render_config = lp.RenderSettings(
         title="Document intake workflow",
         layouts=_layouts,
-        drawing=lp.DrawOptions(show_half_edge_ids=show_half_edge_ids.value),
     )
     if custom_theme.value:
         _channel_colors = {

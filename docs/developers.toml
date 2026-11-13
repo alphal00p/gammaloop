@@ -1818,6 +1818,34 @@ topics = ["nix", "ci", "cache", "documentation"]
 review_triggers = ["flake.nix", "flake.lock", "nix/**", "nix-ci.nix", ".github/workflows/**", "crates/gammaloop-workspace-hack/**", "crates/alphal00p-docs-builder/**", "justfile"]
 
 [[section.note.scope]]
+path = "nix/documentation.nix"
+symbol = "pinned Marimo exporter and publication assembly"
+anchor = "notebookMarimo ="
+end_anchor = "docsFontPath ="
+# Reviewed 2026-11-10: the cache note describes the pinned exporter, explicit
+# Nix-built browser/UFO wheel inputs, invoking-user site render and version-local
+# assembly. The pinned Marimo helper serves the exporter and native notebook tests;
+# the separate offline WASM derivation owns cross-compilation.
+# Reviewed 2026-11-10: the startup profiler reuses the same pinned Python and
+# Chromium. The exporter preserves compatible packages on reruns and replaces
+# conflicting explicit source pins; native producers and runtime licensing stay fixed.
+# Reviewed 2026-11-10: fixed-hash islands/Pyodide inputs and dependency closure
+# feed a separate runtime preparation layer. Checked bytecode retains Python
+# sources; deterministic support-wheel/native streaming preserves the full module,
+# fonts, data and original standalone wheel. Version and bytecode guards protect
+# the reviewed loader boundary. The note records global source coverage and the
+# controlled profiler's HTTP-cache limitation; native producers/licensing stay fixed.
+# Reviewed 2026-11-10: product payloads reference the prepared manifest hash at
+# the site root. Binary/package caching is immutable and source/version isolated;
+# publication retains prior runtimes and hash-named cache workers for snapshots.
+# Reviewed 2026-11-12: standalone cells add a pinned content-addressed runtime
+# consumer, offline IPython and publication assembly; the cache note now records
+# this boundary. Native Cargo producers and runtime licensing are unchanged.
+# Reviewed 2026-11-12: standalone cell assets and editor checks share the pinned
+# runtime closure; full Marimo exports retain their native editor constructors.
+digest = "a760ed6386f3472e5f4ea1cfc7ce3f00c36ab03a"
+
+[[section.note.scope]]
 # Documentation-impact attestation 2026-08-26: the CI repair completes the
 # documented per-package archive/runtime-source boundary by staging the exact
 # documentation sources and tools, restoring vendored Cargo configuration,
@@ -1882,7 +1910,7 @@ end_anchor = "# Exercise the embedded Typst watcher"
 # No-impact attestation 2026-11-02 against 501183a5: this producer range only
 # changes a comment to describe executable runners inheriting the user's license;
 # registry selection and reusable Cargo artifact construction are unchanged.
-digest = "2f0895ef6312939b1fd6a722f7a4be6df409d780"
+digest = "9df75bc3ca6dfe2b39037c556154037aeddc7448"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
@@ -1905,7 +1933,9 @@ end_anchor = "documentationRegistry = builtins.fromTOML"
 # Reviewed 2026-10-19: linked FeynKit installed tests and the notebook host's
 # Linnet Python shim are staged with existing terminal documentation sources.
 # Source-link and wheel validation stay strict; reusable compiler ownership is unchanged.
-digest = "bfafb920e4cc1fc0511aa12ad4c1f86272bb8e75"
+# Reviewed 2026-11-12: standalone cell assets and editor checks share the pinned
+# runtime closure; full Marimo exports retain their native editor constructors.
+digest = "7f4406d3e0914b896f715710d32af68573d28280"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -2021,7 +2051,23 @@ end_anchor = "\nin\n{\n  inherit"
 # No-impact review 2026-11-02 against e32b14a2: the terminal resource copy
 # makes only its copied directories owner-writable for runtime cleanup. Pinned
 # resource bytes, installed-package discovery and producer ownership are unchanged.
-digest = "46c2a94622bd5edd53e04db1f4bd04a4a771a5b8"
+# Reviewed 2026-11-10: publication checks require the separate libraries index,
+# reject incomplete bundles, remove stale library routes, and preserve the index
+# when publishing a snapshot. The terminal check additionally executes browser
+# notebooks with the Nix-built wheel and native numerical notebooks through Marimo.
+# The focused native runner uses the FeynKit dependency archive, avoiding
+# GammaLoop reference exporters, and checks the optional OneLOop adapter with Clippy.
+# Compiled producers and runtime licensing are unchanged.
+# No-impact attestation 2026-11-10: the terminal publication check compares all
+# six generated Rustdoc themes with the current stylesheet. This strengthens
+# presentation validation without changing producer ownership or cache boundaries.
+# Reviewed 2026-11-12: native documentation rendering and direct browser cells
+# use the same source-built plugins. Editor/runtime checks share pinned assets;
+# scientific Cargo producers and runtime-only licensing remain separate.
+# No-impact attestation 2026-11-12: the installed native notebook runner also
+# executes the canonical four-loop showcase. This adds runtime validation only;
+# compiled producer ownership, cache inputs and runtime licensing are unchanged.
+digest = "79b5eae52f960565e5815ecb9bfa02b6d4f51b04"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"

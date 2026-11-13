@@ -2,7 +2,7 @@
 # requires-python = ">=3.11"
 # dependencies = [
 #     "anywidget>=0.9,<1",
-#     "marimo==0.24.0",
+#     "marimo==0.25.1",
 #     "symbolica==3.0.1",
 #     "ufo-model-loader==1.0.1",
 # ]
@@ -197,9 +197,9 @@ def _(mo):
 
 @app.cell
 def _(model):
-    generated = model.with_filters(vertex_allow=["V_3_SCALAR_000"]).generate_diagrams(
-        incoming=["scalar_0"],
-        outgoing=["scalar_0", "scalar_0"],
+    generated = model.process(
+        ["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"]
+    ).generate_diagrams(
         loops=0,
         max_vertices=3,
     )

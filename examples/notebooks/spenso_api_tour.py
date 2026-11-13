@@ -1,3 +1,14 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "symbolica==3.0.1",
+#     "marimo==0.25.1",
+#     "anywidget>=0.9,<1",
+# ]
+# ///
+
+# ruff: noqa: PLR1711 -- marimo uses explicit cell returns.
+
 """Executable tour of every public Spenso type and its display protocols."""
 
 import marimo
@@ -187,12 +198,22 @@ def example_specification():
 def run_examples():
     """Execute the displayed examples in one shared namespace."""
     EXAMPLES, PRELUDE = example_specification()
+    import sys
+
     namespace = {}
     exec(PRELUDE, namespace)  # noqa: S102 -- execute the owned examples shown below.
     examples = []
     for name, explanation, code, variable in EXAMPLES:
+        if name == "CompiledTensorEvaluator" and sys.platform == "emscripten":
+            # C++ shared-library compilation requires a native toolchain.
+            continue
         exec(code, namespace)  # noqa: S102 -- code is an owned literal from the tour.
         examples.append((name, explanation, code, namespace[variable]))
+    assert namespace["evaluated"].shape == (2, 2)
+    assert [complex(namespace["evaluated"][i]) for i in range(4)] == [2, 1, 0, 3]
+    assert namespace["network_result"].shape == (2, 2)
+    # The network squares [[x, 1], [0, x + 1]] without distributing x.
+    assert (namespace["network_result"][1] - (2 * namespace["x"] + 1)).expand() == 0
     return examples, namespace
 
 
@@ -200,10 +221,16 @@ def run_examples():
 def stub_catalog():
     """Include the complete declared member list beside each example."""
     import ast
+    import sys
     from pathlib import Path
 
-    stub = Path(__file__).resolve().parents[2] / "docs/api/python/spynso3.pyi"
-    source = stub.read_text()
+    if sys.platform == "emscripten":
+        from pyodide.http import open_url
+
+        source = open_url("__SPENSO_STUB_URL__").read()
+    else:
+        stub = Path(__file__).resolve().parents[2] / "docs/api/python/spynso3.pyi"
+        source = stub.read_text()
     catalog = {}
     for node in ast.parse(source).body:
         if isinstance(node, ast.ClassDef):
@@ -237,7 +264,7 @@ def _(mo):
     with **TensorEvaluator**. The remaining entries cover registries, patterns,
     display and simplification settings, policies, and exceptions.
 
-    Every example below has been executed. Expand an entry for its code, live
+    Every displayed example below has been executed. C++ compilation runs only locally. Expand an entry for its code, live
     display, text representation and complete declared member list. All examples
     share `from symbolica.community import tensor as sp` and the scalar `x = S("spenso_api_tour::x")`.
     """)
@@ -276,7 +303,11 @@ def _(mo, namespace):
             mo.md("## Results: symbolic composition, evaluated data, compiled data"),
             mo.as_html(namespace["network_result"]),
             mo.as_html(namespace["evaluated"]),
-            mo.as_html(namespace["compiled_result"]),
+            mo.as_html(namespace["compiled_result"])
+            if "compiled_result" in namespace
+            else mo.md(
+                "C++ compilation requires the local notebook and a native compiler. The interpreted evaluator above runs in this browser."
+            ),
             mo.md(
                 "`network.expression()` keeps the source tensor expression; execution results live in `result_tensor()` or `result_scalar()`. The two numerical results above agree."
             ),
@@ -310,6 +341,15 @@ def _(mo):
     operations have tensor-specific meanings; a scalar gamma special function uses
     `Expression.gamma()`.
     """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo, namespace):
+    assert namespace is not None
+    mo.Html(
+        '<span data-notebook-ready="spenso_api_tour">Example computations completed.</span>'
+    )
     return
 
 

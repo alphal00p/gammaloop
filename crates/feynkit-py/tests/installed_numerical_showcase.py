@@ -16,6 +16,12 @@ def main():
     spec = importlib.util.spec_from_file_location("numerical_showcase", path)
     notebook = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(notebook)
+    # Execute the initial page before submitting any integration form.
+    _, initial = notebook.app.run()
+    for name in ("cff", "ltd", "surface_evaluator", "coordinate_maps"):
+        assert name in initial, name
+    assert "histories" not in initial
+
     settings = {
         "batch_size": 1000,
         "batches": 4,
@@ -66,6 +72,8 @@ def main():
             e_columns = np.array(definitions["surface_kinds"]) == "E"
             assert np.min(np.abs(surfaces[:, e_columns])) < 1e-12
             continue
+
+        assert definitions["reference"] is not None
 
         # Compare the native estimator with the independently retained weights,
         # including the complete discrete/continuous density for channel runs.

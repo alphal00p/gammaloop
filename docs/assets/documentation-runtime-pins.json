@@ -1,0 +1,50 @@
+{
+  "compiler": {
+    "url": "https://registry.npmjs.org/@myriaddreamin/typst-ts-web-compiler/-/typst-ts-web-compiler-0.8.0-rc4.tgz",
+    "hash": "sha256-5ya/RBQL46yrTxvpHv9T0CfEetWISwPQt+mJaJd7xcY="
+  },
+  "renderer": {
+    "url": "https://registry.npmjs.org/@myriaddreamin/typst-ts-renderer/-/typst-ts-renderer-0.8.0-rc4.tgz",
+    "hash": "sha256-81pYX6GOcuAxZcpQk5LFLWldh4ECrAZz7DiqqxHY0NU="
+  },
+  "pyodide": {
+    "url": "https://registry.npmjs.org/pyodide/-/pyodide-314.0.0.tgz",
+    "hash": "sha256-oS2NA6YbXLUuNXUYTymMkf+imkcM+kuHMIgkpS9fISw="
+  },
+  "tyModule": {
+    "url": "https://cdn.symbolica.io/docs/live-python/immutable/d785725e4d0ad6dd979c/ty/ty_wasm.js",
+    "hash": "sha256-Y6Bg71eQy/jt5BLukXjZHswdxIlYfdz7qXXm2rZEZuQ="
+  },
+  "tyWasm": {
+    "url": "https://cdn.symbolica.io/docs/live-python/immutable/d785725e4d0ad6dd979c/ty/ty_wasm_bg.wasm",
+    "hash": "sha256-QOeD/Qt0O63qU36c7tz25pDCf+orohipRg+MuuIOgMo="
+  },
+  "tyLicense": {
+    "url": "https://raw.githubusercontent.com/astral-sh/ruff/72b1fd3cefed68152f4219886210da425afa63a0/LICENSE",
+    "hash": "sha256-JZfYVBIrd93HGXFWTKI1CjdghXXOMkrcVlCisgUcjxg="
+  },
+  "typstLicense": {
+    "url": "https://raw.githubusercontent.com/Myriad-Dreamin/typst.ts/ea3cf3a0de3529fe91cb6b9024ba11593743ac37/LICENSE",
+    "hash": "sha256-Bikv/N19MTdHmZJVqEEeFJM98z4kQnpG0WnMX/hFInw="
+  },
+  "pyodideLicense": {
+    "url": "https://raw.githubusercontent.com/pyodide/pyodide/314.0.0/LICENSE",
+    "hash": "sha256-HyVuytGSiAUQ6ErWBHTqt1iSGHhLmlC8fO7jTCuR8dU="
+  },
+  "symbolicaStub": {
+    "url": "https://raw.githubusercontent.com/symbolica-dev/symbolica/8eb7c3729d6abefc916decc1bdf0c06536f8af80/symbolica.pyi",
+    "hash": "sha256-EN3jLQNdpcizIjw2H6c91quX20HGzL8bVdBkhV7cfmg="
+  },
+  "typstAssets": {
+    "url": "https://static.crates.io/crates/typst-assets/typst-assets-0.15.1.crate",
+    "hash": "sha256-vO5QXaxnAt0cXmWqLpSmF50Z7gni5WN9cxPbkXZdxOA="
+  },
+  "symbolicaLicense": {
+    "url": "https://raw.githubusercontent.com/symbolica-dev/symbolica/8eb7c3729d6abefc916decc1bdf0c06536f8af80/License.md",
+    "hash": "sha256-lVdhcKF7yJlvuKlEc3RVRQSLbtxdkeOGfwkff8ayaYE="
+  },
+  "robotoLicense": {
+    "url": "https://raw.githubusercontent.com/googlefonts/roboto-3-classic/v3.015/OFL.txt",
+    "hash": "sha256-BhQCMnqWqtsL+2lKlg7SiezTjTg+OWJDgxq4H+sQnEE="
+  }
+}

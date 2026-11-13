@@ -1,0 +1,26 @@
+/* Source presentation only; Marimo continues to own the full application. */
+#root .documentation-full-code-frame {
+  position: relative; border: 1px solid var(--hairline); border-radius: 0;
+  margin-left: var(--code-gutter); width: calc(100% - var(--code-gutter));
+}
+#root .documentation-full-code-frame::before, #root .documentation-full-code-frame::after {
+  content: ''; position: absolute; width: .6rem; height: .6rem; z-index: 3; pointer-events: none;
+}
+#root .documentation-full-code-frame::before { top: -1px; left: -1px; border-top: 2px solid var(--ink-muted); border-left: 2px solid var(--ink-muted); }
+#root .documentation-full-code-frame::after { bottom: -1px; right: -1px; border-bottom: 2px solid var(--ink-muted); border-right: 2px solid var(--ink-muted); }
+#root .documentation-full-code-frame .cm-editor { background: var(--surface); border-radius: 0; font: var(--code-size)/var(--code-leading) var(--font-mono); }
+#root .documentation-full-code-frame .cm-line { line-height: var(--code-leading); }
+#root .documentation-full-code-frame .cm-editor { --notebook-gutter-width: var(--code-gutter); width: calc(100% + var(--notebook-gutter-width)); margin-left: calc(-1 * var(--notebook-gutter-width)); }
+#root .documentation-full-code-frame .cm-scroller { padding-block: 12px; font: inherit; }
+#root .documentation-full-code-frame .cm-content { padding-block: 0; }
+#root .documentation-full-code-frame .cm-line { padding-inline: 16px; }
+#root .documentation-full-code-frame .cm-gutters { padding-right: 9px; border: 0; background: transparent; color: var(--ink-muted); font: inherit; }
+#root .documentation-full-code-frame .cm-lineNumbers .cm-gutterElement { min-width: 3ch; padding-inline: 0; text-align: right; }
+#root .documentation-full-code-frame .cm-gutter:not(.cm-lineNumbers) { display: none; }
+#root .documentation-full-code-frame .cm-editor:not(.cm-focused) :is(.cm-activeLine,.cm-activeLineGutter) { background: transparent; }
+
+#root .marimo-cell:has(.documentation-full-code-frame),
+#root .marimo-cell:has(.documentation-full-code-frame) .tray { border-radius: 0; }
+#root .marimo-cell:has(.documentation-full-code-frame) { border-color: transparent; }
+
+.codehilite.code-frame { margin-left: var(--code-gutter); }

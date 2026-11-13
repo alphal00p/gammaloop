@@ -1,3 +1,12 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "symbolica==3.0.1",
+#     "marimo==0.25.1",
+#     "anywidget>=0.9,<1",
+# ]
+# ///
+
 # ruff: noqa: B018, PLR1711 -- marimo uses final expressions and explicit cell returns.
 
 import marimo
@@ -227,8 +236,11 @@ def _(G4, Q2, Q24, q24):
     gluon = [0, 0, 4 / 5, -3 / 5]
     momentum = [8, 2, 5, 5]
     value = evaluator.evaluate_complex([[*quark, *gluon, *momentum]])[0]
+    expected = [(7 + 9j) / 10, (5 - 3j) / 10, 0j, 0j]
+    assert value.shape == (4,)
+    assert all(abs(complex(value[i]) - expected[i]) < 1e-12 for i in range(4))
     value
-    return
+    return (value,)
 
 
 @app.cell(hide_code=True)
@@ -308,6 +320,15 @@ def _():
     import marimo as mo
 
     return (mo,)
+
+
+@app.cell(hide_code=True)
+def _(mo, value):
+    assert value.shape == (4,)
+    mo.Html(
+        '<span data-notebook-ready="spenso_current_kernel">Example computations completed.</span>'
+    )
+    return
 
 
 if __name__ == "__main__":

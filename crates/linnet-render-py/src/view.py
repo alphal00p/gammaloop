@@ -31,8 +31,8 @@ def iframe(html, javascript):
 def scripts(templates, interactive):
     """Only Rust-authored templates supply executable notebook controls.
 
-    Extract before inserting any user labels or snapshot SVG. The iframe itself
-    cannot execute scripts; the parent runs only these exact trusted sources.
+    Extract before inserting any user labels or snapshot SVG. The iframe CSP
+    blocks document scripts and inline handlers; the parent runs only these exact trusted sources.
     """
     from html.parser import HTMLParser
 
