@@ -11,6 +11,7 @@
 //! each factor exactly to the depth its partners' valuations require.
 
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
+use symbolica::coefficient::CoefficientView;
 use symbolica::domains::rational::Rational;
 use symbolica::function;
 use symbolica::poly::series::SeriesDepth;
@@ -652,9 +653,12 @@ pub(crate) fn expand(
 pub(crate) struct Spectator(rational_series::RationalSeries);
 
 impl Spectator {
-    /// `None` when `spectator` is not such a rational function (the caller
-    /// then expands the product with [`expand`]).
+    /// `None` when `spectator` is not such a rational function, or a
+    /// denominator depends on another symbol (the caller expands the product).
     pub(crate) fn new(spectator: &Atom, epsilon: Symbol) -> Option<Self> {
+        if !Self::epsilon_denominators(spectator.as_view(), epsilon) {
+            return None;
+        }
         let split = split(
             &crate::Vakint::normalize_gamma_functions(spectator.as_view()),
             epsilon,
@@ -664,6 +668,46 @@ impl Spectator {
         }
         let _stage = crate::stage_timing::StageSpan::new("vakint.p_integral.spectator_prepare");
         rational_series::RationalSeries::new(&split.rational, epsilon).map(Self)
+    }
+
+    /// A conservative guard for atom identity, not merely algebraic equality.
+    /// RationalSeries keeps the ε-free denominator content as one atom:
+    /// expanding a product can produce `(3*nf-6)^-1`, while separately
+    /// expanding its factors produces `1/3*(nf-2)^-1`. Admit only rational
+    /// denominators in ε, whose ε-free content is numeric. This also declines
+    /// harmless symbolic monomial denominators rather than assuming a more
+    /// general normalization identity.
+    fn epsilon_denominators(expression: AtomView, epsilon: Symbol) -> bool {
+        let mut safe = true;
+        expression.visitor(&mut |part| {
+            if !safe {
+                return false;
+            }
+            // Polynomial coefficients are numeric atoms whose variables the
+            // visitor cannot see. As in RationalSeries, accept only ordinary
+            // exact numbers here; generic expansion handles all other domains.
+            if let AtomView::Num(number) = part {
+                safe = matches!(
+                    number.get_coeff_view(),
+                    CoefficientView::Natural(..) | CoefficientView::Large(..)
+                );
+            }
+            if let AtomView::Pow(power) = part {
+                let (base, exponent) = power.get_base_exp();
+                if !get_integer_from_atom(exponent).is_some_and(|n| n >= 0) {
+                    base.visitor(&mut |factor| {
+                        safe &= match factor {
+                            AtomView::Var(variable) => variable.get_symbol() == epsilon,
+                            AtomView::Fun(_) => false,
+                            _ => true,
+                        };
+                        safe
+                    });
+                }
+            }
+            safe
+        });
+        safe
     }
 }
 
@@ -677,10 +721,11 @@ impl Spectator {
 /// through every order the product needs and the result equals the exact
 /// expansion of the product.
 ///
-/// `None` (the caller then uses [`expand`] on the product) when a term of
-/// the inner series ends below `ε^(order - v_S)`, which only a tabulated
-/// master's unknown tail does, or when the spectator series exceeds its
-/// bounds.
+/// `None` (the caller then uses [`expand`] on the product) when a
+/// rational denominator of `prefactor` or a master coefficient depends on
+/// a symbol other than ε, when a term of the inner series ends
+/// below `ε^(order - v_S)`, which only a tabulated master's unknown tail
+/// does, or when the spectator series exceeds its bounds.
 pub(crate) fn expand_factored(
     prefactor: &Atom,
     reduced: &Atom,
@@ -691,6 +736,11 @@ pub(crate) fn expand_factored(
     let Some(spectator_valuation) = spectator.0.valuation() else {
         return Ok(Some(Atom::Zero));
     };
+    // Gamma functions and scale exponentials are handled by the existing
+    // split, not mistaken for symbolic rational denominators.
+    if !Spectator::epsilon_denominators(split(prefactor, epsilon).rational.as_view(), epsilon) {
+        return Ok(None);
+    }
     let inner_order = order - spectator_valuation;
     let symbols = master_symbols();
     let (masters, expanded) = masters_and_expansion(reduced, &symbols)?;
@@ -698,6 +748,9 @@ pub(crate) fn expand_factored(
     // Coefficients of the inner series by power of ε.
     let mut inner = std::collections::BTreeMap::<i64, Vec<Atom>>::new();
     for (monomial, coefficient) in expanded.coefficient_list::<i16>(&masters) {
+        if !Spectator::epsilon_denominators(coefficient.as_view(), epsilon) {
+            return Ok(None);
+        }
         let Some(term) = monomial_term(
             prefactor,
             &monomial,
@@ -855,6 +908,9 @@ mod tests {
                 + Atom::num(5) / (Atom::num(4) * &ep) * tag(2).pow(Atom::num(-1)) * pg(2, 1),
             Atom::num(7) / ((Atom::num(1) - &ep) * &ep) * &no
                 + (Atom::num(1) + &ep) / ep.pow(Atom::num(3)) * tag(-1) * pg(1, 1),
+            // ε-denominators with a non-unit constant term.
+            vk_parse!("(nf-ε)/(3-2*ε)").unwrap() * pg(1, 0)
+                + vk_parse!("ca/((6-4*ε)*ε)").unwrap() * pg(0, 0).pow(Atom::num(2)),
             Atom::Zero,
         ];
         let spectators = [
@@ -863,6 +919,8 @@ mod tests {
             vk_parse!("(nf*ε^2-2*ca)/(3-2*ε)").unwrap(),
             vk_parse!("ε*(1+ε)/(1-2*ε)^2+mass^2").unwrap(),
             Atom::num(-1) / Atom::num(3),
+            vk_parse!("(nf+3*ca)*(2+𝑖)").unwrap(),
+            vk_parse!("mass^2*(nf+ε)/(ε*(3-2*ε))").unwrap(),
         ];
         let prefactor = Vakint::normalize_gamma_functions(
             vk_parse!("(Gamma(1+ε)*Gamma(1-ε)^2/Gamma(2-2*ε))^3*exp(-logMassiveClosure)^(4*ε)*Gamma(2-4*ε)*Gamma(1+4*ε)")
@@ -890,6 +948,72 @@ mod tests {
         }
         // Γ functions in the spectator are not admitted.
         assert!(super::Spectator::new(&vk_parse!("Gamma(1+ε)/ε").unwrap(), e).is_none());
+    }
+
+    #[test]
+    fn factored_expansion_declines_symbolic_denominators() {
+        Vakint::initialize_vakint_symbols();
+        let e = vk_symbol!("ε");
+        let masters = vk_parse!("PG(0,0)^2/(3-2*ε)+PG(1,0)/(ε*(6-4*ε))").unwrap();
+        let prefactor = Atom::num(1);
+        // Without the guard the separately normalized denominator content
+        // gives algebraically equal values but different canonical atoms.
+        let rational_spectators = [
+            vk_parse!("(nf+1)/(nf-2)").unwrap(),
+            vk_parse!("(nf+1)/(1-nf)").unwrap(),
+        ];
+        for spectator in &rational_spectators {
+            assert!(super::Spectator::new(spectator, e).is_none(), "{spectator}");
+            let unguarded = super::Spectator(
+                super::rational_series::RationalSeries::new(spectator, e).unwrap(),
+            );
+            let old = expand(&prefactor, &(&masters * spectator).expand(), e, -1).unwrap();
+            let new = super::expand_factored(&prefactor, &masters, &unguarded, e, -1)
+                .unwrap()
+                .unwrap();
+            assert_ne!(old.to_canonical_string(), new.to_canonical_string());
+            assert!((&old - &new).together().is_zero());
+        }
+        for expression in [
+            "ε/(3-2*ε)+ca/(nf-2*ca)",
+            "(nf+3*ca)*nf^-2*(2+𝑖)",
+            "(nf+ε)/(mass^2*ε*(3-2*ε))",
+            "1/f(nf)",
+        ] {
+            let expression = vk_parse!(expression).unwrap();
+            assert!(super::Spectator::new(&expression, e).is_none());
+            let spectator = super::Spectator::new(&vk_parse!("1/(3-2*ε)").unwrap(), e).unwrap();
+            assert!(
+                super::expand_factored(&prefactor, &(&masters * &expression), &spectator, e, -1)
+                    .unwrap()
+                    .is_none()
+            );
+            assert!(
+                super::expand_factored(&expression, &masters, &spectator, e, -1)
+                    .unwrap()
+                    .is_none()
+            );
+        }
+        let packed = vk_parse!("(nf+1)/(nf-2)")
+            .unwrap()
+            .set_coefficient_ring(vk_symbol!("nf"));
+        assert!(matches!(
+            packed.as_view(),
+            symbolica::atom::AtomView::Num(_)
+        ));
+        assert!(!super::Spectator::epsilon_denominators(packed.as_view(), e));
+        assert!(super::Spectator::new(&packed, e).is_none());
+        let spectator = super::Spectator::new(&Atom::num(1), e).unwrap();
+        assert!(
+            super::expand_factored(&packed, &masters, &spectator, e, -1)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            super::expand_factored(&prefactor, &(&masters * packed), &spectator, e, -1)
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]

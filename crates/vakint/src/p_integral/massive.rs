@@ -619,6 +619,10 @@ impl MassiveClosure {
     /// expansion of the product. `None` when a radial coefficient is not an
     /// admitted rational spectator or an expansion declines, and the caller
     /// expands the product.
+    ///
+    /// Zero masters give zero before any check, as the product does. For
+    /// nonzero invalid inputs, checking the factors separately can report
+    /// a different invalid factor first than checking their product.
     #[allow(clippy::too_many_arguments)]
     fn finalize_factored(
         &self,
@@ -633,6 +637,9 @@ impl MassiveClosure {
         let epsilon = vk_symbol!(&settings.epsilon_symbol);
         let loops = cut_loops as i64 + 1;
         let target = settings.number_of_terms_in_epsilon_expansion - loops - 1;
+        if masters.is_zero() {
+            return Ok(Some(Atom::Zero));
+        }
         let terms = Self::radial_terms(&spectator.expand(), head)?;
         if terms.is_empty() {
             return Ok(Some(Atom::Zero));
@@ -863,6 +870,27 @@ mod tests {
                 .evaluate(&VAKINT, &settings(3), parse(input).as_view())
                 .unwrap_err();
             assert!(matches!(error, VakintError::InvalidNumerator(_)), "{error}");
+        }
+    }
+
+    #[test]
+    fn factored_zero_masters_do_not_validate_the_spectator() {
+        let settings = settings(3);
+        for spectator in ["p(1,mu)", "dot(p(1),p(2))", "dot(k(1),k(1))"] {
+            let value = closure(2)
+                .finalize(
+                    &[ReducedPropagatorValue {
+                        scale_power: 0,
+                        reduced: Atom::Zero,
+                        spectator: Some(parse(spectator)),
+                    }],
+                    1,
+                    &parse("p(1)"),
+                    &settings,
+                    RustRedMasterMode::Symbolic,
+                )
+                .unwrap();
+            assert!(value.is_zero());
         }
     }
 
