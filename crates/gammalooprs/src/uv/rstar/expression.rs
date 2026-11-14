@@ -614,6 +614,7 @@ impl RStarIntegrand {
     pub fn taylor(&self, degree: usize) -> Result<Atom> {
         let _stage = StageSpan::new("gamma.remainder.hard_taylor");
         let parameter = symbol!("rstar_hard_taylor"; Scalar);
+        streamed::dump("hard_routed", self.routed.as_view());
         let scaled = Self::scale_edges(&self.routed, &self.soft_edges, parameter);
         let expanded = TaylorExpansion::new(parameter, degree).evaluate(&scaled)?;
         drop(scaled);
