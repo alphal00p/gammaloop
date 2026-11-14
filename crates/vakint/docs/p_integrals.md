@@ -643,6 +643,44 @@ Step cache:
 - Once a p library is loaded (`Vakint::loaded_p_library`; listing never loads one), its program is part of
   `load_ordered_cache`, `shipped_ordered_caches` and `export_ordered_caches` (written as `p_integral/` of the export).
 
+Five-loop p-integrals (vk5l WP4):
+- Registry: `P_INTEGRAL_LOOP_COUNTS = 1..=5` with the 64 five-loop tops of RustRed's `p-families-5L.v1.json`
+  (Forcer stays at one to four loops); a six-loop graph is outside the 1L-5L registry. A five-loop package may hold
+  only some tops; a missing top is "no family" on request.
+- Package location: the heavy 1-5 package is not built in and not yet a downloadable asset (WP6). Name its
+  directory with `Vakint::load_p_library_directory(dir, verify)` or the environment variable
+  `VAKINT_P_LIBRARY=<dir>` (any directory name; the layout `rustred p-package` or `p5l_library assemble` writes),
+  used ahead of external and built-in data; it loads without the descent certificate unless
+  `VAKINT_P_LIBRARY_VERIFY=1` (a verified five-loop load takes about half an hour). The directory is recorded as
+  the package of RustRed's reproduction commands. An optional `open-nodes.json` sidecar (schema
+  `rustred.p-open-nodes.v1`, read by RustRed's loader) declares nodes not closed (T266).
+- Build: five-loop charts have 20 slots and RustRed compiles arities 1..=16 by default. Build vakint with
+  `--features vakint/five-loop-p` and `RUSTRED_RUNTIME_ARITIES=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,20`
+  (build-time variable of `rustred-core/build.rs`; the feature alone keeps 1..=16). The default build is unchanged.
+  A five-loop request on a default build fails with RustRed's arity error naming `RUSTRED_RUNTIME_ARITIES`.
+- Errors: RustRed's typed refusals pass through unchanged as `RustRedEvaluationError::PRefusal`
+  (`RustRedEvaluationError::p_refusal()` returns the `PError`): `OutsideBox` (a key of a boxed node outside its box,
+  with the violated bound), `OutsideCertifiedSet` (outside the certified key set of a boxed node) and
+  `NodeNotClosed` (a node the package declares not closed). The message names the node, the key, the violated
+  bound, RustRed's request, the reproduction command (`cargo run --release -p rustred-app --example p5l_library --
+  reduce '<package>' p<id>:<powers>`, plus the arity-20 build it needs at five loops) and the vakint integrals.
+- Coverage policy `VakintSettings::rustred_p_uncovered`: `Reject` (default) fails with the typed refusal; `Retain`
+  (decision Q9, the vacuum path's retained unresolved masters) keeps such a key as `PResidual(node, k..)` with a
+  warning, under `master_mode=retain` only (the other modes reject); a Retain request runs without the step cache.
+- Terminals: residual terminals render as `PResidual(node, k..)`; the finalizer resolves them through the p master
+  source (`finalize_with`): five-loop channels use the engine's catalogue (`Vakint::set_p_master_catalogue`), one to
+  four loops the Forcer table. Without a catalogue `Retain` returns them and `Symbolic`/`Numerical` refuse
+  (`PMasterCatalogueError::NoCatalogue`, decision Q3). The catalogue guards mirror the five-loop vacuum path:
+  required number of coefficients and spurious poles after truncation (`MissingMasterOrders`), missing master
+  (`MissingCoefficients`, `UndeclaredMasters`, `UnmappedTerminals`), required digits (no validated digits: an
+  error; fewer than requested: a warning, as the vacuum path's `PrecisionWarning`). Every message names the
+  request's vakint integrals.
+- Reproduction: `VAKINT_DUMP_ORDERED_REQUEST=<dir>` writes every p request (`P<L>-<pid>-<seq>.request.json`, schema
+  `vakint.p-request.v1`: library identity, inputs with presentation, family, powers and exact coefficient, the
+  vakint integrals, the RustRed reproduction command) and its result (`.result.json`: the digest of the exact
+  reduction, scheme `vakint.p-output.v1`, or the error text); `VAKINT_DUMP_ORDERED_REQUEST_ONLY=1` stops after the
+  first written p request.
+
 Not yet: caller families (`register_family`, run-time key computation) and `LocusPolicy` plumbing; the release of
 the `p_integral` area of vakint-external-data (M4); phase-level progress of a p request (the monitor counts its
 channels as cohorts).

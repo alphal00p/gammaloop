@@ -553,6 +553,8 @@ fn uncovered_keys_name_the_vakint_integrals() {
         key: IntegralKey::try_new(vec![3, 1, 1, 1, 1]).unwrap(),
         node: "KITE".to_owned(),
         definition: "box d1".to_owned(),
+        violated: None,
+        request: None,
     };
     let error = reduction_error(outside, &one).to_string();
     assert!(error.contains("(boxed node KITE)"), "{error}");
@@ -562,13 +564,114 @@ fn uncovered_keys_name_the_vakint_integrals() {
     );
 }
 
+/// vk5l WP4: RustRed's typed refusals of boxed and open nodes reach the
+/// caller unchanged (`RustRedEvaluationError::PRefusal`, `p_refusal`): the
+/// node, the key, the violated bound, the original RustRed request, its
+/// reproduction command and the vakint integrals; a 20-slot (five-loop) key
+/// also names the RustRed build the reproduction needs, a 5-slot key not.
+#[test]
+fn typed_refusals_pass_through_with_node_key_bound_request_and_reproduction() {
+    use rustred::propagator::OwnerClassId;
+    use rustred::propagator::error::{BoxViolation, PRequestContext, PRequestInput};
+    let five = [1_i64; 14].into_iter().chain([0; 6]).collect::<Vec<_>>();
+    let mut dotted = five.clone();
+    dotted[6] = 6;
+    let request = std::sync::Arc::new(PRequestContext {
+        library: "p-library:scope=1-5:test".to_owned(),
+        inputs: vec![PRequestInput {
+            presentation: PresentationId(41),
+            family: "P3e892c5a34c7100d_e15".to_owned(),
+            powers: five.clone(),
+        }],
+        reproduce: "cargo run --release -p rustred-app --example p5l_library -- reduce '/pkg' \
+                    p41:1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0"
+            .to_owned(),
+    });
+    let integrals =
+        BTreeSet::from(["P3e892c5a34c7100d_e15(1,1,1,1,1,1,1,1,1,1,1,1,1,1)".to_owned()]);
+    let cases = [
+        (
+            PError::OutsideBox {
+                class: OwnerClassId(9),
+                key: IntegralKey::try_new(dotted.clone()).unwrap(),
+                node: "T178".to_owned(),
+                definition: "box B".to_owned(),
+                violated: Some(Box::new(BoxViolation::LineCap {
+                    slot: 6,
+                    power: 6,
+                    cap: 5,
+                })),
+                request: Some(request.clone()),
+            },
+            vec![
+                "boxed node T178",
+                "line slot 6 power 6 > cap 5",
+                "outside its box B",
+            ],
+        ),
+        (
+            PError::OutsideCertifiedSet {
+                class: OwnerClassId(9),
+                key: IntegralKey::try_new(dotted.clone()).unwrap(),
+                node: "T178".to_owned(),
+                definition: "box B".to_owned(),
+                violated: None,
+                certified_keys: 335_306,
+                request: Some(request.clone()),
+            },
+            vec![
+                "boxed node T178",
+                "not in the certified closure",
+                "certified set (335306 keys)",
+            ],
+        ),
+        (
+            PError::NodeNotClosed {
+                class: OwnerClassId(7),
+                node: "T266".to_owned(),
+                key: IntegralKey::try_new(five.clone()).unwrap(),
+                status: "stuck: not closed".to_owned(),
+                request: Some(request.clone()),
+            },
+            vec!["node T266", "status: stuck: not closed"],
+        ),
+    ];
+    for (native, fragments) in cases {
+        let error = reduction_error(native.clone(), &integrals);
+        assert_eq!(error.p_refusal(), Some(&native));
+        let text = crate::VakintError::from(error).to_string();
+        for fragment in fragments.into_iter().chain([
+            "request: P3e892c5a34c7100d_e15[p41] I(1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0)",
+            "reproduce: cargo run --release -p rustred-app --example p5l_library -- reduce '/pkg'",
+            "reducing the p-integrals P3e892c5a34c7100d_e15(1,1,1,1,1,1,1,1,1,1,1,1,1,1) with the \
+             RustRed p library",
+            "RUSTRED_RUNTIME_ARITIES=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,20",
+        ]) {
+            assert!(text.contains(fragment), "{fragment:?} not in {text}");
+        }
+    }
+    let small = reduction_error(
+        PError::NodeNotClosed {
+            class: OwnerClassId(7),
+            node: "T266".to_owned(),
+            key: IntegralKey::try_new(vec![1, 1, 1, 1, 1]).unwrap(),
+            status: "stuck".to_owned(),
+            request: None,
+        },
+        &integrals,
+    )
+    .to_string();
+    assert!(!small.contains("RUSTRED_RUNTIME_ARITIES"), "{small}");
+}
+
 /// t162-export V6: a library with a BOXED node (RustRed's toy
 /// `testing::boxed_kite_library`: scope 1-2, P2L owned by the boxed kite
 /// table, whose corner is a boxed terminal, an unknown integral). The corner
 /// comes back as `PResidual(KITE,1,1,1,1,1)` (coefficient 1 in the G-scheme
 /// reduction) under `master_mode=retain`; `symbolic` and `numerical` refuse
-/// it with `UnevaluatedTerminal` naming it; a key outside the box is a
-/// reduction error naming RustRed's box and the vakint integral.
+/// it (vk5l WP4: through the p master source, `NoCatalogue` naming it); a key
+/// outside the box is a typed refusal naming RustRed's box and the vakint
+/// integral.
 #[test]
 fn a_boxed_node_returns_its_terminals_as_presidual_and_refuses_numbers() {
     let mut engine = Vakint::new().unwrap();
@@ -612,17 +715,131 @@ fn a_boxed_node_returns_its_terminals_as_presidual_and_refuses_numbers() {
             .evaluate(&settings(mode, None), corner.as_view())
             .unwrap_err()
             .to_string();
-        assert!(error.contains("unevaluated terminals"), "{mode}: {error}");
-        assert!(error.contains(&residual), "{mode}: {error}");
+        assert!(error.contains("no p master catalogue"), "{mode}: {error}");
+        assert!(
+            error.contains("PResidual(KITE,1,1,1,1,1)"),
+            "{mode}: {error}"
+        );
         assert!(error.contains("master_mode=retain"), "{mode}: {error}");
     }
     let outside = engine
         .evaluate(&retain, parse("topo(P2L(p(1),3,1,1,1,1))").as_view())
-        .unwrap_err()
-        .to_string();
+        .unwrap_err();
+    let crate::VakintError::RustRedEvaluation(native) = &outside else {
+        panic!("not a RustRed error: {outside}");
+    };
+    assert!(
+        matches!(native.p_refusal(), Some(PError::OutsideBox { node, .. }) if node == "KITE"),
+        "{outside}"
+    );
+    let outside = outside.to_string();
     assert!(outside.contains("(boxed node KITE)"), "{outside}");
     assert!(outside.contains("outside its box"), "{outside}");
     assert!(outside.contains("P2L(3,1,1,1,1)"), "{outside}");
+    assert!(outside.contains("reproduce:"), "{outside}");
+}
+
+/// vk5l WP4 (decision Q9): under `rustred_p_uncovered = Retain` and
+/// `master_mode=retain` a key the boxed kite refuses stays in the result as
+/// `PResidual(KITE, ..)` (the vacuum path's retained unresolved masters);
+/// `Reject` (the default) and the other master modes keep the typed refusal.
+/// The certified kite (box `d0`, certified set = corner + five dotted keys)
+/// refuses a doubly dotted key too.
+#[test]
+fn the_retain_policy_keeps_refused_keys_as_presidual_in_retain_mode_only() {
+    for library in [
+        rustred::propagator::testing::boxed_kite_library().unwrap(),
+        rustred::propagator::testing::boxed_kite_library_certified().unwrap(),
+    ] {
+        let mut engine = Vakint::new().unwrap();
+        engine.inject_p_library(library).unwrap();
+        let outside = parse("topo(P2L(p(1),3,1,1,1,1))");
+        let mut retain = settings(RustRedMasterMode::Retain, None);
+        assert!(engine.evaluate(&retain, outside.as_view()).is_err());
+        retain.rustred_p_uncovered = crate::RustRedPUncoveredPolicy::Retain;
+        let kept = engine.evaluate(&retain, outside.as_view()).unwrap();
+        let residuals = crate::p_integral::finalize::unevaluated_terminals(&kept);
+        assert_eq!(residuals.len(), 1, "{kept}");
+        assert!(residuals[0].contains("KITE"), "{kept}");
+        let mut symbolic = settings(RustRedMasterMode::Symbolic, None);
+        symbolic.rustred_p_uncovered = crate::RustRedPUncoveredPolicy::Retain;
+        let refused = engine
+            .evaluate(&symbolic, outside.as_view())
+            .unwrap_err()
+            .to_string();
+        assert!(refused.contains("boxed node KITE"), "{refused}");
+    }
+}
+
+/// vk5l WP4: the p path writes its requests as the vacuum path does
+/// (`VAKINT_DUMP_ORDERED_REQUEST`): the request (library identity, inputs,
+/// vakint integrals, RustRed's reproduction command) and its result digest,
+/// equal for two identical requests; a refused request records its error.
+#[test]
+fn a_p_request_and_its_result_are_dumped() {
+    use super::super::request_dump::{PDumpRequest, PRequestDump};
+    let directory = tempfile::tempdir().unwrap();
+    let library = rustred::propagator::testing::boxed_kite_library().unwrap();
+    let options = request_options(&settings(RustRedMasterMode::Retain, None));
+    let one = library.coefficient_context().one();
+    let integrals = BTreeSet::from(["P2L(1,1,1,1,1)".to_owned()]);
+    let p2l = library.top_presentation("P2L").unwrap();
+    let mut digests = Vec::new();
+    for powers in [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [3, 1, 1, 1, 1]] {
+        let inputs = vec![(p2l, IntegralKey::try_new(powers).unwrap(), one.clone())];
+        let dump = PRequestDump::write_to(
+            directory.path(),
+            PDumpRequest {
+                library: &library,
+                loops: 2,
+                label: "test",
+                arithmetic: options.arithmetic_for(2),
+                uncovered: options.uncovered,
+                master_mode: options.master_mode,
+                inputs: &inputs,
+                integrals: &integrals,
+            },
+        )
+        .unwrap();
+        let stem = dump.stem().to_owned();
+        let result = library.reduce(p_reduction_request(&options, 2, inputs, None));
+        dump.finish(&library, &result).unwrap();
+        let read = |suffix: &str| -> serde_json::Value {
+            serde_json::from_slice(
+                &std::fs::read(directory.path().join(format!("{stem}.{suffix}.json"))).unwrap(),
+            )
+            .unwrap()
+        };
+        let request = read("request");
+        assert_eq!(request["schema"], "vakint.p-request.v1");
+        assert_eq!(request["inputs"][0]["family"], "P2L");
+        assert_eq!(request["inputs"][0]["powers"], serde_json::json!(powers));
+        assert_eq!(request["vakint_integrals"][0], "P2L(1,1,1,1,1)");
+        assert!(
+            request["reproduce"]
+                .as_str()
+                .unwrap()
+                .contains("p5l_library -- reduce"),
+            "{request}"
+        );
+        let result = read("result");
+        digests.push((
+            result["output"]["terms_blake3"].clone(),
+            result["error"].clone(),
+        ));
+    }
+    assert_eq!(digests[0], digests[1]);
+    assert!(
+        digests[0].0.is_string() && digests[0].1.is_null(),
+        "{digests:?}"
+    );
+    assert!(digests[2].0.is_null(), "{digests:?}");
+    assert!(
+        digests[2].1.as_str().unwrap().contains("boxed node KITE"),
+        "{digests:?}"
+    );
+    let index = std::fs::read_to_string(directory.path().join("index.jsonl")).unwrap();
+    assert_eq!(index.lines().count(), 6);
 }
 
 /// The direct entry points (`EvaluationMethod::evaluate_integral` and
@@ -1267,4 +1484,315 @@ fn five_loop_smoke_on_a_one_to_five_package() {
         residuals.len()
     );
     assert!(!value.is_zero(), "{input}");
+}
+
+/// vk5l WP4: the guards of the five-loop vacuum path on the p path at five
+/// loops, through the engine (`Vakint::set_p_master_catalogue`, the hook
+/// `p_master_catalogue` and `finalize_reduced`, the step after the RustRed
+/// reduction of `evaluate_ordered_batch`) on WP5's synthetic five-loop
+/// catalogue (`master_catalogue::tests::fixture`), with the vacuum tests'
+/// shared helper `truncation_guard::expect_missing_orders`. Every refusal
+/// names the five-loop vakint integral of the request. The guard "input
+/// outside the box" is `a_boxed_node_returns_its_terminals_as_presidual_and_refuses_numbers`
+/// and `typed_refusals_pass_through_with_node_key_bound_request_and_reproduction`
+/// (and, on a real package, `five_loop_package_drill`).
+mod five_loop_guards {
+    use super::*;
+    use crate::p_integral::master_catalogue::tests::fixture;
+    use crate::p_integral::{PMasterCatalogue, PMasterCatalogueError, p_residual_symbol};
+    use crate::truncation_guard::expect_missing_orders;
+
+    const INTEGRAL: &str = "P3e892c5a34c7100d_e15(1,1,1,1,1,1,1,1,1,1,1,1,1,1)";
+
+    fn engine(catalogue: bool) -> Vakint {
+        let mut engine = Vakint::new().unwrap();
+        if catalogue {
+            engine.set_p_master_catalogue(
+                PMasterCatalogue::from_json("test catalogue", &fixture().to_string()).unwrap(),
+            );
+        }
+        engine
+    }
+
+    fn residual(node: &str, key: &[i64]) -> Atom {
+        let mut arguments = vec![Atom::var(vk_symbol!(node))];
+        arguments.extend(key.iter().map(|&k| Atom::num(k)));
+        p_residual_symbol().call(&arguments[..])
+    }
+
+    /// The p path after the reduction: `reduced` (scale power 0, external
+    /// `p(1)`) of the five-loop request [`INTEGRAL`], finalized in `mode`
+    /// through `terms` Laurent terms at `digits` digits.
+    fn finalize(
+        engine: &Vakint,
+        reduced: Atom,
+        mode: RustRedMasterMode,
+        terms: i64,
+        digits: u32,
+    ) -> Result<Atom, crate::VakintError> {
+        let mut settings = settings(mode, None);
+        settings.number_of_terms_in_epsilon_expansion = terms;
+        settings.run_time_decimal_precision = digits;
+        let head = parse("p(1)");
+        finalize_reduced(
+            engine,
+            &settings,
+            BTreeMap::from([(
+                (5, head.clone()),
+                vec![ReducedPropagatorValue {
+                    scale_power: 0,
+                    reduced,
+                }],
+            )]),
+            &BTreeMap::from([((5, head), BTreeSet::from([INTEGRAL.to_owned()]))]),
+            mode,
+        )
+    }
+
+    fn catalogue_error(error: crate::VakintError) -> PMasterCatalogueError {
+        match error {
+            crate::VakintError::PMasterCatalogue(error) => error,
+            other => panic!("expected a p master catalogue error, got: {other}"),
+        }
+    }
+
+    /// Required number of coefficients (vacuum: `master_truncation_guard_tests`):
+    /// through `ε^0` the known master suffices; one Laurent term more names
+    /// the master, its first missing order and the five-loop request.
+    #[test]
+    fn required_number_of_coefficients() {
+        let engine = engine(true);
+        for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Numerical] {
+            assert!(
+                !finalize(&engine, residual("T900", &[1, 1, 0]), mode, 6, 40)
+                    .unwrap()
+                    .is_zero()
+            );
+            let missing = expect_missing_orders(
+                finalize(&engine, residual("T900", &[1, 1, 0]), mode, 7, 40).unwrap_err(),
+            );
+            assert_eq!(missing.requested_order, Some(1), "{missing}");
+            assert_eq!(missing.masters.len(), 1, "{missing}");
+            assert_eq!(missing.masters[0].first_missing_order, 1, "{missing}");
+            assert!(missing.backend.contains(INTEGRAL), "{missing}");
+        }
+    }
+
+    /// Spurious poles after truncation error (vacuum:
+    /// `spurious_poles_require_deeper_master_coefficients`).
+    #[test]
+    fn spurious_poles_after_truncation_error() {
+        let engine = engine(true);
+        let missing = expect_missing_orders(
+            finalize(
+                &engine,
+                residual("T900", &[1, 1, 1]),
+                RustRedMasterMode::Symbolic,
+                6,
+                40,
+            )
+            .unwrap_err(),
+        );
+        assert_eq!(missing.requested_order, Some(0), "{missing}");
+        assert_eq!(missing.masters[0].first_affected_result_order, 0);
+        assert!(missing.backend.contains(INTEGRAL), "{missing}");
+    }
+
+    /// Missing master (vacuum: `missing_coefficients_are_not_assumed_zero`):
+    /// a master without coefficients, a terminal without a map row, and a
+    /// five-loop terminal without any catalogue are refused by name; Retain
+    /// keeps them.
+    #[test]
+    fn missing_master() {
+        let with = engine(true);
+        for (terminal, expected) in [
+            (
+                residual("T903", &[1]),
+                "declared terminal has no computed coefficients",
+            ),
+            (residual("T901", &[2]), "no master map row yet"),
+            (
+                residual("T902", &[1]),
+                "additional terminal of a boxed node",
+            ),
+        ] {
+            assert!(
+                !finalize(&with, terminal.clone(), RustRedMasterMode::Retain, 6, 40)
+                    .unwrap()
+                    .is_zero()
+            );
+            let error = catalogue_error(
+                finalize(&with, terminal, RustRedMasterMode::Symbolic, 6, 40).unwrap_err(),
+            )
+            .to_string();
+            assert!(
+                error.contains(expected) && error.contains(INTEGRAL),
+                "{error}"
+            );
+        }
+        let without = engine(false);
+        let error = catalogue_error(
+            finalize(
+                &without,
+                residual("T900", &[1, 1, 0]),
+                RustRedMasterMode::Numerical,
+                6,
+                40,
+            )
+            .unwrap_err(),
+        );
+        assert!(
+            matches!(error, PMasterCatalogueError::NoCatalogue { .. }),
+            "{error}"
+        );
+        assert!(error.to_string().contains(INTEGRAL), "{error}");
+    }
+
+    /// Required digits (vacuum: `check_coefficients` and `PrecisionWarning`):
+    /// fewer validated digits than requested only warn, no validated digits
+    /// are an error naming master and order.
+    #[test]
+    fn required_digits() {
+        let engine = engine(true);
+        let terminal = residual("T904", &[1]);
+        assert!(
+            !finalize(
+                &engine,
+                terminal.clone(),
+                RustRedMasterMode::Numerical,
+                6,
+                20
+            )
+            .unwrap()
+            .is_zero()
+        );
+        assert!(
+            !finalize(
+                &engine,
+                terminal.clone(),
+                RustRedMasterMode::Numerical,
+                6,
+                40
+            )
+            .unwrap()
+            .is_zero()
+        );
+        let mut file = fixture();
+        file["masters"][1]["coefficients"]["0"]
+            .as_object_mut()
+            .unwrap()
+            .remove("significant_digits");
+        let mut undigited = Vakint::new().unwrap();
+        undigited.set_p_master_catalogue(
+            PMasterCatalogue::from_json("test", &file.to_string()).unwrap(),
+        );
+        let error = catalogue_error(
+            finalize(&undigited, terminal, RustRedMasterMode::Numerical, 6, 5).unwrap_err(),
+        )
+        .to_string();
+        assert!(
+            error.contains("syn-num")
+                && error.contains("without validated significant digits")
+                && error.contains(INTEGRAL),
+            "{error}"
+        );
+    }
+
+    /// One to four loops keep the Forcer table: the catalogue is a
+    /// five-loop source only.
+    #[test]
+    fn the_catalogue_serves_five_loops_only() {
+        let engine = engine(true);
+        assert!(p_master_catalogue(&engine, 5).is_some());
+        assert!(p_master_catalogue(&engine, 4).is_none());
+    }
+}
+
+/// vk5l WP4 REAL TEST (env-gated, not in `test_vakint` unless set): a
+/// scope 1-5 package assembled from existing tables, named by
+/// `VAKINT_TEST_P5L_DRILL_PACKAGE` (loaded through `VAKINT_P_LIBRARY`'s code
+/// path, `load_p_library_directory`, unverified), reduced through vakint's
+/// public API. `VAKINT_TEST_P5L_DRILL` is a `;`-separated list of
+/// `<label>=<expected>=<input>` with `<expected>` one of `ok` (Retain mode,
+/// printed with its `PResidual` terminals), `outside-box`,
+/// `outside-certified-set`, `outside` (either), `node-not-closed` (the typed
+/// refusal, printed);
+/// `VAKINT_TEST_P5L_DRILL_RETAIN=1` sets the Retain coverage policy.
+#[test]
+fn five_loop_package_drill() {
+    let Some(directory) = std::env::var_os("VAKINT_TEST_P5L_DRILL_PACKAGE") else {
+        eprintln!("five_loop_package_drill: VAKINT_TEST_P5L_DRILL_PACKAGE unset, skipped");
+        return;
+    };
+    let started = std::time::Instant::now();
+    let mut engine = Vakint::new().unwrap();
+    engine
+        .load_p_library_directory(std::path::Path::new(&directory), false)
+        .unwrap_or_else(|error| panic!("{}: {error}", directory.display()));
+    eprintln!(
+        "five_loop_package_drill: loaded {} in {:.1} s (scope {:?})",
+        directory.display(),
+        started.elapsed().as_secs_f64(),
+        engine.p_library().unwrap().scope()
+    );
+    let mut settings = settings(RustRedMasterMode::Retain, None);
+    settings.number_of_terms_in_epsilon_expansion = 6;
+    settings.n_cores = std::env::var("VAKINT_TEST_P5L_DRILL_CORES")
+        .ok()
+        .and_then(|cores| cores.parse().ok())
+        .unwrap_or(1);
+    if std::env::var("VAKINT_TEST_P5L_DRILL_RETAIN").as_deref() == Ok("1") {
+        settings.rustred_p_uncovered = crate::RustRedPUncoveredPolicy::Retain;
+    }
+    let cases = std::env::var("VAKINT_TEST_P5L_DRILL").unwrap_or_default();
+    for case in cases.split(';').filter(|case| !case.trim().is_empty()) {
+        let mut parts = case.splitn(3, '=');
+        let (label, expected, input) = (
+            parts.next().unwrap().trim(),
+            parts.next().unwrap().trim(),
+            parts.next().unwrap().trim(),
+        );
+        let input = parse(input);
+        let started = std::time::Instant::now();
+        let result = engine.evaluate(&settings, input.as_view());
+        let seconds = started.elapsed().as_secs_f64();
+        match (expected, result) {
+            ("ok", Ok(value)) => {
+                let residuals = crate::p_integral::finalize::unevaluated_terminals(&value);
+                eprintln!(
+                    "DRILL {label}: OK in {seconds:.1} s, {} PResidual terminals {residuals:?}\n  \
+                     input {input}\n  value {value}",
+                    residuals.len()
+                );
+                assert!(!value.is_zero(), "{label}: {input}");
+            }
+            (expected, Err(error)) if expected != "ok" => {
+                let crate::VakintError::RustRedEvaluation(native) = &error else {
+                    panic!("{label}: not a RustRed error: {error}");
+                };
+                let refusal = native
+                    .p_refusal()
+                    .unwrap_or_else(|| panic!("{label}: not a typed refusal: {error}"));
+                let kind = match refusal {
+                    PError::OutsideBox { .. } => "outside-box",
+                    PError::OutsideCertifiedSet { .. } => "outside-certified-set",
+                    PError::NodeNotClosed { .. } => "node-not-closed",
+                    _ => "other",
+                };
+                eprintln!(
+                    "DRILL {label}: {kind} in {seconds:.1} s\n  input {input}\n  ERROR {error}"
+                );
+                // `outside`: either refusal of a boxed node (the early box
+                // check or the certified-set check at dispatch).
+                let accepted = kind == expected
+                    || (expected == "outside"
+                        && matches!(kind, "outside-box" | "outside-certified-set"));
+                assert!(
+                    accepted,
+                    "{label}: expected {expected}, got {kind}: {error}"
+                );
+            }
+            (expected, result) => panic!("{label}: expected {expected}, got {result:?}"),
+        }
+    }
 }

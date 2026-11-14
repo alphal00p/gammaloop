@@ -2461,6 +2461,20 @@ impl std::str::FromStr for TensorReductionMethod {
     }
 }
 
+/// vk5l WP4 (plan VK5L §3.2, decision Q9): the coverage policy of RustRed p
+/// requests ([`VakintSettings::rustred_p_uncovered`]).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum RustRedPUncoveredPolicy {
+    /// A key the p library cannot reduce is an error naming node, key, the
+    /// violated bound, the request and a reproduction command.
+    #[default]
+    Reject,
+    /// The vacuum path's mirror: such a key stays in a `master_mode=retain`
+    /// result as `PResidual(node, k..)` (a warning names the refusal); the
+    /// other master modes reject as with `Reject`.
+    Retain,
+}
+
 #[derive(Debug, Clone)]
 pub struct VakintSettings {
     #[allow(unused)]
@@ -2541,6 +2555,12 @@ pub struct VakintSettings {
         rustred::reduction::terminal_normalization::VacuumProductReductionLimits,
     /// Bounded exact alternatives used to obtain an admitted five-loop routing.
     pub rustred_momentum_match_limits: topologies::MomentumMatchLimits,
+    /// What the RustRed p library does with a key it cannot reduce (outside
+    /// a boxed node's box or certified set, a node not closed, a key no rule
+    /// covers): [`RustRedPUncoveredPolicy::Reject`] (the default) fails with
+    /// the typed refusal; `Retain` keeps the key as a `PResidual(node, k..)`
+    /// symbol with a warning, under `master_mode=retain` only.
+    pub rustred_p_uncovered: RustRedPUncoveredPolicy,
     pub tensor_reduction_method: TensorReductionMethod,
     // This quantity is typically set equal to *one plus the maximum loop count* of the UV regularisation problem considered.
     // For example when considering a 2-loop problem, then:
@@ -2882,6 +2902,7 @@ impl Default for VakintSettings {
             rustred_scalar_numerator_limits: Default::default(),
             rustred_product_limits: Default::default(),
             rustred_momentum_match_limits: Default::default(),
+            rustred_p_uncovered: RustRedPUncoveredPolicy::Reject,
             tensor_reduction_method: TensorReductionMethod::FeynKit,
             // Default to a three-loop UV subtraction problem, for which alphaLoop implementation can be used.
             number_of_terms_in_epsilon_expansion: 4,
@@ -2920,9 +2941,13 @@ pub struct Vakint {
     rustred_data: Option<Arc<rustred_evaluation::data::RustRedData>>,
     /// Ordered step caches of the loaded programs, shared by clones.
     ordered_cache: Arc<rustred_evaluation::cache::OrderedCacheRegistry>,
-    /// A RustRed p library injected into this engine (`inject_p_library`);
-    /// otherwise external or built-in p data are used (`rustred_evaluation::p_data`).
+    /// A RustRed p library injected into this engine (`inject_p_library`,
+    /// `load_p_library_directory`); otherwise `VAKINT_P_LIBRARY`, external or
+    /// built-in p data are used (`rustred_evaluation::p_data`).
     p_library: Option<Arc<rustred_evaluation::p_data::PLibraryHandle>>,
+    /// vk5l WP4: the p master catalogue that finalizes five-loop p-integrals
+    /// (`set_p_master_catalogue`); none by default (decision Q3: Retain only).
+    p_master_catalogue: Option<Arc<p_integral::PMasterCatalogue>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -5413,6 +5438,7 @@ impl Vakint {
             rustred_data: None,
             ordered_cache: Arc::default(),
             p_library: None,
+            p_master_catalogue: None,
         })
     }
 

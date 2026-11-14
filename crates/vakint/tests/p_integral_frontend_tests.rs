@@ -1,6 +1,6 @@
 //! The p-integral frontend (`docs/p_integrals.md`, sections 1-3): kind
 //! inference, validation, exact normalization, scaleless zeros, matching onto
-//! the 1L-4L registry for any routing, and the DOT round trip.
+//! the 1L-5L registry for any routing, and the DOT round trip.
 //!
 //! Evaluation is not tested here: it belongs to the Forcer and RustRed
 //! backends, which share the canonical forms checked below.
@@ -336,11 +336,24 @@ mod errors {
         );
     }
 
+    /// vk5l WP4: the registry reaches five loops (the 64 five-loop tops and
+    /// their contractions); six loops are outside it.
     #[test]
-    fn five_loop_inputs_are_outside_the_registry() {
+    fn five_loop_inputs_enter_the_registry_six_loop_inputs_do_not() {
         assert_p_error(
-            FIVE_LOOP_SUNSET,
-            "p-integral not covered by the 1L-4L registry",
+            SIX_LOOP_SUNSET,
+            "p-integral not covered by the 1L-5L registry",
+        );
+        // The sunset is a contraction of a five-loop top: its short form
+        // names that top (a `P<16 hex digits>..` family, not P1L-P4L).
+        let short = short_form(FIVE_LOOP_SUNSET).to_string();
+        assert!(
+            short.contains("topo(")
+                && !short.contains("UNKNOWN")
+                && !["P1L", "P2L", "P3L", "P4L"]
+                    .iter()
+                    .any(|f| short.contains(f)),
+            "{short}"
         );
     }
 
@@ -354,10 +367,16 @@ mod errors {
     }
 }
 
-/// The five-loop sunset: a p-integral outside the 1L-4L registry.
+/// The five-loop sunset: a contraction of five-loop tops (vk5l WP4: inside
+/// the 1L-5L registry).
 const FIVE_LOOP_SUNSET: &str = "topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(1,2),k(2),0,1)\
     *prop(3,edge(1,2),k(3),0,1)*prop(4,edge(1,2),k(4),0,1)*prop(5,edge(1,2),k(5),0,1)\
     *prop(6,edge(2,1),k(1)+k(2)+k(3)+k(4)+k(5)-p(1),0,1))";
+
+/// The six-loop sunset: a p-integral outside the 1L-5L registry.
+const SIX_LOOP_SUNSET: &str = "topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(1,2),k(2),0,1)\
+    *prop(3,edge(1,2),k(3),0,1)*prop(4,edge(1,2),k(4),0,1)*prop(5,edge(1,2),k(5),0,1)\
+    *prop(6,edge(1,2),k(6),0,1)*prop(7,edge(2,1),k(1)+k(2)+k(3)+k(4)+k(5)+k(6)-p(1),0,1))";
 
 /// Section 1, "Out of domain" (M1 review F1, missing test 8).
 mod out_of_domain {
@@ -393,8 +412,8 @@ mod out_of_domain {
             "a p-integral has one external momentum; found",
         );
         assert_p_unknown(
-            FIVE_LOOP_SUNSET,
-            "p-integral not covered by the 1L-4L registry",
+            SIX_LOOP_SUNSET,
+            "p-integral not covered by the 1L-5L registry",
         );
     }
 
@@ -414,7 +433,7 @@ mod out_of_domain {
     fn evaluate_integral_refuses_a_raw_catalogue_miss_before_any_method() {
         let python = fake_python("1.6.4");
         let form = fake_form("5.0.0");
-        let sunset = parse(FIVE_LOOP_SUNSET);
+        let sunset = parse(SIX_LOOP_SUNSET);
         for evaluation_order in [EvaluationOrder::pysecdec_only(None), EvaluationOrder::all()] {
             let settings = VakintSettings {
                 evaluation_order,
@@ -457,7 +476,7 @@ mod out_of_domain {
                 "topo(prop(1,edge(1,2),k(1),muvsq,1)*prop(2,edge(2,1),k(1)-p(1),muvsq,1))",
                 "topo(prop(1,edge(1,2),k(1)+p(2),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))",
                 "topo(prop(1,edge(1,2),k(1),0,1/2)*prop(2,edge(2,1),k(1)-p(1),0,1))",
-                FIVE_LOOP_SUNSET,
+                SIX_LOOP_SUNSET,
             ] {
                 for numerator in [
                     "1",
@@ -483,7 +502,7 @@ mod out_of_domain {
     #[test]
     fn expression_tensor_reduction_refuses_an_unknown_integral() {
         let settings = VakintSettings::default();
-        let input = parse(&format!("dot(k(1),p(1))*{FIVE_LOOP_SUNSET}"));
+        let input = parse(&format!("dot(k(1),p(1))*{SIX_LOOP_SUNSET}"));
         let mut expression = VakintExpression::try_from(input.as_view()).unwrap();
         expression
             .canonicalize(&settings, &VAKINT.topologies, false)
@@ -497,7 +516,7 @@ mod out_of_domain {
     #[test]
     fn a_tree_factor_of_an_unknown_integral_keeps_the_out_of_domain_error() {
         let tree = parse(
-            &FIVE_LOOP_SUNSET.replace("-p(1),0,1))", "-p(1),0,1)*prop(7,edge(3,1),p(1),0,2))"),
+            &SIX_LOOP_SUNSET.replace("-p(1),0,1))", "-p(1),0,1)*prop(8,edge(3,1),p(1),0,2))"),
         );
         assert_out_of_domain_error(VAKINT.evaluate(&VakintSettings::default(), tree.as_view()));
     }
@@ -509,7 +528,7 @@ mod out_of_domain {
         let merged = parse(
             "topo(prop(1,edge(1,3),k(1),0,1)*prop(2,edge(3,2),k(1),0,1)*prop(3,edge(1,2),k(2),0,1)\
              *prop(4,edge(1,2),k(3),0,1)*prop(5,edge(1,2),k(4),0,1)*prop(6,edge(1,2),k(5),0,1)\
-             *prop(7,edge(2,1),k(1)+k(2)+k(3)+k(4)+k(5)-p(1),0,1))",
+             *prop(7,edge(1,2),k(6),0,1)*prop(8,edge(2,1),k(1)+k(2)+k(3)+k(4)+k(5)+k(6)-p(1),0,1))",
         );
         let settings = VakintSettings::default();
         for result in [
@@ -594,12 +613,12 @@ mod out_of_domain {
             "topo(prop(1,edge(1,2),k(1)+p(2),0,1)*prop(2,edge(2,1),2*k(1)-3*p(1),0,1))",
             "momentum conservation",
         );
-        // A graph outside the registry (five loops) with a routing of
+        // A graph outside the registry (six loops) with a routing of
         // determinant 2.
         assert_p_malformed(
             "topo(prop(1,edge(1,2),2*k(1),0,1)*prop(2,edge(1,2),k(2),0,1)*prop(3,edge(1,2),k(3),0,1)\
-             *prop(4,edge(1,2),k(4),0,1)*prop(5,edge(1,2),k(5),0,1)\
-             *prop(6,edge(2,1),2*k(1)+k(2)+k(3)+k(4)+k(5)-p(1),0,1))",
+             *prop(4,edge(1,2),k(4),0,1)*prop(5,edge(1,2),k(5),0,1)*prop(7,edge(1,2),k(6),0,1)\
+             *prop(6,edge(2,1),2*k(1)+k(2)+k(3)+k(4)+k(5)+k(6)-p(1),0,1))",
             "no unimodular change of loop momenta",
         );
     }

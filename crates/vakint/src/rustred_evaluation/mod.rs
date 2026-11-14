@@ -132,6 +132,24 @@ pub enum RustRedEvaluationError {
     ExternalData { detail: String },
     #[error("RustRed master data capability: {detail}")]
     MasterCapability { detail: String },
+    /// vk5l WP4 (plan VK5L §3.2): a typed refusal of the RustRed p library,
+    /// passed through unchanged: `error` is RustRed's
+    /// [`rustred::propagator::error::PError::OutsideBox`] (a key of a boxed
+    /// node outside its box, with the violated bound),
+    /// [`PError::OutsideCertifiedSet`](rustred::propagator::error::PError::OutsideCertifiedSet)
+    /// (outside the certified key set of a boxed node) or
+    /// [`PError::NodeNotClosed`](rustred::propagator::error::PError::NodeNotClosed)
+    /// (a node the package declares not closed, e.g. T266), each naming the
+    /// node, the key, the original RustRed request and the command line that
+    /// reproduces it; `integrals` names the vakint integrals of the request and
+    /// `build` the RustRed build the reproduction needs (arity 20 at five
+    /// loops). [`Self::p_refusal`] returns the RustRed error.
+    #[error("{error}, reducing the p-integrals {integrals} with the RustRed p library{build}")]
+    PRefusal {
+        error: Box<rustred::propagator::error::PError>,
+        integrals: String,
+        build: String,
+    },
     #[error("RustRed application lock is poisoned")]
     CacheLockPoisoned,
     #[error("RustRed cache operation failed: {source}")]
@@ -183,6 +201,17 @@ pub enum RustRedEvaluationError {
 }
 
 impl RustRedEvaluationError {
+    /// vk5l WP4: the RustRed p library's typed refusal (`OutsideBox`,
+    /// `OutsideCertifiedSet`, `NodeNotClosed`) behind this error, if any:
+    /// node, key, violated bound, request and reproduction command are its
+    /// fields.
+    pub fn p_refusal(&self) -> Option<&rustred::propagator::error::PError> {
+        match self {
+            Self::PRefusal { error, .. } => Some(error),
+            _ => None,
+        }
+    }
+
     pub(super) fn from_native(error: impl std::error::Error + 'static) -> Self {
         match Self::resource_cause(&error) {
             Some(resource) => Self::ResourceLimit(resource.clone()),

@@ -40,7 +40,7 @@ pub(crate) struct PGraph {
 pub(crate) enum PRejection {
     /// A well-formed integral outside the p-integral domain: a massive line, a
     /// non-integer power or several external heads (and, in the catalogue,
-    /// more than four loops or a graph outside the 1L-4L registry). Under
+    /// more than five loops or a graph outside the 1L-5L registry). Under
     /// `allow_unknown_integrals` it is matched as an unknown integral;
     /// otherwise it is an error.
     OutOfDomain(String),

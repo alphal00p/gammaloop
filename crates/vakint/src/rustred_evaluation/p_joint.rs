@@ -28,10 +28,7 @@ use rustred::propagator::library::{PLibrary, PReduction, PTerm};
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use symbolica::coefficient::CoefficientView;
 
-use super::{
-    Channel, Channels, PRequestOptions, RustRedEvaluationError, coefficient, invalid,
-    p_reduction_request,
-};
+use super::{Channel, Channels, PRequestOptions, RustRedEvaluationError, coefficient, invalid};
 use crate::p_integral::phases;
 use rustred::reduction::OrderedStepCache;
 use std::sync::Arc;
@@ -334,14 +331,15 @@ pub(super) fn reduce_groups(
             let started = Instant::now();
             let reduction = {
                 let _math = super::MathSpan::new();
-                library
-                    .reduce(p_reduction_request(
-                        options,
-                        group.loops,
-                        inputs,
-                        step_cache.clone(),
-                    ))
-                    .map_err(|error| super::reduction_error(error, &integrals))?
+                super::reduce_one(
+                    library,
+                    options,
+                    group.loops,
+                    inputs,
+                    step_cache.clone(),
+                    &integrals,
+                    &format!("joint scale_power={}", group.scale_power),
+                )?
             };
             let seconds = started.elapsed().as_secs_f64();
             joint_seconds += seconds;
@@ -363,14 +361,15 @@ pub(super) fn reduce_groups(
                 }
                 let count = inputs.len();
                 let started = Instant::now();
-                let reduction = library
-                    .reduce(p_reduction_request(
-                        options,
-                        channel.loops,
-                        inputs,
-                        step_cache.clone(),
-                    ))
-                    .map_err(|error| super::reduction_error(error, &channels[channel].integrals))?;
+                let reduction = super::reduce_one(
+                    library,
+                    options,
+                    channel.loops,
+                    inputs,
+                    step_cache.clone(),
+                    &channels[channel].integrals,
+                    &format!("separate scale_power={}", channel.scale_power),
+                )?;
                 let seconds = started.elapsed().as_secs_f64();
                 separate_seconds += seconds;
                 report("separate", count, &reduction, seconds);

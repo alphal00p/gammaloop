@@ -98,6 +98,10 @@ pub(super) struct PRequestOptions {
     pub five_loop_arithmetic: OrderedWeightArithmetic,
     pub scheduler: OrderedSchedulerOptions,
     pub limits: ReductionLimits,
+    /// vk5l WP4: the coverage policy of every request ([`uncovered_policy`]).
+    pub uncovered: PUncoveredPolicy,
+    /// The master mode of the settings' RustRed backend (request dumps).
+    pub master_mode: Option<RustRedMasterMode>,
 }
 
 impl PRequestOptions {
@@ -117,17 +121,43 @@ impl PRequestOptions {
 }
 
 pub(super) fn request_options(settings: &VakintSettings) -> PRequestOptions {
+    let master_mode = super::request_dump::master_mode(settings);
     PRequestOptions {
         arithmetic: settings.rustred_ordered_weight_arithmetic(),
         five_loop_arithmetic: super::five_loop_ordered_weight_arithmetic(settings),
         scheduler: super::ordered_scheduler(settings),
         limits: settings.rustred_application_options.reduction_limits,
+        uncovered: uncovered_policy(settings.rustred_p_uncovered, master_mode),
+        master_mode,
+    }
+}
+
+/// vk5l WP4 (plan VK5L §3.2, decision Q9): the coverage policy of the p
+/// requests. [`crate::RustRedPUncoveredPolicy::Reject`] (the default): a key
+/// the library cannot reduce is a typed error. `Retain` mirrors the vacuum
+/// path's retained unresolved masters: such a key stays in the result as a
+/// `PResidual(node, k..)` symbol with a warning naming the refusal, but only
+/// under `master_mode=retain` (the vacuum path, too, refuses an unresolved
+/// key once masters must be substituted); `Symbolic` and `Numerical` keep
+/// `Reject`, so the caller sees the typed refusal rather than an unmapped
+/// terminal. A Retain request runs without the step cache (RustRed: a retained
+/// terminal's id is local to the process).
+fn uncovered_policy(
+    setting: crate::RustRedPUncoveredPolicy,
+    master_mode: Option<RustRedMasterMode>,
+) -> PUncoveredPolicy {
+    match (setting, master_mode) {
+        (crate::RustRedPUncoveredPolicy::Retain, Some(RustRedMasterMode::Retain)) => {
+            PUncoveredPolicy::Retain
+        }
+        _ => PUncoveredPolicy::Reject,
     }
 }
 
 /// The request [`reduce_requests`] sends for one channel: `inputs` with the
-/// `options` of the settings, the library's step cache, uncovered keys
-/// rejected, reduced onto the masters (module documentation).
+/// `options` of the settings, the library's step cache, the coverage policy
+/// of the settings ([`uncovered_policy`], `Reject` by default), reduced onto
+/// the masters (module documentation).
 fn p_reduction_request<'a>(
     options: &PRequestOptions,
     loops: usize,
@@ -139,7 +169,7 @@ fn p_reduction_request<'a>(
         arithmetic: options.arithmetic_for(loops),
         scheduler: options.scheduler,
         step_cache,
-        uncovered: PUncoveredPolicy::Reject,
+        uncovered: options.uncovered,
         onto_masters: true,
         limits: options.limits,
         inspector: None,
@@ -168,17 +198,8 @@ struct ChannelInputs {
 /// At most this many vakint integrals are named in a reduction error.
 const NAMED_INTEGRALS: usize = 8;
 
-/// A failed p reduction. A key the library does not cover (`Uncovered`,
-/// `MissingOwner`, or `OutsideBox`: a key of a boxed node outside its box)
-/// names the vakint integrals of the channel next to RustRed's owner class and
-/// key; any other error maps as for the vacuum programs.
-fn reduction_error(error: PError, integrals: &BTreeSet<String>) -> RustRedEvaluationError {
-    if !matches!(
-        error,
-        PError::Uncovered { .. } | PError::MissingOwner { .. } | PError::OutsideBox { .. }
-    ) {
-        return RustRedEvaluationError::from_native(error);
-    }
+/// The vakint integrals of a request, at most [`NAMED_INTEGRALS`], then a count.
+fn named_integrals(integrals: &BTreeSet<String>) -> String {
     let mut named = integrals
         .iter()
         .take(NAMED_INTEGRALS)
@@ -187,12 +208,96 @@ fn reduction_error(error: PError, integrals: &BTreeSet<String>) -> RustRedEvalua
     if integrals.len() > NAMED_INTEGRALS {
         named.push(format!("{} more", integrals.len() - NAMED_INTEGRALS));
     }
-    RustRedEvaluationError::Reduction {
-        detail: format!(
-            "{error}, reducing the p-integrals {} with the RustRed p library",
-            named.join(", ")
-        ),
+    named.join(", ")
+}
+
+/// Highest arity RustRed compiles by default (`RUSTRED_RUNTIME_ARITIES` unset:
+/// `1..=16`); five-loop p families have 20 slots.
+const DEFAULT_RUNTIME_ARITY: usize = 16;
+
+/// The RustRed build a reproduction command of a key of `arity` slots needs:
+/// empty up to [`DEFAULT_RUNTIME_ARITY`], else the arity-20 build (the
+/// default build refuses a 20-slot chart).
+fn reproduction_build(arity: usize) -> String {
+    if arity <= DEFAULT_RUNTIME_ARITY {
+        String::new()
+    } else {
+        format!(
+            " (the reproduction command needs a RustRed build that compiles arity {arity}: \
+             RUSTRED_RUNTIME_ARITIES=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,{arity} with \
+             --features rustred-app/runtime-arity-selection)"
+        )
     }
+}
+
+/// A failed p reduction. A key the library does not cover (`Uncovered`,
+/// `MissingOwner`) names the vakint integrals of the channel next to RustRed's
+/// owner class and key. vk5l WP4: the typed refusals of boxed and open nodes
+/// (`OutsideBox`, `OutsideCertifiedSet`, `NodeNotClosed`: node, key, violated
+/// bound, original request and reproduction command) pass through unchanged
+/// as [`RustRedEvaluationError::PRefusal`] with the vakint integrals and the
+/// build the reproduction needs. Any other error maps as for the vacuum
+/// programs.
+fn reduction_error(error: PError, integrals: &BTreeSet<String>) -> RustRedEvaluationError {
+    match &error {
+        PError::OutsideBox { key, .. }
+        | PError::OutsideCertifiedSet { key, .. }
+        | PError::NodeNotClosed { key, .. } => {
+            let build = reproduction_build(key.powers().len());
+            RustRedEvaluationError::PRefusal {
+                error: Box::new(error),
+                integrals: named_integrals(integrals),
+                build,
+            }
+        }
+        PError::Uncovered { .. } | PError::MissingOwner { .. } => {
+            RustRedEvaluationError::Reduction {
+                detail: format!(
+                    "{error}, reducing the p-integrals {} with the RustRed p library",
+                    named_integrals(integrals)
+                ),
+            }
+        }
+        _ => RustRedEvaluationError::from_native(error),
+    }
+}
+
+/// vk5l WP4: one p request (a channel or a joint group of `loops` loops):
+/// reduced with the settings' `options`, written first when
+/// `VAKINT_DUMP_ORDERED_REQUEST` is set (the request, then its result:
+/// [`super::request_dump::PRequestDump`]; with
+/// `VAKINT_DUMP_ORDERED_REQUEST_ONLY=1` the reduction is skipped and the
+/// evaluation fails after the first written request), its failure mapped by
+/// [`reduction_error`].
+pub(super) fn reduce_one(
+    library: &rustred::propagator::library::PLibrary,
+    options: &PRequestOptions,
+    loops: usize,
+    inputs: Vec<(PresentationId, IntegralKey, Coefficient)>,
+    step_cache: Option<Arc<OrderedStepCache>>,
+    integrals: &BTreeSet<String>,
+    label: &str,
+) -> Result<PReduction, RustRedEvaluationError> {
+    let dump = super::request_dump::PRequestDump::begin(super::request_dump::PDumpRequest {
+        library,
+        loops,
+        label,
+        arithmetic: options.arithmetic_for(loops),
+        uncovered: options.uncovered,
+        master_mode: options.master_mode,
+        inputs: &inputs,
+        integrals,
+    })?;
+    if let Some(dump) = &dump
+        && dump.only()
+    {
+        return Err(super::request_dump::skipped(1));
+    }
+    let result = library.reduce(p_reduction_request(options, loops, inputs, step_cache));
+    if let Some(dump) = dump {
+        dump.finish(library, &result)?;
+    }
+    result.map_err(|error| reduction_error(error, integrals))
 }
 
 /// Exponents of the slots in a polynomial of affine slot forms.
@@ -620,14 +725,15 @@ pub(crate) fn reduce_requests(
                 |(_, inputs, _)| inputs.len(),
                 |index, (channel, inputs, integrals)| {
                     let started = phases::per_request().then(std::time::Instant::now);
-                    let reduction = library
-                        .reduce(p_reduction_request(
-                            &single,
-                            channel.loops,
-                            inputs.clone(),
-                            step_cache.clone(),
-                        ))
-                        .map_err(|error| reduction_error(error, integrals));
+                    let reduction = reduce_one(
+                        library,
+                        &single,
+                        channel.loops,
+                        inputs.clone(),
+                        step_cache.clone(),
+                        integrals,
+                        &format!("channel {index} scale_power={}", channel.scale_power),
+                    );
                     if let (Some(started), Ok(reduction)) = (started, &reduction) {
                         eprintln!(
                             "vakint-p-request index={index} inputs={} terms={} seconds={:.6}",
@@ -685,14 +791,15 @@ pub(crate) fn reduce_requests(
         let before = reduce.total;
         let reduction = reduce.time(|| {
             let _math = MathSpan::new();
-            library
-                .reduce(p_reduction_request(
-                    &options,
-                    channel.loops,
-                    inputs,
-                    step_cache.clone(),
-                ))
-                .map_err(|error| reduction_error(error, &integrals))
+            reduce_one(
+                library,
+                &options,
+                channel.loops,
+                inputs,
+                step_cache.clone(),
+                &integrals,
+                &format!("channel {index} scale_power={}", channel.scale_power),
+            )
         })?;
         if phases::per_request() {
             eprintln!(
@@ -727,18 +834,82 @@ pub(crate) fn reduce_requests(
     Ok(values)
 }
 
-/// HOOK (five-loop p plan, WP4/WP6): the p master catalogue that finalizes
-/// the `loops`-loop channels of `vakint`. The five-loop dispatch (WP4) renders
-/// residual terminals as `PResidual(node, k..)`; with a catalogue the
-/// finalizer maps them onto its masters and applies the catalogue guards
-/// (`p_integral::master_catalogue`); without one `Symbolic` and `Numerical`
-/// refuse them with `PMasterCatalogueError::NoCatalogue` and `Retain` returns
-/// them. No catalogue ships yet (decision Q3: Retain-only first), so this is
-/// `None`; WP6 returns the catalogue of the loaded p area
-/// (`p_integral/masters/<id>/catalogue.json`, `PMasterCatalogue::load`), and
-/// WP4 replaces the request text by the channel's integral names.
-fn p_master_catalogue(_vakint: &Vakint, _loops: usize) -> Option<&PMasterCatalogue> {
-    None
+/// The p master catalogue that finalizes the `loops`-loop channels of
+/// `vakint`. The five-loop dispatch renders residual terminals as
+/// `PResidual(node, k..)`; with a catalogue the finalizer maps them onto its
+/// masters and applies the catalogue guards (`p_integral::master_catalogue`);
+/// without one `Symbolic` and `Numerical` refuse them with
+/// `PMasterCatalogueError::NoCatalogue` and `Retain` returns them. vk5l WP4:
+/// the engine's catalogue (`Vakint::set_p_master_catalogue`) for five loops;
+/// one to four loops keep the Forcer table. No catalogue ships yet (decision
+/// Q3: Retain-only first); WP6 sets the catalogue of the loaded p area.
+fn p_master_catalogue(vakint: &Vakint, loops: usize) -> Option<&PMasterCatalogue> {
+    if loops >= 5 {
+        vakint.p_master_catalogue()
+    } else {
+        None
+    }
+}
+
+/// The vakint integrals of `requests` by loop count and external head
+/// (`FAMILY(a_1,..)`), named by the finalizer's guards.
+fn request_names(
+    requests: &[PropagatorRequest],
+) -> Result<BTreeMap<(usize, Atom), BTreeSet<String>>, VakintError> {
+    let mut names = BTreeMap::<(usize, Atom), BTreeSet<String>>::new();
+    for request in requests {
+        let (head, _) = external_head(&request.external)?;
+        let powers = request
+            .powers
+            .iter()
+            .map(i64::to_string)
+            .collect::<Vec<_>>()
+            .join(",");
+        names
+            .entry((request.family.loops, head))
+            .or_default()
+            .insert(format!("{}({powers})", request.family.name));
+    }
+    Ok(names)
+}
+
+/// Finalize the reduced values of a batch (`reduce_requests`) in `mode`: per
+/// loop count and head, the shared p finalizer with the master source of
+/// that loop count ([`p_master_catalogue`]) and the request's vakint
+/// integrals in its messages.
+pub(crate) fn finalize_reduced(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    reduced: BTreeMap<(usize, Atom), Vec<ReducedPropagatorValue>>,
+    names: &BTreeMap<(usize, Atom), BTreeSet<String>>,
+    mode: RustRedMasterMode,
+) -> Result<Atom, VakintError> {
+    let mut result = Atom::Zero;
+    for ((loops, head), values) in reduced {
+        let catalogue = p_master_catalogue(vakint, loops);
+        let request = match names.get(&(loops, head.clone())) {
+            Some(integrals) if !integrals.is_empty() => format!(
+                "the {loops}-loop p-integrals {} of external {head}",
+                named_integrals(integrals)
+            ),
+            _ => format!("the {loops}-loop p-integrals of external {head}"),
+        };
+        let finalized = phases::time("p.finalize", || {
+            finalize::finalize_with(
+                &values,
+                loops,
+                &head,
+                settings,
+                mode,
+                "RustRed",
+                PMasterSource::new(catalogue, &request),
+            )
+        })?;
+        result += phases::time("p.final_simplify_real", || {
+            simplify_real(finalized.as_view())
+        });
+    }
+    Ok(result)
 }
 
 /// Reduce and finalize a batch of matched p contributions in `mode` (module
@@ -764,26 +935,9 @@ pub(crate) fn evaluate_ordered_batch(
         })
         .collect::<Result<Vec<_>, VakintError>>()?;
     phases::end("p.propagator_requests", started);
-    let mut result = Atom::Zero;
-    for ((loops, head), values) in reduce_requests(vakint, settings, &requests, progress)? {
-        let catalogue = p_master_catalogue(vakint, loops);
-        let request = format!("the {loops}-loop p-integrals of external {head}");
-        let finalized = phases::time("p.finalize", || {
-            finalize::finalize_with(
-                &values,
-                loops,
-                &head,
-                settings,
-                mode,
-                "RustRed",
-                PMasterSource::new(catalogue, &request),
-            )
-        })?;
-        result += phases::time("p.final_simplify_real", || {
-            simplify_real(finalized.as_view())
-        });
-    }
-    Ok(result)
+    let names = request_names(&requests)?;
+    let reduced = reduce_requests(vakint, settings, &requests, progress)?;
+    finalize_reduced(vakint, settings, reduced, &names, mode)
 }
 
 #[path = "p_joint.rs"]

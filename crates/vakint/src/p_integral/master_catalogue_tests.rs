@@ -31,8 +31,9 @@ const REQUEST: &str = "test request topo(T5(p(1),1,...))";
 /// A synthetic five-loop catalogue: `syn_m1` known through `ε^0`
 /// (`1/ε + 5/2`), `syn_num` numerical only (30 digits), `syn_empty` declared
 /// without coefficients, `syn_float` an exact formula embedding a decimal
-/// (5 validated digits), and terminal rows of every status.
-fn fixture() -> Value {
+/// (5 validated digits), and terminal rows of every status. Shared with the
+/// p path's five-loop guard tests (`rustred_evaluation::p_integral` tests).
+pub(crate) fn fixture() -> Value {
     json!({
         "schema": P_MASTER_CATALOGUE_SCHEMA,
         "version": P_MASTER_CATALOGUE_VERSION,
@@ -332,8 +333,9 @@ fn missing_5l_p_master_coefficients_are_not_assumed_zero() {
 
 /// ← `embedded_float_annotations_do_not_override_validated_precision` and
 /// the "finite constant without validated significant digits" refusal: a
-/// numerical-only coefficient needs validated digits of at least
-/// `run_time_decimal_precision`; Symbolic mode refuses it.
+/// numerical-only coefficient needs validated digits (none: an error; fewer
+/// than `run_time_decimal_precision`: a warning, as on the vacuum path);
+/// Symbolic mode refuses it.
 #[test]
 fn numerical_5l_master_without_validated_digits_is_refused() {
     let catalogue = catalogue();
@@ -358,38 +360,17 @@ fn numerical_5l_master_without_validated_digits_is_refused() {
         (symbolica::domains::float::RealLike::to_f64(&real.to_float()) - 1.25).abs() < 1e-15,
         "{value}"
     );
-    // ... but not a 40-digit request: requested vs available, master, order.
-    let error = catalogue_error(
-        run(
-            Some(&catalogue),
-            terminal.clone(),
-            RustRedMasterMode::Numerical,
-            6,
-            40,
-        )
-        .unwrap_err(),
-    );
-    let PMasterCatalogueError::Digits {
-        requested,
-        shortfalls,
-        ..
-    } = &error
-    else {
-        panic!("expected a digits error: {error}");
-    };
-    assert_eq!(*requested, 40);
-    assert_eq!(
-        shortfalls,
-        &[DigitsShortfall {
-            master: "syn-num".into(),
-            order: 0,
-            available: Some(30)
-        }]
-    );
-    assert_names(
-        &error.to_string(),
-        &["syn-num", "epsilon^0", "30 validated digits < 40", REQUEST],
-    );
+    // vk5l WP4 (as the vacuum path): a 40-digit request is served with a
+    // warning, at the 30 validated digits of the coefficient.
+    let value = run(
+        Some(&catalogue),
+        terminal.clone(),
+        RustRedMasterMode::Numerical,
+        6,
+        40,
+    )
+    .unwrap();
+    assert!(!value.is_zero(), "{value}");
     // Without validated digits it is refused at any precision.
     let mut file = fixture();
     file["masters"][1]["coefficients"]["0"]
@@ -411,31 +392,20 @@ fn numerical_5l_master_without_validated_digits_is_refused() {
         &error.to_string(),
         &["syn-num", "without validated significant digits"],
     );
-    // An embedded `2.5`100` counts with its 5 validated digits, not 100.
-    let error = catalogue_error(
-        run(
-            Some(&catalogue),
-            residual("T905", &[1]),
-            RustRedMasterMode::Numerical,
-            6,
-            20,
-        )
-        .unwrap_err(),
-    );
-    assert_names(
-        &error.to_string(),
-        &["syn-float", "5 validated digits < 20"],
-    );
-    assert!(
-        run(
-            Some(&catalogue),
-            residual("T905", &[1]),
-            RustRedMasterMode::Numerical,
-            6,
-            5
-        )
-        .is_ok()
-    );
+    // An embedded `2.5`100` with its 5 validated digits serves a 20-digit
+    // request with a warning (vacuum path), and a 5-digit one silently.
+    for digits in [20, 5] {
+        assert!(
+            run(
+                Some(&catalogue),
+                residual("T905", &[1]),
+                RustRedMasterMode::Numerical,
+                6,
+                digits
+            )
+            .is_ok()
+        );
+    }
     // Symbolic mode never substitutes a decimal.
     let error = catalogue_error(
         run(

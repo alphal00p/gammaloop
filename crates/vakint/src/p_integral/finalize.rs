@@ -12,7 +12,7 @@
 //! `logmUVmu`/`log_mu_sq` split, so that normalizations carrying
 //! `exp(log_mu_sq)^(εL)` (MSbar, GScheme) cancel `(μ²)^(-Lε)` symbolically.
 
-use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
+use symbolica::atom::{Atom, AtomCore, Symbol};
 use symbolica::function;
 use symbolica::transcendental::gamma;
 
@@ -286,8 +286,8 @@ const NAMED_RESIDUALS: usize = 8;
 pub(crate) fn unevaluated_terminals(expression: &Atom) -> Vec<String> {
     let mut found = std::collections::BTreeSet::new();
     expression.visitor(&mut |part| {
-        if let AtomView::Fun(function) = part
-            && function.get_symbol() == p_residual_symbol()
+        if let symbolica::atom::AtomView::Fun(function) = part
+            && function.get_symbol() == super::p_residual_symbol()
         {
             found.insert(part.to_owned().to_string());
             return false;

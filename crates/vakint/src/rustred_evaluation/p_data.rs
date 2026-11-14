@@ -6,7 +6,14 @@
 //!
 //! 1. a library injected into the engine ([`Vakint::inject_p_library`], tests
 //!    and callers that build their own program, e.g.
-//!    `rustred::propagator::testing::one_loop_reference_library()`);
+//!    `rustred::propagator::testing::one_loop_reference_library()`), or a
+//!    package directory loaded into it ([`Vakint::load_p_library_directory`]);
+//!    otherwise the package directory named by the environment variable
+//!    [`P_LIBRARY_VARIABLE`] (`VAKINT_P_LIBRARY`, vk5l WP4: the location of
+//!    the heavy one-to-five-loop package until it is a downloadable asset,
+//!    WP6), loaded without the descent certificate unless
+//!    `VAKINT_P_LIBRARY_VERIFY=1` (a verified five-loop load takes about half
+//!    an hour);
 //! 2. the external data the engine loaded: a hand-made
 //!    `<root>/p/p-library-<a>-<b>/` under the external-data root (the layout
 //!    `rustred p-package` writes; loaded with the descent certificate), else
@@ -52,6 +59,7 @@ use rustred::propagator::PresentationId;
 use rustred::propagator::library::{PBasis, PLibrary};
 use rustred::propagator::presentation::Slot;
 use rustred::propagator::tag::GammaTag;
+use rustred_app::propagator::loader::read_p_library_manifest;
 use rustred_app::propagator::{PLibraryOptions, PLibrarySource, load_p_library};
 use serde::{Deserialize, Serialize};
 use symbolica::atom::Atom;
@@ -74,6 +82,13 @@ const MAX_CACHE_DIRECTORY_NAME: usize = 200;
 pub(crate) const P_DATA_SCHEMA: &str = "vakint.p-data.v1";
 /// The manifest of a p area, `p/manifest.json` below the data root.
 pub(crate) const P_DATA_MANIFEST: &str = "manifest.json";
+/// vk5l WP4: the environment variable naming a p package directory (any
+/// name, the layout `rustred p-package` or `p5l_library assemble` writes),
+/// used ahead of external and built-in data (module documentation).
+pub const P_LIBRARY_VARIABLE: &str = "VAKINT_P_LIBRARY";
+/// With `1`, the package of [`P_LIBRARY_VARIABLE`] loads with the descent
+/// certificate.
+pub const P_LIBRARY_VERIFY_VARIABLE: &str = "VAKINT_P_LIBRARY_VERIFY";
 
 fn data_failure(detail: impl fmt::Display) -> RustRedEvaluationError {
     RustRedEvaluationError::ExternalData {
@@ -85,6 +100,9 @@ fn data_failure(detail: impl fmt::Display) -> RustRedEvaluationError {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum PLibraryOrigin {
     Injected,
+    /// vk5l WP4: a package directory (`load_p_library_directory`,
+    /// `VAKINT_P_LIBRARY`).
+    Package,
     ExternalData,
     BuiltIn,
 }
@@ -93,6 +111,7 @@ impl PLibraryOrigin {
     fn as_str(self) -> &'static str {
         match self {
             Self::Injected => "injected",
+            Self::Package => "package",
             Self::ExternalData => "external-data",
             Self::BuiltIn => "built-in",
         }
@@ -106,7 +125,8 @@ impl PLibraryOrigin {
     fn cache_suffix(self) -> Option<&'static str> {
         match self {
             Self::Injected => Some("injected"),
-            Self::ExternalData | Self::BuiltIn => None,
+            // A package carries its content revision in its identity.
+            Self::Package | Self::ExternalData | Self::BuiltIn => None,
         }
     }
 }
@@ -437,6 +457,17 @@ impl PLibraryHandle {
             .residual_terminal(terminal)
             .map_err(RustRedEvaluationError::from_native)?
             .ok_or_else(|| data_failure(format!("terminal {} is no residual", terminal.0)))?;
+        // vk5l WP4 (decision Q9): a key the Retain policy kept instead of
+        // refusing it; said once per key, as the vacuum path's retained
+        // unresolved masters.
+        if let Some(refusal) = &residual.retained {
+            log::warn!(
+                "RustRed p library: kept PResidual({}, {:?}) unreduced (rustred_p_uncovered = \
+                 Retain, master_mode=retain): {refusal}",
+                residual.node,
+                residual.key.powers()
+            );
+        }
         let mut builder = symbolica::atom::FunctionBuilder::new(p_residual_symbol())
             .add_arg(Atom::var(vk_symbol!(residual.node.as_str())));
         for &power in residual.key.powers() {
@@ -589,6 +620,8 @@ pub(crate) fn load_directory(
         },
     )
     .map_err(|error| located(&error))?;
+    // vk5l WP4: the package directory of RustRed's reproduction commands.
+    library.set_source(directory.path.display().to_string());
     if library.scope() != directory.scope {
         return Err(data_failure(format!(
             "{} holds a library of scope {:?}",
@@ -618,6 +651,38 @@ pub(crate) fn load_directory(
         );
     }
     Ok(handle)
+}
+
+/// vk5l WP4: the directory [`P_LIBRARY_VARIABLE`] names, if set and not empty.
+fn package_variable() -> Option<PathBuf> {
+    std::env::var_os(P_LIBRARY_VARIABLE)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+}
+
+/// vk5l WP4: a package directory loaded through RustRed's fail-closed loader
+/// (with the descent certificate when `verify`), its source recorded for
+/// RustRed's reproduction commands, checked for vakint.
+fn load_package(
+    directory: &Path,
+    verify: bool,
+) -> Result<Arc<PLibraryHandle>, RustRedEvaluationError> {
+    if !directory.is_dir() {
+        return Err(data_failure(format!(
+            "the p package directory {} does not exist ({P_LIBRARY_VARIABLE} or \
+             load_p_library_directory)",
+            directory.display()
+        )));
+    }
+    let library = load_p_library(
+        PLibrarySource::Directory(directory.to_owned()),
+        &PLibraryOptions {
+            verify_descent: verify,
+        },
+    )
+    .map_err(|error| data_failure(format!("{}: {error}", directory.display())))?;
+    library.set_source(directory.display().to_string());
+    PLibraryHandle::new(library, PLibraryOrigin::Package).map(Arc::new)
 }
 
 /// Libraries loaded from external-data directories, by directory: loaded once
@@ -807,6 +872,37 @@ impl Vakint {
         Ok(())
     }
 
+    /// vk5l WP4: reduce the p-integrals of this engine (and its later clones)
+    /// with the RustRed p package in `directory` (the layout `rustred
+    /// p-package` or `p5l_library assemble` writes, e.g. a one-to-five-loop
+    /// package), ahead of `VAKINT_P_LIBRARY`, external and built-in data. The
+    /// package loads through RustRed's fail-closed loader, with the descent
+    /// certificate when `verify` (slow at five loops), and is checked as every
+    /// library ([`PLibraryHandle::new`]). Five-loop packages need a vakint
+    /// build whose RustRed compiles arity 20 (`docs/p_integrals.md`).
+    pub fn load_p_library_directory(
+        &mut self,
+        directory: impl AsRef<Path>,
+        verify: bool,
+    ) -> Result<(), crate::VakintError> {
+        self.p_library = Some(load_package(directory.as_ref(), verify)?);
+        Ok(())
+    }
+
+    /// vk5l WP4: finalize five-loop p-integrals with `catalogue` (WP5's p
+    /// master catalogue: masters with `known_through`, unknown tails and
+    /// digits, residual terminal rows). Without one, five-loop results stay
+    /// `PResidual` symbols under `master_mode=retain` and the other modes
+    /// refuse them (decision Q3).
+    pub fn set_p_master_catalogue(&mut self, catalogue: crate::p_integral::PMasterCatalogue) {
+        self.p_master_catalogue = Some(Arc::new(catalogue));
+    }
+
+    /// The p master catalogue of this engine's five-loop p-integrals.
+    pub(crate) fn p_master_catalogue(&self) -> Option<&crate::p_integral::PMasterCatalogue> {
+        self.p_master_catalogue.as_deref()
+    }
+
     /// The external-data root of this engine's loaded data, if it was read
     /// from a directory.
     fn external_data_root(&self) -> Option<PathBuf> {
@@ -845,6 +941,12 @@ impl Vakint {
         if let Some(handle) = &self.p_library {
             return PDataPresence::Scope(handle.scope());
         }
+        if let Some(directory) = package_variable() {
+            return match read_p_library_manifest(&PLibrarySource::Directory(directory)) {
+                Ok(manifest) => PDataPresence::Scope(manifest.scope[0]..=manifest.scope[1]),
+                Err(_) => PDataPresence::Broken,
+            };
+        }
         match self.resolved_directory() {
             Ok(Some(directory)) => return PDataPresence::Scope(directory.scope),
             Ok(None) => {}
@@ -875,6 +977,27 @@ impl Vakint {
         }
     }
 
+    /// The package of [`P_LIBRARY_VARIABLE`], loaded once per process.
+    fn package_from_variable(&self) -> Result<Option<Arc<PLibraryHandle>>, RustRedEvaluationError> {
+        let Some(directory) = package_variable() else {
+            return Ok(None);
+        };
+        if let Some(handle) = loaded_directories()
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(&directory)
+        {
+            return Ok(Some(Arc::clone(handle)));
+        }
+        let verify = std::env::var(P_LIBRARY_VERIFY_VARIABLE).is_ok_and(|value| value == "1");
+        let handle = load_package(&directory, verify)?;
+        loaded_directories()
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(directory, Arc::clone(&handle));
+        Ok(Some(handle))
+    }
+
     /// The Ordered-cache program of [`Self::loaded_p_library`]; never loads a
     /// library, so it lists the p program only once one is loaded.
     pub(crate) fn loaded_p_cache_program(&self) -> Option<OrderedCacheProgram> {
@@ -885,6 +1008,9 @@ impl Vakint {
     pub(crate) fn p_library(&self) -> Result<Arc<PLibraryHandle>, RustRedEvaluationError> {
         if let Some(handle) = &self.p_library {
             return Ok(Arc::clone(handle));
+        }
+        if let Some(handle) = self.package_from_variable()? {
+            return Ok(handle);
         }
         if let Some(directory) = self.resolved_directory()? {
             if let Some(handle) = loaded_directories()
@@ -912,6 +1038,86 @@ impl Vakint {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// vk5l WP4: a package directory loaded into the engine
+    /// (`load_p_library_directory`) whose `open-nodes.json` (RustRed's
+    /// open-node sidecar) declares every owner of the built-in 1-3 package
+    /// NOT CLOSED as "T266": a request reaching it fails with RustRed's
+    /// `NodeNotClosed` passed through (node, status, key, request and a
+    /// reproduction command naming the package directory); under the Retain
+    /// policy it stays `PResidual(T266, ..)`.
+    #[test]
+    fn a_key_reaching_a_node_declared_open_names_node_key_request_and_reproduction() {
+        let (manifest, _) = built_in_manifest().unwrap().unwrap();
+        let files = built_in_files(manifest).unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path().join("p5l-package");
+        for (name, bytes) in files {
+            let path = directory.join(name);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, bytes).unwrap();
+        }
+        let library: serde_json::Value =
+            serde_json::from_slice(&fs::read(directory.join("library.json")).unwrap()).unwrap();
+        let nodes = (library["owners"].as_array().unwrap().iter())
+            .map(|owner| {
+                serde_json::json!({"class": owner["class"], "node": "T266",
+                    "status": "stuck: not closed"})
+            })
+            .collect::<Vec<_>>();
+        fs::write(
+            directory.join(rustred_app::propagator::loader::OPEN_NODES_FILE),
+            serde_json::to_vec(&serde_json::json!({
+                "schema": rustred_app::propagator::loader::P_OPEN_NODES_SCHEMA,
+                "nodes": nodes,
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let mut engine = Vakint::new().unwrap();
+        engine.load_p_library_directory(&directory, false).unwrap();
+        assert_eq!(engine.p_library().unwrap().origin, PLibraryOrigin::Package);
+        let mut settings = crate::VakintSettings {
+            evaluation_order: crate::EvaluationOrder(vec![crate::EvaluationMethod::RustRed(
+                crate::RustRedEvaluationOptions {
+                    master_mode: crate::RustRedMasterMode::Retain,
+                },
+            )]),
+            form_exe_path: "/rustred-p-integrals-must-not-call-form".into(),
+            integral_normalization_factor: crate::LoopNormalizationFactor::GScheme,
+            n_cores: 1,
+            ..crate::VakintSettings::default()
+        };
+        crate::Vakint::initialize_vakint_symbols();
+        let input = crate::utils::vakint_macros::vk_parse!("topo(P2L(p(1),1,1,1,1,1))").unwrap();
+        let error = engine.evaluate(&settings, input.as_view()).unwrap_err();
+        let crate::VakintError::RustRedEvaluation(native) = &error else {
+            panic!("not a RustRed error: {error}");
+        };
+        assert!(
+            matches!(native.p_refusal(),
+                Some(rustred::propagator::error::PError::NodeNotClosed { node, status, request: Some(_), .. })
+                    if node == "T266" && status == "stuck: not closed"),
+            "{error}"
+        );
+        let text = error.to_string();
+        for fragment in [
+            "no closed reduction for node T266",
+            "request: P2L[p",
+            "reproduce: cargo run --release -p rustred-app --example p5l_library -- reduce",
+            "p5l-package",
+            "reducing the p-integrals P2L(1,1,1,1,1) with the RustRed p library",
+        ] {
+            assert!(text.contains(fragment), "{fragment:?} not in {text}");
+        }
+        settings.rustred_p_uncovered = crate::RustRedPUncoveredPolicy::Retain;
+        let kept = engine.evaluate(&settings, input.as_view()).unwrap();
+        let residuals = crate::p_integral::finalize::unevaluated_terminals(&kept);
+        assert!(
+            !residuals.is_empty() && residuals.iter().all(|r| r.contains("T266")),
+            "{kept}"
+        );
+    }
 
     fn reference() -> Arc<PLibrary> {
         rustred::propagator::testing::one_loop_reference_library().unwrap()

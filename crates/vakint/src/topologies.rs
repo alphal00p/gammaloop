@@ -546,7 +546,7 @@ impl Topologies {
         };
         let uncovered = || {
             VakintError::UnreckognizedIntegral(format!(
-                "{input} (p-integral not covered by the 1L-4L registry)"
+                "{input} (p-integral not covered by the 1L-5L registry)"
             ))
         };
         let Some(matched) = p_integral::match_graph(&graph)? else {

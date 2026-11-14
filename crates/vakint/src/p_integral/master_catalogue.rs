@@ -15,7 +15,10 @@
 //! | (p only) residual terminal without a map row     | [`PMasterCatalogueError::UnmappedTerminals`]           |
 //! | (p only) no catalogue at all (Retain-only today) | [`PMasterCatalogueError::NoCatalogue`]                 |
 //! | finite constant without validated digits         | [`PMasterCatalogueError::Digits`] (`available: None`)  |
-//! | achieved digits below the request                | [`PMasterCatalogueError::Digits`] (`available < req.`) |
+//! | validated digits below the request (a warning)   | `log::warn` naming master, order, digits; the value is |
+//! |                                                  | substituted at its validated digits (vk5l WP4, the     |
+//! |                                                  | coordinator's decision: as the vacuum path's           |
+//! |                                                  | `PrecisionWarning`)                                    |
 //! | malformed / non-finite numerical value           | [`PMasterCatalogueError::Invalid`] at load             |
 //! | Retain mode only warns about unresolved masters  | the same (`log::warn`), terminals stay `PResidual`     |
 //!
@@ -82,7 +85,6 @@ pub const P_MASTER_NORMALISATION: &str = "g-scheme";
 
 /// At most this many entries are named in one error message.
 const NAMED: usize = 8;
-
 
 /// `vakint::PMasterValue(master, k)`: the `ε^k` coefficient of a catalogue
 /// master that is known numerically only (or embeds a finite constant), kept
@@ -177,8 +179,8 @@ pub enum PMasterCatalogueError {
         coefficients: Vec<String>,
         request: String,
     },
-    /// Coefficients without validated digits or with fewer digits than
-    /// `run_time_decimal_precision`.
+    /// Coefficients without validated digits (fewer validated digits than
+    /// `run_time_decimal_precision` only warn, as on the vacuum path).
     #[error(
         "p master data {data_version}: the result at {requested} digits needs master coefficients \
          that cannot support it:{} (request: {request})",
@@ -1089,15 +1091,28 @@ impl<'a> PMasterSource<'a> {
         let mut replacements = Vec::new();
         for (reference, master, order, coefficient) in entries {
             let available = coefficient.significant_digits.filter(|digits| *digits > 0);
-            if available.is_none_or(|digits| digits < requested) {
+            // vk5l WP4 (coordinator, wave-1 decision WP5 (1)): the vacuum
+            // path's handling: no validated digits is an error, fewer
+            // validated digits than requested a warning (the value is used at
+            // the digits it has).
+            let Some(digits) = available else {
                 shortfalls.push(DigitsShortfall {
                     master: master.id.clone(),
                     order,
                     available,
                 });
                 continue;
+            };
+            if digits < requested {
+                log::warn!(
+                    "p master data {}: master {} coefficient epsilon^{order}: {digits} validated \
+                     digits < {requested} requested: imported value cannot support the requested \
+                     precision (request: {})",
+                    catalogue.data_version,
+                    master.id,
+                    self.request()
+                );
             }
-            let digits = available.unwrap();
             let value = match (&coefficient.exact, &coefficient.numerical) {
                 (Some(exact), _) => exact.clone(),
                 (None, Some(text)) => {
@@ -1152,4 +1167,4 @@ impl fmt::Display for PMasterCatalogue {
 
 #[cfg(test)]
 #[path = "master_catalogue_tests.rs"]
-mod tests;
+pub(crate) mod tests;

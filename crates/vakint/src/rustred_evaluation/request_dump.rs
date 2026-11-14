@@ -22,6 +22,14 @@
 //! `VAKINT_DUMP_ORDERED_REQUEST_ONLY=1` the native reductions are skipped after
 //! their requests are written and the evaluation fails with an explicit error.
 //! RustRed's `ordered_replay` example replays these files without Vakint.
+//!
+//! vk5l WP4: the RustRed p path writes its requests the same way:
+//! `P<L>-<pid>-<seq>.request.json` (schema `vakint.p-request.v1`: library
+//! identity, presentation/family/powers/coefficient of every input, the
+//! vakint integrals, and RustRed's reproduction command `p5l_library reduce`
+//! of the inputs at weight one) and `.result.json` (the digest of the exact
+//! reduction or the error text); with `VAKINT_DUMP_ORDERED_REQUEST_ONLY=1`
+//! the first written p request ends the evaluation.
 //! Without the variables nothing happens beyond one cached environment lookup
 //! per native request.
 use std::collections::{BTreeMap, BTreeSet};
@@ -510,6 +518,233 @@ fn append_index(directory: &Path, record: &Value) -> Result<(), RustRedEvaluatio
         .open(directory.join("index.jsonl"))
         .map_err(failure)?;
     writeln!(file, "{record}").map_err(failure)
+}
+
+/// vk5l WP4: schema of a p request (`<stem>.request.json` of a p-integral
+/// request; the p path's mirror of [`REQUEST_SCHEMA`]).
+const P_REQUEST_SCHEMA: &str = "vakint.p-request.v1";
+/// Schema of the result of a p request.
+const P_RESULT_SCHEMA: &str = "vakint.p-result.v1";
+/// The canonical byte layout of [`p_output_digest`].
+pub(super) const P_OUTPUT_DIGEST_SCHEME: &str = "vakint.p-output.v1";
+
+/// vk5l WP4: one RustRed p request (a channel or a joint group).
+pub(super) struct PDumpRequest<'a> {
+    pub(super) library: &'a rustred::propagator::library::PLibrary,
+    pub(super) loops: usize,
+    /// The caller's label of the request (channel or joint group).
+    pub(super) label: &'a str,
+    pub(super) arithmetic: rustred::reduction::OrderedWeightArithmetic,
+    pub(super) uncovered: rustred::propagator::library::PUncoveredPolicy,
+    pub(super) master_mode: Option<crate::RustRedMasterMode>,
+    pub(super) inputs: &'a [(
+        rustred::propagator::PresentationId,
+        IntegralKey,
+        Coefficient,
+    )],
+    /// The vakint integrals of the request.
+    pub(super) integrals: &'a BTreeSet<String>,
+}
+
+/// One written p request; finish it with the library's answer.
+pub(super) struct PRequestDump {
+    directory: PathBuf,
+    stem: String,
+    only: bool,
+    started: Instant,
+}
+
+impl PRequestDump {
+    /// Write the p request if dumping is enabled (`VAKINT_DUMP_ORDERED_REQUEST`).
+    pub(super) fn begin(
+        request: PDumpRequest<'_>,
+    ) -> Result<Option<PRequestDump>, RustRedEvaluationError> {
+        settings()
+            .map(|settings| Self::write(settings, request))
+            .transpose()
+    }
+
+    /// `<stem>.request.json` (schema [`P_REQUEST_SCHEMA`]): the library
+    /// identity, its RustRed reproduction command (`p5l_library reduce`, the
+    /// inputs at weight one), arithmetic, coverage policy, master mode, the
+    /// vakint integrals and the exact inputs (presentation, family, powers,
+    /// canonical coefficient) with their digest.
+    fn write(
+        settings: &DumpSettings,
+        request: PDumpRequest<'_>,
+    ) -> Result<PRequestDump, RustRedEvaluationError> {
+        static SEQUENCE: AtomicUsize = AtomicUsize::new(0);
+        let sequence = SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        std::fs::create_dir_all(&settings.directory).map_err(failure)?;
+        let stem = format!("P{}-{}-{sequence:04}", request.loops, std::process::id());
+        let context = request.library.request_context(request.inputs);
+        let mut hasher = blake3::Hasher::new();
+        let inputs = request
+            .inputs
+            .iter()
+            .zip(&context.inputs)
+            .map(|((presentation, key, coefficient), named)| {
+                let coefficient = canonical(coefficient);
+                hasher.update(format!("p{}\n", presentation.0).as_bytes());
+                hash_key(&mut hasher, key);
+                hasher.update(coefficient.as_bytes());
+                hasher.update(b"\n");
+                json!({"presentation": presentation.0, "family": named.family,
+                    "powers": key.powers(), "coefficient": coefficient})
+            })
+            .collect::<Vec<_>>();
+        let document = json!({
+            "schema": P_REQUEST_SCHEMA,
+            "sequence": sequence,
+            "process_id": std::process::id(),
+            "loop_count": request.loops,
+            "library": {
+                "identity": request.library.identity(),
+                "scope": [request.library.scope().start(), request.library.scope().end()],
+            },
+            "label": request.label,
+            "ordered_weight_arithmetic": format!("{:?}", request.arithmetic),
+            "uncovered": format!("{:?}", request.uncovered),
+            "master_mode": request.master_mode.map(|mode| format!("{mode:?}")),
+            "vakint_integrals": request.integrals,
+            "input_terms": inputs.len(),
+            "input_digest": hasher.finalize().to_hex().to_string(),
+            "inputs": inputs,
+            "reproduce": context.reproduce,
+            "skipped_by_request_only": settings.only,
+        });
+        let file = format!("{stem}.request.json");
+        write_json(&settings.directory.join(&file), &document)?;
+        append_index(
+            &settings.directory,
+            &json!({"event": "p-request", "file": file, "loop_count": request.loops,
+                "input_terms": request.inputs.len(), "label": request.label}),
+        )?;
+        log::info!(
+            "p request dump: wrote {} ({} input terms)",
+            settings.directory.join(&file).display(),
+            request.inputs.len()
+        );
+        Ok(PRequestDump {
+            directory: settings.directory.clone(),
+            stem,
+            only: settings.only,
+            started: Instant::now(),
+        })
+    }
+
+    /// The reduction must be skipped after this request was written.
+    pub(super) fn only(&self) -> bool {
+        self.only
+    }
+
+    /// [`Self::begin`] into `directory` whatever the environment (tests).
+    #[cfg(test)]
+    pub(super) fn write_to(
+        directory: &Path,
+        request: PDumpRequest<'_>,
+    ) -> Result<PRequestDump, RustRedEvaluationError> {
+        Self::write(
+            &DumpSettings {
+                directory: directory.to_owned(),
+                only: false,
+            },
+            request,
+        )
+    }
+
+    /// The file stem of this request (tests).
+    #[cfg(test)]
+    pub(super) fn stem(&self) -> &str {
+        &self.stem
+    }
+
+    /// `<stem>.result.json` (schema [`P_RESULT_SCHEMA`]): the digest of the
+    /// exact reduction ([`p_output_digest`]) or the error text.
+    pub(super) fn finish(
+        self,
+        library: &rustred::propagator::library::PLibrary,
+        result: &Result<
+            rustred::propagator::library::PReduction,
+            rustred::propagator::error::PError,
+        >,
+    ) -> Result<(), RustRedEvaluationError> {
+        let seconds = self.started.elapsed().as_secs_f64();
+        let (output, error) = match result {
+            Ok(reduction) => (Some(p_output_digest(library, reduction)), None),
+            Err(error) => (None, Some(error.to_string())),
+        };
+        let file = format!("{}.result.json", self.stem);
+        write_json(
+            &self.directory.join(&file),
+            &json!({
+                "schema": P_RESULT_SCHEMA,
+                "request": format!("{}.request.json", self.stem),
+                "wall_seconds": seconds,
+                "output": output,
+                "error": error,
+            }),
+        )?;
+        append_index(
+            &self.directory,
+            &json!({"event": "p-result", "file": file, "wall_seconds": seconds,
+                "terms_blake3": output.as_ref().map(|output| output["terms_blake3"].clone()),
+                "error": error.is_some()}),
+        )
+    }
+}
+
+/// Digest of an exact p reduction, in the layout [`P_OUTPUT_DIGEST_SCHEME`]:
+/// terms in RustRed's order as `basis\ntag\ncoefficient\n`, the basis
+/// `1`, `PMaster(name)` or `PResidual(node,k..)` (named by the library), the
+/// tag as `m^e` pairs; nonzero conditions as a sorted set.
+pub(super) fn p_output_digest(
+    library: &rustred::propagator::library::PLibrary,
+    reduction: &rustred::propagator::library::PReduction,
+) -> Value {
+    use rustred::propagator::library::PBasis;
+    let mut hasher = blake3::Hasher::new();
+    for term in &reduction.terms {
+        let basis = match &term.basis {
+            PBasis::Unit => "1".to_owned(),
+            PBasis::Master(name) => format!("PMaster({name})"),
+            PBasis::Residual(id) => match library.residual_terminal(*id) {
+                Ok(Some(named)) => format!("PResidual({},{:?})", named.node, named.key.powers()),
+                _ => format!("Residual({})", id.0),
+            },
+        };
+        let tag = term
+            .tag
+            .exponents()
+            .iter()
+            .map(|(m, e)| format!("{m}^{e}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        hasher.update(basis.as_bytes());
+        hasher.update(b"\n");
+        hasher.update(tag.as_bytes());
+        hasher.update(b"\n");
+        hasher.update(canonical(&term.coefficient).as_bytes());
+        hasher.update(b"\n");
+    }
+    let guards = reduction
+        .nonzero_conditions
+        .iter()
+        .map(canonical)
+        .collect::<BTreeSet<_>>();
+    let mut guard_hasher = blake3::Hasher::new();
+    for guard in &guards {
+        guard_hasher.update(guard.as_bytes());
+        guard_hasher.update(b"\n");
+    }
+    json!({
+        "scheme": P_OUTPUT_DIGEST_SCHEME,
+        "dimension": reduction.dimension,
+        "terms": reduction.terms.len(),
+        "terms_blake3": hasher.finalize().to_hex().to_string(),
+        "distinct_nonzero_conditions": guards.len(),
+        "nonzero_conditions_blake3": guard_hasher.finalize().to_hex().to_string(),
+    })
 }
 
 /// Master mode of the first RustRed backend in the evaluation order.
