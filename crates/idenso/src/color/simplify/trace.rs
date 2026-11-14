@@ -227,6 +227,81 @@ impl ColorAlgebraSimplifier {
         None
     }
 
+    /// An odd adjoint chain annihilates two legs of one symmetric block when
+    /// reversing it is a symmetry of the rest of the product.
+    ///
+    /// Adjoint generators are antisymmetric, F^a_bc = f^{bca}, so
+    /// (F^{x1} ... F^{xk})^T = (-1)^k F^{xk} ... F^{x1}. With both chain ends
+    /// on one symmetric block the chain may be transposed. If every mirrored
+    /// pair of its generator legs (x_i, x_{k+1-i}) also lies in one symmetric
+    /// block, relabelling those dummies restores the original order, so the
+    /// product equals (-1)^k times itself. The case k = 1 is
+    /// [`Self::simplify_symmetric_prefix_structure_product`].
+    pub(super) fn simplify_odd_adjoint_chain_on_symmetric_legs(
+        product: &ProductView<'_>,
+    ) -> Option<Atom> {
+        // Symmetric blocks with the legs that leave their own factor: a slot
+        // repeated within a trace line is contracted inside that line.
+        let mut blocks = Vec::new();
+        for (index, factor) in product.factors.iter().enumerate() {
+            if let Some(invariant) = &factor.symmetric_invariant {
+                blocks.push((index, invariant.args.clone()));
+            }
+            let Some(trace) = &factor.trace else {
+                continue;
+            };
+            let Some(generators) = factor.generator_slots() else {
+                continue;
+            };
+            for &block in &trace.factors {
+                let Some(slots) = color_symmetric_trace_arg_views(trace.rep, block) else {
+                    continue;
+                };
+                let external = slots
+                    .into_iter()
+                    .filter(|slot| generators.iter().filter(|other| *other == slot).count() == 1)
+                    .collect::<Vec<_>>();
+                blocks.push((index, external));
+            }
+        }
+        for (chain_index, factor) in product.factors.iter().enumerate() {
+            let Some(chain) = &factor.chain else {
+                continue;
+            };
+            if chain.factors.len() % 2 == 0 {
+                continue;
+            }
+            let Some(representation) = chain.adjoint_representation() else {
+                continue;
+            };
+            let Some(generators) = chain
+                .factors
+                .iter()
+                .map(|&generator| adjoint_generator_slot(representation.as_view(), generator))
+                .collect::<Option<Vec<_>>>()
+            else {
+                continue;
+            };
+            let mut legs = generators.clone();
+            legs.extend([chain.start, chain.end]);
+            if (0..legs.len()).any(|i| legs[i + 1..].contains(&legs[i])) {
+                continue;
+            }
+            let shared = |left: AtomView<'_>, right: AtomView<'_>| {
+                blocks.iter().any(|(index, slots)| {
+                    *index != chain_index && slots.contains(&left) && slots.contains(&right)
+                })
+            };
+            let k = generators.len();
+            if shared(chain.start, chain.end)
+                && (0..k / 2).all(|i| shared(generators[i], generators[k - 1 - i]))
+            {
+                return Some(Atom::Zero);
+            }
+        }
+        None
+    }
+
     /// Eliminate a repeated generator pair before decomposing an ordered trace.
     /// The identity follows from sum_a T^a X T^a = C_R X -
     /// 1/2 sum_a [T^a,[T^a,X]]. Each term removes two generators.
@@ -618,6 +693,72 @@ impl ColorAlgebraSimplifier {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// d_F^{015} d_A^{2345} (F^0 F^5 F^1)_{34} = 0: transposing the chain
+    /// between the symmetric legs 3, 4 reverses it with a sign, and the
+    /// symmetric fundamental block maps the reversed order back. Ordered
+    /// blocks, even chains and ends on different blocks are kept.
+    #[test]
+    fn odd_adjoint_chain_annihilates_symmetric_legs_under_reversal_symmetry() {
+        crate::test_support::test_initialize();
+        let label = spenso::index_symbol!("idenso::odd_adjoint_chain::edge");
+        let slots = (0..6)
+            .map(|i| ColorAdjoint {}.to_symbolic([Atom::num(8), function!(label, i, 1)]))
+            .collect::<Vec<_>>();
+        let adjoint = adjoint_rep(Atom::num(8));
+        let fundamental = fundamental_rep(Atom::num(3));
+        let generators = |adjoint: bool, legs: &[usize]| {
+            legs.iter()
+                .map(|&leg| ColorAlgebraSimplifier::trace_generator_factor(adjoint, &slots[leg]))
+                .collect::<Vec<_>>()
+        };
+        let symmetric = |rep: &Atom, adjoint: bool, legs: &[usize]| {
+            trace_with_factors(rep.clone(), vec![shadowing::sym(generators(adjoint, legs))])
+        };
+        let ordered = |rep: &Atom, adjoint: bool, legs: &[usize]| {
+            trace_with_factors(rep.clone(), generators(adjoint, legs))
+        };
+        let chain = |word: &[usize]| chain!(&slots[3], &slots[4]; generators(true, word));
+        let cases = [
+            (
+                "five-loop shape",
+                chain(&[0, 5, 1])
+                    * symmetric(&adjoint, true, &[2, 3, 4, 5])
+                    * symmetric(&fundamental, false, &[0, 1, 2]),
+                true,
+            ),
+            (
+                "ordered outer block",
+                chain(&[0, 5, 1])
+                    * symmetric(&adjoint, true, &[2, 3, 4, 5])
+                    * ordered(&fundamental, false, &[0, 1, 2]),
+                false,
+            ),
+            (
+                "ordered end block",
+                chain(&[0, 5, 1])
+                    * ordered(&adjoint, true, &[2, 3, 4, 5])
+                    * symmetric(&fundamental, false, &[0, 1, 2]),
+                false,
+            ),
+            (
+                "even chain",
+                chain(&[0, 1])
+                    * symmetric(&adjoint, true, &[2, 3, 4, 5])
+                    * symmetric(&fundamental, false, &[0, 1, 2, 5]),
+                false,
+            ),
+        ];
+        for (name, source, annihilates) in cases {
+            SymbolicTensor::infer(source.clone()).unwrap();
+            let product = ProductView::parse(source.as_view());
+            assert_eq!(
+                ColorAlgebraSimplifier::simplify_odd_adjoint_chain_on_symmetric_legs(&product),
+                annihilates.then_some(Atom::Zero),
+                "{name}"
+            );
+        }
+    }
 
     /// A rank-two terminal of a commutator branch contracts its metric into
     /// the branch's structure constant: a one-shot decomposition leaves no

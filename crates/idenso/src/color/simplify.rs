@@ -1111,6 +1111,7 @@ impl ColorAlgebraSimplifier {
         let product = parsed;
 
         Self::simplify_symmetric_prefix_structure_product(&product)
+            .or_else(|| Self::simplify_odd_adjoint_chain_on_symmetric_legs(&product))
             .or_else(|| Self::join_color_chain_product(&product))
             .or_else(|| {
                 self.settings
@@ -1266,6 +1267,7 @@ impl ColorAlgebraSimplifier {
         whole_term: bool,
     ) -> Option<Atom> {
         Self::simplify_symmetric_prefix_structure_product(product)
+            .or_else(|| Self::simplify_odd_adjoint_chain_on_symmetric_legs(product))
             .or_else(|| {
                 self.settings
                     .evaluate_traces
