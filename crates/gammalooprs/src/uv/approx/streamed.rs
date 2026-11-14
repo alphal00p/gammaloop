@@ -618,7 +618,7 @@ pub(crate) fn dump(stage: &str, expression: AtomView<'_>) {
     }
     let _ = std::fs::write(
         format!("{directory}/{stage}-{n}.txt"),
-        format!("{expression}"),
+        expression.to_canonical_string(),
     );
 }
 
