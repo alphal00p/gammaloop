@@ -1425,10 +1425,9 @@ impl<'a> NumericLoopPolynomials<'a> {
     }
 
     /// [`LoopPolynomials::sum`]: the spectators of each group of terms with
-    /// the same loop factors summed and expanded once; their terms are then
-    /// gathered by monomial over all groups, `Σ_m m · Σ_g w_{g,m} P_g`, so
-    /// that each loop polynomial `P_g` is only scaled by numbers and every
-    /// monomial multiplies the combined polynomial once.
+    /// the same loop factors summed and expanded once, and their terms
+    /// multiplied with the terms of the group's loop polynomial as numbers
+    /// and cached monomial products, straight into the result.
     fn sum(&mut self, terms: Vec<AtomView<'a>>) -> Option<NumericPolynomial> {
         let mut groups = Vec::<(Vec<AtomView<'a>>, Vec<Atom>)>::new();
         let mut group_indices = HashMap::<Vec<&'a [u8]>, usize>::new();
@@ -1450,8 +1449,12 @@ impl<'a> NumericLoopPolynomials<'a> {
                 }
             }
         }
-        // Σ_g w_{g,m} P_g for every spectator monomial m.
-        let mut weighted = HashMap::<u32, NumericPolynomial>::new();
+        // Every spectator term n_s·m_s times every term n_c·m_c of the
+        // group's loop polynomial, added into the result in place; the
+        // products m_s·m_c of each spectator monomial are kept in a table
+        // indexed by m_c (a loop polynomial has few distinct m_c).
+        let mut result = NumericPolynomial::new();
+        let mut tables = HashMap::<u32, Vec<Option<Option<(Coefficient, u32)>>>>::new();
         for (loop_factors, spectators) in groups {
             let spectators = Atom::add_many(spectators.iter()).expand();
             if spectators.is_zero() {
@@ -1459,29 +1462,25 @@ impl<'a> NumericLoopPolynomials<'a> {
             }
             let spectators = self.monomials.coefficient(spectators.as_view())?;
             let polynomial = self.product(&loop_factors)?;
-            for (&monomial, weight) in &spectators {
-                let target = weighted.entry(monomial).or_default();
+            for (&spectator_monomial, weight) in &spectators {
+                let table = tables.entry(spectator_monomial).or_default();
                 for (exponents, coefficient) in polynomial.iter() {
-                    let target = match target.get_mut(exponents) {
+                    let target = match result.get_mut(exponents) {
                         Some(target) => target,
-                        None => target.entry(exponents.clone()).or_default(),
+                        None => result.entry(exponents.clone()).or_default(),
                     };
                     for (&term_monomial, value) in coefficient {
-                        add_into(target, term_monomial, weight.clone() * value.clone());
+                        let slot = term_monomial as usize;
+                        if table.len() <= slot {
+                            table.resize(slot + 1, None);
+                        }
+                        if table[slot].is_none() {
+                            table[slot] =
+                                Some(self.monomials.product(spectator_monomial, term_monomial));
+                        }
+                        let (scale, product) = table[slot].clone().unwrap()?;
+                        add_into(target, product, scale * weight.clone() * value.clone());
                     }
-                }
-            }
-        }
-        let mut result = NumericPolynomial::new();
-        for (monomial, polynomial) in weighted {
-            for (exponents, coefficient) in polynomial {
-                let target = result.entry(exponents).or_default();
-                for (term_monomial, value) in coefficient {
-                    if value.is_zero() {
-                        continue;
-                    }
-                    let (scale, product) = self.monomials.product(monomial, term_monomial)?;
-                    add_into(target, product, scale * value);
                 }
             }
         }
