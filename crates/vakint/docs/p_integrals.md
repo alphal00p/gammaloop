@@ -522,6 +522,23 @@ Built-in library (M2-V4):
   payloads (`equivalent_p_libraries`, never bytes), the DAG keys against `rustred_topology` run in vakint's build
   (graphica skew), and the terminals against `{1, PMaster(no), PMaster(t105)}`.
 
+p master catalogue (five-loop masters; `p_integral/master_catalogue.rs`, VK5L plan WP5):
+- A catalogue file (schema `vakint.p-master-catalogue.v1`, version constant `P_MASTER_CATALOGUE_VERSION = 1`,
+  normalisation `g-scheme` = the `C_G` above) lists masters (`id`, `symbol` rendered `PMaster(symbol)`, `loops`,
+  `graph`, `leading_order`, exact or numerical coefficients with `significant_digits`, `unknown_from`) and the map of
+  RustRed residual terminals `PResidual(node, k..)` onto them (`status` `mapped` with a combination exact in `d`,
+  `unmapped`, or `additional` for the extra terminals of boxed nodes).
+- `finalize::finalize_with(.., PMasterSource)` substitutes catalogue masters through their known depth plus
+  `ε^k·Oep(k, PMaster(symbol))`, so the vacuum guards apply one to one: required orders and spurious poles through
+  `MissingMasterOrders` (backend label with the data version and the request), masters declared without
+  coefficients (`PMasterCatalogueError::MissingCoefficients`), undeclared masters, unmapped terminals, numerical-only
+  coefficients in Symbolic mode, and digits below `run_time_decimal_precision` or without validated digits
+  (`PMasterCatalogueError::Digits`). Retain only warns and keeps unmapped terminals as `PResidual`.
+- No catalogue ships yet (Retain-only five-loop p-integrals first): without one, Symbolic and Numerical refuse a
+  `PResidual` with `PMasterCatalogueError::NoCatalogue`. `tools/p_integral_registry/ggppss_catalogue.py` converts
+  vakint-external-data's `p_integral/masters/5L-ggppss/masters.jsonl` (281 masters, exact through the first
+  undetermined order) and merges a terminal map. `PMasterSource::forcer()` is the unchanged 1L-4L path.
+
 Four-loop library (M3):
 - RustRed is the default for 1L-4L p-integrals whenever its library is available; Forcer is the fallback. The
   library of scope 1-4 is reachable through vakint-external-data's `p_integral` branch (unreleased until M4): after

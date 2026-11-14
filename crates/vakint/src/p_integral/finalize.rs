@@ -16,6 +16,7 @@ use symbolica::atom::{Atom, AtomCore, Symbol};
 use symbolica::function;
 use symbolica::transcendental::gamma;
 
+use super::master_catalogue::PMasterSource;
 use super::{ReducedPropagatorValue, external_head};
 use crate::rustred_evaluation::RustRedMasterMode;
 use crate::symbols::S;
@@ -180,6 +181,33 @@ pub(crate) fn finalize(
     mode: RustRedMasterMode,
     backend: &str,
 ) -> Result<Atom, VakintError> {
+    finalize_with(
+        values,
+        loops,
+        external,
+        settings,
+        mode,
+        backend,
+        PMasterSource::forcer(),
+    )
+}
+
+/// [`finalize`] with the p masters of `source`: the Forcer table and, when
+/// `source` carries one, a p master catalogue (five-loop masters; WP5 of the
+/// five-loop p plan). Before the expansion, `PResidual` terminals are replaced
+/// by their master map rows and the missing-master guard runs; after the `Oep`
+/// guard, numerical-only coefficients are checked against
+/// `run_time_decimal_precision` ([`super::master_catalogue`]). With
+/// [`PMasterSource::forcer`] this is exactly [`finalize`].
+pub(crate) fn finalize_with(
+    values: &[ReducedPropagatorValue],
+    loops: usize,
+    external: &Atom,
+    settings: &VakintSettings,
+    mode: RustRedMasterMode,
+    backend: &str,
+    source: PMasterSource<'_>,
+) -> Result<Atom, VakintError> {
     let epsilon = vk_symbol!(&settings.epsilon_symbol);
     let (head, _) = external_head(external)?;
     let square = function!(S.dot, &head, &head);
@@ -191,7 +219,9 @@ pub(crate) fn finalize(
     if reduced.is_zero() {
         return Ok(Atom::Zero);
     }
-    super::compare::check_symbols(&reduced)?;
+    let reduced = source.resolve_terminals(&reduced, mode, epsilon)?;
+    source.require_coefficients(&reduced, mode)?;
+    super::compare::check_symbols_with(&reduced, &source.extra_names())?;
     let l = loops as i64;
     let normalization = settings
         .get_staged_integral_normalization_factor_atom()?
@@ -213,14 +243,22 @@ pub(crate) fn finalize(
     } else {
         let target = settings.number_of_terms_in_epsilon_expansion - l - 1;
         let prefactor = Vakint::normalize_gamma_functions((normalization * measure).as_view());
-        let expanded = super::laurent::expand(&prefactor, &reduced, epsilon, target)?;
+        let expanded = super::laurent::expand_with(
+            &prefactor,
+            &reduced,
+            epsilon,
+            target,
+            &|name, epsilon| source.expansion(name, epsilon),
+        )?;
         crate::truncation_guard::ensure_known_orders(
             &expanded,
             epsilon,
             Some(target),
-            backend,
-            crate::truncation_guard::plain_name,
+            &source.backend(backend),
+            |master| source.describe(master),
         )?;
+        let expanded =
+            source.resolve_values(expanded, mode, settings.run_time_decimal_precision)?;
         simplify_real(expanded.as_view())
     };
     if !settings.use_dot_product_notation {

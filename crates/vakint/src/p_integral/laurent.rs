@@ -383,6 +383,25 @@ pub(crate) fn expand(
     epsilon: Symbol,
     order: i64,
 ) -> Result<Atom, VakintError> {
+    expand_with(
+        prefactor,
+        reduced,
+        epsilon,
+        order,
+        &masters::p_master_expansion,
+    )
+}
+
+/// [`expand`], with `PMaster(name)` replaced by `master(name, epsilon)` (its
+/// known coefficients and unknown tail): the Forcer table for [`expand`], a
+/// p master catalogue for `master_catalogue::PMasterSource::expansion`.
+pub(crate) fn expand_with(
+    prefactor: &Atom,
+    reduced: &Atom,
+    epsilon: Symbol,
+    order: i64,
+    master: &dyn Fn(&str, Symbol) -> Result<Atom, VakintError>,
+) -> Result<Atom, VakintError> {
     let mut masters = Vec::new();
     reduced.visitor(&mut |part| {
         if let AtomView::Fun(function) = part
@@ -459,10 +478,7 @@ pub(crate) fn expand(
             } else {
                 let name = masters::p_master_name(base.as_view())
                     .ok_or_else(|| failure(format!("invalid {base}")))?;
-                let value = Laurent::from_polynomial(
-                    &masters::p_master_expansion(&name, epsilon)?,
-                    epsilon,
-                )?;
+                let value = Laurent::from_polynomial(&master(&name, epsilon)?, epsilon)?;
                 for _ in 0..power {
                     tabulated = Some(match tabulated {
                         None => value.clone(),

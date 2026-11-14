@@ -43,6 +43,7 @@ use symbolica::function;
 
 use super::p_data::{PDataPresence, PLibraryHandle, PTop};
 use super::{MatchedContribution, MathSpan, RustRedEvaluationError, RustRedMasterMode};
+use crate::p_integral::master_catalogue::{PMasterCatalogue, PMasterSource};
 use crate::p_integral::parts::{self, Fraction, PDot, PMonomial};
 use crate::p_integral::{
     P_FAMILIES, P_INTEGRAL_LOOP_COUNTS, PropagatorRequest, ReducedPropagatorValue, external_head,
@@ -728,6 +729,20 @@ pub(crate) fn reduce_requests(
     Ok(values)
 }
 
+/// HOOK (five-loop p plan, WP4/WP6): the p master catalogue that finalizes
+/// the `loops`-loop channels of `vakint`. The five-loop dispatch (WP4) renders
+/// residual terminals as `PResidual(node, k..)`; with a catalogue the
+/// finalizer maps them onto its masters and applies the catalogue guards
+/// (`p_integral::master_catalogue`); without one `Symbolic` and `Numerical`
+/// refuse them with `PMasterCatalogueError::NoCatalogue` and `Retain` returns
+/// them. No catalogue ships yet (decision Q3: Retain-only first), so this is
+/// `None`; WP6 returns the catalogue of the loaded p area
+/// (`p_integral/masters/<id>/catalogue.json`, `PMasterCatalogue::load`), and
+/// WP4 replaces the request text by the channel's integral names.
+fn p_master_catalogue(_vakint: &Vakint, _loops: usize) -> Option<&PMasterCatalogue> {
+    None
+}
+
 /// Reduce and finalize a batch of matched p contributions in `mode` (module
 /// documentation). The result is final: the caller adds it to the expression
 /// without RustRed's vacuum master substitution.
@@ -753,8 +768,18 @@ pub(crate) fn evaluate_ordered_batch(
     phases::end("p.propagator_requests", started);
     let mut result = Atom::Zero;
     for ((loops, head), values) in reduce_requests(vakint, settings, &requests, progress)? {
+        let catalogue = p_master_catalogue(vakint, loops);
+        let request = format!("the {loops}-loop p-integrals of external {head}");
         let finalized = phases::time("p.finalize", || {
-            finalize::finalize(&values, loops, &head, settings, mode, "RustRed")
+            finalize::finalize_with(
+                &values,
+                loops,
+                &head,
+                settings,
+                mode,
+                "RustRed",
+                PMasterSource::new(catalogue, &request),
+            )
         })?;
         result += phases::time("p.final_simplify_real", || {
             simplify_real(finalized.as_view())
