@@ -27,6 +27,44 @@ pub struct MassiveClosure {
     pub power: i64,
 }
 
+/// A closure input with its cut graph, cut routing and vacuum numerator
+/// apart, so that the numerator can be lowered onto the RustRed p library
+/// without substituting the routing into it and expanding it
+/// ([`MassiveClosure::evaluate_direct_batch`]).
+#[derive(Clone, Debug)]
+pub struct DirectClosureInput {
+    /// `topo(prop(...))` of the cut graph, in the cut loop momenta `k(1..)`
+    /// and the closing head.
+    pub topology: Atom,
+    /// Every vacuum loop momentum `k(i)` and its image in the cut momenta.
+    pub routing: Vec<(Atom, Atom)>,
+    /// The scalar vacuum numerator (after any tensor projection).
+    pub numerator: Atom,
+}
+
+impl DirectClosureInput {
+    /// The ordinary closure input `numerator(routing).expand() * topology`.
+    pub fn ordinary(&self) -> Atom {
+        let routing = self
+            .routing
+            .iter()
+            .map(|(head, image)| symbolica::id::Replacement::new(head.to_pattern(), image.clone()))
+            .collect::<Vec<_>>();
+        self.numerator.replace_multiple(&routing).expand() * &self.topology
+    }
+}
+
+/// `VAKINT_LOWERING`: `legacy` evaluates direct closure inputs through the
+/// ordinary path; `check` lowers them directly and also through the ordinary
+/// path, compares the values (`LOWERING_CHECK` on stderr) and returns the
+/// direct value.
+fn lowering_mode() -> &'static str {
+    static MODE: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+        std::env::var("VAKINT_LOWERING").unwrap_or_else(|_| "direct".to_owned())
+    });
+    MODE.as_str()
+}
+
 /// Highest power of loop momenta in a scalar p-integral numerator: `dot(k,k)`
 /// counts two, `dot(k,p)` one (an upper bound for nested sums).
 pub(crate) fn loop_rank(view: AtomView) -> usize {
@@ -285,6 +323,186 @@ impl MassiveClosure {
             ));
         }
         Ok(head)
+    }
+
+    /// [`Self::evaluate_batch`] of `(closure, input.ordinary())`, with every
+    /// closure whose numerator the direct lowering covers lowered without
+    /// building the ordinary input ([`crate::rustred_evaluation::p_lowering`]).
+    /// The values are those of the ordinary path.
+    pub fn evaluate_direct_batch(
+        vakint: &Vakint,
+        settings: &crate::VakintSettings,
+        inputs: &[(Self, DirectClosureInput)],
+    ) -> Result<Vec<Atom>, VakintError> {
+        let mode = lowering_mode();
+        if mode == "legacy" {
+            let ordinary = inputs
+                .iter()
+                .map(|(closure, input)| (closure.clone(), input.ordinary()))
+                .collect::<Vec<_>>();
+            return Self::evaluate_batch(vakint, settings, &ordinary);
+        }
+        let check = mode == "check";
+        let mut results = Vec::with_capacity(inputs.len());
+        for (closure, input) in inputs {
+            let started = std::time::Instant::now();
+            let mut stats = crate::rustred_evaluation::p_lowering::DirectStats::default();
+            let direct = settings.with_resource_budget(|| {
+                closure.evaluate_direct(vakint, settings, input, &mut stats)
+            })?;
+            let direct_seconds = started.elapsed().as_secs_f64();
+            let (value, declined) = match direct {
+                Ok(value) => (value, None),
+                Err(declined) => {
+                    let value = Self::evaluate_batch(
+                        vakint,
+                        settings,
+                        &[(closure.clone(), input.ordinary())],
+                    )?
+                    .pop()
+                    .unwrap_or_default();
+                    (value, Some(declined.0))
+                }
+            };
+            if crate::census::enabled() {
+                crate::census::record(
+                    "direct_closure",
+                    serde_json::json!({
+                        "declined": declined,
+                        "numerator_summands": crate::census::summands(input.numerator.as_view()),
+                        "numerator_bytes": input.numerator.as_view().get_byte_size(),
+                        "numerator_terms": stats.numerator_terms,
+                        "canonical_terms": stats.canonical_terms,
+                        "merged_terms": stats.merged_terms,
+                        "distinct_monomials": stats.distinct_monomials,
+                        "spectators": stats.spectators,
+                        "lowered": stats.lowered,
+                        "folded": stats.folded,
+                        "seconds": started.elapsed().as_secs_f64(),
+                        "direct_seconds": direct_seconds,
+                    }),
+                );
+            }
+            if check && declined.is_none() {
+                let checking = std::time::Instant::now();
+                let ordinary = Self::evaluate_batch(
+                    vakint,
+                    settings,
+                    &[(closure.clone(), input.ordinary())],
+                )?
+                .pop()
+                .unwrap_or_default();
+                let ordinary_seconds = checking.elapsed().as_secs_f64();
+                let identical = ordinary == value;
+                let equal = identical || (&ordinary - &value).expand().is_zero();
+                eprintln!(
+                    "LOWERING_CHECK identical={identical} equal={equal} bytes={} direct_seconds={direct_seconds:.3} ordinary_seconds={ordinary_seconds:.3}",
+                    input.numerator.as_view().get_byte_size()
+                );
+                if !identical {
+                    let dir = std::env::var("VAKINT_LOWERING_CHECK_DUMP").ok();
+                    if let Some(dir) = dir {
+                        let n = std::process::id() as u128 * 1_000_000
+                            + std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .map(|d| d.as_micros() % 1_000_000)
+                                .unwrap_or(0);
+                        let _ = std::fs::write(
+                            format!("{dir}/mismatch-{n}.txt"),
+                            format!(
+                                "closure {:?}\ntopology {}\nrouting {:?}\nnumerator {}\ndirect {}\nordinary {}\n",
+                                closure,
+                                input.topology,
+                                input.routing,
+                                input.numerator,
+                                value,
+                                ordinary
+                            ),
+                        );
+                    }
+                }
+            } else if check {
+                eprintln!("LOWERING_CHECK declined={}", declined.unwrap_or(""));
+            }
+            results.push(value);
+        }
+        Ok(results)
+    }
+
+    /// One closure through the direct lowering; `Err(Declined)` when the
+    /// ordinary path must evaluate it.
+    fn evaluate_direct(
+        &self,
+        vakint: &Vakint,
+        settings: &crate::VakintSettings,
+        input: &DirectClosureInput,
+        stats: &mut crate::rustred_evaluation::p_lowering::DirectStats,
+    ) -> Result<Result<Atom, crate::rustred_evaluation::p_lowering::Declined>, VakintError> {
+        use crate::rustred_evaluation::p_integral as rr;
+        use crate::rustred_evaluation::p_lowering::{self as direct, Declined};
+        let head = self.validated_head(settings)?;
+        if input.numerator.is_zero() {
+            return Ok(Ok(Atom::Zero));
+        }
+        settings.validate_execution()?;
+        if fold_check_log().is_some() {
+            return Ok(Err(Declined("the fold check runs the ordinary path")));
+        }
+        let fold = rr::fold_mode();
+        if fold == rr::FoldMode::Off {
+            return Ok(Err(Declined("the unfolded reduction")));
+        }
+        let Some(EvaluationMethod::RustRed(options)) = settings
+            .evaluation_order
+            .0
+            .iter()
+            .find(|method| matches!(method, EvaluationMethod::RustRed(_)))
+            .cloned()
+        else {
+            return Ok(Err(Declined("no RustRed method")));
+        };
+        let first = settings.evaluation_order.0.iter().find_map(|method| match method {
+            EvaluationMethod::RustRed(options) => Some(options.master_mode),
+            EvaluationMethod::Forcer(options) => Some(options.master_mode),
+            _ => None,
+        });
+        if first != Some(options.master_mode) {
+            return Ok(Err(Declined("a Forcer method precedes RustRed")));
+        }
+        let cut = match direct::match_cut(vakint, settings, &input.topology, &head)? {
+            Ok(Some(cut)) => cut,
+            Ok(None) => return Ok(Ok(Atom::Zero)),
+            Err(declined) => return Ok(Err(declined)),
+        };
+        let handle = vakint.p_library()?;
+        let folded = match direct::lower_closure(
+            vakint,
+            settings,
+            &handle,
+            &cut,
+            &input.routing,
+            input.numerator.as_view(),
+            stats,
+        )? {
+            Ok(folded) => folded,
+            Err(declined) => return Ok(Err(declined)),
+        };
+        let reduced = rr::reduce_folded_channels(vakint, settings, &handle, folded, None, fold, true)?;
+        let mode = options.master_mode;
+        let mut result = Atom::Zero;
+        let mut numerical = Atom::Zero;
+        for ((loops, _), values) in reduced {
+            let value = self.finalize(&values, loops, &head, settings, mode)?;
+            if mode == RustRedMasterMode::Numerical {
+                numerical += value;
+            } else {
+                result += value;
+            }
+        }
+        if !numerical.is_zero() {
+            result += vakint.resolve_rustred_numerical(numerical, settings)?;
+        }
+        Ok(Ok(result.expand()))
     }
 
     /// Evaluate independent closures in bounded batches. Forcer reductions of

@@ -128,11 +128,11 @@ fn p_reduction_request<'a>(
 /// One reduction request: the inputs of one loop count, external head, scale
 /// power and non-rational coefficient.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-struct Channel {
-    loops: usize,
-    head: Atom,
-    scale_power: i64,
-    coefficient: Atom,
+pub(crate) struct Channel {
+    pub(crate) loops: usize,
+    pub(crate) head: Atom,
+    pub(crate) scale_power: i64,
+    pub(crate) coefficient: Atom,
 }
 
 /// The lowered inputs of one channel and the vakint integrals they come from
@@ -431,7 +431,7 @@ fn add_request(
 
 /// `P1L(2,1)`: the family and line powers of a request, as a reduction
 /// error names it.
-fn integral_name(request: &PropagatorRequest) -> String {
+pub(crate) fn integral_name(request: &PropagatorRequest) -> String {
     format!(
         "{}({})",
         request.family.name,
@@ -826,7 +826,7 @@ pub(crate) fn reduce_requests_unfolded(
 /// holds the factors free of `ε` (and, as a fallback, any factor that is not
 /// a rational function of `ε` alone), `basis` the product of the factors that
 /// are rational functions of `ε` alone, `value` the rational number.
-fn spectator_terms(coefficient: &Atom, epsilon: Symbol) -> Vec<(Atom, Atom, Rational)> {
+pub(crate) fn spectator_terms(coefficient: &Atom, epsilon: Symbol) -> Vec<(Atom, Atom, Rational)> {
     use symbolica::atom::AtomView;
     use symbolica::coefficient::CoefficientView;
     fn epsilon_rational(view: AtomView, epsilon: Symbol) -> bool {
@@ -940,10 +940,10 @@ fn epsilon_coefficient(
 }
 
 /// The lowered inputs of one folded channel, by epsilon basis function.
-#[derive(Default)]
-struct FoldedInputs {
-    by_basis: BTreeMap<Atom, BTreeMap<(PresentationId, Vec<i64>), Rational>>,
-    integrals: BTreeSet<String>,
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct FoldedInputs {
+    pub(crate) by_basis: BTreeMap<Atom, BTreeMap<(PresentationId, Vec<i64>), Rational>>,
+    pub(crate) integrals: BTreeSet<String>,
 }
 
 /// [`reduce_requests`] with the channels folded: every channel coefficient is
@@ -1058,8 +1058,26 @@ pub(crate) fn reduce_requests_folded(
         stats.folded = folded.len();
         stats.keys = keys.len();
     });
+    reduce_folded_channels(vakint, settings, &handle, folded, progress, mode, factored)
+}
+
+/// The reductions of folded channels ([`reduce_requests_folded`] after the
+/// fold): one library reduction per folded channel, rendered and returned by
+/// loop count and external head. Shared with the direct lowering
+/// ([`super::p_lowering`]), which builds the same folded channels without
+/// requests.
+pub(crate) fn reduce_folded_channels(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    handle: &PLibraryHandle,
+    folded: BTreeMap<Channel, FoldedInputs>,
+    progress: Option<&super::monitor::CallerProgress>,
+    mode: FoldMode,
+    factored: bool,
+) -> Result<BTreeMap<(usize, Atom), Vec<ReducedPropagatorValue>>, VakintError> {
+    let epsilon = vk_symbol!(&settings.epsilon_symbol);
     let reducer = ChannelReducer {
-        handle: &handle,
+        handle,
         options: request_options(settings),
         step_cache: if folded.is_empty() {
             None

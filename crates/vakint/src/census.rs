@@ -5,7 +5,7 @@
 
 use std::sync::LazyLock;
 
-use symbolica::atom::{AtomCore, AtomView};
+use symbolica::atom::AtomView;
 
 static PATH: LazyLock<Option<std::path::PathBuf>> =
     LazyLock::new(|| std::env::var_os("VAKINT_LOWERING_CENSUS").map(Into::into));

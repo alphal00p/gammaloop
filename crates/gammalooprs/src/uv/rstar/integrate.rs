@@ -18,7 +18,10 @@ use symbolica::{
 };
 use vakint::{
     EvaluationMethod, RustRedMasterMode, TensorReductionMethod, Vakint, VakintExpression,
-    VakintSettings, p_integral::MassiveClosure, symbols::S, vakint_parse,
+    VakintSettings,
+    p_integral::{DirectClosureInput, MassiveClosure},
+    symbols::S,
+    vakint_parse,
 };
 
 use crate::uv::approx::integrated::Integrated;
@@ -45,6 +48,10 @@ pub fn integrate_single_mass(
     let mut result = Atom::Zero;
     let mut closures = Vec::new();
     let mut closure_bytes = 0_usize;
+    // `GAMMALOOP_LOWERING=legacy` builds every closure input here, as before.
+    let direct_lowering = !crate::uv::approx::streamed::legacy("direct_lowering");
+    let mut direct = Vec::new();
+    let mut direct_bytes = 0_usize;
     // Census: (summands, bytes) before and after the tensor projector and of
     // the closure inputs.
     let census = vakint::census::enabled();
@@ -105,6 +112,20 @@ pub fn integrate_single_mass(
         // Lorentz representation metadata is constant during the following
         // Laurent expansion; only scalar evanescent coefficients may expand.
         term.numerator = Integrated::restore_lorentz_dimensions(&term.numerator);
+        crate::uv::approx::streamed::dump("closure_numerator", term.numerator.as_view());
+        crate::uv::approx::streamed::dump("closure_topology", cut.integrand.as_view());
+        crate::uv::approx::streamed::dump(
+            "closure_routing",
+            Atom::mul_many(
+                cut.routing_pairs
+                    .iter()
+                    .map(|(head, image)| function!(symbolica::symbol!("rr"), head, image))
+                    .collect::<Vec<_>>()
+                    .iter()
+                    .map(|a| a.as_view()),
+            )
+            .as_view(),
+        );
         if census {
             census_source.0 += vakint::census::summands(source.numerator.as_view());
             census_source.1 += source.numerator.as_view().get_byte_size();
@@ -130,6 +151,35 @@ pub fn integrate_single_mass(
         // tensor spectators. Keeping their coefficients here lets its Laurent
         // expansion include insertion poles before truncating the full product.
         let preparation_started = Instant::now();
+        if direct_lowering && matches!(cut.integrand.as_view(), AtomView::Fun(_)) {
+            // The routing and the expansion are applied by the p-integral
+            // owner's direct lowering, onto the canonical family at once.
+            let input_bytes = term.numerator.as_view().get_byte_size();
+            timing.closure_preparation += preparation_started.elapsed();
+            if census {
+                census_closure.1 += input_bytes;
+                census_closure.2 += 1;
+            }
+            if direct_bytes.saturating_add(input_bytes) > 16 << 20 {
+                flush_direct(vakint, settings, &mut direct, &mut timing, &mut result)?;
+                direct_bytes = 0;
+            }
+            direct_bytes = direct_bytes.saturating_add(input_bytes);
+            direct.push((
+                cut.closure,
+                DirectClosureInput {
+                    topology: cut.integrand,
+                    routing: cut.routing_pairs,
+                    numerator: term.numerator,
+                },
+            ));
+            if direct.len() == 32 || direct_bytes >= 16 << 20 {
+                flush_direct(vakint, settings, &mut direct, &mut timing, &mut result)?;
+                direct_bytes = 0;
+            }
+            continue;
+        }
+        let preparation_started = Instant::now();
         let numerator = term.numerator.replace_multiple(&cut.routing).expand();
         let input = numerator * &cut.integrand;
         timing.closure_preparation += preparation_started.elapsed();
@@ -151,6 +201,7 @@ pub fn integrate_single_mass(
         }
     }
     flush_closures(vakint, settings, &mut closures, &mut timing, &mut result)?;
+    flush_direct(vakint, settings, &mut direct, &mut timing, &mut result)?;
     let combine_started = Instant::now();
     let result = result.expand();
     timing.combine += combine_started.elapsed();
@@ -214,6 +265,29 @@ fn numerator_census(input: &Atom) -> AtomView<'_> {
         }
     }
     input.as_view()
+}
+
+fn flush_direct(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    closures: &mut Vec<(MassiveClosure, DirectClosureInput)>,
+    timing: &mut SingleMassTiming,
+    result: &mut Atom,
+) -> Result<()> {
+    if !closures.is_empty() {
+        let backend_started = Instant::now();
+        let integrated = MassiveClosure::evaluate_direct_batch(vakint, settings, closures)
+            .wrap_err("while integrating an R* remainder through a massless p-integral")?;
+        timing.closure_backend += backend_started.elapsed();
+        timing.closure_calls += closures.len();
+        let combine_started = Instant::now();
+        for value in integrated {
+            *result += value;
+        }
+        timing.combine += combine_started.elapsed();
+        closures.clear();
+    }
+    Ok(())
 }
 
 fn flush_closures(
@@ -311,6 +385,8 @@ impl VacuumLine {
 struct VacuumCut {
     closure: MassiveClosure,
     routing: Vec<Replacement>,
+    /// `routing` as (vacuum loop momentum `k(i)`, its image in the cut basis).
+    routing_pairs: Vec<(Atom, Atom)>,
     integrand: Atom,
     scaleless: bool,
     loops: usize,
@@ -487,19 +563,22 @@ impl VacuumCut {
             .find(|index| !external_ids.contains(&Atom::num(*index)))
             .expect("a finite numerator leaves unused momentum identifiers");
         let hard = function!(S.p, hard_index);
-        let mut routing = heads
+        let mut routing_pairs = heads
             .iter()
             .filter(|head| *head != pivot)
             .enumerate()
-            .map(|(index, head)| Replacement::new(head.to_pattern(), function!(S.k, index + 1)))
+            .map(|(index, head)| (head.clone(), function!(S.k, index + 1)))
+            .collect::<Vec<_>>();
+        let mut routing = routing_pairs
+            .iter()
+            .map(|(head, image)| Replacement::new(head.to_pattern(), image.clone()))
             .collect::<Vec<_>>();
         let rest = (&massive.momentum - Atom::num(sign) * pivot)
             .expand()
             .replace_multiple(&routing);
-        routing.push(Replacement::new(
-            pivot.to_pattern(),
-            Atom::num(sign) * (&hard - rest),
-        ));
+        let pivot_image = Atom::num(sign) * (&hard - rest);
+        routing.push(Replacement::new(pivot.to_pattern(), pivot_image.clone()));
+        routing_pairs.push((pivot.clone(), pivot_image));
         let mut propagators = Atom::one();
         let mut radial = Atom::one();
         let mut has_loop = false;
@@ -528,6 +607,7 @@ impl VacuumCut {
                 power: massive.power,
             },
             routing,
+            routing_pairs,
             integrand: if has_loop {
                 function!(S.topo, propagators)
             } else {
