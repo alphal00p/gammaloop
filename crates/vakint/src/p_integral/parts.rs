@@ -1176,12 +1176,135 @@ static SPLIT_NUMERIC_LEGACY: std::sync::LazyLock<bool> =
 static SPLIT_NUMERIC_CHECK: std::sync::LazyLock<bool> =
     std::sync::LazyLock::new(|| split_numeric_switch("VAKINT_ALGEBRA_CHECK"));
 
-/// A loop-free expanded sum as exact numbers per distinct non-number
-/// monomial (an id of [`Monomials`]).
-type NumericCoefficient = HashMap<u32, Coefficient>;
+/// A small exact rational `n/d` (`d > 0`, coprime): the numbers of the loop
+/// polynomials of [`NumericLoopPolynomials`]. Arithmetic is checked; an
+/// overflow makes the numeric split decline (`None`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct SmallRational(i64, i64);
+
+impl SmallRational {
+    const ONE: Self = Self(1, 1);
+
+    fn new(numerator: i128, denominator: i128) -> Option<Self> {
+        fn gcd(mut a: i128, mut b: i128) -> i128 {
+            while b != 0 {
+                (a, b) = (b, a % b);
+            }
+            a.abs()
+        }
+        if denominator == 0 {
+            return None;
+        }
+        if numerator == 0 {
+            return Some(Self(0, 1));
+        }
+        let divisor = gcd(numerator, denominator);
+        let (mut numerator, mut denominator) = (numerator / divisor, denominator / divisor);
+        if denominator < 0 {
+            (numerator, denominator) = (-numerator, -denominator);
+        }
+        Some(Self(
+            i64::try_from(numerator).ok()?,
+            i64::try_from(denominator).ok()?,
+        ))
+    }
+
+    fn mul(self, other: Self) -> Option<Self> {
+        Self::new(
+            i128::from(self.0) * i128::from(other.0),
+            i128::from(self.1) * i128::from(other.1),
+        )
+    }
+
+    fn add(self, other: Self) -> Option<Self> {
+        Self::new(
+            i128::from(self.0) * i128::from(other.1) + i128::from(other.0) * i128::from(self.1),
+            i128::from(self.1) * i128::from(other.1),
+        )
+    }
+
+    fn is_zero(self) -> bool {
+        self.0 == 0
+    }
+
+    /// A real rational number that fits, else `None`.
+    fn from_view(number: CoefficientView) -> Option<Self> {
+        match number {
+            CoefficientView::Natural(numerator, denominator, 0, _) => {
+                Self::new(i128::from(numerator), i128::from(denominator))
+            }
+            _ => None,
+        }
+    }
+
+    fn from_coefficient(number: &Coefficient) -> Option<Self> {
+        let atom = Atom::num(number.clone());
+        match atom.as_view() {
+            AtomView::Num(number) => Self::from_view(number.get_coeff_view()),
+            _ => None,
+        }
+    }
+
+    fn coefficient(self) -> Coefficient {
+        Coefficient::from(symbolica::domains::rational::Rational::from((
+            self.0, self.1,
+        )))
+    }
+}
+
+/// A loop-free expanded sum of a loop polynomial: small rationals per
+/// distinct non-number monomial (an id of [`Monomials`]), sorted by id.
+type SmallCoefficient = Vec<(u32, SmallRational)>;
+
+/// A polynomial in the loop dots with [`SmallCoefficient`]s.
+type SmallPolynomial = HashMap<Exponents, SmallCoefficient>;
+
+/// The coefficients of the whole numerator: exact (complex) numbers per
+/// monomial id, sorted by id.
+type NumericCoefficient = Vec<(u32, Coefficient)>;
 
 /// A polynomial in the loop dots with [`NumericCoefficient`]s.
 type NumericPolynomial = HashMap<Exponents, NumericCoefficient>;
+
+fn add_small(
+    coefficient: &mut SmallCoefficient,
+    monomial: u32,
+    value: SmallRational,
+) -> Option<()> {
+    match coefficient.binary_search_by_key(&monomial, |(id, _)| *id) {
+        Ok(index) => coefficient[index].1 = coefficient[index].1.add(value)?,
+        Err(index) => coefficient.insert(index, (monomial, value)),
+    }
+    Some(())
+}
+
+fn add_numeric(coefficient: &mut NumericCoefficient, monomial: u32, value: Coefficient) {
+    match coefficient.binary_search_by_key(&monomial, |(id, _)| *id) {
+        Ok(index) => {
+            let sum = std::mem::take(&mut coefficient[index].1) + value;
+            coefficient[index].1 = sum;
+        }
+        Err(index) => coefficient.insert(index, (monomial, value)),
+    }
+}
+
+fn clean_small(mut polynomial: SmallPolynomial) -> SmallPolynomial {
+    polynomial.retain(|_, coefficient| {
+        coefficient.retain(|(_, value)| !value.is_zero());
+        coefficient.shrink_to_fit();
+        !coefficient.is_empty()
+    });
+    polynomial.shrink_to_fit();
+    polynomial
+}
+
+fn clean_numeric(mut polynomial: NumericPolynomial) -> NumericPolynomial {
+    polynomial.retain(|_, coefficient| {
+        coefficient.retain(|(_, value)| !value.is_zero());
+        !coefficient.is_empty()
+    });
+    polynomial
+}
 
 /// The distinct loop-free monomials (normalized products without a number
 /// factor; id 0 is `1`) and their products.
@@ -1189,6 +1312,7 @@ struct Monomials {
     atoms: Vec<Atom>,
     ids: HashMap<Atom, u32>,
     products: HashMap<(u32, u32), Option<(Coefficient, u32)>>,
+    small_products: HashMap<(u32, u32), Option<(SmallRational, u32)>>,
 }
 
 impl Monomials {
@@ -1197,6 +1321,7 @@ impl Monomials {
             atoms: vec![Atom::num(1)],
             ids: HashMap::from([(Atom::num(1), 0)]),
             products: HashMap::new(),
+            small_products: HashMap::new(),
         }
     }
 
@@ -1248,6 +1373,12 @@ impl Monomials {
         }
     }
 
+    /// [`Self::term`] with a small real rational number.
+    fn small_term(&mut self, term: AtomView) -> Option<(SmallRational, u32)> {
+        let (value, monomial) = self.term(term)?;
+        Some((SmallRational::from_coefficient(&value)?, monomial))
+    }
+
     /// The normalized product of two monomials, as a number and a monomial.
     fn product(&mut self, left: u32, right: u32) -> Option<(Coefficient, u32)> {
         if left == 0 {
@@ -1266,14 +1397,23 @@ impl Monomials {
         product
     }
 
-    fn coefficient(&mut self, sum: AtomView) -> Option<NumericCoefficient> {
-        let mut coefficient = NumericCoefficient::new();
-        for term in sum_terms(sum) {
-            let (value, monomial) = self.term(term)?;
-            add_into(&mut coefficient, monomial, value);
+    /// [`Self::product`] with a small real rational number.
+    fn small_product(&mut self, left: u32, right: u32) -> Option<(SmallRational, u32)> {
+        if left == 0 {
+            return Some((SmallRational::ONE, right));
         }
-        coefficient.retain(|_, value| !value.is_zero());
-        Some(coefficient)
+        if right == 0 {
+            return Some((SmallRational::ONE, left));
+        }
+        let key = (left.min(right), left.max(right));
+        if let Some(product) = self.small_products.get(&key) {
+            return *product;
+        }
+        let product = self.product(left, right).and_then(|(value, monomial)| {
+            Some((SmallRational::from_coefficient(&value)?, monomial))
+        });
+        self.small_products.insert(key, product);
+        product
     }
 
     /// `Σ value·monomial` as the canonical sum of its terms.
@@ -1281,7 +1421,7 @@ impl Monomials {
         let terms = coefficient
             .iter()
             .filter(|(_, value)| !value.is_zero())
-            .map(|(&monomial, value)| &Atom::num(value.clone()) * &self.atoms[monomial as usize])
+            .map(|(monomial, value)| &Atom::num(value.clone()) * &self.atoms[*monomial as usize])
             .collect::<Vec<_>>();
         match <[Atom; 1]>::try_from(terms) {
             Ok([term]) => term,
@@ -1290,78 +1430,121 @@ impl Monomials {
     }
 }
 
-fn add_into(coefficient: &mut NumericCoefficient, monomial: u32, value: Coefficient) {
-    match coefficient.entry(monomial) {
-        Entry::Occupied(mut entry) => {
-            let sum = std::mem::take(entry.get_mut()) + value;
-            *entry.get_mut() = sum;
-        }
-        Entry::Vacant(entry) => {
-            entry.insert(value);
-        }
-    }
-}
-
 /// [`LoopPolynomials`] with every coefficient held as exact numbers per
 /// distinct loop-free monomial: the products of terms that it pushes one by
 /// one as atoms ([`ProductSums`]) become number products, with each distinct
-/// product of two monomials normalized once ([`Monomials::product`]).
+/// product of two monomials normalized once ([`Monomials::product`]). Loop
+/// factors and their products carry small real rationals
+/// ([`SmallPolynomial`]); only the numerator's own sum, whose spectators may
+/// be complex, carries [`Coefficient`]s.
 ///
 /// The coefficients are those of [`LoopPolynomials`]: a normalized sum is
 /// the canonical sum of its terms, a normalized product of two terms is the
 /// product of their numbers times the normalized product of their
 /// non-number parts (exact numbers, [`admits_loop_polynomials`]), and like
 /// monomials add their numbers. `None` (use [`LoopPolynomials`]) where a
-/// term is not a number times a monomial.
+/// term is not a number times a monomial, a loop factor has a number that is
+/// not a small real rational, or an operation overflows.
 struct NumericLoopPolynomials<'a> {
     loop_dots: &'a [Atom],
     monomials: Monomials,
-    factors: HashMap<&'a [u8], Rc<NumericPolynomial>>,
-    products: HashMap<Vec<&'a [u8]>, Rc<NumericPolynomial>>,
+    factors: HashMap<&'a [u8], Rc<SmallPolynomial>>,
+    products: HashMap<Vec<&'a [u8]>, Rc<SmallPolynomial>>,
+}
+
+/// The terms of a sum grouped by their loop factors (in first-seen order),
+/// with the product of the other factors of each term.
+fn loop_groups<'a>(terms: Vec<AtomView<'a>>) -> Vec<(Vec<AtomView<'a>>, Vec<Atom>)> {
+    let mut groups = Vec::<(Vec<AtomView<'a>>, Vec<Atom>)>::new();
+    let mut group_indices = HashMap::<Vec<&'a [u8]>, usize>::new();
+    for term in terms {
+        let (loop_factors, spectators): (Vec<_>, Vec<_>) = product_factors(term)
+            .into_iter()
+            .partition(|factor| factor.contains_symbol(S.k));
+        let spectator = if spectators.is_empty() {
+            Atom::num(1)
+        } else {
+            Atom::mul_many(spectators)
+        };
+        let key = loop_factors.iter().map(AtomView::get_data).collect();
+        match group_indices.entry(key) {
+            Entry::Occupied(entry) => groups[*entry.get()].1.push(spectator),
+            Entry::Vacant(entry) => {
+                entry.insert(groups.len());
+                groups.push((loop_factors, vec![spectator]));
+            }
+        }
+    }
+    groups
 }
 
 impl<'a> NumericLoopPolynomials<'a> {
-    fn monomial(&self, dot: AtomView, exponent: u8) -> Option<NumericPolynomial> {
+    fn one(&self) -> SmallPolynomial {
+        HashMap::from([(vec![0; self.loop_dots.len()], vec![(0, SmallRational::ONE)])])
+    }
+
+    fn monomial(&self, dot: AtomView, exponent: u8) -> Option<SmallPolynomial> {
         let index = self.loop_dots.binary_search(&dot.to_owned()).ok()?;
         let mut exponents = vec![0; self.loop_dots.len()];
         exponents[index] = exponent;
-        Some(HashMap::from([(
-            exponents,
-            HashMap::from([(0, Coefficient::one())]),
-        )]))
+        Some(HashMap::from([(exponents, vec![(0, SmallRational::ONE)])]))
     }
 
-    fn mul(
+    fn add_exponents(left: &Exponents, right: &Exponents) -> Option<Exponents> {
+        // `coefficient_list` stores the exponents as `i8`.
+        left.iter()
+            .zip(right)
+            .map(|(left, right)| left.checked_add(*right).filter(|sum| *sum <= 127))
+            .collect()
+    }
+
+    fn mul(&mut self, left: &SmallPolynomial, right: &SmallPolynomial) -> Option<SmallPolynomial> {
+        let mut product = SmallPolynomial::new();
+        for (left_exponents, left_coefficient) in left {
+            for (right_exponents, right_coefficient) in right {
+                let exponents = Self::add_exponents(left_exponents, right_exponents)?;
+                let target = product.entry(exponents).or_default();
+                for &(left_monomial, left_value) in left_coefficient {
+                    for &(right_monomial, right_value) in right_coefficient {
+                        let (scale, monomial) = self
+                            .monomials
+                            .small_product(left_monomial, right_monomial)?;
+                        add_small(target, monomial, scale.mul(left_value)?.mul(right_value)?)?;
+                    }
+                }
+            }
+        }
+        Some(clean_small(product))
+    }
+
+    /// The whole numerator's polynomial times a loop factor's.
+    fn mul_numeric(
         &mut self,
         left: &NumericPolynomial,
-        right: &NumericPolynomial,
+        right: &SmallPolynomial,
     ) -> Option<NumericPolynomial> {
         let mut product = NumericPolynomial::new();
         for (left_exponents, left_coefficient) in left {
             for (right_exponents, right_coefficient) in right {
-                let exponents = left_exponents
-                    .iter()
-                    .zip(right_exponents)
-                    .map(|(left, right)| left.checked_add(*right).filter(|sum| *sum <= 127))
-                    .collect::<Option<Exponents>>()?;
+                let exponents = Self::add_exponents(left_exponents, right_exponents)?;
                 let target = product.entry(exponents).or_default();
-                for (&left_monomial, left_value) in left_coefficient {
-                    for (&right_monomial, right_value) in right_coefficient {
+                for (left_monomial, left_value) in left_coefficient {
+                    for &(right_monomial, right_value) in right_coefficient {
                         let (scale, monomial) =
-                            self.monomials.product(left_monomial, right_monomial)?;
-                        add_into(
+                            self.monomials.product(*left_monomial, right_monomial)?;
+                        add_numeric(
                             target,
                             monomial,
-                            scale * left_value.clone() * right_value.clone(),
+                            scale * left_value.clone() * right_value.coefficient(),
                         );
                     }
                 }
             }
         }
-        Some(clean(product))
+        Some(clean_numeric(product))
     }
 
-    fn factor(&mut self, factor: AtomView<'a>) -> Option<Rc<NumericPolynomial>> {
+    fn factor(&mut self, factor: AtomView<'a>) -> Option<Rc<SmallPolynomial>> {
         if let Some(polynomial) = self.factors.get(factor.get_data()) {
             return Some(polynomial.clone());
         }
@@ -1369,7 +1552,7 @@ impl<'a> NumericLoopPolynomials<'a> {
             AtomView::Fun(function) if function.get_symbol() == S.dot => {
                 self.monomial(factor, 1)?
             }
-            AtomView::Add(_) | AtomView::Mul(_) => self.sum(sum_terms(factor))?,
+            AtomView::Add(_) | AtomView::Mul(_) => self.small_sum(sum_terms(factor))?,
             AtomView::Pow(power) => {
                 let (base, exponent) = power.get_base_exp();
                 let exponent = match exponent {
@@ -1403,16 +1586,13 @@ impl<'a> NumericLoopPolynomials<'a> {
         Some(polynomial)
     }
 
-    fn product(&mut self, factors: &[AtomView<'a>]) -> Option<Rc<NumericPolynomial>> {
+    fn product(&mut self, factors: &[AtomView<'a>]) -> Option<Rc<SmallPolynomial>> {
         let key = factors.iter().map(AtomView::get_data).collect::<Vec<_>>();
         if let Some(polynomial) = self.products.get(&key) {
             return Some(polynomial.clone());
         }
         let polynomial = match factors {
-            [] => Rc::new(HashMap::from([(
-                vec![0; self.loop_dots.len()],
-                HashMap::from([(0, Coefficient::one())]),
-            )])),
+            [] => Rc::new(self.one()),
             [factor] => self.factor(*factor)?,
             [rest @ .., last] => {
                 let rest = self.product(rest)?;
@@ -1424,67 +1604,74 @@ impl<'a> NumericLoopPolynomials<'a> {
         Some(polynomial)
     }
 
-    /// [`LoopPolynomials::sum`]: the spectators of each group of terms with
-    /// the same loop factors summed and expanded once, and their terms
-    /// multiplied with the terms of the group's loop polynomial as numbers
-    /// and cached monomial products, straight into the result.
-    fn sum(&mut self, terms: Vec<AtomView<'a>>) -> Option<NumericPolynomial> {
-        let mut groups = Vec::<(Vec<AtomView<'a>>, Vec<Atom>)>::new();
-        let mut group_indices = HashMap::<Vec<&'a [u8]>, usize>::new();
-        for term in terms {
-            let (loop_factors, spectators): (Vec<_>, Vec<_>) = product_factors(term)
-                .into_iter()
-                .partition(|factor| factor.contains_symbol(S.k));
-            let spectator = if spectators.is_empty() {
-                Atom::num(1)
-            } else {
-                Atom::mul_many(spectators)
-            };
-            let key = loop_factors.iter().map(AtomView::get_data).collect();
-            match group_indices.entry(key) {
-                Entry::Occupied(entry) => groups[*entry.get()].1.push(spectator),
-                Entry::Vacant(entry) => {
-                    entry.insert(groups.len());
-                    groups.push((loop_factors, vec![spectator]));
-                }
-            }
-        }
-        // Every spectator term n_s·m_s times every term n_c·m_c of the
-        // group's loop polynomial, added into the result in place; the
-        // products m_s·m_c of each spectator monomial are kept in a table
-        // indexed by m_c (a loop polynomial has few distinct m_c).
-        let mut result = NumericPolynomial::new();
-        let mut tables = HashMap::<u32, Vec<Option<Option<(Coefficient, u32)>>>>::new();
-        for (loop_factors, spectators) in groups {
+    /// [`LoopPolynomials::sum`] of a sum inside a loop factor, with small
+    /// real rational spectators.
+    fn small_sum(&mut self, terms: Vec<AtomView<'a>>) -> Option<SmallPolynomial> {
+        let mut result = SmallPolynomial::new();
+        for (loop_factors, spectators) in loop_groups(terms) {
             let spectators = Atom::add_many(spectators.iter()).expand();
             if spectators.is_zero() {
                 continue;
             }
-            let spectators = self.monomials.coefficient(spectators.as_view())?;
+            let spectators = sum_terms(spectators.as_view())
+                .into_iter()
+                .map(|term| self.monomials.small_term(term))
+                .collect::<Option<Vec<_>>>()?;
             let polynomial = self.product(&loop_factors)?;
-            for (&spectator_monomial, weight) in &spectators {
-                let table = tables.entry(spectator_monomial).or_default();
+            for &(weight, spectator_monomial) in &spectators {
                 for (exponents, coefficient) in polynomial.iter() {
                     let target = match result.get_mut(exponents) {
                         Some(target) => target,
                         None => result.entry(exponents.clone()).or_default(),
                     };
-                    for (&term_monomial, value) in coefficient {
-                        let slot = term_monomial as usize;
-                        if table.len() <= slot {
-                            table.resize(slot + 1, None);
-                        }
-                        if table[slot].is_none() {
-                            table[slot] =
-                                Some(self.monomials.product(spectator_monomial, term_monomial));
-                        }
-                        let (scale, product) = table[slot].clone().unwrap()?;
-                        add_into(target, product, scale * weight.clone() * value.clone());
+                    for &(term_monomial, value) in coefficient {
+                        let (scale, product) = self
+                            .monomials
+                            .small_product(spectator_monomial, term_monomial)?;
+                        add_small(target, product, scale.mul(weight)?.mul(value)?)?;
                     }
                 }
             }
         }
-        Some(clean(result))
+        Some(clean_small(result))
+    }
+
+    /// [`LoopPolynomials::sum`] of the numerator: the spectators of each
+    /// group of terms with the same loop factors summed and expanded once,
+    /// and their terms multiplied with the terms of the group's loop
+    /// polynomial as numbers and cached monomial products, straight into the
+    /// result.
+    fn sum(&mut self, terms: Vec<AtomView<'a>>) -> Option<NumericPolynomial> {
+        let mut result = NumericPolynomial::new();
+        for (loop_factors, spectators) in loop_groups(terms) {
+            let spectators = Atom::add_many(spectators.iter()).expand();
+            if spectators.is_zero() {
+                continue;
+            }
+            let spectators = sum_terms(spectators.as_view())
+                .into_iter()
+                .map(|term| self.monomials.term(term))
+                .collect::<Option<Vec<_>>>()?;
+            let polynomial = self.product(&loop_factors)?;
+            for (weight, spectator_monomial) in &spectators {
+                for (exponents, coefficient) in polynomial.iter() {
+                    let target = match result.get_mut(exponents) {
+                        Some(target) => target,
+                        None => result.entry(exponents.clone()).or_default(),
+                    };
+                    for &(term_monomial, value) in coefficient {
+                        let (scale, product) =
+                            self.monomials.product(*spectator_monomial, term_monomial)?;
+                        add_numeric(
+                            target,
+                            product,
+                            scale * weight.clone() * value.coefficient(),
+                        );
+                    }
+                }
+            }
+        }
+        Some(clean_numeric(result))
     }
 
     /// The atom polynomial of [`LoopPolynomials`].
@@ -1495,15 +1682,6 @@ impl<'a> NumericLoopPolynomials<'a> {
             .filter(|(_, coefficient)| !coefficient.is_zero())
             .collect()
     }
-}
-
-/// Drop zero numbers and empty coefficients.
-fn clean(mut polynomial: NumericPolynomial) -> NumericPolynomial {
-    polynomial.retain(|_, coefficient| {
-        coefficient.retain(|_, value| !value.is_zero());
-        !coefficient.is_empty()
-    });
-    polynomial
 }
 
 /// The loop polynomial of a numerator with its negative-power factors, by
@@ -1522,8 +1700,11 @@ fn numeric_loop_polynomial<'a>(
     let mut polynomial = polynomials.sum(sum_terms(canonical_numerator))?;
     for factor in negative_powers {
         let factor = polynomials.factor(factor.as_view())?;
-        polynomial = polynomials.mul(&polynomial, &factor)?;
+        polynomial = polynomials.mul_numeric(&polynomial, &factor)?;
     }
+    // The cached loop polynomials are no longer needed for the conversion.
+    polynomials.factors.clear();
+    polynomials.products.clear();
     Some(polynomials.to_atoms(polynomial))
 }
 
