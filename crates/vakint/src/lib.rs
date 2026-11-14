@@ -546,6 +546,11 @@ pub enum VakintError {
     NumericalPrecision(String),
     #[error(transparent)]
     MissingMasterOrders(#[from] truncation_guard::MissingMasterOrders),
+    /// A guard of the p master catalogue (five-loop p masters) refused the
+    /// request: no catalogue, an unmapped terminal, a master without
+    /// coefficients, or coefficients without the requested digits.
+    #[error(transparent)]
+    PMasterCatalogue(#[from] p_integral::PMasterCatalogueError),
     #[error("unknown vakint error")]
     Unknown,
 }

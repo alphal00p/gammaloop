@@ -120,7 +120,15 @@ fn gamma_tag(atom: AtomView, epsilon: Symbol) -> Option<i64> {
 /// integer argument and every `PMaster(name)` a tabulated name in vakint's
 /// namespace (`masters::p_master_names`); anything else is an error.
 pub(crate) fn check_symbols(expression: &Atom) -> Result<(), VakintError> {
-    let known = masters::p_master_names()?;
+    check_symbols_with(expression, &[])
+}
+
+/// [`check_symbols`], with the names `extra` (a p master catalogue's,
+/// `master_catalogue::PMasterSource::extra_names`) known besides the Forcer
+/// masters.
+pub(crate) fn check_symbols_with(expression: &Atom, extra: &[&str]) -> Result<(), VakintError> {
+    let mut known = masters::p_master_names()?;
+    known.extend_from_slice(extra);
     let mut malformed = None;
     expression.visitor(&mut |part| {
         if let AtomView::Fun(function) = part {
