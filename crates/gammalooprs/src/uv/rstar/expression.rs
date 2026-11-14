@@ -68,6 +68,14 @@ static UNSUPPORTED_PHYSICAL_MOMENTA: LazyLock<Vec<Symbol>> = LazyLock::new(|| {
         .collect()
 });
 
+static MEMORY_RELEASE: std::sync::OnceLock<fn()> = std::sync::OnceLock::new();
+
+/// Set by the host binary to return freed allocator memory to the kernel at
+/// once; used before the hard Taylor fallback (`simplify_hard_taylor`).
+pub fn set_memory_release(release: fn()) {
+    let _ = MEMORY_RELEASE.set(release);
+}
+
 /// Exclusive wall-clock stages within one outer integral. Backend time may
 /// contain its own finer timing events; those must not be added to this total.
 struct IntegrationTimings {
@@ -625,7 +633,7 @@ impl RStarIntegrand {
             let _algebra = StageSpan::new("gamma.remainder.hard_taylor_algebra");
             streamed::report_size("hard_taylor", expanded.as_view());
             streamed::dump("hard_taylor", expanded.as_view());
-            Self::simplify(&expanded)
+            Self::simplify_hard_taylor(&expanded)
                 .wrap_err("while simplifying the R* hard Taylor polynomial")?
         };
         if cfg!(test) || hard_taylor_check() {
@@ -645,6 +653,59 @@ impl RStarIntegrand {
             }
         }
         Ok(truncated)
+    }
+
+    /// [`Self::simplify`] of a hard Taylor polynomial. The factorized
+    /// contraction of a deeply nested product of many index-sharing sums
+    /// (27105: a 41 KB polynomial) can grow without bound; under an active
+    /// resource budget (`BETA_PROCESS_RSS_LIMIT_GIB`) it aborts, and the
+    /// polynomial is then expanded and simplified in chunks of summands:
+    /// the same value, not the same factored form, so this path runs only
+    /// where the whole simplification cannot finish
+    /// (`GAMMALOOP_ALGEBRA_LEGACY=hard_taylor_fallback` lets the abort fail
+    /// the diagram instead).
+    fn simplify_hard_taylor(expanded: &Atom) -> Result<Atom> {
+        let attempt =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| Self::simplify(expanded)));
+        match attempt {
+            Ok(result) => result,
+            Err(payload) => {
+                let message = payload
+                    .downcast_ref::<String>()
+                    .cloned()
+                    .or_else(|| {
+                        payload
+                            .downcast_ref::<&str>()
+                            .map(|text| (*text).to_owned())
+                    })
+                    .unwrap_or_default();
+                if !message.starts_with("resource budget exhausted")
+                    || streamed::legacy("hard_taylor_fallback")
+                {
+                    std::panic::resume_unwind(payload);
+                }
+                eprintln!(
+                    "HARD_TAYLOR_FALLBACK bytes={} reason={message}",
+                    expanded.as_view().get_byte_size()
+                );
+                // Return the aborted frontier's pages to the kernel before the
+                // budget is checked again (the allocator keeps freed memory).
+                if let Some(release) = MEMORY_RELEASE.get() {
+                    release();
+                    std::thread::sleep(std::time::Duration::from_millis(1500));
+                }
+                let started = std::time::Instant::now();
+                let expanded = expanded.expand();
+                let simplified = Self::simplify_summands(expanded.as_view())?;
+                eprintln!(
+                    "HARD_TAYLOR_FALLBACK done terms_bytes={} result_bytes={} seconds={:.1}",
+                    expanded.as_view().get_byte_size(),
+                    simplified.as_view().get_byte_size(),
+                    started.elapsed().as_secs_f64()
+                );
+                Ok(simplified)
+            }
+        }
     }
 
     /// The previous hard Taylor path: contract the whole routed expression,
