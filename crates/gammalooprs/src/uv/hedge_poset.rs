@@ -198,9 +198,14 @@ impl Wood {
         let empty = Spinney::empty(graph);
         spinneys.entry(empty.filter().clone()).or_insert(empty);
         let mut vakint_settings = vakint_settings.true_settings();
-        // Retain enough positive epsilon powers for finite terms formed when disconnected
-        // integrated counterterms are multiplied.
-        vakint_settings.number_of_terms_in_epsilon_expansion = max_loops as i64 + 1;
+        let needs_finite_terms = spinneys.values().any(|spinney| {
+            !spinney.filter().is_empty() && spinney.renormalization_scheme == ApproximationType::MUV
+        });
+        // N terms retain an l-loop integral through epsilon^(N-l-1). Pole-only
+        // forests need N=max_loops; MUV projections also need the finite term,
+        // including products with other components' poles in mixed forests.
+        vakint_settings.number_of_terms_in_epsilon_expansion =
+            max_loops as i64 + i64::from(needs_finite_terms);
 
         let mut unions = BTreeSet::new();
         let g: HedgeGraph<_, _> = HedgeGraph::poset(spinneys.into_values());
@@ -1505,7 +1510,10 @@ mod tests {
         graph::{Graph, parse::IntoFinalizedRuntimeGraph},
         initialisation::test_initialise,
         processes::DotExportSettings,
-        uv::{UltravioletGraph, Wood as OldWood, settings::RenormalizationPrescriptionSettings},
+        uv::{
+            UltravioletGraph, Wood as OldWood,
+            settings::{CTRenormalizationRule, RenormalizationPrescriptionSettings},
+        },
     };
 
     use super::*;
@@ -1517,6 +1525,108 @@ mod tests {
 
     fn standard_model() -> Model {
         crate::utils::load_generic_model("sm")
+    }
+
+    fn four_loop_banana() -> Result<Graph> {
+        finalized_runtime_dot!(
+            digraph G {
+                graph [projector=1];
+                node [num=1];
+                edge [particle="scalar_1" num=1];
+                v1 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}"];
+                v1 -> v2 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
+                v1 -> v2 [lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"];
+                v1 -> v2 [lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:3}"];
+                v1 -> v2 [lmb_id=3 source="{ufo_order:4}" sink="{ufo_order:4}"];
+            },
+            "scalars"
+        )
+    }
+
+    #[test]
+    fn epsilon_depth_matches_pole_and_finite_prescriptions() -> Result<()> {
+        test_initialise().unwrap();
+        let graph = four_loop_banana()?;
+        let model = scalar_model();
+        assert_eq!(graph.n_loops(&graph.full_filter()), 4);
+        for (scheme, terms) in [
+            (ApproximationType::PolePart, 4),
+            (ApproximationType::MUV, 5),
+        ] {
+            let settings = UVgenerationSettings {
+                renormalization_prescription: RenormalizationPrescriptionSettings {
+                    log_divergent: scheme,
+                    massive_power_divergent: scheme,
+                    massless_power_divergent: scheme,
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            let mut spinneys = graph.classified_spinneys(
+                &graph.full_filter(),
+                &model,
+                &settings,
+                &graph.loop_momentum_basis,
+            );
+            // The empty identity has the default MUV scheme, but needs no
+            // integral and must not add a finite order to a pole-only forest.
+            spinneys.push(Spinney::empty(&graph));
+            let wood = Wood::from_spinneys(
+                spinneys,
+                &graph,
+                CutStructure::empty(&graph),
+                &settings.vakint,
+            );
+            assert_eq!(
+                wood.vakint_settings.number_of_terms_in_epsilon_expansion,
+                terms
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn epsilon_depth_retains_finite_order_for_counterterm_override() -> Result<()> {
+        test_initialise().unwrap();
+        let graph = four_loop_banana()?;
+        let model = scalar_model();
+        let settings = UVgenerationSettings {
+            renormalization_prescription: RenormalizationPrescriptionSettings {
+                log_divergent: ApproximationType::PolePart,
+                massive_power_divergent: ApproximationType::PolePart,
+                massless_power_divergent: ApproximationType::PolePart,
+                overrides: vec![CTRenormalizationRule::new(
+                    graph.ct_identifier(&graph.full_filter(), &model),
+                    ApproximationType::MUV,
+                )],
+            },
+            ..Default::default()
+        };
+        let wood = Wood::new(CutStructure::empty(&graph), &graph, &model, &settings);
+        let schemes = wood
+            .graph
+            .iter_nodes()
+            .filter(|(_, _, spinney)| !spinney.filter().is_empty())
+            .map(|(_, _, spinney)| spinney.renormalization_scheme)
+            .collect::<Vec<_>>();
+        assert!(schemes.contains(&ApproximationType::PolePart));
+        assert!(schemes.contains(&ApproximationType::MUV));
+        assert_eq!(wood.vakint_settings.number_of_terms_in_epsilon_expansion, 5);
+        Ok(())
+    }
+
+    #[test]
+    fn epsilon_depth_ignores_empty_muv_identity() -> Result<()> {
+        test_initialise().unwrap();
+        let graph = four_loop_banana()?;
+        let wood = Wood::from_spinneys(
+            [Spinney::empty(&graph)],
+            &graph,
+            CutStructure::empty(&graph),
+            &VakintSettings::default(),
+        );
+        assert_eq!(wood.vakint_settings.number_of_terms_in_epsilon_expansion, 0);
+        Ok(())
     }
 
     impl Forests {
