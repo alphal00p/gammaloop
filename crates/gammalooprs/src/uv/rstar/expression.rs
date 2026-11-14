@@ -211,6 +211,8 @@ impl RStarIntegrand {
             .iter_edges_of(&region.boundary)
             .map(|(_, edge, _)| edge)
             .collect();
+        let experiment_input = (super::edge_experiment::enabled() && region.loops != 0)
+            .then(|| expression.clone());
         if region.loops != 0 {
             // Boundary Q labels are the independent source variables of the
             // local polynomial. A subgraph basis supplies signatures only for
@@ -269,6 +271,21 @@ impl RStarIntegrand {
         }
         converter_graph.underlying.forget_identification_history();
         drop(routing_stage);
+        if let Some(input) = experiment_input {
+            let routing = graph
+                .normal_emr_replacement(&region.remaining, &basis, &[W_.x___], |_| true)
+                .into_iter()
+                .collect::<Vec<_>>();
+            super::edge_experiment::compare(
+                graph,
+                &converter_graph,
+                &region.remaining,
+                &input,
+                &routing,
+                region.loops,
+                &|view| Self::simplify_view(view),
+            );
+        }
         Ok(Self {
             region: region.clone(),
             routed: expression,

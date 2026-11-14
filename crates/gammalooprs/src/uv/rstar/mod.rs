@@ -9,6 +9,7 @@
 
 #[cfg(test)]
 mod cache_tests;
+mod edge_experiment;
 mod evaluate;
 mod expression;
 mod insertion_identity;
