@@ -328,12 +328,51 @@ impl Reader<'_> {
     fn read(&mut self, view: AtomView) -> Result<Poly, Declined> {
         match view {
             AtomView::Add(sum) => {
-                let mut total = Poly::new();
+                // Summands grouped by their loop-dependent factors: the
+                // loop-free coefficients of a group are added first and the
+                // group's loop product is multiplied once.
+                let mut order = Vec::<Atom>::new();
+                let mut groups = HashMap::<Atom, Poly>::new();
                 for term in sum.iter() {
                     self.terms += 1;
-                    let poly = self.cached_term(term)?;
-                    for (key, value) in poly.iter() {
-                        add_into(&mut total, *key, value.clone());
+                    let factors = match term {
+                        AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+                        other => vec![other],
+                    };
+                    let (loops, rest): (Vec<_>, Vec<_>) =
+                        factors.into_iter().partition(|factor| Self::has_loop(*factor));
+                    let key = match loops.as_slice() {
+                        [] => Atom::num(1),
+                        [single] => single.to_owned(),
+                        many => Atom::mul_many(many.iter().copied()),
+                    };
+                    let coefficient = self.term_factors(rest)?;
+                    match groups.get_mut(&key) {
+                        Some(group) => {
+                            for (k, value) in coefficient {
+                                add_into(group, k, value);
+                            }
+                        }
+                        None => {
+                            order.push(key.clone());
+                            groups.insert(key, coefficient);
+                        }
+                    }
+                }
+                let mut total = Poly::new();
+                for key in order {
+                    let coefficient = groups.remove(&key).unwrap_or_default();
+                    if coefficient.is_empty() {
+                        continue;
+                    }
+                    let product = if key == Atom::num(1) {
+                        coefficient
+                    } else {
+                        let loops = self.term(key.as_view())?;
+                        self.multiply(&coefficient, &loops)?
+                    };
+                    for (k, value) in product {
+                        add_into(&mut total, k, value);
                     }
                 }
                 Ok(total)
@@ -353,12 +392,6 @@ impl Reader<'_> {
         }
     }
 
-    fn cached_term(&mut self, term: AtomView) -> Result<Rc<Poly>, Declined> {
-        match term {
-            AtomView::Mul(_) => Ok(Rc::new(self.term(term)?)),
-            other => self.cached(other),
-        }
-    }
 
     /// One summand: numbers, spectators and loop-dependent factors.
     fn term(&mut self, term: AtomView) -> Result<Poly, Declined> {
@@ -366,6 +399,11 @@ impl Reader<'_> {
             AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
             other => vec![other],
         };
+        self.term_factors(factors)
+    }
+
+    /// The product of `factors` (one summand, or part of it).
+    fn term_factors(&mut self, factors: Vec<AtomView<'_>>) -> Result<Poly, Declined> {
         let mut value = Rational::one();
         let mut imaginary = false;
         let mut spectators = Vec::new();
