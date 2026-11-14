@@ -581,8 +581,9 @@ fn switch_list(variable: &str) -> Vec<String> {
 }
 
 /// Diagnostics: with `GAMMALOOP_ALGEBRA_DUMP=<directory>`, write the first
-/// `GAMMALOOP_ALGEBRA_DUMP_COUNT` (default 40) inputs of a stage that are
-/// smaller than 2 MB to `<directory>/<stage>-<n>.txt`.
+/// `GAMMALOOP_ALGEBRA_DUMP_COUNT` (default 40) inputs that are smaller than
+/// `GAMMALOOP_ALGEBRA_DUMP_MAX_BYTES` (default 2 MB) to
+/// `<directory>/<stage>-<n>.txt`, only of `GAMMALOOP_ALGEBRA_DUMP_STAGE` if set.
 pub(crate) fn dump(stage: &str, expression: AtomView<'_>) {
     use std::sync::atomic::{AtomicUsize, Ordering};
     static DIRECTORY: LazyLock<Option<String>> =
@@ -594,10 +595,21 @@ pub(crate) fn dump(stage: &str, expression: AtomView<'_>) {
             .unwrap_or(40)
     });
     static NEXT: AtomicUsize = AtomicUsize::new(0);
+    static STAGE: LazyLock<Option<String>> =
+        LazyLock::new(|| std::env::var("GAMMALOOP_ALGEBRA_DUMP_STAGE").ok());
+    static MAX_BYTES: LazyLock<usize> = LazyLock::new(|| {
+        std::env::var("GAMMALOOP_ALGEBRA_DUMP_MAX_BYTES")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(2 << 20)
+    });
     let Some(directory) = DIRECTORY.as_ref() else {
         return;
     };
-    if expression.get_byte_size() > 2 << 20 {
+    if STAGE.as_ref().is_some_and(|only| only != stage) {
+        return;
+    }
+    if expression.get_byte_size() > *MAX_BYTES {
         return;
     }
     let n = NEXT.fetch_add(1, Ordering::Relaxed);

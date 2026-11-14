@@ -620,6 +620,7 @@ impl RStarIntegrand {
         let truncated = {
             let _algebra = StageSpan::new("gamma.remainder.hard_taylor_algebra");
             streamed::report_size("hard_taylor", expanded.as_view());
+            streamed::dump("hard_taylor", expanded.as_view());
             // Summand by summand, as the outer Taylor polynomial: one tensor
             // network of a large hard polynomial held up to ~90 GiB (27105).
             // `GAMMALOOP_ALGEBRA_LEGACY=hard_taylor_summands` restores it.
