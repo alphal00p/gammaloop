@@ -1796,8 +1796,12 @@ fn five_loop_package_drill() {
                     assert!(!reduced.is_zero(), "{label} summand {index}: {summand}");
                     total = total + reduced;
                 }
-                let total = total.expand();
-                let whole = value.expand();
+                // Rational coefficients in eps (e.g. 1/(1+eps) from a
+                // dimension-dependent IBP coefficient) cancel only over a
+                // common denominator: `expand` alone leaves 15*eps/(1+eps)
+                // next to -15*eps (the exact zero needs `together`).
+                let total = total.expand().together().expand();
+                let whole = value.expand().together().expand();
                 eprintln!(
                     "DRILL {label}: ZERO CHECK whole input in {seconds:.1} s: {} terms ({whole}); \
                      sum of the {} separate reductions: {} terms ({total})",

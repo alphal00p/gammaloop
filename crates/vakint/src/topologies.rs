@@ -525,6 +525,18 @@ impl Topologies {
         input: AtomView,
         allow_unknown_integrals: bool,
     ) -> Result<Option<ReplacementRules>, VakintError> {
+        self.match_propagator_preferring(input, allow_unknown_integrals, &|_| true)
+    }
+
+    /// [`Self::match_propagator`] in a family `available` accepts where the
+    /// graph is a sector of one ([`p_integral::match_graph_preferring`]): the
+    /// engine passes the families its RustRed p library holds.
+    pub(crate) fn match_propagator_preferring(
+        &self,
+        input: AtomView,
+        allow_unknown_integrals: bool,
+        available: &dyn Fn(usize) -> bool,
+    ) -> Result<Option<ReplacementRules>, VakintError> {
         let graph = match PGraph::parse_checked(input) {
             Ok(graph) => graph,
             Err(rejection) if rejection.is_out_of_domain() => {
@@ -549,7 +561,7 @@ impl Topologies {
                 "{input} (p-integral not covered by the 1L-5L registry)"
             ))
         };
-        let Some(matched) = p_integral::match_graph(&graph)? else {
+        let Some(matched) = p_integral::match_graph_preferring(&graph, available)? else {
             unimodular?;
             return self.match_unknown_propagator(input, allow_unknown_integrals, uncovered());
         };

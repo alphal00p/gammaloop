@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::graph::Graph as NativeGraph;
 
-use super::catalogue::{PCatalogue, match_graph};
+use super::catalogue::{PCatalogue, match_graph, match_graph_preferring};
 use super::input::{Normalized, PGraph, PLine, VertexClasses, is_scaleless};
 use super::{P_FAMILIES, families};
 use crate::symbols::S;
@@ -361,4 +361,44 @@ fn the_witness_supplies_the_backend_request() {
         super::scalar_numerator(term.numerator.as_view(), &p2).unwrap(),
         term.numerator
     );
+}
+
+/// vk5l WP4: a five-loop sector is matched into a family the caller holds.
+/// The sector of P3dc41bbf2115e501_e15 with lines 9, 11 and 14 pinched (node
+/// T185) has the catalogue representative P05373c99ef72fce4_e13 (first in
+/// table order); a backend holding only P3dc41bbf2115e501_e15 receives it in
+/// that family, as the same sector, with the same powers.
+#[test]
+fn a_five_loop_sector_is_matched_into_an_available_family() {
+    crate::Vakint::initialize_vakint_symbols();
+    let named = P_FAMILIES
+        .iter()
+        .position(|family| family.name == "P3dc41bbf2115e501_e15")
+        .unwrap();
+    let input = crate::utils::vakint_macros::vk_parse!(
+        "topo(P3dc41bbf2115e501_e15(p(1),1,1,1,1,2,1,1,1,0,1,0,1,1,0))"
+    )
+    .unwrap();
+    let Normalized::Graph { graph, .. } = PGraph::parse(input.as_view())
+        .unwrap()
+        .normalize()
+        .unwrap()
+    else {
+        panic!("the T185 sector is not scaleless");
+    };
+    let representative = match_graph(&graph).unwrap().unwrap();
+    assert_eq!(P_FAMILIES[representative.family].name, "P05373c99ef72fce4_e13");
+    let held = match_graph_preferring(&graph, &|family| family == named)
+        .unwrap()
+        .unwrap();
+    assert_eq!(held.family, named);
+    assert_eq!(held.powers.iter().filter(|&&power| power == 0).count(), 3);
+    let mut powers = held.powers.clone();
+    powers.sort();
+    let mut expected = vec![1i64, 1, 1, 1, 2, 1, 1, 1, 0, 1, 0, 1, 1, 0];
+    expected.sort();
+    assert_eq!(powers, expected);
+    // Nothing available: the representative names the missing family.
+    let none = match_graph_preferring(&graph, &|_| false).unwrap().unwrap();
+    assert_eq!(none.family, representative.family);
 }

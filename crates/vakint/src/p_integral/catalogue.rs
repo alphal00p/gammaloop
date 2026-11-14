@@ -12,12 +12,12 @@
 //! five loops); a shipped index can replace a stratum without changing callers.
 
 use std::collections::{BTreeMap, HashMap};
-use std::sync::{LazyLock, OnceLock};
+use std::sync::{LazyLock, Mutex, OnceLock};
 
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::graph::Graph as NativeGraph;
 
-use super::families;
+use super::{PFamily, families};
 use super::input::{PGraph, VertexClasses, is_scaleless};
 use crate::VakintError;
 use crate::routing::{self, linear_momentum};
@@ -118,6 +118,15 @@ impl PCatalogue {
     /// get the same line correspondence (up to the automorphisms that preserve
     /// the powers, which are symmetries of the integral).
     pub(crate) fn lookup(&self, graph: &PGraph) -> Option<(&CatalogueEntry, BTreeMap<i64, usize>)> {
+        self.lookup_keyed(graph)
+            .map(|(entry, labels, _)| (entry, labels))
+    }
+
+    /// [`Self::lookup`] with the catalogue key of the graph.
+    fn lookup_keyed(
+        &self,
+        graph: &PGraph,
+    ) -> Option<(&CatalogueEntry, BTreeMap<i64, usize>, Key)> {
         let stratum = self.stratum(graph.loops, graph.lines.len())?;
         let mut vertices = graph
             .lines
@@ -165,7 +174,7 @@ impl PCatalogue {
             .into_iter()
             .map(|(vertex, node)| (vertex, labels[&(form.vertex_map[node] as i64)]))
             .collect();
-        Some((entry, labels))
+        Some((entry, labels, key))
     }
 }
 
@@ -176,44 +185,7 @@ fn build_stratum(loops: usize, lines: usize) -> HashMap<Key, CatalogueEntry> {
         .iter()
         .filter(|family| family.data.loops == loops)
     {
-        let count = family.lines.len();
-        if lines > count {
-            continue;
-        }
-        for mask in 0u64..1 << count {
-            if mask.count_ones() as usize != count - lines {
-                continue;
-            }
-            let mut classes = VertexClasses::default();
-            let mut pinched = Vec::new();
-            let mut rest = Vec::new();
-            for (position, line) in family.lines.iter().enumerate() {
-                if mask & (1 << position) != 0 {
-                    classes.merge(line.ends);
-                    pinched.push(line.id);
-                } else {
-                    rest.push((line.id, line.ends));
-                }
-            }
-            let rest = rest
-                .into_iter()
-                .map(|(id, (a, b))| (id, (classes.find(a), classes.find(b))))
-                .collect::<Vec<_>>();
-            let (entry, exit) = (classes.find(1), classes.find(2));
-            let ends = rest.iter().map(|(_, ends)| *ends).collect::<Vec<_>>();
-            if is_scaleless(&ends, entry, exit, loops) {
-                continue;
-            }
-            let (key, labels) = canonical(&ends, entry, exit);
-            let candidate = CatalogueEntry {
-                family: family.index,
-                lines: rest
-                    .iter()
-                    .map(|(id, (a, b))| (*id, labels[a], labels[b]))
-                    .collect(),
-                entry: labels[&entry],
-                pinched,
-            };
+        for (key, candidate) in contractions(family, lines) {
             match stratum.entry(key) {
                 std::collections::hash_map::Entry::Vacant(slot) => {
                     slot.insert(candidate);
@@ -228,6 +200,93 @@ fn build_stratum(loops: usize, lines: usize) -> HashMap<Key, CatalogueEntry> {
         }
     }
     log::debug!(target: "vakint::p_integral", "phase=catalogue_stratum loops={loops} lines={lines} graphs={} elapsed_seconds={:.6}", stratum.len(), started.elapsed().as_secs_f64());
+    stratum
+}
+
+/// The non-scaleless contractions of `family` to `lines` lines, keyed by
+/// their canonical multigraph, in mask order.
+fn contractions(family: &PFamily, lines: usize) -> Vec<(Key, CatalogueEntry)> {
+    let loops = family.data.loops;
+    let count = family.lines.len();
+    let mut found = Vec::new();
+    if lines > count {
+        return found;
+    }
+    for mask in 0u64..1 << count {
+        if mask.count_ones() as usize != count - lines {
+            continue;
+        }
+        let mut classes = VertexClasses::default();
+        let mut pinched = Vec::new();
+        let mut rest = Vec::new();
+        for (position, line) in family.lines.iter().enumerate() {
+            if mask & (1 << position) != 0 {
+                classes.merge(line.ends);
+                pinched.push(line.id);
+            } else {
+                rest.push((line.id, line.ends));
+            }
+        }
+        let rest = rest
+            .into_iter()
+            .map(|(id, (a, b))| (id, (classes.find(a), classes.find(b))))
+            .collect::<Vec<_>>();
+        let (entry, exit) = (classes.find(1), classes.find(2));
+        let ends = rest.iter().map(|(_, ends)| *ends).collect::<Vec<_>>();
+        if is_scaleless(&ends, entry, exit, loops) {
+            continue;
+        }
+        let (key, labels) = canonical(&ends, entry, exit);
+        found.push((
+            key,
+            CatalogueEntry {
+                family: family.index,
+                lines: rest
+                    .iter()
+                    .map(|(id, (a, b))| (*id, labels[a], labels[b]))
+                    .collect(),
+                entry: labels[&entry],
+                pinched,
+            },
+        ));
+    }
+    found
+}
+
+/// The sectors of ONE family with `lines` lines (its own representative per
+/// graph: the lexicographically smallest set of pinched lines), built on
+/// first use. Used only when the catalogue representative's family is not
+/// available to the caller ([`match_graph_preferring`]).
+fn family_stratum(family: usize, lines: usize) -> std::sync::Arc<HashMap<Key, CatalogueEntry>> {
+    static STRATA: LazyLock<Mutex<HashMap<(usize, usize), std::sync::Arc<HashMap<Key, CatalogueEntry>>>>> =
+        LazyLock::new(Default::default);
+    if let Some(stratum) = STRATA
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .get(&(family, lines))
+    {
+        return std::sync::Arc::clone(stratum);
+    }
+    let started = std::time::Instant::now();
+    let mut stratum = HashMap::<Key, CatalogueEntry>::new();
+    for (key, candidate) in contractions(&families()[family], lines) {
+        match stratum.entry(key) {
+            std::collections::hash_map::Entry::Vacant(slot) => {
+                slot.insert(candidate);
+            }
+            std::collections::hash_map::Entry::Occupied(mut slot) => {
+                if candidate.pinched < slot.get().pinched {
+                    slot.insert(candidate);
+                }
+            }
+        }
+    }
+    log::debug!(target: "vakint::p_integral", "phase=family_stratum family={family} lines={lines} graphs={} elapsed_seconds={:.6}", stratum.len(), started.elapsed().as_secs_f64());
+    let stratum = std::sync::Arc::new(stratum);
+    STRATA
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .insert((family, lines), std::sync::Arc::clone(&stratum));
     stratum
 }
 
@@ -253,9 +312,47 @@ const MAXIMAL_PARALLEL_ASSIGNMENTS: usize = 1 << 12;
 /// Match a normalized p-integral graph to its catalogue representative.
 /// Returns `None` when its graph is in no catalogue stratum.
 pub(crate) fn match_graph(graph: &PGraph) -> Result<Option<PMatch>, VakintError> {
-    let Some((entry, labels)) = PCatalogue::get().lookup(graph) else {
+    match_graph_preferring(graph, &|_| true)
+}
+
+/// [`match_graph`], but in a family `available` accepts: the catalogue
+/// representative (the first family in table order) when it is available,
+/// else the first available family of the same loop count, in table order,
+/// that contains the graph as a sector. A backend that holds only some
+/// families (a five-loop RustRed package assembled top by top) thus receives
+/// every sector of a family it holds in a family it holds. With no available
+/// family containing the graph, the catalogue representative is returned (the
+/// backend then names the family it lacks).
+pub(crate) fn match_graph_preferring(
+    graph: &PGraph,
+    available: &dyn Fn(usize) -> bool,
+) -> Result<Option<PMatch>, VakintError> {
+    let Some((representative, labels, key)) = PCatalogue::get().lookup_keyed(graph) else {
         return Ok(None);
     };
+    let alternative = if available(representative.family) {
+        None
+    } else {
+        families()
+            .iter()
+            .filter(|family| {
+                family.data.loops == graph.loops
+                    && family.index != representative.family
+                    && family.lines.len() >= graph.lines.len()
+                    && available(family.index)
+            })
+            .find_map(|family| family_stratum(family.index, graph.lines.len()).get(&key).cloned())
+    };
+    if let Some(alternative) = &alternative {
+        log::debug!(
+            target: "vakint::p_integral",
+            "phase=catalogue_alternative representative={} chosen={} pinched={:?}",
+            families()[representative.family].data.name,
+            families()[alternative.family].data.name,
+            alternative.pinched
+        );
+    }
+    let entry = alternative.as_ref().unwrap_or(representative);
     let family = &families()[entry.family];
     let sign = if labels[&graph.entry] == entry.entry {
         1

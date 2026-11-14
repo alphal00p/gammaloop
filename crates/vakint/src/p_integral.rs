@@ -42,7 +42,7 @@ use crate::{
     VakintTerm, get_integer_from_atom, get_prop_with_id, graph::Graph, topologies::Topology,
 };
 
-pub(crate) use catalogue::{PMatch, match_graph};
+pub(crate) use catalogue::{PMatch, match_graph, match_graph_preferring};
 pub use dot::to_dot;
 /// FORM run record for the benchmark harness (not part of the API).
 #[cfg(feature = "experimental-rustred")]

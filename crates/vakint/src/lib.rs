@@ -5454,9 +5454,25 @@ impl Vakint {
         // p-integrals are identified by their own catalogue, before any
         // vacuum or five-loop matcher (docs/p_integrals.md, section 1).
         if p_integral::infer_kind(input)? == p_integral::IntegralKind::Propagator {
-            return self
-                .topologies
-                .match_propagator(input, settings.allow_unknown_integrals);
+            // A five-loop family is reduced by RustRed only; its package may
+            // hold only some of the 64 tops (assembled top by top), so a
+            // sector is matched into a family the package holds where one
+            // contains it (vk5l WP4). Families below five loops are always
+            // complete; an unloadable library keeps the catalogue
+            // representative (the evaluation then reports the library).
+            let library = std::cell::OnceCell::new();
+            let available = |family: usize| {
+                p_integral::P_FAMILIES[family].loops < 5
+                    || library
+                        .get_or_init(|| self.p_library().ok())
+                        .as_ref()
+                        .is_none_or(|handle| handle.holds(family))
+            };
+            return self.topologies.match_propagator_preferring(
+                input,
+                settings.allow_unknown_integrals,
+                &available,
+            );
         }
         if let Some(matched) = self
             .topologies

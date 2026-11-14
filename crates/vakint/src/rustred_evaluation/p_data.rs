@@ -478,15 +478,42 @@ impl PLibraryHandle {
         Ok(atom)
     }
 
+    /// Whether the library holds the top of the [`P_FAMILIES`] entry `family`.
+    pub(crate) fn holds(&self, family: usize) -> bool {
+        self.tops.get(family).is_some_and(Option::is_some)
+    }
+
     /// The top of the [`P_FAMILIES`] entry `family`.
     pub(crate) fn top(&self, family: usize) -> Result<PTop, RustRedEvaluationError> {
         self.tops.get(family).copied().flatten().ok_or_else(|| {
             RustRedEvaluationError::UnsupportedMatchedFamily {
-                detail: format!(
-                    "the RustRed p library of scope {:?} has no family {}",
-                    self.library.scope(),
-                    P_FAMILIES.get(family).map_or("?", |family| family.name)
-                ),
+                // vk5l WP4: a partial five-loop package (assembled top by
+                // top) names the tops it holds; the frontend already matched
+                // into a held top wherever one contains the sector.
+                detail: {
+                    let held = P_FAMILIES
+                        .iter()
+                        .zip(&self.tops)
+                        .filter(|(family, top)| family.loops >= 5 && top.is_some())
+                        .map(|(family, _)| family.name)
+                        .collect::<Vec<_>>();
+                    let name = P_FAMILIES.get(family).map_or("?", |family| family.name);
+                    if P_FAMILIES.get(family).is_some_and(|family| family.loops >= 5) {
+                        format!(
+                            "the five-loop top {name} is not in this RustRed p package (scope {:?}; \
+                             it holds {} of the 64 five-loop tops: {}), and no top it holds \
+                             contains the sector",
+                            self.library.scope(),
+                            held.len(),
+                            held.join(", ")
+                        )
+                    } else {
+                        format!(
+                            "the RustRed p library of scope {:?} has no family {name}",
+                            self.library.scope()
+                        )
+                    }
+                },
             }
         })
     }
