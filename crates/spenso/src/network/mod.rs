@@ -4157,6 +4157,97 @@ where
     NetworkLeaf::LocalTensor(store.push_tensor(result))
 }
 
+/// Decides whether a complete scalar sum of `leaves` atoms that occupy `bytes`
+/// in total goes through Symbolica's [`TermStreamer`] rather than
+/// [`Atom::add_many`].
+///
+/// Only sums too large to normalize comfortably in memory are streamed: every
+/// [`TermStreamer`] builds its own thread pool and buffers, and that set-up
+/// dominated the cost of the many moderate sums of local UV counterterms. Both
+/// paths give the same normalized sum, so the thresholds are tuning choices.
+///
+/// [`TermStreamer`]: symbolica::streaming::TermStreamer
+#[cfg(feature = "shadowing")]
+fn use_streamed_scalar_sum(leaves: usize, bytes: usize) -> bool {
+    const MIN_STREAMED_SUM_LEAVES: usize = 32;
+    const MIN_STREAMED_SUM_BYTES: usize = 1 << 30;
+    leaves >= MIN_STREAMED_SUM_LEAVES && bytes >= MIN_STREAMED_SUM_BYTES
+}
+
+/// Sums complete scalar atoms in memory with [`Atom::add_many`] or, when
+/// `streamed`, through a single-threaded [`TermStreamer`]. Explicit zeros never
+/// become stream terms, and an empty stream yields [`Atom::Zero`].
+///
+/// [`TermStreamer`]: symbolica::streaming::TermStreamer
+#[cfg(feature = "shadowing")]
+fn sum_scalar_atoms(atoms: Vec<Atom>, streamed: bool) -> Atom {
+    use std::{fs::File, io::BufWriter};
+
+    use symbolica::streaming::{TermStreamer, TermStreamerConfig};
+
+    let leaves = atoms.len();
+    let start = profile::enabled().then(std::time::Instant::now);
+
+    if streamed {
+        if profile::enabled() {
+            eprintln!(
+                "spenso_profile execute.sum_term_stream_start leaves={}",
+                leaves,
+            );
+        }
+
+        let mut stream = TermStreamer::<BufWriter<File>>::new(
+            TermStreamerConfig::new()
+                .cores(1)
+                .path(std::env::temp_dir().to_string_lossy().into_owned())
+                .max_mem_bytes(usize::try_from(4_u64 * 1024 * 1024 * 1024).unwrap_or(usize::MAX)),
+        );
+
+        for atom in atoms {
+            // Explicit zero leaves must not become terms in the stream.
+            if !atom.is_zero() {
+                stream.push(atom);
+            }
+        }
+
+        let mut result = stream.to_expression();
+        if result.nterms() == 0 {
+            result = Atom::Zero;
+        }
+        if let Some(start) = start {
+            eprintln!(
+                "spenso_profile execute.sum_term_stream_done leaves={} terms={} bytes={} elapsed_ms={:.3}",
+                leaves,
+                result.nterms(),
+                result.as_view().get_byte_size(),
+                start.elapsed().as_secs_f64() * 1000.0,
+            );
+        }
+        result
+    } else {
+        if profile::verbose() {
+            eprintln!(
+                "spenso_profile execute.sum_atom_add_many_start leaves={}",
+                leaves,
+            );
+        }
+
+        let result = Atom::add_many(atoms);
+        if profile::verbose()
+            && let Some(start) = start
+        {
+            eprintln!(
+                "spenso_profile execute.sum_atom_add_many_done leaves={} terms={} bytes={} elapsed_ms={:.3}",
+                leaves,
+                result.nterms(),
+                result.as_view().get_byte_size(),
+                start.elapsed().as_secs_f64() * 1000.0,
+            );
+        }
+        result
+    }
+}
+
 #[cfg(feature = "shadowing")]
 fn try_atom_scalar_sum<K, Aind, Store>(
     store: &mut Store,
@@ -4172,23 +4263,15 @@ where
         + for<'a> MulAssign<<Store::Scalar as Ref>::Ref<'a>>
         + 'static,
 {
-    use std::{
-        any::{Any, TypeId},
-        fs::File,
-        io::BufWriter,
-    };
+    use std::any::{Any, TypeId};
 
-    use symbolica::{
-        atom::Atom,
-        streaming::{TermStreamer, TermStreamerConfig},
-    };
+    use symbolica::atom::Atom;
 
     if TypeId::of::<Store::Scalar>() != TypeId::of::<Atom>() {
         return None;
     }
 
     const MIN_ATOM_ADD_MANY_LEAVES: usize = 4;
-    const MIN_STREAMED_SUM_LEAVES: usize = 32;
     if targets.len() < MIN_ATOM_ADD_MANY_LEAVES {
         return None;
     }
@@ -4215,65 +4298,11 @@ where
         })
         .collect::<Option<Vec<_>>>()?;
 
-    let start = profile::enabled().then(std::time::Instant::now);
-
-    let result = if targets.len() >= MIN_STREAMED_SUM_LEAVES {
-        if profile::enabled() {
-            eprintln!(
-                "spenso_profile execute.sum_term_stream_start leaves={}",
-                targets.len(),
-            );
-        }
-
-        let mut stream = TermStreamer::<BufWriter<File>>::new(
-            TermStreamerConfig::new()
-                .path(std::env::temp_dir().to_string_lossy().into_owned())
-                .max_mem_bytes(usize::try_from(4_u64 * 1024 * 1024 * 1024).unwrap_or(usize::MAX)),
-        );
-
-        for atom in atoms {
-            // Explicit zero leaves must not become terms in the stream.
-            if !atom.is_zero() {
-                stream.push(atom);
-            }
-        }
-
-        let mut result = stream.to_expression();
-        if result.nterms() == 0 {
-            result = Atom::Zero;
-        }
-        if let Some(start) = start {
-            eprintln!(
-                "spenso_profile execute.sum_term_stream_done leaves={} terms={} bytes={} elapsed_ms={:.3}",
-                targets.len(),
-                result.nterms(),
-                result.as_view().get_byte_size(),
-                start.elapsed().as_secs_f64() * 1000.0,
-            );
-        }
-        result
-    } else {
-        if profile::verbose() {
-            eprintln!(
-                "spenso_profile execute.sum_atom_add_many_start leaves={}",
-                targets.len(),
-            );
-        }
-
-        let result = Atom::add_many(atoms);
-        if profile::verbose()
-            && let Some(start) = start
-        {
-            eprintln!(
-                "spenso_profile execute.sum_atom_add_many_done leaves={} terms={} bytes={} elapsed_ms={:.3}",
-                targets.len(),
-                result.nterms(),
-                result.as_view().get_byte_size(),
-                start.elapsed().as_secs_f64() * 1000.0,
-            );
-        }
-        result
-    };
+    let bytes: usize = atoms
+        .iter()
+        .map(|atom| atom.as_view().get_byte_size())
+        .sum();
+    let result = sum_scalar_atoms(atoms, use_streamed_scalar_sum(targets.len(), bytes));
 
     let boxed: Box<dyn Any> = Box::new(result);
     let scalar = *boxed.downcast::<Store::Scalar>().ok()?;
