@@ -361,6 +361,11 @@ impl TryFrom<LibraryRep> for Minkowski {
 impl BaseRepName for Minkowski {
     const NAME: &'static str = "mink";
 
+    #[cfg(feature = "shadowing")]
+    fn selfless_symbol() -> Symbol {
+        ExtendibleReps::MINKOWSKI.symbol()
+    }
+
     fn selfless_base() -> Self::Base {
         Self::default()
     }
@@ -1688,7 +1693,7 @@ impl LibraryRep {
     }
 
     pub fn new_dual(name: &str) -> Result<Self, RepLibraryError> {
-        REPS.write().unwrap().new_dual_impl(name)
+        Self::new_dual_with_metadata_request(name, None, None)
     }
 
     #[cfg(feature = "shadowing")]
@@ -1696,9 +1701,7 @@ impl LibraryRep {
         name: &str,
         index_palette: IndexPalette,
     ) -> Result<Self, RepLibraryError> {
-        REPS.write()
-            .unwrap()
-            .new_dual_impl_with_index_palette(name, index_palette)
+        Self::new_dual_with_metadata_request(name, Some(index_palette), None)
     }
 
     #[cfg(feature = "shadowing")]
@@ -1707,14 +1710,47 @@ impl LibraryRep {
         index_palette: IndexPalette,
         index_row: IndexRow,
     ) -> Result<Self, RepLibraryError> {
+        Self::new_dual_with_metadata_request(name, Some(index_palette), Some(index_row))
+    }
+
+    fn new_dual_with_metadata_request(
+        name: &str,
+        index_palette: Option<IndexPalette>,
+        index_row: Option<IndexRow>,
+    ) -> Result<Self, RepLibraryError> {
+        let existing = REPS.read().unwrap().find_compatible(
+            name,
+            RepresentationClass::Dualizable,
+            index_palette.as_ref(),
+            index_row,
+        )?;
+        if let Some(rep) = existing {
+            return Ok(rep);
+        }
+        // The read guard has been dropped; another writer may have registered the
+        // name meanwhile, so the insertion path repeats the compatibility check.
         REPS.write()
             .unwrap()
-            .new_dual_impl_with_index_palette_and_row(name, index_palette, index_row)
+            .new_dual_impl_with_metadata_request(name, index_palette, index_row)
+    }
+
+    /// Read already-published representation data without consulting the maps.
+    /// This must not force `REPS`: registry construction also uses this lookup.
+    fn data(&self) -> &'static RepData {
+        match *self {
+            Self::Dummy => &DUMMY_REP_DATA,
+            Self::SelfDual(index) => &SELF_DUAL[index as usize].1,
+            Self::InlineMetric(index) => &INLINE_METRIC[index as usize].1.rep_data,
+            Self::Dualizable(index) => &DUALIZABLE[index.unsigned_abs() as usize - 1].1,
+        }
     }
 
     #[cfg(feature = "shadowing")]
     pub fn symbol(&self) -> Symbol {
-        REPS.read().unwrap()[*self].symbol
+        // The lazy handle completes native registration before the append-only
+        // storage is read; no registry map lock is needed for a published ID.
+        let _ = &*REPS;
+        self.data().symbol
     }
 
     pub fn name(&self) -> String {
@@ -1767,7 +1803,7 @@ impl LibraryRep {
     }
 
     pub fn new_self_dual(name: &str) -> Result<Self, RepLibraryError> {
-        REPS.write().unwrap().new_self_dual(name)
+        Self::new_self_dual_with_metadata_request(name, None, None)
     }
 
     #[cfg(feature = "shadowing")]
@@ -1775,9 +1811,7 @@ impl LibraryRep {
         name: &str,
         index_palette: IndexPalette,
     ) -> Result<Self, RepLibraryError> {
-        REPS.write()
-            .unwrap()
-            .new_self_dual_with_index_palette(name, index_palette)
+        Self::new_self_dual_with_metadata_request(name, Some(index_palette), None)
     }
 
     #[cfg(feature = "shadowing")]
@@ -1786,9 +1820,26 @@ impl LibraryRep {
         index_palette: IndexPalette,
         index_row: IndexRow,
     ) -> Result<Self, RepLibraryError> {
+        Self::new_self_dual_with_metadata_request(name, Some(index_palette), Some(index_row))
+    }
+
+    fn new_self_dual_with_metadata_request(
+        name: &str,
+        index_palette: Option<IndexPalette>,
+        index_row: Option<IndexRow>,
+    ) -> Result<Self, RepLibraryError> {
+        let existing = REPS.read().unwrap().find_compatible(
+            name,
+            RepresentationClass::SelfDual,
+            index_palette.as_ref(),
+            index_row,
+        )?;
+        if let Some(rep) = existing {
+            return Ok(rep);
+        }
         REPS.write()
             .unwrap()
-            .new_self_dual_with_index_palette_and_row(name, index_palette, index_row)
+            .new_self_dual_impl(name, index_palette, index_row)
     }
 
     pub fn all_self_duals() -> impl Iterator<Item = &'static LibraryRep> {
@@ -1855,6 +1906,45 @@ impl ExtendibleReps {
         self.name_map.values()
     }
 
+    fn find_compatible(
+        &self,
+        name: &str,
+        class: RepresentationClass,
+        index_palette: Option<&IndexPalette>,
+        index_row: Option<IndexRow>,
+    ) -> Result<Option<LibraryRep>, RepLibraryError> {
+        let canonical_name = canonical_representation_name(name);
+        let Some(&rep) = self.name_map.get(&canonical_name) else {
+            return Ok(None);
+        };
+        let incompatible = match class {
+            // Inline metrics remain accepted by the self-dual constructor.
+            RepresentationClass::SelfDual => matches!(rep, LibraryRep::Dualizable(_)),
+            RepresentationClass::Dualizable => !matches!(rep, LibraryRep::Dualizable(_)),
+            RepresentationClass::InlineMetric => !matches!(rep, LibraryRep::InlineMetric(_)),
+        };
+        if incompatible {
+            return Err(RepLibraryError::AlreadyExistsDifferentType(name.into()));
+        }
+        #[cfg(feature = "shadowing")]
+        if let Some(index_palette) = index_palette
+            && RepresentationMetadata::from_symbol(self[rep].symbol)
+                .is_none_or(|metadata| metadata.index_palette != *index_palette)
+        {
+            return Err(RepLibraryError::AlreadyExistsDifferentMetadata(name.into()));
+        }
+        #[cfg(feature = "shadowing")]
+        if let Some(index_row) = index_row
+            && RepresentationMetadata::from_symbol(self[rep].symbol)
+                .is_none_or(|metadata| metadata.index_row != index_row)
+        {
+            return Err(RepLibraryError::AlreadyExistsDifferentMetadata(name.into()));
+        }
+        #[cfg(not(feature = "shadowing"))]
+        let _ = (index_palette, index_row);
+        Ok(Some(rep))
+    }
+
     pub fn new_dual_impl(&mut self, name: &str) -> Result<LibraryRep, RepLibraryError> {
         self.new_dual_impl_with_metadata_request(name, None, None)
     }
@@ -1885,26 +1975,16 @@ impl ExtendibleReps {
         index_palette: Option<IndexPalette>,
         index_row: Option<IndexRow>,
     ) -> Result<LibraryRep, RepLibraryError> {
-        let canonical_name = canonical_representation_name(name);
-        if let Some(rep) = self.name_map.get(&canonical_name) {
-            if !matches!(rep, LibraryRep::Dualizable(_)) {
-                return Err(RepLibraryError::AlreadyExistsDifferentType(name.into()));
-            }
-            if let Some(index_palette) = &index_palette
-                && RepresentationMetadata::from_symbol(self[*rep].symbol)
-                    .is_none_or(|metadata| metadata.index_palette != *index_palette)
-            {
-                return Err(RepLibraryError::AlreadyExistsDifferentMetadata(name.into()));
-            }
-            if let Some(index_row) = index_row
-                && RepresentationMetadata::from_symbol(self[*rep].symbol)
-                    .is_none_or(|metadata| metadata.index_row != index_row)
-            {
-                return Err(RepLibraryError::AlreadyExistsDifferentMetadata(name.into()));
-            }
-            return Ok(*rep);
+        if let Some(rep) = self.find_compatible(
+            name,
+            RepresentationClass::Dualizable,
+            index_palette.as_ref(),
+            index_row,
+        )? {
+            return Ok(rep);
         }
 
+        let canonical_name = canonical_representation_name(name);
         let rep = LibraryRep::Dualizable(DUALIZABLE.len() as i16 + 1);
         let symbol = rep.new_symbol_with_index_row(
             &canonical_name,
@@ -1929,17 +2009,19 @@ impl ExtendibleReps {
     fn new_dual_impl_with_metadata_request(
         &mut self,
         name: &str,
-        _index_palette: Option<IndexPalette>,
-        _index_row: Option<IndexRow>,
+        index_palette: Option<IndexPalette>,
+        index_row: Option<IndexRow>,
     ) -> Result<LibraryRep, RepLibraryError> {
-        let canonical_name = canonical_representation_name(name);
-        if let Some(rep) = self.name_map.get(&canonical_name) {
-            if !matches!(rep, LibraryRep::Dualizable(_)) {
-                return Err(RepLibraryError::AlreadyExistsDifferentType(name.into()));
-            }
-            return Ok(*rep);
+        if let Some(rep) = self.find_compatible(
+            name,
+            RepresentationClass::Dualizable,
+            index_palette.as_ref(),
+            index_row,
+        )? {
+            return Ok(rep);
         }
 
+        let canonical_name = canonical_representation_name(name);
         let rep = LibraryRep::Dualizable(DUALIZABLE.len() as i16 + 1);
         self.name_map.insert(canonical_name, rep);
         DUALIZABLE.push((
@@ -1952,7 +2034,7 @@ impl ExtendibleReps {
     }
 
     pub fn new_dual(name: &str) -> Result<LibraryRep, RepLibraryError> {
-        REPS.write().unwrap().new_dual_impl(name)
+        LibraryRep::new_dual(name)
     }
 
     pub fn new_self_dual(&mut self, name: &str) -> Result<LibraryRep, RepLibraryError> {
@@ -1984,28 +2066,16 @@ impl ExtendibleReps {
         index_palette: Option<IndexPalette>,
         index_row: Option<IndexRow>,
     ) -> Result<LibraryRep, RepLibraryError> {
-        let canonical_name = canonical_representation_name(name);
-        if let Some(rep) = self.name_map.get(&canonical_name) {
-            if let LibraryRep::Dualizable(_) = rep {
-                return Err(RepLibraryError::AlreadyExistsDifferentType(name.into()));
-            }
-            #[cfg(feature = "shadowing")]
-            if let Some(index_palette) = &index_palette
-                && RepresentationMetadata::from_symbol(self[*rep].symbol)
-                    .is_none_or(|metadata| metadata.index_palette != *index_palette)
-            {
-                return Err(RepLibraryError::AlreadyExistsDifferentMetadata(name.into()));
-            }
-            #[cfg(feature = "shadowing")]
-            if let Some(index_row) = index_row
-                && RepresentationMetadata::from_symbol(self[*rep].symbol)
-                    .is_none_or(|metadata| metadata.index_row != index_row)
-            {
-                return Err(RepLibraryError::AlreadyExistsDifferentMetadata(name.into()));
-            }
-            return Ok(*rep);
+        if let Some(rep) = self.find_compatible(
+            name,
+            RepresentationClass::SelfDual,
+            index_palette.as_ref(),
+            index_row,
+        )? {
+            return Ok(rep);
         }
 
+        let canonical_name = canonical_representation_name(name);
         let rep = LibraryRep::SelfDual(SELF_DUAL.len() as u16);
 
         #[cfg(feature = "shadowing")]
@@ -2091,12 +2161,7 @@ impl Index<LibraryRep> for ExtendibleReps {
     type Output = RepData;
 
     fn index(&self, index: LibraryRep) -> &Self::Output {
-        match index {
-            LibraryRep::Dummy => &DUMMY_REP_DATA,
-            LibraryRep::SelfDual(l) => &SELF_DUAL[l as usize].1,
-            LibraryRep::InlineMetric(l) => &INLINE_METRIC[l as usize].1.rep_data,
-            LibraryRep::Dualizable(l) => &DUALIZABLE[l.unsigned_abs() as usize - 1].1,
-        }
+        index.data()
     }
 }
 
@@ -2534,11 +2599,56 @@ impl<'a, T: RepName> FromIterator<&'a Representation<T>> for Vec<Dimension> {
 
 #[cfg(test)]
 mod test {
+    use std::sync::Barrier;
+
     use linnet::permutation::Permutation;
 
     use crate::structure::representation::{RepName, Representation};
 
-    use super::{Euclidean, LibraryRep, Lorentz, Minkowski};
+    use super::{Euclidean, LibraryRep, Lorentz, Minkowski, RepLibraryError};
+
+    #[test]
+    fn concurrent_registration_preserves_representation_kind() {
+        let barrier = Barrier::new(8);
+        let results = std::thread::scope(|scope| {
+            let handles: Vec<_> = (0..8)
+                .map(|worker| {
+                    let barrier = &barrier;
+                    scope.spawn(move || {
+                        let name = if worker % 2 == 0 {
+                            "ConcurrentKindForSpensoTests"
+                        } else {
+                            "spenso::ConcurrentKindForSpensoTests"
+                        };
+                        barrier.wait();
+                        if worker < 4 {
+                            LibraryRep::new_self_dual(name)
+                        } else {
+                            LibraryRep::new_dual(name)
+                        }
+                    })
+                })
+                .collect();
+            handles
+                .into_iter()
+                .map(|handle| handle.join().unwrap())
+                .collect::<Vec<_>>()
+        });
+        let winner = *results
+            .iter()
+            .find_map(|result| result.as_ref().ok())
+            .unwrap();
+        assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 4);
+        for result in results {
+            match result {
+                Ok(rep) => assert_eq!(rep, winner),
+                Err(error) => assert!(matches!(
+                    error,
+                    RepLibraryError::AlreadyExistsDifferentType(_)
+                )),
+            }
+        }
+    }
 
     #[test]
     fn ordering() {
@@ -2563,15 +2673,160 @@ mod test {
 #[cfg(test)]
 #[cfg(feature = "shadowing")]
 mod shadowing_tests {
+    use std::process::{Command, Stdio};
+    use std::sync::{Barrier, mpsc};
+    use std::time::{Duration, Instant};
+
     use symbolica::atom::{Atom, AtomView, NamespacedSymbol, Symbol, SymbolBuilder};
 
-    use crate::network::tags::SPENSO_TAG;
+    use crate::network::{library::symbolic::ETS, tags::SPENSO_TAG};
 
     use super::{
-        IndexDisplay, IndexPalette, IndexRow, LibraryRep, Minkowski, RepLibraryError, RepName,
-        RepresentationClass, RepresentationError, RepresentationMetadata,
+        BaseRepName, ExtendibleReps, IndexDisplay, IndexPalette, IndexRow, LibraryRep, Minkowski,
+        RepLibraryError, RepName, RepresentationClass, RepresentationError, RepresentationMetadata,
         representation_typst_body,
     };
+
+    #[test]
+    fn minkowski_symbol_cold_start_uses_canonical_representation() {
+        const CASE: &str = "SPENSO_MINKOWSKI_SYMBOL_COLD_CASE";
+        let Ok(case) = std::env::var(CASE) else {
+            for case in ["minkowski", "tags", "ets", "concurrent"] {
+                let mut child = Command::new(std::env::current_exe().unwrap())
+                    .args([
+                        "--exact",
+                        "structure::representation::shadowing_tests::minkowski_symbol_cold_start_uses_canonical_representation",
+                        "--nocapture",
+                    ])
+                    .env(CASE, case)
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .spawn()
+                    .unwrap();
+                let deadline = Instant::now() + Duration::from_secs(15);
+                while child.try_wait().unwrap().is_none() {
+                    if Instant::now() >= deadline {
+                        child.kill().unwrap();
+                        child.wait().unwrap();
+                        panic!("Minkowski initialization timed out for {case}");
+                    }
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                let output = child.wait_with_output().unwrap();
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                assert!(
+                    output.status.success() && stdout.contains("1 passed"),
+                    "Minkowski initialization failed for {case}: {stdout}\n{}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+            return;
+        };
+
+        let symbol = match case.as_str() {
+            "minkowski" => Minkowski::selfless_symbol(),
+            "tags" => {
+                let _ = SPENSO_TAG.dot;
+                Minkowski::selfless_symbol()
+            }
+            "ets" => {
+                let _ = ETS.metric;
+                Minkowski::selfless_symbol()
+            }
+            "concurrent" => {
+                let barrier = Barrier::new(9);
+                std::thread::scope(|scope| {
+                    let workers = (0..9)
+                        .map(|index| {
+                            let barrier = &barrier;
+                            scope.spawn(move || {
+                                barrier.wait();
+                                match index % 3 {
+                                    0 => {
+                                        let _ = SPENSO_TAG.dot;
+                                    }
+                                    1 => {
+                                        let _ = ETS.metric;
+                                    }
+                                    _ => {}
+                                }
+                                Minkowski::selfless_symbol()
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    let symbols = workers
+                        .into_iter()
+                        .map(|worker| worker.join().unwrap())
+                        .collect::<Vec<_>>();
+                    assert!(symbols.iter().all(|symbol| *symbol == symbols[0]));
+                    symbols[0]
+                })
+            }
+            _ => panic!("unknown Minkowski initialization case {case}"),
+        };
+
+        let canonical = LibraryRep::from(Minkowski {});
+        assert_eq!(canonical, ExtendibleReps::MINKOWSKI);
+        assert_eq!(symbol, canonical.symbol());
+        assert_eq!(symbol.get_namespace(), "spenso");
+        assert!(symbol.has_tag(&SPENSO_TAG.representation));
+        assert!(symbol.has_tag(&SPENSO_TAG.self_dual));
+        assert!(!symbol.has_tag(&SPENSO_TAG.dualizable));
+        assert!(symbol.get_print_function().is_some());
+        let metadata = RepresentationMetadata::from_symbol(symbol).unwrap();
+        assert_eq!(metadata.class, RepresentationClass::InlineMetric);
+        assert_eq!(
+            metadata.index_palette,
+            super::default_index_palette(Minkowski::NAME)
+        );
+        assert_eq!(
+            metadata.index_row,
+            super::default_index_row(Minkowski::NAME)
+        );
+        for alias in ["mink", "spenso::mink"] {
+            assert_eq!(LibraryRep::new_self_dual(alias).unwrap(), canonical);
+            assert!(matches!(
+                LibraryRep::new_dual(alias),
+                Err(RepLibraryError::AlreadyExistsDifferentType(_))
+            ));
+        }
+        let foreign = symbolica::symbol!("spenso_minkowski_cold_test::mink");
+        assert_ne!(symbol, foreign);
+        assert!(Minkowski::new_slot_from(symbol, 4usize.into(), 0usize.into()).is_ok());
+        assert!(Minkowski::new_slot_from(foreign, 4usize.into(), 0usize.into()).is_err());
+    }
+
+    #[test]
+    fn registered_representation_symbols_do_not_require_registry_lock() {
+        let representations = [
+            LibraryRep::Dummy,
+            ExtendibleReps::EUCLIDEAN,
+            ExtendibleReps::MINKOWSKI,
+            ExtendibleReps::LORENTZ_UP,
+            ExtendibleReps::LORENTZ_DOWN,
+        ];
+        let expected = representations.map(|representation| representation.symbol());
+        let (tx, rx) = mpsc::channel();
+        let completed_while_write_locked = std::thread::scope(|scope| {
+            let writer = super::REPS.write().unwrap();
+            scope.spawn(move || {
+                tx.send((
+                    representations.map(|representation| representation.symbol()),
+                    Minkowski::selfless_symbol(),
+                ))
+                .unwrap();
+            });
+            let completed = rx.recv_timeout(Duration::from_secs(5));
+            // Release the guard before joining, even if the accessor regresses
+            // to taking a read lock: the regression must fail, not deadlock.
+            drop(writer);
+            completed
+        });
+        let (symbols, minkowski) = completed_while_write_locked
+            .expect("published representation symbols must not acquire the registry lock");
+        assert_eq!(symbols, expected);
+        assert_eq!(minkowski, expected[2]);
+    }
 
     fn greek_palette() -> IndexPalette {
         IndexPalette::cyclic(
@@ -2582,6 +2837,181 @@ mod shadowing_tests {
             ],
         )
         .unwrap()
+    }
+
+    #[test]
+    fn existing_representation_checks_do_not_require_a_write_lock() {
+        const CHILD: &str = "SPENSO_READ_ONLY_REPRESENTATION_TEST";
+        if std::env::var_os(CHILD).is_none() {
+            // An unrelated test's queued writer can block new readers. Isolate
+            // this test so the held read guard probes only these constructors.
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "structure::representation::shadowing_tests::existing_representation_checks_do_not_require_a_write_lock",
+                    "--test-threads=1",
+                    "--nocapture",
+                ])
+                .env(CHILD, "1")
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success()
+                    && String::from_utf8_lossy(&output.stdout).contains("1 passed"),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr),
+            );
+            return;
+        }
+
+        let self_dual_name = "ReadOnlySelfDualForSpensoTests";
+        let dual_name = "ReadOnlyDualForSpensoTests";
+        let palette = greek_palette();
+        let self_dual = LibraryRep::new_self_dual_with_index_palette_and_row(
+            self_dual_name,
+            palette.clone(),
+            IndexRow::Bottom,
+        )
+        .unwrap();
+        let dual = LibraryRep::new_dual_with_index_palette_and_row(
+            dual_name,
+            palette.clone(),
+            IndexRow::Bottom,
+        )
+        .unwrap();
+        let minkowski = LibraryRep::from(Minkowski {});
+        let (tx, rx) = mpsc::channel();
+        let completed_while_read_locked = std::thread::scope(|scope| {
+            let reader = super::REPS.read().unwrap();
+            scope.spawn(move || {
+                for (name, expected, is_dual) in
+                    [(self_dual_name, self_dual, false), (dual_name, dual, true)]
+                {
+                    let qualified_name = format!("spenso::{name}");
+                    let plain = if is_dual {
+                        LibraryRep::new_dual(&qualified_name)
+                    } else {
+                        LibraryRep::new_self_dual(&qualified_name)
+                    };
+                    assert_eq!(plain.unwrap(), expected);
+                    let with_palette = if is_dual {
+                        LibraryRep::new_dual_with_index_palette(name, palette.clone())
+                    } else {
+                        LibraryRep::new_self_dual_with_index_palette(name, palette.clone())
+                    };
+                    assert_eq!(with_palette.unwrap(), expected);
+                    for (requested_palette, row, compatible) in [
+                        (palette.clone(), IndexRow::Bottom, true),
+                        (IndexPalette::Numeric, IndexRow::Bottom, false),
+                        (palette.clone(), IndexRow::Top, false),
+                    ] {
+                        let result = if is_dual {
+                            LibraryRep::new_dual_with_index_palette_and_row(
+                                name,
+                                requested_palette,
+                                row,
+                            )
+                        } else {
+                            LibraryRep::new_self_dual_with_index_palette_and_row(
+                                name,
+                                requested_palette,
+                                row,
+                            )
+                        };
+                        if compatible {
+                            assert_eq!(result.unwrap(), expected);
+                        } else {
+                            assert!(matches!(
+                                result,
+                                Err(RepLibraryError::AlreadyExistsDifferentMetadata(_))
+                            ));
+                        }
+                    }
+                    let wrong_kind = if is_dual {
+                        LibraryRep::new_self_dual_with_index_palette(name, IndexPalette::Numeric)
+                    } else {
+                        LibraryRep::new_dual_with_index_palette(name, IndexPalette::Numeric)
+                    };
+                    assert!(matches!(
+                        wrong_kind,
+                        Err(RepLibraryError::AlreadyExistsDifferentType(_))
+                    ));
+                }
+                assert_eq!(super::ExtendibleReps::new_dual(dual_name).unwrap(), dual);
+                assert_eq!(LibraryRep::new_self_dual("mink").unwrap(), minkowski);
+                assert!(matches!(
+                    LibraryRep::new_dual("mink"),
+                    Err(RepLibraryError::AlreadyExistsDifferentType(_))
+                ));
+                tx.send(()).unwrap();
+            });
+            let completed = rx.recv_timeout(Duration::from_secs(5));
+            // Release the read lock before joining, so a regression to taking a
+            // write lock fails the timeout assertion instead of deadlocking.
+            drop(reader);
+            completed
+        });
+        completed_while_read_locked.expect("existing representations must only need a read lock");
+    }
+
+    #[test]
+    fn concurrent_registration_preserves_explicit_metadata() {
+        for (name, is_dual) in [
+            ("ConcurrentMetadataSelfDualForSpensoTests", false),
+            ("ConcurrentMetadataDualForSpensoTests", true),
+        ] {
+            let barrier = Barrier::new(8);
+            let results = std::thread::scope(|scope| {
+                let handles: Vec<_> = (0..8)
+                    .map(|worker| {
+                        let barrier = &barrier;
+                        scope.spawn(move || {
+                            let row = if worker % 2 == 0 {
+                                IndexRow::Top
+                            } else {
+                                IndexRow::Bottom
+                            };
+                            let palette = greek_palette();
+                            barrier.wait();
+                            let result = if is_dual {
+                                LibraryRep::new_dual_with_index_palette_and_row(name, palette, row)
+                            } else {
+                                LibraryRep::new_self_dual_with_index_palette_and_row(
+                                    name, palette, row,
+                                )
+                            };
+                            (row, result)
+                        })
+                    })
+                    .collect();
+                handles
+                    .into_iter()
+                    .map(|handle| handle.join().unwrap())
+                    .collect::<Vec<_>>()
+            });
+            let (winning_row, winner) = results
+                .iter()
+                .find_map(|(row, result)| result.as_ref().ok().map(|rep| (*row, *rep)))
+                .unwrap();
+            assert_eq!(
+                results.iter().filter(|(_, result)| result.is_ok()).count(),
+                4
+            );
+            for (row, result) in results {
+                if row == winning_row {
+                    assert_eq!(result.unwrap(), winner);
+                } else {
+                    assert!(matches!(
+                        result,
+                        Err(RepLibraryError::AlreadyExistsDifferentMetadata(_))
+                    ));
+                }
+            }
+            let metadata = winner.metadata().unwrap();
+            assert_eq!(metadata.index_palette, greek_palette());
+            assert_eq!(metadata.index_row, winning_row);
+        }
     }
 
     fn portable_representation_symbol(
