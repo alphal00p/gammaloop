@@ -378,6 +378,14 @@ impl MassiveClosure {
                         "spectators": stats.spectators,
                         "lowered": stats.lowered,
                         "folded": stats.folded,
+                        "read_seconds": stats.read_seconds,
+                        "classify_seconds": stats.classify_seconds,
+                        "monomial_seconds": stats.monomial_seconds,
+                        "scatter_seconds": stats.scatter_seconds,
+                        "finish_seconds": stats.finish_seconds,
+                        "match_seconds": stats.match_seconds,
+                        "reduce_seconds": stats.reduce_seconds,
+                        "finalize_seconds": stats.finalize_seconds,
                         "seconds": started.elapsed().as_secs_f64(),
                         "direct_seconds": direct_seconds,
                     }),
@@ -469,11 +477,13 @@ impl MassiveClosure {
         if first != Some(options.master_mode) {
             return Ok(Err(Declined("a Forcer method precedes RustRed")));
         }
+        let matching = std::time::Instant::now();
         let cut = match direct::match_cut(vakint, settings, &input.topology, &head)? {
             Ok(Some(cut)) => cut,
             Ok(None) => return Ok(Ok(Atom::Zero)),
             Err(declined) => return Ok(Err(declined)),
         };
+        stats.match_seconds += matching.elapsed().as_secs_f64();
         let handle = vakint.p_library()?;
         let folded = match direct::lower_closure(
             vakint,
@@ -487,7 +497,10 @@ impl MassiveClosure {
             Ok(folded) => folded,
             Err(declined) => return Ok(Err(declined)),
         };
+        let reducing = std::time::Instant::now();
         let reduced = rr::reduce_folded_channels(vakint, settings, &handle, folded, None, fold, true)?;
+        stats.reduce_seconds += reducing.elapsed().as_secs_f64();
+        let finalizing = std::time::Instant::now();
         let mode = options.master_mode;
         let mut result = Atom::Zero;
         let mut numerical = Atom::Zero;
@@ -502,7 +515,9 @@ impl MassiveClosure {
         if !numerical.is_zero() {
             result += vakint.resolve_rustred_numerical(numerical, settings)?;
         }
-        Ok(Ok(result.expand()))
+        let result = result.expand();
+        stats.finalize_seconds += finalizing.elapsed().as_secs_f64();
+        Ok(Ok(result))
     }
 
     /// Evaluate independent closures in bounded batches. Forcer reductions of

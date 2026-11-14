@@ -41,7 +41,9 @@
 //! would not read as a rational number, ...) the caller falls back to the
 //! ordinary path (`None`).
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
+
+use ahash::AHashMap as HashMap;
 use std::rc::Rc;
 
 use symbolica::atom::{Atom, AtomCore, AtomView};
@@ -76,6 +78,14 @@ pub(crate) struct DirectStats {
     pub spectators: usize,
     pub lowered: usize,
     pub folded: usize,
+    pub read_seconds: f64,
+    pub classify_seconds: f64,
+    pub monomial_seconds: f64,
+    pub scatter_seconds: f64,
+    pub finish_seconds: f64,
+    pub match_seconds: f64,
+    pub reduce_seconds: f64,
+    pub finalize_seconds: f64,
 }
 
 /// Why the direct lowering declined a closure (the ordinary path runs).
@@ -630,6 +640,7 @@ pub(crate) fn lower_closure(
         vacuum_momenta.insert(vacuum.clone(), total);
     }
     let count = loops * (loops + 1) / 2 + loops;
+    let phase = std::time::Instant::now();
     let mut spectators = Spectators::new();
     let polynomial = {
         let mut reader = Reader {
@@ -669,6 +680,8 @@ pub(crate) fn lower_closure(
         }
     };
     stats.canonical_terms += polynomial.len();
+    stats.read_seconds += phase.elapsed().as_secs_f64();
+    let phase = std::time::Instant::now();
 
     // Classify the canonical terms as the ordinary split does: the spectator
     // image of the ordinary numerator rewrites, split into
@@ -726,6 +739,8 @@ pub(crate) fn lower_closure(
     }
     stats.spectators += images.len();
     stats.merged_terms += merged.len();
+    stats.classify_seconds += phase.elapsed().as_secs_f64();
+    let phase = std::time::Instant::now();
 
     // Lower every distinct loop monomial once and accumulate the folded
     // channels.
@@ -747,15 +762,18 @@ pub(crate) fn lower_closure(
             Err(_) => return Ok(Err(Declined("a scalar product the presentation cannot express"))),
         }
     }
-    // Lowered monomials as (key id, value); keys numbered once per closure,
-    // buckets dense over key ids.
-    let mut lowered_cache = HashMap::<u128, Rc<Vec<(usize, Rational)>>>::new();
+    // Gather the canonical loop polynomial of every bucket
+    // (monomial, phase, scale power, basis), then substitute the slot forms
+    // into each bucket polynomial at once (multivariate Horner): sums are
+    // merged after every multiplication, so the product of forms of each
+    // monomial is never formed on its own. The lowered keys and exact values
+    // are those of lowering every monomial and summing.
     let mut key_ids = HashMap::<Vec<i64>, usize>::new();
     let mut keys = Vec::<Vec<i64>>::new();
     let imaginary_unit = Atom::i();
-    // (monomial id, phase, scale power, basis id) -> bucket.
     let mut bucket_ids = HashMap::<(u32, bool, i64, u32), usize>::new();
-    let mut buckets = Vec::<Vec<Rational>>::new();
+    let mut bucket_terms = Vec::<Vec<(u128, Rational)>>::new();
+    let mut distinct = ahash::AHashSet::<u128>::new();
     for ((loop_monomial, monomial_id, basis_id), (real, imaginary)) in merged {
         let (value, phase) = match (real.is_zero(), imaginary.is_zero()) {
             (true, true) => continue,
@@ -770,47 +788,45 @@ pub(crate) fn lower_closure(
         }
         let r = degree(loop_monomial, count) as i64;
         let scale_power = 2 * loops as i64 - total_power + r;
-        let lowered = match lowered_cache.get(&loop_monomial) {
-            Some(lowered) => Rc::clone(lowered),
-            None => {
-                let lowered = lower_monomial(loop_monomial, count, &forms, &base, top.arity)
-                    .into_iter()
-                    .map(|(key, value)| {
-                        let next = keys.len();
-                        let id = *key_ids.entry(key.clone()).or_insert_with(|| {
-                            keys.push(key);
-                            next
-                        });
-                        (id, value)
-                    })
-                    .collect::<Vec<_>>();
-                let lowered = Rc::new(lowered);
-                lowered_cache.insert(loop_monomial, Rc::clone(&lowered));
-                lowered
-            }
-        };
-        let next = buckets.len();
+        distinct.insert(loop_monomial);
+        let next = bucket_terms.len();
         let bucket = *bucket_ids
             .entry((monomial_id, phase, scale_power, basis_id))
             .or_insert_with(|| {
-                buckets.push(Vec::new());
+                bucket_terms.push(Vec::new());
                 next
             });
-        let bucket = &mut buckets[bucket];
-        if bucket.len() < keys.len() {
-            bucket.resize(keys.len(), Rational::zero());
-        }
-        let unit = value == Rational::one();
-        for (id, coefficient) in lowered.iter() {
-            if unit {
-                bucket[*id] += coefficient;
-            } else {
-                bucket[*id] += &(&value * coefficient);
-            }
-        }
-        stats.lowered += lowered.len();
+        bucket_terms[bucket].push((loop_monomial, value));
     }
-    stats.distinct_monomials += lowered_cache.len();
+    stats.distinct_monomials += distinct.len();
+    let mut buckets = Vec::<Vec<Rational>>::with_capacity(bucket_terms.len());
+    for mut terms in bucket_terms {
+        let substituted = substitute(&mut terms, count, &forms);
+        let mut bucket = Vec::new();
+        for (monomial, value) in substituted {
+            if value.is_zero() {
+                continue;
+            }
+            let key = (0..top.arity)
+                .map(|slot| {
+                    base[slot] - ((monomial >> (BITS * slot as u32)) & ((1 << BITS) - 1)) as i64
+                })
+                .collect::<Vec<_>>();
+            let next = keys.len();
+            let id = *key_ids.entry(key.clone()).or_insert_with(|| {
+                keys.push(key);
+                next
+            });
+            if bucket.len() <= id {
+                bucket.resize(id + 1, Rational::zero());
+            }
+            bucket[id] += &value;
+            stats.lowered += 1;
+        }
+        buckets.push(bucket);
+    }
+    stats.scatter_seconds += phase.elapsed().as_secs_f64();
+    let phase = std::time::Instant::now();
     let integral = super::p_integral::integral_name(&PropagatorRequest {
         family: cut.request_family,
         powers: &cut.powers,
@@ -850,6 +866,7 @@ pub(crate) fn lower_closure(
         }
     }
     stats.folded += folded.len();
+    stats.finish_seconds += phase.elapsed().as_secs_f64();
     Ok(Ok(folded))
 }
 
@@ -873,48 +890,77 @@ fn canonical_rows(index: usize, loops: usize) -> (Vec<i64>, Vec<i64>) {
     (unit(index - position), unit(loops))
 }
 
-/// `Π form_d^n_d` of a packed loop monomial as (slot key, value): the key is
-/// the line powers lowered by the slot exponents (ISPs at negative powers),
-/// as [`super::p_integral`]'s `lower_part`.
-fn lower_monomial(
-    packed: u128,
-    count: usize,
+/// `Σ c·Π form_d^n_d` of a polynomial in the canonical scalar products
+/// `0..vars` (packed monomials), as a polynomial in the slots (packed slot
+/// exponents): Horner in the highest variable, recursively.
+fn substitute(
+    terms: &mut [(u128, Rational)],
+    vars: usize,
     forms: &[rustred::propagator::presentation::AffineSlotForm],
-    base: &[i64],
-    arity: usize,
-) -> Vec<(Vec<i64>, Rational)> {
-    let mut product = HashMap::<u128, Rational>::from([(0u128, Rational::one())]);
-    for index in 0..count {
-        let exponent = (packed >> (BITS * index as u32)) & ((1 << BITS) - 1);
-        let form = &forms[index];
-        for _ in 0..exponent {
-            let mut next = HashMap::<u128, Rational>::with_capacity(product.len() * 2);
-            for (monomial, value) in &product {
-                if !form.constant.is_zero() {
-                    *next.entry(*monomial).or_insert_with(Rational::zero) += &(value * &form.constant);
-                }
-                for (slot, coefficient) in &form.terms {
-                    let shifted = monomial + (1u128 << (BITS * u32::from(*slot)));
-                    *next.entry(shifted).or_insert_with(Rational::zero) += &(value * coefficient);
+) -> HashMap<u128, Rational> {
+    let mut result = HashMap::<u128, Rational>::new();
+    if terms.is_empty() {
+        return result;
+    }
+    // The highest variable present.
+    let exponent = |packed: u128, var: usize| ((packed >> (BITS * var as u32)) & ((1 << BITS) - 1)) as u32;
+    let Some(var) = (0..vars).rev().find(|var| terms.iter().any(|(m, _)| exponent(*m, *var) > 0)) else {
+        let mut total = Rational::zero();
+        for (_, value) in terms.iter() {
+            total += value;
+        }
+        if !total.is_zero() {
+            result.insert(0, total);
+        }
+        return result;
+    };
+    terms.sort_unstable_by_key(|(m, _)| std::cmp::Reverse(exponent(*m, var)));
+    let top = exponent(terms[0].0, var);
+    let mask = !(((1u128 << BITS) - 1) << (BITS * var as u32));
+    let mut start = 0;
+    for power in (0..=top).rev() {
+        if !result.is_empty() {
+            result = multiply_form(&result, &forms[var]);
+        }
+        let mut end = start;
+        while end < terms.len() && exponent(terms[end].0, var) == power {
+            end += 1;
+        }
+        let slice = &mut terms[start..end];
+        for (monomial, _) in slice.iter_mut() {
+            *monomial &= mask;
+        }
+        let inner = substitute(slice, var, forms);
+        for (monomial, value) in inner {
+            match result.get_mut(&monomial) {
+                Some(sum) => *sum += &value,
+                None => {
+                    result.insert(monomial, value);
                 }
             }
-            next.retain(|_, value| !value.is_zero());
-            product = next;
+        }
+        start = end;
+    }
+    result.retain(|_, value| !value.is_zero());
+    result
+}
+
+/// `polynomial · form` on packed slot exponents.
+fn multiply_form(
+    polynomial: &HashMap<u128, Rational>,
+    form: &rustred::propagator::presentation::AffineSlotForm,
+) -> HashMap<u128, Rational> {
+    let mut next = HashMap::<u128, Rational>::with_capacity(polynomial.len() * 2);
+    for (monomial, value) in polynomial {
+        if !form.constant.is_zero() {
+            *next.entry(*monomial).or_insert_with(Rational::zero) += &(value * &form.constant);
+        }
+        for (slot, coefficient) in &form.terms {
+            let shifted = monomial + (1u128 << (BITS * u32::from(*slot)));
+            *next.entry(shifted).or_insert_with(Rational::zero) += &(value * coefficient);
         }
     }
-    let mut lowered = product
-        .into_iter()
-        .map(|(monomial, value)| {
-            let key = (0..arity)
-                .map(|slot| {
-                    base[slot] - ((monomial >> (BITS * slot as u32)) & ((1 << BITS) - 1)) as i64
-                })
-                .collect::<Vec<_>>();
-            (key, value)
-        })
-        .collect::<Vec<_>>();
-    lowered.sort_by(|left, right| left.0.cmp(&right.0));
-    lowered
+    next
 }
 
 /// A loop-free spectator monomial after the numerator rewrites of the
