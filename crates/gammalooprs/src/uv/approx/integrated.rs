@@ -613,6 +613,70 @@ impl IntoIntegrand<'static> for Atom {
     }
 }
 
+/// `map(expression)` for a map that acts on every factor of every summand
+/// alone (a replacement of function patterns), computed once per distinct
+/// factor: summands are rebuilt as normalized products of the factor images,
+/// sums of them as normalized sums, which are the canonical atoms the whole
+/// map returns. Sum factors of a product are mapped recursively.
+fn map_factors_cached(
+    expression: AtomView<'_>,
+    cache: &mut HashMap<Atom, Atom>,
+    map: &dyn Fn(AtomView<'_>) -> Atom,
+) -> Atom {
+    fn factor(
+        view: AtomView<'_>,
+        cache: &mut HashMap<Atom, Atom>,
+        map: &dyn Fn(AtomView<'_>) -> Atom,
+    ) -> Atom {
+        if let AtomView::Add(_) = view {
+            return map_factors_cached(view, cache, map);
+        }
+        let key = view.to_owned();
+        if let Some(image) = cache.get(&key) {
+            return image.clone();
+        }
+        let image = map(view);
+        cache.insert(key, image.clone());
+        image
+    }
+    match expression {
+        AtomView::Add(sum) => {
+            let terms = sum
+                .iter()
+                .map(|term| map_factors_cached(term, cache, map))
+                .collect::<Vec<_>>();
+            Atom::add_many(terms.iter())
+        }
+        AtomView::Mul(product) => {
+            let factors = product
+                .iter()
+                .map(|view| factor(view, cache, map))
+                .collect::<Vec<_>>();
+            Atom::mul_many(factors.iter().map(Atom::as_view))
+        }
+        other => factor(other, cache, map),
+    }
+}
+
+/// [`map_factors_cached`] with `GAMMALOOP_ALGEBRA_LEGACY=factor_maps` (the
+/// whole map) and `GAMMALOOP_ALGEBRA_CHECK=factor_maps` (both compared).
+fn map_factors_switched(
+    stage: &str,
+    expression: &Atom,
+    cache: &mut HashMap<Atom, Atom>,
+    map: &dyn Fn(AtomView<'_>) -> Atom,
+) -> Atom {
+    if streamed::legacy("factor_maps") {
+        return map(expression.as_view());
+    }
+    let mapped = map_factors_cached(expression.as_view(), cache, map);
+    if streamed::check("factor_maps") {
+        let whole = map(expression.as_view());
+        streamed::report_check(stage, expression.as_view(), &mapped, &whole);
+    }
+    mapped
+}
+
 /// The Vakint terms of an integrand, collected per topology.
 #[derive(Default)]
 struct TopologyGroups {
@@ -1416,6 +1480,8 @@ pub(crate) fn to_vakint_integrand<
     ];
     let mut graph_seconds = 0.0;
     let mut notation_images = HashMap::new();
+    // The symbol renames do not depend on the term: one cache for all.
+    let mut rename_images = HashMap::new();
     let mut routing_seconds = 0.0;
     let mut notation_seconds = 0.0;
 
@@ -1596,9 +1662,12 @@ pub(crate) fn to_vakint_integrand<
         let momentum_solution =
             VakintMomentumSolution::solve(&system, &momentum_variables, &add_additional_args)
                 .wrap_err("could not solve momentum system for Vakint integrand")?;
-        t.numerator = t
-            .numerator
-            .replace_multiple(&momentum_solution.replacements);
+        t.numerator = map_factors_switched(
+            "momentum_routing",
+            &t.numerator,
+            &mut std::collections::HashMap::new(),
+            &|factor| factor.replace_multiple(&momentum_solution.replacements),
+        );
         t.integral = momentum_solution.rewrite_integral(&t.integral, &add_additional_args);
         momentum_solution.ensure_free_variables_eliminated(
             term_index,
@@ -1685,28 +1754,30 @@ pub(crate) fn to_vakint_integrand<
             .with(function!(vakint::symbols::S.k, W_.x___))
             .replace(function!(GS.emr_mom, W_.x___))
             .with(function!(vakint::symbols::S.p, W_.x___));
-        t.numerator = t
-            .numerator
-            .replace(function!(GS.loop_mom, W_.x___))
-            .with(function!(vakint::symbols::S.k, W_.x___))
-            .replace(function!(GS.emr_mom, W_.x___))
-            .with(function!(vakint::symbols::S.p, W_.x___))
-            .replace(function!(
-                SPENSO_TAG.dot,
-                function!(W_.a_, W_.a___, Minkowski {}.new_rep(GS.dim).to_symbolic([])),
-                function!(W_.b_, W_.b___, Minkowski {}.new_rep(GS.dim).to_symbolic([]))
-            ))
-            .with(vakint::symbols::S.dot(function!(W_.a_, W_.a___), function!(W_.b_, W_.b___)))
-            .replace(function!(
-                ETS.metric,
-                Minkowski {}.to_symbolic([W_.a__]),
-                Minkowski {}.to_symbolic([W_.b__])
-            ))
-            .with(function!(
-                vakint::symbols::S.metric,
-                Minkowski {}.to_symbolic([W_.a__]),
-                Minkowski {}.to_symbolic([W_.b__])
-            ));
+        let rename = |numerator: AtomView<'_>| {
+            numerator
+                .replace(function!(GS.loop_mom, W_.x___))
+                .with(function!(vakint::symbols::S.k, W_.x___))
+                .replace(function!(GS.emr_mom, W_.x___))
+                .with(function!(vakint::symbols::S.p, W_.x___))
+                .replace(function!(
+                    SPENSO_TAG.dot,
+                    function!(W_.a_, W_.a___, Minkowski {}.new_rep(GS.dim).to_symbolic([])),
+                    function!(W_.b_, W_.b___, Minkowski {}.new_rep(GS.dim).to_symbolic([]))
+                ))
+                .with(vakint::symbols::S.dot(function!(W_.a_, W_.a___), function!(W_.b_, W_.b___)))
+                .replace(function!(
+                    ETS.metric,
+                    Minkowski {}.to_symbolic([W_.a__]),
+                    Minkowski {}.to_symbolic([W_.b__])
+                ))
+                .with(function!(
+                    vakint::symbols::S.metric,
+                    Minkowski {}.to_symbolic([W_.a__]),
+                    Minkowski {}.to_symbolic([W_.b__])
+                ))
+        };
+        t.numerator = map_factors_switched("vakint_symbols", &t.numerator, &mut rename_images, &rename);
         notation_seconds += notation_started.elapsed().as_secs_f64();
         drop(notation_stage);
         debug_tags!(#uv, #integrated, #vakint, #trace;
