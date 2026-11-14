@@ -299,11 +299,7 @@ pub fn regenerate_p_library(directory: &Path, threads: usize) -> Regeneration {
     )
     .unwrap();
     let assembly_seconds = started.elapsed().as_secs_f64();
-    assert!(
-        equivalent_p_libraries(&library, &assembled.library).unwrap(),
-        "{:?}",
-        p_library_differences(&library, &assembled.library).unwrap()
-    );
+    assert_equivalent_up_to_revision(&library, &assembled.library);
     let scope = library.scope();
     Regeneration {
         scope: [*scope.start(), *scope.end()],
@@ -311,4 +307,37 @@ pub fn regenerate_p_library(directory: &Path, threads: usize) -> Regeneration {
         assembly_seconds,
         owners,
     }
+}
+
+/// `shipped` is the program of `assembled` (`equivalent_p_libraries`). Batch 6:
+/// a shipped package may carry a content revision (`,P_PACKAGE_REVISION=<name>`,
+/// assembled under RUSTRED_P_PACKAGE_REVISION) that an in-process assembly does
+/// not have; then the identities must agree without the revision (and the
+/// ordering tag, which p_library_differences ignores) and nothing else may differ.
+pub fn assert_equivalent_up_to_revision(shipped: &PLibrary, assembled: &PLibrary) {
+    if shipped.revision().is_none() {
+        assert!(
+            equivalent_p_libraries(shipped, assembled).unwrap(),
+            "{:?}",
+            p_library_differences(shipped, assembled).unwrap()
+        );
+        return;
+    }
+    let bare = |l: &PLibrary| {
+        let mut identity = l.identity();
+        if let Some(tag) = l.ordering() {
+            identity = identity.replacen(&format!(",P_ORDERING_VERSION={tag}"), "", 1);
+        }
+        if let Some(name) = l.revision() {
+            identity = identity.replacen(&format!(",P_PACKAGE_REVISION={name}"), "", 1);
+        }
+        identity
+    };
+    assert_eq!(bare(shipped), bare(assembled));
+    let differences: Vec<String> = p_library_differences(shipped, assembled)
+        .unwrap()
+        .into_iter()
+        .filter(|difference| !difference.starts_with("identity: "))
+        .collect();
+    assert!(differences.is_empty(), "{differences:?}");
 }

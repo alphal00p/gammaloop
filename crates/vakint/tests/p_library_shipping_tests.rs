@@ -40,9 +40,9 @@ use rustred::propagator::tag::GammaTag;
 use rustred::propagator::topology::{ChildMode, reduction_graph, topologies_json};
 use rustred::propagator::{PTerminalId, p_versions};
 use rustred_app::propagator::loader::read_custom_payloads;
-use rustred_app::propagator::package::{assemble_p_package, p_library_differences};
+use rustred_app::propagator::package::assemble_p_package;
 use rustred_app::propagator::{
-    AssembleOptions, CustomOwnerOptions, CustomPayloads, PLibrarySource, equivalent_p_libraries,
+    AssembleOptions, CustomOwnerOptions, CustomPayloads, PLibrarySource,
 };
 use sha2::{Digest, Sha256};
 use symbolica::atom::{Atom, AtomCore};
@@ -215,6 +215,11 @@ fn p_library_versions_match_rustred() {
         Some(tag) => format!("{identity},P_ORDERING_VERSION={tag}"),
         None => identity,
     };
+    // Batch 6: a package content revision ends the identity, after the ordering.
+    let identity = match shipped().revision() {
+        Some(name) => format!("{identity},P_PACKAGE_REVISION={name}"),
+        None => identity,
+    };
     let versions: serde_json::Map<_, _> = (versions.into_iter())
         .map(|(name, value)| (name.to_owned(), value.into()))
         .collect();
@@ -292,11 +297,7 @@ fn embedded_p_library_matches_current_rustred_assembly() {
     let [_, end] = p_library_scope(&shipped_directory());
     let assembled = assemble_p_package(&families, end, generated, &options).unwrap();
     let shipped = shipped();
-    assert!(
-        equivalent_p_libraries(&shipped, &assembled.library).unwrap(),
-        "{:?}",
-        p_library_differences(&shipped, &assembled.library).unwrap()
-    );
+    p_library4::assert_equivalent_up_to_revision(&shipped, &assembled.library);
     assert_eq!(read_custom_payloads(&shipped_source()).unwrap().len(), 2);
 }
 
