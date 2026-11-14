@@ -331,7 +331,11 @@ fn tensor_reduce_by_factors(
         AtomView::Add(sum) => sum.iter().collect::<Vec<_>>(),
         single => vec![single],
     };
-    let mut terms = Vec::with_capacity(summands.len());
+    // Summands grouped by their tensor product: Σ_T (Σ S) · P[T], so that
+    // every projector image appears once in the result.
+    let mut order = Vec::<Atom>::new();
+    let mut groups = std::collections::HashMap::<Atom, Vec<Atom>>::new();
+    let mut scalar_terms = Vec::new();
     let mut any_tensor = false;
     for summand in summands {
         let factors = match summand {
@@ -341,11 +345,27 @@ fn tensor_reduce_by_factors(
         let (scalars, tensors): (Vec<_>, Vec<_>) =
             factors.into_iter().partition(|factor| closed_scalar(*factor));
         if tensors.is_empty() {
-            terms.push(summand.to_owned());
+            scalar_terms.push(summand.to_owned());
             continue;
         }
         any_tensor = true;
         let tensor = Atom::mul_many(tensors.iter().copied());
+        let scalar = Atom::mul_many(scalars.iter().copied());
+        match groups.get_mut(&tensor) {
+            Some(list) => list.push(scalar),
+            None => {
+                order.push(tensor.clone());
+                groups.insert(tensor, vec![scalar]);
+            }
+        }
+    }
+    if !any_tensor {
+        // A numerator of closed scalars is its own projection.
+        return Ok(Some(source.numerator.clone()));
+    }
+    let mut terms = scalar_terms;
+    for tensor in order {
+        let scalars = groups.remove(&tensor).unwrap_or_default();
         let key = (source.integral.clone(), tensor);
         let image = match images.get(&key) {
             Some(image) => image.clone(),
@@ -366,15 +386,10 @@ fn tensor_reduce_by_factors(
         if image.is_zero() {
             continue;
         }
-        terms.push(if scalars.is_empty() {
-            image
-        } else {
-            Atom::mul_many(scalars.iter().copied()) * image
-        });
-    }
-    if !any_tensor {
-        // A numerator of closed scalars is its own projection.
-        return Ok(Some(source.numerator.clone()));
+        let scalar = Atom::add_many(scalars.iter());
+        if !scalar.is_zero() {
+            terms.push(scalar * image);
+        }
     }
     Ok(Some(Atom::add_many(terms.iter())))
 }
