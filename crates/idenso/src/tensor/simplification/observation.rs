@@ -92,20 +92,43 @@ pub(crate) struct RegionObservation {
     dots: bool,
 }
 
+/// One fixed hasher for every regional inventory set. `AHashSet::new()` and
+/// `collect()` call `RandomState::new()`, which takes a `fetch_add` on one
+/// process-wide counter shared by all threads, six times per retained scan
+/// node. These sets are only queried for membership, `any`, `len` or
+/// `is_empty`, or unioned into other sets; no result depends on their
+/// iteration order, so a fixed seed leaves every observation unchanged.
+const REGION_HASHER: ahash::RandomState = ahash::RandomState::with_seeds(
+    0x243f_6a88_85a3_08d3,
+    0x1319_8a2e_0370_7344,
+    0xa409_3822_299f_31d0,
+    0x082e_fa98_ec4e_6c89,
+);
+
+fn region_set<T>() -> AHashSet<T> {
+    AHashSet::with_hasher(REGION_HASHER)
+}
+
+fn region_set_from<T: Eq + std::hash::Hash>(values: impl IntoIterator<Item = T>) -> AHashSet<T> {
+    let mut set = region_set();
+    set.extend(values);
+    set
+}
+
 impl Default for RegionObservation {
     fn default() -> Self {
         Self {
             counts: [0; HEAD_COUNT],
-            representations: AHashSet::new(),
-            chain_channels: AHashSet::new(),
-            leaves: AHashSet::new(),
+            representations: region_set(),
+            chain_channels: region_set(),
+            leaves: region_set(),
             leaf_children: Vec::new(),
             leaf_inventory_complete: true,
-            reserved_indices: AHashSet::new(),
+            reserved_indices: region_set(),
             indices: 0,
             max_indices: 0,
-            metric_sources: AHashSet::new(),
-            vector_sources: AHashSet::new(),
+            metric_sources: region_set(),
+            vector_sources: region_set(),
             indexed_power: false,
             scalar_interface: true,
             epsilon_degree: 0,
@@ -465,14 +488,14 @@ impl DomainObservations {
     fn terminal_region(&self) -> Arc<RegionObservation> {
         debug_assert!(self.is_terminal_polynomial());
         Arc::new(RegionObservation {
-            representations: self.representations.iter().copied().collect(),
-            reserved_indices: self.reserved_indices.iter().copied().collect(),
+            representations: region_set_from(self.representations.iter().copied()),
+            reserved_indices: region_set_from(self.reserved_indices.iter().copied()),
             indices: self.max_indices,
             max_indices: self.max_indices,
             // Free polynomial ports can acquire partners during composition.
             // The producer excludes internal connections, not those new paths.
-            metric_sources: self.representations.iter().copied().collect(),
-            vector_sources: self.representations.iter().copied().collect(),
+            metric_sources: region_set_from(self.representations.iter().copied()),
+            vector_sources: region_set_from(self.representations.iter().copied()),
             scalar_interface: self.is_closed_scalar(),
             dots: self.needs_dot_normalization(),
             leaf_inventory_complete: false,
@@ -1901,5 +1924,72 @@ mod tests {
         changed.observe_replacement(&source);
         assert_eq!(changed.reduction_observations().max_indices, 4);
         assert!(changed.reduction_observations().candidates.repeated_indices);
+    }
+
+    /// Scan throughput of stored workflow inputs, alone and with 16 threads
+    /// scanning at once, as the production job threads do.
+    /// `cargo test -p idenso --release region_scan_benchmark -- --ignored --nocapture`
+    #[test]
+    #[ignore = "timing benchmark"]
+    fn region_scan_benchmark() {
+        crate::test_support::test_initialize();
+        let _ = SPENSO_TAG.rank_one_tensor_symbol("region_scan::Q");
+        for label in ["region_scan_gl::hedge", "region_scan_gl::edge"] {
+            let _ = symbolica::symbol!(label, tags = [SPENSO_TAG.index.clone()]);
+        }
+        let parse = |source: &str| {
+            Atom::parse(
+                &source
+                    .replace("gammalooprs::Q(", "region_scan::Q(")
+                    .replace("gammalooprs::", "region_scan_gl::")
+                    .replace("subclass_preservation_benchmark::", "region_scan_gl::")
+                    .replace("UFO::", "region_scan_ufo::"),
+                "spenso",
+                symbolica::parser::ParseSettings::symbolica(),
+            )
+            .unwrap()
+        };
+        let inputs = [
+            (
+                "aa_aa_2l_gl16",
+                parse(include_str!(
+                    "../../../tests/fixtures/aa_aa_2l_gl16_integrated_uv_start_after_simplify_metrics.sym"
+                )),
+            ),
+            (
+                "massive_fermion_ladder expanded",
+                parse(include_str!(
+                    "../../../benches/data/massive-fermion-ladder.expr"
+                ))
+                .expand(),
+            ),
+            (
+                "fk0032_projected expanded",
+                parse(include_str!("../../../benches/data/fk0032-projected.expr")).expand(),
+            ),
+        ];
+        for (name, expression) in &inputs {
+            for threads in [1, 16] {
+                let repetitions = 10;
+                let start = std::time::Instant::now();
+                std::thread::scope(|scope| {
+                    for _ in 0..threads {
+                        scope.spawn(|| {
+                            for _ in 0..repetitions {
+                                std::hint::black_box(DomainObservations::scan_regions(
+                                    expression.as_view(),
+                                    None,
+                                ));
+                            }
+                        });
+                    }
+                });
+                println!(
+                    "{name} ({} bytes): {threads} threads: {:?} per scan",
+                    expression.as_view().get_data().len(),
+                    start.elapsed() / repetitions,
+                );
+            }
+        }
     }
 }
