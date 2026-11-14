@@ -623,6 +623,8 @@ struct TermRewrites {
     denominator_rewrites: std::cell::RefCell<HashMap<Atom, Atom>>,
     /// [`Self::contract_metrics`] of each distinct product of indexed factors.
     contraction_images: std::cell::RefCell<HashMap<Atom, Atom>>,
+    /// Census: summands and bytes entering the term rewrites.
+    rewritten_summands: std::cell::Cell<(usize, usize)>,
 }
 
 impl TermRewrites {
@@ -861,6 +863,13 @@ impl TermRewrites {
             ),
             _ => false,
         };
+        if vakint::census::enabled() {
+            let (summands, bytes) = self.rewritten_summands.get();
+            self.rewritten_summands.set((
+                summands + vakint::census::summands(integrand),
+                bytes + integrand.get_byte_size(),
+            ));
+        }
         let mut cache = self.denominator_rewrites.borrow_mut();
         let mut denominators = Vec::new();
         let mut others = Vec::new();
@@ -977,6 +986,7 @@ pub(crate) fn to_vakint_integrand<
     let materialized = Integrated::materialize_tensor(&integrand)?;
     // An integrand passed by value is not needed any more.
     drop(integrand);
+    let census_materialized_bytes = materialized.as_view().get_byte_size();
     let materialization_seconds = started.elapsed().as_secs_f64();
     drop(materialization_stage);
     debug_tags!(#uv, #integrated, #vakint, #trace;
@@ -1042,6 +1052,7 @@ pub(crate) fn to_vakint_integrand<
         substitute_masses_to_m_uv,
         denominator_rewrites: Default::default(),
         contraction_images: Default::default(),
+        rewritten_summands: Default::default(),
     };
 
     // A large integrand is expanded, contracted and rewritten in pieces, so
@@ -1147,6 +1158,12 @@ pub(crate) fn to_vakint_integrand<
         "Vakint trace before split terms"
     );
 
+    let census_input = vakint::census::enabled().then(|| {
+        (
+            vakint::census::summands(vakint_input_atom.as_view()),
+            vakint_input_atom.as_view().get_byte_size(),
+        )
+    });
     let split_started = Instant::now();
     let split_stage = StageSpan::new("gamma.adaptor.split_terms");
     let mut a = VakintExpression::try_from(vakint_input_atom)
@@ -1482,6 +1499,50 @@ pub(crate) fn to_vakint_integrand<
         );
     }
 
+    if let Some((output_summands, output_bytes)) = census_input {
+        let (rewritten_summands, rewritten_bytes) = rewrites.rewritten_summands.get();
+        let numerator_summands = a
+            .0
+            .iter()
+            .map(|t| vakint::census::summands(t.numerator.as_view()))
+            .sum::<usize>();
+        let numerator_bytes = a
+            .0
+            .iter()
+            .map(|t| t.numerator.as_view().get_byte_size())
+            .sum::<usize>();
+        let max_numerator_summands = a
+            .0
+            .iter()
+            .map(|t| vakint::census::summands(t.numerator.as_view()))
+            .max()
+            .unwrap_or(0);
+        vakint::census::record(
+            "to_vakint",
+            serde_json::json!({
+                "materialized_bytes": census_materialized_bytes,
+                "rewritten_summands": rewritten_summands,
+                "rewritten_bytes": rewritten_bytes,
+                "distinct_denominator_products": rewrites.denominator_rewrites.borrow().len(),
+                "distinct_indexed_products": rewrites.contraction_images.borrow().len(),
+                "distinct_notation_products": notation_images.len(),
+                "output_summands": output_summands,
+                "output_bytes": output_bytes,
+                "terms": a.0.len(),
+                "numerator_summands": numerator_summands,
+                "max_numerator_summands": max_numerator_summands,
+                "numerator_bytes": numerator_bytes,
+                "seconds": started.elapsed().as_secs_f64(),
+                "materialization_seconds": materialization_seconds,
+                "expansion_seconds": expansion_seconds,
+                "metric_seconds": metric_seconds,
+                "topology_seconds": topology_seconds,
+                "split_seconds": split_seconds,
+                "routing_seconds": routing_seconds,
+                "notation_seconds": notation_seconds,
+            }),
+        );
+    }
     tracing::info!(
         uv = true,
         integrated = true,

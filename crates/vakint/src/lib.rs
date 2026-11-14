@@ -1,5 +1,6 @@
 #![allow(mixed_script_confusables)]
 pub mod stage_timing;
+pub mod census;
 
 /// M5 batch 2: mimalloc serves the Rust allocations of every binary linking vakint
 /// (default feature `mimalloc`; see Cargo.toml).

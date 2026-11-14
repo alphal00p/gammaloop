@@ -334,6 +334,10 @@ impl MassiveClosure {
         let mut rustred_jobs: Vec<Vec<(crate::ReplacementRules, Atom)>> =
             (0..inputs.len()).map(|_| Vec::new()).collect();
         let mut rustred_mode = None;
+        let census = crate::census::enabled();
+        let census_started = std::time::Instant::now();
+        let mut census_counts = [0_usize; 6];
+        let mut census_families = std::collections::BTreeSet::new();
         for (owner, (closure, input)) in inputs.iter().enumerate() {
             let head = closure.validated_head(settings)?;
             heads.push(head.clone());
@@ -374,6 +378,10 @@ impl MassiveClosure {
                     continue;
                 }
                 let mut expression = VakintExpression::try_from(topology * numerator)?;
+                if census {
+                    census_counts[0] += 1;
+                    census_counts[1] += expression.0.len();
+                }
                 for term in &mut expression.0 {
                     if !term.normalize_propagator()? {
                         continue;
@@ -393,6 +401,13 @@ impl MassiveClosure {
                     let request = matched
                         .propagator_request(term.numerator.as_view())
                         .expect("a p-integral match has a propagator request");
+                    if census {
+                        census_counts[2] += 1;
+                        census_counts[3] += crate::census::summands(request.canonical_numerator);
+                        census_counts[4] += request.canonical_numerator.get_byte_size();
+                        census_families
+                            .insert((request.family.name, request.powers.to_vec()));
+                    }
                     match method {
                         Some(EvaluationMethod::Forcer(options)) => {
                             if options.master_mode != mode {
@@ -456,6 +471,7 @@ impl MassiveClosure {
                 }
             }
         }
+        let census_matching = census_started.elapsed().as_secs_f64();
         if let Some(rustred_mode) = rustred_mode {
             for (owner, jobs) in rustred_jobs.iter().enumerate() {
                 if jobs.is_empty() {
@@ -494,6 +510,13 @@ impl MassiveClosure {
                     vakint, settings, &requests, None,
                 )?;
                 dump_slow_rustred_requests(&requests, started.elapsed());
+                if census {
+                    let stats = crate::rustred_evaluation::p_integral::last_stats();
+                    crate::census::record(
+                        "reduce_folded",
+                        stats.census_json(requests.len(), started.elapsed().as_secs_f64()),
+                    );
+                }
                 for ((loops, _), values) in reduced {
                     let value = inputs[owner].0.finalize(
                         &values,
@@ -509,6 +532,24 @@ impl MassiveClosure {
                     }
                 }
             }
+        }
+        if census {
+            crate::census::record(
+                "closure_batch",
+                serde_json::json!({
+                    "closures": inputs.len(),
+                    "topology_groups": census_counts[0],
+                    "vakint_terms": census_counts[1],
+                    "requests": census_counts[2],
+                    "request_summands": census_counts[3],
+                    "request_bytes": census_counts[4],
+                    "distinct_family_powers": census_families.len(),
+                    "input_summands": inputs.iter().map(|(_, input)| crate::census::summands(input.as_view())).sum::<usize>(),
+                    "input_bytes": inputs.iter().map(|(_, input)| input.as_view().get_byte_size()).sum::<usize>(),
+                    "matching_seconds": census_matching,
+                    "seconds": census_started.elapsed().as_secs_f64(),
+                }),
+            );
         }
         let values = forcer::reduce_inputs(&forcer_requests, settings)?;
         for ((owner, loops), values) in forcer_owners.iter().copied().zip(values) {

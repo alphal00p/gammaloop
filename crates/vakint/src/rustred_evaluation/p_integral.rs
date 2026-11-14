@@ -705,6 +705,36 @@ pub(crate) struct PReduceStats {
     pub prepare_seconds: f64,
     pub library_seconds: f64,
     pub render_seconds: f64,
+    /// Census: split parts, their loop-dot monomials, lowered (channel, key)
+    /// entries, folded channels and distinct integral keys.
+    pub parts: usize,
+    pub monomials: usize,
+    pub lowered: usize,
+    pub folded: usize,
+    pub keys: usize,
+}
+
+impl PReduceStats {
+    /// The census record of one reduction call.
+    pub(crate) fn census_json(&self, requests: usize, seconds: f64) -> serde_json::Value {
+        serde_json::json!({
+            "requests": requests,
+            "channels": self.channels,
+            "parts": self.parts,
+            "monomials": self.monomials,
+            "lowered": self.lowered,
+            "folded": self.folded,
+            "keys": self.keys,
+            "reductions": self.reductions,
+            "pairs": self.pairs,
+            "split_seconds": self.split_seconds,
+            "lower_seconds": self.lower_seconds,
+            "prepare_seconds": self.prepare_seconds,
+            "library_seconds": self.library_seconds,
+            "render_seconds": self.render_seconds,
+            "seconds": seconds,
+        })
+    }
 }
 
 thread_local! {
@@ -944,6 +974,14 @@ pub(crate) fn reduce_requests_folded(
     with_stats(|stats| {
         stats.split_seconds = started.elapsed().as_secs_f64();
         stats.channels = pending.len();
+        if crate::census::enabled() {
+            stats.parts = pending.values().map(|channel| channel.parts.len()).sum();
+            stats.monomials = pending
+                .values()
+                .flat_map(|channel| &channel.parts)
+                .map(|part| part.polynomial.len())
+                .sum();
+        }
     });
     let lowering = std::time::Instant::now();
     // Lower every channel once and distribute its lowered inputs, scaled by
@@ -959,6 +997,7 @@ pub(crate) fn reduce_requests_folded(
         if lowered.is_empty() {
             continue;
         }
+        with_stats(|stats| stats.lowered += lowered.len());
         let lowered = lowered
             .into_iter()
             .filter(|(_, value)| !value.is_zero())
@@ -1014,7 +1053,11 @@ pub(crate) fn reduce_requests_folded(
             target.by_basis.insert(basis, inputs);
         }
     }
-    with_stats(|stats| stats.lower_seconds = lowering.elapsed().as_secs_f64());
+    with_stats(|stats| {
+        stats.lower_seconds = lowering.elapsed().as_secs_f64();
+        stats.folded = folded.len();
+        stats.keys = keys.len();
+    });
     let reducer = ChannelReducer {
         handle: &handle,
         options: request_options(settings),

@@ -45,6 +45,13 @@ pub fn integrate_single_mass(
     let mut result = Atom::Zero;
     let mut closures = Vec::new();
     let mut closure_bytes = 0_usize;
+    // Census: (summands, bytes) before and after the tensor projector and of
+    // the closure inputs.
+    let census = vakint::census::enabled();
+    let mut census_source = (0_usize, 0_usize);
+    let mut census_tensor = (0_usize, 0_usize);
+    let mut census_closure = (0_usize, 0_usize, 0_usize);
+    let mut census_topologies = BTreeSet::new();
     for source in &input.0 {
         if source.numerator.is_zero() {
             timing.zero_terms += 1;
@@ -98,6 +105,13 @@ pub fn integrate_single_mass(
         // Lorentz representation metadata is constant during the following
         // Laurent expansion; only scalar evanescent coefficients may expand.
         term.numerator = Integrated::restore_lorentz_dimensions(&term.numerator);
+        if census {
+            census_source.0 += vakint::census::summands(source.numerator.as_view());
+            census_source.1 += source.numerator.as_view().get_byte_size();
+            census_tensor.0 += vakint::census::summands(term.numerator.as_view());
+            census_tensor.1 += term.numerator.as_view().get_byte_size();
+            census_topologies.insert(cut.integrand.clone());
+        }
         timing.tensor += tensor_started.elapsed();
         timing.integrated_terms += 1;
         if settings.verify_numerator_identification {
@@ -120,6 +134,11 @@ pub fn integrate_single_mass(
         let input = numerator * &cut.integrand;
         timing.closure_preparation += preparation_started.elapsed();
         let input_bytes = input.as_view().get_byte_size();
+        if census {
+            census_closure.0 += vakint::census::summands(numerator_census(&input));
+            census_closure.1 += input_bytes;
+            census_closure.2 += 1;
+        }
         if closure_bytes.saturating_add(input_bytes) > 16 << 20 {
             flush_closures(vakint, settings, &mut closures, &mut timing, &mut result)?;
             closure_bytes = 0;
@@ -135,6 +154,29 @@ pub fn integrate_single_mass(
     let combine_started = Instant::now();
     let result = result.expand();
     timing.combine += combine_started.elapsed();
+    if census {
+        vakint::census::record(
+            "single_mass",
+            serde_json::json!({
+                "source_terms": input.0.len(),
+                "integrated_terms": timing.integrated_terms,
+                "source_summands": census_source.0,
+                "source_bytes": census_source.1,
+                "tensor_summands": census_tensor.0,
+                "tensor_bytes": census_tensor.1,
+                "closure_summands": census_closure.0,
+                "closure_bytes": census_closure.1,
+                "closures": census_closure.2,
+                "distinct_cut_topologies": census_topologies.len(),
+                "result_summands": vakint::census::summands(result.as_view()),
+                "result_bytes": result.as_view().get_byte_size(),
+                "tensor_seconds": timing.tensor.as_secs_f64(),
+                "closure_preparation_seconds": timing.closure_preparation.as_secs_f64(),
+                "closure_backend_seconds": timing.closure_backend.as_secs_f64(),
+                "seconds": started.elapsed().as_secs_f64(),
+            }),
+        );
+    }
     tracing::info!(
         uv = true,
         rstar = true,
@@ -160,6 +202,18 @@ pub fn integrate_single_mass(
         "Integrated single-mass R* remainder"
     );
     Ok(result)
+}
+
+/// The numerator sum of a closure input `numerator * topo(...)`.
+fn numerator_census(input: &Atom) -> AtomView<'_> {
+    if let AtomView::Mul(product) = input.as_view() {
+        for factor in product.iter() {
+            if matches!(factor, AtomView::Add(_)) {
+                return factor;
+            }
+        }
+    }
+    input.as_view()
 }
 
 fn flush_closures(
