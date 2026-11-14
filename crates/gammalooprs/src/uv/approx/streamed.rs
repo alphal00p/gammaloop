@@ -483,3 +483,107 @@ fn switch_list(variable: &str) -> Vec<String> {
         })
         .unwrap_or_default()
 }
+
+/// Diagnostics: with `GAMMALOOP_ALGEBRA_DUMP=<directory>`, write the first
+/// `GAMMALOOP_ALGEBRA_DUMP_COUNT` (default 40) inputs of a stage that are
+/// smaller than 2 MB to `<directory>/<stage>-<n>.txt`.
+pub(crate) fn dump(stage: &str, expression: AtomView<'_>) {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static DIRECTORY: LazyLock<Option<String>> =
+        LazyLock::new(|| std::env::var("GAMMALOOP_ALGEBRA_DUMP").ok());
+    static COUNT: LazyLock<usize> = LazyLock::new(|| {
+        std::env::var("GAMMALOOP_ALGEBRA_DUMP_COUNT")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(40)
+    });
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    let Some(directory) = DIRECTORY.as_ref() else {
+        return;
+    };
+    if expression.get_byte_size() > 2 << 20 {
+        return;
+    }
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    if n >= *COUNT {
+        return;
+    }
+    let _ = std::fs::write(
+        format!("{directory}/{stage}-{n}.txt"),
+        format!("{expression}"),
+    );
+}
+
+/// `whole(expression)` for a map that acts summand by summand and, inside a
+/// summand, only on its factors with explicit (or compact) indices: tensor
+/// contraction and the dot-notation pass. A summand is a product `S * T` of
+/// index-free factors `S` (numbers, symbols, `dot`s, denominators) and
+/// indexed factors `T`; its image is `S * whole(T)`. The products `T` of a
+/// five-loop integrand take a handful of shapes (the open external vectors
+/// and metrics), so `whole` runs once per distinct `T`, cached in `images`,
+/// instead of building a tensor network of the whole sum. Normalized sums and
+/// products are canonical, so the rebuilt sum is the atom `whole` returns.
+/// Returns `None` if an image introduces a dummy index (numbered over the
+/// whole expression), so that the caller maps the whole expression.
+pub(crate) fn map_indexed_factors<'a>(
+    expression: AtomView<'a>,
+    images: &mut std::collections::HashMap<Atom, Atom>,
+    whole: &dyn Fn(AtomView<'_>) -> Result<Atom>,
+) -> Result<Option<Atom>> {
+    let mut matcher = SlotMatcher::default();
+    let mut scalars = Vec::new();
+    let mut indexed = Vec::new();
+    let mut map_term = |term: AtomView<'a>| -> Result<Option<Atom>> {
+        scalars.clear();
+        indexed.clear();
+        let factors = match term {
+            AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+            factor => vec![factor],
+        };
+        for factor in factors {
+            let interface = factor_interface(factor, &mut matcher);
+            if interface.indices.is_empty() && !interface.opaque {
+                scalars.push(factor);
+            } else {
+                indexed.push(factor);
+            }
+        }
+        let key = match indexed[..] {
+            [] => Atom::num(1),
+            [single] => single.to_owned(),
+            _ => Atom::mul_many(indexed.iter().copied()),
+        };
+        let image = match images.entry(key) {
+            std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                let image = whole(entry.key().as_view())?;
+                if introduces_dummies(entry.key().as_view(), image.as_view()) {
+                    return Ok(None);
+                }
+                entry.insert(image)
+            }
+        };
+        if scalars.is_empty() {
+            return Ok(Some(image.clone()));
+        }
+        Ok(Some(Atom::mul_many(
+            scalars
+                .iter()
+                .copied()
+                .chain(std::iter::once(image.as_view())),
+        )))
+    };
+    match expression {
+        AtomView::Add(sum) => {
+            let mut terms = Vec::with_capacity(sum.get_nargs());
+            for term in sum.iter() {
+                let Some(mapped) = map_term(term)? else {
+                    return Ok(None);
+                };
+                terms.push(mapped);
+            }
+            Ok(Some(Atom::add_many(terms.iter())))
+        }
+        term => map_term(term),
+    }
+}

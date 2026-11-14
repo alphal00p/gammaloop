@@ -621,6 +621,8 @@ struct TermRewrites {
     /// [`Self::after_contraction_whole`] of each distinct product of
     /// denominator factors met so far.
     denominator_rewrites: std::cell::RefCell<HashMap<Atom, Atom>>,
+    /// [`Self::contract_metrics`] of each distinct product of indexed factors.
+    contraction_images: std::cell::RefCell<HashMap<Atom, Atom>>,
 }
 
 impl TermRewrites {
@@ -644,11 +646,38 @@ impl TermRewrites {
 
     /// [`Self::contract_metrics`], skipped when the expression has neither a
     /// metric nor a repeated explicit index, so that nothing can contract.
-    fn contract_metrics_if_any(integrand: AtomView<'_>) -> Result<Atom> {
+    fn contract_metrics_if_any(&self, integrand: AtomView<'_>) -> Result<Atom> {
         if !integrand.contains_symbol(ETS.metric) && !integrand.has_repeated_explicit_indices() {
             return Ok(integrand.to_owned());
         }
-        Self::contract_metrics(integrand)
+        self.contract_metrics_by_indexed_factors(integrand)
+    }
+
+    /// [`Self::contract_metrics`] summand by summand on the indexed factors
+    /// only, once per distinct product of them (see
+    /// [`streamed::map_indexed_factors`]). The contraction of a five-loop
+    /// integrand otherwise builds one tensor network of up to millions of
+    /// summands that differ only in index-free factors.
+    /// `GAMMALOOP_ALGEBRA_LEGACY=metric_contraction` restores the whole
+    /// contraction, `GAMMALOOP_ALGEBRA_CHECK=metric_contraction` compares.
+    fn contract_metrics_by_indexed_factors(&self, integrand: AtomView<'_>) -> Result<Atom> {
+        if streamed::legacy("metric_contraction") {
+            return Self::contract_metrics(integrand);
+        }
+        let mapped = streamed::map_indexed_factors(
+            integrand,
+            &mut self.contraction_images.borrow_mut(),
+            &|piece| Self::contract_metrics(piece),
+        )?;
+        let contracted = match mapped {
+            Some(contracted) => contracted,
+            None => Self::contract_metrics(integrand)?,
+        };
+        if streamed::check("metric_contraction") {
+            let whole = Self::contract_metrics(integrand)?;
+            streamed::report_check("metric_contraction", integrand, &contracted, &whole);
+        }
+        Ok(contracted)
     }
 
     // Denominator identities do not overlap. Visit the expression once rather
@@ -906,7 +935,7 @@ impl TermRewrites {
         let mut introduced = false;
         let outcome = streamed::expand_in_pieces(materialized, limit, &mut |piece| {
             streamed::for_each_summand_chunk(piece.as_view(), limit, &mut |chunk| {
-                let contracted = Self::contract_metrics_if_any(chunk)?;
+                let contracted = self.contract_metrics_if_any(chunk)?;
                 if streamed::introduces_dummies(chunk, contracted.as_view()) {
                     introduced = true;
                     return Err(eyre!("a metric contraction introduced a dummy index"));
@@ -1012,6 +1041,7 @@ pub(crate) fn to_vakint_integrand<
         contracted_nodes,
         substitute_masses_to_m_uv,
         denominator_rewrites: Default::default(),
+        contraction_images: Default::default(),
     };
 
     // A large integrand is expanded, contracted and rewritten in pieces, so
@@ -1054,7 +1084,9 @@ pub(crate) fn to_vakint_integrand<
 
             let metrics_started = Instant::now();
             let metric_stage = StageSpan::new("gamma.adaptor.metric_contraction");
-            let contracted = TermRewrites::contract_metrics(integrand_vakint.as_view())?;
+            streamed::dump("contract_metrics", integrand_vakint.as_view());
+            let contracted =
+                rewrites.contract_metrics_by_indexed_factors(integrand_vakint.as_view())?;
             drop(integrand_vakint);
             let integrand_vakint = contracted;
             let metric_seconds = metrics_started.elapsed().as_secs_f64();
@@ -1145,6 +1177,7 @@ pub(crate) fn to_vakint_integrand<
         .allow_new_wildcards_on_rhs(true),
     ];
     let mut graph_seconds = 0.0;
+    let mut notation_images = HashMap::new();
     let mut routing_seconds = 0.0;
     let mut notation_seconds = 0.0;
 
@@ -1371,9 +1404,34 @@ pub(crate) fn to_vakint_integrand<
         // to dot notation here, without reintroducing Schoonschip rank-1 factors.
         // Routing and loop normalization precede this one authoritative pass;
         // neither needs an intermediate cook/infer/to_dots/uncook cycle.
-        let notation =
-            SymbolicTensor::infer_indexed(cooking.try_cook(t.numerator.as_view())?)?.to_dots()?;
-        t.numerator = cooking.uncook(notation.expression().as_view());
+        streamed::dump("notation", t.numerator.as_view());
+        let notation_whole = |numerator: AtomView<'_>| -> Result<Atom> {
+            let notation =
+                SymbolicTensor::infer_indexed(cooking.try_cook(numerator)?)?.to_dots()?;
+            Ok(cooking.uncook(notation.expression().as_view()))
+        };
+        // Once per distinct product of indexed factors rather than one tensor
+        // network of the whole numerator (`streamed::map_indexed_factors`).
+        // `GAMMALOOP_ALGEBRA_LEGACY=dot_notation` restores the whole pass.
+        let notated = if streamed::legacy("dot_notation") {
+            notation_whole(t.numerator.as_view())?
+        } else {
+            let mapped = streamed::map_indexed_factors(
+                t.numerator.as_view(),
+                &mut notation_images,
+                &notation_whole,
+            )?;
+            let notated = match mapped {
+                Some(notated) => notated,
+                None => notation_whole(t.numerator.as_view())?,
+            };
+            if streamed::check("dot_notation") {
+                let whole = notation_whole(t.numerator.as_view())?;
+                streamed::report_check("dot_notation", t.numerator.as_view(), &notated, &whole);
+            }
+            notated
+        };
+        t.numerator = notated;
         debug_tags!(#uv, #integrated, #vakint, #trace;
             stage = "to_vakint_integrand_term_after_metric_shorthand_to_dot",
             term_index = %term_index,
