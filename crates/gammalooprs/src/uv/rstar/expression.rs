@@ -187,6 +187,9 @@ impl RStarIntegrand {
         for insertion in insertions {
             expression *= insertion;
         }
+        // Diagnostics: the remainder before routing (edge momenta intact),
+        // numerator times insertions; its routed form is `hard_routed`.
+        streamed::dump("hard_source", expression.as_view());
         let contracted = InternalSubGraph::try_new(contracted, &graph.underlying)
             .ok_or_else(|| eyre!("an R* insertion contains an unpaired half-edge"))?;
         let basis = if region.loops == 0 {

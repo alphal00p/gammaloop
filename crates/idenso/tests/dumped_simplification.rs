@@ -40,6 +40,24 @@ fn simplify_dumped_hard_taylor_input() {
         input.as_view().get_byte_size(),
         high_water_mark()
     );
+    // IDENSO_SIMPLIFY_MODE=expand: expand the input first (the candidate
+    // fallback for inputs whose factorized contraction does not terminate).
+    let input = if std::env::var("IDENSO_SIMPLIFY_MODE").as_deref() == Ok("expand") {
+        let started = std::time::Instant::now();
+        let expanded = input.expand();
+        eprintln!(
+            "expanded to {} bytes ({} terms) in {:.2} s",
+            expanded.as_view().get_byte_size(),
+            match expanded.as_view() {
+                symbolica::atom::AtomView::Add(sum) => sum.get_nargs(),
+                _ => 1,
+            },
+            started.elapsed().as_secs_f64()
+        );
+        expanded
+    } else {
+        input
+    };
     let started = std::time::Instant::now();
     let cooking = CookSettings::indices()
         .with_mode(CookMode::ReversibleEncoding)

@@ -606,7 +606,10 @@ pub(crate) fn dump(stage: &str, expression: AtomView<'_>) {
     let Some(directory) = DIRECTORY.as_ref() else {
         return;
     };
-    if STAGE.as_ref().is_some_and(|only| only != stage) {
+    if STAGE
+        .as_ref()
+        .is_some_and(|only| !only.split(',').any(|entry| entry == stage))
+    {
         return;
     }
     if expression.get_byte_size() > *MAX_BYTES {
