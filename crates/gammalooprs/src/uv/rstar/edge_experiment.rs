@@ -77,6 +77,9 @@ fn edge_of(vector: AtomView<'_>) -> Option<usize> {
 }
 
 struct Stage {
+    simplify_seconds: f64,
+    simplified_terms: usize,
+    simplified_bytes: usize,
     seconds: f64,
     terms: usize,
     bytes: usize,
@@ -88,10 +91,16 @@ fn run(input: &Atom, simplify: &dyn Fn(AtomView<'_>) -> eyre::Result<Atom>) -> e
     let base = reset_peak();
     let started = Instant::now();
     let simplified = simplify(input.as_view())?;
+    let simplify_seconds = started.elapsed().as_secs_f64();
+    let simplified_terms = summands(simplified.as_view());
+    let simplified_bytes = simplified.as_view().get_byte_size();
     let expanded = simplified.expand();
     let seconds = started.elapsed().as_secs_f64();
     let peak_kib = status_kib("VmHWM:").saturating_sub(base);
     let stage = Stage {
+        simplify_seconds,
+        simplified_terms,
+        simplified_bytes,
         seconds,
         terms: summands(expanded.as_view()),
         bytes: expanded.as_view().get_byte_size(),
@@ -103,6 +112,9 @@ fn run(input: &Atom, simplify: &dyn Fn(AtomView<'_>) -> eyre::Result<Atom>) -> e
 
 fn json(stage: &Stage) -> serde_json::Value {
     serde_json::json!({
+        "simplify_seconds": stage.simplify_seconds,
+        "simplified_terms": stage.simplified_terms,
+        "simplified_bytes": stage.simplified_bytes,
         "seconds": stage.seconds,
         "terms": stage.terms,
         "bytes": stage.bytes,
@@ -137,6 +149,15 @@ pub(super) fn compare(
         let reroute_peak = status_kib("VmHWM:").saturating_sub(base);
         let identical = rerouted == loop_basis;
         let equal = identical || (&rerouted - &loop_basis).expand().is_zero();
+        // Open-index structures: contract the rerouted result once more.
+        let resimplified_equal = equal
+            || (&simplify(rerouted.as_view())?.expand() - &loop_basis).expand().is_zero();
+        if !equal && let Ok(dir) = std::env::var("GAMMALOOP_EDGE_EXPERIMENT_DUMP") {
+            let _ = std::fs::write(
+                format!("{dir}/unequal-{}-{}.txt", std::process::id(), unrouted.as_view().get_byte_size()),
+                format!("input {unrouted}\nloop {loop_basis}\nedge {edge_basis}\nrerouted {rerouted}\n"),
+            );
+        }
 
         // Classes of the edge scalar products of the edge-basis result.
         let underlying = &converter.underlying;
@@ -202,6 +223,7 @@ pub(super) fn compare(
             "rerouted_terms": summands(rerouted.as_view()),
             "identical": identical,
             "equal": equal,
+            "resimplified_equal": resimplified_equal,
             "edge_dot_classes": classes,
         }))
     })();

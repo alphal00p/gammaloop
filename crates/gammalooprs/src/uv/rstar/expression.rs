@@ -136,6 +136,23 @@ impl IntegrationTimings {
             finish_seconds = self.finish,
             "Outer integration stage timings"
         );
+        if vakint::census::enabled() {
+            vakint::census::record(
+                "outer_integration",
+                serde_json::json!({
+                    "kind": kind,
+                    "loops": loops,
+                    "total_seconds": self.started.elapsed().as_secs_f64(),
+                    "routing_seconds": self.routing,
+                    "taylor_seconds": self.taylor,
+                    "tensor_projection_seconds": self.tensor_projection,
+                    "algebra_seconds": self.algebra,
+                    "conversion_seconds": self.conversion,
+                    "backend_seconds": self.backend,
+                    "finish_seconds": self.finish,
+                }),
+            );
+        }
     }
 }
 
@@ -306,11 +323,23 @@ impl RStarIntegrand {
         if let Some(contracted) = self.contracted.get() {
             return Ok(contracted);
         }
+        let started = Instant::now();
         let contracted = {
             let _algebra = StageSpan::new("gamma.remainder.algebra");
             Self::simplify(&self.routed)
                 .wrap_err("while preparing the routed R* tensor expression")?
         };
+        if vakint::census::enabled() {
+            vakint::census::record(
+                "remainder_contraction",
+                serde_json::json!({
+                    "loops": self.region.loops,
+                    "seconds": started.elapsed().as_secs_f64(),
+                    "routed_bytes": self.routed.as_view().get_byte_size(),
+                    "contracted_bytes": contracted.as_view().get_byte_size(),
+                }),
+            );
+        }
         Ok(self.contracted.get_or_init(|| contracted))
     }
 
@@ -646,6 +675,7 @@ impl RStarIntegrand {
         let scaled = Self::scale_edges(&self.routed, &self.soft_edges, parameter);
         let expanded = TaylorExpansion::new(parameter, degree).evaluate(&scaled)?;
         drop(scaled);
+        let started = Instant::now();
         let truncated = {
             let _algebra = StageSpan::new("gamma.remainder.hard_taylor_algebra");
             streamed::report_size("hard_taylor", expanded.as_view());
@@ -653,6 +683,17 @@ impl RStarIntegrand {
             Self::simplify_hard_taylor(&expanded)
                 .wrap_err("while simplifying the R* hard Taylor polynomial")?
         };
+        if vakint::census::enabled() {
+            vakint::census::record(
+                "hard_taylor_contraction",
+                serde_json::json!({
+                    "loops": self.region.loops,
+                    "seconds": started.elapsed().as_secs_f64(),
+                    "taylor_bytes": expanded.as_view().get_byte_size(),
+                    "contracted_bytes": truncated.as_view().get_byte_size(),
+                }),
+            );
+        }
         if cfg!(test) || hard_taylor_check() {
             let reference = self.taylor_contracted(degree)?;
             let identical = truncated == reference;
