@@ -310,10 +310,106 @@ pub(crate) fn expand_in_pieces(
     limit: usize,
     sink: &mut dyn FnMut(Atom) -> Result<()>,
 ) -> Result<()> {
-    if expression.get_byte_size() < limit || has_opaque_composite_power(expression) {
+    if expression.get_byte_size() < limit {
+        return sink(expression.expand());
+    }
+    let blocked = if legacy("opaque_pieces") {
+        has_opaque_composite_power(expression)
+    } else {
+        opaque_power_blocks_pieces(expression)
+    };
+    if blocked {
         return sink(expression.expand());
     }
     expand_pieces_unchecked(expression, limit, sink)
+}
+
+/// Whether distributing `expression` in pieces could cancel an opaque
+/// composite power (see [`has_opaque_composite_power`]) that `expand` keeps.
+///
+/// The pieces multiply chunks of consecutive summands of a sum (or the sum
+/// itself) with the other factors of its product; a normalized product
+/// merges only factors with the same base, and the only merge that `expand`
+/// never makes is a chunk `B` with an opaque power `B^e` (`e` not a positive
+/// integer). Merges of a chunk with a positive integer power give the same
+/// expansion. A chunk is a sum of terms of one sum of the expression, so it
+/// can equal `B` only if some sum of the expression holds every term of
+/// `B`. So the pieces are blocked iff an opaque power has a base that is not
+/// a sum, or a sum outside function arguments and outside the opaque bases
+/// holds every term of an opaque base. Without opaque powers nothing is
+/// blocked. `GAMMALOOP_ALGEBRA_LEGACY=opaque_pieces` blocks every
+/// expression with an opaque power, as before.
+fn opaque_power_blocks_pieces(expression: AtomView<'_>) -> bool {
+    let mut bases = Vec::<Vec<&[u8]>>::new();
+    let mut blocked = false;
+    expression.visitor(&mut |part| {
+        if blocked {
+            return false;
+        }
+        match part {
+            AtomView::Fun(_) => false,
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                if matches!(base, AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_))
+                    && !i64::try_from(exponent).is_ok_and(|exponent| exponent > 0)
+                {
+                    match base {
+                        AtomView::Add(sum) => {
+                            let mut terms =
+                                sum.iter().map(|term| term.get_data()).collect::<Vec<_>>();
+                            terms.sort_unstable();
+                            terms.dedup();
+                            bases.push(terms);
+                        }
+                        _ => blocked = true,
+                    }
+                    // The sums inside an opaque power are not distributed.
+                    return false;
+                }
+                true
+            }
+            _ => true,
+        }
+    });
+    if blocked {
+        return true;
+    }
+    if bases.is_empty() {
+        return false;
+    }
+    let all_terms = bases.iter().flatten().copied().collect::<HashSet<&[u8]>>();
+    expression.visitor(&mut |part| {
+        if blocked {
+            return false;
+        }
+        match part {
+            AtomView::Fun(_) => false,
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                // Opaque powers were collected above; their sums stay whole.
+                !(matches!(base, AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_))
+                    && !i64::try_from(exponent).is_ok_and(|exponent| exponent > 0))
+            }
+            AtomView::Add(sum) => {
+                let present = sum
+                    .iter()
+                    .map(|term| term.get_data())
+                    .filter(|term| all_terms.contains(term))
+                    .collect::<HashSet<_>>();
+                if !present.is_empty()
+                    && bases
+                        .iter()
+                        .any(|base| base.iter().all(|term| present.contains(term)))
+                {
+                    blocked = true;
+                    return false;
+                }
+                true
+            }
+            _ => true,
+        }
+    });
+    blocked
 }
 
 fn expand_pieces_unchecked(
@@ -586,4 +682,37 @@ pub(crate) fn map_indexed_factors<'a>(
         }
         term => map_term(term),
     }
+}
+
+/// Diagnostics: with `GAMMALOOP_ALGEBRA_SIZES=<bytes>`, report on stderr the
+/// shape of every input of a stage of at least that many bytes
+/// (`ALGEBRA_SIZE stage=... bytes=... kind=... args=...`).
+pub(crate) fn report_size(stage: &str, expression: AtomView<'_>) {
+    static THRESHOLD: LazyLock<Option<usize>> = LazyLock::new(|| {
+        std::env::var("GAMMALOOP_ALGEBRA_SIZES")
+            .ok()
+            .and_then(|value| value.parse().ok())
+    });
+    let Some(threshold) = *THRESHOLD else {
+        return;
+    };
+    let bytes = expression.get_byte_size();
+    if bytes < threshold {
+        return;
+    }
+    let (kind, args) = match expression {
+        AtomView::Add(sum) => ("add", sum.get_nargs()),
+        AtomView::Mul(product) => ("mul", product.get_nargs()),
+        AtomView::Pow(_) => ("pow", 2),
+        AtomView::Fun(function) => ("fun", function.get_nargs()),
+        _ => ("leaf", 0),
+    };
+    let largest = match expression {
+        AtomView::Mul(product) => product.iter().map(|f| f.get_byte_size()).max().unwrap_or(0),
+        AtomView::Add(sum) => sum.iter().map(|f| f.get_byte_size()).max().unwrap_or(0),
+        _ => 0,
+    };
+    eprintln!(
+        "ALGEBRA_SIZE stage={stage} bytes={bytes} kind={kind} args={args} largest_arg_bytes={largest}"
+    );
 }
