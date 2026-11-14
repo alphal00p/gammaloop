@@ -10,6 +10,11 @@
 mod evaluate;
 mod expression;
 mod integrate;
+mod massive;
+#[cfg(test)]
+mod massive_regression_tests;
+#[cfg(test)]
+mod massive_tests;
 #[cfg(test)]
 mod master_tests;
 #[cfg(test)]
@@ -27,6 +32,10 @@ mod tests;
 mod uv;
 
 pub use integrate::integrate_single_mass;
+pub use massive::{
+    DistributionTerm, MassiveVacuumSubdivergences, MassiveVacuumTerm, NumeratorMonomial,
+    VacuumTopology, massive_vacuum_direct, massive_vacuum_settings,
+};
 pub use plan::*;
 pub use taylor::TaylorExpansion;
 pub use uv::MassiveUvEvaluator;
