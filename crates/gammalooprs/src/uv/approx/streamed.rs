@@ -330,7 +330,7 @@ fn expand_pieces_unchecked(
             let mut chunk = Vec::new();
             let mut chunk_bytes = 0;
             let flush = |chunk: &mut Vec<AtomView<'_>>,
-                             sink: &mut dyn FnMut(Atom) -> Result<()>|
+                         sink: &mut dyn FnMut(Atom) -> Result<()>|
              -> Result<()> {
                 match chunk[..] {
                     [] => Ok(()),
@@ -366,13 +366,14 @@ fn expand_pieces_unchecked(
             let terms = sum.iter().collect::<Vec<_>>();
             for part in terms.chunks(terms.len().div_ceil(PARTS)) {
                 let part = Atom::add_many(part.iter().copied());
-                let distributed = Atom::mul_many(factors.iter().enumerate().map(|(index, factor)| {
-                    if index == split {
-                        part.as_view()
-                    } else {
-                        *factor
-                    }
-                }));
+                let distributed =
+                    Atom::mul_many(factors.iter().enumerate().map(|(index, factor)| {
+                        if index == split {
+                            part.as_view()
+                        } else {
+                            *factor
+                        }
+                    }));
                 drop(part);
                 expand_pieces_unchecked(distributed.as_view(), limit, sink)?;
             }
@@ -399,7 +400,7 @@ pub(crate) fn for_each_summand_chunk(
     let mut chunk = Vec::new();
     let mut chunk_bytes = 0;
     let flush = |chunk: &mut Vec<AtomView<'_>>,
-                     visit: &mut dyn FnMut(AtomView<'_>) -> Result<()>|
+                 visit: &mut dyn FnMut(AtomView<'_>) -> Result<()>|
      -> Result<()> {
         match chunk[..] {
             [] => Ok(()),
@@ -441,9 +442,7 @@ impl SumAccumulator {
     }
 
     fn merge(&mut self) {
-        let merged = Atom::add_many(
-            std::iter::once(&self.accumulated).chain(self.pending.iter()),
-        );
+        let merged = Atom::add_many(std::iter::once(&self.accumulated).chain(self.pending.iter()));
         self.pending.clear();
         self.pending_bytes = 0;
         self.accumulated = merged;
@@ -455,4 +454,32 @@ impl SumAccumulator {
         }
         self.accumulated
     }
+}
+
+/// Names listed in `GAMMALOOP_ALGEBRA_LEGACY` (comma separated, or `all`)
+/// select the previous implementation of that algebra fast path, so that a
+/// regression can be bisected without a rebuild.
+pub(crate) fn legacy(name: &str) -> bool {
+    static LEGACY: LazyLock<Vec<String>> =
+        LazyLock::new(|| switch_list("GAMMALOOP_ALGEBRA_LEGACY"));
+    LEGACY.iter().any(|entry| entry == name || entry == "all")
+}
+
+/// Names listed in `GAMMALOOP_ALGEBRA_CHECK` (or `all`) also run the previous
+/// implementation and report on stderr whether both results are identical
+/// (`STREAM_CHECK stage=<name> ... equal=...`). Tests always check.
+pub(crate) fn check(name: &str) -> bool {
+    static CHECK: LazyLock<Vec<String>> = LazyLock::new(|| switch_list("GAMMALOOP_ALGEBRA_CHECK"));
+    cfg!(test) || CHECK.iter().any(|entry| entry == name || entry == "all")
+}
+
+fn switch_list(variable: &str) -> Vec<String> {
+    std::env::var(variable)
+        .map(|value| {
+            value
+                .split(',')
+                .map(|entry| entry.trim().to_owned())
+                .collect()
+        })
+        .unwrap_or_default()
 }

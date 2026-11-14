@@ -618,6 +618,9 @@ struct TermRewrites {
     propagators: HashMap<usize, (usize, Atom)>,
     contracted_nodes: HashMap<usize, usize>,
     substitute_masses_to_m_uv: bool,
+    /// [`Self::after_contraction_whole`] of each distinct product of
+    /// denominator factors met so far.
+    denominator_rewrites: std::cell::RefCell<HashMap<Atom, Atom>>,
 }
 
 impl TermRewrites {
@@ -776,11 +779,112 @@ impl TermRewrites {
     }
 
     /// Every rewrite after the metric contraction.
+    ///
+    /// The rewrites only touch the `den` factors of a summand (they become
+    /// `prop`s, are shrunk, flipped, fused and wrapped into one `topo`); all
+    /// other factors pass through. A five-loop integrand has a few hundred
+    /// distinct denominator products but up to millions of summands, so each
+    /// distinct product is rewritten once (by the whole map) and every summand
+    /// is rebuilt as its other factors times that result. Pattern matching no
+    /// longer runs over the numerators. `GAMMALOOP_ALGEBRA_LEGACY=term_rewrites`
+    /// restores the whole map, `GAMMALOOP_ALGEBRA_CHECK=term_rewrites`
+    /// compares both.
     fn after_contraction(&self, integrand: Atom) -> Atom {
+        if streamed::legacy("term_rewrites") {
+            return self.after_contraction_whole(integrand);
+        }
+        let rewritten = self.after_contraction_by_denominators(integrand.as_view());
+        if streamed::check("term_rewrites") {
+            let input = integrand.clone();
+            let whole = self.after_contraction_whole(integrand);
+            streamed::report_check("term_rewrites", input.as_view(), &rewritten, &whole);
+        }
+        rewritten
+    }
+
+    /// The reference for [`Self::after_contraction`]: every rewrite on the
+    /// whole expression.
+    fn after_contraction_whole(&self, integrand: Atom) -> Atom {
         let integrand = self.denominators_to_propagators(integrand);
         let integrand = self.shrink_subgraph(integrand);
         let integrand = Self::flip_and_fuse(integrand);
         Self::wrap_topologies(&integrand)
+    }
+
+    /// [`Self::after_contraction_whole`] applied summand by summand to the
+    /// denominator factors only. A summand is a product `N * D` of non-`den`
+    /// factors `N` and `den` factors (or their powers) `D`; every pattern of
+    /// the rewrites matches inside `D` only (a `prop`, a product of `prop`s
+    /// or `topo`s), so the image of the summand is `N * whole(D)`. Normalized
+    /// sums and products are canonical, so rebuilding the sum of these images
+    /// gives the atom of the whole map. Summands whose other factors mention
+    /// a `den`, `prop`, `edge` or `topo` (inside a function or a sum), or
+    /// that have no denominator, take the whole map.
+    fn after_contraction_by_denominators<'a>(&self, integrand: AtomView<'a>) -> Atom {
+        let vk_prop = vakint::symbols::S.prop;
+        let vk_edge = vakint_symbol!("edge");
+        let vk_topo = vakint_symbol!("topo");
+        let is_denominator = |factor: AtomView<'_>| match factor {
+            AtomView::Fun(function) => function.get_symbol() == GS.den,
+            AtomView::Pow(power) => matches!(
+                power.get_base_exp().0,
+                AtomView::Fun(function) if function.get_symbol() == GS.den
+            ),
+            _ => false,
+        };
+        let mut cache = self.denominator_rewrites.borrow_mut();
+        let mut denominators = Vec::new();
+        let mut others = Vec::new();
+        let mut rewrite = |term: AtomView<'a>| -> Atom {
+            denominators.clear();
+            others.clear();
+            match term {
+                AtomView::Mul(product) => {
+                    for factor in product.iter() {
+                        if is_denominator(factor) {
+                            denominators.push(factor);
+                        } else {
+                            others.push(factor);
+                        }
+                    }
+                }
+                factor if is_denominator(factor) => denominators.push(factor),
+                factor => others.push(factor),
+            }
+            if denominators.is_empty()
+                || others.iter().any(|factor| {
+                    factor.contains_symbol(GS.den)
+                        || factor.contains_symbol(vk_prop)
+                        || factor.contains_symbol(vk_edge)
+                        || factor.contains_symbol(vk_topo)
+                })
+            {
+                return self.after_contraction_whole(term.to_owned());
+            }
+            let key = match denominators[..] {
+                [single] => single.to_owned(),
+                _ => Atom::mul_many(denominators.iter().copied()),
+            };
+            let image = cache
+                .entry(key)
+                .or_insert_with_key(|key| self.after_contraction_whole(key.clone()));
+            if others.is_empty() {
+                return image.clone();
+            }
+            Atom::mul_many(
+                others
+                    .iter()
+                    .copied()
+                    .chain(std::iter::once(image.as_view())),
+            )
+        };
+        match integrand {
+            AtomView::Add(sum) => {
+                let terms = sum.iter().map(&mut rewrite).collect::<Vec<_>>();
+                Atom::add_many(terms.iter())
+            }
+            term => rewrite(term),
+        }
     }
 
     /// The whole map from the materialized integrand to the Vakint input, as
@@ -789,7 +893,7 @@ impl TermRewrites {
         let expanded = materialized.expand();
         let contracted = Self::contract_metrics(expanded.as_view())?;
         drop(expanded);
-        Ok(self.after_contraction(contracted))
+        Ok(self.after_contraction_whole(contracted))
     }
 
     /// [`Self::whole`] on pieces of the expansion of `materialized`, in
@@ -907,6 +1011,7 @@ pub(crate) fn to_vakint_integrand<
         propagators,
         contracted_nodes,
         substitute_masses_to_m_uv,
+        denominator_rewrites: Default::default(),
     };
 
     // A large integrand is expanded, contracted and rewritten in pieces, so
@@ -964,32 +1069,35 @@ pub(crate) fn to_vakint_integrand<
 
             let topology_started = Instant::now();
             let topology_stage = StageSpan::new("gamma.adaptor.propagator_topology");
-            let integrand_vakint = rewrites.denominators_to_propagators(integrand_vakint);
-            debug_tags!(#uv, #integrated, #vakint, #trace;
-                stage = "to_vakint_integrand_after_den_to_prop",
-                reduced = %reduced_label,
-                dependent_subgraph = %dependent_subgraph_label,
-                log.integrand = integrand_vakint,
-                "Vakint trace after denominator-to-propagator conversion"
-            );
-            let integrand_vakint = rewrites.shrink_subgraph(integrand_vakint);
-            debug_tags!(#uv, #integrated, #vakint, #trace;
-                stage = "to_vakint_integrand_after_shrink_subgraph",
-                reduced = %reduced_label,
-                dependent_subgraph = %dependent_subgraph_label,
-                log.integrand = integrand_vakint,
-                "Vakint trace after shrinking subgraph"
-            );
-            let integrand_vakint = TermRewrites::flip_and_fuse(integrand_vakint);
-            debug_tags!(#uv, #integrated, #vakint, #trace;
-                stage = "to_vakint_integrand_after_flip_fuse",
-                reduced = %reduced_label,
-                dependent_subgraph = %dependent_subgraph_label,
-                log.integrand = integrand_vakint,
-                "Vakint trace after edge flip and fuse"
-            );
-            let vakint_input_atom = TermRewrites::wrap_topologies(&integrand_vakint);
-            drop(integrand_vakint);
+            let vakint_input_atom = if !streamed::legacy("term_rewrites") {
+                rewrites.after_contraction(integrand_vakint)
+            } else {
+                let integrand_vakint = rewrites.denominators_to_propagators(integrand_vakint);
+                debug_tags!(#uv, #integrated, #vakint, #trace;
+                    stage = "to_vakint_integrand_after_den_to_prop",
+                    reduced = %reduced_label,
+                    dependent_subgraph = %dependent_subgraph_label,
+                    log.integrand = integrand_vakint,
+                    "Vakint trace after denominator-to-propagator conversion"
+                );
+                let integrand_vakint = rewrites.shrink_subgraph(integrand_vakint);
+                debug_tags!(#uv, #integrated, #vakint, #trace;
+                    stage = "to_vakint_integrand_after_shrink_subgraph",
+                    reduced = %reduced_label,
+                    dependent_subgraph = %dependent_subgraph_label,
+                    log.integrand = integrand_vakint,
+                    "Vakint trace after shrinking subgraph"
+                );
+                let integrand_vakint = TermRewrites::flip_and_fuse(integrand_vakint);
+                debug_tags!(#uv, #integrated, #vakint, #trace;
+                    stage = "to_vakint_integrand_after_flip_fuse",
+                    reduced = %reduced_label,
+                    dependent_subgraph = %dependent_subgraph_label,
+                    log.integrand = integrand_vakint,
+                    "Vakint trace after edge flip and fuse"
+                );
+                TermRewrites::wrap_topologies(&integrand_vakint)
+            };
             let topology_seconds = topology_started.elapsed().as_secs_f64();
             drop(topology_stage);
             (
