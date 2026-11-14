@@ -1747,6 +1747,7 @@ impl<'a> ComponentSum<'a, '_> {
             crate::reference_cases::timing::Phase::ContractionStates,
         );
         let mut states = vec![(remaining, ScalarPolynomial::new_one(&Q))];
+        let mut budget_checks = 0usize;
         let mut emitted: AHashMap<usize, Atom> = AHashMap::new();
         #[cfg(feature = "reference-cases")]
         let mut emitted_bytes = 0usize;
@@ -1813,6 +1814,17 @@ impl<'a> ComponentSum<'a, '_> {
                     .zip(source.1.iter().copied())
                     .collect();
                 for (factors, coefficient) in &terms {
+                    // Cooperative resource budgets (none by default) see a
+                    // growing frontier here; a product of many index-sharing
+                    // sums can otherwise grow without bound before any other
+                    // checkpoint runs. The frontier cannot decline once
+                    // started, so an exhausted budget aborts the operation.
+                    budget_checks = budget_checks.wrapping_add(1);
+                    if budget_checks % 4096 == 0
+                        && let Err(error) = symbolica::utils::resources::checkpoint()
+                    {
+                        panic!("resource budget exhausted in a factorized contraction: {error}");
+                    }
                     self.reset_components(coefficient);
                     for &(factor, exponent) in factors {
                         let leaf = self.input.leaves()[factor];
