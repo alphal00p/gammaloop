@@ -619,7 +619,16 @@ impl RStarIntegrand {
         drop(scaled);
         let truncated = {
             let _algebra = StageSpan::new("gamma.remainder.hard_taylor_algebra");
-            Self::simplify(&expanded).wrap_err("while simplifying the R* hard Taylor polynomial")?
+            streamed::report_size("hard_taylor", expanded.as_view());
+            // Summand by summand, as the outer Taylor polynomial: one tensor
+            // network of a large hard polynomial held up to ~90 GiB (27105).
+            // `GAMMALOOP_ALGEBRA_LEGACY=hard_taylor_summands` restores it.
+            if streamed::legacy("hard_taylor_summands") {
+                Self::simplify(&expanded)
+            } else {
+                Self::simplify_summands(expanded.as_view())
+            }
+            .wrap_err("while simplifying the R* hard Taylor polynomial")?
         };
         if cfg!(test) || hard_taylor_check() {
             let reference = self.taylor_contracted(degree)?;
@@ -674,12 +683,14 @@ impl RStarIntegrand {
         let routed = if self.region.loops == 0 {
             Cow::Borrowed(expression)
         } else {
-            Cow::Owned(expression.replace_multiple(self.graph.normal_emr_replacement(
-                &self.region.remaining,
-                &self.basis,
-                &[W_.x___],
-                HedgePair::is_paired,
-            )))
+            Cow::Owned(
+                expression.replace_multiple(self.graph.normal_emr_replacement(
+                    &self.region.remaining,
+                    &self.basis,
+                    &[W_.x___],
+                    HedgePair::is_paired,
+                )),
+            )
         };
         let allowed_edges = self
             .basis
@@ -1174,7 +1185,10 @@ mod tests {
                 }
             }
         }
-        assert!(compared > 0 && with_insertions > 0, "{compared} {with_insertions}");
+        assert!(
+            compared > 0 && with_insertions > 0,
+            "{compared} {with_insertions}"
+        );
         Ok(())
     }
 
