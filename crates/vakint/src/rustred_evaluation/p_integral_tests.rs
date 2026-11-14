@@ -1708,6 +1708,15 @@ mod five_loop_guards {
     }
 }
 
+/// Number of summands of an expanded drill result (0 for zero).
+fn drill_term_count(value: &Atom) -> usize {
+    match value.as_view() {
+        symbolica::atom::AtomView::Add(add) => add.get_nargs(),
+        _ if value.is_zero() => 0,
+        _ => 1,
+    }
+}
+
 /// vk5l WP4 REAL TEST (env-gated, not in `test_vakint` unless set): a
 /// scope 1-5 package assembled from existing tables, named by
 /// `VAKINT_TEST_P5L_DRILL_PACKAGE` (loaded through `VAKINT_P_LIBRARY`'s code
@@ -1718,6 +1727,9 @@ mod five_loop_guards {
 /// `outside-certified-set`, `outside` (either), `node-not-closed` (the typed
 /// refusal, printed);
 /// `VAKINT_TEST_P5L_DRILL_RETAIN=1` sets the Retain coverage policy.
+/// `<expected>` = `zero`: the input is an exact identity (a sum, e.g. an IBP
+/// relation); each summand is reduced on its own (must be nonzero), and the
+/// sum of those reductions and the reduction of the whole input must vanish.
 #[test]
 fn five_loop_package_drill() {
     let Some(directory) = std::env::var_os("VAKINT_TEST_P5L_DRILL_PACKAGE") else {
@@ -1757,11 +1769,51 @@ fn five_loop_package_drill() {
         let result = engine.evaluate(&settings, input.as_view());
         let seconds = started.elapsed().as_secs_f64();
         match (expected, result) {
+            // An exact identity (e.g. an IBP relation with integer
+            // coefficients): every summand reduced on its own must be
+            // nonzero, and both the sum of those reductions and the
+            // reduction of the whole input must vanish identically.
+            ("zero", Ok(value)) => {
+                let summands: Vec<Atom> = match input.as_view() {
+                    symbolica::atom::AtomView::Add(add) => add.iter().map(|t| t.to_owned()).collect(),
+                    _ => vec![input.clone()],
+                };
+                let mut total = Atom::Zero;
+                for (index, summand) in summands.iter().enumerate() {
+                    let started = std::time::Instant::now();
+                    let reduced = engine
+                        .evaluate(&settings, summand.as_view())
+                        .unwrap_or_else(|error| panic!("{label} summand {index}: {error}"));
+                    let reduced = reduced.expand();
+                    let residuals = crate::p_integral::finalize::unevaluated_terminals(&reduced);
+                    eprintln!(
+                        "DRILL {label} summand {index}: {:.1} s, {} terms, {} PResidual terminals {residuals:?}\n  \
+                         input {summand}\n  value {reduced}",
+                        started.elapsed().as_secs_f64(),
+                        drill_term_count(&reduced),
+                        residuals.len()
+                    );
+                    assert!(!reduced.is_zero(), "{label} summand {index}: {summand}");
+                    total = total + reduced;
+                }
+                let total = total.expand();
+                let whole = value.expand();
+                eprintln!(
+                    "DRILL {label}: ZERO CHECK whole input in {seconds:.1} s: {} terms ({whole}); \
+                     sum of the {} separate reductions: {} terms ({total})",
+                    drill_term_count(&whole),
+                    summands.len(),
+                    drill_term_count(&total)
+                );
+                assert!(whole.is_zero() && total.is_zero(), "{label}: identity violated");
+                eprintln!("DRILL {label}: IDENTITY HOLDS EXACTLY ({} summands)", summands.len());
+            }
             ("ok", Ok(value)) => {
                 let residuals = crate::p_integral::finalize::unevaluated_terminals(&value);
                 eprintln!(
-                    "DRILL {label}: OK in {seconds:.1} s, {} PResidual terminals {residuals:?}\n  \
+                    "DRILL {label}: OK in {seconds:.1} s, {} terms, {} PResidual terminals {residuals:?}\n  \
                      input {input}\n  value {value}",
+                    drill_term_count(&value.expand()),
                     residuals.len()
                 );
                 assert!(!value.is_zero(), "{label}: {input}");
