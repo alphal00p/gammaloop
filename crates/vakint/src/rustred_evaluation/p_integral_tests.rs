@@ -1779,6 +1779,7 @@ fn five_loop_package_drill() {
                     _ => vec![input.clone()],
                 };
                 let mut total = Atom::Zero;
+                let mut nonzero = 0usize;
                 for (index, summand) in summands.iter().enumerate() {
                     let started = std::time::Instant::now();
                     let reduced = engine
@@ -1793,7 +1794,14 @@ fn five_loop_package_drill() {
                         drill_term_count(&reduced),
                         residuals.len()
                     );
-                    assert!(!reduced.is_zero(), "{label} summand {index}: {summand}");
+                    // A summand may vanish on its own (e.g. a numerator odd
+                    // under a symmetry of its sector); the identity needs at
+                    // least two nonzero summands to be a check.
+                    if reduced.is_zero() {
+                        eprintln!("DRILL {label} summand {index}: reduces to 0 on its own");
+                    } else {
+                        nonzero += 1;
+                    }
                     total = total + reduced;
                 }
                 // Rational coefficients in eps (e.g. 1/(1+eps) from a
@@ -1809,8 +1817,12 @@ fn five_loop_package_drill() {
                     summands.len(),
                     drill_term_count(&total)
                 );
+                assert!(nonzero >= 2, "{label}: fewer than two nonzero summands, no check");
                 assert!(whole.is_zero() && total.is_zero(), "{label}: identity violated");
-                eprintln!("DRILL {label}: IDENTITY HOLDS EXACTLY ({} summands)", summands.len());
+                eprintln!(
+                    "DRILL {label}: IDENTITY HOLDS EXACTLY ({} summands, {nonzero} nonzero)",
+                    summands.len()
+                );
             }
             ("ok", Ok(value)) => {
                 let residuals = crate::p_integral::finalize::unevaluated_terminals(&value);
