@@ -1534,7 +1534,15 @@ pub(crate) fn replacement_rules(
 /// with another external vector is a tensor p-integral and is rejected.
 pub(crate) fn scalar_numerator(numerator: AtomView, external: &Atom) -> Result<Atom, VakintError> {
     let _stage = StageSpan::new("p_integral.scalar_admission");
-    let scalar = crate::Vakint::convert_to_dot_notation(numerator);
+    // vk5l WP4: a numerator already in dot notation (no indexed vector) is
+    // kept as it is: the dot-notation passes could not change it, and its
+    // full expansion (32.8 s of 61 s on the beta team's heaviest four-loop
+    // request) is not needed, the split handles products of sums.
+    let scalar = if crate::Vakint::has_indexed_vectors(numerator) {
+        crate::Vakint::convert_to_dot_notation(numerator)
+    } else {
+        numerator.to_owned()
+    };
     let mut tensor = None;
     scalar.visitor(&mut |view| {
         if tensor.is_some() {

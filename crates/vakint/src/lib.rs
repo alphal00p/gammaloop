@@ -7367,6 +7367,21 @@ Evaluated (n_loops=1, mu_r=1) :
         ]
     }
 
+    /// Whether `atom` contains an indexed vector ([`Self::indexed_vector_indices`])
+    /// anywhere. Without one no pass of [`Self::dot_notation_passes`] can
+    /// match, before or after expansion (expanding creates no function).
+    pub(crate) fn has_indexed_vectors(atom: AtomView) -> bool {
+        let mut found = false;
+        atom.visitor(&mut |part| {
+            if found {
+                return false;
+            }
+            found = Self::indexed_vector_indices(part).iter().any(Option::is_some);
+            !found
+        });
+        found
+    }
+
     /// Whether a replacement of [`Self::dot_notation_passes`] can match in
     /// `atom`; if not, the passes return `atom` unchanged. Every pattern binds
     /// indexed vectors ([`Self::indexed_vector_indices`]): `v_(id_,idx_)^n_`
