@@ -20,6 +20,7 @@ pub(super) fn project_hard_vacuum(expression: &Atom, hard_edges: &[EdgeIndex]) -
     if hard_edges.is_empty() || expression.is_zero() {
         return Ok(expression.clone());
     }
+    crate::uv::approx::streamed::dump("project_hard", expression.as_view());
     let cooking = CookSettings::indices()
         .with_mode(CookMode::ReversibleEncoding)
         .with_representation_payloads(true, true);

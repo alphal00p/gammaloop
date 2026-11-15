@@ -252,6 +252,23 @@ impl<L: Copy + Eq + Hash> TermTape<L> {
         coefficient: &Rational,
     ) -> Option<()> {
         let Some((node, exponent)) = pending.pop() else {
+            // Cooperative resource budgets (none by default) must see a
+            // distribution that grows without bound: a deeply nested product
+            // of sums expands here term by term. A distribution cannot
+            // decline once started, so an exhausted budget aborts it.
+            thread_local! {
+                static EMITTED: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+            }
+            let emitted = EMITTED.with(|count| {
+                let next = count.get().wrapping_add(1);
+                count.set(next);
+                next
+            });
+            if emitted % 4096 == 0
+                && let Err(error) = symbolica::utils::resources::checkpoint()
+            {
+                panic!("resource budget exhausted while distributing a product of sums: {error}");
+            }
             let mut key: Vec<_> = self
                 .active
                 .iter()

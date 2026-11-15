@@ -2606,11 +2606,42 @@ fn massive_closure_showcase() {
                 .unwrap_or(1);
             let before = engine.p_relation_cache_statistics();
             let started = std::time::Instant::now();
-            let result = crate::p_integral::MassiveClosure::evaluate_batch(
-                &engine,
-                &settings,
-                &[(closure.clone(), input.clone())],
-            );
+            let result = if std::env::var("VAKINT_TEST_CLOSURE_DIRECT").as_deref() == Ok("1") {
+                // The input is `numerator · topo(...)` in the cut momenta: the
+                // direct lowering's input with the identity routing.
+                let (topology, numerator) = match input.as_view() {
+                    symbolica::atom::AtomView::Mul(product) => {
+                        let mut topology = Atom::num(1);
+                        let mut numerator = Atom::num(1);
+                        for factor in product.iter() {
+                            match factor {
+                                symbolica::atom::AtomView::Fun(function)
+                                    if function.get_symbol() == crate::symbols::S.topo =>
+                                {
+                                    topology = factor.to_owned()
+                                }
+                                _ => numerator = numerator * factor.to_owned(),
+                            }
+                        }
+                        (topology, numerator)
+                    }
+                    other => panic!("{name}: input is not numerator * topo: {:.100}", other.to_string()),
+                };
+                let routing = (1..=5)
+                    .map(|i| (parse(&format!("k({i})")), parse(&format!("k({i})"))))
+                    .collect();
+                crate::p_integral::MassiveClosure::evaluate_direct_batch(
+                    &engine,
+                    &settings,
+                    &[(closure.clone(), crate::p_integral::DirectClosureInput { topology, routing, numerator })],
+                )
+            } else {
+                crate::p_integral::MassiveClosure::evaluate_batch(
+                    &engine,
+                    &settings,
+                    &[(closure.clone(), input.clone())],
+                )
+            };
             let seconds = started.elapsed().as_secs_f64();
             let stats = super::last_stats();
             let after = engine.p_relation_cache_statistics();

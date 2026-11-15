@@ -613,11 +613,145 @@ impl IntoIntegrand<'static> for Atom {
     }
 }
 
+/// `map(expression)` for a map that acts on every factor of every summand
+/// alone (a replacement of function patterns), computed once per distinct
+/// factor: summands are rebuilt as normalized products of the factor images,
+/// sums of them as normalized sums, which are the canonical atoms the whole
+/// map returns. Sum factors of a product are mapped recursively.
+fn map_factors_cached(
+    expression: AtomView<'_>,
+    cache: &mut HashMap<Atom, Atom>,
+    map: &dyn Fn(AtomView<'_>) -> Atom,
+) -> Atom {
+    fn factor(
+        view: AtomView<'_>,
+        cache: &mut HashMap<Atom, Atom>,
+        map: &dyn Fn(AtomView<'_>) -> Atom,
+    ) -> Atom {
+        if let AtomView::Add(_) = view {
+            return map_factors_cached(view, cache, map);
+        }
+        let key = view.to_owned();
+        if let Some(image) = cache.get(&key) {
+            return image.clone();
+        }
+        let image = map(view);
+        cache.insert(key, image.clone());
+        image
+    }
+    match expression {
+        AtomView::Add(sum) => {
+            let terms = sum
+                .iter()
+                .map(|term| map_factors_cached(term, cache, map))
+                .collect::<Vec<_>>();
+            Atom::add_many(terms.iter())
+        }
+        AtomView::Mul(product) => {
+            let factors = product
+                .iter()
+                .map(|view| factor(view, cache, map))
+                .collect::<Vec<_>>();
+            Atom::mul_many(factors.iter().map(Atom::as_view))
+        }
+        other => factor(other, cache, map),
+    }
+}
+
+/// [`map_factors_cached`] with `GAMMALOOP_ALGEBRA_LEGACY=factor_maps` (the
+/// whole map) and `GAMMALOOP_ALGEBRA_CHECK=factor_maps` (both compared).
+fn map_factors_switched(
+    stage: &str,
+    expression: &Atom,
+    cache: &mut HashMap<Atom, Atom>,
+    map: &dyn Fn(AtomView<'_>) -> Atom,
+) -> Atom {
+    if streamed::legacy("factor_maps") {
+        return map(expression.as_view());
+    }
+    let mapped = map_factors_cached(expression.as_view(), cache, map);
+    if streamed::check("factor_maps") {
+        let whole = map(expression.as_view());
+        streamed::report_check(stage, expression.as_view(), &mapped, &whole);
+    }
+    mapped
+}
+
+thread_local! {
+    /// Kept edge-momentum combinations of the integrand being converted
+    /// (`with_momentum_combinations`), substituted with the momentum routing.
+    static MOMENTUM_COMBINATIONS: std::cell::RefCell<Vec<Replacement>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Run `f` (a [`to_vakint_integrand`] call) with `rules`
+/// (`Q(id, x___) -> Σ c Q(e, x___)`) applied before the momentum routing of
+/// every term, factor by factor.
+pub(crate) fn with_momentum_combinations<T>(rules: &[Replacement], f: impl FnOnce() -> T) -> T {
+    let previous = MOMENTUM_COMBINATIONS.with(|c| std::mem::replace(&mut *c.borrow_mut(), rules.to_vec()));
+    let result = f();
+    MOMENTUM_COMBINATIONS.with(|c| *c.borrow_mut() = previous);
+    result
+}
+
+/// The Vakint terms of an integrand, collected per topology.
+#[derive(Default)]
+struct TopologyGroups {
+    by_topology: HashMap<Atom, streamed::SumAccumulator>,
+    /// Images of summands outside the grouped form, split as before.
+    rest: streamed::SumAccumulator,
+}
+
+impl TopologyGroups {
+    /// The terms of `VakintExpression::try_from` of the whole image: one per
+    /// topology, numerators summed, zero numerators dropped, ordered by
+    /// topology.
+    fn into_expression(self) -> Result<VakintExpression> {
+        let mut numerators = std::collections::BTreeMap::<Atom, Atom>::new();
+        for (topology, numerator) in self.by_topology {
+            numerators.insert(topology, numerator.finish());
+        }
+        let rest = self.rest.finish();
+        if !rest.is_zero() {
+            for term in VakintExpression::try_from(rest)
+                .wrap_err("could not split integrand into Vakint terms")?
+                .0
+            {
+                let entry = numerators.entry(term.integral).or_insert(Atom::Zero);
+                *entry = Atom::add_many([&*entry, &term.numerator].into_iter());
+            }
+        }
+        let mut terms = Vec::with_capacity(numerators.len());
+        for (integral, numerator) in numerators {
+            if numerator.is_zero() {
+                continue;
+            }
+            let vectors = vakint::VakintTerm::identify_vectors_in_numerator(numerator.as_view())
+                .map_err(|error| eyre!("{error}"))?;
+            terms.push(vakint::VakintTerm {
+                integral,
+                numerator,
+                vectors,
+            });
+        }
+        Ok(VakintExpression(terms))
+    }
+}
+
 /// The summand-local rewrites of [`to_vakint_integrand`] after expansion.
 struct TermRewrites {
     propagators: HashMap<usize, (usize, Atom)>,
     contracted_nodes: HashMap<usize, usize>,
     substitute_masses_to_m_uv: bool,
+    /// [`Self::after_contraction_whole`] of each distinct product of
+    /// denominator factors met so far.
+    denominator_rewrites: std::cell::RefCell<HashMap<Atom, Atom>>,
+    /// [`Self::contract_metrics`] of each distinct product of indexed factors.
+    contraction_images: std::cell::RefCell<HashMap<Atom, Atom>>,
+    /// Census: summands and bytes entering the term rewrites.
+    rewritten_summands: std::cell::Cell<(usize, usize)>,
+    /// The (topology, other factors) split of each denominator image.
+    topology_images: std::cell::RefCell<HashMap<Atom, Option<(Atom, Atom)>>>,
 }
 
 impl TermRewrites {
@@ -641,11 +775,38 @@ impl TermRewrites {
 
     /// [`Self::contract_metrics`], skipped when the expression has neither a
     /// metric nor a repeated explicit index, so that nothing can contract.
-    fn contract_metrics_if_any(integrand: AtomView<'_>) -> Result<Atom> {
+    fn contract_metrics_if_any(&self, integrand: AtomView<'_>) -> Result<Atom> {
         if !integrand.contains_symbol(ETS.metric) && !integrand.has_repeated_explicit_indices() {
             return Ok(integrand.to_owned());
         }
-        Self::contract_metrics(integrand)
+        self.contract_metrics_by_indexed_factors(integrand)
+    }
+
+    /// [`Self::contract_metrics`] summand by summand on the indexed factors
+    /// only, once per distinct product of them (see
+    /// [`streamed::map_indexed_factors`]). The contraction of a five-loop
+    /// integrand otherwise builds one tensor network of up to millions of
+    /// summands that differ only in index-free factors.
+    /// `GAMMALOOP_ALGEBRA_LEGACY=metric_contraction` restores the whole
+    /// contraction, `GAMMALOOP_ALGEBRA_CHECK=metric_contraction` compares.
+    fn contract_metrics_by_indexed_factors(&self, integrand: AtomView<'_>) -> Result<Atom> {
+        if streamed::legacy("metric_contraction") {
+            return Self::contract_metrics(integrand);
+        }
+        let mapped = streamed::map_indexed_factors(
+            integrand,
+            &mut self.contraction_images.borrow_mut(),
+            &|piece| Self::contract_metrics(piece),
+        )?;
+        let contracted = match mapped {
+            Some(contracted) => contracted,
+            None => Self::contract_metrics(integrand)?,
+        };
+        if streamed::check("metric_contraction") {
+            let whole = Self::contract_metrics(integrand)?;
+            streamed::report_check("metric_contraction", integrand, &contracted, &whole);
+        }
+        Ok(contracted)
     }
 
     // Denominator identities do not overlap. Visit the expression once rather
@@ -776,11 +937,249 @@ impl TermRewrites {
     }
 
     /// Every rewrite after the metric contraction.
+    ///
+    /// The rewrites only touch the `den` factors of a summand (they become
+    /// `prop`s, are shrunk, flipped, fused and wrapped into one `topo`); all
+    /// other factors pass through. A five-loop integrand has a few hundred
+    /// distinct denominator products but up to millions of summands, so each
+    /// distinct product is rewritten once (by the whole map) and every summand
+    /// is rebuilt as its other factors times that result. Pattern matching no
+    /// longer runs over the numerators. `GAMMALOOP_ALGEBRA_LEGACY=term_rewrites`
+    /// restores the whole map, `GAMMALOOP_ALGEBRA_CHECK=term_rewrites`
+    /// compares both.
     fn after_contraction(&self, integrand: Atom) -> Atom {
+        if streamed::legacy("term_rewrites") {
+            return self.after_contraction_whole(integrand);
+        }
+        let rewritten = self.after_contraction_by_denominators(integrand.as_view());
+        if streamed::check("term_rewrites") {
+            let input = integrand.clone();
+            let whole = self.after_contraction_whole(integrand);
+            streamed::report_check("term_rewrites", input.as_view(), &rewritten, &whole);
+        }
+        rewritten
+    }
+
+    /// The reference for [`Self::after_contraction`]: every rewrite on the
+    /// whole expression.
+    fn after_contraction_whole(&self, integrand: Atom) -> Atom {
         let integrand = self.denominators_to_propagators(integrand);
         let integrand = self.shrink_subgraph(integrand);
         let integrand = Self::flip_and_fuse(integrand);
         Self::wrap_topologies(&integrand)
+    }
+
+    /// [`Self::after_contraction_whole`] applied summand by summand to the
+    /// denominator factors only. A summand is a product `N * D` of non-`den`
+    /// factors `N` and `den` factors (or their powers) `D`; every pattern of
+    /// the rewrites matches inside `D` only (a `prop`, a product of `prop`s
+    /// or `topo`s), so the image of the summand is `N * whole(D)`. Normalized
+    /// sums and products are canonical, so rebuilding the sum of these images
+    /// gives the atom of the whole map. Summands whose other factors mention
+    /// a `den`, `prop`, `edge` or `topo` (inside a function or a sum), or
+    /// that have no denominator, take the whole map.
+    fn after_contraction_by_denominators<'a>(&self, integrand: AtomView<'a>) -> Atom {
+        let vk_prop = vakint::symbols::S.prop;
+        let vk_edge = vakint_symbol!("edge");
+        let vk_topo = vakint_symbol!("topo");
+        let is_denominator = |factor: AtomView<'_>| match factor {
+            AtomView::Fun(function) => function.get_symbol() == GS.den,
+            AtomView::Pow(power) => matches!(
+                power.get_base_exp().0,
+                AtomView::Fun(function) if function.get_symbol() == GS.den
+            ),
+            _ => false,
+        };
+        if vakint::census::enabled() {
+            let (summands, bytes) = self.rewritten_summands.get();
+            self.rewritten_summands.set((
+                summands + vakint::census::summands(integrand),
+                bytes + integrand.get_byte_size(),
+            ));
+        }
+        let mut cache = self.denominator_rewrites.borrow_mut();
+        let mut denominators = Vec::new();
+        let mut others = Vec::new();
+        let mut rewrite = |term: AtomView<'a>| -> Atom {
+            denominators.clear();
+            others.clear();
+            match term {
+                AtomView::Mul(product) => {
+                    for factor in product.iter() {
+                        if is_denominator(factor) {
+                            denominators.push(factor);
+                        } else {
+                            others.push(factor);
+                        }
+                    }
+                }
+                factor if is_denominator(factor) => denominators.push(factor),
+                factor => others.push(factor),
+            }
+            if denominators.is_empty()
+                || others.iter().any(|factor| {
+                    factor.contains_symbol(GS.den)
+                        || factor.contains_symbol(vk_prop)
+                        || factor.contains_symbol(vk_edge)
+                        || factor.contains_symbol(vk_topo)
+                })
+            {
+                return self.after_contraction_whole(term.to_owned());
+            }
+            let key = match denominators[..] {
+                [single] => single.to_owned(),
+                _ => Atom::mul_many(denominators.iter().copied()),
+            };
+            let image = cache
+                .entry(key)
+                .or_insert_with_key(|key| self.after_contraction_whole(key.clone()));
+            if others.is_empty() {
+                return image.clone();
+            }
+            Atom::mul_many(
+                others
+                    .iter()
+                    .copied()
+                    .chain(std::iter::once(image.as_view())),
+            )
+        };
+        match integrand {
+            AtomView::Add(sum) => {
+                let terms = sum.iter().map(&mut rewrite).collect::<Vec<_>>();
+                Atom::add_many(terms.iter())
+            }
+            term => rewrite(term),
+        }
+    }
+
+    /// [`Self::after_contraction`] grouped by topology: every summand
+    /// `N * D` adds `N * rest` to the group of its topology, where
+    /// `after_contraction_whole(D) = rest * topo(...)` (once per distinct
+    /// `D`). The groups are the terms that
+    /// `VakintExpression::try_from(after_contraction(integrand))` splits off
+    /// (the coefficient of each `topo` in the canonical sum), without building
+    /// and re-splitting that sum. Summands outside this form go to
+    /// `groups.rest` as their whole-map image.
+    fn group_after_contraction<'a>(&self, integrand: AtomView<'a>, groups: &mut TopologyGroups) {
+        if vakint::census::enabled() {
+            let (summands, bytes) = self.rewritten_summands.get();
+            self.rewritten_summands.set((
+                summands + vakint::census::summands(integrand),
+                bytes + integrand.get_byte_size(),
+            ));
+        }
+        let vk_prop = vakint::symbols::S.prop;
+        let vk_edge = vakint_symbol!("edge");
+        let vk_topo = vakint_symbol!("topo");
+        let is_denominator = |factor: AtomView<'_>| match factor {
+            AtomView::Fun(function) => function.get_symbol() == GS.den,
+            AtomView::Pow(power) => matches!(
+                power.get_base_exp().0,
+                AtomView::Fun(function) if function.get_symbol() == GS.den
+            ),
+            _ => false,
+        };
+        let structural = |factor: AtomView<'_>| {
+            factor.contains_symbol(GS.den)
+                || factor.contains_symbol(vk_prop)
+                || factor.contains_symbol(vk_edge)
+                || factor.contains_symbol(vk_topo)
+        };
+        let mut cache = self.denominator_rewrites.borrow_mut();
+        let mut images = self.topology_images.borrow_mut();
+        let mut denominators = Vec::new();
+        let mut others = Vec::new();
+        let mut group = |term: AtomView<'a>| {
+            denominators.clear();
+            others.clear();
+            match term {
+                AtomView::Mul(product) => {
+                    for factor in product.iter() {
+                        if is_denominator(factor) {
+                            denominators.push(factor);
+                        } else {
+                            others.push(factor);
+                        }
+                    }
+                }
+                factor if is_denominator(factor) => denominators.push(factor),
+                factor => others.push(factor),
+            }
+            if denominators.is_empty() || others.iter().any(|factor| structural(*factor)) {
+                groups.rest.push(self.after_contraction_whole(term.to_owned()));
+                return;
+            }
+            let key = match denominators[..] {
+                [single] => single.to_owned(),
+                _ => Atom::mul_many(denominators.iter().copied()),
+            };
+            let split = images
+                .entry(key.clone())
+                .or_insert_with_key(|key| {
+                    let image = cache
+                        .entry(key.clone())
+                        .or_insert_with_key(|key| self.after_contraction_whole(key.clone()))
+                        .clone();
+                    let factors = match image.as_view() {
+                        AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+                        single => vec![single],
+                    };
+                    let (topologies, rest): (Vec<_>, Vec<_>) = factors.into_iter().partition(
+                        |factor| matches!(factor, AtomView::Fun(f) if f.get_symbol() == vk_topo),
+                    );
+                    match topologies[..] {
+                        [topology] if !rest.iter().any(|factor| structural(*factor)) => Some((
+                            topology.to_owned(),
+                            Atom::mul_many(rest.iter().copied()),
+                        )),
+                        _ => None,
+                    }
+                })
+                .clone();
+            let Some((topology, rest)) = split else {
+                let image = cache[&key].clone();
+                groups
+                    .rest
+                    .push(Atom::mul_many(others.iter().copied().chain(std::iter::once(image.as_view()))));
+                return;
+            };
+            let numerator = if rest == Atom::num(1) {
+                Atom::mul_many(others.iter().copied())
+            } else {
+                Atom::mul_many(others.iter().copied().chain(std::iter::once(rest.as_view())))
+            };
+            groups.by_topology.entry(topology).or_default().push(numerator);
+        };
+        match integrand {
+            AtomView::Add(sum) => sum.iter().for_each(&mut group),
+            term => group(term),
+        }
+    }
+
+    /// [`Self::streamed`] into topology groups ([`Self::group_after_contraction`]).
+    fn streamed_grouped(
+        &self,
+        materialized: AtomView<'_>,
+        limit: usize,
+    ) -> Result<Option<TopologyGroups>> {
+        let mut groups = TopologyGroups::default();
+        let mut introduced = false;
+        let outcome = streamed::expand_in_pieces(materialized, limit, &mut |piece| {
+            streamed::for_each_summand_chunk(piece.as_view(), limit, &mut |chunk| {
+                let contracted = self.contract_metrics_if_any(chunk)?;
+                if streamed::introduces_dummies(chunk, contracted.as_view()) {
+                    introduced = true;
+                    return Err(eyre!("a metric contraction introduced a dummy index"));
+                }
+                self.group_after_contraction(contracted.as_view(), &mut groups);
+                Ok(())
+            })
+        });
+        match outcome {
+            Ok(()) => Ok(Some(groups)),
+            Err(_) if introduced => Ok(None),
+            Err(error) => Err(error),
+        }
     }
 
     /// The whole map from the materialized integrand to the Vakint input, as
@@ -789,7 +1188,7 @@ impl TermRewrites {
         let expanded = materialized.expand();
         let contracted = Self::contract_metrics(expanded.as_view())?;
         drop(expanded);
-        Ok(self.after_contraction(contracted))
+        Ok(self.after_contraction_whole(contracted))
     }
 
     /// [`Self::whole`] on pieces of the expansion of `materialized`, in
@@ -802,7 +1201,7 @@ impl TermRewrites {
         let mut introduced = false;
         let outcome = streamed::expand_in_pieces(materialized, limit, &mut |piece| {
             streamed::for_each_summand_chunk(piece.as_view(), limit, &mut |chunk| {
-                let contracted = Self::contract_metrics_if_any(chunk)?;
+                let contracted = self.contract_metrics_if_any(chunk)?;
                 if streamed::introduces_dummies(chunk, contracted.as_view()) {
                     introduced = true;
                     return Err(eyre!("a metric contraction introduced a dummy index"));
@@ -844,6 +1243,7 @@ pub(crate) fn to_vakint_integrand<
     let materialized = Integrated::materialize_tensor(&integrand)?;
     // An integrand passed by value is not needed any more.
     drop(integrand);
+    let census_materialized_bytes = materialized.as_view().get_byte_size();
     let materialization_seconds = started.elapsed().as_secs_f64();
     drop(materialization_stage);
     debug_tags!(#uv, #integrated, #vakint, #trace;
@@ -907,15 +1307,31 @@ pub(crate) fn to_vakint_integrand<
         propagators,
         contracted_nodes,
         substitute_masses_to_m_uv,
+        denominator_rewrites: Default::default(),
+        contraction_images: Default::default(),
+        rewritten_summands: Default::default(),
+        topology_images: Default::default(),
     };
 
     // A large integrand is expanded, contracted and rewritten in pieces, so
     // that neither its unmerged expansion nor a cooked copy, observation map
     // or contraction of the whole expansion is alive at once.
     let limit = streamed::piece_limit();
+    // The summands are collected per topology directly
+    // (`GAMMALOOP_ALGEBRA_LEGACY=topology_groups` builds and splits the whole
+    // Vakint sum as before).
+    let grouped_mode = !streamed::legacy("topology_groups") && !streamed::legacy("term_rewrites");
+    let check_groups = grouped_mode && streamed::check("topology_groups");
+    let check_reference = check_groups.then(|| materialized.clone());
+    let mut grouped: Option<TopologyGroups> = None;
     let streamed_input = if materialized.as_view().get_byte_size() >= limit {
         let expansion_stage = StageSpan::new("gamma.adaptor.expand");
-        let streamed_input = rewrites.streamed(materialized.as_view(), limit)?;
+        let streamed_input = if grouped_mode {
+            grouped = rewrites.streamed_grouped(materialized.as_view(), limit)?;
+            None
+        } else {
+            rewrites.streamed(materialized.as_view(), limit)?
+        };
         drop(expansion_stage);
         if let Some(streamed_input) = &streamed_input
             && streamed::check_streamed(materialized.as_view())
@@ -928,7 +1344,11 @@ pub(crate) fn to_vakint_integrand<
         None
     };
     let (vakint_input_atom, expansion_seconds, metric_seconds, topology_seconds) =
-        if let Some(streamed_input) = streamed_input {
+        if grouped.is_some() {
+            drop(materialized);
+            let seconds = started.elapsed().as_secs_f64() - materialization_seconds;
+            (Atom::Zero, seconds, 0.0, 0.0)
+        } else if let Some(streamed_input) = streamed_input {
             drop(materialized);
             let seconds = started.elapsed().as_secs_f64() - materialization_seconds;
             (streamed_input, seconds, 0.0, 0.0)
@@ -949,7 +1369,9 @@ pub(crate) fn to_vakint_integrand<
 
             let metrics_started = Instant::now();
             let metric_stage = StageSpan::new("gamma.adaptor.metric_contraction");
-            let contracted = TermRewrites::contract_metrics(integrand_vakint.as_view())?;
+            streamed::dump("contract_metrics", integrand_vakint.as_view());
+            let contracted =
+                rewrites.contract_metrics_by_indexed_factors(integrand_vakint.as_view())?;
             drop(integrand_vakint);
             let integrand_vakint = contracted;
             let metric_seconds = metrics_started.elapsed().as_secs_f64();
@@ -964,32 +1386,40 @@ pub(crate) fn to_vakint_integrand<
 
             let topology_started = Instant::now();
             let topology_stage = StageSpan::new("gamma.adaptor.propagator_topology");
-            let integrand_vakint = rewrites.denominators_to_propagators(integrand_vakint);
-            debug_tags!(#uv, #integrated, #vakint, #trace;
-                stage = "to_vakint_integrand_after_den_to_prop",
-                reduced = %reduced_label,
-                dependent_subgraph = %dependent_subgraph_label,
-                log.integrand = integrand_vakint,
-                "Vakint trace after denominator-to-propagator conversion"
-            );
-            let integrand_vakint = rewrites.shrink_subgraph(integrand_vakint);
-            debug_tags!(#uv, #integrated, #vakint, #trace;
-                stage = "to_vakint_integrand_after_shrink_subgraph",
-                reduced = %reduced_label,
-                dependent_subgraph = %dependent_subgraph_label,
-                log.integrand = integrand_vakint,
-                "Vakint trace after shrinking subgraph"
-            );
-            let integrand_vakint = TermRewrites::flip_and_fuse(integrand_vakint);
-            debug_tags!(#uv, #integrated, #vakint, #trace;
-                stage = "to_vakint_integrand_after_flip_fuse",
-                reduced = %reduced_label,
-                dependent_subgraph = %dependent_subgraph_label,
-                log.integrand = integrand_vakint,
-                "Vakint trace after edge flip and fuse"
-            );
-            let vakint_input_atom = TermRewrites::wrap_topologies(&integrand_vakint);
-            drop(integrand_vakint);
+            let vakint_input_atom = if grouped_mode {
+                let mut groups = TopologyGroups::default();
+                rewrites.group_after_contraction(integrand_vakint.as_view(), &mut groups);
+                grouped = Some(groups);
+                Atom::Zero
+            } else if !streamed::legacy("term_rewrites") {
+                rewrites.after_contraction(integrand_vakint)
+            } else {
+                let integrand_vakint = rewrites.denominators_to_propagators(integrand_vakint);
+                debug_tags!(#uv, #integrated, #vakint, #trace;
+                    stage = "to_vakint_integrand_after_den_to_prop",
+                    reduced = %reduced_label,
+                    dependent_subgraph = %dependent_subgraph_label,
+                    log.integrand = integrand_vakint,
+                    "Vakint trace after denominator-to-propagator conversion"
+                );
+                let integrand_vakint = rewrites.shrink_subgraph(integrand_vakint);
+                debug_tags!(#uv, #integrated, #vakint, #trace;
+                    stage = "to_vakint_integrand_after_shrink_subgraph",
+                    reduced = %reduced_label,
+                    dependent_subgraph = %dependent_subgraph_label,
+                    log.integrand = integrand_vakint,
+                    "Vakint trace after shrinking subgraph"
+                );
+                let integrand_vakint = TermRewrites::flip_and_fuse(integrand_vakint);
+                debug_tags!(#uv, #integrated, #vakint, #trace;
+                    stage = "to_vakint_integrand_after_flip_fuse",
+                    reduced = %reduced_label,
+                    dependent_subgraph = %dependent_subgraph_label,
+                    log.integrand = integrand_vakint,
+                    "Vakint trace after edge flip and fuse"
+                );
+                TermRewrites::wrap_topologies(&integrand_vakint)
+            };
             let topology_seconds = topology_started.elapsed().as_secs_f64();
             drop(topology_stage);
             (
@@ -1007,10 +1437,39 @@ pub(crate) fn to_vakint_integrand<
         "Vakint trace before split terms"
     );
 
+    let census_input = vakint::census::enabled().then(|| {
+        (
+            vakint::census::summands(vakint_input_atom.as_view()),
+            vakint_input_atom.as_view().get_byte_size(),
+        )
+    });
     let split_started = Instant::now();
     let split_stage = StageSpan::new("gamma.adaptor.split_terms");
-    let mut a = VakintExpression::try_from(vakint_input_atom)
-        .wrap_err("could not split integrand into Vakint terms")?;
+    let mut a = if let Some(groups) = grouped {
+        groups.into_expression()?
+    } else {
+        VakintExpression::try_from(vakint_input_atom)
+            .wrap_err("could not split integrand into Vakint terms")?
+    };
+    if let Some(materialized) = check_reference {
+        let reference = VakintExpression::try_from(rewrites.whole(materialized.as_view())?)
+            .wrap_err("could not split integrand into Vakint terms")?;
+        let sorted = |expression: &VakintExpression| {
+            let mut terms = expression
+                .0
+                .iter()
+                .map(|term| (term.integral.clone(), term.numerator.clone(), term.vectors.clone()))
+                .collect::<Vec<_>>();
+            terms.sort_by(|x, y| x.0.cmp(&y.0));
+            terms
+        };
+        eprintln!(
+            "STREAM_CHECK stage=topology_groups bytes={} terms={} equal={}",
+            materialized.as_view().get_byte_size(),
+            a.0.len(),
+            sorted(&a) == sorted(&reference)
+        );
+    }
     let split_seconds = split_started.elapsed().as_secs_f64();
     drop(split_stage);
     let additional_normalization = parse!(&settings.additional_normalization);
@@ -1037,6 +1496,9 @@ pub(crate) fn to_vakint_integrand<
         .allow_new_wildcards_on_rhs(true),
     ];
     let mut graph_seconds = 0.0;
+    let mut notation_images = HashMap::new();
+    // The symbol renames do not depend on the term: one cache for all.
+    let mut rename_images = HashMap::new();
     let mut routing_seconds = 0.0;
     let mut notation_seconds = 0.0;
 
@@ -1217,9 +1679,25 @@ pub(crate) fn to_vakint_integrand<
         let momentum_solution =
             VakintMomentumSolution::solve(&system, &momentum_variables, &add_additional_args)
                 .wrap_err("could not solve momentum system for Vakint integrand")?;
-        t.numerator = t
-            .numerator
-            .replace_multiple(&momentum_solution.replacements);
+        let combinations = MOMENTUM_COMBINATIONS.with(|c| c.borrow().clone());
+        t.numerator = if combinations.is_empty() {
+            map_factors_switched(
+                "momentum_routing",
+                &t.numerator,
+                &mut std::collections::HashMap::new(),
+                &|factor| factor.replace_multiple(&momentum_solution.replacements),
+            )
+        } else {
+            map_factors_cached(
+                t.numerator.as_view(),
+                &mut std::collections::HashMap::new(),
+                &|factor| {
+                    factor
+                        .replace_multiple(&combinations)
+                        .replace_multiple(&momentum_solution.replacements)
+                },
+            )
+        };
         t.integral = momentum_solution.rewrite_integral(&t.integral, &add_additional_args);
         momentum_solution.ensure_free_variables_eliminated(
             term_index,
@@ -1263,9 +1741,34 @@ pub(crate) fn to_vakint_integrand<
         // to dot notation here, without reintroducing Schoonschip rank-1 factors.
         // Routing and loop normalization precede this one authoritative pass;
         // neither needs an intermediate cook/infer/to_dots/uncook cycle.
-        let notation =
-            SymbolicTensor::infer_indexed(cooking.try_cook(t.numerator.as_view())?)?.to_dots()?;
-        t.numerator = cooking.uncook(notation.expression().as_view());
+        streamed::dump("notation", t.numerator.as_view());
+        let notation_whole = |numerator: AtomView<'_>| -> Result<Atom> {
+            let notation =
+                SymbolicTensor::infer_indexed(cooking.try_cook(numerator)?)?.to_dots()?;
+            Ok(cooking.uncook(notation.expression().as_view()))
+        };
+        // Once per distinct product of indexed factors rather than one tensor
+        // network of the whole numerator (`streamed::map_indexed_factors`).
+        // `GAMMALOOP_ALGEBRA_LEGACY=dot_notation` restores the whole pass.
+        let notated = if streamed::legacy("dot_notation") {
+            notation_whole(t.numerator.as_view())?
+        } else {
+            let mapped = streamed::map_indexed_factors(
+                t.numerator.as_view(),
+                &mut notation_images,
+                &notation_whole,
+            )?;
+            let notated = match mapped {
+                Some(notated) => notated,
+                None => notation_whole(t.numerator.as_view())?,
+            };
+            if streamed::check("dot_notation") {
+                let whole = notation_whole(t.numerator.as_view())?;
+                streamed::report_check("dot_notation", t.numerator.as_view(), &notated, &whole);
+            }
+            notated
+        };
+        t.numerator = notated;
         debug_tags!(#uv, #integrated, #vakint, #trace;
             stage = "to_vakint_integrand_term_after_metric_shorthand_to_dot",
             term_index = %term_index,
@@ -1281,28 +1784,30 @@ pub(crate) fn to_vakint_integrand<
             .with(function!(vakint::symbols::S.k, W_.x___))
             .replace(function!(GS.emr_mom, W_.x___))
             .with(function!(vakint::symbols::S.p, W_.x___));
-        t.numerator = t
-            .numerator
-            .replace(function!(GS.loop_mom, W_.x___))
-            .with(function!(vakint::symbols::S.k, W_.x___))
-            .replace(function!(GS.emr_mom, W_.x___))
-            .with(function!(vakint::symbols::S.p, W_.x___))
-            .replace(function!(
-                SPENSO_TAG.dot,
-                function!(W_.a_, W_.a___, Minkowski {}.new_rep(GS.dim).to_symbolic([])),
-                function!(W_.b_, W_.b___, Minkowski {}.new_rep(GS.dim).to_symbolic([]))
-            ))
-            .with(vakint::symbols::S.dot(function!(W_.a_, W_.a___), function!(W_.b_, W_.b___)))
-            .replace(function!(
-                ETS.metric,
-                Minkowski {}.to_symbolic([W_.a__]),
-                Minkowski {}.to_symbolic([W_.b__])
-            ))
-            .with(function!(
-                vakint::symbols::S.metric,
-                Minkowski {}.to_symbolic([W_.a__]),
-                Minkowski {}.to_symbolic([W_.b__])
-            ));
+        let rename = |numerator: AtomView<'_>| {
+            numerator
+                .replace(function!(GS.loop_mom, W_.x___))
+                .with(function!(vakint::symbols::S.k, W_.x___))
+                .replace(function!(GS.emr_mom, W_.x___))
+                .with(function!(vakint::symbols::S.p, W_.x___))
+                .replace(function!(
+                    SPENSO_TAG.dot,
+                    function!(W_.a_, W_.a___, Minkowski {}.new_rep(GS.dim).to_symbolic([])),
+                    function!(W_.b_, W_.b___, Minkowski {}.new_rep(GS.dim).to_symbolic([]))
+                ))
+                .with(vakint::symbols::S.dot(function!(W_.a_, W_.a___), function!(W_.b_, W_.b___)))
+                .replace(function!(
+                    ETS.metric,
+                    Minkowski {}.to_symbolic([W_.a__]),
+                    Minkowski {}.to_symbolic([W_.b__])
+                ))
+                .with(function!(
+                    vakint::symbols::S.metric,
+                    Minkowski {}.to_symbolic([W_.a__]),
+                    Minkowski {}.to_symbolic([W_.b__])
+                ))
+        };
+        t.numerator = map_factors_switched("vakint_symbols", &t.numerator, &mut rename_images, &rename);
         notation_seconds += notation_started.elapsed().as_secs_f64();
         drop(notation_stage);
         debug_tags!(#uv, #integrated, #vakint, #trace;
@@ -1316,6 +1821,50 @@ pub(crate) fn to_vakint_integrand<
         );
     }
 
+    if let Some((output_summands, output_bytes)) = census_input {
+        let (rewritten_summands, rewritten_bytes) = rewrites.rewritten_summands.get();
+        let numerator_summands = a
+            .0
+            .iter()
+            .map(|t| vakint::census::summands(t.numerator.as_view()))
+            .sum::<usize>();
+        let numerator_bytes = a
+            .0
+            .iter()
+            .map(|t| t.numerator.as_view().get_byte_size())
+            .sum::<usize>();
+        let max_numerator_summands = a
+            .0
+            .iter()
+            .map(|t| vakint::census::summands(t.numerator.as_view()))
+            .max()
+            .unwrap_or(0);
+        vakint::census::record(
+            "to_vakint",
+            serde_json::json!({
+                "materialized_bytes": census_materialized_bytes,
+                "rewritten_summands": rewritten_summands,
+                "rewritten_bytes": rewritten_bytes,
+                "distinct_denominator_products": rewrites.denominator_rewrites.borrow().len(),
+                "distinct_indexed_products": rewrites.contraction_images.borrow().len(),
+                "distinct_notation_products": notation_images.len(),
+                "output_summands": output_summands,
+                "output_bytes": output_bytes,
+                "terms": a.0.len(),
+                "numerator_summands": numerator_summands,
+                "max_numerator_summands": max_numerator_summands,
+                "numerator_bytes": numerator_bytes,
+                "seconds": started.elapsed().as_secs_f64(),
+                "materialization_seconds": materialization_seconds,
+                "expansion_seconds": expansion_seconds,
+                "metric_seconds": metric_seconds,
+                "topology_seconds": topology_seconds,
+                "split_seconds": split_seconds,
+                "routing_seconds": routing_seconds,
+                "notation_seconds": notation_seconds,
+            }),
+        );
+    }
     tracing::info!(
         uv = true,
         integrated = true,

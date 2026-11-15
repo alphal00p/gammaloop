@@ -18,7 +18,10 @@ use symbolica::{
 };
 use vakint::{
     EvaluationMethod, RustRedMasterMode, TensorReductionMethod, Vakint, VakintExpression,
-    VakintSettings, p_integral::MassiveClosure, symbols::S, vakint_parse,
+    VakintSettings,
+    p_integral::{DirectClosureInput, MassiveClosure},
+    symbols::S,
+    vakint_parse,
 };
 
 use crate::uv::approx::integrated::Integrated;
@@ -45,6 +48,19 @@ pub fn integrate_single_mass(
     let mut result = Atom::Zero;
     let mut closures = Vec::new();
     let mut closure_bytes = 0_usize;
+    // `GAMMALOOP_LOWERING=legacy` builds every closure input here, as before.
+    let direct_lowering = !crate::uv::approx::streamed::legacy("direct_lowering");
+    let mut direct = Vec::new();
+    let mut direct_bytes = 0_usize;
+    // The projector image of every distinct product of tensor factors.
+    let mut tensor_images = std::collections::HashMap::<(Atom, Atom), Atom>::new();
+    // Census: (summands, bytes) before and after the tensor projector and of
+    // the closure inputs.
+    let census = vakint::census::enabled();
+    let mut census_source = (0_usize, 0_usize);
+    let mut census_tensor = (0_usize, 0_usize);
+    let mut census_closure = (0_usize, 0_usize, 0_usize);
+    let mut census_topologies = BTreeSet::new();
     for source in &input.0 {
         if source.numerator.is_zero() {
             timing.zero_terms += 1;
@@ -93,11 +109,54 @@ pub fn integrate_single_mass(
         }
         let tensor_started = Instant::now();
         let mut term = source.clone();
-        term.tensor_reduce(vakint, &tensor_settings)
-            .wrap_err("while applying the existing vacuum tensor projector to an R* remainder")?;
-        // Lorentz representation metadata is constant during the following
-        // Laurent expansion; only scalar evanescent coefficients may expand.
-        term.numerator = Integrated::restore_lorentz_dimensions(&term.numerator);
+        let factored = if direct_lowering && !crate::uv::approx::streamed::legacy("tensor_factors") {
+            tensor_reduce_by_factors(vakint, &tensor_settings, source, &mut tensor_images)?
+        } else {
+            None
+        };
+        if let Some(factored) = factored {
+            if crate::uv::approx::streamed::check("tensor_factors") {
+                let mut whole = source.clone();
+                whole
+                    .tensor_reduce(vakint, &tensor_settings)
+                    .wrap_err("while applying the existing vacuum tensor projector")?;
+                let whole = Integrated::restore_lorentz_dimensions(&whole.numerator);
+                let equal = (&factored - &whole).expand().is_zero();
+                eprintln!(
+                    "STREAM_CHECK stage=tensor_factors bytes={} equal={equal}",
+                    source.numerator.as_view().get_byte_size()
+                );
+            }
+            term.numerator = factored;
+        } else {
+            term.tensor_reduce(vakint, &tensor_settings).wrap_err(
+                "while applying the existing vacuum tensor projector to an R* remainder",
+            )?;
+            // Lorentz representation metadata is constant during the following
+            // Laurent expansion; only scalar evanescent coefficients may expand.
+            term.numerator = Integrated::restore_lorentz_dimensions(&term.numerator);
+        }
+        crate::uv::approx::streamed::dump("closure_numerator", term.numerator.as_view());
+        crate::uv::approx::streamed::dump("closure_topology", cut.integrand.as_view());
+        crate::uv::approx::streamed::dump(
+            "closure_routing",
+            Atom::mul_many(
+                cut.routing_pairs
+                    .iter()
+                    .map(|(head, image)| function!(symbolica::symbol!("rr"), head, image))
+                    .collect::<Vec<_>>()
+                    .iter()
+                    .map(|a| a.as_view()),
+            )
+            .as_view(),
+        );
+        if census {
+            census_source.0 += vakint::census::summands(source.numerator.as_view());
+            census_source.1 += source.numerator.as_view().get_byte_size();
+            census_tensor.0 += vakint::census::summands(term.numerator.as_view());
+            census_tensor.1 += term.numerator.as_view().get_byte_size();
+            census_topologies.insert(cut.integrand.clone());
+        }
         timing.tensor += tensor_started.elapsed();
         timing.integrated_terms += 1;
         if settings.verify_numerator_identification {
@@ -116,10 +175,44 @@ pub fn integrate_single_mass(
         // tensor spectators. Keeping their coefficients here lets its Laurent
         // expansion include insertion poles before truncating the full product.
         let preparation_started = Instant::now();
+        if direct_lowering && matches!(cut.integrand.as_view(), AtomView::Fun(_)) {
+            // The routing and the expansion are applied by the p-integral
+            // owner's direct lowering, onto the canonical family at once.
+            let input_bytes = term.numerator.as_view().get_byte_size();
+            timing.closure_preparation += preparation_started.elapsed();
+            if census {
+                census_closure.1 += input_bytes;
+                census_closure.2 += 1;
+            }
+            if direct_bytes.saturating_add(input_bytes) > 16 << 20 {
+                flush_direct(vakint, settings, &mut direct, &mut timing, &mut result)?;
+                direct_bytes = 0;
+            }
+            direct_bytes = direct_bytes.saturating_add(input_bytes);
+            direct.push((
+                cut.closure,
+                DirectClosureInput {
+                    topology: cut.integrand,
+                    routing: cut.routing_pairs,
+                    numerator: term.numerator,
+                },
+            ));
+            if direct.len() == 32 || direct_bytes >= 16 << 20 {
+                flush_direct(vakint, settings, &mut direct, &mut timing, &mut result)?;
+                direct_bytes = 0;
+            }
+            continue;
+        }
+        let preparation_started = Instant::now();
         let numerator = term.numerator.replace_multiple(&cut.routing).expand();
         let input = numerator * &cut.integrand;
         timing.closure_preparation += preparation_started.elapsed();
         let input_bytes = input.as_view().get_byte_size();
+        if census {
+            census_closure.0 += vakint::census::summands(numerator_census(&input));
+            census_closure.1 += input_bytes;
+            census_closure.2 += 1;
+        }
         if closure_bytes.saturating_add(input_bytes) > 16 << 20 {
             flush_closures(vakint, settings, &mut closures, &mut timing, &mut result)?;
             closure_bytes = 0;
@@ -132,9 +225,33 @@ pub fn integrate_single_mass(
         }
     }
     flush_closures(vakint, settings, &mut closures, &mut timing, &mut result)?;
+    flush_direct(vakint, settings, &mut direct, &mut timing, &mut result)?;
     let combine_started = Instant::now();
     let result = result.expand();
     timing.combine += combine_started.elapsed();
+    if census {
+        vakint::census::record(
+            "single_mass",
+            serde_json::json!({
+                "source_terms": input.0.len(),
+                "integrated_terms": timing.integrated_terms,
+                "source_summands": census_source.0,
+                "source_bytes": census_source.1,
+                "tensor_summands": census_tensor.0,
+                "tensor_bytes": census_tensor.1,
+                "closure_summands": census_closure.0,
+                "closure_bytes": census_closure.1,
+                "closures": census_closure.2,
+                "distinct_cut_topologies": census_topologies.len(),
+                "result_summands": vakint::census::summands(result.as_view()),
+                "result_bytes": result.as_view().get_byte_size(),
+                "tensor_seconds": timing.tensor.as_secs_f64(),
+                "closure_preparation_seconds": timing.closure_preparation.as_secs_f64(),
+                "closure_backend_seconds": timing.closure_backend.as_secs_f64(),
+                "seconds": started.elapsed().as_secs_f64(),
+            }),
+        );
+    }
     tracing::info!(
         uv = true,
         rstar = true,
@@ -160,6 +277,175 @@ pub fn integrate_single_mass(
         "Integrated single-mass R* remainder"
     );
     Ok(result)
+}
+
+/// Whether a numerator factor is a closed scalar of the vacuum tensor
+/// projector: numbers, symbols and products, sums and powers of
+/// `dot(k(i),k(j))`, `dot(p(i),p(j))` and functions without vectors.
+fn closed_scalar(factor: AtomView<'_>) -> bool {
+    match factor {
+        AtomView::Num(_) | AtomView::Var(_) => true,
+        AtomView::Add(sum) => sum.iter().all(closed_scalar),
+        AtomView::Mul(product) => product.iter().all(closed_scalar),
+        AtomView::Pow(power) => {
+            let (base, exponent) = power.get_base_exp();
+            closed_scalar(base) && closed_scalar(exponent)
+        }
+        AtomView::Fun(function) => {
+            let symbol = function.get_symbol();
+            if symbol == S.dot && function.get_nargs() == 2 {
+                fn bare_vector(argument: AtomView<'_>) -> bool {
+                    matches!(argument, AtomView::Fun(vector)
+                        if (vector.get_symbol() == S.k || vector.get_symbol() == S.p)
+                            && vector.get_nargs() == 1
+                            && matches!(vector.get(0), AtomView::Num(_)))
+                }
+                // A vector or a rational linear combination of one kind of
+                // vectors (loop or external): a sum of closed scalar products.
+                let bare = |argument: AtomView<'_>| match argument {
+                    AtomView::Add(sum) => {
+                        let terms = sum.iter().collect::<Vec<_>>();
+                        let single = |term: AtomView<'_>| match term {
+                            AtomView::Mul(product) => {
+                                let factors = product.iter().collect::<Vec<_>>();
+                                matches!(factors.as_slice(),
+                                    [AtomView::Num(_), v] | [v, AtomView::Num(_)] if bare_vector(*v))
+                            }
+                            other => bare_vector(other),
+                        };
+                        terms.iter().all(|t| single(*t))
+                            && (terms.iter().all(|t| t.contains_symbol(S.k))
+                                || terms.iter().all(|t| !t.contains_symbol(S.k)))
+                    }
+                    other => bare_vector(other),
+                };
+                let (a, b) = (function.get(0), function.get(1));
+                // A loop momentum contracted with an external vector carries
+                // integrated rank.
+                return bare(a) && bare(b) && (a.contains_symbol(S.k) == b.contains_symbol(S.k));
+            }
+            !factor.contains_symbol(S.k)
+                && !factor.contains_symbol(S.p)
+                && !factor.contains_symbol(S.g)
+                && !factor.contains_symbol(S.metric)
+                && !factor.contains_symbol(S.dot)
+                && function.iter().all(closed_scalar)
+        }
+    }
+}
+
+/// [`VakintTerm::tensor_reduce`] (with the dimension restoration) of a vacuum
+/// term, applied once per distinct product of the factors of a summand that
+/// are not closed scalars (open indices, loop momenta contracted with
+/// external vectors, metrics). The projector is linear in the closed scalars
+/// (`∫ T(k) S(k_i·k_j) = P[T] S`), so every summand `S·T` becomes `S·P[T]`;
+/// the result is left unexpanded for the direct lowering.
+fn tensor_reduce_by_factors(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    source: &vakint::VakintTerm,
+    images: &mut std::collections::HashMap<(Atom, Atom), Atom>,
+) -> Result<Option<Atom>> {
+    let summands = match source.numerator.as_view() {
+        AtomView::Add(sum) => sum.iter().collect::<Vec<_>>(),
+        single => vec![single],
+    };
+    // Summands grouped by their tensor product: Σ_T (Σ S) · P[T], so that
+    // every projector image appears once in the result.
+    let mut order = Vec::<Atom>::new();
+    let mut groups = std::collections::HashMap::<Atom, Vec<Atom>>::new();
+    let mut scalar_terms = Vec::new();
+    let mut any_tensor = false;
+    for summand in summands {
+        let factors = match summand {
+            AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+            single => vec![single],
+        };
+        let (scalars, tensors): (Vec<_>, Vec<_>) =
+            factors.into_iter().partition(|factor| closed_scalar(*factor));
+        if tensors.is_empty() {
+            scalar_terms.push(summand.to_owned());
+            continue;
+        }
+        any_tensor = true;
+        let tensor = Atom::mul_many(tensors.iter().copied());
+        let scalar = Atom::mul_many(scalars.iter().copied());
+        match groups.get_mut(&tensor) {
+            Some(list) => list.push(scalar),
+            None => {
+                order.push(tensor.clone());
+                groups.insert(tensor, vec![scalar]);
+            }
+        }
+    }
+    if !any_tensor {
+        // A numerator of closed scalars is its own projection.
+        return Ok(Some(source.numerator.clone()));
+    }
+    let mut terms = scalar_terms;
+    for tensor in order {
+        let scalars = groups.remove(&tensor).unwrap_or_default();
+        let key = (source.integral.clone(), tensor);
+        let image = match images.get(&key) {
+            Some(image) => image.clone(),
+            None => {
+                let mut term = vakint::VakintTerm {
+                    integral: source.integral.clone(),
+                    numerator: key.1.clone(),
+                    vectors: source.vectors.clone(),
+                };
+                term.tensor_reduce(vakint, settings).wrap_err(
+                    "while applying the existing vacuum tensor projector to an R* remainder",
+                )?;
+                let image = Integrated::restore_lorentz_dimensions(&term.numerator);
+                images.insert(key, image.clone());
+                image
+            }
+        };
+        if image.is_zero() {
+            continue;
+        }
+        let scalar = Atom::add_many(scalars.iter());
+        if !scalar.is_zero() {
+            terms.push(scalar * image);
+        }
+    }
+    Ok(Some(Atom::add_many(terms.iter())))
+}
+
+/// The numerator sum of a closure input `numerator * topo(...)`.
+fn numerator_census(input: &Atom) -> AtomView<'_> {
+    if let AtomView::Mul(product) = input.as_view() {
+        for factor in product.iter() {
+            if matches!(factor, AtomView::Add(_)) {
+                return factor;
+            }
+        }
+    }
+    input.as_view()
+}
+
+fn flush_direct(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    closures: &mut Vec<(MassiveClosure, DirectClosureInput)>,
+    timing: &mut SingleMassTiming,
+    result: &mut Atom,
+) -> Result<()> {
+    if !closures.is_empty() {
+        let backend_started = Instant::now();
+        let integrated = MassiveClosure::evaluate_direct_batch(vakint, settings, closures)
+            .wrap_err("while integrating an R* remainder through a massless p-integral")?;
+        timing.closure_backend += backend_started.elapsed();
+        timing.closure_calls += closures.len();
+        let combine_started = Instant::now();
+        for value in integrated {
+            *result += value;
+        }
+        timing.combine += combine_started.elapsed();
+        closures.clear();
+    }
+    Ok(())
 }
 
 fn flush_closures(
@@ -257,6 +543,8 @@ impl VacuumLine {
 struct VacuumCut {
     closure: MassiveClosure,
     routing: Vec<Replacement>,
+    /// `routing` as (vacuum loop momentum `k(i)`, its image in the cut basis).
+    routing_pairs: Vec<(Atom, Atom)>,
     integrand: Atom,
     scaleless: bool,
     loops: usize,
@@ -433,19 +721,22 @@ impl VacuumCut {
             .find(|index| !external_ids.contains(&Atom::num(*index)))
             .expect("a finite numerator leaves unused momentum identifiers");
         let hard = function!(S.p, hard_index);
-        let mut routing = heads
+        let mut routing_pairs = heads
             .iter()
             .filter(|head| *head != pivot)
             .enumerate()
-            .map(|(index, head)| Replacement::new(head.to_pattern(), function!(S.k, index + 1)))
+            .map(|(index, head)| (head.clone(), function!(S.k, index + 1)))
+            .collect::<Vec<_>>();
+        let mut routing = routing_pairs
+            .iter()
+            .map(|(head, image)| Replacement::new(head.to_pattern(), image.clone()))
             .collect::<Vec<_>>();
         let rest = (&massive.momentum - Atom::num(sign) * pivot)
             .expand()
             .replace_multiple(&routing);
-        routing.push(Replacement::new(
-            pivot.to_pattern(),
-            Atom::num(sign) * (&hard - rest),
-        ));
+        let pivot_image = Atom::num(sign) * (&hard - rest);
+        routing.push(Replacement::new(pivot.to_pattern(), pivot_image.clone()));
+        routing_pairs.push((pivot.clone(), pivot_image));
         let mut propagators = Atom::one();
         let mut radial = Atom::one();
         let mut has_loop = false;
@@ -474,6 +765,7 @@ impl VacuumCut {
                 power: massive.power,
             },
             routing,
+            routing_pairs,
             integrand: if has_loop {
                 function!(S.topo, propagators)
             } else {

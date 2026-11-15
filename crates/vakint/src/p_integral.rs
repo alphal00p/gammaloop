@@ -53,11 +53,11 @@ pub use forcer::benchmark as forcer_benchmark;
 #[doc(hidden)]
 pub use forcer::fixtures as forcer_fixtures;
 pub(crate) use input::{Normalized, PGraph, PLine};
-pub use massive::MassiveClosure;
 pub use master_catalogue::{
     P_MASTER_CATALOGUE_SCHEMA, P_MASTER_CATALOGUE_VERSION, P_MASTER_NORMALISATION,
     PMasterCatalogue, PMasterCatalogueError,
 };
+pub use massive::{DirectClosureInput, LoweredClosure, MassiveClosure};
 
 pub(crate) fn invalid(detail: impl std::fmt::Display) -> VakintError {
     VakintError::InvalidIntegralFormat(format!("p-integral: {detail}"))

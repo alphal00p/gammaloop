@@ -374,7 +374,9 @@ impl PropagatorInsertionEvaluator {
             if let Some(cache) = &self.counterterm_cache {
                 plan = plan.with_counterterm_cache(cache.clone());
             }
-            plan.pole_part(&graph, surrogate.model(), vakint, &self.settings)
+            super::expression::in_dressed_scope(|| {
+                plan.pole_part(&graph, surrogate.model(), vakint, &self.settings)
+            })
         }
         .wrap_err("while evaluating the scalar-bubble surrogate's bare poles")?;
         let poles = prepared.restore_atom(&poles)?;

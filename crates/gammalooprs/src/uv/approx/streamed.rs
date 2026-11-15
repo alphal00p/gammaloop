@@ -310,10 +310,106 @@ pub(crate) fn expand_in_pieces(
     limit: usize,
     sink: &mut dyn FnMut(Atom) -> Result<()>,
 ) -> Result<()> {
-    if expression.get_byte_size() < limit || has_opaque_composite_power(expression) {
+    if expression.get_byte_size() < limit {
+        return sink(expression.expand());
+    }
+    let blocked = if legacy("opaque_pieces") {
+        has_opaque_composite_power(expression)
+    } else {
+        opaque_power_blocks_pieces(expression)
+    };
+    if blocked {
         return sink(expression.expand());
     }
     expand_pieces_unchecked(expression, limit, sink)
+}
+
+/// Whether distributing `expression` in pieces could cancel an opaque
+/// composite power (see [`has_opaque_composite_power`]) that `expand` keeps.
+///
+/// The pieces multiply chunks of consecutive summands of a sum (or the sum
+/// itself) with the other factors of its product; a normalized product
+/// merges only factors with the same base, and the only merge that `expand`
+/// never makes is a chunk `B` with an opaque power `B^e` (`e` not a positive
+/// integer). Merges of a chunk with a positive integer power give the same
+/// expansion. A chunk is a sum of terms of one sum of the expression, so it
+/// can equal `B` only if some sum of the expression holds every term of
+/// `B`. So the pieces are blocked iff an opaque power has a base that is not
+/// a sum, or a sum outside function arguments and outside the opaque bases
+/// holds every term of an opaque base. Without opaque powers nothing is
+/// blocked. `GAMMALOOP_ALGEBRA_LEGACY=opaque_pieces` blocks every
+/// expression with an opaque power, as before.
+fn opaque_power_blocks_pieces(expression: AtomView<'_>) -> bool {
+    let mut bases = Vec::<Vec<&[u8]>>::new();
+    let mut blocked = false;
+    expression.visitor(&mut |part| {
+        if blocked {
+            return false;
+        }
+        match part {
+            AtomView::Fun(_) => false,
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                if matches!(base, AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_))
+                    && !i64::try_from(exponent).is_ok_and(|exponent| exponent > 0)
+                {
+                    match base {
+                        AtomView::Add(sum) => {
+                            let mut terms =
+                                sum.iter().map(|term| term.get_data()).collect::<Vec<_>>();
+                            terms.sort_unstable();
+                            terms.dedup();
+                            bases.push(terms);
+                        }
+                        _ => blocked = true,
+                    }
+                    // The sums inside an opaque power are not distributed.
+                    return false;
+                }
+                true
+            }
+            _ => true,
+        }
+    });
+    if blocked {
+        return true;
+    }
+    if bases.is_empty() {
+        return false;
+    }
+    let all_terms = bases.iter().flatten().copied().collect::<HashSet<&[u8]>>();
+    expression.visitor(&mut |part| {
+        if blocked {
+            return false;
+        }
+        match part {
+            AtomView::Fun(_) => false,
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                // Opaque powers were collected above; their sums stay whole.
+                !(matches!(base, AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_))
+                    && !i64::try_from(exponent).is_ok_and(|exponent| exponent > 0))
+            }
+            AtomView::Add(sum) => {
+                let present = sum
+                    .iter()
+                    .map(|term| term.get_data())
+                    .filter(|term| all_terms.contains(term))
+                    .collect::<HashSet<_>>();
+                if !present.is_empty()
+                    && bases
+                        .iter()
+                        .any(|base| base.iter().all(|term| present.contains(term)))
+                {
+                    blocked = true;
+                    return false;
+                }
+                true
+            }
+            _ => true,
+        }
+    });
+    blocked
 }
 
 fn expand_pieces_unchecked(
@@ -330,7 +426,7 @@ fn expand_pieces_unchecked(
             let mut chunk = Vec::new();
             let mut chunk_bytes = 0;
             let flush = |chunk: &mut Vec<AtomView<'_>>,
-                             sink: &mut dyn FnMut(Atom) -> Result<()>|
+                         sink: &mut dyn FnMut(Atom) -> Result<()>|
              -> Result<()> {
                 match chunk[..] {
                     [] => Ok(()),
@@ -366,13 +462,14 @@ fn expand_pieces_unchecked(
             let terms = sum.iter().collect::<Vec<_>>();
             for part in terms.chunks(terms.len().div_ceil(PARTS)) {
                 let part = Atom::add_many(part.iter().copied());
-                let distributed = Atom::mul_many(factors.iter().enumerate().map(|(index, factor)| {
-                    if index == split {
-                        part.as_view()
-                    } else {
-                        *factor
-                    }
-                }));
+                let distributed =
+                    Atom::mul_many(factors.iter().enumerate().map(|(index, factor)| {
+                        if index == split {
+                            part.as_view()
+                        } else {
+                            *factor
+                        }
+                    }));
                 drop(part);
                 expand_pieces_unchecked(distributed.as_view(), limit, sink)?;
             }
@@ -399,7 +496,7 @@ pub(crate) fn for_each_summand_chunk(
     let mut chunk = Vec::new();
     let mut chunk_bytes = 0;
     let flush = |chunk: &mut Vec<AtomView<'_>>,
-                     visit: &mut dyn FnMut(AtomView<'_>) -> Result<()>|
+                 visit: &mut dyn FnMut(AtomView<'_>) -> Result<()>|
      -> Result<()> {
         match chunk[..] {
             [] => Ok(()),
@@ -441,9 +538,7 @@ impl SumAccumulator {
     }
 
     fn merge(&mut self) {
-        let merged = Atom::add_many(
-            std::iter::once(&self.accumulated).chain(self.pending.iter()),
-        );
+        let merged = Atom::add_many(std::iter::once(&self.accumulated).chain(self.pending.iter()));
         self.pending.clear();
         self.pending_bytes = 0;
         self.accumulated = merged;
@@ -455,4 +550,184 @@ impl SumAccumulator {
         }
         self.accumulated
     }
+}
+
+/// Names listed in `GAMMALOOP_ALGEBRA_LEGACY` (comma separated, or `all`)
+/// select the previous implementation of that algebra fast path, so that a
+/// regression can be bisected without a rebuild.
+pub(crate) fn legacy(name: &str) -> bool {
+    static LEGACY: LazyLock<Vec<String>> =
+        LazyLock::new(|| switch_list("GAMMALOOP_ALGEBRA_LEGACY"));
+    LEGACY.iter().any(|entry| entry == name || entry == "all")
+}
+
+/// Names listed in `GAMMALOOP_ALGEBRA_CHECK` (or `all`) also run the previous
+/// implementation and report on stderr whether both results are identical
+/// (`STREAM_CHECK stage=<name> ... equal=...`). Tests always check.
+pub(crate) fn check(name: &str) -> bool {
+    static CHECK: LazyLock<Vec<String>> = LazyLock::new(|| switch_list("GAMMALOOP_ALGEBRA_CHECK"));
+    cfg!(test) || CHECK.iter().any(|entry| entry == name || entry == "all")
+}
+
+fn switch_list(variable: &str) -> Vec<String> {
+    std::env::var(variable)
+        .map(|value| {
+            value
+                .split(',')
+                .map(|entry| entry.trim().to_owned())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Diagnostics: with `GAMMALOOP_ALGEBRA_DUMP=<directory>`, write the first
+/// `GAMMALOOP_ALGEBRA_DUMP_COUNT` (default 40) inputs that are smaller than
+/// `GAMMALOOP_ALGEBRA_DUMP_MAX_BYTES` (default 2 MB) to
+/// `<directory>/<stage>-<n>.txt`, only of `GAMMALOOP_ALGEBRA_DUMP_STAGE` if set.
+pub(crate) fn dump(stage: &str, expression: AtomView<'_>) {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static DIRECTORY: LazyLock<Option<String>> =
+        LazyLock::new(|| std::env::var("GAMMALOOP_ALGEBRA_DUMP").ok());
+    static COUNT: LazyLock<usize> = LazyLock::new(|| {
+        std::env::var("GAMMALOOP_ALGEBRA_DUMP_COUNT")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(40)
+    });
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    static STAGE: LazyLock<Option<String>> =
+        LazyLock::new(|| std::env::var("GAMMALOOP_ALGEBRA_DUMP_STAGE").ok());
+    static MAX_BYTES: LazyLock<usize> = LazyLock::new(|| {
+        std::env::var("GAMMALOOP_ALGEBRA_DUMP_MAX_BYTES")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(2 << 20)
+    });
+    let Some(directory) = DIRECTORY.as_ref() else {
+        return;
+    };
+    if STAGE
+        .as_ref()
+        .is_some_and(|only| !only.split(',').any(|entry| entry == stage))
+    {
+        return;
+    }
+    if expression.get_byte_size() > *MAX_BYTES {
+        return;
+    }
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    if n >= *COUNT {
+        return;
+    }
+    let _ = std::fs::write(
+        format!("{directory}/{stage}-{n}.txt"),
+        expression.to_canonical_string(),
+    );
+}
+
+/// `whole(expression)` for a map that acts summand by summand and, inside a
+/// summand, only on its factors with explicit (or compact) indices: tensor
+/// contraction and the dot-notation pass. A summand is a product `S * T` of
+/// index-free factors `S` (numbers, symbols, `dot`s, denominators) and
+/// indexed factors `T`; its image is `S * whole(T)`. The products `T` of a
+/// five-loop integrand take a handful of shapes (the open external vectors
+/// and metrics), so `whole` runs once per distinct `T`, cached in `images`,
+/// instead of building a tensor network of the whole sum. Normalized sums and
+/// products are canonical, so the rebuilt sum is the atom `whole` returns.
+/// Returns `None` if an image introduces a dummy index (numbered over the
+/// whole expression), so that the caller maps the whole expression.
+pub(crate) fn map_indexed_factors<'a>(
+    expression: AtomView<'a>,
+    images: &mut std::collections::HashMap<Atom, Atom>,
+    whole: &dyn Fn(AtomView<'_>) -> Result<Atom>,
+) -> Result<Option<Atom>> {
+    let mut matcher = SlotMatcher::default();
+    let mut scalars = Vec::new();
+    let mut indexed = Vec::new();
+    let mut map_term = |term: AtomView<'a>| -> Result<Option<Atom>> {
+        scalars.clear();
+        indexed.clear();
+        let factors = match term {
+            AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+            factor => vec![factor],
+        };
+        for factor in factors {
+            let interface = factor_interface(factor, &mut matcher);
+            if interface.indices.is_empty() && !interface.opaque {
+                scalars.push(factor);
+            } else {
+                indexed.push(factor);
+            }
+        }
+        let key = match indexed[..] {
+            [] => Atom::num(1),
+            [single] => single.to_owned(),
+            _ => Atom::mul_many(indexed.iter().copied()),
+        };
+        let image = match images.entry(key) {
+            std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                let image = whole(entry.key().as_view())?;
+                if introduces_dummies(entry.key().as_view(), image.as_view()) {
+                    return Ok(None);
+                }
+                entry.insert(image)
+            }
+        };
+        if scalars.is_empty() {
+            return Ok(Some(image.clone()));
+        }
+        Ok(Some(Atom::mul_many(
+            scalars
+                .iter()
+                .copied()
+                .chain(std::iter::once(image.as_view())),
+        )))
+    };
+    match expression {
+        AtomView::Add(sum) => {
+            let mut terms = Vec::with_capacity(sum.get_nargs());
+            for term in sum.iter() {
+                let Some(mapped) = map_term(term)? else {
+                    return Ok(None);
+                };
+                terms.push(mapped);
+            }
+            Ok(Some(Atom::add_many(terms.iter())))
+        }
+        term => map_term(term),
+    }
+}
+
+/// Diagnostics: with `GAMMALOOP_ALGEBRA_SIZES=<bytes>`, report on stderr the
+/// shape of every input of a stage of at least that many bytes
+/// (`ALGEBRA_SIZE stage=... bytes=... kind=... args=...`).
+pub(crate) fn report_size(stage: &str, expression: AtomView<'_>) {
+    static THRESHOLD: LazyLock<Option<usize>> = LazyLock::new(|| {
+        std::env::var("GAMMALOOP_ALGEBRA_SIZES")
+            .ok()
+            .and_then(|value| value.parse().ok())
+    });
+    let Some(threshold) = *THRESHOLD else {
+        return;
+    };
+    let bytes = expression.get_byte_size();
+    if bytes < threshold {
+        return;
+    }
+    let (kind, args) = match expression {
+        AtomView::Add(sum) => ("add", sum.get_nargs()),
+        AtomView::Mul(product) => ("mul", product.get_nargs()),
+        AtomView::Pow(_) => ("pow", 2),
+        AtomView::Fun(function) => ("fun", function.get_nargs()),
+        _ => ("leaf", 0),
+    };
+    let largest = match expression {
+        AtomView::Mul(product) => product.iter().map(|f| f.get_byte_size()).max().unwrap_or(0),
+        AtomView::Add(sum) => sum.iter().map(|f| f.get_byte_size()).max().unwrap_or(0),
+        _ => 0,
+    };
+    eprintln!(
+        "ALGEBRA_SIZE stage={stage} bytes={bytes} kind={kind} args={args} largest_arg_bytes={largest}"
+    );
 }

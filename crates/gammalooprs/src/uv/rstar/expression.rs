@@ -68,6 +68,14 @@ static UNSUPPORTED_PHYSICAL_MOMENTA: LazyLock<Vec<Symbol>> = LazyLock::new(|| {
         .collect()
 });
 
+static MEMORY_RELEASE: std::sync::OnceLock<fn()> = std::sync::OnceLock::new();
+
+/// Set by the host binary to return freed allocator memory to the kernel at
+/// once; used before the hard Taylor fallback (`simplify_hard_taylor`).
+pub fn set_memory_release(release: fn()) {
+    let _ = MEMORY_RELEASE.set(release);
+}
+
 /// Exclusive wall-clock stages within one outer integral. Backend time may
 /// contain its own finer timing events; those must not be added to this total.
 struct IntegrationTimings {
@@ -128,7 +136,152 @@ impl IntegrationTimings {
             finish_seconds = self.finish,
             "Outer integration stage timings"
         );
+        if vakint::census::enabled() {
+            vakint::census::record(
+                "outer_integration",
+                serde_json::json!({
+                    "kind": kind,
+                    "loops": loops,
+                    "total_seconds": self.started.elapsed().as_secs_f64(),
+                    "routing_seconds": self.routing,
+                    "taylor_seconds": self.taylor,
+                    "tensor_projection_seconds": self.tensor_projection,
+                    "algebra_seconds": self.algebra,
+                    "conversion_seconds": self.conversion,
+                    "backend_seconds": self.backend,
+                    "finish_seconds": self.finish,
+                }),
+            );
+        }
     }
+}
+
+/// `GAMMALOOP_EDGE_CONTRACTION=<list>` (`hard`, `remainder`, `all`): contract
+/// those R* expressions with edge momenta independent
+/// ([`RStarIntegrand::simplify_edge_basis`]).
+/// The edge-contraction checks skip inputs above
+/// `GAMMALOOP_EDGE_CHECK_MAX_BYTES` (those the loop basis cannot finish).
+fn edge_check_admits(expression: &Atom) -> bool {
+    static MAX: LazyLock<usize> = LazyLock::new(|| {
+        std::env::var("GAMMALOOP_EDGE_CHECK_MAX_BYTES")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(usize::MAX)
+    });
+    let admitted = expression.as_view().get_byte_size() <= *MAX;
+    if !admitted {
+        eprintln!(
+            "STREAM_CHECK stage=edge_skipped bytes={}",
+            expression.as_view().get_byte_size()
+        );
+    }
+    admitted
+}
+
+/// `GAMMALOOP_EDGE_DEBUG_DUMP=<dir>`: write the input of a failing step.
+fn edge_debug_dump(stage: &str, expression: &Atom) {
+    if let Ok(dir) = std::env::var("GAMMALOOP_EDGE_DEBUG_DUMP") {
+        let _ = std::fs::write(
+            format!("{dir}/{stage}-{}.txt", std::process::id()),
+            format!("{expression}"),
+        );
+    }
+}
+
+thread_local! {
+    static DRESSED_SCOPE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Run `f` as the R* evaluation of a dressed skeleton (an insertion surrogate):
+/// `GAMMALOOP_EDGE_CONTRACTION=auto` keeps edge momenta in its ordinary
+/// remainders too (measured: fewer terms there, more in insertion-free graphs).
+pub(crate) fn in_dressed_scope<T>(f: impl FnOnce() -> T) -> T {
+    let previous = DRESSED_SCOPE.with(|scope| scope.replace(true));
+    let result = f();
+    DRESSED_SCOPE.with(|scope| scope.set(previous));
+    result
+}
+
+/// Whether hard components keep edge momenta.
+fn keeps_hard() -> bool {
+    edge_contraction("keep") || edge_contraction("keep_hard") || edge_contraction("auto")
+}
+
+/// Whether ordinary remainders keep edge momenta.
+fn keeps_remainder() -> bool {
+    edge_contraction("keep")
+        || edge_contraction("keep_remainder")
+        || (edge_contraction("auto") && DRESSED_SCOPE.with(|scope| scope.get()))
+}
+
+/// `GAMMALOOP_EDGE_PROJECT_LOG=1`: one stderr line before and after each hard projection.
+fn edge_project_log() -> bool {
+    static LOG: LazyLock<bool> =
+        LazyLock::new(|| std::env::var_os("GAMMALOOP_EDGE_PROJECT_LOG").is_some());
+    *LOG
+}
+
+/// Largest projected hard term (bytes) rewritten in the loop basis by `back`
+/// (`GAMMALOOP_EDGE_BACK_MAX_BYTES`, default 64 MB).
+fn edge_back_max_bytes() -> usize {
+    static MAX: LazyLock<usize> = LazyLock::new(|| {
+        std::env::var("GAMMALOOP_EDGE_BACK_MAX_BYTES")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(64_000_000)
+    });
+    *MAX
+}
+
+/// Largest contracted hard Taylor term (bytes) that `pre` rewrites in the loop
+/// basis before the projection (`GAMMALOOP_EDGE_PRE_MAX_BYTES`, default 16 MB).
+fn edge_pre_max_bytes() -> usize {
+    static MAX: LazyLock<usize> = LazyLock::new(|| {
+        std::env::var("GAMMALOOP_EDGE_PRE_MAX_BYTES")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(16_000_000)
+    });
+    *MAX
+}
+
+/// RSS growth (bytes) allowed to a loop-basis hard Taylor contraction under
+/// `fallback` (`GAMMALOOP_EDGE_FALLBACK_GIB`, default 8).
+fn edge_fallback_bytes() -> u64 {
+    static BYTES: LazyLock<u64> = LazyLock::new(|| {
+        let gib: f64 = std::env::var("GAMMALOOP_EDGE_FALLBACK_GIB")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(8.0);
+        (gib * (1u64 << 30) as f64) as u64
+    });
+    *BYTES
+}
+
+/// Resident set size of this process (Linux `/proc/self/statm`).
+fn process_rss_bytes() -> Option<u64> {
+    let statm = std::fs::read_to_string("/proc/self/statm").ok()?;
+    let pages: u64 = statm.split_whitespace().nth(1)?.parse().ok()?;
+    Some(pages * 4096)
+}
+
+/// First id of a kept edge-momentum combination `Q(EDGE_OFFSET + n, ...)`.
+const EDGE_OFFSET: i64 = 1_000_000;
+
+/// `GAMMALOOP_EDGE_CONTRACTION`: comma-separated modes. Unset means
+/// `fallback,back`: hard components are contracted in the loop basis as
+/// before and only a contraction that exhausts its memory budget is redone
+/// and projected with edge momenta kept (a projected result of at most
+/// `GAMMALOOP_EDGE_BACK_MAX_BYTES` rewritten in the loop basis); `off` (or any
+/// value naming no mode) restores the loop-basis contraction everywhere.
+/// `keep_hard` keeps edge momenta in every hard component.
+fn edge_contraction(name: &str) -> bool {
+    static LIST: LazyLock<Vec<String>> = LazyLock::new(|| {
+        std::env::var("GAMMALOOP_EDGE_CONTRACTION")
+            .map(|value| value.split(',').map(|v| v.trim().to_owned()).collect())
+            .unwrap_or_else(|_| vec!["fallback".to_owned(), "back".to_owned()])
+    });
+    LIST.iter().any(|entry| entry == name || entry == "all")
 }
 
 /// `GAMMALOOP_HARD_TAYLOR_CHECK=1` also runs the contracted hard Taylor path on
@@ -150,6 +303,9 @@ pub(super) struct RStarIntegrand {
     routed: Atom,
     /// [`Self::routed`] contracted to dots, built on first use.
     contracted: OnceLock<Atom>,
+    /// Edge momenta kept as independent vectors (`GAMMALOOP_EDGE_CONTRACTION=keep`):
+    /// each distinct loop-momentum combination `Σ c_e Q(e)` -> its id.
+    combinations: std::sync::Mutex<std::collections::BTreeMap<Vec<(i64, Atom)>, i64>>,
     graph: Graph,
     basis: LoopMomentumBasis,
     soft_edges: Vec<EdgeIndex>,
@@ -187,6 +343,9 @@ impl RStarIntegrand {
         for insertion in insertions {
             expression *= insertion;
         }
+        // Diagnostics: the remainder before routing (edge momenta intact),
+        // numerator times insertions; its routed form is `hard_routed`.
+        streamed::dump("hard_source", expression.as_view());
         let contracted = InternalSubGraph::try_new(contracted, &graph.underlying)
             .ok_or_else(|| eyre!("an R* insertion contains an unpaired half-edge"))?;
         let basis = if region.loops == 0 {
@@ -200,6 +359,8 @@ impl RStarIntegrand {
             .iter_edges_of(&region.boundary)
             .map(|(_, edge, _)| edge)
             .collect();
+        let experiment_input = (super::edge_experiment::enabled() && region.loops != 0)
+            .then(|| expression.clone());
         if region.loops != 0 {
             // Boundary Q labels are the independent source variables of the
             // local polynomial. A subgraph basis supplies signatures only for
@@ -258,10 +419,26 @@ impl RStarIntegrand {
         }
         converter_graph.underlying.forget_identification_history();
         drop(routing_stage);
+        if let Some(input) = experiment_input {
+            let routing = graph
+                .normal_emr_replacement(&region.remaining, &basis, &[W_.x___], |_| true)
+                .into_iter()
+                .collect::<Vec<_>>();
+            super::edge_experiment::compare(
+                graph,
+                &converter_graph,
+                &region.remaining,
+                &input,
+                &routing,
+                region.loops,
+                &|view| Self::simplify_view(view),
+            );
+        }
         Ok(Self {
             region: region.clone(),
             routed: expression,
             contracted: OnceLock::new(),
+            combinations: Default::default(),
             graph: converter_graph,
             basis,
             soft_edges,
@@ -278,11 +455,31 @@ impl RStarIntegrand {
         if let Some(contracted) = self.contracted.get() {
             return Ok(contracted);
         }
+        let started = Instant::now();
         let contracted = {
             let _algebra = StageSpan::new("gamma.remainder.algebra");
-            Self::simplify(&self.routed)
-                .wrap_err("while preparing the routed R* tensor expression")?
+            if keeps_remainder() {
+                self.contract_keeping_edges(&self.routed)
+                    .wrap_err("while preparing the routed R* tensor expression")?
+            } else if edge_contraction("remainder") {
+                Self::simplify_edge_basis(&self.routed)
+                    .wrap_err("while preparing the routed R* tensor expression")?
+            } else {
+                Self::simplify(&self.routed)
+                    .wrap_err("while preparing the routed R* tensor expression")?
+            }
         };
+        if vakint::census::enabled() {
+            vakint::census::record(
+                "remainder_contraction",
+                serde_json::json!({
+                    "loops": self.region.loops,
+                    "seconds": started.elapsed().as_secs_f64(),
+                    "routed_bytes": self.routed.as_view().get_byte_size(),
+                    "contracted_bytes": contracted.as_view().get_byte_size(),
+                }),
+            );
+        }
         Ok(self.contracted.get_or_init(|| contracted))
     }
 
@@ -355,8 +552,17 @@ impl RStarIntegrand {
     }
 
     pub(super) fn physical_numerator(&self) -> Result<Atom> {
-        Ok(self
-            .expression()?
+        // The physical path transports its numerator through its own momentum
+        // maps; it keeps the loop-basis contraction.
+        let contracted;
+        let expression = if !self.combinations.lock().unwrap().is_empty() || keeps_remainder() {
+            contracted = Self::simplify(&self.routed)
+                .wrap_err("while preparing the routed R* tensor expression")?;
+            &contracted
+        } else {
+            self.expression()?
+        };
+        Ok(expression
             .replace(function!(GS.den, W_.x___))
             .with(Atom::one()))
     }
@@ -600,7 +806,190 @@ impl RStarIntegrand {
     /// basis before a quotient's pole projection. Hard scalar integrals remain
     /// unevaluated, including the dimension-dependent projector coefficients.
     pub fn project_hard(&self, expression: &Atom) -> Result<Atom> {
-        project_hard_vacuum(expression, &self.basis.loop_edges.raw)
+        let ids = self.combination_ids();
+        let started = Instant::now();
+        let input_bytes = expression.as_view().get_byte_size();
+        if edge_project_log() {
+            eprintln!(
+                "EDGE_PROJECT start loops={} kept={} input_bytes={input_bytes}",
+                self.region.loops,
+                ids.len()
+            );
+        }
+        if ids.is_empty() {
+            let projected = project_hard_vacuum(expression, &self.basis.loop_edges.raw)?;
+            if edge_project_log() {
+                eprintln!(
+                    "EDGE_PROJECT done loops={} kept=0 input_bytes={input_bytes} output_bytes={} seconds={:.3}",
+                    self.region.loops,
+                    projected.as_view().get_byte_size(),
+                    started.elapsed().as_secs_f64()
+                );
+            }
+            return Ok(projected);
+        }
+        // Kept edge-momentum combinations are integrated vectors too.
+        let hard = self
+            .basis
+            .loop_edges
+            .raw
+            .iter()
+            .copied()
+            .chain(ids.iter().copied().map(EdgeIndex::from))
+            .collect::<Vec<_>>();
+        let projected = project_hard_vacuum(expression, &hard)
+            .wrap_err("while projecting with kept edge momenta")?;
+        if streamed::check("edge_contraction") && edge_check_admits(expression) {
+            let rules = self.combination_rules();
+            let loop_input = expression.replace_multiple(&rules);
+            let reference = project_hard_vacuum(&loop_input, &self.basis.loop_edges.raw)?;
+            let substituted = projected.replace_multiple(&rules).expand();
+            let equal = (&substituted - &reference.expand()).expand().is_zero();
+            eprintln!(
+                "STREAM_CHECK stage=edge_projection bytes={} equal={equal}",
+                expression.as_view().get_byte_size()
+            );
+        }
+        let output_bytes = projected.as_view().get_byte_size();
+        // The projected hard term is a scalar polynomial: when it is small,
+        // rewrite it in the loop basis so that its integration sees today's
+        // input (fewer distinct scalar products); a large one stays in the edge
+        // basis, where its expansion stays bounded.
+        let back = edge_contraction("back") && output_bytes <= edge_back_max_bytes();
+        if edge_project_log() {
+            eprintln!(
+                "EDGE_PROJECT done loops={} kept={} input_bytes={input_bytes} output_bytes={output_bytes} seconds={:.3} back={back}",
+                self.region.loops,
+                ids.len(),
+                started.elapsed().as_secs_f64()
+            );
+        }
+        if back {
+            return Ok(projected.replace_multiple(&self.combination_rules()).expand());
+        }
+        Ok(projected)
+    }
+
+    /// [`Self::simplify`] with every linear combination of this component's
+    /// loop-edge momenta in an index slot kept as one independent vector
+    /// `Q(OFFSET + n, slot)` (registered in `self.combinations`); momenta of
+    /// other edges (root, boundary, soft) stay explicit, so Taylor expansions
+    /// and projections in them act as before. The combinations are substituted
+    /// at the routing step of `to_vakint_integrand`.
+    fn contract_keeping_edges(&self, expression: &Atom) -> Result<Atom> {
+        let head = GS.emr_mom;
+        let loop_edges = self
+            .basis
+            .loop_edges
+            .iter()
+            .map(|edge| usize::from(*edge) as i64)
+            .collect::<BTreeSet<_>>();
+        let term_of = |term: AtomView<'_>| -> Option<(i64, Atom, Vec<Atom>)> {
+            let (coefficient, vector) = match term {
+                AtomView::Mul(product) => {
+                    let factors = product.iter().collect::<Vec<_>>();
+                    match factors.as_slice() {
+                        [n @ AtomView::Num(_), v] | [v, n @ AtomView::Num(_)] => (n.to_owned(), *v),
+                        _ => return None,
+                    }
+                }
+                other => (Atom::num(1), other),
+            };
+            let AtomView::Fun(function) = vector else {
+                return None;
+            };
+            if function.get_symbol() != head || function.get_nargs() < 1 {
+                return None;
+            }
+            let edge = i64::try_from(function.get(0)).ok()?;
+            Some((edge, coefficient, function.iter().skip(1).map(|a| a.to_owned()).collect()))
+        };
+        let mut combinations = self.combinations.lock().unwrap();
+        let renamed = expression.replace_map(|view, _, out| {
+            // Denominators keep their loop-basis momenta: their topology and
+            // Taylor arguments are read from them.
+            if matches!(view, AtomView::Fun(f) if f.get_symbol() == GS.den) {
+                **out = view.to_owned();
+                return;
+            }
+            let AtomView::Add(sum) = view else {
+                return;
+            };
+            let mut tail = None;
+            let mut kept = Vec::new();
+            let mut others = Vec::new();
+            for term in sum.iter() {
+                let Some((edge, coefficient, this_tail)) = term_of(term) else {
+                    return;
+                };
+                match &tail {
+                    None => tail = Some(this_tail),
+                    Some(t) if *t == this_tail => {}
+                    _ => return,
+                }
+                if loop_edges.contains(&edge) {
+                    kept.push((edge, coefficient));
+                } else {
+                    others.push(term);
+                }
+            }
+            if kept.len() < 2 || tail.as_ref().is_none_or(|t| t.is_empty()) {
+                return;
+            }
+            kept.sort_by(|a, b| a.0.cmp(&b.0));
+            let next = EDGE_OFFSET + combinations.len() as i64;
+            let id = *combinations.entry(kept).or_insert(next);
+            let vector = symbolica::atom::FunctionBuilder::new(head)
+                .add_arg(Atom::num(id))
+                .add_args(&tail.unwrap_or_default())
+                .finish();
+            **out = if others.is_empty() {
+                vector
+            } else {
+                Atom::add_many(others.iter().copied().chain(std::iter::once(vector.as_view())))
+            };
+        });
+        drop(combinations);
+        Self::simplify_view(renamed.as_view()).map_err(|error| {
+            if let Ok(dir) = std::env::var("GAMMALOOP_EDGE_DEBUG_DUMP") {
+                let _ = std::fs::write(
+                    format!("{dir}/keep-failure-{}.txt", std::process::id()),
+                    format!("input {expression}\nrenamed {renamed}\n"),
+                );
+            }
+            error.wrap_err("while contracting with kept edge momenta")
+        })
+    }
+
+    /// `Q(OFFSET + n, x___) -> Σ c_e Q(e, x___)` for every kept combination.
+    pub(super) fn combination_rules(&self) -> Vec<Replacement> {
+        self.combinations
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(terms, id)| {
+                let pattern = function!(GS.emr_mom, Atom::num(*id), W_.x___);
+                let image = Atom::add_many(
+                    terms
+                        .iter()
+                        .map(|(edge, coefficient)| {
+                            coefficient * function!(GS.emr_mom, Atom::num(*edge), W_.x___)
+                        })
+                        .collect::<Vec<_>>()
+                        .iter(),
+                );
+                Replacement::new(pattern.to_pattern(), image.to_pattern())
+            })
+            .collect()
+    }
+
+    fn combination_ids(&self) -> Vec<usize> {
+        self.combinations
+            .lock()
+            .unwrap()
+            .values()
+            .map(|id| *id as usize)
+            .collect()
     }
 
     /// Hard Taylor expansion leaves the reference mass fixed. These momenta
@@ -614,13 +1003,79 @@ impl RStarIntegrand {
     pub fn taylor(&self, degree: usize) -> Result<Atom> {
         let _stage = StageSpan::new("gamma.remainder.hard_taylor");
         let parameter = symbol!("rstar_hard_taylor"; Scalar);
+        streamed::dump("hard_routed", self.routed.as_view());
         let scaled = Self::scale_edges(&self.routed, &self.soft_edges, parameter);
         let expanded = TaylorExpansion::new(parameter, degree).evaluate(&scaled)?;
         drop(scaled);
+        let started = Instant::now();
         let truncated = {
             let _algebra = StageSpan::new("gamma.remainder.hard_taylor_algebra");
-            Self::simplify(&expanded).wrap_err("while simplifying the R* hard Taylor polynomial")?
+            streamed::report_size("hard_taylor", expanded.as_view());
+            streamed::dump("hard_taylor", expanded.as_view());
+            if keeps_hard() {
+                let kept = self
+                    .contract_keeping_edges(&expanded)
+                    .wrap_err("while simplifying the R* hard Taylor polynomial")?;
+                if streamed::check("edge_contraction") && edge_check_admits(&expanded) {
+                    let reference = Self::simplify(&expanded)
+                        .wrap_err("while simplifying the R* hard Taylor polynomial")?;
+                    let substituted = kept.replace_multiple(&self.combination_rules()).expand();
+                    let equal = (&substituted - &reference.expand()).expand().is_zero();
+                    eprintln!(
+                        "STREAM_CHECK stage=edge_keep bytes={} equal={equal}",
+                        expanded.as_view().get_byte_size()
+                    );
+                }
+                let kept_bytes = kept.as_view().get_byte_size();
+                if edge_contraction("pre") && kept_bytes <= edge_pre_max_bytes() {
+                    // Small contracted hard term: rewrite it in the loop basis
+                    // and project it there (the loop-basis projection is the
+                    // cheaper one for few distinct scalar products).
+                    let rules = self.combination_rules();
+                    self.combinations.lock().unwrap().clear();
+                    if edge_project_log() {
+                        eprintln!("EDGE_PRE loops={} kept_bytes={kept_bytes} back=true", self.region.loops);
+                    }
+                    kept.replace_multiple(&rules).expand()
+                } else {
+                    if edge_project_log() {
+                        eprintln!("EDGE_PRE loops={} kept_bytes={kept_bytes} back=false", self.region.loops);
+                    }
+                    kept
+                }
+            } else if edge_contraction("hard") {
+                let edge = Self::simplify_edge_basis(&expanded)
+                    .wrap_err("while simplifying the R* hard Taylor polynomial")?;
+                if streamed::check("edge_contraction") {
+                    let reference = Self::simplify(&expanded)
+                        .wrap_err("while simplifying the R* hard Taylor polynomial")?;
+                    let identical = edge == reference;
+                    let equal = identical || (&edge - &reference).expand().is_zero();
+                    eprintln!(
+                        "STREAM_CHECK stage=edge_contraction bytes={} identical={identical} equal={equal}",
+                        expanded.as_view().get_byte_size()
+                    );
+                }
+                edge
+            } else if edge_contraction("fallback") {
+                self.simplify_hard_taylor_or_keep(&expanded)
+                    .wrap_err("while simplifying the R* hard Taylor polynomial")?
+            } else {
+                Self::simplify_hard_taylor(&expanded)
+                    .wrap_err("while simplifying the R* hard Taylor polynomial")?
+            }
         };
+        if vakint::census::enabled() {
+            vakint::census::record(
+                "hard_taylor_contraction",
+                serde_json::json!({
+                    "loops": self.region.loops,
+                    "seconds": started.elapsed().as_secs_f64(),
+                    "taylor_bytes": expanded.as_view().get_byte_size(),
+                    "contracted_bytes": truncated.as_view().get_byte_size(),
+                }),
+            );
+        }
         if cfg!(test) || hard_taylor_check() {
             let reference = self.taylor_contracted(degree)?;
             let identical = truncated == reference;
@@ -638,6 +1093,112 @@ impl RStarIntegrand {
             }
         }
         Ok(truncated)
+    }
+
+    /// `GAMMALOOP_EDGE_CONTRACTION=fallback`: today's loop-basis contraction
+    /// under a scoped memory budget (process RSS may grow by
+    /// `GAMMALOOP_EDGE_FALLBACK_GIB`, default 8, over its value at the start).
+    /// When that budget or the process budget is exhausted (the 27105
+    /// signature: a frontier that grows without bound), this component is
+    /// contracted with its edge-momentum combinations kept as independent
+    /// vectors instead, and [`Self::project_hard`] projects it in that basis.
+    /// Components that finish within the budget are unchanged.
+    fn simplify_hard_taylor_or_keep(&self, expanded: &Atom) -> Result<Atom> {
+        use symbolica::utils::resources::{ResourceBudget, ResourceLimits};
+        let limit = process_rss_bytes().map(|rss| rss + edge_fallback_bytes());
+        let budget = ResourceBudget::new(ResourceLimits {
+            max_process_rss_bytes: limit,
+            ..ResourceLimits::default()
+        });
+        let started = Instant::now();
+        let attempt = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            budget.run(|| Self::simplify(expanded))
+        }));
+        let payload = match attempt {
+            Ok(result) => return result,
+            Err(payload) => payload,
+        };
+        let message = payload
+            .downcast_ref::<String>()
+            .cloned()
+            .or_else(|| payload.downcast_ref::<&str>().map(|text| (*text).to_owned()))
+            .unwrap_or_default();
+        if !message.starts_with("resource budget exhausted") {
+            std::panic::resume_unwind(payload);
+        }
+        drop(payload);
+        eprintln!(
+            "EDGE_FALLBACK loops={} taylor_bytes={} after={:.1}s reason={message}",
+            self.region.loops,
+            expanded.as_view().get_byte_size(),
+            started.elapsed().as_secs_f64()
+        );
+        if let Some(release) = MEMORY_RELEASE.get() {
+            release();
+            std::thread::sleep(std::time::Duration::from_millis(1500));
+        }
+        let started = Instant::now();
+        let kept = self.contract_keeping_edges(expanded)?;
+        eprintln!(
+            "EDGE_FALLBACK done kept={} contracted_bytes={} seconds={:.1}",
+            self.combination_ids().len(),
+            kept.as_view().get_byte_size(),
+            started.elapsed().as_secs_f64()
+        );
+        Ok(kept)
+    }
+
+    /// [`Self::simplify`] of a hard Taylor polynomial. The factorized
+    /// contraction of a deeply nested product of many index-sharing sums
+    /// (27105: a 41 KB polynomial) can grow without bound; under an active
+    /// resource budget (`BETA_PROCESS_RSS_LIMIT_GIB`) it aborts, and the
+    /// polynomial is then expanded and simplified in chunks of summands:
+    /// the same value, not the same factored form, so this path runs only
+    /// where the whole simplification cannot finish
+    /// (`GAMMALOOP_ALGEBRA_LEGACY=hard_taylor_fallback` lets the abort fail
+    /// the diagram instead).
+    fn simplify_hard_taylor(expanded: &Atom) -> Result<Atom> {
+        let attempt =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| Self::simplify(expanded)));
+        match attempt {
+            Ok(result) => result,
+            Err(payload) => {
+                let message = payload
+                    .downcast_ref::<String>()
+                    .cloned()
+                    .or_else(|| {
+                        payload
+                            .downcast_ref::<&str>()
+                            .map(|text| (*text).to_owned())
+                    })
+                    .unwrap_or_default();
+                if !message.starts_with("resource budget exhausted")
+                    || streamed::legacy("hard_taylor_fallback")
+                {
+                    std::panic::resume_unwind(payload);
+                }
+                eprintln!(
+                    "HARD_TAYLOR_FALLBACK bytes={} reason={message}",
+                    expanded.as_view().get_byte_size()
+                );
+                // Return the aborted frontier's pages to the kernel before the
+                // budget is checked again (the allocator keeps freed memory).
+                if let Some(release) = MEMORY_RELEASE.get() {
+                    release();
+                    std::thread::sleep(std::time::Duration::from_millis(1500));
+                }
+                let started = std::time::Instant::now();
+                let expanded = expanded.expand();
+                let simplified = Self::simplify_summands(expanded.as_view())?;
+                eprintln!(
+                    "HARD_TAYLOR_FALLBACK done terms_bytes={} result_bytes={} seconds={:.1}",
+                    expanded.as_view().get_byte_size(),
+                    simplified.as_view().get_byte_size(),
+                    started.elapsed().as_secs_f64()
+                );
+                Ok(simplified)
+            }
+        }
     }
 
     /// The previous hard Taylor path: contract the whole routed expression,
@@ -674,12 +1235,14 @@ impl RStarIntegrand {
         let routed = if self.region.loops == 0 {
             Cow::Borrowed(expression)
         } else {
-            Cow::Owned(expression.replace_multiple(self.graph.normal_emr_replacement(
-                &self.region.remaining,
-                &self.basis,
-                &[W_.x___],
-                HedgePair::is_paired,
-            )))
+            Cow::Owned(
+                expression.replace_multiple(self.graph.normal_emr_replacement(
+                    &self.region.remaining,
+                    &self.basis,
+                    &[W_.x___],
+                    HedgePair::is_paired,
+                )),
+            )
         };
         let allowed_edges = self
             .basis
@@ -687,6 +1250,7 @@ impl RStarIntegrand {
             .iter()
             .chain(&root_edges)
             .map(|edge| usize::from(*edge))
+            .chain(self.combination_ids())
             .collect::<BTreeSet<_>>();
         let mut unresolved = BTreeSet::new();
         routed.visitor(&mut |part| {
@@ -717,6 +1281,7 @@ impl RStarIntegrand {
         drop(compensated);
         timing.taylor = timing.lap();
         let expanded = Self::simplify_summands(polynomial.as_view())
+            .inspect_err(|_| edge_debug_dump("outer_simplify", &polynomial))
             .wrap_err("while simplifying the compensated R* outer Taylor polynomial")?;
         drop(polynomial);
         timing.algebra = timing.lap();
@@ -727,6 +1292,7 @@ impl RStarIntegrand {
         // projector are spectators, rather than differentiated source labels.
         let expanded = if let Some(projector) = root_projector {
             let projected = projector(&expanded)
+                .inspect_err(|_| edge_debug_dump("root_projector", &expanded))
                 .wrap_err("while projecting the complete R* outer Taylor polynomial")?;
             drop(expanded);
             Integrated::dimensionally_regularized(&projected)
@@ -738,16 +1304,24 @@ impl RStarIntegrand {
             expanded
         } else {
             // By value: to_vakint drops it once it has been materialized.
-            let input = to_vakint_integrand(
-                expanded,
-                &self.graph.underlying,
-                &self.region.remaining,
-                &self.graph.empty_subgraph::<SuBitGraph>(),
-                &uv_settings.vakint,
-                false,
-            )?;
+            let rules = self.combination_rules();
+            if !rules.is_empty() {
+                edge_debug_dump("to_vakint_input", &expanded);
+            }
+            let input = crate::uv::approx::integrated::with_momentum_combinations(&rules, || -> Result<_> {
+                to_vakint_integrand(
+                    expanded,
+                    &self.graph.underlying,
+                    &self.region.remaining,
+                    &self.graph.empty_subgraph::<SuBitGraph>(),
+                    &uv_settings.vakint,
+                    false,
+                )
+                .wrap_err("while converting with kept edge momenta")
+            })?;
             timing.conversion = timing.lap();
-            let integrated = integrate_single_mass(vakint, vakint_settings, &input)?;
+            let integrated = integrate_single_mass(vakint, vakint_settings, &input)
+                .inspect_err(|_| edge_debug_dump("single_mass_error", &Atom::num(1)))?;
             timing.backend = timing.lap();
             integrated
         };
@@ -824,6 +1398,86 @@ impl RStarIntegrand {
             })
             .collect::<Vec<_>>();
         expression.replace_multiple(&replacements)
+    }
+
+    /// [`Self::simplify`] with every momentum linear combination in an index
+    /// slot (an edge momentum after routing, `Σ c_e Q(e, slot)`) replaced by
+    /// one independent vector before the contraction, and substituted back
+    /// afterwards, factor by factor and without expanding. Contraction is
+    /// linear in each vector, so this is the same tensor expression; the
+    /// contraction no longer distributes the sums of the loop-momentum basis
+    /// (on 27105's hard Taylor input: 47 s and 2.7 GB instead of > 90 GiB).
+    pub(super) fn simplify_edge_basis(expression: &Atom) -> Result<Atom> {
+        const OFFSET: i64 = 2_000_000;
+        let head = GS.emr_mom;
+        let term_of = |term: AtomView<'_>| -> Option<(i64, Atom, Vec<Atom>)> {
+            let (coefficient, vector) = match term {
+                AtomView::Mul(product) => {
+                    let factors = product.iter().collect::<Vec<_>>();
+                    match factors.as_slice() {
+                        [n @ AtomView::Num(_), v] | [v, n @ AtomView::Num(_)] => (n.to_owned(), *v),
+                        _ => return None,
+                    }
+                }
+                other => (Atom::num(1), other),
+            };
+            let AtomView::Fun(function) = vector else {
+                return None;
+            };
+            if function.get_symbol() != head || function.get_nargs() < 1 {
+                return None;
+            }
+            let edge = i64::try_from(function.get(0)).ok()?;
+            if edge >= OFFSET {
+                return None;
+            }
+            Some((edge, coefficient, function.iter().skip(1).map(|a| a.to_owned()).collect()))
+        };
+        let mut combinations = std::collections::BTreeMap::<Vec<(i64, Atom)>, i64>::new();
+        let renamed = expression.replace_map(|view, _, out| {
+            let AtomView::Add(sum) = view else {
+                return;
+            };
+            let mut tail = None;
+            let mut terms = Vec::new();
+            for term in sum.iter() {
+                let Some((edge, coefficient, this_tail)) = term_of(term) else {
+                    return;
+                };
+                match &tail {
+                    None => tail = Some(this_tail),
+                    Some(t) if *t == this_tail => {}
+                    _ => return,
+                }
+                terms.push((edge, coefficient));
+            }
+            terms.sort_by(|a, b| a.0.cmp(&b.0));
+            let next = OFFSET + combinations.len() as i64;
+            let id = *combinations.entry(terms).or_insert(next);
+            **out = symbolica::atom::FunctionBuilder::new(head)
+                .add_arg(Atom::num(id))
+                .add_args(&tail.unwrap_or_default())
+                .finish();
+        });
+        if combinations.is_empty() {
+            return Self::simplify_view(expression.as_view());
+        }
+        let simplified = Self::simplify_view(renamed.as_view())?;
+        let rules = combinations
+            .iter()
+            .map(|(terms, id)| {
+                let pattern = function!(head, Atom::num(*id), W_.x___);
+                let image = Atom::add_many(
+                    terms
+                        .iter()
+                        .map(|(edge, coefficient)| coefficient * function!(head, Atom::num(*edge), W_.x___))
+                        .collect::<Vec<_>>()
+                        .iter(),
+                );
+                Replacement::new(pattern.to_pattern(), image.to_pattern())
+            })
+            .collect::<Vec<_>>();
+        Ok(simplified.replace_multiple(&rules))
     }
 
     pub(super) fn simplify(expression: &Atom) -> Result<Atom> {
@@ -1174,7 +1828,10 @@ mod tests {
                 }
             }
         }
-        assert!(compared > 0 && with_insertions > 0, "{compared} {with_insertions}");
+        assert!(
+            compared > 0 && with_insertions > 0,
+            "{compared} {with_insertions}"
+        );
         Ok(())
     }
 
