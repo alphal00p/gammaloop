@@ -159,6 +159,25 @@ impl IntegrationTimings {
 /// `GAMMALOOP_EDGE_CONTRACTION=<list>` (`hard`, `remainder`, `all`): contract
 /// those R* expressions with edge momenta independent
 /// ([`RStarIntegrand::simplify_edge_basis`]).
+/// The edge-contraction checks skip inputs above
+/// `GAMMALOOP_EDGE_CHECK_MAX_BYTES` (those the loop basis cannot finish).
+fn edge_check_admits(expression: &Atom) -> bool {
+    static MAX: LazyLock<usize> = LazyLock::new(|| {
+        std::env::var("GAMMALOOP_EDGE_CHECK_MAX_BYTES")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(usize::MAX)
+    });
+    let admitted = expression.as_view().get_byte_size() <= *MAX;
+    if !admitted {
+        eprintln!(
+            "STREAM_CHECK stage=edge_skipped bytes={}",
+            expression.as_view().get_byte_size()
+        );
+    }
+    admitted
+}
+
 /// `GAMMALOOP_EDGE_DEBUG_DUMP=<dir>`: write the input of a failing step.
 fn edge_debug_dump(stage: &str, expression: &Atom) {
     if let Ok(dir) = std::env::var("GAMMALOOP_EDGE_DEBUG_DUMP") {
@@ -167,6 +186,32 @@ fn edge_debug_dump(stage: &str, expression: &Atom) {
             format!("{expression}"),
         );
     }
+}
+
+thread_local! {
+    static DRESSED_SCOPE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Run `f` as the R* evaluation of a dressed skeleton (an insertion surrogate):
+/// `GAMMALOOP_EDGE_CONTRACTION=auto` keeps edge momenta in its ordinary
+/// remainders too (measured: fewer terms there, more in insertion-free graphs).
+pub(crate) fn in_dressed_scope<T>(f: impl FnOnce() -> T) -> T {
+    let previous = DRESSED_SCOPE.with(|scope| scope.replace(true));
+    let result = f();
+    DRESSED_SCOPE.with(|scope| scope.set(previous));
+    result
+}
+
+/// Whether hard components keep edge momenta.
+fn keeps_hard() -> bool {
+    edge_contraction("keep") || edge_contraction("keep_hard") || edge_contraction("auto")
+}
+
+/// Whether ordinary remainders keep edge momenta.
+fn keeps_remainder() -> bool {
+    edge_contraction("keep")
+        || edge_contraction("keep_remainder")
+        || (edge_contraction("auto") && DRESSED_SCOPE.with(|scope| scope.get()))
 }
 
 /// First id of a kept edge-momentum combination `Q(EDGE_OFFSET + n, ...)`.
@@ -355,7 +400,7 @@ impl RStarIntegrand {
         let started = Instant::now();
         let contracted = {
             let _algebra = StageSpan::new("gamma.remainder.algebra");
-            if edge_contraction("keep") || edge_contraction("keep_remainder") {
+            if keeps_remainder() {
                 self.contract_keeping_edges(&self.routed)
                     .wrap_err("while preparing the routed R* tensor expression")?
             } else if edge_contraction("remainder") {
@@ -452,7 +497,7 @@ impl RStarIntegrand {
         // The physical path transports its numerator through its own momentum
         // maps; it keeps the loop-basis contraction.
         let contracted;
-        let expression = if edge_contraction("keep") || edge_contraction("keep_remainder") {
+        let expression = if !self.combinations.lock().unwrap().is_empty() || keeps_remainder() {
             contracted = Self::simplify(&self.routed)
                 .wrap_err("while preparing the routed R* tensor expression")?;
             &contracted
@@ -716,8 +761,20 @@ impl RStarIntegrand {
             .copied()
             .chain(ids.into_iter().map(EdgeIndex::from))
             .collect::<Vec<_>>();
-        project_hard_vacuum(expression, &hard)
-            .wrap_err("while projecting with kept edge momenta")
+        let projected = project_hard_vacuum(expression, &hard)
+            .wrap_err("while projecting with kept edge momenta")?;
+        if streamed::check("edge_contraction") && edge_check_admits(expression) {
+            let rules = self.combination_rules();
+            let loop_input = expression.replace_multiple(&rules);
+            let reference = project_hard_vacuum(&loop_input, &self.basis.loop_edges.raw)?;
+            let substituted = projected.replace_multiple(&rules).expand();
+            let equal = (&substituted - &reference.expand()).expand().is_zero();
+            eprintln!(
+                "STREAM_CHECK stage=edge_projection bytes={} equal={equal}",
+                expression.as_view().get_byte_size()
+            );
+        }
+        Ok(projected)
     }
 
     /// [`Self::simplify`] with every linear combination of this component's
@@ -862,11 +919,11 @@ impl RStarIntegrand {
             let _algebra = StageSpan::new("gamma.remainder.hard_taylor_algebra");
             streamed::report_size("hard_taylor", expanded.as_view());
             streamed::dump("hard_taylor", expanded.as_view());
-            if edge_contraction("keep") || edge_contraction("keep_hard") {
+            if keeps_hard() {
                 let kept = self
                     .contract_keeping_edges(&expanded)
                     .wrap_err("while simplifying the R* hard Taylor polynomial")?;
-                if streamed::check("edge_contraction") {
+                if streamed::check("edge_contraction") && edge_check_admits(&expanded) {
                     let reference = Self::simplify(&expanded)
                         .wrap_err("while simplifying the R* hard Taylor polynomial")?;
                     let substituted = kept.replace_multiple(&self.combination_rules()).expand();
