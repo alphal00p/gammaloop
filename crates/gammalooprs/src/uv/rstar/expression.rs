@@ -214,18 +214,72 @@ fn keeps_remainder() -> bool {
         || (edge_contraction("auto") && DRESSED_SCOPE.with(|scope| scope.get()))
 }
 
+/// `GAMMALOOP_EDGE_PROJECT_LOG=1`: one stderr line before and after each hard projection.
+fn edge_project_log() -> bool {
+    static LOG: LazyLock<bool> =
+        LazyLock::new(|| std::env::var_os("GAMMALOOP_EDGE_PROJECT_LOG").is_some());
+    *LOG
+}
+
+/// Largest projected hard term (bytes) rewritten in the loop basis by `back`
+/// (`GAMMALOOP_EDGE_BACK_MAX_BYTES`, default 64 MB).
+fn edge_back_max_bytes() -> usize {
+    static MAX: LazyLock<usize> = LazyLock::new(|| {
+        std::env::var("GAMMALOOP_EDGE_BACK_MAX_BYTES")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(64_000_000)
+    });
+    *MAX
+}
+
+/// Largest contracted hard Taylor term (bytes) that `pre` rewrites in the loop
+/// basis before the projection (`GAMMALOOP_EDGE_PRE_MAX_BYTES`, default 16 MB).
+fn edge_pre_max_bytes() -> usize {
+    static MAX: LazyLock<usize> = LazyLock::new(|| {
+        std::env::var("GAMMALOOP_EDGE_PRE_MAX_BYTES")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(16_000_000)
+    });
+    *MAX
+}
+
+/// RSS growth (bytes) allowed to a loop-basis hard Taylor contraction under
+/// `fallback` (`GAMMALOOP_EDGE_FALLBACK_GIB`, default 8).
+fn edge_fallback_bytes() -> u64 {
+    static BYTES: LazyLock<u64> = LazyLock::new(|| {
+        let gib: f64 = std::env::var("GAMMALOOP_EDGE_FALLBACK_GIB")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(8.0);
+        (gib * (1u64 << 30) as f64) as u64
+    });
+    *BYTES
+}
+
+/// Resident set size of this process (Linux `/proc/self/statm`).
+fn process_rss_bytes() -> Option<u64> {
+    let statm = std::fs::read_to_string("/proc/self/statm").ok()?;
+    let pages: u64 = statm.split_whitespace().nth(1)?.parse().ok()?;
+    Some(pages * 4096)
+}
+
 /// First id of a kept edge-momentum combination `Q(EDGE_OFFSET + n, ...)`.
 const EDGE_OFFSET: i64 = 1_000_000;
 
 /// `GAMMALOOP_EDGE_CONTRACTION`: comma-separated modes. Unset means
-/// `keep_hard` (hard components contracted and projected with edge momenta
-/// kept, ordinary remainders in the loop basis); `off` (or any value naming
-/// no mode) restores the loop-basis contraction everywhere.
+/// `fallback,back`: hard components are contracted in the loop basis as
+/// before and only a contraction that exhausts its memory budget is redone
+/// and projected with edge momenta kept (a projected result of at most
+/// `GAMMALOOP_EDGE_BACK_MAX_BYTES` rewritten in the loop basis); `off` (or any
+/// value naming no mode) restores the loop-basis contraction everywhere.
+/// `keep_hard` keeps edge momenta in every hard component.
 fn edge_contraction(name: &str) -> bool {
     static LIST: LazyLock<Vec<String>> = LazyLock::new(|| {
         std::env::var("GAMMALOOP_EDGE_CONTRACTION")
             .map(|value| value.split(',').map(|v| v.trim().to_owned()).collect())
-            .unwrap_or_else(|_| vec!["keep_hard".to_owned()])
+            .unwrap_or_else(|_| vec!["fallback".to_owned(), "back".to_owned()])
     });
     LIST.iter().any(|entry| entry == name || entry == "all")
 }
@@ -753,8 +807,26 @@ impl RStarIntegrand {
     /// unevaluated, including the dimension-dependent projector coefficients.
     pub fn project_hard(&self, expression: &Atom) -> Result<Atom> {
         let ids = self.combination_ids();
+        let started = Instant::now();
+        let input_bytes = expression.as_view().get_byte_size();
+        if edge_project_log() {
+            eprintln!(
+                "EDGE_PROJECT start loops={} kept={} input_bytes={input_bytes}",
+                self.region.loops,
+                ids.len()
+            );
+        }
         if ids.is_empty() {
-            return project_hard_vacuum(expression, &self.basis.loop_edges.raw);
+            let projected = project_hard_vacuum(expression, &self.basis.loop_edges.raw)?;
+            if edge_project_log() {
+                eprintln!(
+                    "EDGE_PROJECT done loops={} kept=0 input_bytes={input_bytes} output_bytes={} seconds={:.3}",
+                    self.region.loops,
+                    projected.as_view().get_byte_size(),
+                    started.elapsed().as_secs_f64()
+                );
+            }
+            return Ok(projected);
         }
         // Kept edge-momentum combinations are integrated vectors too.
         let hard = self
@@ -763,7 +835,7 @@ impl RStarIntegrand {
             .raw
             .iter()
             .copied()
-            .chain(ids.into_iter().map(EdgeIndex::from))
+            .chain(ids.iter().copied().map(EdgeIndex::from))
             .collect::<Vec<_>>();
         let projected = project_hard_vacuum(expression, &hard)
             .wrap_err("while projecting with kept edge momenta")?;
@@ -777,6 +849,23 @@ impl RStarIntegrand {
                 "STREAM_CHECK stage=edge_projection bytes={} equal={equal}",
                 expression.as_view().get_byte_size()
             );
+        }
+        let output_bytes = projected.as_view().get_byte_size();
+        // The projected hard term is a scalar polynomial: when it is small,
+        // rewrite it in the loop basis so that its integration sees today's
+        // input (fewer distinct scalar products); a large one stays in the edge
+        // basis, where its expansion stays bounded.
+        let back = edge_contraction("back") && output_bytes <= edge_back_max_bytes();
+        if edge_project_log() {
+            eprintln!(
+                "EDGE_PROJECT done loops={} kept={} input_bytes={input_bytes} output_bytes={output_bytes} seconds={:.3} back={back}",
+                self.region.loops,
+                ids.len(),
+                started.elapsed().as_secs_f64()
+            );
+        }
+        if back {
+            return Ok(projected.replace_multiple(&self.combination_rules()).expand());
         }
         Ok(projected)
     }
@@ -937,7 +1026,23 @@ impl RStarIntegrand {
                         expanded.as_view().get_byte_size()
                     );
                 }
-                kept
+                let kept_bytes = kept.as_view().get_byte_size();
+                if edge_contraction("pre") && kept_bytes <= edge_pre_max_bytes() {
+                    // Small contracted hard term: rewrite it in the loop basis
+                    // and project it there (the loop-basis projection is the
+                    // cheaper one for few distinct scalar products).
+                    let rules = self.combination_rules();
+                    self.combinations.lock().unwrap().clear();
+                    if edge_project_log() {
+                        eprintln!("EDGE_PRE loops={} kept_bytes={kept_bytes} back=true", self.region.loops);
+                    }
+                    kept.replace_multiple(&rules).expand()
+                } else {
+                    if edge_project_log() {
+                        eprintln!("EDGE_PRE loops={} kept_bytes={kept_bytes} back=false", self.region.loops);
+                    }
+                    kept
+                }
             } else if edge_contraction("hard") {
                 let edge = Self::simplify_edge_basis(&expanded)
                     .wrap_err("while simplifying the R* hard Taylor polynomial")?;
@@ -952,6 +1057,9 @@ impl RStarIntegrand {
                     );
                 }
                 edge
+            } else if edge_contraction("fallback") {
+                self.simplify_hard_taylor_or_keep(&expanded)
+                    .wrap_err("while simplifying the R* hard Taylor polynomial")?
             } else {
                 Self::simplify_hard_taylor(&expanded)
                     .wrap_err("while simplifying the R* hard Taylor polynomial")?
@@ -985,6 +1093,59 @@ impl RStarIntegrand {
             }
         }
         Ok(truncated)
+    }
+
+    /// `GAMMALOOP_EDGE_CONTRACTION=fallback`: today's loop-basis contraction
+    /// under a scoped memory budget (process RSS may grow by
+    /// `GAMMALOOP_EDGE_FALLBACK_GIB`, default 8, over its value at the start).
+    /// When that budget or the process budget is exhausted (the 27105
+    /// signature: a frontier that grows without bound), this component is
+    /// contracted with its edge-momentum combinations kept as independent
+    /// vectors instead, and [`Self::project_hard`] projects it in that basis.
+    /// Components that finish within the budget are unchanged.
+    fn simplify_hard_taylor_or_keep(&self, expanded: &Atom) -> Result<Atom> {
+        use symbolica::utils::resources::{ResourceBudget, ResourceLimits};
+        let limit = process_rss_bytes().map(|rss| rss + edge_fallback_bytes());
+        let budget = ResourceBudget::new(ResourceLimits {
+            max_process_rss_bytes: limit,
+            ..ResourceLimits::default()
+        });
+        let started = Instant::now();
+        let attempt = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            budget.run(|| Self::simplify(expanded))
+        }));
+        let payload = match attempt {
+            Ok(result) => return result,
+            Err(payload) => payload,
+        };
+        let message = payload
+            .downcast_ref::<String>()
+            .cloned()
+            .or_else(|| payload.downcast_ref::<&str>().map(|text| (*text).to_owned()))
+            .unwrap_or_default();
+        if !message.starts_with("resource budget exhausted") {
+            std::panic::resume_unwind(payload);
+        }
+        drop(payload);
+        eprintln!(
+            "EDGE_FALLBACK loops={} taylor_bytes={} after={:.1}s reason={message}",
+            self.region.loops,
+            expanded.as_view().get_byte_size(),
+            started.elapsed().as_secs_f64()
+        );
+        if let Some(release) = MEMORY_RELEASE.get() {
+            release();
+            std::thread::sleep(std::time::Duration::from_millis(1500));
+        }
+        let started = Instant::now();
+        let kept = self.contract_keeping_edges(expanded)?;
+        eprintln!(
+            "EDGE_FALLBACK done kept={} contracted_bytes={} seconds={:.1}",
+            self.combination_ids().len(),
+            kept.as_view().get_byte_size(),
+            started.elapsed().as_secs_f64()
+        );
+        Ok(kept)
     }
 
     /// [`Self::simplify`] of a hard Taylor polynomial. The factorized
