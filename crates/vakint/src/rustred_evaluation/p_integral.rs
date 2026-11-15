@@ -601,10 +601,16 @@ struct ChannelParts<'r> {
 /// The split parts of a batch, by channel.
 type PendingChannels<'r> = BTreeMap<Channel, ChannelParts<'r>>;
 
-/// One request split and lowered (the value of [`RequestMemo`]): the lowered
-/// inputs of each of its channels, and its vakint integral.
-pub(crate) struct LoweredRequest {
-    channels: Vec<(Channel, BTreeMap<(PresentationId, Vec<i64>), Rational>)>,
+/// Lowered inputs by integral key.
+type LoweredInputs = BTreeMap<(PresentationId, Vec<i64>), Rational>;
+
+/// One request split, lowered and folded (the value of [`RequestMemo`]): its
+/// inputs by folded channel (spectator monomial) and epsilon basis function,
+/// the number of channels its split gave, and its vakint integral. The
+/// folded inputs of a batch are the sums of those of its requests.
+pub(crate) struct FoldedRequest {
+    targets: BTreeMap<Channel, BTreeMap<Atom, LoweredInputs>>,
+    split_channels: usize,
     integral: String,
     pairs: usize,
 }
@@ -613,6 +619,8 @@ pub(crate) struct LoweredRequest {
 /// library is the memo's owner).
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct RequestKey {
+    /// The fold separates the rational functions of this symbol.
+    epsilon: Symbol,
     family: &'static str,
     powers: Vec<i64>,
     external: Atom,
@@ -624,16 +632,16 @@ struct RequestKey {
 const MEMO_BYTES_PER_PAIR: usize = 256;
 
 /// vk5l WP4: the request memo of a p library. A request met again (same
-/// family, powers, external and canonical numerator) reuses its split and
-/// lowered inputs instead of redoing them (on the beta team's heaviest
-/// four-loop request the split and the lowering are 91 % of the call); the
-/// fold, the reduction (with the step cache) and the rendering follow as
-/// for a new request. Least recently used entries go first beyond the bound
+/// family, powers, external, canonical numerator and epsilon symbol) reuses
+/// its split, lowered and folded inputs instead of redoing them (on the beta
+/// team's heaviest four-loop request the split and the lowering are 91 % of
+/// the call); the sum over the batch, the reduction (with the step cache)
+/// and the rendering follow as for a new request. Least recently used entries go first beyond the bound
 /// of [`crate::OrderedCacheSettings::max_resident_bytes`] (`None`: no bound);
 /// `VAKINT_P_REQUEST_MEMO=off` disables it.
 #[derive(Default)]
 pub(crate) struct RequestMemo {
-    entries: HashMap<RequestKey, (Arc<LoweredRequest>, u64)>,
+    entries: HashMap<RequestKey, (Arc<FoldedRequest>, u64)>,
     clock: u64,
     pairs: usize,
     pub hits: u64,
@@ -641,7 +649,7 @@ pub(crate) struct RequestMemo {
 }
 
 impl RequestMemo {
-    fn get(&mut self, key: &RequestKey) -> Option<Arc<LoweredRequest>> {
+    fn get(&mut self, key: &RequestKey) -> Option<Arc<FoldedRequest>> {
         self.clock += 1;
         let clock = self.clock;
         let found = self.entries.get_mut(key).map(|(value, used)| {
@@ -656,7 +664,7 @@ impl RequestMemo {
         found
     }
 
-    fn insert(&mut self, key: RequestKey, value: Arc<LoweredRequest>, max_pairs: Option<usize>) {
+    fn insert(&mut self, key: RequestKey, value: Arc<FoldedRequest>, max_pairs: Option<usize>) {
         if max_pairs.is_some_and(|max| value.pairs > max) {
             return;
         }
@@ -693,15 +701,17 @@ fn request_memo_enabled() -> bool {
     *ENABLED
 }
 
-/// Split and lower one request (`None`: scaleless), through the library's
-/// [`RequestMemo`]; split and lowering seconds go to the statistics.
-fn lowered_request(
+/// Split, lower and fold one request through the library's [`RequestMemo`];
+/// split and lowering (with the fold) seconds go to the statistics.
+fn fold_request(
     handle: &PLibraryHandle,
     settings: &VakintSettings,
     request: &PropagatorRequest,
     forms: &mut BTreeMap<PresentationId, BTreeMap<PDot, AffineSlotForm>>,
-) -> Result<Arc<LoweredRequest>, VakintError> {
+    epsilon: Symbol,
+) -> Result<Arc<FoldedRequest>, VakintError> {
     let key = request_memo_enabled().then(|| RequestKey {
+        epsilon,
         family: request.family.name,
         powers: request.powers.to_vec(),
         external: request.external.clone(),
@@ -718,16 +728,84 @@ fn lowered_request(
     split_request(handle, request, forms, &mut pending)?;
     with_stats(|stats| stats.split_seconds += splitting.elapsed().as_secs_f64());
     let lowering = std::time::Instant::now();
-    let mut channels = Vec::with_capacity(pending.len());
-    let mut pairs = 0;
+    let split_channels = pending.len();
+    // Lower every channel once and distribute its lowered inputs, scaled by
+    // the value of each term of its coefficient, over the folded channels and
+    // basis functions. The integral keys are numbered once, and every folded
+    // basis accumulates into a dense vector indexed by key number.
+    let mut key_ids = HashMap::<(PresentationId, Vec<i64>), usize>::new();
+    let mut keys = Vec::<(PresentationId, Vec<i64>)>::new();
+    let mut buckets = Vec::<Vec<Rational>>::new();
+    let mut targets = BTreeMap::<Channel, BTreeMap<Atom, usize>>::new();
     for (channel, ChannelParts { parts, .. }) in pending {
         let lowered = lower_channel(handle, parts, forms)?;
-        pairs += lowered.len();
-        channels.push((channel, lowered));
+        if lowered.is_empty() {
+            continue;
+        }
+        let lowered = lowered
+            .into_iter()
+            .filter(|(_, value)| !value.is_zero())
+            .map(|(key, value)| {
+                let next = keys.len();
+                let id = *key_ids.entry(key.clone()).or_insert_with(|| {
+                    keys.push(key);
+                    next
+                });
+                (id, value)
+            })
+            .collect::<Vec<_>>();
+        for (monomial, basis, value) in spectator_terms(&channel.coefficient, epsilon) {
+            let target = targets
+                .entry(Channel {
+                    loops: channel.loops,
+                    head: channel.head.clone(),
+                    scale_power: channel.scale_power,
+                    coefficient: monomial,
+                })
+                .or_default();
+            let next = buckets.len();
+            let bucket = *target.entry(basis).or_insert_with(|| {
+                buckets.push(Vec::new());
+                next
+            });
+            let bucket = &mut buckets[bucket];
+            if bucket.len() < keys.len() {
+                bucket.resize(keys.len(), Rational::zero());
+            }
+            let unit = value == Rational::one();
+            for (id, lowered_value) in &lowered {
+                if unit {
+                    bucket[*id] += lowered_value;
+                } else {
+                    bucket[*id] += &(lowered_value * &value);
+                }
+            }
+        }
     }
+    let mut pairs = 0;
+    let targets = targets
+        .into_iter()
+        .map(|(channel, by_basis)| {
+            let by_basis = by_basis
+                .into_iter()
+                .map(|(basis, bucket)| {
+                    let inputs = std::mem::take(&mut buckets[bucket])
+                        .into_iter()
+                        .enumerate()
+                        .filter(|(_, value)| !value.is_zero())
+                        .map(|(id, value)| (keys[id].clone(), value))
+                        .collect::<LoweredInputs>();
+                    pairs += inputs.len();
+                    (basis, inputs)
+                })
+                .collect();
+            (channel, by_basis)
+        })
+        .collect();
     with_stats(|stats| stats.lower_seconds += lowering.elapsed().as_secs_f64());
-    let value = Arc::new(LoweredRequest {
-        channels,
+    let value = Arc::new(FoldedRequest {
+        targets,
+        split_channels,
         integral: integral_name(request),
         pairs,
     });
@@ -1241,101 +1319,41 @@ pub(crate) fn reduce_requests_folded(
     let epsilon = vk_symbol!(&settings.epsilon_symbol);
     let handle = vakint.p_library()?;
     let mut forms = BTreeMap::new();
-    // Every request split and lowered (or taken from the request memo); the
-    // channels of different requests are folded below, each lowered input
-    // distributed as before (rational sums are exact, so the order of the
-    // requests does not change the folded inputs).
-    let lowered_requests = requests
+    // Every request split, lowered and folded (or taken from the request
+    // memo); the batch's folded inputs are the sums of the requests' (rational
+    // sums are exact: the order of the requests does not change them).
+    let folded_requests = requests
         .iter()
-        .map(|request| lowered_request(&handle, settings, request, &mut forms))
+        .map(|request| fold_request(&handle, settings, request, &mut forms, epsilon))
         .collect::<Result<Vec<_>, VakintError>>()?;
-    let distinct = lowered_requests
-        .iter()
-        .flat_map(|lowered| lowered.channels.iter().map(|(channel, _)| channel))
-        .collect::<BTreeSet<_>>()
-        .len();
-    with_stats(|stats| stats.channels = distinct);
-    let lowering = std::time::Instant::now();
-    let mut spectators = HashMap::<Atom, Vec<(Atom, Atom, Rational)>>::new();
-    // Lower every channel once and distribute its lowered inputs, scaled by
-    // the value of each term of its coefficient, over the folded channels and
-    // basis functions. The integral keys are numbered once, and every folded
-    // basis accumulates into a dense vector indexed by key number.
-    let mut key_ids = HashMap::<(PresentationId, Vec<i64>), usize>::new();
-    let mut keys = Vec::<(PresentationId, Vec<i64>)>::new();
-    let mut buckets = Vec::<Vec<Rational>>::new();
-    let mut targets = BTreeMap::<Channel, (BTreeMap<Atom, usize>, BTreeSet<String>)>::new();
-    for (channel, lowered, integral) in lowered_requests.iter().flat_map(|request| {
-        request
-            .channels
+    with_stats(|stats| {
+        stats.channels = folded_requests
             .iter()
-            .map(|(channel, lowered)| (channel, lowered, &request.integral))
-    }) {
-        if lowered.is_empty() {
-            continue;
-        }
-        let lowered = lowered
-            .iter()
-            .filter(|(_, value)| !value.is_zero())
-            .map(|(key, value)| {
-                let next = keys.len();
-                let id = *key_ids.entry(key.clone()).or_insert_with(|| {
-                    keys.push(key.clone());
-                    next
-                });
-                (id, value)
-            })
-            .collect::<Vec<_>>();
-        let terms = spectators
-            .entry(channel.coefficient.clone())
-            .or_insert_with(|| spectator_terms(&channel.coefficient, epsilon))
-            .clone();
-        for (monomial, basis, value) in terms {
-            let target = targets
-                .entry(Channel {
-                    loops: channel.loops,
-                    head: channel.head.clone(),
-                    scale_power: channel.scale_power,
-                    coefficient: monomial,
-                })
-                .or_default();
-            if !target.1.contains(integral) {
-                target.1.insert(integral.clone());
-            }
-            let next = buckets.len();
-            let bucket = *target.0.entry(basis).or_insert_with(|| {
-                buckets.push(Vec::new());
-                next
-            });
-            let bucket = &mut buckets[bucket];
-            if bucket.len() < keys.len() {
-                bucket.resize(keys.len(), Rational::zero());
-            }
-            let unit = value == Rational::one();
-            for (id, lowered_value) in &lowered {
-                if unit {
-                    bucket[*id] += *lowered_value;
-                } else {
-                    bucket[*id] += &(*lowered_value * &value);
+            .map(|request| request.split_channels)
+            .sum()
+    });
+    let summing = std::time::Instant::now();
+    let mut folded = BTreeMap::<Channel, FoldedInputs>::new();
+    for request in &folded_requests {
+        for (channel, by_basis) in &request.targets {
+            let target = folded.entry(channel.clone()).or_default();
+            target.integrals.insert(request.integral.clone());
+            for (basis, inputs) in by_basis {
+                match target.by_basis.get_mut(basis) {
+                    None => {
+                        target.by_basis.insert(basis.clone(), inputs.clone());
+                    }
+                    Some(sum) => {
+                        for (key, value) in inputs {
+                            *sum.entry(key.clone()).or_insert_with(Rational::zero) += value;
+                        }
+                    }
                 }
             }
         }
     }
-    let mut folded = BTreeMap::<Channel, FoldedInputs>::new();
-    for (channel, (by_basis, integrals)) in targets {
-        let target = folded.entry(channel).or_default();
-        target.integrals = integrals;
-        for (basis, bucket) in by_basis {
-            let inputs = std::mem::take(&mut buckets[bucket])
-                .into_iter()
-                .enumerate()
-                .filter(|(_, value)| !value.is_zero())
-                .map(|(id, value)| (keys[id].clone(), value))
-                .collect::<BTreeMap<_, _>>();
-            target.by_basis.insert(basis, inputs);
-        }
-    }
-    with_stats(|stats| stats.lower_seconds += lowering.elapsed().as_secs_f64());
+    drop(folded_requests);
+    with_stats(|stats| stats.lower_seconds += summing.elapsed().as_secs_f64());
     let reducer = ChannelReducer {
         handle: &handle,
         options: request_options(settings),
