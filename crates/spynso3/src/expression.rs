@@ -3923,6 +3923,7 @@ impl TensorExpression {
             collect_chains,
             collect_traces,
             expand,
+            expand_scalar_spectators: false,
             order: order.as_deref(),
             max_passes: max_steps_per_domain,
         };

@@ -235,6 +235,179 @@ impl CoefficientSum {
     }
 }
 
+/// The scalar variables of one frontier, in one append-only polynomial
+/// variable map: products and merges of frontier coefficients then never
+/// reorder and rebuild a polynomial. When enabled, small composite scalar
+/// spectators (such as `2-dim` or a short closed trace) are expanded over their
+/// base variables, so equal monomials merge instead of carrying an opaque copy
+/// of the sum.
+struct SharedScalars {
+    atoms: Vec<Atom>,
+    positions: AHashMap<Atom, usize>,
+    dot_positions: AHashMap<Atom, usize>,
+    map: Arc<Vec<PolyVariable>>,
+    expansions: AHashMap<usize, Expansion>,
+    expand: bool,
+}
+
+/// Composite scalars with at most this many polynomial terms are expanded
+/// over their base variables; larger ones stay opaque variables.
+const EXPANSION_TERM_LIMIT: usize = 64;
+
+/// Composites whose structural term bound (products of sum lengths, powers
+/// expanded) exceeds this are not converted at all, so that a large spectator
+/// such as `(x+y)^1000` is never expanded only to be discarded.
+const EXPANSION_WORK_LIMIT: usize = 1024;
+
+/// Whether `terms^exponent` stays within the expansion limit.
+fn small_power(terms: usize, exponent: u32) -> bool {
+    terms
+        .checked_pow(exponent)
+        .is_some_and(|terms| terms <= EXPANSION_TERM_LIMIT)
+}
+
+/// Whether `value` has no explicit index slot: a composite with internal dummy
+/// indices must not be distributed, since that repeats its index labels.
+fn index_free(slots: &mut SlotMatcher, value: AtomView<'_>) -> bool {
+    let mut free = true;
+    value.visitor(&mut |node| {
+        if matches!(slots.classify(node), SlotMatch::Explicit(_)) {
+            free = false;
+        }
+        free
+    });
+    free
+}
+
+enum Expansion {
+    Base(usize),
+    Composite(ScalarPolynomial),
+}
+
+impl SharedScalars {
+    fn new(expand: bool) -> Self {
+        Self {
+            atoms: Vec::new(),
+            positions: AHashMap::new(),
+            dot_positions: AHashMap::new(),
+            map: Arc::new(Vec::new()),
+            expansions: AHashMap::new(),
+            expand,
+        }
+    }
+
+    /// One position per scalar up to dot spelling: `g(p,q)` from this frontier
+    /// and `dot(p,q)` from a nested contraction are one variable, so their
+    /// exponents add instead of forming distinct monomials.
+    fn position(&mut self, atom: Atom) -> usize {
+        if let Some(&position) = self.positions.get(&atom) {
+            return position;
+        }
+        let dots = crate::shorthands::schoonschip::DotNormalizer::notation(atom.as_view());
+        if let Some(&position) = self.dot_positions.get(&dots) {
+            self.positions.insert(atom, position);
+            return position;
+        }
+        let position = self.atoms.len();
+        self.atoms.push(atom.clone());
+        self.dot_positions.insert(dots, position);
+        self.positions.insert(atom, position);
+        let mut variables = self.map.as_ref().clone();
+        variables.push(PolyVariable::Temporary(position));
+        self.map = Arc::new(variables);
+        position
+    }
+
+    /// The expansion of the scalar variable `index`, whose atom is `atom`.
+    /// `index_free` is asked once, and only when expansion is enabled.
+    fn expansion(
+        &mut self,
+        index: usize,
+        atom: &Atom,
+        index_free: impl FnOnce(&Atom) -> bool,
+    ) -> &Expansion {
+        if !self.expansions.contains_key(&index) {
+            let expansion = self.expand(atom, index_free);
+            self.expansions.insert(index, expansion);
+        }
+        &self.expansions[&index]
+    }
+
+    fn expand(&mut self, atom: &Atom, index_free: impl FnOnce(&Atom) -> bool) -> Expansion {
+        fn composite(view: AtomView<'_>) -> bool {
+            match view {
+                AtomView::Add(_) => true,
+                AtomView::Mul(product) => product.iter().any(composite),
+                AtomView::Pow(power) => {
+                    let (base, exponent) = power.get_base_exp();
+                    matches!(exponent, AtomView::Num(_)) && composite(base)
+                }
+                _ => false,
+            }
+        }
+        // An upper bound of the expanded term count, from the structure only.
+        fn bound(view: AtomView<'_>) -> Option<usize> {
+            match view {
+                AtomView::Add(sum) => sum
+                    .iter()
+                    .try_fold(0usize, |total, term| total.checked_add(bound(term)?)),
+                AtomView::Mul(product) => product
+                    .iter()
+                    .try_fold(1usize, |total, factor| total.checked_mul(bound(factor)?)),
+                AtomView::Pow(power) => {
+                    let (base, exponent) = power.get_base_exp();
+                    let exponent = u32::try_from(i64::try_from(exponent).ok()?).ok()?;
+                    bound(base)?.checked_pow(exponent)
+                }
+                _ => Some(1),
+            }
+        }
+        if self.expand
+            && composite(atom.as_view())
+            && bound(atom.as_view()).is_some_and(|terms| terms <= EXPANSION_WORK_LIMIT)
+            && index_free(atom)
+            && let Ok(polynomial) = atom.try_to_polynomial::<_, u32>(&Q, None)
+            && polynomial.nterms() <= EXPANSION_TERM_LIMIT
+        {
+            let positions = polynomial
+                .variables()
+                .iter()
+                .map(|variable| self.position(variable.to_atom()))
+                .collect::<Vec<_>>();
+            let mut expanded =
+                ScalarPolynomial::new(&Q, Some(polynomial.nterms()), self.map.clone());
+            let mut exponents = vec![0u32; self.map.len()];
+            let mut overflow = false;
+            for term in polynomial.into_iter() {
+                exponents.fill(0);
+                // Two variables of the composite (`g(p,q)` and `dot(p,q)`)
+                // can share one position; their exponents add.
+                for (&position, &exponent) in positions.iter().zip(term.exponents) {
+                    match exponents[position].checked_add(exponent) {
+                        Some(sum) => exponents[position] = sum,
+                        None => overflow = true,
+                    }
+                }
+                expanded.append_monomial(term.coefficient.clone(), &exponents);
+            }
+            if !overflow {
+                return Expansion::Composite(expanded);
+            }
+        }
+        Expansion::Base(self.position(atom.clone()))
+    }
+
+    /// Emit each variable in the spelling it first had in this frontier.
+    fn emit(&self, polynomial: &ScalarPolynomial) -> Option<Atom> {
+        polynomial.to_expression_with_variables(|variable| {
+            let PolyVariable::Temporary(position) = variable else {
+                unreachable!()
+            };
+            Some(self.atoms[*position].clone())
+        })
+    }
+}
+
 type FactorTerm = (Vec<(usize, u32)>, Rational);
 // Selected expression/interface and retained factors.
 type PrerequisiteFactors = (Atom, PartialStructure, Vec<Atom>);
@@ -1751,6 +1924,7 @@ impl<'a> ComponentSum<'a, '_> {
         #[cfg(feature = "reference-cases")]
         let mut emitted_bytes = 0usize;
         let mut scalar_variables: AHashMap<Atom, usize> = AHashMap::new();
+        let mut shared = SharedScalars::new(self.contractor.expand_scalars);
         let mut scalar_form = Some(false);
         #[cfg(feature = "reference-cases")]
         let mut generated = 0usize;
@@ -1897,15 +2071,30 @@ impl<'a> ComponentSum<'a, '_> {
                     }
                     key.factors.sort_unstable_by_key(|(position, _)| *position);
                     key.residual.sort_unstable();
+                    let mut shared_exponents = Vec::with_capacity(variables.len());
+                    let mut composites = Vec::new();
                     for (variable, exponent) in variables.iter().zip(&exponents) {
-                        if let Some(position) = weight
-                            .variables()
-                            .iter()
-                            .position(|entry| entry == variable)
+                        let PolyVariable::Temporary(index) = variable else {
+                            unreachable!()
+                        };
+                        let atom = emitted.get(index)?;
+                        let slots = &mut *self.slots;
+                        let composite = match shared
+                            .expansion(*index, atom, |atom| index_free(slots, atom.as_view()))
                         {
-                            // Machine exponent capacity is not a work budget.
-                            // A decline preserves the caller's exact source.
-                            weight.degree(position).checked_add(*exponent)?;
+                            Expansion::Base(position) => Err(*position),
+                            Expansion::Composite(expanded) => {
+                                Ok(small_power(expanded.nterms(), *exponent))
+                            }
+                        };
+                        match composite {
+                            Err(position) => shared_exponents.push((position, *exponent)),
+                            Ok(true) => composites.push((*index, *exponent)),
+                            // A large power of an expanded composite stays one
+                            // opaque variable in this term.
+                            Ok(false) => {
+                                shared_exponents.push((shared.position(atom.clone()), *exponent));
+                            }
                         }
                     }
                     #[cfg(feature = "reference-cases")]
@@ -1931,8 +2120,28 @@ impl<'a> ComponentSum<'a, '_> {
                             .saturating_add(emitted_bytes.saturating_mul(2))
                             .saturating_add(incoming_bytes.saturating_mul(2)),
                     );
-                    let monomial = ScalarPolynomial::new(&Q, Some(1), Arc::new(variables))
-                        .monomial(self.coefficient.clone(), exponents);
+                    // Distinct frontier variables can share one position (a
+                    // nested `dot(p,q)` and this frontier's `g(p,q)`), so
+                    // their exponents add.
+                    let mut full = vec![0u32; shared.map.len()];
+                    for (position, exponent) in shared_exponents {
+                        full[position] = full[position].checked_add(exponent)?;
+                    }
+                    for (position, &exponent) in full.iter().enumerate().take(weight.nvars()) {
+                        // Machine exponent capacity is not a work budget.
+                        // A decline preserves the caller's exact source.
+                        weight.degree(position).checked_add(exponent)?;
+                    }
+                    let mut monomial = ScalarPolynomial::new(&Q, Some(1), shared.map.clone())
+                        .monomial(self.coefficient.clone(), full);
+                    for (index, exponent) in composites {
+                        let Expansion::Composite(expanded) = &shared.expansions[&index] else {
+                            unreachable!()
+                        };
+                        for _ in 0..exponent {
+                            monomial = &monomial * expanded;
+                        }
+                    }
                     let coefficient = weight * &monomial;
                     #[cfg(feature = "reference-cases")]
                     let surrounding_bytes = state_bytes
@@ -1999,7 +2208,7 @@ impl<'a> ComponentSum<'a, '_> {
         );
         let mut terms = Vec::with_capacity(states.len());
         for (remaining, weight) in states {
-            let mut factors = vec![self.emit_coefficient(&weight)?];
+            let mut factors = vec![shared.emit(&weight)?];
             for (position, arguments) in remaining.factors {
                 scalar_form = scalar_form
                     .zip(self.scalar_form(self.opaque_factors[position].0))

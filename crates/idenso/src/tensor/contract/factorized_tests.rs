@@ -970,3 +970,86 @@ fn default_contraction_completes_the_selected_product() {
     );
     assert_eq!(direct.contract(Default::default()).unwrap(), direct);
 }
+
+fn contract_expanding_scalars(source: &Atom) -> SymbolicTensor<PartialStructure> {
+    SymbolicTensor::<PartialStructure>::infer(source.clone())
+        .unwrap()
+        .contract(crate::tensor::ContractSettings {
+            expand_scalar_spectators: true,
+            ..Default::default()
+        })
+        .unwrap()
+}
+
+#[test]
+fn expanded_scalar_spectators_keep_the_contracted_value_and_interface() {
+    setup();
+    for (source, must_change) in [
+        (
+            "(p(spenso::mink(4,a))*q(spenso::mink(4,a))+x)^2*(y+z)^3*t(spenso::mink(6,c))",
+            true,
+        ),
+        (
+            "(x+y)^3*(spenso::g(p(spenso::mink(4)),p(spenso::mink(4)))+spenso::g(q(spenso::mink(4)),q(spenso::mink(4))))*(t(spenso::mink(4,a),spenso::mink(4,b))+u(spenso::mink(4,a),spenso::mink(4,b)))*(p(spenso::mink(4,a))+q(spenso::mink(4,a)))",
+            false,
+        ),
+        (
+            "(x+y)^7*spenso::g(spenso::mink(4,mu),spenso::mink(4,nu))*p(spenso::mink(4,mu))*q(spenso::mink(4,nu))",
+            false,
+        ),
+        // Both spellings of one scalar inside a composite share a variable:
+        // their exponents must add (dot^2), not overwrite each other.
+        (
+            "(x+spenso::dot(p(spenso::mink(4)),q(spenso::mink(4)))*spenso::g(p(spenso::mink(4)),q(spenso::mink(4))))*(p(spenso::mink(4,a))*q(spenso::mink(4,a))+y)*t(spenso::mink(6,c))",
+            false,
+        ),
+        // A large composite power is never expanded (bounded work).
+        (
+            "(x+y)^400*(p(spenso::mink(4,a))*q(spenso::mink(4,a))+x)*t(spenso::mink(6,c))",
+            false,
+        ),
+    ] {
+        let source = input(source);
+        let factored = contract(&source);
+        let expanded = contract_expanding_scalars(&source);
+        assert_eq!(expanded.reduction_status(), ReductionStatus::Complete);
+        assert_eq!(expanded.structure, factored.structure, "{source}");
+        assert_eq!(
+            expanded.expression.expand(),
+            factored.expression.expand(),
+            "{source}"
+        );
+        if must_change {
+            assert_ne!(
+                expanded.expression, factored.expression,
+                "the frontier spectator must be expanded: {source}"
+            );
+        }
+        // The default policy is unchanged and remains a fixed point.
+        assert_eq!(
+            contract(&factored.expression).expression,
+            factored.expression
+        );
+    }
+}
+
+#[test]
+fn metric_and_dot_spellings_of_one_scalar_multiply() {
+    setup();
+    // The spectator `dot(p,q)` and the contracted `g(p,q)` are one variable of
+    // the frontier, so their exponents must add rather than overwrite.
+    let source = input(
+        "spenso::dot(p(spenso::mink(4)),q(spenso::mink(4)))*spenso::g(spenso::mink(4,mu),spenso::mink(4,nu))*p(spenso::mink(4,mu))*q(spenso::mink(4,nu))*(x+p(spenso::mink(4,a))*q(spenso::mink(4,a)))",
+    );
+    let expected = input(
+        "x*spenso::dot(p(spenso::mink(4)),q(spenso::mink(4)))^2+spenso::dot(p(spenso::mink(4)),q(spenso::mink(4)))^3",
+    );
+    for contracted in [contract(&source), contract_expanding_scalars(&source)] {
+        assert_eq!(contracted.reduction_status(), ReductionStatus::Complete);
+        assert_eq!(
+            contracted.to_dots().unwrap().expression.expand(),
+            expected,
+            "{source}"
+        );
+    }
+}

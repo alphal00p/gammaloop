@@ -73,6 +73,7 @@ pub(crate) struct SlotContraction {
     metric: Symbol,
     metrics: bool,
     expand: bool,
+    expand_scalars: bool,
     representations: Option<Vec<LibraryRep>>,
     observations:
         Option<std::sync::Arc<crate::tensor::simplification::observation::DomainObservations>>,
@@ -94,6 +95,7 @@ impl SlotContraction {
             metric: ETS.metric,
             metrics: true,
             expand: true,
+            expand_scalars: false,
             representations: None,
             observations: None,
             graph: None,
@@ -124,6 +126,13 @@ impl SlotContraction {
 
     pub(crate) fn expanding(mut self, expand: bool) -> Self {
         self.expand = expand;
+        self
+    }
+
+    /// Expand small composite scalar spectators over their base variables
+    /// inside factorized frontiers (see `ContractSettings::expand_scalar_spectators`).
+    pub(crate) fn expanding_scalars(mut self, expand: bool) -> Self {
+        self.expand_scalars = expand;
         self
     }
 
