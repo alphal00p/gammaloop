@@ -1533,12 +1533,22 @@ pub(crate) fn replacement_rules(
 /// contain other vectors; an open loop index or a loop momentum contracted
 /// with another external vector is a tensor p-integral and is rejected.
 pub(crate) fn scalar_numerator(numerator: AtomView, external: &Atom) -> Result<Atom, VakintError> {
+    scalar_numerator_with(numerator, external, true)
+}
+
+/// [`scalar_numerator`]; with `expand` false (the evaluation path), a
+/// numerator already in dot notation (no indexed vector) is kept as it is:
+/// the dot-notation passes could not change it, and its full expansion
+/// (32.8 s of 61 s on the beta team's heaviest four-loop request, vk5l WP4)
+/// is not needed there, the split handles products of sums. The canonical
+/// form ([`crate::Vakint::to_canonical`]) keeps the expanded normal form.
+pub(crate) fn scalar_numerator_with(
+    numerator: AtomView,
+    external: &Atom,
+    expand: bool,
+) -> Result<Atom, VakintError> {
     let _stage = StageSpan::new("p_integral.scalar_admission");
-    // vk5l WP4: a numerator already in dot notation (no indexed vector) is
-    // kept as it is: the dot-notation passes could not change it, and its
-    // full expansion (32.8 s of 61 s on the beta team's heaviest four-loop
-    // request) is not needed, the split handles products of sums.
-    let scalar = if crate::Vakint::has_indexed_vectors(numerator) {
+    let scalar = if expand || crate::Vakint::has_indexed_vectors(numerator) {
         crate::Vakint::convert_to_dot_notation(numerator)
     } else {
         numerator.to_owned()

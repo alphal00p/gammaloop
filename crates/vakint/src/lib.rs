@@ -3395,6 +3395,19 @@ impl VakintTerm {
         replacement_rules: &ReplacementRules,
         short_form: bool,
     ) -> Result<(), VakintError> {
+        self.canonicalize_expanding(settings, replacement_rules, short_form, true)
+    }
+
+    /// [`Self::canonicalize`]; `expand_p` false keeps a p-integral numerator
+    /// that is already in dot notation unexpanded (the evaluation path:
+    /// [`p_integral::scalar_numerator_with`]).
+    pub(crate) fn canonicalize_expanding(
+        &mut self,
+        settings: &VakintSettings,
+        replacement_rules: &ReplacementRules,
+        short_form: bool,
+        expand_p: bool,
+    ) -> Result<(), VakintError> {
         self.integral = replacement_rules.canonical_topology.to_canonical(
             self.integral.as_view(),
             replacement_rules,
@@ -3411,11 +3424,13 @@ impl VakintTerm {
             .as_ref()
             .map(|witness| witness.external.clone());
         if let Some(external) = &external {
-            self.numerator = p_integral::scalar_numerator(self.numerator.as_view(), external)?;
+            self.numerator =
+                p_integral::scalar_numerator_with(self.numerator.as_view(), external, expand_p)?;
         }
         self.apply_numerator_replacement_rules(replacement_rules, settings)?;
         if let Some(external) = &external {
-            self.numerator = p_integral::scalar_numerator(self.numerator.as_view(), external)?;
+            self.numerator =
+                p_integral::scalar_numerator_with(self.numerator.as_view(), external, expand_p)?;
         }
 
         Ok(())
@@ -3657,6 +3672,15 @@ impl VakintTerm {
                             Some(EvaluationMethod::RustRed(_))
                         )
                 });
+        // The evaluation of a p-integral keeps a dot-notation numerator
+        // unexpanded (`p_integral::scalar_numerator_with`).
+        if !p_integral::PGraph::is_out_of_domain_unknown(self.integral.as_view())
+            && let Some(external) = self.propagator_external()?
+        {
+            self.numerator =
+                p_integral::scalar_numerator_with(self.numerator.as_view(), &external, false)?;
+            return Ok(());
+        }
         if compact {
             let mut scalar_settings = settings.clone();
             scalar_settings.use_dot_product_notation = true;
@@ -4992,7 +5016,7 @@ impl VakintExpression {
         short_form: bool,
     ) -> Result<(), VakintError> {
         settings.with_resource_budget(|| {
-            self.canonicalize_with(settings, short_form, |input| {
+            self.canonicalize_with(settings, short_form, true, |input| {
                 topologies.match_topologies_to_user_input(input, settings.allow_unknown_integrals)
             })
         })
@@ -5002,6 +5026,7 @@ impl VakintExpression {
         &mut self,
         settings: &VakintSettings,
         short_form: bool,
+        expand_p: bool,
         mut match_input: impl FnMut(AtomView) -> Result<Option<ReplacementRules>, VakintError>,
     ) -> Result<(), VakintError> {
         for term in self.0.iter_mut() {
@@ -5022,7 +5047,7 @@ impl VakintExpression {
             }
             if let Some(replacement_rules) = match_input(term.integral.as_view())? {
                 //println!("replacement_rules = {}", replacement_rules,);
-                term.canonicalize(settings, &replacement_rules, short_form)?;
+                term.canonicalize_expanding(settings, &replacement_rules, short_form, expand_p)?;
             } else {
                 return Err(VakintError::UnreckognizedIntegral(
                     term.integral.to_string(),
@@ -8287,7 +8312,7 @@ Evaluated (n_loops=1, mu_r=1) :
             }
             p_integral::phases::end("front.master_transport", phase);
             let phase = p_integral::phases::start();
-            vakint_expr.canonicalize_with(settings, false, |input| {
+            vakint_expr.canonicalize_with(settings, false, false, |input| {
                 self.match_topologies_for_settings(settings, input)
             })?;
             p_integral::phases::end("front.canonicalize", phase);
@@ -8336,7 +8361,7 @@ Evaluated (n_loops=1, mu_r=1) :
     ) -> Result<Atom, VakintError> {
         settings.with_resource_budget(|| {
             let mut vakint_expr = VakintExpression::try_from(input)?;
-            vakint_expr.canonicalize_with(settings, short_form, |input| {
+            vakint_expr.canonicalize_with(settings, short_form, true, |input| {
                 self.match_topologies_for_settings(settings, input)
             })?;
             Ok(vakint_expr.into())
