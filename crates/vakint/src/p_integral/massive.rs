@@ -8,7 +8,7 @@ use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use symbolica::function;
 use symbolica::transcendental::gamma;
 
-use super::{ReducedPropagatorValue, external_head, forcer, laurent, scalar_numerator};
+use super::{ReducedPropagatorValue, external_head, forcer, laurent};
 use crate::symbols::S;
 use crate::utils::simplify_real;
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
@@ -387,7 +387,10 @@ impl MassiveClosure {
                             "the cut graph uses {external}, but the closing line uses {head}"
                         )));
                     }
-                    term.numerator = scalar_numerator(term.numerator.as_view(), &head)?;
+                    // vk5l WP4: as the evaluation path, a dot-notation numerator stays
+                    // unexpanded (the split handles products of sums).
+                    term.numerator =
+                        super::scalar_numerator_with(term.numerator.as_view(), &head, false)?;
                     let matched = term.prepare_integral_specs(vakint, settings, None)?;
                     let method = vakint.evaluation_method(settings, &matched.canonical_topology);
                     let request = matched
@@ -635,7 +638,10 @@ impl MassiveClosure {
                             "the cut graph uses {external}, but the closing line uses {head}"
                         )));
                     }
-                    term.numerator = scalar_numerator(term.numerator.as_view(), &head)?;
+                    // vk5l WP4: as the evaluation path, a dot-notation numerator stays
+                    // unexpanded (the split handles products of sums).
+                    term.numerator =
+                        super::scalar_numerator_with(term.numerator.as_view(), &head, false)?;
                     let matched = term.prepare_integral_specs(vakint, settings, None)?;
                     let method = vakint.evaluation_method(settings, &matched.canonical_topology);
                     let term_mode = match method {
