@@ -2512,3 +2512,136 @@ fn p_terminal_export() {
     std::fs::write(&out, text).unwrap();
     eprintln!("p_terminal_export: {} terminals -> {}", records.len(), out.to_string_lossy());
 }
+
+/// vk5l WP4 end-to-end showcase: ready-made massive-closure requests
+/// (`pint6.massive-closure-request.v1`, zstd, one per file, the beta team's
+/// e2e-showcase input) through `MassiveClosure::evaluate_batch` as the R*
+/// pipeline calls it. Environment: `VAKINT_TEST_CLOSURE_FILES` (`:`-separated
+/// paths), `VAKINT_TEST_CLOSURE_OUT` (output directory),
+/// `VAKINT_TEST_P5L_DRILL_PACKAGE` (the p package), `VAKINT_TEST_CLOSURE_MODES`
+/// (`retain,symbolic` default). Per closure and mode: `<name>.<mode>.sym`
+/// (Symbolica canonical string) and `<name>.<mode>.json` (seconds, peak RSS,
+/// sizes, reduction and relation-cache counters).
+#[test]
+fn massive_closure_showcase() {
+    let (Some(files), Some(out)) = (
+        std::env::var_os("VAKINT_TEST_CLOSURE_FILES"),
+        std::env::var_os("VAKINT_TEST_CLOSURE_OUT"),
+    ) else {
+        eprintln!("massive_closure_showcase: environment unset, skipped");
+        return;
+    };
+    let out = std::path::PathBuf::from(out);
+    std::fs::create_dir_all(&out).unwrap();
+    let mut engine = Vakint::new().unwrap();
+    if let Some(package) = std::env::var_os("VAKINT_TEST_P5L_DRILL_PACKAGE") {
+        let loading = std::time::Instant::now();
+        engine
+            .load_p_library_directory(std::path::Path::new(&package), false)
+            .unwrap();
+        engine.p_library().unwrap();
+        eprintln!("SHOWCASE package loaded in {:.1} s", loading.elapsed().as_secs_f64());
+    }
+    let peak = || -> u64 {
+        std::fs::read_to_string("/proc/self/status")
+            .ok()
+            .and_then(|status| {
+                status
+                    .lines()
+                    .find(|line| line.starts_with("VmHWM:"))
+                    .and_then(|line| line.split_whitespace().nth(1)?.parse::<u64>().ok())
+            })
+            .unwrap_or(0)
+            * 1024
+    };
+    let modes = std::env::var("VAKINT_TEST_CLOSURE_MODES").unwrap_or_else(|_| "retain,symbolic".into());
+    for file in std::env::split_paths(&files) {
+        let name = file
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .trim_end_matches(".zst")
+            .trim_end_matches(".txt")
+            .to_owned();
+        let reading = std::time::Instant::now();
+        let raw = std::process::Command::new("zstd")
+            .args(["-qdc"])
+            .arg(&file)
+            .output()
+            .unwrap();
+        assert!(raw.status.success(), "{}: zstd failed", file.display());
+        let text = String::from_utf8(raw.stdout).unwrap();
+        let field = |key: &str| {
+            text.lines()
+                .find_map(|line| line.strip_prefix(key)?.strip_prefix(' '))
+                .unwrap_or_else(|| panic!("{name}: no {key}"))
+                .to_owned()
+        };
+        let epsilon_terms: i64 = field("epsilon_terms").parse().unwrap();
+        let closure = crate::p_integral::MassiveClosure {
+            momentum: parse(&field("closure_momentum")),
+            mass_squared: parse(&field("closure_mass_squared")),
+            power: field("closure_power").parse().unwrap(),
+        };
+        let input_text = field("input");
+        let input = parse(&input_text);
+        drop(text);
+        let read_seconds = reading.elapsed().as_secs_f64();
+        for mode in modes.split(',') {
+            let master_mode = match mode {
+                "retain" => RustRedMasterMode::Retain,
+                "numerical" => RustRedMasterMode::Numerical,
+                _ => RustRedMasterMode::Symbolic,
+            };
+            let mut settings = settings(master_mode, None);
+            settings.epsilon_symbol = "gammalooprs::ε".into();
+            settings.mu_r_sq_symbol = "gammalooprs::μᵣ²".into();
+            settings.integral_normalization_factor = crate::LoopNormalizationFactor::MSbar;
+            settings.number_of_terms_in_epsilon_expansion = epsilon_terms;
+            settings.run_time_decimal_precision = 100;
+            settings.use_dot_product_notation = false;
+            settings.n_cores = std::env::var("VAKINT_TEST_P5L_DRILL_CORES")
+                .ok()
+                .and_then(|cores| cores.parse().ok())
+                .unwrap_or(1);
+            let before = engine.p_relation_cache_statistics();
+            let started = std::time::Instant::now();
+            let result = crate::p_integral::MassiveClosure::evaluate_batch(
+                &engine,
+                &settings,
+                &[(closure.clone(), input.clone())],
+            );
+            let seconds = started.elapsed().as_secs_f64();
+            let stats = super::last_stats();
+            let after = engine.p_relation_cache_statistics();
+            let delta = after.cache.since(&before.cache);
+            let (status, value_text, terms) = match &result {
+                Ok(values) => {
+                    let value = &values[0];
+                    let text = value.to_canonical_string();
+                    let terms = drill_term_count(&value.expand());
+                    std::fs::write(out.join(format!("{name}.{mode}.sym")), &text).unwrap();
+                    ("ok".to_owned(), text.len(), terms)
+                }
+                Err(error) => (format!("refused: {error}"), 0, 0),
+            };
+            let summary = serde_json::json!({
+                "closure": name, "mode": mode, "status": status,
+                "seconds": seconds, "read_seconds": read_seconds, "peak_rss_bytes": peak(),
+                "input_bytes": input_text.len(), "result_bytes": value_text, "result_terms": terms,
+                "epsilon_terms": epsilon_terms,
+                "reduce": {"channels": stats.channels, "reductions": stats.reductions, "pairs": stats.pairs,
+                           "split_s": stats.split_seconds, "lower_s": stats.lower_seconds,
+                           "prepare_s": stats.prepare_seconds, "library_s": stats.library_seconds,
+                           "render_s": stats.render_seconds, "memo_hits": stats.memo_hits},
+                "relation_cache": {"shipped_hits": delta.shipped_hits, "cache_hits": delta.cache_hits,
+                                   "misses": delta.misses, "inserts": delta.inserts},
+                "recipes": {"solves": after.recipes.solves - before.recipes.solves,
+                            "outside_solves": after.recipes.outside_solves - before.recipes.outside_solves,
+                            "failures": after.recipes.failures - before.recipes.failures},
+            });
+            std::fs::write(out.join(format!("{name}.{mode}.json")), summary.to_string()).unwrap();
+            eprintln!("SHOWCASE {name} {mode}: {status:.200} in {seconds:.1} s, {terms} terms, peak {:.2} GB", peak() as f64 / 1e9);
+        }
+    }
+}
