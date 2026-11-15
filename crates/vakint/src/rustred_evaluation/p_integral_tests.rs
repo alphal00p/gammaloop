@@ -2270,6 +2270,16 @@ fn p_request_file_timing() {
         .and_then(|cores| cores.parse().ok())
         .unwrap_or(1);
     let text = std::fs::read_to_string(&file).unwrap();
+    // The beta team's requests write ε as gammalooprs' symbol, and their
+    // settings name it (MSbar measure, five ε terms): as in production, so
+    // that ε-rational coefficients fold into the inputs.
+    if let Ok(epsilon) = std::env::var("VAKINT_TEST_P_REQUEST_EPSILON") {
+        settings.epsilon_symbol = epsilon;
+    } else if text.contains("gammalooprs::{}::ε") {
+        settings.epsilon_symbol = "gammalooprs::ε".into();
+        settings.integral_normalization_factor = crate::LoopNormalizationFactor::MSbar;
+        settings.number_of_terms_in_epsilon_expansion = 5;
+    }
     let records = request_records(&text);
     let requests = records
         .iter()
@@ -2286,11 +2296,12 @@ fn p_request_file_timing() {
         loading.elapsed().as_secs_f64()
     };
     eprintln!(
-        "P-TIMING setup {:.3} s (library {library_load:.3} s), {} requests, fold {:?}, mode {mode:?}, {} cores",
+        "P-TIMING setup {:.3} s (library {library_load:.3} s), {} requests, fold {:?}, mode {mode:?}, {} cores, epsilon {}",
         started.elapsed().as_secs_f64(),
         requests.len(),
         super::fold_mode(),
-        settings.n_cores
+        settings.n_cores,
+        settings.epsilon_symbol
     );
     let names = request_names(&requests).unwrap();
     for pass in ["cold", "warm"] {
