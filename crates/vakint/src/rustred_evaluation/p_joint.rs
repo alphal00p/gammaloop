@@ -243,13 +243,15 @@ pub(super) fn report(label: &str, inputs: usize, reduction: &PReduction, seconds
     let work = reduction.statistics.work;
     let progress = reduction.statistics.progress;
     eprintln!(
-        "vakint-p-work {label} inputs={inputs} input_keys={} rule_applications={} coalescing_additions={} cache_hits={} peak_frontier_keys={} terms={} seconds={seconds:.6}",
+        "vakint-p-work {label} inputs={inputs} input_keys={} rule_applications={} coalescing_additions={} cache_hits={} peak_frontier_keys={} terms={} outside_certified={} {} seconds={seconds:.6}",
         progress.input_keys,
         work.rule_applications(),
         work.coalescing_additions(),
         work.cache_hits(),
         progress.peak_frontier_keys,
         reduction.terms.len(),
+        reduction.outside_certified.len(),
+        crate::rustred_evaluation::p_relations::describe(&reduction.relation_cache),
     );
 }
 

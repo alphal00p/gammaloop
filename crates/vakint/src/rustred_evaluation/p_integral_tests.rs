@@ -977,6 +977,8 @@ fn rendering_fails_closed_outside_the_forcer_basis() {
         }],
         nonzero_conditions: condition.into_iter().collect(),
         statistics: Default::default(),
+        outside_certified: vec![],
+        relation_cache: Default::default(),
     };
     let master = render(
         &handle,
@@ -1008,6 +1010,8 @@ fn rendering_fails_closed_outside_the_forcer_basis() {
         ],
         nonzero_conditions: Vec::new(),
         statistics: Default::default(),
+        outside_certified: vec![],
+        relation_cache: Default::default(),
     };
     assert_eq!(
         render(&handle, &split, epsilon).unwrap(),
@@ -1862,5 +1866,77 @@ fn five_loop_package_drill() {
             }
             (expected, result) => panic!("{label}: expected {expected}, got {result:?}"),
         }
+    }
+}
+
+/// vk5l WP4, persistent relation cache, run as TWO processes of this binary
+/// against one cache directory (environment-driven, skipped without it):
+/// `VAKINT_TEST_P5L_RELATION_PACKAGE` = a package directory whose boxed node
+/// carries a recipe bundle; `VAKINT_TEST_P5L_RELATION_INPUT` = an integral that
+/// reaches a key solved by a recipe at run time (outside the certified set,
+/// or a certified recipe key with no shipped relation);
+/// `VAKINT_TEST_P5L_RELATION_DIR` = the cache directory (moved there with
+/// `PRelationCacheLocation::Directory`); `VAKINT_TEST_P5L_RELATION_ROLE` =
+/// `cold` (first process: at least one recipe solve, inserted into the cache,
+/// value written to `<dir>/value.txt`) or `warm` (second process: the same
+/// value, cache hits, no solve).
+#[test]
+fn p_relation_cache_two_processes() {
+    let (Some(directory), Some(input), Some(cache), Ok(role)) = (
+        std::env::var_os("VAKINT_TEST_P5L_RELATION_PACKAGE"),
+        std::env::var("VAKINT_TEST_P5L_RELATION_INPUT").ok(),
+        std::env::var_os("VAKINT_TEST_P5L_RELATION_DIR"),
+        std::env::var("VAKINT_TEST_P5L_RELATION_ROLE"),
+    ) else {
+        eprintln!("p_relation_cache_two_processes: environment unset, skipped");
+        return;
+    };
+    let cache = std::path::PathBuf::from(cache);
+    let mut engine = Vakint::new().unwrap();
+    engine
+        .load_p_library_directory(std::path::Path::new(&directory), false)
+        .unwrap_or_else(|error| panic!("{}: {error}", directory.to_string_lossy()));
+    let mut settings = settings(RustRedMasterMode::Retain, None);
+    settings.number_of_terms_in_epsilon_expansion = 6;
+    settings.rustred_p_relation_cache.location =
+        crate::PRelationCacheLocation::Directory(cache.clone());
+    let before = engine.p_relation_cache_statistics();
+    let started = std::time::Instant::now();
+    let value = engine
+        .evaluate(&settings, parse(&input).as_view())
+        .unwrap_or_else(|error| panic!("{input}: {error}"))
+        .expand()
+        .together()
+        .expand();
+    let after = engine.p_relation_cache_statistics();
+    let solves = after.recipes.solves - before.recipes.solves;
+    let delta = after.cache.since(&before.cache);
+    eprintln!(
+        "RELATION-CACHE {role}: {:.1} s, {} terms, solves={solves} (outside {}), {}, directory {:?}, \
+         bytes_on_disk={}",
+        started.elapsed().as_secs_f64(),
+        drill_term_count(&value),
+        after.recipes.outside_solves - before.recipes.outside_solves,
+        crate::rustred_evaluation::p_relations::describe(&delta),
+        after.directory,
+        after.bytes_on_disk
+    );
+    assert_eq!(after.directory.as_deref(), Some(cache.as_path()));
+    let saved = cache.join("value.txt");
+    match role.as_str() {
+        "cold" => {
+            assert!(solves > 0, "cold: no recipe solve; the input reaches no run-time key");
+            assert!(delta.inserts > 0, "cold: nothing inserted");
+            assert!(after.bytes_on_disk > 0);
+            std::fs::write(&saved, value.to_canonical_string()).unwrap();
+        }
+        "warm" => {
+            assert_eq!(solves, 0, "warm: a recipe was solved again");
+            assert!(delta.cache_hits > 0, "warm: no hit in the persistent cache");
+            let cold = std::fs::read_to_string(&saved).unwrap();
+            assert_eq!(value.to_canonical_string(), cold, "warm value differs from cold");
+            eprintln!("RELATION-CACHE warm: SERVED FROM DISK WITHOUT A SOLVE, value identical");
+        }
+        other => panic!("VAKINT_TEST_P5L_RELATION_ROLE {other}: cold or warm"),
     }
 }

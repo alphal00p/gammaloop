@@ -925,6 +925,13 @@ impl Vakint {
         self.p_master_catalogue = Some(Arc::new(catalogue));
     }
 
+    /// Locations and counters of the RustRed p relation caches of this
+    /// process (persistent run-time cache, shipped roots, recipe solves);
+    /// [`crate::VakintSettings::rustred_p_relation_cache`].
+    pub fn p_relation_cache_statistics(&self) -> super::p_relations::PRelationCacheStatistics {
+        super::p_relations::statistics()
+    }
+
     /// The p master catalogue of this engine's five-loop p-integrals.
     pub(crate) fn p_master_catalogue(&self) -> Option<&crate::p_integral::PMasterCatalogue> {
         self.p_master_catalogue.as_deref()

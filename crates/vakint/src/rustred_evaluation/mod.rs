@@ -19,6 +19,10 @@ mod official;
 #[cfg(all(unix, not(target_arch = "wasm32")))]
 pub use official::{ExternalDataLoadReport, ExternalDataLoopReport, OfficialExternalDataOptions};
 pub(crate) mod cache;
+pub use p_relations::{
+    P_RELATION_CACHE_DIRECTORY, PRelationCacheLocation, PRelationCacheSettings,
+    PRelationCacheStatistics, VAKINT_CACHE_DIR_VARIABLE,
+};
 pub use cache::{
     DEFAULT_ORDERED_CACHE_MAX_RESIDENT_BYTES, OrderedCacheAutosave, OrderedCacheMode,
     OrderedCacheProgramSaveReport, OrderedCacheProgramStatistics, OrderedCacheSaveReport,
@@ -45,6 +49,7 @@ mod numerator;
 mod ordered;
 pub(crate) mod p_data;
 pub(crate) mod p_integral;
+pub(crate) mod p_relations;
 pub(crate) mod p_shipped_cache;
 #[cfg(test)]
 mod p_shipped_cache_tests;

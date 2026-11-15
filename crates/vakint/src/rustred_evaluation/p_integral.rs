@@ -294,6 +294,19 @@ pub(super) fn reduce_one(
         return Err(super::request_dump::skipped(1));
     }
     let result = library.reduce(p_reduction_request(options, loops, inputs, step_cache));
+    if let Ok(reduction) = &result
+        && reduction.relation_cache != Default::default()
+    {
+        log::info!(
+            "RustRed p request {label}: {}{}",
+            super::p_relations::describe(&reduction.relation_cache),
+            if reduction.outside_certified.is_empty() {
+                String::new()
+            } else {
+                format!(" outside_certified_keys={}", reduction.outside_certified.len())
+            }
+        );
+    }
     if let Some(dump) = dump {
         dump.finish(library, &result)?;
     }
@@ -602,6 +615,9 @@ pub(crate) fn reduce_requests(
     requests: &[PropagatorRequest],
     progress: Option<&super::monitor::CallerProgress>,
 ) -> Result<BTreeMap<(usize, Atom), Vec<ReducedPropagatorValue>>, VakintError> {
+    // Before the library is loaded or used: a boxed node binds the relation
+    // cache roots on its first use (p_relations.rs).
+    super::p_relations::install(settings);
     let handle = vakint.p_library()?;
     let library = &handle.library;
     let options = request_options(settings);

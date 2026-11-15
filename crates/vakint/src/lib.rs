@@ -94,6 +94,10 @@ pub use rustred_evaluation::{
     ShippedOrderedCacheUse, ordered_cache_producer,
 };
 pub use rustred_evaluation::{RustRedEvaluationError, RustRedEvaluationOptions, RustRedMasterMode};
+pub use rustred_evaluation::{
+    P_RELATION_CACHE_DIRECTORY, PRelationCacheLocation, PRelationCacheSettings,
+    PRelationCacheStatistics, VAKINT_CACHE_DIR_VARIABLE,
+};
 pub use truncation_guard::{MissingMasterOrder, MissingMasterOrders};
 
 use regex::Regex;
@@ -2561,6 +2565,13 @@ pub struct VakintSettings {
     /// the typed refusal; `Retain` keeps the key as a `PResidual(node, k..)`
     /// symbol with a warning, under `master_mode=retain` only.
     pub rustred_p_uncovered: RustRedPUncoveredPolicy,
+    /// The persistent relation cache of boxed nodes (keys solved by a recipe
+    /// at run time are saved there and reused by later runs and other
+    /// processes) and the read-only shipped relation roots. Default:
+    /// `<vakint cache directory>/p_relations` ([`PRelationCacheLocation`]).
+    /// RustRed binds the roots when a boxed node is first used in the
+    /// process.
+    pub rustred_p_relation_cache: PRelationCacheSettings,
     pub tensor_reduction_method: TensorReductionMethod,
     // This quantity is typically set equal to *one plus the maximum loop count* of the UV regularisation problem considered.
     // For example when considering a 2-loop problem, then:
@@ -2903,6 +2914,7 @@ impl Default for VakintSettings {
             rustred_product_limits: Default::default(),
             rustred_momentum_match_limits: Default::default(),
             rustred_p_uncovered: RustRedPUncoveredPolicy::Reject,
+            rustred_p_relation_cache: PRelationCacheSettings::default(),
             tensor_reduction_method: TensorReductionMethod::FeynKit,
             // Default to a three-loop UV subtraction problem, for which alphaLoop implementation can be used.
             number_of_terms_in_epsilon_expansion: 4,
