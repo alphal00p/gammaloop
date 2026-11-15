@@ -778,7 +778,7 @@ fn package_master_catalogue(
 }
 
 /// vk5l WP4: the built-in five-loop p master catalogue (lane vk5l-mastermap's
-/// GGPPSS catalogue v3, `data/p/p-master-catalogue-5l.json`: the masters and
+/// GGPPSS catalogue v3, `data/p_master/p-master-catalogue-5l.json`: the masters and
 /// the map of every residual terminal of the current five-loop packages, in
 /// the packages' terminal names and frames), parsed once.
 fn built_in_master_catalogue() -> Option<Arc<crate::p_integral::PMasterCatalogue>> {
@@ -788,7 +788,7 @@ fn built_in_master_catalogue() -> Option<Arc<crate::p_integral::PMasterCatalogue
         .get_or_init(|| {
             match crate::p_integral::PMasterCatalogue::from_json(
                 "built-in p-master-catalogue-5l.json",
-                include_str!("../../data/p/p-master-catalogue-5l.json"),
+                include_str!("../../data/p_master/p-master-catalogue-5l.json"),
             ) {
                 Ok(catalogue) => Some(Arc::new(catalogue)),
                 Err(error) => {
