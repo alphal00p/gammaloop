@@ -154,6 +154,9 @@ pub(crate) struct PLibraryHandle {
     pub dimension: Atom,
     /// The step-cache program of this library (one for every loop count).
     pub cache: OrderedCacheProgram,
+    /// vk5l WP4: split and lowered requests met before
+    /// ([`super::p_integral::RequestMemo`]).
+    request_memo: Mutex<super::p_integral::RequestMemo>,
 }
 
 impl fmt::Debug for PLibraryHandle {
@@ -288,6 +291,7 @@ impl PLibraryHandle {
             origin,
             tops,
             residuals: Mutex::new(BTreeMap::new()),
+            request_memo: Mutex::default(),
             dimension,
             cache,
         })
@@ -476,6 +480,15 @@ impl PLibraryHandle {
         let atom = builder.finish();
         named.insert(terminal.0, atom.clone());
         Ok(atom)
+    }
+
+    /// The request memo of this library.
+    pub(crate) fn request_memo(
+        &self,
+    ) -> std::sync::MutexGuard<'_, super::p_integral::RequestMemo> {
+        self.request_memo
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
     }
 
     /// Whether the library holds the top of the [`P_FAMILIES`] entry `family`.

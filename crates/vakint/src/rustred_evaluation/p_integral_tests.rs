@@ -2321,8 +2321,8 @@ fn p_request_file_timing() {
         let finalize = finalizing.elapsed().as_secs_f64();
         eprintln!(
             "P-TIMING {pass}: reduce_requests {call:.3} s = split {:.3} + lower/fold {:.3} + \
-             coefficients {:.3} + library {:.3} + render {:.3} (channels {}, reductions {}, pairs {}); \
-             finalize {finalize:.3} s; {} terms",
+             coefficients {:.3} + library {:.3} + render {:.3} (channels {}, reductions {}, pairs {}, \
+             memo hits {}); finalize {finalize:.3} s; {} terms",
             stats.split_seconds,
             stats.lower_seconds,
             stats.prepare_seconds,
@@ -2331,7 +2331,48 @@ fn p_request_file_timing() {
             stats.channels,
             stats.reductions,
             stats.pairs,
+            stats.memo_hits,
             drill_term_count(&value.expand())
         );
     }
+}
+
+/// vk5l WP4: a batch met again is served by the request memo (no split, no
+/// lowering: every request a hit) and reduces to the same values; with the
+/// memo bound at zero bytes nothing is kept.
+#[test]
+fn a_repeated_batch_reuses_the_request_memo() {
+    let engine = library_engine();
+    let settings = settings(RustRedMasterMode::Symbolic, None);
+    let text = include_str!("../../tests/fixtures/p_split_requests.txt");
+    let records = request_records(text)
+        .into_iter()
+        .filter(|(family, ..)| has_p_data(&engine, family.loops))
+        .collect::<Vec<_>>();
+    let requests = records
+        .iter()
+        .map(|(family, powers, external, numerator)| PropagatorRequest {
+            family,
+            powers,
+            canonical_numerator: numerator.as_view(),
+            external: external.clone(),
+        })
+        .collect::<Vec<_>>();
+    assert!(!requests.is_empty());
+    if super::fold_mode() == super::FoldMode::Off {
+        return; // the memo serves the folded path
+    }
+    let first = reduce_requests(&engine, &settings, &requests, None).unwrap();
+    assert_eq!(super::last_stats().memo_hits, 0);
+    let second = reduce_requests(&engine, &settings, &requests, None).unwrap();
+    assert_eq!(super::last_stats().memo_hits, requests.len());
+    assert_eq!(super::last_stats().split_seconds, 0.0);
+    assert_eq!(format!("{first:?}"), format!("{second:?}"));
+    // A zero bound keeps nothing.
+    let fresh = library_engine();
+    let mut bounded = settings.clone();
+    bounded.ordered_cache.max_resident_bytes = Some(0);
+    reduce_requests(&fresh, &bounded, &requests, None).unwrap();
+    reduce_requests(&fresh, &bounded, &requests, None).unwrap();
+    assert_eq!(super::last_stats().memo_hits, 0);
 }

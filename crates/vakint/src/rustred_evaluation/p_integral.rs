@@ -601,6 +601,148 @@ struct ChannelParts<'r> {
 /// The split parts of a batch, by channel.
 type PendingChannels<'r> = BTreeMap<Channel, ChannelParts<'r>>;
 
+/// One request split and lowered (the value of [`RequestMemo`]): the lowered
+/// inputs of each of its channels, and its vakint integral.
+pub(crate) struct LoweredRequest {
+    channels: Vec<(Channel, BTreeMap<(PresentationId, Vec<i64>), Rational>)>,
+    integral: String,
+    pairs: usize,
+}
+
+/// The identity of a request: what its split and lowering depend on (the
+/// library is the memo's owner).
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct RequestKey {
+    family: &'static str,
+    powers: Vec<i64>,
+    external: Atom,
+    numerator: Atom,
+}
+
+/// Estimated resident bytes of one lowered input pair (key, rational,
+/// map node) for [`RequestMemo`]'s bound.
+const MEMO_BYTES_PER_PAIR: usize = 256;
+
+/// vk5l WP4: the request memo of a p library. A request met again (same
+/// family, powers, external and canonical numerator) reuses its split and
+/// lowered inputs instead of redoing them (on the beta team's heaviest
+/// four-loop request the split and the lowering are 91 % of the call); the
+/// fold, the reduction (with the step cache) and the rendering follow as
+/// for a new request. Least recently used entries go first beyond the bound
+/// of [`crate::OrderedCacheSettings::max_resident_bytes`] (`None`: no bound);
+/// `VAKINT_P_REQUEST_MEMO=off` disables it.
+#[derive(Default)]
+pub(crate) struct RequestMemo {
+    entries: HashMap<RequestKey, (Arc<LoweredRequest>, u64)>,
+    clock: u64,
+    pairs: usize,
+    pub hits: u64,
+    pub misses: u64,
+}
+
+impl RequestMemo {
+    fn get(&mut self, key: &RequestKey) -> Option<Arc<LoweredRequest>> {
+        self.clock += 1;
+        let clock = self.clock;
+        let found = self.entries.get_mut(key).map(|(value, used)| {
+            *used = clock;
+            Arc::clone(value)
+        });
+        if found.is_some() {
+            self.hits += 1;
+        } else {
+            self.misses += 1;
+        }
+        found
+    }
+
+    fn insert(&mut self, key: RequestKey, value: Arc<LoweredRequest>, max_pairs: Option<usize>) {
+        if max_pairs.is_some_and(|max| value.pairs > max) {
+            return;
+        }
+        self.clock += 1;
+        self.pairs += value.pairs;
+        if let Some((old, _)) = self.entries.insert(key, (value, self.clock)) {
+            self.pairs -= old.pairs;
+        }
+        while let Some(max) = max_pairs
+            && self.pairs > max
+        {
+            let Some(oldest) = self
+                .entries
+                .iter()
+                .min_by_key(|(_, (_, used))| *used)
+                .map(|(key, _)| key.clone())
+            else {
+                break;
+            };
+            if let Some((old, _)) = self.entries.remove(&oldest) {
+                self.pairs -= old.pairs;
+            }
+        }
+    }
+}
+
+fn request_memo_enabled() -> bool {
+    static ENABLED: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+        !matches!(
+            std::env::var("VAKINT_P_REQUEST_MEMO").as_deref(),
+            Ok("off" | "0" | "false")
+        )
+    });
+    *ENABLED
+}
+
+/// Split and lower one request (`None`: scaleless), through the library's
+/// [`RequestMemo`]; split and lowering seconds go to the statistics.
+fn lowered_request(
+    handle: &PLibraryHandle,
+    settings: &VakintSettings,
+    request: &PropagatorRequest,
+    forms: &mut BTreeMap<PresentationId, BTreeMap<PDot, AffineSlotForm>>,
+) -> Result<Arc<LoweredRequest>, VakintError> {
+    let key = request_memo_enabled().then(|| RequestKey {
+        family: request.family.name,
+        powers: request.powers.to_vec(),
+        external: request.external.clone(),
+        numerator: request.canonical_numerator.to_owned(),
+    });
+    if let Some(key) = &key
+        && let Some(found) = handle.request_memo().get(key)
+    {
+        with_stats(|stats| stats.memo_hits += 1);
+        return Ok(found);
+    }
+    let splitting = std::time::Instant::now();
+    let mut pending = PendingChannels::new();
+    split_request(handle, request, forms, &mut pending)?;
+    with_stats(|stats| stats.split_seconds += splitting.elapsed().as_secs_f64());
+    let lowering = std::time::Instant::now();
+    let mut channels = Vec::with_capacity(pending.len());
+    let mut pairs = 0;
+    for (channel, ChannelParts { parts, .. }) in pending {
+        let lowered = lower_channel(handle, parts, forms)?;
+        pairs += lowered.len();
+        channels.push((channel, lowered));
+    }
+    with_stats(|stats| stats.lower_seconds += lowering.elapsed().as_secs_f64());
+    let value = Arc::new(LoweredRequest {
+        channels,
+        integral: integral_name(request),
+        pairs,
+    });
+    if let Some(key) = key {
+        let max_pairs = settings
+            .ordered_cache
+            .max_resident_bytes
+            .map(|bytes| bytes / MEMO_BYTES_PER_PAIR);
+        handle
+            .request_memo()
+            .insert(key, Arc::clone(&value), max_pairs);
+    }
+    Ok(value)
+}
+
 /// The checks of [`lower_part`] on one part, without lowering it: the line
 /// count, and the dot form of every scalar product in the order
 /// [`lower_part`] builds them, cached in `forms`. A part that passes lowers
@@ -808,7 +950,7 @@ fn reduce_requests_with(
         let stats = last_stats();
         eprintln!(
             "vakint-p-reduce requests={} channels={} reductions={} pairs={} split={:.6} lower={:.6} \
-             prepare={:.6} library={:.6} render={:.6} fold={:?}",
+             prepare={:.6} library={:.6} render={:.6} memo_hits={} fold={:?}",
             requests.len(),
             stats.channels,
             stats.reductions,
@@ -818,6 +960,7 @@ fn reduce_requests_with(
             stats.prepare_seconds,
             stats.library_seconds,
             stats.render_seconds,
+            stats.memo_hits,
             fold_mode()
         );
     }
@@ -865,6 +1008,8 @@ pub(crate) struct PReduceStats {
     pub prepare_seconds: f64,
     pub library_seconds: f64,
     pub render_seconds: f64,
+    /// Requests served by the request memo ([`RequestMemo`]).
+    pub memo_hits: usize,
 }
 
 thread_local! {
@@ -1093,19 +1238,25 @@ pub(crate) fn reduce_requests_folded(
     factored: bool,
 ) -> Result<BTreeMap<(usize, Atom), Vec<ReducedPropagatorValue>>, VakintError> {
     with_stats(|stats| *stats = PReduceStats::default());
-    let started = std::time::Instant::now();
     let epsilon = vk_symbol!(&settings.epsilon_symbol);
     let handle = vakint.p_library()?;
     let mut forms = BTreeMap::new();
-    let mut pending = PendingChannels::new();
-    for request in requests {
-        split_request(&handle, request, &mut forms, &mut pending)?;
-    }
-    with_stats(|stats| {
-        stats.split_seconds = started.elapsed().as_secs_f64();
-        stats.channels = pending.len();
-    });
+    // Every request split and lowered (or taken from the request memo); the
+    // channels of different requests are folded below, each lowered input
+    // distributed as before (rational sums are exact, so the order of the
+    // requests does not change the folded inputs).
+    let lowered_requests = requests
+        .iter()
+        .map(|request| lowered_request(&handle, settings, request, &mut forms))
+        .collect::<Result<Vec<_>, VakintError>>()?;
+    let distinct = lowered_requests
+        .iter()
+        .flat_map(|lowered| lowered.channels.iter().map(|(channel, _)| channel))
+        .collect::<BTreeSet<_>>()
+        .len();
+    with_stats(|stats| stats.channels = distinct);
     let lowering = std::time::Instant::now();
+    let mut spectators = HashMap::<Atom, Vec<(Atom, Atom, Rational)>>::new();
     // Lower every channel once and distribute its lowered inputs, scaled by
     // the value of each term of its coefficient, over the folded channels and
     // basis functions. The integral keys are numbered once, and every folded
@@ -1114,24 +1265,32 @@ pub(crate) fn reduce_requests_folded(
     let mut keys = Vec::<(PresentationId, Vec<i64>)>::new();
     let mut buckets = Vec::<Vec<Rational>>::new();
     let mut targets = BTreeMap::<Channel, (BTreeMap<Atom, usize>, BTreeSet<String>)>::new();
-    for (channel, ChannelParts { parts, integrals }) in pending {
-        let lowered = lower_channel(&handle, parts, &mut forms)?;
+    for (channel, lowered, integral) in lowered_requests.iter().flat_map(|request| {
+        request
+            .channels
+            .iter()
+            .map(|(channel, lowered)| (channel, lowered, &request.integral))
+    }) {
         if lowered.is_empty() {
             continue;
         }
         let lowered = lowered
-            .into_iter()
+            .iter()
             .filter(|(_, value)| !value.is_zero())
             .map(|(key, value)| {
                 let next = keys.len();
                 let id = *key_ids.entry(key.clone()).or_insert_with(|| {
-                    keys.push(key);
+                    keys.push(key.clone());
                     next
                 });
                 (id, value)
             })
             .collect::<Vec<_>>();
-        for (monomial, basis, value) in spectator_terms(&channel.coefficient, epsilon) {
+        let terms = spectators
+            .entry(channel.coefficient.clone())
+            .or_insert_with(|| spectator_terms(&channel.coefficient, epsilon))
+            .clone();
+        for (monomial, basis, value) in terms {
             let target = targets
                 .entry(Channel {
                     loops: channel.loops,
@@ -1140,7 +1299,9 @@ pub(crate) fn reduce_requests_folded(
                     coefficient: monomial,
                 })
                 .or_default();
-            target.1.extend(integrals.iter().cloned());
+            if !target.1.contains(integral) {
+                target.1.insert(integral.clone());
+            }
             let next = buckets.len();
             let bucket = *target.0.entry(basis).or_insert_with(|| {
                 buckets.push(Vec::new());
@@ -1153,9 +1314,9 @@ pub(crate) fn reduce_requests_folded(
             let unit = value == Rational::one();
             for (id, lowered_value) in &lowered {
                 if unit {
-                    bucket[*id] += lowered_value;
+                    bucket[*id] += *lowered_value;
                 } else {
-                    bucket[*id] += &(lowered_value * &value);
+                    bucket[*id] += &(*lowered_value * &value);
                 }
             }
         }
@@ -1174,7 +1335,7 @@ pub(crate) fn reduce_requests_folded(
             target.by_basis.insert(basis, inputs);
         }
     }
-    with_stats(|stats| stats.lower_seconds = lowering.elapsed().as_secs_f64());
+    with_stats(|stats| stats.lower_seconds += lowering.elapsed().as_secs_f64());
     let reducer = ChannelReducer {
         handle: &handle,
         options: request_options(settings),
