@@ -54,6 +54,76 @@ impl DirectClosureInput {
     }
 }
 
+/// The folded RustRed input of one or more closures with the same closing
+/// line (mass, power, head): an additive map over canonical integral keys.
+#[derive(Clone, Debug)]
+pub struct LoweredClosure {
+    closure: MassiveClosure,
+    head: Atom,
+    folded: std::collections::BTreeMap<
+        crate::rustred_evaluation::p_integral::Channel,
+        crate::rustred_evaluation::p_integral::FoldedInputs,
+    >,
+}
+
+impl LoweredClosure {
+    /// The closing line this input belongs to: (mass², power, head).
+    pub fn closing_key(&self) -> (Atom, i64, Atom) {
+        (self.closure.mass_squared.clone(), self.closure.power, self.head.clone())
+    }
+
+    /// Add `other` (same closing key) into this input; `Err(other)` otherwise.
+    /// Values are exact rationals, summed per channel, ε-basis and key.
+    pub fn absorb(&mut self, other: LoweredClosure) -> Result<(), LoweredClosure> {
+        if other.closing_key() != self.closing_key() {
+            return Err(other);
+        }
+        for (channel, inputs) in other.folded {
+            let target = self.folded.entry(channel).or_default();
+            target.integrals.extend(inputs.integrals);
+            for (basis, values) in inputs.by_basis {
+                let bucket = target.by_basis.entry(basis).or_default();
+                for (key, value) in values {
+                    let entry = bucket.entry(key).or_insert_with(symbolica::domains::rational::Rational::zero);
+                    *entry += &value;
+                }
+                bucket.retain(|_, value| !value.is_zero());
+            }
+        }
+        Ok(())
+    }
+
+    /// Reduce and finalise once (RustRed master mode of the settings).
+    pub fn evaluate(self, vakint: &Vakint, settings: &crate::VakintSettings) -> Result<Atom, VakintError> {
+        use crate::rustred_evaluation::p_integral as rr;
+        let handle = vakint.p_library()?;
+        let mode = settings
+            .evaluation_order
+            .0
+            .iter()
+            .find_map(|method| match method {
+                EvaluationMethod::RustRed(options) => Some(options.master_mode),
+                _ => None,
+            })
+            .unwrap_or(RustRedMasterMode::Symbolic);
+        let reduced = rr::reduce_folded_channels(vakint, settings, &handle, self.folded, None, rr::fold_mode(), true)?;
+        let mut result = Atom::Zero;
+        let mut numerical = Atom::Zero;
+        for ((loops, _), values) in reduced {
+            let value = self.closure.finalize(&values, loops, &self.head, settings, mode)?;
+            if mode == RustRedMasterMode::Numerical {
+                numerical += value;
+            } else {
+                result += value;
+            }
+        }
+        if !numerical.is_zero() {
+            result += vakint.resolve_rustred_numerical(numerical, settings)?;
+        }
+        Ok(result.expand())
+    }
+}
+
 /// `VAKINT_LOWERING`: `legacy` evaluates direct closure inputs through the
 /// ordinary path; `check` lowers them directly and also through the ordinary
 /// path, compares the values (`LOWERING_CHECK` on stderr) and returns the
@@ -434,7 +504,70 @@ impl MassiveClosure {
             }
             results.push(value);
         }
+        if std::env::var_os("VAKINT_LOWERING_SUMCHECK").is_some() {
+            // Summing check: closures with one closing key, lowered, absorbed
+            // and reduced once, against the sum of their values.
+            let mut groups = std::collections::BTreeMap::<(Atom, i64, Atom), (LoweredClosure, Atom, usize)>::new();
+            for ((closure, input), value) in inputs.iter().zip(&results) {
+                let Some(lowered) = closure.lower_direct(vakint, settings, input)? else {
+                    continue;
+                };
+                match groups.entry(lowered.closing_key()) {
+                    std::collections::btree_map::Entry::Occupied(mut entry) => {
+                        let (sum, total, count) = entry.get_mut();
+                        let _ = sum.absorb(lowered);
+                        *total += value;
+                        *count += 1;
+                    }
+                    std::collections::btree_map::Entry::Vacant(entry) => {
+                        entry.insert((lowered, value.clone(), 1));
+                    }
+                }
+            }
+            for (_, (sum, total, count)) in groups {
+                if count < 2 {
+                    continue;
+                }
+                let summed = sum.evaluate(vakint, settings)?;
+                let total = total.expand();
+                let identical = summed == total;
+                let equal = identical || (&summed - &total).expand().is_zero();
+                eprintln!("LOWERING_SUMCHECK closures={count} identical={identical} equal={equal}");
+            }
+        }
         Ok(results)
+    }
+
+    /// The direct lowering of one closure without its reduction: the folded
+    /// RustRed input keyed by canonical integrals, which can be added to the
+    /// input of other closures (of this or other diagrams) with the same
+    /// closing mass, power and head before one reduction ([`LoweredClosure`]).
+    /// `Ok(None)` when the direct lowering declines the input (use
+    /// [`Self::evaluate_direct_batch`]).
+    pub fn lower_direct(
+        &self,
+        vakint: &Vakint,
+        settings: &crate::VakintSettings,
+        input: &DirectClosureInput,
+    ) -> Result<Option<LoweredClosure>, VakintError> {
+        use crate::rustred_evaluation::p_lowering as direct;
+        let head = self.validated_head(settings)?;
+        if input.numerator.is_zero() {
+            return Ok(Some(LoweredClosure { closure: self.clone(), head, folded: Default::default() }));
+        }
+        let cut = match direct::match_cut(vakint, settings, &input.topology, &head)? {
+            Ok(Some(cut)) => cut,
+            Ok(None) => {
+                return Ok(Some(LoweredClosure { closure: self.clone(), head, folded: Default::default() }));
+            }
+            Err(_) => return Ok(None),
+        };
+        let handle = vakint.p_library()?;
+        let mut stats = direct::DirectStats::default();
+        match direct::lower_closure(vakint, settings, &handle, &cut, &input.routing, input.numerator.as_view(), &mut stats)? {
+            Ok(folded) => Ok(Some(LoweredClosure { closure: self.clone(), head, folded })),
+            Err(_) => Ok(None),
+        }
     }
 
     /// One closure through the direct lowering; `Err(Declined)` when the
