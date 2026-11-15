@@ -180,6 +180,9 @@ pub(crate) struct PLibraryHandle {
     pub dimension: Atom,
     /// The step-cache program of this library (one for every loop count).
     pub cache: OrderedCacheProgram,
+    /// vk5l WP4: the p master catalogue the package ships next to its
+    /// library (`<package>/p-master-catalogue.json`), if any.
+    pub(crate) master_catalogue: Option<Arc<crate::p_integral::PMasterCatalogue>>,
     /// vk5l WP4: split and lowered requests met before
     /// ([`super::p_integral::RequestMemo`]).
     request_memo: Mutex<super::p_integral::RequestMemo>,
@@ -317,6 +320,7 @@ impl PLibraryHandle {
             origin,
             tops,
             residuals: Mutex::new(BTreeMap::new()),
+            master_catalogue: None,
             request_memo: Mutex::default(),
             dimension,
             cache,
@@ -748,7 +752,79 @@ fn load_package(
     )
     .map_err(|error| data_failure(format!("{}: {error}", directory.display())))?;
     library.set_source(directory.display().to_string());
-    PLibraryHandle::new(library, PLibraryOrigin::Package).map(Arc::new)
+    let mut handle = PLibraryHandle::new(library, PLibraryOrigin::Package)?;
+    handle.master_catalogue = package_master_catalogue(directory)?;
+    Ok(Arc::new(handle))
+}
+
+/// File name of the p master catalogue a package ships next to its library.
+pub const P_MASTER_CATALOGUE_FILE: &str = "p-master-catalogue.json";
+
+/// Environment variable overriding the default five-loop p master
+/// catalogue: a file path, or `off` (no catalogue unless one is set).
+pub const P_MASTER_CATALOGUE_VARIABLE: &str = "VAKINT_P_MASTER_CATALOGUE";
+
+/// The catalogue `<directory>/p-master-catalogue.json`, if the package ships one.
+fn package_master_catalogue(
+    directory: &Path,
+) -> Result<Option<Arc<crate::p_integral::PMasterCatalogue>>, RustRedEvaluationError> {
+    let path = directory.join(P_MASTER_CATALOGUE_FILE);
+    if !path.is_file() {
+        return Ok(None);
+    }
+    crate::p_integral::PMasterCatalogue::load(&path)
+        .map(|catalogue| Some(Arc::new(catalogue)))
+        .map_err(|error| data_failure(format!("{}: {error}", path.display())))
+}
+
+/// vk5l WP4: the built-in five-loop p master catalogue (lane vk5l-mastermap's
+/// GGPPSS catalogue v3, `data/p/p-master-catalogue-5l.json`: the masters and
+/// the map of every residual terminal of the current five-loop packages, in
+/// the packages' terminal names and frames), parsed once.
+fn built_in_master_catalogue() -> Option<Arc<crate::p_integral::PMasterCatalogue>> {
+    static CATALOGUE: std::sync::OnceLock<Option<Arc<crate::p_integral::PMasterCatalogue>>> =
+        std::sync::OnceLock::new();
+    CATALOGUE
+        .get_or_init(|| {
+            match crate::p_integral::PMasterCatalogue::from_json(
+                "built-in p-master-catalogue-5l.json",
+                include_str!("../../data/p/p-master-catalogue-5l.json"),
+            ) {
+                Ok(catalogue) => Some(Arc::new(catalogue)),
+                Err(error) => {
+                    log::error!("vakint: the built-in five-loop p master catalogue is invalid: {error}");
+                    None
+                }
+            }
+        })
+        .clone()
+}
+
+/// The catalogue of [`P_MASTER_CATALOGUE_VARIABLE`]: `Some(None)` for `off`,
+/// `None` when unset; a file is read once per path.
+fn variable_master_catalogue() -> Option<Option<Arc<crate::p_integral::PMasterCatalogue>>> {
+    let value = std::env::var_os(P_MASTER_CATALOGUE_VARIABLE)?;
+    if value == "off" {
+        return Some(None);
+    }
+    static LOADED: Mutex<BTreeMap<PathBuf, Arc<crate::p_integral::PMasterCatalogue>>> =
+        Mutex::new(BTreeMap::new());
+    let path = PathBuf::from(value);
+    let mut loaded = LOADED.lock().unwrap_or_else(PoisonError::into_inner);
+    if let Some(catalogue) = loaded.get(&path) {
+        return Some(Some(Arc::clone(catalogue)));
+    }
+    match crate::p_integral::PMasterCatalogue::load(&path) {
+        Ok(catalogue) => {
+            let catalogue = Arc::new(catalogue);
+            loaded.insert(path, Arc::clone(&catalogue));
+            Some(Some(catalogue))
+        }
+        Err(error) => {
+            log::error!("vakint: {P_MASTER_CATALOGUE_VARIABLE}={}: {error}", path.display());
+            Some(None)
+        }
+    }
 }
 
 /// Libraries loaded from external-data directories, by directory: loaded once
@@ -1012,9 +1088,35 @@ impl Vakint {
         super::p_relations::statistics()
     }
 
-    /// The p master catalogue of this engine's five-loop p-integrals.
-    pub(crate) fn p_master_catalogue(&self) -> Option<&crate::p_integral::PMasterCatalogue> {
-        self.p_master_catalogue.as_deref()
+    /// vk5l WP4: no default five-loop p master catalogue for this engine
+    /// (only one set with [`Self::set_p_master_catalogue`]): five-loop results
+    /// stay `PResidual` symbols under `master_mode=retain` and the other modes
+    /// refuse them.
+    pub fn disable_default_p_master_catalogue(&mut self) {
+        self.p_master_catalogue_default = false;
+    }
+
+    /// The p master catalogue of this engine's five-loop p-integrals: the one
+    /// set with [`Self::set_p_master_catalogue`]; else, unless disabled, the
+    /// file of `VAKINT_P_MASTER_CATALOGUE` (`off`: none), the catalogue the
+    /// loaded package ships (`p-master-catalogue.json`), the built-in one.
+    pub(crate) fn p_master_catalogue(&self) -> Option<Arc<crate::p_integral::PMasterCatalogue>> {
+        if let Some(catalogue) = &self.p_master_catalogue {
+            return Some(Arc::clone(catalogue));
+        }
+        if !self.p_master_catalogue_default {
+            return None;
+        }
+        if let Some(chosen) = variable_master_catalogue() {
+            return chosen;
+        }
+        if let Some(catalogue) = self
+            .loaded_p_library()
+            .and_then(|handle| handle.master_catalogue.clone())
+        {
+            return Some(catalogue);
+        }
+        built_in_master_catalogue()
     }
 
     /// The external-data root of this engine's loaded data, if it was read

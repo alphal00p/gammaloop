@@ -2966,6 +2966,9 @@ pub struct Vakint {
     /// vk5l WP4: the p master catalogue that finalizes five-loop p-integrals
     /// (`set_p_master_catalogue`); none by default (decision Q3: Retain only).
     p_master_catalogue: Option<Arc<p_integral::PMasterCatalogue>>,
+    /// vk5l WP4: whether five-loop p results use the default catalogue when
+    /// none is set ([`Vakint::disable_default_p_master_catalogue`]).
+    p_master_catalogue_default: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -5499,6 +5502,7 @@ impl Vakint {
             ordered_cache: Arc::default(),
             p_library: None,
             p_master_catalogue: None,
+            p_master_catalogue_default: true,
         })
     }
 

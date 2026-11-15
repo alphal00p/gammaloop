@@ -1613,7 +1613,7 @@ pub(crate) fn reduce_requests_eager(
 /// the engine's catalogue (`Vakint::set_p_master_catalogue`) for five loops;
 /// one to four loops keep the Forcer table. No catalogue ships yet (decision
 /// Q3: Retain-only first); WP6 sets the catalogue of the loaded p area.
-fn p_master_catalogue(vakint: &Vakint, loops: usize) -> Option<&PMasterCatalogue> {
+fn p_master_catalogue(vakint: &Vakint, loops: usize) -> Option<Arc<PMasterCatalogue>> {
     if loops >= 5 {
         vakint.p_master_catalogue()
     } else {
@@ -1672,7 +1672,7 @@ pub(crate) fn finalize_reduced(
                 settings,
                 mode,
                 "RustRed",
-                PMasterSource::new(catalogue, &request),
+                PMasterSource::new(catalogue.as_deref(), &request),
             )
         })?;
         result += phases::time("p.final_simplify_real", || {

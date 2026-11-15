@@ -1510,6 +1510,7 @@ mod five_loop_guards {
 
     fn engine(catalogue: bool) -> Vakint {
         let mut engine = Vakint::new().unwrap();
+        engine.disable_default_p_master_catalogue();
         if catalogue {
             engine.set_p_master_catalogue(
                 PMasterCatalogue::from_json("test catalogue", &fixture().to_string()).unwrap(),
@@ -1735,6 +1736,46 @@ fn drill_term_count(value: &Atom) -> usize {
 /// `<expected>` = `zero`: the input is an exact identity (a sum, e.g. an IBP
 /// relation); each summand is reduced on its own (must be nonzero), and the
 /// sum of those reductions and the reduction of the whole input must vanish.
+
+/// The largest absolute numerical factor of the terms of `values` (expanded):
+/// the scale of a numerical identity check of [`five_loop_package_drill`].
+fn drill_largest_coefficient(values: &[Atom]) -> f64 {
+    let mut largest = 0.0f64;
+    for value in values {
+        let expanded = value.expand();
+        let terms: Vec<symbolica::atom::AtomView> = match expanded.as_view() {
+            symbolica::atom::AtomView::Add(sum) => sum.iter().collect(),
+            other => vec![other],
+        };
+        for term in terms {
+            let factors: Vec<symbolica::atom::AtomView> = match term {
+                symbolica::atom::AtomView::Mul(product) => product.iter().collect(),
+                other => vec![other],
+            };
+            for factor in factors {
+                if let symbolica::atom::AtomView::Num(_) = factor {
+                    let text = factor.to_string();
+                    let parsed = text
+                        .split('/')
+                        .map(|part| part.trim().trim_end_matches(|c: char| c == '`' || c.is_ascii_digit() && false).parse::<f64>())
+                        .collect::<Vec<_>>();
+                    let magnitude = match parsed.as_slice() {
+                        [Ok(a)] => a.abs(),
+                        [Ok(a), Ok(b)] => (a / b).abs(),
+                        _ => text
+                            .split('`')
+                            .next()
+                            .and_then(|head| head.parse::<f64>().ok())
+                            .map_or(0.0, f64::abs),
+                    };
+                    largest = largest.max(magnitude);
+                }
+            }
+        }
+    }
+    largest
+}
+
 #[test]
 fn five_loop_package_drill() {
     let Some(directory) = std::env::var_os("VAKINT_TEST_P5L_DRILL_PACKAGE") else {
@@ -1752,7 +1793,14 @@ fn five_loop_package_drill() {
         started.elapsed().as_secs_f64(),
         engine.p_library().unwrap().scope()
     );
-    let mut settings = settings(RustRedMasterMode::Retain, None);
+    // vk5l WP4: VAKINT_TEST_P5L_DRILL_MODE=symbolic|numerical runs the
+    // drill end to end through the p master catalogue (default retain).
+    let drill_mode = match std::env::var("VAKINT_TEST_P5L_DRILL_MODE").as_deref() {
+        Ok("symbolic") => RustRedMasterMode::Symbolic,
+        Ok("numerical") => RustRedMasterMode::Numerical,
+        _ => RustRedMasterMode::Retain,
+    };
+    let mut settings = settings(drill_mode, None);
     settings.number_of_terms_in_epsilon_expansion = 6;
     settings.n_cores = std::env::var("VAKINT_TEST_P5L_DRILL_CORES")
         .ok()
@@ -1792,6 +1840,7 @@ fn five_loop_package_drill() {
                 };
                 let mut total = Atom::Zero;
                 let mut nonzero = 0usize;
+                let mut summand_values = Vec::<Atom>::new();
                 for (index, summand) in summands.iter().enumerate() {
                     let started = std::time::Instant::now();
                     let reduced = engine
@@ -1814,6 +1863,7 @@ fn five_loop_package_drill() {
                     } else {
                         nonzero += 1;
                     }
+                    summand_values.push(reduced.clone());
                     total = total + reduced;
                 }
                 // Rational coefficients in eps (e.g. 1/(1+eps) from a
@@ -1830,7 +1880,28 @@ fn five_loop_package_drill() {
                     drill_term_count(&total)
                 );
                 assert!(nonzero >= 2, "{label}: fewer than two nonzero summands, no check");
-                assert!(whole.is_zero() && total.is_zero(), "{label}: identity violated");
+                if drill_mode == RustRedMasterMode::Numerical {
+                    // Numerical masters: every coefficient of the sum must
+                    // vanish to the working precision, relative to the
+                    // largest summand coefficient.
+                    let scale = drill_largest_coefficient(&summand_values);
+                    let residue = drill_largest_coefficient(&[total.clone(), whole.clone()]);
+                    eprintln!(
+                        "DRILL {label}: numerical check: largest |coefficient| of the sums {residue:.3e}, \
+                         of the summands {scale:.3e}"
+                    );
+                    assert!(
+                        residue <= 1e-25 * scale.max(1.0),
+                        "{label}: identity violated numerically"
+                    );
+                    eprintln!(
+                        "DRILL {label}: IDENTITY HOLDS TO WORKING PRECISION ({} summands, {nonzero} nonzero)",
+                        summands.len()
+                    );
+                    continue;
+                } else {
+                    assert!(whole.is_zero() && total.is_zero(), "{label}: identity violated");
+                }
                 eprintln!(
                     "DRILL {label}: IDENTITY HOLDS EXACTLY ({} summands, {nonzero} nonzero)",
                     summands.len()
