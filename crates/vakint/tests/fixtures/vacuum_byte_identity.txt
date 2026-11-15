@@ -244,12 +244,62 @@ free/symbols_after_new	vakint::vec1
 free/symbols_after_new	vakint::ep
 free/symbols_after_new	vakint::d
 free/symbols_after_new	vakint::vakintFloat
-free/symbols_after_new	vakint::msq
-free/symbols_after_new	vakint::I1L
-free/symbols_after_new	vakint::nl_
-free/symbols_after_new	vakint::nr_
+free/symbols_after_new	vakint::PG
+free/symbols_after_new	vakint::PMaster
+free/symbols_after_new	vakint::PGamma
+free/symbols_after_new	vakint::NumericalSource
+free/symbols_after_new	vakint::RustRedMaster
+free/symbols_after_new	vakint::RustRedCoefficient
+free/symbols_after_new	vakint::RustRedFiniteLiteral
+free/symbols_after_new	vakint::RustRedConstant
+free/symbols_after_new	vakint::rustred_input
+free/symbols_after_new	vakint::input_coefficient
+free/symbols_after_new	vakint::HR
+free/symbols_after_new	vakint::HI
+free/symbols_after_new	vakint::GPLReal
+free/symbols_after_new	vakint::GPLImag
+free/symbols_after_new	vakint::PolylogReal
+free/symbols_after_new	vakint::PolylogImag
+free/symbols_after_new	vakint::sqrt3
+free/symbols_after_new	vakint::cl2
+free/symbols_after_new	vakint::S2
+free/symbols_after_new	vakint::Zeta
+free/symbols_after_new	vakint::Sqrt
+free/symbols_after_new	vakint::om1
+free/symbols_after_new	vakint::EulerGamma
+free/symbols_after_new	vakint::D6
+free/symbols_after_new	vakint::T1ep
+free/symbols_after_new	vakint::T1ep2
+free/symbols_after_new	vakint::cl4
+free/symbols_after_new	vakint::s6
+free/symbols_after_new	vakint::MZV
 free/symbols_after_new	vakint::q_
 free/symbols_after_new	vakint::mUVsq_
+free/symbols_after_new	vakint::nl_
+free/symbols_after_new	vakint::nr_
+free/symbols_after_new	vakint::props_
+free/symbols_after_new	vakint::idx___
+free/symbols_after_new	vakint::z2
+free/symbols_after_new	vakint::z3
+free/symbols_after_new	vakint::z4
+free/symbols_after_new	vakint::z5
+free/symbols_after_new	vakint::z6
+free/symbols_after_new	vakint::PR4fin
+free/symbols_after_new	vakint::PR4
+free/symbols_after_new	vakint::PR4dfin
+free/symbols_after_new	vakint::PR4d
+free/symbols_after_new	vakint::PR11dep0
+free/symbols_after_new	vakint::PR11d
+free/symbols_after_new	vakint::PR4ep1
+free/symbols_after_new	vakint::PR4dep1
+free/symbols_after_new	rustred::d
+free/symbols_after_new	vakint::x__
+free/symbols_after_new	vakint::p_
+free/symbols_after_new	vakint::Gamma
+free/symbols_after_new	vakint::partial_numerical_input
+free/symbols_after_new	vakint::RustRedMaterializeSpectator
+free/symbols_after_new	vakint::msq
+free/symbols_after_new	vakint::I1L
 free/symbols_after_new	vakint::lmbID_
 free/symbols_after_new	vakint::mid_
 free/symbols_after_new	vakint::pid_
@@ -346,7 +396,6 @@ free/symbols_after_new	vakint::I4L_FG_pinch_3_7_8
 free/symbols_after_new	vakint::I4L_FG_pinch_4_7_8
 free/symbols_after_new	vakint::I4L_FG_pinch_6_7_8
 free/symbols_after_new	vakint::I4L_FG_pinch_4_6_7_8
-free/symbols_after_new	vakint::props_
 free/symbols_after_new	vakint::P1L
 free/symbols_after_new	vakint::P2L
 free/symbols_after_new	vakint::P3L_LA
@@ -363,6 +412,70 @@ free/symbols_after_new	vakint::P4L_HAHA
 free/symbols_after_new	vakint::P4L_NO1
 free/symbols_after_new	vakint::P4L_NO2
 free/symbols_after_new	vakint::P4L_NO3
+free/symbols_after_new	vakint::P05373c99ef72fce4_e1
+free/symbols_after_new	vakint::P05373c99ef72fce4_e13
+free/symbols_after_new	vakint::P28bbd9922728f59c_e1
+free/symbols_after_new	vakint::P28bbd9922728f59c_e3
+free/symbols_after_new	vakint::P28bbd9922728f59c_e5
+free/symbols_after_new	vakint::P28bbd9922728f59c_e7
+free/symbols_after_new	vakint::P28bbd9922728f59c_e9
+free/symbols_after_new	vakint::P28bbd9922728f59c_e11
+free/symbols_after_new	vakint::P28bbd9922728f59c_e13
+free/symbols_after_new	vakint::P28bbd9922728f59c_e14
+free/symbols_after_new	vakint::P31ce20b7cbb3f542_e1
+free/symbols_after_new	vakint::P31ce20b7cbb3f542_e7
+free/symbols_after_new	vakint::P31ce20b7cbb3f542_e10
+free/symbols_after_new	vakint::P3dc41bbf2115e501_e1
+free/symbols_after_new	vakint::P3dc41bbf2115e501_e5
+free/symbols_after_new	vakint::P3dc41bbf2115e501_e7
+free/symbols_after_new	vakint::P3dc41bbf2115e501_e9
+free/symbols_after_new	vakint::P3dc41bbf2115e501_e13
+free/symbols_after_new	vakint::P3dc41bbf2115e501_e15
+free/symbols_after_new	vakint::P3e892c5a34c7100d_e1
+free/symbols_after_new	vakint::P3e892c5a34c7100d_e5
+free/symbols_after_new	vakint::P3e892c5a34c7100d_e7
+free/symbols_after_new	vakint::P3e892c5a34c7100d_e11
+free/symbols_after_new	vakint::P3e892c5a34c7100d_e15
+free/symbols_after_new	vakint::P47437688db9db7d3_e1
+free/symbols_after_new	vakint::P47437688db9db7d3_e4
+free/symbols_after_new	vakint::P47437688db9db7d3_e10
+free/symbols_after_new	vakint::P47437688db9db7d3_e13
+free/symbols_after_new	vakint::P5c03540956a38684_e1
+free/symbols_after_new	vakint::P5c03540956a38684_e6
+free/symbols_after_new	vakint::P6060726d8885b4d8_e1
+free/symbols_after_new	vakint::P6060726d8885b4d8_e6
+free/symbols_after_new	vakint::P62b7d0ea55c4864e_e1
+free/symbols_after_new	vakint::P62b7d0ea55c4864e_e3
+free/symbols_after_new	vakint::P62b7d0ea55c4864e_e4
+free/symbols_after_new	vakint::P62b7d0ea55c4864e_e6
+free/symbols_after_new	vakint::P62b7d0ea55c4864e_e7
+free/symbols_after_new	vakint::P62b7d0ea55c4864e_e9
+free/symbols_after_new	vakint::P62b7d0ea55c4864e_e11
+free/symbols_after_new	vakint::P62b7d0ea55c4864e_e13
+free/symbols_after_new	vakint::P62b7d0ea55c4864e_e14
+free/symbols_after_new	vakint::P70d08bd9fbf8b598_e1
+free/symbols_after_new	vakint::P70d08bd9fbf8b598_e2
+free/symbols_after_new	vakint::P70d08bd9fbf8b598_e3
+free/symbols_after_new	vakint::P70d08bd9fbf8b598_e5
+free/symbols_after_new	vakint::P70d08bd9fbf8b598_e9
+free/symbols_after_new	vakint::P70d08bd9fbf8b598_e11
+free/symbols_after_new	vakint::P70d08bd9fbf8b598_e13
+free/symbols_after_new	vakint::P70d08bd9fbf8b598_e15
+free/symbols_after_new	vakint::P91b4725a2debf5da_e1
+free/symbols_after_new	vakint::P91b4725a2debf5da_e4
+free/symbols_after_new	vakint::P91b4725a2debf5da_e10
+free/symbols_after_new	vakint::P91b4725a2debf5da_e13
+free/symbols_after_new	vakint::P94d07569bd0c1afa_e1
+free/symbols_after_new	vakint::P94d07569bd0c1afa_e3
+free/symbols_after_new	vakint::P94d07569bd0c1afa_e4
+free/symbols_after_new	vakint::P94d07569bd0c1afa_e6
+free/symbols_after_new	vakint::P94d07569bd0c1afa_e10
+free/symbols_after_new	vakint::P94d07569bd0c1afa_e12
+free/symbols_after_new	vakint::Pbc09329a50dbf2f3_e1
+free/symbols_after_new	vakint::Pcf742ca25d7a22c0_e1
+free/symbols_after_new	vakint::Pcf742ca25d7a22c0_e9
+free/symbols_after_new	vakint::Pcf742ca25d7a22c0_e13
+free/symbols_after_new	vakint::Pcf742ca25d7a22c0_e14
 rustred_retain	validate_settings	Ok(())
 rustred_retain	0	canonical_short	Ok 0
 rustred_retain	0	canonical	Ok 0
@@ -1200,9 +1313,9 @@ rustred_numerical	k(1,1)*k(1,2)*p(1,1)*p(1,2)*topo(prop(1,edge(1,1),k(1),muvsq,3
 rustred_numerical	k(1,1)*k(1,2)*p(1,1)*p(1,2)*topo(prop(1,edge(1,1),k(1),muvsq,3))	canonical	Ok vakint::{spenso::tensor,spenso::rank1}::k(1,1)*vakint::{spenso::tensor,spenso::rank1}::k(1,2)*vakint::{spenso::tensor,spenso::rank1}::p(1,1)*vakint::{spenso::tensor,spenso::rank1}::p(1,2)*vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(1,1),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::muvsq,3))
 rustred_numerical	k(1,1)*k(1,2)*p(1,1)*p(1,2)*topo(prop(1,edge(1,1),k(1),muvsq,3))	tensor_reduce_raw	Ok (-2*vakint::{}::ε+4)^(-1)*(vakint::{spenso::tensor,spenso::rank1}::k(1,vakint::{}::dot_dummy_ind(3)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(1,1),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::muvsq,3))
 rustred_numerical	k(1,1)*k(1,2)*p(1,1)*p(1,2)*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate_integral_raw	Err RustRedEvaluation(Reduction { detail: "loop-external scalar product remains after tensor projection: dot(p(1),k(1))" })
-rustred_numerical	k(1,1)*k(1,2)*p(1,1)*p(1,2)*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate	Ok (log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(15)))^2*1/8*vakint::{}::ε+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(20)))^2*-7.2151958112691607575814011260300e-2*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(29)))^2*1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(30)))^2*-1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^3*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(31)))^2*1/24*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(10)))^2*1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(11)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(12)))^2*-1/4*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(13)))^2*4.5561675835602830455905189583075e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(14)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(16)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(17)))^2*1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(18)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(19)))^2*-2.6298913011475590571982353529956e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*-1.4430391622538321515162802252060e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(21)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(22)))^2*4.5561675835602830455905189583075e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(23)))^2*-4.5561675835602830455905189583075e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(24)))^2*3.5544534975939544744240704903813e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(25)))^2*4.1647240475964834289797017044405e-2*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(26)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(27)))^2*-4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(28)))^2*-8.0131465342160245692996822674848e-3*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(3)))^2*1/4*log(vakint::{}::muvsq^(-1))+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(4)))^2*1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(5)))^2*-1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(6)))^2*1/4*vakint::{}::ε^(-1)+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(7)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(8)))^2*-1.4430391622538321515162802252060e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(9)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε
+rustred_numerical	k(1,1)*k(1,2)*p(1,1)*p(1,2)*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate	Ok (log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(10)))^2*-7.2151958112691607575814011260300e-2*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(24)))^2*1/8*vakint::{}::ε+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(29)))^2*1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(30)))^2*-1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^3*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(31)))^2*1/24*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(11)))^2*1/4*log(vakint::{}::muvsq^(-1))+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(12)))^2*1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(13)))^2*-1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(14)))^2*1/4*vakint::{}::ε^(-1)+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(15)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(16)))^2*4.1647240475964834289797017044405e-2*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(17)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(18)))^2*-4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(19)))^2*-8.0131465342160245692996822674848e-3*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*-1.4430391622538321515162802252060e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(20)))^2*1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(21)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(22)))^2*-1/4*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(23)))^2*4.5561675835602830455905189583075e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(25)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(26)))^2*4.5561675835602830455905189583075e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(27)))^2*-4.5561675835602830455905189583075e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(28)))^2*3.5544534975939544744240704903813e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(3)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(4)))^2*-1.4430391622538321515162802252060e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(5)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(6)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(7)))^2*1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(8)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(9)))^2*-2.6298913011475590571982353529956e-1*vakint::{}::ε^2
 rustred_numerical	k(1,1)*k(1,2)*p(1,1)*p(1,2)*topo(prop(1,edge(1,1),k(1),muvsq,3))	tensor_reduce	Ok (-2*vakint::{}::ε+4)^(-1)*(vakint::{spenso::tensor,spenso::rank1}::k(1,vakint::{}::dot_dummy_ind(3)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(1,1),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::muvsq,3))
-rustred_numerical	k(1,1)*k(1,2)*p(1,1)*p(1,2)*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate_integral	Ok (log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(15)))^2*1/8*vakint::{}::ε+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(20)))^2*-7.2151958112691607575814011260300e-2*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(29)))^2*1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(30)))^2*-1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^3*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(31)))^2*1/24*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(10)))^2*1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(11)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(12)))^2*-1/4*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(13)))^2*4.5561675835602830455905189583075e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(14)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(16)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(17)))^2*1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(18)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(19)))^2*-2.6298913011475590571982353529956e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*-1.4430391622538321515162802252060e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(21)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(22)))^2*4.5561675835602830455905189583075e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(23)))^2*-4.5561675835602830455905189583075e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(24)))^2*3.5544534975939544744240704903813e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(25)))^2*4.1647240475964834289797017044405e-2*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(26)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(27)))^2*-4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(28)))^2*-8.0131465342160245692996822674848e-3*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(3)))^2*1/4*log(vakint::{}::muvsq^(-1))+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(4)))^2*1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(5)))^2*-1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(6)))^2*1/4*vakint::{}::ε^(-1)+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(7)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(8)))^2*-1.4430391622538321515162802252060e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(9)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε
+rustred_numerical	k(1,1)*k(1,2)*p(1,1)*p(1,2)*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate_integral	Ok (log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(10)))^2*-7.2151958112691607575814011260300e-2*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(24)))^2*1/8*vakint::{}::ε+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(29)))^2*1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(30)))^2*-1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^3*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(31)))^2*1/24*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(11)))^2*1/4*log(vakint::{}::muvsq^(-1))+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(12)))^2*1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(13)))^2*-1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(14)))^2*1/4*vakint::{}::ε^(-1)+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(15)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(16)))^2*4.1647240475964834289797017044405e-2*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(17)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(18)))^2*-4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(19)))^2*-8.0131465342160245692996822674848e-3*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*-1.4430391622538321515162802252060e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(20)))^2*1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(21)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(22)))^2*-1/4*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(23)))^2*4.5561675835602830455905189583075e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(25)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(26)))^2*4.5561675835602830455905189583075e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(27)))^2*-4.5561675835602830455905189583075e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(28)))^2*3.5544534975939544744240704903813e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(3)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(4)))^2*-1.4430391622538321515162802252060e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(5)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(6)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(7)))^2*1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(8)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(9)))^2*-2.6298913011475590571982353529956e-1*vakint::{}::ε^2
 rustred_numerical	k(1,1)*k(1,1)*topo(prop(1,edge(1,1),k(1),muvsq,3))	canonical_short	Ok (vakint::{spenso::tensor,spenso::rank1}::k(1,1))^2*vakint::{}::topo(vakint::{}::I1L(vakint::{}::muvsq,3))
 rustred_numerical	k(1,1)*k(1,1)*topo(prop(1,edge(1,1),k(1),muvsq,3))	canonical	Ok (vakint::{spenso::tensor,spenso::rank1}::k(1,1))^2*vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(1,1),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::muvsq,3))
 rustred_numerical	k(1,1)*k(1,1)*topo(prop(1,edge(1,1),k(1),muvsq,3))	tensor_reduce_raw	Ok (vakint::{spenso::tensor,spenso::rank1}::k(1,vakint::{}::dot_dummy_ind(2)))^2*vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(1,1),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::muvsq,3))
@@ -1221,16 +1334,16 @@ rustred_numerical	dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	canonica
 rustred_numerical	dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	canonical	Ok (vakint::{symmetric,linear}::dot(vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{spenso::tensor,spenso::rank1}::p(1)))^2*vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(1,1),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::muvsq,3))
 rustred_numerical	dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	tensor_reduce_raw	Ok (-2*vakint::{}::ε+4)^(-1)*(vakint::{spenso::tensor,spenso::rank1}::k(1,vakint::{}::dot_dummy_ind(3)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(1,1),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::muvsq,3))
 rustred_numerical	dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate_integral_raw	Err RustRedEvaluation(Reduction { detail: "loop-external scalar product remains after tensor projection: dot(p(1),k(1))" })
-rustred_numerical	dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate	Ok (log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(15)))^2*1/8*vakint::{}::ε+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(20)))^2*-7.2151958112691607575814011260300e-2*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(29)))^2*1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(30)))^2*-1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^3*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(31)))^2*1/24*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(10)))^2*1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(11)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(12)))^2*-1/4*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(13)))^2*4.5561675835602830455905189583075e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(14)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(16)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(17)))^2*1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(18)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(19)))^2*-2.6298913011475590571982353529956e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*-1.4430391622538321515162802252060e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(21)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(22)))^2*4.5561675835602830455905189583075e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(23)))^2*-4.5561675835602830455905189583075e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(24)))^2*3.5544534975939544744240704903813e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(25)))^2*4.1647240475964834289797017044405e-2*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(26)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(27)))^2*-4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(28)))^2*-8.0131465342160245692996822674848e-3*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(3)))^2*1/4*log(vakint::{}::muvsq^(-1))+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(4)))^2*1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(5)))^2*-1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(6)))^2*1/4*vakint::{}::ε^(-1)+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(7)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(8)))^2*-1.4430391622538321515162802252060e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(9)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε
+rustred_numerical	dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate	Ok (log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(10)))^2*-7.2151958112691607575814011260300e-2*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(24)))^2*1/8*vakint::{}::ε+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(29)))^2*1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(30)))^2*-1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^3*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(31)))^2*1/24*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(11)))^2*1/4*log(vakint::{}::muvsq^(-1))+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(12)))^2*1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(13)))^2*-1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(14)))^2*1/4*vakint::{}::ε^(-1)+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(15)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(16)))^2*4.1647240475964834289797017044405e-2*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(17)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(18)))^2*-4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(19)))^2*-8.0131465342160245692996822674848e-3*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*-1.4430391622538321515162802252060e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(20)))^2*1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(21)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(22)))^2*-1/4*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(23)))^2*4.5561675835602830455905189583075e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(25)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(26)))^2*4.5561675835602830455905189583075e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(27)))^2*-4.5561675835602830455905189583075e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(28)))^2*3.5544534975939544744240704903813e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(3)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(4)))^2*-1.4430391622538321515162802252060e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(5)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(6)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(7)))^2*1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(8)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(9)))^2*-2.6298913011475590571982353529956e-1*vakint::{}::ε^2
 rustred_numerical	dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	tensor_reduce	Ok (-2*vakint::{}::ε+4)^(-1)*(vakint::{spenso::tensor,spenso::rank1}::k(1,vakint::{}::dot_dummy_ind(3)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(1,1),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::muvsq,3))
-rustred_numerical	dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate_integral	Ok (log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(15)))^2*1/8*vakint::{}::ε+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(20)))^2*-7.2151958112691607575814011260300e-2*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(29)))^2*1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(30)))^2*-1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^3*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(31)))^2*1/24*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(10)))^2*1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(11)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(12)))^2*-1/4*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(13)))^2*4.5561675835602830455905189583075e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(14)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(16)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(17)))^2*1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(18)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(19)))^2*-2.6298913011475590571982353529956e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*-1.4430391622538321515162802252060e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(21)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(22)))^2*4.5561675835602830455905189583075e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(23)))^2*-4.5561675835602830455905189583075e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(24)))^2*3.5544534975939544744240704903813e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(25)))^2*4.1647240475964834289797017044405e-2*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(26)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(27)))^2*-4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(28)))^2*-8.0131465342160245692996822674848e-3*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(3)))^2*1/4*log(vakint::{}::muvsq^(-1))+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(4)))^2*1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(5)))^2*-1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(6)))^2*1/4*vakint::{}::ε^(-1)+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(7)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(8)))^2*-1.4430391622538321515162802252060e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(9)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε
+rustred_numerical	dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate_integral	Ok (log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(10)))^2*-7.2151958112691607575814011260300e-2*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(24)))^2*1/8*vakint::{}::ε+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(29)))^2*1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(30)))^2*-1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^3*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(31)))^2*1/24*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(11)))^2*1/4*log(vakint::{}::muvsq^(-1))+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(12)))^2*1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(13)))^2*-1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(14)))^2*1/4*vakint::{}::ε^(-1)+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(15)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(16)))^2*4.1647240475964834289797017044405e-2*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(17)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(18)))^2*-4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(19)))^2*-8.0131465342160245692996822674848e-3*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*-1.4430391622538321515162802252060e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(20)))^2*1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(21)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(22)))^2*-1/4*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(23)))^2*4.5561675835602830455905189583075e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(25)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(26)))^2*4.5561675835602830455905189583075e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(27)))^2*-4.5561675835602830455905189583075e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(28)))^2*3.5544534975939544744240704903813e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(3)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(4)))^2*-1.4430391622538321515162802252060e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(5)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(6)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(7)))^2*1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(8)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(9)))^2*-2.6298913011475590571982353529956e-1*vakint::{}::ε^2
 rustred_numerical	2.5`30*dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	canonical_short	Ok (vakint::{symmetric,linear}::dot(vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{spenso::tensor,spenso::rank1}::p(1)))^2*2.50000000000000000000000000000*vakint::{}::topo(vakint::{}::I1L(vakint::{}::muvsq,3))
 rustred_numerical	2.5`30*dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	canonical	Ok (vakint::{symmetric,linear}::dot(vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{spenso::tensor,spenso::rank1}::p(1)))^2*2.50000000000000000000000000000*vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(1,1),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::muvsq,3))
 rustred_numerical	2.5`30*dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	tensor_reduce_raw	Ok (-2*vakint::{}::ε+4)^(-1)*(vakint::{spenso::tensor,spenso::rank1}::k(1,vakint::{}::dot_dummy_ind(3)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*2.50000000000000000000000000000*vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(1,1),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::muvsq,3))
 rustred_numerical	2.5`30*dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate_integral_raw	Err RustRedEvaluation(Reduction { detail: "loop-external scalar product remains after tensor projection: dot(p(1),k(1))" })
-rustred_numerical	2.5`30*dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate	Ok (log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(15)))^2*3.1250000000000000000000000000e-1*vakint::{}::ε+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(20)))^2*-1.8037989528172901893953502815e-1*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(29)))^2*3.1250000000000000000000000000e-1*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(30)))^2*-3.1250000000000000000000000000e-1*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^3*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(31)))^2*1.0416666666666666666666666667e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(10)))^2*6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(11)))^2*-6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(12)))^2*-6.2500000000000000000000000000e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(13)))^2*1.1390418958900707613976297396*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(14)))^2*1.0411810118991208572449254261e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(16)))^2*-3.6075979056345803787907005630e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(17)))^2*3.6075979056345803787907005630e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(18)))^2*3.6075979056345803787907005630e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(19)))^2*-6.5747282528688976429955883825e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*-3.6075979056345803787907005630e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(21)))^2*-6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(22)))^2*1.1390418958900707613976297396*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(23)))^2*-1.1390418958900707613976297396*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(24)))^2*8.8861337439848861860601762259e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(25)))^2*1.0411810118991208572449254261e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(26)))^2*1.0411810118991208572449254261e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(27)))^2*-1.0411810118991208572449254261e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(28)))^2*-2.0032866335540061423249205669e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(3)))^2*6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(4)))^2*6.2500000000000000000000000000e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(5)))^2*-6.2500000000000000000000000000e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(6)))^2*6.2500000000000000000000000000e-1*vakint::{}::ε^(-1)+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(7)))^2*-3.6075979056345803787907005630e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(8)))^2*-3.6075979056345803787907005630e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(9)))^2*3.6075979056345803787907005630e-1*vakint::{}::ε
+rustred_numerical	2.5`30*dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate	Ok (log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(10)))^2*-1.8037989528172901893953502815e-1*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(24)))^2*3.1250000000000000000000000000e-1*vakint::{}::ε+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(29)))^2*3.1250000000000000000000000000e-1*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(30)))^2*-3.1250000000000000000000000000e-1*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^3*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(31)))^2*1.0416666666666666666666666667e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(11)))^2*6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(12)))^2*6.2500000000000000000000000000e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(13)))^2*-6.2500000000000000000000000000e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(14)))^2*6.2500000000000000000000000000e-1*vakint::{}::ε^(-1)+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(15)))^2*1.0411810118991208572449254261e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(16)))^2*1.0411810118991208572449254261e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(17)))^2*1.0411810118991208572449254261e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(18)))^2*-1.0411810118991208572449254261e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(19)))^2*-2.0032866335540061423249205669e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*-3.6075979056345803787907005630e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(20)))^2*6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(21)))^2*-6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(22)))^2*-6.2500000000000000000000000000e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(23)))^2*1.1390418958900707613976297396*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(25)))^2*-6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(26)))^2*1.1390418958900707613976297396*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(27)))^2*-1.1390418958900707613976297396*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(28)))^2*8.8861337439848861860601762259e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(3)))^2*-3.6075979056345803787907005630e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(4)))^2*-3.6075979056345803787907005630e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(5)))^2*3.6075979056345803787907005630e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(6)))^2*-3.6075979056345803787907005630e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(7)))^2*3.6075979056345803787907005630e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(8)))^2*3.6075979056345803787907005630e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(9)))^2*-6.5747282528688976429955883825e-1*vakint::{}::ε^2
 rustred_numerical	2.5`30*dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	tensor_reduce	Ok (-2*vakint::{}::ε+4)^(-1)*(vakint::{spenso::tensor,spenso::rank1}::k(1,vakint::{}::dot_dummy_ind(3)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*2.50000000000000000000000000000*vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(1,1),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::muvsq,3))
-rustred_numerical	2.5`30*dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate_integral	Ok (log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(15)))^2*3.1250000000000000000000000000e-1*vakint::{}::ε+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(20)))^2*-1.8037989528172901893953502815e-1*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(29)))^2*3.1250000000000000000000000000e-1*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(30)))^2*-3.1250000000000000000000000000e-1*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^3*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(31)))^2*1.0416666666666666666666666667e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(10)))^2*6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(11)))^2*-6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(12)))^2*-6.2500000000000000000000000000e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(13)))^2*1.1390418958900707613976297396*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(14)))^2*1.0411810118991208572449254261e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(16)))^2*-3.6075979056345803787907005630e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(17)))^2*3.6075979056345803787907005630e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(18)))^2*3.6075979056345803787907005630e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(19)))^2*-6.5747282528688976429955883825e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*-3.6075979056345803787907005630e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(21)))^2*-6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(22)))^2*1.1390418958900707613976297396*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(23)))^2*-1.1390418958900707613976297396*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(24)))^2*8.8861337439848861860601762259e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(25)))^2*1.0411810118991208572449254261e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(26)))^2*1.0411810118991208572449254261e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(27)))^2*-1.0411810118991208572449254261e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(28)))^2*-2.0032866335540061423249205669e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(3)))^2*6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(4)))^2*6.2500000000000000000000000000e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(5)))^2*-6.2500000000000000000000000000e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(6)))^2*6.2500000000000000000000000000e-1*vakint::{}::ε^(-1)+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(7)))^2*-3.6075979056345803787907005630e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(8)))^2*-3.6075979056345803787907005630e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(9)))^2*3.6075979056345803787907005630e-1*vakint::{}::ε
+rustred_numerical	2.5`30*dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate_integral	Ok (log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(10)))^2*-1.8037989528172901893953502815e-1*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(24)))^2*3.1250000000000000000000000000e-1*vakint::{}::ε+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(29)))^2*3.1250000000000000000000000000e-1*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(30)))^2*-3.1250000000000000000000000000e-1*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^3*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(31)))^2*1.0416666666666666666666666667e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(11)))^2*6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(12)))^2*6.2500000000000000000000000000e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(13)))^2*-6.2500000000000000000000000000e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(14)))^2*6.2500000000000000000000000000e-1*vakint::{}::ε^(-1)+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(15)))^2*1.0411810118991208572449254261e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(16)))^2*1.0411810118991208572449254261e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(17)))^2*1.0411810118991208572449254261e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(18)))^2*-1.0411810118991208572449254261e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(19)))^2*-2.0032866335540061423249205669e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*-3.6075979056345803787907005630e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(20)))^2*6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(21)))^2*-6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(22)))^2*-6.2500000000000000000000000000e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(23)))^2*1.1390418958900707613976297396*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(25)))^2*-6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(26)))^2*1.1390418958900707613976297396*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(27)))^2*-1.1390418958900707613976297396*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(28)))^2*8.8861337439848861860601762259e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(3)))^2*-3.6075979056345803787907005630e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(4)))^2*-3.6075979056345803787907005630e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(5)))^2*3.6075979056345803787907005630e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(6)))^2*-3.6075979056345803787907005630e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(7)))^2*3.6075979056345803787907005630e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(8)))^2*3.6075979056345803787907005630e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(9)))^2*-6.5747282528688976429955883825e-1*vakint::{}::ε^2
 rustred_numerical	topo(prop(1,edge(1,2),k(1),muvsq,2)*prop(2,edge(1,2),k(2),muvsq,1)*prop(3,edge(2,1),k(1)+k(2),muvsq,1))	canonical_short	Ok vakint::{}::topo(vakint::{}::I2L(vakint::{}::muvsq,2,1,1))
 rustred_numerical	topo(prop(1,edge(1,2),k(1),muvsq,2)*prop(2,edge(1,2),k(2),muvsq,1)*prop(3,edge(2,1),k(1)+k(2),muvsq,1))	canonical	Ok vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(1,2),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::muvsq,2)*vakint::{}::prop(2,vakint::{}::edge(1,2),vakint::{spenso::tensor,spenso::rank1}::k(2),vakint::{}::muvsq,1)*vakint::{}::prop(3,vakint::{}::edge(2,1),vakint::{spenso::tensor,spenso::rank1}::k(1)+vakint::{spenso::tensor,spenso::rank1}::k(2),vakint::{}::muvsq,1))
 rustred_numerical	topo(prop(1,edge(1,2),k(1),muvsq,2)*prop(2,edge(1,2),k(2),muvsq,1)*prop(3,edge(2,1),k(1)+k(2),muvsq,1))	tensor_reduce_raw	Ok vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(1,2),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::muvsq,2)*vakint::{}::prop(2,vakint::{}::edge(1,2),vakint::{spenso::tensor,spenso::rank1}::k(2),vakint::{}::muvsq,1)*vakint::{}::prop(3,vakint::{}::edge(2,1),vakint::{spenso::tensor,spenso::rank1}::k(1)+vakint::{spenso::tensor,spenso::rank1}::k(2),vakint::{}::muvsq,1))
@@ -1519,12 +1632,62 @@ free/symbols	vakint::vec1
 free/symbols	vakint::ep
 free/symbols	vakint::d
 free/symbols	vakint::vakintFloat
-free/symbols	vakint::msq
-free/symbols	vakint::I1L
-free/symbols	vakint::nl_
-free/symbols	vakint::nr_
+free/symbols	vakint::PG
+free/symbols	vakint::PMaster
+free/symbols	vakint::PGamma
+free/symbols	vakint::NumericalSource
+free/symbols	vakint::RustRedMaster
+free/symbols	vakint::RustRedCoefficient
+free/symbols	vakint::RustRedFiniteLiteral
+free/symbols	vakint::RustRedConstant
+free/symbols	vakint::rustred_input
+free/symbols	vakint::input_coefficient
+free/symbols	vakint::HR
+free/symbols	vakint::HI
+free/symbols	vakint::GPLReal
+free/symbols	vakint::GPLImag
+free/symbols	vakint::PolylogReal
+free/symbols	vakint::PolylogImag
+free/symbols	vakint::sqrt3
+free/symbols	vakint::cl2
+free/symbols	vakint::S2
+free/symbols	vakint::Zeta
+free/symbols	vakint::Sqrt
+free/symbols	vakint::om1
+free/symbols	vakint::EulerGamma
+free/symbols	vakint::D6
+free/symbols	vakint::T1ep
+free/symbols	vakint::T1ep2
+free/symbols	vakint::cl4
+free/symbols	vakint::s6
+free/symbols	vakint::MZV
 free/symbols	vakint::q_
 free/symbols	vakint::mUVsq_
+free/symbols	vakint::nl_
+free/symbols	vakint::nr_
+free/symbols	vakint::props_
+free/symbols	vakint::idx___
+free/symbols	vakint::z2
+free/symbols	vakint::z3
+free/symbols	vakint::z4
+free/symbols	vakint::z5
+free/symbols	vakint::z6
+free/symbols	vakint::PR4fin
+free/symbols	vakint::PR4
+free/symbols	vakint::PR4dfin
+free/symbols	vakint::PR4d
+free/symbols	vakint::PR11dep0
+free/symbols	vakint::PR11d
+free/symbols	vakint::PR4ep1
+free/symbols	vakint::PR4dep1
+free/symbols	rustred::d
+free/symbols	vakint::x__
+free/symbols	vakint::p_
+free/symbols	vakint::Gamma
+free/symbols	vakint::partial_numerical_input
+free/symbols	vakint::RustRedMaterializeSpectator
+free/symbols	vakint::msq
+free/symbols	vakint::I1L
 free/symbols	vakint::lmbID_
 free/symbols	vakint::mid_
 free/symbols	vakint::pid_
@@ -1621,7 +1784,6 @@ free/symbols	vakint::I4L_FG_pinch_3_7_8
 free/symbols	vakint::I4L_FG_pinch_4_7_8
 free/symbols	vakint::I4L_FG_pinch_6_7_8
 free/symbols	vakint::I4L_FG_pinch_4_6_7_8
-free/symbols	vakint::props_
 free/symbols	vakint::P1L
 free/symbols	vakint::P2L
 free/symbols	vakint::P3L_LA
@@ -1638,63 +1800,110 @@ free/symbols	vakint::P4L_HAHA
 free/symbols	vakint::P4L_NO1
 free/symbols	vakint::P4L_NO2
 free/symbols	vakint::P4L_NO3
+free/symbols	vakint::P05373c99ef72fce4_e1
+free/symbols	vakint::P05373c99ef72fce4_e13
+free/symbols	vakint::P28bbd9922728f59c_e1
+free/symbols	vakint::P28bbd9922728f59c_e3
+free/symbols	vakint::P28bbd9922728f59c_e5
+free/symbols	vakint::P28bbd9922728f59c_e7
+free/symbols	vakint::P28bbd9922728f59c_e9
+free/symbols	vakint::P28bbd9922728f59c_e11
+free/symbols	vakint::P28bbd9922728f59c_e13
+free/symbols	vakint::P28bbd9922728f59c_e14
+free/symbols	vakint::P31ce20b7cbb3f542_e1
+free/symbols	vakint::P31ce20b7cbb3f542_e7
+free/symbols	vakint::P31ce20b7cbb3f542_e10
+free/symbols	vakint::P3dc41bbf2115e501_e1
+free/symbols	vakint::P3dc41bbf2115e501_e5
+free/symbols	vakint::P3dc41bbf2115e501_e7
+free/symbols	vakint::P3dc41bbf2115e501_e9
+free/symbols	vakint::P3dc41bbf2115e501_e13
+free/symbols	vakint::P3dc41bbf2115e501_e15
+free/symbols	vakint::P3e892c5a34c7100d_e1
+free/symbols	vakint::P3e892c5a34c7100d_e5
+free/symbols	vakint::P3e892c5a34c7100d_e7
+free/symbols	vakint::P3e892c5a34c7100d_e11
+free/symbols	vakint::P3e892c5a34c7100d_e15
+free/symbols	vakint::P47437688db9db7d3_e1
+free/symbols	vakint::P47437688db9db7d3_e4
+free/symbols	vakint::P47437688db9db7d3_e10
+free/symbols	vakint::P47437688db9db7d3_e13
+free/symbols	vakint::P5c03540956a38684_e1
+free/symbols	vakint::P5c03540956a38684_e6
+free/symbols	vakint::P6060726d8885b4d8_e1
+free/symbols	vakint::P6060726d8885b4d8_e6
+free/symbols	vakint::P62b7d0ea55c4864e_e1
+free/symbols	vakint::P62b7d0ea55c4864e_e3
+free/symbols	vakint::P62b7d0ea55c4864e_e4
+free/symbols	vakint::P62b7d0ea55c4864e_e6
+free/symbols	vakint::P62b7d0ea55c4864e_e7
+free/symbols	vakint::P62b7d0ea55c4864e_e9
+free/symbols	vakint::P62b7d0ea55c4864e_e11
+free/symbols	vakint::P62b7d0ea55c4864e_e13
+free/symbols	vakint::P62b7d0ea55c4864e_e14
+free/symbols	vakint::P70d08bd9fbf8b598_e1
+free/symbols	vakint::P70d08bd9fbf8b598_e2
+free/symbols	vakint::P70d08bd9fbf8b598_e3
+free/symbols	vakint::P70d08bd9fbf8b598_e5
+free/symbols	vakint::P70d08bd9fbf8b598_e9
+free/symbols	vakint::P70d08bd9fbf8b598_e11
+free/symbols	vakint::P70d08bd9fbf8b598_e13
+free/symbols	vakint::P70d08bd9fbf8b598_e15
+free/symbols	vakint::P91b4725a2debf5da_e1
+free/symbols	vakint::P91b4725a2debf5da_e4
+free/symbols	vakint::P91b4725a2debf5da_e10
+free/symbols	vakint::P91b4725a2debf5da_e13
+free/symbols	vakint::P94d07569bd0c1afa_e1
+free/symbols	vakint::P94d07569bd0c1afa_e3
+free/symbols	vakint::P94d07569bd0c1afa_e4
+free/symbols	vakint::P94d07569bd0c1afa_e6
+free/symbols	vakint::P94d07569bd0c1afa_e10
+free/symbols	vakint::P94d07569bd0c1afa_e12
+free/symbols	vakint::Pbc09329a50dbf2f3_e1
+free/symbols	vakint::Pcf742ca25d7a22c0_e1
+free/symbols	vakint::Pcf742ca25d7a22c0_e9
+free/symbols	vakint::Pcf742ca25d7a22c0_e13
+free/symbols	vakint::Pcf742ca25d7a22c0_e14
 free/symbols	vakint::eps
 free/symbols	vakint::I
 free/symbols	vakint::ε
 free/symbols	vakint::mursq
 free/symbols	vakint::log_mu_sq
 free/symbols	vakint::evaluation_input
-free/symbols	vakint::NumericalSource
 free/symbols	vakint::v_
 free/symbols	vakint::id_
 free/symbols	vakint::idx_
-free/symbols	vakint::HR
-free/symbols	vakint::HI
-free/symbols	vakint::GPLReal
-free/symbols	vakint::GPLImag
-free/symbols	vakint::PolylogReal
-free/symbols	vakint::PolylogImag
 free/symbols	vakint::v1_
 free/symbols	vakint::v2_
 free/symbols	vakint::idx1_
 free/symbols	vakint::idx2_
-free/symbols	vakint::EulerGamma
-free/symbols	vakint::D6
-free/symbols	vakint::T1ep
-free/symbols	vakint::T1ep2
-free/symbols	vakint::cl4
-free/symbols	vakint::s6
 free/symbols	vakint::D5bar1
 free/symbols	vakint::D5bar2
 free/symbols	vakint::D6bar1
 free/symbols	vakint::D6bar2
 free/symbols	vakint::T111bar4
 free/symbols	vakint::BNbar4
-free/symbols	vakint::z2
-free/symbols	vakint::z3
-free/symbols	vakint::z4
-free/symbols	vakint::z5
-free/symbols	vakint::z6
-free/symbols	vakint::sqrt3
-free/symbols	vakint::S2
-free/symbols	vakint::cl2
 free/symbols	vakint::numerical_expression
-free/symbols	vakint::RustRedMaster
-free/symbols	vakint::RustRedCoefficient
-free/symbols	vakint::RustRedFiniteLiteral
-free/symbols	vakint::RustRedConstant
 free/symbols	vakint::numerical_coefficient
-free/symbols	vakint::Gamma
-free/symbols	vakint::Zeta
-free/symbols	vakint::Sqrt
 free/symbols	vakint::Oep
 free/symbols	vakint::muvsq
 free/symbols	vakint::vec_
 free/symbols	vakint::integral_
-free/symbols	vakint::idx___
 free/symbols	vakint::tensor_scalar_coefficient
-free/symbols	rustred::d
+free/symbols	vakint::rustred_family_e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4
+free/symbols	vakint::Gam
+free/symbols	vakint::rustred_family_ecdff6f39047e4dae21704b4de33a15ea53d9826e823496f7bdf62c1af498db1
+free/symbols	vakint::miT111
+free/symbols	vakint::rustred_family_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93
+free/symbols	vakint::miBN
+free/symbols	vakint::miD5
+free/symbols	vakint::miD6
+free/symbols	vakint::rustred_data_15123e98612100b6483bec6eea33b5e07dccfadd0978583eb7d2e90f3b3ecf6a
 free/symbols	rustred_indexed_coefficient_v1::n0
+free/symbols	vakint::logmUVmu
+free/symbols	vakint::normalization_input
+free/symbols	vakint::fn_
+free/symbols	vakint::ilmb_
 free/symbols	rustred_indexed_coefficient_v1::n1
 free/symbols	rustred_indexed_coefficient_v1::n2
 free/symbols	rustred::feynman_x_0
@@ -1706,23 +1915,7 @@ free/symbols	rustred_indexed_coefficient_v1::n5
 free/symbols	rustred::feynman_x_3
 free/symbols	rustred::feynman_x_4
 free/symbols	rustred::feynman_x_5
-free/symbols	vakint::rustred_family_e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4
-free/symbols	vakint::Gam
-free/symbols	vakint::rustred_family_ecdff6f39047e4dae21704b4de33a15ea53d9826e823496f7bdf62c1af498db1
-free/symbols	vakint::miT111
-free/symbols	vakint::rustred_family_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93
-free/symbols	vakint::miBN
-free/symbols	vakint::miD5
-free/symbols	vakint::miD6
-free/symbols	vakint::rustred_data_05bb0f9f903cf866a2eb62bf3ed0b97637e89d8b2376b9084a96079259bdace4
-free/symbols	vakint::logmUVmu
-free/symbols	vakint::normalization_input
-free/symbols	vakint::x__
-free/symbols	vakint::p_
-free/symbols	vakint::fn_
-free/symbols	vakint::ilmb_
 free/symbols	vakint::input_coefficient_placeholder_0
-free/symbols	vakint::input_coefficient
 free/symbols	vakint_sources::Input__76616b696e743a3a7b7d3a3a696e7075745f636f656666696369656e7428302c3029__0__cc87e7557048b9d4a04de0bfcc04ff630f300e324d93753313a181aedc05da55
 free/symbols	vakint_sources::Input__76616b696e743a3a7b7d3a3a696e7075745f636f656666696369656e7428312c3029__0__34c9c689f196c1b294399719e22320442f267e7d3fd60e778d084ade2be9565d
 free/symbols	vakint_sources::Input__76616b696e743a3a7b7d3a3a696e7075745f636f656666696369656e7428322c3029__0__0cce65ab9a4e4e20ce94229dccd74596c4809466d4e4c11c071976d65e3b60d8
@@ -1832,16 +2025,6 @@ free/symbols	vakint_sources::Input__76616b696e743a3a7b7d3a3a696e7075745f636f6566
 free/symbols	vakint_sources::Input__76616b696e743a3a7b7d3a3a696e7075745f636f656666696369656e742832312c3029__0__7d4cf366f27b768ee23f4f4c1cd132d3a648d5c2e143e5caeca7ae04ffa4cfe4
 free/symbols	vakint_sources::Input__76616b696e743a3a7b7d3a3a696e7075745f636f656666696369656e742832322c3029__0__826f7e3f52f28ae3bfa2e2a20b3c51dad4c4ed664db888e9fb19cf0f8a406776
 free/symbols	vakint_sources::Input__76616b696e743a3a7b7d3a3a696e7075745f636f656666696369656e742832332c3029__0__f2633486d5b9b9e2ead53cae9e2c3425f815425fb43c7246a3713a799d061a4b
-free/symbols	vakint::rustred_input
-free/symbols	vakint::partial_numerical_input
-free/symbols	vakint::PR4fin
-free/symbols	vakint::PR4dfin
-free/symbols	vakint::PR11dep0
-free/symbols	vakint::PR4ep1
-free/symbols	vakint::PR4dep1
-free/symbols	vakint::RustRedMaterializeSpectator
-free/symbols	vakint::om1
-free/symbols	vakint::MZV
 free/symbols	vakint_sources::Input__76616b696e743a3a7b7d3a3a696e7075745f636f656666696369656e742832342c3029__0__68bcef69b1d1e1729da945291a9015becd9144e4d3b3efb014a655bd27f82637
 free/symbols	vakint_sources::Input__76616b696e743a3a7b7d3a3a696e7075745f636f656666696369656e742832352c3029__0__5ab4f037a4984970d1ca4d765a64fdcaa73877ff952b845416b8d91c821a5eb4
 free/symbols	vakint_sources::Input__76616b696e743a3a7b7d3a3a696e7075745f636f656666696369656e742832362c3029__0__23f7ee200b01a92132b53f6440313a7eb4589ad24f2908cdeb205b9294a304f6
@@ -2511,9 +2694,9 @@ form/all_installed	k(1,1)*k(1,2)*p(1,1)*p(1,2)*topo(prop(1,edge(1,1),k(1),muvsq,
 form/all_installed	k(1,1)*k(1,2)*p(1,1)*p(1,2)*topo(prop(1,edge(1,1),k(1),muvsq,3))	canonical	Ok vakint::{spenso::tensor,spenso::rank1}::k(1,1)*vakint::{spenso::tensor,spenso::rank1}::k(1,2)*vakint::{spenso::tensor,spenso::rank1}::p(1,1)*vakint::{spenso::tensor,spenso::rank1}::p(1,2)*vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(1,1),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::muvsq,3))
 form/all_installed	k(1,1)*k(1,2)*p(1,1)*p(1,2)*topo(prop(1,edge(1,1),k(1),muvsq,3))	tensor_reduce_raw	Ok (-2*vakint::{}::ε+4)^(-1)*(vakint::{spenso::tensor,spenso::rank1}::k(1,vakint::{}::dot_dummy_ind(3)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(1,1),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::muvsq,3))
 form/all_installed	k(1,1)*k(1,2)*p(1,1)*p(1,2)*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate_integral_raw	Err RustRedEvaluation(Reduction { detail: "loop-external scalar product remains after tensor projection: dot(p(1),k(1))" })
-form/all_installed	k(1,1)*k(1,2)*p(1,1)*p(1,2)*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate	Ok (log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(15)))^2*1/8*vakint::{}::ε+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(20)))^2*-7.2151958112691607575814011260300e-2*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(29)))^2*1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(30)))^2*-1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^3*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(31)))^2*1/24*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(10)))^2*1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(11)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(12)))^2*-1/4*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(13)))^2*4.5561675835602830455905189583075e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(14)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(16)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(17)))^2*1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(18)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(19)))^2*-2.6298913011475590571982353529956e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*-1.4430391622538321515162802252060e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(21)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(22)))^2*4.5561675835602830455905189583075e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(23)))^2*-4.5561675835602830455905189583075e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(24)))^2*3.5544534975939544744240704903813e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(25)))^2*4.1647240475964834289797017044405e-2*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(26)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(27)))^2*-4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(28)))^2*-8.0131465342160245692996822674848e-3*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(3)))^2*1/4*log(vakint::{}::muvsq^(-1))+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(4)))^2*1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(5)))^2*-1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(6)))^2*1/4*vakint::{}::ε^(-1)+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(7)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(8)))^2*-1.4430391622538321515162802252060e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(9)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε
+form/all_installed	k(1,1)*k(1,2)*p(1,1)*p(1,2)*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate	Ok (log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(10)))^2*-7.2151958112691607575814011260300e-2*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(24)))^2*1/8*vakint::{}::ε+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(29)))^2*1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(30)))^2*-1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^3*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(31)))^2*1/24*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(11)))^2*1/4*log(vakint::{}::muvsq^(-1))+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(12)))^2*1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(13)))^2*-1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(14)))^2*1/4*vakint::{}::ε^(-1)+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(15)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(16)))^2*4.1647240475964834289797017044405e-2*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(17)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(18)))^2*-4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(19)))^2*-8.0131465342160245692996822674848e-3*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*-1.4430391622538321515162802252060e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(20)))^2*1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(21)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(22)))^2*-1/4*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(23)))^2*4.5561675835602830455905189583075e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(25)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(26)))^2*4.5561675835602830455905189583075e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(27)))^2*-4.5561675835602830455905189583075e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(28)))^2*3.5544534975939544744240704903813e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(3)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(4)))^2*-1.4430391622538321515162802252060e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(5)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(6)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(7)))^2*1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(8)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(9)))^2*-2.6298913011475590571982353529956e-1*vakint::{}::ε^2
 form/all_installed	k(1,1)*k(1,2)*p(1,1)*p(1,2)*topo(prop(1,edge(1,1),k(1),muvsq,3))	tensor_reduce	Ok (-2*vakint::{}::ε+4)^(-1)*(vakint::{spenso::tensor,spenso::rank1}::k(1,vakint::{}::dot_dummy_ind(3)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(1,1),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::muvsq,3))
-form/all_installed	k(1,1)*k(1,2)*p(1,1)*p(1,2)*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate_integral	Ok (log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(15)))^2*1/8*vakint::{}::ε+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(20)))^2*-7.2151958112691607575814011260300e-2*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(29)))^2*1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(30)))^2*-1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^3*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(31)))^2*1/24*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(10)))^2*1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(11)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(12)))^2*-1/4*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(13)))^2*4.5561675835602830455905189583075e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(14)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(16)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(17)))^2*1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(18)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(19)))^2*-2.6298913011475590571982353529956e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*-1.4430391622538321515162802252060e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(21)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(22)))^2*4.5561675835602830455905189583075e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(23)))^2*-4.5561675835602830455905189583075e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(24)))^2*3.5544534975939544744240704903813e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(25)))^2*4.1647240475964834289797017044405e-2*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(26)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(27)))^2*-4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(28)))^2*-8.0131465342160245692996822674848e-3*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(3)))^2*1/4*log(vakint::{}::muvsq^(-1))+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(4)))^2*1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(5)))^2*-1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(6)))^2*1/4*vakint::{}::ε^(-1)+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(7)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(8)))^2*-1.4430391622538321515162802252060e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(9)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε
+form/all_installed	k(1,1)*k(1,2)*p(1,1)*p(1,2)*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate_integral	Ok (log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(10)))^2*-7.2151958112691607575814011260300e-2*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(24)))^2*1/8*vakint::{}::ε+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(29)))^2*1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(30)))^2*-1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^3*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(31)))^2*1/24*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(11)))^2*1/4*log(vakint::{}::muvsq^(-1))+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(12)))^2*1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(13)))^2*-1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(14)))^2*1/4*vakint::{}::ε^(-1)+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(15)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(16)))^2*4.1647240475964834289797017044405e-2*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(17)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(18)))^2*-4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(19)))^2*-8.0131465342160245692996822674848e-3*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*-1.4430391622538321515162802252060e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(20)))^2*1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(21)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(22)))^2*-1/4*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(23)))^2*4.5561675835602830455905189583075e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(25)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(26)))^2*4.5561675835602830455905189583075e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(27)))^2*-4.5561675835602830455905189583075e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(28)))^2*3.5544534975939544744240704903813e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(3)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(4)))^2*-1.4430391622538321515162802252060e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(5)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(6)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(7)))^2*1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(8)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(9)))^2*-2.6298913011475590571982353529956e-1*vakint::{}::ε^2
 form/all_installed	k(1,1)*k(1,1)*topo(prop(1,edge(1,1),k(1),muvsq,3))	canonical_short	Ok (vakint::{spenso::tensor,spenso::rank1}::k(1,1))^2*vakint::{}::topo(vakint::{}::I1L(vakint::{}::muvsq,3))
 form/all_installed	k(1,1)*k(1,1)*topo(prop(1,edge(1,1),k(1),muvsq,3))	canonical	Ok (vakint::{spenso::tensor,spenso::rank1}::k(1,1))^2*vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(1,1),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::muvsq,3))
 form/all_installed	k(1,1)*k(1,1)*topo(prop(1,edge(1,1),k(1),muvsq,3))	tensor_reduce_raw	Ok (vakint::{spenso::tensor,spenso::rank1}::k(1,vakint::{}::dot_dummy_ind(2)))^2*vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(1,1),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::muvsq,3))
@@ -2532,16 +2715,16 @@ form/all_installed	dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	canonic
 form/all_installed	dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	canonical	Ok (vakint::{symmetric,linear}::dot(vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{spenso::tensor,spenso::rank1}::p(1)))^2*vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(1,1),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::muvsq,3))
 form/all_installed	dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	tensor_reduce_raw	Ok (-2*vakint::{}::ε+4)^(-1)*(vakint::{spenso::tensor,spenso::rank1}::k(1,vakint::{}::dot_dummy_ind(3)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(1,1),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::muvsq,3))
 form/all_installed	dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate_integral_raw	Err RustRedEvaluation(Reduction { detail: "loop-external scalar product remains after tensor projection: dot(p(1),k(1))" })
-form/all_installed	dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate	Ok (log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(15)))^2*1/8*vakint::{}::ε+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(20)))^2*-7.2151958112691607575814011260300e-2*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(29)))^2*1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(30)))^2*-1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^3*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(31)))^2*1/24*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(10)))^2*1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(11)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(12)))^2*-1/4*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(13)))^2*4.5561675835602830455905189583075e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(14)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(16)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(17)))^2*1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(18)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(19)))^2*-2.6298913011475590571982353529956e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*-1.4430391622538321515162802252060e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(21)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(22)))^2*4.5561675835602830455905189583075e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(23)))^2*-4.5561675835602830455905189583075e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(24)))^2*3.5544534975939544744240704903813e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(25)))^2*4.1647240475964834289797017044405e-2*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(26)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(27)))^2*-4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(28)))^2*-8.0131465342160245692996822674848e-3*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(3)))^2*1/4*log(vakint::{}::muvsq^(-1))+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(4)))^2*1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(5)))^2*-1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(6)))^2*1/4*vakint::{}::ε^(-1)+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(7)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(8)))^2*-1.4430391622538321515162802252060e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(9)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε
+form/all_installed	dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate	Ok (log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(10)))^2*-7.2151958112691607575814011260300e-2*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(24)))^2*1/8*vakint::{}::ε+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(29)))^2*1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(30)))^2*-1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^3*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(31)))^2*1/24*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(11)))^2*1/4*log(vakint::{}::muvsq^(-1))+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(12)))^2*1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(13)))^2*-1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(14)))^2*1/4*vakint::{}::ε^(-1)+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(15)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(16)))^2*4.1647240475964834289797017044405e-2*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(17)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(18)))^2*-4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(19)))^2*-8.0131465342160245692996822674848e-3*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*-1.4430391622538321515162802252060e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(20)))^2*1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(21)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(22)))^2*-1/4*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(23)))^2*4.5561675835602830455905189583075e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(25)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(26)))^2*4.5561675835602830455905189583075e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(27)))^2*-4.5561675835602830455905189583075e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(28)))^2*3.5544534975939544744240704903813e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(3)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(4)))^2*-1.4430391622538321515162802252060e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(5)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(6)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(7)))^2*1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(8)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(9)))^2*-2.6298913011475590571982353529956e-1*vakint::{}::ε^2
 form/all_installed	dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	tensor_reduce	Ok (-2*vakint::{}::ε+4)^(-1)*(vakint::{spenso::tensor,spenso::rank1}::k(1,vakint::{}::dot_dummy_ind(3)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(1,1),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::muvsq,3))
-form/all_installed	dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate_integral	Ok (log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(15)))^2*1/8*vakint::{}::ε+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(20)))^2*-7.2151958112691607575814011260300e-2*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(29)))^2*1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(30)))^2*-1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^3*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(31)))^2*1/24*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(10)))^2*1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(11)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(12)))^2*-1/4*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(13)))^2*4.5561675835602830455905189583075e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(14)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(16)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(17)))^2*1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(18)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(19)))^2*-2.6298913011475590571982353529956e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*-1.4430391622538321515162802252060e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(21)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(22)))^2*4.5561675835602830455905189583075e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(23)))^2*-4.5561675835602830455905189583075e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(24)))^2*3.5544534975939544744240704903813e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(25)))^2*4.1647240475964834289797017044405e-2*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(26)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(27)))^2*-4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(28)))^2*-8.0131465342160245692996822674848e-3*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(3)))^2*1/4*log(vakint::{}::muvsq^(-1))+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(4)))^2*1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(5)))^2*-1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(6)))^2*1/4*vakint::{}::ε^(-1)+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(7)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(8)))^2*-1.4430391622538321515162802252060e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(9)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε
+form/all_installed	dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate_integral	Ok (log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(10)))^2*-7.2151958112691607575814011260300e-2*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(24)))^2*1/8*vakint::{}::ε+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(29)))^2*1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(30)))^2*-1/8*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^3*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(31)))^2*1/24*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(11)))^2*1/4*log(vakint::{}::muvsq^(-1))+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(12)))^2*1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(13)))^2*-1/4+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(14)))^2*1/4*vakint::{}::ε^(-1)+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(15)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(16)))^2*4.1647240475964834289797017044405e-2*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(17)))^2*4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(18)))^2*-4.1647240475964834289797017044405e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(19)))^2*-8.0131465342160245692996822674848e-3*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*-1.4430391622538321515162802252060e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(20)))^2*1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(21)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(22)))^2*-1/4*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(23)))^2*4.5561675835602830455905189583075e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(25)))^2*-1/4*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(26)))^2*4.5561675835602830455905189583075e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(27)))^2*-4.5561675835602830455905189583075e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(28)))^2*3.5544534975939544744240704903813e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(3)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(4)))^2*-1.4430391622538321515162802252060e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(5)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(6)))^2*-1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(7)))^2*1.4430391622538321515162802252060e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(8)))^2*1.4430391622538321515162802252060e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(9)))^2*-2.6298913011475590571982353529956e-1*vakint::{}::ε^2
 form/all_installed	2.5`30*dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	canonical_short	Ok (vakint::{symmetric,linear}::dot(vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{spenso::tensor,spenso::rank1}::p(1)))^2*2.50000000000000000000000000000*vakint::{}::topo(vakint::{}::I1L(vakint::{}::muvsq,3))
 form/all_installed	2.5`30*dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	canonical	Ok (vakint::{symmetric,linear}::dot(vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{spenso::tensor,spenso::rank1}::p(1)))^2*2.50000000000000000000000000000*vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(1,1),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::muvsq,3))
 form/all_installed	2.5`30*dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	tensor_reduce_raw	Ok (-2*vakint::{}::ε+4)^(-1)*(vakint::{spenso::tensor,spenso::rank1}::k(1,vakint::{}::dot_dummy_ind(3)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*2.50000000000000000000000000000*vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(1,1),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::muvsq,3))
 form/all_installed	2.5`30*dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate_integral_raw	Err RustRedEvaluation(Reduction { detail: "loop-external scalar product remains after tensor projection: dot(p(1),k(1))" })
-form/all_installed	2.5`30*dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate	Ok (log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(15)))^2*3.1250000000000000000000000000e-1*vakint::{}::ε+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(20)))^2*-1.8037989528172901893953502815e-1*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(29)))^2*3.1250000000000000000000000000e-1*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(30)))^2*-3.1250000000000000000000000000e-1*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^3*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(31)))^2*1.0416666666666666666666666667e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(10)))^2*6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(11)))^2*-6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(12)))^2*-6.2500000000000000000000000000e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(13)))^2*1.1390418958900707613976297396*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(14)))^2*1.0411810118991208572449254261e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(16)))^2*-3.6075979056345803787907005630e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(17)))^2*3.6075979056345803787907005630e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(18)))^2*3.6075979056345803787907005630e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(19)))^2*-6.5747282528688976429955883825e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*-3.6075979056345803787907005630e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(21)))^2*-6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(22)))^2*1.1390418958900707613976297396*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(23)))^2*-1.1390418958900707613976297396*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(24)))^2*8.8861337439848861860601762259e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(25)))^2*1.0411810118991208572449254261e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(26)))^2*1.0411810118991208572449254261e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(27)))^2*-1.0411810118991208572449254261e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(28)))^2*-2.0032866335540061423249205669e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(3)))^2*6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(4)))^2*6.2500000000000000000000000000e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(5)))^2*-6.2500000000000000000000000000e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(6)))^2*6.2500000000000000000000000000e-1*vakint::{}::ε^(-1)+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(7)))^2*-3.6075979056345803787907005630e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(8)))^2*-3.6075979056345803787907005630e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(9)))^2*3.6075979056345803787907005630e-1*vakint::{}::ε
+form/all_installed	2.5`30*dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate	Ok (log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(10)))^2*-1.8037989528172901893953502815e-1*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(24)))^2*3.1250000000000000000000000000e-1*vakint::{}::ε+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(29)))^2*3.1250000000000000000000000000e-1*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(30)))^2*-3.1250000000000000000000000000e-1*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^3*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(31)))^2*1.0416666666666666666666666667e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(11)))^2*6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(12)))^2*6.2500000000000000000000000000e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(13)))^2*-6.2500000000000000000000000000e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(14)))^2*6.2500000000000000000000000000e-1*vakint::{}::ε^(-1)+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(15)))^2*1.0411810118991208572449254261e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(16)))^2*1.0411810118991208572449254261e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(17)))^2*1.0411810118991208572449254261e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(18)))^2*-1.0411810118991208572449254261e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(19)))^2*-2.0032866335540061423249205669e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*-3.6075979056345803787907005630e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(20)))^2*6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(21)))^2*-6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(22)))^2*-6.2500000000000000000000000000e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(23)))^2*1.1390418958900707613976297396*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(25)))^2*-6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(26)))^2*1.1390418958900707613976297396*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(27)))^2*-1.1390418958900707613976297396*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(28)))^2*8.8861337439848861860601762259e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(3)))^2*-3.6075979056345803787907005630e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(4)))^2*-3.6075979056345803787907005630e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(5)))^2*3.6075979056345803787907005630e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(6)))^2*-3.6075979056345803787907005630e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(7)))^2*3.6075979056345803787907005630e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(8)))^2*3.6075979056345803787907005630e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(9)))^2*-6.5747282528688976429955883825e-1*vakint::{}::ε^2
 form/all_installed	2.5`30*dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	tensor_reduce	Ok (-2*vakint::{}::ε+4)^(-1)*(vakint::{spenso::tensor,spenso::rank1}::k(1,vakint::{}::dot_dummy_ind(3)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*2.50000000000000000000000000000*vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(1,1),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::muvsq,3))
-form/all_installed	2.5`30*dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate_integral	Ok (log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(15)))^2*3.1250000000000000000000000000e-1*vakint::{}::ε+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(20)))^2*-1.8037989528172901893953502815e-1*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(29)))^2*3.1250000000000000000000000000e-1*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(30)))^2*-3.1250000000000000000000000000e-1*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^3*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(31)))^2*1.0416666666666666666666666667e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(10)))^2*6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(11)))^2*-6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(12)))^2*-6.2500000000000000000000000000e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(13)))^2*1.1390418958900707613976297396*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(14)))^2*1.0411810118991208572449254261e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(16)))^2*-3.6075979056345803787907005630e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(17)))^2*3.6075979056345803787907005630e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(18)))^2*3.6075979056345803787907005630e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(19)))^2*-6.5747282528688976429955883825e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*-3.6075979056345803787907005630e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(21)))^2*-6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(22)))^2*1.1390418958900707613976297396*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(23)))^2*-1.1390418958900707613976297396*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(24)))^2*8.8861337439848861860601762259e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(25)))^2*1.0411810118991208572449254261e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(26)))^2*1.0411810118991208572449254261e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(27)))^2*-1.0411810118991208572449254261e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(28)))^2*-2.0032866335540061423249205669e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(3)))^2*6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(4)))^2*6.2500000000000000000000000000e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(5)))^2*-6.2500000000000000000000000000e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(6)))^2*6.2500000000000000000000000000e-1*vakint::{}::ε^(-1)+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(7)))^2*-3.6075979056345803787907005630e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(8)))^2*-3.6075979056345803787907005630e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(9)))^2*3.6075979056345803787907005630e-1*vakint::{}::ε
+form/all_installed	2.5`30*dot(k(1),p(1))^2*topo(prop(1,edge(1,1),k(1),muvsq,3))	evaluate_integral	Ok (log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(10)))^2*-1.8037989528172901893953502815e-1*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(24)))^2*3.1250000000000000000000000000e-1*vakint::{}::ε+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(29)))^2*3.1250000000000000000000000000e-1*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^2*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(30)))^2*-3.1250000000000000000000000000e-1*vakint::{}::ε^2+(log(vakint::{}::muvsq^(-1)))^3*(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(31)))^2*1.0416666666666666666666666667e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(11)))^2*6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(12)))^2*6.2500000000000000000000000000e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(13)))^2*-6.2500000000000000000000000000e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(14)))^2*6.2500000000000000000000000000e-1*vakint::{}::ε^(-1)+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(15)))^2*1.0411810118991208572449254261e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(16)))^2*1.0411810118991208572449254261e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(17)))^2*1.0411810118991208572449254261e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(18)))^2*-1.0411810118991208572449254261e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(19)))^2*-2.0032866335540061423249205669e-2*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(2)))^2*-3.6075979056345803787907005630e-1+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(20)))^2*6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(21)))^2*-6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(22)))^2*-6.2500000000000000000000000000e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(23)))^2*1.1390418958900707613976297396*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(25)))^2*-6.2500000000000000000000000000e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(26)))^2*1.1390418958900707613976297396*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(27)))^2*-1.1390418958900707613976297396*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(28)))^2*8.8861337439848861860601762259e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(3)))^2*-3.6075979056345803787907005630e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(4)))^2*-3.6075979056345803787907005630e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(5)))^2*3.6075979056345803787907005630e-1*vakint::{}::ε+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(6)))^2*-3.6075979056345803787907005630e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(7)))^2*3.6075979056345803787907005630e-1*log(vakint::{}::muvsq^(-1))*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(8)))^2*3.6075979056345803787907005630e-1*vakint::{}::ε^2+(vakint::{spenso::tensor,spenso::rank1}::p(1,vakint::{}::dot_dummy_ind(9)))^2*-6.5747282528688976429955883825e-1*vakint::{}::ε^2
 form/all_installed	topo(prop(1,edge(1,2),k(1),muvsq,2)*prop(2,edge(1,2),k(2),muvsq,1)*prop(3,edge(2,1),k(1)+k(2),muvsq,1))	canonical_short	Ok vakint::{}::topo(vakint::{}::I2L(vakint::{}::muvsq,2,1,1))
 form/all_installed	topo(prop(1,edge(1,2),k(1),muvsq,2)*prop(2,edge(1,2),k(2),muvsq,1)*prop(3,edge(2,1),k(1)+k(2),muvsq,1))	canonical	Ok vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(1,2),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::muvsq,2)*vakint::{}::prop(2,vakint::{}::edge(1,2),vakint::{spenso::tensor,spenso::rank1}::k(2),vakint::{}::muvsq,1)*vakint::{}::prop(3,vakint::{}::edge(2,1),vakint::{spenso::tensor,spenso::rank1}::k(1)+vakint::{spenso::tensor,spenso::rank1}::k(2),vakint::{}::muvsq,1))
 form/all_installed	topo(prop(1,edge(1,2),k(1),muvsq,2)*prop(2,edge(1,2),k(2),muvsq,1)*prop(3,edge(2,1),k(1)+k(2),muvsq,1))	tensor_reduce_raw	Ok vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(1,2),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::muvsq,2)*vakint::{}::prop(2,vakint::{}::edge(1,2),vakint::{spenso::tensor,spenso::rank1}::k(2),vakint::{}::muvsq,1)*vakint::{}::prop(3,vakint::{}::edge(2,1),vakint::{spenso::tensor,spenso::rank1}::k(1)+vakint::{spenso::tensor,spenso::rank1}::k(2),vakint::{}::muvsq,1))
@@ -2830,12 +3013,62 @@ form/symbols	vakint::vec1
 form/symbols	vakint::ep
 form/symbols	vakint::d
 form/symbols	vakint::vakintFloat
-form/symbols	vakint::msq
-form/symbols	vakint::I1L
-form/symbols	vakint::nl_
-form/symbols	vakint::nr_
+form/symbols	vakint::PG
+form/symbols	vakint::PMaster
+form/symbols	vakint::PGamma
+form/symbols	vakint::NumericalSource
+form/symbols	vakint::RustRedMaster
+form/symbols	vakint::RustRedCoefficient
+form/symbols	vakint::RustRedFiniteLiteral
+form/symbols	vakint::RustRedConstant
+form/symbols	vakint::rustred_input
+form/symbols	vakint::input_coefficient
+form/symbols	vakint::HR
+form/symbols	vakint::HI
+form/symbols	vakint::GPLReal
+form/symbols	vakint::GPLImag
+form/symbols	vakint::PolylogReal
+form/symbols	vakint::PolylogImag
+form/symbols	vakint::sqrt3
+form/symbols	vakint::cl2
+form/symbols	vakint::S2
+form/symbols	vakint::Zeta
+form/symbols	vakint::Sqrt
+form/symbols	vakint::om1
+form/symbols	vakint::EulerGamma
+form/symbols	vakint::D6
+form/symbols	vakint::T1ep
+form/symbols	vakint::T1ep2
+form/symbols	vakint::cl4
+form/symbols	vakint::s6
+form/symbols	vakint::MZV
 form/symbols	vakint::q_
 form/symbols	vakint::mUVsq_
+form/symbols	vakint::nl_
+form/symbols	vakint::nr_
+form/symbols	vakint::props_
+form/symbols	vakint::idx___
+form/symbols	vakint::z2
+form/symbols	vakint::z3
+form/symbols	vakint::z4
+form/symbols	vakint::z5
+form/symbols	vakint::z6
+form/symbols	vakint::PR4fin
+form/symbols	vakint::PR4
+form/symbols	vakint::PR4dfin
+form/symbols	vakint::PR4d
+form/symbols	vakint::PR11dep0
+form/symbols	vakint::PR11d
+form/symbols	vakint::PR4ep1
+form/symbols	vakint::PR4dep1
+form/symbols	rustred::d
+form/symbols	vakint::x__
+form/symbols	vakint::p_
+form/symbols	vakint::Gamma
+form/symbols	vakint::partial_numerical_input
+form/symbols	vakint::RustRedMaterializeSpectator
+form/symbols	vakint::msq
+form/symbols	vakint::I1L
 form/symbols	vakint::lmbID_
 form/symbols	vakint::mid_
 form/symbols	vakint::pid_
@@ -2932,7 +3165,6 @@ form/symbols	vakint::I4L_FG_pinch_3_7_8
 form/symbols	vakint::I4L_FG_pinch_4_7_8
 form/symbols	vakint::I4L_FG_pinch_6_7_8
 form/symbols	vakint::I4L_FG_pinch_4_6_7_8
-form/symbols	vakint::props_
 form/symbols	vakint::P1L
 form/symbols	vakint::P2L
 form/symbols	vakint::P3L_LA
@@ -2949,63 +3181,110 @@ form/symbols	vakint::P4L_HAHA
 form/symbols	vakint::P4L_NO1
 form/symbols	vakint::P4L_NO2
 form/symbols	vakint::P4L_NO3
+form/symbols	vakint::P05373c99ef72fce4_e1
+form/symbols	vakint::P05373c99ef72fce4_e13
+form/symbols	vakint::P28bbd9922728f59c_e1
+form/symbols	vakint::P28bbd9922728f59c_e3
+form/symbols	vakint::P28bbd9922728f59c_e5
+form/symbols	vakint::P28bbd9922728f59c_e7
+form/symbols	vakint::P28bbd9922728f59c_e9
+form/symbols	vakint::P28bbd9922728f59c_e11
+form/symbols	vakint::P28bbd9922728f59c_e13
+form/symbols	vakint::P28bbd9922728f59c_e14
+form/symbols	vakint::P31ce20b7cbb3f542_e1
+form/symbols	vakint::P31ce20b7cbb3f542_e7
+form/symbols	vakint::P31ce20b7cbb3f542_e10
+form/symbols	vakint::P3dc41bbf2115e501_e1
+form/symbols	vakint::P3dc41bbf2115e501_e5
+form/symbols	vakint::P3dc41bbf2115e501_e7
+form/symbols	vakint::P3dc41bbf2115e501_e9
+form/symbols	vakint::P3dc41bbf2115e501_e13
+form/symbols	vakint::P3dc41bbf2115e501_e15
+form/symbols	vakint::P3e892c5a34c7100d_e1
+form/symbols	vakint::P3e892c5a34c7100d_e5
+form/symbols	vakint::P3e892c5a34c7100d_e7
+form/symbols	vakint::P3e892c5a34c7100d_e11
+form/symbols	vakint::P3e892c5a34c7100d_e15
+form/symbols	vakint::P47437688db9db7d3_e1
+form/symbols	vakint::P47437688db9db7d3_e4
+form/symbols	vakint::P47437688db9db7d3_e10
+form/symbols	vakint::P47437688db9db7d3_e13
+form/symbols	vakint::P5c03540956a38684_e1
+form/symbols	vakint::P5c03540956a38684_e6
+form/symbols	vakint::P6060726d8885b4d8_e1
+form/symbols	vakint::P6060726d8885b4d8_e6
+form/symbols	vakint::P62b7d0ea55c4864e_e1
+form/symbols	vakint::P62b7d0ea55c4864e_e3
+form/symbols	vakint::P62b7d0ea55c4864e_e4
+form/symbols	vakint::P62b7d0ea55c4864e_e6
+form/symbols	vakint::P62b7d0ea55c4864e_e7
+form/symbols	vakint::P62b7d0ea55c4864e_e9
+form/symbols	vakint::P62b7d0ea55c4864e_e11
+form/symbols	vakint::P62b7d0ea55c4864e_e13
+form/symbols	vakint::P62b7d0ea55c4864e_e14
+form/symbols	vakint::P70d08bd9fbf8b598_e1
+form/symbols	vakint::P70d08bd9fbf8b598_e2
+form/symbols	vakint::P70d08bd9fbf8b598_e3
+form/symbols	vakint::P70d08bd9fbf8b598_e5
+form/symbols	vakint::P70d08bd9fbf8b598_e9
+form/symbols	vakint::P70d08bd9fbf8b598_e11
+form/symbols	vakint::P70d08bd9fbf8b598_e13
+form/symbols	vakint::P70d08bd9fbf8b598_e15
+form/symbols	vakint::P91b4725a2debf5da_e1
+form/symbols	vakint::P91b4725a2debf5da_e4
+form/symbols	vakint::P91b4725a2debf5da_e10
+form/symbols	vakint::P91b4725a2debf5da_e13
+form/symbols	vakint::P94d07569bd0c1afa_e1
+form/symbols	vakint::P94d07569bd0c1afa_e3
+form/symbols	vakint::P94d07569bd0c1afa_e4
+form/symbols	vakint::P94d07569bd0c1afa_e6
+form/symbols	vakint::P94d07569bd0c1afa_e10
+form/symbols	vakint::P94d07569bd0c1afa_e12
+form/symbols	vakint::Pbc09329a50dbf2f3_e1
+form/symbols	vakint::Pcf742ca25d7a22c0_e1
+form/symbols	vakint::Pcf742ca25d7a22c0_e9
+form/symbols	vakint::Pcf742ca25d7a22c0_e13
+form/symbols	vakint::Pcf742ca25d7a22c0_e14
 form/symbols	vakint::eps
 form/symbols	vakint::I
 form/symbols	vakint::ε
 form/symbols	vakint::mursq
 form/symbols	vakint::log_mu_sq
 form/symbols	vakint::evaluation_input
-form/symbols	vakint::NumericalSource
 form/symbols	vakint::v_
 form/symbols	vakint::id_
 form/symbols	vakint::idx_
-form/symbols	vakint::HR
-form/symbols	vakint::HI
-form/symbols	vakint::GPLReal
-form/symbols	vakint::GPLImag
-form/symbols	vakint::PolylogReal
-form/symbols	vakint::PolylogImag
 form/symbols	vakint::v1_
 form/symbols	vakint::v2_
 form/symbols	vakint::idx1_
 form/symbols	vakint::idx2_
-form/symbols	vakint::EulerGamma
-form/symbols	vakint::D6
-form/symbols	vakint::T1ep
-form/symbols	vakint::T1ep2
-form/symbols	vakint::cl4
-form/symbols	vakint::s6
 form/symbols	vakint::D5bar1
 form/symbols	vakint::D5bar2
 form/symbols	vakint::D6bar1
 form/symbols	vakint::D6bar2
 form/symbols	vakint::T111bar4
 form/symbols	vakint::BNbar4
-form/symbols	vakint::z2
-form/symbols	vakint::z3
-form/symbols	vakint::z4
-form/symbols	vakint::z5
-form/symbols	vakint::z6
-form/symbols	vakint::sqrt3
-form/symbols	vakint::S2
-form/symbols	vakint::cl2
 form/symbols	vakint::numerical_expression
-form/symbols	vakint::RustRedMaster
-form/symbols	vakint::RustRedCoefficient
-form/symbols	vakint::RustRedFiniteLiteral
-form/symbols	vakint::RustRedConstant
 form/symbols	vakint::numerical_coefficient
-form/symbols	vakint::Gamma
-form/symbols	vakint::Zeta
-form/symbols	vakint::Sqrt
 form/symbols	vakint::Oep
 form/symbols	vakint::muvsq
 form/symbols	vakint::vec_
 form/symbols	vakint::integral_
-form/symbols	vakint::idx___
 form/symbols	vakint::tensor_scalar_coefficient
-form/symbols	rustred::d
+form/symbols	vakint::rustred_family_e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4
+form/symbols	vakint::Gam
+form/symbols	vakint::rustred_family_ecdff6f39047e4dae21704b4de33a15ea53d9826e823496f7bdf62c1af498db1
+form/symbols	vakint::miT111
+form/symbols	vakint::rustred_family_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93
+form/symbols	vakint::miBN
+form/symbols	vakint::miD5
+form/symbols	vakint::miD6
+form/symbols	vakint::rustred_data_15123e98612100b6483bec6eea33b5e07dccfadd0978583eb7d2e90f3b3ecf6a
 form/symbols	rustred_indexed_coefficient_v1::n0
+form/symbols	vakint::logmUVmu
+form/symbols	vakint::normalization_input
+form/symbols	vakint::fn_
+form/symbols	vakint::ilmb_
 form/symbols	rustred_indexed_coefficient_v1::n1
 form/symbols	rustred_indexed_coefficient_v1::n2
 form/symbols	rustred::feynman_x_0
@@ -3017,23 +3296,7 @@ form/symbols	rustred_indexed_coefficient_v1::n5
 form/symbols	rustred::feynman_x_3
 form/symbols	rustred::feynman_x_4
 form/symbols	rustred::feynman_x_5
-form/symbols	vakint::rustred_family_e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4
-form/symbols	vakint::Gam
-form/symbols	vakint::rustred_family_ecdff6f39047e4dae21704b4de33a15ea53d9826e823496f7bdf62c1af498db1
-form/symbols	vakint::miT111
-form/symbols	vakint::rustred_family_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93
-form/symbols	vakint::miBN
-form/symbols	vakint::miD5
-form/symbols	vakint::miD6
-form/symbols	vakint::rustred_data_05bb0f9f903cf866a2eb62bf3ed0b97637e89d8b2376b9084a96079259bdace4
-form/symbols	vakint::logmUVmu
-form/symbols	vakint::normalization_input
-form/symbols	vakint::x__
-form/symbols	vakint::p_
-form/symbols	vakint::fn_
-form/symbols	vakint::ilmb_
 form/symbols	vakint::input_coefficient_placeholder_0
-form/symbols	vakint::input_coefficient
 form/symbols	vakint_sources::Input__76616b696e743a3a7b7d3a3a696e7075745f636f656666696369656e7428302c3029__0__cc87e7557048b9d4a04de0bfcc04ff630f300e324d93753313a181aedc05da55
 form/symbols	vakint_sources::Input__76616b696e743a3a7b7d3a3a696e7075745f636f656666696369656e7428312c3029__0__34c9c689f196c1b294399719e22320442f267e7d3fd60e778d084ade2be9565d
 form/symbols	vakint_sources::Input__76616b696e743a3a7b7d3a3a696e7075745f636f656666696369656e7428322c3029__0__0cce65ab9a4e4e20ce94229dccd74596c4809466d4e4c11c071976d65e3b60d8
@@ -3143,16 +3406,6 @@ form/symbols	vakint_sources::Input__76616b696e743a3a7b7d3a3a696e7075745f636f6566
 form/symbols	vakint_sources::Input__76616b696e743a3a7b7d3a3a696e7075745f636f656666696369656e742832312c3029__0__7d4cf366f27b768ee23f4f4c1cd132d3a648d5c2e143e5caeca7ae04ffa4cfe4
 form/symbols	vakint_sources::Input__76616b696e743a3a7b7d3a3a696e7075745f636f656666696369656e742832322c3029__0__826f7e3f52f28ae3bfa2e2a20b3c51dad4c4ed664db888e9fb19cf0f8a406776
 form/symbols	vakint_sources::Input__76616b696e743a3a7b7d3a3a696e7075745f636f656666696369656e742832332c3029__0__f2633486d5b9b9e2ead53cae9e2c3425f815425fb43c7246a3713a799d061a4b
-form/symbols	vakint::rustred_input
-form/symbols	vakint::partial_numerical_input
-form/symbols	vakint::PR4fin
-form/symbols	vakint::PR4dfin
-form/symbols	vakint::PR11dep0
-form/symbols	vakint::PR4ep1
-form/symbols	vakint::PR4dep1
-form/symbols	vakint::RustRedMaterializeSpectator
-form/symbols	vakint::om1
-form/symbols	vakint::MZV
 form/symbols	vakint_sources::Input__76616b696e743a3a7b7d3a3a696e7075745f636f656666696369656e742832342c3029__0__68bcef69b1d1e1729da945291a9015becd9144e4d3b3efb014a655bd27f82637
 form/symbols	vakint_sources::Input__76616b696e743a3a7b7d3a3a696e7075745f636f656666696369656e742832352c3029__0__5ab4f037a4984970d1ca4d765a64fdcaa73877ff952b845416b8d91c821a5eb4
 form/symbols	vakint_sources::Input__76616b696e743a3a7b7d3a3a696e7075745f636f656666696369656e742832362c3029__0__23f7ee200b01a92132b53f6440313a7eb4589ad24f2908cdeb205b9294a304f6
@@ -3169,11 +3422,11 @@ form/symbols	vakint::MASTER3m111111FINPIECE
 form/symbols	vakint::MASTER3m011111FIN
 form/symbols	vakint::MASTER3m011101EP
 form/symbols	vakint::MASTER3m001111FIN
-form/symbols	vakint_sources::AlphaLoop__76616b696e743a3a7b7d3a3a4d4153544552326d32324550__0__ffd8c9b005d82cd4d20344e20e58027b6f482194cfa5b1e5c9dd1503dac03cf0
 form/symbols	vakint_sources::AlphaLoop__76616b696e743a3a7b7d3a3a4d4153544552336d31313131313146494e5049454345__0__47790253b3f9d8a3b5e0be68081559586c504ac82bc38eb99b78916321dee7d7
+form/symbols	vakint_sources::AlphaLoop__76616b696e743a3a7b7d3a3a4d4153544552336d30303131313146494e__0__f6ff49484eecc9060f59b69a49499e6ca28d1e4a54cf65674113fc2e641c4e3f
 form/symbols	vakint_sources::AlphaLoop__76616b696e743a3a7b7d3a3a4d4153544552336d30313131313146494e__0__47ae6e5a65243e92fa608c0534e30893689cbe1f3cd8d65eca831e64b0470591
 form/symbols	vakint_sources::AlphaLoop__76616b696e743a3a7b7d3a3a4d4153544552336d3031313130314550__0__40efc9012df87ced669cda9ff5532e2614818debe718091452bf49831972f3f2
-form/symbols	vakint_sources::AlphaLoop__76616b696e743a3a7b7d3a3a4d4153544552336d30303131313146494e__0__f6ff49484eecc9060f59b69a49499e6ca28d1e4a54cf65674113fc2e641c4e3f
+form/symbols	vakint_sources::AlphaLoop__76616b696e743a3a7b7d3a3a4d4153544552326d32324550__0__ffd8c9b005d82cd4d20344e20e58027b6f482194cfa5b1e5c9dd1503dac03cf0
 form/symbols	vakint::alarmt2m22
 form/symbols	vakint::alarmt2m21
 form/symbols	vakint::uvid
@@ -3223,33 +3476,15 @@ form/symbols	vakint::BN1bar
 form/symbols	vakint::T1
 form/symbols	vakint::T111bar
 form/symbols	vakint::iGam
+form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694435__0__f5a4e457a3977e044e0ab91100233f8bd3f3e78e87c8311a28f642404c2a26c2
+form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694435__0__7f31ca282d7ac08d33e8825d9bd9de3b45e662b59469ee3f1c39ed1da565c62e
+form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694435__0__8f614b271bad9ad0ab6674d56a2dde6112886cde369e47bd7e4bdebba908b293
+form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694435__0__9286e91e7cae32c34757d80838c1500329f4f7695d7cde43e2dc6f140fb1ce89
 form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d6954313131__0__a61e2b8308bed9c7dfa89360d510162befb3ca8de0107aaa3302729aaf992629
 form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d6954313131__0__bdba65408a9f4ea48a421bcab445bab28e7e989777029a3e96f421bd2a134f11
 form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d6954313131__0__2882032ea44ec21ac432d98d044b03d38dd37043870a090e7218a431be81d750
 form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d6954313131__0__fa337617b65975e647fef418a395359bcdf90ffd62aacf0a3bf7479eca8f1413
 form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d6954313131__0__b626eced1e917a16fbb5c37434a79f7c12cb0b177c56da84febc7cd60531d17c
-form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d69424e31__0__0485f42525e4dd5032f395842c8640378979f5c1b1c66dc1bef6e16c5d53686a
-form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d69424e31__0__7af1a532e2f5e473a55b8e601367fac6b4d778a4c15e8e295c21ec9ea3c5e8ad
-form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d69424e31__0__8eb617b9b0aa8a1fb9941b602e204729cb3ddb31a457a6fbc809f390f8b38d22
-form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d69424e31__0__aac916cda9c56a1d7d2359d40280feb622c22156d1d8e1c1f036fcd7f1bca1d3
-form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d69424e31__0__8ccebe00f493fcd47dc3b980d31b9559819302d5033f7794823102bdcec08682
-form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d69424e31__0__1a4cd7026b40a1989a50a6dfd15b1536e7309c5229a9d4c3cc659ab07b19e163
-form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d69444e__0__f04f7dd0c25dd03e64e58648d8825d058ebc02467b99904203929f7f5e726f38
-form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d69444e__0__8afbb0cbf369223984e061873fb4a4ed0feafafa0c836aa5273f34faf10db9ee
-form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d69444e__0__a271828127791fff36e5de57142d1ca1442f8ec6bdc8a254f0fe32bc27a5e100
-form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d69444e__0__96c368df4467076fa3004a69605b210d4f41f673a8ed5c012bb246839baaef7a
-form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694436__0__4972e3fd3a62ec6dc914f236d681a7b3656fa93fbcfc3f17685d8a2026105c08
-form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694436__0__2f82186710f31246455503e3a705409af09cde5d0de0c36d3e522a92bfaaecd5
-form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694436__0__b6732036bba6ede9fbad3fcf848d5e6afc0e79e0813a8a2b03aaa9a2f292052c
-form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694436__0__ef1732d39766fef2a92542b471163c6cca8905395d4280f26b71b0b9b109e184
-form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694435__0__f5a4e457a3977e044e0ab91100233f8bd3f3e78e87c8311a28f642404c2a26c2
-form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694435__0__7f31ca282d7ac08d33e8825d9bd9de3b45e662b59469ee3f1c39ed1da565c62e
-form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694435__0__8f614b271bad9ad0ab6674d56a2dde6112886cde369e47bd7e4bdebba908b293
-form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694435__0__9286e91e7cae32c34757d80838c1500329f4f7695d7cde43e2dc6f140fb1ce89
-form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694433__0__d824948f97d74188de2042bae14d46a3d67e5ce78711e01a6ae7ed860848e632
-form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694433__0__d46b8eeacaa89d8bf3f4f680ea7e7efa7d8ae5d34a33c599fd14b6570a8b3a2c
-form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694433__0__7daef7a92b4dc43921887dff62140e84243c7de5d88f3a8a65cc94f8a9e3b3c8
-form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694433__0__ed222a7748eab5651cb483cf8304c47271e0ef21f7ce5a84b6297896340e2cbd
 form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d69444d__0__2ab109b192afcdb8d8c8ca0607f2f5461df2d177df12744c89ac16840e66ddb9
 form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d69444d__0__eb6375cfc9e4ba1d5dc11a863c1edda6ac5bd35b16e5416d8d916f482ce36b51
 form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d69444d__0__2943ab03709e7551e4ade69671c225dd3dfc44453768c646a0ebeb0fa7ed93dd
@@ -3260,15 +3495,33 @@ form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d69424e__0__64bad38
 form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d69424e__0__3016f1de1a0b13f91be749f5ba953dad2ac60708b3a0a15714d3a3f04ef611dc
 form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d69424e__0__62c559c682fcd0e21cd225061b3e0c6287b9b86218fdbac3307278d8f15fe1fd
 form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d69424e__0__ad6193c2c34e134fcaf819d7a60539ef37b22ea318c9b0e0db661fe6cb09c6ee
-form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694434__0__315df154d4dd755cfdf3862f663a0c076e9e8f8132a651ad106e361fd9470e2e
-form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694434__0__263917f0dc910d96aabc64f1793e3648d8242bd98fc17d18f7ed1fbe8affce99
-form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694434__0__fa9fefd89735afffb0f2f0d5941d4b3f10b1b0c0e285f74565988f00b967e502
-form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694434__0__52f7304871848361d96979bcedf2c31bd36781451c3aa61abcd4aa8f0e3c1fb0
+form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694433__0__d824948f97d74188de2042bae14d46a3d67e5ce78711e01a6ae7ed860848e632
+form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694433__0__d46b8eeacaa89d8bf3f4f680ea7e7efa7d8ae5d34a33c599fd14b6570a8b3a2c
+form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694433__0__7daef7a92b4dc43921887dff62140e84243c7de5d88f3a8a65cc94f8a9e3b3c8
+form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694433__0__ed222a7748eab5651cb483cf8304c47271e0ef21f7ce5a84b6297896340e2cbd
 form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694533__0__98e44dbda69ef9e06960a4f9fd9097b7f733ee5f0e5a4b19a0e4c8407f29ed76
 form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694533__0__6644f24ad2dfde76c781ae30399c66104ebb1965df71d9b7e89f6d6abdad8ceb
 form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694533__0__7c03e1cdf9072e9fac4c2dbf7f3664c9b3a88a142e953d782724993248824b0f
 form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694533__0__f2f962969efbac36d1bbe891e14bc6d6e0dc3f280e591584b85e12c8d2d95212
 form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694533__0__d71adab3c928d05ec6baab8fdc90929376187b175e5af3f8a63d3e4bc115def9
+form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d69424e31__0__0485f42525e4dd5032f395842c8640378979f5c1b1c66dc1bef6e16c5d53686a
+form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d69424e31__0__7af1a532e2f5e473a55b8e601367fac6b4d778a4c15e8e295c21ec9ea3c5e8ad
+form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d69424e31__0__8eb617b9b0aa8a1fb9941b602e204729cb3ddb31a457a6fbc809f390f8b38d22
+form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d69424e31__0__aac916cda9c56a1d7d2359d40280feb622c22156d1d8e1c1f036fcd7f1bca1d3
+form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d69424e31__0__8ccebe00f493fcd47dc3b980d31b9559819302d5033f7794823102bdcec08682
+form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d69424e31__0__1a4cd7026b40a1989a50a6dfd15b1536e7309c5229a9d4c3cc659ab07b19e163
+form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694436__0__4972e3fd3a62ec6dc914f236d681a7b3656fa93fbcfc3f17685d8a2026105c08
+form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694436__0__2f82186710f31246455503e3a705409af09cde5d0de0c36d3e522a92bfaaecd5
+form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694436__0__b6732036bba6ede9fbad3fcf848d5e6afc0e79e0813a8a2b03aaa9a2f292052c
+form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694436__0__ef1732d39766fef2a92542b471163c6cca8905395d4280f26b71b0b9b109e184
+form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694434__0__315df154d4dd755cfdf3862f663a0c076e9e8f8132a651ad106e361fd9470e2e
+form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694434__0__263917f0dc910d96aabc64f1793e3648d8242bd98fc17d18f7ed1fbe8affce99
+form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694434__0__fa9fefd89735afffb0f2f0d5941d4b3f10b1b0c0e285f74565988f00b967e502
+form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d694434__0__52f7304871848361d96979bcedf2c31bd36781451c3aa61abcd4aa8f0e3c1fb0
+form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d69444e__0__f04f7dd0c25dd03e64e58648d8825d058ebc02467b99904203929f7f5e726f38
+form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d69444e__0__8afbb0cbf369223984e061873fb4a4ed0feafafa0c836aa5273f34faf10db9ee
+form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d69444e__0__a271828127791fff36e5de57142d1ca1442f8ec6bdc8a254f0fe32bc27a5e100
+form/symbols	vakint_sources::MATAD__76616b696e743a3a7b7d3a3a6d69444e__0__96c368df4467076fa3004a69605b210d4f41f673a8ed5c012bb246839baaef7a
 form/symbols	vakint::p2
 form/symbols	vakint::p4
 form/symbols	vakint::p5
