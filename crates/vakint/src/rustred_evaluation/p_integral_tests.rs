@@ -1761,7 +1761,14 @@ fn five_loop_package_drill() {
     if std::env::var("VAKINT_TEST_P5L_DRILL_RETAIN").as_deref() == Ok("1") {
         settings.rustred_p_uncovered = crate::RustRedPUncoveredPolicy::Retain;
     }
-    let cases = std::env::var("VAKINT_TEST_P5L_DRILL").unwrap_or_default();
+    // Large inputs (physical requests) come from a file.
+    let cases = match std::env::var_os("VAKINT_TEST_P5L_DRILL_FILE") {
+        Some(file) => std::fs::read_to_string(file).unwrap(),
+        None => std::env::var("VAKINT_TEST_P5L_DRILL").unwrap_or_default(),
+    };
+    if let Ok(epsilon) = std::env::var("VAKINT_TEST_P5L_DRILL_EPSILON") {
+        settings.epsilon_symbol = epsilon;
+    }
     for case in cases.split(';').filter(|case| !case.trim().is_empty()) {
         let mut parts = case.splitn(3, '=');
         let (label, expected, input) = (
