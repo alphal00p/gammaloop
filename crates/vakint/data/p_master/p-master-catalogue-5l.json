@@ -13081,8 +13081,38 @@
     0,
     0
    ],
-   "status": "additional",
-   "note": "additional terminal of a boxed/stuck node (Q4): no value yet (v2 T178 [1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]); v3 key in the package frame"
+   "status": "mapped",
+   "combination": [
+    {
+     "master": "ggppss_int(199)",
+     "coefficient": "(d - 4)^2*PGamma(-1)^10*PGamma(1)^5/((d - 3)^5*(2*d - 7)*(9*d - 34)*PGamma(-2)^5)"
+    },
+    {
+     "master": "ggppss_int(189)",
+     "coefficient": "(3*d - 11)*(5*d - 18)*PGamma(-1)^10*PGamma(1)^5/((d - 3)^5*(9*d - 34)*PGamma(-2)^5)"
+    },
+    {
+     "master": "ggppss_int(190)",
+     "coefficient": "2*(d - 4)^2*PGamma(-1)^10*PGamma(1)^5/((d - 3)^5*(2*d - 7)*(9*d - 34)*PGamma(-2)^5)"
+    },
+    {
+     "master": "ggppss_int(11)",
+     "coefficient": "-4*(5*d - 16)*PGamma(-5)*PGamma(-1)^9*PGamma(1)^4*PGamma(5)/(5*(d - 4)*(d - 3)^2*(2*d - 7)^2*PGamma(-6)*PGamma(-2)^4*PGamma(4))"
+    },
+    {
+     "master": "ggppss_int(47)",
+     "coefficient": "-(3*d - 11)*(3*d - 10)*(3*d - 8)*(5*d - 16)*(5*d - 14)*PGamma(-1)^10*PGamma(1)^5/(4*(d - 4)^2*(d - 3)^4*(2*d - 7)^3*PGamma(-2)^5)"
+    },
+    {
+     "master": "ggppss_int(70)",
+     "coefficient": "(3*d - 11)*(3*d - 10)^3*(5*d - 16)*PGamma(-1)^10*PGamma(1)^5/(4*(d - 4)^2*(d - 3)^4*(2*d - 7)^3*PGamma(-2)^5)"
+    },
+    {
+     "master": null,
+     "coefficient": "-4*(5670*d^5*PGamma(-6)*PGamma(-3)^3*PGamma(-1)^2*PGamma(1)^3*PGamma(4)^2 - 1040*d^5*PGamma(-5)^2*PGamma(-2)^3*PGamma(-1)*PGamma(2)^3*PGamma(5) + 198*d^5*PGamma(-5)*PGamma(-3)^2*PGamma(-2)^3*PGamma(2)*PGamma(4)*PGamma(5) - 95040*d^4*PGamma(-6)*PGamma(-3)^3*PGamma(-1)^2*PGamma(1)^3*PGamma(4)^2 + 18224*d^4*PGamma(-5)^2*PGamma(-2)^3*PGamma(-1)*PGamma(2)^3*PGamma(5) - 3525*d^4*PGamma(-5)*PGamma(-3)^2*PGamma(-2)^3*PGamma(2)*PGamma(4)*PGamma(5) + 636570*d^3*PGamma(-6)*PGamma(-3)^3*PGamma(-1)^2*PGamma(1)^3*PGamma(4)^2 - 127428*d^3*PGamma(-5)^2*PGamma(-2)^3*PGamma(-1)*PGamma(2)^3*PGamma(5) + 25024*d^3*PGamma(-5)*PGamma(-3)^2*PGamma(-2)^3*PGamma(2)*PGamma(4)*PGamma(5) - 2129640*d^2*PGamma(-6)*PGamma(-3)^3*PGamma(-1)^2*PGamma(1)^3*PGamma(4)^2 + 444400*d^2*PGamma(-5)^2*PGamma(-2)^3*PGamma(-1)*PGamma(2)^3*PGamma(5) - 88540*d^2*PGamma(-5)*PGamma(-3)^2*PGamma(-2)^3*PGamma(2)*PGamma(4)*PGamma(5) + 3558600*d*PGamma(-6)*PGamma(-3)^3*PGamma(-1)^2*PGamma(1)^3*PGamma(4)^2 - 772912*d*PGamma(-5)^2*PGamma(-2)^3*PGamma(-1)*PGamma(2)^3*PGamma(5) + 156128*d*PGamma(-5)*PGamma(-3)^2*PGamma(-2)^3*PGamma(2)*PGamma(4)*PGamma(5) - 2376000*PGamma(-6)*PGamma(-3)^3*PGamma(-1)^2*PGamma(1)^3*PGamma(4)^2 + 536256*PGamma(-5)^2*PGamma(-2)^3*PGamma(-1)*PGamma(2)^3*PGamma(5) - 109760*PGamma(-5)*PGamma(-3)^2*PGamma(-2)^3*PGamma(2)*PGamma(4)*PGamma(5))*PGamma(-1)^6/(15*(d - 4)^5*(d - 3)^2*(2*d - 7)^4*(3*d - 10)^2*(5*d - 18)*PGamma(-6)*PGamma(-5)*PGamma(-3)^2*PGamma(-2)^3*PGamma(2)*PGamma(4))"
+    }
+   ],
+   "note": "derived: exact reduction of int199 key [2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] (package frame) through /common/build-cache/vhirschi/p_integral_dev/vk5l-wp2/pkg/t178rec/lib (p_key_batch, rustred c3ab220d), solved for this terminal; other terminals replaced by their v3 rows; R known through eps^3 (base need eps^0); v3 key in the package frame"
   },
   {
    "node": "T178",
