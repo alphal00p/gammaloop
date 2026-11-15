@@ -1908,6 +1908,30 @@ fn five_loop_package_drill() {
                 );
             }
             ("ok", Ok(value)) => {
+                // vk5l WP4 showcase: VAKINT_TEST_P5L_DRILL_DUMP=<dir> writes the
+                // value as Symbolica's canonical string (readable by Symbolica's
+                // parser and its MathML viewer) and a JSON summary.
+                if let Some(directory) = std::env::var_os("VAKINT_TEST_P5L_DRILL_DUMP") {
+                    let directory = std::path::PathBuf::from(directory);
+                    std::fs::create_dir_all(&directory).unwrap();
+                    let mode = format!("{drill_mode:?}").to_lowercase();
+                    let text = value.to_canonical_string();
+                    std::fs::write(directory.join(format!("{label}.{mode}.sym")), &text).unwrap();
+                    std::fs::write(
+                        directory.join(format!("{label}.{mode}.json")),
+                        serde_json::json!({
+                            "label": label,
+                            "mode": mode,
+                            "seconds": seconds,
+                            "terms": drill_term_count(&value.expand()),
+                            "bytes": text.len(),
+                            "input_bytes": input.to_canonical_string().len(),
+                            "presidual_terminals": crate::p_integral::finalize::unevaluated_terminals(&value),
+                        })
+                        .to_string(),
+                    )
+                    .unwrap();
+                }
                 let residuals = crate::p_integral::finalize::unevaluated_terminals(&value);
                 eprintln!(
                     "DRILL {label}: OK in {seconds:.1} s, {} terms, {} PResidual terminals {residuals:?}\n  \
