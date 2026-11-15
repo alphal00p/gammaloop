@@ -217,11 +217,15 @@ fn keeps_remainder() -> bool {
 /// First id of a kept edge-momentum combination `Q(EDGE_OFFSET + n, ...)`.
 const EDGE_OFFSET: i64 = 1_000_000;
 
+/// `GAMMALOOP_EDGE_CONTRACTION`: comma-separated modes. Unset means
+/// `keep_hard` (hard components contracted and projected with edge momenta
+/// kept, ordinary remainders in the loop basis); `off` (or any value naming
+/// no mode) restores the loop-basis contraction everywhere.
 fn edge_contraction(name: &str) -> bool {
     static LIST: LazyLock<Vec<String>> = LazyLock::new(|| {
         std::env::var("GAMMALOOP_EDGE_CONTRACTION")
             .map(|value| value.split(',').map(|v| v.trim().to_owned()).collect())
-            .unwrap_or_default()
+            .unwrap_or_else(|_| vec!["keep_hard".to_owned()])
     });
     LIST.iter().any(|entry| entry == name || entry == "all")
 }
