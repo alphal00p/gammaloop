@@ -2243,3 +2243,77 @@ fn spectator_terms_split_off_the_rational_functions_of_epsilon() {
         .collect::<BTreeSet<_>>();
     assert_eq!(monomials, [parse("T"), parse("L")].into_iter().collect());
 }
+
+/// vk5l WP4 like-for-like timing of `reduce_requests` on dumped requests
+/// (`VAKINT_DUMP_SPLIT_INPUTS` records, e.g. the beta team's physical
+/// requests), skipped unless `VAKINT_TEST_P_REQUEST_FILE` names a file: the
+/// library of [`library_engine`] (`VAKINT_TEST_P_LIBRARY_1_4`), master mode
+/// `VAKINT_TEST_P_REQUEST_MODE` (`symbolic` default, `retain`), one thread
+/// unless `VAKINT_TEST_P_REQUEST_CORES`; prints the cold call with its
+/// split / lower / prepare / library / render seconds, the finalization, and
+/// a warm second call in the same process.
+#[test]
+fn p_request_file_timing() {
+    let Some(file) = std::env::var_os("VAKINT_TEST_P_REQUEST_FILE") else {
+        eprintln!("p_request_file_timing: VAKINT_TEST_P_REQUEST_FILE unset, skipped");
+        return;
+    };
+    let started = std::time::Instant::now();
+    let engine = library_engine();
+    let mode = match std::env::var("VAKINT_TEST_P_REQUEST_MODE").as_deref() {
+        Ok("retain") => RustRedMasterMode::Retain,
+        _ => RustRedMasterMode::Symbolic,
+    };
+    let mut settings = settings(mode, None);
+    settings.n_cores = std::env::var("VAKINT_TEST_P_REQUEST_CORES")
+        .ok()
+        .and_then(|cores| cores.parse().ok())
+        .unwrap_or(1);
+    let text = std::fs::read_to_string(&file).unwrap();
+    let records = request_records(&text);
+    let requests = records
+        .iter()
+        .map(|(family, powers, external, numerator)| PropagatorRequest {
+            family,
+            powers,
+            canonical_numerator: numerator.as_view(),
+            external: external.clone(),
+        })
+        .collect::<Vec<_>>();
+    let library_load = {
+        let loading = std::time::Instant::now();
+        engine.p_library().unwrap();
+        loading.elapsed().as_secs_f64()
+    };
+    eprintln!(
+        "P-TIMING setup {:.3} s (library {library_load:.3} s), {} requests, fold {:?}, mode {mode:?}, {} cores",
+        started.elapsed().as_secs_f64(),
+        requests.len(),
+        super::fold_mode(),
+        settings.n_cores
+    );
+    let names = request_names(&requests).unwrap();
+    for pass in ["cold", "warm"] {
+        let calling = std::time::Instant::now();
+        let reduced = reduce_requests(&engine, &settings, &requests, None).unwrap();
+        let call = calling.elapsed().as_secs_f64();
+        let stats = super::last_stats();
+        let finalizing = std::time::Instant::now();
+        let value = finalize_reduced(&engine, &settings, reduced, &names, mode).unwrap();
+        let finalize = finalizing.elapsed().as_secs_f64();
+        eprintln!(
+            "P-TIMING {pass}: reduce_requests {call:.3} s = split {:.3} + lower/fold {:.3} + \
+             coefficients {:.3} + library {:.3} + render {:.3} (channels {}, reductions {}, pairs {}); \
+             finalize {finalize:.3} s; {} terms",
+            stats.split_seconds,
+            stats.lower_seconds,
+            stats.prepare_seconds,
+            stats.library_seconds,
+            stats.render_seconds,
+            stats.channels,
+            stats.reductions,
+            stats.pairs,
+            drill_term_count(&value.expand())
+        );
+    }
+}
