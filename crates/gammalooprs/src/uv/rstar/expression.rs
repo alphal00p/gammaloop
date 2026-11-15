@@ -156,6 +156,31 @@ impl IntegrationTimings {
     }
 }
 
+/// `GAMMALOOP_EDGE_CONTRACTION=<list>` (`hard`, `remainder`, `all`): contract
+/// those R* expressions with edge momenta independent
+/// ([`RStarIntegrand::simplify_edge_basis`]).
+/// `GAMMALOOP_EDGE_DEBUG_DUMP=<dir>`: write the input of a failing step.
+fn edge_debug_dump(stage: &str, expression: &Atom) {
+    if let Ok(dir) = std::env::var("GAMMALOOP_EDGE_DEBUG_DUMP") {
+        let _ = std::fs::write(
+            format!("{dir}/{stage}-{}.txt", std::process::id()),
+            format!("{expression}"),
+        );
+    }
+}
+
+/// First id of a kept edge-momentum combination `Q(EDGE_OFFSET + n, ...)`.
+const EDGE_OFFSET: i64 = 1_000_000;
+
+fn edge_contraction(name: &str) -> bool {
+    static LIST: LazyLock<Vec<String>> = LazyLock::new(|| {
+        std::env::var("GAMMALOOP_EDGE_CONTRACTION")
+            .map(|value| value.split(',').map(|v| v.trim().to_owned()).collect())
+            .unwrap_or_default()
+    });
+    LIST.iter().any(|entry| entry == name || entry == "all")
+}
+
 /// `GAMMALOOP_HARD_TAYLOR_CHECK=1` also runs the contracted hard Taylor path on
 /// every hard component and reports `HARD_TAYLOR_CHECK ... equal=...` on stderr.
 fn hard_taylor_check() -> bool {
@@ -175,6 +200,9 @@ pub(super) struct RStarIntegrand {
     routed: Atom,
     /// [`Self::routed`] contracted to dots, built on first use.
     contracted: OnceLock<Atom>,
+    /// Edge momenta kept as independent vectors (`GAMMALOOP_EDGE_CONTRACTION=keep`):
+    /// each distinct loop-momentum combination `Σ c_e Q(e)` -> its id.
+    combinations: std::sync::Mutex<std::collections::BTreeMap<Vec<(i64, Atom)>, i64>>,
     graph: Graph,
     basis: LoopMomentumBasis,
     soft_edges: Vec<EdgeIndex>,
@@ -307,6 +335,7 @@ impl RStarIntegrand {
             region: region.clone(),
             routed: expression,
             contracted: OnceLock::new(),
+            combinations: Default::default(),
             graph: converter_graph,
             basis,
             soft_edges,
@@ -326,8 +355,16 @@ impl RStarIntegrand {
         let started = Instant::now();
         let contracted = {
             let _algebra = StageSpan::new("gamma.remainder.algebra");
-            Self::simplify(&self.routed)
-                .wrap_err("while preparing the routed R* tensor expression")?
+            if edge_contraction("keep") || edge_contraction("keep_remainder") {
+                self.contract_keeping_edges(&self.routed)
+                    .wrap_err("while preparing the routed R* tensor expression")?
+            } else if edge_contraction("remainder") {
+                Self::simplify_edge_basis(&self.routed)
+                    .wrap_err("while preparing the routed R* tensor expression")?
+            } else {
+                Self::simplify(&self.routed)
+                    .wrap_err("while preparing the routed R* tensor expression")?
+            }
         };
         if vakint::census::enabled() {
             vakint::census::record(
@@ -412,8 +449,17 @@ impl RStarIntegrand {
     }
 
     pub(super) fn physical_numerator(&self) -> Result<Atom> {
-        Ok(self
-            .expression()?
+        // The physical path transports its numerator through its own momentum
+        // maps; it keeps the loop-basis contraction.
+        let contracted;
+        let expression = if edge_contraction("keep") || edge_contraction("keep_remainder") {
+            contracted = Self::simplify(&self.routed)
+                .wrap_err("while preparing the routed R* tensor expression")?;
+            &contracted
+        } else {
+            self.expression()?
+        };
+        Ok(expression
             .replace(function!(GS.den, W_.x___))
             .with(Atom::one()))
     }
@@ -657,7 +703,143 @@ impl RStarIntegrand {
     /// basis before a quotient's pole projection. Hard scalar integrals remain
     /// unevaluated, including the dimension-dependent projector coefficients.
     pub fn project_hard(&self, expression: &Atom) -> Result<Atom> {
-        project_hard_vacuum(expression, &self.basis.loop_edges.raw)
+        let ids = self.combination_ids();
+        if ids.is_empty() {
+            return project_hard_vacuum(expression, &self.basis.loop_edges.raw);
+        }
+        // Kept edge-momentum combinations are integrated vectors too.
+        let hard = self
+            .basis
+            .loop_edges
+            .raw
+            .iter()
+            .copied()
+            .chain(ids.into_iter().map(EdgeIndex::from))
+            .collect::<Vec<_>>();
+        project_hard_vacuum(expression, &hard)
+            .wrap_err("while projecting with kept edge momenta")
+    }
+
+    /// [`Self::simplify`] with every linear combination of this component's
+    /// loop-edge momenta in an index slot kept as one independent vector
+    /// `Q(OFFSET + n, slot)` (registered in `self.combinations`); momenta of
+    /// other edges (root, boundary, soft) stay explicit, so Taylor expansions
+    /// and projections in them act as before. The combinations are substituted
+    /// at the routing step of `to_vakint_integrand`.
+    fn contract_keeping_edges(&self, expression: &Atom) -> Result<Atom> {
+        let head = GS.emr_mom;
+        let loop_edges = self
+            .basis
+            .loop_edges
+            .iter()
+            .map(|edge| usize::from(*edge) as i64)
+            .collect::<BTreeSet<_>>();
+        let term_of = |term: AtomView<'_>| -> Option<(i64, Atom, Vec<Atom>)> {
+            let (coefficient, vector) = match term {
+                AtomView::Mul(product) => {
+                    let factors = product.iter().collect::<Vec<_>>();
+                    match factors.as_slice() {
+                        [n @ AtomView::Num(_), v] | [v, n @ AtomView::Num(_)] => (n.to_owned(), *v),
+                        _ => return None,
+                    }
+                }
+                other => (Atom::num(1), other),
+            };
+            let AtomView::Fun(function) = vector else {
+                return None;
+            };
+            if function.get_symbol() != head || function.get_nargs() < 1 {
+                return None;
+            }
+            let edge = i64::try_from(function.get(0)).ok()?;
+            Some((edge, coefficient, function.iter().skip(1).map(|a| a.to_owned()).collect()))
+        };
+        let mut combinations = self.combinations.lock().unwrap();
+        let renamed = expression.replace_map(|view, _, out| {
+            // Denominators keep their loop-basis momenta: their topology and
+            // Taylor arguments are read from them.
+            if matches!(view, AtomView::Fun(f) if f.get_symbol() == GS.den) {
+                **out = view.to_owned();
+                return;
+            }
+            let AtomView::Add(sum) = view else {
+                return;
+            };
+            let mut tail = None;
+            let mut kept = Vec::new();
+            let mut others = Vec::new();
+            for term in sum.iter() {
+                let Some((edge, coefficient, this_tail)) = term_of(term) else {
+                    return;
+                };
+                match &tail {
+                    None => tail = Some(this_tail),
+                    Some(t) if *t == this_tail => {}
+                    _ => return,
+                }
+                if loop_edges.contains(&edge) {
+                    kept.push((edge, coefficient));
+                } else {
+                    others.push(term);
+                }
+            }
+            if kept.len() < 2 || tail.as_ref().is_none_or(|t| t.is_empty()) {
+                return;
+            }
+            kept.sort_by(|a, b| a.0.cmp(&b.0));
+            let next = EDGE_OFFSET + combinations.len() as i64;
+            let id = *combinations.entry(kept).or_insert(next);
+            let vector = symbolica::atom::FunctionBuilder::new(head)
+                .add_arg(Atom::num(id))
+                .add_args(&tail.unwrap_or_default())
+                .finish();
+            **out = if others.is_empty() {
+                vector
+            } else {
+                Atom::add_many(others.iter().copied().chain(std::iter::once(vector.as_view())))
+            };
+        });
+        drop(combinations);
+        Self::simplify_view(renamed.as_view()).map_err(|error| {
+            if let Ok(dir) = std::env::var("GAMMALOOP_EDGE_DEBUG_DUMP") {
+                let _ = std::fs::write(
+                    format!("{dir}/keep-failure-{}.txt", std::process::id()),
+                    format!("input {expression}\nrenamed {renamed}\n"),
+                );
+            }
+            error.wrap_err("while contracting with kept edge momenta")
+        })
+    }
+
+    /// `Q(OFFSET + n, x___) -> Σ c_e Q(e, x___)` for every kept combination.
+    pub(super) fn combination_rules(&self) -> Vec<Replacement> {
+        self.combinations
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(terms, id)| {
+                let pattern = function!(GS.emr_mom, Atom::num(*id), W_.x___);
+                let image = Atom::add_many(
+                    terms
+                        .iter()
+                        .map(|(edge, coefficient)| {
+                            coefficient * function!(GS.emr_mom, Atom::num(*edge), W_.x___)
+                        })
+                        .collect::<Vec<_>>()
+                        .iter(),
+                );
+                Replacement::new(pattern.to_pattern(), image.to_pattern())
+            })
+            .collect()
+    }
+
+    fn combination_ids(&self) -> Vec<usize> {
+        self.combinations
+            .lock()
+            .unwrap()
+            .values()
+            .map(|id| *id as usize)
+            .collect()
     }
 
     /// Hard Taylor expansion leaves the reference mass fixed. These momenta
@@ -680,8 +862,39 @@ impl RStarIntegrand {
             let _algebra = StageSpan::new("gamma.remainder.hard_taylor_algebra");
             streamed::report_size("hard_taylor", expanded.as_view());
             streamed::dump("hard_taylor", expanded.as_view());
-            Self::simplify_hard_taylor(&expanded)
-                .wrap_err("while simplifying the R* hard Taylor polynomial")?
+            if edge_contraction("keep") || edge_contraction("keep_hard") {
+                let kept = self
+                    .contract_keeping_edges(&expanded)
+                    .wrap_err("while simplifying the R* hard Taylor polynomial")?;
+                if streamed::check("edge_contraction") {
+                    let reference = Self::simplify(&expanded)
+                        .wrap_err("while simplifying the R* hard Taylor polynomial")?;
+                    let substituted = kept.replace_multiple(&self.combination_rules()).expand();
+                    let equal = (&substituted - &reference.expand()).expand().is_zero();
+                    eprintln!(
+                        "STREAM_CHECK stage=edge_keep bytes={} equal={equal}",
+                        expanded.as_view().get_byte_size()
+                    );
+                }
+                kept
+            } else if edge_contraction("hard") {
+                let edge = Self::simplify_edge_basis(&expanded)
+                    .wrap_err("while simplifying the R* hard Taylor polynomial")?;
+                if streamed::check("edge_contraction") {
+                    let reference = Self::simplify(&expanded)
+                        .wrap_err("while simplifying the R* hard Taylor polynomial")?;
+                    let identical = edge == reference;
+                    let equal = identical || (&edge - &reference).expand().is_zero();
+                    eprintln!(
+                        "STREAM_CHECK stage=edge_contraction bytes={} identical={identical} equal={equal}",
+                        expanded.as_view().get_byte_size()
+                    );
+                }
+                edge
+            } else {
+                Self::simplify_hard_taylor(&expanded)
+                    .wrap_err("while simplifying the R* hard Taylor polynomial")?
+            }
         };
         if vakint::census::enabled() {
             vakint::census::record(
@@ -815,6 +1028,7 @@ impl RStarIntegrand {
             .iter()
             .chain(&root_edges)
             .map(|edge| usize::from(*edge))
+            .chain(self.combination_ids())
             .collect::<BTreeSet<_>>();
         let mut unresolved = BTreeSet::new();
         routed.visitor(&mut |part| {
@@ -845,6 +1059,7 @@ impl RStarIntegrand {
         drop(compensated);
         timing.taylor = timing.lap();
         let expanded = Self::simplify_summands(polynomial.as_view())
+            .inspect_err(|_| edge_debug_dump("outer_simplify", &polynomial))
             .wrap_err("while simplifying the compensated R* outer Taylor polynomial")?;
         drop(polynomial);
         timing.algebra = timing.lap();
@@ -855,6 +1070,7 @@ impl RStarIntegrand {
         // projector are spectators, rather than differentiated source labels.
         let expanded = if let Some(projector) = root_projector {
             let projected = projector(&expanded)
+                .inspect_err(|_| edge_debug_dump("root_projector", &expanded))
                 .wrap_err("while projecting the complete R* outer Taylor polynomial")?;
             drop(expanded);
             Integrated::dimensionally_regularized(&projected)
@@ -866,16 +1082,24 @@ impl RStarIntegrand {
             expanded
         } else {
             // By value: to_vakint drops it once it has been materialized.
-            let input = to_vakint_integrand(
-                expanded,
-                &self.graph.underlying,
-                &self.region.remaining,
-                &self.graph.empty_subgraph::<SuBitGraph>(),
-                &uv_settings.vakint,
-                false,
-            )?;
+            let rules = self.combination_rules();
+            if !rules.is_empty() {
+                edge_debug_dump("to_vakint_input", &expanded);
+            }
+            let input = crate::uv::approx::integrated::with_momentum_combinations(&rules, || -> Result<_> {
+                to_vakint_integrand(
+                    expanded,
+                    &self.graph.underlying,
+                    &self.region.remaining,
+                    &self.graph.empty_subgraph::<SuBitGraph>(),
+                    &uv_settings.vakint,
+                    false,
+                )
+                .wrap_err("while converting with kept edge momenta")
+            })?;
             timing.conversion = timing.lap();
-            let integrated = integrate_single_mass(vakint, vakint_settings, &input)?;
+            let integrated = integrate_single_mass(vakint, vakint_settings, &input)
+                .inspect_err(|_| edge_debug_dump("single_mass_error", &Atom::num(1)))?;
             timing.backend = timing.lap();
             integrated
         };
@@ -952,6 +1176,86 @@ impl RStarIntegrand {
             })
             .collect::<Vec<_>>();
         expression.replace_multiple(&replacements)
+    }
+
+    /// [`Self::simplify`] with every momentum linear combination in an index
+    /// slot (an edge momentum after routing, `Σ c_e Q(e, slot)`) replaced by
+    /// one independent vector before the contraction, and substituted back
+    /// afterwards, factor by factor and without expanding. Contraction is
+    /// linear in each vector, so this is the same tensor expression; the
+    /// contraction no longer distributes the sums of the loop-momentum basis
+    /// (on 27105's hard Taylor input: 47 s and 2.7 GB instead of > 90 GiB).
+    pub(super) fn simplify_edge_basis(expression: &Atom) -> Result<Atom> {
+        const OFFSET: i64 = 2_000_000;
+        let head = GS.emr_mom;
+        let term_of = |term: AtomView<'_>| -> Option<(i64, Atom, Vec<Atom>)> {
+            let (coefficient, vector) = match term {
+                AtomView::Mul(product) => {
+                    let factors = product.iter().collect::<Vec<_>>();
+                    match factors.as_slice() {
+                        [n @ AtomView::Num(_), v] | [v, n @ AtomView::Num(_)] => (n.to_owned(), *v),
+                        _ => return None,
+                    }
+                }
+                other => (Atom::num(1), other),
+            };
+            let AtomView::Fun(function) = vector else {
+                return None;
+            };
+            if function.get_symbol() != head || function.get_nargs() < 1 {
+                return None;
+            }
+            let edge = i64::try_from(function.get(0)).ok()?;
+            if edge >= OFFSET {
+                return None;
+            }
+            Some((edge, coefficient, function.iter().skip(1).map(|a| a.to_owned()).collect()))
+        };
+        let mut combinations = std::collections::BTreeMap::<Vec<(i64, Atom)>, i64>::new();
+        let renamed = expression.replace_map(|view, _, out| {
+            let AtomView::Add(sum) = view else {
+                return;
+            };
+            let mut tail = None;
+            let mut terms = Vec::new();
+            for term in sum.iter() {
+                let Some((edge, coefficient, this_tail)) = term_of(term) else {
+                    return;
+                };
+                match &tail {
+                    None => tail = Some(this_tail),
+                    Some(t) if *t == this_tail => {}
+                    _ => return,
+                }
+                terms.push((edge, coefficient));
+            }
+            terms.sort_by(|a, b| a.0.cmp(&b.0));
+            let next = OFFSET + combinations.len() as i64;
+            let id = *combinations.entry(terms).or_insert(next);
+            **out = symbolica::atom::FunctionBuilder::new(head)
+                .add_arg(Atom::num(id))
+                .add_args(&tail.unwrap_or_default())
+                .finish();
+        });
+        if combinations.is_empty() {
+            return Self::simplify_view(expression.as_view());
+        }
+        let simplified = Self::simplify_view(renamed.as_view())?;
+        let rules = combinations
+            .iter()
+            .map(|(terms, id)| {
+                let pattern = function!(head, Atom::num(*id), W_.x___);
+                let image = Atom::add_many(
+                    terms
+                        .iter()
+                        .map(|(edge, coefficient)| coefficient * function!(head, Atom::num(*edge), W_.x___))
+                        .collect::<Vec<_>>()
+                        .iter(),
+                );
+                Replacement::new(pattern.to_pattern(), image.to_pattern())
+            })
+            .collect::<Vec<_>>();
+        Ok(simplified.replace_multiple(&rules))
     }
 
     pub(super) fn simplify(expression: &Atom) -> Result<Atom> {

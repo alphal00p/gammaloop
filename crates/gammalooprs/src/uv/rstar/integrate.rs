@@ -294,11 +294,30 @@ fn closed_scalar(factor: AtomView<'_>) -> bool {
         AtomView::Fun(function) => {
             let symbol = function.get_symbol();
             if symbol == S.dot && function.get_nargs() == 2 {
-                let bare = |argument: AtomView<'_>| {
+                fn bare_vector(argument: AtomView<'_>) -> bool {
                     matches!(argument, AtomView::Fun(vector)
                         if (vector.get_symbol() == S.k || vector.get_symbol() == S.p)
                             && vector.get_nargs() == 1
                             && matches!(vector.get(0), AtomView::Num(_)))
+                }
+                // A vector or a rational linear combination of one kind of
+                // vectors (loop or external): a sum of closed scalar products.
+                let bare = |argument: AtomView<'_>| match argument {
+                    AtomView::Add(sum) => {
+                        let terms = sum.iter().collect::<Vec<_>>();
+                        let single = |term: AtomView<'_>| match term {
+                            AtomView::Mul(product) => {
+                                let factors = product.iter().collect::<Vec<_>>();
+                                matches!(factors.as_slice(),
+                                    [AtomView::Num(_), v] | [v, AtomView::Num(_)] if bare_vector(*v))
+                            }
+                            other => bare_vector(other),
+                        };
+                        terms.iter().all(|t| single(*t))
+                            && (terms.iter().all(|t| t.contains_symbol(S.k))
+                                || terms.iter().all(|t| !t.contains_symbol(S.k)))
+                    }
+                    other => bare_vector(other),
                 };
                 let (a, b) = (function.get(0), function.get(1));
                 // A loop momentum contracted with an external vector carries

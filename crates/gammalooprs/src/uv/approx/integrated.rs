@@ -677,6 +677,23 @@ fn map_factors_switched(
     mapped
 }
 
+thread_local! {
+    /// Kept edge-momentum combinations of the integrand being converted
+    /// (`with_momentum_combinations`), substituted with the momentum routing.
+    static MOMENTUM_COMBINATIONS: std::cell::RefCell<Vec<Replacement>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Run `f` (a [`to_vakint_integrand`] call) with `rules`
+/// (`Q(id, x___) -> Σ c Q(e, x___)`) applied before the momentum routing of
+/// every term, factor by factor.
+pub(crate) fn with_momentum_combinations<T>(rules: &[Replacement], f: impl FnOnce() -> T) -> T {
+    let previous = MOMENTUM_COMBINATIONS.with(|c| std::mem::replace(&mut *c.borrow_mut(), rules.to_vec()));
+    let result = f();
+    MOMENTUM_COMBINATIONS.with(|c| *c.borrow_mut() = previous);
+    result
+}
+
 /// The Vakint terms of an integrand, collected per topology.
 #[derive(Default)]
 struct TopologyGroups {
@@ -1662,12 +1679,25 @@ pub(crate) fn to_vakint_integrand<
         let momentum_solution =
             VakintMomentumSolution::solve(&system, &momentum_variables, &add_additional_args)
                 .wrap_err("could not solve momentum system for Vakint integrand")?;
-        t.numerator = map_factors_switched(
-            "momentum_routing",
-            &t.numerator,
-            &mut std::collections::HashMap::new(),
-            &|factor| factor.replace_multiple(&momentum_solution.replacements),
-        );
+        let combinations = MOMENTUM_COMBINATIONS.with(|c| c.borrow().clone());
+        t.numerator = if combinations.is_empty() {
+            map_factors_switched(
+                "momentum_routing",
+                &t.numerator,
+                &mut std::collections::HashMap::new(),
+                &|factor| factor.replace_multiple(&momentum_solution.replacements),
+            )
+        } else {
+            map_factors_cached(
+                t.numerator.as_view(),
+                &mut std::collections::HashMap::new(),
+                &|factor| {
+                    factor
+                        .replace_multiple(&combinations)
+                        .replace_multiple(&momentum_solution.replacements)
+                },
+            )
+        };
         t.integral = momentum_solution.rewrite_integral(&t.integral, &add_additional_args);
         momentum_solution.ensure_free_variables_eliminated(
             term_index,
