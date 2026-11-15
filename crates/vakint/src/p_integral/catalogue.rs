@@ -117,6 +117,7 @@ impl PCatalogue {
     /// as edge colours, so inputs that differ only by vertex names or routing
     /// get the same line correspondence (up to the automorphisms that preserve
     /// the powers, which are symmetries of the integral).
+    #[cfg(test)]
     pub(crate) fn lookup(&self, graph: &PGraph) -> Option<(&CatalogueEntry, BTreeMap<i64, usize>)> {
         self.lookup_keyed(graph)
             .map(|(entry, labels, _)| (entry, labels))
@@ -311,6 +312,7 @@ const MAXIMAL_PARALLEL_ASSIGNMENTS: usize = 1 << 12;
 
 /// Match a normalized p-integral graph to its catalogue representative.
 /// Returns `None` when its graph is in no catalogue stratum.
+#[cfg(test)]
 pub(crate) fn match_graph(graph: &PGraph) -> Result<Option<PMatch>, VakintError> {
     match_graph_preferring(graph, &|_| true)
 }
