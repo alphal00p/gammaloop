@@ -360,6 +360,70 @@ fn multiply(
     product
 }
 
+/// vk5l WP4: the lowering of one unit loop-dot monomial `Π dot^e` of a
+/// sector, `Σ c · Π D_s^m`: packed slot exponents ([`PACKED_BITS`] per
+/// slot) when they fit, else exponent vectors. Coefficients accumulate in a
+/// hash map of packed exponents (profile of a six-loop census request: 52 %
+/// of the time went into a `BTreeMap` of key vectors).
+#[derive(Debug)]
+enum UnitLowering {
+    Packed(Vec<(u128, Rational)>),
+    Unpacked(Vec<(Vec<u32>, Rational)>),
+}
+
+/// The lowering of the unit monomial `dots` (sorted) of a sector.
+fn lower_unit(top: PTop, dots: &[(PDot, i64)], forms: &BTreeMap<PDot, AffineSlotForm>) -> UnitLowering {
+    let degree = dots.iter().map(|(_, exponent)| *exponent).sum();
+    if packable(top, degree) {
+        UnitLowering::Packed(lower_unit_packed(dots, forms))
+    } else {
+        let mut product = BTreeMap::from([(vec![0u32; top.arity], Rational::one())]);
+        for &(dot, exponent) in dots {
+            for _ in 0..exponent {
+                product = multiply(&product, &forms[&dot]);
+            }
+        }
+        UnitLowering::Unpacked(product.into_iter().collect())
+    }
+}
+
+/// Bits per slot exponent in a packed slot monomial.
+const PACKED_BITS: u32 = 6;
+
+/// Whether the slot monomials of `top` up to `degree` fit [`PACKED_BITS`].
+fn packable(top: PTop, degree: i64) -> bool {
+    top.arity as u32 * PACKED_BITS <= 128 && degree < (1 << PACKED_BITS)
+}
+
+/// `Π form(dot)^e` over the slots of `top`, packed (slot `s` exponent in
+/// bits `PACKED_BITS·s ..`); the caller checks [`packable`].
+fn lower_unit_packed(
+    dots: &[(PDot, i64)],
+    forms: &BTreeMap<PDot, AffineSlotForm>,
+) -> Vec<(u128, Rational)> {
+    let mut product = HashMap::<u128, Rational>::from([(0u128, Rational::one())]);
+    for (dot, exponent) in dots {
+        let form = &forms[dot];
+        for _ in 0..*exponent {
+            let mut next =
+                HashMap::<u128, Rational>::with_capacity(product.len() * (form.terms.len() + 1));
+            for (monomial, coefficient) in &product {
+                if !form.constant.is_zero() {
+                    *next.entry(*monomial).or_insert_with(Rational::zero) +=
+                        &(coefficient * &form.constant);
+                }
+                for (slot, value) in &form.terms {
+                    let shifted = monomial + (1u128 << (PACKED_BITS * u32::from(*slot)));
+                    *next.entry(shifted).or_insert_with(Rational::zero) += &(coefficient * value);
+                }
+            }
+            next.retain(|_, value| !value.is_zero());
+            product = next;
+        }
+    }
+    product.into_iter().collect()
+}
+
 /// The inputs `Σ c·I_M(key)` of one homogeneous part on the slots of its top
 /// presentation. The line slots carry the positive line powers (a negative
 /// power is already a numerator factor of the part), every scalar product of
@@ -381,39 +445,66 @@ fn lower_part(
         )));
     }
     let loops = usize::from(presentation.loops);
-    let mut lowered = BTreeMap::<Vec<i64>, Rational>::new();
+    let mut packed = HashMap::<u128, Rational>::new();
+    let mut unpacked = HashMap::<Vec<u32>, Rational>::new();
     for (value, monomial) in polynomial {
-        let mut product = BTreeMap::from([(vec![0u32; top.arity], fraction(*value))]);
-        for &(dot, exponent) in &monomial.0 {
-            let form = match forms.entry(dot) {
-                std::collections::btree_map::Entry::Occupied(entry) => entry.into_mut(),
-                std::collections::btree_map::Entry::Vacant(entry) => {
-                    let (a, b) = dot_rows(dot, loops);
-                    entry.insert(
-                        presentation
-                            .express_scalar_product(&a, &b)
-                            .map_err(|error| invalid(format!("{dot:?}: {error}")))?,
-                    )
-                }
-            };
-            for _ in 0..exponent {
-                product = multiply(&product, form);
+        for &(dot, _) in &monomial.0 {
+            if let std::collections::btree_map::Entry::Vacant(entry) = forms.entry(dot) {
+                let (a, b) = dot_rows(dot, loops);
+                entry.insert(
+                    presentation
+                        .express_scalar_product(&a, &b)
+                        .map_err(|error| invalid(format!("{dot:?}: {error}")))?,
+                );
             }
         }
-        for (monomial, coefficient) in product {
-            let key = (0..top.arity)
-                .map(|slot| {
-                    let base = if slot < top.line_count {
-                        powers[slot].max(0)
-                    } else {
-                        0
-                    };
-                    base - i64::from(monomial[slot])
-                })
-                .collect::<Vec<_>>();
-            let entry = lowered.entry(key).or_insert_with(Rational::zero);
-            *entry += &coefficient;
+        let mut dots = monomial.0.clone();
+        dots.sort();
+        let unit = lower_unit(top, &dots, forms);
+        let value = fraction(*value);
+        match &unit {
+            UnitLowering::Packed(terms) => {
+                for (monomial, coefficient) in terms {
+                    *packed.entry(*monomial).or_insert_with(Rational::zero) +=
+                        &(coefficient * &value);
+                }
+            }
+            UnitLowering::Unpacked(terms) => {
+                for (monomial, coefficient) in terms {
+                    *unpacked
+                        .entry(monomial.clone())
+                        .or_insert_with(Rational::zero) += &(coefficient * &value);
+                }
+            }
         }
+    }
+    let key_of = |exponent: &dyn Fn(usize) -> u32| {
+        (0..top.arity)
+            .map(|slot| {
+                let base = if slot < top.line_count {
+                    powers[slot].max(0)
+                } else {
+                    0
+                };
+                base - i64::from(exponent(slot))
+            })
+            .collect::<Vec<_>>()
+    };
+    let mask = (1u128 << PACKED_BITS) - 1;
+    let mut lowered = BTreeMap::<Vec<i64>, Rational>::new();
+    for (monomial, coefficient) in packed {
+        if coefficient.is_zero() {
+            continue;
+        }
+        let key = key_of(&|slot| ((monomial >> (PACKED_BITS * slot as u32)) & mask) as u32);
+        *lowered.entry(key).or_insert_with(Rational::zero) += &coefficient;
+    }
+    for (monomial, coefficient) in unpacked {
+        if coefficient.is_zero() {
+            continue;
+        }
+        let key = key_of(&|slot| monomial[slot]);
+        *lowered.entry(key).or_insert_with(Rational::zero) += &coefficient;
     }
     lowered.retain(|_, value| !value.is_zero());
     Ok(lowered)
@@ -729,32 +820,52 @@ fn fold_request(
     with_stats(|stats| stats.split_seconds += splitting.elapsed().as_secs_f64());
     let lowering = std::time::Instant::now();
     let split_channels = pending.len();
-    // Lower every channel once and distribute its lowered inputs, scaled by
-    // the value of each term of its coefficient, over the folded channels and
-    // basis functions. The integral keys are numbered once, and every folded
-    // basis accumulates into a dense vector indexed by key number.
-    let mut key_ids = HashMap::<(PresentationId, Vec<i64>), usize>::new();
-    let mut keys = Vec::<(PresentationId, Vec<i64>)>::new();
-    let mut buckets = Vec::<Vec<Rational>>::new();
+    // Fold before lowering (vk5l WP4): every channel's coefficient is
+    // `Σ value · basis(ε) · monomial` ([`spectator_terms`]); each loop-dot
+    // monomial of its parts gets the weight `value · fraction` in its folded
+    // target and basis. Each distinct monomial of the request is then lowered
+    // once ([`lower_unit`]) and added, times its weights, into packed
+    // accumulators per target and basis; nothing is kept per monomial. The
+    // channels of a request share their monomials (six-loop census request:
+    // 7 channels, one input monomial whose routing gives thousands of
+    // loop-dot monomials of up to 98,234 keys), and rational sums are exact:
+    // the folded inputs are those of lowering every channel.
+    type MonomialKey = (usize, Vec<(PDot, i64)>);
+    let mut sectors = Vec::<(PTop, &[i64])>::new();
+    let mut sector_ids = HashMap::<(PresentationId, Vec<i64>), usize>::new();
+    let mut weights = HashMap::<MonomialKey, Vec<(usize, Rational)>>::new();
+    let mut slots = 0usize;
     let mut targets = BTreeMap::<Channel, BTreeMap<Atom, usize>>::new();
+    let mut spectators = HashMap::<Atom, Vec<(Atom, Atom, Rational)>>::new();
     for (channel, ChannelParts { parts, .. }) in pending {
-        let lowered = lower_channel(handle, parts, forms)?;
-        if lowered.is_empty() {
-            continue;
-        }
-        let lowered = lowered
-            .into_iter()
-            .filter(|(_, value)| !value.is_zero())
-            .map(|(key, value)| {
-                let next = keys.len();
-                let id = *key_ids.entry(key.clone()).or_insert_with(|| {
-                    keys.push(key);
+        let terms = spectators
+            .entry(channel.coefficient.clone())
+            .or_insert_with(|| spectator_terms(&channel.coefficient, epsilon))
+            .clone();
+        let mut monomials = Vec::<(MonomialKey, Rational)>::new();
+        for PendingPart {
+            top,
+            powers,
+            polynomial,
+        } in parts
+        {
+            let next = sectors.len();
+            let sector = *sector_ids
+                .entry((top.presentation, powers.to_vec()))
+                .or_insert_with(|| {
+                    sectors.push((top, powers));
                     next
                 });
-                (id, value)
-            })
-            .collect::<Vec<_>>();
-        for (monomial, basis, value) in spectator_terms(&channel.coefficient, epsilon) {
+            for (value, monomial) in polynomial {
+                let mut dots = monomial.0;
+                dots.sort();
+                monomials.push(((sector, dots), fraction(value)));
+            }
+        }
+        if monomials.is_empty() {
+            continue;
+        }
+        for (monomial, basis, value) in terms {
             let target = targets
                 .entry(Channel {
                     loops: channel.loops,
@@ -763,38 +874,112 @@ fn fold_request(
                     coefficient: monomial,
                 })
                 .or_default();
-            let next = buckets.len();
-            let bucket = *target.entry(basis).or_insert_with(|| {
-                buckets.push(Vec::new());
-                next
+            let slot = *target.entry(basis).or_insert_with(|| {
+                slots += 1;
+                slots - 1
             });
-            let bucket = &mut buckets[bucket];
-            if bucket.len() < keys.len() {
-                bucket.resize(keys.len(), Rational::zero());
-            }
             let unit = value == Rational::one();
-            for (id, lowered_value) in &lowered {
-                if unit {
-                    bucket[*id] += lowered_value;
+            for (key, fraction) in &monomials {
+                let weight = if unit {
+                    fraction.clone()
                 } else {
-                    bucket[*id] += &(lowered_value * &value);
+                    fraction * &value
+                };
+                weights.entry(key.clone()).or_default().push((slot, weight));
+            }
+        }
+    }
+    // Lower each distinct monomial once into the accumulators of its slots.
+    let mut packed = vec![HashMap::<(usize, u128), Rational>::new(); slots];
+    let mut unpacked = vec![HashMap::<(usize, Vec<u32>), Rational>::new(); slots];
+    for ((sector, dots), mut by_slot) in weights {
+        // Weights of one slot summed first.
+        by_slot.sort_by_key(|(slot, _)| *slot);
+        let mut merged = Vec::<(usize, Rational)>::new();
+        for (slot, weight) in by_slot {
+            match merged.last_mut() {
+                Some((last, sum)) if *last == slot => *sum += &weight,
+                _ => merged.push((slot, weight)),
+            }
+        }
+        merged.retain(|(_, weight)| !weight.is_zero());
+        if merged.is_empty() {
+            continue;
+        }
+        let (top, _) = sectors[sector];
+        let forms = forms.entry(top.presentation).or_default();
+        let presentation = handle.library.presentation(top.presentation);
+        for &(dot, _) in &dots {
+            if let std::collections::btree_map::Entry::Vacant(entry) = forms.entry(dot) {
+                let (a, b) = dot_rows(dot, usize::from(presentation.loops));
+                entry.insert(
+                    presentation
+                        .express_scalar_product(&a, &b)
+                        .map_err(|error| invalid(format!("{dot:?}: {error}")))?,
+                );
+            }
+        }
+        match lower_unit(top, &dots, forms) {
+            UnitLowering::Packed(terms) => {
+                for (slot, weight) in &merged {
+                    let accumulator = &mut packed[*slot];
+                    for (monomial, coefficient) in &terms {
+                        *accumulator
+                            .entry((sector, *monomial))
+                            .or_insert_with(Rational::zero) += &(coefficient * weight);
+                    }
+                }
+            }
+            UnitLowering::Unpacked(terms) => {
+                for (slot, weight) in &merged {
+                    let accumulator = &mut unpacked[*slot];
+                    for (monomial, coefficient) in &terms {
+                        *accumulator
+                            .entry((sector, monomial.clone()))
+                            .or_insert_with(Rational::zero) += &(coefficient * weight);
+                    }
                 }
             }
         }
     }
+    let mask = (1u128 << PACKED_BITS) - 1;
+    let input_key = |sector: usize, exponent: &dyn Fn(usize) -> u32| {
+        let (top, powers) = sectors[sector];
+        let key = (0..top.arity)
+            .map(|slot| {
+                let base = if slot < top.line_count {
+                    powers[slot].max(0)
+                } else {
+                    0
+                };
+                base - i64::from(exponent(slot))
+            })
+            .collect::<Vec<_>>();
+        (top.presentation, key)
+    };
     let mut pairs = 0;
     let targets = targets
         .into_iter()
         .map(|(channel, by_basis)| {
             let by_basis = by_basis
                 .into_iter()
-                .map(|(basis, bucket)| {
-                    let inputs = std::mem::take(&mut buckets[bucket])
-                        .into_iter()
-                        .enumerate()
-                        .filter(|(_, value)| !value.is_zero())
-                        .map(|(id, value)| (keys[id].clone(), value))
-                        .collect::<LoweredInputs>();
+                .map(|(basis, slot)| {
+                    let mut inputs = LoweredInputs::new();
+                    for ((sector, monomial), value) in std::mem::take(&mut packed[slot]) {
+                        if value.is_zero() {
+                            continue;
+                        }
+                        let entry = input_key(sector, &|s| ((monomial >> (PACKED_BITS * s as u32)) & mask) as u32);
+                        *inputs.entry(entry).or_insert_with(Rational::zero) += &value;
+                    }
+                    for ((sector, monomial), value) in std::mem::take(&mut unpacked[slot]) {
+                        if value.is_zero() {
+                            continue;
+                        }
+                        let entry = input_key(sector, &|s| monomial[s]);
+                        *inputs.entry(entry).or_insert_with(Rational::zero) += &value;
+                    }
+                    inputs.retain(|_, value| !value.is_zero());
                     pairs += inputs.len();
                     (basis, inputs)
                 })
@@ -1023,7 +1208,8 @@ fn reduce_requests_with(
     let values = match fold_mode() {
         FoldMode::Off => reduce_requests_unfolded(vakint, settings, requests, progress, factored),
         mode => reduce_requests_folded(vakint, settings, requests, progress, mode, factored),
-    }?;
+    };
+    let values = values?;
     if phases::enabled() {
         let stats = last_stats();
         eprintln!(
