@@ -140,6 +140,32 @@ pub(crate) struct PTop {
     pub arity: usize,
 }
 
+/// One terminal of [`crate::Vakint::p_terminal_listing`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PTerminalRecord {
+    /// RustRed's terminal id (library-local).
+    pub id: u32,
+    /// The canonical string of the `PResidual(node, k_1, ..)` atom vakint returns.
+    pub atom: String,
+    /// The boxed node or the owner presentation's family name.
+    pub node: String,
+    /// The key in the owner presentation's slots.
+    pub key: Vec<i64>,
+    /// A terminal of a boxed node (an unknown integral).
+    pub boxed: bool,
+    /// The owner class id in hex (the suffix of the `library.json` class label).
+    pub owner_class: String,
+    /// The owner's lane (`Custom`, `Triangle`, ...).
+    pub lane: String,
+    pub presentation: u32,
+    pub loops: u8,
+    /// The owner presentation's family name.
+    pub family: String,
+    /// The owner presentation's slots (lines: momentum over `(k_1..k_L, q)`
+    /// and eps units; ISPs), in key order.
+    pub slots: Vec<String>,
+}
+
 /// A checked library and what vakint needs to call it.
 pub(crate) struct PLibraryHandle {
     pub library: Arc<PLibrary>,
@@ -936,6 +962,47 @@ impl Vakint {
     /// refuse them (decision Q3).
     pub fn set_p_master_catalogue(&mut self, catalogue: crate::p_integral::PMasterCatalogue) {
         self.p_master_catalogue = Some(Arc::new(catalogue));
+    }
+
+    /// vk5l WP4 (for the p master catalogue): every terminal the engine's p
+    /// library can emit, as vakint renders it: the `PResidual(node, k..)`
+    /// atom (canonical string), its node, key and owner, and the owner
+    /// presentation's family and slots (the frame of the key). Loads the
+    /// library like an evaluation; a boxed owner's payload prefix is read to
+    /// name its terminals.
+    pub fn p_terminal_listing(&self) -> Result<Vec<PTerminalRecord>, crate::VakintError> {
+        let handle = self.p_library()?;
+        let library = &handle.library;
+        let mut records = Vec::new();
+        for (index, terminal) in library.terminals().iter().enumerate() {
+            let id = rustred::propagator::PTerminalId(index as u32);
+            let rustred::propagator::library::PTerminal::Residual { owner, .. } = terminal else {
+                continue; // the unit terminal
+            };
+            let residual = library
+                .residual_terminal(id)
+                .map_err(RustRedEvaluationError::from_native)?
+                .ok_or_else(|| data_failure(format!("terminal {index} is no residual")))?;
+            let spec = library
+                .owner(*owner)
+                .map(|owner| &owner.spec)
+                .ok_or_else(|| data_failure(format!("terminal {index} of an unknown owner")))?;
+            let presentation = library.presentation(spec.presentation);
+            records.push(PTerminalRecord {
+                id: index as u32,
+                atom: symbolica::atom::AtomCore::to_canonical_string(&handle.residual_atom(id)?),
+                node: residual.node.clone(),
+                key: residual.key.powers().to_vec(),
+                boxed: residual.boxed,
+                owner_class: format!("{:016x}", owner.0),
+                lane: format!("{:?}", spec.lane),
+                presentation: spec.presentation.0,
+                loops: presentation.loops,
+                family: presentation.family.name().to_owned(),
+                slots: presentation.slots.iter().map(|slot| format!("{slot:?}")).collect(),
+            });
+        }
+        Ok(records)
     }
 
     /// Locations and counters of the RustRed p relation caches of this

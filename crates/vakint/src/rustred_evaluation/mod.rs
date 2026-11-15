@@ -23,6 +23,7 @@ pub use p_relations::{
     P_RELATION_CACHE_DIRECTORY, PRelationCacheLocation, PRelationCacheSettings,
     PRelationCacheStatistics, VAKINT_CACHE_DIR_VARIABLE,
 };
+pub use p_data::PTerminalRecord;
 pub use cache::{
     DEFAULT_ORDERED_CACHE_MAX_RESIDENT_BYTES, OrderedCacheAutosave, OrderedCacheMode,
     OrderedCacheProgramSaveReport, OrderedCacheProgramStatistics, OrderedCacheSaveReport,

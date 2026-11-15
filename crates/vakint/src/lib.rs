@@ -97,7 +97,7 @@ pub use rustred_evaluation::{
 pub use rustred_evaluation::{RustRedEvaluationError, RustRedEvaluationOptions, RustRedMasterMode};
 pub use rustred_evaluation::{
     P_RELATION_CACHE_DIRECTORY, PRelationCacheLocation, PRelationCacheSettings,
-    PRelationCacheStatistics, VAKINT_CACHE_DIR_VARIABLE,
+    PRelationCacheStatistics, PTerminalRecord, VAKINT_CACHE_DIR_VARIABLE,
 };
 pub use truncation_guard::{MissingMasterOrder, MissingMasterOrders};
 

@@ -2376,3 +2376,44 @@ fn a_repeated_batch_reuses_the_request_memo() {
     reduce_requests(&fresh, &bounded, &requests, None).unwrap();
     assert_eq!(super::last_stats().memo_hits, 0);
 }
+
+/// vk5l WP4 for the p master catalogue (lane vk5l-mastermap): write every
+/// terminal of the package `VAKINT_TEST_P_TERMINAL_PACKAGE` as vakint renders
+/// it (`Vakint::p_terminal_listing`), one JSON object per line, to
+/// `VAKINT_TEST_P_TERMINAL_OUT`; skipped unless both are set.
+#[test]
+fn p_terminal_export() {
+    let (Some(directory), Some(out)) = (
+        std::env::var_os("VAKINT_TEST_P_TERMINAL_PACKAGE"),
+        std::env::var_os("VAKINT_TEST_P_TERMINAL_OUT"),
+    ) else {
+        eprintln!("p_terminal_export: environment unset, skipped");
+        return;
+    };
+    let mut engine = Vakint::new().unwrap();
+    engine
+        .load_p_library_directory(std::path::Path::new(&directory), false)
+        .unwrap();
+    let records = engine.p_terminal_listing().unwrap();
+    let mut text = String::new();
+    for record in &records {
+        text += &serde_json::json!({
+            "schema": "vakint.p-terminal.v1",
+            "id": record.id,
+            "atom": record.atom,
+            "node": record.node,
+            "key": record.key,
+            "boxed": record.boxed,
+            "owner_class": record.owner_class,
+            "lane": record.lane,
+            "presentation": record.presentation,
+            "loops": record.loops,
+            "family": record.family,
+            "slots": record.slots,
+        })
+        .to_string();
+        text.push('\n');
+    }
+    std::fs::write(&out, text).unwrap();
+    eprintln!("p_terminal_export: {} terminals -> {}", records.len(), out.to_string_lossy());
+}
