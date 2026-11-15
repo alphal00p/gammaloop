@@ -39,11 +39,33 @@ use super::{
 
 type Result<T> = std::result::Result<T, TensorInferenceError>;
 
+fn env_bytes(name: &str) -> Option<usize> {
+    std::env::var(name).ok().and_then(|value| value.parse().ok())
+}
+
+/// Selected sums of at least this many bytes are compiled summand by summand
+/// (`IDENSO_SUMMAND_OPEN_BYTES`, default 1 MiB; every sum in tests).
+fn summand_open_bytes() -> usize {
+    static BYTES: std::sync::LazyLock<usize> = std::sync::LazyLock::new(|| {
+        env_bytes("IDENSO_SUMMAND_OPEN_BYTES").unwrap_or(1 << 20)
+    });
+    if cfg!(test) { 0 } else { *BYTES }
+}
+
+/// Also compile a summand-wise sum of at most this many bytes as one network
+/// and compare both (`IDENSO_SUMMAND_OPEN_CHECK_BYTES`; always in tests).
+fn summand_open_check(sum: AtomView<'_>) -> bool {
+    static BYTES: std::sync::LazyLock<Option<usize>> =
+        std::sync::LazyLock::new(|| env_bytes("IDENSO_SUMMAND_OPEN_CHECK_BYTES"));
+    cfg!(test) || BYTES.is_some_and(|limit| sum.get_byte_size() <= limit)
+}
+
 #[cfg(test)]
 thread_local! {
     pub(crate) static SHALLOW_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     pub(crate) static SHALLOW_VIEWS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     pub(crate) static SELECTED_OPENS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    pub(crate) static SUMMAND_SPLITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static ANALYZED_NODES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
@@ -430,6 +452,132 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
         }
     }
 
+    /// Compile a selected, opened sum summand by summand instead of opening it
+    /// into one network. `None` means: use the whole sum's network.
+    ///
+    /// The whole path parses the sum into a `Sum` node whose children are the
+    /// summands, each parsed exactly as on its own (sums are parsed with
+    /// `precontract_scalars: false`, summand by summand from the same state).
+    /// Its root is compiled as a plain group of its children whenever any
+    /// summand is selected: no other node is the root there, so the root-sum
+    /// split flag only acts on that group. Leaf admission, the tape and the
+    /// dummy state therefore see the same summands in the same order. If no
+    /// summand is selected, the whole sum is one leaf: then the whole path is
+    /// taken. Only the largest network alive differs: one summand's.
+    fn compile_large_sum(
+        &mut self,
+        tape: &mut TermTape<usize>,
+        sum: AtomView<'_>,
+    ) -> Result<Option<Option<(usize, (usize, usize))>>> {
+        let AtomView::Add(summands) = sum else {
+            return Ok(None);
+        };
+        if sum.get_byte_size() < summand_open_bytes() {
+            return Ok(None);
+        }
+        #[cfg(test)]
+        SUMMAND_SPLITS.with(|count| count.set(count.get() + 1));
+        let initial_state = summand_open_check(sum).then(|| self.state.clone());
+        let Some(compiled) = self.compile_summands(tape, sum)? else {
+            return Ok(None);
+        };
+        if !cfg!(test) && std::env::var_os("IDENSO_SUMMAND_OPEN_LOG").is_some() {
+            eprintln!(
+                "SUMMAND_OPEN summands={} bytes={} refused={}",
+                summands.get_nargs(),
+                sum.get_byte_size(),
+                compiled.is_none()
+            );
+        }
+        if let Some(initial_state) = initial_state {
+            // Repeat both compilations on fresh tapes from the same dummy
+            // state: their tapes then register the same leaves in the same
+            // order, and distribute to the same rows, iff they are equivalent.
+            let state = std::mem::replace(&mut self.state, initial_state.clone());
+            let mut split_tape = TermTape::<usize>::default();
+            let split = self.compile_summands(&mut split_tape, sum)?.flatten();
+            self.state = initial_state;
+            let mut whole_tape = TermTape::<usize>::default();
+            let opened = self.open(sum)?;
+            let tree = opened.graph.expr_tree().cast::<ChildVecStore<()>>();
+            let root = opened.graph.graph.node_id(opened.graph.head());
+            let analysis = self.analyze(&opened, &tree, root)?;
+            let whole = self.compile(&mut whole_tape, &opened, &tree, root, true, &analysis)?;
+            drop(opened);
+            self.state = state;
+            let rows = |tape: &mut TermTape<usize>, compiled: Option<(usize, (usize, usize))>| {
+                compiled.map(|(node, size)| {
+                    tape.clear_terms();
+                    let distributed = tape.distribute(&mut vec![(node, 1)], &Rational::one());
+                    (size, tape.leaves().to_vec(), distributed.map(|()| tape.take_terms()))
+                })
+            };
+            let split_rows = rows(&mut split_tape, split);
+            let whole_rows = rows(&mut whole_tape, whole);
+            let equal = split_rows == whole_rows && compiled.is_some() == split_rows.is_some();
+            if cfg!(test) {
+                assert!(
+                    equal,
+                    "summand-wise sum compilation differs from the whole sum: {sum}\nsplit: {split_rows:?}\nwhole: {whole_rows:?}"
+                );
+            } else {
+                eprintln!(
+                    "SUMMAND_OPEN_CHECK summands={} bytes={} equal={equal}",
+                    summands.get_nargs(),
+                    sum.get_byte_size()
+                );
+            }
+        }
+        Ok(Some(compiled))
+    }
+
+    /// The summand loop of [`Self::compile_large_sum`]: `None` if no summand
+    /// is selected, `Some(None)` if the whole path would refuse.
+    fn compile_summands(
+        &mut self,
+        tape: &mut TermTape<usize>,
+        sum: AtomView<'_>,
+    ) -> Result<Option<Option<(usize, (usize, usize))>>> {
+        let AtomView::Add(summands) = sum else {
+            return Ok(None);
+        };
+        let mut children = Vec::with_capacity(summands.get_nargs());
+        let mut any_selected = false;
+        let mut refused = false;
+        for summand in summands.iter() {
+            let opened = self.open(summand)?;
+            let tree = opened.graph.expr_tree().cast::<ChildVecStore<()>>();
+            let root = opened.graph.graph.node_id(opened.graph.head());
+            let analysis = self.analyze(&opened, &tree, root)?;
+            any_selected |= analysis.0[&root];
+            if refused {
+                // The result is refused if any summand is selected; only
+                // look for one.
+                if any_selected {
+                    break;
+                }
+                continue;
+            }
+            match self.compile(tape, &opened, &tree, root, false, &analysis)? {
+                Some(child) => children.push(child),
+                None => {
+                    refused = true;
+                    if any_selected {
+                        break;
+                    }
+                }
+            }
+        }
+        if !any_selected {
+            return Ok(None);
+        }
+        Ok(Some(if refused {
+            None
+        } else {
+            tape.group(children.into_iter(), true)
+        }))
+    }
+
     fn compile<E: AtomCore + Clone + From<E::Output>>(
         &mut self,
         tape: &mut TermTape<usize>,
@@ -549,6 +697,11 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                     // This leaf was selected from its retained head inventory.
                     // Preserve the established copy-local dummy machinery when
                     // opening its arithmetic; unrelated leaves remain opaque.
+                    if let AtomView::Add(_) = expression.as_view()
+                        && let Some(compiled) = self.compile_large_sum(tape, expression.as_view())?
+                    {
+                        return Ok(compiled.map(|(node, size)| TermLeaf::Reference(node, size)));
+                    }
                     let opened = self.open(expression.as_view())?;
                     let opened_tree = opened.graph.expr_tree().cast::<ChildVecStore<()>>();
                     let opened_root = opened.graph.graph.node_id(opened.graph.head());
@@ -1554,6 +1707,34 @@ mod tests {
                 assert_eq!(current.structure, source.structure);
             }
         }
+    }
+
+    /// A selected sum is compiled summand by summand; in tests every such
+    /// compilation is also done on the whole sum's network and compared.
+    #[test]
+    fn selected_sums_compile_summand_by_summand_as_the_whole_sum() {
+        crate::test_support::test_initialize();
+        let port = spenso::mink!(4, 97133);
+        let left = spenso::p!(&port) * symbolica::parse_lit!(summand_split_x + summand_split_y);
+        let right = spenso::q!(&port) * symbolica::parse_lit!(summand_split_u + summand_split_v);
+        let spectator = symbolica::parse_lit!((summand_split_s + summand_split_t) ^ 3);
+        SUMMAND_SPLITS.with(|count| count.set(0));
+        for mode in [CollectionMode::Monomials, CollectionMode::Factored] {
+            for spectator in [Atom::one(), spectator.clone()] {
+                let source = SymbolicTensor::infer(&spectator * (&left + &right)).unwrap();
+                let collected = source
+                    .collect_with_map(
+                        mode,
+                        None,
+                        |value| TensorCollectFilter::<0>::TaggedTensors.matches(value),
+                        |value, _, _| Ok(value),
+                    )
+                    .unwrap();
+                assert!((&collected.expression - &source.expression).expand().is_zero());
+                assert_eq!(collected.structure, source.structure);
+            }
+        }
+        assert!(SUMMAND_SPLITS.with(|count| count.get()) > 0);
     }
 
     #[test]

@@ -1,6 +1,11 @@
 //! Explicit hard Taylor coefficients with the existing UV tensor conventions.
 
-use std::collections::BTreeSet;
+use std::{
+    borrow::Cow,
+    collections::BTreeSet,
+    sync::{LazyLock, OnceLock},
+    time::Instant,
+};
 
 use eyre::{Result, WrapErr, ensure, eyre};
 use feynkit_tensor::TensorReducer;
@@ -16,7 +21,11 @@ use linnet::half_edge::{
 };
 use spenso::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG},
-    structure::representation::{Minkowski, RepName},
+    structure::{
+        partial::PartialStructureExt,
+        representation::{Minkowski, RepName},
+        slot::{SlotMatch, SlotMatcher},
+    },
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
@@ -24,16 +33,19 @@ use symbolica::{
     id::Replacement,
     symbol,
 };
-use vakint::{Vakint, VakintSettings, symbols::S};
+use vakint::{Vakint, VakintSettings, stage_timing::StageSpan, symbols::S};
 
 use crate::{
     debug_tags,
-    graph::{Graph, LMBext, LoopMomentumBasis},
+    graph::{Autogen, Graph, LMBext, LoopMomentumBasis},
     model::Model,
     utils::{GS, W_},
     uv::{
         UVgenerationSettings, UltravioletGraph,
-        approx::integrated::{Integrated, to_vakint_integrand},
+        approx::{
+            integrated::{Integrated, to_vakint_integrand},
+            streamed,
+        },
         uv_graph::UVE,
     },
 };
@@ -42,11 +54,102 @@ use super::{GraphRegion, TaylorExpansion, integrate_single_mass, project::projec
 
 pub(super) type RootProjector<'a> = dyn Fn(&Atom) -> Result<Atom> + 'a;
 
+// The shared transport knows explicit edge momenta and these FeynKit basis
+// coordinates. Other live momentum conventions must keep their own occurrence.
+static UNSUPPORTED_PHYSICAL_MOMENTA: LazyLock<Vec<Symbol>> = LazyLock::new(|| {
+    let supported = [
+        GS.emr_mom,
+        feynkit_graph::symbols::loop_momentum(),
+        feynkit_graph::symbols::external_momentum(),
+    ];
+    [GS.loop_mom, GS.external_mom, S.k, S.p]
+        .into_iter()
+        .filter(|head| !supported.contains(head))
+        .collect()
+});
+
+/// Exclusive wall-clock stages within one outer integral. Backend time may
+/// contain its own finer timing events; those must not be added to this total.
+struct IntegrationTimings {
+    started: Instant,
+    last: Instant,
+    routing: f64,
+    taylor: f64,
+    materialization: f64,
+    tensor_projection: f64,
+    algebra: f64,
+    conversion: f64,
+    backend: f64,
+    finish: f64,
+}
+
+impl IntegrationTimings {
+    fn new() -> Self {
+        let started = Instant::now();
+        Self {
+            started,
+            last: started,
+            routing: 0.0,
+            taylor: 0.0,
+            materialization: 0.0,
+            tensor_projection: 0.0,
+            algebra: 0.0,
+            conversion: 0.0,
+            backend: 0.0,
+            finish: 0.0,
+        }
+    }
+
+    fn lap(&mut self) -> f64 {
+        let now = Instant::now();
+        let elapsed = now.duration_since(self.last).as_secs_f64();
+        self.last = now;
+        elapsed
+    }
+
+    fn log(&self, graph: &Graph, integration_id: usize, loops: usize, kind: &str) {
+        tracing::info!(
+            uv = true,
+            rstar = true,
+            timing = true,
+            stage = "rstar_outer_integration_detail",
+            graph = %graph.name,
+            integration_id,
+            loops,
+            kind,
+            total_seconds = self.started.elapsed().as_secs_f64(),
+            routing_seconds = self.routing,
+            taylor_seconds = self.taylor,
+            materialization_seconds = self.materialization,
+            tensor_projection_seconds = self.tensor_projection,
+            algebra_seconds = self.algebra,
+            conversion_seconds = self.conversion,
+            backend_seconds = self.backend,
+            finish_seconds = self.finish,
+            "Outer integration stage timings"
+        );
+    }
+}
+
+/// `GAMMALOOP_HARD_TAYLOR_CHECK=1` also runs the contracted hard Taylor path on
+/// every hard component and reports `HARD_TAYLOR_CHECK ... equal=...` on stderr.
+fn hard_taylor_check() -> bool {
+    static CHECK: LazyLock<bool> =
+        LazyLock::new(|| std::env::var_os("GAMMALOOP_HARD_TAYLOR_CHECK").is_some());
+    *CHECK
+}
+
 /// The original tensor slots and loop carriers survive all graph contractions.
 /// Only propagator endpoints are identified in the converter's graph.
 pub(super) struct RStarIntegrand {
     pub region: GraphRegion,
-    pub expression: Atom,
+    /// The routed product of the remaining numerator, insertions and
+    /// denominators, before any index contraction. A hard component is only
+    /// ever Taylor projected, and its truncation keeps a tiny fraction of the
+    /// contracted terms: it is contracted after the Taylor step.
+    routed: Atom,
+    /// [`Self::routed`] contracted to dots, built on first use.
+    contracted: OnceLock<Atom>,
     graph: Graph,
     basis: LoopMomentumBasis,
     soft_edges: Vec<EdgeIndex>,
@@ -61,6 +164,7 @@ impl RStarIntegrand {
         marked: EdgeIndex,
         reference_mass_squared: Atom,
     ) -> Result<Self> {
+        let _stage = StageSpan::new("gamma.remainder.construct");
         ensure!(
             insertions.len() == region.insertions.len(),
             "each R* contraction requires an insertion polynomial"
@@ -73,10 +177,13 @@ impl RStarIntegrand {
             region.support.subtract(&contracted) == region.remaining,
             "R* remainder does not match its contracted supports"
         );
+        let numerator_stage = StageSpan::new("gamma.remainder.numerator");
         let mut expression = graph
             .numerator(&region.remaining, &contracted)
             .to_d_dim(GS.dim)
             .get_single_atom()?;
+        drop(numerator_stage);
+        let routing_stage = StageSpan::new("gamma.remainder.routing_and_denominators");
         for insertion in insertions {
             expression *= insertion;
         }
@@ -150,10 +257,11 @@ impl RStarIntegrand {
             converter_graph.underlying.identify_nodes(&nodes, vertex);
         }
         converter_graph.underlying.forget_identification_history();
+        drop(routing_stage);
         Ok(Self {
             region: region.clone(),
-            expression: Self::simplify(&expression)
-                .wrap_err("while preparing the routed R* tensor expression")?,
+            routed: expression,
+            contracted: OnceLock::new(),
             graph: converter_graph,
             basis,
             soft_edges,
@@ -162,6 +270,27 @@ impl RStarIntegrand {
 
     pub fn soft_edges(&self) -> &[EdgeIndex] {
         &self.soft_edges
+    }
+
+    /// The routed expression contracted to dots, as the outer and physical
+    /// paths consume it. It is contracted once, on first use.
+    pub fn expression(&self) -> Result<&Atom> {
+        if let Some(contracted) = self.contracted.get() {
+            return Ok(contracted);
+        }
+        let contracted = {
+            let _algebra = StageSpan::new("gamma.remainder.algebra");
+            Self::simplify(&self.routed)
+                .wrap_err("while preparing the routed R* tensor expression")?
+        };
+        Ok(self.contracted.get_or_init(|| contracted))
+    }
+
+    /// Mutable access to the contracted expression, for tests decorating it.
+    #[cfg(test)]
+    pub fn expression_mut(&mut self) -> Result<&mut Atom> {
+        self.expression()?;
+        Ok(self.contracted.get_mut().expect("contracted above"))
     }
 
     /// Express a two-point amplitude in its first boundary momentum, keeping
@@ -216,12 +345,122 @@ impl RStarIntegrand {
         vakint_settings: &VakintSettings,
         unique_id: usize,
     ) -> Result<Atom> {
-        let mut numerator = self
-            .expression
+        self.integrate_physical_numerator(
+            self.physical_numerator()?,
+            vakint,
+            uv_settings,
+            vakint_settings,
+            unique_id,
+        )
+    }
+
+    pub(super) fn physical_numerator(&self) -> Result<Atom> {
+        Ok(self
+            .expression()?
             .replace(function!(GS.den, W_.x___))
-            .with(Atom::one());
+            .with(Atom::one()))
+    }
+
+    /// Certify a closed numerator in one canonical denominator frame.
+    ///
+    /// Only the compact particle graph enters graph isomorphism. Its chosen
+    /// map transports the complete numerator, which is compared as an exact
+    /// Atom after typed dummy normalization. Remaining automorphisms can miss
+    /// matches conservatively. Open or unsupported tensors form singletons;
+    /// they never fall back to canonizing a large expression-incidence graph.
+    pub(super) fn physical_identity(
+        &self,
+        model: &Model,
+        numerator: &Atom,
+    ) -> Result<Option<(crate::uv::counterterm_identity::CountertermKey, Atom)>> {
+        if UNSUPPORTED_PHYSICAL_MOMENTA
+            .iter()
+            .any(|&momentum| numerator.contains_symbol(momentum))
+        {
+            return Ok(None);
+        }
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let tensor = SymbolicTensor::infer(cooking.try_cook(numerator.as_view())?)?;
+        if !tensor.structure().logical_slots().is_empty() {
+            return Ok(None);
+        }
+        let mut shell = self.graph.clone();
+        let edges = shell
+            .iter_edges()
+            .map(|(pair, edge, _)| (pair.is_paired(), edge))
+            .collect::<Vec<_>>();
+        for (internal, edge) in edges {
+            let retained = self.region.contains_edge(&shell, edge);
+            let data = &mut shell.underlying[edge];
+            data.num = Autogen::explicit(Atom::one());
+            data.dod = Autogen::explicit(0);
+            if internal && !retained {
+                data.is_dummy = true;
+            }
+        }
+        let vertices = shell
+            .underlying
+            .iter_nodes()
+            .map(|(vertex, _, _)| vertex)
+            .collect::<Vec<_>>();
+        for vertex in vertices {
+            let data = &mut shell.underlying[vertex];
+            data.num = Autogen::explicit(Atom::one());
+            data.dod = Autogen::explicit(0);
+            data.vertex_rule = None;
+        }
+        shell.global_prefactor.num = Atom::one();
+        shell.global_prefactor.projector = Atom::one();
+        shell.loop_momentum_basis = self.basis.clone();
+        let identity =
+            crate::uv::counterterm_identity::CountertermIdentity::for_fixed_boundary_skeleton(
+                &shell,
+                &self.region.remaining,
+                model,
+            )?;
+        let mut canonical = identity.canonicalize_integrand(numerator)?.expand();
+        let mut matcher = SlotMatcher::default();
+        let mut indexed = false;
+        canonical.visitor(&mut |part| {
+            if matches!(matcher.classify(part), SlotMatch::Explicit(_)) {
+                indexed = true;
+                false
+            } else {
+                !indexed
+            }
+        });
+        if indexed {
+            let tensor = SymbolicTensor::infer(cooking.try_cook(canonical.as_view())?)?;
+            // The shared typed canonicalizer retains sum scopes. Symbolica
+            // canonizes each top-level summand separately and treats subtrees
+            // without dummy indices as scalar leaves. Invalid tensor/interface
+            // inputs remain errors rather than silently becoming singletons.
+            let normalized = tensor.canonize()?;
+            canonical = cooking.uncook(normalized.expression().as_view());
+        }
+        Ok(Some((identity.key, canonical)))
+    }
+
+    pub(super) fn integrate_physical_numerator(
+        &self,
+        mut numerator: Atom,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+        vakint_settings: &VakintSettings,
+        unique_id: usize,
+    ) -> Result<Atom> {
+        let _stage = StageSpan::new("gamma.physical_integral");
+        let routing_stage = StageSpan::new("gamma.physical_integral.routing");
+        let mut timing = IntegrationTimings::new();
         if self.region.loops == 0 {
-            return Self::finish_tensor(numerator, unique_id);
+            drop(routing_stage);
+            timing.routing = timing.lap();
+            let result = Self::finish_tensor(numerator, unique_id)?;
+            timing.finish = timing.lap();
+            timing.log(&self.graph, unique_id, 0, "physical");
+            return Ok(result);
         }
         let (external, external_routing) =
             Self::physical_external_routing(&self.graph, &self.region.boundary)?;
@@ -242,11 +481,25 @@ impl RStarIntegrand {
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        let source = reducer.admit(cooking.try_cook(numerator.as_view())?)?;
+        timing.routing = timing.lap();
+        drop(routing_stage);
+        let materialization_stage =
+            StageSpan::new("gamma.physical_integral.tensor_materialization");
+        // Compact slash momenta inside gamma chains still carry tensor rank.
+        // Expose those vectors before projection, using the same materializer
+        // as the vacuum bridge. Scalar products and their inverses stay compact.
+        let explicit = Integrated::materialize_tensor(&numerator)?;
+        let source = reducer.admit(cooking.try_cook(explicit.as_view())?)?;
+        timing.materialization = timing.lap();
+        drop(materialization_stage);
+        let projection_stage = StageSpan::new("gamma.physical_integral.tensor_reduction");
         let reduced = reducer
             .reduce(&source)
             .wrap_err("could not reduce a physical propagator tensor")?
             .into_expression()?;
+        timing.tensor_projection = timing.lap();
+        drop(projection_stage);
+        let algebra_stage = StageSpan::new("gamma.physical_integral.algebra");
         numerator = Self::finish_tensor(cooking.uncook(reduced.expression().as_view()), unique_id)?;
         // Tensor restoration can spell scalar products as g(p,k). Normalize
         // them before mapping to Vakint's dot notation; represented metrics
@@ -254,6 +507,9 @@ impl RStarIntegrand {
         let scalar_products =
             SymbolicTensor::infer_indexed(cooking.try_cook(numerator.as_view())?)?.to_dots()?;
         numerator = cooking.uncook(scalar_products.expression().as_view());
+        timing.algebra = timing.lap();
+        drop(algebra_stage);
+        let conversion_stage = StageSpan::new("gamma.physical_integral.vakint_conversion");
 
         let mut routing = self
             .basis
@@ -313,7 +569,7 @@ impl RStarIntegrand {
                 ),
                 momentum,
                 0,
-                1
+                self.graph[edge].extra_data.vakint_edge_power.unwrap_or(1)
             );
         }
         numerator *=
@@ -326,10 +582,18 @@ impl RStarIntegrand {
         );
         let mut settings = vakint_settings.clone();
         settings.use_dot_product_notation = true;
+        timing.conversion = timing.lap();
+        drop(conversion_stage);
+        let backend_stage = StageSpan::new("gamma.physical_integral.backend");
         let integrated = vakint
             .evaluate_integral(&settings, input.as_view())
             .wrap_err("while integrating a physical UV spinney remainder")?;
-        Self::finish_tensor(integrated, unique_id)
+        timing.backend = timing.lap();
+        drop(backend_stage);
+        let result = Self::finish_tensor(integrated, unique_id)?;
+        timing.finish = timing.lap();
+        timing.log(&self.graph, unique_id, self.region.loops, "physical");
+        Ok(result)
     }
 
     /// Put the bare hard term and its local counterterms in the same covariant
@@ -341,9 +605,46 @@ impl RStarIntegrand {
 
     /// Hard Taylor expansion leaves the reference mass fixed. These momenta
     /// are external to this component, even when they are loops of its parent.
+    ///
+    /// The scaling and the truncation act on the routed product before any
+    /// index is contracted, so only the kept Taylor terms are contracted
+    /// (as `approx::local_4d` does for local counterterms). Contraction is
+    /// linear and the parameter is a scalar, so this is the Taylor
+    /// polynomial of the contracted expression, [`Self::taylor_contracted`].
     pub fn taylor(&self, degree: usize) -> Result<Atom> {
+        let _stage = StageSpan::new("gamma.remainder.hard_taylor");
         let parameter = symbol!("rstar_hard_taylor"; Scalar);
-        let scaled = Self::scale_edges(&self.expression, &self.soft_edges, parameter);
+        let scaled = Self::scale_edges(&self.routed, &self.soft_edges, parameter);
+        let expanded = TaylorExpansion::new(parameter, degree).evaluate(&scaled)?;
+        drop(scaled);
+        let truncated = {
+            let _algebra = StageSpan::new("gamma.remainder.hard_taylor_algebra");
+            Self::simplify(&expanded).wrap_err("while simplifying the R* hard Taylor polynomial")?
+        };
+        if cfg!(test) || hard_taylor_check() {
+            let reference = self.taylor_contracted(degree)?;
+            let identical = truncated == reference;
+            let equal = identical || (&truncated - &reference).expand().is_zero();
+            if cfg!(test) {
+                assert!(
+                    equal,
+                    "hard Taylor before contraction differs from the contracted path\nnew: {truncated}\nold: {reference}"
+                );
+            } else {
+                eprintln!(
+                    "HARD_TAYLOR_CHECK loops={} degree={degree} identical={identical} equal={equal}",
+                    self.region.loops
+                );
+            }
+        }
+        Ok(truncated)
+    }
+
+    /// The previous hard Taylor path: contract the whole routed expression,
+    /// then scale and truncate it. Kept as the reference for [`Self::taylor`].
+    fn taylor_contracted(&self, degree: usize) -> Result<Atom> {
+        let parameter = symbol!("rstar_hard_taylor"; Scalar);
+        let scaled = Self::scale_edges(self.expression()?, &self.soft_edges, parameter);
         let expanded = TaylorExpansion::new(parameter, degree).evaluate(&scaled)?;
         Self::simplify(&expanded).wrap_err("while simplifying the R* hard Taylor polynomial")
     }
@@ -362,6 +663,7 @@ impl RStarIntegrand {
         unique_id: usize,
         root_projector: Option<&RootProjector<'_>>,
     ) -> Result<Atom> {
+        let mut timing = IntegrationTimings::new();
         let root_external = root_graph.external_filter::<SuBitGraph>();
         let root_edges = root_graph
             .iter_edges_of(&root_external)
@@ -370,14 +672,14 @@ impl RStarIntegrand {
         // Quotient UV maps return original Q labels. Route newly introduced
         // component edges, preserving this component's independent hard loops.
         let routed = if self.region.loops == 0 {
-            expression.clone()
+            Cow::Borrowed(expression)
         } else {
-            expression.replace_multiple(self.graph.normal_emr_replacement(
+            Cow::Owned(expression.replace_multiple(self.graph.normal_emr_replacement(
                 &self.region.remaining,
                 &self.basis,
                 &[W_.x___],
                 HedgePair::is_paired,
-            ))
+            )))
         };
         let allowed_edges = self
             .basis
@@ -401,13 +703,23 @@ impl RStarIntegrand {
             unresolved.is_empty(),
             "an R* quotient left unintegrated boundary loop carriers: {unresolved:?}"
         );
+        timing.routing = timing.lap();
         let parameter = symbol!("rstar_outer_taylor"; Scalar);
         let taylor = TaylorExpansion::new(parameter, degree);
+        // Each intermediate is dropped as soon as its successor exists: on the
+        // largest diagrams each of them is hundreds of megabytes.
         let scaled = Self::scale_edges(&routed, &root_edges, parameter);
+        drop(routed);
         let compensated =
             taylor.compensate_mass(&scaled, reference_mass_squared, auxiliary_mass_squared);
-        let expanded = Self::simplify(&taylor.evaluate(&compensated)?)
+        drop(scaled);
+        let polynomial = taylor.evaluate(&compensated)?;
+        drop(compensated);
+        timing.taylor = timing.lap();
+        let expanded = Self::simplify_summands(polynomial.as_view())
             .wrap_err("while simplifying the compensated R* outer Taylor polynomial")?;
+        drop(polynomial);
+        timing.algebra = timing.lap();
         // The root is the only boundary which may be projected here. Child
         // and quotient pole maps are already complete, and no later pole map
         // can multiply finite contraction terms by another insertion pole.
@@ -416,27 +728,38 @@ impl RStarIntegrand {
         let expanded = if let Some(projector) = root_projector {
             let projected = projector(&expanded)
                 .wrap_err("while projecting the complete R* outer Taylor polynomial")?;
+            drop(expanded);
             Integrated::dimensionally_regularized(&projected)
         } else {
             expanded
         };
-        if self.region.loops == 0 {
-            return Self::finish_tensor(expanded, unique_id);
-        }
-        let input = to_vakint_integrand(
-            &expanded,
-            &self.graph.underlying,
-            &self.region.remaining,
-            &self.graph.empty_subgraph::<SuBitGraph>(),
-            &uv_settings.vakint,
-            false,
-        )?;
-        let integrated = integrate_single_mass(vakint, vakint_settings, &input)?;
-        Self::finish_tensor(integrated, unique_id)
+        timing.tensor_projection = timing.lap();
+        let integrated = if self.region.loops == 0 {
+            expanded
+        } else {
+            // By value: to_vakint drops it once it has been materialized.
+            let input = to_vakint_integrand(
+                expanded,
+                &self.graph.underlying,
+                &self.region.remaining,
+                &self.graph.empty_subgraph::<SuBitGraph>(),
+                &uv_settings.vakint,
+                false,
+            )?;
+            timing.conversion = timing.lap();
+            let integrated = integrate_single_mass(vakint, vakint_settings, &input)?;
+            timing.backend = timing.lap();
+            integrated
+        };
+        let result = Self::finish_tensor(integrated, unique_id)?;
+        timing.finish = timing.lap();
+        timing.log(root_graph, unique_id, self.region.loops, "single_mass");
+        Ok(result)
     }
 
     /// Use exactly the ordinary R operation's tensor and dimension restoration.
     pub fn finish_tensor(expression: Atom, unique_id: usize) -> Result<Atom> {
+        let _stage = StageSpan::new("gamma.tensor_restoration");
         // Restore compact external scalar products before opening Vakint's
         // remaining dot shorthand. Both physical quotients and normalized
         // root projectors can contain reciprocals of these invariants;
@@ -469,10 +792,11 @@ impl RStarIntegrand {
             .to_dots()?;
         let regulated =
             Integrated::dimensionally_regularized(&cooking.uncook(reduced.expression().as_view()));
+        // Keep collected trace/chain powers for their domain algebra. Opening
+        // a powered trace first would give every copy the same spinor dummies,
+        // turning two independent closed traces into repeated gamma factors.
         let collected = SymbolicTensor::infer_indexed(cooking.try_cook(regulated.as_view())?)?
             .contract(ContractSettings::default())?
-            .undo_trace()?
-            .undo_chain()?
             .simplify_algebra(&AlgebraSettings {
                 gamma: Some(GammaSimplifySettings::canonical()),
                 epsilon: true,
@@ -482,9 +806,13 @@ impl RStarIntegrand {
         // Clifford contraction can create new scalar dimensions. Expand
         // those before the caller takes poles or inserts this tensor in an
         // enclosing graph; open representation dimensions remain metadata.
-        Ok(Integrated::dimensionally_regularized(
-            &cooking.uncook(collected.expression().as_view()),
-        ))
+        let reduced = cooking.uncook(collected.expression().as_view());
+        Integrated::warn_repeated_lorentz_indices(
+            &reduced,
+            "R*",
+            Some(collected.reduction_status()),
+        );
+        Ok(Integrated::dimensionally_regularized(&reduced))
     }
 
     fn scale_edges(expression: &Atom, edges: &[EdgeIndex], parameter: Symbol) -> Atom {
@@ -498,20 +826,56 @@ impl RStarIntegrand {
         expression.replace_multiple(&replacements)
     }
 
-    fn simplify(expression: &Atom) -> Result<Atom> {
+    pub(super) fn simplify(expression: &Atom) -> Result<Atom> {
         debug_tags!(#uv, #integrated, #rstar, #trace;
             stage = "rstar_tensor_input",
             log.expression = expression,
             "Preparing an explicit R* expression for native tensor algebra"
         );
+        Self::simplify_view(expression.as_view())
+    }
+
+    /// [`Self::simplify`] summand by summand: the simplification acts on
+    /// every summand alone, and a normalized sum is canonical. A large sum
+    /// is simplified in chunks of summands and added up once, unless a chunk
+    /// introduces a dummy index, which makes the whole sum be simplified.
+    fn simplify_summands(expression: AtomView<'_>) -> Result<Atom> {
+        let limit = streamed::piece_limit();
+        if expression.get_byte_size() < limit || !matches!(expression, AtomView::Add(_)) {
+            return Self::simplify_view(expression);
+        }
+        let mut accumulated = streamed::SumAccumulator::default();
+        let mut introduced = false;
+        let outcome = streamed::for_each_summand_chunk(expression, limit, &mut |chunk| {
+            let simplified = Self::simplify_view(chunk)?;
+            if streamed::introduces_dummies(chunk, simplified.as_view()) {
+                introduced = true;
+                return Err(eyre!("a simplification introduced a dummy index"));
+            }
+            accumulated.push(simplified);
+            Ok(())
+        });
+        let simplified = match outcome {
+            Ok(()) => accumulated.finish(),
+            Err(_) if introduced => return Self::simplify_view(expression),
+            Err(error) => return Err(error),
+        };
+        if streamed::check_streamed(expression) {
+            let whole = Self::simplify_view(expression)?;
+            streamed::report_check("rstar_simplify", expression, &simplified, &whole);
+        }
+        Ok(simplified)
+    }
+
+    fn simplify_view(expression: AtomView<'_>) -> Result<Atom> {
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
         // As in the ordinary R simplifier, retain open color tensors here.
         // Reduce color identities after the quotient has closed their indices.
-        let simplified = SymbolicTensor::infer_indexed(cooking.try_cook(expression.as_view())?)?
-            .undo_trace()?
-            .undo_chain()?
+        // Leave trace/chain powers intact for the same reason as finish_tensor:
+        // their internal spinor sums must remain independent between copies.
+        let simplified = SymbolicTensor::infer_indexed(cooking.try_cook(expression)?)?
             .simplify_algebra(&AlgebraSettings {
                 gamma: Some(GammaSimplifySettings::canonical()),
                 epsilon: true,
@@ -530,6 +894,74 @@ mod tests {
         initialisation::test_initialise, utils::load_generic_model, uv::rstar::RStarPlan,
     };
     use vakint::symbols::S;
+
+    #[test]
+    fn simplify_powered_dirac_trace_preserves_open_color_tensor() -> Result<()> {
+        use crate::numerator::aind::Aind;
+        use idenso::{
+            IndexTooling,
+            representations::{Bispinor, ColorAdjoint, ColorAntiFundamental, ColorFundamental},
+        };
+        use spenso::structure::slot::{DummyAind, ParseableAind};
+
+        test_initialise()?;
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let mu = mink.to_symbolic([Aind::new_dummy().to_atom()]);
+        let nu = mink.to_symbolic([Aind::new_dummy().to_atom()]);
+        let trace = spenso::trace!(
+            Bispinor {}.new_rep(4).to_symbolic([]),
+            idenso::gamma!(&mu),
+            idenso::gamma!(&nu)
+        );
+        let spectator = idenso::color_t!(
+            ColorAdjoint {}
+                .new_rep(8)
+                .to_symbolic([Aind::Hedge(70, 1).to_atom()]),
+            ColorFundamental {}
+                .new_rep(3)
+                .to_symbolic([Aind::Hedge(71, 1).to_atom()]),
+            ColorAntiFundamental {}
+                .new_rep(3)
+                .to_symbolic([Aind::Hedge(72, 1).to_atom()])
+        );
+        let source = trace.pow(2) * &spectator;
+        let reduced = RStarIntegrand::simplify(&source)?;
+        assert!(!reduced.has_repeated_lorentz_indices());
+        // The early Taylor boundary retains symbolic D and the open color
+        // generator; only its two independent Dirac traces are evaluated.
+        let expected = Atom::num(16) * Atom::var(GS.dim) * spectator;
+        super::super::tests::assert_same_counterterm(&reduced, &expected)?;
+        Ok(())
+    }
+
+    #[test]
+    fn finish_tensor_two_traces_contract_shared_lorentz_indices_before_poles() -> Result<()> {
+        use crate::numerator::aind::Aind;
+        use idenso::{IndexTooling, representations::Bispinor};
+        use spenso::structure::slot::{DummyAind, ParseableAind};
+
+        test_initialise()?;
+        let epsilon = Atom::var(GS.dim_epsilon);
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let spin = Bispinor {}.new_rep(4);
+        let ports: [_; 4] =
+            std::array::from_fn(|i| spin.to_symbolic([Aind::Hedge((i + 3) as u16, 1).to_atom()]));
+        let mu = mink.to_symbolic([Aind::new_dummy().to_atom()]);
+        let nu = mink.to_symbolic([Aind::new_dummy().to_atom()]);
+        let gamma =
+            |a: &Atom, b: &Atom, index: &Atom| function!(idenso::dirac::AGS.gamma, a, b, index);
+        let source = gamma(&ports[0], &ports[1], &mu)
+            * gamma(&ports[1], &ports[0], &nu)
+            * gamma(&ports[2], &ports[3], &mu)
+            * gamma(&ports[3], &ports[2], &nu)
+            / epsilon.pow(2);
+        let reduced = RStarIntegrand::finish_tensor(source, 9954)?;
+        assert!(!reduced.has_repeated_lorentz_indices());
+        let poles = reduced.series(GS.dim_epsilon, 0, -1)?.to_atom();
+        let expected = Atom::num(64) / epsilon.pow(2) - Atom::num(32) / epsilon;
+        super::super::tests::assert_same_counterterm(&poles, &expected)?;
+        Ok(())
+    }
 
     #[test]
     fn finish_tensor_reduces_clifford_words_before_caller_poles() -> Result<()> {
@@ -679,6 +1111,73 @@ mod tests {
         Ok(())
     }
 
+    /// Hard Taylor before contraction against the contracted reference, on
+    /// every hard preparation term of gluonic two- and three-loop graphs,
+    /// bare and with completed counterterm insertions, at every order up to
+    /// the one the plan uses.
+    #[test]
+    fn hard_taylor_before_contraction_matches_the_contracted_path() -> Result<()> {
+        use crate::uv::rstar::tests::{gluon_self_energy, parallel_pair, settings};
+
+        test_initialise()?;
+        let model = load_generic_model("sm");
+        let settings = settings();
+        let vakint = Vakint::new()?;
+        let mass_squared = symbol!("rstar_hard_check_mass_squared"; Scalar);
+        let graphs = [
+            gluon_self_energy(&model, 2, 4, "V_36", |graph| parallel_pair(graph).is_some())?,
+            gluon_self_energy(&model, 3, 6, "V_36", |graph| parallel_pair(graph).is_some())?,
+        ];
+        let mut compared = 0;
+        let mut with_insertions = 0;
+        for graph in &graphs {
+            let marked = parallel_pair(graph).unwrap()[0];
+            let plan = RStarPlan::new(graph, &model, marked, &settings)?;
+            let children = plan.evaluate_uv_children(
+                graph,
+                &model,
+                &Atom::var(mass_squared).sqrt(),
+                &vakint,
+                &settings,
+            )?;
+            for correction in &plan.ir {
+                for term in &correction.preparation {
+                    if term.remainder.is_scaleless(graph, plan.marked_edge) {
+                        continue;
+                    }
+                    let Some(insertions) = term
+                        .counterterms
+                        .iter()
+                        .map(|child| children.get(&child.argument.support).cloned())
+                        .collect::<Option<Vec<_>>>()
+                    else {
+                        continue;
+                    };
+                    let hard = RStarIntegrand::new(
+                        graph,
+                        &model,
+                        &term.remainder,
+                        &insertions,
+                        plan.marked_edge,
+                        Atom::var(mass_squared),
+                    )?;
+                    for degree in 0..=correction.taylor_order as usize {
+                        let new = hard.taylor(degree)?;
+                        let old = hard.taylor_contracted(degree)?;
+                        assert!(
+                            (&new - &old).expand().is_zero(),
+                            "hard Taylor order {degree} differs:\nnew: {new}\nold: {old}"
+                        );
+                        compared += 1;
+                    }
+                    with_insertions += usize::from(!insertions.is_empty());
+                }
+            }
+        }
+        assert!(compared > 0 && with_insertions > 0, "{compared} {with_insertions}");
+        Ok(())
+    }
+
     #[test]
     fn hard_taylor_preserves_the_single_mass_squared_in_the_existing_bridge() -> Result<()> {
         test_initialise()?;
@@ -780,7 +1279,7 @@ mod tests {
                 Atom::var(mass_squared),
             )?;
             assert!(
-                (preserved.expression - &input.expression * factor)
+                (preserved.expression()? - input.expression()? * &factor)
                     .together()
                     .is_zero()
             );
@@ -842,7 +1341,7 @@ mod tests {
             Atom::Zero,
         )?;
         let epsilon = Atom::var(GS.dim_epsilon);
-        input.expression /= epsilon.pow(2);
+        *input.expression_mut()? /= epsilon.pow(2);
         let mut integration = settings.vakint.true_settings();
         integration.integral_normalization_factor = vakint::LoopNormalizationFactor::GScheme;
         integration.number_of_terms_in_epsilon_expansion = 1;
@@ -879,8 +1378,8 @@ mod tests {
             usize::from(input.basis.loop_edges.raw[0]),
             Minkowski {}.new_rep(GS.dim).to_symbolic([])
         );
-        let original = input.expression.clone();
-        input.expression *= function!(SPENSO_TAG.dot, &loop_momentum, &external)
+        let original = input.expression()?.clone();
+        *input.expression_mut()? *= function!(SPENSO_TAG.dot, &loop_momentum, &external)
             / function!(SPENSO_TAG.dot, &external, &external)
             * &metric;
         let actual_scalar = input.integrate_physical(&vakint, &settings, &integration, 5433)?;
@@ -890,18 +1389,19 @@ mod tests {
             (&actual_scalar - &expected_scalar).expand().is_zero(),
             "physical scalar products and their tensor spectators must survive ingress: actual={actual_scalar}, expected={expected_scalar}"
         );
-        input.expression = original;
+        *input.expression_mut()? = original;
         // A vacuum projector would wrongly discard this odd loop tensor.
         // With the physical external momentum, symmetry of the two lines
         // instead gives integral k^mu = p^mu/2 times the scalar bubble.
         let slot = Minkowski {}
             .new_rep(GS.dim)
             .to_symbolic([Aind::Hedge(86, 0).to_atom()]);
-        input.expression *= function!(
+        let loop_vector = function!(
             GS.emr_mom,
             usize::from(input.basis.loop_edges.raw[0]),
             &slot
         );
+        *input.expression_mut()? *= loop_vector;
         let actual_tensor = input.integrate_physical(&vakint, &settings, &integration, 5432)?;
         let actual_tensor = super::super::tests::canonical_tensor(&actual_tensor)?;
         let expected_tensor = expected

@@ -8,6 +8,8 @@
 //! projection is evaluated as a whole so products remain exactly real.
 //! Unsupported words or arguments return errors instead of using finite tables.
 
+use crate::symbols::S;
+
 use std::collections::BTreeMap;
 
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
@@ -25,6 +27,7 @@ use symbolica::transcendental::{
 
 #[cfg(test)]
 use crate::VakintSettings;
+#[cfg(test)]
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
 use crate::{VakintError, get_integer_from_atom};
 
@@ -35,22 +38,21 @@ fn failure(detail: impl Into<String>) -> VakintError {
 /// Real period projections are scalar functions, even at arity two.
 pub(crate) fn is_projection_symbol(symbol: Symbol) -> bool {
     [
-        "HR",
-        "HI",
-        "GPLReal",
-        "GPLImag",
-        "PolylogReal",
-        "PolylogImag",
+        S.hr,
+        S.hi,
+        S.gpl_real,
+        S.gpl_imag,
+        S.polylog_real,
+        S.polylog_imag,
     ]
-    .iter()
-    .any(|name| symbol == vk_symbol!(name))
+    .contains(&symbol)
 }
 
 fn projection(word: &[i8], sign: i8, imaginary: bool) -> Result<Atom, VakintError> {
     let positive = sixth_root_hpl(word, sign).map_err(failure)?;
     let negative = sixth_root_hpl(word, -sign).map_err(failure)?;
     Ok(if imaginary {
-        (positive - negative) / (Atom::num(2) * vk_parse!("𝑖").unwrap())
+        (positive - negative) / (Atom::num(2) * Atom::i())
     } else {
         (positive + negative) / Atom::num(2)
     })
@@ -60,18 +62,18 @@ fn projection(word: &[i8], sign: i8, imaginary: bool) -> Result<Atom, VakintErro
 fn native_constant(part: AtomView) -> Result<Option<Atom>, VakintError> {
     if let AtomView::Var(variable) = part {
         let symbol = variable.get_symbol();
-        for n in 2..=6 {
-            if symbol == vk_symbol!(format!("z{n}")) {
-                return Ok(Some(zeta().call(Atom::num(n))));
+        for (index, shorthand) in S.zeta_shorthands.iter().enumerate() {
+            if symbol == *shorthand {
+                return Ok(Some(zeta().call(Atom::num(index + 2))));
             }
         }
-        if symbol == vk_symbol!("sqrt3") {
+        if symbol == S.sqrt3 {
             return Ok(Some(Atom::num(3).pow(Atom::num((1, 2)))));
         }
-        if symbol == vk_symbol!("cl2") || symbol == vk_symbol!("S2") {
+        if symbol == S.cl2 || symbol == S.s2 {
             // H(1,0; exp(i*pi/3)) has imaginary part -Cl_2(pi/3).
             let clausen = -projection(&[1, 0], 1, true)?;
-            return Ok(Some(if symbol == vk_symbol!("S2") {
+            return Ok(Some(if symbol == S.s2 {
                 // Rationalize the positive radical so exact cancellations do
                 // not depend on identifying sqrt(1/3) with 1/sqrt(3).
                 Atom::num((4, 27)) * clausen * Atom::num(3).pow(Atom::num((1, 2)))
@@ -96,8 +98,8 @@ fn native_constant(part: AtomView) -> Result<Option<Atom>, VakintError> {
             && get_integer_from_atom(*order).is_some_and(|order| order >= 1)
             && let Some((positive, conjugate)) = polylog_pair(*point)
         {
-            let real = vk_symbol!("PolylogReal").call((order.to_owned(), &positive));
-            let imaginary = vk_symbol!("PolylogImag").call((order.to_owned(), positive));
+            let real = S.polylog_real.call((order.to_owned(), &positive));
+            let imaginary = S.polylog_imag.call((order.to_owned(), positive));
             return Ok(Some(
                 real + if conjugate {
                     -Atom::i() * imaginary
@@ -108,7 +110,7 @@ fn native_constant(part: AtomView) -> Result<Option<Atom>, VakintError> {
         }
         return Ok(None);
     }
-    if symbol == vk_symbol!("Zeta") || symbol == zeta() {
+    if symbol == S.zeta || symbol == zeta() {
         if let [argument] = args.as_slice()
             && get_integer_from_atom(*argument).is_some()
         {
@@ -116,7 +118,7 @@ fn native_constant(part: AtomView) -> Result<Option<Atom>, VakintError> {
         }
         return Ok(None);
     }
-    if symbol == vk_symbol!("Sqrt") || symbol == Symbol::SQRT {
+    if symbol == S.sqrt || symbol == Symbol::SQRT {
         if let [argument] = args.as_slice()
             && get_integer_from_atom(*argument).is_some()
         {
@@ -136,7 +138,7 @@ pub(crate) fn projection_kernel(part: AtomView) -> Result<Option<(Atom, bool)>, 
     };
     let symbol = fun.get_symbol();
     let args = fun.iter().collect::<Vec<_>>();
-    if symbol == vk_symbol!("PolylogReal") || symbol == vk_symbol!("PolylogImag") {
+    if symbol == S.polylog_real || symbol == S.polylog_imag {
         let [order, point] = args.as_slice() else {
             return Err(failure(
                 "polylogarithm projection requires an order and argument",
@@ -155,7 +157,7 @@ pub(crate) fn projection_kernel(part: AtomView) -> Result<Option<(Atom, bool)>, 
                 "polylogarithm projection uses the positive-imaginary representative",
             ));
         }
-        let kernel = if positive == vk_parse!("(1+3^(1/2)*𝑖)/2").unwrap() {
+        let kernel = if positive == S.sixth_roots[0].clone() {
             // Li_n(z) = H(0,...,0,1;z). The existing sixth-root
             // HPL kernel provides bounded high-precision evaluation on the
             // unit circle without a general polylogarithm continuation.
@@ -187,9 +189,9 @@ pub(crate) fn projection_kernel(part: AtomView) -> Result<Option<(Atom, bool)>, 
         } else {
             polylog().call((order.to_owned(), positive))
         };
-        return Ok(Some((kernel, symbol == vk_symbol!("PolylogImag"))));
+        return Ok(Some((kernel, symbol == S.polylog_imag)));
     }
-    if symbol == vk_symbol!("GPLReal") || symbol == vk_symbol!("GPLImag") {
+    if symbol == S.gpl_real || symbol == S.gpl_imag {
         let (endpoint, letters) = args
             .split_last()
             .ok_or_else(|| failure("GPL projection has no endpoint"))?;
@@ -200,10 +202,10 @@ pub(crate) fn projection_kernel(part: AtomView) -> Result<Option<(Atom, bool)>, 
             (Atom::num(0), GplLetter::Zero),
             (Atom::num(1), GplLetter::One),
             (Atom::num(-1), GplLetter::MinusOne),
-            (vk_parse!("(1+3^(1/2)*𝑖)/2").unwrap(), GplLetter::R1),
-            (vk_parse!("(-1+3^(1/2)*𝑖)/2").unwrap(), GplLetter::R2),
-            (vk_parse!("(-1-3^(1/2)*𝑖)/2").unwrap(), GplLetter::R4),
-            (vk_parse!("(1-3^(1/2)*𝑖)/2").unwrap(), GplLetter::R5),
+            (S.sixth_roots[0].clone(), GplLetter::R1),
+            (S.sixth_roots[1].clone(), GplLetter::R2),
+            (S.sixth_roots[2].clone(), GplLetter::R4),
+            (S.sixth_roots[3].clone(), GplLetter::R5),
         ]
         .map(|(letter, tag)| (letter.expand(), tag));
         let letters = letters
@@ -221,19 +223,19 @@ pub(crate) fn projection_kernel(part: AtomView) -> Result<Option<(Atom, bool)>, 
             .collect::<Result<Vec<_>, _>>()?;
         return Ok(Some((
             endpoint_one_gpl(&letters).map_err(failure)?,
-            symbol == vk_symbol!("GPLImag"),
+            symbol == S.gpl_imag,
         )));
     }
-    let imaginary = symbol == vk_symbol!("HI");
-    if !imaginary && symbol != vk_symbol!("HR") {
+    let imaginary = symbol == S.hi;
+    if !imaginary && symbol != S.hr {
         return Ok(None);
     }
     let (point, indices) = args
         .split_last()
         .ok_or_else(|| failure("HPL expression has no argument"))?;
-    let positive = vk_parse!("(1+3^(1/2)*𝑖)/2").unwrap();
-    let negative = vk_parse!("(1-3^(1/2)*𝑖)/2").unwrap();
-    let sign = if *point == Atom::var(vk_symbol!("om1")).as_view() || *point == positive.as_view() {
+    let positive = S.sixth_roots[0].clone();
+    let negative = S.sixth_roots[3].clone();
+    let sign = if *point == Atom::var(S.om1).as_view() || *point == positive.as_view() {
         1
     } else if *point == negative.as_view() {
         -1
@@ -261,17 +263,23 @@ pub(crate) fn projection_kernel(part: AtomView) -> Result<Option<(Atom, bool)>, 
 // formulas. Integer polylogarithms obey conjugation here, away from the real
 // branch cut. Keep each real component opaque before rounded arithmetic.
 fn polylog_pair(point: AtomView) -> Option<(Atom, bool)> {
-    for spelling in ["(1+3^(1/2)*𝑖)/2", "(1/3)^(1/2)*𝑖", "3^(1/2)*𝑖/3"] {
-        let positive = vk_parse!(spelling).unwrap();
-        let negative = if spelling.starts_with("(1+") {
-            vk_parse!("(1-3^(1/2)*𝑖)/2").unwrap()
+    for (index, positive) in [
+        &S.sixth_roots[0],
+        &S.imaginary_inverse_sqrt3,
+        &S.rationalized_imaginary_inverse_sqrt3,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let negative = if index == 0 {
+            S.sixth_roots[3].clone()
         } else {
-            -&positive
+            -positive
         };
-        let canonical = if spelling.starts_with("(1+") {
+        let canonical = if index == 0 {
             positive.clone()
         } else {
-            vk_parse!("3^(1/2)*𝑖/3").unwrap()
+            S.rationalized_imaginary_inverse_sqrt3.clone()
         };
         if point == positive.as_view() {
             return Some((canonical, false));
@@ -384,31 +392,28 @@ pub(crate) fn normalize_constants(expression: AtomView) -> Result<Atom, VakintEr
     // Use one exact basis for the positive radical appearing in the sunset
     // formulas. Symbolica deliberately does not infer radical identities in
     // generic complex algebra; here both rationals have their positive roots.
-    let inverse_root = vk_parse!("(1/3)^(1/2)").unwrap();
-    let rationalized = vk_parse!("3^(1/2)/3").unwrap();
+    let inverse_root = S.inverse_sqrt3.clone();
+    let rationalized = S.rationalized_inverse_sqrt3.clone();
     let expression = expression
         .replace(inverse_root.to_pattern())
         .with(rationalized.clone());
     let expression = replace_constants(expression.as_view(), |source, native| {
         if let AtomView::Fun(function) = source {
             let symbol = function.get_symbol();
-            if ["GPLReal", "GPLImag", "PolylogReal", "PolylogImag"]
-                .iter()
-                .any(|name| symbol == vk_symbol!(name))
-            {
+            if [S.gpl_real, S.gpl_imag, S.polylog_real, S.polylog_imag].contains(&symbol) {
                 return Ok(source.to_owned());
             }
-            if symbol == vk_symbol!("HR") || symbol == vk_symbol!("HI") {
+            if symbol == S.hr || symbol == S.hi {
                 // native_constant has already validated the word and endpoint.
                 let mut arguments = function
                     .iter()
                     .map(|part| part.to_owned())
                     .collect::<Vec<_>>();
                 let point = arguments.pop().unwrap();
-                let conjugate = point == vk_parse!("(1-3^(1/2)*𝑖)/2").unwrap();
-                arguments.push(Atom::var(vk_symbol!("om1")));
+                let conjugate = point == S.sixth_roots[3].clone();
+                arguments.push(Atom::var(S.om1));
                 let projection = symbol.call(&arguments);
-                return Ok(if conjugate && symbol == vk_symbol!("HI") {
+                return Ok(if conjugate && symbol == S.hi {
                     -projection
                 } else {
                     projection
@@ -417,9 +422,9 @@ pub(crate) fn normalize_constants(expression: AtomView) -> Result<Atom, VakintEr
         }
         if let AtomView::Var(variable) = source {
             let symbol = variable.get_symbol();
-            if symbol == vk_symbol!("cl2") || symbol == vk_symbol!("S2") {
-                let clausen = -vk_parse!("HI(1,0,om1)").unwrap();
-                return Ok(if symbol == vk_symbol!("S2") {
+            if symbol == S.cl2 || symbol == S.s2 {
+                let clausen = -S.hi.call((1, 0, S.om1));
+                return Ok(if symbol == S.s2 {
                     Atom::num((4, 27)) * clausen * Atom::num(3).pow(Atom::num((1, 2)))
                 } else {
                     clausen
@@ -493,3 +498,63 @@ pub(crate) fn substitute_numerically(
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[test]
+fn projection_symbol_cache_preserves_parser_identity() {
+    use symbolica::atom::{NamespacedSymbol, SymbolBuilder, UserData};
+
+    const CHILD: &str = "VAKINT_PROJECTION_SYMBOL_CACHE_TEST";
+    if std::env::var_os(CHILD).is_none() {
+        // Other tests may already have registered these fixed names. Exercise
+        // first access in isolation, including ordinary cargo test invocations.
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "hpl::projection_symbol_cache_preserves_parser_identity",
+                "--nocapture",
+            ])
+            .env(CHILD, "1")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success() && String::from_utf8_lossy(&output.stdout).contains("1 passed"),
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+        return;
+    }
+
+    let metadata = UserData::Atom(Atom::num(17));
+    let real = SymbolBuilder::new(NamespacedSymbol::parse("vakint::ProjectionCacheReal"))
+        .with_aliases(["HR"])
+        .with_tags(["projection_cache_test::tag"])
+        .with_user_data(metadata.clone())
+        .build()
+        .unwrap();
+    assert!(is_projection_symbol(real));
+    assert!(is_projection_symbol(real));
+    assert_eq!(vk_symbol!("vakint::HR"), real);
+    assert_eq!(real.get_data(), &metadata);
+    assert!(real.has_tag("projection_cache_test::tag"));
+    for name in ["HI", "GPLReal", "GPLImag", "PolylogReal", "PolylogImag"] {
+        assert!(
+            Symbol::get_symbol(NamespacedSymbol::parse(&format!("vakint::{name}"))).is_some(),
+            "global Vakint initialization must register {name}",
+        );
+    }
+    let foreign = vk_symbol!("projection_cache_foreign::HR");
+    assert!(!is_projection_symbol(foreign));
+    for name in [
+        "HR",
+        "HI",
+        "GPLReal",
+        "GPLImag",
+        "PolylogReal",
+        "PolylogImag",
+    ] {
+        assert!(is_projection_symbol(vk_symbol!(name)));
+        assert!(is_projection_symbol(vk_symbol!(format!("vakint::{name}"))));
+    }
+}

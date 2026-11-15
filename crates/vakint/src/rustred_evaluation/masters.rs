@@ -4,6 +4,7 @@
 //! The caller restores target mass powers and measure normalization exactly once.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::OnceLock;
 use std::sync::Arc;
 
 use serde::Deserialize;
@@ -66,9 +67,36 @@ pub(crate) struct Master {
     graph: String,
     pub(crate) metadata: serde_json::Value,
     pub(crate) data: Option<Arc<LoopData>>,
+    parsed_basis: OnceLock<Option<Atom>>,
+    parsed_names: OnceLock<Vec<Atom>>,
 }
 
 impl Master {
+    // Catalog records are immutable once published. Cache parser-resolved
+    // metadata on that record, never across data snapshots or user settings.
+    pub(crate) fn basis_expression(&self) -> Option<&Atom> {
+        self.parsed_basis
+            .get_or_init(|| {
+                self.metadata["exact_basis_expression"]
+                    .as_str()
+                    .and_then(|value| vk_parse!(value).ok())
+            })
+            .as_ref()
+    }
+
+    pub(crate) fn names(&self) -> &[Atom] {
+        self.parsed_names.get_or_init(|| {
+            [
+                self.identity.as_str(),
+                self.metadata["name"].as_str().unwrap_or(""),
+            ]
+            .into_iter()
+            .filter(|name| !name.is_empty())
+            .filter_map(|name| vk_parse!(name).ok())
+            .collect()
+        })
+    }
+
     /// The lowest Laurent order of the master: `ε^-L` for an `L`-loop
     /// vacuum master, or a lower order shipped by its data.
     fn leading_power(&self) -> Result<i64, RustRedEvaluationError> {
@@ -122,8 +150,262 @@ pub(crate) fn combine_exact(expression: Atom) -> Atom {
     } else {
         together_over_shared_remainder(&expression)
             .or_else(|| together_gaussian_laurent(&expression))
+            .or_else(|| together_over_denominator_groups(&expression).ok())
             .unwrap_or_else(|| expression.together())
     }
+}
+
+/// Keep the variable order and coefficient field of the original conversion
+/// while collecting terms with the same denominator. Those two choices affect
+/// the signs and leading coefficients of Symbolica's canonical factors.
+struct ExactDenominatorGroups {
+    expression: Atom,
+    variables: Arc<Vec<symbolica::poly::PolyVariable>>,
+    complex: bool,
+    phase: Atom,
+}
+
+impl ExactDenominatorGroups {
+    fn new(expanded: &Atom) -> Result<Self, &'static str> {
+        let complex = expanded.as_view().has_complex_coefficients();
+        let mut seen_factors = BTreeSet::new();
+        let mut factors_in_order = Vec::new();
+        let mut denominators = BTreeMap::<Atom, (Atom, Atom)>::new();
+        let mut groups = BTreeMap::<Atom, Vec<Atom>>::new();
+        let terms = match expanded.as_view() {
+            AtomView::Add(sum) => sum.iter().collect::<Vec<_>>(),
+            term => vec![term],
+        };
+        let term_count = terms.len();
+        for term in terms {
+            let factors = match term {
+                AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+                factor => vec![factor],
+            };
+            for factor in &factors {
+                if seen_factors.insert(factor.to_owned()) {
+                    factors_in_order.push(factor.to_owned());
+                }
+            }
+            let (denominator, numerator): (Vec<_>, Vec<_>) =
+                factors.into_iter().partition(|factor| {
+                    let AtomView::Pow(power) = factor else {
+                        return false;
+                    };
+                    get_integer_from_atom(power.get_base_exp().1).is_some_and(|power| power < 0)
+                });
+            let denominator = Atom::mul_many(denominator);
+            let (key, coefficient) = match denominators.entry(denominator) {
+                std::collections::btree_map::Entry::Occupied(entry) => entry.into_mut(),
+                std::collections::btree_map::Entry::Vacant(entry) => {
+                    let key = entry.key();
+                    let normalized =
+                        Self::canonicalize(key, None, key.as_view().has_complex_coefficients())?;
+                    let factors = match normalized.as_view() {
+                        AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+                        factor => vec![factor],
+                    };
+                    let (coefficients, factors): (Vec<_>, Vec<_>) = factors
+                        .into_iter()
+                        .partition(|factor| matches!(factor, AtomView::Num(_)));
+                    entry.insert((Atom::mul_many(factors), Atom::mul_many(coefficients)))
+                }
+            };
+            groups
+                .entry(key.clone())
+                .or_default()
+                .push(Atom::mul_many(numerator) * &*coefficient);
+        }
+        if groups.len() == term_count {
+            return Err("distinct_denominator_groups");
+        }
+        let expression = Atom::add_many(
+            groups
+                .iter()
+                .map(|(denominator, numerators)| denominator * Atom::add_many(numerators)),
+        );
+        if expression == *expanded {
+            return Err("unchanged_denominator_groups");
+        }
+        let phase = if complex {
+            Self::common_phase(expanded)
+        } else {
+            Atom::num(1)
+        };
+        let expression = if phase.is_one() {
+            expression
+        } else {
+            // Scale the collected numerators without expanding the groups.
+            Atom::add_many(groups.into_iter().map(|(denominator, numerators)| {
+                denominator * Atom::add_many(numerators.into_iter().map(|value| value / &phase))
+            }))
+        };
+        let mut seen_variables = std::collections::HashSet::new();
+        let mut variables = Vec::new();
+        for factor in factors_in_order {
+            for variable in Self::raw_variables(factor.as_view(), complex)? {
+                if seen_variables.insert(variable.clone()) {
+                    variables.push(variable);
+                }
+            }
+        }
+        Ok(Self {
+            expression,
+            variables: Arc::new(variables),
+            complex,
+            phase,
+        })
+    }
+
+    /// Keep a native numeric phase outside real polynomial arithmetic. An exact
+    /// real quotient is required even inside opaque functions and root bases.
+    fn common_phase(expanded: &Atom) -> Atom {
+        let mut exact = true;
+        expanded.visitor(&mut |part| {
+            if let AtomView::Num(number) = part {
+                exact &= matches!(
+                    number.get_coeff_view(),
+                    CoefficientView::Natural(..) | CoefficientView::Large(..)
+                );
+            }
+            exact
+        });
+        if !exact {
+            return Atom::num(1);
+        }
+        let real_quotient = |phase: &Atom| {
+            !(expanded / phase)
+                .expand()
+                .as_view()
+                .has_complex_coefficients()
+        };
+        let imaginary = Atom::num(symbolica::domains::float::Complex::new(
+            Rational::from(0),
+            Rational::from(1),
+        ));
+        if real_quotient(&imaginary) {
+            return imaginary;
+        }
+        let first = match expanded.as_view() {
+            AtomView::Add(sum) => sum.iter().next().unwrap(),
+            term => term,
+        };
+        let phase = SplitTerm::new(first).coefficient;
+        if !phase.is_zero() && phase.as_view().has_complex_coefficients() && real_quotient(&phase) {
+            phase
+        } else {
+            Atom::num(1)
+        }
+    }
+
+    /// The raw converter appends variables in first-seen order and treats a
+    /// function as one opaque variable. Its public wrapper additionally reduces
+    /// rational-power bases; doing that per factor would change the global map.
+    fn raw_variables(
+        factor: AtomView<'_>,
+        complex: bool,
+    ) -> Result<Vec<symbolica::poly::PolyVariable>, &'static str> {
+        if let AtomView::Num(number) = factor {
+            let coefficient = number.get_coeff_view();
+            // Native exact numbers have no variables. In particular, avoid
+            // repeatedly constructing the algebraic embedding of numeric i.
+            if matches!(
+                coefficient,
+                CoefficientView::Natural(..) | CoefficientView::Large(..)
+            ) && (complex || coefficient.is_real())
+            {
+                return Ok(Vec::new());
+            }
+        }
+        let empty = Arc::new(Vec::new());
+        if complex {
+            let field = symbolica::domains::algebraic::AlgebraicExtension::complex(Q);
+            factor
+                .to_factorized_rational_polynomial_impl::<_, _, u32>(&field, &field, &empty)
+                .map(|polynomial| polynomial.get_variables().to_vec())
+                .map_err(|_| "unsupported_group_conversion")
+        } else {
+            factor
+                .to_factorized_rational_polynomial_impl::<_, _, u32>(&Q, &Z, &empty)
+                .map(|polynomial| polynomial.get_variables().to_vec())
+                .map_err(|_| "unsupported_group_conversion")
+        }
+    }
+
+    fn combine(self) -> Result<Atom, &'static str> {
+        let expression = if self.phase.is_one() {
+            self.expression
+        } else {
+            let real = Self::canonicalize(&self.expression, Some(self.variables.clone()), false)?;
+            self.phase * real
+        };
+        // Both conversions retain the original raw variable order. Restore the
+        // original Q(i) field even when coefficients cancel to a real result.
+        Self::canonicalize(&expression, Some(self.variables), self.complex)
+    }
+
+    fn canonicalize(
+        expression: &Atom,
+        variables: Option<Arc<Vec<symbolica::poly::PolyVariable>>>,
+        complex: bool,
+    ) -> Result<Atom, &'static str> {
+        if complex {
+            use symbolica::domains::{
+                algebraic::{AlgebraicExtension, AlgebraicNumber},
+                float::{Complex, FloatField},
+                rational::RationalField,
+            };
+
+            let field = AlgebraicExtension::complex(Q);
+            let polynomial = expression
+                .try_to_factorized_rational_polynomial::<_, _, u32>(&field, &field, variables)
+                .map_err(|_| "unsupported_group_conversion")?;
+            // As in together(), restore native exact complex coefficients.
+            // FloatField<Complex<Rational>> performs no floating arithmetic.
+            let exact = |coefficient: &AlgebraicNumber<RationalField>| {
+                Complex::new(
+                    coefficient.poly().get_constant(),
+                    coefficient
+                        .poly()
+                        .coefficient(&[1])
+                        .unwrap_or(Rational::from(0)),
+                )
+            };
+            let native = FloatField::from_rep(Complex::new(Rational::from(0), Rational::from(1)));
+            let numerator = Atom::num(exact(&polynomial.numer_coeff))
+                * polynomial
+                    .numerator
+                    .map_coeff(exact, native.clone())
+                    .to_expression();
+            let mut denominator = Atom::num(exact(&polynomial.denom_coeff));
+            for (factor, exponent) in polynomial.denominators {
+                denominator *= factor
+                    .map_coeff(exact, native.clone())
+                    .to_expression()
+                    .pow(exponent);
+            }
+            Ok(numerator / denominator)
+        } else {
+            let polynomial = expression
+                .try_to_factorized_rational_polynomial::<_, _, u32>(&Q, &Z, variables)
+                .map_err(|_| "unsupported_group_conversion")?;
+            let numerator =
+                Atom::num(polynomial.numer_coeff) * polynomial.numerator.to_expression();
+            let mut denominator = Atom::num(polynomial.denom_coeff);
+            for (factor, exponent) in polynomial.denominators {
+                denominator *= factor.to_expression().pow(exponent);
+            }
+            Ok(numerator / denominator)
+        }
+    }
+}
+
+fn together_over_denominator_groups(expanded: &Atom) -> Result<Atom, &'static str> {
+    // Discovery and collection cost more than they save on short sums.
+    if expanded.as_view().nterms() < 16 {
+        return Err("small_group_sum");
+    }
+    ExactDenominatorGroups::new(expanded)?.combine()
 }
 
 /// `together` of an expanded Laurent polynomial with Gaussian rational
@@ -266,6 +548,49 @@ fn together_over_shared_remainder(expanded: &Atom) -> Option<Atom> {
     let combined = Atom::mul_many(std::iter::once(polynomial).chain(fixed).chain(remainder));
     Some(combined.together())
 }
+
+/// The common numeric phase of an exact expression: `i` when dividing by it
+/// leaves real coefficients, else the complex leading coefficient when that
+/// does, else one. Inexact coefficients have no phase to factor out.
+pub(crate) fn common_exact_numeric_phase(expanded: &Atom) -> Atom {
+    let mut exact = true;
+    expanded.visitor(&mut |part| {
+        if let AtomView::Num(number) = part {
+            exact &= matches!(
+                number.get_coeff_view(),
+                CoefficientView::Natural(..) | CoefficientView::Large(..)
+            );
+        }
+        exact
+    });
+    if !exact {
+        return Atom::num(1);
+    }
+    let real_quotient = |phase: &Atom| {
+        !(expanded / phase)
+            .expand()
+            .as_view()
+            .has_complex_coefficients()
+    };
+    let imaginary = Atom::num(symbolica::domains::float::Complex::new(
+        Rational::from(0),
+        Rational::from(1),
+    ));
+    if real_quotient(&imaginary) {
+        return imaginary;
+    }
+    let first = match expanded.as_view() {
+        AtomView::Add(sum) => sum.iter().next().unwrap(),
+        term => term,
+    };
+    let phase = SplitTerm::new(first).coefficient;
+    if !phase.is_zero() && phase.as_view().has_complex_coefficients() && real_quotient(&phase) {
+        phase
+    } else {
+        Atom::num(1)
+    }
+}
+
 
 /// One expanded term: its rational coefficient, its integer powers of bare
 /// symbols, and all remaining factors in canonical order.
@@ -513,6 +838,8 @@ impl MasterCatalog {
                     graph: Self::graph_location(data, &metadata.parent_graph)?,
                     metadata: value.clone(),
                     data: Some(Arc::clone(data)),
+                    parsed_basis: OnceLock::new(),
+                    parsed_names: OnceLock::new(),
                 };
                 parent_graphs
                     .entry(Self::family_symbol(fingerprint))
@@ -1694,6 +2021,8 @@ mod tests {
                         },
                     ),
                 ]),
+                parsed_basis: OnceLock::new(),
+                parsed_names: OnceLock::new(),
             },
         );
         (catalog, symbol)
@@ -2723,6 +3052,8 @@ mod tests {
                         },
                     ),
                 ]),
+                parsed_basis: OnceLock::new(),
+                parsed_names: OnceLock::new(),
             },
         );
         catalog.load_basis_aliases(vec![
@@ -2794,6 +3125,8 @@ mod tests {
                         },
                     ),
                 ]),
+                parsed_basis: OnceLock::new(),
+                parsed_names: OnceLock::new(),
             },
         );
         catalog.load_basis_aliases(vec![

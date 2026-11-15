@@ -8309,6 +8309,7 @@ dependencies = [
  "tempfile",
  "test-log",
  "thiserror 2.0.18",
+ "tracing",
  "ureq",
  "version-compare",
 ]

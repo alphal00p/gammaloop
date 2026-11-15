@@ -20,7 +20,7 @@ use spenso::{
         representation::{Minkowski, RepName},
     },
 };
-use symbolica::atom::Atom;
+use symbolica::atom::{Atom, AtomCore};
 
 use linnet::half_edge::involution::HedgePair;
 
@@ -137,6 +137,27 @@ pub(crate) fn is_not_paired(pair: &HedgePair) -> bool {
     !pair.is_paired()
 }
 
+/// Return a summed complete UV counterterm, with an exact zero made literal.
+///
+/// Forest contributions are added as `sum_k p_k epsilon^k` without
+/// normalisation. When Delta factorises through a vanishing child, e.g.
+/// Delta(A u B) = Delta(A) Delta(B) with Delta(A) = -K[O(epsilon) I_A] = 0,
+/// the cancelling contributions can survive as `X/epsilon + (-X)/epsilon`
+/// whenever their `p_k` distribute coefficients differently. Consumers drop
+/// vanishing children by `is_zero`; an R* preparation term that keeps one
+/// also keeps its contracted hard vectors and fails the hard-moment
+/// projection check. Expansion is an identity: a sum that does not expand to
+/// zero is returned unchanged.
+pub(crate) fn literal_zero_if_vanishing(counterterm: Atom) -> Atom {
+    if !counterterm.is_zero() && counterterm.expand().is_zero() {
+        Atom::Zero
+    } else {
+        counterterm
+    }
+}
+
+mod counterterm_cache;
+mod counterterm_identity;
 pub mod hedge_poset;
 mod marker;
 mod orchestrator;

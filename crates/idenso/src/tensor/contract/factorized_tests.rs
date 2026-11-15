@@ -622,6 +622,35 @@ fn factored_contract_coalesces_vector_powers_before_counting_ports() {
 }
 
 #[test]
+fn factored_contract_admits_library_zeta_spectators() {
+    setup();
+    let square = input("(-p(spenso::mink(4,a))-q(spenso::mink(4,a)))^2");
+    let paired = input(
+        "spenso::g(p(spenso::mink(4)),p(spenso::mink(4)))+2*spenso::g(p(spenso::mink(4)),q(spenso::mink(4)))+spenso::g(q(spenso::mink(4)),q(spenso::mink(4)))",
+    );
+    let zeta = symbolica::transcendental::zeta();
+    for spectator in [
+        zeta.call(3),
+        input("73/147456*1i*gs^6") * zeta.call(3),
+        zeta.call(3) * zeta.call(5),
+    ] {
+        for offset in [Atom::Zero, input("x")] {
+            let source = &offset + &spectator * &square;
+            let result = contract(&source);
+            assert_eq!(result.reduction_status(), ReductionStatus::Complete);
+            assert!(result.is_scalar());
+            assert_eq!(
+                result.expression.expand(),
+                (&offset + &spectator * &paired).expand()
+            );
+            let repeated = result.contract(Default::default()).unwrap();
+            assert_eq!(repeated.reduction_status(), ReductionStatus::Complete);
+            assert_eq!(repeated.expression, result.expression);
+        }
+    }
+}
+
+#[test]
 fn factored_contract_does_not_relax_missing_sum_branch_interfaces() {
     setup();
     let source = input("p(spenso::mink(4,a))*(t(spenso::mink(4,a))+u(spenso::mink(4,b)))");

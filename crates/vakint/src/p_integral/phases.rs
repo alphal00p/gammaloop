@@ -11,12 +11,6 @@ pub(crate) fn enabled() -> bool {
     *ENABLED.get_or_init(|| std::env::var_os("VAKINT_P_PHASES").is_some_and(|value| value != "0"))
 }
 
-/// Whether `VAKINT_P_PHASES=2`: one line per p reduction request too.
-pub(crate) fn per_request() -> bool {
-    static PER_REQUEST: OnceLock<bool> = OnceLock::new();
-    *PER_REQUEST.get_or_init(|| std::env::var("VAKINT_P_PHASES").is_ok_and(|value| value == "2"))
-}
-
 /// The start of a timed phase; `None` when profiling is off.
 pub(crate) fn start() -> Option<Instant> {
     enabled().then(Instant::now)
@@ -44,32 +38,3 @@ pub(crate) fn time<T>(name: &str, work: impl FnOnce() -> T) -> T {
     value
 }
 
-/// An accumulator for a phase repeated many times (per channel).
-#[derive(Default)]
-pub(crate) struct Accumulator {
-    pub total: Duration,
-    pub count: usize,
-}
-
-impl Accumulator {
-    pub(crate) fn time<T>(&mut self, work: impl FnOnce() -> T) -> T {
-        if !enabled() {
-            return work();
-        }
-        let started = Instant::now();
-        let value = work();
-        self.total += started.elapsed();
-        self.count += 1;
-        value
-    }
-
-    pub(crate) fn report(&self, name: &str) {
-        if enabled() {
-            eprintln!(
-                "vakint-phase {name} {:.6} count={}",
-                self.total.as_secs_f64(),
-                self.count
-            );
-        }
-    }
-}

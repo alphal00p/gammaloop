@@ -1,19 +1,285 @@
 //! Independent diagrams obtained by opening a selected region's boundary.
 
 use idenso::tensor::SymbolicTensor;
+use spenso::structure::partial::PartialStructure;
 use std::collections::{BTreeMap, BTreeSet};
 
 use linnet::half_edge::{
     NodeIndex,
-    involution::{Flow, HedgePair},
-    subgraph::{Inclusion, SuBitGraph, SubSetLike},
+    involution::{Flow, Hedge, HedgePair},
+    subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetLike},
 };
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder};
 
 use crate::{
-    DiagramEndpoint, DiagramError, DiagramHalfEdge, ExternalLeg, ExternalState, FeynmanDiagram,
-    NumeratorInterface, VertexId, symbols,
+    DiagramEndpoint, DiagramError, DiagramHalfEdge, EdgeId, ExternalLeg, ExternalState,
+    FeynmanDiagram, NumeratorInterface, VertexId, symbols,
 };
+
+/// Symbolic owner transport between a parent diagram and an independently routed graph.
+///
+/// Edge orientations are preserved. Momentum coordinates are first resolved to
+/// their owning edge, so an external vector restored from an excised insertion
+/// keeps its original sign. An owner removed by the transformation, or an
+/// ambiguous split edge without a vertex context, is an error.
+#[derive(Clone, Debug)]
+pub struct DiagramRelabeling {
+    forward: OwnerTranslation,
+    backward: OwnerTranslation,
+    endpoints: BTreeMap<DiagramHalfEdge, DiagramHalfEdge>,
+    parent_hedges: usize,
+    derived_hedges: usize,
+}
+
+#[derive(Clone, Debug, Default)]
+struct OwnerTranslation {
+    vertices: BTreeMap<usize, Vec<usize>>,
+    edges: BTreeMap<usize, Vec<usize>>,
+    hedges: BTreeMap<usize, Vec<usize>>,
+    vertex_edges: BTreeMap<(usize, usize), Vec<usize>>,
+    loop_edges: Vec<EdgeId>,
+    external_edges: Vec<EdgeId>,
+}
+
+impl OwnerTranslation {
+    fn translate(&self, atom: &Atom, vertex: Option<VertexId>) -> Result<Atom, DiagramError> {
+        let mut failure = None;
+        let result = atom.replace_map_bottom_up(|term, _, out| {
+            let AtomView::Fun(function) = term else {
+                return;
+            };
+            let mut head = function.get_symbol();
+            let args = function.iter().collect::<Vec<_>>();
+            let Some(mut owner) = args.first().and_then(|arg| usize::try_from(*arg).ok()) else {
+                return;
+            };
+            let candidates = if head == symbols::hedge_index() {
+                self.hedges.get(&owner)
+            } else if head == symbols::vertex_index() {
+                self.vertices.get(&owner)
+            } else {
+                if head == symbols::loop_momentum() || head == symbols::external_momentum() {
+                    let coordinates = if head == symbols::loop_momentum() {
+                        &self.loop_edges
+                    } else {
+                        &self.external_edges
+                    };
+                    let Some(edge) = coordinates.get(owner) else {
+                        failure = Some(format!("unknown source momentum coordinate {owner}"));
+                        return;
+                    };
+                    owner = edge.0;
+                    head = symbols::momentum();
+                }
+                if ![
+                    symbols::edge_index(),
+                    symbols::momentum(),
+                    symbols::denominator(),
+                    symbols::u(),
+                    symbols::ubar(),
+                    symbols::v(),
+                    symbols::vbar(),
+                    symbols::epsilon(),
+                    symbols::epsilonbar(),
+                ]
+                .contains(&head)
+                {
+                    return;
+                }
+                vertex
+                    .and_then(|v| self.vertex_edges.get(&(v.0, owner)))
+                    .or_else(|| self.edges.get(&owner))
+            };
+            let mapped = match candidates.map(Vec::as_slice) {
+                Some([mapped]) => *mapped,
+                Some(_) => {
+                    failure = Some(format!("symbolic owner {owner} has multiple images"));
+                    return;
+                }
+                None => {
+                    failure = Some(format!(
+                        "symbolic owner {owner} lies outside the retained region"
+                    ));
+                    return;
+                }
+            };
+            **out = FunctionBuilder::new(head)
+                .add_arg(mapped)
+                .add_args(args[1..].iter().copied())
+                .finish();
+        });
+        failure.map_or(Ok(result), |message| {
+            Err(DiagramError::Invariant {
+                operation: "transporting diagram owners",
+                message,
+            })
+        })
+    }
+}
+
+impl DiagramRelabeling {
+    pub(crate) fn new(
+        parent: &FeynmanDiagram,
+        derived: &FeynmanDiagram,
+        vertices: BTreeMap<usize, usize>,
+        edges: BTreeMap<usize, Vec<usize>>,
+        hedges: BTreeMap<usize, usize>,
+        vertex_edges: BTreeMap<(usize, usize), Vec<usize>>,
+    ) -> Self {
+        let forward = OwnerTranslation {
+            vertices: vertices.into_iter().map(|(a, b)| (a, vec![b])).collect(),
+            edges,
+            hedges: hedges.into_iter().map(|(a, b)| (a, vec![b])).collect(),
+            vertex_edges,
+            loop_edges: parent.loop_momentum_basis.loop_edges.clone(),
+            external_edges: parent.loop_momentum_basis.external_edges.clone(),
+        };
+        let invert = |map: &BTreeMap<usize, Vec<usize>>| {
+            let mut inverse: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+            for (&source, targets) in map {
+                for &target in targets {
+                    inverse.entry(target).or_default().push(source);
+                }
+            }
+            inverse
+        };
+        let backward = OwnerTranslation {
+            vertices: invert(&forward.vertices),
+            edges: invert(&forward.edges),
+            hedges: invert(&forward.hedges),
+            vertex_edges: BTreeMap::new(),
+            loop_edges: derived.loop_momentum_basis.loop_edges.clone(),
+            external_edges: derived.loop_momentum_basis.external_edges.clone(),
+        };
+        let endpoints = parent
+            .half_edges()
+            .filter_map(|endpoint| {
+                let old = parent.half_edge_id(endpoint)?;
+                let [new] = forward.hedges.get(&old.0)?.as_slice() else {
+                    return None;
+                };
+                let new = Hedge(*new);
+                Some((
+                    endpoint,
+                    DiagramHalfEdge {
+                        edge: EdgeId(derived.graph[&new].0),
+                        endpoint: match derived.graph.flow(new) {
+                            Flow::Source => DiagramEndpoint::Source,
+                            Flow::Sink => DiagramEndpoint::Target,
+                        },
+                    },
+                ))
+            })
+            .collect();
+        Self {
+            forward,
+            backward,
+            endpoints,
+            parent_hedges: parent.graph.n_hedges(),
+            derived_hedges: derived.graph.n_hedges(),
+        }
+    }
+
+    fn identity(diagram: &FeynmanDiagram) -> Self {
+        Self::new(
+            diagram,
+            diagram,
+            (0..diagram.graph.n_nodes()).map(|i| (i, i)).collect(),
+            (0..diagram.graph.n_edges()).map(|i| (i, vec![i])).collect(),
+            (0..diagram.graph.n_hedges()).map(|i| (i, i)).collect(),
+            BTreeMap::new(),
+        )
+    }
+
+    /// Translate from parent owners; a vertex context resolves split edge copies.
+    pub fn translate_atom(
+        &self,
+        atom: &Atom,
+        vertex: Option<VertexId>,
+    ) -> Result<Atom, DiagramError> {
+        self.forward.translate(atom, vertex)
+    }
+
+    /// Restore a result expressed in the derived graph's owners to parent owners.
+    /// Artificial surrogate owners have no inverse and are rejected.
+    pub fn restore_atom(&self, atom: &Atom) -> Result<Atom, DiagramError> {
+        self.backward.translate(atom, None)
+    }
+
+    /// Translate the expression and its declared open tensor ports together.
+    pub fn translate_tensor(
+        &self,
+        tensor: &SymbolicTensor<PartialStructure>,
+        vertex: Option<VertexId>,
+    ) -> Result<SymbolicTensor<PartialStructure>, DiagramError> {
+        NumeratorInterface::translate(tensor, |atom| self.translate_atom(atom, vertex))
+    }
+
+    /// Restore the expression and its declared open tensor ports together.
+    pub fn restore_tensor(
+        &self,
+        tensor: &SymbolicTensor<PartialStructure>,
+    ) -> Result<SymbolicTensor<PartialStructure>, DiagramError> {
+        NumeratorInterface::translate(tensor, |atom| self.restore_atom(atom))
+    }
+
+    pub fn edge(&self, edge: EdgeId) -> Option<EdgeId> {
+        match self.forward.edges.get(&edge.0)?.as_slice() {
+            [edge] => Some(EdgeId(*edge)),
+            _ => None,
+        }
+    }
+
+    pub fn vertex(&self, vertex: VertexId) -> Option<VertexId> {
+        match self.forward.vertices.get(&vertex.0)?.as_slice() {
+            [vertex] => Some(VertexId(*vertex)),
+            _ => None,
+        }
+    }
+
+    pub fn half_edge(&self, half_edge: DiagramHalfEdge) -> Option<DiagramHalfEdge> {
+        self.endpoints.get(&half_edge).copied()
+    }
+
+    /// Transport a surviving support into the derived half-edge universe.
+    pub fn translate_subgraph(&self, support: &SuBitGraph) -> Result<SuBitGraph, DiagramError> {
+        let error = |message: &str| DiagramError::Invariant {
+            operation: "transporting a diagram support",
+            message: message.into(),
+        };
+        if support.size() != self.parent_hedges {
+            return Err(error("selection has a different parent half-edge universe"));
+        }
+        let mut translated = SuBitGraph::empty(self.derived_hedges);
+        for hedge in support.included_iter() {
+            let Some([mapped]) = self.forward.hedges.get(&hedge.0).map(Vec::as_slice) else {
+                return Err(error(
+                    "selection contains an owner removed by the transformation",
+                ));
+            };
+            translated.add(Hedge(*mapped));
+        }
+        Ok(translated)
+    }
+
+    pub fn translate_half_edge(
+        &self,
+        half_edge: DiagramHalfEdge,
+    ) -> Result<DiagramHalfEdge, DiagramError> {
+        self.half_edge(half_edge)
+            .ok_or_else(|| DiagramError::Invariant {
+                operation: "transporting a diagram attachment",
+                message: format!("half-edge {half_edge:?} was removed by the transformation"),
+            })
+    }
+}
+
+/// An independent region together with its exact parent ownership map.
+#[derive(Clone, Debug)]
+pub struct ExcisedDiagram {
+    pub diagram: FeynmanDiagram,
+    pub relabeling: DiagramRelabeling,
+}
 
 impl FeynmanDiagram {
     /// Excise an independent diagram, preserving the valence of retained vertices.
@@ -39,6 +305,17 @@ impl FeynmanDiagram {
         subgraph: &SuBitGraph,
         isolated_vertices: &[VertexId],
     ) -> Result<Self, DiagramError> {
+        Ok(self
+            .excise_with_mapping(subgraph, isolated_vertices)?
+            .diagram)
+    }
+
+    /// Excise a region and retain bidirectional transport of symbolic owners.
+    pub fn excise_with_mapping(
+        &self,
+        subgraph: &SuBitGraph,
+        isolated_vertices: &[VertexId],
+    ) -> Result<ExcisedDiagram, DiagramError> {
         let error = |message: String| DiagramError::Invariant {
             operation: "excising a diagram region",
             message,
@@ -66,7 +343,10 @@ impl FeynmanDiagram {
         }
         if subgraph.n_included() == self.graph.n_hedges() && retained.len() == self.graph.n_nodes()
         {
-            return Ok(self.clone());
+            return Ok(ExcisedDiagram {
+                diagram: self.clone(),
+                relabeling: DiagramRelabeling::identity(self),
+            });
         }
 
         let mut contributing = BTreeSet::new();
@@ -185,90 +465,20 @@ impl FeynmanDiagram {
             .into_iter()
             .map(|(old, new)| (old.0, diagram.half_edge_id(new).unwrap().0))
             .collect::<BTreeMap<_, _>>();
-        let translate = |atom: &Atom, vertex: Option<VertexId>| -> Result<Atom, DiagramError> {
-            let mut failure = None;
-            let result = atom.replace_map_bottom_up(|term, _, out| {
-                let AtomView::Fun(function) = term else {
-                    return;
-                };
-                let mut head = function.get_symbol();
-                let args = function.iter().collect::<Vec<_>>();
-                let Some(mut owner) = args.first().and_then(|arg| usize::try_from(*arg).ok())
-                else {
-                    return;
-                };
-                let mapped = if head == symbols::hedge_index() {
-                    hedges.get(&owner).copied()
-                } else if head == symbols::vertex_index() {
-                    vertices.get(&owner).copied()
-                } else {
-                    if head == symbols::loop_momentum() || head == symbols::external_momentum() {
-                        let coordinates = if head == symbols::loop_momentum() {
-                            &self.loop_momentum_basis.loop_edges
-                        } else {
-                            &self.loop_momentum_basis.external_edges
-                        };
-                        let Some(edge) = coordinates.get(owner) else {
-                            failure = Some(format!("unknown parent momentum coordinate {owner}"));
-                            return;
-                        };
-                        owner = edge.0;
-                        head = symbols::momentum();
-                    }
-                    if ![
-                        symbols::edge_index(),
-                        symbols::momentum(),
-                        symbols::denominator(),
-                        symbols::u(),
-                        symbols::ubar(),
-                        symbols::v(),
-                        symbols::vbar(),
-                        symbols::epsilon(),
-                        symbols::epsilonbar(),
-                    ]
-                    .contains(&head)
-                    {
-                        return;
-                    }
-                    let candidates = vertex
-                        .and_then(|v| vertex_edges.get(&(v.0, owner)))
-                        .or_else(|| edges.get(&owner));
-                    match candidates.map(Vec::as_slice) {
-                        Some([edge]) => Some(*edge),
-                        Some(_) => {
-                            failure = Some(format!(
-                                "symbolic edge {owner} has multiple boundary copies"
-                            ));
-                            return;
-                        }
-                        None => None,
-                    }
-                };
-                let Some(mapped) = mapped else {
-                    failure = Some(format!(
-                        "symbolic index {owner} lies outside the excised region"
-                    ));
-                    return;
-                };
-                **out = FunctionBuilder::new(head)
-                    .add_arg(mapped)
-                    .add_args(args[1..].iter().copied())
-                    .finish();
-            });
-            failure.map_or(Ok(result), |message| Err(error(message)))
-        };
+        let relabeling =
+            DiagramRelabeling::new(self, &diagram, vertices, edges, hedges, vertex_edges);
         diagram.validation.take();
         diagram.graph = diagram.graph.map_result(
             |_, id, mut vertex| {
                 vertex.numerator = NumeratorInterface::translate(&vertex.numerator, |atom| {
-                    translate(atom, Some(original_vertices[id.0]))
+                    relabeling.translate_atom(atom, Some(original_vertices[id.0]))
                 })?;
                 Ok::<_, DiagramError>(vertex)
             },
             |_, _, _, _, mut data| {
                 data.data.numerator =
                     NumeratorInterface::translate(&data.data.numerator, |atom| {
-                        translate(atom, None)
+                        relabeling.translate_atom(atom, None)
                     })?;
                 Ok(data)
             },
@@ -276,7 +486,10 @@ impl FeynmanDiagram {
         )?;
         diagram.numerator = Self::fragment_numerator(&diagram.graph)?;
         diagram.validate()?;
-        Ok(diagram)
+        Ok(ExcisedDiagram {
+            diagram,
+            relabeling,
+        })
     }
 }
 
@@ -287,12 +500,12 @@ mod tests {
     use feynkit_model::Model;
     use linnet::half_edge::{
         involution::{EdgeIndex, Hedge},
-        subgraph::{BaseSubgraph, ModifySubSet},
+        subgraph::BaseSubgraph,
     };
     use symbolica::function;
 
     use super::*;
-    use crate::{DiagramEdge, DiagramVertex, EdgeId};
+    use crate::{DiagramEdge, DiagramVertex};
 
     fn model() -> Arc<Model> {
         Arc::new(Model::from_json(r#"{

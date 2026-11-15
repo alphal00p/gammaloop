@@ -1,7 +1,10 @@
 use crate::tensor::inference::InterfaceInference;
 use ahash::HashMap;
 use spenso::network::tags::SPENSO_TAG;
-use std::sync::{Arc, Mutex};
+use std::{
+    cell::RefCell,
+    sync::{Arc, Mutex},
+};
 use symbolica::{
     atom::{
         Atom, AtomCore, AtomView, FunctionBuilder, NamespacedSymbol, Symbol, SymbolBuilder,
@@ -10,6 +13,15 @@ use symbolica::{
     coefficient::CoefficientView,
     parser::{ParseSettings, Token},
 };
+
+thread_local! {
+    // Dimension symbols and their validated payloads are immutable. Keep the
+    // small hot set local to each worker rather than adding a shared lock to
+    // every slot inspection. Neither rejected nor oversized payloads are kept.
+    static DIMENSION_PAYLOADS: RefCell<HashMap<Symbol, Atom>> = RefCell::new(HashMap::default());
+    #[cfg(test)]
+    static DIMENSION_DECODES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, thiserror::Error)]
 pub enum CookingError {
@@ -650,9 +662,9 @@ impl CookSettings {
             use std::fmt::Write;
             write!(&mut name, "{byte:02x}").unwrap();
         }
-        self.build_symbol(name, None, self.output_tags.explicit_tags())
-            .map(Atom::var)
-            .map(Some)
+        let symbol = self.build_symbol(name, None, self.output_tags.explicit_tags())?;
+        Self::remember_dimension_payload(symbol, dimension);
+        Ok(Some(Atom::var(symbol)))
     }
 
     fn portable_dimension(value: AtomView<'_>) -> bool {
@@ -689,6 +701,10 @@ impl CookSettings {
         let hex = symbol
             .get_name()
             .strip_prefix("idenso::cooked_dimension_v1_")?;
+        if let Some(payload) = DIMENSION_PAYLOADS.with(|cache| cache.borrow().get(&symbol).cloned())
+        {
+            return Some(payload);
+        }
         if !hex.len().is_multiple_of(2) {
             return None;
         }
@@ -703,6 +719,8 @@ impl CookSettings {
             })
             .collect::<Option<Vec<_>>>()?;
         let text = String::from_utf8(bytes).ok()?;
+        #[cfg(test)]
+        DIMENSION_DECODES.with(|count| count.set(count.get() + 1));
         // Tokenize without constructing products. Reject function calls before any
         // normalization can invoke a callback on a forged or unsupported payload.
         let token =
@@ -716,7 +734,29 @@ impl CookSettings {
             }
         }
         let atom = Atom::parse(&text, "idenso", ParseSettings::default()).ok()?;
-        Self::portable_dimension(atom.as_view()).then_some(atom)
+        if !Self::portable_dimension(atom.as_view()) {
+            return None;
+        }
+        Self::remember_dimension_payload(symbol, atom.as_view());
+        Some(atom)
+    }
+
+    // A byte limit as well as an entry limit bounds memory for authored
+    // dimension expressions. Misses always retain the original decode checks.
+    const DIMENSION_CACHE_ENTRIES: usize = 64;
+    const DIMENSION_CACHE_BYTES: usize = 16 * 1024;
+
+    fn remember_dimension_payload(symbol: Symbol, payload: AtomView<'_>) {
+        if payload.get_byte_size() > Self::DIMENSION_CACHE_BYTES {
+            return;
+        }
+        DIMENSION_PAYLOADS.with(|cache| {
+            let mut cache = cache.borrow_mut();
+            if cache.len() == Self::DIMENSION_CACHE_ENTRIES && !cache.contains_key(&symbol) {
+                cache.clear();
+            }
+            cache.insert(symbol, payload.to_owned());
+        });
     }
 
     fn cook_function_symbol(
@@ -1334,8 +1374,91 @@ mod tests {
                 .unwrap(),
         );
         calls.store(0, Ordering::Relaxed);
-        assert_eq!(settings.uncook(forged.as_view()), forged);
+        for _ in 0..2 {
+            assert_eq!(settings.uncook(forged.as_view()), forged);
+        }
         assert_eq!(calls.load(Ordering::Relaxed), 0);
+        assert!(
+            super::DIMENSION_PAYLOADS
+                .with(|cache| { !cache.borrow().contains_key(&forged.get_symbol().unwrap()) })
+        );
+    }
+
+    #[test]
+    fn dimension_payload_cache_seeds_and_decodes_once_per_worker() {
+        use symbolica::atom::AtomCore;
+
+        test_initialize();
+        super::DIMENSION_PAYLOADS.with(|cache| cache.borrow_mut().clear());
+        let settings = CookSettings::reversible();
+        let expected = parse_lit!(idenso::dimension_cache_n ^ 2 - 1);
+        let symbol = settings
+            .cook_dimension(expected.as_view())
+            .unwrap()
+            .unwrap()
+            .get_symbol()
+            .unwrap();
+        let before = super::DIMENSION_DECODES.with(std::cell::Cell::get);
+        for _ in 0..16 {
+            assert_eq!(
+                CookSettings::dimension_payload(symbol),
+                Some(expected.clone())
+            );
+        }
+        assert_eq!(super::DIMENSION_DECODES.with(std::cell::Cell::get), before);
+
+        // A worker which did not create the symbol must decode its portable
+        // name once, then reuse the same validated payload without parsing.
+        std::thread::spawn(move || {
+            let before = super::DIMENSION_DECODES.with(std::cell::Cell::get);
+            for _ in 0..16 {
+                assert_eq!(
+                    CookSettings::dimension_payload(symbol),
+                    Some(expected.clone())
+                );
+            }
+            assert_eq!(
+                super::DIMENSION_DECODES.with(std::cell::Cell::get),
+                before + 1
+            );
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
+    fn dimension_payload_cache_eviction_preserves_portable_decoding() {
+        use symbolica::atom::AtomCore;
+
+        test_initialize();
+        super::DIMENSION_PAYLOADS.with(|cache| cache.borrow_mut().clear());
+        let settings = CookSettings::reversible();
+        let variable = Atom::var(symbol!("idenso::dimension_cache_eviction_n"));
+        let mut first = None;
+        for number in 1..=CookSettings::DIMENSION_CACHE_ENTRIES + 1 {
+            let payload = &variable + Atom::num(number as i64);
+            let symbol = settings
+                .cook_dimension(payload.as_view())
+                .unwrap()
+                .unwrap()
+                .get_symbol()
+                .unwrap();
+            first.get_or_insert_with(|| (symbol, payload.clone()));
+            assert_eq!(CookSettings::dimension_payload(symbol), Some(payload));
+            assert!(
+                super::DIMENSION_PAYLOADS.with(|cache| {
+                    cache.borrow().len() <= CookSettings::DIMENSION_CACHE_ENTRIES
+                })
+            );
+        }
+        let (symbol, payload) = first.unwrap();
+        assert!(super::DIMENSION_PAYLOADS.with(|cache| !cache.borrow().contains_key(&symbol)));
+        let before = super::DIMENSION_DECODES.with(std::cell::Cell::get);
+        assert_eq!(CookSettings::dimension_payload(symbol), Some(payload));
+        assert_eq!(
+            super::DIMENSION_DECODES.with(std::cell::Cell::get),
+            before + 1
+        );
     }
 
     #[test]

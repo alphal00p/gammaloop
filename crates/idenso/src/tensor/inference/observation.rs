@@ -170,7 +170,13 @@ impl InterfaceInference {
         if scope.count_indices && matches!(value, AtomView::Fun(_)) {
             super::tests::OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(count.get() + 1));
         }
-        let mut result = ExplicitIndexOccurrences::default();
+        // This recursive pass already owns a randomized hash builder. Reuse
+        // its keys for per-node scratch maps instead of generating fresh ones
+        // even for scalar nodes that never contain an explicit index.
+        let mut result = ExplicitIndexOccurrences {
+            counts: AHashMap::with_hasher(cache.hasher().clone()),
+            selected_pair: false,
+        };
         if let Ok(slot) = slots.parse::<LibraryRep, AbstractIndex>(value) {
             if scope.count_indices {
                 result.add(slot.rep().base().slot(slot.aind()), 1);

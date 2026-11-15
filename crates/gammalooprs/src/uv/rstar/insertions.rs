@@ -1,0 +1,1242 @@
+//! Bare propagator-insertion identities with the original UV forest kept separate.
+
+use std::{
+    collections::{BTreeSet, HashMap},
+    sync::{Arc, LazyLock, Mutex, OnceLock},
+    time::{Duration, Instant},
+};
+
+use eyre::{Result, WrapErr, ensure, eyre};
+use feynkit_graph::{
+    DiagramEdge, DiagramRelabeling, DiagramVertex, ExternalLeg, ExternalState, FeynmanDiagram,
+    NumeratorInterface, PropagatorInsertion, VertexId,
+};
+use idenso::{CookMode, CookSettings, tensor::SymbolicTensor};
+use spenso::{network::parsing::ParseState, structure::abstract_index::AbstractIndex};
+use symbolica::{
+    atom::{Atom, AtomCore, AtomView, Symbol},
+    function, symbol,
+};
+use vakint::Vakint;
+
+use crate::{
+    feyngen::feynkit::FeynmanDiagramGammaLoopExt,
+    graph::FeynmanGraph,
+    numerator::aind::Aind,
+    utils::{GS, W_},
+    uv::{
+        UVgenerationSettings,
+        counterterm_cache::{CacheTimingPhase, CacheTimingStats, CacheTimings},
+        counterterm_identity::{CountertermIdentity, CountertermKey},
+    },
+};
+
+use linnet::half_edge::{
+    NodeIndex,
+    subgraph::{SuBitGraph, SubSetOps},
+};
+
+use super::{
+    CountertermCache, InsertionSkeletonIdentity, RStarPlan, expression::RStarIntegrand,
+    integrate_propagator,
+};
+
+type CachedIntegral = Arc<OnceLock<Result<Atom, String>>>;
+
+/// Cached open tensors share integration-local names. Freshen only contracted
+/// indices on each use, preserving their established public boundary ports.
+fn freshen_insertion_indices(coefficient: &Atom, reservation_context: &[Atom]) -> Result<Atom> {
+    let state = ParseState::<Aind>::default();
+    for expression in reservation_context {
+        state.reserve_indices(expression.as_view());
+    }
+    state.reserve_indices(coefficient.as_view());
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    static MARKER: LazyLock<Symbol> = LazyLock::new(|| symbol!("rstar_insertion_internal_scope"));
+    let marker = *MARKER;
+    let scoped = SymbolicTensor::infer(cooking.try_cook(coefficient.as_view())?)?
+        .wrap_indices(marker, true)?;
+    let mut names = HashMap::new();
+    let expression = scoped.expression().replace_map(|term, _, out| {
+        if let AtomView::Fun(fun) = term
+            && fun.get_symbol() == AbstractIndex::scope_symbol()
+            && matches!(fun.iter().next(), Some(AtomView::Var(scope)) if scope.get_symbol() == marker)
+        {
+            // Lower the temporary native scope to the existing runtime Aind
+            // representation, which the R* tensor/parser bridge accepts.
+            **out = names
+                .entry(term.to_owned())
+                .or_insert_with(|| Atom::from(state.fresh_index()))
+                .clone();
+        }
+    });
+    Ok(cooking.uncook(expression.as_view()))
+}
+
+/// The bare poles of the original graph, without its overall factor or projector.
+pub struct InsertionPoleResult {
+    pub poles: Atom,
+    pub insertions: usize,
+    pub insertion_loops: usize,
+}
+
+/// One selected insertion, expressed in the final surrogate's owner frame.
+pub struct PreparedInsertionHole {
+    pub vertex: VertexId,
+    pub loops: usize,
+    pub coefficient: Atom,
+    /// The selected support and boundary in the original input graph.
+    pub original: PropagatorInsertion,
+}
+
+/// A bare insertion identity before the outer propagator is integrated.
+///
+/// Local coefficient ownership is retained for the ordinary R* fallback above
+/// four loops. Group integration instead transports the complete numerator,
+/// including the correlated product of all holes, into one physical integrand.
+pub struct PreparedInsertion {
+    surrogate: FeynmanDiagram,
+    holes: Vec<PreparedInsertionHole>,
+    maps: Vec<DiagramRelabeling>,
+    identity: OnceLock<Result<InsertionSkeletonIdentity, String>>,
+    context: Arc<()>,
+    extraction_elapsed: Duration,
+}
+
+impl PreparedInsertion {
+    pub fn surrogate(&self) -> &FeynmanDiagram {
+        &self.surrogate
+    }
+
+    pub fn holes(&self) -> &[PreparedInsertionHole] {
+        &self.holes
+    }
+
+    pub fn loop_count(&self) -> usize {
+        self.surrogate.loop_count()
+    }
+
+    /// The complete local numerator, excluding global factors and projectors.
+    pub fn complete_numerator(&self) -> Atom {
+        NumeratorInterface::export(self.surrogate.numerator()).0
+    }
+
+    /// Remove only the selected coefficients; all outside local rules survive.
+    pub fn skeleton(&self) -> Result<FeynmanDiagram> {
+        let one = SymbolicTensor::infer(Atom::one())?;
+        Ok(self.surrogate.clone().with_numerator_fragments(
+            self.holes.iter().map(|hole| (hole.vertex, one.clone())),
+            [],
+        )?)
+    }
+
+    /// Exact dressed skeleton identity, computed only when grouping is requested.
+    pub fn skeleton_identity(&self) -> Result<&InsertionSkeletonIdentity> {
+        self.identity
+            .get_or_init(|| {
+                let build = || -> Result<InsertionSkeletonIdentity> {
+                    let skeleton = self.skeleton()?;
+                    let graph = skeleton.to_gamma_loop_graph(None, true)?;
+                    // The native bridge maps graph data in place, preserving node IDs.
+                    let holes = self
+                        .holes
+                        .iter()
+                        .map(|hole| (NodeIndex(hole.vertex.0), hole.loops))
+                        .collect::<Vec<_>>();
+                    InsertionSkeletonIdentity::new(&graph, skeleton.model(), &holes)
+                };
+                build().map_err(|error| format!("{error:#}"))
+            })
+            .as_ref()
+            .map_err(|error| eyre!(error.clone()))
+    }
+
+    /// Restore an integrated tensor in this surrogate's external frame.
+    pub fn restore_atom(&self, expression: &Atom) -> Result<Atom> {
+        let mut restored = expression.clone();
+        for map in self.maps.iter().rev() {
+            restored = map.restore_atom(&restored)?;
+        }
+        Ok(restored)
+    }
+}
+
+/// A weighted aggregate, in the first supplied member's surrogate frame.
+///
+/// This cannot be recorded as an individual member's integral. Every original
+/// graph still needs its own proper-UV forest contribution, even when `poles`
+/// is zero. No global graph factor or projector is added implicitly.
+pub struct GroupedInsertionPoleResult {
+    pub poles: Atom,
+    pub members: usize,
+    pub insertions: usize,
+    pub insertion_loops: usize,
+}
+
+/// Evaluate proper two-point regions once and replace them by scalar bubbles.
+///
+/// This implements the *bare-amplitude* identity in arXiv:1801.06084, Eq. (3.2).
+/// It must not be used to replace the local counterterm by that of the surrogate:
+/// epsilon-dependent insertion coefficients do not commute with the child pole
+/// maps. Feed the returned poles to the original plan's
+/// [`RStarPlan::counterterm_from_pole_part`] instead.
+///
+/// All open tensors are retained, including longitudinal terms and fermion
+/// chains. No particle-specific self-energy ansatz or transversality is assumed.
+/// Settings are fixed for the evaluator's lifetime. Its cache matches dressed
+/// particle graphs up to isomorphism and contracted-index renaming, transporting
+/// the stored open amplitude into each caller's boundary slots and momenta.
+pub struct PropagatorInsertionEvaluator {
+    settings: UVgenerationSettings,
+    cache: Mutex<HashMap<(String, usize, CountertermKey), CachedIntegral>>,
+    counterterm_cache: Option<Arc<CountertermCache>>,
+    timings: CacheTimings,
+    context: Arc<()>,
+}
+
+impl PropagatorInsertionEvaluator {
+    pub fn new(settings: UVgenerationSettings) -> Self {
+        Self {
+            settings,
+            cache: Mutex::new(HashMap::new()),
+            counterterm_cache: None,
+            timings: CacheTimings::default(),
+            context: Arc::new(()),
+        }
+    }
+
+    /// Enable optional cache-phase accounting without changing cached values.
+    pub fn with_timing(mut self, enabled: bool) -> Self {
+        self.timings = CacheTimings::new(enabled);
+        self
+    }
+
+    pub fn cache_timing(&self) -> Option<CacheTimingStats> {
+        self.timings.stats()
+    }
+
+    /// Share complete UV counterterms with surrounding graph evaluations.
+    pub fn with_counterterm_cache(mut self, cache: Arc<CountertermCache>) -> Self {
+        self.counterterm_cache = Some(cache);
+        self
+    }
+
+    /// Extract a maximal vertex-disjoint set, preferring larger regions.
+    ///
+    /// Nested regions are included in their largest selected ancestor's direct
+    /// integral. Each selected region must have at most four loops. A graph
+    /// without eligible insertions returns `None`, allowing the full-graph path.
+    pub fn pole_part(
+        &self,
+        diagram: &FeynmanDiagram,
+        vakint: &Vakint,
+    ) -> Result<Option<InsertionPoleResult>> {
+        self.prepare(diagram, vakint)?
+            .map(|prepared| self.pole_part_of_prepared(&prepared, vakint))
+            .transpose()
+    }
+
+    /// Prepare the same bare identity as [`Self::pole_part`] without integrating
+    /// its outer skeleton. A preparation belongs to this evaluator's settings.
+    pub fn prepare(
+        &self,
+        diagram: &FeynmanDiagram,
+        vakint: &Vakint,
+    ) -> Result<Option<PreparedInsertion>> {
+        ensure!(
+            diagram.cuts().is_empty(),
+            "insertion evaluation requires an uncut amplitude"
+        );
+        let mut candidates = diagram.propagator_insertions()?;
+        candidates.retain(|candidate| candidate.loops <= 4);
+        candidates.sort_by_key(|candidate| std::cmp::Reverse(candidate.loops));
+        let mut occupied = BTreeSet::new();
+        let selected = candidates
+            .into_iter()
+            .filter(|candidate| {
+                let vertices = diagram.underlying().nodes(&candidate.support);
+                if vertices.iter().any(|vertex| occupied.contains(vertex)) {
+                    false
+                } else {
+                    occupied.extend(vertices);
+                    true
+                }
+            })
+            .collect::<Vec<_>>();
+        if selected.is_empty() {
+            return Ok(None);
+        }
+        let loops = diagram.loop_count();
+        let extraction_started = Instant::now();
+        let mut surrogate = diagram.clone();
+        let mut maps: Vec<DiagramRelabeling> = Vec::new();
+        let mut holes: Vec<PreparedInsertionHole> = Vec::new();
+        for insertion in &selected {
+            let excised = diagram.excise_with_mapping(&insertion.support, &[])?;
+            let coefficient = self.normalized_insertion(&excised.diagram, vakint, loops)?;
+            let vanishes = coefficient.is_zero();
+            let mut coefficient = freshen_insertion_indices(
+                &excised.relabeling.restore_atom(&coefficient)?,
+                &[
+                    NumeratorInterface::export(surrogate.numerator()).0,
+                    NumeratorInterface::export(surrogate.projector()).0,
+                    NumeratorInterface::export(surrogate.numerator_prefactor()).0,
+                ],
+            )?;
+            let mut current = insertion.clone();
+            for map in &maps {
+                coefficient = map.translate_atom(&coefficient, None)?;
+                current = PropagatorInsertion {
+                    support: map.translate_subgraph(&current.support)?,
+                    boundary: [
+                        map.translate_half_edge(current.boundary[0])?,
+                        map.translate_half_edge(current.boundary[1])?,
+                    ],
+                    loops: current.loops,
+                };
+            }
+            let particle = surrogate
+                .edges()
+                .find(|(id, _, _)| *id == current.boundary[0].edge)
+                .ok_or_else(|| eyre!("missing insertion boundary edge"))?
+                .2
+                .particle;
+            let replacement = surrogate.scalar_bubble_surrogate(&current, particle)?;
+            surrogate = replacement.with_coefficient(&SymbolicTensor::infer(coefficient)?)?;
+            for hole in &mut holes {
+                hole.vertex = replacement
+                    .relabeling
+                    .vertex(hole.vertex)
+                    .ok_or_else(|| eyre!("a disjoint insertion lost its coefficient vertex"))?;
+                hole.coefficient = replacement
+                    .relabeling
+                    .translate_atom(&hole.coefficient, None)?;
+            }
+            let coefficient = surrogate
+                .vertices()
+                .find(|(id, _)| *id == replacement.coefficient_vertex)
+                .ok_or_else(|| eyre!("missing insertion coefficient vertex"))?
+                .1;
+            holes.push(PreparedInsertionHole {
+                vertex: replacement.coefficient_vertex,
+                loops: insertion.loops,
+                coefficient: NumeratorInterface::export(&coefficient.numerator).0,
+                original: insertion.clone(),
+            });
+            maps.push(replacement.relabeling);
+            // The complete bare product already vanishes. Preserve the old
+            // early exit without evaluating further insertion coefficients.
+            if vanishes {
+                break;
+            }
+        }
+        Ok(Some(PreparedInsertion {
+            surrogate,
+            holes,
+            maps,
+            identity: OnceLock::new(),
+            context: self.context.clone(),
+            extraction_elapsed: extraction_started.elapsed(),
+        }))
+    }
+
+    /// Integrate one prepared identity, retaining local ownership above four
+    /// loops and returning the original graph's external tensor frame.
+    pub fn pole_part_of_prepared(
+        &self,
+        prepared: &PreparedInsertion,
+        vakint: &Vakint,
+    ) -> Result<InsertionPoleResult> {
+        self.check_preparation(prepared)?;
+        let surrogate = &prepared.surrogate;
+        let loops = prepared.loop_count();
+        let surrogate_started = Instant::now();
+        // Through four loops the physical propagator backend gives KG directly.
+        // Reconstructing it through R* would compute a second, unnecessary UV
+        // forest: the caller still needs the original graph's forest for Delta.
+        let poles = if prepared.complete_numerator().is_zero() {
+            Ok(Atom::Zero)
+        } else if loops <= 4 {
+            let graph = surrogate.to_gamma_loop_graph(None, true)?;
+            integrate_propagator(
+                &graph,
+                surrogate.model(),
+                vakint,
+                &self.settings,
+                loops as i64,
+            )
+        } else {
+            let graph = surrogate.to_gamma_loop_graph(None, true)?;
+            let mut plan =
+                RStarPlan::with_automatic_edge(&graph, surrogate.model(), &self.settings)?;
+            if let Some(cache) = &self.counterterm_cache {
+                plan = plan.with_counterterm_cache(cache.clone());
+            }
+            plan.pole_part(&graph, surrogate.model(), vakint, &self.settings)
+        }
+        .wrap_err("while evaluating the scalar-bubble surrogate's bare poles")?;
+        let poles = prepared.restore_atom(&poles)?;
+        tracing::info!(
+            uv = true,
+            rstar = true,
+            timing = true,
+            insertions = prepared.holes.len(),
+            insertion_loops = prepared.holes.iter().map(|hole| hole.loops).sum::<usize>(),
+            extraction_seconds = prepared.extraction_elapsed.as_secs_f64(),
+            surrogate_seconds = surrogate_started.elapsed().as_secs_f64(),
+            "Evaluated bare poles with propagator insertions extracted"
+        );
+        Ok(InsertionPoleResult {
+            poles,
+            insertions: prepared.holes.len(),
+            insertion_loops: prepared.holes.iter().map(|hole| hole.loops).sum(),
+        })
+    }
+
+    /// Integrate one verified skeleton with the sum of the supplied weighted
+    /// complete numerators. Products at different sites remain correlated:
+    /// this sums actual members and never forms a Cartesian product of holes.
+    ///
+    /// Weights must be momentum-independent scalars regular at epsilon=0 and
+    /// include any desired original graph factors exactly once. At most four
+    /// loops are admitted: placing a multisite sum on one local vertex is only
+    /// valid for direct physical integration, not for a surrogate UV forest.
+    /// Call [`Self::pole_part_of_prepared`] separately above four loops.
+    pub fn weighted_pole_part(
+        &self,
+        members: &[(&PreparedInsertion, Atom)],
+        vakint: &Vakint,
+    ) -> Result<GroupedInsertionPoleResult> {
+        let (representative, _) = members
+            .first()
+            .ok_or_else(|| eyre!("an insertion group needs at least one member"))?;
+        self.check_preparation(representative)?;
+        let loops = representative.loop_count();
+        ensure!(
+            (1..=4).contains(&loops),
+            "grouped insertion integration supports at most four loops; retain per-member local ownership above four loops"
+        );
+        let identity = representative.skeleton_identity()?;
+        let mut numerator = Atom::Zero;
+        let mut insertions = 0;
+        let mut insertion_loops = 0;
+        for (member, weight) in members {
+            self.check_preparation(member)?;
+            ensure!(
+                member.loop_count() == loops,
+                "insertion group has different parent loop orders"
+            );
+            Self::validate_weight(weight)?;
+            let source_identity = member.skeleton_identity()?;
+            ensure!(
+                identity.key() == source_identity.key(),
+                "insertion group contains different dressed skeletons"
+            );
+            numerator +=
+                weight * identity.transport_from(source_identity, &member.complete_numerator())?;
+            insertions += member.holes.len();
+            insertion_loops += member.holes.iter().map(|hole| hole.loops).sum::<usize>();
+        }
+        // `with_numerator` keeps the complete tensor as one expression. This
+        // graph is used solely by the physical integrator, never by R* forests.
+        let poles = if numerator.is_zero() {
+            Atom::Zero
+        } else {
+            let diagram = representative
+                .surrogate
+                .clone()
+                // Identity transport restores source-owned indices, including
+                // functional dummy(n) labels. Re-admit that notation through
+                // the same reversible boundary as a retained graph numerator.
+                .with_numerator(NumeratorInterface::admit(numerator, None)?)?;
+            let graph = diagram.to_gamma_loop_graph(None, true)?;
+            integrate_propagator(
+                &graph,
+                diagram.model(),
+                vakint,
+                &self.settings,
+                loops as i64,
+            )
+            .wrap_err("while integrating a weighted insertion skeleton")?
+        };
+        Ok(GroupedInsertionPoleResult {
+            poles,
+            members: members.len(),
+            insertions,
+            insertion_loops,
+        })
+    }
+
+    fn check_preparation(&self, prepared: &PreparedInsertion) -> Result<()> {
+        ensure!(
+            Arc::ptr_eq(&self.context, &prepared.context),
+            "insertion preparation belongs to a different evaluator/settings context"
+        );
+        Ok(())
+    }
+
+    fn validate_weight(weight: &Atom) -> Result<()> {
+        use spenso::structure::partial::PartialStructureExt;
+        ensure!(
+            ![GS.emr_mom, GS.loop_mom, GS.external_mom]
+                .into_iter()
+                .any(|momentum| weight.contains_symbol(momentum)),
+            "insertion group weights must not depend on momenta"
+        );
+        ensure!(
+            SymbolicTensor::infer(weight.clone())?
+                .structure()
+                .logical_slots()
+                .is_empty(),
+            "insertion group weights must be scalars"
+        );
+        let epsilon_weight = weight
+            .replace(Atom::var(GS.dim))
+            .with(Atom::num(4) - Atom::num(2) * Atom::var(GS.dim_epsilon));
+        ensure!(
+            epsilon_weight
+                .series(GS.dim_epsilon, 0, -1)?
+                .to_atom()
+                .expand()
+                .together()
+                .is_zero(),
+            "insertion group weights must be regular in epsilon; singular weights require additional bare finite terms"
+        );
+        Ok(())
+    }
+
+    fn normalized_insertion(
+        &self,
+        insertion: &FeynmanDiagram,
+        vakint: &Vakint,
+        parent_loops: usize,
+    ) -> Result<Atom> {
+        let loops = insertion.loop_count();
+        // An N-loop surrogate has at most N poles. Its regular coefficient is
+        // therefore needed through eps^(N-1), requiring the L-loop insertion
+        // through eps^(N-L-1): precisely N terms in Vakint's convention.
+        let integral = self.integrate_cached(insertion, vakint, parent_loops)?;
+        if integral.is_zero() {
+            return Ok(Atom::Zero);
+        }
+        let bubble = scalar_bubble(insertion)?;
+        let bubble_integral = self.integrate_cached(&bubble, vakint, parent_loops)?;
+        let external = insertion
+            .edges()
+            .find_map(|(id, _, data)| data.external.as_ref().map(|_| id))
+            .ok_or_else(|| eyre!("excised insertion has no external momentum"))?;
+        let bubble_integral = bubble_integral
+            .replace(function!(GS.emr_mom, 0, W_.x___))
+            .with(function!(GS.emr_mom, external.0, W_.x___));
+        let coefficient = (integral / bubble_integral.pow(loops))
+            .series(GS.dim_epsilon, 0, parent_loops as i64 - 1)?
+            .to_atom()
+            .expand()
+            .together();
+        ensure!(
+            coefficient
+                .series(GS.dim_epsilon, 0, -1)?
+                .to_atom()
+                .expand()
+                .is_zero(),
+            "normalized insertion has epsilon poles; scalar-bubble bare poles alone are insufficient"
+        );
+        ensure!(
+            !coefficient.contains_symbol(Symbol::LOG) && !coefficient.contains_symbol(GS.mu_r_sq),
+            "insertion scale did not cancel against the scalar bubbles: {coefficient}"
+        );
+        // The surrogate R* forest requires local polynomial vertices. A more
+        // general insertion can produce inverse external invariants, which
+        // must be encoded as line powers before that representation is valid.
+        let mut polynomial = true;
+        let _ = coefficient.replace_map_bottom_up(|term, _, _| {
+            if let AtomView::Pow(power) = term
+                && power.get_base().contains_symbol(GS.emr_mom)
+                && i64::try_from(power.get_exp())
+                    .ok()
+                    .is_none_or(|exponent| exponent < 0)
+            {
+                polynomial = false;
+            }
+        });
+        ensure!(
+            polynomial,
+            "normalized insertion is not polynomial in its external momentum"
+        );
+        Ok(coefficient)
+    }
+
+    fn integrate_cached(
+        &self,
+        diagram: &FeynmanDiagram,
+        vakint: &Vakint,
+        terms: usize,
+    ) -> Result<Atom> {
+        let mut timing = self.timings.start();
+        let graph = diagram.to_gamma_loop_graph(None, true)?;
+        let boundary = graph.external_filter::<SuBitGraph>();
+        let support = graph.no_dummy().subtract(&boundary);
+        let identity = CountertermIdentity::new(&graph, &support, diagram.model())?;
+        // The complete bare tensor is stored, not just its poles. Expansion
+        // depth belongs to the key; lower-loop finite terms enter parent poles.
+        let key = (
+            format!("{:?}", diagram.model().fingerprint()),
+            terms,
+            identity.key.clone(),
+        );
+        timing.lap(CacheTimingPhase::Key);
+        let entry = {
+            let mut cache = self
+                .cache
+                .lock()
+                .map_err(|_| eyre!("insertion cache lock poisoned"))?;
+            timing.lap(CacheTimingPhase::MapLockWait);
+            let entry = cache.entry(key).or_default().clone();
+            drop(cache);
+            timing.lap(CacheTimingPhase::MapLockHold);
+            entry
+        };
+        let canonical = timing
+            .resolve(&entry, |timing| {
+                let started = Instant::now();
+                let integral = integrate_propagator(
+                    &graph,
+                    diagram.model(),
+                    vakint,
+                    &self.settings,
+                    terms as i64,
+                );
+                timing.lap(CacheTimingPhase::Initializer);
+                let result = integral
+                    .and_then(|integral| identity.canonicalize_delta(&integral))
+                    .map_err(|error| format!("{error:#}"));
+                timing.lap(CacheTimingPhase::Store);
+                tracing::info!(
+                    uv = true,
+                    rstar = true,
+                    timing = true,
+                    loops = diagram.loop_count(),
+                    terms = terms,
+                    seconds = started.elapsed().as_secs_f64(),
+                    "Computed an uncached bare propagator insertion"
+                );
+                result
+            })
+            .clone()
+            .map_err(|error| eyre!(error))?;
+        // An isomorphism can send the stored momentum to either external leg.
+        // Restore the direct integrator's one-momentum convention before the
+        // amplitude is divided by its scalar-bubble normalization. This also
+        // identifies logarithms and finite terms, not just polynomial poles.
+        timing.restart();
+        let result = RStarIntegrand::physical_external_routing(&graph, &boundary).and_then(
+            |(_, routing)| {
+                Ok(identity
+                    .restore_delta(&canonical)?
+                    .replace_multiple(&routing))
+            },
+        );
+        timing.lap(CacheTimingPhase::Restore);
+        result
+    }
+}
+
+fn scalar_bubble(source: &FeynmanDiagram) -> Result<FeynmanDiagram> {
+    let particle = source
+        .edges()
+        .find(|(_, _, edge)| !edge.is_dummy)
+        .ok_or_else(|| eyre!("insertion has no propagators"))?
+        .2
+        .particle;
+    let directed = !source.model().particle_is_self_conjugate(particle);
+    let mut builder = FeynmanDiagram::builder(source.model_arc(), "insertion_normalization");
+    let mut vertex = |name: &str| {
+        builder.add_vertex(DiagramVertex {
+            name: name.into(),
+            interaction: None,
+            numerator: SymbolicTensor::infer(Atom::one()).unwrap(),
+        })
+    };
+    let left = vertex("left");
+    let right = vertex("right");
+    let mut incoming = DiagramEdge::new(particle, directed);
+    incoming.external = Some(ExternalLeg {
+        name: "in".into(),
+        index: 0,
+        state: ExternalState::Incoming,
+        connection: 0,
+    });
+    builder.add_edge(None, left, incoming)?;
+    builder.add_edge(left, right, DiagramEdge::new(particle, directed))?;
+    builder.add_edge(left, right, DiagramEdge::new(particle, directed))?;
+    let mut outgoing = DiagramEdge::new(particle, directed);
+    outgoing.external = Some(ExternalLeg {
+        name: "out".into(),
+        index: 1,
+        state: ExternalState::Outgoing,
+        connection: 1,
+    });
+    builder.add_edge(right, None, outgoing)?;
+    Ok(builder.build()?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{initialisation::test_initialise, model::Model};
+    use feynkit_graph::VertexId;
+    use idenso::representations::{Bispinor, ColorAdjoint};
+    use spenso::{
+        network::{library::symbolic::ETS, tags::SPENSO_TAG},
+        structure::{
+            partial::PartialStructureExt,
+            representation::{Minkowski, RepName},
+        },
+    };
+    use std::collections::HashSet;
+
+    #[test]
+    fn cached_open_dirac_and_color_tensors_get_independent_dummy_indices() -> Result<()> {
+        test_initialise()?;
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let spin = Bispinor {}.new_rep(4);
+        let color = ColorAdjoint {}.new_rep(8);
+        let mu = mink.to_symbolic([Atom::from(Aind::UVTerm(0, 1))]);
+        let nu = mink.to_symbolic([Atom::from(Aind::UVTerm(0, 2))]);
+        let internal_spin = spin.to_symbolic([Atom::from(Aind::UVTerm(0, 3))]);
+        let internal_color = color.to_symbolic([Atom::from(Aind::UVTerm(0, 4))]);
+        let cached = function!(
+            idenso::dirac::AGS.gamma,
+            spin.to_symbolic([Atom::from(Aind::Hedge(8, 0))]),
+            &internal_spin,
+            &mu
+        ) * function!(
+            idenso::dirac::AGS.gamma,
+            &internal_spin,
+            spin.to_symbolic([Atom::from(Aind::Hedge(9, 0))]),
+            &nu
+        ) * function!(GS.emr_mom, 0, &mu)
+            * function!(GS.emr_mom, 0, &nu)
+            * function!(
+                ETS.metric,
+                color.to_symbolic([Atom::from(Aind::Hedge(8, 1))]),
+                &internal_color
+            )
+            * function!(
+                ETS.metric,
+                &internal_color,
+                color.to_symbolic([Atom::from(Aind::Hedge(9, 1))])
+            );
+        // Simulate restoring one cache entry onto two disjoint graph regions.
+        let second = cached.replace_map(|term, _, out| {
+            if let AtomView::Fun(fun) = term
+                && fun.get_symbol() == GS.hedgeaind
+                && let Ok(Aind::Hedge(owner, local)) = Aind::try_from(term)
+            {
+                // Local slot zero is serialized as hedge(owner), whereas the
+                // color slot uses hedge(owner, 1); both must move together.
+                **out = Atom::from(Aind::Hedge(owner + 10, local));
+            }
+        });
+        for local in [0, 1] {
+            for owner in [8, 9] {
+                assert!(!second.contains(Atom::from(Aind::Hedge(owner, local))));
+                assert!(second.contains(Atom::from(Aind::Hedge(owner + 10, local))));
+            }
+        }
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let mut tensors = Vec::new();
+        let mut private_names = Vec::new();
+        let mut public_ports = Vec::new();
+        // Imported dummy labels need not have passed through the runtime Aind
+        // parser. Reserve all surrounding fragments before allocating names.
+        let imported_max = 1_000_002;
+        let mut context = (1_000_000..=imported_max)
+            .map(|index| {
+                function!(
+                    GS.emr_mom,
+                    31,
+                    mink.to_symbolic([Atom::from(Aind::Dummy(index))])
+                )
+            })
+            .collect::<Vec<_>>();
+        for source in [&cached, &second] {
+            let fresh = freshen_insertion_indices(source, &context)?;
+            assert!(!fresh.contains_symbol(GS.uvaind));
+            let mut names = HashSet::new();
+            fresh.as_view().visitor(&mut |term| {
+                if let AtomView::Fun(fun) = term
+                    && fun.get_symbol() == GS.dummyaind
+                {
+                    names.insert(Aind::try_from(term).expect("runtime-compatible dummy"));
+                    return false;
+                }
+                true
+            });
+            assert_eq!(names.len(), 4);
+            assert!(
+                names
+                    .iter()
+                    .all(|index| { matches!(index, Aind::Dummy(index) if *index > imported_max) })
+            );
+            let original = SymbolicTensor::infer(cooking.try_cook(source.as_view())?)?;
+            context.push(fresh.clone());
+            let fresh = SymbolicTensor::infer(cooking.try_cook(fresh.as_view())?)?;
+            let ports = fresh
+                .structure()
+                .logical_slots()
+                .into_iter()
+                .collect::<HashSet<_>>();
+            assert_eq!(ports.len(), 4);
+            assert_eq!(
+                original
+                    .structure()
+                    .logical_slots()
+                    .into_iter()
+                    .collect::<HashSet<_>>(),
+                ports
+            );
+            public_ports.push(ports);
+            private_names.push(names);
+            tensors.push(fresh);
+        }
+        assert!(private_names[0].is_disjoint(&private_names[1]));
+        assert!(public_ports[0].is_disjoint(&public_ports[1]));
+        let product = tensors[0].multiply(&tensors[1])?;
+        assert_eq!(product.structure().logical_slots().len(), 8);
+        Ok(())
+    }
+
+    fn serial_bubbles(count: usize) -> Result<FeynmanDiagram> {
+        let model = Arc::new(Model::from_json(
+            r#"{
+            "name":"insertion_identity","restriction":null,"orders":[],
+            "parameters":[{"name":"ZERO","lhablock":null,"lhacode":null,"nature":"internal","parameter_type":"real","value":[0.0,0.0],"expression":null}],
+            "particles":[{"pdg_code":25,"name":"phi","antiname":"phi","spin":1,"color":1,"mass":"ZERO","width":"ZERO","texname":"phi","antitexname":"phi","charge":0.0,"ghost_number":0,"lepton_number":0,"y_charge":0}],
+            "propagators":[],"lorentz_structures":[],"couplings":[],"vertex_rules":[]
+        }"#,
+        )?);
+        let particle = model.particle_id("phi")?;
+        let mut builder = FeynmanDiagram::builder(model, "serial_dressed_bubbles");
+        for vertex in 0..2 + 2 * count {
+            builder.add_vertex(DiagramVertex {
+                name: format!("v{vertex}"),
+                interaction: None,
+                numerator: SymbolicTensor::infer(Atom::one())?,
+            });
+        }
+        for (index, (source, target, state)) in [
+            (None, Some(VertexId(0)), ExternalState::Incoming),
+            (Some(VertexId(1)), None, ExternalState::Outgoing),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let mut edge = DiagramEdge::new(particle, false);
+            edge.external = Some(ExternalLeg {
+                name: format!("external_{index}"),
+                index,
+                state,
+                connection: index,
+            });
+            builder.add_edge(source, target, edge)?;
+        }
+        builder.add_edge(VertexId(0), VertexId(1), DiagramEdge::new(particle, false))?;
+        let mut previous = VertexId(0);
+        let mut numerators = Vec::new();
+        let vector = |edge: usize| {
+            function!(
+                GS.emr_mom,
+                edge,
+                Minkowski {}.new_rep(GS.dim).to_symbolic([])
+            )
+        };
+        for index in 0..count {
+            let left = VertexId(2 + 2 * index);
+            let right = VertexId(3 + 2 * index);
+            let boundary = builder.add_edge(previous, left, DiagramEdge::new(particle, false))?;
+            let internal = builder.add_edge(left, right, DiagramEdge::new(particle, false))?;
+            builder.add_edge(left, right, DiagramEdge::new(particle, false))?;
+            // A real loop-momentum numerator, localized within each insertion.
+            // Its integral is q²/2 times the bubble. The evanescent factor must
+            // survive both normalization and the original child pole maps.
+            numerators.push((
+                left,
+                SymbolicTensor::infer(
+                    (Atom::one() + Atom::var(GS.dim_epsilon))
+                        * function!(SPENSO_TAG.dot, vector(boundary.0), vector(internal.0)),
+                )?,
+            ));
+            previous = right;
+        }
+        builder.add_edge(previous, VertexId(1), DiagramEdge::new(particle, false))?;
+        Ok(builder.build()?.with_numerator_fragments(numerators, [])?)
+    }
+
+    fn check_serial(count: usize) -> Result<()> {
+        test_initialise()?;
+        let diagram = serial_bubbles(count)?;
+        let mut settings = super::super::tests::settings();
+        settings.vakint.normalization = "GScheme".into();
+        let evaluator = PropagatorInsertionEvaluator::new(settings.clone());
+        let vakint = Vakint::new()?;
+        let extracted = evaluator
+            .pole_part(&diagram, &vakint)?
+            .expect("proper insertions");
+        assert_eq!(extracted.insertions, count);
+        assert_eq!(extracted.insertion_loops, count);
+        let graph = diagram.to_gamma_loop_graph(None, true)?;
+        let direct = integrate_propagator(
+            &graph,
+            diagram.model(),
+            &vakint,
+            &settings,
+            diagram.loop_count() as i64,
+        )?;
+        super::super::tests::assert_same_counterterm(&extracted.poles, &direct)?;
+        let plan = RStarPlan::with_automatic_edge(&graph, diagram.model(), &settings)?;
+        let recovered = plan.counterterm_from_pole_part(
+            &graph,
+            diagram.model(),
+            &vakint,
+            &settings,
+            &extracted.poles,
+        )?;
+        let full = plan.counterterm(&graph, diagram.model(), &vakint, &settings)?;
+        super::super::tests::assert_same_counterterm(&recovered, &full)?;
+        // Cache reuse must not change tensor owners or the regulator depth.
+        let repeated = evaluator.pole_part(&diagram, &vakint)?.unwrap();
+        super::super::tests::assert_same_counterterm(&repeated.poles, &direct)
+    }
+
+    #[test]
+    fn extracted_dressed_bubble_preserves_bare_poles_and_original_counterterm() -> Result<()> {
+        check_serial(1)
+    }
+
+    #[test]
+    fn two_disjoint_dressed_insertions_preserve_three_loop_poles() -> Result<()> {
+        check_serial(2)
+    }
+
+    #[test]
+    fn grouped_multisite_sum_preserves_correlations_and_epsilon_depth() -> Result<()> {
+        test_initialise()?;
+        let template = serial_bubbles(2)?;
+        let epsilon = Atom::var(GS.dim_epsilon);
+        let factors = [
+            [Atom::one() + 2 * &epsilon, Atom::num(3) - &epsilon],
+            [Atom::num(4) - &epsilon, Atom::num(2) + 3 * &epsilon],
+        ];
+        let weights = [Atom::num(2) + &epsilon, Atom::num(-3) + 2 * &epsilon];
+        let mut settings = super::super::tests::settings();
+        settings.vakint.normalization = "GScheme".into();
+        let evaluator = PropagatorInsertionEvaluator::new(settings.clone());
+        let vakint = Vakint::new()?;
+        let mut prepared = Vec::new();
+        let mut direct = Vec::new();
+        for factors in &factors {
+            let fragments = [VertexId(2), VertexId(4)]
+                .into_iter()
+                .zip(factors)
+                .map(|(id, factor)| {
+                    let vertex = template
+                        .vertices()
+                        .find(|(vertex, _)| *vertex == id)
+                        .unwrap()
+                        .1;
+                    Ok((
+                        id,
+                        SymbolicTensor::infer(
+                            factor * NumeratorInterface::export(&vertex.numerator).0,
+                        )?,
+                    ))
+                })
+                .collect::<Result<Vec<_>>>()?;
+            let diagram = template.clone().with_numerator_fragments(fragments, [])?;
+            let graph = diagram.to_gamma_loop_graph(None, true)?;
+            direct.push(integrate_propagator(
+                &graph,
+                diagram.model(),
+                &vakint,
+                &settings,
+                3,
+            )?);
+            let term = evaluator
+                .prepare(&diagram, &vakint)?
+                .expect("two proper insertions");
+            assert_eq!(term.holes().len(), 2);
+            assert_eq!(term.loop_count(), 3);
+            // Both coefficients have been carried through the second replacement.
+            for hole in term.holes() {
+                let fragment = term
+                    .surrogate()
+                    .vertices()
+                    .find(|(id, _)| *id == hole.vertex)
+                    .unwrap()
+                    .1;
+                assert_eq!(
+                    hole.coefficient,
+                    NumeratorInterface::export(&fragment.numerator).0
+                );
+            }
+            let individual = evaluator.pole_part_of_prepared(&term, &vakint)?;
+            super::super::tests::assert_same_counterterm(
+                &individual.poles,
+                direct.last().unwrap(),
+            )?;
+            prepared.push(term);
+        }
+        let group = evaluator.weighted_pole_part(
+            &[
+                (&prepared[0], weights[0].clone()),
+                (&prepared[1], weights[1].clone()),
+            ],
+            &vakint,
+        )?;
+        assert_eq!(
+            (group.members, group.insertions, group.insertion_loops),
+            (2, 4, 4)
+        );
+        let actual = prepared[0].restore_atom(&group.poles)?;
+        let poles = |value: Atom| -> Result<Atom> {
+            Ok(value
+                .series(GS.dim_epsilon, 0, -1)?
+                .to_atom()
+                .expand()
+                .together())
+        };
+        let expected = poles(&weights[0] * &direct[0] + &weights[1] * &direct[1])?;
+        assert!(!expected.is_zero());
+        super::super::tests::assert_same_counterterm(&actual, &expected)?;
+        // Independent family sums would invent the absent (A1,B2)/(A2,B1)
+        // tuples. Their nonzero discrepancy makes this a correlation test.
+        let cartesian = poles(
+            &direct[0]
+                * (&weights[0] * &factors[0][0] + &weights[1] * &factors[1][0])
+                * (&factors[0][1] + &factors[1][1])
+                / (&factors[0][0] * &factors[0][1]),
+        )?;
+        assert!(!(cartesian - &expected).expand().together().is_zero());
+        let constant_weights = poles(2 * &direct[0] - 3 * &direct[1])?;
+        assert!(
+            !(constant_weights - expected).expand().together().is_zero(),
+            "positive epsilon weights must contribute to lower poles"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn grouped_weights_reject_singular_dimension_and_open_tensors() -> Result<()> {
+        test_initialise()?;
+        PropagatorInsertionEvaluator::validate_weight(&(Atom::num(2) + Atom::var(GS.dim_epsilon)))?;
+        for weight in [
+            Atom::one() / Atom::var(GS.dim_epsilon),
+            Atom::one() / (Atom::var(GS.dim) - 4),
+            function!(GS.emr_mom, 0, Minkowski {}.new_rep(GS.dim).to_symbolic([])),
+            ETS.metric(
+                Minkowski {}
+                    .new_rep(GS.dim)
+                    .to_symbolic([Atom::from(Aind::Hedge(0, 0))]),
+                Minkowski {}
+                    .new_rep(GS.dim)
+                    .to_symbolic([Atom::from(Aind::Hedge(1, 0))]),
+            ),
+        ] {
+            assert!(PropagatorInsertionEvaluator::validate_weight(&weight).is_err());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn grouped_tensor_numerator_readmits_restored_dummy_indices() -> Result<()> {
+        test_initialise()?;
+        let minkowski = Minkowski {}.new_rep(GS.dim);
+        let mu = minkowski.to_symbolic([Atom::from(Aind::Dummy(1_000_001))]);
+        let nu = minkowski.to_symbolic([Atom::from(Aind::Dummy(1_000_002))]);
+        let trace = ETS.metric(&mu, &nu).pow(2);
+        let diagram = serial_bubbles(1)?.with_numerator_fragments(
+            [(VertexId(0), NumeratorInterface::admit(trace, None)?)],
+            [],
+        )?;
+        let mut settings = super::super::tests::settings();
+        settings.vakint.normalization = "GScheme".into();
+        let evaluator = PropagatorInsertionEvaluator::new(settings.clone());
+        let vakint = Vakint::new()?;
+        let prepared = evaluator.prepare(&diagram, &vakint)?.unwrap();
+        let identity = prepared.skeleton_identity()?;
+        let transported = identity.transport_from(identity, &prepared.complete_numerator())?;
+        assert!(
+            transported.contains_symbol(GS.dummyaind),
+            "the fixture must exercise restored functional dummy indices"
+        );
+        let group = evaluator.weighted_pole_part(
+            &[(&prepared, Atom::one()), (&prepared, Atom::num(2))],
+            &vakint,
+        )?;
+        let graph = diagram.to_gamma_loop_graph(None, true)?;
+        let direct = integrate_propagator(&graph, diagram.model(), &vakint, &settings, 2)?;
+        assert!(!direct.is_zero());
+        super::super::tests::assert_same_counterterm(
+            &prepared.restore_atom(&group.poles)?,
+            &(3 * direct),
+        )
+    }
+
+    #[test]
+    fn zero_grouped_bare_sum_does_not_replace_original_forests() -> Result<()> {
+        test_initialise()?;
+        let diagram = serial_bubbles(1)?;
+        let mut settings = super::super::tests::settings();
+        settings.vakint.normalization = "GScheme".into();
+        let evaluator = PropagatorInsertionEvaluator::new(settings.clone());
+        let vakint = Vakint::new()?;
+        let prepared = evaluator.prepare(&diagram, &vakint)?.unwrap();
+        let grouped = evaluator.weighted_pole_part(
+            &[(&prepared, Atom::one()), (&prepared, Atom::num(-1))],
+            &vakint,
+        )?;
+        assert!(grouped.poles.is_zero());
+        assert_eq!(grouped.members, 2);
+        let graph = diagram.to_gamma_loop_graph(None, true)?;
+        let plan = RStarPlan::with_automatic_edge(&graph, diagram.model(), &settings)?;
+        let forest = plan.counterterm_from_pole_part(
+            &graph,
+            diagram.model(),
+            &vakint,
+            &settings,
+            &Atom::Zero,
+        )?;
+        assert!(
+            !forest.is_zero(),
+            "a zero bare group is not a zero-forest certificate"
+        );
+        let other_evaluator = PropagatorInsertionEvaluator::new(settings);
+        assert!(
+            other_evaluator
+                .pole_part_of_prepared(&prepared, &vakint)
+                .is_err()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn isomorphic_bare_insertions_share_complete_amplitudes_at_fixed_depth() -> Result<()> {
+        test_initialise()?;
+        let diagram = serial_bubbles(2)?;
+        let insertions = diagram
+            .propagator_insertions()?
+            .into_iter()
+            .filter(|insertion| insertion.loops == 1)
+            .map(|insertion| diagram.excise_with_mapping(&insertion.support, &[]))
+            .collect::<Result<Vec<_>, _>>()?;
+        assert_eq!(insertions.len(), 2);
+        let mut settings = super::super::tests::settings();
+        settings.vakint.normalization = "GScheme".into();
+        let evaluator = PropagatorInsertionEvaluator::new(settings.clone());
+        assert!(evaluator.cache_timing().is_none());
+        let evaluator = evaluator.with_timing(true);
+        let vakint = Vakint::new()?;
+        for insertion in &insertions {
+            let cached = evaluator.integrate_cached(&insertion.diagram, &vakint, 3)?;
+            let graph = insertion.diagram.to_gamma_loop_graph(None, true)?;
+            let direct = integrate_propagator(&graph, diagram.model(), &vakint, &settings, 3)?;
+            super::super::tests::assert_same_counterterm(&cached, &direct)?;
+            assert_eq!(evaluator.cache.lock().unwrap().len(), 1);
+        }
+        let deeper = evaluator.integrate_cached(&insertions[0].diagram, &vakint, 4)?;
+        assert_eq!(evaluator.cache.lock().unwrap().len(), 2);
+        let graph = insertions[0].diagram.to_gamma_loop_graph(None, true)?;
+        let direct = integrate_propagator(&graph, diagram.model(), &vakint, &settings, 4)?;
+        super::super::tests::assert_same_counterterm(&deeper, &direct)?;
+        let timing = evaluator.cache_timing().unwrap();
+        assert_eq!(
+            (timing.calls, timing.initializers, timing.reuses),
+            (3, 2, 1)
+        );
+        assert_eq!(timing.pending_reuses, 0);
+        assert!(timing.key_ns > 0 && timing.restore_ns > 0);
+        Ok(())
+    }
+
+    #[test]
+    fn cached_bare_amplitude_restores_the_callers_single_external_momentum() -> Result<()> {
+        test_initialise()?;
+        let template = scalar_bubble(&serial_bubbles(1)?)?.with_numerator_fragments(
+            [(
+                VertexId(0),
+                SymbolicTensor::infer(Atom::one() + Atom::var(GS.dim_epsilon))?,
+            )],
+            [],
+        )?;
+        let mut settings = super::super::tests::settings();
+        settings.vakint.normalization = "GScheme".into();
+        let evaluator = PropagatorInsertionEvaluator::new(settings.clone());
+        let vakint = Vakint::new()?;
+        let _ = evaluator.integrate_cached(&template, &vakint, 3)?;
+        for reverse_outgoing in [false, true] {
+            // Keep the decorated vertex fixed while making the other boundary
+            // edge the first external momentum chosen by the direct integrator.
+            // Equal-flow boundary legs additionally require Q_other = -Q_first.
+            let mut builder =
+                FeynmanDiagram::builder(template.model_arc(), "reordered_bare_bubble");
+            for (_, vertex) in template.vertices() {
+                builder.add_vertex(vertex.clone());
+            }
+            let edges = template.edges().collect::<Vec<_>>();
+            for (_, endpoints, edge) in edges.into_iter().rev() {
+                if reverse_outgoing && endpoints.target.is_none() {
+                    let mut incoming = edge.clone();
+                    incoming.external.as_mut().unwrap().state = ExternalState::Incoming;
+                    builder.add_edge_with_slots(
+                        endpoints.target,
+                        endpoints.source,
+                        incoming,
+                        edge.target_slot(),
+                        edge.source_slot(),
+                    )?;
+                } else {
+                    builder.add_edge_with_slots(
+                        endpoints.source,
+                        endpoints.target,
+                        edge.clone(),
+                        edge.source_slot(),
+                        edge.target_slot(),
+                    )?;
+                }
+            }
+            let reordered = builder.build()?;
+            let actual = evaluator.integrate_cached(&reordered, &vakint, 3)?;
+            assert_eq!(evaluator.cache.lock().unwrap().len(), 1);
+            let graph = reordered.to_gamma_loop_graph(None, true)?;
+            let expected = integrate_propagator(&graph, reordered.model(), &vakint, &settings, 3)?;
+            let canonical = evaluator
+                .cache
+                .lock()
+                .unwrap()
+                .values()
+                .next()
+                .unwrap()
+                .get()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .clone();
+            let support = graph
+                .no_dummy()
+                .subtract(&graph.external_filter::<SuBitGraph>());
+            let identity = CountertermIdentity::new(&graph, &support, reordered.model())?;
+            let before_routing = identity.restore_delta(&canonical)?;
+            assert!(
+                !(&before_routing - &expected).expand().together().is_zero(),
+                "the fixture must expose the different external-momentum convention before routing"
+            );
+            super::super::tests::assert_same_counterterm(&actual, &expected)?;
+        }
+        Ok(())
+    }
+}

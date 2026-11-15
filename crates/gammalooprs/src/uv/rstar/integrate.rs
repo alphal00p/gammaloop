@@ -4,7 +4,10 @@
 //! Its external tensor coefficients accompany the scalar numerator through the
 //! exact p-integral reduction and the final Laurent expansion.
 
-use std::collections::BTreeSet;
+use std::{
+    collections::BTreeSet,
+    time::{Duration, Instant},
+};
 
 use eyre::{Result, WrapErr, ensure, eyre};
 use symbolica::{
@@ -34,28 +37,39 @@ pub fn integrate_single_mass(
     settings: &VakintSettings,
     input: &VakintExpression,
 ) -> Result<Atom> {
+    let started = Instant::now();
+    let mut timing = SingleMassTiming::default();
     let mut tensor_settings = settings.clone();
     tensor_settings.tensor_reduction_method = TensorReductionMethod::FeynKit;
     tensor_settings.use_dot_product_notation = true;
     let mut result = Atom::Zero;
+    let mut closures = Vec::new();
+    let mut closure_bytes = 0_usize;
     for source in &input.0 {
         if source.numerator.is_zero() {
+            timing.zero_terms += 1;
             continue;
         }
         if source.integral == Atom::one() {
+            let local_started = Instant::now();
             ensure!(
                 !source.numerator.contains_symbol(S.k),
                 "a local R* insertion cannot contain an unintegrated loop momentum"
             );
             result += &source.numerator;
+            timing.local += local_started.elapsed();
+            timing.local_terms += 1;
             continue;
         }
+        let topology_started = Instant::now();
         let lines = VacuumLine::parse(&source.integral)?;
         let massive = lines
             .iter()
             .filter(|line| !line.mass_squared.is_zero() && line.power > 0)
             .collect::<Vec<_>>();
         if massive.is_empty() {
+            timing.topology_cut += topology_started.elapsed();
+            timing.scaleless_terms += 1;
             continue;
         }
         ensure!(
@@ -70,33 +84,123 @@ pub fn integrate_single_mass(
             "an R* remainder contains another massive propagator with nonpositive power"
         );
         let cut = VacuumCut::new(&lines, massive[0], &source.numerator)?;
+        timing.topology_cut += topology_started.elapsed();
+        timing.remaining_loops_max = timing.remaining_loops_max.max(cut.loops);
         // A massive self-loop times a massless vacuum component is scaleless.
         if cut.scaleless {
+            timing.scaleless_terms += 1;
             continue;
         }
+        let tensor_started = Instant::now();
         let mut term = source.clone();
         term.tensor_reduce(vakint, &tensor_settings)
             .wrap_err("while applying the existing vacuum tensor projector to an R* remainder")?;
         // Lorentz representation metadata is constant during the following
         // Laurent expansion; only scalar evanescent coefficients may expand.
         term.numerator = Integrated::restore_lorentz_dimensions(&term.numerator);
+        timing.tensor += tensor_started.elapsed();
+        timing.integrated_terms += 1;
         if settings.verify_numerator_identification {
             // Strict matching admits only authenticated scalar symbols. Keep
             // arbitrary tensor spectators outside that check, as before.
-            result += cut.evaluate_split(vakint, settings, &term.numerator)?;
+            let strict_started = Instant::now();
+            let integrated = cut.evaluate_split(vakint, settings, &term.numerator, &mut timing)?;
+            // Inclusive branch time, overlapping the detailed phase totals.
+            timing.strict_branch += strict_started.elapsed();
+            let combine_started = Instant::now();
+            result += integrated;
+            timing.combine += combine_started.elapsed();
             continue;
         }
         // The p-integral owner separates homogeneous loop monomials from their
         // tensor spectators. Keeping their coefficients here lets its Laurent
         // expansion include insertion poles before truncating the full product.
+        let preparation_started = Instant::now();
         let numerator = term.numerator.replace_multiple(&cut.routing).expand();
         let input = numerator * &cut.integrand;
-        result += cut
-            .closure
-            .evaluate(vakint, settings, input.as_view())
-            .wrap_err("while integrating an R* remainder through a massless p-integral")?;
+        timing.closure_preparation += preparation_started.elapsed();
+        let input_bytes = input.as_view().get_byte_size();
+        if closure_bytes.saturating_add(input_bytes) > 16 << 20 {
+            flush_closures(vakint, settings, &mut closures, &mut timing, &mut result)?;
+            closure_bytes = 0;
+        }
+        closure_bytes = closure_bytes.saturating_add(input_bytes);
+        closures.push((cut.closure, input));
+        if closures.len() == 32 || closure_bytes >= 16 << 20 {
+            flush_closures(vakint, settings, &mut closures, &mut timing, &mut result)?;
+            closure_bytes = 0;
+        }
     }
-    Ok(result.expand())
+    flush_closures(vakint, settings, &mut closures, &mut timing, &mut result)?;
+    let combine_started = Instant::now();
+    let result = result.expand();
+    timing.combine += combine_started.elapsed();
+    tracing::info!(
+        uv = true,
+        rstar = true,
+        timing = true,
+        source_terms = input.0.len(),
+        zero_terms = timing.zero_terms,
+        local_terms = timing.local_terms,
+        scaleless_terms = timing.scaleless_terms,
+        integrated_terms = timing.integrated_terms,
+        remaining_loops_max = timing.remaining_loops_max,
+        p_integral_loops_max = timing.remaining_loops_max.saturating_sub(1),
+        closure_calls = timing.closure_calls,
+        strict_split_terms = timing.strict_split_terms,
+        strict_numerator_identification = settings.verify_numerator_identification,
+        topology_cut_seconds = timing.topology_cut.as_secs_f64(),
+        native_tensor_seconds = timing.tensor.as_secs_f64(),
+        closure_preparation_seconds = timing.closure_preparation.as_secs_f64(),
+        closure_backend_seconds = timing.closure_backend.as_secs_f64(),
+        result_combination_seconds = timing.combine.as_secs_f64(),
+        local_seconds = timing.local.as_secs_f64(),
+        strict_branch_seconds = timing.strict_branch.as_secs_f64(),
+        seconds = started.elapsed().as_secs_f64(),
+        "Integrated single-mass R* remainder"
+    );
+    Ok(result)
+}
+
+fn flush_closures(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    closures: &mut Vec<(MassiveClosure, Atom)>,
+    timing: &mut SingleMassTiming,
+    result: &mut Atom,
+) -> Result<()> {
+    if !closures.is_empty() {
+        let backend_started = Instant::now();
+        let integrated = MassiveClosure::evaluate_batch(vakint, settings, closures)
+            .wrap_err("while integrating an R* remainder through a massless p-integral")?;
+        timing.closure_backend += backend_started.elapsed();
+        timing.closure_calls += closures.len();
+        let combine_started = Instant::now();
+        for value in integrated {
+            *result += value;
+        }
+        timing.combine += combine_started.elapsed();
+        closures.clear();
+    }
+    Ok(())
+}
+
+#[derive(Default)]
+struct SingleMassTiming {
+    topology_cut: Duration,
+    tensor: Duration,
+    closure_preparation: Duration,
+    closure_backend: Duration,
+    combine: Duration,
+    local: Duration,
+    strict_branch: Duration,
+    zero_terms: usize,
+    local_terms: usize,
+    scaleless_terms: usize,
+    integrated_terms: usize,
+    remaining_loops_max: usize,
+    closure_calls: usize,
+    strict_split_terms: usize,
 }
 
 struct VacuumLine {
@@ -164,7 +268,9 @@ impl VacuumCut {
         vakint: &Vakint,
         settings: &VakintSettings,
         numerator: &Atom,
+        timing: &mut SingleMassTiming,
     ) -> Result<Atom> {
+        let preparation_started = Instant::now();
         let mut invariants = BTreeSet::new();
         numerator.visitor(&mut |part| {
             if let AtomView::Fun(function) = part
@@ -176,18 +282,25 @@ impl VacuumCut {
             }
             true
         });
+        let coefficients =
+            numerator.coefficient_list::<i16>(&invariants.into_iter().collect::<Vec<_>>());
+        timing.closure_preparation += preparation_started.elapsed();
+        timing.strict_split_terms += coefficients.len();
         let mut result = Atom::Zero;
-        for (scalar, coefficient) in
-            numerator.coefficient_list::<i16>(&invariants.into_iter().collect::<Vec<_>>())
-        {
+        for (scalar, coefficient) in coefficients {
+            let preparation_started = Instant::now();
             ensure!(
                 !coefficient.contains_symbol(S.k),
                 "the vacuum tensor projector left an uncontracted loop momentum: {coefficient}"
             );
             let scalar = scalar.replace_multiple(&self.routing).expand() * &self.integrand;
-            result += self
-                .evaluate(vakint, settings, &scalar, &coefficient)
+            timing.closure_preparation += preparation_started.elapsed();
+            let integrated = self
+                .evaluate(vakint, settings, &scalar, &coefficient, timing)
                 .wrap_err("while integrating an R* remainder through a massless p-integral")?;
+            let combine_started = Instant::now();
+            result += integrated;
+            timing.combine += combine_started.elapsed();
         }
         Ok(result)
     }
@@ -198,7 +311,9 @@ impl VacuumCut {
         settings: &VakintSettings,
         scalar: &Atom,
         coefficient: &Atom,
+        timing: &mut SingleMassTiming,
     ) -> Result<Atom> {
+        let preparation_started = Instant::now();
         let retained = settings
             .evaluation_order
             .0
@@ -209,7 +324,15 @@ impl VacuumCut {
             })
             == Some(RustRedMasterMode::Retain);
         if retained {
-            return Ok(coefficient * self.closure.evaluate(vakint, settings, scalar.as_view())?);
+            timing.closure_preparation += preparation_started.elapsed();
+            let backend_started = Instant::now();
+            let integrated = self.closure.evaluate(vakint, settings, scalar.as_view())?;
+            timing.closure_backend += backend_started.elapsed();
+            timing.closure_calls += 1;
+            let combine_started = Instant::now();
+            let result = coefficient * integrated;
+            timing.combine += combine_started.elapsed();
+            return Ok(result);
         }
         let epsilon = vakint_parse!(&settings.epsilon_symbol)
             .map_err(|error| eyre!(error))?
@@ -219,6 +342,7 @@ impl VacuumCut {
             .series(epsilon, 0, SeriesDepth::relative(1))
             .wrap_err("could not determine the Laurent order of an R* insertion coefficient")?;
         if series.is_zero() {
+            timing.closure_preparation += preparation_started.elapsed();
             return Ok(Atom::Zero);
         }
         let exponent = series.get_trailing_exponent();
@@ -238,14 +362,21 @@ impl VacuumCut {
             .number_of_terms_in_epsilon_expansion
             .checked_sub(valuation.min(0))
             .ok_or_else(|| eyre!("the R* insertion requires an overflowing Laurent depth"))?;
+        timing.closure_preparation += preparation_started.elapsed();
+        let backend_started = Instant::now();
         let integrated = self
             .closure
             .evaluate(vakint, &closure_settings, scalar.as_view())?;
+        timing.closure_backend += backend_started.elapsed();
+        timing.closure_calls += 1;
+        let combine_started = Instant::now();
         let target = settings.number_of_terms_in_epsilon_expansion - self.loops as i64 - 1;
-        Ok((coefficient * integrated)
+        let result = (coefficient * integrated)
             .series(epsilon, 0, target)
             .wrap_err("could not truncate the complete R* insertion and integral product")?
-            .to_atom())
+            .to_atom();
+        timing.combine += combine_started.elapsed();
+        Ok(result)
     }
 
     fn new(lines: &[VacuumLine], massive: &VacuumLine, numerator: &Atom) -> Result<Self> {
@@ -455,7 +586,12 @@ mod tests {
             let mut term = source.clone();
             term.tensor_reduce(&VAKINT, &tensor_settings)?;
             term.numerator = Integrated::restore_lorentz_dimensions(&term.numerator);
-            result += cut.evaluate_split(&VAKINT, settings, &term.numerator)?;
+            result += cut.evaluate_split(
+                &VAKINT,
+                settings,
+                &term.numerator,
+                &mut SingleMassTiming::default(),
+            )?;
         }
         Ok(result.expand())
     }

@@ -43,6 +43,7 @@ spenso = { workspace = true, default-features = false }
 spenso-macros = { workspace = true, default-features = false }
 string-template-plus = "0.4.3"
 thiserror = { workspace = true }
+tracing = { workspace = true }
 version-compare = "0.2.1"
 
 [target.'cfg(all(unix, not(target_arch = "wasm32")))'.dependencies]

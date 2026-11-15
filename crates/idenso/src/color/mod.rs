@@ -35,6 +35,7 @@ use super::representations::{ColorAdjoint, ColorFundamental};
 mod casimir;
 mod conjugate;
 mod macros;
+pub mod network;
 pub(crate) mod simplify;
 
 pub use conjugate::color_conj_impl;
@@ -574,6 +575,10 @@ pub struct ColorSimplifySettings {
     /// colour round, and distributes a colour sum with ports only when a
     /// rule can span it. Without it, every insertion returns to the planner.
     pub one_shot_traces: bool,
+    /// Whether a term whose colour factors are a closed network (every colour
+    /// index summed within the term) is reduced to group invariants at once
+    /// by the closed-network reducer (see [`network`]), as color.h does.
+    pub closed_networks: bool,
 }
 
 impl Default for ColorSimplifySettings {
@@ -583,6 +588,7 @@ impl Default for ColorSimplifySettings {
             expand_cross_chain_fierz: true,
             substitute_cof_dimension_invariants: false,
             one_shot_traces: true,
+            closed_networks: true,
         }
     }
 }
@@ -611,6 +617,13 @@ impl ColorSimplifySettings {
     /// colour fixed point with a no-op round.
     pub fn without_one_shot_traces(mut self) -> Self {
         self.one_shot_traces = false;
+        self
+    }
+
+    /// Reduces closed colour networks with the local rules only, without the
+    /// closed-network reducer.
+    pub fn without_closed_networks(mut self) -> Self {
+        self.closed_networks = false;
         self
     }
 }

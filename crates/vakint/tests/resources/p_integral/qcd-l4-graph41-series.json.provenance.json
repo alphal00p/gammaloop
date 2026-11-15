@@ -1,0 +1,6 @@
+{
+  "source": "/common/ben/beta/results/performance-v31/series-replay/inputs/graph41-call-507.json",
+  "sha256": "8814c6ed8d274d7bd0647aa63c6ebe21790a973b15395a9f5d88b429b7b57977",
+  "call_id": 507,
+  "note": "Largest completed generic expansion in graph41 diagnostic; exact full coefficient comparison."
+}

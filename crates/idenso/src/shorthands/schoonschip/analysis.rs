@@ -10,7 +10,7 @@ use crate::tensor::inference::InterfaceInference;
 
 #[cfg(test)]
 std::thread_local! {
-    pub(super) static SCAN_COUNTS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    pub(crate) static SCAN_COUNTS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     pub(crate) static CANDIDATE_NODE_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 

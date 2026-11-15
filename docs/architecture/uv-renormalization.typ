@@ -150,6 +150,22 @@ paths from their common root. At a union it:
 The construction operates over an arbitrary number of components and is
 not special-cased for a two-component spectacles graph.
 
+== Local UV rescaling
+
+Momentum routing precedes hard-scale rescaling. Loop labels are rescaled in
+order, including labels belonging to already expanded child cycles. Separate
+passes preserve the behavior of nested momentum and index payloads. The
+independent substitutions for an existing vacuum mass and the consumed-loop
+measure marker share one traversal.
+
+Denominator deformation follows these substitutions so that the newly introduced
+parent vacuum mass remains unscaled. Momentum projection is a second pass:
+four-argument denominators receive the mass deformation, while other arities
+retain their existing momentum-projection behavior. Each pure denominator map
+uses a bounded, call-local replacement cache to avoid rebuilding repeated
+results across numerator terms. This cache does not retain graph identities or
+counterterms between calls.
+
 == Marker Representation
 <marker-representation>
 UV markers are diagnostic symbolic structure. Approximation,
@@ -365,6 +381,133 @@ Lower-loop analytic checks retain the external scale logarithm, the first
 open-index bubble moment, and the nonlocal pole of an overall-convergent
 bubble-in-kite graph. Inverse powers of the external virtuality remain scalar
 invariants during tensor restoration.
+
+=== Extracting dressed propagator insertions
+
+#link("https://arxiv.org/pdf/1801.06084#page=4")[Equation (3.2) of
+_The R\*-operation and five-loop calculations_] is an identity of bare
+amplitudes. An L-loop massless two-point insertion has a common scale
+`(q^2)^(-L epsilon)`. Dividing its full open tensor by L scalar bubbles
+removes that scale. Replacing the original region by the scalar bubbles
+and their normalized tensor coefficient therefore preserves the bare
+integral. For a gluon, both `q^2 g(mu,nu)` and `q(mu) q(nu)` are retained;
+individual diagrams are not assumed transverse. Fermion chains and color
+ports likewise remain open until their surrounding contractions occur.
+
+This identity does not identify individual local counterterms. In G-scheme,
+a nested scalar two-loop example has
+`Delta(G) = 1/(2 epsilon^2) - 1/(2 epsilon)`.
+Putting `1+epsilon` on a vertex inside its one-loop child gives
+`Delta((1+epsilon)G) = 1/(2 epsilon^2) - 1/epsilon`, whereas
+`K((1+epsilon) Delta(G)) = 1/(2 epsilon^2)`.
+The child's own pole map discards a different finite term. This discrepancy
+is checked by an evaluated native R\* regression.
+
+`PropagatorInsertionEvaluator` consequently returns only bare poles. The
+original plan's `counterterm_from_pole_part` recovers
+`Delta_U(G) = -K (K G + sum_(S != empty) Delta_U(S) G/S)`
+using the original proper UV forest. The projected variant contracts the
+complete preparation before its final pole projection. It requires a linear
+root projector regular in epsilon; child tensors and child pole scopes are
+unchanged.
+
+FeynKit detects proper two-boundary 1PI regions without species restrictions.
+The evaluator selects a maximal vertex-disjoint set, preferring larger
+regions; a selected ancestor includes its nested insertions. Each region is
+excised with an explicit ownership map, evaluated by `integrate_propagator`,
+then replaced by L scalar bubbles. The coefficient and the final tensor are
+transported through these maps. Original global factors remain separate.
+The surrogate's bare poles are evaluated directly through four loops; at
+five loops they are reconstructed with R\*. Direct evaluation avoids a
+redundant surrogate subtraction forest, while recovery of the original
+counterterm continues to use the original forest in either case.
+
+For an N-loop parent, a regular normalized coefficient is retained through
+`epsilon^(N-1)`, requiring the L-loop insertion through
+`epsilon^(N-L-1)`. A normalized coefficient with poles, uncancelled scale
+logarithms, or inverse momentum powers is rejected, since those cases need
+additional integral depth or a different graph representation. Direct
+insertion integrals currently support one through four loops and unit
+propagator powers. Physical-cut graphs are unsupported. The original
+full-graph APIs remain available.
+
+An evaluator-local, thread-safe cache stores complete bare propagators using
+the same dressed-graph isomorphism certificate as the counterterm cache below.
+The requested epsilon depth is part of its key. Thus isomorphic insertions
+reuse finite and higher-order terms as well as poles, with boundary indices
+and momenta transported into the requesting graph.
+
+A hit for the complete propagator returns its amplitude directly. Inserting
+that amplitude into a larger graph still leaves its momentum to be integrated.
+The factor `(q^2)^(-L epsilon)` induces epsilon-dependent propagator powers;
+the current integer-power p-integral interface represents these by the scalar
+bubbles. Caching the amplitude does not discard this momentum dependence.
+
+=== Reusing complete UV counterterms
+
+`CountertermCache` stores a connected graph's complete local Delta, including
+all proper subtractions, before any enclosing projector or global factor.
+The cache is shared by graph workers and by the original-UV and decorated
+quotient calls. Concurrent requests for one entry share its computation.
+A hit returns the stored tensor before convergence checking, forest construction,
+Taylor expansion or vacuum integration. Overall-convergent decorated arguments
+store a zero result after validating their pole-part prescription; their symbolic
+degree is checked only while filling the entry.
+
+The identity is a canonical colored incidence graph containing particle types,
+propagator masses and powers, local numerator syntax and tensor connectivity.
+Model and subtraction settings also belong to the key. Vertex and edge labels,
+external index names and internal dummy names are not key data. The canonical
+isomorphism supplies boundary momentum and tensor-index transport, including
+momentum orientation; private indices are freshened when an entry is restored.
+Particle topology is compared first, with self-conjugate lines such as gluons
+undirected. Arbitrary routing directions are normalized in the numerator with
+their exact signs; they do not become particle-edge labels.
+Keeping local numerator placement distinguishes decorations whose nested pole
+maps differ, including epsilon-dependent vertex factors.
+Graph-owned indices are normalized before antisymmetric local rules are
+compared. Custom antisymmetric expressions containing unowned private indices
+can still cause conservative misses after renaming; a failed match is computed
+independently.
+
+On a miss, pole-part subtraction uses the Bogoliubov preparation as a sum over
+proper spinneys. Each connected child is replaced by its cached complete Delta,
+so nested children can be reused even when the parent itself is new. The
+existing Taylor and vacuum integration kernels act on each prepared quotient;
+consumed loop measures retain their scaling markers and every child keeps its
+own pole projection. The original unfolded forest remains an independent
+uncached comparison path. This aggregate recursion currently requires
+pole-part subtraction on every support.
+
+For a prepared quotient with `r` remaining loops, the cache requests `r`
+Laurent terms from Vakint, so the complete insertion-and-integral product is
+retained through `epsilon^(-1)`. Insertion poles and spurious reduction poles
+remain in the master coefficients; the master-order planner therefore retains
+the finite and positive master orders they promote into that product's poles.
+Scalar `d = 4 - 2 epsilon` dependence is exposed before this planning, while
+Lorentz-slot dimensions remain metadata. The final tensor contraction still
+precedes pole projection. Ordinary forest finite-counterterm depths are unchanged.
+
+=== Batching the remaining scalar integrals
+
+Independent scalar requests from an outer remainder can share one FORCER
+invocation. Each request is routed before combination, and scalar tags keep
+its homogeneous channels separate. The reduced channels return to their
+original massive closures: masses, propagator powers, spectator tensors and
+the epsilon depth required by insertion poles remain request-specific.
+
+The raw-output cache retains individual request keys across batches. A worker
+publishes the requests it owns before waiting for another worker's requests,
+so overlapping batches cannot wait on each other cyclically. Both the queued
+closure inputs and the rendered FORM batches are bounded. Strict numerator
+verification retains the serial path as an independent comparison.
+
+Outer integration timing includes Taylor expansion, tensor algebra,
+conversion to scalar topologies, reduction and Laurent expansion. Its nested
+timers separate these stages; their elapsed times must not be added to the
+inclusive outer total. FORCER subprocess timing includes startup and table
+loading, while a request's backend time can also include waiting for a cached
+computation owned by another worker.
 
 === Choosing the massive line
 

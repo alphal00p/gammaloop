@@ -11,6 +11,8 @@ mod compact_dot;
 mod display;
 pub mod expressions;
 mod finalization;
+mod insertion_surrogate;
+mod insertions;
 #[cfg(test)]
 mod integral_annotation_tests;
 mod integrals;
@@ -24,6 +26,8 @@ pub mod symbols;
 pub mod thresholds;
 mod uv;
 
+pub use insertion_surrogate::ScalarBubbleSurrogate;
+pub use insertions::PropagatorInsertion;
 pub use integrals::{
     IntegralFamily, IntegralFamilyError, IntegralMapping, PropagatorMapping, QuadraticMomentum,
 };
@@ -31,6 +35,7 @@ pub use numerator_interface::NumeratorInterface;
 pub use power_counting::DOD;
 #[cfg(feature = "svg")]
 pub use scene::SceneOptions;
+pub use subgraph::{DiagramRelabeling, ExcisedDiagram};
 
 // Symbolica does not permit adding tags after a bare symbol with the same name
 // has been registered. Claim momentum, index and Lorentz heads during global state
@@ -2293,7 +2298,7 @@ impl FeynmanDiagram {
                     .global_data
                     .statements
                     .get("num_interface")
-                    .map(|value| NumeratorInterface::parse(value))
+                    .map(|value| NumeratorInterface::parse_with(value, &mut parse_expression))
                     .transpose()?,
             )?)
             .numerator_prefactor(NumeratorInterface::admit(
@@ -2302,7 +2307,7 @@ impl FeynmanDiagram {
                     .global_data
                     .statements
                     .get("numerator_prefactor_interface")
-                    .map(|value| NumeratorInterface::parse(value))
+                    .map(|value| NumeratorInterface::parse_with(value, &mut parse_expression))
                     .transpose()?,
             )?)
             .projector(NumeratorInterface::admit(
@@ -2311,7 +2316,7 @@ impl FeynmanDiagram {
                     .global_data
                     .statements
                     .get("projector_interface")
-                    .map(|value| NumeratorInterface::parse(value))
+                    .map(|value| NumeratorInterface::parse_with(value, &mut parse_expression))
                     .transpose()?,
             )?)
             .cuts(cuts)
@@ -2357,7 +2362,7 @@ impl FeynmanDiagram {
                     )?,
                     data.statements
                         .get("num_interface")
-                        .map(|value| NumeratorInterface::parse(value))
+                        .map(|value| NumeratorInterface::parse_with(value, &mut parse_expression))
                         .transpose()?,
                 )?,
             };
@@ -2477,7 +2482,7 @@ impl FeynmanDiagram {
                     data.data
                         .statements
                         .get("num_interface")
-                        .map(|value| NumeratorInterface::parse(value))
+                        .map(|value| NumeratorInterface::parse_with(value, &mut parse_expression))
                         .transpose()?,
                 )?,
                 source_slot: VertexSlot(0),
@@ -2852,6 +2857,8 @@ impl FeynmanDiagram {
     }
 
     fn expression_parser() -> impl FnMut(&'static str, String) -> Result<Atom, DiagramError> {
+        #[cfg(test)]
+        tests::EXPRESSION_PARSER_CONSTRUCTIONS.with(|count| count.set(count.get() + 1));
         // Canonical strings include attributes and tags, but not Symbolica user data.
         // Reuse exact registered declarations so Spenso representation metadata survives.
         // Share this map within an import, but refresh it for each new import.
@@ -3107,6 +3114,10 @@ mod tests {
     use super::*;
     use std::sync::Arc;
     use symbolica::utils::resources::ResourceLimits;
+
+    thread_local! {
+        pub(super) static EXPRESSION_PARSER_CONSTRUCTIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    }
 
     fn scalar_model() -> Arc<Model> {
         Arc::new(Model::from_json(
@@ -4337,6 +4348,86 @@ mod tests {
         for ((_, _, restored), (_, _, original)) in restored.edges().zip(diagram.edges()) {
             assert!(restored.numerator.same_value(&original.numerator));
         }
+    }
+
+    #[test]
+    fn dot_import_reuses_parser_for_typed_interfaces_and_refreshes_user_data() {
+        use symbolica::atom::{AtomView, NamespacedSymbol, SymbolBuilder};
+
+        let diagram = one_loop();
+        FeynmanDiagram::from_dot(diagram.model_arc(), &diagram.to_dot().unwrap()).unwrap();
+        // This declaration did not exist when the previous import took its snapshot.
+        let label = SymbolBuilder::new(NamespacedSymbol::parse(
+            "feynkit_graph_tests::interface_label_after_import",
+        ))
+        .with_tags(["feynkit_graph_tests::interface_label_tag"])
+        .with_user_data(UserData::String("retained interface metadata".to_owned()))
+        .build()
+        .unwrap();
+        let matrix = NumeratorInterface::admit(
+            symbolica::function!(
+                spenso::tensor_symbol!("feynkit_graph::shared_parser_matrix"),
+                Minkowski {}.new_rep(4).to_symbolic([Atom::var(label)]),
+                spenso::structure::representation::Euclidean {}
+                    .new_rep(2)
+                    .to_symbolic([])
+            ),
+            None,
+        )
+        .unwrap();
+        let zero = matrix.with_checked_expression(Atom::Zero).unwrap();
+        let diagram = diagram
+            .with_numerator(zero.clone())
+            .unwrap()
+            .with_numerator_prefactor(matrix.clone())
+            .with_projector(matrix.clone());
+        let dot = diagram.to_dot().unwrap();
+        EXPRESSION_PARSER_CONSTRUCTIONS.with(|count| count.set(0));
+        let restored = FeynmanDiagram::from_dot(diagram.model_arc(), &dot).unwrap();
+        assert_eq!(
+            EXPRESSION_PARSER_CONSTRUCTIONS.with(std::cell::Cell::get),
+            1
+        );
+        assert!(restored.numerator().same_value(&zero));
+        assert!(restored.numerator_prefactor().same_value(&matrix));
+        assert!(restored.projector().same_value(&matrix));
+        assert_eq!(
+            restored.numerator().structure().logical_slots(),
+            zero.structure().logical_slots()
+        );
+        for ((_, actual), (_, expected)) in restored.vertices().zip(diagram.vertices()) {
+            assert!(actual.numerator.same_value(&expected.numerator));
+        }
+        for ((_, _, actual), (_, _, expected)) in restored.edges().zip(diagram.edges()) {
+            assert!(actual.numerator.same_value(&expected.numerator));
+        }
+        let (_, metadata) = NumeratorInterface::export(restored.numerator());
+        let metadata = metadata.unwrap();
+        let mut found_label = false;
+        for port in &metadata.0 {
+            port.visitor(&mut |node| {
+                if let AtomView::Var(variable) = node
+                    && variable.get_symbol() == label
+                {
+                    assert_eq!(
+                        variable.get_symbol().get_data(),
+                        &UserData::String("retained interface metadata".to_owned())
+                    );
+                    assert!(
+                        variable
+                            .get_symbol()
+                            .has_tag("feynkit_graph_tests::interface_label_tag")
+                    );
+                    found_label = true;
+                }
+                true
+            });
+        }
+        assert!(
+            found_label,
+            "the explicit source label must survive cooking and import"
+        );
+        restored.validate().unwrap();
     }
 
     #[test]

@@ -2,6 +2,8 @@
 //! reach the shared tracked evaluator. The leaves contain exact metadata and
 //! need neither a process-global value map nor a mutable engine registry.
 
+use crate::symbols::S;
+
 use std::collections::BTreeMap;
 
 use sha2::{Digest, Sha256};
@@ -17,17 +19,18 @@ use symbolica::{
 };
 
 use crate::{
-    VakintError, get_integer_from_atom,
-    inspection::FiniteSource,
-    utils::vakint_macros::{vk_parse, vk_symbol},
+    VakintError, get_integer_from_atom, inspection::FiniteSource, utils::vakint_macros::vk_parse,
 };
+
+#[cfg(test)]
+use crate::utils::vakint_macros::vk_symbol;
 
 fn failure(detail: impl Into<String>) -> VakintError {
     VakintError::NumericalPrecision(detail.into())
 }
 
 pub(crate) fn is_source(part: AtomView) -> bool {
-    matches!(part, AtomView::Fun(function) if function.get_symbol() == vk_symbol!("NumericalSource"))
+    matches!(part, AtomView::Fun(function) if function.get_symbol() == S.numerical_source)
 }
 
 pub(crate) fn coefficient_power(monomial: AtomView, epsilon: Symbol) -> Result<i64, VakintError> {
@@ -110,7 +113,7 @@ fn staged_float(
     let key = Atom::var(symbol!(format!(
         "vakint_sources::{backend}__{encoded}__{ordinal}__{digest}"
     )));
-    vk_symbol!("NumericalSource").call((
+    S.numerical_source.call((
         key,
         Atom::num(order),
         Atom::num(component),
@@ -222,7 +225,7 @@ fn decode(part: AtomView) -> Result<Option<DecodedSource>, VakintError> {
     let AtomView::Fun(function) = part else {
         return Ok(None);
     };
-    if function.get_symbol() != vk_symbol!("NumericalSource") {
+    if function.get_symbol() != S.numerical_source {
         return Ok(None);
     }
     let arguments = function.iter().collect::<Vec<_>>();

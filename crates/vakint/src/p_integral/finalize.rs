@@ -214,7 +214,7 @@ pub(crate) fn finalize_with(
     let mut reduced = Atom::Zero;
     for value in values {
         let sign = if value.scale_power % 2 == 0 { 1 } else { -1 };
-        reduced += Atom::num(sign) * square.pow(Atom::num(value.scale_power)) * &value.reduced;
+        reduced += Atom::num(sign) * square.pow(Atom::num(value.scale_power)) * value.value().as_ref();
     }
     if reduced.is_zero() {
         return Ok(Atom::Zero);

@@ -4,11 +4,13 @@
 //!
 //! A batch of matched p contributions is split into the homogeneous parts of
 //! the shared numerator split (`p_integral::parts`, the one Forcer renders),
-//! grouped into channels keyed by (loop count, external head `p(i)`, scale
-//! power `w`, non-rational coefficient), lowered onto the slots of the family's
+//! grouped initially by (loop count, external head `p(i)`, scale power `w`,
+//! non-rational coefficient), then folded by spectator monomial: rational
+//! functions of ε enter the reduction as rational functions of d = 4-2ε.
+//! Inputs are lowered onto the slots of the family's
 //! top presentation (lines, then ISPs; a numerator scalar product is the
 //! presentation's own affine form in its slots, Minkowski with `q·q = -1`) and
-//! reduced with ONE [`PReductionRequest`] per channel onto the masters:
+//! reduced with one [`PReductionRequest`] per folded channel onto the masters:
 //! `PReduction` is `(εG(1,1))^-L Σ c·I_M(x)` at `Q² = 1` (convention C3), which
 //! is exactly vakint's `reduced = (-1)^(Σa+r)·C_G`. The Wick sign of a part
 //! (`PPart::wick_sign`) belongs to the Forcer path only and is never applied
@@ -24,7 +26,7 @@
 //! compare the RustRed p path with Forcer's frozen values per scale power
 //! (M2-V5 Tier A).
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
 use rustred::algebra::{Coefficient, CoefficientContext, ExactAlgebraLimits};
@@ -189,6 +191,7 @@ struct Channel {
 /// The lowered inputs of one channel and the vakint integrals they come from
 /// (`P1L(2,1)`: family and line powers), named when the library cannot reduce
 /// them.
+#[cfg(test)]
 #[derive(Default)]
 struct ChannelInputs {
     inputs: BTreeMap<(PresentationId, Vec<i64>), Rational>,
@@ -456,6 +459,16 @@ fn render(
     reduction: &PReduction,
     epsilon: Symbol,
 ) -> Result<Atom, RustRedEvaluationError> {
+    Ok(collect_terms(render_terms(handle, reduction, epsilon)?))
+}
+
+/// The terms of [`render`]: per tag and master, the coefficient at
+/// `d = 4 - 2ε`, not yet simplified.
+fn render_terms(
+    handle: &PLibraryHandle,
+    reduction: &PReduction,
+    epsilon: Symbol,
+) -> Result<BTreeMap<Atom, Atom>, RustRedEvaluationError> {
     let dimension = Atom::num(4) - Atom::num(2) * Atom::var(epsilon);
     let at_dimension = |coefficient: &Coefficient| {
         coefficient
@@ -503,57 +516,18 @@ fn render(
         }
         *coefficients.entry(tag * basis).or_default() += at_dimension(&term.coefficient);
     }
-    Ok(coefficients
-        .into_iter()
-        .fold(Atom::Zero, |reduced, (monomial, coefficient)| {
-            reduced + coefficient.together() * monomial
-        }))
+    Ok(coefficients)
 }
 
-/// The engine inputs of one channel: nonzero coefficients in the library's
-/// context.
-fn channel_inputs(
-    library: &rustred::propagator::library::PLibrary,
-    inputs: BTreeMap<(PresentationId, Vec<i64>), Rational>,
-    exact: ExactAlgebraLimits,
-) -> Result<Vec<(PresentationId, IntegralKey, Coefficient)>, RustRedEvaluationError> {
-    inputs
-        .into_iter()
-        .filter(|(_, value)| !value.is_zero())
-        .map(|((presentation, powers), value)| {
-            let key = IntegralKey::try_new(powers)
-                .map_err(|error| invalid(format!("integral key: {error}")))?;
-            Ok((
-                presentation,
-                key,
-                coefficient(library.coefficient_context(), &value, exact)?,
-            ))
-        })
-        .collect()
-}
-
-/// Whether a batch of `channels` requests on `threads` workers runs its
-/// requests side by side, each on one thread, instead of one after the
-/// other on all threads: when there are at least two requests per worker
-/// (many small requests pay a thread pool and a window dispatch each).
-/// `VAKINT_P_ACROSS_CHANNELS=on|off` overrides the choice (benchmarks).
-fn across_channels(threads: usize, channels: usize) -> bool {
-    static MODE: std::sync::OnceLock<Option<bool>> = std::sync::OnceLock::new();
-    let forced = *MODE.get_or_init(
-        || match std::env::var("VAKINT_P_ACROSS_CHANNELS").as_deref() {
-            Ok("on" | "1") => Some(true),
-            Ok("off" | "0") => Some(false),
-            _ => None,
-        },
-    );
-    threads > 1 && channels > 1 && forced.unwrap_or(channels >= 2 * threads)
-}
-
-/// The lowered inputs of a batch, by channel.
+/// The lowered inputs of a batch, by channel (the eager table of
+/// [`reduce_requests_eager`]).
+#[cfg(test)]
 type Channels = BTreeMap<Channel, ChannelInputs>;
 
 /// Lower one backend request (`docs/p_integrals.md`, section 5) into
-/// `channels`; a scaleless request adds nothing.
+/// `channels`; a scaleless request adds nothing. The eager lowering of
+/// [`reduce_requests_eager`].
+#[cfg(test)]
 fn add_request(
     handle: &PLibraryHandle,
     request: &PropagatorRequest,
@@ -571,16 +545,7 @@ fn add_request(
     let (head, _) = external_head(&request.external)?;
     let presentation = handle.library.presentation(top.presentation);
     let forms = forms.entry(top.presentation).or_default();
-    let integral = format!(
-        "{}({})",
-        request.family.name,
-        request
-            .powers
-            .iter()
-            .map(i64::to_string)
-            .collect::<Vec<_>>()
-            .join(",")
-    );
+    let integral = integral_name(request);
     for part in split {
         let lowered = lower_part(presentation, top, request.powers, &part.polynomial, forms)?;
         let channel = channels
@@ -603,250 +568,860 @@ fn add_request(
     Ok(())
 }
 
+/// `P1L(2,1)`: the family and line powers of a request, as a reduction
+/// error names it.
+fn integral_name(request: &PropagatorRequest) -> String {
+    format!(
+        "{}({})",
+        request.family.name,
+        request
+            .powers
+            .iter()
+            .map(i64::to_string)
+            .collect::<Vec<_>>()
+            .join(",")
+    )
+}
+
+/// A homogeneous part of a request, split but not yet lowered: the top it is
+/// lowered onto, the request's line powers and the loop-dot polynomial.
+struct PendingPart<'r> {
+    top: PTop,
+    powers: &'r [i64],
+    polynomial: Vec<(Fraction, PMonomial)>,
+}
+
+/// The split parts of one channel and the vakint integrals they come from.
+#[derive(Default)]
+struct ChannelParts<'r> {
+    parts: Vec<PendingPart<'r>>,
+    integrals: BTreeSet<String>,
+}
+
+/// The split parts of a batch, by channel.
+type PendingChannels<'r> = BTreeMap<Channel, ChannelParts<'r>>;
+
+/// The checks of [`lower_part`] on one part, without lowering it: the line
+/// count, and the dot form of every scalar product in the order
+/// [`lower_part`] builds them, cached in `forms`. A part that passes lowers
+/// without error with these forms, and the first error is the one
+/// [`lower_part`] would return.
+fn prepare_part(
+    presentation: &Presentation,
+    top: PTop,
+    powers: &[i64],
+    polynomial: &[(Fraction, PMonomial)],
+    forms: &mut BTreeMap<PDot, AffineSlotForm>,
+) -> Result<(), RustRedEvaluationError> {
+    if powers.len() != top.line_count {
+        return Err(invalid(format!(
+            "{} line powers for {} lines",
+            powers.len(),
+            top.line_count
+        )));
+    }
+    let loops = usize::from(presentation.loops);
+    for (_, monomial) in polynomial {
+        for &(dot, _) in &monomial.0 {
+            if let std::collections::btree_map::Entry::Vacant(entry) = forms.entry(dot) {
+                let (a, b) = dot_rows(dot, loops);
+                entry.insert(
+                    presentation
+                        .express_scalar_product(&a, &b)
+                        .map_err(|error| invalid(format!("{dot:?}: {error}")))?,
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Split one backend request (`docs/p_integrals.md`, section 5) into the
+/// parts of `channels`, checked as [`lower_part`] checks them but not
+/// lowered; a scaleless request adds nothing.
+fn split_request<'r>(
+    handle: &PLibraryHandle,
+    request: &PropagatorRequest<'r>,
+    forms: &mut BTreeMap<PresentationId, BTreeMap<PDot, AffineSlotForm>>,
+    channels: &mut PendingChannels<'r>,
+) -> Result<(), VakintError> {
+    let family = P_FAMILIES
+        .iter()
+        .position(|family| family.name == request.family.name)
+        .ok_or_else(|| invalid(format!("unknown family {}", request.family.name)))?;
+    let top = handle.top(family)?;
+    let Some(split) = parts::split_parts(request)? else {
+        return Ok(()); // scaleless: an exact zero
+    };
+    let (head, _) = external_head(&request.external)?;
+    let presentation = handle.library.presentation(top.presentation);
+    let forms = forms.entry(top.presentation).or_default();
+    let integral = integral_name(request);
+    for part in split {
+        prepare_part(presentation, top, request.powers, &part.polynomial, forms)?;
+        let channel = channels
+            .entry(Channel {
+                loops: request.family.loops,
+                head: head.clone(),
+                scale_power: part.scale_power,
+                coefficient: part.coefficient,
+            })
+            .or_default();
+        channel.integrals.insert(integral.clone());
+        channel.parts.push(PendingPart {
+            top,
+            powers: request.powers,
+            polynomial: part.polynomial,
+        });
+    }
+    Ok(())
+}
+
+/// The lowered inputs of one channel: its parts lowered in order and merged
+/// by key, each part's polynomial dropped once it is lowered.
+fn lower_channel(
+    handle: &PLibraryHandle,
+    parts: Vec<PendingPart>,
+    forms: &mut BTreeMap<PresentationId, BTreeMap<PDot, AffineSlotForm>>,
+) -> Result<BTreeMap<(PresentationId, Vec<i64>), Rational>, RustRedEvaluationError> {
+    let mut inputs = BTreeMap::<(PresentationId, Vec<i64>), Rational>::new();
+    for PendingPart {
+        top,
+        powers,
+        polynomial,
+    } in parts
+    {
+        let lowered = lower_part(
+            handle.library.presentation(top.presentation),
+            top,
+            powers,
+            &polynomial,
+            forms.entry(top.presentation).or_default(),
+        )?;
+        drop(polynomial);
+        for (key, value) in lowered {
+            let entry = inputs
+                .entry((top.presentation, key))
+                .or_insert_with(Rational::zero);
+            *entry += &value;
+        }
+    }
+    Ok(inputs)
+}
+
+/// What [`reduce_channel`] needs of the batch.
+struct ChannelReducer<'h> {
+    handle: &'h PLibraryHandle,
+    options: PRequestOptions,
+    step_cache: Option<Arc<OrderedStepCache>>,
+    epsilon: Symbol,
+}
+
+/// Reduce the lowered `inputs` of one channel onto the masters, without the
+/// channel coefficient (`None` when no input is left).
+fn reduce_channel(
+    reducer: &ChannelReducer,
+    channel: &Channel,
+    inputs: BTreeMap<(PresentationId, Vec<i64>), Rational>,
+    integrals: &BTreeSet<String>,
+) -> Result<Option<Atom>, VakintError> {
+    let library = &reducer.handle.library;
+    let exact = reducer.options.limits.exact_algebra;
+    let inputs = inputs
+        .into_iter()
+        .filter(|(_, value)| !value.is_zero())
+        .map(|((presentation, powers), value)| {
+            let key = IntegralKey::try_new(powers)
+                .map_err(|error| invalid(format!("integral key: {error}")))?;
+            Ok((
+                presentation,
+                key,
+                coefficient(library.coefficient_context(), &value, exact)?,
+            ))
+        })
+        .collect::<Result<Vec<_>, RustRedEvaluationError>>()?;
+    if inputs.is_empty() {
+        return Ok(None);
+    }
+    let reduction = reduce_inputs(reducer, channel, inputs, integrals)?;
+    let rendering = std::time::Instant::now();
+    let rendered = render(reducer.handle, &reduction, reducer.epsilon)?;
+    with_stats(|stats| stats.render_seconds += rendering.elapsed().as_secs_f64());
+    Ok(Some(rendered))
+}
+
 /// The reduced values of a batch of backend requests (`docs/p_integrals.md`,
 /// section 5), by loop count and external head: one [`PReductionRequest`] per
 /// channel (module documentation), the values of one head NOT yet finalized
 /// (`reduced` per scale power, comparable with Forcer's `combine_parts` in
 /// the tag basis). The request-level entry of the RustRed p path below
 /// [`evaluate_ordered_batch`], for crate tests (M2-V5 Tier A).
+///
+/// Every request is split (and checked as its lowering checks it) before any
+/// channel is reduced, but a channel is lowered only just before its
+/// reduction, so only one channel's lowered inputs are alive at a time. The
+/// values, their order and the errors are those of lowering every channel
+/// first ([`reduce_requests_eager`]): rational sums are exact, and lowering
+/// fails only where [`prepare_part`] fails, in the same order.
+///
+/// The channels are folded first ([`reduce_requests_folded`]) unless
+/// `VAKINT_P_FOLD` is `off` (`0`, `false`), which keeps one reduction per
+/// non-rational coefficient; `basis` and `coefficient` pick the fold mode
+/// ([`FoldMode::DEFAULT`] when unset).
 pub(crate) fn reduce_requests(
     vakint: &Vakint,
     settings: &VakintSettings,
     requests: &[PropagatorRequest],
     progress: Option<&super::monitor::CallerProgress>,
 ) -> Result<BTreeMap<(usize, Atom), Vec<ReducedPropagatorValue>>, VakintError> {
+    reduce_requests_with(vakint, settings, requests, progress, false)
+}
+
+/// [`reduce_requests`] with every value factored: `reduced` is the rendered
+/// reduction of a channel and `spectator` its coefficient, so that a caller
+/// can expand both apart ([`ReducedPropagatorValue`]). The product of the two
+/// is the value of [`reduce_requests`].
+pub(crate) fn reduce_requests_factored(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    requests: &[PropagatorRequest],
+    progress: Option<&super::monitor::CallerProgress>,
+) -> Result<BTreeMap<(usize, Atom), Vec<ReducedPropagatorValue>>, VakintError> {
+    reduce_requests_with(vakint, settings, requests, progress, true)
+}
+
+fn reduce_requests_with(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    requests: &[PropagatorRequest],
+    progress: Option<&super::monitor::CallerProgress>,
+    factored: bool,
+) -> Result<BTreeMap<(usize, Atom), Vec<ReducedPropagatorValue>>, VakintError> {
     // Before the library is loaded or used: a boxed node binds the relation
     // cache roots on its first use (p_relations.rs).
     super::p_relations::install(settings);
+    let values = match fold_mode() {
+        FoldMode::Off => reduce_requests_unfolded(vakint, settings, requests, progress, factored),
+        mode => reduce_requests_folded(vakint, settings, requests, progress, mode, factored),
+    }?;
+    if phases::enabled() {
+        let stats = last_stats();
+        eprintln!(
+            "vakint-p-reduce requests={} channels={} reductions={} pairs={} split={:.6} lower={:.6} \
+             prepare={:.6} library={:.6} render={:.6} fold={:?}",
+            requests.len(),
+            stats.channels,
+            stats.reductions,
+            stats.pairs,
+            stats.split_seconds,
+            stats.lower_seconds,
+            stats.prepare_seconds,
+            stats.library_seconds,
+            stats.render_seconds,
+            fold_mode()
+        );
+    }
+    Ok(values)
+}
+
+/// How [`reduce_requests`] forms its reductions (`VAKINT_P_FOLD`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum FoldMode {
+    /// One reduction per (loops, head, scale power, non-rational coefficient).
+    Off,
+    /// One reduction per (loops, head, scale power, spectator monomial,
+    /// epsilon basis function), with rational inputs; the basis functions are
+    /// multiplied in after the reduction.
+    Basis,
+    /// One reduction per (loops, head, scale power, spectator monomial), with
+    /// the epsilon-rational parts in the inputs as rational functions of `d`.
+    Coefficient,
+}
+
+pub(crate) fn fold_mode() -> FoldMode {
+    static MODE: std::sync::LazyLock<FoldMode> =
+        std::sync::LazyLock::new(|| match std::env::var("VAKINT_P_FOLD").as_deref() {
+            Ok("off" | "0" | "false") => FoldMode::Off,
+            Ok("basis") => FoldMode::Basis,
+            Ok("coefficient") => FoldMode::Coefficient,
+            _ => FoldMode::DEFAULT,
+        });
+    *MODE
+}
+
+impl FoldMode {
+    /// The mode when `VAKINT_P_FOLD` is unset (or `on`).
+    pub(crate) const DEFAULT: FoldMode = FoldMode::Coefficient;
+}
+
+/// What the last [`reduce_requests`] call on this thread did (diagnostics).
+#[derive(Clone, Debug, Default)]
+pub(crate) struct PReduceStats {
+    pub channels: usize,
+    pub reductions: usize,
+    pub pairs: usize,
+    pub split_seconds: f64,
+    pub lower_seconds: f64,
+    pub prepare_seconds: f64,
+    pub library_seconds: f64,
+    pub render_seconds: f64,
+}
+
+thread_local! {
+    static STATS: std::cell::RefCell<PReduceStats> = std::cell::RefCell::new(PReduceStats::default());
+}
+
+/// The statistics of the last [`reduce_requests`] call on this thread.
+pub(crate) fn last_stats() -> PReduceStats {
+    STATS.with(|stats| stats.borrow().clone())
+}
+
+fn with_stats(update: impl FnOnce(&mut PReduceStats)) {
+    STATS.with(|stats| update(&mut stats.borrow_mut()));
+}
+
+/// [`reduce_requests`] without folding.
+pub(crate) fn reduce_requests_unfolded(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    requests: &[PropagatorRequest],
+    progress: Option<&super::monitor::CallerProgress>,
+    factored: bool,
+) -> Result<BTreeMap<(usize, Atom), Vec<ReducedPropagatorValue>>, VakintError> {
+    with_stats(|stats| *stats = PReduceStats::default());
+    let started = std::time::Instant::now();
     let handle = vakint.p_library()?;
+    let mut forms = BTreeMap::new();
+    let mut channels = PendingChannels::new();
+    for request in requests {
+        split_request(&handle, request, &mut forms, &mut channels)?;
+    }
+    with_stats(|stats| {
+        stats.split_seconds = started.elapsed().as_secs_f64();
+        stats.channels = channels.len();
+    });
+    let reducer = ChannelReducer {
+        handle: &handle,
+        options: request_options(settings),
+        step_cache: if channels.is_empty() {
+            None
+        } else {
+            vakint.ordered_step_cache(settings, &handle.cache)?
+        },
+        epsilon: vk_symbol!(&settings.epsilon_symbol),
+    };
+    let total = channels.len();
+    let mut values = BTreeMap::<(usize, Atom), Vec<ReducedPropagatorValue>>::new();
+    for (index, (channel, ChannelParts { parts, integrals })) in channels.into_iter().enumerate() {
+        if let Some(progress) = progress {
+            progress.cohorts(index, total);
+        }
+        let lowering = std::time::Instant::now();
+        let inputs = lower_channel(&handle, parts, &mut forms)?;
+        with_stats(|stats| {
+            stats.lower_seconds += lowering.elapsed().as_secs_f64();
+            stats.pairs += inputs.len();
+        });
+        let Some(reduced) = reduce_channel(&reducer, &channel, inputs, &integrals)? else {
+            continue;
+        };
+        let Channel {
+            loops,
+            head,
+            scale_power,
+            coefficient,
+        } = channel;
+        let value = if factored {
+            ReducedPropagatorValue {
+                scale_power,
+                reduced,
+                spectator: Some(coefficient),
+            }
+        } else {
+            ReducedPropagatorValue {
+                scale_power,
+                reduced: reduced * &coefficient,
+                spectator: None,
+            }
+        };
+        values.entry((loops, head)).or_default().push(value);
+    }
+    if let Some(progress) = progress {
+        progress.cohorts(total, total);
+    }
+    Ok(values)
+}
+
+/// A term `value · basis(ε) · monomial` of a channel coefficient: `monomial`
+/// holds the factors free of `ε` (and, as a fallback, any factor that is not
+/// a rational function of `ε` alone), `basis` the product of the factors that
+/// are rational functions of `ε` alone, `value` the rational number.
+fn spectator_terms(coefficient: &Atom, epsilon: Symbol) -> Vec<(Atom, Atom, Rational)> {
+    use symbolica::atom::AtomView;
+    use symbolica::coefficient::CoefficientView;
+    fn epsilon_rational(view: AtomView, epsilon: Symbol) -> bool {
+        match view {
+            AtomView::Num(_) => parts::rational(view).is_some(),
+            AtomView::Var(var) => var.get_symbol() == epsilon,
+            AtomView::Add(sum) => sum.iter().all(|term| epsilon_rational(term, epsilon)),
+            AtomView::Mul(product) => product.iter().all(|f| epsilon_rational(f, epsilon)),
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                crate::get_integer_from_atom(exponent).is_some() && epsilon_rational(base, epsilon)
+            }
+            _ => false,
+        }
+    }
+    let expanded = coefficient.expand();
+    let mut terms = Vec::new();
+    let mut add = |term: AtomView| {
+        let mut value = Rational::one();
+        let mut basis = Atom::num(1);
+        let mut monomial = Atom::num(1);
+        let factors = match term {
+            AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+            other => vec![other],
+        };
+        for factor in factors {
+            if let Some(number) = parts::rational(factor) {
+                value *= &fraction(number);
+            } else if let AtomView::Num(number) = factor
+                && let CoefficientView::Natural(0, _, imaginary, denominator) =
+                    number.get_coeff_view()
+                && imaginary != 0
+            {
+                // A purely imaginary number: its rational magnitude goes to
+                // the value and the unit to the monomial.
+                let magnitude = Rational::from((imaginary, denominator));
+                monomial *= factor.to_owned() / Atom::num(magnitude.clone());
+                value *= &magnitude;
+            } else if !factor.contains_symbol(epsilon) {
+                monomial *= factor.to_owned();
+            } else if epsilon_rational(factor, epsilon) {
+                basis *= factor.to_owned();
+            } else {
+                monomial *= factor.to_owned();
+            }
+        }
+        if !value.is_zero() {
+            terms.push((monomial, basis, value));
+        }
+    };
+    match expanded.as_view() {
+        AtomView::Add(sum) => sum.iter().for_each(&mut add),
+        other => add(other),
+    }
+    terms
+}
+
+/// A rational function of `ε` alone ([`spectator_terms`]) as a coefficient of
+/// the library's context at `ε = (4 - d)/2`.
+fn epsilon_coefficient(
+    context: &CoefficientContext,
+    view: symbolica::atom::AtomView,
+    epsilon: Symbol,
+    epsilon_at_d: &Coefficient,
+    limits: ExactAlgebraLimits,
+) -> Result<Coefficient, RustRedEvaluationError> {
+    use symbolica::atom::AtomView;
+    let native = RustRedEvaluationError::from_native;
+    match view {
+        AtomView::Num(_) => {
+            let value = parts::rational(view).ok_or_else(|| invalid(format!("number {view}")))?;
+            coefficient(context, &fraction(value), limits)
+        }
+        AtomView::Var(var) if var.get_symbol() == epsilon => Ok(epsilon_at_d.clone()),
+        AtomView::Add(sum) => {
+            let mut total = context.zero();
+            for term in sum.iter() {
+                let term = epsilon_coefficient(context, term, epsilon, epsilon_at_d, limits)?;
+                total = context.try_add(&total, &term, limits).map_err(native)?;
+            }
+            Ok(total)
+        }
+        AtomView::Mul(product) => {
+            let mut total = context.one();
+            for factor in product.iter() {
+                let factor = epsilon_coefficient(context, factor, epsilon, epsilon_at_d, limits)?;
+                total = context.try_mul(&total, &factor, limits).map_err(native)?;
+            }
+            Ok(total)
+        }
+        AtomView::Pow(power) => {
+            let (base, exponent) = power.get_base_exp();
+            let exponent = crate::get_integer_from_atom(exponent)
+                .ok_or_else(|| invalid(format!("power {view}")))?;
+            let base = epsilon_coefficient(context, base, epsilon, epsilon_at_d, limits)?;
+            let mut total = context.one();
+            for _ in 0..exponent.unsigned_abs() {
+                total = context.try_mul(&total, &base, limits).map_err(native)?;
+            }
+            if exponent < 0 {
+                total = context
+                    .try_div(&context.one(), &total, limits)
+                    .map_err(native)?;
+            }
+            Ok(total)
+        }
+        _ => Err(invalid(format!(
+            "not a rational function of epsilon: {view}"
+        ))),
+    }
+}
+
+/// The lowered inputs of one folded channel, by epsilon basis function.
+#[derive(Default)]
+struct FoldedInputs {
+    by_basis: BTreeMap<Atom, BTreeMap<(PresentationId, Vec<i64>), Rational>>,
+    integrals: BTreeSet<String>,
+}
+
+/// [`reduce_requests`] with the channels folded: every channel coefficient is
+/// written as `Σ value · basis(ε) · monomial` ([`spectator_terms`]), and the
+/// channel key keeps only the monomial. The value of a folded channel is
+/// `Σ_basis basis(ε) · R(Σ value · inputs) · monomial`, by linearity the sum
+/// of the values of the channels it folds. In [`FoldMode::Basis`] every basis
+/// function is reduced apart with rational inputs and multiplied in at the
+/// render level; in [`FoldMode::Coefficient`] the basis functions enter the
+/// inputs as rational functions of `d` and each folded channel is reduced once.
+pub(crate) fn reduce_requests_folded(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    requests: &[PropagatorRequest],
+    progress: Option<&super::monitor::CallerProgress>,
+    mode: FoldMode,
+    factored: bool,
+) -> Result<BTreeMap<(usize, Atom), Vec<ReducedPropagatorValue>>, VakintError> {
+    with_stats(|stats| *stats = PReduceStats::default());
+    let started = std::time::Instant::now();
+    let epsilon = vk_symbol!(&settings.epsilon_symbol);
+    let handle = vakint.p_library()?;
+    let mut forms = BTreeMap::new();
+    let mut pending = PendingChannels::new();
+    for request in requests {
+        split_request(&handle, request, &mut forms, &mut pending)?;
+    }
+    with_stats(|stats| {
+        stats.split_seconds = started.elapsed().as_secs_f64();
+        stats.channels = pending.len();
+    });
+    let lowering = std::time::Instant::now();
+    // Lower every channel once and distribute its lowered inputs, scaled by
+    // the value of each term of its coefficient, over the folded channels and
+    // basis functions. The integral keys are numbered once, and every folded
+    // basis accumulates into a dense vector indexed by key number.
+    let mut key_ids = HashMap::<(PresentationId, Vec<i64>), usize>::new();
+    let mut keys = Vec::<(PresentationId, Vec<i64>)>::new();
+    let mut buckets = Vec::<Vec<Rational>>::new();
+    let mut targets = BTreeMap::<Channel, (BTreeMap<Atom, usize>, BTreeSet<String>)>::new();
+    for (channel, ChannelParts { parts, integrals }) in pending {
+        let lowered = lower_channel(&handle, parts, &mut forms)?;
+        if lowered.is_empty() {
+            continue;
+        }
+        let lowered = lowered
+            .into_iter()
+            .filter(|(_, value)| !value.is_zero())
+            .map(|(key, value)| {
+                let next = keys.len();
+                let id = *key_ids.entry(key.clone()).or_insert_with(|| {
+                    keys.push(key);
+                    next
+                });
+                (id, value)
+            })
+            .collect::<Vec<_>>();
+        for (monomial, basis, value) in spectator_terms(&channel.coefficient, epsilon) {
+            let target = targets
+                .entry(Channel {
+                    loops: channel.loops,
+                    head: channel.head.clone(),
+                    scale_power: channel.scale_power,
+                    coefficient: monomial,
+                })
+                .or_default();
+            target.1.extend(integrals.iter().cloned());
+            let next = buckets.len();
+            let bucket = *target.0.entry(basis).or_insert_with(|| {
+                buckets.push(Vec::new());
+                next
+            });
+            let bucket = &mut buckets[bucket];
+            if bucket.len() < keys.len() {
+                bucket.resize(keys.len(), Rational::zero());
+            }
+            let unit = value == Rational::one();
+            for (id, lowered_value) in &lowered {
+                if unit {
+                    bucket[*id] += lowered_value;
+                } else {
+                    bucket[*id] += &(lowered_value * &value);
+                }
+            }
+        }
+    }
+    let mut folded = BTreeMap::<Channel, FoldedInputs>::new();
+    for (channel, (by_basis, integrals)) in targets {
+        let target = folded.entry(channel).or_default();
+        target.integrals = integrals;
+        for (basis, bucket) in by_basis {
+            let inputs = std::mem::take(&mut buckets[bucket])
+                .into_iter()
+                .enumerate()
+                .filter(|(_, value)| !value.is_zero())
+                .map(|(id, value)| (keys[id].clone(), value))
+                .collect::<BTreeMap<_, _>>();
+            target.by_basis.insert(basis, inputs);
+        }
+    }
+    with_stats(|stats| stats.lower_seconds = lowering.elapsed().as_secs_f64());
+    let reducer = ChannelReducer {
+        handle: &handle,
+        options: request_options(settings),
+        step_cache: if folded.is_empty() {
+            None
+        } else {
+            vakint.ordered_step_cache(settings, &handle.cache)?
+        },
+        epsilon,
+    };
     let library = &handle.library;
-    let options = request_options(settings);
-    let exact = options.limits.exact_algebra;
+    let context = library.coefficient_context();
+    let exact = reducer.options.limits.exact_algebra;
+    let native = RustRedEvaluationError::from_native;
+    let epsilon_at_d = {
+        let d = context
+            .parameter(&handle.dimension.to_canonical_string())
+            .or_else(|| context.parameter("d"))
+            .ok_or_else(|| invalid("the p library has no dimension parameter"))?;
+        let four_minus_d = context
+            .try_sub(&context.integer(4), &d, exact)
+            .map_err(native)?;
+        context
+            .try_div(&four_minus_d, &context.integer(2), exact)
+            .map_err(native)?
+    };
+    let total = folded.len();
+    let mut values = BTreeMap::<(usize, Atom), Vec<ReducedPropagatorValue>>::new();
+    for (
+        index,
+        (
+            channel,
+            FoldedInputs {
+                by_basis,
+                integrals,
+            },
+        ),
+    ) in folded.into_iter().enumerate()
+    {
+        if let Some(progress) = progress {
+            progress.cohorts(index, total);
+        }
+        let reduced = match mode {
+            FoldMode::Coefficient => {
+                let preparing = std::time::Instant::now();
+                let mut inputs = BTreeMap::<(PresentationId, Vec<i64>), Coefficient>::new();
+                for (basis, lowered) in by_basis {
+                    let weight = epsilon_coefficient(
+                        context,
+                        basis.as_view(),
+                        epsilon,
+                        &epsilon_at_d,
+                        exact,
+                    )?;
+                    for (key, value) in lowered {
+                        if value.is_zero() {
+                            continue;
+                        }
+                        let term = context
+                            .try_mul(&weight, &coefficient(context, &value, exact)?, exact)
+                            .map_err(native)?;
+                        match inputs.get_mut(&key) {
+                            Some(sum) => {
+                                *sum = context.try_add(sum, &term, exact).map_err(native)?
+                            }
+                            None => {
+                                inputs.insert(key, term);
+                            }
+                        }
+                    }
+                }
+                with_stats(|stats| {
+                    stats.prepare_seconds += preparing.elapsed().as_secs_f64();
+                    stats.pairs += inputs.len();
+                });
+                let inputs = inputs
+                    .into_iter()
+                    .filter(|(_, value)| !value.is_zero())
+                    .map(|((presentation, powers), value)| {
+                        let key = IntegralKey::try_new(powers)
+                            .map_err(|error| invalid(format!("integral key: {error}")))?;
+                        Ok((presentation, key, value))
+                    })
+                    .collect::<Result<Vec<_>, RustRedEvaluationError>>()?;
+                if inputs.is_empty() {
+                    continue;
+                }
+                let reduction = reduce_inputs(&reducer, &channel, inputs, &integrals)?;
+                let rendering = std::time::Instant::now();
+                let terms = render_terms(&handle, &reduction, epsilon)?;
+                let reduced = collect_terms(terms);
+                with_stats(|stats| stats.render_seconds += rendering.elapsed().as_secs_f64());
+                reduced
+            }
+            _ => {
+                let mut combined = BTreeMap::<Atom, Atom>::new();
+                for (basis, lowered) in by_basis {
+                    with_stats(|stats| stats.pairs += lowered.len());
+                    let inputs = lowered
+                        .into_iter()
+                        .filter(|(_, value)| !value.is_zero())
+                        .map(|((presentation, powers), value)| {
+                            let key = IntegralKey::try_new(powers)
+                                .map_err(|error| invalid(format!("integral key: {error}")))?;
+                            Ok((presentation, key, coefficient(context, &value, exact)?))
+                        })
+                        .collect::<Result<Vec<_>, RustRedEvaluationError>>()?;
+                    if inputs.is_empty() {
+                        continue;
+                    }
+                    let reduction = reduce_inputs(&reducer, &channel, inputs, &integrals)?;
+                    let rendering = std::time::Instant::now();
+                    for (monomial, value) in render_terms(&handle, &reduction, epsilon)? {
+                        *combined.entry(monomial).or_default() += value * &basis;
+                    }
+                    with_stats(|stats| stats.render_seconds += rendering.elapsed().as_secs_f64());
+                }
+                let rendering = std::time::Instant::now();
+                let reduced = collect_terms(combined);
+                with_stats(|stats| stats.render_seconds += rendering.elapsed().as_secs_f64());
+                reduced
+            }
+        };
+        if reduced.is_zero() {
+            continue;
+        }
+        let Channel {
+            loops,
+            head,
+            scale_power,
+            coefficient,
+        } = channel;
+        let value = if factored {
+            ReducedPropagatorValue {
+                scale_power,
+                reduced,
+                spectator: Some(coefficient),
+            }
+        } else {
+            ReducedPropagatorValue {
+                scale_power,
+                reduced: reduced * &coefficient,
+                spectator: None,
+            }
+        };
+        values.entry((loops, head)).or_default().push(value);
+    }
+    if let Some(progress) = progress {
+        progress.cohorts(total, total);
+    }
+    Ok(values)
+}
+
+/// One library reduction of `inputs` for `channel` (the checks of
+/// [`reduce_channel`]), timed into the statistics.
+fn reduce_inputs(
+    reducer: &ChannelReducer,
+    channel: &Channel,
+    inputs: Vec<(PresentationId, IntegralKey, Coefficient)>,
+    integrals: &BTreeSet<String>,
+) -> Result<PReduction, VakintError> {
+    let reducing = std::time::Instant::now();
+    let reduction = {
+        let _math = MathSpan::new();
+        reduce_one(
+            &reducer.handle.library,
+            &reducer.options,
+            channel.loops,
+            inputs,
+            reducer.step_cache.clone(),
+            integrals,
+            &format!(
+                "{}L scale_power={} coefficient={}",
+                channel.loops, channel.scale_power, channel.coefficient
+            ),
+        )?
+    };
+    with_stats(|stats| {
+        stats.library_seconds += reducing.elapsed().as_secs_f64();
+        stats.reductions += 1;
+    });
+    if reduction.dimension != channel.loops as i64 {
+        return Err(invalid(format!(
+            "a {}-loop request returned a reduction of dimension {}",
+            channel.loops, reduction.dimension
+        ))
+        .into());
+    }
+    Ok(reduction)
+}
+
+/// `Σ coefficient.together() · monomial` of [`render_terms`]: [`render`].
+fn collect_terms(terms: BTreeMap<Atom, Atom>) -> Atom {
+    terms
+        .into_iter()
+        .fold(Atom::Zero, |reduced, (monomial, coefficient)| {
+            reduced + coefficient.together() * monomial
+        })
+}
+
+/// [`reduce_requests`] as it was before the lazy lowering: every channel is
+/// lowered into one table before any is reduced. The reference of the tests.
+#[cfg(test)]
+pub(crate) fn reduce_requests_eager(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    requests: &[PropagatorRequest],
+    progress: Option<&super::monitor::CallerProgress>,
+) -> Result<BTreeMap<(usize, Atom), Vec<ReducedPropagatorValue>>, VakintError> {
+    let handle = vakint.p_library()?;
     let mut forms = BTreeMap::new();
     let mut channels = Channels::new();
-    let started = phases::start();
     for request in requests {
         add_request(&handle, request, &mut forms, &mut channels)?;
     }
-    phases::end("p.split_and_lower", started);
-    let epsilon = vk_symbol!(&settings.epsilon_symbol);
-    let step_cache = phases::time("p.attach_step_cache", || {
-        if channels.is_empty() {
-            Ok(None)
+    let reducer = ChannelReducer {
+        handle: &handle,
+        options: request_options(settings),
+        step_cache: if channels.is_empty() {
+            None
         } else {
-            vakint.ordered_step_cache(settings, &handle.cache)
-        }
-    })?;
-    let (mut convert, mut reduce, mut rendering) = (
-        phases::Accumulator::default(),
-        phases::Accumulator::default(),
-        phases::Accumulator::default(),
-    );
-    if phases::enabled() {
-        let union = channels
-            .values()
-            .flat_map(|inputs| inputs.inputs.keys())
-            .collect::<BTreeSet<_>>();
-        let presentations = union.iter().map(|(id, _)| *id).collect::<BTreeSet<_>>();
-        let integrals = channels
-            .values()
-            .flat_map(|inputs| inputs.integrals.iter())
-            .collect::<BTreeSet<_>>();
-        eprintln!(
-            "vakint-phase-info p_batch requests={} channels={} inputs={} distinct_keys={} presentations={} vakint_integrals={}",
-            requests.len(),
-            channels.len(),
-            channels
-                .values()
-                .map(|inputs| inputs.inputs.len())
-                .sum::<usize>(),
-            union.len(),
-            presentations.len(),
-            integrals.len()
-        );
-    }
-    let mut values = BTreeMap::<(usize, Atom), Vec<ReducedPropagatorValue>>::new();
-    let joint_mode = joint::mode();
-    if joint_mode != joint::JointMode::Off && !channels.is_empty() {
-        let groups = joint::groups(library, &channels, epsilon, exact)?;
-        let check = joint_mode == joint::JointMode::Check;
-        let reductions = reduce.time(|| {
-            joint::reduce_groups(
-                library,
-                &options,
-                &step_cache,
-                &groups,
-                &channels,
-                check,
-                exact,
-            )
-        })?;
-        if !check {
-            for (group, reduction) in groups.iter().zip(&reductions) {
-                for (channel, _) in &group.channels {
-                    channels.remove(channel);
-                }
-                let Some(reduction) = reduction else {
-                    continue; // the summed inputs cancel: an exact zero
-                };
-                if reduction.dimension != group.loops as i64 {
-                    return Err(invalid(format!(
-                        "a {}-loop request returned a reduction of dimension {}",
-                        group.loops, reduction.dimension
-                    ))
-                    .into());
-                }
-                let reduced =
-                    rendering.time(|| render(&handle, reduction, epsilon))? * &group.monomial;
-                values
-                    .entry((group.loops, group.head.clone()))
-                    .or_default()
-                    .push(ReducedPropagatorValue {
-                        scale_power: group.scale_power,
-                        reduced,
-                    });
-            }
-        }
-    }
+            vakint.ordered_step_cache(settings, &handle.cache)?
+        },
+        epsilon: vk_symbol!(&settings.epsilon_symbol),
+    };
     let total = channels.len();
-    let threads = settings.n_cores.max(1);
-    if across_channels(threads, total) {
-        // Many small requests (physics numerators: one per distinct
-        // coefficient): each on one thread, the requests spread over the
-        // workers, results consumed in channel order. A request returns the
-        // same terms on any thread count and whatever its step cache holds,
-        // so the values do not depend on the scheduling.
-        let jobs = channels
-            .into_iter()
-            .map(|(channel, ChannelInputs { inputs, integrals })| {
-                let inputs = convert.time(|| channel_inputs(library, inputs, exact))?;
-                Ok((channel, inputs, integrals))
-            })
-            .collect::<Result<Vec<_>, RustRedEvaluationError>>()?
-            .into_iter()
-            .filter(|(_, inputs, _)| !inputs.is_empty())
-            .collect::<Vec<_>>();
-        let single = PRequestOptions {
-            scheduler: OrderedSchedulerOptions {
-                threads: 1,
-                ..options.scheduler
-            },
-            ..options
-        };
-        let reductions = reduce.time(|| {
-            let _math = MathSpan::new();
-            super::parallel::map_ordered_by_cost(
-                threads,
-                &jobs,
-                |(_, inputs, _)| inputs.len(),
-                |index, (channel, inputs, integrals)| {
-                    let started = phases::per_request().then(std::time::Instant::now);
-                    let reduction = reduce_one(
-                        library,
-                        &single,
-                        channel.loops,
-                        inputs.clone(),
-                        step_cache.clone(),
-                        integrals,
-                        &format!("channel {index} scale_power={}", channel.scale_power),
-                    );
-                    if let (Some(started), Ok(reduction)) = (started, &reduction) {
-                        eprintln!(
-                            "vakint-p-request index={index} inputs={} terms={} seconds={:.6}",
-                            inputs.len(),
-                            reduction.terms.len(),
-                            started.elapsed().as_secs_f64()
-                        );
-                    }
-                    reduction
-                },
-            )
-        });
-        let reductions = reductions.into_iter().collect::<Result<Vec<_>, _>>()?;
-        for ((channel, _, _), reduction) in jobs.iter().zip(&reductions) {
-            if reduction.dimension != channel.loops as i64 {
-                return Err(invalid(format!(
-                    "a {}-loop request returned a reduction of dimension {}",
-                    channel.loops, reduction.dimension
-                ))
-                .into());
-            }
-        }
-        let rendered = rendering.time(|| {
-            super::parallel::map_ordered(threads, &reductions, |_, reduction| {
-                render(&handle, reduction, epsilon)
-            })
-        });
-        for ((channel, _, _), reduced) in jobs.into_iter().zip(rendered) {
-            values
-                .entry((channel.loops, channel.head))
-                .or_default()
-                .push(ReducedPropagatorValue {
-                    scale_power: channel.scale_power,
-                    reduced: reduced? * &channel.coefficient,
-                });
-        }
-        if let Some(progress) = progress {
-            progress.cohorts(total, total);
-        }
-        convert.report("p.input_coefficients");
-        reduce.report("p.rustred_reduce");
-        rendering.report("p.render");
-        return Ok(values);
-    }
+    let mut values = BTreeMap::<(usize, Atom), Vec<ReducedPropagatorValue>>::new();
     for (index, (channel, ChannelInputs { inputs, integrals })) in channels.into_iter().enumerate()
     {
         if let Some(progress) = progress {
             progress.cohorts(index, total);
         }
-        let inputs = convert.time(|| channel_inputs(library, inputs, exact))?;
-        if inputs.is_empty() {
+        let Some(reduced) = reduce_channel(&reducer, &channel, inputs, &integrals)? else {
             continue;
-        }
-        let input_count = inputs.len();
-        let before = reduce.total;
-        let reduction = reduce.time(|| {
-            let _math = MathSpan::new();
-            reduce_one(
-                library,
-                &options,
-                channel.loops,
-                inputs,
-                step_cache.clone(),
-                &integrals,
-                &format!("channel {index} scale_power={}", channel.scale_power),
-            )
-        })?;
-        if phases::per_request() {
-            eprintln!(
-                "vakint-p-request index={index} inputs={input_count} terms={} seconds={:.6}",
-                reduction.terms.len(),
-                (reduce.total - before).as_secs_f64()
-            );
-        }
-        if reduction.dimension != channel.loops as i64 {
-            return Err(invalid(format!(
-                "a {}-loop request returned a reduction of dimension {}",
-                channel.loops, reduction.dimension
-            ))
-            .into());
-        }
-        let reduced =
-            rendering.time(|| render(&handle, &reduction, epsilon))? * &channel.coefficient;
+        };
         values
             .entry((channel.loops, channel.head))
             .or_default()
             .push(ReducedPropagatorValue {
                 scale_power: channel.scale_power,
-                reduced,
+                reduced: reduced * &channel.coefficient,
+                spectator: None,
             });
     }
     if let Some(progress) = progress {
         progress.cohorts(total, total);
     }
-    convert.report("p.input_coefficients");
-    reduce.report("p.rustred_reduce");
-    rendering.report("p.render");
     Ok(values)
 }
 
@@ -955,9 +1530,6 @@ pub(crate) fn evaluate_ordered_batch(
     let reduced = reduce_requests(vakint, settings, &requests, progress)?;
     finalize_reduced(vakint, settings, reduced, &names, mode)
 }
-
-#[path = "p_joint.rs"]
-mod joint;
 
 #[cfg(test)]
 #[path = "p_integral_tests.rs"]

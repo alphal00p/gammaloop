@@ -11,6 +11,8 @@ mod test;
 
 #[cfg(test)]
 pub(crate) use analysis::CANDIDATE_NODE_VISITS;
+#[cfg(test)]
+pub(crate) use analysis::SCAN_COUNTS;
 pub(crate) use analysis::SimplificationCandidates;
 // The legacy raw pipeline exists solely as an independent unit-test oracle.
 #[cfg(test)]

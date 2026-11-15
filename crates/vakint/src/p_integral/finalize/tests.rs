@@ -205,6 +205,7 @@ fn value(scale_power: i64, reduced: Atom) -> ReducedPropagatorValue {
     ReducedPropagatorValue {
         scale_power,
         reduced,
+        spectator: None,
     }
 }
 

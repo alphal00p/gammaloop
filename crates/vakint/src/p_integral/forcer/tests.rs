@@ -107,11 +107,26 @@ fn forcer_battery(file: &str, frozen_json: &str) -> Vec<(Case, Vec<ReducedPropag
                     &settings(form),
                 )
                 .unwrap_or_else(|error| panic!("{}: {error}", case.name));
+                // The frozen outputs follow the epsilon-free channel layout;
+                // live requests reduce epsilon-rational factors inside FORM,
+                // so equal values can differ in their algebraic form.
                 assert_eq!(
-                    reduced, frozen,
-                    "{}: live Forcer differs from the fixture",
+                    reduced.iter().map(|value| value.scale_power).collect::<Vec<_>>(),
+                    frozen.iter().map(|value| value.scale_power).collect::<Vec<_>>(),
+                    "{}: live Forcer scale powers differ from the fixture",
                     case.name
                 );
+                for (live, frozen) in reduced.iter().zip(&frozen) {
+                    assert!(
+                        (&live.reduced - &frozen.reduced)
+                            .expand()
+                            .together()
+                            .is_zero(),
+                        "{}: live Forcer differs from the fixture at scale {}",
+                        case.name,
+                        live.scale_power
+                    );
+                }
             }
             (case, frozen)
         })
@@ -504,6 +519,7 @@ fn assert_guard(
             .map(|value| ReducedPropagatorValue {
                 scale_power: value.scale_power,
                 reduced: &value.reduced * e.pow(Atom::num(-pole)),
+                spectator: None,
             })
             .collect::<Vec<_>>();
         finalize(
@@ -766,6 +782,174 @@ fn tagged_homogeneous_channels_match_independent_reductions() {
             );
         }
     }
+}
+
+fn rational_atom(value: &EpsilonRational) -> Atom {
+    value.numerator.to_expression() / value.denominator.to_expression()
+}
+
+#[test]
+fn epsilon_coordinates_separate_epsilon_free_spectators() {
+    let coefficient = parse(
+        "transverse*g^8*(-192/((3-2*ε)*(4-2*ε)*(6-2*ε)) + 64/((3-2*ε)*(4-2*ε)))*dot(p(1),p(1)) \
+         + longitudinal*g^8*192/((4-2*ε)*(6-2*ε))*dot(p(1),p(1))",
+    );
+    let coordinates = epsilon_coordinates(&coefficient, epsilon()).unwrap();
+    assert_eq!(coordinates.len(), 2);
+    let mut reconstructed = Atom::Zero;
+    for (spectator, rational) in &coordinates {
+        assert!(!spectator.contains_symbol(epsilon()));
+        reconstructed += spectator * rational_atom(rational);
+    }
+    assert!((reconstructed - &coefficient).expand().together().is_zero());
+
+    // Complex phases stay spectators; cancelling rational functions vanish.
+    let coordinates =
+        epsilon_coordinates(&parse("𝑖*a*(1+ε) - 𝑖*a - 𝑖*a*ε + b*ε"), epsilon()).unwrap();
+    assert_eq!(coordinates.len(), 1);
+    assert_eq!(coordinates[0].0, parse("b"));
+    // Epsilon mixed with another symbol keeps the coefficient outside FORM.
+    assert!(epsilon_coordinates(&parse("a/(a+ε)"), epsilon()).is_none());
+    assert_eq!(epsilon_coordinates(&parse("a*b"), epsilon()).unwrap().len(), 1);
+}
+
+#[test]
+fn proportional_and_spanning_coefficients_share_channels() {
+    let family = family("P2L");
+    let powers = [1, 1, 1, 1, 1];
+    let external = parse("-p(3)");
+    let shared = parse("t*(1+ε)/(3-2*ε) + l*(2-ε)");
+    // Equal degree: proportional coefficients share a channel; a third,
+    // independent direction in the (t, l) plane adds exactly one more.
+    let numerator = &shared * parse("dot(k(1),k(1))")
+        + parse("(4+ε)/(6-2*ε)") * &shared * parse("dot(k(1),k(2))")
+        + parse("t*5 + l*(1-ε)") * parse("dot(k(2),k(2))");
+    let plain = forcer_input(family, &powers, numerator.as_view(), &external)
+        .unwrap()
+        .unwrap();
+    let moved = forcer_input_with_epsilon(family, &powers, numerator.as_view(), &external, epsilon())
+        .unwrap()
+        .unwrap();
+    assert_eq!(plain.parts.len(), 3);
+    assert_eq!(moved.parts.len(), 2, "{}", moved.program);
+    assert!(moved.program.contains("rat("));
+    // Equal integrals must merge their coefficients from the first sort on.
+    assert!(moved.program.contains("PolyRatFun rat;"));
+    assert!(!plain.program.contains("PolyRatFun"));
+}
+
+#[test]
+fn epsilon_rational_channels_match_reductions_with_external_coefficients() {
+    let Some(form) = forcer_test_form() else {
+        eprintln!("FORM 5 is unavailable: skipped the epsilon-rational channel run");
+        return;
+    };
+    let family = family("P2L");
+    let powers = [1, 1, 2, 1, 1];
+    let external = parse("-p(3)");
+    let terms = [
+        (parse("t*192/((3-2*ε)*(4-2*ε))"), parse("dot(k(1),k(1))*dot(k(2),p(3))")),
+        (parse("t*(1+ε)/(6-2*ε)"), parse("dot(k(1),k(2))*dot(k(2),p(3))")),
+        (parse("l*(2-ε)^2"), parse("dot(k(1),p(3))^2")),
+        (parse("l/(3-2*ε)"), parse("dot(k(1),k(1))*dot(k(2),p(3))")),
+        (parse("t*l"), parse("dot(k(2),k(2))")),
+    ];
+    let numerator = Atom::add_many(terms.iter().map(|(c, m)| c * m).collect::<Vec<_>>());
+    let plain = forcer_input(family, &powers, numerator.as_view(), &external)
+        .unwrap()
+        .unwrap();
+    let moved = forcer_input_with_epsilon(family, &powers, numerator.as_view(), &external, epsilon())
+        .unwrap()
+        .unwrap();
+    assert!(moved.parts.len() < plain.parts.len());
+    assert!(moved.program.contains("rat("));
+
+    let settings = settings(&form);
+    let mut expected = BTreeMap::<i64, Atom>::new();
+    for (coefficient, monomial) in &terms {
+        for value in reduce_p(family, &powers, monomial.as_view(), &external, &settings).unwrap() {
+            *expected.entry(value.scale_power).or_default() += coefficient * value.reduced;
+        }
+    }
+    let actual = reduce_p(family, &powers, numerator.as_view(), &external, &settings).unwrap();
+    assert_eq!(actual.len(), expected.len());
+    for value in actual {
+        assert!(
+            (value.reduced - &expected[&value.scale_power])
+                .expand()
+                .together()
+                .is_zero(),
+            "epsilon-rational channels changed scale {}",
+            value.scale_power
+        );
+    }
+}
+
+#[test]
+fn independent_request_batches_match_serial_reductions_with_distinct_routings() {
+    let Some(form) = forcer_test_form() else {
+        eprintln!("FORM 5 is unavailable: skipped cross-request batch reduction");
+        return;
+    };
+    let directory = tempfile::tempdir().unwrap();
+    let settings = VakintSettings {
+        // Both lanes must execute, rather than compare two cache hits.
+        clean_tmp_dir: false,
+        temporary_directory: Some(directory.path().display().to_string()),
+        ..settings(&form)
+    };
+    let specifications = [
+        (
+            family("P1L"),
+            vec![2, 1],
+            parse("(alpha+ε)/ε*dot(k(1),p(7))+dot(k(1),k(1))"),
+            parse("p(7)"),
+        ),
+        (
+            family("P2L"),
+            vec![1, 1, 1, 1, 1],
+            parse("beta/ε^2+dot(k(1),k(2))^2"),
+            parse("-p(3)"),
+        ),
+        (
+            family("P2L"),
+            vec![1, 0, 1, 1, 1],
+            parse("dot(k(1),p(2))^2+ε"),
+            parse("p(2)"),
+        ),
+    ];
+    let inputs = specifications
+        .iter()
+        .map(|(family, powers, numerator, external)| {
+            forcer_input(family, powers, numerator.as_view(), external)
+                .unwrap()
+                .unwrap()
+        })
+        .collect::<Vec<_>>();
+    let actual = reduce_inputs(&inputs, &settings).unwrap();
+    for ((family, powers, numerator, external), actual) in specifications.iter().zip(actual) {
+        let expected = reduce_p(family, powers, numerator.as_view(), external, &settings).unwrap();
+        assert_eq!(actual.len(), expected.len());
+        for (actual, expected) in actual.iter().zip(expected) {
+            assert_eq!(actual.scale_power, expected.scale_power);
+            assert!(
+                (&actual.reduced - expected.reduced)
+                    .expand()
+                    .together()
+                    .is_zero()
+            );
+        }
+    }
+    let programs = std::fs::read_dir(directory.path())
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().join("run_forcer.frm").is_file())
+        .count();
+    assert_eq!(
+        programs,
+        specifications.len() + 1,
+        "all batch requests must share one FORM invocation"
+    );
 }
 
 #[test]

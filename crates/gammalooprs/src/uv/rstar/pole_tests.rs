@@ -25,8 +25,9 @@ use vakint::Vakint;
 use crate::{
     feyngen::feynkit::FeynmanDiagramGammaLoopExt,
     finalized_runtime_dot,
-    graph::{Graph, LMBext, parse::IntoFinalizedRuntimeGraph},
+    graph::{Autogen, Graph, LMBext, parse::IntoFinalizedRuntimeGraph},
     initialisation::test_initialise,
+    model::Model,
     utils::{GS, W_, load_generic_model},
     uv::{UVgenerationSettings, UltravioletGraph},
 };
@@ -68,10 +69,7 @@ fn external_square(graph: &Graph) -> Atom {
     function!(SPENSO_TAG.dot, &momentum, &momentum)
 }
 
-#[test]
-fn two_loop_nested_bubble_bare_poles_include_the_physical_logarithm() -> Result<()> {
-    test_initialise()?;
-    let model = load_generic_model("scalars");
+fn nested_bubble(model: &Model) -> Result<Graph> {
     // The external legs attach to A and C, so the AB bubble carries an
     // integrated outer momentum. Both outer lines have power one: unlike
     // placing both external legs on A/B, this graph has no physical IR pole.
@@ -87,9 +85,17 @@ fn two_loop_nested_bubble_bare_poles_include_the_physical_logarithm() -> Result<
             A -> B [id=1 lmb_id=0 source="{ufo_order:2}" sink="{ufo_order:1}"];
             A -> C [id=2 source="{ufo_order:3}" sink="{ufo_order:1}"];
             B -> C [id=3 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"];
-        }, &model
+        }, model
     )?;
     make_massless(&mut graph);
+    Ok(graph)
+}
+
+#[test]
+fn two_loop_nested_bubble_bare_poles_include_the_physical_logarithm() -> Result<()> {
+    test_initialise()?;
+    let model = load_generic_model("scalars");
+    let graph = nested_bubble(&model)?;
     let settings = settings();
     let vakint = Vakint::new()?;
     let plan = RStarPlan::new(&graph, &model, EdgeIndex::from(0), &settings)?;
@@ -109,7 +115,114 @@ fn two_loop_nested_bubble_bare_poles_include_the_physical_logarithm() -> Result<
     let expected = Atom::one() / (Atom::num(2) * epsilon.pow(2))
         + (Atom::num(1) / Atom::num(2) - logarithm) / &epsilon;
     assert!(actual.contains_symbol(Symbol::LOG), "bare poles: {actual}");
-    assert_same_counterterm(&actual, &expected)
+    assert_same_counterterm(&actual, &expected)?;
+    let reconstructed =
+        plan.counterterm_from_pole_part(&graph, &model, &vakint, &settings, &expected)?;
+    let direct = plan.counterterm(&graph, &model, &vakint, &settings)?;
+    assert_same_counterterm(&reconstructed, &direct)
+}
+
+#[test]
+fn local_epsilon_coefficient_does_not_commute_with_nested_counterterms() -> Result<()> {
+    test_initialise()?;
+    let model = load_generic_model("scalars");
+    let mut graph = nested_bubble(&model)?;
+    let settings = settings();
+    let vakint = Vakint::new()?;
+    let plan = RStarPlan::new(&graph, &model, EdgeIndex::from(0), &settings)?;
+    assert_eq!(plan.counterterms.len(), 1);
+
+    let epsilon = Atom::var(GS.dim_epsilon);
+    let double_pole = Atom::one() / (Atom::num(2) * epsilon.pow(2));
+    let surrogate = plan.counterterm(&graph, &model, &vakint, &settings)?;
+    assert_same_counterterm(
+        &surrogate,
+        &(&double_pole - Atom::one() / (Atom::num(2) * &epsilon)),
+    )?;
+
+    // Put the coefficient on an actual vertex inside the AB UV child.
+    // Graph-wide prefactors are intentionally excluded by the R* API.
+    let inner_vertex = graph
+        .iter_nodes_of(&plan.counterterms[0].argument.support)
+        .find_map(|(node, _, data)| (data.name.value == "B").then_some(node))
+        .expect("the nested bubble contains vertex B");
+    let coefficient = Atom::one() + &epsilon;
+    graph.underlying[inner_vertex].num = Autogen::explicit(coefficient.clone());
+    let dressed_plan = RStarPlan::new(&graph, &model, EdgeIndex::from(0), &settings)?;
+    let dressed = dressed_plan.counterterm(&graph, &model, &vakint, &settings)?;
+
+    // GScheme: B = 1/eps - log(Q²/mu²) + O(eps), and the bare
+    // nested graph has poles 1/(2eps²) + (1/2 - log(Q²/mu²))/eps.
+    // The dressed child still has Delta(B) = -1/eps. Thus -K R' of
+    // (1+eps)G is 1/(2eps²) - 1/eps, whereas multiplying Delta(G)
+    // after its child projections loses the extra simple pole.
+    assert_same_counterterm(&dressed, &(&double_pole - Atom::one() / &epsilon))?;
+    let naive = (&coefficient * &surrogate)
+        .series(GS.dim_epsilon, 0, -1)?
+        .to_atom();
+    assert_same_counterterm(&naive, &double_pole)?;
+    assert_same_counterterm(&(&dressed - naive), &(-Atom::one() / &epsilon))?;
+
+    // The same coefficient is safe in front of the complete bare integral.
+    // Reapply the original forest to these independently known bare poles.
+    let logarithm = function!(
+        Symbol::LOG,
+        -external_square(&graph) / Atom::var(GS.mu_r_sq)
+    );
+    let bare_poles = &double_pole + (Atom::one() - logarithm) / &epsilon;
+    let reconstructed =
+        dressed_plan.counterterm_from_pole_part(&graph, &model, &vakint, &settings, &bare_poles)?;
+    assert_same_counterterm(&reconstructed, &dressed)
+}
+
+#[test]
+fn inverse_forest_projection_contracts_root_tensors_before_poles() -> Result<()> {
+    use crate::numerator::aind::Aind;
+    use spenso::{network::library::symbolic::ETS, structure::slot::ParseableAind};
+
+    test_initialise()?;
+    let model = load_generic_model("scalars");
+    let mut graph = nested_bubble(&model)?;
+    let settings = settings();
+    let vakint = Vakint::new()?;
+    let plan = RStarPlan::new(&graph, &model, EdgeIndex::from(0), &settings)?;
+    let outer_vertex = graph
+        .iter_nodes_of(&plan.support)
+        .find_map(|(node, _, data)| (data.name.value == "C").then_some(node))
+        .expect("vertex C lies outside the nested UV child");
+    let minkowski = Minkowski {}.new_rep(GS.dim);
+    let tensor = ETS.metric(
+        minkowski.to_symbolic([Aind::Hedge(4, 0).to_atom()]),
+        minkowski.to_symbolic([Aind::Hedge(5, 0).to_atom()]),
+    );
+    graph.underlying[outer_vertex].num = Autogen::explicit(tensor.clone());
+    let plan = RStarPlan::new(&graph, &model, EdgeIndex::from(0), &settings)?;
+    let epsilon = Atom::var(GS.dim_epsilon);
+    let logarithm = function!(
+        Symbol::LOG,
+        -external_square(&graph) / Atom::var(GS.mu_r_sq)
+    );
+    let bare_poles = &tensor
+        * (Atom::one() / (Atom::num(2) * epsilon.pow(2))
+            + (Atom::num(1) / Atom::num(2) - logarithm) / &epsilon);
+    // Deliberately leave both the metric contraction and 1/(d-1) to the
+    // implementation, so d/(d-1) must be expanded before its final K.
+    let project = |expression: &Atom| -> Result<Atom> {
+        Ok(expression * &tensor / (Atom::var(GS.dim) - Atom::one()))
+    };
+    let reconstructed = plan.projected_counterterm_from_pole_part(
+        &graph,
+        &model,
+        &vakint,
+        &settings,
+        &bare_poles,
+        &project,
+    )?;
+    let expected =
+        Atom::num(2) / (Atom::num(3) * epsilon.pow(2)) - Atom::num(5) / (Atom::num(9) * &epsilon);
+    assert_same_counterterm(&reconstructed, &expected)?;
+    let direct = plan.projected_counterterm(&graph, &model, &vakint, &settings, &project)?;
+    assert_same_counterterm(&reconstructed, &direct)
 }
 
 #[test]
@@ -156,7 +269,10 @@ fn overall_convergent_bubble_in_kite_has_a_nonlocal_subdivergence_pole() -> Resu
         Atom::num(6) * function!(zeta(), 3) / (external_square(&graph) * Atom::var(GS.dim_epsilon));
     assert!(!canonical_tensor(&actual)?.is_zero());
     assert!(!actual.contains_symbol(Symbol::LOG), "bare poles: {actual}");
-    assert_same_counterterm(&actual, &expected)
+    assert_same_counterterm(&actual, &expected)?;
+    let reconstructed =
+        plan.counterterm_from_pole_part(&graph, &model, &vakint, &settings, &expected)?;
+    assert_same_counterterm(&reconstructed, &Atom::Zero)
 }
 
 #[test]
@@ -262,5 +378,8 @@ fn one_loop_ghost_bare_pole_matches_the_exact_bubble_moment() -> Result<()> {
         !retains_other_external,
         "bare pole has unrouted external momentum: {actual}"
     );
-    assert_same_counterterm(&actual, &expected)
+    assert_same_counterterm(&actual, &expected)?;
+    let reconstructed =
+        plan.counterterm_from_pole_part(&graph, &model, &vakint, &settings, &expected)?;
+    assert_same_counterterm(&reconstructed, &(-expected))
 }

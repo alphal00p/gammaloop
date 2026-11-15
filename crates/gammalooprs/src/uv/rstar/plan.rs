@@ -3,7 +3,10 @@
 //! All supports and boundary half-edges refer to the original typed graph. In
 //! particular, contracting a region never renumbers an insertion's tensor slots.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 use color_eyre::Result;
 use eyre::{ensure, eyre};
@@ -24,6 +27,7 @@ use crate::{
         ApproximationType, RenormalizationPrescriptionSettings, Spinney, UVgenerationSettings,
         UltravioletGraph,
         approx::CutStructure,
+        counterterm_cache::{CountertermCache, CountertermRequest},
         hedge_poset::{Forests, Wood},
     },
 };
@@ -333,9 +337,17 @@ pub struct RStarPlan {
     /// Decorated quotient dependencies have their explicit order in `forest`.
     pub counterterms: Vec<CountertermCall>,
     catalogue: Vec<Spinney>,
+    pub(super) counterterm_cache: Option<Arc<CountertermCache>>,
 }
 
 impl RStarPlan {
+    /// Reuse completed proper UV and decorated quotient counterterms across
+    /// evaluations. Root projectors remain outside this shared cache.
+    pub fn with_counterterm_cache(mut self, cache: Arc<CountertermCache>) -> Self {
+        self.counterterm_cache = Some(cache);
+        self
+    }
+
     pub fn new(
         graph: &Graph,
         model: &Model,
@@ -484,6 +496,7 @@ impl RStarPlan {
             ir,
             counterterms,
             catalogue,
+            counterterm_cache: None,
         })
     }
 
@@ -499,6 +512,75 @@ impl RStarPlan {
         .unfold()
     }
 
+    /// Exact undecorated UV requests used by this plan's ordinary R children.
+    /// The family mass and settings are identical to normal R* evaluation.
+    /// Dynamic IR quotient insertions are not known at this stage.
+    pub fn uv_child_requests<'a>(
+        &self,
+        graph: &Graph,
+        model: &'a Model,
+        settings: &UVgenerationSettings,
+    ) -> Vec<CountertermRequest<'a>> {
+        if self.counterterms.is_empty() {
+            return Vec::new();
+        }
+        let reference_mass = Atom::var(*super::REFERENCE_MASS_SQUARED).sqrt();
+        let (family, settings) = self.uv_family(graph, &reference_mass, settings);
+        self.uv_family_requests(family, model, settings)
+    }
+
+    fn uv_family(
+        &self,
+        graph: &Graph,
+        reference_mass: &Atom,
+        settings: &UVgenerationSettings,
+    ) -> (Graph, UVgenerationSettings) {
+        let mut family = graph.clone();
+        family.underlying[self.marked_edge].particle = family[self.marked_edge]
+            .particle
+            .clone()
+            .override_mass(Some(reference_mass.clone()));
+        let settings = UVgenerationSettings {
+            generate_integrated: true,
+            // Diagnostic wrappers are not part of an inserted polynomial.
+            add_marker: false,
+            ..settings.clone()
+        };
+        (family, settings)
+    }
+
+    fn uv_family_requests<'a>(
+        &self,
+        family: Graph,
+        model: &'a Model,
+        settings: UVgenerationSettings,
+    ) -> Vec<CountertermRequest<'a>> {
+        // Match the MS catalogue fixed by `build`, independently of the
+        // caller's ordinary-R prescription. Shared by lazy and eager requests.
+        let settings = Arc::new(UVgenerationSettings {
+            subtract_uv: true,
+            renormalization_prescription: RenormalizationPrescriptionSettings {
+                log_divergent: ApproximationType::PolePart,
+                massive_power_divergent: ApproximationType::PolePart,
+                massless_power_divergent: ApproximationType::PolePart,
+                overrides: Vec::new(),
+            },
+            ..settings
+        });
+        let family = Arc::new(family);
+        self.counterterms
+            .iter()
+            .map(|call| {
+                CountertermRequest::new(
+                    Arc::clone(&family),
+                    call.argument.support.clone(),
+                    model,
+                    Arc::clone(&settings),
+                )
+            })
+            .collect()
+    }
+
     /// Evaluate only proper UV children with the existing massive R operation.
     /// `reference_mass` is a mass, rather than a mass squared. The returned
     /// polynomials retain its powers and their original open tensor slots.
@@ -512,17 +594,21 @@ impl RStarPlan {
         vakint: &Vakint,
         settings: &UVgenerationSettings,
     ) -> Result<BTreeMap<SuBitGraph, Atom>> {
-        let mut family = graph.clone();
-        family.underlying[self.marked_edge].particle = family[self.marked_edge]
-            .particle
-            .clone()
-            .override_mass(Some(reference_mass.clone()));
-        let settings = UVgenerationSettings {
-            generate_integrated: true,
-            // Diagnostic wrappers are not part of an inserted polynomial.
-            add_marker: false,
-            ..settings.clone()
-        };
+        let (family, settings) = self.uv_family(graph, reference_mass, settings);
+        if let Some(cache) = &self.counterterm_cache {
+            return self
+                .counterterms
+                .iter()
+                .zip(self.uv_family_requests(family, model, settings))
+                .map(|(call, request)| {
+                    let polynomial = request
+                        .evaluate(cache, vakint)?
+                        .replace(GS.m_uv_expansion)
+                        .with(GS.m_uv_vacuum);
+                    Ok((call.argument.support.clone(), polynomial))
+                })
+                .collect();
+        }
         let mut forest = Wood::from_spinneys(
             self.catalogue
                 .iter()

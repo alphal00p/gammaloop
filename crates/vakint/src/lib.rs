@@ -1,4 +1,5 @@
 #![allow(mixed_script_confusables)]
+pub mod stage_timing;
 
 /// M5 batch 2: mimalloc serves the Rust allocations of every binary linking vakint
 /// (default feature `mimalloc`; see Cargo.toml).
@@ -2492,6 +2493,10 @@ pub struct VakintSettings {
     /// order is resolved for the default path; after changing this path, use
     /// [`EvaluationOrder::available`] to resolve it for the new executable.
     pub form_exe_path: String,
+    /// Reuse raw FORCER reductions across requests and share in-flight results.
+    /// Disabling this cache recomputes every request, independently of the
+    /// RustRed step cache and any caller-owned counterterm caches.
+    pub forcer_cache: bool,
     /// Executable name or path used to invoke Python-based backends.
     pub python_exe_path: String,
     /// Whether canonicalization must account for every numerator factor.
@@ -2895,6 +2900,7 @@ impl Default for VakintSettings {
             mu_r_sq_symbol: format!("{}::mursq", NAMESPACE),
             evaluation_order: EvaluationOrder::available(&form_exe_path, &python_exe_path),
             form_exe_path,
+            forcer_cache: true,
             python_exe_path,
             verify_numerator_identification: false,
             run_time_decimal_precision: 32,
@@ -3433,8 +3439,8 @@ impl VakintTerm {
         while let Some(m) = vector_matcher.next_detailed() {
             if let Match::FunctionName(vec_symbol) = m.match_stack.get(vk_symbol!("vec_")).unwrap()
             {
-                if *vec_symbol == vk_symbol!(LOOP_MOMENTUM_SYMBOL)
-                    || *vec_symbol == vk_symbol!(EXTERNAL_MOMENTUM_SYMBOL)
+                if *vec_symbol == S.k
+                    || *vec_symbol == S.p
                 {
                     vectors.insert((
                         vec_symbol.get_stripped_name().into(),
@@ -4966,10 +4972,11 @@ impl VakintExpression {
             ) {
                 return Err(VakintError::InvalidIntegralFormat(format!("{}", integral)));
             }
+            let vectors = VakintTerm::identify_vectors_in_numerator(numerator.as_view())?;
             res.push(VakintTerm {
-                integral: integral.to_owned().clone(),
-                numerator: numerator.to_owned().clone(),
-                vectors: VakintTerm::identify_vectors_in_numerator(numerator.as_view())?,
+                integral,
+                numerator,
+                vectors,
             });
         }
 
@@ -5104,6 +5111,22 @@ impl VakintExpression {
                                 - 1,
                         )
                     })?;
+                // Experimental hybrid: above BETA_RUSTRED_MAX_RANK_PHYSICAL a p-integral
+                // goes to the order's Forcer entry instead of RustRed.
+                let method = if propagator
+                    && matches!(method, EvaluationMethod::RustRed(_))
+                    && p_integral::massive::rustred_max_rank_physical().is_some_and(|max| {
+                        p_integral::massive::loop_rank(term.numerator.as_view()) > max
+                    }) {
+                    settings
+                        .evaluation_order
+                        .0
+                        .iter()
+                        .find(|candidate| matches!(candidate, EvaluationMethod::Forcer(_)))
+                        .unwrap_or(method)
+                } else {
+                    method
+                };
                 if propagator && let EvaluationMethod::RustRed(options) = method {
                     let (contributions, vectors) = p_ordered
                         .entry((
@@ -7310,20 +7333,117 @@ Evaluated (n_loops=1, mu_r=1) :
             })
     }
 
+    /// Whether `symbol` may head an indexed vector `v(id, index)` of
+    /// [`Self::convert_to_dot_notation`]. Declared scalar functions retain
+    /// their arguments even when they resemble (vector id, index), as do
+    /// native CAS scalar functions.
+    fn is_dot_notation_vector_head(symbol: Symbol) -> bool {
+        !symbol.is_scalar()
+            && !crate::hpl::is_projection_symbol(symbol)
+            && (symbol.get_namespace() != "symbolica"
+                || !symbolica::state::State::is_builtin(symbol.get_stripped_name()))
+    }
+
+    /// The arguments that the dot-notation pattern `v_(id_,idx_)` can bind
+    /// to `idx_` in `atom`: a function of two arguments with a vector head
+    /// and a number `id_`, in either order for a symmetric head (the matcher
+    /// permutes its arguments). Both `None` if the pattern cannot match.
+    fn indexed_vector_indices(atom: AtomView<'_>) -> [Option<AtomView<'_>>; 2] {
+        let AtomView::Fun(function) = atom else {
+            return [None, None];
+        };
+        let symbol = function.get_symbol();
+        if function.get_nargs() != 2 || !Self::is_dot_notation_vector_head(symbol) {
+            return [None, None];
+        }
+        let mut arguments = function.iter();
+        let (first, second) = (arguments.next().unwrap(), arguments.next().unwrap());
+        let unordered =
+            symbol.is_symmetric() || symbol.is_antisymmetric() || symbol.is_cyclesymmetric();
+        let is_number = |argument: AtomView| matches!(argument, AtomView::Num(_));
+        [
+            is_number(first).then_some(second),
+            (unordered && is_number(second)).then_some(first),
+        ]
+    }
+
+    /// Whether a replacement of [`Self::dot_notation_passes`] can match in
+    /// `atom`; if not, the passes return `atom` unchanged. Every pattern binds
+    /// indexed vectors ([`Self::indexed_vector_indices`]): `v_(id_,idx_)^n_`
+    /// one as the base of a power, `v1_(id1_,idx_)*v2_(id2_,idx_)` two factors
+    /// of one product with a common index, and
+    /// `g(idx1_,idx2_)*v1_(id1_,idx1_)*v2_(id2_,idx2_)` two factors of a
+    /// product with a metric factor.
+    pub(crate) fn dot_notation_passes_may_apply(atom: AtomView) -> bool {
+        let is_indexed_vector = |view| {
+            Self::indexed_vector_indices(view)
+                .iter()
+                .any(Option::is_some)
+        };
+        let mut found = false;
+        atom.visitor(&mut |part| {
+            if found {
+                return false;
+            }
+            found = match part {
+                AtomView::Pow(power) => is_indexed_vector(power.get_base_exp().0),
+                AtomView::Mul(product) => {
+                    let vectors = product
+                        .iter()
+                        .map(Self::indexed_vector_indices)
+                        .filter(|indices| indices.iter().any(Option::is_some))
+                        .collect::<Vec<_>>();
+                    let metric = || {
+                        product.iter().any(|factor| {
+                            matches!(factor, AtomView::Fun(function)
+                                if function.get_symbol() == vk_symbol!("g"))
+                        })
+                    };
+                    let common_index = || {
+                        vectors.iter().enumerate().any(|(position, left)| {
+                            vectors[position + 1..].iter().any(|right| {
+                                left.iter()
+                                    .flatten()
+                                    .any(|index| right.iter().flatten().any(|other| other == index))
+                            })
+                        })
+                    };
+                    vectors.len() >= 2 && (metric() || common_index())
+                }
+                _ => false,
+            };
+            !found
+        });
+        found
+    }
+
     pub fn convert_to_dot_notation(atom: AtomView) -> Atom {
-        let mut old_expr = atom.to_owned().expand();
-        // Declared scalar functions retain their arguments even when they
-        // resemble (vector id, index), as do native CAS scalar functions.
+        // One summand at a time: the unmerged expansion of a large sum is
+        // many times the size of the merged one.
+        let expanded = crate::utils::expand_merging(atom);
+        // Input the passes cannot match, such as a p-integral numerator that
+        // is in dot notation already, is returned unchanged.
+        if !Self::dot_notation_passes_may_apply(expanded.as_view()) {
+            debug_assert_eq!(
+                Self::dot_notation_passes(expanded.clone()),
+                expanded,
+                "a dot-notation pass changed an input it cannot match"
+            );
+            return expanded;
+        }
+        Self::dot_notation_passes(expanded)
+    }
+
+    /// The replacement passes of [`Self::convert_to_dot_notation`] on an
+    /// expanded expression, repeated until nothing changes.
+    fn dot_notation_passes(mut old_expr: Atom) -> Atom {
         let vector_head_condition = WildcardRestriction::Filter(Box::new(|matched| {
             let symbol = match matched {
                 Match::Single(AtomView::Var(variable)) => variable.get_symbol(),
                 Match::FunctionName(symbol) => *symbol,
                 _ => return false,
             };
-            !symbol.is_scalar()
-                && !crate::hpl::is_projection_symbol(symbol)
-                && (symbol.get_namespace() != "symbolica"
-                    || !symbolica::state::State::is_builtin(symbol.get_stripped_name()))
+            Self::is_dot_notation_vector_head(symbol)
         }));
 
         loop {
@@ -7395,13 +7515,7 @@ Evaluated (n_loops=1, mu_r=1) :
         while let Some(m) = vector_matcher.next_detailed() {
             if let Match::FunctionName(vec_symbol) = m.match_stack.get(vk_symbol!("vec_")).unwrap()
             {
-                if [
-                    // LOOP_MOMENTUM_SYMBOL,
-                    // EXTERNAL_MOMENTUM_SYMBOL,
-                    "vec1", "vec",
-                ]
-                .iter()
-                .any(|s| *vec_symbol == vk_symbol!(s))
+                if [vk_symbol!("vec1"), vk_symbol!("vec")].contains(vec_symbol)
                 {
                     indices.insert(m.match_stack.get(vk_symbol!("idx_")).unwrap().to_atom());
                 }
@@ -8745,6 +8859,76 @@ mod tests {
         let input = &scalar * vk_parse!("k(1,73)^2").unwrap();
         let expected = scalar * vk_parse!("dot(k(1),k(1))").unwrap();
         assert_eq!(Vakint::convert_to_dot_notation(input.as_view()), expected);
+    }
+
+    #[test]
+    fn dot_notation_skips_its_passes_exactly_when_they_cannot_match() {
+        Vakint::initialize_vakint_symbols();
+        let scalar = symbolica::symbol!("vakint::scalar_dot_skip_regression"; Scalar);
+        let symmetric = symbolica::symbol!("vakint::symmetric_dot_skip_regression"; Symmetric);
+        let ordered = symbolica::symbol!("vakint::ordered_dot_skip_regression");
+        let mu = vk_symbol!("mu");
+        // No pattern can match: the passes are skipped and would return the
+        // input unchanged. The second and third inputs have the tensor
+        // structure of a five-loop p-integral numerator.
+        let skipped = [
+            "1",
+            "p(0,mu)*p(0,nu)*dot(k(1),p(1))*ep+g(mu,nu)*dot(p(0),p(0))*dot(k(2),k(2))",
+            "(p(0,mu)*p(1,nu)+g(mu,nu)*dot(p(0),p(1)))*(dot(k(1),p(1))+dot(k(1),k(1)))^2*(2-ep)^-1",
+            "dot(k(1),k(1))^2*dot(k(1),p(1))*nf^3*(1-2*ep)^-1+3*dot(k(2),p(1))*ep^-2",
+            "(dot(k(1),k(2))+dot(k(1),p(1)))^3*(nf+ep)^2",
+            "f(k(1),mu)*g(mu,nu)*p(1,nu)^0+f(x,y,z)",
+            "dot(k(1),k(1))*sqrt(2)+log(3)*exp(2)",
+            "f(2,x)",
+        ]
+        .into_iter()
+        .map(|source| vk_parse!(source).unwrap())
+        .chain([
+            function!(scalar, 2, 71) * function!(scalar, 3, 71),
+            function!(scalar, 2, mu).pow(2),
+            // An ordered head binds its first argument as the number only.
+            function!(ordered, mu, 2) * function!(ordered, 3, mu),
+        ]);
+        for input in skipped {
+            let expanded = input.expand();
+            assert!(
+                !Vakint::dot_notation_passes_may_apply(expanded.as_view()),
+                "{input}"
+            );
+            assert_eq!(
+                Vakint::dot_notation_passes(expanded.clone()),
+                expanded,
+                "{input}"
+            );
+            assert_eq!(Vakint::convert_to_dot_notation(input.as_view()), expanded);
+        }
+        // A pattern may match: an indexed vector to a power, two of them with
+        // a common index (also as the second argument of a symmetric head)
+        // or with a metric in one product (whatever its indices).
+        let kept = [
+            "k(1,73)^2",
+            "p(0,mu)^3*ep",
+            "k(1,mu)*p(1,mu)*nf",
+            "g(mu,nu)*k(1,mu)*k(2,nu)+dot(k(1),k(1))",
+            "g(rho,sigma)*k(1,mu)*k(2,nu)",
+            "p(1,mu)*k(1,nu)*g(nu,rho)",
+            "(p(0,mu)+p(1,mu))*p(2,mu)",
+        ]
+        .into_iter()
+        .map(|source| vk_parse!(source).unwrap())
+        .chain([function!(symmetric, mu, 2) * function!(symmetric, 3, mu)]);
+        for input in kept {
+            let expanded = input.expand();
+            assert!(
+                Vakint::dot_notation_passes_may_apply(expanded.as_view()),
+                "{input}"
+            );
+            assert_eq!(
+                Vakint::convert_to_dot_notation(input.as_view()),
+                Vakint::dot_notation_passes(expanded),
+                "{input}"
+            );
+        }
     }
 
     #[test]

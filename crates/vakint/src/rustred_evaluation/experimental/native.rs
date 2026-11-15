@@ -68,16 +68,18 @@ impl<const N: usize> NativeCandidate<N> {
                 .replace(self.dimension.to_pattern())
                 .with(physical_dimension.to_pattern())
         })?);
-        let numerator = input
-            .numerator
-            .replace(vakint_parse!("ep").unwrap().to_pattern())
-            .with(epsilon.to_pattern());
-        let numerator =
+        // The intermediate numerator is dropped before the lowering.
+        let numerator = {
+            let numerator = input
+                .numerator
+                .replace(vakint_parse!("ep").unwrap().to_pattern())
+                .with(epsilon.to_pattern());
             crate::rustred_evaluation::numerator::MatchedScalarInput::numerator_in_family_dimension(
                 numerator.as_view(),
                 settings,
                 &self.dimension,
-            );
+            )
+        };
         scalar
             .lower_weighted(&numerator, &input.target, &input.mass_squared)
             .map_err(crate::RustRedEvaluationError::from_native)

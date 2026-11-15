@@ -1,6 +1,6 @@
 //! Scalar hard coefficients and complete covariant quotient insertions.
 
-use eyre::{Result, WrapErr, ensure};
+use eyre::{Result, WrapErr, bail, ensure};
 use idenso::{CookMode, CookSettings, tensor::SymbolicTensor};
 use linnet::half_edge::involution::EdgeIndex;
 use spenso::{
@@ -83,11 +83,22 @@ pub(super) fn hard_moments(
         !soft_denominator,
         "a soft R* momentum remains in a hard Taylor denominator"
     );
-    ensure!(
-        unprojected.is_none(),
-        "R* hard moments require vacuum tensor projection before quotient UV maps: {}",
-        unprojected.unwrap_or(Atom::Zero)
-    );
+    if let Some(unprojected) = unprojected {
+        // A vanishing hard part can keep a closed hard dummy between two sum
+        // factors, which contraction cannot close without distributing them.
+        // Literal zero children upstream should leave no such term.
+        if expression.expand().is_zero() {
+            tracing::warn!(
+                uv = true,
+                rstar = true,
+                "an R* hard part vanishes only after expansion; it has no hard moments"
+            );
+            return Ok(Vec::new());
+        }
+        bail!(
+            "R* hard moments require vacuum tensor projection before quotient UV maps: {unprojected}"
+        );
+    }
 
     let cooking = CookSettings::indices()
         .with_mode(CookMode::ReversibleEncoding)
@@ -225,6 +236,39 @@ mod tests {
             vec![(coefficient, Atom::one())]
         );
         assert!(hard_moments(&Atom::Zero, &[EdgeIndex::from(4)])?.is_empty());
+        Ok(())
+    }
+
+    /// The shape of B_self_energy_L5_105327's failing hard part: a child
+    /// counterterm `X/epsilon + (-X)/epsilon` with differently distributed
+    /// sums, whose hard vectors close only against a second sum factor.
+    #[test]
+    fn hard_part_vanishing_after_expansion_has_no_moments() -> Result<()> {
+        test_initialise()?;
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let index = |aind: Aind| mink.to_symbolic([aind.to_atom()]);
+        let (dummy, port, open) = (
+            index(Aind::Dummy(0)),
+            index(Aind::Hedge(3, 1)),
+            index(Aind::Hedge(0, 1)),
+        );
+        let hard = |slot: &Atom| function!(GS.emr_mom, 2, slot);
+        let vector = hard(&mink.to_symbolic([]));
+        let hard_square = function!(SPENSO_TAG.dot, &vector, &vector);
+        let metric = function!(ETS.metric, &dummy, &port);
+        let tensor = hard(&dummy) * hard(&port);
+        let trace = &hard_square * &metric;
+        let epsilon = Atom::var(GS.dim_epsilon);
+        let child = (&tensor - &trace) / &epsilon + (&trace - &tensor) / &epsilon;
+        assert!(!child.is_zero() && child.expand().is_zero());
+        let dimension = Atom::num(4) - Atom::num(2) * &epsilon;
+        let projector = &metric - &dimension * &metric;
+        let soft = function!(GS.emr_mom, 4, &open);
+        let soft_edges = [EdgeIndex::from(4)];
+        assert!(hard_moments(&(&projector * &child * &soft), &soft_edges)?.is_empty());
+        // A nonzero hard part of the same shape still needs its projection.
+        let nonzero = &projector * (&tensor - &trace) / &epsilon * &soft;
+        assert!(hard_moments(&nonzero, &soft_edges).is_err());
         Ok(())
     }
 }

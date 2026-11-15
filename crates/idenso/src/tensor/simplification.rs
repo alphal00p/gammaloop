@@ -552,13 +552,24 @@ impl SymbolicTensor<PartialStructure> {
                 // by a no-op round, survives another family's intrinsic change
                 // that adds no colour work, instead of needing a confirming
                 // colour round.
+                // Collecting structure constants into chains keeps them,
+                // but an odd adjoint chain between the legs of one symmetric
+                // tensor has a rule of its own (chain notation only).
+                const CHAIN: usize = 5;
+                let new_chain_rule = || {
+                    observed.candidates.counts[CHAIN] > plan.observed.candidates.counts[CHAIN]
+                        && crate::color::simplify::has_odd_chain_between_symmetric_legs(
+                            value.expression.as_view(),
+                        )
+                };
                 let colour_settled = operation != COLOR
                     && dirty.is_some()
                     && (plan.pending | plan.deferred) & COLOR == 0
                     && one_shot_colour
                     && (observed.adds_no_colour_work(&plan.observed)
                         || (notation_only
-                            && observed.notation_adds_no_colour_work(&plan.observed)));
+                            && observed.notation_adds_no_colour_work(&plan.observed)))
+                    && !new_chain_rule();
                 plan.observed = observed;
                 plan.value = value;
                 plan.changes += 1;

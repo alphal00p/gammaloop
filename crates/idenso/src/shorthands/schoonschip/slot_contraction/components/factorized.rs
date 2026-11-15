@@ -56,6 +56,185 @@ impl Remaining<'_> {
     }
 }
 
+// Merge similarly sized coefficients instead of copying a growing polynomial
+// for every contribution to one frontier state. There is at most one partial
+// per logarithmic term-count bin, hence at most usize::BITS partials. The common
+// one-coefficient case needs no additional allocation. Symbolica still owns
+// variable-map unification, exact cancellation, and monomial ordering.
+enum CoefficientSum {
+    One(ScalarPolynomial),
+    Binned(Vec<Option<ScalarPolynomial>>),
+}
+
+impl CoefficientSum {
+    fn push(
+        &mut self,
+        mut coefficient: ScalarPolynomial,
+        #[cfg(feature = "reference-cases")] surrounding_bytes: usize,
+    ) {
+        if coefficient.is_zero() {
+            return;
+        }
+        if let Self::One(old) = self {
+            if old.is_zero() {
+                *old = coefficient;
+                return;
+            }
+            let first = old.nterms().ilog2() as usize;
+            let second = coefficient.nterms().ilog2() as usize;
+            let old = std::mem::replace(old, ScalarPolynomial::new_zero(&Q));
+            if first == second {
+                *self = Self::One(Self::merge(
+                    old,
+                    coefficient,
+                    #[cfg(feature = "reference-cases")]
+                    surrounding_bytes.saturating_add(std::mem::size_of::<Self>()),
+                ));
+            } else {
+                let mut bins = Vec::new();
+                bins.resize_with(first.max(second) + 1, || None);
+                bins[first] = Some(old);
+                bins[second] = Some(coefficient);
+                *self = Self::Binned(bins);
+            }
+            return;
+        }
+        let Self::Binned(bins) = self else {
+            unreachable!()
+        };
+        while !coefficient.is_zero() {
+            let bin = coefficient.nterms().ilog2() as usize;
+            if bins.len() <= bin {
+                bins.resize_with(bin + 1, || None);
+            }
+            let Some(old) = bins[bin].take() else {
+                bins[bin] = Some(coefficient);
+                return;
+            };
+            coefficient = Self::merge(
+                old,
+                coefficient,
+                #[cfg(feature = "reference-cases")]
+                surrounding_bytes.saturating_add(Self::binned_bytes(bins)),
+            );
+            // Cancellation can move the result to a smaller bin. Each merge
+            // consumes an occupied bin, so the loop also terminates then.
+        }
+    }
+
+    fn finish(
+        self,
+        #[cfg(feature = "reference-cases")] surrounding_bytes: usize,
+    ) -> ScalarPolynomial {
+        let bins = match self {
+            Self::One(coefficient) => return coefficient,
+            Self::Binned(bins) => bins,
+        };
+        #[cfg(feature = "reference-cases")]
+        let mut remaining_bytes = Self::binned_bytes(&bins);
+        let mut sum = ScalarPolynomial::new_zero(&Q);
+        for coefficient in bins.into_iter().flatten() {
+            #[cfg(feature = "reference-cases")]
+            {
+                // The iterator retains the allocation while each moved
+                // coefficient leaves the unconsumed payload charge. Keep a
+                // saturated bound conservative after the exact total is lost.
+                if remaining_bytes != usize::MAX {
+                    remaining_bytes -= ComponentSum::coefficient_bytes(&coefficient)
+                        - std::mem::size_of::<ScalarPolynomial>();
+                }
+            }
+            // Smallest first: the final fold never repeatedly copies the
+            // largest partial while adding the remaining small ones.
+            sum = Self::merge(
+                sum,
+                coefficient,
+                #[cfg(feature = "reference-cases")]
+                surrounding_bytes.saturating_add(remaining_bytes),
+            );
+        }
+        sum
+    }
+
+    fn merge(
+        first: ScalarPolynomial,
+        second: ScalarPolynomial,
+        #[cfg(feature = "reference-cases")] surrounding_bytes: usize,
+    ) -> ScalarPolynomial {
+        #[cfg(feature = "reference-cases")]
+        let _merge_timing = crate::reference_cases::timing::scope(
+            crate::reference_cases::timing::Phase::CoefficientMerge,
+        );
+        #[cfg(feature = "reference-cases")]
+        {
+            // Addition may widen both variable maps and allocate a merged
+            // output. Include all other retained partials through the caller's
+            // surrounding storage, not just the two inputs being merged.
+            let variables = first.nvars().saturating_add(second.nvars());
+            let inputs = first
+                .nterms()
+                .saturating_add(second.nterms())
+                .saturating_mul(
+                    std::mem::size_of::<Rational>()
+                        .saturating_add(variables.saturating_mul(std::mem::size_of::<u32>())),
+                );
+            let maps = variables.saturating_mul(std::mem::size_of::<PolyVariable>());
+            let retained = ComponentSum::coefficient_bytes(&first)
+                .saturating_add(ComponentSum::coefficient_bytes(&second));
+            crate::reference_cases::timing::frontier_workspace(
+                surrounding_bytes
+                    .saturating_add(retained)
+                    .saturating_add(inputs.saturating_add(maps).saturating_mul(2)),
+            );
+        }
+        if first.is_zero() {
+            return second;
+        }
+        if second.is_zero() {
+            return first;
+        }
+        // Symbolica inherits the first operand's variable order. Preserve the
+        // larger map so a different ordering only reconstructs the smaller
+        // polynomial; reconstructing the larger one can require quadratic
+        // monomial insertion.
+        if first.nterms() < second.nterms() {
+            second + first
+        } else {
+            first + second
+        }
+    }
+
+    #[cfg(feature = "reference-cases")]
+    fn binned_bytes(bins: &Vec<Option<ScalarPolynomial>>) -> usize {
+        std::mem::size_of::<Self>()
+            .saturating_add(
+                bins.capacity()
+                    .saturating_mul(std::mem::size_of::<Option<ScalarPolynomial>>()),
+            )
+            .saturating_add(
+                bins.iter()
+                    .flatten()
+                    .map(|coefficient| {
+                        ComponentSum::coefficient_bytes(coefficient)
+                            - std::mem::size_of::<ScalarPolynomial>()
+                    })
+                    .fold(0usize, usize::saturating_add),
+            )
+    }
+
+    #[cfg(feature = "reference-cases")]
+    fn storage_bytes(&self) -> usize {
+        match self {
+            Self::One(coefficient) => {
+                std::mem::size_of::<Self>()
+                    .saturating_add(ComponentSum::coefficient_bytes(coefficient))
+                    - std::mem::size_of::<ScalarPolynomial>()
+            }
+            Self::Binned(bins) => Self::binned_bytes(bins),
+        }
+    }
+}
+
 type FactorTerm = (Vec<(usize, u32)>, Rational);
 // Selected expression/interface and retained factors.
 type PrerequisiteFactors = (Atom, PartialStructure, Vec<Atom>);
@@ -1619,7 +1798,7 @@ impl<'a> ComponentSum<'a, '_> {
                 generated = generated.saturating_add(count);
             }
             let mut positions: AHashMap<Remaining<'a>, usize> = AHashMap::new();
-            let mut next: Vec<(Remaining<'a>, ScalarPolynomial)> = Vec::new();
+            let mut next: Vec<(Remaining<'a>, CoefficientSum)> = Vec::new();
             #[cfg(feature = "reference-cases")]
             let mut next_bytes = 0usize;
             for (remaining, weight) in &states {
@@ -1742,68 +1921,75 @@ impl<'a> ComponentSum<'a, '_> {
                     } else {
                         0
                     };
+                    // Multiplication constructs one incoming coefficient. Any
+                    // subsequent merge accounts for all retained partial sums.
                     #[cfg(feature = "reference-cases")]
-                    let target_bytes = position.map_or(0, |position| {
-                        let target = &next[position].1;
-                        target.nterms().saturating_mul(
-                            std::mem::size_of::<Rational>()
-                                + (target.nvars() + weight.nvars() + variables.len())
-                                    * std::mem::size_of::<u32>(),
-                        )
-                    });
-                    // Existing polynomial addition owns the only workspace:
-                    // two unified inputs and the merged output.
-                    #[cfg(feature = "reference-cases")]
-                    let live_bytes = state_bytes
-                        .saturating_add(next_bytes)
-                        .saturating_add(key_bytes)
-                        .saturating_add(emitted_bytes.saturating_mul(2))
-                        .saturating_add(
-                            incoming_bytes
-                                .saturating_add(target_bytes)
-                                .saturating_mul(2),
-                        );
-                    #[cfg(feature = "reference-cases")]
-                    crate::reference_cases::timing::frontier_workspace(live_bytes);
+                    crate::reference_cases::timing::frontier_workspace(
+                        state_bytes
+                            .saturating_add(next_bytes)
+                            .saturating_add(key_bytes)
+                            .saturating_add(emitted_bytes.saturating_mul(2))
+                            .saturating_add(incoming_bytes.saturating_mul(2)),
+                    );
                     let monomial = ScalarPolynomial::new(&Q, Some(1), Arc::new(variables))
                         .monomial(self.coefficient.clone(), exponents);
                     let coefficient = weight * &monomial;
+                    #[cfg(feature = "reference-cases")]
+                    let surrounding_bytes = state_bytes
+                        .saturating_add(emitted_bytes.saturating_mul(2))
+                        .saturating_add(Self::coefficient_bytes(&monomial));
                     if coefficient.is_zero() {
                         continue;
                     }
-                    #[cfg(feature = "reference-cases")]
-                    let _merge_timing = crate::reference_cases::timing::scope(
-                        crate::reference_cases::timing::Phase::CoefficientMerge,
-                    );
                     if let Some(position) = position {
-                        let old = std::mem::replace(
-                            &mut next[position].1,
-                            ScalarPolynomial::new_zero(&Q),
+                        #[cfg(feature = "reference-cases")]
+                        {
+                            next_bytes -= next[position].1.storage_bytes();
+                        }
+                        next[position].1.push(
+                            coefficient,
+                            #[cfg(feature = "reference-cases")]
+                            surrounding_bytes.saturating_add(next_bytes),
                         );
                         #[cfg(feature = "reference-cases")]
                         {
-                            next_bytes -= Self::coefficient_bytes(&old);
+                            next_bytes += next[position].1.storage_bytes();
                         }
-                        let merged = old + coefficient;
-                        #[cfg(feature = "reference-cases")]
-                        {
-                            next_bytes += Self::coefficient_bytes(&merged);
-                        }
-                        next[position].1 = merged;
                     } else {
+                        let coefficient = CoefficientSum::One(coefficient);
                         #[cfg(feature = "reference-cases")]
                         {
-                            next_bytes += Self::coefficient_bytes(&coefficient) + key_bytes;
+                            next_bytes += coefficient.storage_bytes() + key_bytes;
                         }
                         positions.insert(key.clone(), next.len());
                         next.push((key, coefficient));
                     }
+                    #[cfg(feature = "reference-cases")]
+                    crate::reference_cases::timing::frontier_workspace(
+                        surrounding_bytes.saturating_add(next_bytes),
+                    );
                 }
             }
             self.overrides.clear();
             states = next
                 .into_iter()
-                .filter(|(_, weight)| !weight.is_zero())
+                .filter_map(|(remaining, coefficients)| {
+                    #[cfg(feature = "reference-cases")]
+                    {
+                        next_bytes -= coefficients.storage_bytes();
+                    }
+                    let weight = coefficients.finish(
+                        #[cfg(feature = "reference-cases")]
+                        state_bytes
+                            .saturating_add(next_bytes)
+                            .saturating_add(emitted_bytes.saturating_mul(2)),
+                    );
+                    #[cfg(feature = "reference-cases")]
+                    {
+                        next_bytes += Self::coefficient_bytes(&weight);
+                    }
+                    (!weight.is_zero()).then_some((remaining, weight))
+                })
                 .collect();
         }
         self.overrides.clear();
@@ -1954,6 +2140,219 @@ mod tests {
     use super::super::tests::{input, setup};
     use super::*;
     use crate::shorthands::schoonschip::Schoonschip;
+
+    #[test]
+    fn frontier_coefficient_sum_cancels_across_sizes_and_variable_orders() {
+        let polynomial = |variables: &[usize], terms: &[(i64, [u32; 2])]| {
+            ScalarPolynomial::from_coefficient_list(
+                terms
+                    .iter()
+                    .map(|(coefficient, _)| Rational::from(*coefficient))
+                    .collect(),
+                terms.iter().flat_map(|(_, exponents)| *exponents).collect(),
+                Arc::new(
+                    variables
+                        .iter()
+                        .copied()
+                        .map(PolyVariable::Temporary)
+                        .collect(),
+                ),
+                &Q,
+            )
+        };
+        let first = polynomial(
+            &[0, 1],
+            &[
+                (1, [1, 0]),
+                (2, [0, 1]),
+                (3, [1, 1]),
+                (-3, [0, 0]),
+                (7, [0, u32::MAX]),
+            ],
+        );
+        let opposite = polynomial(
+            &[1, 0],
+            &[(-2, [1, 0]), (-1, [0, 1]), (-3, [1, 1]), (3, [0, 0])],
+        );
+        // Addition must preserve machine-width exponents without multiplying
+        // them, and cancellation must work across the two map orderings.
+        let large_power = polynomial(&[1, 0], &[(-7, [u32::MAX, 0])]);
+        let mut sum = CoefficientSum::One(first);
+        // The five- and four-term inputs cancel down into the occupied
+        // one-term bin, where the remaining large power must cancel as well.
+        for coefficient in [large_power, opposite] {
+            sum.push(
+                coefficient,
+                #[cfg(feature = "reference-cases")]
+                0,
+            );
+        }
+        assert!(
+            sum.finish(
+                #[cfg(feature = "reference-cases")]
+                0
+            )
+            .is_zero()
+        );
+
+        let retained = polynomial(&[3, 2], &[(5, [0, 1])]);
+        let mut sum = CoefficientSum::One(retained.clone());
+        for coefficient in [
+            -retained.clone(),
+            ScalarPolynomial::new_zero(&Q),
+            retained.clone(),
+        ] {
+            sum.push(
+                coefficient,
+                #[cfg(feature = "reference-cases")]
+                0,
+            );
+        }
+        assert_eq!(
+            sum.finish(
+                #[cfg(feature = "reference-cases")]
+                0
+            ),
+            retained
+        );
+
+        // Finalizing small bins first must not impose a small partial's map
+        // order on a large partial. Swapping these variables reverses the
+        // large polynomial's monomial order, making insertion quadratic.
+        let terms = (0..=128u32)
+            .map(|power| (1, [power, 128 - power]))
+            .collect::<Vec<_>>();
+        let large = polynomial(&[0, 1], &terms);
+        let small = polynomial(&[1, 0], &[(1, [129, 0])]);
+        let large_variables = large.variables().clone();
+        let expected = &large + &small;
+        let mut sum = CoefficientSum::One(large);
+        sum.push(
+            small,
+            #[cfg(feature = "reference-cases")]
+            0,
+        );
+        let result = sum.finish(
+            #[cfg(feature = "reference-cases")]
+            0,
+        );
+        assert_eq!(result.variables(), &large_variables);
+        assert_eq!(result, expected);
+
+        #[cfg(feature = "reference-cases")]
+        {
+            use crate::reference_cases::timing::{self, Frontier};
+            let surrounding_bytes = 1 << 20;
+            let ((result, retained_bytes), clocks) =
+                timing::measure("coefficient workspace", || {
+                    timing::frontier(Frontier {
+                        selected: 0,
+                        states: 1,
+                        local_terms: 4,
+                        generated: 0,
+                        predicted_bytes: 0,
+                        coefficient_bytes: 0,
+                        max_coefficient_bytes: 0,
+                    });
+                    let mut sum = CoefficientSum::One(polynomial(&[0, 1], &[(1, [0, 0])]));
+                    let mut retained_bytes = sum.storage_bytes();
+                    for coefficient in [
+                        polynomial(&[1, 0], &[(1, [1, 0]), (1, [2, 0])]),
+                        polynomial(
+                            &[2, 0],
+                            &[(1, [1, 0]), (1, [2, 0]), (1, [3, 0]), (1, [4, 0])],
+                        ),
+                        polynomial(&[0, 1], &[(1, [1, 0])]),
+                    ] {
+                        sum.push(coefficient, surrounding_bytes);
+                        retained_bytes = retained_bytes.max(sum.storage_bytes());
+                    }
+                    (sum.finish(surrounding_bytes), retained_bytes)
+                });
+            assert_eq!(result.nterms(), 8);
+            let report = clocks.to_string();
+            let predicted: usize = report
+                .split_once("\"predicted_bytes\":")
+                .unwrap()
+                .1
+                .split(',')
+                .next()
+                .unwrap()
+                .parse()
+                .unwrap();
+            assert!(
+                predicted >= surrounding_bytes + retained_bytes,
+                "workspace includes all retained partial buffers: {report}"
+            );
+        }
+    }
+
+    #[test]
+    fn frontier_coefficient_sum_bounds_partials_and_matches_bulk_collection() {
+        let variables = Arc::new(vec![PolyVariable::Temporary(0)]);
+        let mut coefficients = Vec::new();
+        let mut exponents = Vec::new();
+        let mut sum = CoefficientSum::One(ScalarPolynomial::new_zero(&Q));
+        // A skewed arrival order includes both very small and large exponents;
+        // no contiguous degree box or input-order assumption is permitted.
+        for index in 0..1025u32 {
+            let exponent = if index % 2 == 0 {
+                index / 2
+            } else {
+                u32::MAX - index / 2
+            };
+            let coefficient = Rational::from(if index % 3 == 0 { -1 } else { 1 });
+            coefficients.push(coefficient.clone());
+            exponents.push(exponent);
+            let term = ScalarPolynomial::new(&Q, Some(1), variables.clone())
+                .monomial(coefficient, vec![exponent]);
+            sum.push(
+                term,
+                #[cfg(feature = "reference-cases")]
+                0,
+            );
+            if let CoefficientSum::Binned(bins) = &sum {
+                assert!(bins.len() <= usize::BITS as usize);
+                for (bin, partial) in bins.iter().enumerate() {
+                    if let Some(partial) = partial {
+                        assert_eq!(partial.nterms().ilog2() as usize, bin);
+                    }
+                }
+            }
+        }
+        let expected =
+            ScalarPolynomial::from_coefficient_list(coefficients, exponents, variables, &Q);
+        assert_eq!(
+            sum.finish(
+                #[cfg(feature = "reference-cases")]
+                0
+            ),
+            expected
+        );
+    }
+
+    #[test]
+    fn frontier_coefficient_sum_matches_expanded_contraction_with_cancellations() {
+        let contractor = setup();
+        let source = input(concat!(
+            "(x*p(mink(4,a))+y*q(mink(4,a))+z*r(mink(4,a))+w*s(mink(4,a)))",
+            "*(x*p(mink(4,b))-y*q(mink(4,b))+z*r(mink(4,b))-w*s(mink(4,b)))",
+            "*g(mink(4,a),mink(4,b))",
+        ));
+        let expected = input(concat!(
+            "x^2*g(p(mink(4)),p(mink(4)))+2*x*z*g(p(mink(4)),r(mink(4)))",
+            "+z^2*g(r(mink(4)),r(mink(4)))-y^2*g(q(mink(4)),q(mink(4)))",
+            "-2*y*w*g(q(mink(4)),s(mink(4)))-w^2*g(s(mink(4)),s(mink(4)))",
+        ));
+        assert_eq!(source.expand().schoonschip().expand(), expected);
+        for order in [None, Some([2, 1, 0].as_slice())] {
+            let result = contractor
+                .contract_factorized(source.as_view(), order, true)
+                .unwrap();
+            assert_eq!(result.status, ReductionStatus::Complete);
+            assert_eq!(result.root.expand(), expected);
+        }
+    }
 
     #[test]
     fn source_free_color_scopes_stay_opaque_beside_real_contractions() {

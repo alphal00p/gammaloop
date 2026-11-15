@@ -31,6 +31,7 @@
 //! whichever side has fewer contraction orbits.  Only residual free-index
 //! output uses the explicitly budgeted labeled-pairing path.
 
+use std::borrow::Borrow;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::mem;
 
@@ -283,28 +284,31 @@ impl TensorReduction {
     /// }
     /// ```
     pub fn expression(&self) -> Result<SymbolicTensor<PartialStructure>, TensorReductionError> {
-        self.budget.run(|| {
-            resources::checkpoint()?;
-            let expression = self.terms.iter().try_fold(self.zero.clone(), |sum, term| {
-                resources::checkpoint()?;
-                Ok::<_, TensorReductionError>(sum.try_add(&term.expression()?)?)
-            })?;
-            resources::checkpoint()?;
-            Ok(expression)
-        })
+        self.budget
+            .run(|| Self::materialize_terms(&self.zero, self.terms.iter()))
     }
 
     /// Consume the compact result and materialize its expression.
     pub fn into_expression(self) -> Result<SymbolicTensor<PartialStructure>, TensorReductionError> {
-        self.budget.run(|| {
+        self.budget
+            .run(|| Self::materialize_terms(&self.zero, self.terms.into_iter()))
+    }
+
+    fn materialize_terms<T: Borrow<TensorReductionTerm>>(
+        zero: &SymbolicTensor<PartialStructure>,
+        terms: impl ExactSizeIterator<Item = T>,
+    ) -> Result<SymbolicTensor<PartialStructure>, TensorReductionError> {
+        resources::checkpoint()?;
+        let mut summands = Vec::with_capacity(terms.len());
+        for term in terms {
             resources::checkpoint()?;
-            let expression = self.terms.into_iter().try_fold(self.zero, |sum, term| {
-                resources::checkpoint()?;
-                Ok::<_, TensorReductionError>(sum.try_add(&term.expression()?)?)
-            })?;
-            resources::checkpoint()?;
-            Ok(expression)
-        })
+            summands.push(term.borrow().expression()?);
+        }
+        resources::checkpoint()?;
+        // The leading zero retains the ordered interface for an empty reduction.
+        let expression = SymbolicTensor::try_sum(std::iter::once(zero).chain(&summands))?;
+        resources::checkpoint()?;
+        Ok(expression)
     }
 }
 
@@ -2073,6 +2077,133 @@ mod tests {
             .add_arg(minkowski_slot(dimension, left))
             .add_arg(minkowski_slot(dimension, right))
             .finish()
+    }
+
+    fn materialization_fixture(
+        zero: SymbolicTensor<PartialStructure>,
+        terms: impl IntoIterator<Item = (Atom, SymbolicTensor<PartialStructure>)>,
+    ) -> TensorReduction {
+        let budget = ResourceBudget::capture_current();
+        TensorReduction {
+            terms: terms
+                .into_iter()
+                .map(|(coefficient, tensor)| TensorReductionTerm {
+                    coefficient,
+                    tensor,
+                    integrated_orbit: None,
+                    projector_orbit: None,
+                    budget: budget.clone(),
+                })
+                .collect(),
+            fully_contracted: zero.structure().logical_slots().is_empty(),
+            zero,
+            max_rank: 0,
+            budget,
+        }
+    }
+
+    #[test]
+    fn bulk_materialization_matches_checked_sum_and_retains_interface_order() {
+        let dimension = symbol!("bulk_tensor_sum::D").to_atom();
+        let mu = symbol!("bulk_tensor_sum::mu").to_atom();
+        let nu = symbol!("bulk_tensor_sum::nu").to_atom();
+        let head = tensor_symbol!("bulk_tensor_sum::T");
+        let tensor = |label: i64| {
+            SymbolicTensor::infer(
+                FunctionBuilder::new(head)
+                    .add_arg(label)
+                    .add_arg(minkowski_slot(&dimension, &nu))
+                    .add_arg(minkowski_slot(&dimension, &mu))
+                    .finish(),
+            )
+            .unwrap()
+        };
+        let source = tensor(0);
+        let reduction = materialization_fixture(
+            source.with_checked_expression(Atom::Zero).unwrap(),
+            (0..16).map(|index| {
+                (
+                    Atom::num(index + 1) / (&dimension + Atom::num(index + 2)),
+                    tensor(index),
+                )
+            }),
+        );
+        let reference = reduction
+            .terms
+            .iter()
+            .fold(reduction.zero.clone(), |sum, term| {
+                sum.try_add(&term.expression().unwrap()).unwrap()
+            });
+        let borrowed = reduction.expression().unwrap();
+        let consumed = reduction.into_expression().unwrap();
+        for result in [borrowed, consumed] {
+            assert_eq!(result.expression(), reference.expression());
+            assert_eq!(
+                result.structure().logical_slots(),
+                source.structure().logical_slots()
+            );
+        }
+    }
+
+    #[test]
+    fn bulk_materialization_preserves_empty_and_cancelled_typed_zero() {
+        let dimension = symbol!("bulk_tensor_zero::D").to_atom();
+        let mu = symbol!("bulk_tensor_zero::mu").to_atom();
+        let nu = symbol!("bulk_tensor_zero::nu").to_atom();
+        let source = SymbolicTensor::infer(metric(&dimension, &mu, &nu)).unwrap();
+        let zero = source.with_checked_expression(Atom::Zero).unwrap();
+        for terms in [
+            Vec::new(),
+            vec![
+                (Atom::one(), source.clone()),
+                (Atom::num(-1), source.clone()),
+            ],
+        ] {
+            let reduction = materialization_fixture(zero.clone(), terms);
+            let borrowed = reduction.expression().unwrap();
+            let consumed = reduction.into_expression().unwrap();
+            for result in [borrowed, consumed] {
+                assert!(result.expression().is_zero());
+                assert_eq!(
+                    result.structure().logical_slots(),
+                    source.structure().logical_slots()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn bulk_materialization_rejects_incompatible_zero_term_interfaces() {
+        let dimension = symbol!("bulk_tensor_mismatch::D").to_atom();
+        let mu = symbol!("bulk_tensor_mismatch::mu").to_atom();
+        let nu = symbol!("bulk_tensor_mismatch::nu").to_atom();
+        let source = SymbolicTensor::infer(metric(&dimension, &mu, &nu)).unwrap();
+        let reduction = materialization_fixture(
+            source.with_checked_expression(Atom::Zero).unwrap(),
+            [(Atom::one(), SymbolicTensor::infer(Atom::Zero).unwrap())],
+        );
+        // Summing only untyped atoms would hide this rank mismatch in zero.
+        assert!(reduction.expression().is_err());
+        assert!(reduction.into_expression().is_err());
+    }
+
+    #[test]
+    fn bulk_materialization_validates_weighted_terms_before_cancellation() {
+        let (k, _, _, _) = vectors();
+        let dimension = symbol!("bulk_tensor_weight::D").to_atom();
+        let mu = symbol!("bulk_tensor_weight::mu").to_atom();
+        let invalid_scalar_weight = indexed(k, 1, &dimension, &mu);
+        let scalar = SymbolicTensor::infer(Atom::one()).unwrap();
+        let reduction = materialization_fixture(
+            scalar.with_checked_expression(Atom::Zero).unwrap(),
+            [
+                (invalid_scalar_weight.clone(), scalar.clone()),
+                (-invalid_scalar_weight, scalar),
+            ],
+        );
+        // These atoms cancel, but an open vector cannot be a scalar weight.
+        assert!(reduction.expression().is_err());
+        assert!(reduction.into_expression().is_err());
     }
 
     #[test]

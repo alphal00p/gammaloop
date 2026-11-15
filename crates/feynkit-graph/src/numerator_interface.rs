@@ -25,11 +25,20 @@ pub struct NumeratorInterface(
 
 impl NumeratorInterface {
     pub fn parse(source: &str) -> Result<Self, DiagramError> {
+        Self::parse_with(source, &mut FeynmanDiagram::expression_parser())
+    }
+
+    /// Reuse the current import's registered-symbol map for its logical ports.
+    /// The caller owns the parser lifetime; later imports take a fresh snapshot.
+    pub(crate) fn parse_with(
+        source: &str,
+        parse_expression: &mut impl FnMut(&'static str, String) -> Result<Atom, DiagramError>,
+    ) -> Result<Self, DiagramError> {
         let ports: Vec<String> = serde_json::from_str(source)?;
         Ok(Self(
             ports
                 .into_iter()
-                .map(|port| FeynmanDiagram::parse_expression("numerator interface", port))
+                .map(|port| parse_expression("numerator interface", port))
                 .collect::<Result<_, _>>()?,
         ))
     }

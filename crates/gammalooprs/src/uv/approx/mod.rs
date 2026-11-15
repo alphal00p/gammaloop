@@ -38,6 +38,7 @@ pub mod final_integrand;
 pub mod integrated;
 pub mod local_3d;
 pub mod local_4d;
+pub(crate) mod streamed;
 
 pub trait Rooted {
     fn root() -> Self;

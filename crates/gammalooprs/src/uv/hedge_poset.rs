@@ -55,6 +55,7 @@ use crate::{
         },
         export::UVForestNodeExpression,
         forest::ParametricIntegrands,
+        literal_zero_if_vanishing,
         marker::UvMarker,
         settings::VakintSettings,
     },
@@ -1365,7 +1366,8 @@ impl Forests {
                 support.string_label()
             ));
         }
-        Ok(result)
+        // The same exact zero as a cached Delta, see `CountertermCache::compute`.
+        Ok(literal_zero_if_vanishing(result))
     }
 
     pub(crate) fn renormalization_part_of_ends(

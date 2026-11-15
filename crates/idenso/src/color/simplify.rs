@@ -283,6 +283,19 @@ impl SymbolicTensor<PartialStructure> {
     }
 }
 
+/// Whether a term of `expression` has an odd adjoint chain between the legs
+/// of one symmetric tensor, which only the chain rule removes. Collecting
+/// structure constants into such a chain is new colour work.
+pub(crate) fn has_odd_chain_between_symmetric_legs(expression: AtomView<'_>) -> bool {
+    let terms: Vec<AtomView<'_>> = match expression {
+        AtomView::Add(sum) => sum.iter().collect(),
+        term => vec![term],
+    };
+    terms.into_iter().any(|term| {
+        ColorAlgebraSimplifier::simplify_odd_adjoint_chain_on_symmetric_legs(&ProductView::parse(term)).is_some()
+    })
+}
+
 impl SymbolicTensor<PartialStructure> {
     /// A domain that is one product of colour factors, also sums and powers
     /// with colour, and of scalar spectators: the product of its colour
@@ -365,6 +378,16 @@ impl ColorAlgebraSimplifier {
         complete: bool,
         beside: &[AtomView<'_>],
     ) -> Atom {
+        if self.settings.closed_networks
+            && self.settings.evaluate_traces
+            && let Some(reduced) = Self::reduce_closed_terms(expression)
+        {
+            return if self.settings.substitute_cof_dimension_invariants {
+                reduced.to_cof_dimension_invariants()
+            } else {
+                reduced
+            };
+        }
         // Without an indexed fundamental slot there is no generator to join:
         // a closed trace names only its representation.
         let collected = if !has_fundamental_slot(expression) {
@@ -407,6 +430,45 @@ impl ColorAlgebraSimplifier {
         } else {
             rewritten
         }
+    }
+
+    /// Every term whose colour factors form a closed network, reduced to
+    /// group invariants (color.h's algorithm, see [`super::network`]); its
+    /// other factors are spectators. `None` unless every term with colour
+    /// factors is such a network and no spectator holds colour work (a
+    /// symmetric tensor, a colour sum, a port), so that the local rules see
+    /// the others. Every term is read before any is reduced.
+    fn reduce_closed_terms(expression: AtomView<'_>) -> Option<Atom> {
+        let terms: Vec<AtomView<'_>> = match expression {
+            AtomView::Add(sum) => sum.iter().collect(),
+            term => vec![term],
+        };
+        let mut parsed = Vec::with_capacity(terms.len());
+        for term in terms {
+            let (colour, spectators): (Vec<_>, Vec<_>) = multiplicative_factor_views(term)
+                .into_iter()
+                .partition(|factor| is_closed_network_factor(*factor));
+            if spectators.iter().any(|spectator| atom_contains_color_port_or_work(*spectator)) {
+                return None;
+            }
+            if colour.is_empty() {
+                parsed.push((None, spectators));
+                continue;
+            }
+            parsed.push((Some(super::network::parse_closed(&colour)?), spectators));
+        }
+        if parsed.iter().all(|(network, _)| network.is_none()) {
+            return None;
+        }
+        let mut reduced = Vec::with_capacity(parsed.len());
+        for (network, spectators) in parsed {
+            let value = match network {
+                Some(network) => network.reduce().ok()?,
+                None => Atom::num(1),
+            };
+            reduced.push(Atom::mul_many(spectators.into_iter().chain([value.as_view()])));
+        }
+        Some(Atom::add_many(reduced))
     }
 
     /// [`Self::step`] on the colour factors of a row; its `foreign` factors,
@@ -1111,6 +1173,7 @@ impl ColorAlgebraSimplifier {
         let product = parsed;
 
         Self::simplify_symmetric_prefix_structure_product(&product)
+            .or_else(|| Self::simplify_odd_adjoint_chain_on_symmetric_legs(&product))
             .or_else(|| Self::join_color_chain_product(&product))
             .or_else(|| {
                 self.settings
@@ -1266,6 +1329,7 @@ impl ColorAlgebraSimplifier {
         whole_term: bool,
     ) -> Option<Atom> {
         Self::simplify_symmetric_prefix_structure_product(product)
+            .or_else(|| Self::simplify_odd_adjoint_chain_on_symmetric_legs(product))
             .or_else(|| {
                 self.settings
                     .evaluate_traces
@@ -3970,6 +4034,26 @@ fn multiplicative_factor_views(expr: AtomView<'_>) -> Vec<AtomView<'_>> {
 
 fn atom_contains_color_node(expr: AtomView<'_>) -> bool {
     color_node_search(expr, false)
+}
+
+/// A generator, structure constant, colour metric, line or trace, or a power
+/// of one: the factors the closed-network reducer reads.
+fn is_closed_network_factor(factor: AtomView<'_>) -> bool {
+    let factor = match factor {
+        AtomView::Pow(power) => power.get_base_exp().0,
+        _ => factor,
+    };
+    let AtomView::Fun(function) = factor else {
+        return false;
+    };
+    let symbol = function.get_symbol();
+    if symbol == CS.f || symbol == CS.t || symbol == T.chain || symbol == T.trace {
+        return true;
+    }
+    symbol == ETS.metric
+        && function.iter().all(|slot| {
+            color_adjoint_dimension(&slot).is_some() || color_fundamental_slot(slot).is_some()
+        })
 }
 
 /// Scalar invariants such as Casimirs have no ports and no rule of their own,

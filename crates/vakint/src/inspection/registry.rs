@@ -136,20 +136,24 @@ impl MasterCatalog {
         if let Some((symbol, _)) = self.constant_source(symbol)? {
             return Ok(Some(self.constant_symbol(symbol)));
         }
-        let binding = PERIOD_BINDINGS
-            .into_iter()
+        // Resolved symbols and parsed basis expressions are cached: this runs
+        // for every symbol of every finalized coefficient.
+        let AtomView::Var(variable) = symbol else {
+            return Ok(None);
+        };
+        let binding = crate::symbols::S
+            .period_bindings
+            .iter()
             .find_map(|(name, basis, power)| {
-                (symbol == Atom::var(vk_symbol!(name)).as_view()).then_some((basis, power))
+                (variable.get_symbol() == *name).then_some((*basis, *power))
             });
         let Some((basis, power)) = binding else {
             return Ok(None);
         };
-        let basis = Atom::var(vk_symbol!(basis));
+        let basis = Atom::var(basis);
         let candidate = self.masters.iter().find(|(_, master)| {
             master.loop_count == 4
-                && master.metadata["exact_basis_expression"]
-                    .as_str()
-                    .is_some_and(|value| vk_parse!(value).is_ok_and(|atom| atom == basis))
+                && master.basis_expression().is_some_and(|atom| *atom == basis)
                 && master.coefficients.get(&power).is_some_and(|coefficient| {
                     coefficient.numerical.is_some() || coefficient.exact.is_some()
                 })

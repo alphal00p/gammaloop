@@ -11,7 +11,7 @@ use spenso::{
 use symbolica::{
     atom::{Atom, AtomView, Symbol, representation::FunView},
     coefficient::CoefficientView,
-    function, symbol,
+    function,
 };
 use thiserror::Error;
 
@@ -338,12 +338,12 @@ impl TryFrom<AtomView<'_>> for Aind {
             },
             AtomView::Fun(f) => {
                 let symbol = f.get_symbol();
-                if symbol == GS.dummyaind || symbol == symbol!("dummy") {
+                if symbol == GS.dummyaind {
                     parse_dummy_aind(f)
-                } else if symbol == GS.edgeaind || symbol == symbol!("edge") {
+                } else if symbol == GS.edgeaind {
                     let (i, j) = parse_u16_aind_pair(f, "edge")?;
                     Ok(Aind::Edge(i, j))
-                } else if symbol == GS.hedgeaind || symbol == symbol!("hedge") {
+                } else if symbol == GS.hedgeaind {
                     let (i, j) = parse_u16_aind_pair(f, "hedge")?;
                     Ok(Aind::Hedge(i, j))
                 } else if symbol == GS.vertexaind {

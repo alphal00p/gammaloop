@@ -456,7 +456,7 @@ fn non_rational_coefficients_key_the_channels() {
             }
         })
         .collect::<Vec<_>>();
-    let values = reduce_requests(&engine, &settings, &requests, None).unwrap();
+    let values = reduce_requests_unfolded(&engine, &settings, &requests, None, false).unwrap();
     assert_eq!(values.keys().collect::<Vec<_>>(), [&(1, external.clone())]);
     assert_eq!(
         values[&(1, external.clone())].len(),
@@ -1546,6 +1546,7 @@ mod five_loop_guards {
                 vec![ReducedPropagatorValue {
                     scale_power: 0,
                     reduced,
+                    spectator: None,
                 }],
             )]),
             &BTreeMap::from([((5, head), BTreeSet::from([INTEGRAL.to_owned()]))]),
@@ -1939,4 +1940,306 @@ fn p_relation_cache_two_processes() {
         }
         other => panic!("VAKINT_TEST_P5L_RELATION_ROLE {other}: cold or warm"),
     }
+}
+
+/// The records of a `VAKINT_DUMP_SPLIT_INPUTS` dump (`family`, `powers`,
+/// `external` and `numerator` lines): family, powers, external, numerator.
+fn request_records(
+    text: &str,
+) -> Vec<(
+    &'static crate::p_integral::PFamilyData,
+    Vec<i64>,
+    Atom,
+    Atom,
+)> {
+    text.split("\n---\n")
+        .filter(|record| !record.trim().is_empty())
+        .map(|record| {
+            let field = |key: &str| {
+                record
+                    .lines()
+                    .find_map(|line| line.strip_prefix(key)?.strip_prefix(' '))
+                    .unwrap_or_else(|| panic!("a request record without {key}"))
+            };
+            (
+                registry_family(field("family")).unwrap(),
+                field("powers")
+                    .split(',')
+                    .map(|power| power.parse().unwrap())
+                    .collect(),
+                parse(field("external")),
+                parse(field("numerator")),
+            )
+        })
+        .collect()
+}
+
+/// The built-in p library (one to three loops), or the scope 1-4 package
+/// named by `VAKINT_TEST_P_LIBRARY_1_4`.
+fn library_engine() -> Vakint {
+    let mut engine = Vakint::new().unwrap();
+    if let Some(directory) = std::env::var_os("VAKINT_TEST_P_LIBRARY_1_4") {
+        let library = rustred_app::propagator::load_p_library(
+            rustred_app::propagator::PLibrarySource::Directory(directory.into()),
+            &rustred_app::propagator::PLibraryOptions {
+                verify_descent: false,
+            },
+        )
+        .unwrap();
+        engine.inject_p_library(library).unwrap();
+    }
+    engine
+}
+
+/// The lazy lowering of [`reduce_requests`] (one channel lowered just before
+/// its reduction) gives the values, in the same order, and the errors of the
+/// eager table of [`reduce_requests_eager`], request by request and on the
+/// whole batch at once: the real five-loop requests of
+/// `p_split_requests.txt` within the library's scope, and with
+/// `VAKINT_P_REQUEST_CORPUS` a directory of dumped requests (one per file).
+#[test]
+fn lazy_channel_lowering_reproduces_the_eager_table() {
+    let engine = library_engine();
+    let settings = settings(RustRedMasterMode::Symbolic, None);
+    let mut texts = vec![include_str!("../../tests/fixtures/p_split_requests.txt").to_string()];
+    if let Some(directory) = std::env::var_os("VAKINT_P_REQUEST_CORPUS") {
+        let mut paths = std::fs::read_dir(directory)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect::<Vec<_>>();
+        paths.sort();
+        texts.extend(
+            paths
+                .iter()
+                .map(|path| std::fs::read_to_string(path).unwrap()),
+        );
+    }
+    let records = texts
+        .iter()
+        .flat_map(|text| request_records(text))
+        .filter(|(family, ..)| has_p_data(&engine, family.loops))
+        .collect::<Vec<_>>();
+    assert!(records.len() >= 5, "{} records in scope", records.len());
+    let requests = records
+        .iter()
+        .map(|(family, powers, external, numerator)| PropagatorRequest {
+            family,
+            powers,
+            canonical_numerator: numerator.as_view(),
+            external: external.clone(),
+        })
+        .collect::<Vec<_>>();
+    let same = |requests: &[PropagatorRequest]| {
+        let lazy = reduce_requests_unfolded(&engine, &settings, requests, None, false);
+        let eager = reduce_requests_eager(&engine, &settings, requests, None);
+        match (&lazy, &eager) {
+            (Ok(lazy), Ok(eager)) => {
+                assert_eq!(lazy, eager);
+                assert_eq!(format!("{lazy:?}"), format!("{eager:?}"));
+            }
+            _ => assert_eq!(
+                lazy.as_ref().map_err(ToString::to_string).err(),
+                eager.as_ref().map_err(ToString::to_string).err()
+            ),
+        }
+        lazy.map_or(0, |values| values.values().map(Vec::len).sum::<usize>())
+    };
+    let mut values = 0;
+    for request in &requests {
+        values += same(std::slice::from_ref(request));
+    }
+    assert!(values > 0);
+    assert!(same(&requests) > 0);
+    // Batches whose requests share channels.
+    let doubled = requests
+        .iter()
+        .chain(&requests)
+        .cloned()
+        .collect::<Vec<_>>();
+    assert!(same(&doubled) > 0);
+}
+
+/// The values of one batch summed per (loops, head, scale power), the
+/// spectator multiplied in.
+fn summed(
+    values: BTreeMap<(usize, Atom), Vec<ReducedPropagatorValue>>,
+) -> BTreeMap<(usize, Atom, i64), Atom> {
+    let mut sums = BTreeMap::<(usize, Atom, i64), Atom>::new();
+    for ((loops, head), list) in values {
+        for value in list {
+            *sums
+                .entry((loops, head.clone(), value.scale_power))
+                .or_default() += value.value().as_ref();
+        }
+    }
+    sums
+}
+
+/// Both fold modes give, per (loops, head, scale power), exactly the sum of
+/// today's channel values, with and without factored spectators, request by
+/// request and on whole batches: the real five-loop requests of
+/// `p_split_requests.txt` within the library's scope (and the corpus of
+/// `VAKINT_P_REQUEST_CORPUS`), and the one-loop requests with mixed
+/// non-rational coefficients. A folded spectator is free of `ε` whenever
+/// every channel coefficient is a polynomial in other symbols times
+/// rational functions of `ε`.
+#[test]
+fn folded_channels_reproduce_the_unfolded_values() {
+    let check = |engine: &Vakint,
+                 settings: &VakintSettings,
+                 requests: &[PropagatorRequest],
+                 epsilon_free: bool| {
+        let epsilon = epsilon(settings);
+        for factored in [false, true] {
+            let today =
+                reduce_requests_unfolded(engine, settings, requests, None, factored).unwrap();
+            let today = summed(today);
+            for mode in [FoldMode::Basis, FoldMode::Coefficient] {
+                let folded =
+                    reduce_requests_folded(engine, settings, requests, None, mode, factored)
+                        .unwrap();
+                for value in folded.values().flatten() {
+                    assert_eq!(value.spectator.is_some(), factored);
+                    if epsilon_free && let Some(spectator) = &value.spectator {
+                        assert!(!spectator.contains_symbol(epsilon), "{spectator}");
+                    }
+                }
+                let folded = summed(folded);
+                let keys = today.keys().chain(folded.keys()).collect::<BTreeSet<_>>();
+                for key in keys {
+                    let zero = Atom::Zero;
+                    let difference = (today.get(key).unwrap_or(&zero)
+                        - folded.get(key).unwrap_or(&zero))
+                    .expand();
+                    assert!(
+                        difference.is_zero() || difference.together().expand().is_zero(),
+                        "{mode:?}, factored {factored}, {key:?}: {difference}"
+                    );
+                }
+            }
+        }
+    };
+
+    let engine = library_engine();
+    let settings = settings(RustRedMasterMode::Symbolic, None);
+    let mut texts = vec![include_str!("../../tests/fixtures/p_split_requests.txt").to_string()];
+    if let Some(directory) = std::env::var_os("VAKINT_P_REQUEST_CORPUS") {
+        let mut paths = std::fs::read_dir(directory)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect::<Vec<_>>();
+        paths.sort();
+        texts.extend(
+            paths
+                .iter()
+                .map(|path| std::fs::read_to_string(path).unwrap()),
+        );
+    }
+    let records = texts
+        .iter()
+        .flat_map(|text| request_records(text))
+        .filter(|(family, ..)| has_p_data(&engine, family.loops))
+        .collect::<Vec<_>>();
+    assert!(records.len() >= 5, "{} records in scope", records.len());
+    let requests = records
+        .iter()
+        .map(|(family, powers, external, numerator)| PropagatorRequest {
+            family,
+            powers,
+            canonical_numerator: numerator.as_view(),
+            external: external.clone(),
+        })
+        .collect::<Vec<_>>();
+    for request in &requests {
+        check(&engine, &settings, std::slice::from_ref(request), false);
+    }
+    check(&engine, &settings, &requests, false);
+
+    // One-loop requests whose coefficients mix spectator symbols and ε.
+    let engine = engine_one_loop();
+    let fixture = battery();
+    let terms = [
+        ("muvsq+ε", "bubble_12_n1"),
+        ("muvsq*(1+ε)/(3-2*ε)+muvsq^2/(2-ε)", "bubble_21_n1"),
+        ("ε/(1-ε)^2", "bubble_22_n1"),
+        ("muvsq^2*ε", "bubble_21_n0"),
+        ("𝑖*muvsq/(3-2*ε)", "bubble_12_n1"),
+    ];
+    let external = parse("p(3)");
+    let numerators = terms.map(|(coefficient, name)| {
+        parse(&format!(
+            "({coefficient})*({})",
+            case(&fixture, name).numerator
+        ))
+    });
+    let requests = terms
+        .iter()
+        .zip(&numerators)
+        .map(|((_, name), numerator)| {
+            let case = case(&fixture, name);
+            PropagatorRequest {
+                family: registry_family(&case.family).unwrap(),
+                powers: &case.powers,
+                canonical_numerator: numerator.as_view(),
+                external: external.clone(),
+            }
+        })
+        .collect::<Vec<_>>();
+    for request in &requests {
+        check(&engine, &settings, std::slice::from_ref(request), true);
+    }
+    check(&engine, &settings, &requests, true);
+}
+
+fn engine_one_loop() -> Vakint {
+    engine()
+}
+
+/// [`spectator_terms`] writes a coefficient as `Σ value · basis(ε) ·
+/// monomial` with `basis` a rational function of `ε` alone and `monomial`
+/// free of it; a factor that is not a rational function of `ε` alone (a Γ
+/// function, a denominator mixing `ε` with another symbol) stays in the
+/// monomial, so the decomposition is exact in every case.
+#[test]
+fn spectator_terms_split_off_the_rational_functions_of_epsilon() {
+    let settings = settings(RustRedMasterMode::Symbolic, None);
+    let epsilon = epsilon(&settings);
+    let cases = [
+        ("T*(1-ε)/(3-2*ε)+L*ε^2/((3-2*ε)*(2-ε))", true),
+        ("2/3*𝑖*T*muvsq^2*(1+ε)/(3-2*ε)^2-5*𝑖*L*muvsq^2/(2-ε)", true),
+        ("T*ε", true),
+        ("T*exp(ε)/(3-2*ε)", false),
+        ("T/(muvsq-ε)+L*(1+ε)", false),
+    ];
+    for (text, epsilon_free) in cases {
+        let coefficient = parse(text);
+        let terms = spectator_terms(&coefficient, epsilon);
+        let mut sum = Atom::Zero;
+        for (monomial, basis, value) in &terms {
+            assert!(!value.is_zero());
+            assert!(
+                parts::rational(basis.as_view()).is_some() || basis.contains_symbol(epsilon),
+                "{text}: basis {basis}"
+            );
+            if epsilon_free {
+                assert!(
+                    !monomial.contains_symbol(epsilon),
+                    "{text}: monomial {monomial}"
+                );
+            }
+            sum += monomial * basis * Atom::num(value.clone());
+        }
+        let difference = (&sum - &coefficient).expand();
+        assert!(
+            difference.is_zero() || difference.together().expand().is_zero(),
+            "{text}: {sum}"
+        );
+    }
+    // Two monomials, each with one basis function per distinct ε factor.
+    let terms = spectator_terms(&parse("T*(1-ε)/(3-2*ε)+L/(3-2*ε)"), epsilon);
+    let monomials = terms
+        .iter()
+        .map(|(m, ..)| m.clone())
+        .collect::<BTreeSet<_>>();
+    assert_eq!(monomials, [parse("T"), parse("L")].into_iter().collect());
 }

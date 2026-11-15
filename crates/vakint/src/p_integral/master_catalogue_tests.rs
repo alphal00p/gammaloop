@@ -115,6 +115,7 @@ fn run(
         &[ReducedPropagatorValue {
             scale_power: 0,
             reduced,
+            spectator: None,
         }],
         5,
         &vk_parse!("p(1)").unwrap(),
