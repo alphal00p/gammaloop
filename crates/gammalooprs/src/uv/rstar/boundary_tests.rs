@@ -26,7 +26,7 @@ use crate::{
 use super::{
     RStarPlan, TaylorExpansion,
     boundary::{
-        BoundaryMode, BoundaryStats, ClosedRootNormalization, Grammar, Role, census_dump_refusal,
+        BoundaryMode, BoundaryStats, ClosedRootNormalization, Grammar, Role,
         denominator_orders, fallback_max_bytes, fallback_max_summands, large_reason, split_into_blocks,
         take_logged_summaries, validate_remainder_boundary, verify_vakint_scalar, with_boundary_mode,
         with_census_dump,
@@ -514,64 +514,115 @@ fn boundary_matches_old_path_two_and_three_loop() -> Result<()> {
     })
 }
 
-/// Mode on under a census dump is refused until the boundary dump (DESIGN
-/// 6b, step 4) exists, at start-up and at the first ordinary remainder, so a
-/// census can never come out empty without an error; check and off are not.
+/// Mode on under a census dump is accepted at start-up since the boundary
+/// dump exists (DESIGN 6b; the refusal of 6e49bae5e5 is lifted), in every mode.
 #[test]
-fn mode_on_refuses_the_census_dump() -> Result<()> {
-    with_production_piece_limit(|| -> Result<()> {
-        test_initialise()?;
-        for (mode, dump, refused) in [
-            (BoundaryMode::On, true, true),
-            (BoundaryMode::On, false, false),
-            (BoundaryMode::Check, true, false),
-            (BoundaryMode::Off, true, false),
-        ] {
-            let refusal = with_census_dump(dump, || census_dump_refusal(mode));
-            ensure!(refusal.is_some() == refused, "{mode:?} dump={dump}: {refusal:?}");
+fn census_dump_is_accepted_in_every_mode() -> Result<()> {
+    test_initialise()?;
+    for mode in [BoundaryMode::On, BoundaryMode::Check, BoundaryMode::Off] {
+        for dump in [true, false] {
             let startup = with_census_dump(dump, || {
                 with_boundary_mode(mode, false, validate_remainder_boundary)
             });
-            ensure!(startup.is_err() == refused, "{mode:?} dump={dump}: start-up {startup:?}");
+            ensure!(startup.is_ok(), "{mode:?} dump={dump}: start-up {startup:?}");
         }
-        // Wired into the ordinary loop: before any remainder is integrated.
-        let vakint = Vakint::new()?;
-        let settings = settings();
-        let diagram = colour_factored(&load(include_str!("testdata/l2-d0.dot"))?)?;
-        let graph = diagram.to_gamma_loop_graph(None, true)?;
-        let model = diagram.model();
-        let plan = RStarPlan::with_automatic_edge(&graph, model, &settings)?;
-        let closed_root = test_normalization(&graph);
-        let callback = |tensor: &Atom| -> Result<Atom> {
-            Ok(tensor.replace_multiple(&closed_root.external_routing) * &closed_root.factor)
-        };
-        let _ = take_logged_summaries();
-        let result = with_census_dump(true, || {
-            with_boundary_mode(BoundaryMode::On, false, || {
-                plan.projected_counterterm_closing_root_scalar(
-                    &graph,
-                    model,
-                    &vakint,
-                    &settings,
-                    &callback,
-                    &closed_root,
-                )
-            })
-        });
-        let error = match result {
-            Ok(value) => return Err(eyre!("mode on under a census dump returned {value}")),
-            Err(error) => format!("{error:#}"),
-        };
-        ensure!(error.contains("PINT6_CLOSURE_DUMP"), "unexpected error: {error}");
-        // BOUNDARY_SUMMARY is printed on the error path too, marked as such.
-        let logged = take_logged_summaries();
-        ensure!(
-            logged.iter().all(|(_, outcome, _)| outcome == "error")
-                && logged.last().is_some_and(|(root, _, _)| root == "closed"),
-            "summaries with outcome=error, the closed root last, expected: {logged:?}"
-        );
-        Ok(())
-    })
+    }
+    Ok(())
+}
+
+/// The boundary record (DESIGN 6b, Addendum B): written with a streamed block
+/// file and an inline block, read back by the streaming reader into the same
+/// routing (plus the closing route, A1), blocks and patterns; the block file
+/// has one line per summand (A3); a newline inside an atom is refused (A2);
+/// the boundary and v1 counters are independent.
+#[test]
+fn boundary_record_round_trips() -> Result<()> {
+    test_initialise()?;
+    let parse = |text: &str| vakint::vakint_parse!(text).map_err(|error| eyre!("{error}"));
+    let directory = std::env::temp_dir().join(format!("pint6-boundary-test-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&directory);
+    let dump = super::pint6_dump::test_settings(&directory)?;
+    // A block of 100 summands (file) and a small one (inline).
+    let large = Atom::add_many(
+        (1..=100)
+            .map(|n| parse(&format!("{n}*dot(k(1),k(2))^{}*dot(k(2),k(2))", n % 3)))
+            .collect::<Result<Vec<_>>>()?
+            .iter(),
+    );
+    let small = parse("dot(k(1),k(1))+3/7*dot(k(1),k(2))")?;
+    let topology = parse("topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-p(1),0,2))")?;
+    let routing = vec![(parse("k(1)")?, parse("k(1)")?), (parse("k(2)")?, parse("k(1)-p(1)")?)];
+    let boundary = vakint::p_integral::RemainderBoundary::new(
+        "graph=test marked_edge=2 integration_id=1 loops=2",
+        parse("p(1)")?,
+        Atom::var(symbol!("rstar_mass_squared"; Scalar)),
+        routing.clone(),
+        vec![large, small],
+        vec![vakint::p_integral::BoundaryPattern {
+            topology: topology.clone(),
+            closure_power: 1,
+            terms: vec![(0, parse("dot(p(0),p(0))")?), (1, parse("2*ε")?)],
+        }],
+    )
+    .map_err(|error| eyre!("{error}"))?;
+    let meta = super::boundary::PatternMeta {
+        order: 0,
+        topology: topology.clone(),
+        key: topology.clone(),
+        integral: topology,
+        closure_power: 1,
+        unprojected_nonzero: true,
+    };
+    let built = super::boundary::BuiltBoundary {
+        boundary,
+        patterns: vec![meta],
+        zero_patterns: Vec::new(),
+        grades: vec![super::boundary::Grade::default(), super::boundary::Grade::default()],
+        loops: 2,
+        basis: vec![2, 3],
+        normalisation: Atom::num(1),
+        external: parse("p(0)")?,
+        degree: 2,
+        integration_id: 1,
+    };
+    let vakint_settings = settings().vakint.true_settings();
+    let references = [(0usize, 7usize)].into_iter().collect();
+    let first = super::pint6_dump::write_boundary(
+        &dump,
+        &vakint_settings,
+        &built,
+        &serde_json::json!({"test": true}),
+        false,
+        &references,
+    )?;
+    let second = super::pint6_dump::write_boundary(
+        &dump,
+        &vakint_settings,
+        &built,
+        &serde_json::json!({}),
+        false,
+        &Default::default(),
+    )?;
+    ensure!(second.sequence == first.sequence + 1, "boundary sequence {first:?}");
+    ensure!(first.block_files == 1, "one streamed block file expected");
+    super::pint6_dump::verify_boundary(&built.boundary, &first.header)?;
+    let (read, keys) = super::pint6_dump::read_boundary(&first.header)?;
+    ensure!(read.routing.len() == routing.len() + 1, "the closing route (A1)");
+    ensure!(keys.get("routing").map(String::as_str) == Some("3"), "routing count {keys:?}");
+    let header = std::fs::read_to_string(&first.header)?;
+    ensure!(header.contains("\tref_closure=7\t"), "ref_closure missing:\n{header}");
+    ensure!(header.contains("\nroute "), "route lines missing");
+    // A3: the block file has exactly `summands` lines after its three head lines.
+    let block = std::fs::read_dir(&directory)?
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .find(|path| path.to_string_lossy().ends_with(".block-000.txt.zst"))
+        .ok_or_else(|| eyre!("no block file"))?;
+    let text = std::process::Command::new("zstd").arg("-dcq").arg(&block).output()?.stdout;
+    let text = String::from_utf8(text)?;
+    ensure!(text.lines().count() == 3 + 100, "block lines");
+    ensure!(text.lines().nth(2) == Some("summands 100"), "summands line");
+    let _ = std::fs::remove_dir_all(&directory);
+    Ok(())
 }
 
 /// The vacuum projection of a boundary coefficient does not depend on the
