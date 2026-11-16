@@ -24,6 +24,7 @@ use super::experimental::catalog::OfflineTerminalCatalog;
 use super::experimental::native::NativeCandidate;
 use super::experimental::timing::MathSpan;
 use super::request_dump::{self, DumpChannel, DumpProgram, DumpRequest, RequestDump};
+use crate::stage_timing::StageSpan;
 use crate::symbols::S;
 use crate::utils::vakint_macros::vk_symbol;
 use crate::{
@@ -446,6 +447,7 @@ pub(super) fn evaluate_ordered_batch(
     mut observation: Option<&mut rustred::solver::CandidateRoutedApplicationObserver<'_>>,
     progress: Option<&super::monitor::CallerProgress>,
 ) -> Result<Atom, VakintError> {
+    let _stage = StageSpan::new("rustred.lower.ordered_batch");
     let data = vakint.four_loop_data()?;
     let programs = data.four_loop.as_ref().unwrap();
     let mut channels = BTreeMap::<
@@ -464,9 +466,12 @@ pub(super) fn evaluate_ordered_batch(
             settings,
             super::numerator::ScalarNumeratorForm::PreserveProducts,
         )?;
-        let lowering = program
-            .native
-            .lower_weighted_scalar_numerator(&input, settings)?;
+        let lowering = {
+            let _stage = StageSpan::new("rustred.lower.scalar_lowering");
+            program
+                .native
+                .lower_weighted_scalar_numerator(&input, settings)?
+        };
         let context = family.coefficient_context();
         for term in lowering.terms() {
             let coefficient = term.coefficient().clone();
@@ -513,7 +518,10 @@ pub(super) fn evaluate_ordered_batch(
             }
         }
     }
-    let mut raw = BTreeMap::<Atom, Atom>::new();
+    // Channel contributions per mass, summed once at the end: repeated
+    // `+=` re-merges the whole growing sum per channel (quadratic).
+    // (mass -> master symbol -> coefficient contributions of every channel).
+    let mut raw = BTreeMap::<Atom, BTreeMap<Atom, Vec<Atom>>>::new();
     let dimension = crate::utils::vakint_macros::vk_parse!("4-2*ep").unwrap();
     let cohort_total = channels.len();
     let mut skipped = 0;
@@ -559,6 +567,7 @@ pub(super) fn evaluate_ordered_batch(
         }
         let step_cache = vakint.ordered_step_cache(settings, &program.step_cache)?;
         let _math = MathSpan::new();
+        let _ibp = StageSpan::new("rustred.lower.native_ibp");
         let reduced = request_dump::observe_native(
             dump.as_mut(),
             observation.as_deref_mut(),
@@ -575,6 +584,7 @@ pub(super) fn evaluate_ordered_batch(
                     )
             },
         )??;
+        drop(_ibp);
         if let Some(dump) = dump {
             dump.finish(
                 request_dump::family_terms(reduced.family_fingerprint(), reduced.terms()),
@@ -584,21 +594,23 @@ pub(super) fn evaluate_ordered_batch(
         }
         let family = program.native.family_shared();
         let family_dimension = family.dimension().to_expression();
-        let masters = reduced
-            .terms()
-            .iter()
-            .map(|(master, coefficient)| {
-                coefficient
-                    .to_expression()
-                    .replace(family_dimension.to_pattern())
-                    .with(dimension.to_pattern())
-                    * data.masters.symbol(family.fingerprint(), master.powers())
-            })
-            .sum::<Atom>();
         let spectator = spectator
             .replace(family_dimension.to_pattern())
-            .with(dimension.to_pattern());
-        *raw.entry(mass.clone()).or_insert(Atom::Zero) += masters * spectator * mass.pow(exponent);
+            .with(dimension.to_pattern())
+            * mass.pow(exponent);
+        let per_master = raw.entry(mass.clone()).or_default();
+        for (master, coefficient) in reduced.terms() {
+            per_master
+                .entry(data.masters.symbol(family.fingerprint(), master.powers()))
+                .or_default()
+                .push(
+                    coefficient
+                        .to_expression()
+                        .replace(family_dimension.to_pattern())
+                        .with(dimension.to_pattern())
+                        * &spectator,
+                );
+        }
     }
     if let Some(progress) = progress {
         progress.cohorts(cohort_total, cohort_total);
@@ -606,11 +618,25 @@ pub(super) fn evaluate_ordered_batch(
     if skipped != 0 {
         return Err(request_dump::skipped(skipped).into());
     }
+    tracing::info!(target: "vakint::batch_sizes",
+        loops = 4,
+        contributions = contributions.len(),
+        channels = cohort_total,
+        masters = raw.values().map(BTreeMap::len).sum::<usize>(),
+        channel_terms = raw.values().flat_map(BTreeMap::values).map(Vec::len).sum::<usize>(),
+        raw_bytes = raw
+            .values()
+            .flat_map(BTreeMap::values)
+            .flatten()
+            .map(|term| term.as_view().get_byte_size())
+            .sum::<usize>(),
+        "four-loop ordered batch sizes");
     let mut value = Atom::Zero;
     for (mass, raw) in raw {
         let raw = {
+            let _stage = StageSpan::new("rustred.lower.combine_before_normalization");
             let _math = MathSpan::new();
-            super::combine_exact(raw)
+            super::combine_per_master(raw)
         };
         let normalized = crate::matad::MATAD::with_settings(settings.clone())
             .finalize_reduced_masters(

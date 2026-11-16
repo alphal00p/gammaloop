@@ -140,6 +140,20 @@ pub(crate) struct BareMasterDeclaration {
 
 pub(crate) type BareMasterDeclarations = BTreeMap<Atom, BareMasterDeclaration>;
 
+/// `Σ master · combine_exact(Σ its contributions)` for a reduction collected
+/// per master symbol. Equal in value to `combine_exact` of the whole sum, but
+/// never expands all masters and channels over one common denominator: every
+/// consumer recombines master by master anyway
+/// ([`MasterCatalog::combine_master_coefficients`]), and the whole-sum
+/// expansion of a large ordered batch is what exhausts memory (tens of GB).
+pub(crate) fn combine_per_master(per_master: BTreeMap<Atom, Vec<Atom>>) -> Atom {
+    Atom::add_many(
+        per_master
+            .into_iter()
+            .map(|(master, contributions)| master * combine_exact(Atom::add_many(contributions))),
+    )
+}
+
 pub(crate) fn combine_exact(expression: Atom) -> Atom {
     let expression = expression.expand();
     // Symbolica's rational canonicalization requires exact coefficients.

@@ -101,7 +101,8 @@ pub(super) fn evaluate_ordered_batch(
     let mut channels =
         BTreeMap::<(Atom, Atom, i64), Vec<(IntegralKey, rustred::algebra::Coefficient)>>::new();
     let mut anchors = BTreeMap::<Atom, i64>::new();
-    let mut raw = BTreeMap::<Atom, Atom>::new();
+    // Contributions per mass, summed once at the end (see four_loop).
+    let mut raw = BTreeMap::<Atom, Vec<Atom>>::new();
     drop(setup);
     for contribution in contributions {
         let _stage = StageSpan::new("rustred.lower.admission_and_channels");
@@ -227,17 +228,17 @@ pub(super) fn evaluate_ordered_batch(
                     matched.loop_count,
                     term.integral().powers()
                 );
-                *raw.entry(matched.mass_squared.clone())
-                    .or_insert(Atom::Zero) += term
-                    .coefficient()
-                    .to_expression()
-                    .replace(rustred_dimension.to_pattern())
-                    .with(dimension.to_pattern())
-                    * term.scalar_spectator()
-                    * matched.mass_squared.clone().pow(exponent)
-                    * data
-                        .masters
-                        .symbol(artifact.family_fingerprint(), term.integral().powers());
+                raw.entry(matched.mass_squared.clone()).or_default().push(
+                    term.coefficient()
+                        .to_expression()
+                        .replace(rustred_dimension.to_pattern())
+                        .with(dimension.to_pattern())
+                        * term.scalar_spectator()
+                        * matched.mass_squared.clone().pow(exponent)
+                        * data
+                            .masters
+                            .symbol(artifact.family_fingerprint(), term.integral().powers()),
+                );
                 continue;
             }
             let anchor = *anchors
@@ -398,7 +399,9 @@ pub(super) fn evaluate_ordered_batch(
         let spectator = spectator
             .replace(rustred_dimension.to_pattern())
             .with(dimension.to_pattern());
-        *raw.entry(mass.clone()).or_insert(Atom::Zero) += masters * spectator * mass.pow(exponent);
+        raw.entry(mass.clone())
+            .or_default()
+            .push(masters * spectator * mass.pow(exponent));
     }
     if let Some(progress) = progress {
         progress.cohorts(cohort_total, cohort_total);
@@ -411,7 +414,7 @@ pub(super) fn evaluate_ordered_batch(
         let raw = {
             let _stage = StageSpan::new("rustred.lower.combine_before_normalization");
             let _math = MathSpan::new();
-            super::combine_exact(raw)
+            super::combine_exact(Atom::add_many(raw))
         };
         let normalized = {
             let _stage = StageSpan::new("rustred.lower.matad_normalization");
