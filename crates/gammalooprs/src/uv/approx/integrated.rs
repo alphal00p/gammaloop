@@ -44,7 +44,7 @@ use crate::{
     utils::{GS, W_},
     uv::{
         ApproximationType, UltravioletGraph,
-        approx::{ForestNodeLike, Rooted, UVCtx, local_4d::Local4dCts, streamed},
+        approx::{ForestNodeLike, Rooted, UVCtx, counts, local_4d::Local4dCts, streamed},
         marker::{UvMarker, UvOperation},
         settings::VakintSettings,
         uv_graph::UVE,
@@ -750,6 +750,9 @@ struct TermRewrites {
     contraction_images: std::cell::RefCell<HashMap<Atom, Atom>>,
     /// Census: summands and bytes entering the term rewrites.
     rewritten_summands: std::cell::Cell<(usize, usize)>,
+    /// Counts (see [`super::counts`]): summands of the expansion, whole or
+    /// summed over its pieces.
+    expanded_summands: std::cell::Cell<usize>,
     /// The (topology, other factors) split of each denominator image.
     topology_images: std::cell::RefCell<HashMap<Atom, Option<(Atom, Atom)>>>,
 }
@@ -1156,6 +1159,12 @@ impl TermRewrites {
         }
     }
 
+    /// Counts: add the summands of an expanded piece.
+    fn count_expanded(&self, piece: AtomView<'_>) {
+        self.expanded_summands
+            .set(self.expanded_summands.get() + vakint::census::summands(piece));
+    }
+
     /// [`Self::streamed`] into topology groups ([`Self::group_after_contraction`]).
     fn streamed_grouped(
         &self,
@@ -1165,6 +1174,7 @@ impl TermRewrites {
         let mut groups = TopologyGroups::default();
         let mut introduced = false;
         let outcome = streamed::expand_in_pieces(materialized, limit, &mut |piece| {
+            self.count_expanded(piece.as_view());
             streamed::for_each_summand_chunk(piece.as_view(), limit, &mut |chunk| {
                 let contracted = self.contract_metrics_if_any(chunk)?;
                 if streamed::introduces_dummies(chunk, contracted.as_view()) {
@@ -1200,6 +1210,7 @@ impl TermRewrites {
         let mut accumulated = streamed::SumAccumulator::default();
         let mut introduced = false;
         let outcome = streamed::expand_in_pieces(materialized, limit, &mut |piece| {
+            self.count_expanded(piece.as_view());
             streamed::for_each_summand_chunk(piece.as_view(), limit, &mut |chunk| {
                 let contracted = self.contract_metrics_if_any(chunk)?;
                 if streamed::introduces_dummies(chunk, contracted.as_view()) {
@@ -1236,14 +1247,34 @@ pub(crate) fn to_vakint_integrand<
 ) -> Result<VakintExpression> {
     let _stage = StageSpan::new("gamma.adaptor.to_vakint");
     let started = Instant::now();
+    // Instrumentation (opt-in, see `counts`): sizes of this conversion and of
+    // the outer Taylor product it expands. No value depends on them.
+    let counting = counts::enabled();
+    let taylor_shape = if counting {
+        counts::take_taylor_shape()
+    } else {
+        None
+    };
     let reduced_label = reduced.string_label();
     let dependent_subgraph_label = dependent_subgraph.string_label();
     let materialization_stage = StageSpan::new("gamma.adaptor.materialize_tensor");
     let integrand = integrand.into_integrand();
+    let input_size = counting.then(|| {
+        (
+            vakint::census::summands(integrand.as_view()),
+            integrand.as_view().get_byte_size(),
+        )
+    });
     let materialized = Integrated::materialize_tensor(&integrand)?;
     // An integrand passed by value is not needed any more.
     drop(integrand);
     let census_materialized_bytes = materialized.as_view().get_byte_size();
+    let materialized_size = counting.then(|| {
+        (
+            vakint::census::summands(materialized.as_view()),
+            streamed::expansion_estimate(materialized.as_view()),
+        )
+    });
     let materialization_seconds = started.elapsed().as_secs_f64();
     drop(materialization_stage);
     debug_tags!(#uv, #integrated, #vakint, #trace;
@@ -1310,6 +1341,7 @@ pub(crate) fn to_vakint_integrand<
         denominator_rewrites: Default::default(),
         contraction_images: Default::default(),
         rewritten_summands: Default::default(),
+        expanded_summands: Default::default(),
         topology_images: Default::default(),
     };
 
@@ -1324,7 +1356,8 @@ pub(crate) fn to_vakint_integrand<
     let check_groups = grouped_mode && streamed::check("topology_groups");
     let check_reference = check_groups.then(|| materialized.clone());
     let mut grouped: Option<TopologyGroups> = None;
-    let streamed_input = if materialized.as_view().get_byte_size() >= limit {
+    let in_pieces = materialized.as_view().get_byte_size() >= limit;
+    let streamed_input = if in_pieces {
         let expansion_stage = StageSpan::new("gamma.adaptor.expand");
         let streamed_input = if grouped_mode {
             grouped = rewrites.streamed_grouped(materialized.as_view(), limit)?;
@@ -1357,6 +1390,7 @@ pub(crate) fn to_vakint_integrand<
             let expansion_stage = StageSpan::new("gamma.adaptor.expand");
             let integrand_vakint = materialized.expand();
             drop(materialized);
+            rewrites.count_expanded(integrand_vakint.as_view());
             let expansion_seconds = expansion_started.elapsed().as_secs_f64();
             drop(expansion_stage);
             debug_tags!(#uv, #integrated, #vakint, #trace;
@@ -1821,6 +1855,38 @@ pub(crate) fn to_vakint_integrand<
         );
     }
 
+    let call_counts = counting.then(|| {
+        let topology_summands = a
+            .0
+            .iter()
+            .map(|t| vakint::census::summands(t.numerator.as_view()))
+            .collect::<Vec<_>>();
+        let (input_summands, input_bytes) = input_size.unwrap_or_default();
+        let (materialized_summands, (estimated_summands, estimated_bytes)) =
+            materialized_size.unwrap_or_default();
+        serde_json::json!({
+            "call": counts::next_call(),
+            "reduced": &reduced_label,
+            "input_summands": input_summands,
+            "input_bytes": input_bytes,
+            "materialized_summands": materialized_summands,
+            "materialized_bytes": census_materialized_bytes,
+            "estimated_expanded_summands": estimated_summands,
+            "estimated_expanded_bytes": estimated_bytes,
+            "expanded_summands": rewrites.expanded_summands.get(),
+            "in_pieces": in_pieces,
+            "terms": a.0.len(),
+            "output_summands": topology_summands.iter().sum::<usize>(),
+            "output_bytes": a
+                .0
+                .iter()
+                .map(|t| t.numerator.as_view().get_byte_size())
+                .sum::<usize>(),
+            "topology_summands": topology_summands,
+            "seconds": started.elapsed().as_secs_f64(),
+            "taylor": taylor_shape,
+        })
+    });
     if let Some((output_summands, output_bytes)) = census_input {
         let (rewritten_summands, rewritten_bytes) = rewrites.rewritten_summands.get();
         let numerator_summands = a
@@ -1862,8 +1928,12 @@ pub(crate) fn to_vakint_integrand<
                 "split_seconds": split_seconds,
                 "routing_seconds": routing_seconds,
                 "notation_seconds": notation_seconds,
+                "counts": call_counts,
             }),
         );
+    }
+    if let Some(call_counts) = &call_counts {
+        counts::publish(call_counts);
     }
     tracing::info!(
         uv = true,

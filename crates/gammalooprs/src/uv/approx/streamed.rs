@@ -318,6 +318,51 @@ fn has_opaque_composite_power(expression: AtomView<'_>) -> bool {
     found
 }
 
+/// The size of `expression.expand()` before like terms merge, as
+/// `(summands, bytes)`: a sum adds the sizes of its terms; a product
+/// multiplies the summand counts of its factors (every summand of the
+/// expansion concatenates one summand of each factor, so its bytes are the
+/// sum of the factors' average summand bytes); a positive integer power of a
+/// sum or product is that many factors. Functions and other powers are not
+/// distributed and count as one summand of their own bytes. Merging like
+/// terms only shrinks the expansion, so this bounds what `expand` holds
+/// before it normalizes. In floating point: it never overflows.
+pub(crate) fn expansion_estimate(expression: AtomView<'_>) -> (f64, f64) {
+    match expression {
+        AtomView::Add(sum) => sum.iter().map(expansion_estimate).fold(
+            (0.0, 0.0),
+            |(terms, bytes), (more_terms, more_bytes)| (terms + more_terms, bytes + more_bytes),
+        ),
+        AtomView::Mul(product) => {
+            let (mut terms, mut summand_bytes) = (1.0, 0.0);
+            for factor in product.iter() {
+                let (factor_terms, factor_bytes) = expansion_estimate(factor);
+                if factor_terms == 0.0 {
+                    return (0.0, 0.0);
+                }
+                terms *= factor_terms;
+                summand_bytes += factor_bytes / factor_terms;
+            }
+            (terms, terms * summand_bytes)
+        }
+        AtomView::Pow(power) => {
+            let (base, exponent) = power.get_base_exp();
+            match (base, i64::try_from(exponent)) {
+                (AtomView::Add(_) | AtomView::Mul(_), Ok(n)) if n > 0 => {
+                    let (base_terms, base_bytes) = expansion_estimate(base);
+                    if base_terms == 0.0 {
+                        return (0.0, 0.0);
+                    }
+                    let terms = base_terms.powf(n as f64);
+                    (terms, terms * n as f64 * base_bytes / base_terms)
+                }
+                _ => (1.0, expression.get_byte_size() as f64),
+            }
+        }
+        _ => (1.0, expression.get_byte_size() as f64),
+    }
+}
+
 /// Pass the expansion of `expression` to `sink` in pieces whose sum is
 /// `expression.expand()`. Each piece is an expanded, normalized atom.
 ///
