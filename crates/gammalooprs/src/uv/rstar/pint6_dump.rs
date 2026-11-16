@@ -69,6 +69,37 @@ pub fn set_term(term: impl Into<String>) {
     *TERM.lock().unwrap() = term.into();
 }
 
+/// The root projection of the R* outer integration that requests the
+/// following closures, written into each record header (`channel`,
+/// `taylor_order`, `normalisation`; new keys at the coordinator's request,
+/// which byte comparisons of v1 records ignore). Set around one outer
+/// integration by the evaluation that runs it ([`with_channel`]).
+#[derive(Clone, Debug)]
+pub(super) struct ClosureChannel {
+    /// `projection metric` for the closed metric root (the root closure
+    /// metric contracted in the root scope, the normalisation applied after
+    /// the outer Taylor step); `none` without a root projector.
+    pub(super) channel: &'static str,
+    /// The outer Taylor order of the plan.
+    pub(super) taylor_order: i64,
+    /// The root normalisation, as text.
+    pub(super) normalisation: &'static str,
+}
+
+thread_local! {
+    static CHANNEL: std::cell::RefCell<Option<ClosureChannel>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Run `f` (one outer integration) with `channel` recorded in the headers of
+/// the closures it writes.
+pub(super) fn with_channel<T>(channel: ClosureChannel, f: impl FnOnce() -> T) -> T {
+    let previous = CHANNEL.with(|slot| slot.replace(Some(channel)));
+    let result = f();
+    CHANNEL.with(|slot| *slot.borrow_mut() = previous);
+    result
+}
+
 fn loop_rank(view: AtomView) -> usize {
     match view {
         AtomView::Mul(product) => product.iter().map(loop_rank).sum(),
@@ -394,6 +425,12 @@ pub(super) fn write(
         "numerator_bytes {}",
         numerator.as_view().get_byte_size()
     )?;
+    // Coordinator request: the root projection of this closure (new keys).
+    if let Some(channel) = CHANNEL.with(|slot| slot.borrow().clone()) {
+        writeln!(out, "channel {}", channel.channel)?;
+        writeln!(out, "taylor_order {}", channel.taylor_order)?;
+        writeln!(out, "normalisation {}", channel.normalisation)?;
+    }
     // Instrumentation: the counts of the to_vakint call that produced this
     // closure (see uv::approx::counts); a new key, before the input line.
     if let Some(counts) = crate::uv::approx::counts::last_counts() {

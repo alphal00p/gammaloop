@@ -29,7 +29,7 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder},
     domains::atom::AtomField,
     function,
-    id::Replacement,
+    id::{Pattern, Replacement},
     parse, parse_lit,
     poly::series::Series,
     solve::SolveCoverage,
@@ -740,7 +740,7 @@ impl TopologyGroups {
 }
 
 /// The summand-local rewrites of [`to_vakint_integrand`] after expansion.
-struct TermRewrites {
+pub(crate) struct TermRewrites {
     propagators: HashMap<usize, (usize, Atom)>,
     contracted_nodes: HashMap<usize, usize>,
     substitute_masses_to_m_uv: bool,
@@ -759,6 +759,129 @@ struct TermRewrites {
 }
 
 impl TermRewrites {
+    /// The rewrites of the `den` factors of `reduced`'s paired edges of `graph`
+    /// (the edge id becomes a 1-based `prop` id in the iteration order of
+    /// `graph`, with the endpoints of the edge), with the nodes of every
+    /// connected component of `dependent_subgraph` identified to its first
+    /// node. Extracted from [`to_vakint_integrand`].
+    pub(crate) fn new<
+        E: UVE,
+        V,
+        H,
+        S: SubGraphLike + SubSetLike<Base = SuBitGraph>,
+        SS: SubGraphLike,
+    >(
+        graph: &HedgeGraph<E, V, H>,
+        reduced: &S,
+        dependent_subgraph: &SS,
+        substitute_masses_to_m_uv: bool,
+    ) -> Self {
+        let vk_edge = vakint_symbol!("edge");
+        debug_tags!(#uv, #integrated, #vakint, #graph, #dump;
+            reduced = %graph.dot(reduced),
+            "Den to prop for"
+        );
+        let mut propagators = HashMap::new();
+        for (pair, index, _data) in graph.iter_edges_of(reduced) {
+            if let HedgePair::Paired { source, sink } = pair {
+                propagators.insert(
+                    usize::from(index),
+                    (
+                        propagators.len() + 1,
+                        function!(
+                            vk_edge,
+                            usize::from(graph.node_id(source)),
+                            usize::from(graph.node_id(sink))
+                        ),
+                    ),
+                );
+            }
+        }
+        debug_tags!(#uv, #integrated, #vakint, #graph, #dump;
+            reduced = %graph.dot(dependent_subgraph),
+            "Shrinking subgraph for vakint"
+        );
+        // Each disconnected counterterm has its own contracted vertex. Identifying
+        // distinct children with each other would create extra quotient cycles
+        // without corresponding independent momentum coordinates.
+        let mut contracted_nodes = HashMap::new();
+        for component in graph.connected_components(dependent_subgraph) {
+            let mut first: Option<NodeIndex> = None;
+            for (id, _crown, _data) in graph.iter_nodes_of(&component) {
+                debug_tags!(#uv, #integrated, #vakint, #graph, #inspect;
+                    id = %id,
+                    "Shrinking Node"
+                );
+
+                if let Some(first) = first {
+                    contracted_nodes.insert(id.0, first.0);
+                } else {
+                    first = Some(id);
+                }
+            }
+        }
+        TermRewrites {
+            propagators,
+            contracted_nodes,
+            substitute_masses_to_m_uv,
+            denominator_rewrites: Default::default(),
+            contraction_images: Default::default(),
+            rewritten_summands: Default::default(),
+            expanded_summands: Default::default(),
+            topology_images: Default::default(),
+        }
+    }
+
+    /// Whether a factor mentions a `den`, `prop`, `edge` or `topo`: such a
+    /// factor outside the denominator product takes the whole map.
+    fn structural(factor: AtomView<'_>) -> bool {
+        factor.contains_symbol(GS.den)
+            || factor.contains_symbol(vakint::symbols::S.prop)
+            || factor.contains_symbol(vakint_symbol!("edge"))
+            || factor.contains_symbol(vakint_symbol!("topo"))
+    }
+
+    /// The (topology, other factors) split of the image of a denominator
+    /// product ([`Self::after_contraction_whole`]): exactly one `topo` factor
+    /// and no structural rest, else `None`.
+    fn split_topology_image(image: &Atom) -> Option<(Atom, Atom)> {
+        let vk_topo = vakint_symbol!("topo");
+        let factors = match image.as_view() {
+            AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+            single => vec![single],
+        };
+        let (topologies, rest): (Vec<_>, Vec<_>) = factors
+            .into_iter()
+            .partition(|factor| matches!(factor, AtomView::Fun(f) if f.get_symbol() == vk_topo));
+        match topologies[..] {
+            [topology] if !rest.iter().any(|factor| Self::structural(*factor)) => {
+                Some((topology.to_owned(), Atom::mul_many(rest.iter().copied())))
+            }
+            _ => None,
+        }
+    }
+
+    /// The (topology, rest) split of the image of one product `key` of
+    /// denominator factors (`den` or its powers), as
+    /// [`Self::group_after_contraction`] computes it for a summand with these
+    /// denominators, sharing its caches: today's grouping key of that
+    /// denominator product and the factor its numerator receives. `None` when
+    /// the image is not one `topo` times a non-structural rest.
+    pub(crate) fn denominator_image(&self, key: &Atom) -> Option<(Atom, Atom)> {
+        let mut cache = self.denominator_rewrites.borrow_mut();
+        let mut images = self.topology_images.borrow_mut();
+        images
+            .entry(key.clone())
+            .or_insert_with_key(|key| {
+                let image = cache
+                    .entry(key.clone())
+                    .or_insert_with_key(|key| self.after_contraction_whole(key.clone()))
+                    .clone();
+                Self::split_topology_image(&image)
+            })
+            .clone()
+    }
+
     // Nested counterterms can expose a boundary metric next to the propagator
     // metric of the reduced graph. Contract those metric-only structures before
     // the expression is split into Vakint terms.
@@ -966,7 +1089,7 @@ impl TermRewrites {
 
     /// The reference for [`Self::after_contraction`]: every rewrite on the
     /// whole expression.
-    fn after_contraction_whole(&self, integrand: Atom) -> Atom {
+    pub(crate) fn after_contraction_whole(&self, integrand: Atom) -> Atom {
         let integrand = self.denominators_to_propagators(integrand);
         let integrand = self.shrink_subgraph(integrand);
         let integrand = Self::flip_and_fuse(integrand);
@@ -1126,19 +1249,7 @@ impl TermRewrites {
                         .entry(key.clone())
                         .or_insert_with_key(|key| self.after_contraction_whole(key.clone()))
                         .clone();
-                    let factors = match image.as_view() {
-                        AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
-                        single => vec![single],
-                    };
-                    let (topologies, rest): (Vec<_>, Vec<_>) = factors.into_iter().partition(
-                        |factor| matches!(factor, AtomView::Fun(f) if f.get_symbol() == vk_topo),
-                    );
-                    match topologies[..] {
-                        [topology] if !rest.iter().any(|factor| structural(*factor)) => {
-                            Some((topology.to_owned(), Atom::mul_many(rest.iter().copied())))
-                        }
-                        _ => None,
-                    }
+                    Self::split_topology_image(&image)
                 })
                 .clone();
             let Some((topology, rest)) = split else {
@@ -1300,64 +1411,15 @@ pub(crate) fn to_vakint_integrand<
         "Vakint trace after undo shorthands"
     );
 
-    let vk_prop = vakint::symbols::S.prop;
-    let vk_edge = vakint_symbol!("edge");
-    debug_tags!(#uv, #integrated, #vakint, #graph, #dump;
-        reduced = %graph.dot(reduced),
-        "Den to prop for"
+    let rewrites = TermRewrites::new(
+        graph,
+        reduced,
+        dependent_subgraph,
+        substitute_masses_to_m_uv,
     );
-    let mut propagators = HashMap::new();
-    for (pair, index, _data) in graph.iter_edges_of(reduced) {
-        if let HedgePair::Paired { source, sink } = pair {
-            propagators.insert(
-                usize::from(index),
-                (
-                    propagators.len() + 1,
-                    function!(
-                        vk_edge,
-                        usize::from(graph.node_id(source)),
-                        usize::from(graph.node_id(sink))
-                    ),
-                ),
-            );
-        }
-    }
-    debug_tags!(#uv, #integrated, #vakint, #graph, #dump;
-        reduced = %graph.dot(dependent_subgraph),
-        "Shrinking subgraph for vakint"
-    );
-    // Each disconnected counterterm has its own contracted vertex. Identifying
-    // distinct children with each other would create extra quotient cycles
-    // without corresponding independent momentum coordinates.
-    let mut contracted_nodes = HashMap::new();
-    for component in graph.connected_components(dependent_subgraph) {
-        let mut first: Option<NodeIndex> = None;
-        for (id, _crown, _data) in graph.iter_nodes_of(&component) {
-            debug_tags!(#uv, #integrated, #vakint, #graph, #inspect;
-                id = %id,
-                "Shrinking Node"
-            );
-
-            if let Some(first) = first {
-                contracted_nodes.insert(id.0, first.0);
-            } else {
-                first = Some(id);
-            }
-        }
-    }
     let cooking = CookSettings::indices()
         .with_mode(CookMode::ReversibleEncoding)
         .with_representation_payloads(true, true);
-    let rewrites = TermRewrites {
-        propagators,
-        contracted_nodes,
-        substitute_masses_to_m_uv,
-        denominator_rewrites: Default::default(),
-        contraction_images: Default::default(),
-        rewritten_summands: Default::default(),
-        expanded_summands: Default::default(),
-        topology_images: Default::default(),
-    };
 
     // A large integrand is expanded, contracted and rewritten in pieces, so
     // that neither its unmerged expansion nor a cooked copy, observation map
@@ -1535,28 +1597,7 @@ pub(crate) fn to_vakint_integrand<
     let split_seconds = split_started.elapsed().as_secs_f64();
     drop(split_stage);
     let additional_normalization = parse!(&settings.additional_normalization);
-    let propagator_pattern = function!(
-        vk_prop,
-        W_.a_,
-        function!(vakint::symbols::S.edge, W_.i_, W_.j_),
-        W_.c_,
-        W_.d_,
-        W_.e_
-    )
-    .to_pattern();
-    let momentum_pattern = function!(GS.emr_mom, W_.a_).to_pattern();
-    let add_additional_args = [
-        Replacement::new(
-            function!(GS.emr_mom, W_.i_).to_pattern(),
-            function!(GS.emr_mom, W_.i_, W_.a___),
-        )
-        .allow_new_wildcards_on_rhs(true),
-        Replacement::new(
-            function!(GS.loop_mom, W_.i_).to_pattern(),
-            function!(GS.loop_mom, W_.i_, W_.a___),
-        )
-        .allow_new_wildcards_on_rhs(true),
-    ];
+    let (propagator_pattern, momentum_pattern, add_additional_args) = term_patterns();
     let mut graph_seconds = 0.0;
     let mut notation_images = HashMap::new();
     // The symbol renames do not depend on the term: one cache for all.
@@ -1577,113 +1618,9 @@ pub(crate) fn to_vakint_integrand<
 
         let graph_started = Instant::now();
         let graph_stage = StageSpan::new("gamma.adaptor.rebuild_graph");
-        let mut graph = HedgeGraphBuilder::new();
-        //prop(<id>, edge(<node_source>,<node_sink>), <mom>, <mass>, <power>)
-        let mut nodemap = HashMap::new();
-
-        struct ContractibleEdge {
-            mom: Atom,
-            mass: Atom,
-            power: i32,
-        }
-
-        for m in t.integral.pattern_match(&propagator_pattern, None, None) {
-            let i: usize = m[&W_.i_].as_view().try_into().unwrap();
-            let j: usize = m[&W_.j_].as_view().try_into().unwrap();
-            nodemap.entry(i).or_insert_with(|| graph.add_node(()));
-            nodemap.entry(j).or_insert_with(|| graph.add_node(()));
-
-            graph.add_edge(
-                nodemap[&i],
-                nodemap[&j],
-                ContractibleEdge {
-                    mom: m[&W_.c_].clone(),
-                    mass: m[&W_.d_].clone(),
-                    power: m[&W_.e_].as_view().try_into().unwrap(),
-                },
-                false,
-            );
-        }
-
-        let mut system = vec![];
-        let mut momentum_variables = vec![];
-
-        let mut graph: HedgeGraph<ContractibleEdge, ()> = graph.build();
-        let uncontracted_propagator_count =
-            graph.iter_edges().filter(|(p, _, _)| p.is_paired()).count();
-        let uncontracted_propagator_power_sum = graph
-            .iter_edges()
-            .filter_map(|(p, _, e)| p.is_paired().then_some(e.data.power))
-            .sum::<i32>();
-
-        while let Some(same_mass_two_bond) = graph.a_bond(&|c| {
-            let mut count = 0;
-            let mut mass = None;
-            for (_, _, d) in graph.iter_edges_of(c) {
-                count += 1;
-
-                if let Some(m) = &mass
-                    && m != &d.data.mass
-                {
-                    return false;
-                } else {
-                    mass = Some(d.data.mass.clone());
-                }
-                if count > 2 {
-                    return false;
-                }
-            }
-            count == 2
-        }) {
-            let mut iter = same_mass_two_bond.included_iter();
-            let first = graph[&iter.next().unwrap()];
-            let second = graph[&iter.next().unwrap()];
-            graph[first].power += graph[second].power;
-            let mut to_contract: SuBitGraph = graph.empty_subgraph();
-            to_contract.add(graph[&second].1);
-            graph.contract_subgraph(&to_contract, ());
-        }
-        let mut nodes_to_merge = vec![];
-
-        for c in graph.connected_components(&graph.full_filter()) {
-            let Some((nid, _, _)) = graph.iter_nodes_of(&c).next() else {
-                continue;
-            };
-            nodes_to_merge.push(nid);
-        }
-
-        if !nodes_to_merge.is_empty() {
-            graph.identify_nodes(&nodes_to_merge, ());
-        }
-
-        graph.forget_identification_history();
-        debug_tags!(#uv, #integrated, #vakint, #graph, #dump;
-            log.graph = %graph.base_dot(),
-            "Graph"
-        );
-
-        let mut new_integral: Atom = 1.into();
-        for (p, eid, e) in graph.iter_edges() {
-            let HedgePair::Paired { source, sink } = p else {
-                continue;
-            };
-            new_integral *= function!(
-                vk_prop,
-                eid.0 + 1, //vakint propagator ids are 1-indexed
-                function!(
-                    vakint::symbols::S.edge,
-                    graph.node_id(source).0,
-                    graph.node_id(sink).0
-                ),
-                &e.data.mom,
-                &e.data
-                    .mass
-                    .pow(2)
-                    .replace(GS.m_uv_expansion)
-                    .with(GS.m_uv_vacuum),
-                e.data.power
-            )
-        }
+        let (graph, uncontracted_propagator_count, uncontracted_propagator_power_sum) =
+            rebuilt_vacuum_graph(&t.integral, &propagator_pattern);
+        let new_integral = rebuilt_propagators(&graph);
 
         // println!("{}->{}", t.integral, new_integral);
         t.integral = function!(vakint::symbols::S.topo, new_integral);
@@ -1713,30 +1650,7 @@ pub(crate) fn to_vakint_integrand<
 
         let routing_started = Instant::now();
         let routing_stage = StageSpan::new("gamma.adaptor.momentum_routing");
-        let lmb = graph.lmb();
-        for (p, e, ed) in graph.iter_edges() {
-            if p.is_paired() {
-                // println!("{e}");
-                let loop_expr = lmb.loop_atom::<Atom>(e, GS.loop_mom, &[], false);
-
-                ed.data
-                    .mom
-                    .pattern_match(&momentum_pattern, None, None)
-                    .for_each(|m| {
-                        let var = momentum_pattern.replace_wildcards(&m).unwrap();
-                        if !momentum_variables.iter().any(|existing| existing == &var) {
-                            momentum_variables.push(var);
-                        }
-                    });
-
-                // println!("{loop_expr}");
-
-                // println!("{external_expr}");
-                let is_zero = &ed.data.mom - loop_expr;
-                // println!("Momentum check for edge {}: {}", e, is_zero);
-                system.push(is_zero);
-            }
-        }
+        let (system, momentum_variables) = momentum_system(&graph, &momentum_pattern);
 
         let momentum_solution =
             VakintMomentumSolution::solve(&system, &momentum_variables, &add_additional_args)
@@ -1840,37 +1754,13 @@ pub(crate) fn to_vakint_integrand<
             log.numerator = t.numerator,
             "Vakint trace"
         );
-        t.integral = t
-            .integral
-            .replace(function!(GS.loop_mom, W_.x___))
-            .with(function!(vakint::symbols::S.k, W_.x___))
-            .replace(function!(GS.emr_mom, W_.x___))
-            .with(function!(vakint::symbols::S.p, W_.x___));
-        let rename = |numerator: AtomView<'_>| {
-            numerator
-                .replace(function!(GS.loop_mom, W_.x___))
-                .with(function!(vakint::symbols::S.k, W_.x___))
-                .replace(function!(GS.emr_mom, W_.x___))
-                .with(function!(vakint::symbols::S.p, W_.x___))
-                .replace(function!(
-                    SPENSO_TAG.dot,
-                    function!(W_.a_, W_.a___, Minkowski {}.new_rep(GS.dim).to_symbolic([])),
-                    function!(W_.b_, W_.b___, Minkowski {}.new_rep(GS.dim).to_symbolic([]))
-                ))
-                .with(vakint::symbols::S.dot(function!(W_.a_, W_.a___), function!(W_.b_, W_.b___)))
-                .replace(function!(
-                    ETS.metric,
-                    Minkowski {}.to_symbolic([W_.a__]),
-                    Minkowski {}.to_symbolic([W_.b__])
-                ))
-                .with(function!(
-                    vakint::symbols::S.metric,
-                    Minkowski {}.to_symbolic([W_.a__]),
-                    Minkowski {}.to_symbolic([W_.b__])
-                ))
-        };
-        t.numerator =
-            map_factors_switched("vakint_symbols", &t.numerator, &mut rename_images, &rename);
+        t.integral = vakint_integral_rename(&t.integral);
+        t.numerator = map_factors_switched(
+            "vakint_symbols",
+            &t.numerator,
+            &mut rename_images,
+            &vakint_rename,
+        );
         notation_seconds += notation_started.elapsed().as_secs_f64();
         drop(notation_stage);
         debug_tags!(#uv, #integrated, #vakint, #trace;
@@ -1981,6 +1871,235 @@ pub(crate) fn to_vakint_integrand<
     );
 
     Ok(a)
+}
+
+/// The propagator pattern `prop(a_, edge(i_, j_), c_, d_, e_)`, the edge
+/// momentum variable pattern `Q(a_)` and the replacements that give a
+/// momentum variable its additional (slot) arguments, of the per-term
+/// rebuild of [`to_vakint_integrand`].
+fn term_patterns() -> (Pattern, Pattern, [Replacement; 2]) {
+    let propagator_pattern = function!(
+        vakint::symbols::S.prop,
+        W_.a_,
+        function!(vakint::symbols::S.edge, W_.i_, W_.j_),
+        W_.c_,
+        W_.d_,
+        W_.e_
+    )
+    .to_pattern();
+    let momentum_pattern = function!(GS.emr_mom, W_.a_).to_pattern();
+    let add_additional_args = [
+        Replacement::new(
+            function!(GS.emr_mom, W_.i_).to_pattern(),
+            function!(GS.emr_mom, W_.i_, W_.a___),
+        )
+        .allow_new_wildcards_on_rhs(true),
+        Replacement::new(
+            function!(GS.loop_mom, W_.i_).to_pattern(),
+            function!(GS.loop_mom, W_.i_, W_.a___),
+        )
+        .allow_new_wildcards_on_rhs(true),
+    ];
+    (propagator_pattern, momentum_pattern, add_additional_args)
+}
+
+/// A propagator of the per-term graph rebuild ([`rebuilt_vacuum_graph`]).
+struct ContractibleEdge {
+    mom: Atom,
+    mass: Atom,
+    power: i32,
+}
+
+/// The graph of the propagators `prop(<id>, edge(<node_source>,<node_sink>),
+/// <mom>, <mass>, <power>)` of one Vakint term's integral, with every
+/// same-mass two-bond merged into one line (powers added) and the first node
+/// of every connected component identified; and the paired propagator count
+/// and power sum before the merge. Extracted from [`to_vakint_integrand`].
+fn rebuilt_vacuum_graph(
+    integral: &Atom,
+    propagator_pattern: &Pattern,
+) -> (HedgeGraph<ContractibleEdge, ()>, usize, i32) {
+    let mut graph = HedgeGraphBuilder::new();
+    //prop(<id>, edge(<node_source>,<node_sink>), <mom>, <mass>, <power>)
+    let mut nodemap = HashMap::new();
+
+    for m in integral.pattern_match(propagator_pattern, None, None) {
+        let i: usize = m[&W_.i_].as_view().try_into().unwrap();
+        let j: usize = m[&W_.j_].as_view().try_into().unwrap();
+        nodemap.entry(i).or_insert_with(|| graph.add_node(()));
+        nodemap.entry(j).or_insert_with(|| graph.add_node(()));
+
+        graph.add_edge(
+            nodemap[&i],
+            nodemap[&j],
+            ContractibleEdge {
+                mom: m[&W_.c_].clone(),
+                mass: m[&W_.d_].clone(),
+                power: m[&W_.e_].as_view().try_into().unwrap(),
+            },
+            false,
+        );
+    }
+
+    let mut graph: HedgeGraph<ContractibleEdge, ()> = graph.build();
+    let uncontracted_propagator_count =
+        graph.iter_edges().filter(|(p, _, _)| p.is_paired()).count();
+    let uncontracted_propagator_power_sum = graph
+        .iter_edges()
+        .filter_map(|(p, _, e)| p.is_paired().then_some(e.data.power))
+        .sum::<i32>();
+
+    while let Some(same_mass_two_bond) = graph.a_bond(&|c| {
+        let mut count = 0;
+        let mut mass = None;
+        for (_, _, d) in graph.iter_edges_of(c) {
+            count += 1;
+
+            if let Some(m) = &mass
+                && m != &d.data.mass
+            {
+                return false;
+            } else {
+                mass = Some(d.data.mass.clone());
+            }
+            if count > 2 {
+                return false;
+            }
+        }
+        count == 2
+    }) {
+        let mut iter = same_mass_two_bond.included_iter();
+        let first = graph[&iter.next().unwrap()];
+        let second = graph[&iter.next().unwrap()];
+        graph[first].power += graph[second].power;
+        let mut to_contract: SuBitGraph = graph.empty_subgraph();
+        to_contract.add(graph[&second].1);
+        graph.contract_subgraph(&to_contract, ());
+    }
+    let mut nodes_to_merge = vec![];
+
+    for c in graph.connected_components(&graph.full_filter()) {
+        let Some((nid, _, _)) = graph.iter_nodes_of(&c).next() else {
+            continue;
+        };
+        nodes_to_merge.push(nid);
+    }
+
+    if !nodes_to_merge.is_empty() {
+        graph.identify_nodes(&nodes_to_merge, ());
+    }
+
+    graph.forget_identification_history();
+    debug_tags!(#uv, #integrated, #vakint, #graph, #dump;
+        log.graph = %graph.base_dot(),
+        "Graph"
+    );
+    (
+        graph,
+        uncontracted_propagator_count,
+        uncontracted_propagator_power_sum,
+    )
+}
+
+/// The product of the propagators of a rebuilt graph: 1-based ids, the mass
+/// squared (with `m_uv_expansion` -> `m_uv_vacuum`).
+fn rebuilt_propagators(graph: &HedgeGraph<ContractibleEdge, ()>) -> Atom {
+    let mut new_integral: Atom = 1.into();
+    for (p, eid, e) in graph.iter_edges() {
+        let HedgePair::Paired { source, sink } = p else {
+            continue;
+        };
+        new_integral *= function!(
+            vakint::symbols::S.prop,
+            eid.0 + 1, //vakint propagator ids are 1-indexed
+            function!(
+                vakint::symbols::S.edge,
+                graph.node_id(source).0,
+                graph.node_id(sink).0
+            ),
+            &e.data.mom,
+            &e.data
+                .mass
+                .pow(2)
+                .replace(GS.m_uv_expansion)
+                .with(GS.m_uv_vacuum),
+            e.data.power
+        )
+    }
+    new_integral
+}
+
+/// The momentum conservation system of a rebuilt graph (every line momentum
+/// minus its loop momentum in the graph's basis) and its edge momentum
+/// variables, in order of appearance.
+fn momentum_system(
+    graph: &HedgeGraph<ContractibleEdge, ()>,
+    momentum_pattern: &Pattern,
+) -> (Vec<Atom>, Vec<Atom>) {
+    let mut system = vec![];
+    let mut momentum_variables = vec![];
+    let lmb = graph.lmb();
+    for (p, e, ed) in graph.iter_edges() {
+        if p.is_paired() {
+            // println!("{e}");
+            let loop_expr = lmb.loop_atom::<Atom>(e, GS.loop_mom, &[], false);
+
+            ed.data
+                .mom
+                .pattern_match(momentum_pattern, None, None)
+                .for_each(|m| {
+                    let var = momentum_pattern.replace_wildcards(&m).unwrap();
+                    if !momentum_variables.iter().any(|existing| existing == &var) {
+                        momentum_variables.push(var);
+                    }
+                });
+
+            // println!("{loop_expr}");
+
+            // println!("{external_expr}");
+            let is_zero = &ed.data.mom - loop_expr;
+            // println!("Momentum check for edge {}: {}", e, is_zero);
+            system.push(is_zero);
+        }
+    }
+    (system, momentum_variables)
+}
+
+/// The final rename of a Vakint term's integral: loop momenta `K` -> `k`,
+/// edge momenta `Q` -> `p` (vakint symbols).
+pub(crate) fn vakint_integral_rename(integral: &Atom) -> Atom {
+    integral
+        .replace(function!(GS.loop_mom, W_.x___))
+        .with(function!(vakint::symbols::S.k, W_.x___))
+        .replace(function!(GS.emr_mom, W_.x___))
+        .with(function!(vakint::symbols::S.p, W_.x___))
+}
+
+/// The final rename of a Vakint term's numerator: loop momenta `K` -> `k`,
+/// edge momenta `Q` -> `p`, `d`-dimensional dot products and metrics to
+/// vakint's `dot` and `g`.
+pub(crate) fn vakint_rename(numerator: AtomView<'_>) -> Atom {
+    numerator
+        .replace(function!(GS.loop_mom, W_.x___))
+        .with(function!(vakint::symbols::S.k, W_.x___))
+        .replace(function!(GS.emr_mom, W_.x___))
+        .with(function!(vakint::symbols::S.p, W_.x___))
+        .replace(function!(
+            SPENSO_TAG.dot,
+            function!(W_.a_, W_.a___, Minkowski {}.new_rep(GS.dim).to_symbolic([])),
+            function!(W_.b_, W_.b___, Minkowski {}.new_rep(GS.dim).to_symbolic([]))
+        ))
+        .with(vakint::symbols::S.dot(function!(W_.a_, W_.a___), function!(W_.b_, W_.b___)))
+        .replace(function!(
+            ETS.metric,
+            Minkowski {}.to_symbolic([W_.a__]),
+            Minkowski {}.to_symbolic([W_.b__])
+        ))
+        .with(function!(
+            vakint::symbols::S.metric,
+            Minkowski {}.to_symbolic([W_.a__]),
+            Minkowski {}.to_symbolic([W_.b__])
+        ))
 }
 
 struct VakintMomentumSolution {
