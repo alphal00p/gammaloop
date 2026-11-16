@@ -2620,6 +2620,28 @@ fn showcase_postprocess() {
         }
         let text = result.to_canonical_string();
         std::fs::write(out.join("result_exact_d_coef.txt"), &text).unwrap();
+        // The same with each master monomial as a named symbol Master(i) and a
+        // legend Master(i) -> its closed form (no closed form inline).
+        let master_symbol = crate::utils::vakint_macros::vk_symbol!("Master");
+        let mut named = Atom::Zero;
+        let mut legend = Vec::new();
+        for (index, master) in order.iter().enumerate() {
+            let coefficient = Atom::add_many(groups[master].iter().map(|a| a.as_view())).collect_num();
+            named += symbolica::function!(coef, coefficient) * symbolica::function!(master_symbol, Atom::num(index as i64 + 1));
+            let mut pgamma = Vec::new();
+            let mut gammas = Vec::new();
+            for factor in match master.as_view() {
+                symbolica::atom::AtomView::Mul(product) => product.iter().map(|f| f.to_owned()).collect::<Vec<_>>(),
+                _ => vec![master.clone()],
+            } {
+                let text = factor.to_canonical_string();
+                if text.contains("PGamma") { pgamma.push(text) } else { gammas.push(text) }
+            }
+            legend.push(serde_json::json!({"symbol": format!("vakint::Master({})", index + 1),
+                "closed_form": master.to_canonical_string(), "pgamma_tags": pgamma, "gamma_functions": gammas}));
+        }
+        std::fs::write(out.join("result_exact_masters.txt"), named.to_canonical_string()).unwrap();
+        std::fs::write(out.join("result_exact_masters_legend.json"), serde_json::to_string_pretty(&legend).unwrap()).unwrap();
         std::fs::write(
             out.join("result_exact_d_coef.json"),
             serde_json::json!({"masters": order.len(), "terms_in_d": groups.values().map(|g| g.len()).sum::<usize>(),
