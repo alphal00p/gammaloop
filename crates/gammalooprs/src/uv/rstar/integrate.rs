@@ -160,6 +160,10 @@ pub fn integrate_single_mass(
         timing.tensor += tensor_started.elapsed();
         timing.integrated_terms += 1;
         if settings.verify_numerator_identification {
+            ensure!(
+                super::pint6_dump::settings().is_none(),
+                "PINT6_CLOSURE_DUMP does not cover the strict split branch"
+            );
             // Strict matching admits only authenticated scalar symbols. Keep
             // arbitrary tensor spectators outside that check, as before.
             let strict_started = Instant::now();
@@ -175,6 +179,24 @@ pub fn integrate_single_mass(
         // tensor spectators. Keeping their coefficients here lets its Laurent
         // expansion include insertion poles before truncating the full product.
         let preparation_started = Instant::now();
+        if let Some(dump) = super::pint6_dump::settings() {
+            // Local export patch: before the direct-lowering branch, so both
+            // closure paths are recorded (and skipped at >= the skip loops).
+            let numerator = term.numerator.replace_multiple(&cut.routing).expand();
+            let p_loops = super::pint6_dump::write(
+                dump,
+                settings,
+                &cut.closure,
+                &numerator,
+                &cut.integrand,
+                cut.loops,
+            )?;
+            if p_loops >= dump.skip_min_p_loops {
+                // Export only: the request is recorded and not evaluated.
+                timing.closure_preparation += preparation_started.elapsed();
+                continue;
+            }
+        }
         if direct_lowering && matches!(cut.integrand.as_view(), AtomView::Fun(_)) {
             // The routing and the expansion are applied by the p-integral
             // owner's direct lowering, onto the canonical family at once.

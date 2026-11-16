@@ -26,6 +26,7 @@ mod master_tests;
 mod matter_tests;
 mod moments;
 mod physical;
+pub mod pint6_dump;
 mod plan;
 #[cfg(test)]
 mod pole_tests;
