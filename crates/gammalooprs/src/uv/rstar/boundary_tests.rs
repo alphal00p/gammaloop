@@ -27,7 +27,7 @@ use super::{
     RStarPlan, TaylorExpansion,
     boundary::{
         BoundaryMode, BoundaryStats, ClosedRootNormalization, Grammar, Role, census_dump_refusal,
-        denominator_orders, fallback_max_summands, large_decline, split_into_blocks,
+        denominator_orders, fallback_max_bytes, fallback_max_summands, large_reason, split_into_blocks,
         validate_remainder_boundary, verify_vakint_scalar, with_boundary_mode, with_census_dump,
     },
     expression::RStarIntegrand,
@@ -276,18 +276,30 @@ fn postconditions_reject_unmapped_loop_momenta() -> Result<()> {
     Ok(())
 }
 
-/// DESIGN 10c with Addendum C: a decline before the contraction is large from
-/// six loops on (its |P| is unknown), after it by the summand count of P.
+/// DESIGN 10c with Addendum C and the step 1-3 review: one predicate, before
+/// and after the contraction. Six loops or a census dump are always large;
+/// after the contraction, P above the byte or the summand limit. A factorized
+/// P (one top-level product, summand count 1) is large by its loops, the
+/// dump or its bytes, never by its summand count alone.
 #[test]
-fn pre_contraction_declines_of_six_loop_remainders_are_large() {
+fn large_rule_holds_before_and_after_the_contraction() {
     let mut stats = BoundaryStats::default();
-    assert!(!large_decline(&stats, 5));
-    assert!(large_decline(&stats, 6));
+    // Before the contraction.
+    assert!(large_reason(&stats, 5, false).is_none());
+    assert!(large_reason(&stats, 6, false).is_some());
+    assert!(large_reason(&stats, 2, true).is_some());
+    // After it, with a factorized P: one summand.
     stats.contracted = true;
-    stats.p_summands = 10;
-    assert!(!large_decline(&stats, 6));
+    stats.p_summands = 1;
+    stats.p_bytes = 3_341_388;
+    assert!(large_reason(&stats, 5, false).is_none());
+    assert!(large_reason(&stats, 6, false).is_some(), "six loops after the contraction");
+    assert!(large_reason(&stats, 5, true).is_some(), "a census dump after the contraction");
+    stats.p_bytes = fallback_max_bytes().saturating_add(1);
+    assert!(fallback_max_bytes() == usize::MAX || large_reason(&stats, 5, false).is_some());
+    stats.p_bytes = 10;
     stats.p_summands = fallback_max_summands().saturating_add(1);
-    assert!(fallback_max_summands() == usize::MAX || large_decline(&stats, 2));
+    assert!(fallback_max_summands() == usize::MAX || large_reason(&stats, 2, false).is_some());
 }
 
 /// The physical external rules of a two-point graph, as beta builds them:

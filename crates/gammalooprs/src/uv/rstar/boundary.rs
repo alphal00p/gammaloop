@@ -201,22 +201,64 @@ pub(crate) fn settings_gate(settings: &VakintSettings) -> std::result::Result<()
     }
 }
 
-/// Remainders with at least this many loops are large when they decline
-/// before their numerator is contracted (DESIGN Addendum C): the summand
-/// count of `P` is not known yet there, and today's path would contract the
-/// whole remainder (1237: about 40 GB).
-pub(crate) const LARGE_PRE_CONTRACTION_LOOPS: usize = 6;
+/// `GAMMALOOP_BOUNDARY_FALLBACK_MAX_BYTES` (default 256 MiB of `P`; 0 = no
+/// limit). idenso returns the contracted closed scalar factorized, often as a
+/// single top-level product, so the summand count of `P` is 1 and says
+/// nothing about its size; its byte size does.
+pub(crate) fn fallback_max_bytes() -> usize {
+    static MAX: LazyLock<usize> = LazyLock::new(|| {
+        match std::env::var("GAMMALOOP_BOUNDARY_FALLBACK_MAX_BYTES")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+        {
+            Some(0) => usize::MAX,
+            Some(max) => max,
+            None => 256 << 20,
+        }
+    });
+    *MAX
+}
 
-/// Whether a decline must not fall back to today's path (DESIGN 10c and
-/// Addendum C): after the contraction, more summands of `P` than the limit;
-/// before it, a remainder of at least [`LARGE_PRE_CONTRACTION_LOOPS`] loops,
-/// or any remainder of a census dump (`PINT6_CLOSURE_DUMP`).
-pub(super) fn large_decline(stats: &BoundaryStats, loops: usize) -> bool {
-    if stats.contracted {
-        stats.p_summands > fallback_max_summands()
-    } else {
-        loops >= LARGE_PRE_CONTRACTION_LOOPS || super::pint6_dump::settings().is_some()
+/// Remainders with at least this many loops are always large (DESIGN
+/// Addendum C, extended after the contraction by the step 1-3 review): today's
+/// path would contract or expand the whole remainder (1237: about 40 GB).
+pub(crate) const LARGE_LOOPS: usize = 6;
+
+/// Why a remainder is large (DESIGN 10c, Addendum C), or `None`: at least
+/// [`LARGE_LOOPS`] loops; any remainder of a census dump; after the
+/// contraction, `P` above the byte or the summand limit. One predicate for
+/// both decisions: a large decline never falls back to today's path, and a
+/// large remainder runs vakint strict (no `ordinary()` expansion of a pattern).
+pub(super) fn large_reason(stats: &BoundaryStats, loops: usize, census_dump: bool) -> Option<String> {
+    if loops >= LARGE_LOOPS {
+        return Some(format!("{loops} loops (large from {LARGE_LOOPS})"));
     }
+    if census_dump {
+        return Some("a census dump (PINT6_CLOSURE_DUMP)".to_owned());
+    }
+    if stats.contracted {
+        if stats.p_bytes > fallback_max_bytes() {
+            return Some(format!(
+                "P of {} bytes, limit {}",
+                stats.p_bytes,
+                fallback_max_bytes()
+            ));
+        }
+        if stats.p_summands > fallback_max_summands() {
+            return Some(format!(
+                "P of {} summands, limit {}",
+                stats.p_summands,
+                fallback_max_summands()
+            ));
+        }
+    }
+    None
+}
+
+/// [`large_reason`] for the running process (census dump from the
+/// environment).
+pub(super) fn is_large(stats: &BoundaryStats, loops: usize) -> bool {
+    large_reason(stats, loops, census_dump_active()).is_some()
 }
 
 #[cfg(test)]
@@ -294,7 +336,7 @@ pub fn remainder_boundary_provenance() -> serde_json::Value {
 /// The start-up line of a binary that may take the new path (DESIGN 0).
 pub fn startup_line() -> String {
     format!(
-        "remainder_boundary={} strict={} vakint_gates={} vakint_boundary_blocks={} fallback_max_summands={}",
+        "remainder_boundary={} strict={} vakint_gates={} vakint_boundary_blocks={} fallback_max_summands={} fallback_max_bytes={} large_loops={LARGE_LOOPS}",
         match remainder_boundary_mode() {
             Ok(mode) => mode.as_str().to_owned(),
             Err(error) => format!("error({error})"),
@@ -306,6 +348,10 @@ pub fn startup_line() -> String {
         },
         vakint_boundary_blocks(),
         match fallback_max_summands() {
+            usize::MAX => "unlimited".to_owned(),
+            max => max.to_string(),
+        },
+        match fallback_max_bytes() {
             usize::MAX => "unlimited".to_owned(),
             max => max.to_string(),
         }

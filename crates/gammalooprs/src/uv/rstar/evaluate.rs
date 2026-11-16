@@ -1116,38 +1116,37 @@ impl<'a> Evaluation<'a> {
                 self.graph.name
             )
         })?;
-        let large_limit = boundary::fallback_max_summands();
         let built = match built {
             Built::Declined(decline, stats) => {
-                let large = boundary::large_decline(&stats, remainder.region.loops);
+                let large = boundary::large_reason(
+                    &stats,
+                    remainder.region.loops,
+                    boundary::census_dump_active(),
+                );
                 eprintln!(
-                    "BOUNDARY_FALLBACK graph={} id={id} loops={} stage={} reason={} p_summands={} large={large}",
+                    "BOUNDARY_FALLBACK graph={} id={id} loops={} stage={} reason={} contracted={} p_summands={} p_bytes={} large={}",
                     self.graph.name,
                     remainder.region.loops,
                     decline.stage,
                     decline.reason,
-                    stats.p_summands
+                    stats.contracted,
+                    stats.p_summands,
+                    stats.p_bytes,
+                    large.is_some()
                 );
                 self.summary.declined(&decline);
                 self.summary.contracted(&stats);
                 self.boundary_elapsed += started.elapsed();
                 self.summary.seconds_boundary += started.elapsed().as_secs_f64();
-                if large {
+                if let Some(why) = large {
                     self.summary.errors += 1;
                     return Err(eyre!(
-                        "BOUNDARY_DECLINED_LARGE graph={} id={id} loops={}: {}:{} ({}; no fallback to today's path)",
+                        "BOUNDARY_DECLINED_LARGE graph={} id={id} loops={}: {}:{} ({why}, {} the contraction; no fallback to today's path)",
                         self.graph.name,
                         remainder.region.loops,
                         decline.stage,
                         decline.reason,
-                        if stats.contracted {
-                            format!("{} summands of P, limit {large_limit}", stats.p_summands)
-                        } else {
-                            format!(
-                                "before the contraction, at least {} loops or a census dump",
-                                boundary::LARGE_PRE_CONTRACTION_LOOPS
-                            )
-                        }
+                        if stats.contracted { "after" } else { "before" }
                     ));
                 }
                 if strict {
@@ -1165,7 +1164,7 @@ impl<'a> Evaluation<'a> {
         };
         match mode {
             BoundaryMode::Check => self.check_boundary(&remainder, built, &settings, id, started),
-            _ => self.evaluate_boundary(&remainder, built, &settings, id, started, large_limit),
+            _ => self.evaluate_boundary(&remainder, built, &settings, id, started),
         }
     }
 
@@ -1178,7 +1177,6 @@ impl<'a> Evaluation<'a> {
         settings: &VakintSettings,
         id: usize,
         started: Instant,
-        large_limit: usize,
     ) -> Result<Atom> {
         let loops = remainder.region.loops;
         let (value, mut stats, built) = match built {
@@ -1198,8 +1196,10 @@ impl<'a> Evaluation<'a> {
             let skipped =
                 super::pint6_dump::settings().is_some_and(|dump| p_loops >= dump.skip_min_p_loops);
             if !skipped {
+                // A large remainder runs vakint strict: a pattern decline is
+                // an error, never an `ordinary()` expansion (DESIGN 10c).
                 let options = vakint::p_integral::BoundaryOptions {
-                    strict: boundary::boundary_strict() || stats.p_summands > large_limit,
+                    strict: boundary::boundary_strict() || boundary::is_large(&stats, loops),
                 };
                 let (evaluated, reads, hits) =
                     boundary::evaluate_boundary(&built.boundary, self.vakint, settings, options)
@@ -1290,7 +1290,7 @@ impl<'a> Evaluation<'a> {
             Some(built) => {
                 let options = vakint::p_integral::BoundaryOptions {
                     strict: boundary::boundary_strict()
-                        || stats.p_summands > boundary::fallback_max_summands(),
+                        || boundary::is_large(&stats, remainder.region.loops),
                 };
                 let (value, reads, hits) =
                     boundary::evaluate_boundary(&built.boundary, self.vakint, settings, options)
