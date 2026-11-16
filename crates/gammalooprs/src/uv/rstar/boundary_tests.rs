@@ -28,7 +28,8 @@ use super::{
     boundary::{
         BoundaryMode, BoundaryStats, ClosedRootNormalization, Grammar, Role, census_dump_refusal,
         denominator_orders, fallback_max_bytes, fallback_max_summands, large_reason, split_into_blocks,
-        validate_remainder_boundary, verify_vakint_scalar, with_boundary_mode, with_census_dump,
+        take_logged_summaries, validate_remainder_boundary, verify_vakint_scalar, with_boundary_mode,
+        with_census_dump,
     },
     expression::RStarIntegrand,
     recursive_tests::{colour_factored, load, settings},
@@ -504,6 +505,7 @@ fn mode_on_refuses_the_census_dump() -> Result<()> {
         let callback = |tensor: &Atom| -> Result<Atom> {
             Ok(tensor.replace_multiple(&closed_root.external_routing) * &closed_root.factor)
         };
+        let _ = take_logged_summaries();
         let result = with_census_dump(true, || {
             with_boundary_mode(BoundaryMode::On, false, || {
                 plan.projected_counterterm_closing_root_scalar(
@@ -521,6 +523,13 @@ fn mode_on_refuses_the_census_dump() -> Result<()> {
             Err(error) => format!("{error:#}"),
         };
         ensure!(error.contains("PINT6_CLOSURE_DUMP"), "unexpected error: {error}");
+        // BOUNDARY_SUMMARY is printed on the error path too, marked as such.
+        let logged = take_logged_summaries();
+        ensure!(
+            logged.iter().all(|(_, outcome, _)| outcome == "error")
+                && logged.last().is_some_and(|(root, _, _)| root == "closed"),
+            "summaries with outcome=error, the closed root last, expected: {logged:?}"
+        );
         Ok(())
     })
 }

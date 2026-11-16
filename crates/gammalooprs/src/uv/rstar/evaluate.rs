@@ -366,10 +366,14 @@ impl RStarPlan {
                 term.remainder.loops,
                 self.taylor_order
             ));
-            let _ = evaluation.integrate_ordinary(term)?;
+            if let Err(error) = evaluation.integrate_ordinary(term) {
+                // The counts up to the failure, before the error propagates.
+                evaluation.log_boundary_summary("error");
+                return Err(error);
+            }
             count += 1;
         }
-        evaluation.log_boundary_summary();
+        evaluation.log_boundary_summary("ok");
         Ok(count)
     }
 
@@ -754,6 +758,16 @@ impl<'a> Evaluation<'a> {
     }
 
     fn counterterm(&mut self) -> Result<Atom> {
+        let result = self.counterterm_terms();
+        if result.is_err() {
+            // The counts up to the failure, before the error propagates
+            // (log_timing prints them on success).
+            self.log_boundary_summary("error");
+        }
+        result
+    }
+
+    fn counterterm_terms(&mut self) -> Result<Atom> {
         if self.graph.compute_dod(&self.plan.support) < 0 {
             self.log_timing();
             return Ok(Atom::Zero);
@@ -812,7 +826,7 @@ impl<'a> Evaluation<'a> {
 
     /// The remainder-boundary summary of this evaluation, when the mode is
     /// not off (`BOUNDARY_SUMMARY`, DESIGN 8).
-    fn log_boundary_summary(&self) {
+    fn log_boundary_summary(&self, outcome: &str) {
         if !matches!(
             boundary::remainder_boundary_mode(),
             Ok(BoundaryMode::On | BoundaryMode::Check)
@@ -830,11 +844,11 @@ impl<'a> Evaluation<'a> {
         } else {
             "open"
         };
-        self.summary.log(&self.graph.name, root);
+        self.summary.log(&self.graph.name, root, outcome);
     }
 
     fn log_timing(&self) {
-        self.log_boundary_summary();
+        self.log_boundary_summary("ok");
         let elapsed = self.started.elapsed();
         let preparation = elapsed.saturating_sub(
             self.proper_uv_elapsed + self.quotient_elapsed + self.integration_elapsed,
@@ -1085,6 +1099,25 @@ impl<'a> Evaluation<'a> {
             *self.summary.not_admitted.entry(reason).or_default() += 1;
             return self.integrate(&remainder, remainder.expression()?);
         }
+        let errors = self.summary.errors;
+        let result = self.integrate_admitted(&remainder, mode, strict);
+        if result.is_err() && self.summary.errors == errors {
+            // A hard error of an admitted remainder (the build, the
+            // evaluation, or today's path in check mode or as a fallback).
+            self.summary.errors += 1;
+        }
+        result
+    }
+
+    /// One admitted remainder (DESIGN 6a, 7): the build, then a decline
+    /// (fallback, or an error under STRICT or when large), the evaluation
+    /// (mode on) or the comparison with today's path (check).
+    fn integrate_admitted(
+        &mut self,
+        remainder: &RStarIntegrand,
+        mode: BoundaryMode,
+        strict: bool,
+    ) -> Result<Atom> {
         let closed_root = self
             .closed_root
             .expect("admission requires the closed-root normalisation");
@@ -1094,7 +1127,7 @@ impl<'a> Evaluation<'a> {
         settings.number_of_terms_in_epsilon_expansion = i64::try_from(remainder.region.loops)?;
         let degree = usize::try_from(self.plan.taylor_order)?;
         let built = boundary::build_boundary(
-            &remainder,
+            remainder,
             &BoundaryRequest {
                 graph_name: &self.graph.name,
                 marked_edge: self.plan.marked_edge,
@@ -1158,13 +1191,13 @@ impl<'a> Evaluation<'a> {
                         decline.reason
                     ));
                 }
-                return self.integrate(&remainder, remainder.expression()?);
+                return self.integrate(remainder, remainder.expression()?);
             }
             built => built,
         };
         match mode {
-            BoundaryMode::Check => self.check_boundary(&remainder, built, &settings, id, started),
-            _ => self.evaluate_boundary(&remainder, built, &settings, id, started),
+            BoundaryMode::Check => self.check_boundary(remainder, built, &settings, id, started),
+            _ => self.evaluate_boundary(remainder, built, &settings, id, started),
         }
     }
 

@@ -488,7 +488,7 @@ pub(super) fn log_stats(graph: &str, id: usize, stats: &BoundaryStats) {
 
 /// The remainder-boundary counts of one evaluation (`BOUNDARY_SUMMARY`,
 /// DESIGN 8).
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub(super) struct BoundarySummary {
     /// Ordinary remainders seen with the mode on or check.
     pub remainders: usize,
@@ -498,6 +498,9 @@ pub(super) struct BoundarySummary {
     pub zero: usize,
     /// Declines after admission (today's path ran).
     pub fallback: usize,
+    /// Admitted remainders whose processing ended in an error (large or
+    /// strict declines, check mismatches, hard errors of the build, the
+    /// evaluation or today's path).
     pub errors: usize,
     pub not_admitted: BTreeMap<String, usize>,
     pub fallback_reasons: BTreeMap<String, usize>,
@@ -532,7 +535,9 @@ impl BoundarySummary {
         }
     }
 
-    pub(super) fn log(&self, graph: &str, root: &str) {
+    /// `outcome`: `ok`, or `error` when the evaluation ends in an error (the
+    /// summary is printed before the error propagates).
+    pub(super) fn log(&self, graph: &str, root: &str, outcome: &str) {
         let list = |map: &BTreeMap<String, usize>| {
             if map.is_empty() {
                 "none".to_owned()
@@ -544,7 +549,7 @@ impl BoundarySummary {
             }
         };
         eprintln!(
-            "BOUNDARY_SUMMARY graph={graph} root={root} remainders={} boundary={} zero={} fallback={} errors={} not_admitted={} fallback_reasons={} certified={} uncertified={} checks={} checks_skipped={} seconds_boundary={:.3} seconds_today={:.3}",
+            "BOUNDARY_SUMMARY graph={graph} root={root} remainders={} boundary={} zero={} fallback={} errors={} not_admitted={} fallback_reasons={} certified={} uncertified={} checks={} checks_skipped={} seconds_boundary={:.3} seconds_today={:.3} outcome={outcome}",
             self.remainders,
             self.boundary,
             self.zero,
@@ -559,7 +564,26 @@ impl BoundarySummary {
             self.seconds_boundary,
             self.seconds_today,
         );
+        #[cfg(test)]
+        LOGGED_SUMMARIES.with(|logged| {
+            logged
+                .borrow_mut()
+                .push((root.to_owned(), outcome.to_owned(), self.clone()))
+        });
     }
+}
+
+#[cfg(test)]
+thread_local! {
+    static LOGGED_SUMMARIES: std::cell::RefCell<Vec<(String, String, BoundarySummary)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Tests: the summaries logged on this thread since the last call, as
+/// `(root, outcome, summary)`.
+#[cfg(test)]
+pub(super) fn take_logged_summaries() -> Vec<(String, String, BoundarySummary)> {
+    LOGGED_SUMMARIES.with(|logged| std::mem::take(&mut *logged.borrow_mut()))
 }
 
 /// The process resident set size in GiB (`/proc/self/statm`).
