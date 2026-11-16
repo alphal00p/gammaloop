@@ -78,28 +78,11 @@ pub fn integrate_single_mass(
             continue;
         }
         let topology_started = Instant::now();
-        let lines = VacuumLine::parse(&source.integral)?;
-        let massive = lines
-            .iter()
-            .filter(|line| !line.mass_squared.is_zero() && line.power > 0)
-            .collect::<Vec<_>>();
-        if massive.is_empty() {
+        let Some(cut) = cut_frame(&source.integral, &source.numerator)? else {
             timing.topology_cut += topology_started.elapsed();
             timing.scaleless_terms += 1;
             continue;
-        }
-        ensure!(
-            massive.len() == 1,
-            "an R* remainder needs exactly one massive propagator, found {}",
-            massive.len()
-        );
-        ensure!(
-            lines
-                .iter()
-                .all(|line| { line.mass_squared.is_zero() || std::ptr::eq(line, massive[0]) }),
-            "an R* remainder contains another massive propagator with nonpositive power"
-        );
-        let cut = VacuumCut::new(&lines, massive[0], &source.numerator)?;
+        };
         timing.topology_cut += topology_started.elapsed();
         timing.remaining_loops_max = timing.remaining_loops_max.max(cut.loops);
         // A massive self-loop times a massless vacuum component is scaleless.
@@ -363,7 +346,7 @@ fn closed_scalar(factor: AtomView<'_>) -> bool {
 /// external vectors, metrics). The projector is linear in the closed scalars
 /// (`∫ T(k) S(k_i·k_j) = P[T] S`), so every summand `S·T` becomes `S·P[T]`;
 /// the result is left unexpanded for the direct lowering.
-fn tensor_reduce_by_factors(
+pub(super) fn tensor_reduce_by_factors(
     vakint: &Vakint,
     settings: &VakintSettings,
     source: &vakint::VakintTerm,
@@ -564,14 +547,48 @@ impl VacuumLine {
     }
 }
 
-struct VacuumCut {
-    closure: MassiveClosure,
-    routing: Vec<Replacement>,
+/// The cut of a vacuum term at its unique massive line ([`cut_frame`]).
+pub(super) struct VacuumCut {
+    /// The closing line: the cut head `p(hard)`, the mass squared and power
+    /// of the massive line.
+    pub(super) closure: MassiveClosure,
+    pub(super) routing: Vec<Replacement>,
     /// `routing` as (vacuum loop momentum `k(i)`, its image in the cut basis).
-    routing_pairs: Vec<(Atom, Atom)>,
-    integrand: Atom,
-    scaleless: bool,
-    loops: usize,
+    pub(super) routing_pairs: Vec<(Atom, Atom)>,
+    /// `topo(prop(..))` of the other lines in the cut momenta (or the tree
+    /// factor of a one-loop vacuum term).
+    pub(super) integrand: Atom,
+    pub(super) scaleless: bool,
+    /// Vacuum loops (the p-integral has one less).
+    pub(super) loops: usize,
+}
+
+/// The cut of the vacuum term `integral` (`topo(prop(..))`) at its unique
+/// massive line with positive power, with the closing head `p(n)` for the
+/// smallest `n >= 1` absent from `probe` (the numerator); `None` when no line
+/// is massive (the term is scaleless). Extracted from
+/// [`integrate_single_mass`].
+pub(super) fn cut_frame(integral: &Atom, probe: &Atom) -> Result<Option<VacuumCut>> {
+    let lines = VacuumLine::parse(integral)?;
+    let massive = lines
+        .iter()
+        .filter(|line| !line.mass_squared.is_zero() && line.power > 0)
+        .collect::<Vec<_>>();
+    if massive.is_empty() {
+        return Ok(None);
+    }
+    ensure!(
+        massive.len() == 1,
+        "an R* remainder needs exactly one massive propagator, found {}",
+        massive.len()
+    );
+    ensure!(
+        lines
+            .iter()
+            .all(|line| { line.mass_squared.is_zero() || std::ptr::eq(line, massive[0]) }),
+        "an R* remainder contains another massive propagator with nonpositive power"
+    );
+    Ok(Some(VacuumCut::new(&lines, massive[0], probe)?))
 }
 
 impl VacuumCut {

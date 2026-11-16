@@ -392,6 +392,7 @@ impl RStarPlan {
             ChildMass::Reference,
         )?;
         evaluation.root_closure = Some(closure);
+        evaluation.channel = ("isotropic", "1/(d (d-1) (d+2))");
         let channels = evaluation.counterterm()?;
         Ok(markers
             .iter()
@@ -578,6 +579,9 @@ struct Evaluation<'a> {
     root_projector: Option<&'a RootProjector<'a>>,
     /// The root metric closure of a closing evaluation (root scope only).
     root_closure: Option<Atom>,
+    /// The root projection channel and its normalisation, recorded in the
+    /// closure dump headers (`PINT6_CLOSURE_DUMP`).
+    channel: (&'static str, &'static str),
     started: Instant,
     proper_uv_elapsed: Duration,
     quotient_elapsed: Duration,
@@ -692,6 +696,14 @@ impl<'a> Evaluation<'a> {
             integration_id: 0,
             root_projector,
             root_closure: None,
+            channel: if root_projector.is_some() {
+                (
+                    "projection open-root",
+                    "root projector after the outer Taylor step",
+                )
+            } else {
+                ("none", "1")
+            },
             started,
             proper_uv_elapsed,
             quotient_elapsed: Duration::ZERO,
@@ -705,6 +717,7 @@ impl<'a> Evaluation<'a> {
             self.graph,
             &self.plan.support,
         )?);
+        self.channel = ("projection metric", "1/(i p^2 d_A (d-1))");
         Ok(self)
     }
 
@@ -968,19 +981,26 @@ impl<'a> Evaluation<'a> {
             "Integrating a compensated R* remainder"
         );
         let started = Instant::now();
-        let result = remainder.integrate(
-            expression,
-            self.graph,
-            &self.root_edges,
-            usize::try_from(self.plan.taylor_order)?,
-            self.reference_mass_squared,
-            &self.auxiliary_mass_squared,
-            self.vakint,
-            self.uv_settings,
-            &settings,
-            self.integration_id,
-            self.root_projector,
-        );
+        let channel = super::pint6_dump::ClosureChannel {
+            channel: self.channel.0,
+            taylor_order: i64::from(self.plan.taylor_order),
+            normalisation: self.channel.1,
+        };
+        let result = super::pint6_dump::with_channel(channel, || {
+            remainder.integrate(
+                expression,
+                self.graph,
+                &self.root_edges,
+                usize::try_from(self.plan.taylor_order)?,
+                self.reference_mass_squared,
+                &self.auxiliary_mass_squared,
+                self.vakint,
+                self.uv_settings,
+                &settings,
+                self.integration_id,
+                self.root_projector,
+            )
+        });
         self.integration_elapsed += started.elapsed();
         result
     }
