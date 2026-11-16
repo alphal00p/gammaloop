@@ -357,6 +357,9 @@ pub struct GenerationOptions {
     pub(crate) cut_amplitude_filters: Vec<GenerationFilter>,
     pub(crate) numerator_grouping: NumeratorGrouping,
     pub(crate) filter_zero_color: bool,
+    /// Runtime-only: never serialized, so saved process definitions keep
+    /// their encoding. See [`GenerationOptions::cancel_closed_loop_orientations`].
+    pub(crate) cancel_closed_loop_orientations: bool,
     pub(crate) graph_prefix: String,
     pub(crate) selected_diagram_ids: Option<BTreeSet<DiagramId>>,
     pub(crate) selected_diagram_names: Option<BTreeSet<String>>,
@@ -527,6 +530,7 @@ impl Default for GenerationOptions {
             cut_amplitude_filters: Vec::new(),
             numerator_grouping: NumeratorGrouping::None,
             filter_zero_color: false,
+            cancel_closed_loop_orientations: false,
             graph_prefix: "D".to_owned(),
             selected_diagram_ids: None,
             selected_diagram_names: None,
@@ -634,6 +638,7 @@ impl GenerationOptions {
             cut_amplitude_filters: persistent.cut_amplitude_filters,
             numerator_grouping: persistent.numerator_grouping,
             filter_zero_color: persistent.filter_zero_color,
+            cancel_closed_loop_orientations: false,
             graph_prefix: persistent.graph_prefix,
             selected_diagram_ids: persistent
                 .selected_diagram_ids
@@ -733,6 +738,10 @@ impl fmt::Debug for GenerationOptions {
             .field("cut_amplitude_filters", &self.cut_amplitude_filters)
             .field("numerator_grouping", &self.numerator_grouping)
             .field("filter_zero_color", &self.filter_zero_color)
+            .field(
+                "cancel_closed_loop_orientations",
+                &self.cancel_closed_loop_orientations,
+            )
             .field("graph_prefix", &self.graph_prefix)
             .field("selected_diagram_ids", &self.selected_diagram_ids)
             .field("selected_diagram_names", &self.selected_diagram_names)
@@ -853,6 +862,26 @@ impl GenerationOptions {
     pub fn filter_zero_color(mut self, enabled: bool) -> Self {
         self.filter_zero_color = enabled;
         self
+    }
+
+    /// Remove diagrams whose closed fermion loops cancel against their own
+    /// reversed orientations: the numerator summed over all 2^k orientations
+    /// of the k closed non-ghost fermion loops, built in the diagram's own
+    /// frame, vanishes exactly (Furry's theorem in QED, the C-merged color
+    /// zeros in QCD, and diagrams that cancel through an automorphism).
+    ///
+    /// Disabled by default. Only exact zeros are removed; survivors keep their
+    /// names and overall factors. Diagrams the test cannot certify, such as
+    /// loops whose antiparticle has no explicit propagator, are retained and
+    /// counted in [`crate::GenerationReport::orientation_test_skipped`].
+    /// This option is runtime-only and is not serialized.
+    pub fn cancel_closed_loop_orientations(mut self, enabled: bool) -> Self {
+        self.cancel_closed_loop_orientations = enabled;
+        self
+    }
+
+    pub fn cancels_closed_loop_orientations(&self) -> bool {
+        self.cancel_closed_loop_orientations
     }
 
     pub fn graph_prefix(mut self, prefix: impl Into<String>) -> Self {
@@ -1180,6 +1209,30 @@ mod tests {
         assert_eq!(decoded, options);
         assert!(decoded.filter.is_none());
         assert!(decoded.progress.is_none());
+    }
+
+    #[test]
+    fn options_flag_not_persisted() {
+        let defaults = GenerationOptions::default();
+        assert!(!defaults.cancels_closed_loop_orientations());
+        let enabled = defaults.clone().cancel_closed_loop_orientations(true);
+        assert!(enabled.cancels_closed_loop_orientations());
+        let config = bincode::config::standard();
+        let encoded_default = bincode::encode_to_vec(&defaults, config).unwrap();
+        let encoded_enabled = bincode::encode_to_vec(&enabled, config).unwrap();
+        assert_eq!(encoded_default, encoded_enabled);
+        let (decoded, _): (GenerationOptions, usize) =
+            bincode::decode_from_slice(&encoded_enabled, config).unwrap();
+        assert!(!decoded.cancels_closed_loop_orientations());
+        assert_eq!(
+            serde_json::to_string(&defaults).unwrap(),
+            serde_json::to_string(&enabled).unwrap()
+        );
+        assert!(
+            !serde_json::to_string(&enabled)
+                .unwrap()
+                .contains("orientation")
+        );
     }
 
     #[test]

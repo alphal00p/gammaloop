@@ -67,6 +67,7 @@ for method in (
     assert signature.parameters["maximum_bridges"].default is Ellipsis
     assert signature.parameters["progress"].default == "auto"
     assert signature.parameters["filter_zero_color"].default is False
+    assert signature.parameters["cancel_closed_loop_orientations"].default is False
 
 try:
     hep.NumeratorGrouping("zeroes")
@@ -108,6 +109,26 @@ assert all(
     before.zero_numerator_count <= after.zero_numerator_count
     for before, after in zip(filter_updates, filter_updates[1:])
 )
+
+# Closed-loop orientation cancellation is opt-in: QED photon self-energy at three
+# loops keeps QGRAF's 20 one-particle-irreducible graphs, and the flag removes the
+# two with an odd electron loop (Furry), leaving the 18 of `onepi, floop`.
+qed_photon = hep.Model.qed().process(["a"], ["a"], particle_selection=["a", "e-"])
+plain = qed_photon.generate_diagrams(loops=3, progress=None)
+assert plain.report.retained_count == 20
+assert plain.report.orientation_zero_count == 0
+assert "orientation" not in repr(plain.report)
+updates = []
+furry = qed_photon.generate_diagrams(
+    loops=3, cancel_closed_loop_orientations=True, progress=updates.append
+)
+assert furry.report.retained_count == 18
+assert furry.report.orientation_zero_count == 2
+assert furry.report.orientation_test_skipped == 0
+assert "orientation_zero_count=2" in repr(furry.report)
+assert any(p.stage == "orientation_sum_zero" for p in updates)
+kept = {d.name: d.to_json() for d in plain.diagrams}
+assert all(kept[d.name] == d.to_json() for d in furry.diagrams)
 
 # Notebook progress displays the live zero count and closes every indicator.
 context = MagicMock()

@@ -437,6 +437,54 @@ struct CanonicalTopology {
     left_right_swapped: bool,
 }
 
+/// Numerator times prefactor and projector with expanded couplings: the
+/// common input of every numerator zero test and comparison.
+pub(crate) fn prepared_numerator(
+    diagram: &FeynmanDiagram,
+    numerator: &SymbolicTensor<PartialStructure>,
+    model: &Model,
+) -> Result<SymbolicTensor<PartialStructure>, GroupingError> {
+    let color_error = |error: TensorInferenceError| GroupingError::ColorSimplification {
+        diagram: diagram.name().to_owned(),
+        message: error.to_string(),
+    };
+    let complete = numerator
+        .multiply(diagram.numerator_prefactor())
+        .map_err(|error| color_error(error.into()))?
+        .multiply(diagram.projector())
+        .map_err(|error| color_error(error.into()))?;
+    complete
+        .with_checked_expression(model.expand_couplings(complete.expression()))
+        .map_err(color_error)
+}
+
+/// Exact zero test of a numerator in `diagram`'s frame after color algebra.
+///
+/// Lorentz and spinor factors are left untouched. Samples may only prove a
+/// nonzero value; `true` requires the exact symbolic fallback.
+pub(crate) fn exact_color_zero(
+    diagram: &FeynmanDiagram,
+    numerator: &SymbolicTensor<PartialStructure>,
+    model: &Model,
+) -> Result<bool, GroupingError> {
+    let color_error = |error: TensorInferenceError| GroupingError::ColorSimplification {
+        diagram: diagram.name().to_owned(),
+        message: error.to_string(),
+    };
+    let simplified = prepared_numerator(diagram, numerator, model)?
+        .simplify_algebra(&AlgebraSettings {
+            color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+            contract: AlgebraContraction::None,
+            ..Default::default()
+        })
+        .map_err(color_error)?;
+    Ok(simplified
+        .expression()
+        .collect_factors()
+        .check_zero_with(&symbolica::atom::ZeroTestSettings::default().exact_fallback(true))
+        .is_true())
+}
+
 #[derive(Clone, Copy)]
 enum ComparisonMode {
     Identical,
@@ -511,15 +559,7 @@ pub(crate) fn group_diagrams(
             diagram: diagram.name().to_owned(),
             message: error.to_string(),
         };
-        let complete = diagram
-            .numerator()
-            .multiply(diagram.numerator_prefactor())
-            .map_err(|error| color_error(error.into()))?
-            .multiply(diagram.projector())
-            .map_err(|error| color_error(error.into()))?;
-        let complete = complete
-            .with_checked_expression(model.expand_couplings(complete.expression()))
-            .map_err(&color_error)?;
+        let complete = prepared_numerator(&diagram, diagram.numerator(), model)?;
         let color_reps = [
             ColorAdjoint {}.into(),
             ColorFundamental {}.into(),
