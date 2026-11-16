@@ -1123,9 +1123,6 @@ impl<'a> Evaluation<'a> {
     /// 6a, 7).
     fn integrate_ordinary(&mut self, term: &UvPreparationTerm) -> Result<Atom> {
         let mode = boundary::remainder_boundary_mode()?;
-        if let Some(message) = boundary::census_dump_refusal(mode) {
-            return Err(eyre!("{message} ({})", self.graph.name));
-        }
         let remainder = self.remainder(term)?;
         if mode == BoundaryMode::Off {
             return self.integrate(&remainder, remainder.expression()?);
@@ -1266,11 +1263,24 @@ impl<'a> Evaluation<'a> {
         self.summary.contracted(&stats);
         let mut value = value;
         let evaluate_started = Instant::now();
+        let mut dump_seconds = 0.0;
         if let Some(built) = &built {
             self.summary.boundary += 1;
             let p_loops = built.loops.saturating_sub(1);
             let skipped =
                 super::pint6_dump::settings().is_some_and(|dump| p_loops >= dump.skip_min_p_loops);
+            if let Some(dump) = super::pint6_dump::settings() {
+                // The census record, before the evaluation (DESIGN 6b).
+                let dump_started = Instant::now();
+                self.dump_boundary(dump, built, &stats, settings, !skipped, None)
+                    .wrap_err_with(|| {
+                        format!(
+                            "while dumping the remainder boundary {id} of {}",
+                            self.graph.name
+                        )
+                    })?;
+                dump_seconds = dump_started.elapsed().as_secs_f64();
+            }
             if !skipped {
                 // A large remainder runs vakint strict: a pattern decline is
                 // an error, never an `ordinary()` expansion (DESIGN 10c).
@@ -1290,7 +1300,10 @@ impl<'a> Evaluation<'a> {
                 stats.block_hits = hits;
             }
         }
-        let evaluate_seconds = evaluate_started.elapsed().as_secs_f64();
+        let evaluate_seconds = evaluate_started.elapsed().as_secs_f64() - dump_seconds;
+        if super::pint6_dump::settings().is_some() {
+            stats.seconds.push(("dump", dump_seconds));
+        }
         stats.seconds.push(("evaluate", evaluate_seconds));
         stats.rss_gb[3] = boundary::rss_gb();
         let finish_started = Instant::now();
@@ -1415,6 +1428,28 @@ impl<'a> Evaluation<'a> {
             &label,
         );
         let seconds_check = check_started.elapsed().as_secs_f64();
+        if let (Some(dump), Some(built)) = (super::pint6_dump::settings(), built.as_ref()) {
+            // The boundary record beside today's v1 records, paired with them
+            // (DESIGN 6b `ref_closure`); written before a mismatch is raised.
+            let dump_started = Instant::now();
+            self.dump_boundary(
+                dump,
+                built,
+                &stats,
+                settings,
+                !skipped,
+                Some(&report.ref_closures),
+            )
+            .wrap_err_with(|| {
+                format!(
+                    "while dumping the remainder boundary {id} of {}",
+                    self.graph.name
+                )
+            })?;
+            stats
+                .seconds
+                .push(("dump", dump_started.elapsed().as_secs_f64()));
+        }
         boundary::log_stats(&self.graph.name, id, &stats);
         boundary::record_stats(&self.graph.name, id, &stats);
         eprintln!(
@@ -1486,5 +1521,67 @@ impl<'a> Evaluation<'a> {
         self.integration_elapsed += started.elapsed();
         self.summary.seconds_today += started.elapsed().as_secs_f64();
         result
+    }
+
+    /// The census record of a built boundary (DESIGN 6b). `references`: the
+    /// v1 records of today's path (check mode); in mode on the v1 records
+    /// are written from the boundary first when `PINT6_BOUNDARY_V1=1` (6c),
+    /// with this outer integration's channel, as today's path writes them.
+    fn dump_boundary(
+        &self,
+        dump: &super::pint6_dump::DumpSettings,
+        built: &boundary::BuiltBoundary,
+        stats: &boundary::BoundaryStats,
+        settings: &VakintSettings,
+        evaluated: bool,
+        references: Option<&BTreeMap<usize, usize>>,
+    ) -> Result<()> {
+        let references = match references {
+            Some(references) => references.clone(),
+            None if super::pint6_dump::boundary_v1() => {
+                let channel = super::pint6_dump::ClosureChannel {
+                    channel: self.channel.0,
+                    taylor_order: i64::from(self.plan.taylor_order),
+                    normalisation: self.channel.1,
+                };
+                super::pint6_dump::with_channel(channel, || {
+                    super::pint6_dump::write_v1_from_boundary(dump, settings, built)
+                })?
+            }
+            None => BTreeMap::new(),
+        };
+        let counts = boundary::stats_json(&self.graph.name, built.integration_id, stats);
+        let written = super::pint6_dump::write_boundary(
+            dump,
+            settings,
+            built,
+            &counts,
+            evaluated,
+            &references,
+        )?;
+        eprintln!(
+            "BOUNDARY_DUMP graph={} id={} sequence={} header={} block_files={} text_bytes={} ref_closures={} rss_gb={:.2}",
+            self.graph.name,
+            built.integration_id,
+            written.sequence,
+            written.header.display(),
+            written.block_files,
+            written.text_bytes,
+            references.len(),
+            boundary::rss_gb()
+        );
+        if super::pint6_dump::boundary_verify() {
+            let started = Instant::now();
+            super::pint6_dump::verify_boundary(&built.boundary, &written.header)?;
+            eprintln!(
+                "BOUNDARY_DUMP_VERIFY graph={} id={} sequence={} identical seconds={:.3} rss_gb={:.2}",
+                self.graph.name,
+                built.integration_id,
+                written.sequence,
+                started.elapsed().as_secs_f64(),
+                boundary::rss_gb()
+            );
+        }
+        Ok(())
     }
 }

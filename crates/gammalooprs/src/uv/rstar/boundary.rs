@@ -295,28 +295,11 @@ pub(crate) fn with_census_dump<T>(active: bool, f: impl FnOnce() -> T) -> T {
     f()
 }
 
-/// Mode on with a census dump is refused until the boundary dump (DESIGN 6b,
-/// step 4) is built: an admitted remainder would write no closure record and
-/// today's path, which writes the v1 records, would not run, so the census
-/// would come out empty without an error.
-pub(super) fn census_dump_refusal(mode: BoundaryMode) -> Option<String> {
-    (mode == BoundaryMode::On && census_dump_active()).then(|| {
-        "GAMMALOOP_REMAINDER_BOUNDARY=1 with PINT6_CLOSURE_DUMP needs the boundary dump \
-         (DESIGN 6b, step 4), which is not built yet: admitted remainders would write no closure \
-         record. Use GAMMALOOP_REMAINDER_BOUNDARY=check (today's v1 records are written) or leave \
-         the mode unset"
-            .to_owned()
-    })
-}
-
-/// The remainder-boundary switches, checked at start-up: the mode parses, and
-/// mode on is not combined with a census dump ([`census_dump_refusal`]).
+/// The remainder-boundary switches, checked at start-up: the mode parses.
+/// Mode on (and check) with a census dump write the boundary record (DESIGN
+/// 6b); the refusal of 6e49bae5e5 is lifted with the dump writer.
 pub fn validate_remainder_boundary() -> Result<BoundaryMode> {
-    let mode = remainder_boundary_mode()?;
-    if let Some(message) = census_dump_refusal(mode) {
-        return Err(eyre!(message));
-    }
-    Ok(mode)
+    remainder_boundary_mode()
 }
 
 /// `VAKINT_P_BOUNDARY_BLOCKS`: `reuse` (default) or `off`.
@@ -1685,6 +1668,11 @@ pub(super) struct BoundaryRequest<'b> {
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub(super) struct PatternMeta {
+    /// The position of the pattern among all patterns (kept and zero), in key
+    /// order: today's closure order.
+    pub order: usize,
+    /// The cut topology `topo(prop(..))` with this pattern's powers.
+    pub topology: Atom,
     /// The grouping key (today's topology key, `topo(prop(..))`).
     pub key: Atom,
     /// `I_π`: today's `VakintTerm.integral` (rebuilt, routed, vakint symbols).
@@ -1704,6 +1692,17 @@ pub(super) struct BuiltBoundary {
     pub grades: Vec<Grade>,
     /// The vacuum loop count `L`.
     pub loops: usize,
+    /// The R* loop basis edge ids `b_j`, in order (`k(j+1) = Q(b_j)`).
+    pub basis: Vec<usize>,
+    /// `c̃` with the vakint normalisation of every vacuum loop (folded into
+    /// every coefficient; informational in the record).
+    pub normalisation: Atom,
+    /// `p(x0)` in vakint symbols (the `k·p` structures of the grades).
+    pub external: Atom,
+    /// The outer Taylor degree.
+    pub degree: usize,
+    /// The integration id of this remainder.
+    pub integration_id: usize,
 }
 
 /// The outcome of a build.
@@ -1933,10 +1932,11 @@ pub(super) fn build_boundary(remainder: &RStarIntegrand, request: &BoundaryReque
         }
         mapped_orders.insert(monomial.clone(), mapped);
     }
+    let header_normalisation = &normalization * additional.pow(patterns[0].frame.nloops as i64);
     let block_grades = blocks.keys().cloned().collect::<Vec<_>>();
     let mut kept = Vec::new();
     let mut zero_patterns = Vec::new();
-    for pattern in &patterns {
+    for (order, pattern) in patterns.iter().enumerate() {
         // d_{j,π} = Σ_{μ∈π} rest_μ · d_{j,μ}.
         let mut orders = vec![Vec::<Atom>::new(); request.degree + 1];
         for (monomial, rest) in &pattern.raw {
@@ -2005,6 +2005,8 @@ pub(super) fn build_boundary(remainder: &RStarIntegrand, request: &BoundaryReque
             terms.push((index, coefficient));
         }
         let meta = PatternMeta {
+            order,
+            topology: pattern.cut.integrand.clone(),
             key: pattern.key.clone(),
             integral: pattern.frame.integral.clone(),
             closure_power: pattern.cut.closure.power,
@@ -2141,6 +2143,11 @@ pub(super) fn build_boundary(remainder: &RStarIntegrand, request: &BoundaryReque
             zero_patterns,
             grades: block_grades,
             loops,
+            basis: basis.clone(),
+            normalisation: header_normalisation,
+            external: grammar.external().clone(),
+            degree: request.degree,
+            integration_id: request.integration_id,
         },
         stats,
     ))
@@ -2291,6 +2298,8 @@ pub(super) struct CheckReport {
     pub value: &'static str,
     /// One `BOUNDARY_CHECK_PAIR` line per failing pair.
     pub failing: Vec<String>,
+    /// Pattern order -> sequence of the v1 record of the same closure.
+    pub ref_closures: BTreeMap<usize, usize>,
 }
 
 impl CheckReport {
@@ -2334,11 +2343,23 @@ pub(super) fn compare_pairs(
     struct Group {
         kept: Vec<usize>,
         captured: Vec<usize>,
+        /// Pattern orders of the kept patterns and of the zero patterns that
+        /// today's path still writes (unprojected non-zero).
+        orders: Vec<(usize, bool)>,
     }
     let mut groups = BTreeMap::<Atom, Group>::new();
     if let Some(built) = built {
         for (index, meta) in built.patterns.iter().enumerate() {
-            groups.entry(meta.integral.clone()).or_default().kept.push(index);
+            let group = groups.entry(meta.integral.clone()).or_default();
+            group.kept.push(index);
+            group.orders.push((meta.order, true));
+        }
+        for meta in built.zero_patterns.iter().filter(|meta| meta.unprojected_nonzero) {
+            groups
+                .entry(meta.integral.clone())
+                .or_default()
+                .orders
+                .push((meta.order, false));
         }
     }
     for (index, closure) in captured.iter().enumerate() {
@@ -2473,6 +2494,31 @@ pub(super) fn compare_pairs(
             _ => {}
         }
     }
+    // `ref_closure` (DESIGN 6b): the k-th pattern of a group (kept and
+    // unprojected-non-zero zero patterns, key order) with the k-th captured
+    // closure; failing equal counts, the kept patterns alone.
+    let mut ref_closures = BTreeMap::new();
+    for group in groups.values() {
+        let mut orders = group.orders.clone();
+        orders.sort_unstable();
+        let sequences = group
+            .captured
+            .iter()
+            .map(|index| captured[*index].sequence)
+            .collect::<Vec<_>>();
+        let paired = if orders.len() == sequences.len() {
+            orders.iter().map(|(order, _)| *order).collect::<Vec<_>>()
+        } else {
+            orders.iter().filter(|(_, kept)| *kept).map(|(order, _)| *order).collect()
+        };
+        if paired.len() == sequences.len() {
+            for (order, sequence) in paired.into_iter().zip(sequences) {
+                if let Some(sequence) = sequence {
+                    ref_closures.insert(order, sequence);
+                }
+            }
+        }
+    }
     let input = if worst == "MISMATCH" {
         "MISMATCH".to_owned()
     } else if skipped > 0 {
@@ -2492,10 +2538,14 @@ pub(super) fn compare_pairs(
     };
     CheckReport {
         old_closures: captured.len(),
-        pairs: groups.len(),
+        pairs: groups
+            .values()
+            .filter(|group| !group.kept.is_empty() || !group.captured.is_empty())
+            .count(),
         input,
         value,
         failing,
+        ref_closures,
     }
 }
 
@@ -2504,8 +2554,12 @@ pub(super) fn record_stats(graph: &str, id: usize, stats: &BoundaryStats) {
     if !vakint::census::enabled() {
         return;
     }
-    vakint::census::record(
-        "remainder_boundary",
+    vakint::census::record("remainder_boundary", stats_json(graph, id, stats));
+}
+
+/// The counts of one built remainder as JSON (the census record, and the
+/// `counts` line of the boundary record).
+pub(super) fn stats_json(graph: &str, id: usize, stats: &BoundaryStats) -> serde_json::Value {
         serde_json::json!({
             "graph": graph,
             "integration_id": id,
@@ -2534,6 +2588,5 @@ pub(super) fn record_stats(graph: &str, id: usize, stats: &BoundaryStats) {
             "boundary_blocks": vakint_boundary_blocks(),
             "seconds": stats.seconds.iter().map(|(stage, seconds)| serde_json::json!([stage, seconds])).collect::<Vec<_>>(),
             "rss_gb": stats.rss_gb,
-        }),
-    );
+        })
 }
