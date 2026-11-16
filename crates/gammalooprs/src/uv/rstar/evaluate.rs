@@ -28,7 +28,8 @@ use crate::{
 use super::{
     ChildMass, CountertermCall, IrForestTerm, MassiveUvEvaluator, RStarPlan, UvChildrenRoute,
     UvPreparationTerm,
-    expression::{RStarIntegrand, RootProjector},
+    boundary::{self, BoundaryMode, BoundaryRequest, Built, ClosedRootNormalization},
+    expression::{IntegrationTimings, RStarIntegrand, RootProjector},
     moments::hard_moments,
     physical::PreparedPhysicalUvTerm,
 };
@@ -238,6 +239,59 @@ impl RStarPlan {
             uv_settings,
             Some(root_normalization),
             true,
+            None,
+        )
+    }
+
+    /// [`Self::projected_counterterm_closing_root`] with the closed metric-root
+    /// normalisation also given as data (`closed_root`: the callback is
+    /// `closed_root.factor · σ` on closed scalars). With
+    /// `GAMMALOOP_REMAINDER_BOUNDARY` unset this is
+    /// [`Self::projected_counterterm_closing_root`]; otherwise the admitted
+    /// root-scope remainders take the remainder-boundary path.
+    pub fn projected_counterterm_closing_root_scalar(
+        &self,
+        graph: &Graph,
+        model: &Model,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+        root_normalization: &dyn Fn(&Atom) -> Result<Atom>,
+        closed_root: &ClosedRootNormalization,
+    ) -> Result<Atom> {
+        let mut evaluation = Evaluation::new(
+            self,
+            graph,
+            model,
+            vakint,
+            uv_settings,
+            Some(root_normalization),
+            ChildMass::Reference,
+        )?
+        .closing_root()?;
+        evaluation.closed_root = Some(closed_root);
+        evaluation.counterterm()
+    }
+
+    /// [`Self::projected_bare_terms_only_closing_root`] with the closed
+    /// metric-root normalisation as data (see
+    /// [`Self::projected_counterterm_closing_root_scalar`]).
+    pub fn projected_bare_terms_only_closing_root_scalar(
+        &self,
+        graph: &Graph,
+        model: &Model,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+        root_normalization: &dyn Fn(&Atom) -> Result<Atom>,
+        closed_root: &ClosedRootNormalization,
+    ) -> Result<usize> {
+        self.bare_terms_only_closing(
+            graph,
+            model,
+            vakint,
+            uv_settings,
+            Some(root_normalization),
+            true,
+            Some(closed_root),
         )
     }
 
@@ -262,7 +316,15 @@ impl RStarPlan {
         uv_settings: &'a UVgenerationSettings,
         root_projector: Option<&'a RootProjector<'a>>,
     ) -> Result<usize> {
-        self.bare_terms_only_closing(graph, model, vakint, uv_settings, root_projector, false)
+        self.bare_terms_only_closing(
+            graph,
+            model,
+            vakint,
+            uv_settings,
+            root_projector,
+            false,
+            None,
+        )
     }
 
     fn bare_terms_only_closing<'a>(
@@ -273,6 +335,7 @@ impl RStarPlan {
         uv_settings: &'a UVgenerationSettings,
         root_projector: Option<&'a RootProjector<'a>>,
         close_root: bool,
+        closed_root: Option<&'a ClosedRootNormalization>,
     ) -> Result<usize> {
         let mut evaluation =
             // Bare terms only: no proper UV child is computed.
@@ -289,6 +352,7 @@ impl RStarPlan {
         if close_root {
             evaluation = evaluation.closing_root()?;
         }
+        evaluation.closed_root = closed_root;
         let mut count = 0;
         for term in &self.ordinary_uv {
             if !term.counterterms.is_empty() || term.remainder.is_scaleless(graph, self.marked_edge)
@@ -302,10 +366,10 @@ impl RStarPlan {
                 term.remainder.loops,
                 self.taylor_order
             ));
-            let remainder = evaluation.remainder(term)?;
-            let _ = evaluation.integrate(&remainder, remainder.expression()?)?;
+            let _ = evaluation.integrate_ordinary(term)?;
             count += 1;
         }
+        evaluation.log_boundary_summary();
         Ok(count)
     }
 
@@ -545,6 +609,13 @@ struct Evaluation<'a> {
     /// The root projection channel and its normalisation, recorded in the
     /// closure dump headers (`PINT6_CLOSURE_DUMP`).
     channel: (&'static str, &'static str),
+    /// The closed metric-root normalisation as data, given by the `_scalar`
+    /// entry points; used only when `GAMMALOOP_REMAINDER_BOUNDARY` is set.
+    closed_root: Option<&'a ClosedRootNormalization>,
+    /// Time on the remainder-boundary path (inert when the mode is off).
+    boundary_elapsed: Duration,
+    /// Remainder-boundary counts of this evaluation (`BOUNDARY_SUMMARY`).
+    summary: boundary::BoundarySummary,
     started: Instant,
     proper_uv_elapsed: Duration,
     quotient_elapsed: Duration,
@@ -662,6 +733,9 @@ impl<'a> Evaluation<'a> {
             } else {
                 ("none", "1")
             },
+            closed_root: None,
+            boundary_elapsed: Duration::ZERO,
+            summary: Default::default(),
             started,
             proper_uv_elapsed,
             quotient_elapsed: Duration::ZERO,
@@ -692,8 +766,7 @@ impl<'a> Evaluation<'a> {
             {
                 continue;
             }
-            let remainder = self.remainder(term)?;
-            prepared += self.integrate(&remainder, remainder.expression()?)?;
+            prepared += self.integrate_ordinary(term)?;
         }
         for correction in &self.plan.ir {
             for term in &correction.preparation {
@@ -737,7 +810,31 @@ impl<'a> Evaluation<'a> {
         Ok(result)
     }
 
+    /// The remainder-boundary summary of this evaluation, when the mode is
+    /// not off (`BOUNDARY_SUMMARY`, DESIGN 8).
+    fn log_boundary_summary(&self) {
+        if !matches!(
+            boundary::remainder_boundary_mode(),
+            Ok(BoundaryMode::On | BoundaryMode::Check)
+        ) {
+            return;
+        }
+        let root = if self.root_closure.is_some() && self.root_projector.is_some() {
+            if self.plan.root_boundary.is_some() {
+                "child"
+            } else {
+                "closed"
+            }
+        } else if self.plan.root_boundary.is_some() || self.root_projector.is_none() {
+            "child"
+        } else {
+            "open"
+        };
+        self.summary.log(&self.graph.name, root);
+    }
+
     fn log_timing(&self) {
+        self.log_boundary_summary();
         let elapsed = self.started.elapsed();
         let preparation = elapsed.saturating_sub(
             self.proper_uv_elapsed + self.quotient_elapsed + self.integration_elapsed,
@@ -924,6 +1021,241 @@ impl<'a> Evaluation<'a> {
             }))
     }
 
+    /// Remainder-boundary admission (DESIGN 10a): every reason is silent and
+    /// counted, never an error, except the vakint gates under STRICT.
+    fn boundary_admits(&self, remainder: &RStarIntegrand) -> std::result::Result<(), String> {
+        if self.closed_root.is_none() {
+            return Err("no_closed_root".into());
+        }
+        if self.root_closure.is_none() || self.root_projector.is_none() {
+            return Err("open_root".into());
+        }
+        if self.plan.root_boundary.is_some() {
+            return Err("proper_support_root".into());
+        }
+        if remainder.region.loops < 2 {
+            return Err("one_loop_tree_cut".into());
+        }
+        if !RStarIntegrand::plain_remainder_contraction() {
+            return Err("edge_contraction".into());
+        }
+        if [
+            "direct_lowering",
+            "tensor_factors",
+            "topology_groups",
+            "term_rewrites",
+            "factor_maps",
+            "dot_notation",
+        ]
+        .iter()
+        .any(|name| crate::uv::approx::streamed::legacy(name))
+        {
+            return Err("algebra_legacy".into());
+        }
+        if self.settings.verify_numerator_identification {
+            return Err("strict_split_branch".into());
+        }
+        boundary::vakint_gates()
+            .and_then(|()| boundary::settings_gate(&self.settings))
+            .map_err(|reason| format!("vakint_gates:{reason}"))
+    }
+
+    /// One root-scope ordinary remainder (the ordinary loop and the census
+    /// bare-term loop): today's [`Self::integrate`] with the mode off; the
+    /// remainder-boundary path for an admitted remainder otherwise (DESIGN
+    /// 6a, 7).
+    fn integrate_ordinary(&mut self, term: &UvPreparationTerm) -> Result<Atom> {
+        let mode = boundary::remainder_boundary_mode()?;
+        let remainder = self.remainder(term)?;
+        if mode == BoundaryMode::Off {
+            return self.integrate(&remainder, remainder.expression()?);
+        }
+        self.summary.remainders += 1;
+        let strict = boundary::boundary_strict();
+        if let Err(reason) = self.boundary_admits(&remainder) {
+            if strict && reason.starts_with("vakint_gates") {
+                return Err(eyre!(
+                    "BOUNDARY strict: the vakint gates reject an admissible remainder of {} ({reason})",
+                    self.graph.name
+                ));
+            }
+            *self.summary.not_admitted.entry(reason).or_default() += 1;
+            return self.integrate(&remainder, remainder.expression()?);
+        }
+        let closed_root = self
+            .closed_root
+            .expect("admission requires the closed-root normalisation");
+        let id = self.integration_id + 1;
+        let started = Instant::now();
+        let mut settings = self.settings.clone();
+        settings.number_of_terms_in_epsilon_expansion = i64::try_from(remainder.region.loops)?;
+        let degree = usize::try_from(self.plan.taylor_order)?;
+        let built = boundary::build_boundary(
+            &remainder,
+            &BoundaryRequest {
+                graph_name: &self.graph.name,
+                marked_edge: self.plan.marked_edge,
+                integration_id: id,
+                root_edges: &self.root_edges,
+                degree,
+                reference_mass_squared: self.reference_mass_squared,
+                auxiliary_mass_squared: &self.auxiliary_mass_squared,
+                vakint: self.vakint,
+                settings: &settings,
+                additional_normalization: &self.uv_settings.vakint.additional_normalization,
+                epsilon: self.epsilon,
+                closed_root,
+            },
+        )
+        .wrap_err_with(|| {
+            format!(
+                "while building the remainder boundary {id} of {}",
+                self.graph.name
+            )
+        })?;
+        let large_limit = boundary::fallback_max_summands();
+        let built = match built {
+            Built::Declined(decline, stats) => {
+                let large = stats.p_summands > large_limit;
+                eprintln!(
+                    "BOUNDARY_FALLBACK graph={} id={id} loops={} stage={} reason={} p_summands={} large={large}",
+                    self.graph.name,
+                    remainder.region.loops,
+                    decline.stage,
+                    decline.reason,
+                    stats.p_summands
+                );
+                self.summary.declined(&decline);
+                self.summary.contracted(&stats);
+                self.boundary_elapsed += started.elapsed();
+                self.summary.seconds_boundary += started.elapsed().as_secs_f64();
+                if large {
+                    return Err(eyre!(
+                        "BOUNDARY_DECLINED_LARGE graph={} id={id}: {}:{} with {} summands of P (limit {large_limit})",
+                        self.graph.name,
+                        decline.stage,
+                        decline.reason,
+                        stats.p_summands
+                    ));
+                }
+                if strict {
+                    return Err(eyre!(
+                        "BOUNDARY strict: the remainder boundary {id} of {} declined at {}: {}",
+                        self.graph.name,
+                        decline.stage,
+                        decline.reason
+                    ));
+                }
+                return self.integrate(&remainder, remainder.expression()?);
+            }
+            built => built,
+        };
+        match mode {
+            BoundaryMode::Check => self.check_boundary(&remainder, built, &settings, id, started),
+            _ => self.evaluate_boundary(&remainder, built, &settings, id, started, large_limit),
+        }
+    }
+
+    /// Mode on: the value of a built boundary, finished as today's outer
+    /// integration (one integration id, kind `single_mass`).
+    fn evaluate_boundary(
+        &mut self,
+        remainder: &RStarIntegrand,
+        built: Built,
+        settings: &VakintSettings,
+        id: usize,
+        started: Instant,
+        large_limit: usize,
+    ) -> Result<Atom> {
+        let loops = remainder.region.loops;
+        let (value, mut stats, built) = match built {
+            Built::Zero(stats) => {
+                self.summary.zero += 1;
+                (Atom::Zero, stats, None)
+            }
+            Built::Boundary(built, stats) => (Atom::Zero, stats, Some(built)),
+            Built::Declined(..) => unreachable!("declines are handled by the caller"),
+        };
+        self.summary.contracted(&stats);
+        let mut value = value;
+        let evaluate_started = Instant::now();
+        if let Some(built) = &built {
+            self.summary.boundary += 1;
+            let p_loops = built.loops.saturating_sub(1);
+            let skipped =
+                super::pint6_dump::settings().is_some_and(|dump| p_loops >= dump.skip_min_p_loops);
+            if !skipped {
+                let options = vakint::p_integral::BoundaryOptions {
+                    strict: boundary::boundary_strict() || stats.p_summands > large_limit,
+                };
+                let (evaluated, reads, hits) =
+                    boundary::evaluate_boundary(&built.boundary, self.vakint, settings, options)
+                        .wrap_err_with(|| {
+                            format!(
+                                "while evaluating the remainder boundary {id} of {}",
+                                self.graph.name
+                            )
+                        })?;
+                value = evaluated;
+                stats.block_reads = reads;
+                stats.block_hits = hits;
+            }
+        }
+        let evaluate_seconds = evaluate_started.elapsed().as_secs_f64();
+        stats.seconds.push(("evaluate", evaluate_seconds));
+        stats.rss_gb[3] = boundary::rss_gb();
+        let finish_started = Instant::now();
+        let result = RStarIntegrand::finish_tensor(value, id)?;
+        let finish_seconds = finish_started.elapsed().as_secs_f64();
+        stats.seconds.push(("finish", finish_seconds));
+        self.integration_id = id;
+        let stage = |name: &str| {
+            stats
+                .seconds
+                .iter()
+                .filter(|(stage, _)| *stage == name)
+                .map(|(_, seconds)| seconds)
+                .sum::<f64>()
+        };
+        let taylor = stage("den") + stage("collect");
+        let conversion = [
+            "frames", "cut", "routing", "contract", "project", "assemble", "verify",
+        ]
+        .iter()
+        .map(|name| stage(name))
+        .sum::<f64>();
+        IntegrationTimings::boundary(
+            started,
+            taylor,
+            conversion,
+            evaluate_seconds,
+            finish_seconds,
+        )
+        .log(self.graph, id, loops, "single_mass");
+        boundary::log_stats(&self.graph.name, id, &stats);
+        let elapsed = started.elapsed();
+        self.integration_elapsed += elapsed;
+        self.boundary_elapsed += elapsed;
+        self.summary.seconds_boundary += elapsed.as_secs_f64();
+        Ok(result)
+    }
+
+    /// Mode check: today's path under capture, compared with the built
+    /// boundary (DESIGN 7); returns today's value.
+    fn check_boundary(
+        &mut self,
+        _remainder: &RStarIntegrand,
+        _built: Built,
+        _settings: &VakintSettings,
+        id: usize,
+        _started: Instant,
+    ) -> Result<Atom> {
+        Err(eyre!(
+            "GAMMALOOP_REMAINDER_BOUNDARY=check is not available in this build (remainder {id} of {})",
+            self.graph.name
+        ))
+    }
+
     fn integrate(&mut self, remainder: &RStarIntegrand, expression: &Atom) -> Result<Atom> {
         self.integration_id += 1;
         // All insertion poles and hard projector coefficients are already in
@@ -960,6 +1292,7 @@ impl<'a> Evaluation<'a> {
             )
         });
         self.integration_elapsed += started.elapsed();
+        self.summary.seconds_today += started.elapsed().as_secs_f64();
         result
     }
 }

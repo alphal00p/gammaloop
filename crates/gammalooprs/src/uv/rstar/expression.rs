@@ -22,7 +22,7 @@ use linnet::half_edge::{
 use spenso::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG},
     structure::{
-        partial::{PartialStructure, PartialStructureExt},
+        partial::PartialStructureExt,
         representation::{Minkowski, RepName},
         slot::{IsAbstractSlot, SlotMatch, SlotMatcher},
     },
@@ -116,7 +116,32 @@ impl IntegrationTimings {
         elapsed
     }
 
-    fn log(&self, graph: &Graph, integration_id: usize, loops: usize, kind: &str) {
+    /// The timings of one outer integration on the remainder-boundary path
+    /// (kind `single_mass`): taylor = den + collect, conversion = frames +
+    /// cut + routing + contract + project + assemble + verify, backend =
+    /// evaluate, finish = finish.
+    pub(super) fn boundary(
+        started: Instant,
+        taylor: f64,
+        conversion: f64,
+        backend: f64,
+        finish: f64,
+    ) -> Self {
+        Self {
+            started,
+            last: Instant::now(),
+            routing: 0.0,
+            taylor,
+            materialization: 0.0,
+            tensor_projection: 0.0,
+            algebra: 0.0,
+            conversion,
+            backend,
+            finish,
+        }
+    }
+
+    pub(super) fn log(&self, graph: &Graph, integration_id: usize, loops: usize, kind: &str) {
         tracing::info!(
             uv = true,
             rstar = true,
@@ -793,6 +818,117 @@ impl RStarIntegrand {
 
     pub fn soft_edges(&self) -> &[EdgeIndex] {
         &self.soft_edges
+    }
+
+    /// Whether the routed remainder vanishes (nothing is integrated).
+    pub(super) fn routed_is_zero(&self) -> bool {
+        self.routed.is_zero()
+    }
+
+    /// The routed numerator `N` (numerator × insertions × closure) and the
+    /// denominator factors `den(e, ..)^-1`, split off the top-level factors
+    /// of the routed product on demand (remainder boundary, DESIGN 1): the
+    /// product is exactly that by construction. Exactly one denominator per
+    /// paired remaining edge, none inside `N`; `Err(reason)` otherwise.
+    pub(super) fn split_routed(&self) -> std::result::Result<(Atom, Vec<Atom>), String> {
+        let factors = match self.routed.as_view() {
+            AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+            single => vec![single],
+        };
+        let paired = self
+            .graph
+            .iter_edges_of(&self.region.remaining)
+            .filter(|(pair, _, _)| pair.is_paired())
+            .map(|(_, edge, _)| usize::from(edge))
+            .collect::<BTreeSet<_>>();
+        let mut seen = BTreeSet::new();
+        let mut denominators = Vec::new();
+        let mut numerator = Vec::new();
+        for factor in factors {
+            if let AtomView::Pow(power) = factor
+                && let (AtomView::Fun(base), exponent) = power.get_base_exp()
+                && base.get_symbol() == GS.den
+            {
+                if i64::try_from(exponent).ok() != Some(-1) {
+                    return Err("den_split: a denominator power other than -1".into());
+                }
+                let Ok(edge) = usize::try_from(base.get(0)) else {
+                    return Err("den_split: a denominator without an edge id".into());
+                };
+                if !paired.contains(&edge) || !seen.insert(edge) {
+                    return Err(format!("den_split: edge {edge}"));
+                }
+                denominators.push(factor.to_owned());
+                continue;
+            }
+            if factor.contains_symbol(GS.den) {
+                return Err("den_split: a denominator inside the numerator".into());
+            }
+            numerator.push(factor);
+        }
+        if seen != paired {
+            return Err("den_split: not one denominator per paired edge".into());
+        }
+        Ok((Atom::mul_many(numerator.iter().copied()), denominators))
+    }
+
+    /// `P = C(σ(N))`: the routed numerator `N` of [`Self::split_routed`] with
+    /// the external identification `σ` applied, contracted to dots in the
+    /// loop basis as [`Self::expression`] contracts the whole remainder, and
+    /// idenso's closed-scalar certificate of this contraction (DESIGN
+    /// Addendum A(1): read on the contraction's own result, never by a scan).
+    pub(super) fn numerator_contracted(
+        &self,
+        numerator: Atom,
+        external_routing: &[Replacement],
+    ) -> Result<(Atom, bool)> {
+        let started = Instant::now();
+        let routed = numerator.replace_multiple(external_routing);
+        drop(numerator);
+        let contracted = {
+            let _algebra = StageSpan::new("gamma.remainder.algebra");
+            Self::simplify_view_certified(routed.as_view())
+                .wrap_err("while contracting the routed R* numerator")?
+        };
+        if vakint::census::enabled() {
+            vakint::census::record(
+                "remainder_contraction",
+                serde_json::json!({
+                    "loops": self.region.loops,
+                    "seconds": started.elapsed().as_secs_f64(),
+                    "routed_bytes": routed.as_view().get_byte_size(),
+                    "contracted_bytes": contracted.0.as_view().get_byte_size(),
+                    "certified_closed_scalar": contracted.1,
+                    "boundary": true,
+                }),
+            );
+        }
+        Ok(contracted)
+    }
+
+    /// Whether an ordinary remainder is contracted in the loop basis, without
+    /// kept edge momenta (remainder-boundary admission A7).
+    pub(super) fn plain_remainder_contraction() -> bool {
+        !keeps_remainder() && !edge_contraction("remainder")
+    }
+
+    /// No kept edge-momentum combination was introduced.
+    pub(super) fn assert_no_combinations(&self) -> Result<()> {
+        ensure!(
+            self.combinations.lock().unwrap().is_empty(),
+            "a remainder boundary contraction kept edge-momentum combinations"
+        );
+        Ok(())
+    }
+
+    /// The loop edges `b_j` of the R* basis, in `j` order.
+    pub(super) fn loop_basis_edges(&self) -> Vec<EdgeIndex> {
+        self.basis.loop_edges.iter().copied().collect()
+    }
+
+    /// The converter graph (insertion supports identified to one vertex).
+    pub(super) fn converter_graph(&self) -> &Graph {
+        &self.graph
     }
 
     /// The routed expression contracted to dots, as the outer and physical
@@ -1909,7 +2045,7 @@ impl RStarIntegrand {
         Ok(Integrated::dimensionally_regularized(&reduced))
     }
 
-    fn scale_edges(expression: &Atom, edges: &[EdgeIndex], parameter: Symbol) -> Atom {
+    pub(super) fn scale_edges(expression: &Atom, edges: &[EdgeIndex], parameter: Symbol) -> Atom {
         let replacements = edges
             .iter()
             .map(|edge| {
@@ -2065,15 +2201,15 @@ impl RStarIntegrand {
         // Reduce color identities after the quotient has closed their indices.
         // Leave trace/chain powers intact for the same reason as finish_tensor:
         // their internal spinor sums must remain independent between copies.
-        let simplified: SymbolicTensor<PartialStructure> =
-            SymbolicTensor::infer_indexed(cooking.try_cook(expression)?)?
-                .simplify_algebra(&AlgebraSettings {
-                    gamma: Some(GammaSimplifySettings::canonical()),
-                    epsilon: true,
-                    ..Default::default()
-                })?
-                .to_dots()?
-                .into();
+        // The certificate accessors are on the indexed type (DESIGN Addendum
+        // A(3)): no conversion is needed to read them.
+        let simplified = SymbolicTensor::infer_indexed(cooking.try_cook(expression)?)?
+            .simplify_algebra(&AlgebraSettings {
+                gamma: Some(GammaSimplifySettings::canonical()),
+                epsilon: true,
+                ..Default::default()
+            })?
+            .to_dots()?;
         let certified = simplified.is_certified_closed_scalar();
         Ok((cooking.uncook(simplified.expression().as_view()), certified))
     }
