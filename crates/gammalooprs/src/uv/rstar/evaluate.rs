@@ -147,6 +147,24 @@ impl RStarPlan {
         .counterterm()
     }
 
+    /// Local export patch: run only the ordinary-UV preparation terms of
+    /// [`Self::projected_counterterm`] that carry no proper UV counterterm
+    /// (the empty spinney), through the same root projector, outer Taylor
+    /// expansion and single-mass integration. Proper UV children and IR
+    /// corrections are not computed. Returns the number of terms integrated;
+    /// the result values are discarded (meaningful only with requests skipped
+    /// through `PINT6_SKIP_MIN_P_LOOPS`, for request export).
+    pub fn projected_bare_terms_only(
+        &self,
+        graph: &Graph,
+        model: &Model,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+        root_projector: &dyn Fn(&Atom) -> Result<Atom>,
+    ) -> Result<usize> {
+        self.bare_terms_only_with(graph, model, vakint, uv_settings, Some(root_projector))
+    }
+
     /// As [`Self::projected_counterterm`] for a metric root projector whose
     /// momentum-free metric is applied in the root scope instead: every
     /// root-level remainder is multiplied by [`RStarIntegrand::root_closure`]
@@ -200,6 +218,88 @@ impl RStarPlan {
         )?
         .closing_root()?
         .counterterm_from_pole_part(bare_poles)
+    }
+
+    /// Local export patch: as [`Self::projected_bare_terms_only`], closing the
+    /// metric root in the root scope (see [`Self::projected_counterterm_closing_root`]).
+    pub fn projected_bare_terms_only_closing_root(
+        &self,
+        graph: &Graph,
+        model: &Model,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+        root_normalization: &dyn Fn(&Atom) -> Result<Atom>,
+    ) -> Result<usize> {
+        self.bare_terms_only_closing(graph, model, vakint, uv_settings, Some(root_normalization), true)
+    }
+
+    /// Local export patch: as [`Self::projected_bare_terms_only`], without a
+    /// root projector, i.e. the bare terms of [`Self::pole_part`] (the route
+    /// of insertion surrogates above four loops).
+    pub fn bare_terms_only_unprojected(
+        &self,
+        graph: &Graph,
+        model: &Model,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+    ) -> Result<usize> {
+        self.bare_terms_only_with(graph, model, vakint, uv_settings, None)
+    }
+
+    fn bare_terms_only_with<'a>(
+        &'a self,
+        graph: &'a Graph,
+        model: &'a Model,
+        vakint: &'a Vakint,
+        uv_settings: &'a UVgenerationSettings,
+        root_projector: Option<&'a RootProjector<'a>>,
+    ) -> Result<usize> {
+        self.bare_terms_only_closing(graph, model, vakint, uv_settings, root_projector, false)
+    }
+
+    fn bare_terms_only_closing<'a>(
+        &'a self,
+        graph: &'a Graph,
+        model: &'a Model,
+        vakint: &'a Vakint,
+        uv_settings: &'a UVgenerationSettings,
+        root_projector: Option<&'a RootProjector<'a>>,
+        close_root: bool,
+    ) -> Result<usize> {
+        let mut evaluation =
+            // Bare terms only: no proper UV child is computed.
+            Evaluation::new_with(
+                self,
+                graph,
+                model,
+                vakint,
+                uv_settings,
+                root_projector,
+                ChildMass::Reference,
+                false,
+            )?;
+        if close_root {
+            evaluation = evaluation.closing_root()?;
+        }
+        let mut count = 0;
+        for term in &self.ordinary_uv {
+            if !term.counterterms.is_empty()
+                || term.remainder.is_scaleless(graph, self.marked_edge)
+            {
+                continue;
+            }
+            super::pint6_dump::set_term(format!(
+                "graph={} marked_edge={} term=ordinary_uv[empty spinney] remaining_loops={} taylor_order={}",
+                graph.name,
+                usize::from(self.marked_edge),
+                term.remainder.loops,
+                self.taylor_order
+            ));
+            let remainder = evaluation.remainder(term)?;
+            let _ = evaluation.integrate(&remainder, remainder.expression()?)?;
+            count += 1;
+        }
+        Ok(count)
     }
 
     /// Reconstruct all poles of the bare, infrared-finite massless propagator
@@ -340,6 +440,28 @@ impl<'a> Evaluation<'a> {
         root_projector: Option<&'a RootProjector<'a>>,
         child_mass: ChildMass,
     ) -> Result<Self> {
+        Self::new_with(
+            plan,
+            graph,
+            model,
+            vakint,
+            uv_settings,
+            root_projector,
+            child_mass,
+            true,
+        )
+    }
+
+    fn new_with(
+        plan: &'a RStarPlan,
+        graph: &'a Graph,
+        model: &'a Model,
+        vakint: &'a Vakint,
+        uv_settings: &'a UVgenerationSettings,
+        root_projector: Option<&'a RootProjector<'a>>,
+        child_mass: ChildMass,
+        compute_children: bool,
+    ) -> Result<Self> {
         let started = Instant::now();
         for (_, _, edge) in graph.iter_edges_of(&plan.support) {
             ensure!(
@@ -354,7 +476,7 @@ impl<'a> Evaluation<'a> {
         let reference_mass_squared = *super::REFERENCE_MASS_SQUARED;
         let reference_mass = Atom::var(reference_mass_squared).sqrt();
         let children_started = Instant::now();
-        let children = if plan.counterterms.is_empty() {
+        let children = if plan.counterterms.is_empty() || !compute_children {
             BTreeMap::new()
         } else {
             plan.evaluate_uv_children_for(
@@ -420,10 +542,7 @@ impl<'a> Evaluation<'a> {
 
     /// Close the root metric in every root-scope remainder of this evaluation.
     fn closing_root(mut self) -> Result<Self> {
-        self.root_closure = Some(RStarIntegrand::root_closure(
-            self.graph,
-            &self.plan.support,
-        )?);
+        self.root_closure = Some(RStarIntegrand::root_closure(self.graph, &self.plan.support)?);
         Ok(self)
     }
 
