@@ -2554,6 +2554,115 @@ fn p_terminal_export() {
     );
 }
 
+/// vk5l-physrun dashboard post-processing (env-gated):
+/// `VAKINT_TEST_PP_RETAIN=<retain .sym>` -> `<VAKINT_TEST_PP_OUT>/result_exact_d_coef.txt`: the Retain value with
+/// `gammalooprs::ε = (4 - d)/2`, grouped by master monomial (the product of its `PGamma(..)` / `gamma(..)`
+/// factors) as `Σ coef(c) · master` (`c` with collect_num); `VAKINT_TEST_PP_SYMBOLIC=<symbolic .sym>` ->
+/// `<OUT>/eps_orders_collected.json`: every order from `VAKINT_TEST_PP_MIN_ORDER` (default -6) to the highest
+/// present, each `collect_num().collect_factors()`, an explicit "0" where it cancels.
+#[test]
+fn showcase_postprocess() {
+    let Some(out) = std::env::var_os("VAKINT_TEST_PP_OUT") else {
+        eprintln!("showcase_postprocess: environment unset, skipped");
+        return;
+    };
+    let out = std::path::PathBuf::from(out);
+    std::fs::create_dir_all(&out).unwrap();
+    let _ = Vakint::new().unwrap();
+    let epsilon = crate::utils::vakint_macros::vk_symbol!("gammalooprs::ε");
+    if let Some(path) = std::env::var_os("VAKINT_TEST_PP_RETAIN") {
+        let started = std::time::Instant::now();
+        let value = parse(&std::fs::read_to_string(&path).unwrap());
+        let d = parse("d");
+        let rule = symbolica::id::Replacement::new(
+            Atom::var(epsilon).to_pattern(),
+            ((Atom::num(4) - &d) / Atom::num(2)).to_pattern(),
+        );
+        let in_d = value.replace_multiple(&[rule]).expand();
+        let is_master = |factor: symbolica::atom::AtomView| -> bool {
+            let base = match factor {
+                symbolica::atom::AtomView::Pow(power) => power.get_base_exp().0,
+                other => other,
+            };
+            match base {
+                symbolica::atom::AtomView::Fun(function) => {
+                    let symbol = function.get_symbol();
+                    let name = symbol.get_name();
+                    name.ends_with("::gamma") || name == "gamma" || name.ends_with("PGamma") || name.ends_with("PMaster") || name.ends_with("PResidual") || name.ends_with("PG")
+                }
+                _ => false,
+            }
+        };
+        let mut order = Vec::<Atom>::new();
+        let mut groups = std::collections::HashMap::<Atom, Vec<Atom>>::new();
+        let terms = match in_d.as_view() {
+            symbolica::atom::AtomView::Add(sum) => sum.iter().map(|t| t.to_owned()).collect::<Vec<_>>(),
+            _ => vec![in_d.clone()],
+        };
+        for term in terms {
+            let factors = match term.as_view() {
+                symbolica::atom::AtomView::Mul(product) => product.iter().map(|f| f.to_owned()).collect::<Vec<_>>(),
+                _ => vec![term.clone()],
+            };
+            let (masters, rest): (Vec<_>, Vec<_>) = factors.into_iter().partition(|f| is_master(f.as_view()));
+            let master = if masters.is_empty() { Atom::num(1) } else { Atom::mul_many(masters.iter().map(|a| a.as_view())) };
+            let coefficient = if rest.is_empty() { Atom::num(1) } else { Atom::mul_many(rest.iter().map(|a| a.as_view())) };
+            if !groups.contains_key(&master) {
+                order.push(master.clone());
+            }
+            groups.entry(master).or_default().push(coefficient);
+        }
+        let coef = crate::utils::vakint_macros::vk_symbol!("coef");
+        let mut result = Atom::Zero;
+        for master in &order {
+            let coefficient = Atom::add_many(groups[master].iter().map(|a| a.as_view())).collect_num();
+            result += symbolica::function!(coef, coefficient) * master;
+        }
+        let text = result.to_canonical_string();
+        std::fs::write(out.join("result_exact_d_coef.txt"), &text).unwrap();
+        std::fs::write(
+            out.join("result_exact_d_coef.json"),
+            serde_json::json!({"masters": order.len(), "terms_in_d": groups.values().map(|g| g.len()).sum::<usize>(),
+                               "bytes": text.len(), "seconds": started.elapsed().as_secs_f64(),
+                               "masters_list": order.iter().map(|m| m.to_canonical_string()).collect::<Vec<_>>()}).to_string(),
+        )
+        .unwrap();
+        eprintln!("showcase_postprocess: {} master monomials, {} bytes", order.len(), text.len());
+    }
+    if let Some(path) = std::env::var_os("VAKINT_TEST_PP_SYMBOLIC") {
+        let value = parse(&std::fs::read_to_string(&path).unwrap()).expand();
+        let mut orders = std::collections::BTreeMap::<i64, Atom>::new();
+        for (power, coefficient) in value.coefficient_list::<i8>(&[Atom::var(epsilon)]) {
+            let order = if power == Atom::num(1) {
+                0
+            } else if power == Atom::var(epsilon) {
+                1
+            } else {
+                match power.as_view() {
+                    symbolica::atom::AtomView::Pow(p) => crate::get_integer_from_atom(p.get_base_exp().1).unwrap(),
+                    _ => panic!("not a power of epsilon: {power}"),
+                }
+            };
+            *orders.entry(order).or_insert(Atom::Zero) += coefficient;
+        }
+        let min = std::env::var("VAKINT_TEST_PP_MIN_ORDER").ok().and_then(|v| v.parse().ok()).unwrap_or(-6);
+        let max = orders.keys().copied().max().unwrap_or(min);
+        let mut json = serde_json::Map::new();
+        for order in min.min(max)..=max {
+            let text = match orders.get(&order) {
+                Some(coefficient) => {
+                    let collected = coefficient.expand().collect_num().collect_factors();
+                    if collected.is_zero() { "0".to_owned() } else { collected.to_canonical_string() }
+                }
+                None => "0".to_owned(),
+            };
+            json.insert(order.to_string(), serde_json::Value::String(text));
+        }
+        std::fs::write(out.join("eps_orders_collected.json"), serde_json::to_string_pretty(&json).unwrap()).unwrap();
+        eprintln!("showcase_postprocess: orders {min}..{max}");
+    }
+}
+
 /// vk5l-physrun: the Laurent orders of a Symbolica canonical-string result
 /// (`VAKINT_TEST_EPS_IN`, e.g. sum.symbolic.sym) in `gammalooprs::ε`, written
 /// to `VAKINT_TEST_EPS_OUT` as JSON {"orders": {"<n>": "<canonical string>"},
@@ -2793,7 +2902,12 @@ fn massive_closure_showcase_sum() {
             );
             check = serde_json::json!({"found": found, "identical": identical, "equal": equal});
         }
+        let dispatch = engine.p_dispatch_counters();
+        let load = std::fs::read_to_string("/proc/loadavg").unwrap_or_default();
         let summary = serde_json::json!({
+            "dispatch_process_total": {"table": dispatch.table, "explicit": dispatch.explicit, "cached": dispatch.cached,
+                                       "recipe_solved": dispatch.recipe_solved, "refused": dispatch.refused},
+            "loadavg_at_end": load.trim(), "utc_end_unix": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0),
             "closures": names, "mode": mode, "seconds": seconds, "read_seconds": read_seconds,
             "result_bytes": text.len(), "result_terms": drill_term_count(&value.expand()),
             "arithmetic": settings.ordered_weight_arithmetic.to_string(), "check": check,
