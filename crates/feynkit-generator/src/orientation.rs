@@ -63,11 +63,23 @@ impl Generator {
         };
         let mut loops = Vec::new();
         for edges in self.closed_fermion_loops(&topology.graph, false)? {
-            let particle = topology.graph.edges()[edges[0]].data.particle;
-            // Majorana lines carry no direction; their loops are not varied.
-            if !self.model.particle_is_self_conjugate(particle) {
-                loops.push(edges);
+            let majorana = edges
+                .iter()
+                .filter(|edge| {
+                    self.model
+                        .particle_is_self_conjugate(topology.graph.edges()[**edge].data.particle)
+                })
+                .count();
+            // Majorana lines carry no direction; pure Majorana loops are not
+            // varied. A loop that mixes Majorana and Dirac lines has no
+            // certified reversal (fermion-flow conventions), so it fails closed.
+            if majorana == edges.len() {
+                continue;
             }
+            if majorana > 0 {
+                return skip("a closed loop mixes Majorana and Dirac fermions");
+            }
+            loops.push(edges);
         }
         if loops.is_empty() {
             return Ok(OrientationSumVerdict::NoClosedLoops);
@@ -122,6 +134,11 @@ impl Generator {
             };
             if mask == 0 && !same_structure(&variant, diagram) {
                 return skip("the rebuilt diagram does not reproduce the input frame");
+            }
+            // Every variant must keep the input's vertices and edge endpoints,
+            // so `Q(edge)` and the half-edge transport mean the same thing.
+            if mask != 0 && !same_endpoints(&variant, diagram) {
+                return skip("a reversed variant moved an edge endpoint");
             }
             let explicit = cooking.uncook(variant.numerator().expression().as_view());
             let relabeled = match HedgeFrame::of(&variant).relabel_into(&hedges, &explicit) {
@@ -303,6 +320,21 @@ fn same_structure(left: &FeynmanDiagram, right: &FeynmanDiagram) -> bool {
         .eq(right
             .vertices()
             .map(|(id, vertex)| (id, vertex.interaction)))
+        && edges(left) == edges(right)
+}
+
+/// Same vertices, edges, edge endpoints and edge directedness. Species,
+/// interactions and slots differ between reversed variants and are not compared.
+fn same_endpoints(left: &FeynmanDiagram, right: &FeynmanDiagram) -> bool {
+    let edges = |diagram: &FeynmanDiagram| {
+        diagram
+            .edges()
+            .map(|(id, ends, edge)| (id, ends.source, ends.target, edge.directed))
+            .collect::<Vec<_>>()
+    };
+    left.vertices()
+        .map(|(id, _)| id)
+        .eq(right.vertices().map(|(id, _)| id))
         && edges(left) == edges(right)
 }
 
