@@ -984,7 +984,7 @@ impl RStarPlan {
             } else {
                 None
             };
-            let delta = match isotropic.as_ref() {
+            let delta = super::expression::in_uv_child_scope(|| match isotropic.as_ref() {
                 Some(pairings) => {
                     #[cfg(test)]
                     ISOTROPIC_CHILDREN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -998,7 +998,7 @@ impl RStarPlan {
                     plan.isotropic_counterterm(graph, model, vakint, settings, pairings)
                 }
                 None => plan.counterterm(graph, model, vakint, settings),
-            }
+            })
             .wrap_err_with(|| {
                     format!(
                         "while computing the {}-loop UV child {} with R*",

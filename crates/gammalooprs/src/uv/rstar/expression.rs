@@ -203,6 +203,32 @@ pub(crate) fn in_dressed_scope<T>(f: impl FnOnce() -> T) -> T {
     result
 }
 
+thread_local! {
+    static UV_CHILD_SCOPE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Run `f` as the R* evaluation of a proper UV child (its own complete-graph
+/// R*, nested children included). See [`uv_child_edge_remainder`].
+pub(crate) fn in_uv_child_scope<T>(f: impl FnOnce() -> T) -> T {
+    let previous = UV_CHILD_SCOPE.with(|scope| scope.replace(true));
+    let result = f();
+    UV_CHILD_SCOPE.with(|scope| scope.set(previous));
+    result
+}
+
+/// `GAMMALOOP_UV_CHILD_EDGE_REMAINDER=1` (opt-in): inside an R* child, the
+/// ordinary remainders are contracted in the edge basis, exactly as
+/// `GAMMALOOP_EDGE_CONTRACTION=remainder` does everywhere. A child keeps its
+/// boundary slots open, and the edge-basis contraction of those open-index
+/// remainders is much cheaper; the closed root keeps the loop basis, where
+/// the edge basis is slower. Any other value or unset: unchanged.
+fn uv_child_edge_remainder() -> bool {
+    static ON: LazyLock<bool> = LazyLock::new(|| {
+        std::env::var("GAMMALOOP_UV_CHILD_EDGE_REMAINDER").is_ok_and(|value| value.trim() == "1")
+    });
+    *ON && UV_CHILD_SCOPE.with(|scope| scope.get())
+}
+
 /// Whether hard components keep edge momenta.
 fn keeps_hard() -> bool {
     edge_contraction("keep") || edge_contraction("keep_hard") || edge_contraction("auto")
@@ -693,7 +719,7 @@ impl RStarIntegrand {
                         .wrap_err("while preparing the routed R* tensor expression")?,
                     false,
                 )
-            } else if edge_contraction("remainder") {
+            } else if edge_contraction("remainder") || uv_child_edge_remainder() {
                 (
                     Self::simplify_edge_basis(&self.routed)
                         .wrap_err("while preparing the routed R* tensor expression")?,
