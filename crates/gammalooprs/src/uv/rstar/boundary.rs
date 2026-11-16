@@ -1191,7 +1191,8 @@ impl Grammar {
     /// summand's indexed factors through the R* remainder contraction
     /// ([`retry_contraction`]: cook, infer, `simplify_algebra`, `to_dots`,
     /// uncook; once per distinct product of indexed factors), then graded
-    /// again. `Err` is a hard error (an exhausted resource budget).
+    /// again. `Err` is a hard error (a failing retry contraction or an
+    /// exhausted resource budget).
     pub(super) fn grade_summand(
         &mut self,
         summand: AtomView<'_>,
@@ -1210,7 +1211,16 @@ impl Grammar {
             &retry_contraction,
         ) {
             Ok(Some(notated)) => notated,
-            _ => return Ok(Err(Decline::new("collect", format!("indexed:{head}")))),
+            // The retry would introduce dummy indices: a decline.
+            Ok(None) => return Ok(Err(Decline::new("collect", format!("indexed:{head}")))),
+            // A failing contraction (cook, infer, simplify_algebra) or an
+            // exhausted budget is a hard error, as the remainder contraction
+            // itself: never a silent fallback, and its cause is kept.
+            Err(error) => {
+                return Err(error.wrap_err(format!(
+                    "while retrying the contraction of an indexed factor ({head}) of an R* remainder boundary"
+                )));
+            }
         };
         match self.grade(notated.as_view(), stats) {
             Ok(map) => Ok(Ok(map)),
