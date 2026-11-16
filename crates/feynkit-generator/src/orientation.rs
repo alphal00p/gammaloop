@@ -17,6 +17,16 @@
 //! Color factors are left as built: the color algebra then decides whether
 //! the transposed color traces cancel.
 //!
+//! Every variant, including `D_0`, is rebuilt from the topology. The rebuild
+//! fills two legs of one species at a vertex first-fit, so `D_0` may put them
+//! in swapped slots relative to `D` (background-field QCD: the two B legs of
+//! V_BBQQ or V_ccBB). Such a variant stands for `D` only when every slot
+//! exchange is certified to leave the rule's complete numerator invariant
+//! (`Generator::leg_exchange_symmetric`, exact, cached per rule and leg
+//! pair); its numerator is then used unchanged (`input_frame_mismatch`).
+//! Reversed variants need the same certificate for every pair of identical
+//! legs at their vertices. Anything uncertified is `Skipped`.
+//!
 //! What a removed zero means depends on the loop's colour:
 //! - colourless loops (QED, Furry's theorem): the orientation sum vanishes
 //!   identically, independent of any gauge group;
@@ -31,17 +41,28 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use feynkit_graph::{DiagramEndpoint, DiagramHalfEdge, EdgeId, FeynmanDiagram, NumeratorInterface};
-use idenso::{CookMode, CookSettings, dirac::AGS, representations::Bispinor};
+use feynkit_graph::{
+    DiagramEndpoint, DiagramHalfEdge, EdgeId, FeynmanDiagram, NumeratorInterface, VertexId,
+};
+use feynkit_model::VertexRuleId;
+use idenso::{
+    CookMode, CookSettings,
+    color::ColorSimplifySettings,
+    dirac::AGS,
+    representations::Bispinor,
+    tensor::{AlgebraContraction, AlgebraSettings},
+};
+use linnet::half_edge::involution::Flow;
 use spenso::{network::library::symbolic::ETS, structure::representation::RepName};
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol, ZeroTestSettings},
     graph::Graph,
 };
 
 use super::{
     ColoredNode, ColoredTopology, EdgeColor, ExternalNode, FermionSigns, GenerationError,
-    GenerationOptions, GenerationType, Generator, ResolvedProcess, grouping,
+    GenerationOptions, GenerationType, Generator, NumeratorHalfEdge, NumeratorInstantiation,
+    NumeratorOwner, ResolvedProcess, grouping,
 };
 
 /// Largest number of independently reversed loops; `2^k` variants are built.
@@ -145,13 +166,24 @@ impl Generator {
                 Ok(variant) => variant,
                 Err(reason) => return skip(&reason),
             };
-            if mask == 0 && !same_structure(&variant, diagram) {
-                return skip("the rebuilt diagram does not reproduce the input frame");
-            }
-            // Every variant must keep the input's vertices and edge endpoints,
-            // so `Q(edge)` and the half-edge transport mean the same thing.
-            if mask != 0 && !same_endpoints(&variant, diagram) {
-                return skip("a reversed variant moved an edge endpoint");
+            if mask == 0 {
+                // N(D_0) stands for N(D): see `input_frame_mismatch`.
+                if let Some(reason) = self.input_frame_mismatch(&variant, diagram)? {
+                    return skip(&reason);
+                }
+            } else {
+                // Every variant must keep the input's vertices and edge
+                // endpoints, so `Q(edge)` and the half-edge transport mean the
+                // same thing.
+                if !same_endpoints(&variant, diagram) {
+                    return skip("a reversed variant moved an edge endpoint");
+                }
+                // The rebuild fills identical legs first-fit, as generation
+                // does; the reversed family member's numerator is independent
+                // of that choice only for certified-symmetric rules.
+                if let Some(reason) = self.uncertified_identical_legs(&variant)? {
+                    return skip(&reason);
+                }
             }
             let explicit = cooking.uncook(variant.numerator().expression().as_view());
             let relabeled = match HedgeFrame::of(&variant).relabel_into(&hedges, &explicit) {
@@ -313,21 +345,223 @@ fn colored_topology(diagram: &FeynmanDiagram) -> Result<ColoredTopology, String>
     })
 }
 
-/// Same vertices, edges, endpoints, species and attached interaction slots.
-fn same_structure(left: &FeynmanDiagram, right: &FeynmanDiagram) -> bool {
+impl Generator {
+    /// Whether the rebuilt S = 0 variant may stand for the input diagram.
+    /// `None` accepts it, `Some` carries a skip reason.
+    ///
+    /// The variant must have the input's vertices, interactions, edges,
+    /// endpoints and species. Its interaction slots may differ from the
+    /// input's only by a permutation `pi` of identical legs at a vertex: the
+    /// rebuild fills identical legs first-fit in its own edge order, which
+    /// need not be the order generation saw.
+    ///
+    /// Why the variant's numerator is then used unchanged, and not mapped
+    /// through `pi`: the interaction numerator at a vertex is
+    /// `N_V(l_1, .., l_n)`, with `l_s` the leg data (edge, half-edge, flow)
+    /// put in slot `s`. The input has `N_V(l)`, the variant `N_V(l o pi^-1)`.
+    /// Every transposition of `pi` exchanges two legs of one species and is
+    /// certified (`leg_exchange_symmetric`) to leave the complete rule
+    /// numerator invariant for arbitrary leg data, so `N_V(l o pi^-1) =
+    /// N_V(l)` exactly, and so are the diagram numerators. Half-edge indices
+    /// are transported by (edge, endpoint), not by slot, so no relabelling is
+    /// left to do; renaming indices by `pi` would instead give one half-edge
+    /// another's indices while `Q(edge)` stayed put.
+    fn input_frame_mismatch(
+        &self,
+        variant: &FeynmanDiagram,
+        input: &FeynmanDiagram,
+    ) -> Result<Option<String>, GenerationError> {
+        if !same_structure_up_to_slots(variant, input) {
+            return Ok(Some(
+                "the rebuilt diagram does not reproduce the input frame".to_owned(),
+            ));
+        }
+        let (input_slots, variant_slots) = (slot_tables(input), slot_tables(variant));
+        for (vertex, data) in input.vertices() {
+            let Some(rule_id) = data.interaction else {
+                return Ok(Some(format!("vertex {} has no interaction", vertex.0)));
+            };
+            let rule = self.model.vertex_rule_by_id(rule_id)?;
+            let (Some(input_legs), Some(variant_legs)) =
+                (input_slots.get(&vertex), variant_slots.get(&vertex))
+            else {
+                return Ok(Some(format!("vertex {} has no legs", vertex.0)));
+            };
+            if input_legs == variant_legs {
+                continue;
+            }
+            // pi: input slot -> variant slot of the same half-edge.
+            let mut permutation = BTreeMap::new();
+            for (hedge, slot) in input_legs {
+                let Some(image) = variant_legs.get(hedge) else {
+                    return Ok(Some(format!(
+                        "vertex {} lost a leg in the rebuild",
+                        vertex.0
+                    )));
+                };
+                let species = |slot: usize| rule.particles.get(slot).copied();
+                if species(*slot).is_none() || species(*slot) != species(*image) {
+                    return Ok(Some(format!(
+                        "the rebuild moved a leg of {} to a slot of another species",
+                        rule.name
+                    )));
+                }
+                permutation.insert(*slot, *image);
+            }
+            if permutation
+                .keys()
+                .ne(permutation.values().collect::<BTreeSet<_>>())
+            {
+                return Ok(Some(format!(
+                    "the rebuilt slots of {} are not a permutation",
+                    rule.name
+                )));
+            }
+            for (a, b) in transpositions(&permutation) {
+                if !self.leg_exchange_symmetric(rule_id, a, b)? {
+                    return Ok(Some(format!(
+                        "{} is not certified symmetric under exchanging its identical legs {} and {}",
+                        rule.name,
+                        a + 1,
+                        b + 1
+                    )));
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    /// `Some` skip reason when a vertex of `diagram` has two legs of one
+    /// species whose exchange is not certified to leave its rule invariant.
+    fn uncertified_identical_legs(
+        &self,
+        diagram: &FeynmanDiagram,
+    ) -> Result<Option<String>, GenerationError> {
+        for (vertex, data) in diagram.vertices() {
+            let Some(rule_id) = data.interaction else {
+                return Ok(Some(format!("vertex {} has no interaction", vertex.0)));
+            };
+            let rule = self.model.vertex_rule_by_id(rule_id)?;
+            for a in 0..rule.particles.len() {
+                for b in a + 1..rule.particles.len() {
+                    if rule.particles[a] == rule.particles[b]
+                        && !self.leg_exchange_symmetric(rule_id, a, b)?
+                    {
+                        return Ok(Some(format!(
+                            "{} is not certified symmetric under exchanging its identical legs {} and {}",
+                            rule.name,
+                            a + 1,
+                            b + 1
+                        )));
+                    }
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    /// Whether the complete numerator of interaction `rule_id` (every color x
+    /// Lorentz channel times its coupling) is invariant under exchanging legs
+    /// `a` and `b` of one species, for arbitrary leg data. Certified once per
+    /// (rule, leg pair) for this generator and cached; anything that cannot
+    /// be certified exactly is `false`.
+    pub(crate) fn leg_exchange_symmetric(
+        &self,
+        rule_id: VertexRuleId,
+        a: usize,
+        b: usize,
+    ) -> Result<bool, GenerationError> {
+        let key = (rule_id, a.min(b), a.max(b));
+        if let Some(certified) = self.numerators.leg_exchanges.read().unwrap().get(&key) {
+            return Ok(*certified);
+        }
+        let certified = self.certify_leg_exchange(key.0, key.1, key.2)?;
+        self.numerators
+            .leg_exchanges
+            .write()
+            .unwrap()
+            .insert(key, certified);
+        Ok(certified)
+    }
+
+    /// The legs get distinct edges, half-edges and momenta `Q(edge)`, so the
+    /// exchanged instantiation swaps every index and momentum of `a` and `b`
+    /// at once. All legs are sinks; a source leg only negates its own momentum,
+    /// which a generic `Q(edge)` already covers. The difference of the two
+    /// numerators must vanish after expansion, or after the color algebra of
+    /// `grouping::exact_color_zero` with the exact zero test; samples never
+    /// certify.
+    fn certify_leg_exchange(
+        &self,
+        rule_id: VertexRuleId,
+        a: usize,
+        b: usize,
+    ) -> Result<bool, GenerationError> {
+        let rule = self.model.vertex_rule_by_id(rule_id)?;
+        if a == b {
+            return Ok(true);
+        }
+        match (rule.particles.get(a), rule.particles.get(b)) {
+            (Some(left), Some(right)) if left == right => {}
+            _ => return Ok(false),
+        }
+        let legs = rule
+            .particles
+            .iter()
+            .enumerate()
+            .map(|(leg, particle)| {
+                let particle = self.model.particle_by_id(*particle)?;
+                Ok(NumeratorHalfEdge {
+                    edge: leg,
+                    hedge: 2 * leg + 1,
+                    flow: Flow::Sink,
+                    spin: particle.spin,
+                    color: particle.color,
+                })
+            })
+            .collect::<Result<Vec<_>, GenerationError>>()?;
+        let mut exchanged = legs.clone();
+        exchanged.swap(a, b);
+        let numerator = |legs: &[NumeratorHalfEdge]| {
+            self.interaction_expression(
+                rule_id,
+                &NumeratorInstantiation {
+                    owner: NumeratorOwner::Vertex(0),
+                    legs,
+                    reversed: false,
+                },
+            )
+        };
+        let difference = (numerator(&legs)? - numerator(&exchanged)?).expand();
+        if difference.is_zero() {
+            return Ok(true);
+        }
+        let Ok(difference) = NumeratorInterface::admit(difference, None) else {
+            return Ok(false);
+        };
+        let Ok(simplified) = difference.simplify_algebra(&AlgebraSettings {
+            color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+            contract: AlgebraContraction::None,
+            ..Default::default()
+        }) else {
+            return Ok(false);
+        };
+        Ok(simplified
+            .expression()
+            .expand()
+            .collect_factors()
+            .check_zero_with(&ZeroTestSettings::default().exact_fallback(true))
+            .is_true())
+    }
+}
+
+/// Same vertices, interactions, edges, endpoints and species; slots are
+/// compared by `Generator::input_frame_mismatch`.
+fn same_structure_up_to_slots(left: &FeynmanDiagram, right: &FeynmanDiagram) -> bool {
     let edges = |diagram: &FeynmanDiagram| {
         diagram
             .edges()
-            .map(|(id, ends, edge)| {
-                (
-                    id,
-                    ends.source,
-                    ends.target,
-                    edge.particle,
-                    ends.source.map(|_| edge.source_slot()),
-                    ends.target.map(|_| edge.target_slot()),
-                )
-            })
+            .map(|(id, ends, edge)| (id, ends.source, ends.target, edge.particle, edge.directed))
             .collect::<Vec<_>>()
     };
     left.vertices()
@@ -336,6 +570,47 @@ fn same_structure(left: &FeynmanDiagram, right: &FeynmanDiagram) -> bool {
             .vertices()
             .map(|(id, vertex)| (id, vertex.interaction)))
         && edges(left) == edges(right)
+}
+
+/// Interaction slot of every attached half-edge, per vertex.
+fn slot_tables(
+    diagram: &FeynmanDiagram,
+) -> BTreeMap<VertexId, BTreeMap<(EdgeId, DiagramEndpoint), usize>> {
+    let mut tables = BTreeMap::<_, BTreeMap<_, _>>::new();
+    for (edge, ends, data) in diagram.edges() {
+        if let Some(vertex) = ends.source {
+            tables
+                .entry(vertex)
+                .or_default()
+                .insert((edge, DiagramEndpoint::Source), data.source_slot().0);
+        }
+        if let Some(vertex) = ends.target {
+            tables
+                .entry(vertex)
+                .or_default()
+                .insert((edge, DiagramEndpoint::Target), data.target_slot().0);
+        }
+    }
+    tables
+}
+
+/// Transpositions whose product is the permutation `slot -> image`: each
+/// cycle `(c_0 c_1 .. c_k)` is `(c_0 c_k) .. (c_0 c_1)`. They stay inside one
+/// species because the permutation does.
+fn transpositions(permutation: &BTreeMap<usize, usize>) -> Vec<(usize, usize)> {
+    let mut seen = BTreeSet::new();
+    let mut result = Vec::new();
+    for start in permutation.keys() {
+        if !seen.insert(*start) {
+            continue;
+        }
+        let mut next = permutation[start];
+        while next != *start && seen.insert(next) {
+            result.push((*start, next));
+            next = permutation[&next];
+        }
+    }
+    result
 }
 
 /// Same vertices, edges, edge endpoints and edge directedness. Species,
@@ -493,5 +768,131 @@ impl SpinorSymbols {
             }
         });
         (!unsupported).then_some(result)
+    }
+}
+
+#[cfg(test)]
+mod leg_exchange_tests {
+    use feynkit_model::Model;
+
+    use super::*;
+
+    const QCD: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/orientation/qcd_l5/model.json"
+    );
+
+    fn qcd_definition() -> serde_json::Value {
+        serde_json::from_str(&std::fs::read_to_string(QCD).unwrap()).unwrap()
+    }
+
+    fn identical_pairs(generator: &Generator) -> Vec<(String, usize, usize, bool)> {
+        let mut pairs = Vec::new();
+        for (index, rule) in generator.model.vertex_rules().iter().enumerate() {
+            let id = generator.model.vertex_rule_id_at(index).unwrap();
+            for a in 0..rule.particles.len() {
+                for b in a + 1..rule.particles.len() {
+                    if rule.particles[a] == rule.particles[b] {
+                        let certified = generator.leg_exchange_symmetric(id, a, b).unwrap();
+                        pairs.push((rule.name.clone(), a, b, certified));
+                    }
+                }
+            }
+        }
+        pairs
+    }
+
+    #[test]
+    fn background_qcd_rules_are_certified_symmetric() {
+        let generator = Generator::new(Model::from_json(&qcd_definition().to_string()).unwrap());
+        let pairs = identical_pairs(&generator);
+        // V_QQQ 3, V_BQQ 1, V_QQQQ 6, V_BQQQ 3, V_BBQQ 2, V_ccBB 1.
+        assert_eq!(pairs.len(), 16, "{pairs:?}");
+        assert!(pairs.iter().all(|pair| pair.3), "{pairs:?}");
+        // Cached: the second lookup does not recompute.
+        let cached = generator.numerators.leg_exchanges.read().unwrap().len();
+        assert_eq!(cached, 16);
+        identical_pairs(&generator);
+        assert_eq!(generator.numerators.leg_exchanges.read().unwrap().len(), 16);
+    }
+
+    #[test]
+    fn non_identical_or_out_of_range_legs_are_not_certified() {
+        let generator = Generator::new(Model::from_json(&qcd_definition().to_string()).unwrap());
+        let rule = generator.model.vertex_rule_id("V_BBQQ").unwrap();
+        assert!(!generator.leg_exchange_symmetric(rule, 0, 2).unwrap());
+        assert!(!generator.leg_exchange_symmetric(rule, 1, 7).unwrap());
+    }
+
+    /// V_BBQQ with its third color x Lorentz channel removed: exchanging the
+    /// two B legs maps the second channel onto the missing one.
+    fn asymmetric_bbqq() -> Model {
+        let mut definition = qcd_definition();
+        let rule = definition["vertex_rules"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|rule| rule["name"] == "V_BBQQ")
+            .unwrap();
+        rule["couplings"][2][2] = serde_json::Value::Null;
+        Model::from_json(&definition.to_string()).unwrap()
+    }
+
+    #[test]
+    fn asymmetric_four_point_rule_is_not_certified() {
+        let generator = Generator::new(asymmetric_bbqq());
+        let rule = generator.model.vertex_rule_id("V_BBQQ").unwrap();
+        assert!(!generator.leg_exchange_symmetric(rule, 0, 1).unwrap());
+        assert!(!generator.leg_exchange_symmetric(rule, 2, 3).unwrap());
+        // The other rules are untouched.
+        let other = generator.model.vertex_rule_id("V_QQQQ").unwrap();
+        assert!(generator.leg_exchange_symmetric(other, 0, 3).unwrap());
+    }
+
+    #[test]
+    fn sign_flipping_exchange_is_not_certified() {
+        // f(1,2,a) f(3,4,a) g(1,2) g(3,4) is odd under B <-> B: an exchange
+        // that flips the sign must not be accepted.
+        let mut definition = qcd_definition();
+        definition["lorentz_structures"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({
+                "name": "SYM",
+                "spins": [3, 3, 3, 3],
+                "structure": "Metric(idx(1,1),idx(1,2))*Metric(idx(1,3),idx(1,4))"
+            }));
+        let rule = definition["vertex_rules"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|rule| rule["name"] == "V_BBQQ")
+            .unwrap();
+        rule["lorentz_structures"] = serde_json::json!(["SYM"]);
+        rule["couplings"] = serde_json::json!([["gs2_i"], [null], [null]]);
+        let generator = Generator::new(Model::from_json(&definition.to_string()).unwrap());
+        let rule = generator.model.vertex_rule_id("V_BBQQ").unwrap();
+        assert!(!generator.leg_exchange_symmetric(rule, 0, 1).unwrap());
+    }
+
+    #[test]
+    fn transpositions_compose_to_the_permutation() {
+        // (0 2 3) and the fixed point 1, and a 2-cycle (4 5).
+        let permutation = BTreeMap::from([(0, 2), (1, 1), (2, 3), (3, 0), (4, 5), (5, 4)]);
+        let pairs = transpositions(&permutation);
+        assert_eq!(pairs.len(), 3);
+        // Applying the transpositions in order maps every slot to its image.
+        for (slot, image) in &permutation {
+            let mapped = pairs.iter().fold(*slot, |current, (a, b)| {
+                if current == *a {
+                    *b
+                } else if current == *b {
+                    *a
+                } else {
+                    current
+                }
+            });
+            assert_eq!(mapped, *image, "slot {slot}");
+        }
     }
 }

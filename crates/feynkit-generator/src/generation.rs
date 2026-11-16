@@ -1373,6 +1373,9 @@ pub(crate) struct Generator {
 struct NumeratorCache {
     interactions: RwLock<HashMap<InteractionNumeratorKey, SymbolicTensor<PartialStructure>>>,
     propagators: RwLock<HashMap<PropagatorNumeratorKey, SymbolicTensor<PartialStructure>>>,
+    /// Certified exchange symmetry of two identical legs `(rule, a, b)`,
+    /// `a < b`, of an interaction numerator (see `orientation`).
+    leg_exchanges: RwLock<HashMap<(VertexRuleId, usize, usize), bool>>,
 }
 
 #[derive(PartialEq, Eq, Hash)]
@@ -3417,6 +3420,23 @@ impl Generator {
         if let Some(numerator) = self.numerators.interactions.read().unwrap().get(&key) {
             return Ok(numerator.clone());
         }
+        let numerator = self.interaction_expression(rule_id, instantiation)?;
+        let numerator = NumeratorInterface::admit(numerator, None)?;
+        self.numerators
+            .interactions
+            .write()
+            .unwrap()
+            .insert(key, numerator.clone());
+        Ok(numerator)
+    }
+
+    /// The complete numerator of interaction `rule_id`, every color x Lorentz
+    /// channel times its coupling, localized to `instantiation`.
+    fn interaction_expression(
+        &self,
+        rule_id: VertexRuleId,
+        instantiation: &NumeratorInstantiation<'_>,
+    ) -> Result<Atom, GenerationError> {
         let rule = self.model.vertex_rule_by_id(rule_id)?;
         let mut terms = Vec::new();
         for (color_index, color) in rule.color_structures.iter().enumerate() {
@@ -3436,18 +3456,11 @@ impl Generator {
                 }
             }
         }
-        let numerator = if terms.is_empty() {
+        Ok(if terms.is_empty() {
             Atom::one()
         } else {
             Atom::add_many(terms)
-        };
-        let numerator = NumeratorInterface::admit(numerator, None)?;
-        self.numerators
-            .interactions
-            .write()
-            .unwrap()
-            .insert(key, numerator.clone());
-        Ok(numerator)
+        })
     }
 
     fn edge_numerator(
