@@ -50,6 +50,11 @@ use crate::{
 #[path = "main_generation_regressions.rs"]
 mod main_generation_regressions;
 
+#[path = "orientation.rs"]
+mod orientation;
+
+pub use orientation::OrientationSumVerdict;
+
 #[derive(Debug, Error)]
 pub enum GenerationError {
     #[error(transparent)]
@@ -208,6 +213,19 @@ pub struct GenerationReport {
     pub retained_count: usize,
     pub zero_numerator_count: usize,
     pub completed: bool,
+    /// Diagrams removed because their closed fermion loops sum to an exact
+    /// zero over all orientations. Only counted with
+    /// [`GenerationOptions::cancel_closed_loop_orientations`].
+    #[serde(default, skip_serializing_if = "is_zero_count")]
+    pub orientation_zero_count: usize,
+    /// Diagrams with closed fermion loops that the orientation test could not
+    /// certify and therefore retained.
+    #[serde(default, skip_serializing_if = "is_zero_count")]
+    pub orientation_test_skipped: usize,
+}
+
+fn is_zero_count(count: &usize) -> bool {
+    *count == 0
 }
 
 #[derive(Debug, Clone)]
@@ -1355,6 +1373,16 @@ pub trait FeynmanDiagramRulesExt {
     /// Callers with an explicit projector retain that supplied expression.
     fn external_state_projector(&self)
     -> Result<SymbolicTensor<PartialStructure>, GenerationError>;
+
+    /// Test whether this diagram's numerator, summed over both orientations
+    /// of each closed non-ghost fermion loop in its own frame, vanishes
+    /// exactly. This is the per-diagram test behind
+    /// [`GenerationOptions::cancel_closed_loop_orientations`]; only the
+    /// options' numerator prefactor and projector policy are used.
+    fn closed_loop_orientation_sum(
+        &self,
+        options: &GenerationOptions,
+    ) -> Result<OrientationSumVerdict, GenerationError>;
 }
 
 impl FeynmanDiagramRulesExt for FeynmanDiagram {
@@ -1401,6 +1429,24 @@ impl FeynmanDiagramRulesExt for FeynmanDiagram {
             }
         }
         Ok(NumeratorInterface::admit(projector, None)?)
+    }
+
+    fn closed_loop_orientation_sum(
+        &self,
+        options: &GenerationOptions,
+    ) -> Result<OrientationSumVerdict, GenerationError> {
+        // Sewn cross-section legs share their connection.
+        let mut connections = BTreeSet::new();
+        let generation_type = if self
+            .edges()
+            .filter_map(|(_, _, edge)| edge.external.as_ref())
+            .all(|external| connections.insert(external.connection))
+        {
+            GenerationType::Amplitude
+        } else {
+            GenerationType::CrossSection
+        };
+        Generator::new(self.model_arc()).orientation_sum_verdict_in(self, generation_type, options)
     }
 }
 
@@ -1870,6 +1916,69 @@ impl Generator {
             comparison_diagrams.push(pair.comparison);
             representatives.push((pair.representative, pair.reversed_edges));
         }
+        // Closed-loop orientation sums: after naming and selection, so names
+        // stay stable, and before grouping, which skips zero tests for `None`.
+        let mut orientation_zero_count = 0;
+        let mut orientation_test_skipped = 0;
+        if options.cancel_closed_loop_orientations && !options.cancellation_requested() {
+            let total = comparison_diagrams.len();
+            options.report_progress("orientation_sum_zero", 0, Some(total));
+            let checked = Mutex::new(0);
+            let verdict = |diagram: &FeynmanDiagram| {
+                if options.cancellation_requested() {
+                    return Ok(None);
+                }
+                let verdict = self.orientation_sum_verdict_in(diagram, generation_type, options)?;
+                let mut count = checked.lock().unwrap();
+                *count += 1;
+                options.report_progress("orientation_sum_zero", *count, Some(total));
+                Ok::<_, GenerationError>(Some(verdict))
+            };
+            #[cfg(target_arch = "wasm32")]
+            let verdicts = comparison_diagrams
+                .iter()
+                .map(verdict)
+                .collect::<Result<Vec<_>, _>>()?;
+            #[cfg(not(target_arch = "wasm32"))]
+            let verdicts = if let Some(pool) = &pool {
+                pool.install(|| {
+                    comparison_diagrams
+                        .par_iter()
+                        .with_min_len(1)
+                        .with_max_len(1)
+                        .map(verdict)
+                        .collect::<Result<Vec<_>, _>>()
+                })?
+            } else {
+                comparison_diagrams
+                    .iter()
+                    .map(verdict)
+                    .collect::<Result<Vec<_>, _>>()?
+            };
+            if options.cancellation_requested() {
+                completed = false;
+            }
+            let mut retained_comparisons = Vec::with_capacity(comparison_diagrams.len());
+            let mut retained_representatives = Vec::with_capacity(representatives.len());
+            for ((comparison, representative), verdict) in comparison_diagrams
+                .into_iter()
+                .zip(representatives)
+                .zip(verdicts)
+            {
+                match verdict {
+                    Some(OrientationSumVerdict::Zero) => {
+                        orientation_zero_count += 1;
+                        continue;
+                    }
+                    Some(OrientationSumVerdict::Skipped(_)) => orientation_test_skipped += 1,
+                    _ => {}
+                }
+                retained_comparisons.push(comparison);
+                retained_representatives.push(representative);
+            }
+            comparison_diagrams = retained_comparisons;
+            representatives = retained_representatives;
+        }
         let grouping = if options.cancellation_requested() {
             completed = false;
             &NumeratorGrouping::None
@@ -1994,6 +2103,8 @@ impl Generator {
                 retained_count: diagrams.len(),
                 zero_numerator_count,
                 completed,
+                orientation_zero_count,
+                orientation_test_skipped,
             },
             diagrams,
             groups,
@@ -2833,11 +2944,21 @@ impl Generator {
         graph: &Graph<ColoredNode, EdgeColor>,
         include_ghosts: bool,
     ) -> Result<usize, GenerationError> {
+        Ok(self.closed_fermion_loops(graph, include_ghosts)?.len())
+    }
+
+    /// Edge sets of the closed, non-branching fermion components, in order of
+    /// their first vertex. Ghost lines are included only on request.
+    fn closed_fermion_loops(
+        &self,
+        graph: &Graph<ColoredNode, EdgeColor>,
+        include_ghosts: bool,
+    ) -> Result<Vec<Vec<usize>>, GenerationError> {
         let mut adjacency = vec![Vec::new(); graph.nodes().len()];
         let mut degrees = vec![0; graph.nodes().len()];
         // Build adjacency using only the selected Grassmann edges. A self-loop
         // contributes degree two.
-        for edge in graph.edges() {
+        for (edge_id, edge) in graph.edges().iter().enumerate() {
             let particle = self.model.particle_by_id(edge.data.particle)?;
             if !(particle.is_fermion() && !particle.is_ghost()
                 || include_ghosts && particle.is_ghost())
@@ -2847,12 +2968,12 @@ impl Generator {
             let (left, right) = edge.vertices;
             if left == right {
                 degrees[left] += 2;
-                adjacency[left].push(right);
+                adjacency[left].push((edge_id, right));
             } else {
                 degrees[left] += 1;
                 degrees[right] += 1;
-                adjacency[left].push(right);
-                adjacency[right].push(left);
+                adjacency[left].push((edge_id, right));
+                adjacency[right].push((edge_id, left));
             }
         }
 
@@ -2863,27 +2984,30 @@ impl Generator {
         }
 
         let mut visited = vec![false; graph.nodes().len()];
-        let mut closed_loops = 0;
+        let mut closed_loops = Vec::new();
         for start in 0..graph.nodes().len() {
             if degrees[start] == 0 || visited[start] {
                 continue;
             }
             let mut stack = vec![start];
             let mut closed = true;
+            let mut edges = BTreeSet::new();
             while let Some(vertex) = stack.pop() {
                 if visited[vertex] {
                     continue;
                 }
                 visited[vertex] = true;
                 closed &= degrees[vertex] == 2;
-                stack.extend(
-                    adjacency[vertex]
-                        .iter()
-                        .copied()
-                        .filter(|neighbor| !visited[*neighbor]),
-                );
+                for (edge, neighbor) in &adjacency[vertex] {
+                    edges.insert(*edge);
+                    if !visited[*neighbor] {
+                        stack.push(*neighbor);
+                    }
+                }
             }
-            closed_loops += usize::from(closed);
+            if closed {
+                closed_loops.push(edges.into_iter().collect());
+            }
         }
         Ok(closed_loops)
     }

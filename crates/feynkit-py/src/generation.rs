@@ -964,6 +964,12 @@ impl PyProcess {
     /// filter_zero_color : bool, optional
     ///     Discard diagrams whose color algebra proves the numerator is zero,
     ///     before numerator grouping. Defaults to False, independently of grouping.
+    /// cancel_closed_loop_orientations : bool, optional
+    ///     Discard diagrams whose numerator, summed over both orientations of each
+    ///     closed non-ghost fermion loop in the diagram's own frame, is exactly zero
+    ///     (Furry's theorem, orientation-summed color zeros, and self-cancelling
+    ///     graphs that numerator grouping keeps). Survivors keep their names and
+    ///     factors. Defaults to False; the setting is not serialized.
     /// progress : {"auto"}, Callable[[GenerationProgress], None] or None, optional
     ///     Defaults to "auto": show progress when marimo.running_in_notebook()
     ///     is true, with stage, counts, and elapsed time. None disables progress.
@@ -982,9 +988,9 @@ impl PyProcess {
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
     ///     KeyboardInterrupt, stop generation and propagate to the caller.
-    #[pyo3(signature = (*, loops=OrderRangeInput::default(), symmetrize_initial=false, symmetrize_final=None, symmetrize_left_right=false, symmetrize_external_fermions=false, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=false, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
+    #[pyo3(signature = (*, loops=OrderRangeInput::default(), symmetrize_initial=false, symmetrize_final=None, symmetrize_left_right=false, symmetrize_external_fermions=false, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=false, cancel_closed_loop_orientations=false, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
     #[pyo3(
-        text_signature = "($self, *, loops=0, symmetrize_initial=False, symmetrize_final=None, symmetrize_left_right=False, symmetrize_external_fermions=False, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=False, cancellation_token=None, progress='auto', filter=None)"
+        text_signature = "($self, *, loops=0, symmetrize_initial=False, symmetrize_final=None, symmetrize_left_right=False, symmetrize_external_fermions=False, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=False, cancel_closed_loop_orientations=False, cancellation_token=None, progress='auto', filter=None)"
     )]
     #[allow(clippy::too_many_arguments)]
     fn generate_diagrams(
@@ -1027,6 +1033,7 @@ impl PyProcess {
         projector: Option<PythonExpression>,
         numerator_grouping: Option<PyNumeratorGrouping>,
         filter_zero_color: bool,
+        cancel_closed_loop_orientations: bool,
         cancellation_token: Option<PyCancellationToken>,
         #[gen_stub(override_type(type_repr = "typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None", imports = ("collections.abc", "typing")))]
         progress: Option<Py<PyAny>>,
@@ -1069,6 +1076,7 @@ impl PyProcess {
             projector,
             numerator_grouping,
             filter_zero_color,
+            cancel_closed_loop_orientations,
             cancellation_token,
         )?
         .inner;
@@ -1174,6 +1182,12 @@ impl PyProcess {
     /// filter_zero_color : bool, optional
     ///     Discard diagrams whose color algebra proves the numerator is zero,
     ///     before numerator grouping. Defaults to False, independently of grouping.
+    /// cancel_closed_loop_orientations : bool, optional
+    ///     Discard diagrams whose numerator, summed over both orientations of each
+    ///     closed non-ghost fermion loop in the diagram's own frame, is exactly zero
+    ///     (Furry's theorem, orientation-summed color zeros, and self-cancelling
+    ///     graphs that numerator grouping keeps). Survivors keep their names and
+    ///     factors. Defaults to False; the setting is not serialized.
     /// progress : {"auto"}, Callable[[GenerationProgress], None] or None, optional
     ///     Defaults to "auto": show progress when marimo.running_in_notebook()
     ///     is true, with stage, counts, and elapsed time. None disables progress.
@@ -1192,9 +1206,9 @@ impl PyProcess {
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
     ///     KeyboardInterrupt, stop generation and propagate to the caller.
-    #[pyo3(signature = (*, dimension=None, real=None, loops=OrderRangeInput::default(), symmetrize_initial=false, symmetrize_final=None, symmetrize_left_right=false, symmetrize_external_fermions=false, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=false, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
+    #[pyo3(signature = (*, dimension=None, real=None, loops=OrderRangeInput::default(), symmetrize_initial=false, symmetrize_final=None, symmetrize_left_right=false, symmetrize_external_fermions=false, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=false, cancel_closed_loop_orientations=false, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
     #[pyo3(
-        text_signature = "($self, *, dimension=None, real=None, loops=0, symmetrize_initial=False, symmetrize_final=None, symmetrize_left_right=False, symmetrize_external_fermions=False, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=False, cancellation_token=None, progress='auto', filter=None)"
+        text_signature = "($self, *, dimension=None, real=None, loops=0, symmetrize_initial=False, symmetrize_final=None, symmetrize_left_right=False, symmetrize_external_fermions=False, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=False, cancel_closed_loop_orientations=False, cancellation_token=None, progress='auto', filter=None)"
     )]
     #[allow(clippy::too_many_arguments)]
     fn generate_amplitude(
@@ -1239,6 +1253,7 @@ impl PyProcess {
         projector: Option<PythonExpression>,
         numerator_grouping: Option<PyNumeratorGrouping>,
         filter_zero_color: bool,
+        cancel_closed_loop_orientations: bool,
         cancellation_token: Option<PyCancellationToken>,
         #[gen_stub(override_type(type_repr = "typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None", imports = ("collections.abc", "typing")))]
         progress: Option<Py<PyAny>>,
@@ -1281,6 +1296,7 @@ impl PyProcess {
             projector,
             numerator_grouping,
             filter_zero_color,
+            cancel_closed_loop_orientations,
             cancellation_token,
         )?
         .inner;
@@ -1393,6 +1409,12 @@ impl PyProcess {
     /// filter_zero_color : bool, optional
     ///     Discard diagrams whose color algebra proves the numerator is zero,
     ///     before numerator grouping. Defaults to False, independently of grouping.
+    /// cancel_closed_loop_orientations : bool, optional
+    ///     Discard diagrams whose numerator, summed over both orientations of each
+    ///     closed non-ghost fermion loop in the diagram's own frame, is exactly zero
+    ///     (Furry's theorem, orientation-summed color zeros, and self-cancelling
+    ///     graphs that numerator grouping keeps). Survivors keep their names and
+    ///     factors. Defaults to False; the setting is not serialized.
     /// progress : {"auto"}, Callable[[GenerationProgress], None] or None, optional
     ///     Defaults to "auto": show progress when marimo.running_in_notebook()
     ///     is true, with stage, counts, and elapsed time. None disables progress.
@@ -1411,9 +1433,9 @@ impl PyProcess {
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
     ///     KeyboardInterrupt, stop generation and propagate to the caller.
-    #[pyo3(signature = (*, loops=OrderRangeInput::default(), symmetrize_initial=false, symmetrize_final=None, symmetrize_left_right=false, symmetrize_external_fermions=false, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=false, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
+    #[pyo3(signature = (*, loops=OrderRangeInput::default(), symmetrize_initial=false, symmetrize_final=None, symmetrize_left_right=false, symmetrize_external_fermions=false, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=false, cancel_closed_loop_orientations=false, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
     #[pyo3(
-        text_signature = "($self, *, loops=0, symmetrize_initial=False, symmetrize_final=None, symmetrize_left_right=False, symmetrize_external_fermions=False, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=False, cancellation_token=None, progress='auto', filter=None)"
+        text_signature = "($self, *, loops=0, symmetrize_initial=False, symmetrize_final=None, symmetrize_left_right=False, symmetrize_external_fermions=False, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, filter_zero_color=False, cancel_closed_loop_orientations=False, cancellation_token=None, progress='auto', filter=None)"
     )]
     #[allow(clippy::too_many_arguments)]
     fn generate_cross_section(
@@ -1456,6 +1478,7 @@ impl PyProcess {
         projector: Option<PythonExpression>,
         numerator_grouping: Option<PyNumeratorGrouping>,
         filter_zero_color: bool,
+        cancel_closed_loop_orientations: bool,
         cancellation_token: Option<PyCancellationToken>,
         #[gen_stub(override_type(type_repr = "typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None", imports = ("collections.abc", "typing")))]
         progress: Option<Py<PyAny>>,
@@ -1498,6 +1521,7 @@ impl PyProcess {
             projector,
             numerator_grouping,
             filter_zero_color,
+            cancel_closed_loop_orientations,
             cancellation_token,
         )?
         .inner;
@@ -1949,6 +1973,7 @@ impl GenerationSettings {
         projector: Option<PythonExpression>,
         numerator_grouping: Option<PyNumeratorGrouping>,
         filter_zero_color: bool,
+        cancel_closed_loop_orientations: bool,
         cancellation_token: Option<PyCancellationToken>,
     ) -> PyResult<Self> {
         // Ported from GammaLoop's CLI policy. Explicit None disables a default;
@@ -2028,7 +2053,8 @@ impl GenerationSettings {
             .symmetrize_external_fermions(symmetrize_external_fermions)
             .allow_self_loops(allow_self_loops)
             .allow_zero_flow_edges(allow_zero_flow_edges)
-            .filter_zero_color(filter_zero_color);
+            .filter_zero_color(filter_zero_color)
+            .cancel_closed_loop_orientations(cancel_closed_loop_orientations);
         if let Some(value) = threads {
             inner = inner.threads(value);
         }
@@ -2170,7 +2196,8 @@ pub struct PyGenerationProgress {
 #[pymethods]
 impl PyGenerationProgress {
     /// Pipeline stage: topologies, topology_filters, interactions,
-    /// interaction_filters, numerators, selection, filter_zero_color, grouping_preparation,
+    /// interaction_filters, numerators, selection, orientation_sum_zero (only with
+    /// cancel_closed_loop_orientations), filter_zero_color, grouping_preparation,
     /// grouping_samples, grouping_comparison, grouping, complete or cancelled.
     ///
     /// Examples
@@ -2309,6 +2336,32 @@ impl PyGenerationReport {
     fn zero_numerator_count(&self) -> usize {
         self.inner.zero_numerator_count
     }
+    /// Return the number of diagrams removed because their closed fermion loops
+    /// cancel exactly when summed over both orientations.
+    ///
+    /// Always zero unless ``cancel_closed_loop_orientations=True``.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``GenerationReport`` class example:
+    ///
+    /// >>> removed_orientations = report.orientation_zero_count
+    #[getter]
+    fn orientation_zero_count(&self) -> usize {
+        self.inner.orientation_zero_count
+    }
+    /// Return the number of diagrams with closed fermion loops that the
+    /// orientation test could not certify and therefore retained.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``GenerationReport`` class example:
+    ///
+    /// >>> unchecked = report.orientation_test_skipped
+    #[getter]
+    fn orientation_test_skipped(&self) -> usize {
+        self.inner.orientation_test_skipped
+    }
     /// Report whether generation finished without cancellation.
     ///
     /// Examples
@@ -2329,8 +2382,18 @@ impl PyGenerationReport {
     ///
     /// >>> print(result.report)
     fn __repr__(&self) -> String {
+        // Orientation counters appear only when the opt-in test acted.
+        let orientation =
+            if self.inner.orientation_zero_count > 0 || self.inner.orientation_test_skipped > 0 {
+                format!(
+                    ", orientation_zero_count={}, orientation_test_skipped={}",
+                    self.inner.orientation_zero_count, self.inner.orientation_test_skipped,
+                )
+            } else {
+                String::new()
+            };
         format!(
-            "GenerationReport(topology_count={}, interaction_assignment_count={}, retained_count={}, zero_numerator_count={}, completed={})",
+            "GenerationReport(topology_count={}, interaction_assignment_count={}, retained_count={}, zero_numerator_count={}{orientation}, completed={})",
             self.inner.topology_count,
             self.inner.interaction_assignment_count,
             self.inner.retained_count,
@@ -2883,6 +2946,7 @@ fn run_generation(
                             "interaction_filters" => "Filtering interactions",
                             "numerators" => "Constructing numerators",
                             "selection" => "Selecting diagrams",
+                            "orientation_sum_zero" => "Cancelling closed-loop orientations",
                             "filter_zero_color" => "Filtering zero-color diagrams",
                             "grouping_preparation" => "Preparing numerators for grouping",
                             "grouping_samples" => "Sampling numerators for grouping",
