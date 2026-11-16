@@ -78,6 +78,35 @@ impl TaylorExpansion {
         Ok(expansion.to_atom())
     }
 
+    /// Every Taylor coefficient `[λ^0] .. [λ^degree]` of `expression`, from the
+    /// same `series` and with the same regularity checks as [`Self::polynomial`]
+    /// (so `Σ_i λ^i orders[i]` is that polynomial). The coefficients are the
+    /// series' own, unexpanded.
+    pub fn orders(&self, expression: &Atom) -> Result<Vec<Atom>> {
+        let expansion = expression
+            .series(self.parameter, 0, self.degree)
+            .wrap_err("could not Taylor-expand the explicit R* expression")?;
+        let mut orders = vec![Atom::Zero; self.degree + 1];
+        for (power, coefficient) in expansion.terms() {
+            ensure!(
+                coefficient.is_zero() || (power >= 0 && power.is_integer()),
+                "R* Taylor expansion requires an expression regular at zero; found power {power}"
+            );
+            if coefficient.is_zero() {
+                continue;
+            }
+            let index = power
+                .numerator()
+                .to_i64()
+                .and_then(|index| usize::try_from(index).ok())
+                .ok_or_else(|| eyre::eyre!("an R* Taylor order {power} is not a small integer"))?;
+            if index <= self.degree {
+                orders[index] = &orders[index] + coefficient;
+            }
+        }
+        Ok(orders)
+    }
+
     /// Truncate the complete product or sum, then set its parameter to one.
     pub fn evaluate(&self, expression: &Atom) -> Result<Atom> {
         Ok(self
@@ -175,6 +204,25 @@ mod tests {
             .replace(symbol!("I2"))
             .with(parse!("1/eps-L"));
         assert_equal(taylor.evaluate(&prepared).unwrap(), parse!("-z*M2/eps"));
+    }
+
+    #[test]
+    fn orders_reassemble_the_series() {
+        let taylor = TaylorExpansion::new(symbol!("lambda"), 2);
+        let lambda = Atom::var(symbol!("lambda"));
+        // Two compensated propagators with a raised power and a numerator.
+        let product = parse!("(q2 + 2*lambda*qp + lambda^2*p2 + mu2)^-2*(k2 + lambda*kp)^-1*(a + lambda*b + lambda^3*c)");
+        let compensated = taylor.compensate_mass(&product, symbol!("mu2"), &parse!("M2"));
+        let orders = taylor.orders(&compensated).unwrap();
+        assert_eq!(orders.len(), 3);
+        let reassembled = orders
+            .iter()
+            .enumerate()
+            .fold(Atom::Zero, |sum, (power, order)| sum + lambda.pow(power as i64) * order);
+        assert_equal(reassembled, taylor.polynomial(&compensated).unwrap());
+        // Regularity errors propagate.
+        assert!(taylor.orders(&parse!("1/lambda + a")).is_err());
+        assert!(taylor.orders(&parse!("lambda^(1/2)")).is_err());
     }
 
     #[test]

@@ -2102,6 +2102,52 @@ pub(crate) fn vakint_rename(numerator: AtomView<'_>) -> Atom {
         ))
 }
 
+/// The vacuum frame of one topology key: the per-term rebuild of
+/// [`to_vakint_integrand`] without a numerator (the remainder boundary).
+pub(crate) struct TermFrame {
+    /// The term's integral exactly as [`to_vakint_integrand`] leaves it:
+    /// rebuilt (two-bonds merged), routed by the momentum solution and in
+    /// vakint symbols (`VakintTerm.integral`).
+    pub(crate) integral: Atom,
+    /// The loop count of the rebuilt graph (the power of the additional
+    /// normalisation).
+    pub(crate) nloops: usize,
+    solution: VakintMomentumSolution,
+}
+
+impl TermFrame {
+    /// The image of the edge momentum `Q(edge)` (without a slot) under the
+    /// frame's momentum solution, in the vacuum loop momenta `k(l)` of
+    /// [`Self::integral`]; `None` when the solution does not determine it.
+    pub(crate) fn loop_image(&self, edge: usize) -> Option<Atom> {
+        let momentum = function!(GS.emr_mom, edge);
+        if self.solution.free_variables.contains(&momentum) {
+            return None;
+        }
+        let image = momentum.replace_multiple(&self.solution.replacements);
+        (image != momentum).then(|| vakint_integral_rename(&image))
+    }
+}
+
+/// [`TermFrame`] of the topology key `topology` (`topo(prop(..))`, the key
+/// [`TermRewrites::denominator_image`] returns).
+pub(crate) fn term_frame(topology: &Atom) -> Result<TermFrame> {
+    let (propagator_pattern, momentum_pattern, add_additional_args) = term_patterns();
+    let (graph, _, _) = rebuilt_vacuum_graph(topology, &propagator_pattern);
+    let integral = function!(vakint::symbols::S.topo, rebuilt_propagators(&graph));
+    let nloops = graph.cyclotomatic_number(&graph.full_filter());
+    let (system, variables) = momentum_system(&graph, &momentum_pattern);
+    let solution = VakintMomentumSolution::solve(&system, &variables, &add_additional_args)
+        .wrap_err("could not solve momentum system for Vakint integrand")?;
+    let integral = solution.rewrite_integral(&integral, &add_additional_args);
+    solution.ensure_free_variables_eliminated(0, "integral", &integral, &add_additional_args)?;
+    Ok(TermFrame {
+        integral: vakint_integral_rename(&integral),
+        nloops,
+        solution,
+    })
+}
+
 struct VakintMomentumSolution {
     replacements: Vec<Replacement>,
     free_variables: Vec<Atom>,
