@@ -180,6 +180,9 @@ pub(crate) struct PLibraryHandle {
     pub dimension: Atom,
     /// The step-cache program of this library (one for every loop count).
     pub cache: OrderedCacheProgram,
+    /// vk5l WP4: the package's explicit key expressions
+    /// (`<package>/relations`), passed to RustRed as a read-only relation root.
+    pub(crate) relations_root: Option<PathBuf>,
     /// vk5l WP4: the p master catalogue the package ships next to its
     /// library (`<package>/p-master-catalogue.json`), if any.
     pub(crate) master_catalogue: Option<Arc<crate::p_integral::PMasterCatalogue>>,
@@ -321,6 +324,7 @@ impl PLibraryHandle {
             tops,
             residuals: Mutex::new(BTreeMap::new()),
             master_catalogue: None,
+            relations_root: None,
             request_memo: Mutex::default(),
             dimension,
             cache,
@@ -708,7 +712,10 @@ pub(crate) fn load_directory(
             listed.identity
         )));
     }
-    let handle = PLibraryHandle::new(library, PLibraryOrigin::ExternalData).map(Arc::new)?;
+    let mut handle = PLibraryHandle::new(library, PLibraryOrigin::ExternalData)?;
+    handle.master_catalogue = package_master_catalogue(&directory.path)?;
+    handle.relations_root = package_relations_root(&directory.path);
+    let handle = Arc::new(handle);
     if directory.listed.is_some()
         && let Ok(Some((manifest, _))) = built_in_manifest()
     {
@@ -754,6 +761,7 @@ fn load_package(
     library.set_source(directory.display().to_string());
     let mut handle = PLibraryHandle::new(library, PLibraryOrigin::Package)?;
     handle.master_catalogue = package_master_catalogue(directory)?;
+    handle.relations_root = package_relations_root(directory);
     Ok(Arc::new(handle))
 }
 
@@ -763,6 +771,12 @@ pub const P_MASTER_CATALOGUE_FILE: &str = "p-master-catalogue.json";
 /// Environment variable overriding the default five-loop p master
 /// catalogue: a file path, or `off` (no catalogue unless one is set).
 pub const P_MASTER_CATALOGUE_VARIABLE: &str = "VAKINT_P_MASTER_CATALOGUE";
+
+/// `<directory>/relations` if the package ships explicit key expressions.
+fn package_relations_root(directory: &Path) -> Option<PathBuf> {
+    let root = directory.join(super::p_relations::P_PACKAGE_RELATIONS_DIRECTORY);
+    root.is_dir().then_some(root)
+}
 
 /// The catalogue `<directory>/p-master-catalogue.json`, if the package ships one.
 fn package_master_catalogue(
@@ -1079,6 +1093,14 @@ impl Vakint {
             });
         }
         Ok(records)
+    }
+
+    /// vk5l WP4: how the p keys of this process were served, by kind (table
+    /// rule steps, explicit key expressions, cached relations, recipe solves,
+    /// typed refusals); a reduction call's own counters are in the
+    /// diagnostics (`VAKINT_P_PHASES`).
+    pub fn p_dispatch_counters(&self) -> super::p_relations::PDispatchCounters {
+        super::p_relations::dispatch_counters()
     }
 
     /// Locations and counters of the RustRed p relation caches of this

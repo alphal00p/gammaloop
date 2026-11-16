@@ -20,8 +20,9 @@ mod official;
 pub use official::{ExternalDataLoadReport, ExternalDataLoopReport, OfficialExternalDataOptions};
 pub(crate) mod cache;
 pub use p_relations::{
-    P_RELATION_CACHE_DIRECTORY, PRelationCacheLocation, PRelationCacheSettings,
-    PRelationCacheStatistics, VAKINT_CACHE_DIR_VARIABLE,
+    P_PACKAGE_RELATIONS_DIRECTORY, P_RELATION_CACHE_DIRECTORY, PDispatchCounters,
+    PRelationCacheLocation, PRelationCacheSettings, PRelationCacheStatistics,
+    VAKINT_CACHE_DIR_VARIABLE,
 };
 pub use p_data::PTerminalRecord;
 pub use cache::{

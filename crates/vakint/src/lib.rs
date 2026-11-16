@@ -96,9 +96,13 @@ pub use rustred_evaluation::{
 };
 pub use rustred_evaluation::{RustRedEvaluationError, RustRedEvaluationOptions, RustRedMasterMode};
 pub use rustred_evaluation::{
-    P_RELATION_CACHE_DIRECTORY, PRelationCacheLocation, PRelationCacheSettings,
-    PRelationCacheStatistics, PTerminalRecord, VAKINT_CACHE_DIR_VARIABLE,
+    P_PACKAGE_RELATIONS_DIRECTORY, P_RELATION_CACHE_DIRECTORY, PDispatchCounters,
+    PRelationCacheLocation, PRelationCacheSettings, PRelationCacheStatistics, PTerminalRecord,
+    VAKINT_CACHE_DIR_VARIABLE,
 };
+/// Run-time solves at keys outside a boxed node's certified set (RustRed):
+/// recipe families, trace-row and wall bounds, the d = 4 preference.
+pub use rustred::propagator::recipes::POutsideSettings as RustRedPOutsideSettings;
 pub use truncation_guard::{MissingMasterOrder, MissingMasterOrders};
 
 use regex::Regex;
@@ -2577,6 +2581,10 @@ pub struct VakintSettings {
     /// RustRed binds the roots when a boxed node is first used in the
     /// process.
     pub rustred_p_relation_cache: PRelationCacheSettings,
+    /// vk5l WP4: run-time solves at keys outside a boxed node's certified
+    /// set (bounds per solve and per key, recipe families tried, the d = 4
+    /// preference, table rules outside the set); RustRed's defaults.
+    pub rustred_p_outside: RustRedPOutsideSettings,
     pub tensor_reduction_method: TensorReductionMethod,
     // This quantity is typically set equal to *one plus the maximum loop count* of the UV regularisation problem considered.
     // For example when considering a 2-loop problem, then:
@@ -2921,6 +2929,7 @@ impl Default for VakintSettings {
             rustred_momentum_match_limits: Default::default(),
             rustred_p_uncovered: RustRedPUncoveredPolicy::Reject,
             rustred_p_relation_cache: PRelationCacheSettings::default(),
+            rustred_p_outside: RustRedPOutsideSettings::default(),
             tensor_reduction_method: TensorReductionMethod::FeynKit,
             // Default to a three-loop UV subtraction problem, for which alphaLoop implementation can be used.
             number_of_terms_in_epsilon_expansion: 4,
