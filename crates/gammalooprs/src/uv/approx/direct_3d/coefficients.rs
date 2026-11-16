@@ -15,6 +15,8 @@ use symbolica::{
     symbol,
 };
 
+use three_dimensional_reps::ThermalDistributionCall;
+
 use crate::{
     cff::expression::OrientationID, integrands::process::param_builder::FnMapEntry, utils::GS,
     uv::Integrands,
@@ -25,6 +27,19 @@ pub(super) struct ScalarCoefficients {
     scope: Atom,
     calls: BTreeMap<Atom, Atom>,
     definitions: Vec<Arc<FnMapEntry>>,
+    /// Bodies of extracted homogeneous factors, keyed by body, with their tags.
+    factors: BTreeMap<Atom, Atom>,
+    factor_definitions: Vec<Arc<FnMapEntry>>,
+}
+
+/// Head of the tag that names one extracted homogeneous factor.
+pub(super) fn factor_symbol() -> Symbol {
+    Integrands::factor_symbol()
+}
+
+/// Whether `view` is a closed homogeneous-factor family call.
+pub(super) fn is_factor_call(view: AtomView<'_>) -> bool {
+    Integrands::factor_tag(view).is_some()
 }
 
 impl ScalarCoefficients {
@@ -34,6 +49,8 @@ impl ScalarCoefficients {
             scope,
             calls: BTreeMap::new(),
             definitions: Vec::new(),
+            factors: BTreeMap::new(),
+            factor_definitions: Vec::new(),
         }
     }
 
@@ -136,6 +153,242 @@ impl ScalarCoefficients {
         })
     }
 
+    /// Degree of `view` as an exactly homogeneous function of the Taylor
+    /// variable, `G(t) = t^d G(1)` for positive `t`, or `None` when it is not
+    /// certified. Lazy guards, markers, retained calls, tensors, and occupations
+    /// that are not soft-compensated thermal distributions are never certified.
+    fn degree(&self, view: AtomView<'_>) -> Option<Rational> {
+        match view {
+            AtomView::Num(_) => Some(Rational::from(0)),
+            AtomView::Var(var) => {
+                Some(Rational::from(i64::from(var.get_symbol() == self.variable)))
+            }
+            AtomView::Add(sum) => {
+                let mut terms = sum.iter();
+                let degree = self.degree(terms.next()?)?;
+                terms
+                    .all(|term| self.degree(term).as_ref() == Some(&degree))
+                    .then_some(degree)
+            }
+            AtomView::Mul(product) => product
+                .iter()
+                .try_fold(Rational::from(0), |degree, factor| {
+                    Some(degree + self.degree(factor)?)
+                }),
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                let exponent = Rational::try_from(exponent).ok()?;
+                Some(self.degree(base)? * exponent)
+            }
+            AtomView::Fun(call) => {
+                let head = call.get_symbol();
+                if [
+                    OrientationID::symbol(),
+                    GS.theta,
+                    GS.orientation_delta,
+                    Symbol::IF,
+                    GS.ct_marker,
+                    Self::head(),
+                    symbol!("gammalooprs::uv::numerator_family"),
+                    factor_symbol(),
+                ]
+                .contains(&head)
+                    || view.is_tensorial(StrictTensorFilter::ContainsReps)
+                {
+                    return None;
+                }
+                if head == GS.thermal_distribution
+                    && (!view.contains_symbol(self.variable)
+                        || !ThermalDistributionCall::try_from(view)
+                            .is_ok_and(|call| call.temperature_flag.is_one()))
+                {
+                    return None;
+                }
+                if head == GS.on_shell_energy && call.get_nargs() == 2 {
+                    // A square root of its invariant; the owner is a tag.
+                    return (self.degree(call.get(0))?.is_zero())
+                        .then(|| self.degree(call.get(1)))
+                        .flatten()
+                        .map(|degree| degree / Rational::from(2));
+                }
+                if head == GS.esurface {
+                    // An n-ary sum of its arguments.
+                    let mut terms = call.iter();
+                    let degree = self.degree(terms.next()?)?;
+                    return terms
+                        .all(|term| self.degree(term).as_ref() == Some(&degree))
+                        .then_some(degree);
+                }
+                if head == GS.thermal_weight_wrapper && call.get_nargs() == 1 {
+                    // Numerically the identity.
+                    return self.degree(call.get(0));
+                }
+                call.iter()
+                    .all(|argument| self.degree(argument).is_some_and(|d| d.is_zero()))
+                    .then(|| Rational::from(0))
+            }
+        }
+    }
+
+    /// Replace each maximal exactly homogeneous, Taylor-dependent subtree in a
+    /// polynomial position by one opaque t-free factor times its power of the
+    /// Taylor variable. The rewrite is an identity for positive `t`, so native
+    /// series of the result equal those of `atom`, while each factor body is
+    /// expanded never and stored once. Factors never enter inverses or
+    /// function arguments, so they remain polynomial in every coefficient.
+    pub(super) fn retain_homogeneous(&mut self, atom: &Atom) -> Atom {
+        match self.homogeneous(atom.as_view()) {
+            (Some(degree), _) => self.factor(atom, &degree),
+            (None, rewritten) => rewritten.unwrap_or_else(|| atom.clone()),
+        }
+    }
+
+    /// The certified degree of `view`, or its rewrite when it is not
+    /// certified and one of its polynomial parts changed.
+    fn homogeneous(&mut self, view: AtomView<'_>) -> (Option<Rational>, Option<Atom>) {
+        let parts = match view {
+            AtomView::Add(sum) => sum.iter().collect::<Vec<_>>(),
+            AtomView::Mul(product) => product.iter().collect(),
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                let Ok(exponent) = Rational::try_from(exponent) else {
+                    return (None, None);
+                };
+                if !exponent.is_integer() || exponent.is_negative() {
+                    return (self.degree(view), None);
+                }
+                return match self.homogeneous(base) {
+                    (Some(degree), _) => (Some(degree * exponent), None),
+                    (None, rewritten) => (
+                        None,
+                        rewritten.map(|base| base.pow(Atom::num(exponent.clone()))),
+                    ),
+                };
+            }
+            _ => return (self.degree(view), None),
+        };
+        let walked = parts
+            .iter()
+            .map(|part| self.homogeneous(*part))
+            .collect::<Vec<_>>();
+        let is_sum = matches!(view, AtomView::Add(_));
+        if let Some(degrees) = walked
+            .iter()
+            .map(|(degree, _)| degree.clone())
+            .collect::<Option<Vec<_>>>()
+        {
+            if !is_sum {
+                return (
+                    Some(
+                        degrees
+                            .into_iter()
+                            .fold(Rational::from(0), |total, degree| total + degree),
+                    ),
+                    None,
+                );
+            }
+            if degrees.iter().all(|degree| *degree == degrees[0]) {
+                return (degrees.into_iter().next(), None);
+            }
+        }
+        // Mixed: certified Taylor-dependent parts become factors, grouped by
+        // degree in a sum and multiplied together in a product. Taylor-free
+        // certified parts stay visible to enclosing operations.
+        let mut kept = Vec::new();
+        let mut groups = BTreeMap::<Rational, Vec<Atom>>::new();
+        let mut product_degree = Rational::from(0);
+        let mut changed = false;
+        for (part, (degree, rewritten)) in parts.into_iter().zip(walked) {
+            match degree {
+                Some(degree) if part.contains_symbol(self.variable) => {
+                    let key = if is_sum {
+                        degree
+                    } else {
+                        product_degree += degree;
+                        Rational::from(0)
+                    };
+                    groups.entry(key).or_default().push(part.to_owned());
+                }
+                _ => {
+                    changed |= rewritten.is_some();
+                    kept.push(rewritten.unwrap_or_else(|| part.to_owned()));
+                }
+            }
+        }
+        for (degree, group) in groups {
+            let (group, degree) = if is_sum {
+                (Atom::add_many(group), degree)
+            } else {
+                (Atom::mul_many(group), product_degree.clone())
+            };
+            let factor = self.factor(&group, &degree);
+            changed |= factor != group;
+            kept.push(factor);
+        }
+        if !changed {
+            return (None, None);
+        }
+        (
+            None,
+            Some(if is_sum {
+                Atom::add_many(kept)
+            } else {
+                Atom::mul_many(kept)
+            }),
+        )
+    }
+
+    /// `G = t^degree G(1)`, with a large Taylor-dependent `G(1)` shared as one
+    /// bare factor tag.
+    fn factor(&mut self, atom: &Atom, degree: &Rational) -> Atom {
+        if !atom.contains_symbol(self.variable) {
+            return atom.clone();
+        }
+        let body = atom.replace(self.variable).with(Atom::num(1));
+        if body.is_zero() {
+            return Atom::Zero;
+        }
+        // Small factors cost less inline than a separate shared body.
+        if body.as_view().get_byte_size() < 256 {
+            return atom.clone();
+        }
+        let tag = if let Some(tag) = self.factors.get(&body) {
+            tag.clone()
+        } else {
+            let tag = factor_symbol()
+                .call_args([self.scope.clone(), Atom::num(self.factor_definitions.len())]);
+            self.factor_definitions.push(Arc::new(FnMapEntry {
+                lhs: symbol!("gammalooprs::uv::numerator_family").call_args([tag.clone()]),
+                rhs: body.clone(),
+                args: vec![],
+                tags: vec![tag.clone()],
+                inlining: InliningPolicy::Always,
+                is_alias: false,
+            }));
+            self.factors.insert(body, tag.clone());
+            tag
+        };
+        tag * Atom::var(self.variable).pow(Atom::num(degree.clone()))
+    }
+
+    /// Hand bare factor tags out as closed parameter-free families.
+    pub(super) fn wrap_factors(&self, atom: &Atom) -> Atom {
+        if self.factor_definitions.is_empty() {
+            return atom.clone();
+        }
+        atom.replace_map(|view, _, out| {
+            if let AtomView::Fun(call) = view
+                && call.get_symbol() == factor_symbol()
+            {
+                **out = symbol!("gammalooprs::uv::numerator_family").call_args([view]);
+            }
+        })
+    }
+
+    pub(super) fn factor_definitions(&self) -> &[Arc<FnMapEntry>] {
+        &self.factor_definitions
+    }
+
     #[cfg(test)]
     pub(super) fn restore(&self, atom: &Atom) -> Result<Atom> {
         let replacements = self
@@ -164,7 +417,7 @@ impl ScalarCoefficients {
 mod tests {
     use super::*;
     use crate::{initialisation::test_initialise, numerator::symbolica_ext::NumeratorAtomExt};
-    use symbolica::{function, parse_lit};
+    use symbolica::{function, parse_lit, poly::series::SeriesDepth};
 
     fn coefficient() -> Atom {
         let q = parse_lit!(momentum(q));
@@ -234,6 +487,194 @@ mod tests {
         let actual = deform(result).series(u, Atom::Zero, 1)?.to_atom();
         let expected = deform(reference).series(u, Atom::Zero, 1)?.to_atom();
         assert!((actual - expected).expand().is_zero());
+        Ok(())
+    }
+
+    /// A loop-momentum component after an enclosing rescaling by `t`.
+    fn component(edge: i64, index: usize, t: &Atom) -> Atom {
+        GS.emr_vec.call_args([Atom::num(edge), GS.cind(index)]) / t
+    }
+
+    /// A frozen soft energy after an enclosing rescaling: its invariant is
+    /// homogeneous of degree zero, as a sum over explicit components.
+    fn frozen_energy(t: &Atom, loop_edge: i64) -> Atom {
+        let invariant = Atom::add_many((1..=3).map(|index| component(loop_edge, index, t).pow(2)))
+            + parse_lit!(frozen_mass).pow(2) / t.pow(2);
+        function!(
+            GS.on_shell_energy,
+            symbol!("S_frozen"),
+            t.pow(2) * invariant
+        )
+    }
+
+    /// Expand energy invariants, so equal energies compare equal.
+    fn canonical_energies(atom: &Atom) -> Atom {
+        atom.replace_map(|view, _, out| {
+            if let AtomView::Fun(call) = view
+                && call.get_symbol() == GS.on_shell_energy
+                && call.get_nargs() == 2
+            {
+                **out = function!(GS.on_shell_energy, call.get(0), call.get(1).expand());
+            }
+        })
+    }
+
+    /// The MUV rearrangement of an ordinary energy, which is not homogeneous.
+    fn muv_energy(edge: i64, t: &Atom) -> Atom {
+        let invariant = -parse_lit!(mUV).pow(2)
+            + (parse_lit!(mUV).pow(2) + GS.emr_vec.call_args([Atom::num(edge), GS.cind(1)]).pow(2))
+                / t.pow(2);
+        function!(GS.on_shell_energy, edge, t.pow(2) * invariant)
+    }
+
+    #[test]
+    fn homogeneous_degrees_are_certified_only_for_exact_scalings() -> Result<()> {
+        test_initialise()?;
+        let t_symbol = symbol!("coefficient_t");
+        let t = Atom::var(t_symbol);
+        let coefficients = ScalarCoefficients::new(t_symbol, Atom::num(3));
+        let degree = |atom: &Atom| coefficients.degree(atom.as_view());
+        let frozen = frozen_energy(&t, 0);
+        assert_eq!(degree(&frozen), Some(Rational::from(0)));
+        assert_eq!(degree(&(&frozen / &t)), Some(Rational::from(-1)));
+        let scaled = function!(GS.on_shell_energy, 4, t.pow(2) * parse_lit!(x));
+        assert_eq!(degree(&scaled), Some(Rational::from(1)));
+        // A soft-compensated occupation: vacuum + t^-d N(E/t).
+        for order in 0..=2 {
+            let energy = function!(GS.on_shell_energy, 4, t.pow(2) * parse_lit!(x)) / &t;
+            let occupation = ThermalDistributionCall::atom_at_energy(4, order, 1, -1, 1, &energy);
+            assert_eq!(degree(&occupation), Some(Rational::from(0)));
+            assert_eq!(
+                degree(&(t.pow(Atom::num(-order)) * &occupation)),
+                Some(Rational::from(-order))
+            );
+        }
+        // Zero-temperature steps and Taylor-free occupations are barriers.
+        let energy = function!(GS.on_shell_energy, 4, t.pow(2) * parse_lit!(x)) / &t;
+        assert_eq!(
+            degree(&ThermalDistributionCall::atom_at_energy(
+                4, 1, 0, -1, 1, &energy
+            )),
+            None
+        );
+        assert_eq!(
+            degree(&ThermalDistributionCall::atom_at_energy(
+                4,
+                0,
+                1,
+                -1,
+                1,
+                parse_lit!(y)
+            )),
+            None
+        );
+        let surface = GS.wrap_esurface(&(&scaled + &t * parse_lit!(z)));
+        assert_eq!(degree(&surface), Some(Rational::from(1)));
+        assert_eq!(
+            degree(&function!(GS.thermal_weight_wrapper, &scaled)),
+            Some(Rational::from(1))
+        );
+        // The MUV rearrangement of an ordinary energy is not homogeneous.
+        assert_eq!(degree(&muv_energy(0, &t)), None);
+        assert_eq!(degree(&(&t + 1)), None);
+        assert_eq!(degree(&function!(symbol!("f"), &t)), None);
+        assert_eq!(degree(&t.pow(parse_lit!(y))), None);
+        for barrier in [
+            function!(Symbol::IF, symbol!("condition"), &t, 0),
+            function!(GS.theta, &t),
+            function!(symbol!("gammalooprs::uv::numerator_family"), 1),
+            function!(factor_symbol(), 1, 2),
+            function!(Integrands::scalar_symbol(), 1, 2),
+        ] {
+            assert_eq!(degree(&barrier), None, "{barrier}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn homogeneous_factors_are_exact_polynomial_and_series_transparent() -> Result<()> {
+        test_initialise()?;
+        let t_symbol = symbol!("coefficient_t");
+        let t = Atom::var(t_symbol);
+        let frozen = frozen_energy(&t, 0);
+        // A frozen-like product of degree -1: the soft jet of a hard line.
+        let dot = Atom::add_many((1..=3).map(|i| component(0, i, &t) * component(2, i, &t)));
+        let square = Atom::add_many((1..=3).map(|i| component(2, i, &t).pow(2)));
+        let frozen_product = t.pow(3) * dot.pow(2) / frozen.pow(3) + &t * &square / &frozen;
+        // The cograph energy carries the MUV rearrangement; the eikonal
+        // denominator mixes it with a frozen, homogeneous shift.
+        let cograph = muv_energy(5, &t);
+        let shift = &dot / &frozen;
+        let eikonal = (&cograph / &t + &shift / &t).pow(-1);
+        let small = &t * GS.emr_vec.call_args([Atom::num(5), GS.cind(1)]);
+        let source = &eikonal * &frozen_product + &cograph * &small;
+
+        let mut coefficients = ScalarCoefficients::new(t_symbol, Atom::num(4));
+        let skeleton = coefficients.retain_homogeneous(&source);
+        assert_eq!(coefficients.factor_definitions().len(), 1);
+        assert!(skeleton.as_view().get_byte_size() < source.as_view().get_byte_size());
+        // Factors only in polynomial positions.
+        let mut hidden = false;
+        skeleton.visitor(&mut |view| {
+            match view {
+                AtomView::Fun(call) if call.get_symbol() != factor_symbol() => {
+                    hidden |= view.contains_symbol(factor_symbol());
+                    return false;
+                }
+                AtomView::Pow(power) => {
+                    let negative = Rational::try_from(power.get_base_exp().1)
+                        .is_ok_and(|exponent| exponent.is_negative());
+                    hidden |= negative && view.contains_symbol(factor_symbol());
+                }
+                _ => {}
+            }
+            true
+        });
+        assert!(!hidden, "{skeleton}");
+        // The small Taylor-dependent cograph term stays as it was.
+        assert!(skeleton.contains(&(&cograph * &small)));
+        let wrapped = coefficients.wrap_factors(&skeleton);
+        let inline = coefficients
+            .factor_definitions()
+            .iter()
+            .map(|entry| entry.replacement())
+            .collect::<Vec<_>>();
+        let restored = wrapped.replace_multiple(&inline);
+        assert!(!restored.contains_symbol(factor_symbol()));
+        let difference = (canonical_energies(&restored) - canonical_energies(&source))
+            .expand()
+            .together()
+            .cancel();
+        assert!(difference.is_zero(), "{difference}");
+        // Native series of the skeleton, with the factor bodies restored
+        // afterwards, equal those of the source.
+        for depth in [-1, 0, 2] {
+            let expected = source
+                .series(
+                    t_symbol,
+                    Atom::Zero,
+                    SeriesDepth::absolute(Rational::from(depth)),
+                )?
+                .to_atom();
+            let actual = wrapped
+                .series(
+                    t_symbol,
+                    Atom::Zero,
+                    SeriesDepth::absolute(Rational::from(depth)),
+                )?
+                .to_atom()
+                .replace_multiple(&inline);
+            let difference = (canonical_energies(&actual) - canonical_energies(&expected))
+                .expand()
+                .together()
+                .cancel();
+            assert!(difference.is_zero(), "depth {depth}: {difference}");
+        }
+        // Identical bodies share one factor; a second pass finds no new one.
+        let again = coefficients.retain_homogeneous(&source);
+        assert_eq!(again, skeleton);
+        assert_eq!(coefficients.factor_definitions().len(), 1);
+        assert_eq!(coefficients.retain_homogeneous(&skeleton), skeleton);
         Ok(())
     }
 

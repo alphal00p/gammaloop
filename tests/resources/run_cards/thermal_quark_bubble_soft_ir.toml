@@ -1,0 +1,72 @@
+commands = []
+
+[[command_blocks]]
+name = "generate"
+commands = [
+  "import model sm-thermal",
+  "set model aS=1.0 muB=0.0",
+  "remove processes",
+  "import graphs ./tests/resources/graphs/thermal_quark_bubble.dot -p thermal_quark_bubble -i thermal_quark_bubble",
+  "generate existing -p thermal_quark_bubble -i thermal_quark_bubble",
+]
+
+[[command_blocks]]
+name = "profile_uv"
+commands = [
+  "profile ultra-violet -p thermal_quark_bubble -i thermal_quark_bubble --selected-limits only-divergent --min-scaling=3 --max-scaling=6 --n-points 8 --seed 1337 --use_f128 --allow-vanishing-missing-fits",
+]
+
+[[command_blocks]]
+name = "profile_soft"
+commands = [
+  "profile bulk -p thermal_quark_bubble -i thermal_quark_bubble --select 'thermal_quark_bubble S(e0)' --min-scaling=-2 --max-scaling=-5 --n-points 15 --seed 1337",
+]
+
+[[command_blocks]]
+name = "profile_finite_mu"
+commands = [
+  "set model muB=3.0",
+  "run profile_uv",
+  "run profile_soft",
+]
+
+[cli_settings.global.generation]
+override_lmb_heuristics = true
+
+[cli_settings.global.generation.medium]
+mode = "thermodynamic_equilibrium"
+vacuum_subtraction = true
+
+[cli_settings.global.generation.uv]
+subtract_uv = true
+generate_integrated = false
+add_marker = false
+inner_products = true
+orchestrator = "hedge_poset"
+
+[cli_settings.global.generation.uv.renormalization_prescription]
+log_divergent = "MUV"
+massive_power_divergent = "MUV"
+massless_power_divergent = "IR"
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+
+[cli_settings.global.generation.tropical_subgraph_table]
+disable_tropical_generation = true
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = false
+compile = false
+
+[default_runtime_settings.general]
+inverse_temperature = 1.0
+evaluator_method = "SingleParametric"
+m_uv = 1.0
+mu_r = 2.0
+
+[default_runtime_settings.kinematics]
+e_cm = 1.0
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true

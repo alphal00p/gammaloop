@@ -35,7 +35,10 @@ pub(crate) struct Local3DSignedBranch {
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Local3DMaterialization {
     DirectU,
-    /// The exact linear identity H(X) = S(X) + U(X-S(X)).
+    /// H(X) = U(X) + S(X) - US(X). In vacuum this is materialized through
+    /// the exact linear identity S(X) + U(X-S(X)). At finite temperature the
+    /// soft branch is frozen first and US(X) is the component's own U acting
+    /// on it with the branch scope, so U(X) and US(X) are separate terms.
     FactorizedSoft,
 }
 

@@ -1,0 +1,12 @@
+digraph thermal_quark_bubble {
+  // One quark polarization loop closed by a gluon carrying q.
+  num = "1";
+  overall_factor = "(AutG(2))^(-1)*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)";
+  overall_factor_evaluated = "-1/2";
+  projector = "1";
+
+  // Independent loop momenta are [q, p] = [e0, e2].
+  a1:0 -> a0:1 [id=0 dir=none particle=g lmb_id=0 lmb_rep="K(0,a___)"];
+  a1:2 -> a0:3 [id=1 particle=d lmb_rep="K(1,a___)-K(0,a___)"];
+  a0:4 -> a1:5 [id=2 particle=d lmb_id=1 lmb_rep="K(1,a___)"];
+}

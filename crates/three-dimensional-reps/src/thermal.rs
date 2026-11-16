@@ -12,18 +12,23 @@ use symbolica::{
 
 use crate::symbols::{S, sign, thermal_distribution_symbol};
 
-/// The tagged arguments of an N call, before physical orientations are resolved.
+/// A distribution's edge metadata and energy, before physical orientations are resolved.
+/// The edge retains its particle and chemical-potential ownership when soft expansion
+/// changes the energy; see [`Self::atom_at_energy`] for an example.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ThermalDistributionCall {
     pub edge: EdgeIndex,
     pub derivative_order: usize,
     pub temperature_flag: Atom,
     pub thermal_sign: Atom,
     pub orientation_sign: Atom,
+    /// Positive on-shell energy, possibly deformed by a local Taylor operation.
+    pub energy: Atom,
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum ThermalDistributionCallError {
-    #[error("Thermal distribution must be an N call with five arguments, got {0}")]
+    #[error("Thermal distribution must be an N call with six arguments, got {0}")]
     InvalidCall(Atom),
     #[error("Thermal distribution edge must be a non-negative integer, got {0}")]
     InvalidEdge(Atom),
@@ -32,7 +37,8 @@ pub enum ThermalDistributionCallError {
 }
 
 impl ThermalDistributionCall {
-    /// Build a concrete call or a wildcard pattern using the same argument layout.
+    /// Build a call at the original edge's on-shell energy.
+    /// Use [`Self::atom_at_energy`] when momenta inside the energy have been expanded.
     pub fn atom<'a>(
         edge: impl Into<AtomOrView<'a>>,
         derivative_order: impl Into<AtomOrView<'a>>,
@@ -40,12 +46,46 @@ impl ThermalDistributionCall {
         thermal_sign: impl Into<AtomOrView<'a>>,
         orientation_sign: impl Into<AtomOrView<'a>>,
     ) -> Atom {
+        let edge = edge.into();
+        let energy = function!(symbol!("gammalooprs::OSE"), edge.as_view());
+        Self::atom_at_energy(
+            edge,
+            derivative_order,
+            temperature_flag,
+            thermal_sign,
+            orientation_sign,
+            energy,
+        )
+    }
+
+    /// Build a call retaining edge metadata while exposing the energy to Taylor expansion.
+    /// Differentiating the last argument increments the ordinary energy-derivative order.
+    ///
+    /// ```
+    /// use symbolica::prelude::*;
+    /// use three_dimensional_reps::ThermalDistributionCall;
+    /// let energy = symbol!("thermal_example_energy");
+    /// let call = ThermalDistributionCall::atom_at_energy(0, 0, 1, -1, 1, energy);
+    /// assert_eq!(
+    ///     call.derivative(energy),
+    ///     ThermalDistributionCall::atom_at_energy(0, 1, 1, -1, 1, energy),
+    /// );
+    /// ```
+    pub fn atom_at_energy<'a>(
+        edge: impl Into<AtomOrView<'a>>,
+        derivative_order: impl Into<AtomOrView<'a>>,
+        temperature_flag: impl Into<AtomOrView<'a>>,
+        thermal_sign: impl Into<AtomOrView<'a>>,
+        orientation_sign: impl Into<AtomOrView<'a>>,
+        energy: impl Into<AtomOrView<'a>>,
+    ) -> Atom {
         FunctionBuilder::new(thermal_distribution_symbol())
             .add_arg(edge)
             .add_arg(derivative_order)
             .add_arg(temperature_flag)
             .add_arg(thermal_sign)
             .add_arg(orientation_sign)
+            .add_arg(energy)
             .finish()
     }
 }
@@ -60,9 +100,10 @@ impl TryFrom<AtomView<'_>> for ThermalDistributionCall {
             temperature_flag,
             thermal_sign,
             orientation_sign,
+            energy,
         ] = match atom {
             AtomView::Fun(function) if function.get_symbol() == thermal_distribution_symbol() => {
-                <[_; 5]>::try_from(function.iter().collect::<Vec<_>>()).ok()
+                <[_; 6]>::try_from(function.iter().collect::<Vec<_>>()).ok()
             }
             _ => None,
         }
@@ -78,6 +119,7 @@ impl TryFrom<AtomView<'_>> for ThermalDistributionCall {
             temperature_flag: temperature_flag.to_owned(),
             thermal_sign: thermal_sign.to_owned(),
             orientation_sign: orientation_sign.to_owned(),
+            energy: energy.to_owned(),
         })
     }
 }
@@ -304,31 +346,18 @@ impl ThermalWeight {
     /// The vacuum value of a completed weight atom: every order-zero factor takes
     /// its vacuum weight `(1 + s)/2` and every derivative vanishes.
     fn vacuum_value(weight: AtomView) -> Atom {
-        let (edge, derivative, temperature, sign, orientation) = symbol!(
-            "edge_",
-            "derivative_",
-            "temperature_",
-            "sign_",
-            "orientation_"
-        );
-        weight
-            .replace(ThermalDistributionCall::atom(
-                edge,
-                0,
-                temperature,
-                sign,
-                orientation,
-            ))
-            .with(ThermalDistributionFactor::vacuum_atom(0, Atom::var(sign)))
-            .replace(ThermalDistributionCall::atom(
-                edge,
-                derivative,
-                temperature,
-                sign,
-                orientation,
-            ))
-            // All remaining factors have positive derivative order.
-            .with(ThermalDistributionFactor::vacuum_atom(1, Atom::var(sign)))
+        weight.replace_map(|term, _, out| {
+            if let AtomView::Fun(function) = term
+                && function.get_symbol() == S.thermal_distribution
+            {
+                let call = ThermalDistributionCall::try_from(term)
+                    .expect("thermal weights contain valid distribution calls");
+                **out = ThermalDistributionFactor::vacuum_atom(
+                    call.derivative_order,
+                    call.thermal_sign,
+                );
+            }
+        })
     }
 
     /// `weight - vacuum`, written so that every term keeps a factor whose vacuum
@@ -348,12 +377,13 @@ impl ThermalWeight {
                 // Only order zero has a nonzero vacuum value.
                 let call = ThermalDistributionCall::try_from(weight)
                     .expect("thermal weights contain valid distribution calls");
-                ThermalDistributionCall::atom(
+                ThermalDistributionCall::atom_at_energy(
                     call.edge.0 as i64,
                     call.derivative_order as i64,
                     call.temperature_flag,
                     -1,
                     call.orientation_sign,
+                    call.energy,
                 )
             }
             AtomView::Add(sum) => sum.iter().map(Self::vacuum_difference).sum(),
@@ -407,14 +437,21 @@ pub static VACUUM_SUBTRACTION: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
 /// `N(s) = (1 + s)/2 + N(-1)`. Vacuum subtraction relies on this identity, so a
 /// subtracted weight equals `weight - vacuum` once both are rewritten.
 pub static OCCUPATION_FORM: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
-    let (edge, temperature, sign, orientation) =
-        symbol!("edge_", "temperature_", "sign_", "orientation_");
+    let (edge, temperature, sign, orientation, energy) =
+        symbol!("edge_", "temperature_", "sign_", "orientation_", "energy_");
     [
-        ThermalDistributionCall::atom(edge, 0, temperature, sign, orientation)
+        ThermalDistributionCall::atom_at_energy(edge, 0, temperature, sign, orientation, energy)
             .to_pattern()
             .replace_with(
                 (ThermalDistributionFactor::vacuum_atom(0, Atom::var(sign))
-                    + ThermalDistributionCall::atom(edge, 0, temperature, -1, orientation))
+                    + ThermalDistributionCall::atom_at_energy(
+                        edge,
+                        0,
+                        temperature,
+                        -1,
+                        orientation,
+                        energy,
+                    ))
                 .to_pattern(),
             ),
     ]
@@ -423,6 +460,7 @@ pub static OCCUPATION_FORM: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
 #[cfg(test)]
 mod tests {
     use std::collections::{BTreeMap, BTreeSet};
+    use symbolica::poly::series::SeriesDepth;
 
     use super::*;
     use crate::{Generate3DExpressionOptions, expression::AllOrientations, generate_3d_expression};
@@ -431,6 +469,101 @@ mod tests {
         let weight = symbol!("unwrapped_weight_");
         atom.replace(function!(S.thermal_weight_wrapper, weight))
             .with(weight)
+    }
+
+    #[test]
+    fn repeated_thermal_builders_keep_the_registered_energy_derivative() {
+        let call = ThermalDistributionCall::atom(2, 0, 1, -1, 1);
+        let energy = function!(symbol!("gammalooprs::OSE"), 2);
+        for _ in 0..3 {
+            let repeated = ThermalDistributionCall::atom_at_energy(2, 0, 1, -1, 1, &energy);
+            assert_eq!(call, repeated);
+            let parsed = ThermalDistributionCall::try_from(repeated.as_view()).unwrap();
+            assert_eq!(parsed.energy, energy);
+        }
+        let energy_variable = symbol!("thermal_repeated_energy");
+        assert_eq!(
+            call.replace(energy.to_pattern())
+                .with(energy_variable)
+                .derivative(energy_variable),
+            ThermalDistributionCall::atom_at_energy(2, 1, 1, -1, 1, energy_variable),
+        );
+    }
+
+    #[test]
+    fn thermal_energy_derivatives_remove_the_contour_offset() {
+        let energy = symbol!("thermal_contour_derivative_energy");
+        for temperature in [0, 1] {
+            for orientation in [-1, 1] {
+                let call = |order, contour| {
+                    ThermalDistributionCall::atom_at_energy(
+                        7,
+                        order,
+                        temperature,
+                        contour,
+                        orientation,
+                        energy,
+                    )
+                };
+                assert!((call(0, 1) - call(0, -1)).derivative(energy).is_zero());
+                for order in 0..3 {
+                    for contour in [-1, 0, 1] {
+                        assert_eq!(call(order, contour).derivative(energy), call(order + 1, -1));
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn thermal_energy_series_keeps_edge_and_distribution_derivatives() {
+        let (energy, shift, curvature, scale) = symbol!(
+            "thermal_series_energy",
+            "thermal_series_shift",
+            "thermal_series_curvature",
+            "thermal_series_scale"
+        );
+        let deformed_energy =
+            Atom::var(energy) + Atom::var(scale) * shift + Atom::var(scale).pow(2) * curvature;
+        let call = ThermalDistributionCall::atom_at_energy(7, 1, 1, -1, -1, deformed_energy);
+        let parsed = ThermalDistributionCall::try_from(call.as_view()).unwrap();
+        assert_eq!(parsed.edge, EdgeIndex(7));
+        assert_eq!(parsed.derivative_order, 1);
+        assert!(parsed.energy.contains_symbol(scale));
+
+        let distribution =
+            |order| ThermalDistributionCall::atom_at_energy(7, order, 1, -1, -1, energy);
+        let expected = distribution(1)
+            + Atom::var(scale) * shift * distribution(2)
+            + Atom::var(scale).pow(2)
+                * (Atom::var(curvature) * distribution(2)
+                    + Atom::var(shift).pow(2) * distribution(3) / Atom::num(2));
+        for expression in [call.clone(), function!(S.thermal_weight_wrapper, call)] {
+            let expanded = expression
+                .series(scale, 0, SeriesDepth::absolute(2))
+                .unwrap()
+                .to_atom();
+            assert!((unwrapped(&expanded) - &expected).expand().is_zero());
+        }
+    }
+
+    #[test]
+    fn deformed_thermal_energy_preserves_vacuum_subtraction() {
+        let energy = symbol!("thermal_vacuum_deformed_energy");
+        let call = ThermalDistributionCall::atom_at_energy(4, 0, 1, 1, -1, energy);
+        let occupation = ThermalDistributionCall::atom_at_energy(4, 0, 1, -1, -1, energy);
+        assert_eq!(ThermalWeight::vacuum_value(call.as_view()), Atom::one());
+        assert_eq!(ThermalWeight::vacuum_difference(call.as_view()), occupation);
+        assert_eq!(
+            call.replace_multiple(&*OCCUPATION_FORM),
+            Atom::one() + &occupation,
+        );
+        let derivative = call.derivative(energy);
+        assert!(ThermalWeight::vacuum_value(derivative.as_view()).is_zero());
+        assert_eq!(
+            ThermalWeight::vacuum_difference(derivative.as_view()),
+            derivative,
+        );
     }
 
     /// No term cancels a nonzero vacuum constant in floating point.

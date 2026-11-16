@@ -95,6 +95,28 @@ impl Integrands {
         symbol!("gammalooprs::uv::scalar_coefficient"; Scalar)
     }
 
+    /// Head of the tag naming one exactly homogeneous factor that Taylor
+    /// operations share instead of expanding. Its closed family
+    /// `numerator_family(tag)` has no arguments and a scalar body.
+    pub(crate) fn factor_symbol() -> Symbol {
+        symbol!("gammalooprs::uv::homogeneous_factor"; Scalar)
+    }
+
+    /// The bare tag of a closed homogeneous-factor family call.
+    pub(crate) fn factor_tag(view: AtomView<'_>) -> Option<AtomView<'_>> {
+        let AtomView::Fun(call) = view else {
+            return None;
+        };
+        if call.get_symbol() != symbol!("gammalooprs::uv::numerator_family")
+            || call.get_nargs() != 1
+        {
+            return None;
+        }
+        let tag = call.get(0);
+        matches!(tag, AtomView::Fun(tag) if tag.get_symbol() == Self::factor_symbol())
+            .then_some(tag)
+    }
+
     pub(crate) fn scalar_definitions(&self) -> &[Arc<FnMapEntry>] {
         &self.scalars
     }

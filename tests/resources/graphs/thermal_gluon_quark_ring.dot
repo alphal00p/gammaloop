@@ -1,0 +1,18 @@
+digraph thermal_gluon_quark_ring {
+  // A d-quark polarization and a gluon bubble joined by gluons carrying q.
+  // Simultaneous endpoint exchange and exchange of the two bubble gluons give
+  // four automorphisms. There is one closed fermion loop.
+  num = "1";
+  overall_factor = "(AutG(4))^(-1)*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)";
+  overall_factor_evaluated = "-1/4";
+  projector = "1";
+
+  // Compatible independent loop momenta are [q, p, k] = [e0, e2, e4].
+  // Profiling S(e0) also makes e1 soft; these are not independent soft limits.
+  a1:0 -> b0:1 [id=0 dir=none particle=g lmb_id=0 lmb_rep="K(0,a___)"];
+  b1:2 -> a0:3 [id=1 dir=none particle=g lmb_rep="K(0,a___)"];
+  a0:4 -> a1:5 [id=2 particle=d lmb_id=1 lmb_rep="K(1,a___)"];
+  a1:6 -> a0:7 [id=3 particle=d lmb_rep="K(1,a___)-K(0,a___)"];
+  b0:8 -> b1:9 [id=4 dir=none particle=g lmb_id=2 lmb_rep="K(2,a___)"];
+  b1:10 -> b0:11 [id=5 dir=none particle=g lmb_rep="K(2,a___)-K(0,a___)"];
+}

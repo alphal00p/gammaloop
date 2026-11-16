@@ -1726,6 +1726,72 @@ impl EvaluatorStack {
     /// Contract each shared numerator body once, then expose only its scalar
     /// components to the evaluator. Formal branch coefficients remain arguments
     /// of both component functions and the scalar aliases they retain.
+    /// Homogeneous Taylor factors are closed, parameter-free scalar families.
+    /// Register each as a plain scalar function called by its bare tag, so
+    /// its occurrences remain scalar leaves of the tensor network instead of
+    /// numerator components. Returns `None` when there is no such factor.
+    #[allow(clippy::type_complexity)]
+    fn register_scalar_factors<A: AtomCore>(
+        atoms: &[A],
+        param_builder: &ParamBuilder,
+        definitions: &[Arc<FnMapEntry>],
+        inlining: InliningPolicy,
+    ) -> Result<Option<(Vec<Atom>, ParamBuilder, Vec<Arc<FnMapEntry>>)>> {
+        let (factors, families): (Vec<_>, Vec<_>) =
+            definitions.iter().cloned().partition(|definition| {
+                crate::uv::Integrands::factor_tag(definition.lhs.as_view()).is_some()
+            });
+        if factors.is_empty() {
+            return Ok(None);
+        }
+        let mut builder = param_builder.clone();
+        let mut registered = HashMap::<Atom, Atom>::new();
+        for entry in &factors {
+            let tag = crate::uv::Integrands::factor_tag(entry.lhs.as_view())
+                .unwrap()
+                .to_owned();
+            if !entry.args.is_empty() || entry.tags != [tag.clone()] {
+                return Err(eyre!("invalid homogeneous factor binding {}", entry.lhs));
+            }
+            if let Some(existing) = registered.get(&tag) {
+                if *existing != entry.rhs {
+                    return Err(eyre!("conflicting homogeneous factor definitions"));
+                }
+                continue;
+            }
+            registered.insert(tag.clone(), entry.rhs.clone());
+            // Mirror the scalar preparation of every other evaluator input.
+            let body = GS.lower_esurfaces(&entry.rhs.as_view().to_cof_dimension_invariants());
+            let tags = tag
+                .as_fun_view()
+                .unwrap()
+                .iter()
+                .map(|argument| argument.to_owned())
+                .collect();
+            builder
+                .add_function_entry(FnMapEntry {
+                    lhs: tag,
+                    rhs: body,
+                    args: vec![],
+                    tags,
+                    inlining,
+                    is_alias: false,
+                })
+                .map_err(|error| eyre!(error))?;
+        }
+        let atoms = atoms
+            .iter()
+            .map(|atom| {
+                atom.as_atom_view().replace_map(|view, _, out| {
+                    if let Some(tag) = crate::uv::Integrands::factor_tag(view) {
+                        out.set_from_view(&tag);
+                    }
+                })
+            })
+            .collect();
+        Ok(Some((atoms, builder, families)))
+    }
+
     fn preprocess_numerator_families<A: AtomCore>(
         atoms: &[A],
         param_builder: &ParamBuilder,
@@ -1734,6 +1800,18 @@ impl EvaluatorStack {
         alias_symbol: Symbol,
         inlining: InliningPolicy,
     ) -> Result<(Vec<AliasedAtom>, ParamBuilder)> {
+        if let Some((atoms, builder, families)) =
+            Self::register_scalar_factors(atoms, param_builder, definitions, inlining)?
+        {
+            return Self::preprocess_numerator_families(
+                &atoms,
+                &builder,
+                &families,
+                settings,
+                alias_symbol,
+                inlining,
+            );
+        }
         let mut builder = param_builder.clone();
         if definitions.is_empty() {
             let atoms = atoms
@@ -4190,6 +4268,122 @@ mod tests {
             // formal must not substitute into an already inserted argument.
             assert_eq!(atom.get_root().replace_multiple(&replacements), expected);
         }
+    }
+
+    #[test]
+    fn homogeneous_factors_register_as_scalar_functions_beside_tensor_families() {
+        test_initialise().unwrap();
+        let family = symbol!("gammalooprs::uv::numerator_family");
+        let tensor_family = symbol!("evaluator_test::factor_tensor_family");
+        let formal = symbol!("evaluator_test::factor_argument"; Scalar);
+        let q = function!(formal, 0);
+        let r = function!(formal, 1);
+        let scope = Atom::var(symbol!("evaluator_test::factor_scope"));
+        let tag = |index: i64| function!(crate::uv::Integrands::factor_symbol(), &scope, index);
+        let energy = function!(
+            GS.on_shell_energy,
+            0,
+            parse_lit!(evaluator_test::x).pow(2) + 1
+        );
+        let surface = GS.wrap_esurface(&(&energy + parse_lit!(evaluator_test::y)));
+        let bodies = [&energy * parse_lit!(evaluator_test::y), surface.pow(-2)];
+        let mut definitions = bodies
+            .iter()
+            .enumerate()
+            .map(|(index, body)| {
+                Arc::new(FnMapEntry {
+                    inlining: InliningPolicy::Always,
+                    is_alias: false,
+                    lhs: function!(family, tag(index as i64)),
+                    rhs: body.clone(),
+                    tags: vec![tag(index as i64)],
+                    args: vec![],
+                })
+            })
+            .collect::<Vec<_>>();
+        definitions.push(Arc::new(FnMapEntry {
+            inlining: InliningPolicy::Always,
+            is_alias: false,
+            lhs: function!(tensor_family, 7, &q, &r),
+            rhs: &q + 10 * &r,
+            tags: vec![Atom::num(7)],
+            args: [&q, &r]
+                .into_iter()
+                .map(|arg| Indeterminate::try_from(arg.clone()).unwrap())
+                .collect(),
+        }));
+        let factor = |index: i64| function!(family, tag(index));
+        let roots = [
+            3 * factor(0) * function!(tensor_family, 7, &r, &q) + factor(1),
+            factor(0).pow(2) * factor(1),
+        ];
+        let (atoms, prepared) = EvaluatorStack::preprocess_numerator_families(
+            &roots,
+            &ParamBuilder::new_empty(),
+            &definitions,
+            &EvaluatorSettings::default(),
+            symbol!("evaluator_test::factor_scalar"),
+            InliningPolicy::Never,
+        )
+        .unwrap();
+        // Factors are called by their bare scalar tags, never as components.
+        for atom in &atoms {
+            assert!(!atom.get_root().contains_symbol(family));
+            assert!(
+                atom.get_root()
+                    .contains_symbol(crate::uv::Integrands::factor_symbol())
+            );
+        }
+        let registered = prepared
+            .reps
+            .iter()
+            .filter(|entry| {
+                entry
+                    .lhs
+                    .contains_symbol(crate::uv::Integrands::factor_symbol())
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(registered.len(), 2);
+        assert!(registered.iter().all(|entry| {
+            entry.args.is_empty()
+                && entry.inlining == InliningPolicy::Never
+                && !entry.rhs.contains_symbol(GS.esurface)
+        }));
+        let replacements = prepared
+            .reps
+            .iter()
+            .map(FnMapEntry::replacement)
+            .collect::<Vec<_>>();
+        let lowered = |atom: &Atom| GS.lower_esurfaces(atom);
+        let expected = [
+            3 * lowered(&bodies[0]) * (&r + 10 * &q) + lowered(&bodies[1]),
+            lowered(&bodies[0]).pow(2) * lowered(&bodies[1]),
+        ];
+        for (atom, expected) in atoms.iter().zip(expected) {
+            let mut resolved = atom.get_root().clone();
+            for _ in 0..4 {
+                resolved = resolved.replace_multiple(&replacements);
+            }
+            assert_eq!((resolved - expected).expand(), Atom::Zero);
+        }
+
+        // Conflicting bodies for one tag remain an error.
+        let mut conflicting = definitions.clone();
+        conflicting.push(Arc::new(FnMapEntry {
+            rhs: Atom::num(2),
+            ..definitions[0].as_ref().clone()
+        }));
+        assert!(
+            EvaluatorStack::preprocess_numerator_families(
+                &roots,
+                &ParamBuilder::new_empty(),
+                &conflicting,
+                &EvaluatorSettings::default(),
+                symbol!("evaluator_test::factor_scalar"),
+                InliningPolicy::Never,
+            )
+            .is_err()
+        );
     }
 
     #[test]

@@ -265,6 +265,12 @@ expression operations. CFF/from4D keeps its already-summed `SingleParametric`
 construction. LTD uses the same generic evaluator builder for its complete sum,
 with `SingleParametric` and `SummedFunctionMap` available when requested. The direct
 CFF/from3D Taylor path keeps its existing keyed-family representation.
+Within each direct Taylor operation, every maximal scalar subexpression that is
+exactly homogeneous in the Taylor scale, such as the coefficient of a frozen soft
+branch, becomes one shared closed factor times its power of that scale. No series
+expands a factor body. The next enclosing operation inlines the factor and extracts
+again in its own scale. The evaluator registers these factors as scalar functions,
+not as numerator tensor components.
 
 Requesting LTD requires local UV counterterms from expanded four-dimensional integrands and a complete orientation sum. Mixed CFF/LTD generation uses that same UV setting for both representations. Individual raised threshold residue-order coefficients may differ between CFF and LTD. Their complete contribution for each physical degenerate cut/residue must agree locally, with all pieces multiplying the same observable function grouped together. LTD threshold localization uses its own denominator factors and never reconstructs CFF to fix those individual coefficients.
 
@@ -352,7 +358,10 @@ For accepted tails, tables label the sparse terminal-zero evidence as `zero tail
   reduces to U. Integrated `IR` uses the signed finite projection described above.
 - Scheme validation rejects a positive-degree MUV parent containing a
   positive-degree IR child: its reduced-cograph subtraction lacks the containing
-  soft branch. It also rejects IR and PolePart components in one nested or
+  soft branch. The exception is a finite-temperature hedge-poset direct-3D forest
+  without integrated counterterms, where every enclosing operation treats the
+  completed soft branch as a frozen vertex, so the parent's U is that local
+  subtraction; integrated thermal soft counterterms are rejected up front. It also rejects IR and PolePart components in one nested or
   disconnected UV wood until their combined integrated policy is implemented.
   Components that cannot occur together in a wood do not trigger this rejection.
 - Local `OS` dispatch remains deferred, and requesting integrated OS is rejected

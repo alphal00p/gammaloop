@@ -33,7 +33,7 @@ use crate::{
     },
 };
 
-use super::coefficients::ScalarCoefficients;
+use super::coefficients::{ScalarCoefficients, is_factor_call};
 
 static NUMERATOR_SCOPE: AtomicUsize = AtomicUsize::new(0);
 
@@ -605,15 +605,34 @@ impl DirectResidueBranches {
                 .flat_map(|(_, roots)| roots.scalar_definitions().iter().cloned()),
         )?;
         let family = symbol!("gammalooprs::uv::numerator_family");
+        // Homogeneous factors of an earlier operation were transformed with
+        // every other body. Inline them here: in this operation's variable they
+        // are ordinary dependent subexpressions, extracted again below.
+        let factor_inline = self
+            .iter_keys()
+            .flat_map(|(_, roots)| roots.numerators().iter())
+            .filter(|entry| is_factor_call(entry.lhs.as_view()))
+            .map(|entry| (entry.lhs.clone(), entry.replacement()))
+            .collect::<BTreeMap<_, _>>()
+            .into_values()
+            .collect::<Vec<_>>();
+        let inline_factors = |atom: &Atom| {
+            if factor_inline.is_empty() {
+                atom.clone()
+            } else {
+                atom.replace_multiple(&factor_inline)
+            }
+        };
         let mut scalar_sources = BTreeMap::<Atom, Arc<FnMapEntry>>::new();
         let mut scalar_families = BTreeSet::new();
-        let sources = self.map_numerators(|entry| resolve(&entry.rhs))?;
+        let sources = self.map_numerators(|entry| resolve(&inline_factors(&entry.rhs)))?;
         let sources = Self::from_keyed(
             sources
                 .iter_keys()
                 .map(|(key, roots)| {
                     let mut used = BTreeSet::new();
                     let roots = roots.fallible_map(|atom| {
+                        let atom = inline_factors(atom);
                         let mut error = None;
                         let result = atom.replace_map(|view, _, out| {
                             if error.is_some() {
@@ -658,6 +677,7 @@ impl DirectResidueBranches {
                     let definitions = roots
                         .numerators()
                         .iter()
+                        .filter(|entry| !is_factor_call(entry.lhs.as_view()))
                         .cloned()
                         .chain(used.iter().map(|call| Arc::clone(&scalar_sources[call])))
                         .collect::<Vec<_>>();
@@ -846,12 +866,21 @@ impl DirectResidueBranches {
                 independent = normalized.clone();
                 dependent = Atom::one();
             }
+            let dependent_bytes = dependent.as_view().get_byte_size();
+            // A scalar coefficient is expanded only through its parts that are
+            // not exactly homogeneous; the rest becomes t^d times shared
+            // t-free factors that no series ever sees.
+            if center.is_zero() && scalar_families.contains(&entry.lhs) {
+                dependent = scalar_coefficients.retain_homogeneous(&dependent);
+            }
             crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
                 stage = "shared_taylor_body_probe_start", scope = %scope, index,
                 source_bytes = entry.rhs.as_view().get_byte_size(),
                 normalized_bytes = normalized.as_view().get_byte_size(),
                 independent_bytes = independent.as_view().get_byte_size(),
-                dependent_bytes = dependent.as_view().get_byte_size(),
+                dependent_bytes,
+                skeleton_bytes = dependent.as_view().get_byte_size(),
+                factor_count = scalar_coefficients.factor_definitions().len(),
                 "Probing a shared numerator's Laurent order"
             );
             let started = std::time::Instant::now();
@@ -1068,8 +1097,13 @@ impl DirectResidueBranches {
             coefficient_families = coefficients.values().map(Vec::len).sum::<usize>(),
             source_body_bytes = definitions.iter().map(|entry| entry.rhs.as_view().get_byte_size()).sum::<usize>(),
             coefficient_body_bytes = coefficients.values().flatten().map(|entry| entry.rhs.as_view().get_byte_size()).sum::<usize>(),
+            incoming_factors = factor_inline.len(),
+            factor_count = scalar_coefficients.factor_definitions().len(),
+            factor_body_bytes = scalar_coefficients.factor_definitions().iter().map(|entry| entry.rhs.as_view().get_byte_size()).sum::<usize>(),
+            scalar_definition_bytes = scalar_coefficients.definitions().iter().map(|entry| entry.rhs.as_view().get_byte_size()).sum::<usize>(),
             "Retained shared Taylor coefficients before residue specialization"
         );
+        let factor_definitions = scalar_coefficients.factor_definitions().to_vec();
         let result = Self::from_keyed(
             sources.iter_keys()
                 .enumerate()
@@ -1104,7 +1138,8 @@ impl DirectResidueBranches {
                                     "Constructing residue-root Taylor coefficients"
                                 );
                                 let composed = finish(&expanded_families)?;
-                                let result = scalar_coefficients.retain(&composed);
+                                let retained = scalar_coefficients.retain(&composed);
+                                let result = scalar_coefficients.wrap_factors(&retained);
                                 crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
                                     stage = "shared_taylor_root_series_done", scope = %scope, branch_index, ?cut,
                                     elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
@@ -1122,7 +1157,8 @@ impl DirectResidueBranches {
                             integrands
                                 .numerators()
                                 .iter()
-                                .flat_map(|entry| coefficients[&entry.lhs].iter().cloned()),
+                                .flat_map(|entry| coefficients[&entry.lhs].iter().cloned())
+                                .chain(factor_definitions.iter().cloned()),
                         )?,
                     ))
                 })

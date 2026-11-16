@@ -404,7 +404,11 @@ fn physical_full_h_scalar_cancellation_certificates() -> Result<()> {
                     if let AtomView::Fun(fun) = part
                         && fun.get_symbol() == symbol!("gammalooprs::uv::numerator_family")
                     {
-                        keys.insert(part.to_owned());
+                        // Mirror production: closed homogeneous factors are
+                        // scalar indeterminates, not numerator keys.
+                        if !is_factor_call(part) {
+                            keys.insert(part.to_owned());
+                        }
                         return false;
                     }
                     true

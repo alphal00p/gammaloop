@@ -31,6 +31,7 @@ use spenso::{
     structure::representation::{Minkowski, RepName},
 };
 use symbolica::{function, symbol};
+use three_dimensional_reps::ThermalDistributionCall;
 
 // #[debug_instrument(
 //     current = %current.log_display(),
@@ -1801,4 +1802,723 @@ fn local_3d_os_dispatch_is_unconditionally_deferred() {
             &given,
         )
         .unwrap();
+}
+
+#[test]
+fn thermal_soft_hard_chart_matches_direct_occupation_jets() -> Result<()> {
+    test_initialise()?;
+    let graph: Graph = dot!(
+        digraph thermal_soft_jet {
+            node [num=1];
+            ext [style=invis];
+            ext -> a:0 [id=0 particle=H];
+            b:1 -> ext [id=1 particle=H];
+            a -> b [id=2 particle=d num=1];
+            b -> a [id=3 particle=d num=1 lmb_id=0];
+        }
+    )?;
+    let root = root_node(&graph);
+    let settings = UVgenerationSettings::default();
+    let ctx = UVCtx::new(&graph, &settings);
+    let direct_parameter = symbol!("thermal_soft_direct_parameter");
+    let mass = symbol!("thermal_soft_direct_mass");
+    let contour = symbol!("thermal_soft_direct_contour");
+    let orientation = symbol!("thermal_soft_direct_orientation");
+    let independent_energy = symbol!("thermal_soft_independent_energy");
+    let chemical_potential = graph[EdgeIndex(2)].chemical_potential_atom().unwrap();
+    let occupation = (Atom::var(contour) + Atom::one()) / Atom::num(2)
+        - Atom::one()
+            / ((Atom::var(GS.inverse_temperature)
+                * (Atom::var(independent_energy) - Atom::var(orientation) * &chemical_potential))
+                .exp()
+                + Atom::one());
+
+    for dod in 0..=2 {
+        let mut current = two_point_node(&graph, dod);
+        current.lmb = graph.try_compatible_sub_lmb(
+            current.subgraph(),
+            graph.dummy_less_full_crown(current.subgraph()),
+            &graph.loop_momentum_basis,
+        )?;
+        let loop_edge = *current.lmb.loop_edges.first().unwrap();
+        let shifted_edge = graph
+            .iter_edges_of(current.subgraph())
+            .find_map(|(pair, edge, _)| (pair.is_paired() && edge != loop_edge).then_some(edge))
+            .unwrap();
+        let mass_scope = function!(*LOCAL_3D_MASS_SCOPE, loop_edge.0);
+        let mut source_invariant = (Atom::var(mass) * &mass_scope).pow(2);
+        let mut direct_invariant = source_invariant.clone();
+        for component in 1..=3 {
+            let index = [GS.cind(component)];
+            source_invariant += GS
+                .emr_vec
+                .call_args([Atom::num(shifted_edge.0), index[0].clone()])
+                .pow(2);
+            let hard = current
+                .lmb
+                .loop_atom(shifted_edge, GS.emr_vec, &index, true);
+            let boundary = current.lmb.ext_atom(shifted_edge, GS.emr_vec, &index, true);
+            direct_invariant += (hard + Atom::var(direct_parameter) * boundary).pow(2);
+        }
+        let source_energy = function!(GS.on_shell_energy, loop_edge.0, source_invariant);
+        let direct_energy = function!(GS.on_shell_energy, loop_edge.0, &direct_invariant);
+        for derivative_order in 0..=2 {
+            // The measure contributes 3, E^r contributes r, and N_j contributes
+            // -j. Thus r+3-j=d, and the strict negative Laurent endpoint keeps
+            // exactly the direct external jet through d-1 (nothing for d=0).
+            let degree = i64::from(dod - 3 + derivative_order);
+            let weight = |energy: &Atom| {
+                energy.pow(degree)
+                    * ThermalDistributionCall::atom_at_energy(
+                        shifted_edge.0,
+                        derivative_order,
+                        1,
+                        contour,
+                        orientation,
+                        energy,
+                    )
+            };
+            let actual = Local3DLoopRescaling::FullSubgraph.project(
+                Local3DDeformation::Soft,
+                &ctx,
+                &current,
+                &root,
+                &weight(&source_energy),
+                None,
+                current.lmb(),
+            )?;
+            let expected = if dod == 0 {
+                Atom::Zero
+            } else {
+                (direct_energy.pow(degree)
+                    * (ThermalDistributionCall::atom_at_energy(
+                        shifted_edge.0,
+                        derivative_order,
+                        1,
+                        -1,
+                        orientation,
+                        &direct_energy,
+                    ) + if derivative_order == 0 {
+                        (Atom::var(contour) + Atom::one()) / Atom::num(2)
+                    } else {
+                        Atom::Zero
+                    }))
+                .series(direct_parameter, Atom::Zero, dod - 1)?
+                .to_atom()
+                .replace(direct_parameter)
+                .with(1)
+            };
+            // These are scalar coefficients; graph numerators are never distributed.
+            let difference = (&actual - expected).together().cancel().expand();
+            assert!(
+                difference.is_zero(),
+                "d={dod}, N order={derivative_order}: {difference}"
+            );
+            if dod != 2 {
+                continue;
+            }
+
+            // Independently differentiate the elementary Fermi occupation, then
+            // Taylor-expand E(k+tq,m). T and mu remain fixed throughout this route.
+            let mut direct_occupation = occupation.clone();
+            for _ in 0..derivative_order {
+                direct_occupation = direct_occupation.derivative(independent_energy);
+            }
+            let explicit_energy = direct_invariant.sqrt();
+            let direct = explicit_energy.pow(degree)
+                * direct_occupation
+                    .replace(independent_energy)
+                    .with(explicit_energy);
+            let mut actual = graph
+                .make_thermal_distributions_explicit(
+                    &actual,
+                    MediumMode::ThermodynamicEquilibrium,
+                    [shifted_edge],
+                )?
+                .replace(function!(GS.on_shell_energy, W_.x_, W_.prop_))
+                .with(Atom::var(W_.prop_).sqrt());
+            let mut direct = direct;
+            for expression in [&mut actual, &mut direct] {
+                *expression = expression
+                    .replace(mass)
+                    .with(4)
+                    .replace(mass_scope.to_pattern())
+                    .with(1);
+                for (component, value) in [(1, 1), (2, 2), (3, 2)] {
+                    *expression = expression
+                        .replace(
+                            GS.emr_vec
+                                .call_args([Atom::num(loop_edge.0), GS.cind(component)]),
+                        )
+                        .with(value);
+                }
+                for edge in &current.lmb.ext_edges {
+                    for (component, value) in [(1, 1), (2, -1), (3, 1)] {
+                        *expression = expression
+                            .replace(
+                                GS.emr_vec
+                                    .call_args([Atom::num(edge.0), GS.cind(component)]),
+                            )
+                            .with(value);
+                    }
+                }
+            }
+            let direct = direct
+                .series(direct_parameter, Atom::Zero, 1)?
+                .to_atom()
+                .replace(direct_parameter)
+                .with(1);
+            let params = [
+                Atom::var(GS.inverse_temperature),
+                chemical_potential.clone(),
+                Atom::var(contour),
+                Atom::var(orientation),
+            ];
+            let [mut actual, mut direct] = [actual, direct].map(|expression| {
+                expression
+                    .evaluator(&params)
+                    .function_map(graph.param_builder.fn_map.clone())
+                    .build()
+                    .unwrap()
+                    .map_coeff(&|coefficient| coefficient.re.to_f64())
+            });
+            for mu in [-0.8, 0.8] {
+                for contour in [-1.0, 0.0, 1.0] {
+                    for orientation in [-1.0, 1.0] {
+                        let input = [0.7, mu, contour, orientation];
+                        let actual = actual.evaluate_single(&input);
+                        let direct = direct.evaluate_single(&input);
+                        assert!(
+                            (actual - direct).abs() < 2e-12,
+                            "N order={derivative_order}, mu={mu}, contour={contour}, orientation={orientation}: {actual} != {direct}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn thermal_soft_distinct_edge_divided_difference_is_regular() -> Result<()> {
+    test_initialise()?;
+    let graph: Graph = dot!(
+        digraph thermal_soft_coincident_energies {
+            node [num=1];
+            ext [style=invis];
+            ext -> a:0 [id=0 particle=H];
+            b:1 -> ext [id=1 particle=H];
+            a -> b [id=2 particle=d num=1];
+            b -> a [id=3 particle=d num=1 lmb_id=0];
+        }
+    )?;
+    let mut current = two_point_node(&graph, 2);
+    current.lmb = graph.try_compatible_sub_lmb(
+        current.subgraph(),
+        graph.dummy_less_full_crown(current.subgraph()),
+        &graph.loop_momentum_basis,
+    )?;
+    let root = root_node(&graph);
+    let settings = UVgenerationSettings::default();
+    let ctx = UVCtx::new(&graph, &settings);
+    let loop_edge = *current.lmb.loop_edges.first().unwrap();
+    let shifted_edge = EdgeIndex(2);
+    assert_ne!(shifted_edge, loop_edge);
+    assert_eq!(
+        graph[shifted_edge].chemical_potential_atom(),
+        graph[loop_edge].chemical_potential_atom()
+    );
+    let mass = Atom::var(symbol!("thermal_soft_coincident_mass"))
+        * function!(*LOCAL_3D_MASS_SCOPE, loop_edge.0);
+    let mut base_invariant = mass.pow(2);
+    let mut shifted_invariant = base_invariant.clone();
+    let mut scalar_product = Atom::Zero;
+    for component in 1..=3 {
+        let index = [GS.cind(component)];
+        let hard = current
+            .lmb
+            .loop_atom(shifted_edge, GS.emr_vec, &index, true);
+        let boundary = current.lmb.ext_atom(shifted_edge, GS.emr_vec, &index, true);
+        base_invariant += hard.pow(2);
+        shifted_invariant += (&hard + &boundary).pow(2);
+        scalar_product += hard * boundary;
+    }
+    let base_energy = function!(GS.on_shell_energy, loop_edge.0, base_invariant);
+    let shifted_energy = function!(GS.on_shell_energy, loop_edge.0, shifted_invariant);
+    for orientation in [-1, 1] {
+        // Distinct source edges have the same physical occupation. A temporary
+        // projection view must recognize this equality before taking the series.
+        let source = (ThermalDistributionCall::atom_at_energy(
+            shifted_edge.0,
+            0,
+            1,
+            -1,
+            orientation,
+            &shifted_energy,
+        ) - ThermalDistributionCall::atom_at_energy(
+            loop_edge.0,
+            0,
+            1,
+            -1,
+            orientation,
+            &base_energy,
+        )) / (&shifted_energy - &base_energy);
+        let actual = Local3DLoopRescaling::FullSubgraph.project(
+            Local3DDeformation::Soft,
+            &ctx,
+            &current,
+            &root,
+            &source,
+            None,
+            current.lmb(),
+        )?;
+        // [f(E+delta)-f(E)]/delta = f'(E)+delta*f''(E)/2+O(delta²).
+        // The quotient has degree -1; its 3D measure makes d=2, keeping
+        // its constant and linear external coefficients.
+        let expected = ThermalDistributionCall::atom_at_energy(
+            shifted_edge.0,
+            1,
+            1,
+            -1,
+            orientation,
+            &base_energy,
+        ) + &scalar_product / (Atom::num(2) * &base_energy)
+            * ThermalDistributionCall::atom_at_energy(
+                shifted_edge.0,
+                2,
+                1,
+                -1,
+                orientation,
+                &base_energy,
+            );
+        let difference = (actual - expected).together().cancel().expand();
+        assert!(
+            difference.is_zero(),
+            "orientation={orientation}: {difference}"
+        );
+    }
+    Ok(())
+}
+
+/// A quark-loop child {e1,e2}, its two-loop gluon parent {e0,e1,e2}, and a
+/// disjoint sibling loop {e3}.
+fn thermal_soft_forest() -> Result<Graph> {
+    Ok(dot!(
+        digraph thermal_soft_forest {
+            node [num=1];
+            a -> b [id=0 particle=g num=1 lmb_id=0];
+            a -> b [id=1 particle=d num=1];
+            b -> a [id=2 particle=d num=1 lmb_id=1];
+            a -> a [id=3 particle=d num=1 lmb_id=2];
+        }
+    )?)
+}
+
+fn thermal_soft_node(graph: &Graph, edges: &[usize], dod: i32) -> TestNode {
+    let mut subgraph = graph.empty_subgraph::<SuBitGraph>();
+    for &edge in edges {
+        subgraph.add(graph[&EdgeIndex(edge)].1);
+    }
+    TestNode {
+        lmb: graph.compatible_sub_lmb(
+            &subgraph,
+            graph.dummy_less_full_crown(&subgraph),
+            &graph.loop_momentum_basis,
+        ),
+        subgraph,
+        dod,
+        scheme: ApproximationType::IR,
+    }
+}
+
+/// The on-shell energy of `edge` started by the operation owning `owner`.
+fn scoped_energy(edge: EdgeIndex, owner: EdgeIndex, mass: Atom) -> Atom {
+    let invariant = (1..=3)
+        .map(|component| {
+            GS.emr_vec
+                .call_args([Atom::num(edge.0), GS.cind(component)])
+                .pow(2)
+        })
+        .sum::<Atom>()
+        + mass.pow(2);
+    function!(GS.on_shell_energy, owner.0, invariant)
+}
+
+/// The owners of every on-shell energy in `atom`.
+fn energy_owners(atom: &Atom) -> BTreeSet<Atom> {
+    let mut owners = BTreeSet::new();
+    atom.visitor(&mut |view| {
+        if let AtomView::Fun(call) = view
+            && call.get_symbol() == GS.on_shell_energy
+        {
+            owners.insert(call.get(0).to_owned());
+        }
+        true
+    });
+    owners
+}
+
+/// The MUV expansion of `1/E0^3` on the reduced line e0 of a two-loop parent
+/// with total degree two, at the parent's ordinary scope.
+fn reduced_line_uv(parent_carrier: EdgeIndex, mass: &Atom, parent_scope: &Atom) -> Atom {
+    let uv_energy = scoped_energy(
+        EdgeIndex(0),
+        parent_carrier,
+        Atom::var(GS.m_uv_vacuum) * parent_scope,
+    );
+    let mass_shift = (mass.pow(2) - Atom::var(GS.m_uv_expansion).pow(2)) * parent_scope.pow(2);
+    uv_energy.pow(-3) - Atom::num(3) / Atom::num(2) * mass_shift * uv_energy.pow(-5)
+}
+
+#[test]
+fn thermal_soft_completed_child_is_frozen_in_two_loop_parent_and_inert_in_sibling() -> Result<()> {
+    test_initialise()?;
+    let graph = thermal_soft_forest()?;
+    let child = thermal_soft_node(&graph, &[1, 2], 2);
+    let parent = thermal_soft_node(&graph, &[0, 1, 2], 2);
+    let sibling = thermal_soft_node(&graph, &[3], 0);
+    assert_eq!(
+        parent.lmb.loop_edges.len(),
+        2,
+        "the enclosing operation must scale both loops"
+    );
+    let root = root_node(&graph);
+    let settings = UVgenerationSettings::default();
+    let ctx = UVCtx::new(&graph, &settings);
+    let child_carrier = *child.lmb.loop_edges.first().unwrap();
+    let parent_carrier = *parent.lmb.loop_edges.first().unwrap();
+    let child_scope = function!(*LOCAL_3D_MASS_SCOPE, child_carrier.0);
+    let parent_scope = function!(*LOCAL_3D_MASS_SCOPE, parent_carrier.0);
+    let sibling_scope = function!(*LOCAL_3D_MASS_SCOPE, 3);
+    let physical_mass = Atom::var(symbol!("thermal_soft_forest_mass"));
+    let shifted_energy = scoped_energy(EdgeIndex(1), child_carrier, &physical_mass * &child_scope);
+    let child_source =
+        ThermalDistributionCall::atom_at_energy(1, 0, 1, -1, 1, &shifted_energy) / &shifted_energy;
+    let completed_child = Local3DLoopRescaling::FullSubgraph.project(
+        Local3DDeformation::Soft,
+        &ctx,
+        &child,
+        &root,
+        &child_source,
+        None,
+        child.lmb(),
+    )?;
+    assert!(completed_child.contains_symbol(GS.thermal_distribution));
+    assert!(
+        (1..=3).any(|component| completed_child
+            .contains(GS.emr_vec.call_args([Atom::num(0), GS.cind(component)]))),
+        "the completed child must retain the outer loop's linear boundary jet"
+    );
+
+    let parent_energy = scoped_energy(EdgeIndex(0), parent_carrier, &physical_mass * &parent_scope);
+    let spectator = ThermalDistributionCall::atom(3, 0, 1, -1, -1);
+
+    // Unfrozen, as in vacuum, the parent's U vacuum-projects the child's occupation.
+    let unfrozen_uv = Local3DLoopRescaling::FullSubgraph.t(
+        &ctx,
+        &parent,
+        &child,
+        &(&completed_child * &spectator / parent_energy.pow(3)),
+        Some(parent.subgraph()),
+        parent.lmb(),
+    )?;
+    assert!(
+        unfrozen_uv.is_zero(),
+        "an unfrozen thermal child is vacuum-projected by the parent's U"
+    );
+
+    // At finite temperature the completed branch is handed on as a frozen vertex.
+    let frozen_child = Direct3dApproximation::freeze_soft_atom(
+        &completed_child,
+        child.subgraph(),
+        child.lmb(),
+        &child_scope,
+    );
+    assert!(frozen_child.contains_symbol(*LOCAL_3D_SOFT_SCOPE));
+    assert!(!frozen_child.contains(child_scope.clone()));
+    assert_eq!(
+        energy_owners(&frozen_child),
+        BTreeSet::from([Atom::var(child.subgraph().symbol())]),
+        "every energy the child expanded must be owned by its support"
+    );
+    let parent_source = &frozen_child * &spectator / parent_energy.pow(3);
+    let parent_soft = Local3DLoopRescaling::FullSubgraph.project(
+        Local3DDeformation::Soft,
+        &ctx,
+        &parent,
+        &child,
+        &parent_source,
+        Some(parent.subgraph()),
+        parent.lmb(),
+    )?;
+    // There is no graph-external momentum. After both parent loops, the masses
+    // and the child's temperature co-scale, this scalar coefficient has degree
+    // -4 and the measure degree 6. Its d=2 soft jet is therefore the entire
+    // coefficient, including the frozen child and the disjoint occupation.
+    let difference = (parent_soft - &parent_source).together().cancel().expand();
+    assert!(difference.is_zero(), "two-loop parent: {difference}");
+
+    // The parent's U subtracts only its reduced cograph e0. The frozen child is
+    // homogeneous of degree -1 and stays a fixed vertex, while 1/E0^3 receives
+    // its MUV expansion through relative order two.
+    let parent_uv = Local3DLoopRescaling::FullSubgraph.t(
+        &ctx,
+        &parent,
+        &child,
+        &parent_source,
+        Some(parent.subgraph()),
+        parent.lmb(),
+    )?;
+    let expected_uv =
+        &frozen_child * &spectator * reduced_line_uv(parent_carrier, &physical_mass, &parent_scope);
+    let difference = (parent_uv - expected_uv).together().cancel().expand();
+    assert!(
+        difference.is_zero(),
+        "the parent's U must keep its frozen child: {difference}"
+    );
+
+    let sibling_energy = scoped_energy(
+        EdgeIndex(3),
+        EdgeIndex(3),
+        Atom::var(GS.m_uv_expansion) * &sibling_scope,
+    );
+    let completed_child = frozen_child;
+    let sibling_source = &completed_child
+        * ThermalDistributionCall::atom_at_energy(3, 0, 1, 1, -1, &sibling_energy)
+        / sibling_energy.pow(3);
+    let sibling_uv = Local3DLoopRescaling::FullSubgraph.t(
+        &ctx,
+        &sibling,
+        &root,
+        &sibling_source,
+        None,
+        sibling.lmb(),
+    )?;
+    let vacuum_energy = scoped_energy(
+        EdgeIndex(3),
+        EdgeIndex(3),
+        Atom::var(GS.m_uv_vacuum) * sibling_scope,
+    );
+    let difference = (sibling_uv - &completed_child / vacuum_energy.pow(3))
+        .together()
+        .cancel()
+        .expand();
+    assert!(
+        difference.is_zero(),
+        "a disjoint U changed the retained child: {difference}"
+    );
+    Ok(())
+}
+
+#[test]
+fn thermal_soft_own_u_keeps_the_branch_scope_that_an_enclosing_u_co_scales() -> Result<()> {
+    test_initialise()?;
+    let graph = thermal_soft_forest()?;
+    let child = thermal_soft_node(&graph, &[1, 2], 2);
+    let parent = thermal_soft_node(&graph, &[0, 1, 2], 2);
+    let root = root_node(&graph);
+    let settings = UVgenerationSettings::default();
+    let ctx = UVCtx::new(&graph, &settings);
+    let child_carrier = *child.lmb.loop_edges.first().unwrap();
+    let parent_carrier = *parent.lmb.loop_edges.first().unwrap();
+    let child_scope = function!(*LOCAL_3D_MASS_SCOPE, child_carrier.0);
+    let parent_scope = function!(*LOCAL_3D_MASS_SCOPE, parent_carrier.0);
+    let child_owner = Atom::var(child.subgraph().symbol());
+    let physical_mass = Atom::var(symbol!("thermal_soft_own_u_mass"));
+    let child_energy = scoped_energy(EdgeIndex(1), child_carrier, &physical_mass * &child_scope);
+    // A vacuum part and an occupation, so that U leaves a nonzero coefficient.
+    let child_source = (Atom::one()
+        + ThermalDistributionCall::atom_at_energy(1, 0, 1, -1, 1, &child_energy))
+        / &child_energy;
+    let soft = Local3DLoopRescaling::FullSubgraph.project(
+        Local3DDeformation::Soft,
+        &ctx,
+        &child,
+        &root,
+        &child_source,
+        None,
+        child.lmb(),
+    )?;
+    let frozen =
+        Direct3dApproximation::freeze_soft_atom(&soft, child.subgraph(), child.lmb(), &child_scope);
+
+    // U_c(S_c X): the child's own U projects its retained occupation and
+    // expands its own energies with MUV in the branch scope.
+    let own_uv = Local3DLoopRescaling::FullSubgraph.project(
+        Local3DDeformation::OrdinaryOnSoftBranch,
+        &ctx,
+        &child,
+        &root,
+        &frozen,
+        None,
+        child.lmb(),
+    )?;
+    assert!(!own_uv.is_zero());
+    assert!(!own_uv.contains_symbol(GS.thermal_distribution));
+    assert!(own_uv.contains_symbol(GS.m_uv_vacuum));
+    assert!(own_uv.contains(thermal_soft::soft_branch_scope(child.subgraph())));
+    assert!(!own_uv.contains(child_scope.clone()));
+    assert_eq!(
+        energy_owners(&own_uv),
+        BTreeSet::from([child_owner.clone()])
+    );
+    // Up to its tags it is the ordinary U of the same soft jet.
+    let lowered = own_uv
+        .replace(thermal_soft::soft_branch_scope(child.subgraph()))
+        .with(child_scope.clone())
+        .replace(function!(GS.on_shell_energy, child_owner.clone(), W_.prop_))
+        .with(function!(GS.on_shell_energy, child_carrier.0, W_.prop_));
+    let ordinary_on_soft =
+        Local3DLoopRescaling::FullSubgraph.t(&ctx, &child, &root, &soft, None, child.lmb())?;
+    let difference = (lowered - ordinary_on_soft).together().cancel().expand();
+    assert!(difference.is_zero(), "own U up to its tags: {difference}");
+
+    // An enclosing U co-scales the branch scope of U_c(S_c X), which is thus a
+    // fixed vertex times the MUV expansion of the reduced line e0.
+    let parent_energy = scoped_energy(EdgeIndex(0), parent_carrier, &physical_mass * &parent_scope);
+    let reduced_line = reduced_line_uv(parent_carrier, &physical_mass, &parent_scope);
+    let parent_uv = Local3DLoopRescaling::FullSubgraph.t(
+        &ctx,
+        &parent,
+        &child,
+        &(&own_uv / parent_energy.pow(3)),
+        Some(parent.subgraph()),
+        parent.lmb(),
+    )?;
+    let difference = (parent_uv - &own_uv * &reduced_line)
+        .together()
+        .cancel()
+        .expand();
+    assert!(
+        difference.is_zero(),
+        "the enclosing U must co-scale U_c(S_c X): {difference}"
+    );
+
+    // U_c X keeps the ordinary scope, which the enclosing U holds fixed, so
+    // the same factorization fails for it.
+    let ordinary_uv = Local3DLoopRescaling::FullSubgraph.t(
+        &ctx,
+        &child,
+        &root,
+        &child_source,
+        None,
+        child.lmb(),
+    )?;
+    assert!(ordinary_uv.contains(child_scope.clone()));
+    let parent_on_ordinary = Local3DLoopRescaling::FullSubgraph.t(
+        &ctx,
+        &parent,
+        &child,
+        &(&ordinary_uv / parent_energy.pow(3)),
+        Some(parent.subgraph()),
+        parent.lmb(),
+    )?;
+    let factorized = (&ordinary_uv * &reduced_line)
+        .replace(child_scope.clone())
+        .with(parent_scope.clone());
+    let difference = (parent_on_ordinary - factorized)
+        .together()
+        .cancel()
+        .expand();
+    assert!(
+        !difference.is_zero(),
+        "the ordinary scope of U_c X must not be co-scaled by the enclosing U"
+    );
+    Ok(())
+}
+
+#[test]
+fn thermal_soft_dispatch_preserves_the_vacuum_and_zero_temperature_modes() -> Result<()> {
+    test_initialise()?;
+    let mut graph = scalar_two_point_graph();
+    let settings = UVgenerationSettings {
+        generate_integrated: false,
+        ..Default::default()
+    };
+    let orientation_pattern = OrientationPattern::default();
+    for mode in [
+        MediumMode::Vacuum,
+        MediumMode::ThermodynamicEquilibrium,
+        MediumMode::ZeroTemperatureEquilibrium,
+    ] {
+        graph.set_medium_mode(mode)?;
+        let mut options = graph.denominator_only_cff_3d_expression_options();
+        options.medium_mode = mode;
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let production = graph.generate_3d_expression_for_integrand(
+            &[],
+            &canonization,
+            &options,
+            Some(&Atom::one()),
+        )?;
+        let orientation = OrientationProjection::exact_expression(
+            &production,
+            &options,
+            &orientation_pattern,
+            false,
+        );
+        let ctx = UVCtx::new(&graph, &settings);
+        let root = root_node(&graph);
+        for dod in 0..=2 {
+            let current = two_point_node(&graph, dod);
+            let loop_edge = *current.lmb.loop_edges.first().unwrap();
+            let mass = graph[loop_edge].mass_atom() * function!(*LOCAL_3D_MASS_SCOPE, loop_edge.0);
+            let energy = GS.ose_full(loop_edge, loop_edge, mass, None);
+            let distribution = if mode == MediumMode::Vacuum {
+                Atom::one()
+            } else {
+                ThermalDistributionCall::atom_at_energy(
+                    loop_edge.0,
+                    0,
+                    i64::from(mode.is_finite_temperature()),
+                    1,
+                    1,
+                    &energy,
+                )
+            };
+            let source = distribution / energy.pow(3 - i64::from(dod));
+            let input = Integrands::root().map(|_| source.clone());
+            let input = DirectResidueBranches::production(OrientationID(0), input)?;
+            let actual = apply_taylor(
+                &ctx,
+                orientation,
+                &current,
+                &root,
+                None,
+                current.lmb(),
+                &input,
+            )?
+            .materialize(false)?
+            .resolved()?;
+            let actual = actual.iter().next().unwrap().1;
+            assert_eq!(
+                actual.contains_symbol(GS.thermal_distribution),
+                mode.is_finite_temperature() && dod > 0,
+                "mode={mode:?}, d={dod}"
+            );
+            // Only a thermal soft branch is frozen for enclosing operations.
+            let mut frozen = actual.contains_symbol(*LOCAL_3D_SOFT_SCOPE);
+            actual.visitor(&mut |view| {
+                if let AtomView::Fun(call) = view
+                    && call.get_symbol() == GS.on_shell_energy
+                    && thermal_soft::component_owner(call.get(0), graph.n_hedges()).is_some()
+                {
+                    frozen = true;
+                }
+                !frozen
+            });
+            assert_eq!(
+                frozen,
+                mode.is_finite_temperature() && dod > 0,
+                "frozen soft branch in mode={mode:?}, d={dod}"
+            );
+            assert!(!actual.contains_symbol(GS.rescale));
+            assert!(
+                !actual.is_zero(),
+                "the vacuum coefficient must remain in mode={mode:?}, d={dod}"
+            );
+        }
+    }
+    Ok(())
 }

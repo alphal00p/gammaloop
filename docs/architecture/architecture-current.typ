@@ -291,9 +291,11 @@ parameter layer expands the symbolic weights using particle statistics,
 chemical potentials, and inverse temperature; the shared generator does not
 own the physics model.
 
-Each distribution factor is the tagged call `N(e, r, t, s, sigma)`. Here `e` is
-the edge ID and `r` the derivative order with respect to the positive on-shell
-energy `E` of `e`. The flag `t` is 1 at finite temperature and 0 in the
+Each distribution factor is the tagged call `N(e, r, t, s, sigma, E)`. Here `e`
+retains particle and chemical-potential ownership, `r` is the derivative order
+with respect to positive energy, and `E` is an explicit energy expression.
+The initial energy is `OSE(e)`; Taylor operations can change its momentum
+dependence without changing its particle metadata. The flag `t` is 1 at finite temperature and 0 in the
 zero-temperature limit. The contour offset `s` is +1 or -1 for a directed weight
 and 0 for their symmetric average. The physical energy orientation
 `sigma = sign(e)` selects the chemical potential `sigma*mu` and stays symbolic
@@ -309,6 +311,8 @@ an `s = -1` body is the bare occupation. As a runtime argument, `s` would let
 evaluator optimization add the constant to an exponentially small occupation
 first. Orders one and two are written in closed form with `sech` and `csch`;
 higher orders are differentiated symbolically from order two. The
+energy-derivative callback increments `r` and sets the contour offset to `-1`,
+since differentiating removes the constant vacuum offset. The
 zero-temperature order zero is
 `(1 + s)/2 - theta(sigma*mu - E)`, whose positive orders are the distributions
 localized below. The registered step is zero for a negative real argument and one
@@ -351,16 +355,42 @@ Surviving pole orientations remain independent of numerator interpolation maps,
 so zero or uniform-scale samples never set the chemical-potential sign. Residue
 map identities and labels distinguish both the pole directions and the samples.
 
-Medium modes use direct local 3D UV subtraction. Their local UV kernels take the
-vacuum limit while the surrounding observable retains its medium dependence;
+Medium modes use direct local 3D UV subtraction. The ordinary operator `U`
+takes the active distributions' vacuum limit. The experimental finite-temperature
+soft operator `S` retains them. Under the auxiliary hard rescaling, it represents
+`N_d(E_h)` as `h^(-d) N_d(E_h/h)`: since
+`E_h = h E(k + q/h,m)`, the energy argument exposes the external soft expansion
+at fixed physical temperature and chemical potential. Equal active occupations
+are identified by statistics and chemical potential; contour offsets are separated
+from their occupation before expansion. No damping, loop-count restriction, or
+additional disjoint counterterm is included. This minimal construction is under
+investigation and requires `generate_integrated = false`; local finiteness is not
+established.
+
+At finite temperature the completed soft branch is a frozen vertex for every
+strictly enclosing operation. After its series, the branch replaces its mass scope
+by `local_3d_soft_scope(S_<label>)` of its support and the owner of each on-shell
+energy it expanded by that support's `S_<label>` symbol; retained occupations are
+recognized through these energies. An enclosing `U` or `S` co-scales the soft scope,
+normalizes the branch's energies as `S` does, and co-scales the temperature and
+chemical potential of its occupations instead of projecting them, so an enclosing
+`U` expands only the reduced cograph. A positive-degree `IR` node therefore
+materializes `S(X) + U(X) - U(S(X))`: `U(X)` keeps the ordinary scope, which
+enclosing operations hold fixed, while the node's own `U` acts on its frozen
+branch with the branch scope, which they co-scale. In vacuum and at zero
+temperature the node keeps the single pass `S(X) + U(X - S(X))`.
 CFF conversion wraps each completed medium coefficient as `thermal_weight(W)`;
 optional vacuum subtraction replaces it with `thermal_weight(W - V(W))` before
-local UV operations. The wrapper survives UV subtraction and final assembly,
+local UV operations. The wrapper follows the identity under differentiation,
 then the evaluator function map resolves it as the identity. Only
 `thermal_weight(0)` normalizes immediately, so vanishing branches are pruned.
 With vacuum subtraction enabled, the spinney covering all loop edges is excluded
 before both 4D and 3D counterterm computation, including when bridges remain in the
-graph; there are no separate vacuum-subtraction forest branches.
+graph; there are no separate vacuum-subtraction forest branches. The exception is a
+finite-temperature hedge-poset direct-3D forest without integrated counterterms that
+contains a positive-degree `IR` component: there the spinney is kept as a plain `U`,
+the subtraction of each frozen soft branch's reduced cograph. On every other branch
+it vanishes identically, and its node returns zero before numerator or Taylor work.
 Vacuum mode emits a plain unit without a thermal wrapper. Generation validation
 rejects combining vacuum mode with vacuum subtraction and rejects
 `local_uv_cts_from_expanded_4d_integrands` for either medium mode.
@@ -372,7 +402,9 @@ GammaLoop.
 
 Process generation configures the graph's parameter builder with its selected medium and
 registers only that mode's distribution functions. Finite-temperature energy derivatives
-are built incrementally. Zero-temperature registration contains only order zero; positive-order
+are built incrementally, with additional orders registered from the completed
+Taylor expressions and retained definitions before evaluator construction.
+Zero-temperature registration contains only order zero; positive-order
 factors are removed or localized before ordinary evaluator construction, as described below.
 The builder persists the mode so runtime warmup can validate the current
 temperature, chemical potentials, bosonic mass domain, and finite real fermion masses
@@ -495,7 +527,9 @@ CFF capacities belong to independently sampled denominator occurrences. Physical
 
 Both direct local-3D modes first perform the complete loop-energy integration and build the complete/global CFF expression; the UV Taylor operators then act on that CFF expression. They use the same Taylor-transformed CFF bodies. Writing the generalized residue map as `{ k -> C_k }`, `explicit_orientation_sum_only=false` is `sum_k sigma(k) C_k`, with `sigma(k)` the one-hot selector for the complete residue-map key. The Taylor operator is applied independently to every keyed body and leaves that selector opaque. `explicit_orientation_sum_only=true` only replaces each selector by one and explicitly sums the same bodies. Neither direct mode reconstructs or projects completed local-4D Taylor structures.
 
-Active direct-3D on-shell energies use `OnShellEnergy(owner, s) = sqrt(s)`, where the invariant `s = m^2 + q^2` retains the complete routed spatial momentum and mass scopes. Its custom derivative is `dE/ds = 1/(2E)`; the owner has zero derivative. Only this invariant argument participates in the Taylor chain rule. Hard/soft normalization factors the common rescaling out of the invariant, with the established UV expansion/vacuum mass completion. Squared momentum sums remain factored. Ownership survives enclosing Taylor operations and is discarded only on the final evaluator copy, where even energy powers can reduce to invariant powers. The evaluator function map supplies `sqrt(s)`.
+Active direct-3D on-shell energies use `OnShellEnergy(owner, s) = sqrt(s)`, where
+the owner is the starting operation's route edge, or the `S_<label>` support symbol
+of a frozen finite-temperature soft branch, and where the invariant `s = m^2 + q^2` retains the complete routed spatial momentum and mass scopes. Its custom derivative is `dE/ds = 1/(2E)`; the owner has zero derivative. Only this invariant argument participates in the Taylor chain rule. Hard/soft normalization factors the common rescaling out of the invariant, with the established UV expansion/vacuum mass completion. Squared momentum sums remain factored. Ownership survives enclosing Taylor operations and is discarded only on the final evaluator copy, where even energy powers can reduce to invariant powers. The evaluator function map supplies `sqrt(s)`.
 
 The surrounding CFF denominator sum uses `Esurface(a1, ..., an) = a1 + ... + an`. Its arguments contain the signed on-shell energies and energy shifts, with their momentum and mass dependence visible to enclosing transformations. Each partial derivative with respect to an argument is one. This distinguishes the energy sum from its individual `OnShellEnergy` square roots.
 

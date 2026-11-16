@@ -4,7 +4,7 @@ mod coefficient_tests;
 mod coefficients;
 mod forest;
 mod kernel;
-pub(crate) use kernel::LOCAL_3D_MASS_SCOPE;
+pub(crate) use kernel::{LOCAL_3D_MASS_SCOPE, LOCAL_3D_SOFT_SCOPE};
 
 pub(crate) use branches::DirectResidueBranches;
 #[cfg(test)]
