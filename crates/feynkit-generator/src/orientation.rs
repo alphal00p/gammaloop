@@ -90,9 +90,10 @@ impl Generator {
         if loops.len() > MAX_ORIENTED_LOOPS {
             return skip("too many closed fermion loops");
         }
-        // Fail closed unless both species of every loop have an explicit
-        // propagator. The reversed-propagator fallback only swaps half-edge
-        // slots and keeps the unsigned edge momentum.
+        // Fail closed for a loop species without any propagator. A species
+        // that borrows its antiparticle's propagator is fine: the reversed
+        // template is read with swapped slots and momentum -Q(edge), which is
+        // the antiparticle line exactly.
         let species = loops
             .iter()
             .flatten()
@@ -100,13 +101,11 @@ impl Generator {
             .collect::<BTreeSet<_>>();
         for particle in species {
             let particle = self.model.particle_by_id(particle)?;
-            for candidate in [particle, self.model.antiparticle(particle)?] {
-                if !matches!(self.model.particle_propagator(candidate)?, Some((_, false))) {
-                    return skip(&format!(
-                        "{} has no explicit propagator; reversal is not certified",
-                        candidate.name
-                    ));
-                }
+            if self.model.particle_propagator(particle)?.is_none() {
+                return skip(&format!(
+                    "{} has no propagator; reversal is not certified",
+                    particle.name
+                ));
             }
         }
 

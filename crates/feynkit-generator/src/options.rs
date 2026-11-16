@@ -872,7 +872,7 @@ impl GenerationOptions {
     ///
     /// Disabled by default. Only exact zeros are removed; survivors keep their
     /// names and overall factors. Diagrams the test cannot certify, such as
-    /// loops whose antiparticle has no explicit propagator, are retained and
+    /// loops whose species has no propagator at all, are retained and
     /// counted in [`crate::GenerationReport::orientation_test_skipped`].
     /// This option is runtime-only and is not serialized.
     pub fn cancel_closed_loop_orientations(mut self, enabled: bool) -> Self {

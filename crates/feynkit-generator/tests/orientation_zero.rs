@@ -332,17 +332,58 @@ fn even_loop_bubble_never_dropped() {
     }
 }
 
-#[test]
-fn reversed_propagator_fallback_fails_closed() {
+/// `qed_massless.json` without the propagators of `particles`.
+fn qed_without_propagators(particles: &[&str]) -> Model {
     let mut definition: serde_json::Value =
         serde_json::from_str(&fixture("qed_massless.json")).unwrap();
-    definition["propagators"]
-        .as_array_mut()
-        .unwrap()
-        .retain(|propagator| propagator["particle"] != "e+");
-    let model = Model::from_json(&definition.to_string()).unwrap();
+    let propagators = definition["propagators"].as_array_mut().unwrap();
+    let before = propagators.len();
+    propagators.retain(|propagator| !particles.contains(&propagator["particle"].as_str().unwrap()));
+    assert_eq!(propagators.len() + particles.len(), before);
+    for particle in definition["particles"].as_array_mut().unwrap() {
+        particle["propagator"] = serde_json::Value::Null;
+    }
+    Model::from_json(&definition.to_string()).unwrap()
+}
+
+/// A loop species that borrows its antiparticle's propagator is tested, not
+/// skipped, and every verdict matches the model with both propagators.
+#[test]
+fn reversed_propagator_fallback_is_tested() {
+    let twins = ["e-", "e+"].map(|removed| (removed, qed_without_propagators(&[removed])));
+    let names = |result: &GenerationResult| {
+        result
+            .diagrams
+            .iter()
+            .map(|diagram| diagram.name().to_owned())
+            .collect::<Vec<_>>()
+    };
+    // QGRAF onepi, floop: 18, 153 and 1638 graphs survive.
+    for (loops, zeros) in [(3, 2), (4, 36), (5, 594)] {
+        let options = photon_options(loops).cancel_closed_loop_orientations(true);
+        let expected = photon_self_energy(qed_massless(), &options);
+        assert_eq!(expected.report.orientation_test_skipped, 0, "L{loops}");
+        assert_eq!(expected.report.orientation_zero_count, zeros, "L{loops}");
+        for (removed, twin) in &twins {
+            let actual = photon_self_energy(twin.clone(), &options);
+            let label = format!("L{loops} without {removed}");
+            assert_eq!(actual.report.orientation_test_skipped, 0, "{label}");
+            assert_eq!(actual.report.orientation_zero_count, zeros, "{label}");
+            assert_eq!(
+                actual.report.retained_count, expected.report.retained_count,
+                "{label}"
+            );
+            assert_eq!(names(&actual), names(&expected), "{label}");
+        }
+    }
+}
+
+/// A loop species without any propagator still fails closed.
+#[test]
+fn missing_propagator_fails_closed() {
+    let model = qed_without_propagators(&["e-", "e+"]);
     let on = photon_self_energy(
-        model.clone(),
+        model,
         &photon_options(3).cancel_closed_loop_orientations(true),
     );
     assert_eq!(on.report.retained_count, 20);
