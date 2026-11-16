@@ -362,12 +362,15 @@ impl RStarPlan {
             symbol!("gammalooprs::uv_isotropic_channel_2"; Scalar),
             symbol!("gammalooprs::uv_isotropic_channel_3"; Scalar),
         ];
-        let sum = &pairings[0] + &pairings[1] + &pairings[2];
+        // sum_j tau_j ((d+2) T_j - sum_i T_i) = sum_j ((d+2) tau_j - sum_i tau_i) T_j.
+        let markers_sum = markers
+            .iter()
+            .fold(Atom::Zero, |sum, marker| sum + Atom::var(*marker));
         let closure = markers
             .iter()
             .zip(pairings)
             .fold(Atom::Zero, |closure, (marker, pairing)| {
-                closure + Atom::var(*marker) * ((&d + 2) * pairing - &sum)
+                closure + ((&d + 2) * Atom::var(*marker) - &markers_sum) * pairing
             });
         let normalization = Atom::one() / (&d * (&d - 1) * (&d + 2));
         let normalize = |tensor: &Atom| -> Result<Atom> { Ok(tensor * &normalization) };

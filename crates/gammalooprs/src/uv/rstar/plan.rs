@@ -105,16 +105,74 @@ static UV_CHILDREN_ROUTE: LazyLock<UvChildrenRoute> = LazyLock::new(|| {
     UvChildrenRoute::parse(&value).unwrap_or_else(|error| panic!("{error:#}"))
 });
 
-/// R*-route children with four open Lorentz slots and no external-momentum
-/// dependence are computed through their scalar metric channels
-/// ([`RStarPlan::isotropic_counterterm`]); `GAMMALOOP_UV_CHILD_CLOSURE=off`
-/// keeps the open rank-four tensor.
-fn isotropic_children() -> bool {
-    static ON: LazyLock<bool> = LazyLock::new(|| {
-        std::env::var("GAMMALOOP_UV_CHILD_CLOSURE").map_or(true, |value| value != "off")
-    });
-    *ON
+/// How an R*-route proper UV child with a closed tensor structure is
+/// contracted. `Off` (the default) contracts the open child tensor.
+/// `Isotropic { min_loops }` computes a logarithmically divergent child with
+/// four open Lorentz slots and at least `min_loops` loops through its three
+/// scalar metric channels ([`RStarPlan::isotropic_counterterm`]). Exact
+/// either way; which is faster depends on the child class, so it is opt-in.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum UvChildClosure {
+    #[default]
+    Off,
+    Isotropic { min_loops: usize },
 }
+
+impl std::fmt::Display for UvChildClosure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Off => write!(f, "off"),
+            Self::Isotropic { min_loops } => write!(f, "isotropic:{min_loops}"),
+        }
+    }
+}
+
+impl UvChildClosure {
+    /// `GAMMALOOP_UV_CHILD_CLOSURE`: unset, empty or `off`; `isotropic`; or
+    /// `isotropic:N` for children of at least N loops. Anything else is an
+    /// error.
+    pub fn parse(value: &str) -> Result<Self> {
+        let value = value.trim();
+        if value.is_empty() || value == "off" {
+            return Ok(Self::Off);
+        }
+        let (name, threshold) = match value.split_once(':') {
+            Some((name, threshold)) => (name.trim(), Some(threshold.trim())),
+            None => (value, None),
+        };
+        ensure!(
+            name == "isotropic",
+            "GAMMALOOP_UV_CHILD_CLOSURE must be `off`, `isotropic` or `isotropic:N`, not `{value}`"
+        );
+        let min_loops = match threshold {
+            None => 1,
+            Some(threshold) => threshold.parse::<usize>().wrap_err_with(|| {
+                format!("GAMMALOOP_UV_CHILD_CLOSURE loop threshold `{threshold}` is not an integer")
+            })?,
+        };
+        Ok(Self::Isotropic {
+            min_loops: min_loops.max(1),
+        })
+    }
+
+    pub fn from_environment() -> Self {
+        *UV_CHILD_CLOSURE
+    }
+
+    fn applies(&self, loops: usize) -> bool {
+        matches!(self, Self::Isotropic { min_loops } if loops >= *min_loops)
+    }
+}
+
+static UV_CHILD_CLOSURE: LazyLock<UvChildClosure> = LazyLock::new(|| {
+    let value = std::env::var("GAMMALOOP_UV_CHILD_CLOSURE").unwrap_or_default();
+    UvChildClosure::parse(&value).unwrap_or_else(|error| panic!("{error:#}"))
+});
+
+/// Children computed through [`RStarPlan::isotropic_counterterm`], for tests.
+#[cfg(test)]
+pub(crate) static ISOTROPIC_CHILDREN: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
 
 /// `GAMMALOOP_UV_CHILDREN_LOG=1`: one stderr line per proper UV child request
 /// of an R*-route plan (route, loops, seconds); for smoke tests and timing.
@@ -443,6 +501,7 @@ pub struct RStarPlan {
     pub(super) counterterm_cache: Option<Arc<CountertermCache>>,
     /// Route of the proper UV children, `GAMMALOOP_UV_CHILDREN` by default.
     pub(super) uv_children: UvChildrenRoute,
+    pub(super) uv_child_closure: UvChildClosure,
     /// `Some(crown)` when the root is a proper support of the graph (a UV
     /// child evaluated by R*): its boundary carriers are the full crown of
     /// `support` rather than the graph's external edges.
@@ -459,6 +518,12 @@ impl RStarPlan {
 
     /// Select how this plan's proper UV children are computed (the default is
     /// the process-wide `GAMMALOOP_UV_CHILDREN`).
+    /// Contract eligible R*-route children through their scalar channels.
+    pub fn with_uv_child_closure(mut self, closure: UvChildClosure) -> Self {
+        self.uv_child_closure = closure;
+        self
+    }
+
     pub fn with_uv_children(mut self, route: UvChildrenRoute) -> Self {
         self.uv_children = route;
         self
@@ -656,6 +721,7 @@ impl RStarPlan {
             catalogue,
             counterterm_cache: None,
             uv_children: UvChildrenRoute::from_environment(),
+            uv_child_closure: UvChildClosure::from_environment(),
             root_boundary: None,
         })
     }
@@ -839,6 +905,7 @@ impl RStarPlan {
                     vakint,
                     settings,
                     self.uv_children,
+                    self.uv_child_closure,
                 )?
             } else {
                 request
@@ -893,27 +960,34 @@ impl RStarPlan {
         vakint: &Vakint,
         settings: &UVgenerationSettings,
         route: UvChildrenRoute,
+        closure: UvChildClosure,
     ) -> Result<Atom> {
-        let isotropic = if isotropic_children() {
-            super::expression::RStarIntegrand::isotropic_boundary(graph, support)?
-        } else {
-            None
+        let key = match closure {
+            UvChildClosure::Off => format!("{}#uv-children={route}", serde_json::to_string(settings)?),
+            closure => format!(
+                "{}#uv-children={route}#child-closure={closure}",
+                serde_json::to_string(settings)?
+            ),
         };
-        let key = format!(
-            "{}#uv-children={route}{}",
-            serde_json::to_string(settings)?,
-            if isotropic.is_some() { "#isotropic" } else { "" }
-        );
         cache.counterterm_with(graph, support, model, key, || {
             let started = Instant::now();
             let plan = Self::for_support(graph, model, support, settings)?
                 .with_uv_children(route)
+                .with_uv_child_closure(closure)
                 .with_counterterm_cache(Arc::clone(cache));
             // A logarithmically divergent child with four open Lorentz slots
             // is a constant isotropic tensor: compute its three scalar
             // channels in its own root scope instead of the open tensor.
-            let delta = match isotropic.as_ref().filter(|_| plan.taylor_order == 0) {
+            // Decided on a cache miss only.
+            let isotropic = if plan.taylor_order == 0 && closure.applies(graph.n_loops(support)) {
+                super::expression::RStarIntegrand::isotropic_boundary(graph, support)?
+            } else {
+                None
+            };
+            let delta = match isotropic.as_ref() {
                 Some(pairings) => {
+                    #[cfg(test)]
+                    ISOTROPIC_CHILDREN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     if uv_children_log() {
                         eprintln!(
                             "UV_CHILD_CLOSURE graph={} loops={} closure=isotropic",

@@ -384,6 +384,17 @@ impl RStarIntegrand {
             .numerator(support, &graph.empty_subgraph())
             .to_d_dim(GS.dim)
             .get_single_atom()?;
+        // The metric pairings span only the parity-even rank-four tensors; a
+        // gamma5 or Levi-Civita symbol could leave an epsilon part they miss.
+        let parity_odd = [
+            idenso::dirac::AGS.gamma5,
+            idenso::dirac::AGS.projp,
+            idenso::dirac::AGS.projm,
+            *idenso::epsilon::EPSILON_SYMBOL,
+        ];
+        if parity_odd.iter().any(|symbol| numerator.contains_symbol(*symbol)) {
+            return Ok(None);
+        }
         let tensor = SymbolicTensor::infer(cooking.try_cook(numerator.as_view())?)?;
         let mut slots = Vec::new();
         for slot in tensor.structure().logical_slots() {
