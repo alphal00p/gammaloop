@@ -2839,16 +2839,64 @@ fn showcase_postprocess() {
             legend.push(serde_json::json!({"symbol": format!("vakint::Master({})", index + 1),
                 "closed_form": master.to_canonical_string(), "pgamma_tags": pgamma, "gamma_functions": gammas}));
         }
+        std::fs::write(out.join("result_exact_masters.txt"), named.to_canonical_string()).unwrap();
+        // vk5l-physrun (user): the result with vakint's OWN kept-symbolic atoms
+        // (PGamma / PG / PMaster / PResidual, unrenamed) times coef(...); the
+        // closed-form Gamma functions stay in the coefficients.
+        let is_vakint_symbol = |factor: symbolica::atom::AtomView| -> bool {
+            let base = match factor {
+                symbolica::atom::AtomView::Pow(power) => power.get_base_exp().0,
+                other => other,
+            };
+            match base {
+                symbolica::atom::AtomView::Fun(function) => {
+                    let symbol = function.get_symbol();
+                    let name = symbol.get_name();
+                    name.ends_with("PGamma") || name.ends_with("PMaster") || name.ends_with("PResidual") || name.ends_with("::PG")
+                }
+                _ => false,
+            }
+        };
+        let mut symbol_order = Vec::<Atom>::new();
+        let mut symbol_groups = std::collections::HashMap::<Atom, Vec<Atom>>::new();
+        let mut distinct = std::collections::BTreeSet::<String>::new();
+        let all_terms = match in_d.as_view() {
+            symbolica::atom::AtomView::Add(sum) => sum.iter().map(|t| t.to_owned()).collect::<Vec<_>>(),
+            _ => vec![in_d.clone()],
+        };
+        for term in all_terms {
+            let factors = match term.as_view() {
+                symbolica::atom::AtomView::Mul(product) => product.iter().map(|f| f.to_owned()).collect::<Vec<_>>(),
+                _ => vec![term.clone()],
+            };
+            let (kept, rest): (Vec<_>, Vec<_>) = factors.into_iter().partition(|f| is_vakint_symbol(f.as_view()));
+            for factor in &kept {
+                let base = match factor.as_view() {
+                    symbolica::atom::AtomView::Pow(power) => power.get_base_exp().0.to_owned(),
+                    other => other.to_owned(),
+                };
+                distinct.insert(base.to_canonical_string());
+            }
+            let monomial = if kept.is_empty() { Atom::num(1) } else { Atom::mul_many(kept.iter().map(|a| a.as_view())) };
+            let coefficient = if rest.is_empty() { Atom::num(1) } else { Atom::mul_many(rest.iter().map(|a| a.as_view())) };
+            if !symbol_groups.contains_key(&monomial) {
+                symbol_order.push(monomial.clone());
+            }
+            symbol_groups.entry(monomial).or_default().push(coefficient);
+        }
+        let mut with_symbols = Atom::Zero;
+        for monomial in &symbol_order {
+            let coefficient = Atom::add_many(symbol_groups[monomial].iter().map(|a| a.as_view())).collect_num();
+            with_symbols += symbolica::function!(coef, coefficient) * monomial;
+        }
+        std::fs::write(out.join("result_exact_symbols.txt"), with_symbols.to_canonical_string()).unwrap();
         std::fs::write(
-            out.join("result_exact_masters.txt"),
-            named.to_canonical_string(),
+            out.join("result_exact_symbols.json"),
+            serde_json::json!({"monomials": symbol_order.iter().map(|m| m.to_canonical_string()).collect::<Vec<_>>(),
+                               "symbols": distinct}).to_string(),
         )
         .unwrap();
-        std::fs::write(
-            out.join("result_exact_masters_legend.json"),
-            serde_json::to_string_pretty(&legend).unwrap(),
-        )
-        .unwrap();
+        std::fs::write(out.join("result_exact_masters_legend.json"), serde_json::to_string_pretty(&legend).unwrap()).unwrap();
         std::fs::write(
             out.join("result_exact_d_coef.json"),
             serde_json::json!({"masters": order.len(), "terms_in_d": groups.values().map(|g| g.len()).sum::<usize>(),
