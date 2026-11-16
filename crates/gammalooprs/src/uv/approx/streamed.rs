@@ -16,6 +16,14 @@
 //! and `GAMMALOOP_STREAM_CHECK_BYTES=<n>` also runs the whole map on every
 //! streamed input of at most n bytes and reports on stderr whether both
 //! results are identical (`STREAM_CHECK stage=... equal=...`).
+//!
+//! `GAMMALOOP_STREAM_BY_ESTIMATE=1` (opt-in, default off): the Vakint bridge
+//! expands in pieces when the estimated size of the expansion
+//! ([`expansion_estimate`], bytes before like terms merge) reaches the piece
+//! limit, not only when its input does, and [`expand_in_pieces`] sizes its
+//! pieces by that estimate (see [`stream_by_estimate`]). A small input with a
+//! large expansion (a product of sums) is then distributed in pieces too. The
+//! pieces add up to the same atom, so results do not change.
 
 use std::{collections::HashSet, sync::LazyLock};
 
@@ -50,6 +58,32 @@ static CHECK_LIMIT: LazyLock<Option<usize>> = LazyLock::new(|| {
 #[cfg(test)]
 thread_local! {
     static TEST_PIECE_LIMIT: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+}
+
+static BY_ESTIMATE: LazyLock<bool> =
+    LazyLock::new(|| std::env::var("GAMMALOOP_STREAM_BY_ESTIMATE").as_deref() == Ok("1"));
+
+/// `GAMMALOOP_STREAM_BY_ESTIMATE=1`: decide and size the pieces of the
+/// to_vakint expansion by the estimated size of the expansion (see the module
+/// documentation). Default off: by the input bytes, as before.
+pub(crate) fn stream_by_estimate() -> bool {
+    *BY_ESTIMATE
+}
+
+/// The size by which expansions are cut into pieces: the bytes of
+/// `expression`, or with `by_estimate` the larger of those and the estimated
+/// bytes of its expansion ([`expansion_estimate`]).
+pub(crate) fn expansion_size(expression: AtomView<'_>, by_estimate: bool) -> usize {
+    let bytes = expression.get_byte_size();
+    if !by_estimate {
+        return bytes;
+    }
+    let estimate = expansion_estimate(expression).1;
+    if estimate >= usize::MAX as f64 {
+        usize::MAX
+    } else {
+        bytes.max(estimate as usize)
+    }
 }
 
 /// Tests only: run `f` on this thread with the production piece limit, for
@@ -374,13 +408,26 @@ pub(crate) fn expansion_estimate(expression: AtomView<'_>) -> (f64, f64) {
 /// expansion of a normalized sum is canonical (sorted monomials, like terms
 /// merged with exact coefficients, zeros dropped), so adding the pieces gives
 /// the atom `expand` returns. An expression with an opaque composite power
-/// is expanded as a whole.
+/// is expanded as a whole. Sizes are bytes, or with
+/// `GAMMALOOP_STREAM_BY_ESTIMATE=1` estimated expansion bytes
+/// ([`expansion_size`]).
 pub(crate) fn expand_in_pieces(
     expression: AtomView<'_>,
     limit: usize,
     sink: &mut dyn FnMut(Atom) -> Result<()>,
 ) -> Result<()> {
-    if expression.get_byte_size() < limit {
+    expand_in_pieces_by(expression, limit, stream_by_estimate(), sink)
+}
+
+/// [`expand_in_pieces`] with an explicit size measure: `by_estimate` cuts by
+/// [`expansion_size`] instead of input bytes.
+pub(crate) fn expand_in_pieces_by(
+    expression: AtomView<'_>,
+    limit: usize,
+    by_estimate: bool,
+    sink: &mut dyn FnMut(Atom) -> Result<()>,
+) -> Result<()> {
+    if expansion_size(expression, by_estimate) < limit {
         return sink(expression.expand());
     }
     let blocked = if legacy("opaque_pieces") {
@@ -391,7 +438,7 @@ pub(crate) fn expand_in_pieces(
     if blocked {
         return sink(expression.expand());
     }
-    expand_pieces_unchecked(expression, limit, sink)
+    expand_pieces_unchecked(expression, limit, by_estimate, sink)
 }
 
 /// Whether distributing `expression` in pieces could cancel an opaque
@@ -485,10 +532,11 @@ fn opaque_power_blocks_pieces(expression: AtomView<'_>) -> bool {
 fn expand_pieces_unchecked(
     expression: AtomView<'_>,
     limit: usize,
+    by_estimate: bool,
     sink: &mut dyn FnMut(Atom) -> Result<()>,
 ) -> Result<()> {
     const PARTS: usize = 16;
-    if expression.get_byte_size() < limit {
+    if expansion_size(expression, by_estimate) < limit {
         return sink(expression.expand());
     }
     match expression {
@@ -500,13 +548,13 @@ fn expand_pieces_unchecked(
              -> Result<()> {
                 match chunk[..] {
                     [] => Ok(()),
-                    [term] => expand_pieces_unchecked(term, limit, sink),
+                    [term] => expand_pieces_unchecked(term, limit, by_estimate, sink),
                     _ => sink(Atom::add_many(chunk.iter().copied()).expand()),
                 }
                 .map(|()| chunk.clear())
             };
             for term in sum.iter() {
-                let bytes = term.get_byte_size();
+                let bytes = expansion_size(term, by_estimate);
                 if chunk_bytes + bytes >= limit {
                     flush(&mut chunk, sink)?;
                     chunk_bytes = 0;
@@ -541,7 +589,7 @@ fn expand_pieces_unchecked(
                         }
                     }));
                 drop(part);
-                expand_pieces_unchecked(distributed.as_view(), limit, sink)?;
+                expand_pieces_unchecked(distributed.as_view(), limit, by_estimate, sink)?;
             }
             Ok(())
         }
@@ -800,4 +848,43 @@ pub(crate) fn report_size(stage: &str, expression: AtomView<'_>) {
     eprintln!(
         "ALGEBRA_SIZE stage={stage} bytes={bytes} kind={kind} args={args} largest_arg_bytes={largest}"
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use symbolica::parse;
+
+    #[test]
+    fn expansion_estimate_counts_distributed_summands() {
+        let expression = parse!("(a+b+c)*(d+e)*f + (g+h)^2 + k(x+y)");
+        let (terms, bytes) = expansion_estimate(expression.as_view());
+        assert_eq!(terms, 3.0 * 2.0 + 2.0 * 2.0 + 1.0);
+        assert!(bytes > 0.0);
+        let unexpanded = parse!("(a+b)*(c+d)");
+        assert_eq!(expansion_size(unexpanded.as_view(), false), unexpanded.as_view().get_byte_size());
+        assert!(expansion_size(unexpanded.as_view(), true) >= unexpanded.as_view().get_byte_size());
+    }
+
+    #[test]
+    fn pieces_by_estimate_add_up_to_the_whole_expansion() {
+        let expression = parse!(
+            "(a+b+c+d)*(x1+x2+x3+x4+x5)*(y1+y2)^2*z + (p+q)*(r+s+t) + 3*u^2*(v+w)^(-1)"
+        );
+        let whole = expression.expand();
+        for limit in [1, 64, 256, 1024, 1 << 20] {
+            for by_estimate in [false, true] {
+                let mut pieces = Vec::new();
+                expand_in_pieces_by(expression.as_view(), limit, by_estimate, &mut |piece| {
+                    pieces.push(piece);
+                    Ok(())
+                })
+                .unwrap();
+                assert_eq!(Atom::add_many(pieces.iter()), whole, "limit {limit} by_estimate {by_estimate}");
+                if by_estimate && limit <= 256 {
+                    assert!(pieces.len() > 1, "limit {limit}: {} piece(s)", pieces.len());
+                }
+            }
+        }
+    }
 }
