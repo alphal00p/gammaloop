@@ -545,7 +545,7 @@ fn boundary_record_round_trips() -> Result<()> {
     // A block of 100 summands (file) and a small one (inline).
     let large = Atom::add_many(
         (1..=100)
-            .map(|n| parse(&format!("{n}*dot(k(1),k(2))^{}*dot(k(2),k(2))", n % 3)))
+            .map(|n| parse(&format!("{n}*dot(k(1),k(2))^{n}*dot(k(2),k(2))")))
             .collect::<Result<Vec<_>>>()?
             .iter(),
     );
