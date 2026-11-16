@@ -151,6 +151,59 @@ impl RStarPlan {
         .counterterm()
     }
 
+    /// As [`Self::projected_counterterm`] for a metric root projector whose
+    /// momentum-free metric is applied in the root scope instead: every
+    /// root-level remainder is multiplied by [`RStarIntegrand::root_closure`]
+    /// together with its child insertions, so the remainder algebra contracts
+    /// a closed scalar. IR quotient counterterms and proper UV children keep
+    /// their open indices; IR corrections are closed after their quotient `K`.
+    /// `root_normalization` then supplies only the momentum-dependent rest of
+    /// the projector (normalization, rerouting, channel tags) after Taylor.
+    pub fn projected_counterterm_closing_root(
+        &self,
+        graph: &Graph,
+        model: &Model,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+        root_normalization: &dyn Fn(&Atom) -> Result<Atom>,
+    ) -> Result<Atom> {
+        Evaluation::new(
+            self,
+            graph,
+            model,
+            vakint,
+            uv_settings,
+            Some(root_normalization),
+        )?
+        .closing_root()?
+        .counterterm()
+    }
+
+    /// As [`Self::projected_counterterm_from_pole_part`], closing the root
+    /// metric in the root scope (see [`Self::projected_counterterm_closing_root`]).
+    /// `bare_poles` keep their open slots; they are closed where the metric
+    /// projector applied before, after their own pole projection.
+    pub fn projected_counterterm_from_pole_part_closing_root(
+        &self,
+        graph: &Graph,
+        model: &Model,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+        bare_poles: &Atom,
+        root_normalization: &dyn Fn(&Atom) -> Result<Atom>,
+    ) -> Result<Atom> {
+        Evaluation::new(
+            self,
+            graph,
+            model,
+            vakint,
+            uv_settings,
+            Some(root_normalization),
+        )?
+        .closing_root()?
+        .counterterm_from_pole_part(bare_poles)
+    }
+
     /// Reconstruct all poles of the bare, infrared-finite massless propagator
     /// graph at its original off-shell momentum, including subdivergence poles.
     ///
@@ -251,6 +304,8 @@ struct Evaluation<'a> {
     quotient_counterterms: BTreeMap<(CountertermCall, Atom), Atom>,
     integration_id: usize,
     root_projector: Option<&'a RootProjector<'a>>,
+    /// The root metric closure of a closing evaluation (root scope only).
+    root_closure: Option<Atom>,
     started: Instant,
     proper_uv_elapsed: Duration,
     quotient_elapsed: Duration,
@@ -309,11 +364,21 @@ impl<'a> Evaluation<'a> {
             quotient_counterterms: BTreeMap::new(),
             integration_id: 0,
             root_projector,
+            root_closure: None,
             started,
             proper_uv_elapsed,
             quotient_elapsed: Duration::ZERO,
             integration_elapsed: Duration::ZERO,
         })
+    }
+
+    /// Close the root metric in every root-scope remainder of this evaluation.
+    fn closing_root(mut self) -> Result<Self> {
+        self.root_closure = Some(RStarIntegrand::root_closure(
+            self.graph,
+            &self.plan.support,
+        )?);
+        Ok(self)
     }
 
     fn counterterm(&mut self) -> Result<Atom> {
@@ -340,7 +405,9 @@ impl<'a> Evaluation<'a> {
                 {
                     continue;
                 }
-                let hard = self.remainder(term)?;
+                // The hard part feeds quotient counterterms (a `K` each): it
+                // keeps its open root slots, closed after the quotient below.
+                let hard = self.open_remainder(term)?;
                 let polynomial = hard
                     .taylor(usize::try_from(correction.taylor_order)?)
                     .wrap_err("while Taylor-expanding the prepared hard component")?;
@@ -359,6 +426,9 @@ impl<'a> Evaluation<'a> {
                         expression += coefficient * self.ir_forest(forest, insertion)?;
                     }
                     if !expression.is_zero() {
+                        if let Some(closure) = &self.root_closure {
+                            expression *= closure;
+                        }
                         prepared += self.integrate(&hard, &expression)?;
                     }
                 }
@@ -401,6 +471,11 @@ impl<'a> Evaluation<'a> {
             self.graph,
             &self.graph.external_filter::<SuBitGraph>(),
         )?;
+        // Closed bare poles stand where the metric projector contracted them.
+        let bare_poles = match &self.root_closure {
+            Some(closure) => bare_poles * closure,
+            None => bare_poles.clone(),
+        };
         let mut prepared = bare_poles + self.physical_uv_preparation()?;
         if let Some(projector) = self.root_projector {
             prepared = projector(&prepared)?;
@@ -450,13 +525,14 @@ impl<'a> Evaluation<'a> {
             .into_iter()
             .map(|insertion| insertion.replace(self.reference_mass_squared).with(0))
             .collect::<Vec<_>>();
-        RStarIntegrand::new(
+        RStarIntegrand::new_with_closure(
             self.graph,
             self.model,
             &term.remainder,
             &insertions,
             self.plan.marked_edge,
             Atom::Zero,
+            self.root_closure.as_ref(),
         )
     }
 
@@ -472,15 +548,30 @@ impl<'a> Evaluation<'a> {
             .collect()
     }
 
+    /// A root-scope remainder, closed when this evaluation closes the root.
     fn remainder(&self, term: &UvPreparationTerm) -> Result<RStarIntegrand> {
+        self.remainder_with(term, self.root_closure.as_ref())
+    }
+
+    /// A remainder that keeps its open root slots (an IR hard part).
+    fn open_remainder(&self, term: &UvPreparationTerm) -> Result<RStarIntegrand> {
+        self.remainder_with(term, None)
+    }
+
+    fn remainder_with(
+        &self,
+        term: &UvPreparationTerm,
+        closure: Option<&Atom>,
+    ) -> Result<RStarIntegrand> {
         let insertions = self.insertions(term)?;
-        RStarIntegrand::new(
+        RStarIntegrand::new_with_closure(
             self.graph,
             self.model,
             &term.remainder,
             &insertions,
             self.plan.marked_edge,
             Atom::var(self.reference_mass_squared),
+            closure,
         )
     }
 

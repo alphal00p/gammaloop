@@ -24,7 +24,7 @@ use spenso::{
     structure::{
         partial::PartialStructureExt,
         representation::{Minkowski, RepName},
-        slot::{SlotMatch, SlotMatcher},
+        slot::{IsAbstractSlot, SlotMatch, SlotMatcher},
     },
 };
 use symbolica::{
@@ -320,6 +320,68 @@ impl RStarIntegrand {
         marked: EdgeIndex,
         reference_mass_squared: Atom,
     ) -> Result<Self> {
+        Self::new_with_closure(
+            graph,
+            model,
+            region,
+            insertions,
+            marked,
+            reference_mass_squared,
+            None,
+        )
+    }
+
+    /// The metric that closes the two open external Lorentz slots of the
+    /// graph numerator over `support`, spelled as in every R* remainder (the
+    /// d-dimensional continuation of the vertex slots).
+    ///
+    /// It is momentum-free, so it commutes with routing, the outer Taylor
+    /// operation and the reference mass. Applied in a root-scope remainder,
+    /// together with its insertions, it contracts the root indices before the
+    /// remainder algebra and inside the root `K` only, exactly where the
+    /// metric root projector contracted them; child and quotient
+    /// counterterms keep their open indices.
+    pub fn root_closure(graph: &Graph, support: &SuBitGraph) -> Result<Atom> {
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let numerator = graph
+            .numerator(support, &graph.empty_subgraph())
+            .to_d_dim(GS.dim)
+            .get_single_atom()?;
+        let tensor = SymbolicTensor::infer(cooking.try_cook(numerator.as_view())?)?;
+        let slots = tensor
+            .structure()
+            .logical_slots()
+            .into_iter()
+            .map(|slot| match slot.aind {
+                spenso::structure::partial::PartialIndex::Explicit(index) => {
+                    Ok(slot.rep().slot::<spenso::structure::abstract_index::AbstractIndex, _>(index))
+                }
+                _ => Err(eyre!(
+                    "the root closure needs explicitly named external slots"
+                )),
+            })
+            .collect::<Result<Vec<_>>>()?;
+        ensure!(
+            slots.len() == 2 && slots[0].rep() == slots[1].rep(),
+            "the root closure needs exactly two open external slots of one representation, found {}",
+            slots.len()
+        );
+        Ok(cooking.uncook(ETS.metric(slots[0].to_atom(), slots[1].to_atom()).as_view()))
+    }
+
+    /// As [`Self::new`], with an optional root closure multiplied into the
+    /// remainder together with its insertions (see [`Self::root_closure`]).
+    pub fn new_with_closure(
+        graph: &Graph,
+        model: &Model,
+        region: &GraphRegion,
+        insertions: &[Atom],
+        marked: EdgeIndex,
+        reference_mass_squared: Atom,
+        closure: Option<&Atom>,
+    ) -> Result<Self> {
         let _stage = StageSpan::new("gamma.remainder.construct");
         ensure!(
             insertions.len() == region.insertions.len(),
@@ -343,6 +405,9 @@ impl RStarIntegrand {
         for insertion in insertions {
             expression *= insertion;
         }
+        if let Some(closure) = closure {
+            expression *= closure;
+        }
         // Diagnostics: the remainder before routing (edge momenta intact),
         // numerator times insertions; its routed form is `hard_routed`.
         streamed::dump("hard_source", expression.as_view());
@@ -359,8 +424,8 @@ impl RStarIntegrand {
             .iter_edges_of(&region.boundary)
             .map(|(_, edge, _)| edge)
             .collect();
-        let experiment_input = (super::edge_experiment::enabled() && region.loops != 0)
-            .then(|| expression.clone());
+        let experiment_input =
+            (super::edge_experiment::enabled() && region.loops != 0).then(|| expression.clone());
         if region.loops != 0 {
             // Boundary Q labels are the independent source variables of the
             // local polynomial. A subgraph basis supplies signatures only for
