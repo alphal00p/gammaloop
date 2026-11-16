@@ -1804,7 +1804,13 @@ fn five_loop_package_drill() {
         Ok("numerical") => RustRedMasterMode::Numerical,
         _ => RustRedMasterMode::Retain,
     };
-    let mut settings = settings(drill_mode, None);
+    // vk5l-physrun: VAKINT_TEST_P5L_DRILL_ARITHMETIC selects the ordered weight arithmetic.
+    let drill_arithmetic = std::env::var("VAKINT_TEST_P5L_DRILL_ARITHMETIC").ok();
+    let mut settings = settings(drill_mode, drill_arithmetic.as_deref());
+    // vk5l-physrun: VAKINT_TEST_ORDERED_CACHE=off runs without the in-memory step cache.
+    if std::env::var("VAKINT_TEST_ORDERED_CACHE").as_deref() == Ok("off") {
+        settings.ordered_cache = crate::OrderedCacheSettings::off();
+    }
     settings.number_of_terms_in_epsilon_expansion = 6;
     // lane vk5l-mastermap: the five-loop master basis of the drill's results
     // (VAKINT_TEST_P5L_DRILL_BASIS=pole_bounded; default original).
@@ -3691,6 +3697,10 @@ fn massive_closure_showcase_sum() {
         }
         if std::env::var("VAKINT_TEST_P_RULES_OUTSIDE").as_deref() == Ok("0") {
             settings.rustred_p_outside.rules_outside = false;
+        }
+        // vk5l-physrun: VAKINT_TEST_ORDERED_CACHE=off runs without the in-memory step cache.
+        if std::env::var("VAKINT_TEST_ORDERED_CACHE").as_deref() == Ok("off") {
+            settings.ordered_cache = crate::OrderedCacheSettings::off();
         }
         settings.epsilon_symbol = "gammalooprs::ε".into();
         settings.mu_r_sq_symbol = "gammalooprs::μᵣ²".into();

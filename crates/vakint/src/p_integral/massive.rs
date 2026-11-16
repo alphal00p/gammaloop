@@ -158,15 +158,10 @@ impl LoweredClosure {
                 _ => None,
             })
             .unwrap_or(RustRedMasterMode::Symbolic);
-        let reduced = rr::reduce_folded_channels(
-            vakint,
-            settings,
-            &handle,
-            self.folded,
-            None,
-            rr::fold_mode(),
-            true,
-        )?;
+        let before = rr::last_stats();
+        let clock = std::time::Instant::now();
+        let reduced = rr::reduce_folded_channels(vakint, settings, &handle, self.folded, None, rr::fold_mode(), true)?;
+        direct_sum_reduce_line(&before, clock.elapsed().as_secs_f64());
         let mut result = Atom::Zero;
         let mut numerical = Atom::Zero;
         for ((loops, _), values) in reduced {
@@ -215,15 +210,10 @@ impl LoweredClosure {
             .copied()
             .unwrap_or(*first);
         let handle = vakint.p_library()?;
-        let reduced = rr::reduce_folded_channels(
-            vakint,
-            reducing,
-            &handle,
-            self.folded,
-            None,
-            rr::fold_mode(),
-            true,
-        )?;
+        let before = rr::last_stats();
+        let clock = std::time::Instant::now();
+        let reduced = rr::reduce_folded_channels(vakint, reducing, &handle, self.folded, None, rr::fold_mode(), true)?;
+        direct_sum_reduce_line(&before, clock.elapsed().as_secs_f64());
         let mut results = Vec::with_capacity(settings.len());
         for settings in settings {
             let mode = mode_of(settings);
@@ -2404,3 +2394,19 @@ mod tests {
 #[cfg(test)]
 #[path = "massive_replay_tests.rs"]
 mod replay_tests;
+
+/// vk5l-physrun (local): where a class's reduction time goes (phases on).
+fn direct_sum_reduce_line(before: &crate::rustred_evaluation::p_integral::PReduceStats, seconds: f64) {
+    if !super::phases::enabled() {
+        return;
+    }
+    let after = crate::rustred_evaluation::p_integral::last_stats();
+    eprintln!(
+        "vakint-direct-sum reduce {seconds:.2} s: prepare {:.2} library {:.2} render {:.2} reductions {} pairs {}",
+        after.prepare_seconds - before.prepare_seconds,
+        after.library_seconds - before.library_seconds,
+        after.render_seconds - before.render_seconds,
+        after.reductions - before.reductions,
+        after.pairs - before.pairs
+    );
+}
