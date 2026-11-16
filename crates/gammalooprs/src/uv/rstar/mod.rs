@@ -27,6 +27,8 @@ mod pole_tests;
 mod project;
 mod propagator;
 #[cfg(test)]
+mod recursive_tests;
+#[cfg(test)]
 mod scalar;
 mod taylor;
 #[cfg(test)]

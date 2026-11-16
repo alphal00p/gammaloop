@@ -7,7 +7,10 @@ use std::{
 };
 
 use eyre::{Result, WrapErr, ensure, eyre};
-use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
+use linnet::half_edge::{
+    involution::EdgeIndex,
+    subgraph::{SuBitGraph, SubSetLike},
+};
 use symbolica::{
     atom::{Atom, AtomCore, Symbol},
     parse, symbol,
@@ -22,7 +25,8 @@ use crate::{
 };
 
 use super::{
-    CountertermCall, IrForestTerm, MassiveUvEvaluator, RStarPlan, UvPreparationTerm,
+    ChildMass, CountertermCall, IrForestTerm, MassiveUvEvaluator, RStarPlan, UvChildrenRoute,
+    UvPreparationTerm,
     expression::{RStarIntegrand, RootProjector},
     moments::hard_moments,
     physical::PreparedPhysicalUvTerm,
@@ -46,7 +50,15 @@ impl RStarPlan {
         uv_settings: &UVgenerationSettings,
         root_projector: Option<&RootProjector<'_>>,
     ) -> Result<Vec<PreparedPhysicalUvTerm>> {
-        let evaluation = Evaluation::new(self, graph, model, vakint, uv_settings, None)?;
+        let evaluation = Evaluation::new(
+            self,
+            graph,
+            model,
+            vakint,
+            uv_settings,
+            None,
+            ChildMass::Zero,
+        )?;
         let started = Instant::now();
         let settings: Arc<str> = serde_json::to_string(&uv_settings.vakint)?.into();
         let terms = self
@@ -88,7 +100,16 @@ impl RStarPlan {
         vakint: &Vakint,
         uv_settings: &UVgenerationSettings,
     ) -> Result<Atom> {
-        Evaluation::new(self, graph, model, vakint, uv_settings, None)?.counterterm()
+        Evaluation::new(
+            self,
+            graph,
+            model,
+            vakint,
+            uv_settings,
+            None,
+            ChildMass::Reference,
+        )?
+        .counterterm()
     }
 
     /// Compute a root-projected local MS counterterm using the same R* forest.
@@ -121,6 +142,7 @@ impl RStarPlan {
             vakint,
             uv_settings,
             Some(root_projector),
+            ChildMass::Reference,
         )?
         .counterterm()
     }
@@ -202,7 +224,15 @@ impl RStarPlan {
             graph,
             &graph.external_filter::<SuBitGraph>(),
         )?;
-        let mut evaluation = Evaluation::new(self, graph, model, vakint, uv_settings, None)?;
+        let mut evaluation = Evaluation::new(
+            self,
+            graph,
+            model,
+            vakint,
+            uv_settings,
+            None,
+            ChildMass::Reference,
+        )?;
         let result = -evaluation.counterterm()? - evaluation.physical_uv_preparation()?;
         evaluation.poles(&result.replace_multiple(&external_routing))
     }
@@ -230,8 +260,17 @@ impl RStarPlan {
         uv_settings: &UVgenerationSettings,
         bare_poles: &Atom,
     ) -> Result<Atom> {
-        Evaluation::new(self, graph, model, vakint, uv_settings, None)?
-            .counterterm_from_pole_part(bare_poles)
+        // Only the physical remainders consume the children, at zero mass.
+        Evaluation::new(
+            self,
+            graph,
+            model,
+            vakint,
+            uv_settings,
+            None,
+            ChildMass::Zero,
+        )?
+        .counterterm_from_pole_part(bare_poles)
     }
 
     /// Project the complete physical preparation before its final pole map.
@@ -257,6 +296,7 @@ impl RStarPlan {
             vakint,
             uv_settings,
             Some(root_projector),
+            ChildMass::Zero,
         )?
         .counterterm_from_pole_part(bare_poles)
     }
@@ -273,6 +313,9 @@ struct Evaluation<'a> {
     reference_mass_squared: Symbol,
     auxiliary_mass_squared: Atom,
     children: BTreeMap<SuBitGraph, Atom>,
+    /// Carriers scaled by the outer Taylor operation: the graph's external
+    /// edges, or the full crown of a proper support root.
+    root_edges: Vec<EdgeIndex>,
     uv: MassiveUvEvaluator<'a>,
     quotient_counterterms: BTreeMap<(CountertermCall, Atom), Atom>,
     integration_id: usize,
@@ -293,6 +336,7 @@ impl<'a> Evaluation<'a> {
         vakint: &'a Vakint,
         uv_settings: &'a UVgenerationSettings,
         root_projector: Option<&'a RootProjector<'a>>,
+        child_mass: ChildMass,
     ) -> Result<Self> {
         let started = Instant::now();
         for (_, _, edge) in graph.iter_edges_of(&plan.support) {
@@ -311,8 +355,37 @@ impl<'a> Evaluation<'a> {
         let children = if plan.counterterms.is_empty() {
             BTreeMap::new()
         } else {
-            plan.evaluate_uv_children(graph, model, &reference_mass, vakint, uv_settings)
-                .wrap_err("while computing the proper UV counterterms with massive R")?
+            plan.evaluate_uv_children_for(
+                graph,
+                model,
+                &reference_mass,
+                vakint,
+                uv_settings,
+                child_mass,
+            )
+            .wrap_err(match plan.uv_children {
+                UvChildrenRoute::Massive => {
+                    "while computing the proper UV counterterms with massive R"
+                }
+                UvChildrenRoute::Rstar { .. } => {
+                    "while computing the proper UV counterterms with recursive R*"
+                }
+            })?
+        };
+        let root_edges = match &plan.root_boundary {
+            None => {
+                let root_external = graph.external_filter::<SuBitGraph>();
+                graph
+                    .iter_edges_of(&root_external)
+                    .map(|(_, edge, _)| edge)
+                    .collect::<Vec<_>>()
+            }
+            Some(boundary) => graph
+                .iter_edges_of(boundary)
+                .map(|(_, edge, _)| edge)
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .collect(),
         };
         let proper_uv_elapsed = children_started.elapsed();
         let mut uv = MassiveUvEvaluator::new(graph, model, vakint, uv_settings);
@@ -330,6 +403,7 @@ impl<'a> Evaluation<'a> {
             reference_mass_squared,
             auxiliary_mass_squared: Atom::var(symbol!("rstar_mass_squared"; Scalar)),
             children,
+            root_edges,
             uv,
             quotient_counterterms: BTreeMap::new(),
             integration_id: 0,
@@ -614,6 +688,7 @@ impl<'a> Evaluation<'a> {
         let result = remainder.integrate(
             expression,
             self.graph,
+            &self.root_edges,
             usize::try_from(self.plan.taylor_order)?,
             self.reference_mass_squared,
             &self.auxiliary_mass_squared,
