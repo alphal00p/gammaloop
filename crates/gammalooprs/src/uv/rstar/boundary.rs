@@ -219,6 +219,59 @@ pub(super) fn large_decline(stats: &BoundaryStats, loops: usize) -> bool {
     }
 }
 
+#[cfg(test)]
+thread_local! {
+    static TEST_CENSUS_DUMP: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
+}
+
+/// Whether a census dump (`PINT6_CLOSURE_DUMP`) is running.
+pub(super) fn census_dump_active() -> bool {
+    #[cfg(test)]
+    if let Some(active) = TEST_CENSUS_DUMP.with(|slot| slot.get()) {
+        return active;
+    }
+    super::pint6_dump::settings().is_some()
+}
+
+/// Tests: run `f` as if a census dump were (or were not) running on this
+/// thread. Only the remainder-boundary decisions read it; nothing is written.
+#[cfg(test)]
+pub(crate) fn with_census_dump<T>(active: bool, f: impl FnOnce() -> T) -> T {
+    struct Restore(Option<bool>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let previous = self.0;
+            TEST_CENSUS_DUMP.with(|slot| slot.set(previous));
+        }
+    }
+    let _restore = Restore(TEST_CENSUS_DUMP.with(|slot| slot.replace(Some(active))));
+    f()
+}
+
+/// Mode on with a census dump is refused until the boundary dump (DESIGN 6b,
+/// step 4) is built: an admitted remainder would write no closure record and
+/// today's path, which writes the v1 records, would not run, so the census
+/// would come out empty without an error.
+pub(super) fn census_dump_refusal(mode: BoundaryMode) -> Option<String> {
+    (mode == BoundaryMode::On && census_dump_active()).then(|| {
+        "GAMMALOOP_REMAINDER_BOUNDARY=1 with PINT6_CLOSURE_DUMP needs the boundary dump \
+         (DESIGN 6b, step 4), which is not built yet: admitted remainders would write no closure \
+         record. Use GAMMALOOP_REMAINDER_BOUNDARY=check (today's v1 records are written) or leave \
+         the mode unset"
+            .to_owned()
+    })
+}
+
+/// The remainder-boundary switches, checked at start-up: the mode parses, and
+/// mode on is not combined with a census dump ([`census_dump_refusal`]).
+pub fn validate_remainder_boundary() -> Result<BoundaryMode> {
+    let mode = remainder_boundary_mode()?;
+    if let Some(message) = census_dump_refusal(mode) {
+        return Err(eyre!(message));
+    }
+    Ok(mode)
+}
+
 /// `VAKINT_P_BOUNDARY_BLOCKS`: `reuse` (default) or `off`.
 pub(crate) fn vakint_boundary_blocks() -> &'static str {
     match std::env::var("VAKINT_P_BOUNDARY_BLOCKS").as_deref() {
