@@ -2716,7 +2716,7 @@ fn massive_closure_showcase_sum() {
         inputs.len()
     );
     let modes = std::env::var("VAKINT_TEST_CLOSURE_MODES").unwrap_or_else(|_| "retain".into());
-    for mode in modes.split(',') {
+    let make_settings = |mode: &str| {
         let master_mode = match mode {
             "retain" => RustRedMasterMode::Retain,
             "numerical" => RustRedMasterMode::Numerical,
@@ -2747,11 +2747,29 @@ fn massive_closure_showcase_sum() {
         settings.run_time_decimal_precision = 100;
         settings.use_dot_product_notation = false;
         settings.n_cores = 1;
+        settings
+    };
+    let mode_list = modes.split(',').collect::<Vec<_>>();
+    let all_settings = mode_list.iter().map(|mode| make_settings(mode)).collect::<Vec<_>>();
+    // vk5l-physrun: several modes share ONE lowering and ONE reduction
+    // (evaluate_direct_sum_modes) unless VAKINT_TEST_SUM_SHARED=0.
+    let shared = mode_list.len() > 1 && std::env::var("VAKINT_TEST_SUM_SHARED").as_deref() != Ok("0");
+    let mut values = Vec::new();
+    if shared {
         let started = std::time::Instant::now();
-        let value =
-            crate::p_integral::MassiveClosure::evaluate_direct_sum(&engine, &settings, &inputs)
-                .unwrap();
+        let refs = all_settings.iter().collect::<Vec<_>>();
+        let results = crate::p_integral::MassiveClosure::evaluate_direct_sum_modes(&engine, &refs, &inputs).unwrap();
         let seconds = started.elapsed().as_secs_f64();
+        eprintln!("SHOWCASE_SUM shared lowering + reduction for {} modes in {seconds:.1} s", mode_list.len());
+        values.extend(results.into_iter().map(|value| (value, seconds)));
+    } else {
+        for settings in &all_settings {
+            let started = std::time::Instant::now();
+            let value = crate::p_integral::MassiveClosure::evaluate_direct_sum(&engine, settings, &inputs).unwrap();
+            values.push((value, started.elapsed().as_secs_f64()));
+        }
+    }
+    for ((mode, settings), (value, seconds)) in mode_list.iter().copied().zip(&all_settings).zip(values) {
         let text = value.to_canonical_string();
         std::fs::write(out.join(format!("sum.{mode}.sym")), &text).unwrap();
         let mut check = serde_json::Value::Null;

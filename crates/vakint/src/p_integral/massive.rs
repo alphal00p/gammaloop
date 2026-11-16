@@ -142,6 +142,58 @@ impl LoweredClosure {
         }
         Ok(result.expand())
     }
+
+    /// vk5l-physrun: reduce ONCE and finalize once per settings (one master
+    /// mode each, e.g. Retain and Symbolic): the reduced values in the master
+    /// basis do not depend on the master mode, only the finalization does.
+    /// The reduction runs with the first non-Retain settings (step cache on).
+    pub fn evaluate_modes(
+        self,
+        vakint: &Vakint,
+        settings: &[&crate::VakintSettings],
+    ) -> Result<Vec<Atom>, VakintError> {
+        use crate::rustred_evaluation::p_integral as rr;
+        let mode_of = |settings: &crate::VakintSettings| {
+            settings
+                .evaluation_order
+                .0
+                .iter()
+                .find_map(|method| match method {
+                    EvaluationMethod::RustRed(options) => Some(options.master_mode),
+                    _ => None,
+                })
+                .unwrap_or(RustRedMasterMode::Symbolic)
+        };
+        let Some(first) = settings.first() else {
+            return Ok(Vec::new());
+        };
+        let reducing = settings
+            .iter()
+            .find(|settings| mode_of(settings) != RustRedMasterMode::Retain)
+            .copied()
+            .unwrap_or(*first);
+        let handle = vakint.p_library()?;
+        let reduced = rr::reduce_folded_channels(vakint, reducing, &handle, self.folded, None, rr::fold_mode(), true)?;
+        let mut results = Vec::with_capacity(settings.len());
+        for settings in settings {
+            let mode = mode_of(settings);
+            let mut result = Atom::Zero;
+            let mut numerical = Atom::Zero;
+            for ((loops, _), values) in &reduced {
+                let value = self.closure.finalize(values, *loops, &self.head, settings, mode)?;
+                if mode == RustRedMasterMode::Numerical {
+                    numerical += value;
+                } else {
+                    result += value;
+                }
+            }
+            if !numerical.is_zero() {
+                result += vakint.resolve_rustred_numerical(numerical, settings)?;
+            }
+            results.push(result.expand());
+        }
+        Ok(results)
+    }
 }
 
 /// `VAKINT_LOWERING`: `legacy` evaluates direct closure inputs through the
@@ -833,6 +885,78 @@ impl MassiveClosure {
                 }
             }
             Ok(result.expand())
+        })
+    }
+
+    /// vk5l-physrun: [`Self::evaluate_direct_sum`] for several settings (one
+    /// master mode each) at once: every closure is lowered ONCE and every
+    /// class reduced ONCE ([`LoweredClosure::evaluate_modes`]); one value per
+    /// settings. The lowering uses the first settings (the modes must agree
+    /// on everything else).
+    pub fn evaluate_direct_sum_modes(
+        vakint: &Vakint,
+        settings: &[&crate::VakintSettings],
+        inputs: &[(Self, DirectClosureInput)],
+    ) -> Result<Vec<Atom>, VakintError> {
+        let Some(first) = settings.first() else {
+            return Ok(Vec::new());
+        };
+        first.with_resource_budget(|| {
+            let mut classes = Vec::<LoweredClosure>::new();
+            let mut results = vec![Atom::Zero; settings.len()];
+            let started = std::time::Instant::now();
+            for (index, (closure, input)) in inputs.iter().enumerate() {
+                first.validate_execution()?;
+                let lowering = std::time::Instant::now();
+                let lowered = closure.lower_direct(vakint, first, input)?;
+                if super::phases::enabled() {
+                    eprintln!(
+                        "vakint-direct-sum closure {}/{} {} in {:.1} s (total {:.1} s)",
+                        index + 1,
+                        inputs.len(),
+                        if lowered.is_some() { "lowered" } else { "declined" },
+                        lowering.elapsed().as_secs_f64(),
+                        started.elapsed().as_secs_f64()
+                    );
+                }
+                match lowered {
+                    Some(mut lowered) => {
+                        for class in classes.iter_mut() {
+                            match class.absorb(lowered) {
+                                Ok(()) => {
+                                    lowered = LoweredClosure {
+                                        closure: closure.clone(),
+                                        head: Atom::Zero,
+                                        folded: Default::default(),
+                                    };
+                                    break;
+                                }
+                                Err(back) => lowered = back,
+                            }
+                        }
+                        if !lowered.head.is_zero() {
+                            classes.push(lowered);
+                        }
+                    }
+                    None => {
+                        for (result, settings) in results.iter_mut().zip(settings) {
+                            *result += Self::evaluate_batch(vakint, settings, &[(closure.clone(), input.ordinary())])?
+                                .pop()
+                                .unwrap_or_default();
+                        }
+                    }
+                }
+            }
+            for class in classes {
+                let reducing = std::time::Instant::now();
+                for (result, value) in results.iter_mut().zip(class.evaluate_modes(vakint, settings)?) {
+                    *result += value;
+                }
+                if super::phases::enabled() {
+                    eprintln!("vakint-direct-sum class reduced once and finalized per mode in {:.1} s", reducing.elapsed().as_secs_f64());
+                }
+            }
+            Ok(results.into_iter().map(|result| result.expand()).collect())
         })
     }
 

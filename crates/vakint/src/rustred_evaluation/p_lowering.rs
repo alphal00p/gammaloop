@@ -1187,7 +1187,6 @@ pub(crate) fn lower_closure(
     // merged after every multiplication, so the product of forms of each
     // monomial is never formed on its own. The lowered keys and exact values
     // are those of lowering every monomial and summing.
-    let mut key_ids = HashMap::<Vec<i64>, usize>::new();
     let mut keys = Vec::<Vec<i64>>::new();
     let imaginary_unit = Atom::i();
     let mut bucket_ids = HashMap::<(u32, bool, i64, u32), usize>::new();
@@ -1222,8 +1221,13 @@ pub(crate) fn lower_closure(
         bucket_terms[bucket].push((loop_monomial, value));
     }
     stats.distinct_monomials += distinct.len();
-    let mut buckets = Vec::<Vec<Rational>>::with_capacity(bucket_terms.len());
+    // vk5l-physrun: a lowered key is a function of its packed slot monomial
+    // (the line powers are fixed per closure): key ids by monomial, each key
+    // vector built once; a bucket holds its (key id, value) pairs (the
+    // substitution gives each monomial once per bucket).
+    let mut buckets = Vec::<Vec<(usize, Rational)>>::with_capacity(bucket_terms.len());
     let integer_forms = IntegerForms::new(&forms);
+    let mut monomial_ids = HashMap::<u128, usize>::new();
     for mut terms in bucket_terms {
         let substituted = match integer_forms
             .as_ref()
@@ -1232,25 +1236,22 @@ pub(crate) fn lower_closure(
             Some(substituted) => substituted,
             None => substitute(&mut terms, count, &forms),
         };
-        let mut bucket = Vec::new();
+        let mut bucket = Vec::with_capacity(substituted.len());
         for (monomial, value) in substituted {
             if value.is_zero() {
                 continue;
             }
-            let key = (0..top.arity)
-                .map(|slot| {
-                    base[slot] - ((monomial >> (BITS * slot as u32)) & ((1 << BITS) - 1)) as i64
-                })
-                .collect::<Vec<_>>();
             let next = keys.len();
-            let id = *key_ids.entry(key.clone()).or_insert_with(|| {
+            let id = *monomial_ids.entry(monomial).or_insert_with(|| {
+                let key = (0..top.arity)
+                    .map(|slot| {
+                        base[slot] - ((monomial >> (BITS * slot as u32)) & ((1 << BITS) - 1)) as i64
+                    })
+                    .collect::<Vec<_>>();
                 keys.push(key);
                 next
             });
-            if bucket.len() <= id {
-                bucket.resize(id + 1, Rational::zero());
-            }
-            bucket[id] += &value;
+            bucket.push((id, value));
             stats.lowered += 1;
         }
         buckets.push(bucket);
@@ -1267,7 +1268,6 @@ pub(crate) fn lower_closure(
     for ((monomial_id, phase, scale_power, basis_id), bucket) in bucket_ids {
         let inputs = std::mem::take(&mut buckets[bucket])
             .into_iter()
-            .enumerate()
             .filter(|(_, value)| !value.is_zero())
             .map(|(id, value)| ((top.presentation, keys[id].clone()), value))
             .collect::<BTreeMap<_, _>>();
