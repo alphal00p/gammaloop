@@ -1613,6 +1613,66 @@ pub(crate) struct FoldedInputs {
 /// vk5l-physrun: `VAKINT_P_KEY_DUMP=<file>` appends every reduced key of a
 /// folded channel as `loops<TAB>presentation<TAB>powers` (whole-input key
 /// statistics: distinct keys per closure and across closures).
+/// The inputs of a coefficient-folded channel: per key, `Σ_basis value ·
+/// basis(ε)` at `d` ([`epsilon_coefficient`]), the keys in ascending order.
+///
+/// vk5l-physrun: the rational values of a key are gathered first (one entry
+/// per basis, in ascending basis order), and the exact rational function is
+/// built once per distinct list of (basis, value) pairs, with the same
+/// products and sums in the same order as one key at a time. Physical
+/// closures repeat the same small rational values over millions of keys.
+fn coefficient_inputs(
+    context: &CoefficientContext,
+    by_basis: BTreeMap<Atom, BTreeMap<(PresentationId, Vec<i64>), Rational>>,
+    epsilon: Symbol,
+    epsilon_at_d: &Coefficient,
+    exact: ExactAlgebraLimits,
+) -> Result<Vec<((PresentationId, Vec<i64>), Coefficient)>, VakintError> {
+    let native = RustRedEvaluationError::from_native;
+    let mut weights = Vec::with_capacity(by_basis.len());
+    let mut parts = ahash::AHashMap::<(PresentationId, Vec<i64>), Vec<(u32, Rational)>>::new();
+    for (index, (basis, lowered)) in by_basis.into_iter().enumerate() {
+        weights.push(epsilon_coefficient(
+            context,
+            basis.as_view(),
+            epsilon,
+            epsilon_at_d,
+            exact,
+        )?);
+        let index = u32::try_from(index).map_err(|_| invalid("too many epsilon basis functions"))?;
+        for (key, value) in lowered {
+            if !value.is_zero() {
+                parts.entry(key).or_default().push((index, value));
+            }
+        }
+    }
+    let mut built = ahash::AHashMap::<Vec<(u32, Rational)>, Coefficient>::new();
+    let mut inputs = Vec::with_capacity(parts.len());
+    for (key, list) in parts {
+        let value = match built.get(&list) {
+            Some(value) => value.clone(),
+            None => {
+                let mut sum: Option<Coefficient> = None;
+                for (index, value) in &list {
+                    let term = context
+                        .try_mul(&weights[*index as usize], &coefficient(context, value, exact)?, exact)
+                        .map_err(native)?;
+                    sum = Some(match sum {
+                        Some(sum) => context.try_add(&sum, &term, exact).map_err(native)?,
+                        None => term,
+                    });
+                }
+                let value = sum.ok_or_else(|| invalid("a folded key without a nonzero value"))?;
+                built.insert(list, value.clone());
+                value
+            }
+        };
+        inputs.push((key, value));
+    }
+    inputs.sort_unstable_by(|left, right| left.0.cmp(&right.0));
+    Ok(inputs)
+}
+
 fn key_dump<'a>(loops: usize, keys: impl Iterator<Item = &'a (PresentationId, Vec<i64>)>) {
     static FILE: std::sync::LazyLock<Option<std::sync::Mutex<std::fs::File>>> =
         std::sync::LazyLock::new(|| {
@@ -1769,37 +1829,13 @@ pub(crate) fn reduce_folded_channels(
         let reduced = match mode {
             FoldMode::Coefficient => {
                 let preparing = std::time::Instant::now();
-                let mut inputs = BTreeMap::<(PresentationId, Vec<i64>), Coefficient>::new();
-                for (basis, lowered) in by_basis {
-                    let weight = epsilon_coefficient(
-                        context,
-                        basis.as_view(),
-                        epsilon,
-                        &epsilon_at_d,
-                        exact,
-                    )?;
-                    for (key, value) in lowered {
-                        if value.is_zero() {
-                            continue;
-                        }
-                        let term = context
-                            .try_mul(&weight, &coefficient(context, &value, exact)?, exact)
-                            .map_err(native)?;
-                        match inputs.get_mut(&key) {
-                            Some(sum) => {
-                                *sum = context.try_add(sum, &term, exact).map_err(native)?
-                            }
-                            None => {
-                                inputs.insert(key, term);
-                            }
-                        }
-                    }
-                }
+                let inputs =
+                    coefficient_inputs(context, by_basis, epsilon, &epsilon_at_d, exact)?;
                 with_stats(|stats| {
                     stats.prepare_seconds += preparing.elapsed().as_secs_f64();
                     stats.pairs += inputs.len();
                 });
-                key_dump(channel.loops, inputs.keys());
+                key_dump(channel.loops, inputs.iter().map(|(key, _)| key));
                 let inputs = inputs
                     .into_iter()
                     .filter(|(_, value)| !value.is_zero())
