@@ -43,6 +43,7 @@ use crate::{
     uv::{
         UVgenerationSettings, UltravioletGraph,
         approx::{
+            counts,
             integrated::{Integrated, to_vakint_integrand},
             streamed,
         },
@@ -1623,6 +1624,15 @@ impl RStarIntegrand {
         let compensated =
             taylor.compensate_mass(&scaled, reference_mass_squared, auxiliary_mass_squared);
         drop(scaled);
+        // Instrumentation (opt-in, no value depends on it): the P_i x D_j
+        // shape of this product, reported by the next to_vakint call.
+        if self.region.loops != 0 && counts::enabled() {
+            counts::set_taylor_shape(counts::taylor_shape(
+                compensated.as_view(),
+                parameter,
+                degree,
+            ));
+        }
         let polynomial = taylor.evaluate(&compensated)?;
         drop(compensated);
         timing.taylor = timing.lap();

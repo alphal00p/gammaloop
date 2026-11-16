@@ -34,6 +34,7 @@ use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetLike, SubS
 use super::IntegrandExpr;
 use vakint::Vakint;
 
+pub(crate) mod counts;
 pub mod final_integrand;
 pub mod integrated;
 pub mod local_3d;

@@ -49,6 +49,11 @@ pub(super) fn settings() -> Option<&'static DumpSettings> {
         .as_ref()
 }
 
+/// Whether `PINT6_CLOSURE_DUMP` is set (closure records are written).
+pub fn enabled() -> bool {
+    settings().is_some()
+}
+
 static CONTEXT: Mutex<String> = Mutex::new(String::new());
 static TERM: Mutex<String> = Mutex::new(String::new());
 static SEQUENCE: AtomicUsize = AtomicUsize::new(0);
@@ -357,6 +362,11 @@ pub(super) fn write(
     writeln!(out, "numerator_monomials {}", monomials.len())?;
     writeln!(out, "max_loop_rank {max_rank}")?;
     writeln!(out, "numerator_bytes {}", numerator.as_view().get_byte_size())?;
+    // Instrumentation: the counts of the to_vakint call that produced this
+    // closure (see uv::approx::counts); a new key, before the input line.
+    if let Some(counts) = crate::uv::approx::counts::last_counts() {
+        writeln!(out, "to_vakint_counts {counts}")?;
+    }
     // Exactly the Atom MassiveClosure::evaluate_batch receives with this closure.
     writeln!(out, "input {}", (numerator * integrand).to_canonical_string())?;
     out.flush()?;
