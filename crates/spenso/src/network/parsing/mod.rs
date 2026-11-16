@@ -42,6 +42,7 @@ use construction::Construction;
 use linnet::half_edge::NodeIndex;
 mod indices;
 pub(crate) mod structure_inference;
+use structure_inference::TensorialSyntax;
 pub use structure_inference::{AtomStructureExt, ChainNestingError, StructureFromAtom};
 mod materialization;
 mod tensor_from_expression;
@@ -271,16 +272,17 @@ impl ParseSettings {
 }
 
 /// Exact opaque-boundary observations shared across admitted graph versions.
-/// Each entry records tensorial syntax and logical slot atoms; an empty slot
-/// list can still describe a tensor leaf with internal contractions. Reuse a
-/// cache only while admission facts and the parsing policy remain valid,
-/// including `strict_tensor_filter` and `parse_composite_scalars_as_tensors`.
+/// True entries retain logical raw slot atoms for tensor constructors, including
+/// paired ports of self-loops, or exposed slots for opaque arithmetic boundaries.
+/// False entries contain no structural witness. Syntax classification uses the
+/// requested filter independently, so structural facts survive filter changes.
 pub type LeafInterfaceCache = Arc<Mutex<HashMap<Atom, (bool, Vec<Atom>)>>>;
 
 #[derive(Clone)]
 pub struct ParseState<Aind = AbstractIndex, View = ()> {
     view: View,
     chain_scope_validated: bool,
+    require_admitted_interfaces: bool,
     leaf_interfaces: Option<LeafInterfaceCache>,
     depth: usize,
     matcher: Rc<RefCell<SlotMatcher>>,
@@ -307,6 +309,7 @@ impl<Aind> Default for ParseState<Aind> {
         Self {
             view: (),
             chain_scope_validated: false,
+            require_admitted_interfaces: false,
             leaf_interfaces: None,
             depth: 0,
             matcher: Rc::new(RefCell::new(SlotMatcher::default())),
@@ -319,12 +322,24 @@ impl<Aind> Default for ParseState<Aind> {
 }
 
 impl<Aind, View> ParseState<Aind, View> {
+    /// Carry admitted raw ports through parsing and shorthand materialization.
+    /// See [`LeafInterfaceCache`] for the cache's admission contract.
+    pub fn with_leaf_interfaces(mut self, cache: LeafInterfaceCache) -> Self {
+        self.require_admitted_interfaces = true;
+        self.matcher = Rc::new(RefCell::new(SlotMatcher::with_leaf_interfaces([
+            Arc::clone(&cache),
+        ])));
+        self.leaf_interfaces = Some(cache);
+        self
+    }
+
     // Rebinding an original subtree moves the operation owners, without adding
     // per-leaf reference-count traffic. Only the dispatcher sets the view.
     fn with_view<NextView>(self, view: NextView) -> ParseState<Aind, NextView> {
         ParseState {
             view,
             chain_scope_validated: self.chain_scope_validated,
+            require_admitted_interfaces: self.require_admitted_interfaces,
             leaf_interfaces: self.leaf_interfaces,
             depth: self.depth,
             matcher: self.matcher,
@@ -340,7 +355,6 @@ impl<Aind, View> ParseState<Aind, View> {
     fn materialized(self) -> ParseState<Aind> {
         let mut state = self.with_view(());
         state.chain_scope_validated = false;
-        state.leaf_interfaces = None;
         state
     }
 }
@@ -441,21 +455,24 @@ where
         )
     }
 
-    /// Build a depth-one opaque graph from already admitted tensor syntax.
+    /// Build a graph from already admitted tensor syntax.
     ///
     /// The caller must have established well-formed tensor syntax, compatible
     /// sums, index scopes, and chain nesting. This entry reuses exact boundary
-    /// interfaces and skips the admission and dummy-reservation walks. It accepts
-    /// only opaque depth-one parsing, which does not allocate shorthand dummies.
-    /// Reuse requires unchanged `strict_tensor_filter` and
-    /// `parse_composite_scalars_as_tensors`. Discard the cache after callbacks or
-    /// rewrites that invalidate those admission or classification facts.
+    /// interfaces and skips repeated syntax admission. Opaque depth-one parsing
+    /// also skips dummy reservation; shorthand expansion reserves existing names
+    /// before allocating new channel indices.
+    /// Every structural leaf selected by the parsing settings must have retained
+    /// raw ports or target-owned admission facts. Missing facts are errors.
+    /// Producers must transport these facts when callbacks or rewrites change
+    /// the corresponding expression.
     #[allow(clippy::result_large_err)]
     pub fn try_from_admitted_view<S, Lib: TensorLibraryFor<S, T, Key = K>>(
         value: AtomView<'src>,
         library: &Lib,
         settings: &ParseSettings,
         leaf_interfaces: LeafInterfaceCache,
+        admission: Option<&T::Admission>,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
         S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
@@ -463,24 +480,56 @@ where
         T::Slot: IsAbstractSlot<Aind = Aind>,
         T: TensorFromExpression<'src, S, Sc, K, Symbol, Aind, Lib, ErroringLibrary<Symbol>>,
     {
-        if settings.shorthand_parsing != ShorthandParsing::Opaque || settings.depth_limit != Some(1)
-        {
-            return Err(TensorNetworkError::Other(eyre::eyre!(
-                "admitted parsing requires opaque shorthand and depth_limit=Some(1)"
-            )));
-        }
+        Self::try_from_admitted_view_with_function_library(
+            value,
+            library,
+            &ErroringLibrary::<Symbol>::new(),
+            settings,
+            leaf_interfaces,
+            admission,
+        )
+    }
+
+    /// Parse admitted syntax with a caller-supplied function library, reusing
+    /// exact leaf interfaces under the same policy as `try_from_admitted_view`.
+    #[allow(clippy::result_large_err)]
+    pub fn try_from_admitted_view_with_function_library<S, Lib, FunLib>(
+        value: AtomView<'src>,
+        library: &Lib,
+        function_library: &FunLib,
+        settings: &ParseSettings,
+        leaf_interfaces: LeafInterfaceCache,
+        admission: Option<&T::Admission>,
+    ) -> Result<Self, TensorNetworkError<K, Symbol>>
+    where
+        S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
+        S::Slot: IsAbstractSlot<Aind = Aind>,
+        T::Slot: IsAbstractSlot<Aind = Aind>,
+        T: TensorFromExpression<'src, S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        Lib: TensorLibraryFor<S, T, Key = K>,
+        FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
+    {
         let mut construction = Construction::new();
+        construction.admission = admission.cloned();
         let state = ParseState::<Aind> {
             chain_scope_validated: true,
+            require_admitted_interfaces: true,
+            matcher: Rc::new(RefCell::new(SlotMatcher::with_leaf_interfaces([
+                Arc::clone(&leaf_interfaces),
+            ]))),
             leaf_interfaces: Some(leaf_interfaces),
             ..Default::default()
         };
+        if settings.shorthand_parsing != ShorthandParsing::Opaque || settings.depth_limit != Some(1)
+        {
+            state.reserve_indices(value);
+        }
         let root = Self::try_from_view_impl(
             &mut construction,
             value,
             state,
             library,
-            &ErroringLibrary::<Symbol>::new(),
+            function_library,
             settings,
             AtomOrView::View,
         )?;
@@ -542,7 +591,7 @@ where
         function_library: &FunLib,
         settings: &ParseSettings,
         emit_graph: bool,
-    ) -> Result<(Construction<Str, K, Aind>, NodeIndex), TensorNetworkError<K, Symbol>>
+    ) -> Result<(Construction<Str, K, Aind, T::Admission>, NodeIndex), TensorNetworkError<K, Symbol>>
     where
         S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
         S::Slot: IsAbstractSlot<Aind = Aind>,
@@ -586,7 +635,7 @@ where
     }
 
     fn try_from_view_impl<'node, S, Lib, FunLib, View>(
-        construction: &mut Construction<Str, K, Aind>,
+        construction: &mut Construction<Str, K, Aind, T::Admission>,
         value: AtomView<'node>,
         state: ParseState<Aind, View>,
         library: &Lib,
@@ -659,7 +708,7 @@ where
 
     #[allow(clippy::type_complexity, clippy::result_large_err)]
     fn as_leaf<'node, S, Lib, FunLib>(
-        construction: &mut Construction<Str, K, Aind>,
+        construction: &mut Construction<Str, K, Aind, T::Admission>,
         value: AtomView<'node>,
         state: &ParseState<Aind, AtomView<'node>>,
         library: &Lib,
@@ -677,33 +726,13 @@ where
     {
         let scalar_composite = settings.parse_composite_scalars_as_tensors
             && matches!(value, AtomView::Add(_) | AtomView::Mul(_));
-        let cached_tensorial = state.leaf_interfaces.as_ref().and_then(|cache| {
-            cache
-                .lock()
-                .unwrap()
-                .get(value.get_data())
-                .map(|entry| entry.0)
-        });
         if !scalar_composite
-            && !cached_tensorial.unwrap_or_else(|| {
-                structure_inference::TensorialSyntax::is_tensorial(
-                    value,
-                    settings.strict_tensor_filter,
-                    &state.matcher.borrow(),
-                )
-            })
+            && !TensorialSyntax::is_tensorial(
+                value,
+                settings.strict_tensor_filter,
+                &state.matcher.borrow(),
+            )
         {
-            if let Some(cache) = &state.leaf_interfaces {
-                if cached_tensorial.is_some() {
-                    profile::bump(Counter::ParseStructureCacheHit, 1);
-                } else {
-                    profile::bump(Counter::ParseStructureCacheMiss, 1);
-                    cache
-                        .lock()
-                        .unwrap()
-                        .insert(value.to_owned(), (false, Vec::new()));
-                }
-            }
             return Ok(construction.scalar(Self::scalar_from_expression(retain(value))?));
         }
 
@@ -724,7 +753,7 @@ where
         clippy::too_many_arguments
     )]
     fn as_inferred_leaf<'node, S, Lib, FunLib>(
-        construction: &mut Construction<Str, K, Aind>,
+        construction: &mut Construction<Str, K, Aind, T::Admission>,
         value: AtomView<'node>,
         state: &ParseState<Aind, AtomView<'node>>,
 
@@ -745,7 +774,11 @@ where
         profile::bump(Counter::ParseStructureAttempt, 1);
         let structure = {
             let _span = profile::span(Timer::ParseStructure);
-            S::structure_from_parser(state)
+            if let Some(admission) = construction.admission.as_ref() {
+                T::admitted_structure(value, admission, || state.next())
+            } else {
+                S::structure_from_parser(state)
+            }
         };
 
         let structure = match structure {
@@ -769,6 +802,11 @@ where
             library,
             function_library,
             settings,
+            construction.admission.as_ref(),
+            state
+                .require_admitted_interfaces
+                .then_some(state.leaf_interfaces.as_ref())
+                .flatten(),
         )?
         .into_parts();
         Ok(construction.tensor(tensor, layout)?)
@@ -776,7 +814,7 @@ where
 
     #[allow(clippy::result_large_err)]
     fn try_from_mul<'node, S, Lib, FunLib>(
-        construction: &mut Construction<Str, K, Aind>,
+        construction: &mut Construction<Str, K, Aind, T::Admission>,
         value: MulView<'node>,
         mut state: ParseState<Aind, AtomView<'node>>,
         library: &Lib,
@@ -904,7 +942,7 @@ where
 
     #[allow(clippy::result_large_err)]
     fn try_from_fun<'node, S, Lib, FunLib>(
-        construction: &mut Construction<Str, K, Aind>,
+        construction: &mut Construction<Str, K, Aind, T::Admission>,
         value: FunView<'node>,
         state: ParseState<Aind, AtomView<'node>>,
         library: &Lib,
@@ -965,31 +1003,11 @@ where
             );
         }
 
-        let cached_tensorial = state.leaf_interfaces.as_ref().and_then(|cache| {
-            cache
-                .lock()
-                .unwrap()
-                .get(value.as_view().get_data())
-                .map(|entry| entry.0)
-        });
-        if !cached_tensorial.unwrap_or_else(|| {
-            structure_inference::TensorialSyntax::is_tensorial(
-                value.as_view(),
-                settings.strict_tensor_filter,
-                &state.matcher.borrow(),
-            )
-        }) {
-            if let Some(cache) = &state.leaf_interfaces {
-                if cached_tensorial.is_some() {
-                    profile::bump(Counter::ParseStructureCacheHit, 1);
-                } else {
-                    profile::bump(Counter::ParseStructureCacheMiss, 1);
-                    cache
-                        .lock()
-                        .unwrap()
-                        .insert(value.as_view().to_owned(), (false, Vec::new()));
-                }
-            }
+        if !TensorialSyntax::is_tensorial(
+            value.as_view(),
+            settings.strict_tensor_filter,
+            &state.matcher.borrow(),
+        ) {
             return Self::parse_scalar_function(
                 construction,
                 value,
@@ -1024,8 +1042,8 @@ where
     }
 
     #[allow(clippy::result_large_err)]
-    fn parse_scalar_function<'node>(
-        construction: &mut Construction<Str, K, Aind>,
+    fn parse_scalar_function<'node, Admission>(
+        construction: &mut Construction<Str, K, Aind, Admission>,
         value: FunView<'node>,
         shorthand_parsing: ShorthandParsing,
         retain: fn(AtomView<'node>) -> AtomOrView<'src>,
@@ -1051,7 +1069,7 @@ where
 
     #[allow(clippy::result_large_err)]
     fn parse_broadcast_function<'node, S, Lib, FunLib>(
-        construction: &mut Construction<Str, K, Aind>,
+        construction: &mut Construction<Str, K, Aind, T::Admission>,
         value: FunView<'node>,
         state: ParseState<Aind, AtomView<'node>>,
         library: &Lib,
@@ -1095,7 +1113,7 @@ where
 
     #[allow(clippy::result_large_err)]
     fn parse_expanded_function<'node, S, Lib, FunLib>(
-        construction: &mut Construction<Str, K, Aind>,
+        construction: &mut Construction<Str, K, Aind, T::Admission>,
         value: FunView<'node>,
         state: ParseState<Aind, AtomView<'node>>,
         library: &Lib,
@@ -1160,7 +1178,7 @@ where
 
     #[allow(clippy::result_large_err)]
     fn parse_regular_function_leaf<'node, S, Lib, FunLib>(
-        construction: &mut Construction<Str, K, Aind>,
+        construction: &mut Construction<Str, K, Aind, T::Admission>,
         value: FunView<'node>,
         state: &ParseState<Aind, AtomView<'node>>,
         library: &Lib,
@@ -1177,7 +1195,11 @@ where
         profile::bump(Counter::ParseStructureAttempt, 1);
         let structure = {
             let _span = profile::span(Timer::ParseStructure);
-            S::structure_from_parser(state)
+            if let Some(admission) = construction.admission.as_ref() {
+                T::admitted_structure(value.as_view(), admission, || state.next())
+            } else {
+                S::structure_from_parser(state)
+            }
         };
 
         let structure = match structure {
@@ -1205,15 +1227,19 @@ where
                         .library_tensor(&tensor_structure, structure.map_canonical(|_| key)),
                 )
             }
-            Err(_) if structure.canonical().is_scalar() => {
+            Err(_) if structure.canonical().is_scalar() && !T::PRESERVE_SCALAR_METADATA => {
                 Ok(construction.scalar(Self::scalar_from_expression(retain(value.as_view()))?))
             }
             Err(_) => {
                 // Tensor dimensions may remain symbolic during analytic normalization;
                 // opaque scalars and library tensors need no eager shadow here.
                 // The target decides whether missing leaves need finite components.
-                let (tensor, layout) =
-                    T::tensor_from_leaf(retain(value.as_view()), structure)?.into_parts();
+                let (tensor, layout) = T::tensor_from_leaf(
+                    retain(value.as_view()),
+                    structure,
+                    construction.admission.as_ref(),
+                )?
+                .into_parts();
                 Ok(construction.tensor(tensor, layout)?)
             }
         }
@@ -1221,7 +1247,7 @@ where
 
     #[allow(clippy::result_large_err)]
     fn try_from_pow<'node, S, Lib, FunLib>(
-        construction: &mut Construction<Str, K, Aind>,
+        construction: &mut Construction<Str, K, Aind, T::Admission>,
         value: PowView<'node>,
         mut state: ParseState<Aind, AtomView<'node>>,
         library: &Lib,
@@ -1332,6 +1358,16 @@ where
             };
             // println!("{:?}", out.state);
             Ok(out)
+        } else if T::PRESERVE_SCALAR_METADATA {
+            Self::as_leaf::<S, Lib, FunLib>(
+                construction,
+                value.as_view(),
+                &state,
+                library,
+                function_library,
+                settings,
+                retain,
+            )
         } else {
             Ok(construction.scalar(Self::scalar_from_expression(retain(value.as_view()))?))
         }
@@ -1339,7 +1375,7 @@ where
 
     #[allow(clippy::result_large_err)]
     fn try_from_add<'node, S, Lib, FunLib>(
-        construction: &mut Construction<Str, K, Aind>,
+        construction: &mut Construction<Str, K, Aind, T::Admission>,
         value: AddView<'node>,
         mut state: ParseState<Aind, AtomView<'node>>,
         library: &Lib,

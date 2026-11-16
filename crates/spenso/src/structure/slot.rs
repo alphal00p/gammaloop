@@ -1,25 +1,32 @@
-use super::{
-    abstract_index::{AbstractIndex, AbstractIndexError},
-    dimension::DimensionError,
-    representation::{
-        BaseRepName, LibraryRep, LibrarySlot, RepName, Representation, RepresentationError,
-    },
+use super::abstract_index::{AbstractIndex, AbstractIndexError};
+use super::dimension::DimensionError;
+#[cfg(feature = "shadowing")]
+use super::representation::Minkowski;
+use super::representation::{
+    BaseRepName, LibraryRep, LibrarySlot, RepName, Representation, RepresentationError,
 };
 
-use crate::structure::dimension::Dimension;
 #[cfg(feature = "shadowing")]
-use crate::{
-    network::tags::{SPENSO_TAG, SpensoTags},
-    structure::abstract_index::AIND_SYMBOLS,
-};
+use crate::network::library::symbolic::ETS;
+#[cfg(feature = "shadowing")]
+use crate::network::parsing::LeafInterfaceCache;
+#[cfg(feature = "shadowing")]
+use crate::network::tags::{SPENSO_TAG, SpensoTags};
+#[cfg(feature = "shadowing")]
+use crate::shadowing::{ANTISYM, CYCLIC, SYM};
+#[cfg(feature = "shadowing")]
+use crate::structure::abstract_index::AIND_SYMBOLS;
+use crate::structure::dimension::Dimension;
 use bincode::Encode;
 // #[cfg(feature = "shadowing")]
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
+use std::fmt::{Debug, Display};
 use std::hash::Hash;
-use std::{
-    cmp::Ordering,
-    fmt::{Debug, Display},
-};
+#[cfg(feature = "shadowing")]
+use std::sync::OnceLock;
+#[cfg(feature = "shadowing")]
+use std::{array, mem};
 #[cfg(feature = "shadowing")]
 use symbolica::atom::representation::{FunView, ListIterator};
 #[cfg(feature = "shadowing")]
@@ -336,13 +343,14 @@ impl<'a> SlotView<'a> {
 /// The small, bounded caches avoid repeated tag lookups and representation
 /// resolution without making scans quadratic in the number of distinct heads.
 pub struct SlotMatcher {
+    pub(crate) leaf_interfaces: Option<Vec<LeafInterfaceCache>>,
     heads: [Option<(u32, SlotHead)>; 16],
     resolved: Vec<(Symbol, Option<Symbol>, LibraryRep)>,
     tags: &'static SpensoTags,
     aind: Symbol,
     wrappers: [u32; 3],
-    metric: std::sync::OnceLock<Symbol>,
-    projectors: [std::sync::OnceLock<Symbol>; 3],
+    metric: OnceLock<Symbol>,
+    projectors: [OnceLock<Symbol>; 3],
     observed_slots: Option<Vec<Atom>>,
 }
 
@@ -353,8 +361,9 @@ impl Default for SlotMatcher {
         // tensor heads miss the small recognition cache.
         let wrappers = &*AIND_SYMBOLS;
         Self {
-            metric: std::sync::OnceLock::new(),
-            projectors: std::array::from_fn(|_| std::sync::OnceLock::new()),
+            leaf_interfaces: None,
+            metric: OnceLock::new(),
+            projectors: array::from_fn(|_| OnceLock::new()),
             heads: [None; 16],
             resolved: Vec::new(),
             observed_slots: None,
@@ -368,6 +377,16 @@ impl Default for SlotMatcher {
 
 #[cfg(feature = "shadowing")]
 impl SlotMatcher {
+    /// Recognize slots while requiring retained tensor boundaries for structural
+    /// queries. Missing tensor facts are errors, never a request for inference.
+    /// See [`LeafInterfaceCache`] for the constructor-port convention.
+    pub fn with_leaf_interfaces(caches: impl IntoIterator<Item = LeafInterfaceCache>) -> Self {
+        Self {
+            leaf_interfaces: Some(caches.into_iter().collect()),
+            ..Self::default()
+        }
+    }
+
     pub(crate) fn index_bundle(&self) -> Symbol {
         self.aind
     }
@@ -375,16 +394,14 @@ impl SlotMatcher {
     /// Bundle values stay local to one observation; the first access retains
     /// the ordinary initialization boundary and a new matcher probes again.
     pub(crate) fn metric(&self) -> Symbol {
-        *self
-            .metric
-            .get_or_init(|| crate::network::library::symbolic::ETS.metric)
+        *self.metric.get_or_init(|| ETS.metric)
     }
 
     fn projector(&self, index: usize) -> Symbol {
         *self.projectors[index].get_or_init(|| match index {
-            0 => *crate::shadowing::SYM,
-            1 => *crate::shadowing::ANTISYM,
-            2 => *crate::shadowing::CYCLIC,
+            0 => *SYM,
+            1 => *ANTISYM,
+            2 => *CYCLIC,
             _ => unreachable!("three projector symbols"),
         })
     }
@@ -394,7 +411,7 @@ impl SlotMatcher {
     }
 
     pub(crate) fn projectors(&self) -> [Symbol; 3] {
-        std::array::from_fn(|index| self.projector(index))
+        array::from_fn(|index| self.projector(index))
     }
 
     pub(crate) fn is_variance_wrapper(&self, symbol: Symbol) -> bool {
@@ -443,13 +460,10 @@ impl SlotMatcher {
 
     /// Retain written ports during an existing inference traversal. Reusing
     /// their normalized atoms must not reconstruct opaque index callbacks.
-    pub(crate) fn observe_slots<R>(
-        &mut self,
-        infer: impl FnOnce(&mut Self) -> R,
-    ) -> (R, Vec<Atom>) {
+    pub fn observe_slots<R>(&mut self, infer: impl FnOnce(&mut Self) -> R) -> (R, Vec<Atom>) {
         let previous = self.observed_slots.replace(Vec::new());
         let result = infer(self);
-        let observed = std::mem::replace(&mut self.observed_slots, previous).unwrap();
+        let observed = mem::replace(&mut self.observed_slots, previous).unwrap();
         (result, observed)
     }
 
@@ -518,9 +532,7 @@ impl SlotMatcher {
         let AtomView::Fun(vector) = value else {
             return None;
         };
-        if vector.get_symbol() != crate::network::library::symbolic::ETS.delta
-            || vector.get_nargs() != 2
-        {
+        if vector.get_symbol() != ETS.delta || vector.get_nargs() != 2 {
             return None;
         }
         let representation = self.compact_representation(vector.get(1))?;
@@ -545,8 +557,7 @@ impl SlotMatcher {
             usize::try_from(dimension).is_ok_and(|dimension| component < dimension)
         } else {
             representation.is_self_dual()
-                && representation.head()
-                    == LibraryRep::from(super::representation::Minkowski {}).symbol()
+                && representation.head() == LibraryRep::from(Minkowski {}).symbol()
                 && component < 4
         };
         in_bounds.then_some(component)

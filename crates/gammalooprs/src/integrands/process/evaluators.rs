@@ -12,6 +12,7 @@ use linnet::half_edge::{
     subgraph::{SubSetIter, SubSetLike, subset::SubSet},
     typed_vec::IndexLike,
 };
+use spenso::structure::{OrderedStructure, ScalarStructure};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -1038,7 +1039,7 @@ impl EvaluatorStack {
         let input = if settings.do_algebra {
             a.clone()
         } else {
-            a.with_checked_expression(a.expression().to_cof_dimension_invariants())?
+            a.with_produced_expression(a.expression().to_cof_dimension_invariants())?
         };
         let network_input = if settings.do_algebra {
             let simplified = input.simplify_algebra(&idenso::tensor::AlgebraSettings {
@@ -1172,7 +1173,8 @@ impl EvaluatorStack {
         // Retain the checked carrier until the component library owns its ports.
         // Energy surfaces are scalar functions; their lowering preserves the interface.
         let network_input = if network_input.expression().contains_symbol(GS.esurface) {
-            network_input.with_checked_expression(GS.lower_esurfaces(network_input.expression()))?
+            network_input
+                .with_produced_expression(GS.lower_esurfaces(network_input.expression()))?
         } else {
             network_input
         };
@@ -1439,7 +1441,12 @@ impl EvaluatorStack {
                 if rhs.validate_chain_like_nesting().is_err() {
                     return None;
                 }
-                let rhs = match SymbolicTensor::infer_indexed(rhs) {
+                // The endpoint plan above established a closed joint body;
+                // its private index allocation cannot create a free port.
+                let rhs = match SymbolicTensor::from_produced_indexed_parts(
+                    rhs,
+                    IndexedStructure::identity(OrderedStructure::scalar_structure()),
+                ) {
                     Ok(tensor) => tensor,
                     Err(error) => {
                         combination_error = Some(error);

@@ -1,12 +1,20 @@
-use std::{collections::BTreeMap, time::Instant};
+use std::collections::BTreeMap;
+use std::sync::Arc;
+use std::time::Instant;
 
 use color_eyre::Result;
 use eyre::{WrapErr, eyre};
 use idenso::{CookMode, CookSettings, IndexTooling, tensor::SymbolicTensor};
 use linnet::half_edge::subgraph::{Inclusion, SubSetLike, SubSetOps};
-use symbolica::atom::{Atom, AtomCore};
+use spenso::structure::IndexedStructure;
+use spenso::structure::partial::PartialStructure;
+use spenso::structure::slot::IsAbstractSlot;
+use symbolica::atom::{Atom, AtomCore, AtomView};
+use symbolica::symbol;
 use three_dimensional_reps::RepresentationMode;
 use vakint::Vakint;
+
+use crate::integrands::process::param_builder::NumeratorDefinition;
 
 use crate::{
     graph::{Graph, cuts::CutSet, feynman_graph::FeynmanGraph},
@@ -445,12 +453,24 @@ struct IntegrandMapComparison<'a> {
 
 impl IntegrandMapComparison<'_> {
     fn compare(&self) -> Result<()> {
-        let legacy = self.legacy.resolved()?;
-        let hedge = self.hedge.resolved()?;
+        let legacy = self.legacy.resolved_scalars()?;
+        let hedge = self.hedge.resolved_scalars()?;
+        let mut legacy_cache = BTreeMap::new();
+        let mut hedge_cache = BTreeMap::new();
         legacy
             .checked_zip(&hedge, |key, legacy_expr, hedge_expr| {
-                if !ComparableExpr::new(legacy_expr)
-                    .equivalent_to(&ComparableExpr::new(hedge_expr))?
+                let legacy_tensor = ComparableExpr::materialize(
+                    legacy_expr.as_view(),
+                    legacy.numerators(),
+                    &mut legacy_cache,
+                )?;
+                let hedge_tensor = ComparableExpr::materialize(
+                    hedge_expr.as_view(),
+                    hedge.numerators(),
+                    &mut hedge_cache,
+                )?;
+                if !ComparableExpr::new(&legacy_tensor)
+                    .equivalent_to(&ComparableExpr::new(&hedge_tensor))?
                 {
                     crate::debug_tags!(#uv, #compare, #mismatch;
                         cut_index = self.cut_index,
@@ -485,8 +505,8 @@ struct RenormalizationComparison<'a> {
 
 impl RenormalizationComparison<'_> {
     fn compare(&self) -> Result<()> {
-        if !ComparableExpr::new(&self.legacy.expression)
-            .equivalent_to(&ComparableExpr::new(&self.hedge.expression))?
+        if !ComparableExpr::new(&self.legacy.cooked_tensor()?)
+            .equivalent_to(&ComparableExpr::new(&self.hedge.cooked_tensor()?))?
         {
             return Err(eyre!(
                 "UV orchestrator compare mismatch in integrated renormalization part"
@@ -497,12 +517,118 @@ impl RenormalizationComparison<'_> {
 }
 
 struct ComparableExpr<'a> {
-    atom: &'a Atom,
+    tensor: &'a SymbolicTensor<IndexedStructure>,
 }
 
 impl<'a> ComparableExpr<'a> {
-    fn new(atom: &'a Atom) -> Self {
-        Self { atom }
+    fn new(tensor: &'a SymbolicTensor<IndexedStructure>) -> Self {
+        Self { tensor }
+    }
+
+    /// Compose retained families through the raw residue shell. Only syntax
+    /// without a retained owner is admitted; expanded numerator bodies keep
+    /// their established interfaces and never pass through root inference.
+    fn materialize(
+        atom: AtomView<'_>,
+        numerators: &[Arc<NumeratorDefinition>],
+        cache: &mut BTreeMap<Atom, SymbolicTensor<IndexedStructure>>,
+    ) -> Result<SymbolicTensor<IndexedStructure>> {
+        let original = atom.to_owned();
+        if let Some(value) = cache.get(&original) {
+            return Ok(value.clone());
+        }
+        let family = symbol!("gammalooprs::uv::numerator_family");
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let value = if !atom.contains_symbol(family) {
+            // This is the first typed boundary for the raw residue shell or
+            // an actual argument supplied to a retained function.
+            SymbolicTensor::infer_indexed(cooking.try_cook(atom)?)?
+        } else {
+            match atom {
+                AtomView::Add(sum) => {
+                    let mut terms = sum.iter();
+                    let mut result = Self::materialize(
+                        terms.next().expect("nonempty symbolic sum"),
+                        numerators,
+                        cache,
+                    )?;
+                    for term in terms {
+                        result = result.try_add(&Self::materialize(term, numerators, cache)?)?;
+                    }
+                    result
+                }
+                AtomView::Mul(product) => {
+                    let mut factors = product.iter();
+                    let mut result = Self::materialize(
+                        factors.next().expect("nonempty symbolic product"),
+                        numerators,
+                        cache,
+                    )?;
+                    for factor in factors {
+                        result = result.multiply(Self::materialize(factor, numerators, cache)?)?;
+                    }
+                    result
+                }
+                AtomView::Pow(power) => {
+                    let (base, exponent) = power.get_base_exp();
+                    Self::materialize(base, numerators, cache)?
+                        .pow(&Self::materialize(exponent, numerators, cache)?)?
+                }
+                AtomView::Fun(call) if call.get_symbol() == family => {
+                    let mut entries = numerators.iter().filter(|entry| {
+                        entry.tags.len() + entry.args.len() == call.get_nargs()
+                            && call
+                                .iter()
+                                .zip(&entry.tags)
+                                .all(|(arg, tag)| arg == tag.as_view())
+                    });
+                    let entry = entries
+                        .next()
+                        .ok_or_else(|| eyre!("unresolved retained numerator call {atom}"))?;
+                    if entries.next().is_some() {
+                        return Err(eyre!("ambiguous retained numerator call {atom}"));
+                    }
+                    let mut scalar_binding = true;
+                    for argument in call.iter().skip(entry.tags.len()) {
+                        let argument = Self::materialize(argument, numerators, cache)?;
+                        let argument: SymbolicTensor<PartialStructure> = argument.into();
+                        scalar_binding &=
+                            argument.is_scalar() && argument.explicit_indices()?.next().is_none();
+                    }
+                    let preserves_ports =
+                        entry.rhs.structure().logical_slots().iter().all(|slot| {
+                            let slot = cooking.uncook(slot.to_atom().as_view());
+                            atom.replace_multiple([entry.with_rhs(slot.clone()).replacement()])
+                                == slot
+                        });
+                    let expression =
+                        cooking.try_cook(atom.replace_multiple([entry.replacement()]).as_view())?;
+                    if expression.contains_symbol(family) {
+                        return Err(eyre!("unresolved or cyclic retained numerator family call"));
+                    }
+                    if scalar_binding && preserves_ports {
+                        entry.rhs.with_materialized_expression(
+                            "retained numerator binding",
+                            expression,
+                        )?
+                    } else {
+                        // Arbitrary actual arguments or index-valued formals
+                        // are a user substitution boundary, not a built-in
+                        // scalar binding with an established interface.
+                        SymbolicTensor::infer_indexed(expression)?
+                    }
+                }
+                _ => {
+                    return Err(eyre!(
+                        "retained numerator call occurs outside tensor arithmetic: {atom}"
+                    ));
+                }
+            }
+        };
+        cache.insert(original, value.clone());
+        Ok(value)
     }
 
     fn equivalent_to(&self, other: &Self) -> Result<bool> {
@@ -519,11 +645,14 @@ impl<'a> ComparableExpr<'a> {
     }
 
     fn normalized(&self) -> Result<Atom> {
-        let input = self.atom.replace(crate::utils::GS.dim).with(4);
+        let tensor = self.tensor.map_representation_dimensions(|_, dimension| {
+            dimension.replace(crate::utils::GS.dim).with(4)
+        })?;
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        let normalized = SymbolicTensor::infer_indexed(cooking.try_cook(input.as_view())?)?
+        let normalized = tensor
+            .with_produced_expression(tensor.expression().replace(crate::utils::GS.dim).with(4))?
             .simplify_algebra(&idenso::tensor::AlgebraSettings {
                 color: Some(Default::default()),
                 ..Default::default()
@@ -551,7 +680,10 @@ mod tests {
     use linnet::half_edge::{involution::EdgeIndex, subgraph::SubSetLike};
     use spenso::{chain, mink};
     use std::collections::BTreeSet;
+    use symbolica::evaluate::InliningPolicy;
     use symbolica::symbol;
+
+    use crate::integrands::process::param_builder::FnMapEntry;
 
     #[test]
     fn compare_canonicalizes_contracted_uv_indices() {
@@ -573,6 +705,13 @@ mod tests {
         let legacy = expression(1);
         let hedge = expression(0);
         assert_ne!(legacy, hedge, "the source dummy-index charts must differ");
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let legacy =
+            SymbolicTensor::infer_indexed(cooking.try_cook(legacy.as_view()).unwrap()).unwrap();
+        let hedge =
+            SymbolicTensor::infer_indexed(cooking.try_cook(hedge.as_view()).unwrap()).unwrap();
         let legacy = ComparableExpr::new(&legacy);
         let hedge = ComparableExpr::new(&hedge);
 
@@ -592,6 +731,51 @@ mod tests {
                 .equivalent_to(&hedge)
                 .expect("test expressions should canonicalize")
         );
+    }
+
+    #[test]
+    fn compare_retains_family_and_renormalization_open_ports() -> Result<()> {
+        test_initialise()?;
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let start = bis!(4, Atom::from(Aind::Hedge(0, 0)));
+        let end = bis!(4, Atom::from(Aind::Hedge(1, 0)));
+        let index = mink!(4, Atom::from(Aind::UVTerm(0, 2)));
+        let raw = chain!(start, end, gamma!(index.clone()))
+            * crate::utils::GS.emr_vec(EdgeIndex::from(0), index);
+        let parameter = symbol!("compare_retained_parameter");
+        let source = SymbolicTensor::infer_indexed(
+            cooking.try_cook((raw * Atom::var(parameter)).as_view())?,
+        )?;
+        let family = symbol!("gammalooprs::uv::numerator_family");
+        let call = family.call_args([Atom::num(17), Atom::num(3)]);
+        for source in [source.clone(), source.with_produced_expression(Atom::Zero)?] {
+            let definition = Arc::new(FnMapEntry {
+                lhs: family.call_args([Atom::num(17), Atom::var(parameter)]),
+                rhs: source,
+                tags: vec![Atom::num(17)],
+                args: vec![parameter.into()],
+                inlining: InliningPolicy::Always,
+                is_alias: false,
+            });
+            let root = &call * symbolica::parse!("(compare_e+compare_f)*(compare_g+compare_h)");
+            let value = ComparableExpr::materialize(
+                root.as_view(),
+                &[Arc::clone(&definition)],
+                &mut BTreeMap::new(),
+            )?;
+            assert_eq!(value.structure(), definition.rhs.structure());
+            assert_eq!(value.rank(), 2);
+            let part = RenormalizationPart::legacy(
+                cooking.uncook(value.expression().as_view()),
+                value.structure().clone(),
+            );
+            let recovered = part.cooked_tensor()?;
+            assert_eq!(recovered.structure(), value.structure());
+            assert!(ComparableExpr::new(&recovered).equivalent_to(&ComparableExpr::new(&value))?);
+        }
+        Ok(())
     }
 
     #[test]

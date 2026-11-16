@@ -1,7 +1,47 @@
 use super::*;
+use crate::tensor::{SymbolicNetExt, SymbolicNetParse};
 use crate::test_support;
+use spenso::network::parsing::ParseSettings;
+use spenso::shadowing::TensorCollectFilter;
 use spenso::tensor_symbol;
 use symbolica::{function, symbol};
+
+#[test]
+fn renamed_generic_leaves_survive_collection_and_network_execution_without_inference() {
+    test_support::test_initialize();
+    let rep = LibraryRep::from(Minkowski {}).new_rep(4);
+    let old = AbstractIndex::Normal(99631);
+    let new = AbstractIndex::Normal(99633);
+    let left = tensor_symbol!("authoritative_metadata::pipeline_left");
+    let right = tensor_symbol!("authoritative_metadata::pipeline_right");
+    let original = function!(left, rep.slot::<AbstractIndex, _>(old).to_atom())
+        * function!(right, rep.slot::<AbstractIndex, _>(old).to_atom());
+    let expected = function!(left, rep.slot::<AbstractIndex, _>(new).to_atom())
+        * function!(right, rep.slot::<AbstractIndex, _>(new).to_atom());
+    let source = SymbolicTensor::infer(original).unwrap();
+    INFERENCE_CALLS.with(|count| count.set(0));
+    INFERENCE_VISITS.with(|count| count.set(0));
+
+    let renamed = source
+        .renamed_indices(&HashMap::from([(old, new)]))
+        .unwrap();
+    assert_eq!(renamed.expression(), &expected);
+    let rows = renamed
+        .coefficient_list(TensorCollectFilter::Reps([rep.rep]))
+        .unwrap();
+    assert!(!rows.is_empty());
+    let mut reconstructed = Atom::Zero;
+    for (tensor, coefficient) in rows {
+        let value = tensor.multiply(&coefficient).unwrap();
+        let network = value
+            .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+        reconstructed += network.simple_execute::<()>().unwrap();
+    }
+    assert_eq!(reconstructed, expected);
+    assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+    assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
+}
 
 #[test]
 fn expansion_keeps_coalesced_oriented_tensor_copies() {
@@ -27,6 +67,7 @@ fn expansion_keeps_coalesced_oriented_tensor_copies() {
     OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
     SCOPE_VALIDATIONS.with(|count| count.set(0));
     INFERENCE_CALLS.with(|count| count.set(0));
+    INFERENCE_VISITS.with(|count| count.set(0));
     let expanded = weighted.expanded(None, false).unwrap();
     assert_eq!(expanded.expression, expected);
     assert_eq!(expanded.structure, weighted.structure);
@@ -41,6 +82,7 @@ fn expansion_keeps_coalesced_oriented_tensor_copies() {
     assert_eq!(OCCURRENCE_FUNCTION_VISITS.with(|count| count.get()), 0);
     assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
     assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+    assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
 }
 
 #[test]
@@ -81,6 +123,7 @@ fn zero_algebra_maps_hidden_pair_before_later_explicit_collisions() {
     OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
     SCOPE_VALIDATIONS.with(|count| count.set(0));
     INFERENCE_CALLS.with(|count| count.set(0));
+    INFERENCE_VISITS.with(|count| count.set(0));
 
     let zero = source.with_algebra_result(Atom::Zero).unwrap();
     assert!(zero.is_zero());
@@ -123,6 +166,7 @@ fn zero_algebra_maps_hidden_pair_before_later_explicit_collisions() {
     assert_eq!(OCCURRENCE_FUNCTION_VISITS.with(|count| count.get()), 0);
     assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
     assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+    assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
 }
 
 #[test]
@@ -152,6 +196,7 @@ fn dual_free_dimension_mapping_preserves_orientation_and_later_collision_history
     OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
     SCOPE_VALIDATIONS.with(|count| count.set(0));
     INFERENCE_CALLS.with(|count| count.set(0));
+    INFERENCE_VISITS.with(|count| count.set(0));
 
     let mut calls = Vec::new();
     let mapped = source
@@ -197,6 +242,7 @@ fn dual_free_dimension_mapping_preserves_orientation_and_later_collision_history
     assert_eq!(OCCURRENCE_FUNCTION_VISITS.with(|count| count.get()), 0);
     assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
     assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+    assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
 }
 
 #[test]
@@ -239,6 +285,7 @@ fn admitted_arithmetic_owns_canonical_named_ports_and_composes_without_observati
     OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
     SCOPE_VALIDATIONS.with(|count| count.set(0));
     INFERENCE_CALLS.with(|count| count.set(0));
+    INFERENCE_VISITS.with(|count| count.set(0));
 
     let sum = a.try_add(&b).unwrap();
     let difference = a.try_sub(&b).unwrap();
@@ -276,6 +323,7 @@ fn admitted_arithmetic_owns_canonical_named_ports_and_composes_without_observati
     assert_eq!(OCCURRENCE_FUNCTION_VISITS.with(|count| count.get()), 0);
     assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
     assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+    assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
 }
 
 #[test]
@@ -308,6 +356,7 @@ fn additive_branches_keep_maximum_public_multiplicity_in_both_operand_orders() {
     OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
     SCOPE_VALIDATIONS.with(|count| count.set(0));
     INFERENCE_CALLS.with(|count| count.set(0));
+    INFERENCE_VISITS.with(|count| count.set(0));
 
     let branch = scalar.multiply(&vector).unwrap();
     let interface = [slot.rep().slot(PartialIndex::Explicit(index))];
@@ -337,6 +386,7 @@ fn additive_branches_keep_maximum_public_multiplicity_in_both_operand_orders() {
     assert_eq!(OCCURRENCE_FUNCTION_VISITS.with(|count| count.get()), 0);
     assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
     assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+    assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
 }
 
 #[test]
@@ -374,6 +424,7 @@ fn mapping_hidden_base_use_separates_it_from_the_free_dual_port() {
     OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
     SCOPE_VALIDATIONS.with(|count| count.set(0));
     INFERENCE_CALLS.with(|count| count.set(0));
+    INFERENCE_VISITS.with(|count| count.set(0));
 
     let source = free_dual.multiply(&scalar_base).unwrap();
     let interface = [dual_slot.rep().slot(PartialIndex::Explicit(index))];
@@ -418,6 +469,7 @@ fn mapping_hidden_base_use_separates_it_from_the_free_dual_port() {
     assert_eq!(OCCURRENCE_FUNCTION_VISITS.with(|count| count.get()), 0);
     assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
     assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+    assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
 
     // Protect the exact external variance, rather than hiding the opposite
     // orientation's use merely because it shares this collision key.
@@ -500,6 +552,7 @@ fn publication_borrows_supplied_history_without_observing_the_payload() {
     OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
     SCOPE_VALIDATIONS.with(|count| count.set(0));
     INFERENCE_CALLS.with(|count| count.set(0));
+    INFERENCE_VISITS.with(|count| count.set(0));
     assert_eq!(value.explicit_index_occurrences().unwrap().count(slot), 2);
     assert!(Arc::ptr_eq(
         value.proofs.occurrences.get().unwrap(),
@@ -513,6 +566,7 @@ fn publication_borrows_supplied_history_without_observing_the_payload() {
     assert_eq!(OCCURRENCE_FUNCTION_VISITS.with(|count| count.get()), 0);
     assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
     assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+    assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
 }
 
 #[test]

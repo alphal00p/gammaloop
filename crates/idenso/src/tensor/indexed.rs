@@ -106,6 +106,15 @@ impl IndexedTensor {
         PartialTensor::from_declared_parts(expression, structure.into_partial())?.try_into_indexed()
     }
 
+    /// Publish fresh indexed syntax whose producer establishes its free ports.
+    /// User-supplied payloads and interfaces use [`Self::from_indexed_parts`].
+    pub fn from_produced_indexed_parts(
+        expression: Atom,
+        structure: IndexedStructure,
+    ) -> Result<Self> {
+        PartialTensor::from_produced_parts(expression, structure.into_partial())?.try_into_indexed()
+    }
+
     pub(crate) fn into_partial_engine(self) -> PartialTensor {
         let Self {
             structure,
@@ -175,6 +184,25 @@ impl IndexedTensor {
         let structure = self.structure.clone().into_partial();
         self.borrowed_parts(&structure)
             .with_checked_expression(expression)?
+            .try_into_indexed()
+    }
+
+    /// Publish a built-in free-index-preserving result using the source's
+    /// authoritative interface and history. Arbitrary user maps remain checked.
+    /// Debug builds independently verify the producer's interface contract.
+    pub fn with_produced_expression(&self, expression: Atom) -> Result<Self> {
+        let structure = self.structure.clone().into_partial();
+        self.borrowed_parts(&structure)
+            .with_produced_expression(expression)?
+            .try_into_indexed()
+    }
+
+    /// Publish a built-in materializer's expression, retaining free ports and
+    /// accounting for newly allocated or renamed internal index identities.
+    pub fn with_materialized_expression(&self, operation: &str, expression: Atom) -> Result<Self> {
+        let structure = self.structure.clone().into_partial();
+        self.borrowed_parts(&structure)
+            .with_materialized_expression(operation, expression)?
             .try_into_indexed()
     }
 
@@ -600,7 +628,8 @@ mod tests {
         let result = source
             .with_algebra_result(Atom::num(2) * source.expression())
             .unwrap();
-        assert_eq!(source.proofs.algebra.get(), Some(&true));
+        // A proven algebra result uses the admitted source directly.
+        assert!(source.proofs.algebra.get().is_none());
         assert_eq!(source.proofs.validated.get(), Some(&true));
         assert_eq!(result.structure.logical_slots(), vec![slot]);
         let structure = source.structure.clone().into_partial();

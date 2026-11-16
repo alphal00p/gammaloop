@@ -3,10 +3,9 @@
 //! with basis momenta remain numerator invariants for subsequent IBP reduction.
 
 use super::{
-    Outside, TensorMonomial, TensorReducer, TensorReductionError, TensorReductionTerm, dot,
+    Outside, ProjectedTerm, TensorMonomial, TensorReducer, TensorReductionError, dot,
     indexed_vector, outside_pair,
 };
-use idenso::tensor::SymbolicTensor;
 use std::collections::HashMap;
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -86,7 +85,7 @@ impl TensorReducer {
         &self,
         monomial: TensorMonomial,
         projector: &ExternalProjector,
-    ) -> Result<Vec<TensorReductionTerm>, TensorReductionError> {
+    ) -> Result<Vec<ProjectedTerm>, TensorReductionError> {
         if monomial.integrated.is_empty() {
             return self.reduce_monomial(monomial);
         }
@@ -154,16 +153,14 @@ impl TensorReducer {
                 outside,
             })?;
             for term in terms {
-                let transverse = term.tensor.expression().replace_map(|view, _, output| {
+                let transverse = term.tensor.replace_map(|view, _, output| {
                     if let Some(value) = transverse_pairs.get(&view.to_owned()) {
                         **output = value.clone();
                     }
                 });
-                let transverse = term.tensor.with_checked_expression(transverse)?;
-                let coefficient = SymbolicTensor::infer(&monomial.scalar * &parallel)?;
-                let tensor = coefficient.multiply(&transverse)?;
+                let tensor = &monomial.scalar * &parallel * transverse;
                 if !tensor.is_zero() {
-                    result.push(TensorReductionTerm {
+                    result.push(ProjectedTerm {
                         coefficient: term.coefficient,
                         tensor,
                         // The invariants now contain longitudinal subtractions,
@@ -187,6 +184,7 @@ impl TensorReducer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use idenso::tensor::SymbolicTensor;
     use spenso::network::library::symbolic::ETS;
     use spenso::structure::representation::{Minkowski, RepName};
     use symbolica::function;

@@ -4,6 +4,8 @@
 //! graph pairs them (sewn initial states) or leaves them dangling (amplitudes).
 
 use feynkit_kinematics::{MomentumSignature, SignOrZero, Signature};
+use idenso::tensor::SymbolicTensor;
+use idenso::tensor::inference::TensorInferenceError;
 use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph, HedgeGraphError, NoData,
@@ -15,11 +17,13 @@ use linnet::half_edge::{
     tree::SimpleTraversalTree,
 };
 use linnet::union_find::UnionFind;
-use symbolica::{
-    atom::{Atom, AtomOrView, FunctionBuilder, Symbol},
-    id::Replacement,
-};
+use spenso::structure::partial::PartialStructure;
+use std::collections::HashMap;
+use symbolica::atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol};
+use symbolica::id::Replacement;
 use thiserror::Error;
+
+use crate::symbols;
 
 /// A spanning-forest routing in the underlying graph's edge coordinates.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1408,10 +1412,31 @@ impl crate::LoopMomentumBasis {
     /// Route momenta and collect numerical multiples of sums without
     /// distributing products of numerator factors.
     pub fn route_expression(&self, expression: &Atom) -> Atom {
-        use symbolica::atom::AtomCore;
         expression
             .replace_multiple(self.momentum_replacements())
             .expand_num()
+    }
+
+    /// Route an admitted numerator while carrying each tensor constructor's
+    /// raw ports through scalar metadata changes and momentum-vector sums.
+    ///
+    /// # Errors
+    /// Returns errors in the source's retained tensor or index metadata.
+    pub fn route_tensor(
+        &self,
+        tensor: &SymbolicTensor<PartialStructure>,
+    ) -> Result<SymbolicTensor<PartialStructure>, TensorInferenceError> {
+        let replacements = self.momentum_replacements();
+        tensor.map_produced_expression(&HashMap::new(), |node| {
+            let routed = match node {
+                AtomView::Fun(function) if function.get_symbol() == symbols::momentum() => {
+                    node.replace_multiple(&replacements).expand_num()
+                }
+                AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_) => node.expand_num(),
+                _ => return Ok(None),
+            };
+            Ok((routed.as_view() != node).then_some(routed))
+        })
     }
 }
 
@@ -1453,7 +1478,14 @@ impl crate::DiagramEdge {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{EdgeId, LoopMomentumBasis};
+    use idenso::tensor::SymbolicNetParse;
     use linnet::half_edge::builder::HedgeGraphBuilder;
+    use spenso::network::parsing::ParseSettings;
+    use spenso::structure::abstract_index::AbstractIndex;
+    use spenso::{mink, tensor_symbol};
+    use std::collections::BTreeMap;
+    use symbolica::function;
 
     fn bubble() -> HedgeGraph<(), ()> {
         let mut builder = HedgeGraphBuilder::new();
@@ -1464,6 +1496,43 @@ mod tests {
         builder.add_edge(a, b, (), Orientation::Default);
         builder.add_external_edge(b, (), Orientation::Default, Flow::Source);
         builder.build()
+    }
+
+    #[test]
+    fn typed_routing_retains_generic_metadata_and_generated_vector_ports() {
+        let basis = LoopMomentumBasis {
+            tree_edges: vec![EdgeId(0)],
+            loop_edges: vec![EdgeId(1)],
+            external_edges: vec![EdgeId(2)],
+            dependent_externals: vec![],
+            edge_signatures: BTreeMap::from([(
+                EdgeId(0),
+                MomentumSignature::new(
+                    Signature::from_iter([SignOrZero::Plus]),
+                    Signature::from_iter([SignOrZero::Minus]),
+                ),
+            )]),
+        };
+        let port = mink!(4, 71421);
+        let q = symbols::momentum();
+        let spectator = function!(tensor_symbol!("routing_metadata_spectator"), &port);
+        let source = SymbolicTensor::infer(
+            function!(
+                tensor_symbol!("routing_metadata_generic"),
+                function!(symbolica::symbol!("routing_owner"; Scalar), function!(q, 0)),
+                &port
+            ) * &spectator
+                + function!(q, 0, &port) * spectator,
+        )
+        .unwrap();
+        let expected = basis.route_expression(source.expression());
+        let routed = basis.route_tensor(&source).unwrap();
+        assert_eq!(routed.expression(), &expected);
+        assert_eq!(basis.route_tensor(&routed).unwrap().expression(), &expected);
+        let network = routed
+            .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+        assert!(network.graph.dangling_indices().is_empty());
     }
 
     #[test]

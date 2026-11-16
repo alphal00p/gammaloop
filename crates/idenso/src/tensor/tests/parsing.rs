@@ -513,7 +513,7 @@ fn parse_scalar_tensors_step_by() {
       overlap = "scale";
       layout = "neato";
 
-      0	 [label = "S:(d(mink(4,2)))^2*a*b(mink(4,1))*c*d(mink(4,1))"];
+      0	 [label = "T:(d(mink(4,2)))^2*a*b(mink(4,1))*c*d(mink(4,1))"];
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
     }
@@ -528,7 +528,7 @@ fn parse_scalar_tensors_step_by() {
       overlap = "scale";
       layout = "neato";
 
-      0	 [label = "S:(d(mink(4,2)))^2*a*b(mink(4,1))*c*d(mink(4,1))"];
+      0	 [label = "TT:(d(mink(4,2)))^2*b(mink(4,1))*d(mink(4,1))*a*c"];
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
     }

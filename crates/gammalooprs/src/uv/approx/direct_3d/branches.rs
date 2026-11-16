@@ -11,7 +11,7 @@ use color_eyre::Result;
 use eyre::{ensure, eyre};
 use idenso::tensor::SymbolicTensor;
 use spenso::shadowing::{ANTISYM, CYCLIC, SYM};
-use spenso::structure::IndexedStructure;
+use spenso::structure::{IndexedStructure, OrderedStructure, ScalarStructure};
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Indeterminate, Symbol, SymbolAttribute, SymbolBuilder},
     domains::{atom::AtomField, rational::Rational},
@@ -345,7 +345,11 @@ impl DirectResidueBranches {
             file.mapped = %mapped.to_plain_string(),
             "Prepared a shared numerator before checking its retained tensor interface"
         );
-        Ok((numerator.with_checked_expression(mapped)?, parameters, rows))
+        Ok((
+            numerator.with_produced_expression(mapped)?,
+            parameters,
+            rows,
+        ))
     }
 
     /// Build the multiplicative identity on this branch family's exact cut
@@ -425,7 +429,15 @@ impl DirectResidueBranches {
             self.iter_keys()
                 .flat_map(|(_, integrands)| integrands.scalar_definitions().iter().cloned()),
         )?;
-        let mut resolved = self.map_expressions(&mut resolve)?;
+        // A scalar template may be instantiated with unknown actual arguments;
+        // validate that user binding before publishing the retained tensor.
+        let mut resolved = self
+            .map_numerators(|entry| {
+                Ok(entry
+                    .rhs
+                    .with_checked_expression(resolve(entry.rhs.expression())?)?)
+            })?
+            .fallible_map(|_, atom| resolve(atom))?;
         for (_, integrands) in &mut resolved.0 {
             integrands.scalars.clear();
         }
@@ -493,7 +505,10 @@ impl DirectResidueBranches {
         )
     }
 
-    /// Apply a substitution to both scalar roots and their shared tensor bodies.
+    /// Apply an internal free-index-preserving substitution to both scalar roots
+    /// and their shared tensor bodies. Callers retain existing index identities:
+    /// scalar weights, energy substitutions and momentum splits do not allocate
+    /// new dummies. Tensor materializers must publish their occurrence history.
     pub(crate) fn map_expressions(
         &self,
         mut map: impl FnMut(&Atom) -> Result<Atom>,
@@ -501,7 +516,7 @@ impl DirectResidueBranches {
         self.map_numerators(|entry| {
             Ok(entry
                 .rhs
-                .with_checked_expression(map(entry.rhs.expression())?)?)
+                .with_produced_expression(map(entry.rhs.expression())?)?)
         })?
         .fallible_map(|_, atom| map(atom))
     }
@@ -678,9 +693,14 @@ impl DirectResidueBranches {
                                             return;
                                         }
                                     };
-                                    // Admit an actual scalar arithmetic definition here;
-                                    // the opaque numerator call is never inferred as scalar.
-                                    let rhs = match SymbolicTensor::infer_indexed(rhs) {
+                                    // Formal arithmetic validation cannot certify
+                                    // arbitrary user-supplied actual arguments.
+                                    let rhs = match SymbolicTensor::from_indexed_parts(
+                                        rhs,
+                                        IndexedStructure::identity(
+                                            OrderedStructure::scalar_structure(),
+                                        ),
+                                    ) {
                                         Ok(rhs) => rhs,
                                         Err(err) => {
                                             error = Some(err.into());
@@ -1107,7 +1127,7 @@ impl DirectResidueBranches {
                 rhs += &lhs * delta.pow(Atom::num(&exponent - &bound));
                 retained.push(Arc::new(FnMapEntry {
                     lhs,
-                    rhs: entry.rhs.with_checked_expression(coefficient)?,
+                    rhs: entry.rhs.with_produced_expression(coefficient)?,
                     args: entry.args.clone(),
                     tags: vec![tag],
                     inlining: entry.inlining,

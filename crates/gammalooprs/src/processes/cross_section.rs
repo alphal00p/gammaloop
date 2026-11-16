@@ -1506,7 +1506,10 @@ impl CrossSectionGraph {
                     };
                     let projector = &self.graph.global_prefactor.projector;
                     self.graph.global_prefactor.projector = projector
-                        .with_checked_expression(projector.expression().replace_multiple(&[p]))?;
+                        .with_materialized_expression(
+                            "polarization sum",
+                            projector.expression().replace_multiple(&[p]),
+                        )?;
                 }
                 Helicity::SummedAveraged => {
                     let Some(p) = p.resolve(model).polarization_sum(
@@ -1520,7 +1523,10 @@ impl CrossSectionGraph {
                     };
                     let projector = &self.graph.global_prefactor.projector;
                     self.graph.global_prefactor.projector = projector
-                        .with_checked_expression(projector.expression().replace_multiple(&[p]))?;
+                        .with_materialized_expression(
+                            "averaged polarization sum",
+                            projector.expression().replace_multiple(&[p]),
+                        )?;
                 }
                 _ => {}
             }

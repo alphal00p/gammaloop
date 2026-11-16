@@ -68,8 +68,24 @@ pub use smart_shadow::SmartShadowStructure;
 
 pub trait ScalarTensor: HasStructure<Structure: ScalarStructure> {
     fn new_scalar(scalar: Self::Scalar) -> Self;
+
+    /// Apply scalar power arithmetic while allowing the tensor owner to retain
+    /// scoped metadata. The argument must have a scalar structure.
+    fn scalar_power(self, _exponent: i8, power: impl FnOnce(Self::Scalar) -> Self::Scalar) -> Self
+    where
+        Self: Sized,
+    {
+        Self::new_scalar(power(
+            self.scalar_power_base()
+                .expect("scalar power requires a scalar tensor"),
+        ))
+    }
 }
 pub trait HasStructure {
+    /// Whether extracting a scalar would erase metadata needed by later tensor
+    /// operations. Such values stay in tensor storage during execution.
+    const PRESERVE_SCALAR_METADATA: bool = false;
+
     type Store<S>: HasStructure<Structure = S>
     where
         S: TensorStructure;

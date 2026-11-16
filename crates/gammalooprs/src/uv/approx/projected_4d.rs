@@ -66,7 +66,7 @@ impl Projected4dCts {
                 .map(|sector| {
                     Ok(Projected4dSector {
                         coefficient: sector.coefficient.fallible_map(&mut f)?.map_numerators(
-                            |tensor| Ok(tensor.with_checked_expression(f(tensor.expression())?)?),
+                            |tensor| Ok(tensor.with_produced_expression(f(tensor.expression())?)?),
                         )?,
                         frozen_factor: sector.frozen_factor.clone(),
                     })
@@ -388,7 +388,7 @@ impl Localizer<'_> {
                         (!carrier.is_zero()).then_some((carrier, arguments))
                     })
                     .collect();
-                *numerator = numerator.with_checked_expression(mapped)?;
+                *numerator = numerator.with_produced_expression(mapped)?;
                 parameters.extend(new_parameters);
                 // Equal complete argument rows share one summed carrier. Other
                 // Taylor families remain separate ordinary bodies; adding them

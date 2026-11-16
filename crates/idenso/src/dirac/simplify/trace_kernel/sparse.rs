@@ -104,7 +104,13 @@ impl TraceAlgebra for SparseOutput {
     fn scale(&mut self, coefficient: i32, value: usize) -> usize {
         self.recipe.push_product(Vec::new(), coefficient, value)
     }
-    fn metric_product(&mut self, metric: AtomView<'_>, coefficient: i32, value: usize) -> usize {
+    fn metric_product(
+        &mut self,
+        metric: AtomView<'_>,
+        _endpoints: [AtomView<'_>; 2],
+        coefficient: i32,
+        value: usize,
+    ) -> usize {
         let variable = self.variable(metric);
         self.recipe.push_product(vec![variable], coefficient, value)
     }
@@ -176,10 +182,10 @@ mod tests {
         for budget in [0, MAX_ROW_BYTES] {
             let mut output = SparseOutput::default();
             let unit = output.unit(Atom::num(4).as_view());
-            let x2 = output.metric_product(x.as_view(), 2, unit);
-            let x2 = output.metric_product(x.as_view(), 1, x2);
+            let x2 = output.metric_product(x.as_view(), [x.as_view(); 2], 2, unit);
+            let x2 = output.metric_product(x.as_view(), [x.as_view(); 2], 1, x2);
             let left = output.dimension_product(d.as_view(), -4, 1, x2);
-            let right = output.metric_product(d.as_view(), 3, unit);
+            let right = output.metric_product(d.as_view(), [d.as_view(); 2], 3, unit);
             let root = output.add(left, right);
             // Runtime roots need not equal the stored template root or last node.
             output.scale(7, unit);

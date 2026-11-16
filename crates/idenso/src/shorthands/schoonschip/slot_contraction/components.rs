@@ -4,17 +4,18 @@ mod factorized;
 pub(crate) use factorized::{FactorizedContraction, ReductionStatus};
 
 use super::{Endpoint, SlotContraction};
-use crate::{
-    shorthands::schoonschip::SimplificationCandidates,
-    tensor::{SymbolicTensor, inference::InterfaceInference},
-};
+use crate::shorthands::schoonschip::SimplificationCandidates;
+#[cfg(test)]
+use crate::tensor::SymbolicTensor;
+use crate::tensor::TensorProofs;
+use crate::tensor::inference::InterfaceInference;
 use ahash::AHashMap;
-use spenso::shadowing::{TermLeaf, TermTape};
+use spenso::shadowing::TermTape;
 use spenso::structure::{
     abstract_index::AbstractIndex,
     partial::{PartialStructure, PartialStructureExt},
     representation::{LibraryRep, RepName},
-    slot::{SlotMatch, SlotMatcher},
+    slot::{IsAbstractSlot, Slot, SlotMatch, SlotMatcher},
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol, representation::FunView},
@@ -81,6 +82,13 @@ struct MonomialKey {
 
 type ScalarPolynomial = MultivariatePolynomial<RationalField, u32>;
 
+/// Producer facts for a polynomial whose remaining vectors and metrics carry
+/// these explicit ports. Metadata is certified once when a variable is admitted.
+struct TerminalPorts {
+    slots: Vec<Slot<LibraryRep, AbstractIndex>>,
+    needs_dots: bool,
+}
+
 // Leaves identify borrowed payloads or an opaque subtree of the existing graph.
 // Only explicit expansion admits Atom arithmetic directly.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -123,7 +131,6 @@ struct ComponentSum<'a, 'b> {
     factors: Vec<(usize, u32)>,
     coefficient: Rational,
     contracted: bool,
-    inference: InterfaceInference,
     tensor_ports: AHashMap<AtomView<'a>, Vec<(usize, AtomView<'a>)>>,
     tensors: Vec<(TensorSource, Vec<Argument<'a>>)>,
     opaque_factors: Vec<(AtomView<'a>, Vec<AtomView<'a>>, PartialStructure)>,
@@ -145,6 +152,15 @@ struct ComponentSum<'a, 'b> {
     // Scalar notation facts established by selected scoped replacements. The
     // source domain owns original-region facts; generated powers reuse these.
     scalar_forms: AHashMap<AtomView<'a>, bool>,
+    /// The open slots of a frontier whose every state is a certified scalar
+    /// polynomial times vectors and metrics on exactly these explicit slots
+    /// (sorted, each once), with its dot-normalization need. `contract_graph`
+    /// certifies such an output as terminal when the slots are its root ports.
+    terminal_slots: Option<TerminalPorts>,
+    terminal_variables: AHashMap<usize, Option<TerminalPorts>>,
+    // Retained terminal facts for opaque factors, valid while their ports keep
+    // the original bindings. Scoped replacements update this entry directly.
+    terminal_factors: AHashMap<usize, TerminalPorts>,
 }
 
 impl SlotContraction {
@@ -377,7 +393,6 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
             factors: Vec::new(),
             coefficient: Rational::one(),
             contracted: false,
-            inference: InterfaceInference::default(),
             tensor_ports: AHashMap::new(),
             tensors: Vec::new(),
             opaque_factors: Vec::new(),
@@ -395,6 +410,9 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
             scalar_interfaces: AHashMap::new(),
             metadata_certificates: AHashMap::new(),
             scalar_forms: AHashMap::new(),
+            terminal_slots: None,
+            terminal_variables: AHashMap::new(),
+            terminal_factors: AHashMap::new(),
         }
     }
 
@@ -418,18 +436,40 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
                     .finish()
             }
             Variable::Tensor(TensorSource::Function(head), arguments) => {
-                let mut function = FunctionBuilder::new(*head);
-                for argument in arguments {
-                    function = match *argument {
-                        Argument::Original(value) => function.add_arg(value),
-                        Argument::Vector(space, head) => {
-                            let (representation, dimension) = self.spaces[space];
-                            let compact = representation.to_symbolic([dimension]);
-                            function.add_arg(self.emit_vector(head, compact.as_view()))
+                // The component plan retains every surviving explicit terminal
+                // as an original argument. A vector substitution consumes its port.
+                let mut matcher = SlotMatcher::default();
+                let ports = arguments
+                    .iter()
+                    .filter_map(|argument| match argument {
+                        Argument::Original(value)
+                            if matches!(matcher.classify(*value), SlotMatch::Explicit(_)) =>
+                        {
+                            Some((*value).to_owned())
                         }
-                    };
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>();
+                let supplied = arguments
+                    .iter()
+                    .map(|argument| self.emit_argument(*argument))
+                    .collect::<Vec<_>>();
+                let expression = FunctionBuilder::new(*head).add_args(&supplied).finish();
+                if !expression.is_zero() {
+                    let supplied = supplied.iter().map(Atom::as_view).collect::<Vec<_>>();
+                    let (target, ports) = TensorProofs::raw_ports_after_argument_permutation(
+                        &supplied,
+                        expression.as_view(),
+                        &ports,
+                    )?;
+                    if target.get_symbol() != *head {
+                        return None;
+                    }
+                    let produced = TensorProofs::default();
+                    produced.retain_leaf_ports(target.as_view(), ports).ok()?;
+                    self.contractor.generated.borrow_mut().push(produced);
                 }
-                function.finish()
+                expression
             }
             Variable::Tensor(TensorSource::Factor(position), arguments) => {
                 return self.emit_factor(*position, arguments);
@@ -569,11 +609,15 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
             // has no internal work but still has an external port. Reuse the
             // shallow graph's actual boundary proof when that leaf is known.
             && self.scalar_interfaces.get(&value).copied().unwrap_or_else(|| {
-                SymbolicTensor::validate_interface(
-                    &value.to_owned(),
-                    &PartialStructure::from_logical_slots([]),
-                )
-                .is_ok()
+                if let Some(proofs) = &self.contractor.proofs {
+                    proofs.admitted_interface(value)
+                        .is_some_and(|interface| interface.logical_slots().is_empty())
+                } else {
+                    // A raw expansion has no carrier. Plain scalar arithmetic
+                    // and closed dot powers still qualify as spectators.
+                    compact_power || InterfaceInference::replacement_interface(value)
+                        .is_ok_and(|interface| interface.logical_slots().is_empty())
+                }
             });
         if self.scalar_spectators.len() < 256 {
             self.scalar_spectators.insert(value, scalar);
@@ -773,7 +817,7 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
 
     fn emit_vector(&self, vector: usize, port: AtomView<'_>) -> Atom {
         let source = self.vectors[vector];
-        source
+        let expression = source
             .iter()
             .take(source.get_nargs() - 1)
             .fold(
@@ -781,7 +825,13 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
                 |builder, argument| builder.add_arg(argument),
             )
             .add_arg(port)
-            .finish()
+            .finish();
+        let produced = TensorProofs::default();
+        produced
+            .retain_leaf_ports(expression.as_view(), vec![port.to_owned()])
+            .expect("vector emission supplies its typed constructor port");
+        self.contractor.generated.borrow_mut().push(produced);
+        expression
     }
 
     fn atomic(value: AtomView<'_>) -> bool {
@@ -957,9 +1007,26 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         let ports = if let Some(ports) = self.tensor_ports.get(&value) {
             ports.clone()
         } else {
-            // Builtin tensor symmetries preserve explicit ports. The interface
-            // proof below guards admission; emission normalizes signs and zeros.
-            if !self.inference.algebra_preserves_leaf_interfaces(value) {
+            // Intrinsic tensor symmetries preserve explicit ports. Reuse their
+            // admitted interface; emission normalizes signs and zeros.
+            if let Some(proofs) = &self.contractor.proofs {
+                let interface = proofs.admitted_interface(value)?;
+                if interface.has_unresolved_ports()
+                    || interface
+                        .logical_slots()
+                        .iter()
+                        .any(|slot| !slot.rep().rep.is_self_dual())
+                {
+                    return None;
+                }
+            } else {
+                // Only the raw flat test oracle can receive a tensor leaf here
+                // without a graph. Its heterogeneous terms are admitted separately.
+                #[cfg(test)]
+                if !InterfaceInference::default().algebra_preserves_leaf_interfaces(value) {
+                    return None;
+                }
+                #[cfg(not(test))]
                 return None;
             }
             let mut ports = Vec::new();
@@ -1247,13 +1314,126 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
 mod tests {
     use super::*;
     use crate::shorthands::schoonschip::Schoonschip;
+    use crate::tensor::inference::tests::{INFERENCE_CALLS, INFERENCE_VISITS};
+    use crate::tensor::{ContractSettings, SymbolicNetParse};
+    use crate::test_support;
+    use spenso::network::parsing::ParseSettings as NetworkParseSettings;
     use spenso::network::tags::SPENSO_TAG;
+    use spenso::{g, mink, tensor_symbol};
     use std::sync::{Arc, Mutex};
+    use symbolica::function;
     use symbolica::parser::ParseSettings;
 
     fn parse(value: &str) -> Atom {
         Atom::parse(value, "closed_component_test", ParseSettings::symbolica()).unwrap()
     }
+
+    #[test]
+    fn vector_substitution_keeps_generic_leaf_witnesses_for_lowering() {
+        setup();
+        let first = SPENSO_TAG.tensor_symbol("closed_component_test::retained_generic_first");
+        let second = SPENSO_TAG.tensor_symbol("closed_component_test::retained_generic_second");
+        let symmetric = tensor_symbol!("closed_component_test::retained_symmetric"; Symmetric);
+        let vector = SPENSO_TAG.rank_one_tensor_symbol("closed_component_test::retained_vector");
+        let contracted = mink!(4, 71941);
+        let free = mink!(4, 71942);
+        let compact = function!(vector, mink!(4));
+        let a = function!(first, &contracted, &free);
+        let b = function!(second, &contracted, &free);
+        for (base, heads) in [
+            (a.clone(), vec![first]),
+            (a + b, vec![first, second]),
+            (function!(symmetric, &contracted, &free), vec![symmetric]),
+        ] {
+            let source = SymbolicTensor::infer(base * function!(vector, &contracted)).unwrap();
+            INFERENCE_CALLS.with(|count| count.set(0));
+            INFERENCE_VISITS.with(|count| count.set(0));
+            let result = source.contract(Default::default()).unwrap();
+            assert_eq!(result.rank(), 1);
+            let expected =
+                Atom::add_many(heads.iter().map(|&head| function!(head, &compact, &free)));
+            assert_eq!(result.expression, expected);
+            for head in heads {
+                let leaf = function!(head, &compact, &free);
+                let leaves = result.proofs.leaf_interfaces.get().unwrap().lock().unwrap();
+                assert_eq!(
+                    leaves.get(leaf.as_view().get_data()).unwrap().1,
+                    vec![free.clone()]
+                );
+                assert_eq!(
+                    leaves.get(compact.as_view().get_data()).unwrap().1,
+                    vec![mink!(4)]
+                );
+                assert!(
+                    !source
+                        .proofs
+                        .leaf_interfaces
+                        .get()
+                        .unwrap()
+                        .lock()
+                        .unwrap()
+                        .contains_key(leaf.as_view().get_data())
+                );
+            }
+            let network = result
+                .parse_to_symbolic_net::<AbstractIndex>(&NetworkParseSettings::default())
+                .unwrap();
+            assert_eq!(network.graph.dangling_indices().len(), 1);
+            assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+            assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
+        }
+    }
+    #[test]
+    fn symmetric_metric_substitution_keeps_normalized_raw_port_order() {
+        setup();
+        let head = tensor_symbol!("closed_component_test::symmetric_metric_ports"; Symmetric);
+        let mut slots = [mink!(4, 71961), mink!(4, 71962), mink!(4, 71963)];
+        slots.sort_unstable_by(|left, right| AtomView::cmp(&left.as_view(), &right.as_view()));
+        let [first, middle, last] = slots;
+        let source =
+            SymbolicTensor::infer(function!(head, &first, &middle) * g!(&first, &last)).unwrap();
+        let expected = function!(head, &last, &middle);
+        let AtomView::Fun(target) = expected.as_view() else {
+            panic!("the symmetric constructor retains its head");
+        };
+        let raw_ports = target
+            .iter()
+            .map(|port| port.to_owned())
+            .collect::<Vec<_>>();
+        assert_ne!(raw_ports, vec![last, middle]);
+        let explicit_order = [0, 1];
+        for order in [None, Some(explicit_order.as_slice())] {
+            INFERENCE_CALLS.with(|count| count.set(0));
+            INFERENCE_VISITS.with(|count| count.set(0));
+            let result = source
+                .contract(ContractSettings {
+                    order,
+                    ..Default::default()
+                })
+                .unwrap();
+            assert_eq!(result.expression, expected);
+            assert_eq!(
+                result
+                    .proofs
+                    .leaf_interfaces
+                    .get()
+                    .unwrap()
+                    .lock()
+                    .unwrap()
+                    .get(expected.as_view().get_data())
+                    .unwrap()
+                    .1,
+                raw_ports,
+            );
+            let network = result
+                .parse_to_symbolic_net::<AbstractIndex>(&NetworkParseSettings::default())
+                .unwrap();
+            assert_eq!(network.graph.dangling_indices().len(), 2);
+            assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+            assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
+        }
+    }
+
     #[test]
     fn metric_only_disconnected_components_keep_separate_dummy_representatives() {
         setup();
@@ -1362,7 +1542,7 @@ mod tests {
             "closed_component_test::wild_port_",
             tags = [SPENSO_TAG.index.clone()]
         );
-        let index = symbolica::function!(head, Atom::num(90), Atom::num(0));
+        let index = function!(head, Atom::num(90), Atom::num(0));
         let a = input("a");
         let source =
             input("(p(mink(4,a))+q(mink(4,a)))*r(mink(4,a))").replace_map(|value, _, output| {
@@ -1390,12 +1570,13 @@ mod tests {
         let contractor = setup();
         let metadata = symbolica::symbol!("closed_component_test::index_metadata"; Scalar);
         let index = Atom::var(symbolica::symbol!("closed_component_test::literal_index_"));
-        let spectator = symbolica::function!(metadata, spenso::mink!(4, &index));
+        let spectator = function!(metadata, mink!(4, &index));
+        let source =
+            SymbolicTensor::infer(&spectator * input("p(mink(4,a))*q(mink(4,a))")).unwrap();
+        let contractor = contractor.admitted(&source);
         let mut slots = SlotMatcher::default();
         let mut sum = ComponentSum::new(&contractor, Intake::Contraction, &mut slots);
         assert!(sum.scalar_spectator(spectator.as_view()));
-        let source =
-            SymbolicTensor::infer(&spectator * input("p(mink(4,a))*q(mink(4,a))")).unwrap();
         let result = source.contract(Default::default()).unwrap();
         assert_eq!(
             result.expression(),
@@ -1616,7 +1797,7 @@ mod tests {
         let calls = Arc::new(Mutex::new(Vec::new()));
         let observed = Arc::clone(&calls);
         let target = b.clone();
-        let head = spenso::tensor_symbol!(
+        let head = tensor_symbol!(
             "closed_component_test::input_leaf_rank_loss",
             norm = move |value, output| {
                 observed.lock().unwrap().push(value.to_owned());
@@ -2406,7 +2587,7 @@ mod tests {
         let calls = Arc::new(Mutex::new(Vec::new()));
         let observed = Arc::clone(&calls);
         let compact = input("p(mink(4))");
-        let callback = spenso::tensor_symbol!(
+        let callback = tensor_symbol!(
             "component_opaque_rank_loss",
             norm = move |value, out| {
                 observed.lock().unwrap().push(value.to_owned());
@@ -2503,19 +2684,19 @@ mod tests {
                 "{source}"
             );
             assert_eq!(
-                crate::test_support::contracted_atom(source.as_view()).unwrap(),
+                test_support::contracted_atom(source.as_view()).unwrap(),
                 Atom::num(0)
             );
         }
         let source = input("t(mink(4,a))*u(mink(4,a))+t(mink(4,b))*u(mink(4,b))");
-        let result = crate::test_support::contracted_atom(source.as_view()).unwrap();
+        let result = test_support::contracted_atom(source.as_view()).unwrap();
         assert!(
             result == input("2*t(mink(4,a))*u(mink(4,a))")
                 || result == input("2*t(mink(4,b))*u(mink(4,b))"),
             "reuse one whole original representative, never a fresh label"
         );
         assert_eq!(
-            crate::test_support::contracted_atom(result.as_view()).unwrap(),
+            test_support::contracted_atom(result.as_view()).unwrap(),
             result
         );
     }
@@ -2602,7 +2783,7 @@ mod tests {
                 "{source}"
             );
             assert_eq!(
-                crate::test_support::contracted_atom(source.normalize_dots().as_view()).unwrap(),
+                test_support::contracted_atom(source.normalize_dots().as_view()).unwrap(),
                 Atom::num(0)
             );
         }
@@ -2610,7 +2791,7 @@ mod tests {
             "(x+g(p(mink(4)),q(mink(4))))^3*t(mink(4,a))*u(mink(4,a))-(x+g(q(mink(4)),p(mink(4))))^3*t(mink(4,b))*u(mink(4,b))",
         );
         assert_eq!(
-            crate::test_support::contracted_atom(scalar_power.as_view()).unwrap(),
+            test_support::contracted_atom(scalar_power.as_view()).unwrap(),
             Atom::Zero
         );
         // Derived equal factors still form their old power. Repeated identical
@@ -2622,7 +2803,7 @@ mod tests {
             + Atom::num(1);
         let source = product + Atom::num(1);
         assert_eq!(
-            crate::test_support::contracted_atom(source.normalize_dots().as_view()).unwrap(),
+            test_support::contracted_atom(source.normalize_dots().as_view()).unwrap(),
             expected
         );
         for source in [
@@ -2687,7 +2868,7 @@ mod tests {
         let result = tensor.with_rewritten_expression(expression).unwrap();
         assert_eq!(result.structure, tensor.structure);
         assert_eq!(
-            crate::test_support::contracted_atom(source.as_view()).unwrap(),
+            test_support::contracted_atom(source.as_view()).unwrap(),
             Atom::num(0)
         );
     }
@@ -2775,12 +2956,12 @@ mod tests {
             Some(Atom::num(0))
         );
         assert_eq!(
-            crate::test_support::contracted_atom(source.as_view()).unwrap(),
+            test_support::contracted_atom(source.as_view()).unwrap(),
             Atom::num(0)
         );
         assert_eq!(
-            crate::test_support::contracted_atom(
-                crate::test_support::contracted_atom(source.as_view())
+            test_support::contracted_atom(
+                test_support::contracted_atom(source.as_view())
                     .unwrap()
                     .as_view()
             )
@@ -2881,14 +3062,14 @@ mod tests {
         let contractor = setup();
         let calls = Arc::new(AtomicUsize::new(0));
         let observed = Arc::clone(&calls);
-        let callback = spenso::tensor_symbol!(
+        let callback = tensor_symbol!(
             "closed_component_test::fused_callback",
             norm = move |_, _| {
                 observed.fetch_add(1, Ordering::Relaxed);
             }
         );
         let callback = FunctionBuilder::new(callback)
-            .add_arg(spenso::mink!(4, 75321))
+            .add_arg(mink!(4, 75321))
             .finish();
         let source = input("(p(mink(4,a))+q(mink(4,a)))*t(mink(4,a))") + callback;
         calls.store(0, Ordering::Relaxed);
@@ -2978,10 +3159,18 @@ mod tests {
             Some(Atom::num(0)),
         );
         assert_eq!(
-            crate::test_support::contracted_atom(source.as_view())
+            test_support::contracted_atom(source.as_view()).unwrap(),
+            Atom::num(0),
+        );
+
+        // A surviving scalar does not justify attaching the tentative sum's
+        // index-free facts to retained source syntax with cancelled tensors.
+        let partial = &source + Atom::one();
+        assert_eq!(
+            test_support::contracted_atom(partial.as_view())
                 .unwrap()
                 .expand(),
-            Atom::num(0),
+            Atom::one(),
         );
 
         // This cancellation happens before graph planning, while the typed

@@ -921,7 +921,20 @@ impl TryFrom<AtomView<'_>> for AbstractIndex {
                     _ => Err(AbstractIndexError::NotNatural),
                 }
             }
-            AtomView::Var(v) => Ok(AbstractIndex::Symbol(v.get_symbol().into())),
+            AtomView::Var(v) => {
+                let symbol = v.get_symbol();
+                // Only the generated symbol round-trips as Dummy. Users may
+                // apply the display tag to arbitrary symbols in their namespace.
+                if symbol.get_namespace() == symbolica::namespace!()
+                    && symbol.has_tag(DUMMY_INDEX_TAG)
+                    && let Some(suffix) = symbol.get_stripped_name().strip_prefix("d_")
+                    && let Ok(number) = suffix.parse::<usize>()
+                    && number.to_string() == suffix
+                {
+                    return Ok(Self::Dummy(number));
+                }
+                Ok(Self::Symbol(symbol.into()))
+            }
             AtomView::Fun(function) if function.get_symbol() == Self::scope_symbol() => {
                 let args = function.iter().collect::<Vec<_>>();
                 let [AtomView::Var(scope), index] = args.as_slice() else {

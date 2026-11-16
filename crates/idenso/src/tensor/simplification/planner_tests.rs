@@ -1,12 +1,24 @@
+#[cfg(debug_assertions)]
+use super::observation::{DEBUG_CANDIDATE_VISITS, DEBUG_CERTIFICATE_CHECKS};
+use super::observation::{DomainObservations, INITIAL_SCANS, REPLACEMENT_SCANS};
 use super::*;
+use crate::shorthands::DOT_NOTATION_PASSES;
+use crate::shorthands::schoonschip::CANDIDATE_NODE_VISITS;
+use crate::tensor::collection::SHALLOW_BUILDS;
+use crate::tensor::inference::tests::{INFERENCE_CALLS, INFERENCE_VISITS, SCOPE_VALIDATIONS};
+use crate::test_support;
 use crate::{gamma, gamma5};
 use spenso::structure::partial::PartialStructureExt;
+#[cfg(debug_assertions)]
+use spenso::structure::slot::SlotMatcher;
+use spenso::vector_symbol;
 use spenso::{g, mink, p, q, trace};
 use std::collections::HashSet;
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder},
     symbol,
 };
+use symbolica::{function, parse_lit};
 
 #[test]
 fn spinor_vectors_contract_into_the_matrix_ports_of_a_collected_gamma_chain() {
@@ -277,6 +289,163 @@ fn free_trace_results_discharge_cleanup_without_entering_contraction() {
         CONTRACT_DOMAIN_CALLS.with(|count| count.get()),
         0,
         "free-port results must use their observations before contraction setup"
+    );
+}
+
+#[test]
+fn contracted_open_port_polynomials_reuse_producer_observations() {
+    let reps = test_support::test_initialize();
+    let vector = vector_symbol!("contracted_open_observation_vector");
+    let spectator = parse_lit!((contracted_open_x + contracted_open_y) ^ 20);
+    for representation in [&reps.mink4, &reps.mink_d] {
+        let slot = |index: i64| representation.to_symbolic([Atom::num(index)]);
+        let (inner, left, right) = (slot(99741), slot(99742), slot(99743));
+        let component = |index, port: &Atom| function!(vector, Atom::num(index), port);
+        let source = SymbolicTensor::infer(
+            &spectator
+                * (component(0, &inner) + component(1, &inner))
+                * (component(2, &inner) * component(3, &left)
+                    + component(4, &inner) * component(5, &left))
+                * (component(6, &right) + component(7, &right)),
+        )
+        .unwrap();
+        source.reduction_observations();
+        let scans = INITIAL_SCANS.with(|count| count.get());
+        REPLACEMENT_SCANS.with(|count| count.set(0));
+        #[cfg(debug_assertions)]
+        DEBUG_CERTIFICATE_CHECKS.with(|count| count.set(0));
+        #[cfg(debug_assertions)]
+        DEBUG_CANDIDATE_VISITS.with(|count| count.set(0));
+
+        let contracted = source.contract(Default::default()).unwrap();
+        #[cfg(debug_assertions)]
+        assert!(DEBUG_CERTIFICATE_CHECKS.with(|count| count.get()) > 0);
+        #[cfg(debug_assertions)]
+        assert!(DEBUG_CANDIDATE_VISITS.with(|count| count.get()) > 0);
+        assert_eq!(contracted.reduction_status(), ReductionStatus::Complete);
+        let observed = contracted.reduction_observations();
+        assert!(observed.is_terminal_polynomial() && !observed.is_closed_scalar());
+        let dotted = contracted.to_dots().unwrap();
+        assert!(dotted.reduction_observations().is_terminal_polynomial());
+        assert!(!dotted.reduction_observations().needs_dot_normalization());
+        assert_eq!(REPLACEMENT_SCANS.with(|count| count.get()), 0);
+        assert_eq!(INITIAL_SCANS.with(|count| count.get()), scans);
+
+        // A completed producer result requires no further discovery. Debug
+        // certificate checks run independently and have separate counters.
+        DOT_NOTATION_PASSES.with(|count| count.set(0));
+        CANDIDATE_NODE_VISITS.with(|count| count.set(0));
+        SHALLOW_BUILDS.with(|count| count.set(0));
+        INFERENCE_CALLS.with(|count| count.set(0));
+        INFERENCE_VISITS.with(|count| count.set(0));
+        SCOPE_VALIDATIONS.with(|count| count.set(0));
+        let repeated = dotted
+            .to_dots()
+            .unwrap()
+            .simplify_algebra(&AlgebraSettings {
+                contract: AlgebraContraction::Dots,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(Default::default())
+            .unwrap();
+        assert_eq!(DOT_NOTATION_PASSES.with(|count| count.get()), 0);
+        assert_eq!(CANDIDATE_NODE_VISITS.with(|count| count.get()), 0);
+        assert_eq!(SHALLOW_BUILDS.with(|count| count.get()), 0);
+        assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+        assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
+        assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
+        assert_eq!(REPLACEMENT_SCANS.with(|count| count.get()), 0);
+        assert_eq!(INITIAL_SCANS.with(|count| count.get()), scans);
+        assert_eq!(repeated.expression, dotted.expression);
+        assert_eq!(repeated.structure, source.structure);
+
+        let rescanned = SymbolicTensor::infer(contracted.expression.clone())
+            .unwrap()
+            .to_dots()
+            .unwrap();
+        assert_eq!(dotted.expression, rescanned.expression);
+        assert_eq!(dotted.structure, rescanned.structure);
+    }
+}
+
+#[test]
+fn unchanged_identity_retains_stronger_terminal_facts_and_index_history() {
+    test_support::test_initialize();
+    let source = SymbolicTensor::infer(p!(mink!(4, 99744))).unwrap();
+    source.reduction_observations();
+    assert!(!source.reduction_observations().is_terminal_polynomial());
+    CANDIDATE_NODE_VISITS.with(|count| count.set(0));
+    let certified = source
+        .with_identity_result(
+            source.expression.clone(),
+            Some(DomainObservations::terminal_polynomial(
+                &source.structure,
+                false,
+            )),
+        )
+        .unwrap();
+    assert!(certified.reduction_observations().is_terminal_polynomial());
+    assert!(!source.reduction_observations().is_terminal_polynomial());
+    assert!(Arc::ptr_eq(
+        source.proofs.occurrences.get().unwrap(),
+        certified.proofs.occurrences.get().unwrap(),
+    ));
+    assert_eq!(CANDIDATE_NODE_VISITS.with(|count| count.get()), 0);
+
+    let conservative = certified
+        .with_identity_result(
+            certified.expression.clone(),
+            Some(DomainObservations::terminal_polynomial(
+                &certified.structure,
+                true,
+            )),
+        )
+        .unwrap();
+    assert!(Arc::ptr_eq(
+        certified.reduction_observations(),
+        conservative.reduction_observations(),
+    ));
+    assert!(
+        !conservative
+            .reduction_observations()
+            .needs_dot_normalization()
+    );
+
+    let zero = certified.with_algebra_result(Atom::Zero).unwrap();
+    let zero = zero
+        .with_identity_result(
+            Atom::Zero,
+            Some(DomainObservations::terminal_polynomial(
+                &zero.structure,
+                false,
+            )),
+        )
+        .unwrap();
+    assert_eq!(zero.structure, source.structure);
+    assert!(Arc::ptr_eq(
+        source.proofs.occurrences.get().unwrap(),
+        zero.proofs.occurrences.get().unwrap(),
+    ));
+    assert!(zero.reduction_observations().is_terminal_polynomial());
+    assert!(!zero.reduction_observations().is_closed_scalar());
+    DOT_NOTATION_PASSES.with(|count| count.set(0));
+    assert!(zero.to_dots().unwrap().is_zero());
+    assert_eq!(DOT_NOTATION_PASSES.with(|count| count.get()), 0);
+}
+
+#[test]
+#[cfg(debug_assertions)]
+#[should_panic(expected = "terminal producer retained an identity candidate")]
+fn debug_terminal_verification_rejects_unfinished_identity_metadata() {
+    let reps = test_support::test_initialize();
+    let word = trace!(reps.bis4.to_symbolic([]);
+        [gamma!(p!(mink!(4))), gamma!(q!(mink!(4)))]);
+    let source = SymbolicTensor::infer(word).unwrap();
+    DomainObservations::closed_scalar(false).assert_terminal_result(
+        &source.expression,
+        &source.structure,
+        SlotMatcher::with_leaf_interfaces([source.proofs.parser_leaf_interfaces()]),
     );
 }
 
@@ -945,25 +1114,33 @@ fn trusted_replacements_reuse_unchanged_opaque_boundary_interfaces() {
     let source = SymbolicTensor::infer(g!(&mu, &nu) * p!(&nu) * &spectator).unwrap();
     source.reduction_observations();
     source.shallow_graph().unwrap();
-    let interfaces = source.proofs.leaf_interfaces.get().unwrap();
-    let prior = interfaces.lock().unwrap().clone();
-    assert!(prior.contains_key(&spectator));
+    let prior = source.proofs.leaf_interfaces.get().unwrap();
+    let boundary = source.admitted_interface(spectator.as_view()).unwrap();
+    assert!(boundary.logical_slots().is_empty());
 
-    // This is the metric substitution's exact result. Its spectator keeps its
-    // admitted scalar interface even though its interior still has dummy pairs.
+    // A metric substitution retains the spectator's regional boundary, while
+    // the source and output own the raw leaves reachable from each payload.
     let rewritten = source
         .with_identity_result(p!(&mu) * &spectator, None)
         .unwrap();
     assert_ne!(rewritten.expression, source.expression);
-    assert!(Arc::ptr_eq(
-        interfaces,
-        rewritten.proofs.leaf_interfaces.get().unwrap()
-    ));
+    assert_eq!(
+        rewritten.proofs.retained_interface(spectator.as_view()),
+        Some(boundary)
+    );
     rewritten.shallow_graph().unwrap();
-    let current = interfaces.lock().unwrap();
-    assert_eq!(current.get(&spectator), prior.get(&spectator));
-    assert_eq!(current.len(), prior.len() + 1);
+    let current = rewritten
+        .proofs
+        .leaf_interfaces
+        .get()
+        .unwrap()
+        .lock()
+        .unwrap();
     assert!(current.contains_key(&p!(&mu)));
+    assert!(!current.contains_key(&p!(&nu)));
+    let prior = prior.lock().unwrap();
+    assert!(prior.contains_key(&p!(&nu)));
+    assert!(!prior.contains_key(&p!(&mu)));
 }
 
 #[test]

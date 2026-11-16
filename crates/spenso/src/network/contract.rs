@@ -717,6 +717,77 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         ScaledTensorRef::scaled(term.tensor, scalar)
     }
 
+    /// A product of closed tensor carriers keeps their metadata while the
+    /// scalar-only strategy collapses the whole operation in one step.
+    #[allow(clippy::result_large_err)]
+    fn closed_tensor_product<T, Sc, CStrat, FK, Store>(
+        &self,
+        executor: &mut Store,
+    ) -> Result<Option<NetworkLeaf<K, Aind>>, TensorNetworkError<K, FK>>
+    where
+        K: Display,
+        FK: Display,
+        Store: NetworkStoreAccess<Tensor = T, Scalar = Sc>,
+        T: HasStructure
+            + Clone
+            + Ref
+            + FastTensorSum
+            + Contract<T, CStrat, LCM = T>
+            + ScalarMul<Sc, Output = T>
+            + for<'a> AddAssign<T::Ref<'a>>,
+        Sc: Clone + Ref + for<'a> MulAssign<Sc::Ref<'a>>,
+    {
+        if !T::PRESERVE_SCALAR_METADATA {
+            return Ok(None);
+        }
+        let mut tensors = Vec::new();
+        let mut coefficient: Option<Sc> = None;
+        for (pos, operand) in self.operands.iter().enumerate() {
+            if let NetworkLeaf::Scalar(index) = &operand.leaf {
+                let factor = executor.scalar_ref(*index);
+                if let Some(coefficient) = &mut coefficient {
+                    *coefficient *= factor.refer();
+                } else {
+                    coefficient = Some(factor.clone());
+                }
+            } else if let Some(terms) = self.scaled_tensors(pos)
+                && !terms.is_empty()
+                && terms
+                    .iter()
+                    .all(|term| executor.tensor(term.tensor).structure().is_scalar())
+            {
+                tensors.push(terms);
+            } else {
+                return Ok(None);
+            }
+        }
+        let mut product: Option<T> = None;
+        for terms in tensors {
+            let index = match terms.as_slice() {
+                [term] if term.scale.is_none() => term.tensor,
+                _ => Self::materialize_scaled_tensors(executor, &terms),
+            };
+            let factor = executor.tensor(index);
+            product = Some(match product {
+                None => factor.clone(),
+                Some(product) => product.contract(factor)?,
+            });
+        }
+        let Some(product) = product else {
+            return Ok(None);
+        };
+        let product = if let Some(coefficient) = coefficient {
+            product
+                .scalar_mul(&coefficient)
+                .expect("a scalar tensor supports its own coefficients")
+        } else {
+            product
+        };
+        Ok(Some(NetworkLeaf::LocalTensor(
+            executor.push_tensor(product),
+        )))
+    }
+
     #[allow(clippy::result_large_err)]
     pub fn contract_scalars<LT, T, L, Sc, FK, Store>(
         &mut self,
@@ -757,7 +828,9 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                     true
                 }
                 NetworkLeaf::LocalTensor(index) => {
-                    if let Some(scalar) = executor.tensor(*index).scalar_ref() {
+                    if !T::PRESERVE_SCALAR_METADATA
+                        && let Some(scalar) = executor.tensor(*index).scalar_ref()
+                    {
                         if let Some(accumulator) = &mut accumulator {
                             *accumulator *= scalar;
                         } else {
@@ -770,7 +843,9 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                     }
                 }
                 NetworkLeaf::ScaledTensor(term) => {
-                    if let Some(tensor_scalar) = executor.tensor(term.tensor).scalar_ref() {
+                    if !T::PRESERVE_SCALAR_METADATA
+                        && let Some(tensor_scalar) = executor.tensor(term.tensor).scalar_ref()
+                    {
                         if let Some(term_scalar) = term.scale {
                             if let Some(accumulator) = &mut accumulator {
                                 *accumulator *= executor.scalar_ref(term_scalar).refer();
@@ -899,7 +974,9 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                     true
                 }
                 NetworkLeaf::LocalTensor(index) => {
-                    if let Some(scalar) = executor.tensor(*index).scalar_ref() {
+                    if !T::PRESERVE_SCALAR_METADATA
+                        && let Some(scalar) = executor.tensor(*index).scalar_ref()
+                    {
                         if let Some(accumulator) = &mut accumulator {
                             *accumulator *= scalar;
                         } else {
@@ -912,7 +989,9 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
                     }
                 }
                 NetworkLeaf::ScaledTensor(term) => {
-                    if let Some(tensor_scalar) = executor.tensor(term.tensor).scalar_ref() {
+                    if !T::PRESERVE_SCALAR_METADATA
+                        && let Some(tensor_scalar) = executor.tensor(term.tensor).scalar_ref()
+                    {
                         if let Some(term_scalar) = term.scale {
                             if let Some(accumulator) = &mut accumulator {
                                 *accumulator *= executor.scalar_ref(term_scalar).refer();
@@ -2536,6 +2615,9 @@ where
         FK: Display,
     {
         let mut product = ProductContraction::from_operation(graph, operation)?;
+        if let Some(leaf) = product.closed_tensor_product::<T, Sc, CStrat, FK, _>(executor)? {
+            return Ok(leaf);
+        }
         product.contract_scalars::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
         product.finish::<LT, T, L, Sc, FK, Store>(executor, graph, lib)
     }
@@ -2553,6 +2635,19 @@ where
         Aind: AbsInd,
     {
         let mut product = ProductContraction::from_operation(graph, operation)?;
+        if let Some(leaf) = product.closed_tensor_product::<T, Sc, CStrat, FK, _>(executor)? {
+            graph
+                .identify_subgraph_nodes_without_deleting_self_edges(
+                    operation.hedges(),
+                    NetworkNode::Leaf(leaf),
+                    ignored,
+                )
+                .ok_or_else(|| {
+                    TensorNetworkError::Other(eyre!("ready scalar product has no nodes"))
+                })?;
+            graph.finish_deferred_node_identifications();
+            return Ok(true);
+        }
         product
             .contract_scalars_in_place::<LT, T, L, Sc, FK, Store>(
                 executor, graph, operation, lib, ignored,

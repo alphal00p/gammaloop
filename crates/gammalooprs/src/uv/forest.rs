@@ -24,6 +24,7 @@ use idenso::{
 };
 use spenso::shadowing::TensorCollectFilter;
 use spenso::shadowing::symbolica_utils::LogPrint;
+use spenso::structure::{IndexedStructure, OrderedStructure, ScalarStructure};
 
 use symbolica::atom::{Atom, AtomCore};
 
@@ -68,7 +69,8 @@ impl ParametricIntegrands {
         }
     }
 
-    /// Apply a semantic substitution to roots and each retained body once.
+    /// Apply an internal scalar/momentum substitution to roots and each retained
+    /// body once. The caller preserves every tensor's free indices.
     /// Multiplicative cut prefactors continue to use the root-only `map`.
     pub(crate) fn map_expressions(
         self,
@@ -79,7 +81,7 @@ impl ParametricIntegrands {
                 .integrands
                 .fallible_map(&mut map)?
                 .map_numerators(|tensor| {
-                    Ok(tensor.with_checked_expression(map(tensor.expression())?)?)
+                    Ok(tensor.with_produced_expression(map(tensor.expression())?)?)
                 })?,
             cuts: self.cuts,
         })
@@ -348,13 +350,14 @@ impl Forest {
         graph: &Graph,
         settings: &UVgenerationSettings,
     ) -> Result<RenormalizationPart> {
-        let mut sum = Atom::Zero;
+        let mut sum: Option<SymbolicTensor<IndexedStructure>> = None;
         let marker = UvMarker::new(settings);
 
         let wild = Atom::var(W_.x___);
 
         let replacements =
             graph.integrand_replacement(&graph.full_filter(), &graph.loop_momentum_basis, &[wild]);
+        let mut retained_prefactor = None;
         for (_, n) in &self.dag.nodes {
             if !n.children.is_empty() {
                 continue;
@@ -373,7 +376,7 @@ impl Forest {
                 n.data.subgraph(),
                 physical.expression(),
             );
-            let physical = physical.with_checked_expression(marked)?;
+            let physical = physical.with_produced_expression(marked)?;
 
             debug_tags!(#generation, #uv, #graph, #term;
                 forest_term = %n.data.simple_display(graph),
@@ -381,13 +384,21 @@ impl Forest {
                 "Term before simplification"
             );
 
-            let overall = SymbolicTensor::infer_indexed(graph.overall_factor.clone())?;
-            let prefactor = graph
-                .global_prefactor
-                .projector
-                .clone()
-                .multiply(graph.global_prefactor.num.clone())?
-                .multiply(overall)?;
+            if retained_prefactor.is_none() {
+                let overall = SymbolicTensor::infer_indexed(graph.overall_factor.clone())?;
+                retained_prefactor = Some(
+                    graph
+                        .global_prefactor
+                        .projector
+                        .clone()
+                        .multiply(graph.global_prefactor.num.clone())?
+                        .multiply(overall)?,
+                );
+            }
+            let prefactor = retained_prefactor
+                .as_ref()
+                .expect("initialized user prefactor")
+                .clone();
             let cooking = CookSettings::indices()
                 .with_mode(CookMode::ReversibleEncoding)
                 .with_representation_payloads(true, true);
@@ -419,13 +430,29 @@ impl Forest {
                     .expr(&graph.full_filter()),
                expr = % atom.log_print(None),"Term"
             );
-            sum += atom;
+            sum = Some(match sum {
+                Some(sum) => sum.try_add(&reduced)?,
+                None => reduced,
+            });
         }
 
+        let sum = match sum {
+            Some(sum) => sum,
+            None => SymbolicTensor::from_produced_indexed_parts(
+                Atom::Zero,
+                IndexedStructure::identity(OrderedStructure::scalar_structure()),
+            )?,
+        };
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
         Ok(RenormalizationPart::legacy(
-            sum.replace_multiple(&replacements)
+            cooking
+                .uncook(sum.expression().as_view())
+                .replace_multiple(&replacements)
                 .replace(GS.m_uv_expansion)
                 .with(GS.m_uv_vacuum),
+            sum.structure().clone(),
         ))
     }
 

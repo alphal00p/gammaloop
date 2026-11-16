@@ -12,9 +12,7 @@ use gammalooprs::uv::ApproximationType;
 use idenso::{
     coad, cof,
     color::{ColorSimplifySettings, CS},
-    color_cas, color_idx,
-    tensor::SymbolicTensor,
-    CookMode, CookSettings,
+    color_cas, color_idx, CookMode, CookSettings,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -117,14 +115,13 @@ impl Renormalize {
         };
 
         for (index, graph_term) in amplitude.graphs.iter_mut().enumerate() {
-            let mut part = graph_term
-                .renormalization_part(&state.model, &settings)?
-                .expression;
+            let part = graph_term.renormalization_part(&state.model, &settings)?;
 
             let cooking = CookSettings::indices()
                 .with_mode(CookMode::ReversibleEncoding)
                 .with_representation_payloads(true, true);
-            let simplified = SymbolicTensor::infer_indexed(cooking.try_cook(part.as_view())?)?
+            let simplified = part
+                .cooked_tensor()?
                 .simplify_algebra(&idenso::tensor::AlgebraSettings {
                     color: Some(ColorSimplifySettings::default()),
                     ..Default::default()
@@ -136,7 +133,7 @@ impl Renormalize {
                 })?
                 .to_dots()?;
             let simplified = cooking.uncook(simplified.expression().as_view());
-            part = state
+            let mut part = state
                 .model
                 .apply_parameter_replacement_rules(&state.model.expand_couplings(&simplified))
                 .collect_factors();

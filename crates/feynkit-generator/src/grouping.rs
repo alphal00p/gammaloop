@@ -1,69 +1,50 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fmt,
-    sync::{
-        Mutex,
-        atomic::{AtomicUsize, Ordering},
-    },
-};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::fmt;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
+use feynkit_graph::expressions;
 use feynkit_graph::symbols;
 use feynkit_graph::{
     DiagramEndpoint, DiagramError, DiagramHalfEdge, EdgeId, ExternalLeg, ExternalState,
-    FeynmanDiagram, VertexId, expressions::evaluate_overall_factor,
+    FeynmanDiagram, VertexId,
 };
 use feynkit_model::{Model, ModelError, ParameterId, ParticleId};
-use idenso::{
-    CookMode, CookSettings, cof,
-    color::{CS, ColorSimplifySettings},
-    color_idx,
-    dirac::{AGS, spinor_matrix_structure},
-    rep_symbols::RS,
-    representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet},
-    tensor::{
-        AlgebraContraction, AlgebraSettings, ContractSettings, SymbolicTensor,
-        inference::{InterfaceInference, TensorInferenceError},
-    },
+use idenso::color::{CS, ColorSimplifySettings};
+use idenso::dirac;
+use idenso::dirac::AGS;
+use idenso::rep_symbols::RS;
+use idenso::representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet};
+use idenso::tensor::inference::{InterfaceInference, TensorInferenceError};
+use idenso::tensor::{AlgebraContraction, AlgebraSettings, ContractSettings, SymbolicTensor};
+use idenso::{CookMode, CookSettings, cof, color_idx};
+use spenso::network::library::LibraryTensor;
+use spenso::network::library::function_lib::{INBUILTS, Panic};
+use spenso::network::library::symbolic::{ExplicitKey, TensorLibrary};
+use spenso::network::parsing::{
+    ParseSettings as TensorParseSettings, ShadowedStructure, ShorthandParsing,
 };
+use spenso::network::store::NetworkStore;
+use spenso::network::{MinResultRank, Network, Sequential};
+use spenso::shadowing::{Collectable, TensorCollectFilter};
+use spenso::structure::Canonicalized;
 use spenso::structure::abstract_index::AbstractIndex;
-use spenso::{
-    network::{
-        MinResultRank, Network, Sequential,
-        library::{
-            LibraryTensor,
-            function_lib::{INBUILTS, Panic},
-            symbolic::{ExplicitKey, TensorLibrary},
-        },
-        parsing::{ParseSettings as TensorParseSettings, ShadowedStructure, ShorthandParsing},
-        store::NetworkStore,
-    },
-    shadowing::{Collectable, TensorCollectFilter},
-    structure::{
-        Canonicalized,
-        partial::{PartialStructure, PartialStructureExt},
-        representation::{LibraryRep, Minkowski, RepName},
-        slot::{AbsInd, DummyAind, IsAbstractSlot, ParseableAind, SlotError},
-    },
-    tensors::{
-        data::{DataTensor, StorageTensor},
-        parametric::ParamTensor,
-    },
-};
+use spenso::structure::partial::{PartialStructure, PartialStructureExt};
+use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
+use spenso::structure::slot::{AbsInd, DummyAind, IsAbstractSlot, ParseableAind, SlotError};
+use spenso::tensors::data::{DataTensor, StorageTensor};
+use spenso::tensors::parametric::ParamTensor;
 use spenso_hep_lib::{
     CHARGE_CONJUGATION_WEYL_COMPONENTS, gamma_data_weyl, gamma5_weyl_data, proj_m_data_weyl,
     proj_p_data_weyl,
 };
+use symbolica::atom::representation::FunView;
+use symbolica::atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol};
+use symbolica::graph::Graph;
+use symbolica::id::{AliasedAtom, Replacement};
 #[cfg(test)]
 use symbolica::parser::ParseSettings;
-use symbolica::{
-    atom::{
-        Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol, representation::FunView,
-    },
-    function,
-    graph::Graph,
-    id::{AliasedAtom, Replacement},
-    symbol,
-};
+use symbolica::{function, symbol};
 use thiserror::Error;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -229,11 +210,11 @@ impl ParseableAind for GroupingIndex {
             AtomView::Var(variable) => Ok(Self::Symbol(variable.get_symbol())),
             AtomView::Fun(function) => {
                 let head = function.get_symbol();
-                if head == feynkit_graph::symbols::hedge_index() {
+                if head == symbols::hedge_index() {
                     owned_index(function, "gammalooprs::hedge", Self::Hedge)
-                } else if head == feynkit_graph::symbols::vertex_index() {
+                } else if head == symbols::vertex_index() {
                     owned_index(function, "gammalooprs::vertex", Self::Vertex)
-                } else if head == feynkit_graph::symbols::edge_index() {
+                } else if head == symbols::edge_index() {
                     owned_index(function, "gammalooprs::edge", Self::Edge)
                 } else if head == symbol!("FeynKit::DummyIndex") {
                     if function.get_nargs() != 1 {
@@ -492,8 +473,16 @@ pub(crate) fn group_diagrams(
                 diagram,
                 source_diagram,
                 PreparedNumerator {
-                    exact: SymbolicTensor::infer(Atom::one()).expect("literal scalar one"),
-                    sample_source: SymbolicTensor::infer(Atom::one()).expect("literal scalar one"),
+                    exact: SymbolicTensor::from_produced_parts(
+                        Atom::one(),
+                        PartialStructure::from_logical_slots([]),
+                    )
+                    .expect("literal scalar one"),
+                    sample_source: SymbolicTensor::from_produced_parts(
+                        Atom::one(),
+                        PartialStructure::from_logical_slots([]),
+                    )
+                    .expect("literal scalar one"),
                     samples: Vec::new(),
                 },
             )));
@@ -570,7 +559,11 @@ pub(crate) fn group_diagrams(
         let sample_source = if compares_numerators {
             normalize_momentum_routing(&diagram, &simplified).map_err(&color_error)?
         } else {
-            SymbolicTensor::infer(Atom::one()).expect("literal scalar one")
+            SymbolicTensor::from_produced_parts(
+                Atom::one(),
+                PartialStructure::from_logical_slots([]),
+            )
+            .expect("literal scalar one")
         };
         // Canonical comparison and numerical sampling retain separate typed
         // values, preserving the existing optional canonicalization policy.
@@ -585,14 +578,14 @@ pub(crate) fn group_diagrams(
                     .map_representation_dimensions(|_, dimension| dimension.replace(CS.nc).with(3))
                     .map_err(&color_error)?;
                 concrete
-                    .with_checked_expression(
-                        concrete
-                            .expression()
+                    .map_produced_expression(&HashMap::new(), |node| {
+                        let mapped = node
                             .replace(CS.nc)
                             .with(3)
                             .replace(color_idx!(2, cof!(RS.d_)))
-                            .with(Atom::num(1) / Atom::num(2)),
-                    )
+                            .with(Atom::num(1) / Atom::num(2));
+                        Ok::<_, TensorInferenceError>((mapped.as_view() != node).then_some(mapped))
+                    })
                     .map_err(&color_error)?
             } else {
                 exact_source
@@ -600,17 +593,23 @@ pub(crate) fn group_diagrams(
             // Factoring can change which tensor sum anchors the dummy frame.
             // Finish scalar normalization before assigning canonical indices.
             let exact_source = exact_source
-                .with_algebra_result(exact_source.expression().replace_map_bottom_up(
-                    |value, _, out| {
-                        if matches!(value, AtomView::Add(_)) {
-                            **out = value.collect_numeric_content();
-                        }
-                    },
-                ))
+                .map_produced_expression(&HashMap::new(), |node| {
+                    if !matches!(node, AtomView::Add(_)) {
+                        return Ok(None);
+                    }
+                    let mapped = node.collect_numeric_content();
+                    Ok::<_, TensorInferenceError>((mapped.as_view() != node).then_some(mapped))
+                })
                 .map_err(&color_error)?;
             let exact_source = if matches!(grouping, NumeratorGrouping::UpToScalar(_)) {
                 exact_source
-                    .with_algebra_result(exact_source.expression().collect_factors())
+                    .map_produced_expression(&HashMap::new(), |node| {
+                        if !matches!(node, AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_)) {
+                            return Ok(None);
+                        }
+                        let mapped = node.collect_factors();
+                        Ok::<_, TensorInferenceError>((mapped.as_view() != node).then_some(mapped))
+                    })
                     .map_err(|error| tensor_evaluation_error(&diagram, 0, error))?
             } else {
                 exact_source
@@ -619,7 +618,11 @@ pub(crate) fn group_diagrams(
                 tensor_evaluation_error(&diagram, 0, format!("exact canonicalization: {error}"))
             })?
         } else {
-            SymbolicTensor::infer(Atom::one()).expect("literal scalar one")
+            SymbolicTensor::from_produced_parts(
+                Atom::one(),
+                PartialStructure::from_logical_slots([]),
+            )
+            .expect("literal scalar one")
         };
         Ok(Some((
             diagram,
@@ -806,7 +809,7 @@ pub(crate) fn group_diagrams(
     // the graph numerators and retained provenance of surviving groups intact.
     groups.retain(|group| {
         let weight = Atom::add_many(group.members.iter().map(|member| {
-            &member.ratio * evaluate_overall_factor(member.overall_factor.as_view())
+            &member.ratio * expressions::evaluate_overall_factor(member.overall_factor.as_view())
         }));
         // These are scalar normalization weights, not graph numerators.
         // Exact rescaling can leave distinct denominators or algebraic
@@ -843,13 +846,12 @@ fn normalize_momentum_routing(
     diagram: &FeynmanDiagram,
     source: &SymbolicTensor<PartialStructure>,
 ) -> Result<SymbolicTensor<PartialStructure>, TensorInferenceError> {
-    let mut numerator = source.expression().clone();
     let basis = diagram.loop_momentum_basis();
     let external_connections = diagram
         .edges()
         .filter_map(|(id, _, edge)| edge.external.as_ref().map(|leg| (id, leg.connection)))
         .collect::<BTreeMap<_, _>>();
-    numerator = basis.route_expression(&numerator);
+    let numerator = basis.route_tensor(source)?;
     let args = symbol!("feynkit_generator::routing_args___");
     let replacements = basis
         .external_edges
@@ -858,47 +860,50 @@ fn normalize_momentum_routing(
         .filter_map(|(slot, edge)| {
             external_connections.get(edge).map(|connection| {
                 Replacement::new(
-                    function!(feynkit_graph::symbols::external_momentum(), slot, args).to_pattern(),
-                    function!(
-                        feynkit_graph::symbols::external_momentum(),
-                        *connection,
-                        args
-                    )
-                    .to_pattern(),
+                    function!(symbols::external_momentum(), slot, args).to_pattern(),
+                    function!(symbols::external_momentum(), *connection, args).to_pattern(),
                 )
             })
         })
         .collect::<Vec<_>>();
-    numerator = numerator.replace_multiple(&replacements);
+    let numerator = numerator.map_produced_expression(&HashMap::new(), |node| {
+        if !matches!(node, AtomView::Fun(function) if function.get_symbol() == symbols::external_momentum()) {
+            return Ok(None);
+        }
+        let mapped = node.replace_multiple(&replacements);
+        Ok::<_, TensorInferenceError>((mapped.as_view() != node).then_some(mapped))
+    })?;
     let polarization_symbols = [
-        feynkit_graph::symbols::u(),
-        feynkit_graph::symbols::ubar(),
-        feynkit_graph::symbols::v(),
-        feynkit_graph::symbols::vbar(),
-        feynkit_graph::symbols::epsilon(),
-        feynkit_graph::symbols::epsilonbar(),
+        symbols::u(),
+        symbols::ubar(),
+        symbols::v(),
+        symbols::vbar(),
+        symbols::epsilon(),
+        symbols::epsilonbar(),
     ];
 
-    numerator = numerator.replace_map(|term, _, output| {
+    numerator.map_produced_expression(&HashMap::new(), |term| {
         let AtomView::Fun(function) = term else {
-            return;
+            return Ok(None);
         };
         if polarization_symbols.contains(&function.get_symbol()) && function.get_nargs() == 2 {
             let mut arguments = function.iter();
             let Some(edge) = arguments.next().and_then(momentum_edge) else {
-                return;
+                return Ok(None);
             };
             let Some(connection) = external_connections.get(&edge) else {
-                return;
+                return Ok(None);
             };
             let index = arguments.next().expect("polarization arity checked");
-            **output = FunctionBuilder::new(function.get_symbol())
-                .add_arg(symbol!("FeynKit::ExternalMomentum").call(*connection as i64))
-                .add_arg(index)
-                .finish();
+            return Ok(Some(
+                FunctionBuilder::new(function.get_symbol())
+                    .add_arg(symbol!("FeynKit::ExternalMomentum").call(*connection as i64))
+                    .add_arg(index)
+                    .finish(),
+            ));
         }
-    });
-    source.with_checked_expression(numerator)
+        Ok(None)
+    })
 }
 
 /// Give left/right partners the same symbolic polarization tensor for exact
@@ -907,33 +912,29 @@ fn normalize_momentum_routing(
 fn normalize_symmetric_polarizations(
     numerator: &SymbolicTensor<PartialStructure>,
 ) -> Result<SymbolicTensor<PartialStructure>, TensorInferenceError> {
-    numerator.with_checked_expression(numerator.expression().replace_map(|term, _, output| {
+    numerator.map_produced_expression(&HashMap::new(), |term| {
         let AtomView::Fun(function) = term else {
-            return;
+            return Ok(None);
         };
-        let normalized_head = if [
-            feynkit_graph::symbols::epsilon(),
-            feynkit_graph::symbols::epsilonbar(),
-        ]
-        .contains(&function.get_symbol())
-        {
-            feynkit_graph::symbols::epsilon()
-        } else if [
-            feynkit_graph::symbols::u(),
-            feynkit_graph::symbols::ubar(),
-            feynkit_graph::symbols::v(),
-            feynkit_graph::symbols::vbar(),
-        ]
-        .contains(&function.get_symbol())
-        {
-            feynkit_graph::symbols::u()
-        } else {
-            return;
-        };
-        **output = FunctionBuilder::new(normalized_head)
-            .add_args(function.iter())
-            .finish();
-    }))
+        let normalized_head =
+            if [symbols::epsilon(), symbols::epsilonbar()].contains(&function.get_symbol()) {
+                symbols::epsilon()
+            } else if [symbols::u(), symbols::ubar(), symbols::v(), symbols::vbar()]
+                .contains(&function.get_symbol())
+            {
+                symbols::u()
+            } else {
+                return Ok(None);
+            };
+        if normalized_head == function.get_symbol() {
+            return Ok(None);
+        }
+        Ok(Some(
+            FunctionBuilder::new(normalized_head)
+                .add_args(function.iter())
+                .finish(),
+        ))
+    })
 }
 
 fn momentum_edge(argument: AtomView<'_>) -> Option<EdgeId> {
@@ -1428,16 +1429,20 @@ fn evaluate_tensor_sample(
                 .map_representation_dimensions(|_, dimension| dimension.replace(CS.nc).with(3))
                 .map_err(|error| tensor_evaluation_error(diagram, sample, error))?;
             color
-                .with_checked_expression(
-                    (color.expression() * scalar).replace_multiple(&color_replacements),
-                )
+                .with_algebra_result(color.expression() * scalar)
+                .and_then(|weighted| {
+                    weighted.map_produced_expression(&HashMap::new(), |node| {
+                        let mapped = node.replace_multiple(&color_replacements);
+                        Ok::<_, TensorInferenceError>((mapped.as_view() != node).then_some(mapped))
+                    })
+                })
                 .map_err(|error| tensor_evaluation_error(diagram, sample, error))
         })
         .collect::<Result<Vec<_>, GroupingError>>()?;
     let mut contributions = contributions.into_iter();
     let Some(mut sum) = contributions.next() else {
         return numerator
-            .with_checked_expression(Atom::Zero)
+            .with_produced_expression(Atom::Zero)
             .map_err(|error| tensor_evaluation_error(diagram, sample, error));
     };
     for contribution in contributions {
@@ -1460,7 +1465,7 @@ fn tensor_sample_library(
     for loop_index in 0..diagram.loop_momentum_basis().loop_edges.len() {
         insert_sample_vector(
             &mut library,
-            feynkit_graph::symbols::loop_momentum(),
+            symbols::loop_momentum(),
             Atom::num(loop_index),
             &format!("loop-momentum:{loop_index}"),
             false,
@@ -1486,7 +1491,7 @@ fn tensor_sample_library(
         if inserted_momenta.insert(external.connection) {
             insert_sample_vector(
                 &mut library,
-                feynkit_graph::symbols::external_momentum(),
+                symbols::external_momentum(),
                 Atom::num(external.connection),
                 &format!("external-momentum:{}", external.connection),
                 false,
@@ -1511,12 +1516,12 @@ fn tensor_sample_library(
                 external.state
             };
             let head = match (particle.spin, state, particle.is_antiparticle()) {
-                (2, ExternalState::Incoming, false) => feynkit_graph::symbols::u(),
-                (2, ExternalState::Incoming, true) => feynkit_graph::symbols::vbar(),
-                (2, ExternalState::Outgoing, false) => feynkit_graph::symbols::ubar(),
-                (2, ExternalState::Outgoing, true) => feynkit_graph::symbols::v(),
-                (3, ExternalState::Incoming, _) => feynkit_graph::symbols::epsilon(),
-                (3, ExternalState::Outgoing, _) => feynkit_graph::symbols::epsilonbar(),
+                (2, ExternalState::Incoming, false) => symbols::u(),
+                (2, ExternalState::Incoming, true) => symbols::vbar(),
+                (2, ExternalState::Outgoing, false) => symbols::ubar(),
+                (2, ExternalState::Outgoing, true) => symbols::v(),
+                (3, ExternalState::Incoming, _) => symbols::epsilon(),
+                (3, ExternalState::Outgoing, _) => symbols::epsilonbar(),
                 _ => continue,
             };
             let label = if options.symmetric_polarizations {
@@ -1585,7 +1590,7 @@ fn insert_dirac_tensors(library: &mut GroupingTensorLibrary) {
     library.insert_explicit(projp);
     library
         .insert_explicit_sparse(
-            spinor_matrix_structure::<GroupingIndex>(AGS.charge_conjugation, 4),
+            dirac::spinor_matrix_structure::<GroupingIndex>(AGS.charge_conjugation, 4),
             CHARGE_CONJUGATION_WEYL_COMPONENTS
                 .map(|(indices, sign)| (indices.to_vec(), Atom::num(sign))),
             Atom::Zero,
@@ -1992,6 +1997,7 @@ fn topology_key_variant(
 
 #[cfg(test)]
 mod tests {
+    use idenso::tensor::SymbolicNetParse;
     use std::sync::Arc;
 
     use feynkit_graph::{
@@ -2010,6 +2016,21 @@ mod tests {
             ParseSettings::default(),
         )
         .unwrap()
+    }
+
+    #[test]
+    fn symmetric_polarization_normalization_retains_the_constructor_ports() {
+        let port = Bispinor {}
+            .new_rep(4)
+            .slot::<AbstractIndex, _>(AbstractIndex::Normal(71431))
+            .to_atom();
+        let source = SymbolicTensor::infer(function!(symbols::ubar(), 7, &port)).unwrap();
+        let normalized = super::normalize_symmetric_polarizations(&source).unwrap();
+        assert_eq!(normalized.expression(), &function!(symbols::u(), 7, &port));
+        let network = normalized
+            .parse_to_symbolic_net::<AbstractIndex>(&TensorParseSettings::default())
+            .unwrap();
+        assert_eq!(network.graph.dangling_indices().len(), 1);
     }
 
     // Authored fixture expressions enter at the source boundary. These exact
@@ -2193,7 +2214,7 @@ mod tests {
             builder.add_edge(right, outgoing, vector()).unwrap();
             (incoming_edge, loop_edge)
         };
-        let endpoint = feynkit_graph::symbols::hedge_index().call((
+        let endpoint = symbols::hedge_index().call((
             (2 * incoming_edge.0 + 1) as i64,
             if internal_edges_first { 2_i64 } else { 1_i64 },
         ));
@@ -2202,7 +2223,7 @@ mod tests {
             .add_arg(loop_edge.0 as i64)
             .add_arg(index.clone())
             .finish();
-        let projector = FunctionBuilder::new(feynkit_graph::symbols::epsilon())
+        let projector = FunctionBuilder::new(symbols::epsilon())
             .add_arg(incoming_edge.0 as i64)
             .add_arg(index)
             .finish();
@@ -2515,7 +2536,9 @@ mod tests {
                         .contains(&spectator)
                 );
                 assert_eq!(
-                    evaluate_overall_factor(grouped.diagrams[0].overall_factor().as_view()),
+                    expressions::evaluate_overall_factor(
+                        grouped.diagrams[0].overall_factor().as_view()
+                    ),
                     Atom::num(-2),
                 );
             }
@@ -2717,12 +2740,12 @@ mod tests {
             Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap(),
         );
         let heads = [
-            feynkit_graph::symbols::epsilon(),
-            feynkit_graph::symbols::epsilonbar(),
-            feynkit_graph::symbols::u(),
-            feynkit_graph::symbols::ubar(),
-            feynkit_graph::symbols::v(),
-            feynkit_graph::symbols::vbar(),
+            symbols::epsilon(),
+            symbols::epsilonbar(),
+            symbols::u(),
+            symbols::ubar(),
+            symbols::v(),
+            symbols::vbar(),
         ];
         let spectator = test_atom("(UFO::MT+UFO::MH)^11");
         for pdg in [22, 6, -6] {
@@ -3068,16 +3091,8 @@ mod tests {
         for diagram in &diagrams {
             let samples = numerical_tensor_samples(diagram.numerator(), diagram, &options).unwrap();
             for value in &samples {
-                assert!(
-                    !value
-                        .expression()
-                        .contains_symbol(feynkit_graph::symbols::epsilon())
-                );
-                assert!(
-                    !value
-                        .expression()
-                        .contains_symbol(feynkit_graph::symbols::epsilonbar())
-                );
+                assert!(!value.expression().contains_symbol(symbols::epsilon()));
+                assert!(!value.expression().contains_symbol(symbols::epsilonbar()));
                 assert!(value.expression().contains_symbol(symbol!("UFO::MT")));
             }
             sampled_words.push(samples);
@@ -3582,7 +3597,7 @@ mod tests {
 
         let index = cooking
             .cook_function(
-                function!(feynkit_graph::symbols::hedge_index(), 17, 2)
+                function!(symbols::hedge_index(), 17, 2)
                     .as_fun_view()
                     .unwrap(),
             )
@@ -3877,15 +3892,17 @@ mod tests {
                         &test_atom("(x+y)^7")
                     );
                     assert!(
-                        evaluate_overall_factor(grouped.diagrams[0].overall_factor().as_view())
-                            .check_equal_with(
-                                &residual * &scale,
-                                &symbolica::atom::ZeroTestSettings::default()
-                                    .finite_field_samples(0)
-                                    .numerical_samples(0)
-                                    .exact_fallback(true),
-                            )
-                            .is_true()
+                        expressions::evaluate_overall_factor(
+                            grouped.diagrams[0].overall_factor().as_view()
+                        )
+                        .check_equal_with(
+                            &residual * &scale,
+                            &symbolica::atom::ZeroTestSettings::default()
+                                .finite_field_samples(0)
+                                .numerical_samples(0)
+                                .exact_fallback(true),
+                        )
+                        .is_true()
                     );
                 }
             }

@@ -53,6 +53,9 @@ impl FinalIntegrands {
             .into_iter()
     }
 
+    /// Apply a production scalar/momentum map, retaining each body's free indices
+    /// and existing index identities. Momentum splitting reuses its input slot;
+    /// scalar normalization and marker finishing allocate no dummy indices.
     pub(crate) fn map_expressions(
         &self,
         mut map: impl FnMut(&Atom) -> Result<Atom>,
@@ -69,9 +72,9 @@ impl FinalIntegrands {
                         source_interface = ?tensor.structure(),
                         file.source = %tensor.expression().to_plain_string(),
                         file.mapped = %mapped.to_plain_string(),
-                        "Mapped a retained final numerator before interface validation"
+                        "Mapped a retained final numerator with its established interface"
                     );
-                    Ok(tensor.with_checked_expression(mapped)?)
+                    Ok(tensor.with_produced_expression(mapped)?)
                 })?,
             representation: self.representation,
         })
@@ -416,7 +419,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
                         CffGenerationContext::EmbeddedCffFactor,
                     )?;
                 let carrier = factors.pop().expect("routing retains the scalar carrier");
-                let numerator = source_numerator.with_checked_expression(
+                let numerator = source_numerator.with_produced_expression(
                     factors
                         .pop()
                         .expect("routing retains the ordinary numerator"),
@@ -636,7 +639,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
             // scalar rewrite must preserve that established logical interface.
             let tensor = tensor
                 .map_representation_dimensions(|_, dimension| dimension.replace(GS.dim).with(4))?;
-            let tensor = tensor.with_checked_expression(normalize_scalar(tensor.expression()))?;
+            let tensor = tensor.with_produced_expression(normalize_scalar(tensor.expression()))?;
             debug_tags!(#generation, #profile, #uv, #numerator, #dump;
                 stage = "final_integrand_before_color",
                 graph = %graph.name,
@@ -664,7 +667,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
             let reduced = reduced.map_representation_dimensions(|_, dimension| {
                 dimension.replace(GS.dim_epsilon).with(0)
             })?;
-            Ok(reduced.with_checked_expression(
+            Ok(reduced.with_produced_expression(
                 reduced
                     .expression()
                     .replace(GS.m_uv_expansion)

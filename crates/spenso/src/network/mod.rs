@@ -3936,6 +3936,13 @@ where
         + for<'a> AddAssign<<Store::Scalar as Ref>::Ref<'a>>
         + for<'a> MulAssign<<Store::Scalar as Ref>::Ref<'a>>,
 {
+    if Store::Tensor::PRESERVE_SCALAR_METADATA
+        && targets
+            .iter()
+            .any(|(_, leaf)| !matches!(leaf, NetworkLeaf::Scalar(_)))
+    {
+        return None;
+    }
     // Fully contracted tensors can retain lazy sum and coefficient wrappers.
     // Check every component before doing scalar algebra or modifying the store.
     if !targets.iter().all(|(_, leaf)| match leaf {
@@ -3984,6 +3991,7 @@ fn try_balanced_tensor_sum<K, FK, Aind, Store, LT, L>(
 where
     Store: NetworkStoreAccess,
     Store::Tensor: HasStructure
+        + ScalarTensor
         + TensorStructure
         + Clone
         + Ref
@@ -3992,7 +4000,7 @@ where
         + From<LT::WithIndices>
         + ScalarMul<Store::Scalar, Output = Store::Tensor>
         + for<'a> AddAssign<<Store::Tensor as Ref>::Ref<'a>>,
-    Store::Scalar: Clone + 'static,
+    Store::Scalar: Clone + Into<<Store::Tensor as HasStructure>::Scalar> + 'static,
     LT: LibraryTensor + Clone,
     L: Library<<Store::Tensor as HasStructure>::Structure, Key = K, Value = Canonicalized<LT>>,
     K: Display + Debug,
@@ -4005,7 +4013,13 @@ where
     let mut terms = Vec::with_capacity(targets.len());
     for (node_id, leaf) in targets {
         match leaf {
-            NetworkLeaf::Scalar(_) => return None,
+            NetworkLeaf::Scalar(index) => {
+                if !Store::Tensor::PRESERVE_SCALAR_METADATA {
+                    return None;
+                }
+                let scalar = Store::Tensor::new_scalar(store.scalar_ref(*index).clone().into());
+                terms.push(ScaledTensorRef::tensor(store.push_tensor(scalar)));
+            }
             NetworkLeaf::LocalTensor(index) => {
                 terms.push(ScaledTensorRef::tensor(*index));
             }
@@ -4172,6 +4186,13 @@ where
         + for<'a> MulAssign<<Store::Scalar as Ref>::Ref<'a>>
         + 'static,
 {
+    if Store::Tensor::PRESERVE_SCALAR_METADATA
+        && targets
+            .iter()
+            .any(|(_, leaf)| !matches!(leaf, NetworkLeaf::Scalar(_)))
+    {
+        return None;
+    }
     use std::{
         any::{Any, TypeId},
         fs::File,
@@ -5960,16 +5981,24 @@ where
                         return Ok(leaf.clone());
                     }
                     let tensor = Store::Tensor::new_scalar(self.scalar_ref(*si).clone().into());
-                    let base = Store::Scalar::from(tensor.scalar_power_base().unwrap());
-                    let mut s = base.ref_one();
-                    for _ in 0..n {
-                        s *= base.refer();
-                    }
-                    if pow < 0 {
-                        s = s.ref_one() / s;
-                    }
-                    let pos = self.push_scalar(s);
-                    return Ok(NetworkLeaf::Scalar(pos.into()));
+                    let power = |base| {
+                        let base = Store::Scalar::from(base);
+                        let mut result = base.ref_one();
+                        for _ in 0..n {
+                            result *= base.refer();
+                        }
+                        if pow < 0 {
+                            result = result.ref_one() / result;
+                        }
+                        result
+                    };
+                    return if Store::Tensor::PRESERVE_SCALAR_METADATA {
+                        let tensor = tensor.scalar_power(pow, |base| power(base).into());
+                        Ok(NetworkLeaf::LocalTensor(self.push_tensor(tensor)))
+                    } else {
+                        let result = power(tensor.scalar_power_base().unwrap());
+                        Ok(NetworkLeaf::Scalar(self.push_scalar(result).into()))
+                    };
                 }
 
                 let (mut t, original) = match leaf {
@@ -6020,9 +6049,8 @@ where
                     }
                     1 => Ok(original),
                     _ => {
-                        let (mut s, exponent) = if t.is_scalar() {
-                            // Preserve the scalar boundary before repeating a contraction.
-                            (Store::Scalar::from(t.scalar_power_base().unwrap()), n)
+                        let (scalar, exponent) = if t.is_scalar() {
+                            (t, pow)
                         } else {
                             let squares = n / 2;
                             let square = t.contract(&t)?;
@@ -6039,25 +6067,41 @@ where
                                         "".to_string(),
                                     ));
                                 }
-                                (Store::Scalar::from(t.scalar_power_base().unwrap()), 1)
+                                (t, -1)
                             } else {
-                                let scalar = if pow < 0 || squares > 1 {
-                                    square.scalar_power_base()
-                                } else {
-                                    square.scalar()
-                                };
-                                (Store::Scalar::from(scalar.unwrap()), squares)
+                                (
+                                    square,
+                                    if pow < 0 {
+                                        -(squares as i8)
+                                    } else {
+                                        squares as i8
+                                    },
+                                )
                             }
                         };
-                        let base = s.clone();
-                        for _ in 1..exponent {
-                            s *= base.refer();
+                        let power = |base| {
+                            let base = Store::Scalar::from(base);
+                            let mut result = base.clone();
+                            for _ in 1..exponent.unsigned_abs() {
+                                result *= base.refer();
+                            }
+                            if exponent < 0 {
+                                result = result.ref_one() / result;
+                            }
+                            result
+                        };
+                        if Store::Tensor::PRESERVE_SCALAR_METADATA {
+                            let tensor = scalar.scalar_power(exponent, |base| power(base).into());
+                            Ok(NetworkLeaf::LocalTensor(self.push_tensor(tensor)))
+                        } else {
+                            let base = if exponent == 1 {
+                                scalar.scalar()
+                            } else {
+                                scalar.scalar_power_base()
+                            };
+                            let result = power(base.unwrap());
+                            Ok(NetworkLeaf::Scalar(self.push_scalar(result).into()))
                         }
-                        if pow < 0 {
-                            s = s.ref_one() / s;
-                        }
-                        let pos = self.push_scalar(s);
-                        Ok(NetworkLeaf::Scalar(pos.into()))
                     }
                 }
             }

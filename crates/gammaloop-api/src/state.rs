@@ -1669,7 +1669,8 @@ const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 // Version 22 combines indexed FeynKit tensors with ordered CFF/LTD runtime payloads.
 // Main version20 and published FeynKit version21 have incompatible layouts and
 // must be rejected before model parsing, symbolic import or process decoding.
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 22;
+// Version 23 stores regional tensor interfaces and raw leaf ports in tensor archive v2.
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 23;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -3776,7 +3777,7 @@ mod tests {
         }
         state.save(temp.path(), true, false).unwrap();
         let manifest = load_state_manifest(temp.path()).unwrap();
-        assert_eq!(manifest.version, 22);
+        assert_eq!(manifest.version, 23);
         assert!(manifest
             .ufo_print_symbols
             .contains(&"orphan_ufo_printer".to_owned()));
@@ -5104,7 +5105,7 @@ commands = ["quit -n"]
 
     #[test]
     fn state_load_rejects_previous_branch_layouts_before_deserialization() {
-        for version in [20, 21] {
+        for version in [20, 21, 22] {
             let temp = tempdir().unwrap();
             fs::write(
                 temp.path().join(STATE_MANIFEST_FILE),
@@ -5128,7 +5129,7 @@ commands = ["quit -n"]
             };
             let message = error.to_string();
             assert!(message.contains(&format!("State version {version}")));
-            assert!(message.contains("supported version 22"));
+            assert!(message.contains("supported version 23"));
             assert!(message.contains("regenerate the saved state"));
         }
     }
@@ -5144,7 +5145,7 @@ commands = ["quit -n"]
 
     #[test]
     fn state_save_rejects_legacy_target_before_writing() {
-        for version in [1, 20, 21] {
+        for version in [1, 20, 21, 22] {
             let temp = tempdir().unwrap();
             let symbolica_state = temp.path().join("symbolica_state.bin");
             fs::write(

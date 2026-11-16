@@ -18,13 +18,14 @@ use symbolica::poly::PolyVariable;
 use symbolica::poly::polynomial::MultivariatePolynomial;
 use symbolica_utils::PolynomialExpressionExt;
 
+use crate::color::simplify::ColorAlgebraSimplifier;
 #[cfg(feature = "reference-cases")]
 use crate::reference_cases::timing;
 #[cfg(feature = "reference-cases")]
 use crate::reference_cases::timing::Phase;
-use crate::tensor::SymbolicTensor;
 use crate::tensor::inference::{InterfaceInference, TensorInferenceError};
 use crate::tensor::simplification::observation::DomainObservations;
+use crate::tensor::{SymbolicTensor, TensorProofs};
 
 pub(crate) type CollectedPolynomial = MultivariatePolynomial<RationalField, u32>;
 
@@ -37,6 +38,7 @@ pub(crate) type CollectedPolynomial = MultivariatePolynomial<RationalField, u32>
 // An upstream public opaque-atom variable would remove this exception.
 pub(crate) struct CollectedOutput<'a> {
     source: &'a DomainObservations,
+    proofs: TensorProofs,
     atoms: [HashMap<Atom, CollectedPolynomial>; 2],
     opaque: Vec<Atom>,
     imaginary_unit: Option<PolyVariable>,
@@ -54,9 +56,10 @@ struct CollectedSector {
 }
 
 impl<'a> CollectedOutput<'a> {
-    pub(crate) fn new(source: &'a DomainObservations) -> Self {
+    pub(crate) fn new(source: &'a SymbolicTensor<PartialStructure>) -> Self {
         Self {
-            source,
+            source: source.reduction_observations(),
+            proofs: source.proofs.clone(),
             atoms: Default::default(),
             opaque: Vec::new(),
             imaginary_unit: None,
@@ -75,6 +78,42 @@ impl<'a> CollectedOutput<'a> {
     pub(crate) fn with_preserved_sums(mut self, preserve: fn(AtomView<'_>) -> bool) -> Self {
         self.preserve_sum = Some(preserve);
         self
+    }
+
+    /// Attach the boundary supplied by a leaf constructor before polynomial
+    /// conversion can hide that leaf among generated coefficients.
+    pub(crate) fn polynomial_with_interface(
+        &mut self,
+        value: AtomView<'_>,
+        interface: &PartialStructure,
+    ) -> CollectedPolynomial {
+        let polynomial = self.polynomial(value, false);
+        for variable in polynomial.variables().iter() {
+            if !matches!(variable, PolyVariable::Temporary(_))
+                && variable.to_atom().as_view() == value
+            {
+                self.tensors.insert(
+                    variable.clone(),
+                    Some(!interface.logical_slots().is_empty()),
+                );
+            }
+        }
+        polynomial
+    }
+
+    pub(crate) fn metric_polynomial(
+        &mut self,
+        metric: AtomView<'_>,
+        endpoints: [AtomView<'_>; 2],
+    ) -> CollectedPolynomial {
+        if let Some(polynomial) = self.atoms[0].get(metric.get_data()) {
+            return polynomial.clone();
+        }
+        let interface = self
+            .proofs
+            .metric_interface(endpoints)
+            .expect("admitted trace endpoints establish their generated metric boundary");
+        self.polynomial_with_interface(metric, &interface)
     }
 
     // Selected exterior coefficients can be collected across trace sectors.
@@ -256,6 +295,58 @@ impl<'a> CollectedOutput<'a> {
         coefficient.expand_num()
     }
 
+    /// A colour identity can emit both a source scalar sum and its individual
+    /// terms. Test their exact polynomial relation without opening any other
+    /// source factor or changing the grouping of a surviving result.
+    fn cancels_with_source_sum(&self, value: &CollectedPolynomial) -> bool {
+        if self.opaque.is_empty() || value.nterms() < 2 {
+            return false;
+        }
+        let elementary =
+            |atom| matches!(atom, AtomView::Num(_) | AtomView::Var(_) | AtomView::Fun(_));
+        for (position, variable) in value.variables().iter().enumerate() {
+            let PolyVariable::Temporary(index) = variable else {
+                continue;
+            };
+            let AtomView::Add(sum) = self.opaque[*index].as_view() else {
+                continue;
+            };
+            let degree = value.degree(position);
+            if degree == 0
+                || self.tensors.get(variable) == Some(&Some(true))
+                || !sum.iter().all(|term| match term {
+                    AtomView::Mul(product) => product.iter().all(elementary),
+                    factor => elementary(factor),
+                })
+            {
+                continue;
+            }
+            let Ok(expanded) = sum
+                .as_view()
+                .try_to_polynomial::<_, u32>(&Q, value.variables())
+            else {
+                continue;
+            };
+            // Only reconcile monomials in the existing basis. Bound the terms
+            // per substitution by the size of the collected input and keep
+            // exponent arithmetic within Symbolica's signed range.
+            if expanded.variables() == value.variables()
+                && expanded
+                    .nterms()
+                    .checked_pow(degree)
+                    .is_some_and(|n| n <= value.nterms())
+                && (0..value.nvars()).all(|i| {
+                    u64::from(expanded.degree(i)) * u64::from(degree) + u64::from(value.degree(i))
+                        <= i32::MAX as u64
+                })
+                && value.replace_with_poly(position, &expanded).is_zero()
+            {
+                return true;
+            }
+        }
+        false
+    }
+
     pub(crate) fn finish(&mut self, value: CollectedPolynomial) -> Option<Atom> {
         #[cfg(feature = "reference-cases")]
         let _phase = timing::scope(Phase::OutputNormalization);
@@ -264,6 +355,9 @@ impl<'a> CollectedOutput<'a> {
         }
         let mut tensors = Vec::new();
         for (position, variable) in value.variables().iter().enumerate() {
+            if value.degree(position) == 0 {
+                continue;
+            }
             if matches!(variable, PolyVariable::Temporary(_)) {
                 if self.tensors.get(variable) == Some(&Some(true)) {
                     tensors.push(position);
@@ -271,8 +365,10 @@ impl<'a> CollectedOutput<'a> {
                 continue;
             }
             if (*self.tensors.entry(variable.clone()).or_insert_with(|| {
-                InterfaceInference::replacement_interface(variable.to_atom().as_view())
-                    .ok()
+                let atom = variable.to_atom();
+                self.proofs
+                    .admitted_interface(atom.as_view())
+                    .or_else(|| ColorAlgebraSimplifier::produced_interface(atom.as_view()))
                     .map(|interface| !interface.logical_slots().is_empty())
             }))? {
                 tensors.push(position);
@@ -303,7 +399,9 @@ impl<'a> CollectedOutput<'a> {
         // Numerical distribution can prove a cancellation against an opened
         // copy of a preserved sum. Accept that zero without changing any
         // surviving decomposition's arithmetic contexts.
-        let expression = if !self.preserved_sums.is_empty() && expression.expand_num().is_zero() {
+        let expression = if (!self.preserved_sums.is_empty() && expression.expand_num().is_zero())
+            || (!expression.is_zero() && self.cancels_with_source_sum(&value))
+        {
             Atom::Zero
         } else {
             expression
@@ -327,6 +425,18 @@ impl<'a> CollectedOutput<'a> {
         self.begin();
         let polynomial = self.polynomial(expression.as_view(), false);
         self.finish(polynomial)
+    }
+
+    pub(crate) fn collect_tensor(
+        &mut self,
+        source: &SymbolicTensor<PartialStructure>,
+    ) -> Option<Atom> {
+        // This emission may have introduced leaves absent from the original
+        // collector input. Use the actual producer's proof owner for the row.
+        let previous = mem::replace(&mut self.proofs, source.proofs.clone());
+        let expression = self.collect_atom(&source.expression);
+        self.proofs = previous;
+        expression
     }
 
     pub(crate) fn retain_product(&mut self, expression: &Atom) {
@@ -392,6 +502,18 @@ impl<'a> CollectedOutput<'a> {
             }
             self.refused = false;
             let coefficient_polynomial = self.polynomial(coefficient.expression.as_view(), true);
+            for variable in coefficient_polynomial.variables().iter() {
+                if !matches!(variable, PolyVariable::Temporary(_))
+                    && let Some(interface) = coefficient
+                        .proofs
+                        .admitted_interface(variable.to_atom().as_view())
+                {
+                    self.tensors.insert(
+                        variable.clone(),
+                        Some(!interface.logical_slots().is_empty()),
+                    );
+                }
+            }
             if self.refused {
                 retained.push((selected, coefficient));
                 continue;
@@ -456,7 +578,7 @@ mod tests {
             let expression = (&x + Atom::i() * &y) * (&x - Atom::i() * &y) - x.pow(2) - y.pow(2)
                 + Atom::num(remainder);
             let source = SymbolicTensor::infer(Atom::one()).unwrap();
-            let mut output = CollectedOutput::new(source.reduction_observations());
+            let mut output = CollectedOutput::new(&source);
             let result = output.collect_atom(&expression).unwrap();
             assert_eq!(result, Atom::num(remainder));
             assert_eq!(output.collect_atom(&result), Some(result));
@@ -469,7 +591,7 @@ mod tests {
             "(preserved_a+preserved_b)*(preserved_c+preserved_d)"
         ))
         .unwrap();
-        let mut output = CollectedOutput::new(source.reduction_observations())
+        let mut output = CollectedOutput::new(&source)
             .with_preserved_sums(|value| !matches!(value, AtomView::Num(_)));
         assert_eq!(
             output.collect_atom(&source.expression),
@@ -483,7 +605,7 @@ mod tests {
     #[test]
     fn unrepresentable_power_refuses_without_expanding_its_scalar_base() {
         let source = SymbolicTensor::infer(parse!("overflow_x + overflow_y")).unwrap();
-        let mut output = CollectedOutput::new(source.reduction_observations());
+        let mut output = CollectedOutput::new(&source);
         let expression = source.expression.pow(i64::from(i32::MAX) + 1);
         let polynomial = output.polynomial(expression.as_view(), false);
         assert!(output.refused);
@@ -495,7 +617,7 @@ mod tests {
     #[test]
     fn product_checks_all_monomials_after_aligning_variables() {
         let source = SymbolicTensor::infer(Atom::one()).unwrap();
-        let mut output = CollectedOutput::new(source.reduction_observations());
+        let mut output = CollectedOutput::new(&source);
         let left = CollectedPolynomial::from_coefficient_list(
             vec![Rational::one(), Rational::one()],
             vec![0, i32::MAX as u32, 1, 0],
@@ -516,7 +638,7 @@ mod tests {
     #[test]
     fn refused_finalizer_product_retains_the_exact_selected_state() {
         let source = SymbolicTensor::infer(parse!("retained_x + retained_y")).unwrap();
-        let mut output = CollectedOutput::new(source.reduction_observations());
+        let mut output = CollectedOutput::new(&source);
         let selected = SymbolicTensor::from_validated_parts(
             source.expression.pow(i64::from(i32::MAX)),
             PartialStructure::from_logical_slots([]),

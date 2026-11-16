@@ -19,7 +19,7 @@ use linnet::half_edge::{
     subgraph::{Inclusion, InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps},
 };
 use serde::{Deserialize, Serialize};
-use spenso::structure::IndexedStructure;
+use spenso::structure::{IndexedStructure, OrderedStructure, ScalarStructure};
 use symbolica::{
     atom::{AtomCore, AtomView},
     prelude::*,
@@ -117,8 +117,8 @@ pub(crate) struct Local4dCts(FourDSectors);
 pub(crate) struct Full4dCts(FourDSectors);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct FourDTerm {
-    pub(crate) numerator: SymbolicTensor<IndexedStructure>,
+pub(crate) struct FourDTerm<N = SymbolicTensor<IndexedStructure>> {
+    pub(crate) numerator: N,
     pub(crate) denominators: Vec<FourDDenominator>,
 }
 
@@ -242,13 +242,16 @@ impl CanonicalUvDenominatorClass {
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        let polynomial = SymbolicTensor::infer_indexed(cooking.try_cook(polynomial.as_view())?)?
-            .contract(ContractSettings {
-                rank_one: false,
-                collect_chains: false,
-                collect_traces: false,
-                ..Default::default()
-            })?;
+        let polynomial = SymbolicTensor::from_produced_indexed_parts(
+            cooking.try_cook(polynomial.as_view())?,
+            IndexedStructure::identity(OrderedStructure::scalar_structure()),
+        )?
+        .contract(ContractSettings {
+            rank_one: false,
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })?;
         let polynomial = cooking.uncook(polynomial.expression().as_view());
         let polynomial = polynomial.expand();
         let mut residual = false;
@@ -273,13 +276,16 @@ impl CanonicalUvDenominatorClass {
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        let collapsed = SymbolicTensor::infer_indexed(cooking.try_cook(collapsed.as_view())?)?
-            .contract(ContractSettings {
-                rank_one: false,
-                collect_chains: false,
-                collect_traces: false,
-                ..Default::default()
-            })?;
+        let collapsed = SymbolicTensor::from_produced_indexed_parts(
+            cooking.try_cook(collapsed.as_view())?,
+            IndexedStructure::identity(OrderedStructure::scalar_structure()),
+        )?
+        .contract(ContractSettings {
+            rank_one: false,
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })?;
         let collapsed = cooking.uncook(collapsed.expression().as_view());
         let collapsed = collapsed.expand();
         if residual || collapsed != self.full_expr {
@@ -713,7 +719,7 @@ impl CanonicalUvSector {
         }
         match error {
             Some(error) => Err(error),
-            None => Ok(atom.with_checked_expression(result)?),
+            None => Ok(atom.with_produced_expression(result)?),
         }
     }
 
@@ -863,7 +869,7 @@ impl CanonicalUvSector {
         });
         match error {
             Some(error) => Err(error),
-            None => Ok(atom.with_checked_expression(normalized)?),
+            None => Ok(atom.with_produced_expression(normalized)?),
         }
     }
 
@@ -928,8 +934,11 @@ impl FourDSectors {
                 .next()
                 .map(|sector| sector.atom.clone())
                 .unwrap_or_else(|| {
-                    SymbolicTensor::infer_indexed(Atom::Zero)
-                        .expect("literal zero has a scalar indexed interface")
+                    SymbolicTensor::from_produced_indexed_parts(
+                        Atom::Zero,
+                        IndexedStructure::identity(OrderedStructure::scalar_structure()),
+                    )
+                    .expect("literal zero has a scalar indexed interface")
                 }),
         };
         Ok(Self::with_atom(active, recursive_completion, atom))
@@ -990,8 +999,11 @@ impl Full4dCts {
     #[cfg(test)]
     fn root() -> Self {
         Self(FourDSectors::active_atom(
-            SymbolicTensor::infer_indexed(Atom::one())
-                .expect("literal one has a scalar indexed interface"),
+            SymbolicTensor::from_produced_indexed_parts(
+                Atom::one(),
+                IndexedStructure::identity(OrderedStructure::scalar_structure()),
+            )
+            .expect("literal one has a scalar indexed interface"),
         ))
     }
 
@@ -1163,7 +1175,10 @@ impl Local4dCts {
     }
 
     pub(crate) fn from_full_product(factors: impl IntoIterator<Item = Full4dCts>) -> Result<Self> {
-        let mut atom = SymbolicTensor::infer_indexed(Atom::one())?;
+        let mut atom = SymbolicTensor::from_produced_indexed_parts(
+            Atom::one(),
+            IndexedStructure::identity(OrderedStructure::scalar_structure()),
+        )?;
         let mut products = vec![(
             FourDSector::new(atom.clone(), Vec::new(), Vec::new()),
             false,
@@ -1281,26 +1296,73 @@ impl Local4dCts {
 }
 
 impl FourDTerm {
-    fn numerator(numerator: Atom) -> Result<Self> {
+    fn from_tensor(tensor: &SymbolicTensor<IndexedStructure>) -> Result<Vec<Self>> {
+        if !tensor.expression().contains_symbol(GS.den) {
+            return Ok(vec![Self {
+                numerator: tensor.clone(),
+                denominators: Vec::new(),
+            }]);
+        }
+        // Denominators are scalars. Split their rational shell without admitting
+        // temporary numerator factors, then attach each complete numerator to
+        // the original tensor's authoritative boundary and occurrence history.
+        FourDTerm::<Atom>::split_view(tensor.expression().as_view())?
+            .into_iter()
+            .map(|term| {
+                Ok(Self {
+                    numerator: tensor.with_produced_expression(term.numerator)?,
+                    denominators: term.denominators,
+                })
+            })
+            .collect()
+    }
+
+    #[cfg(test)]
+    fn from_view(view: AtomView<'_>) -> Result<Vec<Self>> {
+        FourDTerm::<Atom>::split_view(view)?
+            .into_iter()
+            .map(Self::admit_test_shell)
+            .collect()
+    }
+
+    #[cfg(test)]
+    fn group(terms: impl IntoIterator<Item = Self>) -> Result<Vec<Self>> {
+        FourDTerm::<Atom>::group_shells(terms.into_iter().map(|term| FourDTerm {
+            numerator: term.numerator.into_expression(),
+            denominators: term.denominators,
+        }))
+        .into_iter()
+        .map(Self::admit_test_shell)
+        .collect()
+    }
+
+    #[cfg(test)]
+    fn admit_test_shell(term: FourDTerm<Atom>) -> Result<Self> {
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
         Ok(Self {
-            numerator: SymbolicTensor::infer_indexed(cooking.try_cook(numerator.as_view())?)
-                .wrap_err_with(|| {
-                    format!("invalid rational-shell numerator fragment `{numerator}`")
-                })?,
-            denominators: Vec::new(),
+            numerator: SymbolicTensor::infer_indexed(cooking.try_cook(term.numerator.as_view())?)?,
+            denominators: term.denominators,
         })
     }
+}
 
-    fn product(mut left: Self, right: Self) -> Result<Self> {
-        left.numerator = left.numerator.multiply(right.numerator)?;
-        left.denominators.extend(right.denominators);
-        Ok(left)
+impl FourDTerm<Atom> {
+    fn numerator(numerator: Atom) -> Self {
+        Self {
+            numerator,
+            denominators: Vec::new(),
+        }
     }
 
-    fn group(terms: impl IntoIterator<Item = Self>) -> Result<Vec<Self>> {
+    fn product(mut left: Self, right: Self) -> Self {
+        left.numerator *= right.numerator;
+        left.denominators.extend(right.denominators);
+        left
+    }
+
+    fn group_shells(terms: impl IntoIterator<Item = Self>) -> Vec<Self> {
         let mut buckets = BTreeMap::new();
         for mut term in terms {
             term.denominators.sort_by_cached_key(|denominator| {
@@ -1329,43 +1391,22 @@ impl FourDTerm {
                 }
                 std::collections::btree_map::Entry::Occupied(mut entry) => {
                     let existing = entry.get_mut();
-                    existing.numerator = existing.numerator.try_add(&term.numerator)?;
+                    existing.numerator += term.numerator;
                 }
             }
         }
-        Ok(buckets
+        buckets
             .into_values()
             .filter(|term| !term.numerator.is_zero())
-            .collect())
-    }
-
-    fn from_tensor(tensor: &SymbolicTensor<IndexedStructure>) -> Result<Vec<Self>> {
-        if !tensor.expression().contains_symbol(GS.den) {
-            return Ok(vec![Self {
-                numerator: tensor.clone(),
-                denominators: Vec::new(),
-            }]);
-        }
-        // The rational-shell parser still uses temporary symbolic arithmetic.
-        // Its fresh inference cannot replace the source's logical port order.
-        // Restore each complete numerator through the original carrier once the
-        // scalar denominator topology has been separated, preserving typed zero.
-        Self::from_view(tensor.expression().as_view())?
-            .into_iter()
-            .map(|mut term| {
-                term.numerator =
-                    tensor.with_checked_expression(term.numerator.into_expression())?;
-                Ok(term)
-            })
             .collect()
     }
 
-    pub(super) fn from_view(view: AtomView<'_>) -> Result<Vec<Self>> {
+    fn split_view(view: AtomView<'_>) -> Result<Vec<Self>> {
         // A denominator-free subtree is an opaque numerator. Inspect its symbols
         // once instead of recursively rebuilding its sums/products just to prove
         // that every child has the same empty denominator topology.
         if matches!(view, AtomView::Add(_) | AtomView::Mul(_)) && !view.contains_symbol(GS.den) {
-            return Ok(vec![Self::numerator(view.to_owned())?]);
+            return Ok(vec![Self::numerator(view.to_owned())]);
         }
         match view {
             AtomView::Add(add) => {
@@ -1376,18 +1417,18 @@ impl FourDTerm {
                 // typed denominator factors for CFF to pinch internally.
                 let terms = add
                     .iter()
-                    .map(Self::from_view)
+                    .map(Self::split_view)
                     .collect::<Result<Vec<_>>>()?
                     .into_iter()
                     .flatten()
                     .collect::<Vec<_>>();
-                Self::group(terms)
+                Ok(Self::group_shells(terms))
             }
             AtomView::Mul(mul) => {
-                let mut products = vec![Self::numerator(Atom::one())?];
+                let mut products = vec![Self::numerator(Atom::one())];
                 for factor in mul.iter() {
-                    let factor_terms = Self::from_view(factor)?;
-                    products = Self::group(
+                    let factor_terms = Self::split_view(factor)?;
+                    products = Self::group_shells(
                         products
                             .into_iter()
                             .flat_map(|left| {
@@ -1396,8 +1437,8 @@ impl FourDTerm {
                                     .cloned()
                                     .map(move |right| Self::product(left.clone(), right))
                             })
-                            .collect::<Result<Vec<_>>>()?,
-                    )?;
+                            .collect::<Vec<_>>(),
+                    );
                 }
                 Ok(products)
             }
@@ -1409,15 +1450,15 @@ impl FourDTerm {
                 let Ok(exponent) = usize::try_from(exponent) else {
                     return Ok(vec![Self::from_factorized_term(view)?]);
                 };
-                let factors = Self::from_view(base)?;
+                let factors = Self::split_view(base)?;
                 if factors.iter().all(|term| term.denominators.is_empty()) {
-                    return Ok(vec![Self::numerator(view.to_owned())?]);
+                    return Ok(vec![Self::numerator(view.to_owned())]);
                 }
                 // Multiply rational shells only. Positive denominator blocks
                 // and denominator-free numerator powers remain opaque above.
-                let mut products = vec![Self::numerator(Atom::one())?];
+                let mut products = vec![Self::numerator(Atom::one())];
                 for _ in 0..exponent {
-                    products = Self::group(
+                    products = Self::group_shells(
                         products
                             .into_iter()
                             .flat_map(|left| {
@@ -1426,8 +1467,8 @@ impl FourDTerm {
                                     .cloned()
                                     .map(move |right| Self::product(left.clone(), right))
                             })
-                            .collect::<Result<Vec<_>>>()?,
-                    )?;
+                            .collect::<Vec<_>>(),
+                    );
                 }
                 Ok(products)
             }
@@ -1440,7 +1481,7 @@ impl FourDTerm {
             AtomView::Pow(power) => {
                 let (base, exponent) = power.get_base_exp();
                 let Some(denominator) = FourDDenominator::from_view(base)? else {
-                    return Self::numerator(view.to_owned());
+                    return Ok(Self::numerator(view.to_owned()));
                 };
                 let Ok(exponent) = i64::try_from(exponent) else {
                     return Err(eyre!(
@@ -1449,16 +1490,16 @@ impl FourDTerm {
                     ));
                 };
                 if exponent >= 0 {
-                    return Self::numerator(view.to_owned());
+                    return Ok(Self::numerator(view.to_owned()));
                 }
                 let multiplicity = usize::try_from(exponent.unsigned_abs())
                     .map_err(|_| eyre!("4D denominator multiplicity does not fit in memory"))?;
                 Ok(Self {
-                    numerator: SymbolicTensor::infer_indexed(Atom::one())?,
+                    numerator: Atom::one(),
                     denominators: std::iter::repeat_n(denominator, multiplicity).collect(),
                 })
             }
-            _ => Self::numerator(view.to_owned()),
+            _ => Ok(Self::numerator(view.to_owned())),
         }
     }
 }
@@ -1505,13 +1546,16 @@ impl FourDDenominator {
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        let normalized = SymbolicTensor::infer_indexed(cooking.try_cook(normalized.as_view())?)?
-            .contract(ContractSettings {
-                rank_one: false,
-                collect_chains: false,
-                collect_traces: false,
-                ..Default::default()
-            })?;
+        let normalized = SymbolicTensor::from_produced_indexed_parts(
+            cooking.try_cook(normalized.as_view())?,
+            IndexedStructure::identity(OrderedStructure::scalar_structure()),
+        )?
+        .contract(ContractSettings {
+            rank_one: false,
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })?;
         let normalized = cooking.uncook(normalized.expression().as_view());
         Ok(normalized.expand())
     }
@@ -1549,8 +1593,11 @@ impl FourDDenominator {
 impl Rooted for Local4dCts {
     fn root() -> Self {
         Self(FourDSectors::active_atom(
-            SymbolicTensor::infer_indexed(Atom::one())
-                .expect("literal one has a scalar indexed interface"),
+            SymbolicTensor::from_produced_indexed_parts(
+                Atom::one(),
+                IndexedStructure::identity(OrderedStructure::scalar_structure()),
+            )
+            .expect("literal one has a scalar indexed interface"),
         ))
     }
 }
@@ -1991,7 +2038,7 @@ fn t<S: super::ForestNodeLike>(
         &generated_lmb
     };
 
-    let rescaled = integrand.with_checked_expression(graph.uv_rescaled(
+    let rescaled = integrand.with_produced_expression(graph.uv_rescaled(
         current.subgraph(),
         n_loops,
         lmb,
@@ -2337,7 +2384,7 @@ fn t_raw<S: ForestNodeLike>(
         "Checking the retained interface after a local Taylor operation"
     );
 
-    Ok(integrand.with_checked_expression(evaluated)?)
+    Ok(integrand.with_produced_expression(evaluated)?)
 }
 
 fn tilde_t_raw<S: ForestNodeLike>(
@@ -2360,7 +2407,7 @@ fn tilde_t_raw<S: ForestNodeLike>(
         true,
         integrand.expression(),
     );
-    tilde_taylor(integrand.with_checked_expression(rescaled)?, current.dod())
+    tilde_taylor(integrand.with_produced_expression(rescaled)?, current.dod())
 }
 
 fn tilde_taylor(

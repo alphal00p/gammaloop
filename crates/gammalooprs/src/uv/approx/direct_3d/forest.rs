@@ -4,7 +4,7 @@ use color_eyre::Result;
 use eyre::eyre;
 use idenso::tensor::SymbolicTensor;
 use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps};
-use spenso::structure::IndexedStructure;
+use spenso::structure::{IndexedStructure, OrderedStructure, ScalarStructure};
 use symbolica::{
     atom::{Atom, AtomCore},
     function,
@@ -472,7 +472,10 @@ impl<'a> Direct3dApproximation<'a> {
         // Equal masses in disjoint integrated prefixes must remain distinct
         // until an enclosing operation contains their respective components.
         let finite_counterterm = finite_counterterms.iter().try_fold(
-            SymbolicTensor::infer_indexed(Atom::one())?,
+            SymbolicTensor::from_produced_indexed_parts(
+                Atom::one(),
+                IndexedStructure::identity(OrderedStructure::scalar_structure()),
+            )?,
             |product, (coefficient, component)| -> Result<_> {
                 let mass_scope =
                     function!(*LOCAL_3D_MASS_SCOPE, usize::from(component.lmb_id()) as i64);
@@ -500,7 +503,7 @@ impl<'a> Direct3dApproximation<'a> {
                         masses.push(mass);
                     }
                 }
-                let coefficient = coefficient.with_checked_expression(expression)?;
+                let coefficient = coefficient.with_produced_expression(expression)?;
                 Ok(product.multiply(coefficient)?)
             },
         )?;

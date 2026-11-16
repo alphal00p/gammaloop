@@ -233,6 +233,7 @@ trait TraceAlgebra {
     fn metric_product(
         &mut self,
         metric: AtomView<'_>,
+        endpoints: [AtomView<'_>; 2],
         coefficient: i32,
         value: Self::Value,
     ) -> Self::Value;
@@ -264,7 +265,13 @@ impl TraceAlgebra for FactoredOutput {
             _ => Atom::num(coefficient) * value,
         }
     }
-    fn metric_product(&mut self, metric: AtomView<'_>, coefficient: i32, value: Atom) -> Atom {
+    fn metric_product(
+        &mut self,
+        metric: AtomView<'_>,
+        _endpoints: [AtomView<'_>; 2],
+        coefficient: i32,
+        value: Atom,
+    ) -> Atom {
         if coefficient == 1 {
             metric * value.as_view()
         } else {
@@ -377,8 +384,12 @@ where
     ) -> Output::Value {
         let position = self.metric_position(left, right);
         let metric = self.metrics[position].as_ref().unwrap();
-        self.output
-            .metric_product(metric.as_view(), coefficient, value)
+        self.output.metric_product(
+            metric.as_view(),
+            [self.arguments[left], self.arguments[right]],
+            coefficient,
+            value,
+        )
     }
 
     fn with_output<Other: TraceAlgebra>(self, output: Other) -> PairingTrace<'a, Other, Metric> {
@@ -1102,9 +1113,10 @@ pub(super) mod tests {
                 })
             });
             let unit = Atom::num(4);
+            let arguments = (0..N).map(Atom::num).collect::<Vec<_>>();
             let mut trace = PairingTrace {
                 width: N,
-                arguments: Vec::new(),
+                arguments: arguments.iter().map(Atom::as_view).collect(),
                 metrics: (0..N)
                     .flat_map(|a| {
                         (0..N).map(move |b| {
@@ -1180,10 +1192,11 @@ pub(super) mod tests {
                     })
                 })
                 .collect();
+            let arguments = (0..6).map(Atom::num).collect::<Vec<_>>();
             for word in &words {
                 let mut trace = PairingTrace {
                     width: 6,
-                    arguments: Vec::new(),
+                    arguments: arguments.iter().map(Atom::as_view).collect(),
                     metrics: metrics.iter().cloned().map(Some).collect(),
                     trace_unit: unit.as_view(),
                     subwords: HashMap::new(),

@@ -36,6 +36,7 @@ use linnet::half_edge::{
     subgraph::{Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
 };
 use spenso::shadowing::TensorCollectFilter;
+use spenso::structure::{IndexedStructure, OrderedStructure, ScalarStructure};
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder},
     function,
@@ -1574,13 +1575,14 @@ impl Forests {
         graph: &Graph,
         settings: &UVgenerationSettings,
     ) -> Result<RenormalizationPart> {
-        let mut sum = Atom::Zero;
+        let mut sum: Option<SymbolicTensor<IndexedStructure>> = None;
         let marker = UvMarker::new(settings);
 
         let wild = Atom::var(W_.x___);
 
         let replacements =
             graph.integrand_replacement(&graph.full_filter(), &graph.loop_momentum_basis, &[wild]);
+        let mut retained_prefactor = None;
         for (node, mut crown, key) in self.graph.iter_nodes() {
             if crown.any(|r| self.graph.flow(r).is_source()) {
                 continue;
@@ -1596,7 +1598,10 @@ impl Forests {
                 vec![node]
             };
             let physical = components.into_iter().try_fold(
-                SymbolicTensor::infer_indexed(Atom::one())?,
+                SymbolicTensor::from_produced_indexed_parts(
+                    Atom::one(),
+                    IndexedStructure::identity(OrderedStructure::scalar_structure()),
+                )?,
                 |product, component| -> Result<_> {
                     let component_key = &self.graph[component];
                     let integrated = self
@@ -1620,18 +1625,26 @@ impl Forests {
                 forest_node.subgraph(),
                 physical.expression(),
             );
-            let physical = physical.with_checked_expression(marked)?;
+            let physical = physical.with_produced_expression(marked)?;
             debug!(
                 key=%key,
                expr = % physical.expression().log_print(None),"Term before simplification"
             );
-            let overall = SymbolicTensor::infer_indexed(graph.overall_factor.clone())?;
-            let prefactor = graph
-                .global_prefactor
-                .projector
-                .clone()
-                .multiply(graph.global_prefactor.num.clone())?
-                .multiply(overall)?;
+            if retained_prefactor.is_none() {
+                let overall = SymbolicTensor::infer_indexed(graph.overall_factor.clone())?;
+                retained_prefactor = Some(
+                    graph
+                        .global_prefactor
+                        .projector
+                        .clone()
+                        .multiply(graph.global_prefactor.num.clone())?
+                        .multiply(overall)?,
+                );
+            }
+            let prefactor = retained_prefactor
+                .as_ref()
+                .expect("initialized user prefactor")
+                .clone();
             let cooking = CookSettings::indices()
                 .with_mode(CookMode::ReversibleEncoding)
                 .with_representation_payloads(true, true);
@@ -1653,13 +1666,29 @@ impl Forests {
                 key=%key,
                expr = % atom.log_print(None),"Term"
             );
-            sum += atom;
+            sum = Some(match sum {
+                Some(sum) => sum.try_add(&reduced)?,
+                None => reduced,
+            });
         }
 
+        let sum = match sum {
+            Some(sum) => sum,
+            None => SymbolicTensor::from_produced_indexed_parts(
+                Atom::Zero,
+                IndexedStructure::identity(OrderedStructure::scalar_structure()),
+            )?,
+        };
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
         Ok(RenormalizationPart::new(
-            sum.replace_multiple(&replacements)
+            cooking
+                .uncook(sum.expression().as_view())
+                .replace_multiple(&replacements)
                 .replace(GS.m_uv_expansion)
                 .with(GS.m_uv_vacuum),
+            sum.structure().clone(),
             self.graph.n_nodes(),
         ))
     }

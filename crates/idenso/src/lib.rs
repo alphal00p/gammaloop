@@ -1,49 +1,48 @@
 #![allow(uncommon_codepoints)]
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::sync::{Arc, Mutex};
 
-use linnet::{
-    half_edge::subgraph::{BaseSubgraph, ModifySubSet, SuBitGraph, SubSetLike},
-    tree::child_vec::ChildVecStore,
+use crate::dirac::{DiracSimplifier, GammaSimplifySettings};
+use crate::tensor::inference::TensorInferenceError;
+use crate::tensor::{
+    AlgebraSettings, ContractSettings, SymbolicNet, SymbolicNetExt, SymbolicTensor, TensorProofs,
 };
+use linnet::half_edge::subgraph::{BaseSubgraph, ModifySubSet, SuBitGraph, SubSetLike};
 use shorthands::metric::{list_dangling_impl, wrap_dummies_impl, wrap_indices_impl};
-use spenso::{
-    network::{
-        graph::{NetworkEdge, NetworkLeaf, NetworkNode},
-        library::function_lib::INBUILTS,
-        library::symbolic::ETS,
-        parsing::{ParseSettings, ParseState, SchoonschipExpansionMode, ShorthandParsing},
-        store::TensorScalarStore,
-    },
-    shadowing::symbolica_utils::SpensoPrintSettings,
-    structure::{
-        abstract_index::AbstractIndex,
-        partial::{PartialStructure, PartialStructureExt},
-        representation::{Euclidean, Lorentz, Minkowski, RepName},
-        slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind},
-    },
-    symbol_set,
-    symbolica_init::in_symbolica_initializer,
+use spenso::network::graph::NetworkEdge;
+use spenso::network::library::DummyLibrary;
+use spenso::network::library::function_lib::INBUILTS;
+use spenso::network::library::symbolic::ETS;
+use spenso::network::parsing::{
+    ParseSettings, ParseState, SchoonschipExpansionMode, ShorthandParsing, StrictTensorFilter,
 };
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Symbol},
-    function,
-    id::{AliasedAtom, Pattern, Replacement},
-    initialize,
-    printer::AtomPrinter,
-    symbol,
+use spenso::network::store::TensorScalarStoreMapping;
+use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
+use spenso::structure::OrderedStructure;
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::partial::{PartialIndex, PartialStructure, PartialStructureExt};
+use spenso::structure::representation::{
+    Euclidean, LibraryRep, LibrarySlot, Lorentz, Minkowski, RepName,
 };
+use spenso::structure::slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind, Slot};
+use spenso::symbol_set;
+use spenso::symbolica_init::in_symbolica_initializer;
+use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
+use symbolica::id::{Pattern, Replacement};
+use symbolica::printer::AtomPrinter;
+use symbolica::{function, initialize};
 use thiserror::Error;
 
-use crate::{
-    color::{CS, color_conj_impl},
-    dirac::AGS,
-    epsilon::EPSILON_SYMBOL,
-    rep_symbols::RS,
-    representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet, SpinFundamental},
-    shorthands::{UndoShorthands, chain::Chain},
-    tensor::{SymbolicNetExt, SymbolicNetParse},
+use crate::color::{CS, color_conj_impl};
+use crate::dirac::AGS;
+use crate::epsilon::EPSILON_SYMBOL;
+use crate::rep_symbols::RS;
+use crate::representations::{
+    Bispinor, ColorAdjoint, ColorFundamental, ColorSextet, SpinFundamental,
 };
+use crate::shorthands::UndoShorthands;
+use crate::shorthands::chain::Chain;
+use crate::tensor::SymbolicNetParse;
 
 initialize!(|| {
     in_symbolica_initializer(|| {
@@ -349,7 +348,55 @@ pub enum AdjointError {
     TooManyDanglingBispinors { count: usize },
 }
 
-impl tensor::SymbolicTensor<PartialStructure> {
+impl SymbolicTensor<PartialStructure> {
+    fn substitute_admitted_slots(
+        &self,
+        replacements: &[(LibrarySlot<AbstractIndex>, LibrarySlot<AbstractIndex>)],
+    ) -> Result<Self, TensorInferenceError> {
+        let map_slot = |slot| {
+            replacements
+                .iter()
+                .find(|(source, _)| *source == slot)
+                .map_or(slot, |(_, target)| *target)
+        };
+        let map_interface = |structure: &PartialStructure| {
+            Ok(PartialStructure::from_logical_slots(
+                structure
+                    .logical_slots()
+                    .into_iter()
+                    .map(|slot| match slot.aind {
+                        PartialIndex::Explicit(index) => {
+                            let mapped = map_slot(slot.rep().slot(index));
+                            mapped.rep().slot(PartialIndex::Explicit(mapped.aind()))
+                        }
+                        PartialIndex::Open(_) => slot,
+                    }),
+            ))
+        };
+        let atoms = replacements
+            .iter()
+            .map(|(from, to)| (from.to_atom(), to.to_atom()))
+            .collect::<Vec<_>>();
+        let (expression, mapped) = self.map_admitted_expression(
+            |value| {
+                Ok(atoms
+                    .iter()
+                    .find(|(from, _)| from.as_view() == value)
+                    .map(|(_, to)| to.clone()))
+            },
+            map_interface,
+        )?;
+        let occurrences = self
+            .explicit_index_occurrences()?
+            .mapped(|slot| Ok::<_, TensorInferenceError>(map_slot(slot)))?;
+        let result = Self::from_validated_parts(
+            expression,
+            map_interface(&self.structure)?,
+            Arc::new(occurrences),
+        );
+        self.finish_mapped_result("Dirac endpoint substitution", result, mapped)
+    }
+
     /// Dirac adjunction with the source's ordered logical axes. The external
     /// representations are dualized; zero retains those axes without parsing.
     /// As for axis permutation, unresolved axes acquire independent graph labels
@@ -371,32 +418,40 @@ impl tensor::SymbolicTensor<PartialStructure> {
                 .map(|slot| slot.dual()),
         );
         if source.is_zero() {
-            return Ok(Self::from_declared_parts(Atom::Zero, interface)?);
+            return Ok(source.with_produced_parts(Atom::Zero, interface, |slot| slot.dual())?);
         }
-        let (expression, has_spinor_edges) = Self::prepare_dirac_adjoint::<AbstractIndex>(
+        let (proofs, _) = source.producer_context();
+        let (_, has_spinor_edges, typed) = Self::prepare_dirac_adjoint::<AbstractIndex>(
             source.expression().as_view(),
             preserve_indices,
+            Some((source, &proofs)),
         )?;
-        let expression = if has_spinor_edges {
-            expression.chainify(Bispinor {}.into())
-        } else {
-            expression
-        };
-        let value = Self::from_declared_parts(expression, interface)?;
+        let value = typed.expect("typed adjoint input retains its producer metadata");
+        let mut ordered = Self::from_validated_parts(
+            value.expression,
+            interface,
+            Arc::clone(
+                value
+                    .proofs
+                    .occurrences
+                    .get()
+                    .expect("adjoint carries index history"),
+            ),
+        );
+        ordered.proofs.inherit_interfaces([&value.proofs]);
         if has_spinor_edges {
-            Ok(value.finish_dirac_adjoint(preserve_indices)?)
+            Ok(ordered
+                .chainified(Bispinor {}.into())?
+                .finish_dirac_adjoint(preserve_indices)?)
         } else {
-            Ok(value)
+            Ok(ordered)
         }
     }
 
-    fn finish_dirac_adjoint(
-        self,
-        preserve_indices: bool,
-    ) -> Result<Self, tensor::inference::TensorInferenceError> {
+    fn finish_dirac_adjoint(self, preserve_indices: bool) -> Result<Self, TensorInferenceError> {
         if preserve_indices {
-            self.simplify_algebra(&crate::tensor::AlgebraSettings {
-                gamma: Some(dirac::GammaSimplifySettings {
+            self.simplify_algebra(&AlgebraSettings {
+                gamma: Some(GammaSimplifySettings {
                     gamma0: true,
                     evaluate_traces: false,
                     ..Default::default()
@@ -404,7 +459,7 @@ impl tensor::SymbolicTensor<PartialStructure> {
                 epsilon: true,
                 ..Default::default()
             })?
-            .contract(crate::tensor::ContractSettings {
+            .contract(ContractSettings {
                 collect_chains: false,
                 collect_traces: false,
                 ..Default::default()
@@ -419,20 +474,35 @@ impl tensor::SymbolicTensor<PartialStructure> {
     fn prepare_dirac_adjoint<Aind: DummyAind + ParseableAind + AbsInd>(
         source: AtomView<'_>,
         preserve_indices: bool,
-    ) -> Result<(Atom, bool), AdjointError> {
-        let net = source
-            .parse_to_symbolic_net::<Aind>(&ParseSettings {
-                shorthand_parsing: ShorthandParsing::Expand {
-                    schoonschip: SchoonschipExpansionMode {
-                        inner_products: false,
-                        expand_inside_chains: true,
-                        expand_schoonship: true,
-                    },
-                    trace: true,
-                    chain: true,
+        typed_source: Option<(&Self, &TensorProofs)>,
+    ) -> Result<(Atom, bool, Option<Self>), AdjointError> {
+        let settings = ParseSettings {
+            shorthand_parsing: ShorthandParsing::Expand {
+                schoonschip: SchoonschipExpansionMode {
+                    inner_products: false,
+                    expand_inside_chains: true,
+                    expand_schoonship: true,
                 },
-                ..Default::default()
-            })
+                trace: true,
+                chain: true,
+            },
+            ..Default::default()
+        }
+        .with_strict_tensor_filter(StrictTensorFilter::ContainsReps);
+        let net =
+            match typed_source {
+                Some((_, proofs)) => SymbolicNet::<Aind>::try_from_admitted_view::<
+                    OrderedStructure<LibraryRep, Aind>,
+                    _,
+                >(
+                    source,
+                    &DummyLibrary::<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>>::new(),
+                    &settings,
+                    proofs.parser_leaf_interfaces(),
+                    Some(proofs),
+                ),
+                None => source.parse_to_symbolic_net::<Aind>(&settings),
+            }
             .map_err(|error| NetworkToolingError::Parse {
                 reason: error.to_string(),
             })?;
@@ -444,7 +514,11 @@ impl tensor::SymbolicTensor<PartialStructure> {
             matches!(edge.data, NetworkEdge::Slot(slot)
                 if slot.rep_name() == Bispinor {}.into())
         }) {
-            return Ok((source.spenso_conj(), false));
+            return if let Some((typed, _)) = typed_source {
+                Ok((Atom::Zero, false, Some(typed.spenso_conjugated()?)))
+            } else {
+                Ok((source.spenso_conj(), false, None))
+            };
         }
 
         let bis_dangling: Vec<_> = net
@@ -508,28 +582,122 @@ impl tensor::SymbolicTensor<PartialStructure> {
         }
         // Materialize matrix channels in this same parse before conjugation.
         // Scalar inner products stay compact, and every sum branch is retained.
+        if let Some((_, proofs)) = typed_source {
+            let leaves = proofs.parser_leaf_interfaces();
+            for tensor in net.store.iter_tensors() {
+                let written = leaves
+                    .lock()
+                    .expect("leaf interface cache is not poisoned")
+                    .get(tensor.expression.as_view().get_data())
+                    .cloned();
+                if let Some((true, written)) = written {
+                    proofs.retain_leaf_ports(tensor.expression.as_view(), written)?;
+                }
+            }
+        }
         let explicit = net.simple_execute::<()>()?;
         // Include the parser's newly materialized channel indices, then share
         // one collision-free allocator across boundary and matrix conjugation.
         let dummies = ParseState::<Aind>::default();
         dummies.reserve_indices(explicit.as_view());
-        let mut a = explicit.spenso_conj();
+        let mut typed = typed_source
+            .map(|(source, proofs)| {
+                source
+                    .borrowed_with_proofs(proofs)
+                    .with_materialized_expression("Dirac graph lowering", explicit.clone())?
+                    .spenso_conjugated()
+            })
+            .transpose()?;
+        let mut a = if typed.is_some() {
+            Atom::Zero
+        } else {
+            explicit.spenso_conj()
+        };
         for i in bis_dangling {
             let mut dummy = i;
             dummy.aind = dummies.fresh_index();
+            if let Some(value) = typed.take() {
+                let from = Slot::<LibraryRep, AbstractIndex>::try_from(i.to_atom().as_view())
+                    .map_err(|error| TensorInferenceError::invalid(error.to_string()))?;
+                let to = Slot::<LibraryRep, AbstractIndex>::try_from(dummy.to_atom().as_view())
+                    .map_err(|error| TensorInferenceError::invalid(error.to_string()))?;
+                let mapped = value.substitute_admitted_slots(&[(from, to)])?;
+                let expression = function!(AGS.gamma0, i.to_atom(), dummy.to_atom());
+                let gamma = Self::from_produced_parts(
+                    expression,
+                    PartialStructure::from_logical_slots([
+                        from.rep().slot(PartialIndex::Explicit(from.aind())),
+                        to.rep().slot(PartialIndex::Explicit(to.aind())),
+                    ]),
+                )?;
+                gamma.proofs.retain_leaf_ports(
+                    gamma.expression.as_view(),
+                    vec![i.to_atom(), dummy.to_atom()],
+                )?;
+                typed = Some(mapped.multiply(&gamma)?);
+                continue;
+            }
             a = a
                 .replace(Pattern::Literal(i.to_atom()))
                 .with(Pattern::Literal(dummy.to_atom()))
                 * function!(AGS.gamma0, i.to_atom(), dummy.to_atom());
         }
         for (i, j) in transpositions {
+            if let Some(value) = typed.take() {
+                let first = Slot::<LibraryRep, AbstractIndex>::try_from(i.to_atom().as_view())
+                    .map_err(|error| TensorInferenceError::invalid(error.to_string()))?;
+                let second = Slot::<LibraryRep, AbstractIndex>::try_from(j.to_atom().as_view())
+                    .map_err(|error| TensorInferenceError::invalid(error.to_string()))?;
+                typed = Some(value.substitute_admitted_slots(&[(first, second), (second, first)])?);
+                continue;
+            }
             a = a.replace_multiple(&[
                 Replacement::new(Pattern::Literal(i.to_atom()), Pattern::Literal(j.to_atom())),
                 Replacement::new(Pattern::Literal(j.to_atom()), Pattern::Literal(i.to_atom())),
             ]);
         }
-        a = dirac::DiracSimplifier::conjugate_matrices::<Aind>(a.as_view(), &dummies);
-        Ok((dirac::DiracSimplifier::factor_gamma_zero(a.as_view()), true))
+        if let Some(value) = typed {
+            let mut failure = None;
+            let expression = DiracSimplifier::conjugate_matrices_with::<Aind>(
+                value.expression.as_view(),
+                &dummies,
+                &mut |expression, ports| {
+                    if let Err(error) = value.proofs.retain_leaf_ports(expression, ports) {
+                        failure = Some(error);
+                    }
+                },
+            );
+            if let Some(error) = failure {
+                return Err(error.into());
+            }
+            let value =
+                value.with_materialized_expression("Dirac matrix conjugation", expression)?;
+            let proofs = value.proofs.clone();
+            let failure = Arc::new(Mutex::new(None));
+            let metric_failure = Arc::clone(&failure);
+            let expression = DiracSimplifier::factor_gamma_zero_with(
+                value.expression.as_view(),
+                move |expression, ports| {
+                    if let Err(error) = proofs.retain_leaf_ports(expression, ports) {
+                        *metric_failure
+                            .lock()
+                            .expect("metric producer errors are not poisoned") = Some(error);
+                    }
+                },
+            );
+            if let Some(error) = failure
+                .lock()
+                .expect("metric producer errors are not poisoned")
+                .take()
+            {
+                return Err(error.into());
+            }
+            let value =
+                value.with_materialized_expression("Dirac gamma-zero factoring", expression)?;
+            return Ok((Atom::Zero, true, Some(value)));
+        }
+        a = DiracSimplifier::conjugate_matrices::<Aind>(a.as_view(), &dummies);
+        Ok((DiracSimplifier::factor_gamma_zero(a.as_view()), true, None))
     }
 }
 
@@ -541,144 +709,13 @@ impl IndexTooling for AtomView<'_> {
         &self,
         mut new_dummy: impl FnMut(usize) -> Aind,
     ) -> Result<Atom, CanonicalizationError> {
-        // Admit the complete source before algebraic zero pruning. The chosen
-        // index parser owns accepted label syntax; canonicalization uses those
-        // parsed identities without imposing another spelling restriction.
-        let mut net = self
+        let net = self
             .parse_to_symbolic_net::<Aind>(&ParseSettings::default())
             .map_err(|error| NetworkToolingError::Parse {
                 reason: error.to_string(),
             })?;
-
-        net.remove_antisymmetric_zero_terms();
-
-        // Keep duality wrappers in the expression graph. The canonicalizer
-        // follows the same base index inside dind(...), while the wrapper
-        // preserves which occurrence is covariant. Erasing that distinction
-        // can collapse opposite color metrics into an invalid tensor square.
-        let mut dummies = BTreeMap::new();
-        for (p, _, d) in net.graph.graph.iter_edges() {
-            if p.is_paired()
-                && let NetworkEdge::Slot(s) = d.data
-            {
-                let slot = if s.rep_name().is_dual() { s.dual() } else { *s };
-                // println!("{}:{:?}", ind, group);
-                dummies.insert(slot.to_atom(), slot.rep());
-            }
-        }
-
-        let external = net.graph.dangling_indices();
-        // Reconstruct the admitted operation graph, without running tensor algebra
-        // merely to hand its syntax to Symbolica's canonicalizer.
-        let tree = net.graph.expr_tree().cast::<ChildVecStore<()>>();
-        let root = net.graph.graph.node_id(net.graph.head());
-        let expr = net
-            .graph
-            .to_expression_at(&tree, root, &mut |_, node| match node {
-                NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
-                    Ok(Some(net.store.tensors[*index].expression.clone()))
-                }
-                NetworkNode::Leaf(NetworkLeaf::Scalar(index)) => {
-                    Ok(Some(net.store.get_scalar_ref(*index).clone()))
-                }
-                NetworkNode::Op(_) => Ok(None),
-                _ => Err(spenso::network::TensorNetworkError::Other(eyre::eyre!(
-                    "canonicalization requires stored symbolic leaves"
-                ))),
-            })
-            .map_err(|error| CanonicalizationError::Prepare {
-                reason: error.to_string(),
-            })?;
-        // Symbolica rejects tensor-containing negative powers even when their
-        // base is a closed scalar network. Canonicalize those independent
-        // contractions recursively, then keep them opaque during outer labeling.
-        let mut aliases = BTreeMap::new();
-        let mut used = expr.get_all_symbols(true);
-        let mut serial = 0;
-        let mut failure = None;
-        let expr = expr.replace_map(|atom, _, out| {
-            let AtomView::Pow(power) = atom else {
-                return;
-            };
-            let (base, exponent) = power.get_base_exp();
-            if i64::try_from(exponent).is_ok_and(|n| n > 0) {
-                return;
-            }
-            let canonical =
-                match base.canonize::<Aind>(&mut new_dummy as &mut dyn FnMut(usize) -> Aind) {
-                    Ok(canonical) => canonical.pow(exponent),
-                    Err(error) => {
-                        failure = Some(error);
-                        return;
-                    }
-                };
-            let alias = aliases.entry(canonical).or_insert_with(|| {
-                loop {
-                    let name = symbol!(&format!("idenso::canonical_scalar_{serial}"));
-                    serial += 1;
-                    if used.insert(name) {
-                        break Atom::var(name);
-                    }
-                }
-            });
-            **out = alias.clone();
-        });
-        if let Some(error) = failure {
-            return Err(error);
-        }
-        let mut scalar_definitions = AliasedAtom::from(Atom::Zero);
-        for (original, alias) in aliases {
-            scalar_definitions.register_alias(alias, original);
-        }
-        // Spenso supplies validated incidence and external slots. Symbolica
-        // canonizes the reconstructed expression, including dummy pairs inside
-        // nested sums, without distributing any products of sums.
-        let canonical =
-            expr.canonize_tensors(dummies)
-                .map_err(|error| CanonicalizationError::Indices {
-                    reason: error.to_string(),
-                })?;
-
-        // Sum branches also have paired copies of genuinely external slots.
-        // Preserve those labels after Symbolica has validated their incidence.
-        let mut reserved = BTreeSet::new();
-        for slot in external {
-            let slot = if slot.rep_name().is_dual() {
-                slot.dual()
-            } else {
-                slot
-            };
-            let slot = slot.to_atom();
-            reserved.insert(slot);
-        }
-
-        let mut reps = vec![];
-        let mut next_dummy = 0;
-
-        // Only relabel names that Symbolica validated as contracted indices;
-        // keep their replacements distinct from the genuine external slots.
-        // Canceled terms can leave unused names in the validated index pool.
-        for (d, r) in canonical
-            .dummy_indices
-            .into_iter()
-            .filter(|(index, _)| canonical.canonical_form.contains(index))
-        {
-            let target = loop {
-                let candidate = r.slot::<Aind, Aind>(new_dummy(next_dummy)).to_atom();
-                next_dummy += 1;
-                if reserved.insert(candidate.clone()) {
-                    break candidate;
-                }
-            };
-            reps.push(Replacement::new(
-                Pattern::Literal(d),
-                Pattern::Literal(target),
-            ));
-        }
-
-        Ok(scalar_definitions
-            .map_root(|_| canonical.canonical_form.replace_multiple(&reps))
-            .into_inner())
+        SymbolicTensor::<PartialStructure>::canonize_parsed(net, &mut new_dummy, None)
+            .map(|(expression, _)| expression)
     }
     fn spenso_conj(&self) -> Atom {
         let conjugate = self
@@ -713,10 +750,11 @@ impl IndexTooling for AtomView<'_> {
         &self,
         preserve_indices: bool,
     ) -> Result<Atom, AdjointError> {
-        let (factored, has_spinor_edges) =
-            tensor::SymbolicTensor::<PartialStructure>::prepare_dirac_adjoint::<Aind>(
+        let (factored, has_spinor_edges, _) =
+            SymbolicTensor::<PartialStructure>::prepare_dirac_adjoint::<Aind>(
                 *self,
                 preserve_indices,
+                None,
             )?;
         if !has_spinor_edges {
             return Ok(factored);
@@ -764,58 +802,104 @@ impl IndexTooling for AtomView<'_> {
 
 #[cfg(test)]
 pub mod test {
+    use crate::dirac::AGS;
+    use crate::representations::Bispinor;
+    use crate::tensor::inference::tests::{INFERENCE_CALLS, INFERENCE_VISITS};
+    use crate::tensor::{
+        AlgebraSettings, ContractSettings, SymbolicNetExt, SymbolicNetParse, SymbolicTensor,
+    };
+    use crate::test_support::test_initialize;
+    use crate::{
+        AdjointError, CanonicalizationError, CookMode, CookSettings, Cookable, IndexTooling,
+        NetworkToolingError, gamma, u,
+    };
     use insta::assert_snapshot;
-    use spenso::{
-        network::tags::SPENSO_TAG,
-        p, slot,
-        structure::{abstract_index::AbstractIndex, slot::ParseableAind},
-    };
-    use symbolica::{
-        atom::{Atom, AtomCore, FunctionBuilder},
-        function, parse_lit,
-        printer::CanonicalOrderingSettings,
-        symbol,
-    };
+    use spenso::iterators::IteratableTensor;
+    use spenso::network::library::panicing::ErroringLibrary;
+    use spenso::network::library::symbolic::{ExplicitKey, TensorLibrary};
+    use spenso::network::parsing::{ParseSettings, ShadowedStructure};
+    use spenso::network::store::NetworkStore;
+    use spenso::network::tags::SPENSO_TAG;
+    use spenso::network::{ExecutionResult, Network, Sequential, SmallestDegree};
+    use spenso::structure::abstract_index::AbstractIndex;
+    use spenso::structure::partial::{PartialStructure, PartialStructureExt};
+    use spenso::structure::representation::{LibraryRep, RepName};
+    use spenso::structure::slot::{DualSlotTo, ParseableAind};
+    use spenso::structure::{Canonicalized, TensorStructure};
+    use spenso::tensors::parametric::ParamTensor;
+    use spenso::{chain, mink, p, slot, tensor_symbol};
+    use std::collections::BTreeMap;
+    use symbolica::atom::{Atom, AtomCore, FunctionBuilder, Symbol};
+    use symbolica::parser::ParseSettings as SymbolicaParseSettings;
+    use symbolica::printer::CanonicalOrderingSettings;
+    use symbolica::{function, parse_lit, symbol};
     use symbolica_utils::AtomPrintExt;
 
-    use crate::{
-        AdjointError, CanonicalizationError, Cookable, IndexTooling, NetworkToolingError, gamma,
-        test_support::test_initialize, u,
-    };
+    #[test]
+    fn typed_adjoint_transports_interface_without_release_inference() {
+        test_initialize();
+        for expression in [
+            gamma!(91701, 91702, 91703),
+            chain!(
+                bis!(4, 91701),
+                bis!(4, 91702),
+                gamma!(mink!(4, 91703)),
+                gamma!(mink!(4, 91704))
+            ),
+            chain!(bis!(4, 91701), bis!(4, 91702), gamma!(p!(mink!(4)))),
+        ] {
+            let source = SymbolicTensor::infer(expression).unwrap();
+            let source_leaves = source.admitted_leaf_interfaces().lock().unwrap().clone();
+            for preserve in [true, false] {
+                let expected = source
+                    .expression()
+                    .dirac_adjoint::<AbstractIndex>(preserve)
+                    .unwrap();
+                let expected_execution = expected
+                    .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+                    .unwrap()
+                    .simple_execute::<()>()
+                    .unwrap();
+                INFERENCE_CALLS.with(|count| count.set(0));
+                INFERENCE_VISITS.with(|count| count.set(0));
+                let result = source.dirac_adjoint(preserve).unwrap();
+                let network = result
+                    .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+                    .unwrap();
+                assert_eq!(network.graph.dangling_indices().len(), source.rank());
+                let executed = network.simple_execute::<()>().unwrap();
+                assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+                assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
+                // The typed result preserves compact chains. Both public
+                // forms lower to the same matrix product and free ports.
+                assert_eq!(
+                    executed.canonize(AbstractIndex::Dummy).unwrap(),
+                    expected_execution.canonize(AbstractIndex::Dummy).unwrap()
+                );
+                assert_eq!(
+                    *source.admitted_leaf_interfaces().lock().unwrap(),
+                    source_leaves
+                );
+                let expected_interface = PartialStructure::from_logical_slots(
+                    source
+                        .structure()
+                        .logical_slots()
+                        .into_iter()
+                        .map(|port| port.dual()),
+                );
+                assert_eq!(result.structure(), &expected_interface);
+            }
+        }
+    }
 
     #[test]
     fn typed_adjoint_keeps_native_logical_axes_and_ranked_zero() {
-        use crate::{CookMode, CookSettings, representations::Bispinor, tensor::SymbolicTensor};
-        use spenso::{
-            iterators::IteratableTensor,
-            network::{
-                ExecutionResult, Network, Sequential, SmallestDegree,
-                library::{
-                    panicing::ErroringLibrary,
-                    symbolic::{ExplicitKey, TensorLibrary},
-                },
-                parsing::{ParseSettings, ShadowedStructure},
-                store::NetworkStore,
-            },
-            structure::{
-                Canonicalized, TensorStructure,
-                partial::{PartialStructure, PartialStructureExt},
-                representation::{LibraryRep, RepName},
-                slot::DualSlotTo,
-            },
-            tensors::parametric::ParamTensor,
-        };
-        use std::collections::BTreeMap;
         type Tensor = ParamTensor<ShadowedStructure<AbstractIndex>>;
         type Lib = TensorLibrary<ParamTensor<ExplicitKey<AbstractIndex>>, AbstractIndex>;
-        type Net = Network<
-            NetworkStore<Tensor, Atom>,
-            ExplicitKey<AbstractIndex>,
-            symbolica::atom::Symbol,
-        >;
+        type Net = Network<NetworkStore<Tensor, Atom>, ExplicitKey<AbstractIndex>, Symbol>;
 
         test_initialize();
-        let matrix = spenso::tensor_symbol!("typed_adjoint::matrix"; Real);
+        let matrix = tensor_symbol!("typed_adjoint::matrix"; Real);
         let label = symbol!("typed_adjoint::index", tags = [SPENSO_TAG.index.clone()]);
         let bis = LibraryRep::from(Bispinor {}).new_rep(4);
         let raw = function!(
@@ -856,7 +940,7 @@ pub mod test {
             .unwrap();
         library
             .insert_explicit_sparse(
-                ExplicitKey::from_iter([bis, bis], crate::dirac::AGS.gamma0, None),
+                ExplicitKey::from_iter([bis, bis], AGS.gamma0, None),
                 [(0, 2), (1, 3), (2, 0), (3, 1)]
                     .into_iter()
                     .map(|(row, column)| (vec![row, column], Atom::one())),
@@ -988,7 +1072,7 @@ pub mod test {
                     "chain(cof(3,i),dind(cof(3,j)),{coefficient}*t(coad(8,a),in,out),t(coad(8,b),in,out))"
                 ),
                 "spenso",
-                symbolica::parser::ParseSettings::symbolica(),
+                SymbolicaParseSettings::symbolica(),
             )
             .unwrap();
             for preserve_indices in [false, true] {
@@ -1000,23 +1084,22 @@ pub mod test {
             }
         }
         let closed = Atom::i()
-            * gamma!([4, 11], [4, 12], spenso::mink!(4, 13))
-            * gamma!([4, 12], [4, 11], spenso::mink!(4, 14));
-        let expected =
-            -Atom::num(4) * Atom::i() * spenso::g!(spenso::mink!(4, 13), spenso::mink!(4, 14));
+            * gamma!([4, 11], [4, 12], mink!(4, 13))
+            * gamma!([4, 12], [4, 11], mink!(4, 14));
+        let expected = -Atom::num(4) * Atom::i() * spenso::g!(mink!(4, 13), mink!(4, 14));
         for preserve_indices in [false, true] {
             let adjoint = closed
                 .dirac_adjoint::<AbstractIndex>(preserve_indices)
                 .unwrap();
-            let result = crate::tensor::SymbolicTensor::infer(adjoint)
+            let result = SymbolicTensor::infer(adjoint)
                 .unwrap()
-                .simplify_algebra(&crate::tensor::AlgebraSettings {
+                .simplify_algebra(&AlgebraSettings {
                     gamma: Some(Default::default()),
                     epsilon: true,
                     ..Default::default()
                 })
                 .unwrap()
-                .contract(crate::tensor::ContractSettings {
+                .contract(ContractSettings {
                     collect_chains: false,
                     collect_traces: false,
                     ..Default::default()
