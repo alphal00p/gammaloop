@@ -5,11 +5,13 @@
 //! crown is selected, allowing dummy half-edges to be absent. An excluded region
 //! removes its edges and all vertices incident to that region.
 
+use idenso::tensor::SymbolicTensor;
 use linnet::half_edge::{
     HedgeGraph, NodeIndex,
     involution::{EdgeIndex, HedgePair},
     subgraph::{ModifySubSet, SubGraphLike, SubSetLike, SubSetOps, subset::SubSet},
 };
+use spenso::structure::partial::{PartialStructure, PartialStructureExt};
 use spenso::structure::{
     dimension::Dimension,
     representation::{Minkowski, RepName},
@@ -224,7 +226,10 @@ impl crate::FeynmanDiagram {
         Ok(self.graph.try_fold_numerator(
             subgraph,
             without,
-            idenso::tensor::SymbolicTensor::infer(Atom::one())?,
+            SymbolicTensor::from_produced_parts(
+                Atom::one(),
+                PartialStructure::from_logical_slots([]),
+            )?,
             |_, vertex| vertex.numerator.clone(),
             |edge| edge.numerator.clone(),
             |edge| edge.is_dummy,

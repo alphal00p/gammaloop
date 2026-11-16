@@ -97,13 +97,7 @@ impl<L: Copy + Eq + Hash> TermTape<L> {
     ) -> Option<(usize, (usize, usize))> {
         let data = &graph.graph[node];
         if let Some(value) = leaf(self, node, data) {
-            return match value {
-                TermLeaf::Value(value) => self.leaf(value),
-                TermLeaf::Number(value, coefficient) => self.number(value, coefficient),
-                TermLeaf::Reference(node, size) => {
-                    (node < self.nodes.len()).then_some((node, Self::checked_size(size.0, size.1)?))
-                }
-            };
+            return self.push_leaf(value);
         }
         match data {
             NetworkNode::Op(NetworkOp::Sum | NetworkOp::Product) => {
@@ -130,6 +124,17 @@ impl<L: Copy + Eq + Hash> TermTape<L> {
             // Numeric negation and nonpositive powers likewise need an explicit
             // leaf decision rather than silently changing their grammar.
             _ => None,
+        }
+    }
+
+    /// Register a materialized operand or refer to an existing node of this tape.
+    pub fn push_leaf(&mut self, value: TermLeaf<L>) -> Option<(usize, (usize, usize))> {
+        match value {
+            TermLeaf::Value(value) => self.leaf(value),
+            TermLeaf::Number(value, coefficient) => self.number(value, coefficient),
+            TermLeaf::Reference(node, size) => {
+                (node < self.nodes.len()).then_some((node, Self::checked_size(size.0, size.1)?))
+            }
         }
     }
 

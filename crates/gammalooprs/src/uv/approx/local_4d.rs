@@ -19,7 +19,7 @@ use linnet::half_edge::{
     subgraph::{Inclusion, InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps},
 };
 use serde::{Deserialize, Serialize};
-use spenso::structure::IndexedStructure;
+use spenso::structure::{IndexedStructure, OrderedStructure, ScalarStructure};
 use symbolica::{
     atom::{AtomCore, AtomView},
     prelude::*,
@@ -117,8 +117,8 @@ pub(crate) struct Local4dCts(FourDSectors);
 pub(crate) struct Full4dCts(FourDSectors);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct FourDTerm {
-    pub(crate) numerator: SymbolicTensor<IndexedStructure>,
+pub(crate) struct FourDTerm<N = SymbolicTensor<IndexedStructure>> {
+    pub(crate) numerator: N,
     pub(crate) denominators: Vec<FourDDenominator>,
 }
 
@@ -242,13 +242,16 @@ impl CanonicalUvDenominatorClass {
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        let polynomial = SymbolicTensor::infer_indexed(cooking.try_cook(polynomial.as_view())?)?
-            .contract(ContractSettings {
-                rank_one: false,
-                collect_chains: false,
-                collect_traces: false,
-                ..Default::default()
-            })?;
+        let polynomial = SymbolicTensor::from_produced_indexed_parts(
+            cooking.try_cook(polynomial.as_view())?,
+            IndexedStructure::identity(OrderedStructure::scalar_structure()),
+        )?
+        .contract(ContractSettings {
+            rank_one: false,
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })?;
         let polynomial = cooking.uncook(polynomial.expression().as_view());
         let polynomial = polynomial.expand();
         let mut residual = false;
@@ -273,13 +276,16 @@ impl CanonicalUvDenominatorClass {
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        let collapsed = SymbolicTensor::infer_indexed(cooking.try_cook(collapsed.as_view())?)?
-            .contract(ContractSettings {
-                rank_one: false,
-                collect_chains: false,
-                collect_traces: false,
-                ..Default::default()
-            })?;
+        let collapsed = SymbolicTensor::from_produced_indexed_parts(
+            cooking.try_cook(collapsed.as_view())?,
+            IndexedStructure::identity(OrderedStructure::scalar_structure()),
+        )?
+        .contract(ContractSettings {
+            rank_one: false,
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })?;
         let collapsed = cooking.uncook(collapsed.expression().as_view());
         let collapsed = collapsed.expand();
         if residual || collapsed != self.full_expr {
@@ -713,7 +719,7 @@ impl CanonicalUvSector {
         }
         match error {
             Some(error) => Err(error),
-            None => Ok(atom.with_checked_expression(result)?),
+            None => Ok(atom.with_produced_expression(result)?),
         }
     }
 
@@ -863,7 +869,7 @@ impl CanonicalUvSector {
         });
         match error {
             Some(error) => Err(error),
-            None => Ok(atom.with_checked_expression(normalized)?),
+            None => Ok(atom.with_produced_expression(normalized)?),
         }
     }
 
@@ -928,8 +934,11 @@ impl FourDSectors {
                 .next()
                 .map(|sector| sector.atom.clone())
                 .unwrap_or_else(|| {
-                    SymbolicTensor::infer_indexed(Atom::Zero)
-                        .expect("literal zero has a scalar indexed interface")
+                    SymbolicTensor::from_produced_indexed_parts(
+                        Atom::Zero,
+                        IndexedStructure::identity(OrderedStructure::scalar_structure()),
+                    )
+                    .expect("literal zero has a scalar indexed interface")
                 }),
         };
         Ok(Self::with_atom(active, recursive_completion, atom))
@@ -990,8 +999,11 @@ impl Full4dCts {
     #[cfg(test)]
     fn root() -> Self {
         Self(FourDSectors::active_atom(
-            SymbolicTensor::infer_indexed(Atom::one())
-                .expect("literal one has a scalar indexed interface"),
+            SymbolicTensor::from_produced_indexed_parts(
+                Atom::one(),
+                IndexedStructure::identity(OrderedStructure::scalar_structure()),
+            )
+            .expect("literal one has a scalar indexed interface"),
         ))
     }
 
@@ -1163,7 +1175,10 @@ impl Local4dCts {
     }
 
     pub(crate) fn from_full_product(factors: impl IntoIterator<Item = Full4dCts>) -> Result<Self> {
-        let mut atom = SymbolicTensor::infer_indexed(Atom::one())?;
+        let mut atom = SymbolicTensor::from_produced_indexed_parts(
+            Atom::one(),
+            IndexedStructure::identity(OrderedStructure::scalar_structure()),
+        )?;
         let mut products = vec![(
             FourDSector::new(atom.clone(), Vec::new(), Vec::new()),
             false,
@@ -1281,26 +1296,73 @@ impl Local4dCts {
 }
 
 impl FourDTerm {
-    fn numerator(numerator: Atom) -> Result<Self> {
+    fn from_tensor(tensor: &SymbolicTensor<IndexedStructure>) -> Result<Vec<Self>> {
+        if !tensor.expression().contains_symbol(GS.den) {
+            return Ok(vec![Self {
+                numerator: tensor.clone(),
+                denominators: Vec::new(),
+            }]);
+        }
+        // Denominators are scalars. Split their rational shell without admitting
+        // temporary numerator factors, then attach each complete numerator to
+        // the original tensor's authoritative boundary and occurrence history.
+        FourDTerm::<Atom>::split_view(tensor.expression().as_view())?
+            .into_iter()
+            .map(|term| {
+                Ok(Self {
+                    numerator: tensor.with_produced_expression(term.numerator)?,
+                    denominators: term.denominators,
+                })
+            })
+            .collect()
+    }
+
+    #[cfg(test)]
+    fn from_view(view: AtomView<'_>) -> Result<Vec<Self>> {
+        FourDTerm::<Atom>::split_view(view)?
+            .into_iter()
+            .map(Self::admit_test_shell)
+            .collect()
+    }
+
+    #[cfg(test)]
+    fn group(terms: impl IntoIterator<Item = Self>) -> Result<Vec<Self>> {
+        FourDTerm::<Atom>::group_shells(terms.into_iter().map(|term| FourDTerm {
+            numerator: term.numerator.into_expression(),
+            denominators: term.denominators,
+        }))
+        .into_iter()
+        .map(Self::admit_test_shell)
+        .collect()
+    }
+
+    #[cfg(test)]
+    fn admit_test_shell(term: FourDTerm<Atom>) -> Result<Self> {
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
         Ok(Self {
-            numerator: SymbolicTensor::infer_indexed(cooking.try_cook(numerator.as_view())?)
-                .wrap_err_with(|| {
-                    format!("invalid rational-shell numerator fragment `{numerator}`")
-                })?,
-            denominators: Vec::new(),
+            numerator: SymbolicTensor::infer_indexed(cooking.try_cook(term.numerator.as_view())?)?,
+            denominators: term.denominators,
         })
     }
+}
 
-    fn product(mut left: Self, right: Self) -> Result<Self> {
-        left.numerator = left.numerator.multiply(right.numerator)?;
-        left.denominators.extend(right.denominators);
-        Ok(left)
+impl FourDTerm<Atom> {
+    fn numerator(numerator: Atom) -> Self {
+        Self {
+            numerator,
+            denominators: Vec::new(),
+        }
     }
 
-    fn group(terms: impl IntoIterator<Item = Self>) -> Result<Vec<Self>> {
+    fn product(mut left: Self, right: Self) -> Self {
+        left.numerator *= right.numerator;
+        left.denominators.extend(right.denominators);
+        left
+    }
+
+    fn group_shells(terms: impl IntoIterator<Item = Self>) -> Vec<Self> {
         let mut buckets = BTreeMap::new();
         for mut term in terms {
             term.denominators.sort_by_cached_key(|denominator| {
@@ -1329,43 +1391,22 @@ impl FourDTerm {
                 }
                 std::collections::btree_map::Entry::Occupied(mut entry) => {
                     let existing = entry.get_mut();
-                    existing.numerator = existing.numerator.try_add(&term.numerator)?;
+                    existing.numerator += term.numerator;
                 }
             }
         }
-        Ok(buckets
+        buckets
             .into_values()
             .filter(|term| !term.numerator.is_zero())
-            .collect())
-    }
-
-    fn from_tensor(tensor: &SymbolicTensor<IndexedStructure>) -> Result<Vec<Self>> {
-        if !tensor.expression().contains_symbol(GS.den) {
-            return Ok(vec![Self {
-                numerator: tensor.clone(),
-                denominators: Vec::new(),
-            }]);
-        }
-        // The rational-shell parser still uses temporary symbolic arithmetic.
-        // Its fresh inference cannot replace the source's logical port order.
-        // Restore each complete numerator through the original carrier once the
-        // scalar denominator topology has been separated, preserving typed zero.
-        Self::from_view(tensor.expression().as_view())?
-            .into_iter()
-            .map(|mut term| {
-                term.numerator =
-                    tensor.with_checked_expression(term.numerator.into_expression())?;
-                Ok(term)
-            })
             .collect()
     }
 
-    pub(super) fn from_view(view: AtomView<'_>) -> Result<Vec<Self>> {
+    fn split_view(view: AtomView<'_>) -> Result<Vec<Self>> {
         // A denominator-free subtree is an opaque numerator. Inspect its symbols
         // once instead of recursively rebuilding its sums/products just to prove
         // that every child has the same empty denominator topology.
         if matches!(view, AtomView::Add(_) | AtomView::Mul(_)) && !view.contains_symbol(GS.den) {
-            return Ok(vec![Self::numerator(view.to_owned())?]);
+            return Ok(vec![Self::numerator(view.to_owned())]);
         }
         match view {
             AtomView::Add(add) => {
@@ -1376,18 +1417,18 @@ impl FourDTerm {
                 // typed denominator factors for CFF to pinch internally.
                 let terms = add
                     .iter()
-                    .map(Self::from_view)
+                    .map(Self::split_view)
                     .collect::<Result<Vec<_>>>()?
                     .into_iter()
                     .flatten()
                     .collect::<Vec<_>>();
-                Self::group(terms)
+                Ok(Self::group_shells(terms))
             }
             AtomView::Mul(mul) => {
-                let mut products = vec![Self::numerator(Atom::one())?];
+                let mut products = vec![Self::numerator(Atom::one())];
                 for factor in mul.iter() {
-                    let factor_terms = Self::from_view(factor)?;
-                    products = Self::group(
+                    let factor_terms = Self::split_view(factor)?;
+                    products = Self::group_shells(
                         products
                             .into_iter()
                             .flat_map(|left| {
@@ -1396,8 +1437,8 @@ impl FourDTerm {
                                     .cloned()
                                     .map(move |right| Self::product(left.clone(), right))
                             })
-                            .collect::<Result<Vec<_>>>()?,
-                    )?;
+                            .collect::<Vec<_>>(),
+                    );
                 }
                 Ok(products)
             }
@@ -1409,15 +1450,15 @@ impl FourDTerm {
                 let Ok(exponent) = usize::try_from(exponent) else {
                     return Ok(vec![Self::from_factorized_term(view)?]);
                 };
-                let factors = Self::from_view(base)?;
+                let factors = Self::split_view(base)?;
                 if factors.iter().all(|term| term.denominators.is_empty()) {
-                    return Ok(vec![Self::numerator(view.to_owned())?]);
+                    return Ok(vec![Self::numerator(view.to_owned())]);
                 }
                 // Multiply rational shells only. Positive denominator blocks
                 // and denominator-free numerator powers remain opaque above.
-                let mut products = vec![Self::numerator(Atom::one())?];
+                let mut products = vec![Self::numerator(Atom::one())];
                 for _ in 0..exponent {
-                    products = Self::group(
+                    products = Self::group_shells(
                         products
                             .into_iter()
                             .flat_map(|left| {
@@ -1426,8 +1467,8 @@ impl FourDTerm {
                                     .cloned()
                                     .map(move |right| Self::product(left.clone(), right))
                             })
-                            .collect::<Result<Vec<_>>>()?,
-                    )?;
+                            .collect::<Vec<_>>(),
+                    );
                 }
                 Ok(products)
             }
@@ -1440,7 +1481,7 @@ impl FourDTerm {
             AtomView::Pow(power) => {
                 let (base, exponent) = power.get_base_exp();
                 let Some(denominator) = FourDDenominator::from_view(base)? else {
-                    return Self::numerator(view.to_owned());
+                    return Ok(Self::numerator(view.to_owned()));
                 };
                 let Ok(exponent) = i64::try_from(exponent) else {
                     return Err(eyre!(
@@ -1449,16 +1490,16 @@ impl FourDTerm {
                     ));
                 };
                 if exponent >= 0 {
-                    return Self::numerator(view.to_owned());
+                    return Ok(Self::numerator(view.to_owned()));
                 }
                 let multiplicity = usize::try_from(exponent.unsigned_abs())
                     .map_err(|_| eyre!("4D denominator multiplicity does not fit in memory"))?;
                 Ok(Self {
-                    numerator: SymbolicTensor::infer_indexed(Atom::one())?,
+                    numerator: Atom::one(),
                     denominators: std::iter::repeat_n(denominator, multiplicity).collect(),
                 })
             }
-            _ => Self::numerator(view.to_owned()),
+            _ => Ok(Self::numerator(view.to_owned())),
         }
     }
 }
@@ -1505,13 +1546,16 @@ impl FourDDenominator {
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        let normalized = SymbolicTensor::infer_indexed(cooking.try_cook(normalized.as_view())?)?
-            .contract(ContractSettings {
-                rank_one: false,
-                collect_chains: false,
-                collect_traces: false,
-                ..Default::default()
-            })?;
+        let normalized = SymbolicTensor::from_produced_indexed_parts(
+            cooking.try_cook(normalized.as_view())?,
+            IndexedStructure::identity(OrderedStructure::scalar_structure()),
+        )?
+        .contract(ContractSettings {
+            rank_one: false,
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })?;
         let normalized = cooking.uncook(normalized.expression().as_view());
         Ok(normalized.expand())
     }
@@ -1549,9 +1593,58 @@ impl FourDDenominator {
 impl Rooted for Local4dCts {
     fn root() -> Self {
         Self(FourDSectors::active_atom(
-            SymbolicTensor::infer_indexed(Atom::one())
-                .expect("literal one has a scalar indexed interface"),
+            SymbolicTensor::from_produced_indexed_parts(
+                Atom::one(),
+                IndexedStructure::identity(OrderedStructure::scalar_structure()),
+            )
+            .expect("literal one has a scalar indexed interface"),
         ))
+    }
+}
+
+/// The denominator and measure transforms are scalar. Momentum routing also
+/// changes compact tensor operands, whose raw incidences belong to the input.
+trait TaylorIntegrand: Sized {
+    type Error;
+
+    fn scalar_transform(&self, transform: impl FnOnce(&Atom) -> Atom) -> Result<Self, Self::Error>;
+    fn route_momenta(
+        self,
+        route: impl Fn(AtomView<'_>) -> Option<Atom>,
+    ) -> Result<Self, Self::Error>;
+}
+
+impl TaylorIntegrand for Atom {
+    type Error = std::convert::Infallible;
+
+    fn scalar_transform(&self, transform: impl FnOnce(&Atom) -> Atom) -> Result<Self, Self::Error> {
+        Ok(transform(self))
+    }
+
+    fn route_momenta(
+        self,
+        route: impl Fn(AtomView<'_>) -> Option<Atom>,
+    ) -> Result<Self, Self::Error> {
+        Ok(self.replace_map(|view, _, output| {
+            if let Some(value) = route(view) {
+                **output = value;
+            }
+        }))
+    }
+}
+
+impl TaylorIntegrand for SymbolicTensor<IndexedStructure> {
+    type Error = idenso::tensor::inference::TensorInferenceError;
+
+    fn scalar_transform(&self, transform: impl FnOnce(&Atom) -> Atom) -> Result<Self, Self::Error> {
+        self.with_algebra_result(transform(self.expression()))
+    }
+
+    fn route_momenta(
+        self,
+        route: impl Fn(AtomView<'_>) -> Option<Atom>,
+    ) -> Result<Self, Self::Error> {
+        self.map_produced_vector_components(GS.emr_mom, route)
     }
 }
 
@@ -1565,17 +1658,18 @@ impl Graph {
         atom: &Atom,
     ) -> Atom {
         self.uv_rescaled_with_loops(expansion_subgraph, n_loops, lmb, reference_lmb, false, atom)
+            .unwrap_or_else(|never| match never {})
     }
 
-    fn uv_rescaled_with_loops(
+    fn uv_rescaled_with_loops<T: TaylorIntegrand>(
         &self,
         expansion_subgraph: &SuBitGraph,
         n_loops: usize,
         lmb: &LoopMomentumBasis,
         reference_lmb: &LoopMomentumBasis,
         soft_expansion: bool,
-        atom: &Atom,
-    ) -> Atom {
+        atom: &T,
+    ) -> Result<T, T::Error> {
         let mut scaled_edges = self
             .underlying
             .iter_edges_of(expansion_subgraph)
@@ -1606,70 +1700,71 @@ impl Graph {
         // argument, so a Q carrying this tag can later leave the wrapper while
         // still identifying the source line which produced it.
         let tagged_edges = scaled_edges.clone();
-        let tagged = atom
-            .replace(GS.den(W_.a_, W_.mom_, W_.mass_, W_.prop_))
-            .with_map(move |matched| {
-                let edge = matched.get(W_.a_).unwrap().to_atom();
-                let is_scaled = usize::try_from(edge.as_view()).is_ok_and(|edge| {
-                    tagged_edges.contains(&linnet::half_edge::involution::EdgeIndex(edge))
-                });
-                if !is_scaled {
-                    return GS.den(
-                        edge,
-                        matched.get(W_.mom_).unwrap().to_atom(),
+        let tagged = atom.scalar_transform(|atom| {
+            atom.replace(GS.den(W_.a_, W_.mom_, W_.mass_, W_.prop_))
+                .with_map(move |matched| {
+                    let edge = matched.get(W_.a_).unwrap().to_atom();
+                    let is_scaled = usize::try_from(edge.as_view()).is_ok_and(|edge| {
+                        tagged_edges.contains(&linnet::half_edge::involution::EdgeIndex(edge))
+                    });
+                    if !is_scaled {
+                        return GS.den(
+                            edge,
+                            matched.get(W_.mom_).unwrap().to_atom(),
+                            matched.get(W_.mass_).unwrap().to_atom(),
+                            matched.get(W_.prop_).unwrap().to_atom(),
+                        );
+                    }
+                    let source_momentum = function!(GS.emr_mom, edge.as_view());
+                    // Role two is transient and distinguishes a denominator which
+                    // belongs to this Taylor operation from persistent role-zero or
+                    // role-one tags retained by a nested child, role-three tags
+                    // fixing physical-source momenta, or role-four tags retaining
+                    // the literal carrier of a new soft crown momentum.
+                    let tag = GS.uv_momentum_provenance.call_args([
+                        edge.as_view(),
+                        Atom::num(2).as_view(),
+                        source_momentum.as_view(),
+                    ]);
+                    let tag_momenta = |value: Atom| {
+                        value.replace_map(|view, _, output| {
+                            let AtomView::Fun(momentum) = view else {
+                                return;
+                            };
+                            if momentum.get_symbol() != GS.emr_mom || momentum.get_nargs() == 0 {
+                                return;
+                            }
+                            if matches!(
+                                momentum.get(0),
+                                AtomView::Fun(provenance)
+                                    if provenance.get_symbol() == GS.uv_momentum_provenance
+                            ) {
+                                // Existing child provenance retains its owner and
+                                // role. Re-emitting the complete momentum makes this
+                                // node opaque to the top-down traversal, so the outer
+                                // operation cannot tag a literal Q inside its stored
+                                // hard-momentum payload before affine transport.
+                                **output = Atom::from(momentum.to_owned());
+                                return;
+                            }
+                            if momentum.get(0) != edge.as_view() {
+                                return;
+                            }
+                            let mut tagged = FunctionBuilder::new(GS.emr_mom).add_arg(tag.clone());
+                            for index in momentum.iter().skip(1) {
+                                tagged = tagged.add_arg(index.to_owned());
+                            }
+                            **output = tagged.finish();
+                        })
+                    };
+                    GS.den(
+                        edge.clone(),
+                        tag_momenta(matched.get(W_.mom_).unwrap().to_atom()),
                         matched.get(W_.mass_).unwrap().to_atom(),
-                        matched.get(W_.prop_).unwrap().to_atom(),
-                    );
-                }
-                let source_momentum = function!(GS.emr_mom, edge.as_view());
-                // Role two is transient and distinguishes a denominator which
-                // belongs to this Taylor operation from persistent role-zero or
-                // role-one tags retained by a nested child, role-three tags
-                // fixing physical-source momenta, or role-four tags retaining
-                // the literal carrier of a new soft crown momentum.
-                let tag = GS.uv_momentum_provenance.call_args([
-                    edge.as_view(),
-                    Atom::num(2).as_view(),
-                    source_momentum.as_view(),
-                ]);
-                let tag_momenta = |value: Atom| {
-                    value.replace_map(|view, _, output| {
-                        let AtomView::Fun(momentum) = view else {
-                            return;
-                        };
-                        if momentum.get_symbol() != GS.emr_mom || momentum.get_nargs() == 0 {
-                            return;
-                        }
-                        if matches!(
-                            momentum.get(0),
-                            AtomView::Fun(provenance)
-                                if provenance.get_symbol() == GS.uv_momentum_provenance
-                        ) {
-                            // Existing child provenance retains its owner and
-                            // role. Re-emitting the complete momentum makes this
-                            // node opaque to the top-down traversal, so the outer
-                            // operation cannot tag a literal Q inside its stored
-                            // hard-momentum payload before affine transport.
-                            **output = Atom::from(momentum.to_owned());
-                            return;
-                        }
-                        if momentum.get(0) != edge.as_view() {
-                            return;
-                        }
-                        let mut tagged = FunctionBuilder::new(GS.emr_mom).add_arg(tag.clone());
-                        for index in momentum.iter().skip(1) {
-                            tagged = tagged.add_arg(index.to_owned());
-                        }
-                        **output = tagged.finish();
-                    })
-                };
-                GS.den(
-                    edge.clone(),
-                    tag_momenta(matched.get(W_.mom_).unwrap().to_atom()),
-                    matched.get(W_.mass_).unwrap().to_atom(),
-                    tag_momenta(matched.get(W_.prop_).unwrap().to_atom()),
-                )
-            });
+                        tag_momenta(matched.get(W_.prop_).unwrap().to_atom()),
+                    )
+                })
+        })?;
 
         // Scale the hard part of every momentum in the complete current UV
         // subgraph while retaining its immutable source owner. The compatible
@@ -1679,12 +1774,12 @@ impl Graph {
         // a derivative of D_e must not lose its owner when the LMB happens to
         // spell its hard momentum with another physical edge ID.
         let inverse_rescale = Atom::one() / GS.rescale;
-        let mut atomarg = tagged.replace_map(|view, _, output| {
+        let routed = tagged.route_momenta(|view| {
             let AtomView::Fun(momentum) = view else {
-                return;
+                return None;
             };
             if momentum.get_symbol() != GS.emr_mom || momentum.get_nargs() == 0 {
-                return;
+                return None;
             }
             let (owner, role, routed) = if let Some((owner, role, mut routed)) =
                 GS.uv_momentum_provenance_data(momentum.get(0))
@@ -1697,8 +1792,7 @@ impl Graph {
                 // from the vacuum denominator's momentum system.
                 if role == UvMomentumProvenanceRole::DenominatorDerivedSoft {
                     if !scaled_edges.contains(&owner) {
-                        **output = Atom::from(momentum.to_owned());
-                        return;
+                        return Some(momentum.as_view().to_owned());
                     }
                     routed = if lmb.ext_edges.contains(&owner) {
                         function!(GS.emr_mom, usize::from(owner))
@@ -1724,10 +1818,10 @@ impl Graph {
                     edge => (usize::try_from(edge), false),
                 };
                 let Ok(owner) = owner.map(EdgeIndex) else {
-                    return;
+                    return None;
                 };
                 if !scaled_edges.contains(&owner) {
-                    return;
+                    return None;
                 }
                 (
                     owner,
@@ -1806,100 +1900,102 @@ impl Graph {
                     **output = component.finish();
                 }
             });
-            **output = if soft_expansion {
+            Some(if soft_expansion {
                 hard_component + soft * GS.rescale
             } else {
                 hard_component * &inverse_rescale + soft
-            };
-        });
+            })
+        })?;
 
-        if soft_expansion {
-            // S retains physical masses. Only the denominator polynomial is
-            // differentiated; its momentum metadata names the resulting hard
-            // pole at zero component-external momentum.
-            return atomarg
+        routed.scalar_transform(|atomarg| {
+            if soft_expansion {
+                // S retains physical masses. Only the denominator polynomial is
+                // differentiated; its momentum metadata names the resulting hard
+                // pole at zero component-external momentum.
+                return atomarg
+                    .replace(GS.den(W_.a_, W_.mom_, W_.mass_, W_.prop_))
+                    .with_map(|matched| {
+                        GS.den(
+                            matched.get(W_.a_).unwrap().to_atom(),
+                            matched
+                                .get(W_.mom_)
+                                .unwrap()
+                                .to_atom()
+                                .replace(GS.rescale)
+                                .with(Atom::Zero),
+                            matched.get(W_.mass_).unwrap().to_atom(),
+                            matched.get(W_.prop_).unwrap().to_atom(),
+                        )
+                    });
+            }
+
+            // Free `mUVexp` occurrences are left untouched here: with the
+            // inverse loop-momentum expansion, soft dependence is generated by
+            // the shifted hard momenta and denominator expansion rather than by
+            // an explicit soft rescaling pass.
+
+            // Vacuum masses in active Taylor terms and previously integrated
+            // coefficients carry the same hard weight as the parent loop momenta.
+            // This preserves the forest's prescribed Taylor order even when the
+            // remaining quotient would converge with its coefficient held fixed.
+            // The denominator rewrite below introduces the unscaled vacuum mass
+            // for the parent propagator basis.
+            let mut atomarg = atomarg
+                .replace(GS.m_uv_vacuum)
+                .with(Atom::var(GS.m_uv_vacuum) / GS.rescale);
+
+            // The stored scale restores consumed loop measures independently of mUV. It is set to
+            // one when the next integration consumes it.
+            atomarg = atomarg
+                .replace(GS.integrated_loop_scale)
+                .with(Atom::var(GS.integrated_loop_scale) * GS.rescale);
+
+            let tsquare = Atom::var(GS.rescale).pow(2);
+            let m_uv_expansion_sq = Atom::var(GS.m_uv_expansion).pow(2);
+            let m_uv_vacuum_sq = Atom::var(GS.m_uv_vacuum).pow(2);
+
+            debug_tags!(#uv, #integrated, #inspect;
+                log.res = atomarg,
+                "Rescaled momenta expanded"
+            );
+            atomarg = atomarg
                 .replace(GS.den(W_.a_, W_.mom_, W_.mass_, W_.prop_))
-                .with_map(|matched| {
-                    GS.den(
-                        matched.get(W_.a_).unwrap().to_atom(),
-                        matched
-                            .get(W_.mom_)
-                            .unwrap()
-                            .to_atom()
+                .with_map(move |m| {
+                    let edge = m.get(W_.a_).unwrap().to_atom();
+                    let momentum = m.get(W_.mom_).unwrap().to_atom();
+                    let mass = m.get(W_.mass_).unwrap().to_atom();
+                    let propagator = m.get(W_.prop_).unwrap().to_atom();
+
+                    let (mass, propagator) = if mass == m_uv_expansion_sq {
+                        // The MUV deformation was already introduced by an inner UV limit.
+                        // Rescale it without adding the vacuum mass a second time.
+                        (mass, propagator * &tsquare)
+                    } else {
+                        (
+                            mass * &tsquare + &m_uv_expansion_sq,
+                            propagator * &tsquare + &m_uv_expansion_sq * &tsquare - &m_uv_vacuum_sq,
+                        )
+                    };
+
+                    GS.den(edge, momentum, mass, propagator) / &tsquare
+                })
+                .replace(function!(GS.den, W_.a_, W_.mom_, W_.a___))
+                .with_map(move |m| {
+                    let mut f = symbolica::atom::FunctionBuilder::new(GS.den);
+                    f = f.add_arg(m.get(W_.a_).unwrap().to_atom());
+                    f = f.add_arg(
+                        (m.get(W_.mom_).unwrap().to_atom() * GS.rescale)
+                            .expand()
                             .replace(GS.rescale)
                             .with(Atom::Zero),
-                        matched.get(W_.mass_).unwrap().to_atom(),
-                        matched.get(W_.prop_).unwrap().to_atom(),
-                    )
+                    );
+                    f = f.add_arg(m.get(W_.a___).unwrap().to_atom());
+                    f.finish()
                 });
-        }
 
-        // Free `mUVexp` occurrences are left untouched here: with the
-        // inverse loop-momentum expansion, soft dependence is generated by
-        // the shifted hard momenta and denominator expansion rather than by
-        // an explicit soft rescaling pass.
-
-        // Vacuum masses in active Taylor terms and previously integrated
-        // coefficients carry the same hard weight as the parent loop momenta.
-        // This preserves the forest's prescribed Taylor order even when the
-        // remaining quotient would converge with its coefficient held fixed.
-        // The denominator rewrite below introduces the unscaled vacuum mass
-        // for the parent propagator basis.
-        atomarg = atomarg
-            .replace(GS.m_uv_vacuum)
-            .with(Atom::var(GS.m_uv_vacuum) / GS.rescale);
-
-        // The stored scale restores consumed loop measures independently of mUV. It is set to
-        // one when the next integration consumes it.
-        atomarg = atomarg
-            .replace(GS.integrated_loop_scale)
-            .with(Atom::var(GS.integrated_loop_scale) * GS.rescale);
-
-        let tsquare = Atom::var(GS.rescale).pow(2);
-        let m_uv_expansion_sq = Atom::var(GS.m_uv_expansion).pow(2);
-        let m_uv_vacuum_sq = Atom::var(GS.m_uv_vacuum).pow(2);
-
-        debug_tags!(#uv, #integrated, #inspect;
-            log.res = atomarg,
-            "Rescaled momenta expanded"
-        );
-        atomarg = atomarg
-            .replace(GS.den(W_.a_, W_.mom_, W_.mass_, W_.prop_))
-            .with_map(move |m| {
-                let edge = m.get(W_.a_).unwrap().to_atom();
-                let momentum = m.get(W_.mom_).unwrap().to_atom();
-                let mass = m.get(W_.mass_).unwrap().to_atom();
-                let propagator = m.get(W_.prop_).unwrap().to_atom();
-
-                let (mass, propagator) = if mass == m_uv_expansion_sq {
-                    // The MUV deformation was already introduced by an inner UV limit.
-                    // Rescale it without adding the vacuum mass a second time.
-                    (mass, propagator * &tsquare)
-                } else {
-                    (
-                        mass * &tsquare + &m_uv_expansion_sq,
-                        propagator * &tsquare + &m_uv_expansion_sq * &tsquare - &m_uv_vacuum_sq,
-                    )
-                };
-
-                GS.den(edge, momentum, mass, propagator) / &tsquare
-            })
-            .replace(function!(GS.den, W_.a_, W_.mom_, W_.a___))
-            .with_map(move |m| {
-                let mut f = symbolica::atom::FunctionBuilder::new(GS.den);
-                f = f.add_arg(m.get(W_.a_).unwrap().to_atom());
-                f = f.add_arg(
-                    (m.get(W_.mom_).unwrap().to_atom() * GS.rescale)
-                        .expand()
-                        .replace(GS.rescale)
-                        .with(Atom::Zero),
-                );
-                f = f.add_arg(m.get(W_.a___).unwrap().to_atom());
-                f.finish()
-            });
-
-        atomarg *= Atom::var(GS.rescale).pow(-4 * n_loops as i64);
-        atomarg
+            atomarg *= Atom::var(GS.rescale).pow(-4 * n_loops as i64);
+            atomarg
+        })
     }
 }
 
@@ -1991,13 +2087,14 @@ fn t<S: super::ForestNodeLike>(
         &generated_lmb
     };
 
-    let rescaled = integrand.with_checked_expression(graph.uv_rescaled(
+    let rescaled = graph.uv_rescaled_with_loops(
         current.subgraph(),
         n_loops,
         lmb,
         current.lmb(),
-        integrand.expression(),
-    ))?;
+        false,
+        integrand,
+    )?;
     debug_tags!(#uv,#integrated,#rescaled;log.res = rescaled.expression(), n_loops=%n_loops,"Rescaled expanded");
 
     let series = rescaled
@@ -2301,20 +2398,22 @@ fn t_raw<S: ForestNodeLike>(
     }
 
     // A parent always uses the full component scope on the completed child.
-    let rescaled = graph.uv_rescaled(
+    let rescaled = graph.uv_rescaled_with_loops(
         current.subgraph(),
         active_loop_edges.len(),
         lmb,
         lmb,
-        integrand.expression(),
-    );
+        false,
+        integrand,
+    )?;
     debug_tags!(#uv,#integrated,#rescaled;
-        log.res = rescaled,
+        log.res = rescaled.expression(),
         n_loops = active_loop_edges.len(),
         "Rescaled expanded"
     );
 
     let series = rescaled
+        .expression()
         .series_preserving_factors(GS.rescale, Atom::Zero.as_view(), 0, &[])
         .wrap_err_with(|| {
             format!(
@@ -2332,12 +2431,12 @@ fn t_raw<S: ForestNodeLike>(
         operation = "ordinary",
         interface = ?integrand.structure(),
         file.input = %integrand.expression().to_plain_string(),
-        file.rescaled = %rescaled.to_plain_string(),
+        file.rescaled = %rescaled.expression().to_plain_string(),
         file.output = %evaluated.to_plain_string(),
         "Checking the retained interface after a local Taylor operation"
     );
 
-    Ok(integrand.with_checked_expression(evaluated)?)
+    Ok(rescaled.with_algebra_result(evaluated)?)
 }
 
 fn tilde_t_raw<S: ForestNodeLike>(
@@ -2352,15 +2451,10 @@ fn tilde_t_raw<S: ForestNodeLike>(
     // Canonical component bases are padded with unrelated graph externals.
     // Scale only independent slots that flow through this component and all
     // of its dependent/independent crown carriers, retaining source ownership.
-    let rescaled = ctx.graph.uv_rescaled_with_loops(
-        current.subgraph(),
-        0,
-        lmb,
-        lmb,
-        true,
-        integrand.expression(),
-    );
-    tilde_taylor(integrand.with_checked_expression(rescaled)?, current.dod())
+    let rescaled =
+        ctx.graph
+            .uv_rescaled_with_loops(current.subgraph(), 0, lmb, lmb, true, integrand)?;
+    tilde_taylor(rescaled, current.dod())
 }
 
 fn tilde_taylor(
@@ -4156,8 +4250,9 @@ mod tests {
         let soft = nested.ext_atom(affine_carrier, GS.emr_mom, &indices, true);
         assert!(!hard.is_zero() && !soft.is_zero());
         let boundary = GS.emr_mom(affine_carrier, GS.cind(0)).pow(2);
-        let deformed =
-            graph.uv_rescaled_with_loops(parent.subgraph(), 0, &nested, &nested, true, &boundary);
+        let deformed = graph
+            .uv_rescaled_with_loops(parent.subgraph(), 0, &nested, &nested, true, &boundary)
+            .unwrap();
         let deformed = GS.erase_uv_momentum_provenance(&deformed);
         let parameter = Atom::var(GS.rescale);
         assert_eq!(
@@ -7158,7 +7253,12 @@ mod tests {
                 .unwrap();
                 let child_h = hat_t_raw(&child_grown, &ctx, &gamma_one, &root, &child_lmb).unwrap();
                 let child_uv_linear = child_u.try_sub(&child_us).unwrap();
-                let child_uv_linear = child_uv_linear.with_algebra_result(child_uv_linear.expression().collect_factors()).unwrap();
+                let child_uv_linear = child_uv_linear
+                    .with_materialized_expression(
+                        "collect paper UV factors",
+                        child_uv_linear.expression().collect_factors(),
+                    )
+                    .unwrap();
 
                 // At m=p_os=0, Eq. (4.25) identifies the paper's OS operator
                 // with H_1.  Encode the two surviving routed tensor/gamma
@@ -7634,7 +7734,12 @@ mod tests {
                 // B.17, not B.16, starts the corresponding integrated bar-K
                 // contribution.
                 let outer_uv_remainder = outer_u.try_sub(&outer_us).unwrap();
-                let outer_uv_remainder = outer_uv_remainder.with_algebra_result(outer_uv_remainder.expression().collect_factors()).unwrap();
+                let outer_uv_remainder = outer_uv_remainder
+                    .with_materialized_expression(
+                        "collect paper UV factors",
+                        outer_uv_remainder.expression().collect_factors(),
+                    )
+                    .unwrap();
                 // The child boundary labels must remain fixed while its H1
                 // and U1 atoms are checked above.  Once a completed child is
                 // attached to its co-graph, however, those paired labels are

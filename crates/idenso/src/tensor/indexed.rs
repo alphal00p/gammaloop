@@ -69,6 +69,7 @@ impl PartialTensor {
             expression,
             is_metric,
             is_composite,
+            work,
             proofs,
         } = self;
         let structure = IndexedStructure::try_from(structure)
@@ -87,6 +88,7 @@ impl PartialTensor {
             expression,
             is_metric,
             is_composite,
+            work,
             proofs,
         })
     }
@@ -106,12 +108,22 @@ impl IndexedTensor {
         PartialTensor::from_declared_parts(expression, structure.into_partial())?.try_into_indexed()
     }
 
+    /// Publish fresh indexed syntax whose producer establishes its free ports.
+    /// User-supplied payloads and interfaces use [`Self::from_indexed_parts`].
+    pub fn from_produced_indexed_parts(
+        expression: Atom,
+        structure: IndexedStructure,
+    ) -> Result<Self> {
+        PartialTensor::from_produced_parts(expression, structure.into_partial())?.try_into_indexed()
+    }
+
     pub(crate) fn into_partial_engine(self) -> PartialTensor {
         let Self {
             structure,
             expression,
             is_metric,
             is_composite,
+            work,
             proofs,
         } = self;
         PartialTensor {
@@ -119,6 +131,7 @@ impl IndexedTensor {
             expression,
             is_metric,
             is_composite,
+            work,
             proofs,
         }
     }
@@ -129,7 +142,9 @@ impl IndexedTensor {
             structure,
             is_metric: self.is_metric,
             is_composite: self.is_composite,
+            work: Some(&self.work),
             proofs: &self.proofs,
+            source_proofs: &self.proofs,
         }
     }
 
@@ -161,13 +176,12 @@ impl IndexedTensor {
     }
 
     pub fn contraction_complete(&self) -> bool {
-        self.proofs.contracted
+        self.work.contracted()
     }
 
     pub fn reduction_status(&self) -> ReductionStatus {
-        self.proofs
-            .reduction
-            .as_ref()
+        self.work
+            .record()
             .map_or(ReductionStatus::Deferred, |record| record.status)
     }
 
@@ -175,6 +189,82 @@ impl IndexedTensor {
         let structure = self.structure.clone().into_partial();
         self.borrowed_parts(&structure)
             .with_checked_expression(expression)?
+            .try_into_indexed()
+    }
+
+    /// Publish a built-in free-index-preserving result using the source's
+    /// authoritative interface and history. Arbitrary user maps remain checked.
+    /// Debug builds independently verify the producer's interface contract.
+    pub fn with_produced_expression(&self, expression: Atom) -> Result<Self> {
+        let structure = self.structure.clone().into_partial();
+        self.borrowed_parts(&structure)
+            .with_produced_expression(expression)?
+            .try_into_indexed()
+    }
+
+    /// Route a producer-known momentum head to a scalar linear combination
+    /// of components of the same head. The producer can change momentum owners
+    /// and weights. It must preserve the exact written port or concrete component,
+    /// including its dimension, and introduce no new tensor indices. A label-only
+    /// momentum in scalar metadata can change its owner or scalar weight too.
+    /// Returning a replacement keeps its internal provenance opaque to routing.
+    /// Use [`Self::with_checked_expression`] for arbitrary user transformations.
+    ///
+    /// # Errors
+    /// Returns an error for an untagged momentum head, an unpublished source,
+    /// or a normalization callback that violates the established tensor interface.
+    ///
+    /// # Example
+    /// ```
+    /// use idenso::tensor::SymbolicTensor;
+    /// use idenso::tensor::inference::TensorInferenceError;
+    /// use spenso::{mink, vector_symbol};
+    /// use symbolica::function;
+    ///
+    /// let q = vector_symbol!("docs::route_q");
+    /// let port = mink!(4, 42);
+    /// let old = function!(q, 1, &port);
+    /// let new = function!(q, 2, &port);
+    /// let source = SymbolicTensor::infer_indexed(old.clone())?;
+    /// let routed = source.map_produced_vector_components(q, |node| {
+    ///     (node == old.as_view()).then(|| new.clone())
+    /// })?;
+    /// assert_eq!(routed.expression(), &new);
+    /// assert_eq!(routed.rank(), 1);
+    /// # Ok::<(), TensorInferenceError>(())
+    /// ```
+    pub fn map_produced_vector_components(
+        self,
+        head: Symbol,
+        route: impl FnMut(AtomView<'_>) -> Option<Atom>,
+    ) -> Result<Self> {
+        if !head.has_tag(&spenso::network::tags::SPENSO_TAG.rank1) {
+            return Err(TensorInferenceError::Invalid(
+                "momentum routing requires a rank-one tensor head".into(),
+            ));
+        }
+        let source = self.into_partial_engine();
+        let history = source.proofs.occurrences.get().ok_or_else(|| {
+            TensorInferenceError::Invalid("momentum routing requires an admitted source".into())
+        })?;
+        let (expression, mapped) = source.map_vector_nodes(head, route)?;
+        let mut result = PartialTensor::from_validated_parts(
+            expression,
+            source.structure.clone(),
+            std::sync::Arc::clone(history),
+        );
+        result.proofs.normalized_product = source.proofs.normalized_product.clone();
+        source
+            .finish_mapped_result("map_produced_vector_components", result, mapped)?
+            .try_into_indexed()
+    }
+
+    /// Publish a built-in materializer's expression, retaining free ports and
+    /// accounting for newly allocated or renamed internal index identities.
+    pub fn with_materialized_expression(&self, operation: &str, expression: Atom) -> Result<Self> {
+        let structure = self.structure.clone().into_partial();
+        self.borrowed_parts(&structure)
+            .with_materialized_expression(operation, expression)?
             .try_into_indexed()
     }
 
@@ -352,8 +442,7 @@ impl IndexedTensor {
         );
         let state = ParseState::default();
         for value in values {
-            value.proofs.reserve_indices(
-                &value.expression,
+            value.reserve_indices(
                 value
                     .structure
                     .logical_slots()
@@ -595,13 +684,15 @@ mod tests {
             spenso::tensor_symbol!("borrowed_publication_vector"),
             slot.to_atom()
         );
-        let mut source = IndexedTensor::infer_indexed(expression).unwrap();
-        source.proofs.algebra = Default::default();
+        let source = IndexedTensor::infer_indexed(expression).unwrap();
         let result = source
             .with_algebra_result(Atom::num(2) * source.expression())
             .unwrap();
-        assert_eq!(source.proofs.algebra.get(), Some(&true));
-        assert_eq!(source.proofs.validated.get(), Some(&true));
+        // A proven algebra result uses the admitted source directly.
+        assert!(Arc::ptr_eq(
+            source.proofs.occurrences.get().unwrap(),
+            result.proofs.occurrences.get().unwrap(),
+        ));
         assert_eq!(result.structure.logical_slots(), vec![slot]);
         let structure = source.structure.clone().into_partial();
         let borrowed = source.borrowed_parts(&structure);
@@ -648,7 +739,7 @@ mod tests {
         let indexed_names = IndexedTensor::reserved_dummies([&indexed]);
         assert_eq!(DUMMY_RESERVATION_WALKS.with(|count| count.get()), 0);
         assert!(std::sync::Arc::ptr_eq(
-            indexed.proofs.observations.get().unwrap(),
+            indexed.work.observations().unwrap(),
             &observations
         ));
         for index in [partial_names.fresh_index(), indexed_names.fresh_index()] {
@@ -965,7 +1056,7 @@ mod tests {
         assert_eq!(used, bytes.len());
         assert_eq!(restored, source);
         assert_eq!(restored.structure.logical_slots(), slots);
-        assert!(restored.proofs.shallow_graph.get().is_none());
+        assert!(restored.work.graph().is_none());
         let cooked_open = CookSettings::reversible()
             .preserve_tags()
             .try_cook(

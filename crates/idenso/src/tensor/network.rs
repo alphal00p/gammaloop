@@ -1,24 +1,161 @@
 //! Checked lowering from a symbolic carrier to finite component execution.
 
-use super::SymbolicTensor;
+use super::TensorProofs;
+use super::composition;
+use super::inference::{InterfaceInference, TensorInferenceError};
+use super::{SymbolicNet, SymbolicNetParse, SymbolicTensor};
 use crate::CookSettings;
-use spenso::network::library::FunctionLibrary;
+use spenso::network::library::{DummyKey, DummyLibrary, FunctionLibrary};
 use spenso::network::parsing::{
-    ParseSettings, StructureFromAtom, TensorFromExpression, TensorLibraryFor,
+    LeafInterfaceCache, ParseSettings, StrictTensorFilter, StructureFromAtom, TensorFromExpression,
+    TensorLibraryFor,
 };
 use spenso::network::store::NetworkStore;
+use spenso::network::tags::SPENSO_TAG;
 use spenso::network::{Network, TensorNetworkError};
+use spenso::structure::abstract_index::AbstractIndex;
 use spenso::structure::partial::{PartialIndex, PartialStructure, PartialStructureExt};
 use spenso::structure::representation::{LibraryRep, LibrarySlot};
-use spenso::structure::slot::{AbsInd, DummyAind, IsAbstractSlot, ParseableAind};
+use spenso::structure::slot::{
+    AbsInd, DummyAind, IsAbstractSlot, ParseableAind, SlotMatch, SlotMatcher,
+};
 use spenso::structure::{
-    Canonicalized, HasStructure, OrderedStructure, ScalarStructure, TensorStructure,
+    Canonicalized, HasStructure, IndexedStructure, OrderedStructure, ScalarStructure,
+    TensorStructure,
 };
 use spenso::tensors::data::SparseTensor;
 use std::fmt::{Debug, Display};
-use symbolica::atom::{Atom, Symbol};
+use std::sync::Arc;
+use symbolica::atom::{Atom, AtomView, Symbol};
+
+impl TensorProofs {
+    pub(crate) fn parser_leaf_interfaces(&self) -> LeafInterfaceCache {
+        Arc::clone(self.leaf_interfaces.get_or_init(Default::default))
+    }
+
+    /// Opaque arithmetic and shorthand regions expose their retained free
+    /// boundary. Ordinary functions keep the separate raw-port witness, which
+    /// includes repeated internal indices and their written order.
+    fn parser_interfaces(
+        &self,
+        expression: AtomView<'_>,
+        decode_port: impl Fn(&Atom) -> Atom,
+    ) -> Result<LeafInterfaceCache, TensorInferenceError> {
+        let cache = Arc::clone(self.leaf_interfaces.get_or_init(Default::default));
+        let mut pending = vec![expression];
+        let mut slots = SlotMatcher::with_leaf_interfaces([Arc::clone(&cache)]);
+        while let Some(value) = pending.pop() {
+            if !matches!(slots.classify(value), SlotMatch::Other) {
+                continue;
+            }
+            let composite = match value {
+                AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_) => true,
+                AtomView::Fun(function) => {
+                    let head = function.get_symbol();
+                    if head.is_scalar() {
+                        continue;
+                    }
+                    composition::is_composite_head(head, &SPENSO_TAG)
+                        || head == SPENSO_TAG.dot
+                        || InterfaceInference::is_compound_metric(function, &mut slots)
+                }
+                _ => false,
+            };
+            if composite {
+                let retained = cache
+                    .lock()
+                    .expect("leaf interface cache is not poisoned")
+                    .get(value.get_data())
+                    .is_some_and(|(tensorial, _)| *tensorial);
+                if !retained {
+                    let interface = self.admitted_interface(value).ok_or_else(|| {
+                        TensorInferenceError::invalid(format!(
+                            "component lowering is missing a retained regional interface for {value}"
+                        ))
+                    })?;
+                    let ports = interface
+                        .logical_slots()
+                        .into_iter()
+                        .map(|slot| decode_port(&composition::port_atom(slot)))
+                        .collect();
+                    cache
+                        .lock()
+                        .expect("leaf interface cache is not poisoned")
+                        .insert(value.to_owned(), (true, ports));
+                }
+            }
+            match value {
+                AtomView::Fun(function) => pending.extend(function.iter()),
+                AtomView::Add(sum) => pending.extend(sum.iter()),
+                AtomView::Mul(product) => pending.extend(product.iter()),
+                AtomView::Pow(power) => {
+                    let (base, exponent) = power.get_base_exp();
+                    pending.extend([base, exponent]);
+                }
+                _ => {}
+            }
+        }
+        Ok(cache)
+    }
+
+    /// Publish the ports selected by a tensor constructor before its expression
+    /// loses provenance. Raw slots retain internal pairs for graph lowering;
+    /// the region boundary contracts those pairs without inspecting the payload.
+    pub(crate) fn retain_leaf_ports(
+        &self,
+        expression: AtomView<'_>,
+        ports: Vec<Atom>,
+    ) -> Result<(), TensorInferenceError> {
+        self.retain_boundary(
+            expression,
+            &Self::boundary_from_leaf_ports(ports.iter().map(Atom::as_view))?,
+        );
+        if matches!(expression, AtomView::Fun(_)) {
+            self.leaf_interfaces
+                .get_or_init(Default::default)
+                .lock()
+                .expect("leaf interface cache is not poisoned")
+                .insert(expression.to_owned(), (true, ports));
+        }
+        Ok(())
+    }
+
+    pub(super) fn boundary_from_leaf_ports<'a>(
+        ports: impl IntoIterator<Item = AtomView<'a>>,
+    ) -> Result<PartialStructure, TensorInferenceError> {
+        let mut matcher = SlotMatcher::default();
+        let interface = ports
+            .into_iter()
+            .enumerate()
+            .filter(|(_, port)| !matches!(port, AtomView::Var(var)
+                if var.get_symbol() == SPENSO_TAG.chain_in || var.get_symbol() == SPENSO_TAG.chain_out))
+            .map(|(position, port)| {
+                if let Ok(slot) = matcher.parse::<LibraryRep, AbstractIndex>(port) {
+                    Ok(slot.rep().slot(PartialIndex::Explicit(slot.aind())))
+                } else {
+                    matcher
+                        .parse_representation::<LibraryRep>(port)
+                        .map(|rep| rep.slot(PartialIndex::open(position)))
+                        .map_err(|reason| TensorInferenceError::invalid(reason.to_string()))
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        InterfaceInference::merge_explicit_interface_sequence(&[
+            PartialStructure::from_logical_slots(interface),
+        ])
+    }
+}
 
 impl SymbolicTensor<PartialStructure> {
+    /// Isolate facts emitted by one producer. Unchanged expression keys remain
+    /// shared, while new records cannot accumulate on a retained source tensor.
+    pub(crate) fn producer_context(&self) -> (TensorProofs, LeafInterfaceCache) {
+        let mut proofs = self.proofs.clone();
+        proofs.publish_interfaces(self.expression.as_view(), self.structure.clone(), []);
+        let leaves = Arc::clone(proofs.leaf_interfaces.get_or_init(Default::default));
+        (proofs, leaves)
+    }
+
     /// Lower this admitted tensor into a component network, retaining its boundary.
     ///
     /// The parser still owns shorthand topology, fresh dummy allocation and library
@@ -73,7 +210,7 @@ impl SymbolicTensor<PartialStructure> {
         }
         self.explicit_index_occurrences()
             .map_err(|error| invalid(error.to_string()))?;
-        let source = if self.structure.open_positions().is_empty() {
+        let mut source = if self.structure.open_positions().is_empty() {
             self
         } else {
             let source = self
@@ -82,13 +219,48 @@ impl SymbolicTensor<PartialStructure> {
             drop(self);
             source
         };
-        // Retain the admitted boundary and payload, but release symbolic planning
-        // graphs before allocating the independent component-execution network.
-        let (expression, structure) = source.into_parts();
+        // Component construction needs admitted facts, not the symbolic
+        // execution plan. Release that graph before decoding can run callbacks.
+        source.replace_admission(source.producer_context().0);
         let decode = |expression: &Atom| match index_decoding {
             Some(settings) => settings.uncook(expression.as_view()),
             None => expression.clone(),
         };
+        // The mapper runs each rebuilt function's normalizer once and carries
+        // exact raw-port witnesses alongside it. Temporary regional facts keep
+        // the source labels until their boundary ports are decoded below;
+        // they are never published as a symbolic tensor with stale indices.
+        let (expression, leaf_interfaces) = if let Some(decoding) = index_decoding {
+            let (expression, mapped) = source
+                .map_admitted_expression(
+                    |value| {
+                        if matches!(value, AtomView::Fun(function)
+                            if function.get_symbol().is_scalar())
+                        {
+                            return Ok(Some(value.to_owned()));
+                        }
+                        if matches!(value, AtomView::Var(_)) {
+                            let decoded = decoding.uncook(value);
+                            return Ok((decoded.as_view() != value).then_some(decoded));
+                        }
+                        Ok(None)
+                    },
+                    |interface| Ok(interface.clone()),
+                )
+                .map_err(|error| invalid(error.to_string()))?;
+            let leaves = mapped
+                .parser_interfaces(expression.as_view(), decode)
+                .map_err(|error| invalid(error.to_string()))?;
+            (Some(expression), leaves)
+        } else {
+            let leaves = source
+                .proofs
+                .parser_interfaces(source.expression.as_view(), decode)
+                .map_err(|error| invalid(error.to_string()))?;
+            (None, leaves)
+        };
+        let (original, structure) = source.into_parts();
+        let expression = expression.unwrap_or(original);
         let expected = structure
             .logical_slots()
             .into_iter()
@@ -110,20 +282,14 @@ impl SymbolicTensor<PartialStructure> {
             return Ok(interface.map_canonical(|_| Network::from_tensor(T::from(tensor))));
         }
 
-        let expression = match index_decoding {
-            Some(_) => {
-                let decoded = decode(&expression);
-                drop(expression);
-                decoded
-            }
-            None => expression,
-        };
         let network =
-            Network::<NetworkStore<T, Atom>, K, Symbol, Aind>::try_from_view_with_function_library(
+            Network::<NetworkStore<T, Atom>, K, Symbol, Aind>::try_from_admitted_view_with_function_library(
                 expression.as_view(),
                 library,
                 functions,
                 settings,
+                leaf_interfaces,
+                None,
             )?;
         let mut actual = network.graph.dangling_indices();
         for slot in expected {
@@ -143,10 +309,96 @@ impl SymbolicTensor<PartialStructure> {
     }
 }
 
+impl SymbolicNetParse for SymbolicTensor<PartialStructure> {
+    fn parse_to_symbolic_net<Aind: AbsInd + DummyAind + ParseableAind>(
+        &self,
+        settings: &ParseSettings,
+    ) -> Result<SymbolicNet<Aind>, TensorNetworkError<DummyKey, Symbol>> {
+        let materialized;
+        let source = if self.structure.open_positions().is_empty() {
+            self
+        } else {
+            materialized = self
+                .materialized()
+                .map_err(|error| TensorNetworkError::Other(eyre::eyre!(error.to_string())))?;
+            &materialized
+        };
+        let slots = source.structure.logical_slots().into_iter().map(|slot| {
+            let PartialIndex::Explicit(index) = slot.aind else {
+                unreachable!("materialized symbolic-network ports are explicit")
+            };
+            slot.rep().slot(index)
+        });
+        source.parse_admitted_symbolic_net(settings, slots)
+    }
+}
+
+impl SymbolicNetParse for SymbolicTensor<IndexedStructure> {
+    fn parse_to_symbolic_net<Aind: AbsInd + DummyAind + ParseableAind>(
+        &self,
+        settings: &ParseSettings,
+    ) -> Result<SymbolicNet<Aind>, TensorNetworkError<DummyKey, Symbol>> {
+        self.parse_admitted_symbolic_net(settings, self.structure.logical_slots())
+    }
+}
+
+impl<S> SymbolicTensor<S> {
+    fn parse_admitted_symbolic_net<Aind: AbsInd + DummyAind + ParseableAind>(
+        &self,
+        settings: &ParseSettings,
+        slots: impl IntoIterator<Item = LibrarySlot<AbstractIndex>>,
+    ) -> Result<SymbolicNet<Aind>, TensorNetworkError<DummyKey, Symbol>> {
+        let slots = slots.into_iter().collect::<Vec<_>>();
+        if self.expression.is_zero() {
+            let slots = slots
+                .into_iter()
+                .map(|slot| {
+                    let index = slot.aind().to_atom();
+                    Aind::from_view(index.as_view())
+                        .map(|index| slot.rep().slot(index))
+                        .map_err(|_| {
+                            TensorNetworkError::Other(eyre::eyre!(
+                                "symbolic network index cannot represent {index}"
+                            ))
+                        })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            return Ok(SymbolicNet::from_tensor(SymbolicTensor {
+                expression: Atom::Zero,
+                structure: OrderedStructure::new(slots).into_canonical(),
+                work: self.work.clone(),
+                proofs: self.proofs.clone(),
+                is_metric: false,
+                is_composite: false,
+            }));
+        }
+        let library = DummyLibrary::<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>>::new();
+        let settings = settings
+            .clone()
+            .with_strict_tensor_filter(StrictTensorFilter::ContainsReps);
+        let mut proofs = self.proofs.clone();
+        let interface = PartialStructure::from_logical_slots(
+            slots
+                .into_iter()
+                .map(|slot| slot.rep().slot(PartialIndex::Explicit(slot.aind()))),
+        );
+        proofs.publish_interfaces(self.expression.as_view(), interface, []);
+        let leaves = proofs.parser_leaf_interfaces();
+        SymbolicNet::try_from_admitted_view_with_context::<OrderedStructure<LibraryRep, Aind>, _>(
+            self.expression.as_view(),
+            &library,
+            &settings,
+            leaves,
+            Some(&proofs),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tensor::SymbolicNet;
+    use crate::tensor::inference::tests::{INFERENCE_CALLS, INFERENCE_VISITS};
+    use crate::tensor::planning::PlanningNetwork;
     use crate::{CookMode, CookSettings, test_support};
     use spenso::iterators::IteratableTensor;
     use spenso::network::library::panicing::ErroringLibrary;
@@ -165,6 +417,43 @@ mod tests {
     type Structure = ShadowedStructure<AbstractIndex>;
     type Tensor = ParamTensor<Structure>;
     type Net = Network<NetworkStore<Tensor, Atom>, DummyKey, Symbol, AbstractIndex>;
+
+    #[test]
+    fn typed_symbolic_network_retains_leaf_loops_and_ranked_zero() {
+        test_support::test_initialize();
+        let rep = Euclidean {}.new_rep(2);
+        let slot = rep.slot::<AbstractIndex, _>(83).to_atom();
+        let source = SymbolicTensor::infer(function!(
+            tensor_symbol!("typed_symbolic_network_loop"),
+            &slot,
+            &slot
+        ))
+        .unwrap();
+        let typed = source
+            .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+        let raw = source
+            .expression()
+            .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+        assert!(typed.graph.dangling_indices().is_empty());
+        assert_eq!(
+            typed.graph.graph.iter_edges().count(),
+            raw.graph.graph.iter_edges().count(),
+        );
+
+        let vector = SymbolicTensor::infer(function!(
+            tensor_symbol!("typed_symbolic_network_vector"),
+            &slot
+        ))
+        .unwrap();
+        let zero = vector.with_produced_expression(Atom::Zero).unwrap();
+        let network = zero
+            .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+        assert_eq!(network.graph.dangling_indices().len(), 1);
+        assert_eq!(network.graph.dangling_indices()[0].to_atom(), slot);
+    }
 
     #[test]
     fn typed_component_lowering_matches_direct_component_execution() {
@@ -207,6 +496,63 @@ mod tests {
         let direct: Atom = direct.result_scalar().unwrap().into();
         assert_eq!(typed, direct);
         assert_eq!(source.expression(), &expression);
+    }
+
+    #[test]
+    fn component_lowering_transports_decoded_loops_for_every_filter() {
+        test_support::test_initialize();
+        let decoding = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let label = function!(index_symbol!("component_decoded_loop_index"), 18, 2);
+        let encoded = CookSettings::reversible()
+            .cook_function(label.as_fun_view().unwrap())
+            .unwrap();
+        let rep = Euclidean {}.new_rep(2);
+        let slot = rep.to_symbolic([encoded]);
+        let head = tensor_symbol!("component_decoded_loop");
+        let expression = function!(head, &slot, &slot);
+        let source = SymbolicTensor::infer(expression.clone()).unwrap();
+        let decoded = decoding.uncook(expression.as_view());
+        let library = DummyLibrary::<Tensor>::new();
+        let functions = ErroringLibrary::<Symbol>::new();
+        for filter in [
+            StrictTensorFilter::Tagged,
+            StrictTensorFilter::TaggedChecked,
+            StrictTensorFilter::ContainsReps,
+        ] {
+            for composite_scalars in [false, true] {
+                let settings = ParseSettings {
+                    strict_tensor_filter: filter,
+                    parse_composite_scalars_as_tensors: composite_scalars,
+                    ..Default::default()
+                };
+                let mut expected = Net::try_from_view_with_function_library(
+                    decoded.as_view(),
+                    &library,
+                    &functions,
+                    &settings,
+                )
+                .unwrap();
+                expected
+                    .execute::<Sequential, SmallestDegree, _, _, _>(&library, &functions)
+                    .unwrap();
+                let expected: Atom = expected.result_scalar().unwrap().into();
+                INFERENCE_CALLS.with(|count| count.set(0));
+                INFERENCE_VISITS.with(|count| count.set(0));
+                let mut network: Net = source
+                    .clone()
+                    .into_network(&library, &functions, &settings, Some(&decoding))
+                    .unwrap()
+                    .into_canonical();
+                assert!(network.graph.dangling_indices().is_empty());
+                network
+                    .execute::<Sequential, SmallestDegree, _, _, _>(&library, &functions)
+                    .unwrap();
+                let actual: Atom = network.result_scalar().unwrap().into();
+                assert_eq!(actual, expected);
+                assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+                assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
+            }
+        }
     }
 
     #[test]
@@ -385,7 +731,7 @@ mod tests {
         let raw_slot = rep.to_symbolic([raw_index]);
         let cooked_slot = rep.to_symbolic([cooked_index]);
         assert_ne!(cooked_slot, raw_slot);
-        let graph = Arc::new(Mutex::new(None::<Weak<SymbolicNet<AbstractIndex>>>));
+        let graph = Arc::new(Mutex::new(None::<Weak<PlanningNetwork<Atom>>>));
         let observed = Arc::clone(&graph);
         let decoded = Arc::new(AtomicBool::new(false));
         let did_decode = Arc::clone(&decoded);

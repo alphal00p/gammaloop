@@ -1,33 +1,26 @@
 use std::sync::LazyLock;
 
-use spenso::{
-    metric,
-    network::{
-        library::symbolic::{ETS, ExplicitKey},
-        parsing::ParseState,
-        tags::SPENSO_TAG,
-    },
-    shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings},
-    structure::{
-        Canonicalized,
-        dimension::Dimension,
-        representation::{LibraryRep, Minkowski, RepName},
-        slot::{AbsInd, DummyAind, ParseableAind, SlotMatch, SlotMatcher},
-    },
-    utils::to_superscript,
-};
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Symbol},
-    function,
-    printer::PrintState,
-};
+use spenso::metric;
+use spenso::network::library::symbolic::{ETS, ExplicitKey};
+use spenso::network::parsing::ParseState;
+use spenso::network::tags::SPENSO_TAG;
+use spenso::shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings};
+use spenso::structure::Canonicalized;
+use spenso::structure::dimension::Dimension;
+use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
+use spenso::structure::slot::{AbsInd, DummyAind, ParseableAind, SlotMatch, SlotMatcher};
+use spenso::utils::to_superscript;
+use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
+use symbolica::function;
+use symbolica::printer::PrintState;
 
 #[cfg(test)]
 use symbolica::symbol;
 
-use crate::{
-    IndexTooling, bis, gamma, gamma0, rep_symbols::RS, shorthands::bracket::BracketNormalizer,
-};
+use crate::rep_symbols::RS;
+use crate::shorthands::bracket::BracketNormalizer;
+use crate::tensor::TensorProofs;
+use crate::{IndexTooling, bis, gamma, gamma0};
 
 use super::representations::Bispinor;
 
@@ -512,6 +505,30 @@ impl PolSymbols {
 
 impl DiracSimplifier<'_> {
     pub(crate) fn factor_gamma_zero(expr: AtomView<'_>) -> Atom {
+        Self::factor_gamma_zero_with(expr, |_, _| {})
+    }
+
+    /// Matrix and metric constructors declare every argument as a port.
+    /// Verify the emitted head and permutation after symmetry normalization.
+    fn observe_matrix_ports<'a>(
+        head: Symbol,
+        value: AtomView<'a>,
+        ports: &[Atom],
+        observer: impl FnOnce(AtomView<'a>, Vec<Atom>),
+    ) {
+        let arguments = ports.iter().map(Atom::as_view).collect::<Vec<_>>();
+        if let Some((actual, ordered)) =
+            TensorProofs::raw_ports_after_argument_permutation(&arguments, value, ports)
+            && actual.get_symbol() == head
+        {
+            observer(actual.as_view(), ordered);
+        }
+    }
+
+    pub(crate) fn factor_gamma_zero_with(
+        expr: AtomView<'_>,
+        observer: impl Fn(AtomView<'_>, Vec<Atom>) + Clone + Send + Sync + 'static,
+    ) -> Atom {
         let repeated_gamma0 = gamma0!(RS.a__, RS.b__) * gamma0!(RS.b__, RS.c__);
 
         let gamma0_ia = gamma0!([RS.d_, RS.i_], [RS.d_, RS.a_]);
@@ -522,35 +539,69 @@ impl DiracSimplifier<'_> {
             + Atom::var(RS.e_) * metric!(bis!(RS.d_, RS.j_), bis!(RS.d_, RS.i_)))
         .to_pattern();
 
-        let gmgrhs = (gamma0_ia.clone()
-            * (Atom::var(RS.f_) * gamma_ab.clone()
-                + Atom::var(RS.e_) * metric!(bis!(RS.d_, RS.a_), bis!(RS.d_, RS.b_)))
-            * gamma0_bj.clone())
-        .to_pattern();
-
         let gmgn = (Atom::var(RS.f_) * gamma0_ia.clone() * gamma_ab.clone() * gamma0_bj.clone()
             + metric!(bis!(RS.d_, RS.j_), bis!(RS.d_, RS.i_)))
         .to_pattern();
-
-        let gmgnrhs = (gamma0_ia
-            * (Atom::var(RS.f_) * gamma_ab + metric!(bis!(RS.d_, RS.a_), bis!(RS.d_, RS.b_)))
-            * gamma0_bj)
-            .to_pattern();
-
-        let simplified = BracketNormalizer::normalize(expr)
-            .replace(gmg)
-            .with(gmgrhs)
-            .replace(gmgn)
-            .with(gmgnrhs)
+        let factors = [
+            gamma0_ia.to_pattern(),
+            gamma_ab.to_pattern(),
+            gamma0_bj.to_pattern(),
+            Atom::var(RS.f_).to_pattern(),
+        ];
+        let internal_ports = [
+            bis!(RS.d_, RS.a_).to_pattern(),
+            bis!(RS.d_, RS.b_).to_pattern(),
+        ];
+        let mut simplified = BracketNormalizer::normalize(expr);
+        for (lhs, metric_coefficient) in [
+            (gmg, Atom::var(RS.e_).to_pattern()),
+            (gmgn, Atom::one().to_pattern()),
+        ] {
+            let observer = observer.clone();
+            let ports = internal_ports.clone();
+            let factors = factors.clone();
+            simplified = simplified.replace(lhs).with_map(move |matches| {
+                let ports = ports
+                    .iter()
+                    .map(|port| port.replace_wildcards_with_matches(matches))
+                    .collect::<Vec<_>>();
+                let metric = function!(ETS.metric, &ports[0], &ports[1]);
+                Self::observe_matrix_ports(ETS.metric, metric.as_view(), &ports, &observer);
+                let first = factors[0].replace_wildcards_with_matches(matches);
+                let middle = factors[1].replace_wildcards_with_matches(matches);
+                let last = factors[2].replace_wildcards_with_matches(matches);
+                let coefficient = factors[3].replace_wildcards_with_matches(matches);
+                let metric_coefficient = metric_coefficient.replace_wildcards_with_matches(matches);
+                first * (coefficient * middle + metric_coefficient * metric) * last
+            });
+        }
+        let endpoints = [bis!(RS.a__).to_pattern(), bis!(RS.c__).to_pattern()];
+        let simplified = simplified
             .replace(repeated_gamma0)
             .repeat()
-            .with(metric!(bis!(RS.a__), bis!(RS.c__)));
+            .with_map(move |matches| {
+                let ports = endpoints
+                    .iter()
+                    .map(|port| port.replace_wildcards_with_matches(matches))
+                    .collect::<Vec<_>>();
+                let metric = function!(ETS.metric, &ports[0], &ports[1]);
+                Self::observe_matrix_ports(ETS.metric, metric.as_view(), &ports, &observer);
+                metric
+            });
         BracketNormalizer::normalize(simplified.as_view())
     }
 
     pub(crate) fn conjugate_matrices<Aind: DummyAind + ParseableAind>(
         expr: AtomView<'_>,
         dummies: &ParseState<Aind>,
+    ) -> Atom {
+        Self::conjugate_matrices_with(expr, dummies, &mut |_, _| {})
+    }
+
+    pub(crate) fn conjugate_matrices_with<Aind: DummyAind + ParseableAind>(
+        expr: AtomView<'_>,
+        dummies: &ParseState<Aind>,
+        observer: &mut impl FnMut(AtomView<'_>, Vec<Atom>),
     ) -> Atom {
         let mut result = expr.to_owned();
         // Allocate the two sandwich connections per occurrence from the
@@ -615,13 +666,32 @@ impl DiracSimplifier<'_> {
                 if matrix == AGS.gamma {
                     middle = middle.add_arg(Atom::var(RS.a__));
                 }
-                **out = (Atom::num(sign)
-                    * function!(AGS.gamma0, &last, &inner_last)
-                    * middle.finish()
-                    * function!(AGS.gamma0, &inner_first, &first))
-                .to_pattern()
-                .replace_wildcards(&matches)
-                .expect("the conjugate pattern binds every generated matrix argument");
+                let bind = |expression: Atom| {
+                    expression
+                        .to_pattern()
+                        .replace_wildcards(&matches)
+                        .expect("the conjugate pattern binds every generated matrix argument")
+                };
+                let before = bind(function!(AGS.gamma0, &last, &inner_last));
+                let middle = bind(middle.finish());
+                let after = bind(function!(AGS.gamma0, &inner_first, &first));
+                let before_ports = [bind(last.clone()), bind(inner_last)];
+                let after_ports = [bind(inner_first), bind(first.clone())];
+                let mut middle_ports = vec![before_ports[1].clone(), after_ports[0].clone()];
+                if matrix == AGS.gamma
+                    && let AtomView::Fun(conjugate) = node
+                    && let Some(AtomView::Fun(original)) = conjugate.iter().next()
+                {
+                    middle_ports.extend(original.iter().skip(2).map(|argument| argument.to_owned()));
+                }
+                Self::observe_matrix_ports(
+                    AGS.gamma0, before.as_view(), &before_ports, &mut *observer,
+                );
+                Self::observe_matrix_ports(adjoint, middle.as_view(), &middle_ports, &mut *observer);
+                Self::observe_matrix_ports(
+                    AGS.gamma0, after.as_view(), &after_ports, &mut *observer,
+                );
+                **out = Atom::num(sign) * before * middle * after;
             });
         }
         result

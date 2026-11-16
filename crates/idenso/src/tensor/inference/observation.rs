@@ -1,11 +1,20 @@
 //! Shared scope and explicit-index observation. This is a syntax-only pass:
 //! no normalization callback, materialization, or dummy allocation is permitted.
+#[cfg(all(test, debug_assertions))]
+use super::DebugInference;
 #[cfg(test)]
-use super::tests::{OCCURRENCE_FUNCTION_VISITS, SCOPE_VALIDATIONS};
+use super::tests::{
+    DEBUG_OCCURRENCE_FUNCTION_VISITS, DEBUG_SCOPE_VALIDATIONS, OCCURRENCE_FUNCTION_VISITS,
+    SCOPE_VALIDATIONS,
+};
 use super::{InferenceResult, InterfaceInference, LeafInference, TensorInferenceError};
+use crate::color::CS;
+use crate::dirac::AGS;
+use crate::tensor::TensorProofs;
 use crate::tensor::composition;
 use crate::tensor::composition::ExplicitIndexOccurrences;
 use ahash::AHashMap;
+use spenso::network::library::symbolic::ETS;
 use spenso::network::parsing::{AtomStructureExt, ChainNestingError, StrictTensorFilter};
 use spenso::network::tags::SPENSO_TAG;
 use spenso::shadowing::{ANTISYM, CYCLIC, SYM};
@@ -13,12 +22,21 @@ use spenso::structure::TensorStructure;
 use spenso::structure::abstract_index::AbstractIndex;
 use spenso::structure::partial::{PartialIndex, PartialStructure, PartialStructureExt};
 use spenso::structure::representation::{LibraryRep, RepName, Representation};
-use spenso::structure::slot::{IsAbstractSlot, SlotMatcher};
+use spenso::structure::slot::{IsAbstractSlot, SlotMatch, SlotMatcher};
+#[cfg(test)]
+use std::cell::Cell;
+use std::cell::OnceCell;
 use std::mem;
 #[cfg(test)]
 use symbolica::atom::AtomCore;
-use symbolica::atom::{AtomView, Symbol};
+use symbolica::atom::representation::FunView;
+use symbolica::atom::{Atom, AtomView, Symbol};
 use symbolica::domains::rational::Rational;
+
+#[cfg(test)]
+thread_local! {
+    static SCOPED_INTERFACE_INFERENCES: Cell<usize> = const { Cell::new(0) };
+}
 
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub(in crate::tensor) struct ObservationScope {
@@ -26,10 +44,47 @@ pub(in crate::tensor) struct ObservationScope {
     pub(super) inside_factor: bool,
     pub(super) validate: bool,
     pub(super) count_indices: bool,
+    pub(super) admit_direct_ports: bool,
     pub(super) pair_representation: Option<LibraryRep>,
 }
 
 type Cache = AHashMap<ObservationScope, AHashMap<Vec<u8>, ExplicitIndexOccurrences>>;
+
+/// A producer owns its draft. Parser readers share the admitted source and
+/// isolate any missing declarations before writing them, including sum terms
+/// whose declared order can differ from their literal storage order.
+#[derive(Clone, Copy)]
+struct OccurrenceFacts<'a> {
+    source: &'a TensorProofs,
+    parser: Option<(AtomView<'a>, &'a OnceCell<TensorProofs>)>,
+}
+
+impl<'a> OccurrenceFacts<'a> {
+    fn current(self) -> &'a TensorProofs {
+        self.parser
+            .and_then(|(_, local)| local.get())
+            .unwrap_or(self.source)
+    }
+
+    fn writable(self) -> &'a TensorProofs {
+        let Some((value, local)) = self.parser else {
+            return self.source;
+        };
+        local.get_or_init(|| {
+            let mut facts = self.source.clone();
+            facts.publish_interfaces(value, self.source.retained_interface(value), []);
+            facts
+        })
+    }
+
+    fn interface(self, value: AtomView<'_>) -> Option<PartialStructure> {
+        if self.parser.is_some() {
+            self.current().inspect_interface(value)
+        } else {
+            self.source.admitted_interface(value)
+        }
+    }
+}
 
 impl InterfaceInference {
     /// Whether a function argument exports explicit tensor-index occurrences.
@@ -44,12 +99,16 @@ impl InterfaceInference {
     ) -> bool {
         (parent.has_tag(&SPENSO_TAG.tensor) || composition::is_composite_head(parent, &SPENSO_TAG))
             && (slots.parse::<LibraryRep, AbstractIndex>(argument).is_ok()
-                || Representation::<LibraryRep>::try_from(argument).is_ok()
-                || argument.is_tensorial(StrictTensorFilter::Tagged)
-                || matches!(argument, AtomView::Fun(nested)
-                    if nested.get_symbol() == *SYM
-                        || nested.get_symbol() == *ANTISYM
-                        || nested.get_symbol() == *CYCLIC))
+                || Self::nested_index_argument(argument))
+    }
+
+    fn nested_index_argument(argument: AtomView<'_>) -> bool {
+        Representation::<LibraryRep>::try_from(argument).is_ok()
+            || argument.is_tensorial(StrictTensorFilter::Tagged)
+            || matches!(argument, AtomView::Fun(nested)
+                if nested.get_symbol() == *SYM
+                    || nested.get_symbol() == *ANTISYM
+                    || nested.get_symbol() == *CYCLIC)
     }
 
     /// Detect explicit index pairs in any additive branch without distributing it.
@@ -122,7 +181,17 @@ impl InterfaceInference {
         slots: &mut SlotMatcher,
     ) -> InferenceResult<ExplicitIndexOccurrences> {
         #[cfg(test)]
-        SCOPE_VALIDATIONS.with(|count| count.set(count.get() + 1));
+        {
+            #[cfg(debug_assertions)]
+            let debug = DebugInference::is_active();
+            #[cfg(not(debug_assertions))]
+            let debug = false;
+            if debug {
+                DEBUG_SCOPE_VALIDATIONS.with(|count| count.set(count.get() + 1));
+            } else {
+                SCOPE_VALIDATIONS.with(|count| count.set(count.get() + 1));
+            }
+        }
         Self::observe_indices(
             value,
             slots,
@@ -136,23 +205,187 @@ impl InterfaceInference {
         )
     }
 
+    /// An admitted metric whose arguments are tensors consumes one axis from
+    /// each. A direct slot, representation or fixed component belongs to the
+    /// ordinary metric constructor. Only the two argument heads are inspected.
+    pub(in crate::tensor) fn is_compound_metric(
+        function: FunView<'_>,
+        slots: &mut SlotMatcher,
+    ) -> bool {
+        function.get_symbol() == ETS.metric
+            && function.get_nargs() == 2
+            && function.iter().all(|argument| {
+                !matches!(argument, AtomView::Num(_) | AtomView::Var(_))
+                    && matches!(slots.classify(argument), SlotMatch::Other)
+                    && slots.concrete_component(argument).is_none()
+            })
+    }
+
+    /// Constructor signatures establish which arguments are raw graph ports.
+    /// This also supplies the ports for a newly emitted factor in a Dirac word.
+    pub(in crate::tensor) fn constructor_ports(
+        function: FunView<'_>,
+        slots: &mut SlotMatcher,
+        admit_direct_ports: bool,
+    ) -> Option<Vec<Atom>> {
+        let head = function.get_symbol();
+        if head.has_tag(&SPENSO_TAG.rank1) {
+            let port = slots.vector_argument(function)?;
+            // A selected concrete component has no external port. Momentum
+            // labels and other scalar metadata are never parser incidences.
+            if slots
+                .concrete_component(port)
+                .is_some_and(|component| component.is_ok())
+            {
+                return Some(Vec::new());
+            }
+            return (Self::is_chain_placeholder(port)
+                || slots.parse::<LibraryRep, AbstractIndex>(port).is_ok()
+                || slots.parse_representation::<LibraryRep>(port).is_ok())
+            .then(|| vec![port.to_owned()]);
+        }
+        if Self::is_compound_metric(function, slots) {
+            // A metric of compound operands consumes just one axis from each.
+            // Their spectators belong to the composed boundary, not an empty leaf.
+            return None;
+        }
+        if head == CS.d {
+            // The symmetric invariant d_R(R, a, b, ...) declares its group
+            // representation first. The three-index d(a, b, c) has no prefix.
+            return Some(
+                function
+                    .iter()
+                    .skip(usize::from(function.get_nargs() >= 4))
+                    .map(|port| port.to_owned())
+                    .collect(),
+            );
+        }
+        (head == AGS.gamma0
+            || Self::is_builtin_tensor(head)
+            || (admit_direct_ports && composition::is_tensor_leaf_head(head)))
+        .then(|| {
+            function
+                .iter()
+                .filter(|&port| {
+                    Self::is_chain_placeholder(port)
+                        || slots.parse::<LibraryRep, AbstractIndex>(port).is_ok()
+                        || slots.parse_representation::<LibraryRep>(port).is_ok()
+                })
+                .map(|port| port.to_owned())
+                .collect()
+        })
+    }
+
+    /// Account for emitted indices using the producer's retained interfaces.
+    /// Missing scoped facts are an internal producer error; this path never
+    /// falls back to observing the free interface of an emitted expression.
+    pub(in crate::tensor) fn produced_occurrences(
+        value: AtomView<'_>,
+        slots: &mut SlotMatcher,
+        proofs: &TensorProofs,
+    ) -> InferenceResult<ExplicitIndexOccurrences> {
+        Self::constructor_occurrences(value, slots, proofs, false)
+    }
+
+    /// At the public parts boundary the raw expression is supplied for the
+    /// first time, so record the written ports of tagged generic constructors.
+    pub(in crate::tensor) fn constructor_occurrences(
+        value: AtomView<'_>,
+        slots: &mut SlotMatcher,
+        proofs: &TensorProofs,
+        admit_direct_ports: bool,
+    ) -> InferenceResult<ExplicitIndexOccurrences> {
+        Self::occurrences_with_facts(
+            value,
+            slots,
+            OccurrenceFacts {
+                source: proofs,
+                parser: None,
+            },
+            admit_direct_ports,
+        )
+    }
+
+    /// An admitted parser may need a provisional boundary for a newly scoped
+    /// leaf. Return any private declarations to the caller publishing that leaf.
+    pub(in crate::tensor) fn parser_occurrences(
+        value: AtomView<'_>,
+        source: &TensorProofs,
+        boundary: Option<&PartialStructure>,
+    ) -> InferenceResult<(ExplicitIndexOccurrences, Option<TensorProofs>)> {
+        let local = OnceCell::new();
+        let facts = OccurrenceFacts {
+            source,
+            parser: Some((value, &local)),
+        };
+        if let Some(boundary) = boundary
+            && source.retained_interface(value).is_none()
+        {
+            facts.writable().supply_interface(value, boundary);
+        }
+        let history =
+            Self::occurrences_with_facts(value, &mut SlotMatcher::default(), facts, false)?;
+        Ok((history, local.into_inner()))
+    }
+
+    fn occurrences_with_facts(
+        value: AtomView<'_>,
+        slots: &mut SlotMatcher,
+        facts: OccurrenceFacts<'_>,
+        admit_direct_ports: bool,
+    ) -> InferenceResult<ExplicitIndexOccurrences> {
+        // The per-call cache can reuse children. Its root is returned directly.
+        Self::observe_indices_uncached(
+            value,
+            slots,
+            &mut AHashMap::new(),
+            ObservationScope {
+                validate: true,
+                admit_direct_ports,
+                count_indices: true,
+                ..ObservationScope::default()
+            },
+            &mut |_| false,
+            Some(facts),
+        )
+    }
+
     /// Keep only the boundary ports of one independently scoped expression.
     /// Observing its interface cannot normalize callbacks or allocate indices.
     fn scope_explicit_occurrences(
         value: AtomView<'_>,
         occurrences: &mut ExplicitIndexOccurrences,
         slots: &mut SlotMatcher,
+        proofs: Option<OccurrenceFacts<'_>>,
     ) -> InferenceResult<PartialStructure> {
-        let mut inference = InterfaceInference {
-            slots: mem::take(slots),
-            leaf_inference: LeafInference::Observe,
-            ..InterfaceInference::default()
+        let interface = if let Some(proofs) = proofs {
+            proofs.interface(value).ok_or_else(|| {
+                TensorInferenceError::invalid(format!(
+                    "internal producer omitted the scoped tensor interface for {value}"
+                ))
+            })?
+        } else {
+            #[cfg(test)]
+            {
+                #[cfg(debug_assertions)]
+                let debug = DebugInference::is_active();
+                #[cfg(not(debug_assertions))]
+                let debug = false;
+                if !debug {
+                    SCOPED_INTERFACE_INFERENCES.with(|count| count.set(count.get() + 1));
+                }
+            }
+            let mut inference = InterfaceInference {
+                slots: mem::take(slots),
+                leaf_inference: LeafInference::Observe,
+                ..InterfaceInference::default()
+            };
+            let interface = inference
+                .infer_view(value)
+                .and_then(|interface| Self::merge_explicit_interface_sequence(&[interface]));
+            *slots = inference.slots;
+            interface?
         };
-        let interface = inference
-            .infer_view(value)
-            .and_then(|interface| Self::merge_explicit_interface_sequence(&[interface]));
-        *slots = inference.slots;
-        let interface = interface?;
         let boundary = interface.logical_slots();
         occurrences.retain(|slot| {
             boundary.iter().any(|port| {
@@ -170,6 +403,17 @@ impl InterfaceInference {
         scope: ObservationScope,
         exclude_tensor_leaf: &mut impl FnMut(AtomView<'_>) -> bool,
     ) -> InferenceResult<ExplicitIndexOccurrences> {
+        Self::observe_indices_with_interfaces(value, slots, cache, scope, exclude_tensor_leaf, None)
+    }
+
+    fn observe_indices_with_interfaces(
+        value: AtomView<'_>,
+        slots: &mut SlotMatcher,
+        cache: &mut Cache,
+        scope: ObservationScope,
+        exclude_tensor_leaf: &mut impl FnMut(AtomView<'_>) -> bool,
+        proofs: Option<OccurrenceFacts<'_>>,
+    ) -> InferenceResult<ExplicitIndexOccurrences> {
         let reusable = matches!(value, AtomView::Fun(_))
             && !value.needs_normalization()
             && value.get_byte_size() <= Self::CACHE_KEY_BYTES;
@@ -180,8 +424,14 @@ impl InterfaceInference {
         {
             return Ok(summary.clone());
         }
-        let result =
-            Self::observe_indices_uncached(value, slots, cache, scope, exclude_tensor_leaf)?;
+        let result = Self::observe_indices_uncached(
+            value,
+            slots,
+            cache,
+            scope,
+            exclude_tensor_leaf,
+            proofs,
+        )?;
         if reusable
             && cache.values().map(|values| values.len()).sum::<usize>() < Self::CACHE_ENTRIES
         {
@@ -201,10 +451,19 @@ impl InterfaceInference {
         cache: &mut Cache,
         mut scope: ObservationScope,
         exclude_tensor_leaf: &mut impl FnMut(AtomView<'_>) -> bool,
+        proofs: Option<OccurrenceFacts<'_>>,
     ) -> InferenceResult<ExplicitIndexOccurrences> {
         #[cfg(test)]
         if scope.count_indices && matches!(value, AtomView::Fun(_)) {
-            OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(count.get() + 1));
+            #[cfg(debug_assertions)]
+            let debug = DebugInference::is_active();
+            #[cfg(not(debug_assertions))]
+            let debug = false;
+            if debug {
+                DEBUG_OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(count.get() + 1));
+            } else {
+                OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(count.get() + 1));
+            }
         }
         let mut result = ExplicitIndexOccurrences::default();
         if let Ok(slot) = slots.parse::<LibraryRep, AbstractIndex>(value) {
@@ -229,9 +488,27 @@ impl InterfaceInference {
                 ));
             }
             AtomView::Add(sum) => {
+                // A producer declaring a sum's boundary also declares that
+                // boundary for each alternative. Transport that contract to
+                // fresh terms; powers cannot make the same deduction for bases.
+                if let Some(proofs) = proofs
+                    && let Some(interface) = proofs.current().retained_interface(value)
+                {
+                    for term in sum.iter() {
+                        if proofs.current().retained_interface(term).is_none() {
+                            proofs.writable().supply_interface(term, &interface);
+                        }
+                    }
+                }
                 for term in sum.iter() {
-                    let mut branch =
-                        Self::observe_indices(term, slots, cache, scope, exclude_tensor_leaf)?;
+                    let mut branch = Self::observe_indices_with_interfaces(
+                        term,
+                        slots,
+                        cache,
+                        scope,
+                        exclude_tensor_leaf,
+                        proofs,
+                    )?;
                     // Each alternative owns its internal contractions. Only
                     // surviving ports can meet factors outside this sum. Keep
                     // malformed local counts visible to the existing validator.
@@ -240,7 +517,7 @@ impl InterfaceInference {
                     if !branch.is_empty()
                         && branch.validate().is_ok()
                         && let Err(error) =
-                            Self::scope_explicit_occurrences(term, &mut branch, slots)
+                            Self::scope_explicit_occurrences(term, &mut branch, slots, proofs)
                         && scope.validate
                         && scope.pair_representation.is_none()
                     {
@@ -251,12 +528,13 @@ impl InterfaceInference {
             }
             AtomView::Mul(product) => {
                 for factor in product.iter() {
-                    result.append(&Self::observe_indices(
+                    result.append(&Self::observe_indices_with_interfaces(
                         factor,
                         slots,
                         cache,
                         scope,
                         exclude_tensor_leaf,
+                        proofs,
                     )?);
                 }
             }
@@ -276,16 +554,26 @@ impl InterfaceInference {
                     } else {
                         scope
                     };
-                    let mut branch =
-                        Self::observe_indices(term, slots, cache, child, exclude_tensor_leaf)?;
+                    let mut branch = Self::observe_indices_with_interfaces(
+                        term,
+                        slots,
+                        cache,
+                        child,
+                        exclude_tensor_leaf,
+                        proofs,
+                    )?;
                     if position == 0 && !branch.is_empty() && branch.validate().is_ok() {
                         result.selected_pair |= branch.selected_pair;
-                        let interface =
-                            match Self::scope_explicit_occurrences(base, &mut branch, slots) {
-                                Ok(interface) => Some(interface),
-                                Err(error) if scope.validate => return Err(error),
-                                Err(_) => None,
-                            };
+                        let interface = match Self::scope_explicit_occurrences(
+                            base,
+                            &mut branch,
+                            slots,
+                            proofs,
+                        ) {
+                            Ok(interface) => Some(interface),
+                            Err(error) if scope.validate => return Err(error),
+                            Err(_) => None,
+                        };
                         if interface
                             .as_ref()
                             .is_some_and(|interface| interface.canonical().is_scalar())
@@ -295,7 +583,20 @@ impl InterfaceInference {
                         if scope.validate
                             && let Some(interface) = &interface
                         {
-                            Self::power_interface(interface, exponent, || value.to_string())?;
+                            // Symbolica can spell two typed, same-oriented factors
+                            // as a power. Only that exact admitted product can
+                            // certify their two uncontracted copies.
+                            if !proofs.is_some_and(|proofs| {
+                                Self::admitted_oriented_square(
+                                    proofs.current(),
+                                    value,
+                                    interface,
+                                    exponent,
+                                )
+                                .is_some()
+                            }) {
+                                Self::power_interface(interface, exponent, || value.to_string())?;
+                            }
                         }
                         if let Ok(exponent) = Rational::try_from(exponent)
                             && exponent.denominator() == 1
@@ -313,12 +614,16 @@ impl InterfaceInference {
                         if !Self::has_structured_syntax(exponent) {
                             continue;
                         }
-                        let interface =
-                            match Self::scope_explicit_occurrences(exponent, &mut branch, slots) {
-                                Ok(interface) => Some(interface),
-                                Err(error) if scope.validate => return Err(error),
-                                Err(_) => None,
-                            };
+                        let interface = match Self::scope_explicit_occurrences(
+                            exponent,
+                            &mut branch,
+                            slots,
+                            proofs,
+                        ) {
+                            Ok(interface) => Some(interface),
+                            Err(error) if scope.validate => return Err(error),
+                            Err(_) => None,
+                        };
                         if interface
                             .as_ref()
                             .is_some_and(|interface| interface.canonical().is_scalar())
@@ -336,21 +641,42 @@ impl InterfaceInference {
             }
             AtomView::Fun(function) => {
                 let symbol = function.get_symbol();
-                scope.validate &= !SPENSO_TAG.is_scalar_metadata(symbol);
+                let tags = &*SPENSO_TAG;
+                if let Some(proofs) = proofs {
+                    // New known constructors publish their raw declaration in
+                    // this existing producer walk. A generic tensor's root
+                    // boundary cannot establish hidden or ordered raw ports.
+                    let recorded = proofs.current().leaf_interfaces.contains(value);
+                    if !recorded
+                        && let Some(ports) =
+                            Self::constructor_ports(function, slots, scope.admit_direct_ports)
+                    {
+                        // Only publish the constructor boundary when it is
+                        // not already the producer's authoritative root.
+                        let proofs = proofs.writable();
+                        let retained = proofs.retained_interface(value);
+                        proofs.retain_leaf_ports(value, ports)?;
+                        if let Some(retained) = retained {
+                            proofs.retain_boundary(value, &retained);
+                        }
+                    }
+                }
+                scope.validate &= !tags.is_scalar_metadata(symbol);
                 if scope.validate {
-                    scope.owner = ChainNestingError::enter(scope.owner, symbol, &SPENSO_TAG)
+                    scope.owner = ChainNestingError::enter(scope.owner, symbol, tags)
                         .map_err(|error| TensorInferenceError::invalid(error.to_string()))?;
                 }
-                let tensor_leaf = symbol.has_tag(&SPENSO_TAG.tensor);
+                let tensor_leaf = symbol.has_tag(&tags.tensor);
                 let count_arguments = scope.count_indices
+                    && (tensor_leaf || composition::is_composite_head(symbol, tags))
                     && !(composition::is_tensor_leaf_head(symbol) && exclude_tensor_leaf(value));
                 let mut inputs = 0;
                 let mut outputs = 0;
                 for (position, argument) in function.iter().enumerate() {
                     let mut child = scope;
-                    if symbol == SPENSO_TAG.chain {
+                    if symbol == tags.chain {
                         child.inside_factor = position >= 2;
-                    } else if symbol == SPENSO_TAG.trace {
+                    } else if symbol == tags.trace {
                         child.inside_factor = position >= 1;
                     } else if scope.validate && Self::is_chain_placeholder(argument) {
                         if !(scope.inside_factor && tensor_leaf) {
@@ -361,22 +687,41 @@ impl InterfaceInference {
                         let AtomView::Var(variable) = argument else {
                             unreachable!()
                         };
-                        if variable.get_symbol() == SPENSO_TAG.chain_in {
+                        if variable.get_symbol() == tags.chain_in {
                             inputs += 1;
                         } else {
                             outputs += 1;
                         }
                         continue;
                     }
-                    child.count_indices =
-                        count_arguments && Self::explicit_index_argument(symbol, argument, slots);
+                    match argument {
+                        AtomView::Num(_) => continue,
+                        AtomView::Var(variable)
+                            if !child.validate
+                                || ![tags.chain_in, tags.chain_out]
+                                    .contains(&variable.get_symbol()) =>
+                        {
+                            continue;
+                        }
+                        _ => {}
+                    }
+                    if count_arguments
+                        && let Ok(slot) = slots.parse::<LibraryRep, AbstractIndex>(argument)
+                    {
+                        // Its complete index identity belongs to this port, including
+                        // scoped labels. Count it in written order on the owning tensor.
+                        result.add(slot, 1);
+                        continue;
+                    }
+                    child.count_indices = count_arguments && Self::nested_index_argument(argument);
                     if child.validate || child.count_indices {
-                        result.append(&Self::observe_indices(
+                        result.append(&Self::observe_indices_with_interfaces(
                             argument,
                             slots,
                             cache,
                             child,
                             exclude_tensor_leaf,
+                            proofs,
                         )?);
                     }
                 }
@@ -404,13 +749,176 @@ mod tests {
     use crate::bis;
     use crate::representations::Bispinor;
     use crate::tensor::SymbolicTensor;
+    use crate::tensor::inference::tests::{INFERENCE_CALLS, INFERENCE_VISITS};
     use crate::test_support;
     use spenso::network::library::symbolic::ETS;
     use spenso::structure::dimension::Dimension;
     use spenso::structure::representation::{ExtendibleReps, Minkowski};
-    use spenso::{bracket, mink, tensor_symbol};
+    use spenso::{bracket, mink, tensor_symbol, vector_symbol};
     use symbolica::atom::{Atom, FunctionBuilder};
     use symbolica::{function, symbol};
+
+    #[test]
+    fn initial_sum_producer_transports_its_boundary_to_fresh_generic_terms() {
+        test_support::test_initialize();
+        let mu = mink!(4, 99469);
+        let left = function!(tensor_symbol!("initial_generic_left"), &mu);
+        let right = function!(tensor_symbol!("initial_generic_right"), &mu);
+        let declared = SymbolicTensor::infer(left.clone()).unwrap().structure;
+        SCOPED_INTERFACE_INFERENCES.with(|count| count.set(0));
+        INFERENCE_CALLS.with(|count| count.set(0));
+        INFERENCE_VISITS.with(|count| count.set(0));
+        let value = SymbolicTensor::from_produced_parts(left + right, declared).unwrap();
+        assert_eq!(value.rank(), 1);
+        assert_eq!(SCOPED_INTERFACE_INFERENCES.with(|count| count.get()), 0);
+        assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+        assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
+    }
+
+    #[test]
+    fn parser_observations_keep_competing_sum_orders_local() {
+        test_support::test_initialize();
+        let mu = mink!(4, 99731);
+        let nu = mink!(4, 99733);
+        let shared = function!(tensor_symbol!("parser_shared_term"), &mu, &nu);
+        let first = &shared + function!(tensor_symbol!("parser_first_term"), &mu, &nu);
+        let second = &shared + function!(tensor_symbol!("parser_second_term"), &mu, &nu);
+        let forward = SymbolicTensor::infer(shared.clone()).unwrap().structure;
+        let reverse =
+            PartialStructure::from_logical_slots(forward.logical_slots().into_iter().rev());
+        assert_ne!(forward, reverse);
+        let source = TensorProofs::default();
+        source.retain_boundary(first.as_view(), &forward);
+        source.retain_boundary(second.as_view(), &reverse);
+
+        for (sum, declaration) in [(&first, &forward), (&second, &reverse), (&first, &forward)] {
+            let (history, private) =
+                InterfaceInference::parser_occurrences(sum.as_view(), &source, None).unwrap();
+            assert_eq!(history.entries().count(), 2);
+            assert_eq!(
+                private
+                    .unwrap()
+                    .retained_interface(shared.as_view())
+                    .as_ref(),
+                Some(declaration)
+            );
+            assert!(source.retained_interface(shared.as_view()).is_none());
+        }
+        // A term with its own declaration keeps that logical order in either sum.
+        source.retain_boundary(shared.as_view(), &reverse);
+        let (_, private) =
+            InterfaceInference::parser_occurrences(first.as_view(), &source, None).unwrap();
+        assert_eq!(
+            private
+                .unwrap()
+                .retained_interface(shared.as_view())
+                .as_ref(),
+            Some(&reverse)
+        );
+        assert_eq!(source.retained_interface(shared.as_view()), Some(reverse));
+    }
+
+    #[test]
+    fn provisional_parser_boundary_preserves_existing_raw_composite_ports() {
+        test_support::test_initialize();
+        let mu = mink!(4, 99735);
+        let value = bracket!(
+            function!(tensor_symbol!("parser_raw_composite_left"), &mu),
+            function!(tensor_symbol!("parser_raw_composite_right"), &mu)
+        );
+        let source = TensorProofs::default();
+        let raw = vec![mu.clone(), mu];
+        let leaves = source.parser_leaf_interfaces();
+        leaves
+            .lock()
+            .unwrap()
+            .insert(value.clone(), (true, raw.clone()));
+        let scalar = PartialStructure::from_logical_slots([]);
+        let (_, private) =
+            InterfaceInference::parser_occurrences(value.as_view(), &source, Some(&scalar))
+                .unwrap();
+        let private = private.unwrap();
+        assert_eq!(private.retained_interface(value.as_view()), Some(scalar));
+        assert_eq!(
+            private.parser_leaf_interfaces().lock().unwrap()[&value].1,
+            raw
+        );
+        assert_eq!(leaves.lock().unwrap()[&value].1, raw);
+        assert!(source.retained_interface(value.as_view()).is_none());
+    }
+
+    #[test]
+    fn initial_producer_scopes_compose_constructor_interfaces_without_inference() {
+        test_support::test_initialize();
+        let mu = mink!(4, 99465);
+        let nu = mink!(4, 99467);
+        let left = function!(vector_symbol!("initial_producer_p"), &mu)
+            * function!(vector_symbol!("initial_producer_q"), &mu);
+        let right = function!(vector_symbol!("initial_producer_r"), &nu)
+            * function!(vector_symbol!("initial_producer_s"), &nu);
+        SCOPED_INTERFACE_INFERENCES.with(|count| count.set(0));
+        INFERENCE_CALLS.with(|count| count.set(0));
+        INFERENCE_VISITS.with(|count| count.set(0));
+        let value = SymbolicTensor::from_produced_parts(
+            (left + right).pow(2),
+            PartialStructure::from_logical_slots([]),
+        )
+        .unwrap();
+        assert!(value.is_scalar());
+        assert_eq!(SCOPED_INTERFACE_INFERENCES.with(|count| count.get()), 0);
+        assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+        assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
+    }
+
+    #[test]
+    fn producer_occurrence_scopes_reuse_admitted_interfaces() {
+        test_support::test_initialize();
+        let mu = mink!(4, 99461);
+        let a = function!(tensor_symbol!("producer_occurrence_a"), &mu);
+        let b = function!(tensor_symbol!("producer_occurrence_b"), &mu);
+        let slot = SlotMatcher::default()
+            .parse::<LibraryRep, AbstractIndex>(mu.as_view())
+            .unwrap();
+        for (expression, expected) in [(&a + &b, 1), (bracket!(&a, &b).pow(2), 0)] {
+            let source = SymbolicTensor::infer(expression).unwrap();
+            SCOPED_INTERFACE_INFERENCES.with(|count| count.set(0));
+            INFERENCE_CALLS.with(|count| count.set(0));
+            INFERENCE_VISITS.with(|count| count.set(0));
+            let occurrences = InterfaceInference::produced_occurrences(
+                source.expression().as_view(),
+                &mut SlotMatcher::default(),
+                &source.proofs,
+            )
+            .unwrap();
+            assert_eq!(occurrences.count(slot), expected);
+            assert_eq!(SCOPED_INTERFACE_INFERENCES.with(|count| count.get()), 0);
+            assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+            assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
+        }
+    }
+
+    #[test]
+    fn producer_occurrence_scopes_reject_missing_facts_without_inference() {
+        test_support::test_initialize();
+        let mu = mink!(4, 99463);
+        let a = function!(tensor_symbol!("producer_missing_a"), &mu);
+        let source = SymbolicTensor::infer(a.clone()).unwrap();
+        let unknown = a + function!(tensor_symbol!("producer_missing_b"), &mu);
+        SCOPED_INTERFACE_INFERENCES.with(|count| count.set(0));
+        INFERENCE_CALLS.with(|count| count.set(0));
+        INFERENCE_VISITS.with(|count| count.set(0));
+        assert!(
+            InterfaceInference::produced_occurrences(
+                unknown.as_view(),
+                &mut SlotMatcher::default(),
+                &source.proofs,
+            )
+            .is_err()
+        );
+        assert_eq!(SCOPED_INTERFACE_INFERENCES.with(|count| count.get()), 0);
+        assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+        assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
+    }
 
     #[test]
     fn one_observation_checks_scopes_and_keeps_branch_multiplicity() {

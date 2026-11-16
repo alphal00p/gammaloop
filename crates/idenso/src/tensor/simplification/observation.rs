@@ -2,12 +2,15 @@
 //! inventory and regional observations come from the same syntactic traversal.
 
 use super::super::SymbolicTensor;
+use super::super::regions::RegionKey;
+#[cfg(debug_assertions)]
+use crate::shorthands::schoonschip::DotNormalizer;
 use crate::{
     dirac::AGS,
     representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet},
     shorthands::schoonschip::SimplificationCandidates,
 };
-use ahash::{AHashMap, AHashSet};
+use ahash::{AHashMap, AHashSet, RandomState};
 use spenso::structure::partial::{
     PartialIndex, PartialSlot, PartialStructure, PartialStructureExt,
 };
@@ -19,11 +22,52 @@ use spenso::{
         slot::{IsAbstractSlot, SlotMatch, SlotMatcher},
     },
 };
+#[cfg(all(test, debug_assertions))]
+use std::cell::Cell;
+use std::hash::Hash;
+use std::ops::Range;
 use std::{
     collections::HashSet,
-    sync::{Arc, LazyLock, RwLock},
+    sync::{Arc, LazyLock, OnceLock},
 };
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
+
+#[cfg(all(test, debug_assertions))]
+thread_local! {
+    static DEBUG_OBSERVATION_ACTIVE: Cell<bool> = const { Cell::new(false) };
+    pub(crate) static DEBUG_CERTIFICATE_CHECKS: Cell<usize> = const { Cell::new(0) };
+    pub(crate) static DEBUG_CANDIDATE_SCANS: Cell<usize> = const { Cell::new(0) };
+    pub(crate) static DEBUG_CANDIDATE_VISITS: Cell<usize> = const { Cell::new(0) };
+    pub(crate) static DEBUG_OBSERVED_NODES: Cell<usize> = const { Cell::new(0) };
+}
+
+/// Keep debug certificate verification distinct from production scan budgets,
+/// including when a failed assertion unwinds through a test.
+#[cfg(all(test, debug_assertions))]
+#[derive(Debug)]
+pub(crate) struct DebugObservation {
+    previous: bool,
+}
+
+#[cfg(all(test, debug_assertions))]
+impl DebugObservation {
+    fn enter() -> Self {
+        Self {
+            previous: DEBUG_OBSERVATION_ACTIVE.with(|active| active.replace(true)),
+        }
+    }
+
+    pub(crate) fn is_active() -> bool {
+        DEBUG_OBSERVATION_ACTIVE.with(Cell::get)
+    }
+}
+
+#[cfg(all(test, debug_assertions))]
+impl Drop for DebugObservation {
+    fn drop(&mut self) {
+        DEBUG_OBSERVATION_ACTIVE.with(|active| active.set(self.previous));
+    }
+}
 
 pub(crate) const HEAD_COUNT: usize = 24;
 pub(crate) static DOMAIN_HEADS: LazyLock<[Symbol; HEAD_COUNT]> = LazyLock::new(|| {
@@ -66,6 +110,14 @@ thread_local! {
     static REUSED_SCOPES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
+/// An already observed child's position in its parent's bytes. The same facts
+/// can be used under any byte-identical parent without keeping its old payload.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ObservedChild {
+    range: Range<usize>,
+    observation: Arc<RegionObservation>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct RegionObservation {
     pub(crate) counts: [usize; HEAD_COUNT],
@@ -77,7 +129,9 @@ pub(crate) struct RegionObservation {
     // stay in their shared regional observations rather than being cloned and
     // rehashed into every arithmetic ancestor.
     leaves: AHashSet<Atom>,
-    leaf_children: Vec<Arc<RegionObservation>>,
+    children: Vec<ObservedChild>,
+    scope: bool,
+    summands: usize,
     leaf_inventory_complete: bool,
     reserved_indices: AHashSet<AbstractIndex>,
     indices: usize,
@@ -92,20 +146,35 @@ pub(crate) struct RegionObservation {
     dots: bool,
 }
 
+/// One fixed hasher for every regional inventory set. `AHashSet::new()` and
+/// `collect()` call `RandomState::new()`, which takes a `fetch_add` on one
+/// process-wide counter shared by all threads, six times per retained scan
+/// node. These sets are only queried for membership, `any`, `len` or
+/// `is_empty`, or unioned into other sets; no result depends on their
+/// iteration order, so a fixed seed leaves every observation unchanged.
+const REGION_HASHER: RandomState = RandomState::with_seeds(
+    0x243f_6a88_85a3_08d3,
+    0x1319_8a2e_0370_7344,
+    0xa409_3822_299f_31d0,
+    0x082e_fa98_ec4e_6c89,
+);
+
 impl Default for RegionObservation {
     fn default() -> Self {
         Self {
             counts: [0; HEAD_COUNT],
-            representations: AHashSet::new(),
-            chain_channels: AHashSet::new(),
-            leaves: AHashSet::new(),
-            leaf_children: Vec::new(),
+            representations: AHashSet::with_hasher(REGION_HASHER),
+            chain_channels: AHashSet::with_hasher(REGION_HASHER),
+            leaves: AHashSet::with_hasher(REGION_HASHER),
+            children: Vec::new(),
+            scope: false,
+            summands: 0,
             leaf_inventory_complete: true,
-            reserved_indices: AHashSet::new(),
+            reserved_indices: AHashSet::with_hasher(REGION_HASHER),
             indices: 0,
             max_indices: 0,
-            metric_sources: AHashSet::new(),
-            vector_sources: AHashSet::new(),
+            metric_sources: AHashSet::with_hasher(REGION_HASHER),
+            vector_sources: AHashSet::with_hasher(REGION_HASHER),
             indexed_power: false,
             scalar_interface: true,
             epsilon_degree: 0,
@@ -117,6 +186,12 @@ impl Default for RegionObservation {
 }
 
 impl RegionObservation {
+    fn set_from<T: Eq + Hash>(values: impl IntoIterator<Item = T>) -> AHashSet<T> {
+        let mut set = AHashSet::with_hasher(REGION_HASHER);
+        set.extend(values);
+        set
+    }
+
     pub(crate) fn any_leaf(&self, mut selected: impl FnMut(AtomView<'_>) -> bool) -> Option<bool> {
         if !self.leaf_inventory_complete {
             return None;
@@ -135,7 +210,12 @@ impl RegionObservation {
                     return Some(true);
                 }
             }
-            pending.extend(region.leaf_children.iter().map(AsRef::as_ref));
+            pending.extend(
+                region
+                    .children
+                    .iter()
+                    .map(|child| child.observation.as_ref()),
+            );
         }
         Some(false)
     }
@@ -172,7 +252,19 @@ impl RegionObservation {
 
     fn observe(&mut self, node: AtomView<'_>, slot: &SlotMatch<'_>, slots: &mut SlotMatcher) {
         #[cfg(test)]
-        OBSERVED_NODES.with(|count| count.set(count.get() + 1));
+        {
+            #[cfg(debug_assertions)]
+            let debug = DebugObservation::is_active();
+            #[cfg(not(debug_assertions))]
+            let debug = false;
+            if !debug {
+                OBSERVED_NODES.with(|count| count.set(count.get() + 1));
+            }
+            #[cfg(debug_assertions)]
+            if debug {
+                DEBUG_OBSERVED_NODES.with(|count| count.set(count.get() + 1));
+            }
+        }
         match node {
             AtomView::Var(variable) => {
                 let head = variable.get_symbol();
@@ -311,7 +403,7 @@ impl RegionObservation {
             | (u8::from(counts[4] > 0) * super::EPSILON)
     }
 
-    fn merge(&mut self, other: &Arc<Self>) {
+    fn merge(&mut self, other: &Self) {
         for (count, additional) in self.counts.iter_mut().zip(other.counts) {
             *count += additional;
         }
@@ -319,9 +411,6 @@ impl RegionObservation {
             .extend(other.representations.iter().copied());
         self.chain_channels
             .extend(other.chain_channels.iter().copied());
-        if !other.leaves.is_empty() || !other.leaf_children.is_empty() {
-            self.leaf_children.push(Arc::clone(other));
-        }
         self.leaf_inventory_complete &= other.leaf_inventory_complete;
         self.reserved_indices
             .extend(other.reserved_indices.iter().copied());
@@ -365,13 +454,46 @@ impl RegionObservation {
     }
 }
 
+/// An open scope of a scan: the facts of its node that its completion needs.
+struct ScanFrame {
+    begin: usize,
+    end: usize,
+    key: RegionKey,
+    summands: usize,
+    power: bool,
+    scope: bool,
+    scalar_owner: bool,
+    observed: Arc<RegionObservation>,
+}
+
+impl ScanFrame {
+    fn new(source: &Arc<Atom>, node: AtomView<'_>, observed: Arc<RegionObservation>) -> Self {
+        let begin = node.get_data().as_ptr() as usize;
+        Self {
+            begin,
+            end: begin + node.get_data().len(),
+            key: RegionKey::within(source, node),
+            summands: match node {
+                AtomView::Add(sum) => sum.get_nargs(),
+                _ => 0,
+            },
+            power: matches!(node, AtomView::Pow(_)),
+            scope: DomainObservations::is_scope(node),
+            scalar_owner: DomainObservations::is_scalar_owner(node),
+            observed,
+        }
+    }
+}
+
+type RegionIndex = AHashMap<RegionKey, Arc<RegionObservation>>;
+
 #[derive(Clone, Debug)]
 pub(crate) struct DomainObservations {
     pub(crate) candidates: SimplificationCandidates<HEAD_COUNT>,
-    regions: AHashMap<Atom, Arc<RegionObservation>>,
-    // Exact syntax facts survive replacements independently of live candidate
-    // multiplicities. Share this memo instead of cloning every unchanged scope.
-    scopes: Arc<RwLock<AHashMap<Atom, Arc<RegionObservation>>>>,
+    regions: RegionIndex,
+    // A changed payload shares observations, but owns the byte keys indexing
+    // them. Index its nested facts only when a caller asks for one.
+    scopes: Arc<OnceLock<RegionIndex>>,
     // A producer can establish terminal polynomial form without collecting syntactic
     // regions. Missing regions remain unknown to arbitrary collector predicates.
     polynomial_form: Option<TerminalPolynomialForm>,
@@ -462,17 +584,71 @@ impl DomainObservations {
         self.polynomial_form.is_some()
     }
 
+    /// Strengthening facts for unchanged syntax must retain its admitted region
+    /// inventory and scope memo, which collectors can still need later.
+    pub(crate) fn retain_regions(mut self, previous: &Self) -> Self {
+        self.regions = previous.regions.clone();
+        self.scopes = Arc::clone(&previous.scopes);
+        self
+    }
+
+    /// Verify producer claims independently without using the scan to construct
+    /// output metadata. A zero has no visible ports; its nominal interface and
+    /// conservative construction history remain owned by the tensor.
+    #[cfg(debug_assertions)]
+    pub(crate) fn assert_terminal_result(
+        &self,
+        expression: &Atom,
+        structure: &PartialStructure,
+        slots: SlotMatcher,
+    ) {
+        if !self.is_terminal_polynomial() {
+            return;
+        }
+        #[cfg(test)]
+        let _debug_observation = DebugObservation::enter();
+        #[cfg(test)]
+        DEBUG_CERTIFICATE_CHECKS.with(|count| count.set(count.get() + 1));
+        if expression.is_zero() {
+            return;
+        }
+        let observed = {
+            let payload = Arc::new(expression.clone());
+            Self::scan_in(&payload)
+        };
+        assert_eq!(
+            observed.identity_candidates(),
+            0,
+            "terminal producer retained an identity candidate: {expression}"
+        );
+        let expected = Self::terminal_polynomial(structure, self.needs_dot_normalization());
+        assert!(
+            observed.max_indices <= expected.max_indices
+                && observed
+                    .reserved_indices
+                    .is_subset(&expected.reserved_indices),
+            "terminal producer retained internal indices: {expression}"
+        );
+        if !self.needs_dot_normalization() {
+            assert_eq!(
+                DotNormalizer::notation(expression.as_view(), slots),
+                *expression,
+                "terminal producer incorrectly certified completed dot notation"
+            );
+        }
+    }
+
     fn terminal_region(&self) -> Arc<RegionObservation> {
         debug_assert!(self.is_terminal_polynomial());
         Arc::new(RegionObservation {
-            representations: self.representations.iter().copied().collect(),
-            reserved_indices: self.reserved_indices.iter().copied().collect(),
+            representations: RegionObservation::set_from(self.representations.iter().copied()),
+            reserved_indices: RegionObservation::set_from(self.reserved_indices.iter().copied()),
             indices: self.max_indices,
             max_indices: self.max_indices,
             // Free polynomial ports can acquire partners during composition.
             // The producer excludes internal connections, not those new paths.
-            metric_sources: self.representations.iter().copied().collect(),
-            vector_sources: self.representations.iter().copied().collect(),
+            metric_sources: RegionObservation::set_from(self.representations.iter().copied()),
+            vector_sources: RegionObservation::set_from(self.representations.iter().copied()),
             scalar_interface: self.is_closed_scalar(),
             dots: self.needs_dot_normalization(),
             leaf_inventory_complete: false,
@@ -520,7 +696,7 @@ impl DomainObservations {
                     })
                 })?
             };
-            regions.insert(factor.to_owned(), region);
+            regions.insert(RegionKey::owned(factor), region);
         }
         if !retained {
             return None;
@@ -536,27 +712,7 @@ impl DomainObservations {
             traversal_complete: false,
             intrinsic: true,
         };
-        // Keep nested scalar-interface proofs when a later contraction opens
-        // one of these unchanged spectators. The usual same-domain case shares
-        // its cache outright; independently admitted spectators contribute only
-        // their existing exact-syntax facts, without another candidate walk.
-        let scopes = observed
-            .first()
-            .map(|(_, facts)| Arc::clone(&facts.scopes))
-            .unwrap_or_default();
-        for (_, facts) in observed.iter().skip(1) {
-            if !Arc::ptr_eq(&scopes, &facts.scopes) {
-                let inherited = facts
-                    .scopes
-                    .read()
-                    .unwrap()
-                    .iter()
-                    .map(|(expression, region)| (expression.clone(), Arc::clone(region)))
-                    .collect::<Vec<_>>();
-                scopes.write().unwrap().extend(inherited);
-            }
-        }
-        let mut result = Self::from_regions(candidates, regions, scopes, false);
+        let mut result = Self::from_regions(candidates, regions, Arc::default(), false);
         result.identity_inventory_complete = terminal.identity_inventory_complete
             && observed
                 .iter()
@@ -616,6 +772,39 @@ impl DomainObservations {
             .then(|| Self::closed_scalar(region.dots || region.counts[17] > 0))
     }
 
+    /// Certify an unchanged region whose admitted interface accounts for every
+    /// incidence. The retained inventory supplies identity and notation facts;
+    /// unknown regions and ambiguous scopes remain uncertified.
+    pub(crate) fn certify_terminal_region(
+        &self,
+        expression: AtomView<'_>,
+        structure: &PartialStructure,
+    ) -> Option<Self> {
+        let region = self.region(expression)?;
+        let slots = structure.logical_slots();
+        if !region.intrinsic
+            || region.opaque
+            || region.identity_candidates() != 0
+            || region.counts[5..8].iter().any(|&count| count != 0)
+            || region.indexed_power
+            || slots
+                .iter()
+                .any(|slot| !matches!(slot.aind, PartialIndex::Explicit(_)))
+            || region.max_indices != slots.len()
+            || region.reserved_indices.iter().any(|index| {
+                !slots
+                    .iter()
+                    .any(|slot| slot.aind == PartialIndex::Explicit(*index))
+            })
+        {
+            return None;
+        }
+        Some(Self::terminal_polynomial(
+            structure,
+            region.dots || region.counts[17] > 0,
+        ))
+    }
+
     fn regions(expression: AtomView<'_>) -> Vec<AtomView<'_>> {
         match expression {
             AtomView::Mul(product) => product.iter().collect(),
@@ -624,12 +813,17 @@ impl DomainObservations {
         }
     }
 
+    #[cfg(test)]
     fn initial(expression: AtomView<'_>) -> Self {
+        Self::initial_in(&Arc::new(expression.to_owned()))
+    }
+
+    fn initial_in(payload: &Arc<Atom>) -> Self {
         #[cfg(test)]
         INITIAL_SCANS.with(|count| count.set(count.get() + 1));
         #[cfg(test)]
-        INITIAL_DOMAINS.with(|domains| domains.borrow_mut().push(expression.to_owned()));
-        Self::scan_regions(expression, None)
+        INITIAL_DOMAINS.with(|domains| domains.borrow_mut().push(payload.as_ref().clone()));
+        Self::scan_in(payload)
     }
 
     fn is_scope(value: AtomView<'_>) -> bool {
@@ -646,18 +840,34 @@ impl DomainObservations {
                     .contains(&function.get_symbol()))
     }
 
+    fn scan_in(source: &Arc<Atom>) -> Self {
+        let expression = source.as_view();
+        let mut scopes = RegionIndex::new();
+        let (candidates, regions) = Self::scan_regions(source, expression, None, &mut scopes);
+        Self::from_regions(
+            candidates,
+            regions,
+            Arc::new(OnceLock::from(scopes)),
+            matches!(expression, AtomView::Add(_)),
+        )
+    }
+
     fn scan_regions(
+        source: &Arc<Atom>,
         expression: AtomView<'_>,
-        cached: Option<&AHashMap<Atom, Arc<RegionObservation>>>,
-    ) -> Self {
+        cached: Option<&RegionIndex>,
+        scopes: &mut RegionIndex,
+    ) -> (SimplificationCandidates<HEAD_COUNT>, RegionIndex) {
+        // Every region and scope key refers to this one copy of the scanned
+        // expression, instead of owning a copy of its subtree: nested scopes
+        // would repeat the bytes of their descendants at every level.
         let wanted = Self::regions(expression)
             .into_iter()
             .map(|region| region.get_data().as_ptr() as usize)
             .collect::<AHashSet<_>>();
         let mut regions = AHashMap::new();
         let mut slots = SlotMatcher::default();
-        let mut scopes = AHashMap::new();
-        let mut stack = Vec::<(usize, usize, Atom, Arc<RegionObservation>)>::new();
+        let mut stack = Vec::<ScanFrame>::new();
         let candidates = SimplificationCandidates::scan_observing(
             expression,
             *DOMAIN_HEADS,
@@ -670,75 +880,63 @@ impl DomainObservations {
                 let end = begin + node.get_data().len();
                 while stack
                     .last()
-                    .is_some_and(|(start, stop, _, _)| begin < *start || end > *stop)
+                    .is_some_and(|frame| begin < frame.begin || end > frame.end)
                 {
-                    Self::finish_observation(&mut stack, &wanted, &mut regions, &mut scopes);
+                    Self::finish_observation(&mut stack, &wanted, &mut regions, scopes);
                 }
                 // Each additive branch needs a separate maximum for incidence
                 // and epsilon degree, including branches that are simple leaves.
                 let retain = stack.is_empty()
                     || wanted.contains(&begin)
                     || Self::is_scope(node)
-                    || stack.last().is_some_and(|(_, _, parent, _)| {
-                        matches!(parent.as_view(), AtomView::Add(_))
-                    });
+                    || stack.last().is_some_and(|frame| frame.summands != 0);
                 if retain {
-                    if let Some(observation) = cached.and_then(|cache| cache.get(node.get_data())) {
+                    if let Some(observation) = cached.and_then(|cache| {
+                        cache
+                            .get(node.get_data())
+                            .or_else(|| scopes.get(node.get_data()))
+                    }) {
                         #[cfg(test)]
                         REUSED_SCOPES.with(|count| count.set(count.get() + 1));
-                        stack.push((begin, end, node.to_owned(), Arc::clone(observation)));
+                        stack.push(ScanFrame::new(source, node, Arc::clone(observation)));
                         // Stop the shared candidate/index traversal itself, not
                         // just regional bookkeeping. Replacement candidates are
                         // reconstructed from these complete regional summaries.
                         return false;
                     }
-                    stack.push((begin, end, node.to_owned(), Arc::default()));
+                    stack.push(ScanFrame::new(source, node, Arc::default()));
                 }
-                Arc::make_mut(&mut stack.last_mut().unwrap().3).observe(node, slot, &mut slots);
+                Arc::make_mut(&mut stack.last_mut().unwrap().observed)
+                    .observe(node, slot, &mut slots);
                 true
             },
         );
         while !stack.is_empty() {
-            Self::finish_observation(&mut stack, &wanted, &mut regions, &mut scopes);
+            Self::finish_observation(&mut stack, &wanted, &mut regions, scopes);
         }
-        Self::from_regions(
-            candidates,
-            regions,
-            Arc::new(RwLock::new(scopes)),
-            matches!(expression, AtomView::Add(_)),
-        )
+        (candidates, regions)
     }
 
     fn finish_observation(
-        stack: &mut Vec<(usize, usize, Atom, Arc<RegionObservation>)>,
+        stack: &mut Vec<ScanFrame>,
         wanted: &AHashSet<usize>,
-        regions: &mut AHashMap<Atom, Arc<RegionObservation>>,
-        scopes: &mut AHashMap<Atom, Arc<RegionObservation>>,
+        regions: &mut RegionIndex,
+        scopes: &mut RegionIndex,
     ) {
-        let (begin, _, value, mut observed) = stack.pop().unwrap();
-        if let AtomView::Fun(function) = value.as_view() {
-            let head = function.get_symbol();
-            // Scalar owners hide representation metadata from their interface.
-            // A metric consumes the sole compact port of each vector in a dot.
-            // Generic compact tensor leaves keep their unresolved interfaces.
-            let scalar = head.is_scalar()
-                || head == SPENSO_TAG.scalar
-                || head == SPENSO_TAG.pure_scalar
-                || ([ETS.metric, SPENSO_TAG.dot].contains(&head) && function.get_nargs() == 2 && {
-                    let mut slots = SlotMatcher::default();
-                    function.iter().all(|argument| {
-                        matches!(argument, AtomView::Fun(vector)
-                            if vector.get_symbol().has_tag(&SPENSO_TAG.rank1)
-                                && slots.vector_argument(vector)
-                                    .and_then(|port| slots.compact_representation(port))
-                                    .is_some())
-                    })
-                });
-            if scalar && !observed.scalar_interface {
-                Arc::make_mut(&mut observed).scalar_interface = true;
-            }
+        let ScanFrame {
+            begin,
+            end,
+            summands,
+            key,
+            scalar_owner,
+            power,
+            scope,
+            mut observed,
+        } = stack.pop().unwrap();
+        if scalar_owner && !observed.scalar_interface {
+            Arc::make_mut(&mut observed).scalar_interface = true;
         }
-        if matches!(value.as_view(), AtomView::Pow(_)) {
+        if power {
             // Scalar coefficient powers stay opaque to contraction. Anything
             // without that certificate retains the existing per-copy scope,
             // including indices hidden in metadata and tensor shorthands.
@@ -757,37 +955,72 @@ impl DomainObservations {
         // branches. Keep its observation once, just as replacement walks do.
         // Every occurrence was still scanned and contributes its own counts to
         // its parent; only the completed, context-free inventory is shared.
-        if let Some(previous) = scopes.get(value.as_view().get_data()) {
+        if observed.scope != scope || observed.summands != summands {
+            let observation = Arc::make_mut(&mut observed);
+            observation.scope = scope;
+            observation.summands = summands;
+        }
+        if let Some(previous) = scopes.get(key.bytes()) {
             observed = Arc::clone(previous);
         }
-        if let Some((_, _, parent, aggregate)) = stack.last_mut() {
-            let aggregate = Arc::make_mut(aggregate);
-            let degree = if matches!(parent.as_view(), AtomView::Add(_)) {
+        if let Some(parent) = stack.last_mut() {
+            let additive = parent.summands != 0;
+            let aggregate = Arc::make_mut(&mut parent.observed);
+            let degree = if additive {
                 aggregate.epsilon_degree.max(observed.epsilon_degree)
             } else {
                 (aggregate.epsilon_degree + observed.epsilon_degree).min(2)
             };
-            let max_indices = if matches!(parent.as_view(), AtomView::Add(_)) {
+            let max_indices = if additive {
                 aggregate.max_indices.max(observed.max_indices)
             } else {
                 aggregate.max_indices + observed.max_indices
             };
             aggregate.merge(&observed);
+            if scope || !observed.leaves.is_empty() || !observed.children.is_empty() {
+                aggregate.children.push(ObservedChild {
+                    range: begin - parent.begin..end - parent.begin,
+                    observation: Arc::clone(&observed),
+                });
+            }
             aggregate.epsilon_degree = degree;
             aggregate.max_indices = max_indices;
         }
         if wanted.contains(&begin) {
-            regions.insert(value.clone(), Arc::clone(&observed));
+            regions.insert(key.clone(), Arc::clone(&observed));
         }
-        if Self::is_scope(value.as_view()) {
-            scopes.insert(value, observed);
+        if scope {
+            scopes.insert(key, observed);
         }
+    }
+
+    /// Scalar owners hide representation metadata from their interface.
+    /// A metric consumes the sole compact port of each vector in a dot.
+    /// Generic compact tensor leaves keep their unresolved interfaces.
+    fn is_scalar_owner(value: AtomView<'_>) -> bool {
+        let AtomView::Fun(function) = value else {
+            return false;
+        };
+        let head = function.get_symbol();
+        head.is_scalar()
+            || head == SPENSO_TAG.scalar
+            || head == SPENSO_TAG.pure_scalar
+            || ([ETS.metric, SPENSO_TAG.dot].contains(&head) && function.get_nargs() == 2 && {
+                let mut slots = SlotMatcher::default();
+                function.iter().all(|argument| {
+                    matches!(argument, AtomView::Fun(vector)
+                        if vector.get_symbol().has_tag(&SPENSO_TAG.rank1)
+                            && slots.vector_argument(vector)
+                                .and_then(|port| slots.compact_representation(port))
+                                .is_some())
+                })
+            })
     }
 
     fn from_regions(
         candidates: SimplificationCandidates<HEAD_COUNT>,
-        regions: AHashMap<Atom, Arc<RegionObservation>>,
-        scopes: Arc<RwLock<AHashMap<Atom, Arc<RegionObservation>>>>,
+        regions: RegionIndex,
+        scopes: Arc<OnceLock<RegionIndex>>,
         additive: bool,
     ) -> Self {
         let epsilon_degree = if additive {
@@ -835,29 +1068,33 @@ impl DomainObservations {
     /// A kernel supplies the changed replacement. Reuse each surviving region;
     /// only newly written regions lose their syntactic and interface facts.
     pub(crate) fn updated(&self, expression: AtomView<'_>) -> Self {
+        self.updated_in(&Arc::new(expression.to_owned()))
+    }
+
+    fn updated_in(&self, payload: &Arc<Atom>) -> Self {
+        let expression = payload.as_view();
         let mut regions = AHashMap::new();
+        let mut new_scopes = RegionIndex::new();
         for view in Self::regions(expression) {
-            let region = if let Some(region) = self.region(view) {
+            let region = if let Some(region) = self
+                .region(view)
+                .or_else(|| new_scopes.get(view.get_data()).cloned())
+            {
                 #[cfg(test)]
                 REUSED_REGIONS.with(|count| count.set(count.get() + 1));
                 region
             } else {
                 #[cfg(test)]
                 REPLACEMENT_SCANS.with(|count| count.set(count.get() + 1));
-                let replacement = {
-                    let cached = self.scopes.read().unwrap();
-                    Self::scan_regions(view, Some(&cached))
-                };
-                let region = replacement
-                    .region(view)
-                    .expect("the replacement root is observed");
-                self.scopes
-                    .write()
-                    .unwrap()
-                    .extend(std::mem::take(&mut *replacement.scopes.write().unwrap()));
-                region
+                let (_, observed) =
+                    Self::scan_regions(payload, view, Some(self.scopes()), &mut new_scopes);
+                new_scopes
+                    .get(view.get_data())
+                    .or_else(|| observed.get(view.get_data()))
+                    .cloned()
+                    .expect("the replacement root is observed")
             };
-            regions.insert(view.to_owned(), region);
+            regions.insert(RegionKey::within(payload, view), region);
         }
         let mut candidates = self.candidates.clone();
         candidates.counts =
@@ -881,7 +1118,7 @@ impl DomainObservations {
         let mut result = Self::from_regions(
             candidates,
             regions,
-            Arc::clone(&self.scopes),
+            Arc::default(),
             matches!(expression, AtomView::Add(_)),
         );
         // Each replacement root is either observed now or reuses this domain's
@@ -921,17 +1158,13 @@ impl DomainObservations {
     /// Reducing an independent family first can avoid carrying a large selected
     /// sum through its kernels. This estimate affects scheduling, never scope.
     pub(crate) fn identity_branch_cost(&self, family: u8) -> usize {
-        self.regions
-            .iter()
-            .fold(1usize, |cost, (expression, region)| {
-                if region.identity_candidates() & family != 0
-                    && let AtomView::Add(sum) = expression.as_view()
-                {
-                    cost.saturating_add(sum.get_nargs().saturating_sub(1))
-                } else {
-                    cost
-                }
-            })
+        self.regions.values().fold(1usize, |cost, region| {
+            if region.identity_candidates() & family != 0 && region.summands > 0 {
+                cost.saturating_add(region.summands - 1)
+            } else {
+                cost
+            }
+        })
     }
 
     /// Invalidate only families whose observed bodies or incident representations
@@ -1012,24 +1245,48 @@ impl DomainObservations {
                 .all(|&head| self.candidates.counts[head] <= previous.candidates.counts[head])
     }
 
+    /// Index the retained facts, using their recorded offsets to bind them to
+    /// this expression. No syntax walk is needed, even for a reopened subtree.
+    fn scopes(&self) -> &RegionIndex {
+        self.scopes.get_or_init(|| {
+            let mut index = RegionIndex::new();
+            let mut pending: Vec<_> = self
+                .regions
+                .iter()
+                .map(|(key, facts)| (key.clone(), facts))
+                .collect();
+            while let Some((key, facts)) = pending.pop() {
+                if facts.scope && index.contains_key(key.bytes()) {
+                    continue;
+                }
+                pending.extend(
+                    facts
+                        .children
+                        .iter()
+                        .map(|child| (key.child(&child.range), &child.observation)),
+                );
+                if facts.scope {
+                    index.insert(key, Arc::clone(facts));
+                }
+            }
+            index
+        })
+    }
+
     pub(crate) fn region(&self, expression: AtomView<'_>) -> Option<Arc<RegionObservation>> {
         self.regions
             .get(expression.get_data())
+            .or_else(|| self.scopes().get(expression.get_data()))
             .cloned()
-            .or_else(|| {
-                self.scopes
-                    .read()
-                    .unwrap()
-                    .get(expression.get_data())
-                    .cloned()
-            })
     }
 }
 
 impl SymbolicTensor<PartialStructure> {
     pub(crate) fn reduction_observations(&self) -> &Arc<DomainObservations> {
-        self.proofs.observations.get_or_init(|| {
-            let mut observed = DomainObservations::initial(self.expression.as_view());
+        self.work.get_or_init().observations.get_or_init(|| {
+            let mut observed = DomainObservations::initial_in(
+                &self.proofs.observation_payload(self.expression.as_view()),
+            );
             self.exclude_external_connections(&mut observed);
             Arc::new(observed)
         })
@@ -1043,7 +1300,7 @@ impl SymbolicTensor<PartialStructure> {
         // their conservative candidate flags do not invalidate this proof.
         // Indexed powers can encode extra copies, while scalar powers cannot.
         if !observed.candidates.traversal_complete
-            || self.proofs.validated.get() != Some(&true)
+            || !self.proofs.is_admitted()
             || observed
                 .regions
                 .values()
@@ -1073,26 +1330,32 @@ impl SymbolicTensor<PartialStructure> {
 
     pub(crate) fn observe_replacement(&self, previous: &Self) {
         // Exact unchanged opaque boundaries retain their logical interfaces.
-        // A callback can invalidate these facts, so only intrinsic, admitted
-        // transformations share the cache with a new payload.
-        if self.proofs.validated.get() == Some(&true)
-            && let Some(interfaces) = previous.proofs.leaf_interfaces.get()
-            && previous.normalization_is_intrinsic()
-        {
-            let _ = self.proofs.leaf_interfaces.set(Arc::clone(interfaces));
+        // Callback-generated syntax has a different key; rebuilding a sibling
+        // cannot invalidate an unchanged leaf's admitted interface.
+        if self.proofs.is_admitted() {
+            self.proofs.leaf_interfaces.inherit_replacement(
+                self.expression.as_view(),
+                previous.expression.as_view(),
+                &previous.proofs.leaf_interfaces,
+            );
         }
-        if self.proofs.observations.get().is_some() {
+        self.observe_replacement_work(previous);
+    }
+
+    pub(in crate::tensor) fn observe_replacement_work(&self, previous: &Self) {
+        if self.work.observations().is_some() {
             return;
         }
         let previous_observations = previous.reduction_observations();
         let observed = if self.expression == previous.expression {
             Arc::clone(previous_observations)
         } else {
-            let mut observed = previous_observations.updated(self.expression.as_view());
+            let mut observed = previous_observations
+                .updated_in(&self.proofs.observation_payload(self.expression.as_view()));
             self.exclude_external_connections(&mut observed);
             Arc::new(observed)
         };
-        let _ = self.proofs.observations.set(observed);
+        let _ = self.work.get_or_init().observations.set(observed);
     }
 }
 
@@ -1123,7 +1386,7 @@ impl SettledRegions {
         let intrinsic = complete && source.normalization_is_intrinsic();
         let result = operation(source)?;
         if intrinsic
-            && result.proofs.frontier == super::ReductionStatus::Complete
+            && result.work.frontier() == super::ReductionStatus::Complete
             && result.expression == key.0
             && result.structure.logical_slots() == key.1
         {
@@ -1146,6 +1409,9 @@ impl SettledRegions {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support;
+    use spenso::index_symbol;
+    use symbolica::parser::ParseSettings;
 
     #[test]
     fn leaf_inventories_share_descendants_instead_of_copying_each_ancestor() {
@@ -1169,7 +1435,12 @@ mod tests {
                     continue;
                 }
                 retained_leaves += region.leaves.len();
-                pending.extend(region.leaf_children.iter().map(AsRef::as_ref));
+                pending.extend(
+                    region
+                        .children
+                        .iter()
+                        .map(|child| child.observation.as_ref()),
+                );
             }
             // The two branches share the complete repeated subtree. Retain
             // each distinct function once while counting both occurrences in
@@ -1195,6 +1466,122 @@ mod tests {
         }
     }
 
+    /// Compare the two stored key sets with the owned Atom representation on
+    /// a real simplifier input. Byte counts exclude observations and map buckets.
+    #[test]
+    fn observation_span_storage_matches_owned_workflow_keys() {
+        test_support::test_initialize();
+        SPENSO_TAG.rank_one_tensor_symbol("scope_storage::Q");
+        let _ = (
+            index_symbol!("scope_storage::hedge"),
+            index_symbol!("scope_storage::edge"),
+        );
+        let text = include_str!(
+            "../../../tests/fixtures/aa_aa_2l_gl16_integrated_uv_start_after_simplify_metrics.sym"
+        )
+        .replace("gammalooprs::", "scope_storage::");
+        let input = Atom::parse(&text, "spenso", ParseSettings::symbolica()).unwrap();
+        let source = input.as_view();
+        let owned_regions: AHashSet<_> = DomainObservations::regions(source)
+            .into_iter()
+            .map(|region| region.to_owned())
+            .collect();
+        let mut owned_scopes = AHashSet::new();
+        SimplificationCandidates::scan_observing(
+            source,
+            *DOMAIN_HEADS,
+            || true,
+            |node, _| {
+                if DomainObservations::is_scope(node) {
+                    owned_scopes.insert(node.to_owned());
+                }
+                true
+            },
+        );
+        let observed = DomainObservations::initial(source);
+        for (owned, spans) in [
+            (&owned_regions, &observed.regions),
+            (&owned_scopes, observed.scopes()),
+        ] {
+            assert_eq!(spans.len(), owned.len());
+            assert!(
+                owned
+                    .iter()
+                    .all(|key| spans.contains_key(key.as_view().get_data()))
+            );
+        }
+        let old_bytes: usize = owned_scopes
+            .iter()
+            .chain(&owned_regions)
+            .map(|atom| atom.as_view().get_data().len())
+            .sum();
+        let mut payloads = HashSet::new();
+        let stored_bytes: usize = observed
+            .scopes()
+            .keys()
+            .chain(observed.regions.keys())
+            .map(RegionKey::owner)
+            .filter(|owner| payloads.insert(Arc::as_ptr(owner)))
+            .map(|owner| owner.as_view().get_data().len())
+            .sum();
+        assert_eq!(stored_bytes, source.get_data().len());
+        assert!(stored_bytes < old_bytes);
+        eprintln!(
+            "GL16 observation keys: {} regions + {} scopes, {old_bytes} owned bytes, {stored_bytes} span-backed bytes",
+            owned_regions.len(),
+            owned_scopes.len()
+        );
+    }
+
+    #[test]
+    fn observing_nested_scopes_shares_one_payload_and_releases_it_on_extraction() {
+        crate::test_support::test_initialize();
+        let inner = symbolica::parse_lit!(shared_scope_x + shared_scope_y);
+        let child = inner.clone().pow(3);
+        let mut large = child.clone();
+        for i in 1..32 {
+            large = (large + i).pow(2);
+        }
+        let parent = DomainObservations::initial(large.as_view());
+        let key = parent
+            .scopes()
+            .get_key_value(large.as_view().get_data())
+            .unwrap()
+            .0;
+        let owner = Arc::downgrade(key.owner());
+        assert!(
+            parent
+                .scopes()
+                .keys()
+                .chain(parent.regions.keys())
+                .all(|other| Arc::ptr_eq(key.owner(), other.owner()))
+        );
+        let owned_bytes: usize = parent
+            .scopes()
+            .keys()
+            .chain(parent.regions.keys())
+            .map(|key| key.bytes().len())
+            .sum();
+        let payload_bytes = key.owner().as_view().get_data().len();
+        assert!(
+            owned_bytes > payload_bytes * 10,
+            "the fixture must have deep overlapping keys"
+        );
+        eprintln!(
+            "32-level observation fixture: {owned_bytes} owned key bytes, {payload_bytes} span-backed bytes"
+        );
+        let shared_facts = parent.region(inner.as_view()).unwrap();
+        let surviving = parent.updated(child.as_view());
+        drop(parent);
+        assert!(
+            owner.upgrade().is_none(),
+            "a surviving scope kept its old scan buffer alive"
+        );
+        let nested = surviving.region(inner.as_view()).unwrap();
+        assert!(Arc::ptr_eq(&shared_facts, &nested));
+        assert!(surviving.region(large.as_view()).is_none());
+    }
+
     #[test]
     fn replacement_reuses_tensor_and_symmetric_trace_boundaries() {
         use crate::shorthands::schoonschip::CANDIDATE_NODE_VISITS;
@@ -1211,19 +1598,17 @@ mod tests {
         );
         let source = SymbolicTensor::infer(&structure * &trace).unwrap();
         let initial = source.reduction_observations();
-        assert!(initial.scopes.read().unwrap().contains_key(&structure));
-        assert!(initial.scopes.read().unwrap().contains_key(&trace));
+        assert!(
+            initial
+                .scopes()
+                .contains_key(structure.as_view().get_data())
+        );
+        assert!(initial.scopes().contains_key(trace.as_view().get_data()));
         let AtomView::Fun(trace_view) = trace.as_view() else {
             panic!("expected trace")
         };
         let symmetric = trace_view.iter().nth(1).unwrap();
-        assert!(
-            initial
-                .scopes
-                .read()
-                .unwrap()
-                .contains_key(symmetric.get_data())
-        );
+        assert!(initial.scopes().contains_key(symmetric.get_data()));
 
         let changed = Atom::one()
             + Atom::var(symbolica::symbol!("terminal_inventory::weight")) * &source.expression;
@@ -1261,7 +1646,10 @@ mod tests {
         // scanner itself must not revisit either sum's children.
         assert_eq!(scanned, 4);
         assert_eq!(REUSED_SCOPES.with(|count| count.get()), 2);
-        assert!(Arc::ptr_eq(&observed.scopes, &updated.scopes));
+        assert!(Arc::ptr_eq(
+            &observed.region(nested.as_view()).unwrap(),
+            &updated.region(nested.as_view()).unwrap()
+        ));
         OBSERVED_NODES.with(|count| count.set(0));
         CANDIDATE_NODE_VISITS.with(|count| count.set(0));
         let fresh = DomainObservations::initial(changed.as_view());
@@ -1528,7 +1916,12 @@ mod tests {
             combined.structure.clone(),
             Arc::clone(combined.proofs.occurrences.get().unwrap()),
         );
-        cached.proofs.observations.set(Arc::new(facts)).unwrap();
+        cached
+            .work
+            .get_or_init()
+            .observations
+            .set(Arc::new(facts))
+            .unwrap();
         let settings = AlgebraSettings {
             contract: AlgebraContraction::Dots,
             ..Default::default()
@@ -1572,7 +1965,6 @@ mod tests {
             &selected.expression * &spectators[0].expression * &spectators[1].expression,
         )
         .unwrap();
-        let source_scopes = Arc::clone(&spectators[0].reduction_observations().scopes);
         let weights = [first_weight, second_weight];
         let source_regions = std::array::from_fn::<_, 2, _>(|i| {
             spectators[i]
@@ -1592,7 +1984,6 @@ mod tests {
             &spectators,
         )
         .unwrap();
-        assert!(Arc::ptr_eq(&source_scopes, &observed.scopes));
         assert!(!observed.excludes_internal_connections());
         for (weight, source) in weights.iter().zip(source_regions) {
             let retained = observed.region(weight.as_view()).unwrap();

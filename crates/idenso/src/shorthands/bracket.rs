@@ -1,13 +1,10 @@
-use spenso::{
-    bracket,
-    network::{parsing::AtomStructureExt, tags::SPENSO_TAG},
-    structure::{
-        OrderedStructure,
-        abstract_index::AbstractIndex,
-        representation::{LibraryRep, Representation},
-        slot::Slot,
-    },
-};
+use spenso::bracket;
+use spenso::network::parsing::StructureFromAtom;
+use spenso::network::tags::SPENSO_TAG;
+use spenso::structure::OrderedStructure;
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::representation::{LibraryRep, Representation};
+use spenso::structure::slot::{Slot, SlotMatcher};
 use symbolica::atom::{Atom, AtomCore, AtomView};
 
 /// Expose a bracket's factors to ordinary product identities without erasing
@@ -16,6 +13,10 @@ pub(crate) struct BracketNormalizer;
 
 impl BracketNormalizer {
     pub(crate) fn normalize(expression: AtomView<'_>) -> Atom {
+        Self::with_matcher(expression, SlotMatcher::default())
+    }
+
+    pub(crate) fn with_matcher(expression: AtomView<'_>, mut matcher: SlotMatcher) -> Atom {
         // Every transformation below opens a bracket at this node or in one
         // of its factors. Ordinary tensor expressions need no rebuilding.
         if !expression.contains_symbol(SPENSO_TAG.bracket) {
@@ -26,10 +27,10 @@ impl BracketNormalizer {
             if let AtomView::Mul(factors) = node {
                 if factors
                     .iter()
-                    .any(|factor| Self::open_payload(factor).is_some())
+                    .any(|factor| Self::open_payload(factor, &mut matcher).is_some())
                 {
                     let product = factors.iter().fold(Atom::one(), |product, factor| {
-                        product * Self::open_payload(factor).unwrap_or(factor)
+                        product * Self::open_payload(factor, &mut matcher).unwrap_or(factor)
                     });
                     **out = Self::scoped_product(product);
                 }
@@ -51,13 +52,16 @@ impl BracketNormalizer {
                 return;
             }
             let product = function.iter().fold(Atom::one(), |product, factor| {
-                product * Self::open_payload(factor).unwrap_or(factor)
+                product * Self::open_payload(factor, &mut matcher).unwrap_or(factor)
             });
             **out = Self::scoped_product(product);
         })
     }
 
-    fn open_payload(expression: AtomView<'_>) -> Option<AtomView<'_>> {
+    fn open_payload<'a>(
+        expression: AtomView<'a>,
+        matcher: &mut SlotMatcher,
+    ) -> Option<AtomView<'a>> {
         let AtomView::Fun(function) = expression else {
             return None;
         };
@@ -70,7 +74,8 @@ impl BracketNormalizer {
         }
         // Fast inference returns EmptyStructure for a scalar. Its contracted
         // indices belong to a closed scope and must not join the outer product.
-        payload.infer_structure::<OrderedStructure>().ok()?;
+        OrderedStructure::<LibraryRep, AbstractIndex>::structure_from_atom(payload, matcher)
+            .ok()?;
         Some(payload)
     }
 

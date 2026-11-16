@@ -2,6 +2,7 @@ use crate::tensor::inference::InterfaceInference;
 use ahash::HashMap;
 use spenso::network::tags::SPENSO_TAG;
 use spenso::structure::abstract_index::{AIND_SYMBOLS, AbstractIndex, AbstractIndexError};
+use std::fmt::Write;
 use std::sync::{Arc, Mutex};
 use symbolica::atom::representation::FunView;
 use symbolica::atom::{
@@ -700,11 +701,25 @@ impl CookSettings {
         // plain-text export and a fresh process with no previously registered payload.
         let text = dimension.to_canonical_string();
         let mut name = String::from("idenso::cooked_dimension_v1_");
+        let mut tags = self.output_tags.explicit_tags().to_vec();
+        tags.sort_unstable();
+        tags.dedup();
         for byte in text.bytes() {
-            use std::fmt::Write;
-            write!(&mut name, "{byte:02x}").unwrap();
+            write!(name, "{byte:02x}").unwrap();
         }
-        self.build_symbol(name, None, self.output_tags.explicit_tags())
+        if !tags.is_empty() {
+            name.push_str("_t");
+            for tag in &tags {
+                // 00 terminates each tag. FF cannot occur in UTF-8, so it can
+                // represent a literal NUL without colliding with a separator.
+                for byte in tag.bytes() {
+                    let byte = if byte == 0 { 0xff } else { byte };
+                    write!(name, "{byte:02x}").unwrap();
+                }
+                name.push_str("00");
+            }
+        }
+        self.build_symbol(name, None, &tags)
             .map(Atom::var)
             .map(Some)
     }
@@ -736,27 +751,42 @@ impl CookSettings {
         supported
     }
 
+    fn decode_dimension_hex(hex: &str) -> Option<Vec<u8>> {
+        let (pairs, tail) = hex.as_bytes().as_chunks::<2>();
+        if !tail.is_empty() || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return None;
+        }
+        pairs
+            .iter()
+            .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).ok()?, 16).ok())
+            .collect()
+    }
+
     /// Read a portable dimension encoded by this owner, without a process-local registry.
     /// Returns `None` for ordinary symbols or invalid encodings. Consumers can
     /// compare this scalar dimension while retaining native tensor slot syntax.
     pub fn dimension_payload(symbol: Symbol) -> Option<Atom> {
-        let hex = symbol
+        let encoded = symbol
             .get_name()
             .strip_prefix("idenso::cooked_dimension_v1_")?;
-        if !hex.len().is_multiple_of(2) {
-            return None;
-        }
-        let bytes = hex
-            .as_bytes()
-            .as_chunks::<2>()
-            .0
-            .iter()
-            .map(|pair| {
-                let text = std::str::from_utf8(pair).ok()?;
-                u8::from_str_radix(text, 16).ok()
-            })
-            .collect::<Option<Vec<_>>>()?;
-        let text = String::from_utf8(bytes).ok()?;
+        let hex = if let Some((hex, tags)) = encoded.split_once("_t") {
+            let mut bytes = Self::decode_dimension_hex(tags)?;
+            if bytes.pop() != Some(0) {
+                return None;
+            }
+            for tag in bytes.split_mut(|byte| *byte == 0) {
+                for byte in tag.iter_mut().filter(|byte| **byte == 0xff) {
+                    *byte = 0;
+                }
+                if !std::str::from_utf8(tag).ok()?.contains("::") {
+                    return None;
+                }
+            }
+            hex
+        } else {
+            encoded
+        };
+        let text = String::from_utf8(Self::decode_dimension_hex(hex)?).ok()?;
         // Tokenize without constructing products. Reject function calls before any
         // normalization can invoke a callback on a forged or unsupported payload.
         let token =
@@ -1500,6 +1530,54 @@ mod tests {
     }
 
     #[test]
+    fn cooked_dimensions_distinguish_tag_sets_in_either_registration_order() {
+        test_initialize();
+        let plain = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let tagged = CookSettings::reversible();
+        for (dimension, settings) in [
+            (parse_lit!(idenso::plain_first_n ^ 2 - 1), [&plain, &tagged]),
+            (
+                parse_lit!(idenso::tagged_first_n ^ 2 - 1),
+                [&tagged, &plain],
+            ),
+        ] {
+            let [first, second] = settings.map(|setting| {
+                let encoded = setting
+                    .cook_dimension(dimension.as_view())
+                    .unwrap()
+                    .unwrap();
+                let symbol = encoded.get_symbol().unwrap();
+                assert_eq!(symbol.get_tags(), setting.output_tags.explicit_tags());
+                assert_eq!(
+                    CookSettings::dimension_payload(symbol).as_ref(),
+                    Some(&dimension)
+                );
+                encoded
+            });
+            assert_ne!(first, second);
+        }
+        let dimension = parse_lit!(idenso::tag_order_n ^ 2);
+        let cook = |tags| {
+            plain
+                .clone()
+                .with_output_tags(tags)
+                .cook_dimension(dimension.as_view())
+                .unwrap()
+        };
+        assert_eq!(
+            cook(["idenso::one", "idenso::two"]),
+            cook(["idenso::two", "idenso::one"])
+        );
+        for invalid in [
+            symbol!("idenso::cooked_dimension_v1_31_tzz"),
+            symbol!("idenso::cooked_dimension_v1_31_t6100"),
+            symbol!("idenso::cooked_dimension_v1_31_t613a3a620000"),
+        ] {
+            assert_eq!(CookSettings::dimension_payload(invalid), None);
+        }
+    }
+
+    #[test]
     fn dimension_cooking_refuses_callbacks_and_metadata_without_invoking_them() {
         use crate::{CookMode, CookingError};
         use std::sync::{
@@ -1598,27 +1676,40 @@ mod tests {
         let settings = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(false, true);
+        let tagged = settings.clone().with_output_tags(["idenso::cooked"]);
         let expected = parse!("spenso::coad(spenso::Nc^2-1)");
         if let Ok(text) = std::env::var(KEY) {
-            let parsed = Atom::parse(text, "idenso", Default::default()).unwrap();
-            let AtomView::Fun(rep) = parsed.as_view() else {
-                panic!("representation");
-            };
-            let AtomView::Var(dim) = rep.iter().next().unwrap() else {
-                panic!("atomic dimension");
-            };
-            assert_eq!(dim.get_symbol().get_data(), &UserData::None);
-            assert_eq!(settings.uncook(parsed.as_view()), expected);
+            let (plain, canonical) = text.split_once('\n').unwrap();
+            for (text, cook) in [(plain, &settings), (canonical, &tagged)] {
+                let parsed = Atom::parse(text, "idenso", Default::default()).unwrap();
+                let AtomView::Fun(rep) = parsed.as_view() else {
+                    panic!("representation");
+                };
+                let AtomView::Var(dim) = rep.iter().next().unwrap() else {
+                    panic!("atomic dimension");
+                };
+                assert_eq!(dim.get_symbol().get_data(), &UserData::None);
+                assert_eq!(
+                    dim.get_symbol().get_tags(),
+                    cook.output_tags.explicit_tags()
+                );
+                assert_eq!(cook.uncook(parsed.as_view()), expected);
+                assert_eq!(cook.try_cook(expected.as_view()).unwrap(), parsed);
+            }
             return;
         }
-        let cooked = settings.cook(expected.as_view());
+        let plain = settings
+            .cook(expected.as_view())
+            .as_view()
+            .to_plain_string();
+        let canonical = tagged.cook(expected.as_view()).to_canonical_string();
         let output = std::process::Command::new(std::env::current_exe().unwrap())
             .args([
                 "--exact",
                 "cook::tests::portable_dimension_plain_text_round_trips_in_a_fresh_process",
                 "--nocapture",
             ])
-            .env(KEY, cooked.as_view().to_plain_string())
+            .env(KEY, format!("{plain}\n{canonical}"))
             .output()
             .unwrap();
         assert!(

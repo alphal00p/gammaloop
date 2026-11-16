@@ -84,10 +84,9 @@ fn tensor_free_admission_is_opaque_and_proofs_remain_lazy() {
         assert!(value.is_scalar());
         assert!(value.explicit_index_occurrences().unwrap().is_empty());
         for proof in [
-            &value.proofs.intrinsic,
+            &value.work.intrinsic,
             &value.proofs.normalized_product,
-            &value.proofs.algebra,
-            &value.proofs.rewrite,
+            &value.work.rewrite,
         ] {
             assert!(proof.get().is_none());
         }

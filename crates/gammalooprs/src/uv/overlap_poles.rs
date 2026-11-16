@@ -7,6 +7,10 @@ use crate::{
     graph::FeynmanGraph,
     uv::{Integrands, approx::direct_3d::physical_full_h_fixture},
 };
+use idenso::representations::{ColorAdjoint, ColorFundamental, ColorSextet};
+use idenso::tensor::SymbolicTensor;
+use idenso::{CookMode, CookSettings};
+use spenso::shadowing::TensorCollectFilter;
 
 #[derive(Clone, Debug)]
 pub(super) struct OverlapStep {
@@ -189,24 +193,27 @@ impl PhysicalOverlapInput {
                 .cut(operation, &cutset)?;
             // Match production's per-node color collection before the forest sum.
             // FinalIntegrands::iter/export would resolve every numerator; do not use them.
+            let color = TensorCollectFilter::Reps([
+                ColorAdjoint {}.into(),
+                ColorFundamental {}.into(),
+                ColorSextet {}.into(),
+            ]);
             let integrands = computed
                 .final_integrands
-                .map_expressions(|atom| {
-                    let color = spenso::shadowing::TensorCollectFilter::Reps([
-                        idenso::representations::ColorAdjoint {}.into(),
-                        idenso::representations::ColorFundamental {}.into(),
-                        idenso::representations::ColorSextet {}.into(),
-                    ]);
-                    let cooking = idenso::CookSettings::indices()
-                        .with_mode(idenso::CookMode::ReversibleEncoding)
+                .clone()
+                .into_integrands()
+                .fallible_map(|atom| {
+                    let cooking = CookSettings::indices()
+                        .with_mode(CookMode::ReversibleEncoding)
                         .with_representation_payloads(true, true);
-                    let collected = idenso::tensor::SymbolicTensor::infer_indexed(
-                        cooking.try_cook(atom.as_view())?,
-                    )?
-                    .collect(color)?;
+                    // Raw scalar roots have no retained tensor carrier. Shared
+                    // numerator bodies below already have one and never re-enter admission.
+                    let collected =
+                        SymbolicTensor::infer_indexed(cooking.try_cook(atom.as_view())?)?
+                            .collect(color)?;
                     Ok(cooking.uncook(collected.expression().as_view()))
                 })?
-                .into_integrands();
+                .map_numerators(|tensor| Ok(tensor.collect(color)?))?;
             assert_eq!(integrands.iter().count(), 1);
             assert!(
                 integrands
@@ -299,7 +306,7 @@ impl PhysicalOverlapInput {
                 .with(W_.d_))
         };
         integrands.fallible_map(finish)?.map_numerators(|tensor| {
-            Ok(tensor.with_checked_expression(finish(tensor.expression())?)?)
+            Ok(tensor.with_produced_expression(finish(tensor.expression())?)?)
         })
     }
 }

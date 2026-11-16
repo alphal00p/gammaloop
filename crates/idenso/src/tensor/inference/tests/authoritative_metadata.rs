@@ -1,7 +1,318 @@
 use super::*;
+use crate::tensor::{SymbolicNetExt, SymbolicNetParse};
 use crate::test_support;
-use spenso::tensor_symbol;
+use spenso::network::parsing::ParseSettings;
+use spenso::shadowing::TensorCollectFilter;
+use spenso::{mink, tensor_symbol};
 use symbolica::{function, symbol};
+
+#[test]
+fn materializers_reuse_exact_publication_and_release_replaced_roots() {
+    test_support::test_initialize();
+    let leaf = function!(
+        tensor_symbol!("authoritative_metadata::prepared_leaf"),
+        mink!(4, 99721)
+    );
+    let coefficient = Atom::var(symbol!("authoritative_metadata::old_coefficient"));
+    let source = SymbolicTensor::infer(&leaf * &coefficient).unwrap();
+    let previous = Arc::downgrade(source.proofs.admitted_interfaces.get().unwrap());
+    let unchanged = source
+        .borrowed_parts()
+        .with_generated_expression("unchanged materializer", source.expression.clone(), &[])
+        .unwrap();
+    assert!(Arc::ptr_eq(
+        unchanged.proofs.admitted_interfaces.get().unwrap(),
+        source.proofs.admitted_interfaces.get().unwrap(),
+    ));
+    let expression = Atom::num(2) * &leaf;
+    let mut proofs = source.proofs.clone();
+    proofs.publish_interfaces(expression.as_view(), source.structure.clone(), []);
+    let prepared = Arc::clone(proofs.admitted_interfaces.get().unwrap());
+    let leaves = proofs.parser_leaf_interfaces();
+    let result = source
+        .with_published_materialization("changed materializer", expression, proofs)
+        .unwrap();
+    assert!(Arc::ptr_eq(
+        result.proofs.admitted_interfaces.get().unwrap(),
+        &prepared
+    ));
+    assert!(Arc::ptr_eq(
+        result.proofs.leaf_interfaces.get().unwrap(),
+        &leaves
+    ));
+    assert!(
+        result
+            .proofs
+            .retained_interface(coefficient.as_view())
+            .is_none()
+    );
+    drop(unchanged);
+    drop(source);
+    assert!(previous.upgrade().is_none());
+}
+
+#[test]
+fn unchanged_materializer_keeps_the_declared_order_over_a_prepared_storage_order() {
+    test_support::test_initialize();
+    let expression = function!(
+        tensor_symbol!("authoritative_metadata::ordered_materializer"),
+        mink!(4, 99727),
+        mink!(4, 99729)
+    );
+    let source = SymbolicTensor::infer(expression.clone()).unwrap();
+    let reversed =
+        PartialStructure::from_logical_slots(source.structure.logical_slots().into_iter().rev());
+    assert_ne!(reversed, source.structure);
+    let mut proofs = source.proofs.clone();
+    proofs.publish_interfaces(expression.as_view(), reversed, []);
+    let result = source
+        .with_published_materialization("prepared order", expression, proofs)
+        .unwrap();
+    assert_eq!(result.structure, source.structure);
+    assert_eq!(
+        result
+            .proofs
+            .retained_interface(result.expression.as_view()),
+        Some(result.structure.clone()),
+    );
+}
+
+#[test]
+fn a_prepared_materializer_cannot_certify_its_own_callback_output() {
+    test_support::test_initialize();
+    let target = tensor_symbol!("authoritative_metadata::callback_result");
+    let head = tensor_symbol!(
+        "authoritative_metadata::materializer_callback",
+        norm = move |node, out| {
+            let AtomView::Fun(function) = node else {
+                return;
+            };
+            let mut args = function.iter();
+            let Some(selector) = args.next() else { return };
+            if selector == Atom::one().as_view() {
+                **out = Atom::one();
+            } else if selector == Atom::num(2).as_view()
+                && let (Some(first), Some(second)) = (args.next(), args.next())
+            {
+                **out = function!(target, second, first);
+            }
+        }
+    );
+    let first = mink!(4, 99739);
+    let second = mink!(4, 99741);
+    let source = SymbolicTensor::infer(function!(head, 0, &first, &second)).unwrap();
+    for selector in [1, 2] {
+        let expression = function!(head, selector, &first, &second);
+        let actual = SymbolicTensor::infer(expression.clone()).unwrap();
+        let mut prepared = source.proofs.clone();
+        prepared.publish_interfaces(
+            expression.as_view(),
+            source.structure.clone(),
+            [&actual.proofs],
+        );
+        let result = source.with_published_materialization("callback", expression, prepared);
+        if selector == 1 {
+            assert!(actual.is_scalar());
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("compatible tensor interface")
+            );
+        } else {
+            assert_ne!(source.structure, actual.structure);
+            let value = result.unwrap();
+            assert_eq!(value.structure, source.structure);
+            assert_eq!(
+                value.proofs.retained_interface(value.expression.as_view()),
+                Some(source.structure.clone())
+            );
+            assert_eq!(
+                value.proofs.parser_leaf_interfaces().lock().unwrap()[&value.expression].1,
+                [second.clone(), first.clone()]
+            );
+        }
+    }
+}
+
+#[test]
+fn chainify_rejects_a_callback_erasing_a_spectator_from_its_generated_composite() {
+    test_support::test_initialize();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let count = Arc::clone(&calls);
+    let template = tensor_symbol!("authoritative_metadata::changed_chain_template");
+    let head = tensor_symbol!(
+        "authoritative_metadata::chainify_callback",
+        norm = move |node, out| {
+            if let AtomView::Fun(function) = node
+                && function.iter().any(|arg| matches!(arg, AtomView::Var(var) if var.get_symbol() == SPENSO_TAG.chain_in))
+            {
+                count.fetch_add(1, Ordering::Relaxed);
+                **out = function!(template, SPENSO_TAG.chain_in, SPENSO_TAG.chain_out);
+            }
+        }
+    );
+    let spectator = LibraryRep::from(ColorFundamental {})
+        .new_rep(3)
+        .slot::<AbstractIndex, _>(AbstractIndex::Normal(99747))
+        .to_atom();
+    let source =
+        SymbolicTensor::infer(function!(head, mink!(4, 99743), mink!(4, 99745), spectator))
+            .unwrap();
+    let initial_leaves = source
+        .proofs
+        .parser_leaf_interfaces()
+        .lock()
+        .unwrap()
+        .clone();
+    assert_eq!(source.rank(), 3);
+    assert!(source.chainified(LibraryRep::from(Minkowski {})).is_err());
+    assert!(calls.load(Ordering::Relaxed) > 0);
+    assert_eq!(
+        *source.proofs.parser_leaf_interfaces().lock().unwrap(),
+        initial_leaves
+    );
+}
+
+#[test]
+fn independent_validation_checks_the_same_ports_without_collecting_admission_facts() {
+    test_support::test_initialize();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let counter = Arc::clone(&calls);
+    let head = tensor_symbol!(
+        "authoritative_metadata::validation_only",
+        norm = move |_, _| {
+            counter.fetch_add(1, Ordering::Relaxed);
+        }
+    );
+    let leaf = function!(head, mink!(4, 99719));
+    let expression = Atom::num(3) * &leaf;
+    calls.store(0, Ordering::Relaxed);
+    let observe = |purpose| {
+        SymbolicTensor::observed_interface(&expression, LeafInference::Observe, purpose).unwrap()
+    };
+    let checked = observe(ObservationPurpose::Validate);
+    let admitted = observe(ObservationPurpose::Publish);
+    assert_eq!(checked.interface, admitted.interface);
+    assert_eq!(
+        checked
+            .occurrences
+            .unwrap()
+            .oriented_entries()
+            .collect::<Vec<_>>(),
+        admitted
+            .occurrences
+            .unwrap()
+            .oriented_entries()
+            .collect::<Vec<_>>(),
+    );
+    assert!(checked.leaf_interfaces.lock().unwrap().is_empty());
+    assert!(admitted.leaf_interfaces.lock().unwrap().contains_key(&leaf));
+    let retained = |interfaces| TensorProofs {
+        admitted_interfaces: OnceLock::from(Arc::new(interfaces)),
+        ..TensorProofs::default()
+    };
+    assert!(!retained(checked.interfaces).owns_expression(expression.as_view()));
+    assert_eq!(
+        retained(admitted.interfaces).retained_interface(leaf.as_view()),
+        Some(admitted.interface),
+    );
+    assert_eq!(calls.load(Ordering::Relaxed), 0);
+}
+
+#[test]
+fn publishing_an_admitted_parser_leaf_keeps_callback_ports_scoped() {
+    test_support::test_initialize();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    let head = tensor_symbol!(
+        "authoritative_metadata::parser_callback_leaf",
+        norm = move |_, _| {
+            observed.fetch_add(1, Ordering::Relaxed);
+        }
+    );
+    let ports = [mink!(4, 99417), mink!(4, 99415)];
+    let leaf = function!(head, &ports[0], &ports[1]);
+    assert!(calls.load(Ordering::Relaxed) > 0);
+    let sibling = function!(
+        tensor_symbol!("authoritative_metadata::parser_callback_sibling"),
+        mink!(4, 99419)
+    );
+    let source = SymbolicTensor::infer(&leaf * &sibling).unwrap();
+    calls.store(0, Ordering::Relaxed);
+    INFERENCE_CALLS.with(|count| count.set(0));
+    INFERENCE_VISITS.with(|count| count.set(0));
+
+    let network = source
+        .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap();
+    let parsed = network
+        .store
+        .tensors
+        .iter()
+        .find(|tensor| tensor.expression == leaf)
+        .unwrap();
+    assert!(parsed.proofs.owns_expression(leaf.as_view()));
+    assert_eq!(
+        parsed
+            .proofs
+            .retained_interface(leaf.as_view())
+            .unwrap()
+            .logical_slots()
+            .len(),
+        ports.len()
+    );
+    assert!(
+        parsed
+            .proofs
+            .retained_interface(sibling.as_view())
+            .is_none()
+    );
+    let leaves = parsed.proofs.leaf_interfaces.get().unwrap().lock().unwrap();
+    assert_eq!(leaves[&leaf].1, ports);
+    assert!(!leaves.contains_key(&sibling));
+    assert_eq!(calls.load(Ordering::Relaxed), 0);
+    assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+    assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
+    assert!(source.with_checked_expression(Atom::one()).is_err());
+}
+
+#[test]
+fn renamed_generic_leaves_survive_collection_and_network_execution_without_inference() {
+    test_support::test_initialize();
+    let rep = LibraryRep::from(Minkowski {}).new_rep(4);
+    let old = AbstractIndex::Normal(99631);
+    let new = AbstractIndex::Normal(99633);
+    let left = tensor_symbol!("authoritative_metadata::pipeline_left");
+    let right = tensor_symbol!("authoritative_metadata::pipeline_right");
+    let original = function!(left, rep.slot::<AbstractIndex, _>(old).to_atom())
+        * function!(right, rep.slot::<AbstractIndex, _>(old).to_atom());
+    let expected = function!(left, rep.slot::<AbstractIndex, _>(new).to_atom())
+        * function!(right, rep.slot::<AbstractIndex, _>(new).to_atom());
+    let source = SymbolicTensor::infer(original).unwrap();
+    INFERENCE_CALLS.with(|count| count.set(0));
+    INFERENCE_VISITS.with(|count| count.set(0));
+
+    let renamed = source
+        .renamed_indices(&HashMap::from([(old, new)]))
+        .unwrap();
+    assert_eq!(renamed.expression(), &expected);
+    let rows = renamed
+        .coefficient_list(TensorCollectFilter::Reps([rep.rep]))
+        .unwrap();
+    assert!(!rows.is_empty());
+    let mut reconstructed = Atom::Zero;
+    for (tensor, coefficient) in rows {
+        let value = tensor.multiply(&coefficient).unwrap();
+        let network = value
+            .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+        reconstructed += network.simple_execute::<()>().unwrap();
+    }
+    assert_eq!(reconstructed, expected);
+    assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+    assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
+}
 
 #[test]
 fn expansion_keeps_coalesced_oriented_tensor_copies() {
@@ -27,6 +338,7 @@ fn expansion_keeps_coalesced_oriented_tensor_copies() {
     OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
     SCOPE_VALIDATIONS.with(|count| count.set(0));
     INFERENCE_CALLS.with(|count| count.set(0));
+    INFERENCE_VISITS.with(|count| count.set(0));
     let expanded = weighted.expanded(None, false).unwrap();
     assert_eq!(expanded.expression, expected);
     assert_eq!(expanded.structure, weighted.structure);
@@ -41,6 +353,7 @@ fn expansion_keeps_coalesced_oriented_tensor_copies() {
     assert_eq!(OCCURRENCE_FUNCTION_VISITS.with(|count| count.get()), 0);
     assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
     assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+    assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
 }
 
 #[test]
@@ -81,6 +394,7 @@ fn zero_algebra_maps_hidden_pair_before_later_explicit_collisions() {
     OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
     SCOPE_VALIDATIONS.with(|count| count.set(0));
     INFERENCE_CALLS.with(|count| count.set(0));
+    INFERENCE_VISITS.with(|count| count.set(0));
 
     let zero = source.with_algebra_result(Atom::Zero).unwrap();
     assert!(zero.is_zero());
@@ -123,6 +437,7 @@ fn zero_algebra_maps_hidden_pair_before_later_explicit_collisions() {
     assert_eq!(OCCURRENCE_FUNCTION_VISITS.with(|count| count.get()), 0);
     assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
     assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+    assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
 }
 
 #[test]
@@ -152,6 +467,7 @@ fn dual_free_dimension_mapping_preserves_orientation_and_later_collision_history
     OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
     SCOPE_VALIDATIONS.with(|count| count.set(0));
     INFERENCE_CALLS.with(|count| count.set(0));
+    INFERENCE_VISITS.with(|count| count.set(0));
 
     let mut calls = Vec::new();
     let mapped = source
@@ -197,6 +513,7 @@ fn dual_free_dimension_mapping_preserves_orientation_and_later_collision_history
     assert_eq!(OCCURRENCE_FUNCTION_VISITS.with(|count| count.get()), 0);
     assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
     assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+    assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
 }
 
 #[test]
@@ -239,6 +556,7 @@ fn admitted_arithmetic_owns_canonical_named_ports_and_composes_without_observati
     OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
     SCOPE_VALIDATIONS.with(|count| count.set(0));
     INFERENCE_CALLS.with(|count| count.set(0));
+    INFERENCE_VISITS.with(|count| count.set(0));
 
     let sum = a.try_add(&b).unwrap();
     let difference = a.try_sub(&b).unwrap();
@@ -276,6 +594,7 @@ fn admitted_arithmetic_owns_canonical_named_ports_and_composes_without_observati
     assert_eq!(OCCURRENCE_FUNCTION_VISITS.with(|count| count.get()), 0);
     assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
     assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+    assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
 }
 
 #[test]
@@ -308,6 +627,7 @@ fn additive_branches_keep_maximum_public_multiplicity_in_both_operand_orders() {
     OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
     SCOPE_VALIDATIONS.with(|count| count.set(0));
     INFERENCE_CALLS.with(|count| count.set(0));
+    INFERENCE_VISITS.with(|count| count.set(0));
 
     let branch = scalar.multiply(&vector).unwrap();
     let interface = [slot.rep().slot(PartialIndex::Explicit(index))];
@@ -337,6 +657,7 @@ fn additive_branches_keep_maximum_public_multiplicity_in_both_operand_orders() {
     assert_eq!(OCCURRENCE_FUNCTION_VISITS.with(|count| count.get()), 0);
     assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
     assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+    assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
 }
 
 #[test]
@@ -374,6 +695,7 @@ fn mapping_hidden_base_use_separates_it_from_the_free_dual_port() {
     OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
     SCOPE_VALIDATIONS.with(|count| count.set(0));
     INFERENCE_CALLS.with(|count| count.set(0));
+    INFERENCE_VISITS.with(|count| count.set(0));
 
     let source = free_dual.multiply(&scalar_base).unwrap();
     let interface = [dual_slot.rep().slot(PartialIndex::Explicit(index))];
@@ -418,6 +740,7 @@ fn mapping_hidden_base_use_separates_it_from_the_free_dual_port() {
     assert_eq!(OCCURRENCE_FUNCTION_VISITS.with(|count| count.get()), 0);
     assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
     assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+    assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
 
     // Protect the exact external variance, rather than hiding the opposite
     // orientation's use merely because it shares this collision key.
@@ -682,6 +1005,7 @@ fn publication_borrows_supplied_history_without_observing_the_payload() {
     OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
     SCOPE_VALIDATIONS.with(|count| count.set(0));
     INFERENCE_CALLS.with(|count| count.set(0));
+    INFERENCE_VISITS.with(|count| count.set(0));
     assert_eq!(value.explicit_index_occurrences().unwrap().count(slot), 2);
     assert!(Arc::ptr_eq(
         value.proofs.occurrences.get().unwrap(),
@@ -695,6 +1019,7 @@ fn publication_borrows_supplied_history_without_observing_the_payload() {
     assert_eq!(OCCURRENCE_FUNCTION_VISITS.with(|count| count.get()), 0);
     assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
     assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+    assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
 }
 
 #[test]

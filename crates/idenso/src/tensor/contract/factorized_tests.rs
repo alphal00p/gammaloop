@@ -1,8 +1,10 @@
 use crate::shorthands::chain::CHAINIFY_CALLS;
-use crate::shorthands::schoonschip::{ReductionStatus, Schoonschip};
+use crate::shorthands::schoonschip::{ReductionStatus, Schoonschip, SlotContraction};
 use crate::tensor::collection::SHALLOW_BUILDS;
-use crate::tensor::simplification::observation::INITIAL_SCANS;
-use crate::tensor::{ContractSettings, SELECTED_OPENS, SymbolicTensor};
+use crate::tensor::simplification::observation::{INITIAL_SCANS, REPLACEMENT_SCANS};
+use crate::tensor::{
+    AlgebraContraction, AlgebraSettings, ContractSettings, SELECTED_OPENS, SymbolicTensor,
+};
 use crate::{Cookable, color_f, color_t, test_support};
 use spenso::network::library::symbolic::ETS;
 use spenso::network::tags::SPENSO_TAG;
@@ -449,7 +451,7 @@ fn disconnected_refusal_retains_local_metric_fallback_and_finished_components() 
         assert_eq!(direct.root, expected);
         assert!(direct.observations.is_none());
         let result = typed
-            .contract(crate::tensor::ContractSettings {
+            .contract(ContractSettings {
                 order: Some(&order),
                 collect_chains: false,
                 collect_traces: false,
@@ -493,7 +495,7 @@ fn disconnected_components_do_not_bypass_callback_interface_checks() {
     calls.lock().unwrap().clear();
     assert!(
         typed
-            .contract(crate::tensor::ContractSettings {
+            .contract(ContractSettings {
                 collect_chains: false,
                 collect_traces: false,
                 ..Default::default()
@@ -924,4 +926,218 @@ fn default_contraction_completes_the_selected_product() {
         body.expression.expand().schoonschip().expand()
     );
     assert_eq!(direct.contract(Default::default()).unwrap(), direct);
+}
+
+fn contract_expanding_scalars(source: &Atom) -> SymbolicTensor<PartialStructure> {
+    SymbolicTensor::<PartialStructure>::infer(source.clone())
+        .unwrap()
+        .contract(ContractSettings {
+            expand_scalar_spectators: true,
+            ..Default::default()
+        })
+        .unwrap()
+}
+
+#[test]
+fn expanded_scalar_spectators_keep_the_contracted_value_and_interface() {
+    setup();
+    for (source, must_change) in [
+        (
+            "(p(spenso::mink(4,a))*q(spenso::mink(4,a))+x)^2*(y+z)^3*t(spenso::mink(6,c))",
+            true,
+        ),
+        (
+            "(x+y)^3*(spenso::g(p(spenso::mink(4)),p(spenso::mink(4)))+spenso::g(q(spenso::mink(4)),q(spenso::mink(4))))*(t(spenso::mink(4,a),spenso::mink(4,b))+u(spenso::mink(4,a),spenso::mink(4,b)))*(p(spenso::mink(4,a))+q(spenso::mink(4,a)))",
+            false,
+        ),
+        (
+            "(x+y)^7*spenso::g(spenso::mink(4,mu),spenso::mink(4,nu))*p(spenso::mink(4,mu))*q(spenso::mink(4,nu))",
+            false,
+        ),
+        // Both spellings of one scalar inside a composite share a variable:
+        // their exponents must add (dot^2), not overwrite each other.
+        (
+            "(x+spenso::dot(p(spenso::mink(4)),q(spenso::mink(4)))*spenso::g(p(spenso::mink(4)),q(spenso::mink(4))))*(p(spenso::mink(4,a))*q(spenso::mink(4,a))+y)*t(spenso::mink(6,c))",
+            false,
+        ),
+        // A large composite power is never expanded (bounded work).
+        (
+            "(x+y)^400*(p(spenso::mink(4,a))*q(spenso::mink(4,a))+x)*t(spenso::mink(6,c))",
+            false,
+        ),
+    ] {
+        let source = input(source);
+        let factored = contract(&source);
+        let expanded = contract_expanding_scalars(&source);
+        assert_eq!(expanded.reduction_status(), ReductionStatus::Complete);
+        assert_eq!(expanded.structure, factored.structure, "{source}");
+        assert_eq!(
+            expanded.expression.expand(),
+            factored.expression.expand(),
+            "{source}"
+        );
+        if must_change {
+            assert_ne!(
+                expanded.expression, factored.expression,
+                "the frontier spectator must be expanded: {source}"
+            );
+        }
+        // The default policy is unchanged and remains a fixed point.
+        assert_eq!(
+            contract(&factored.expression).expression,
+            factored.expression
+        );
+    }
+}
+
+#[test]
+fn metric_and_dot_spellings_of_one_scalar_multiply() {
+    setup();
+    // The spectator `dot(p,q)` and the contracted `g(p,q)` are one variable of
+    // the frontier, so their exponents must add rather than overwrite.
+    let source = input(
+        "spenso::dot(p(spenso::mink(4)),q(spenso::mink(4)))*spenso::g(spenso::mink(4,mu),spenso::mink(4,nu))*p(spenso::mink(4,mu))*q(spenso::mink(4,nu))*(x+p(spenso::mink(4,a))*q(spenso::mink(4,a)))",
+    );
+    let expected = input(
+        "x*spenso::dot(p(spenso::mink(4)),q(spenso::mink(4)))^2+spenso::dot(p(spenso::mink(4)),q(spenso::mink(4)))^3",
+    );
+    for contracted in [contract(&source), contract_expanding_scalars(&source)] {
+        assert_eq!(contracted.reduction_status(), ReductionStatus::Complete);
+        assert_eq!(
+            contracted.to_dots().unwrap().expression.expand(),
+            expected,
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn dot_requests_emit_frontier_scalars_in_dot_notation() {
+    setup();
+    let algebra = |source: &Atom, contract: AlgebraContraction| {
+        SymbolicTensor::<PartialStructure>::infer(source.clone())
+            .unwrap()
+            .simplify_algebra(&AlgebraSettings {
+                contract,
+                ..Default::default()
+            })
+            .unwrap()
+    };
+    for source in [
+        "(p(spenso::mink(4,a))+q(spenso::mink(4,a)))*(p(spenso::mink(4,a))+2*q(spenso::mink(4,a)))*(p(spenso::mink(4,b))-q(spenso::mink(4,b)))*(q(spenso::mink(4,b))+3*p(spenso::mink(4,b)))",
+        "(x+y)^3*(spenso::g(p(spenso::mink(4)),p(spenso::mink(4)))+spenso::g(q(spenso::mink(4)),q(spenso::mink(4))))*(t(spenso::mink(4,a),spenso::mink(4,b))+u(spenso::mink(4,a),spenso::mink(4,b)))*(p(spenso::mink(4,a))+q(spenso::mink(4,a)))",
+        "spenso::dot(p(spenso::mink(4)),q(spenso::mink(4)))*spenso::g(spenso::mink(4,mu),spenso::mink(4,nu))*p(spenso::mink(4,mu))*q(spenso::mink(4,nu))*(x+p(spenso::mink(4,a))*q(spenso::mink(4,a)))",
+    ] {
+        let source = input(source);
+        let dots = algebra(&source, AlgebraContraction::Dots);
+        let fully = algebra(&source, AlgebraContraction::Fully)
+            .to_dots()
+            .unwrap();
+        assert_eq!(dots.reduction_status(), ReductionStatus::Complete);
+        assert_eq!(dots.structure, fully.structure, "{source}");
+        assert_eq!(
+            dots.expression.expand(),
+            fully.expression.expand(),
+            "{source}"
+        );
+        // The emitted spelling is already the dot normal form.
+        assert_eq!(
+            dots.to_dots().unwrap().expression,
+            dots.expression,
+            "{source}"
+        );
+        assert_eq!(
+            algebra(&dots.expression, AlgebraContraction::Dots).expression,
+            dots.expression,
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn open_frontier_metadata_retains_pending_dot_work() {
+    setup();
+    let source = SymbolicTensor::infer(input(
+        "(p(spenso::mink(4,a))+q(spenso::mink(4,a)))*(p(spenso::mink(4,a))+2*q(spenso::mink(4,a)))*p(spenso::g(p(spenso::mink(4)),q(spenso::mink(4))),spenso::mink(4,c))",
+    ))
+    .unwrap();
+    let contracted = source.contract(Default::default()).unwrap();
+    let independently_observed = SymbolicTensor::infer(contracted.expression.clone())
+        .unwrap()
+        .to_dots()
+        .unwrap();
+    let dotted = contracted.to_dots().unwrap();
+    assert_eq!(dotted.structure, source.structure);
+    assert_eq!(dotted.expression, independently_observed.expression);
+    assert_eq!(dotted.to_dots().unwrap().expression, dotted.expression);
+}
+
+#[test]
+fn minimal_open_frontier_retains_nested_sum_and_spectator_facts() {
+    setup();
+    let settings = ContractSettings {
+        expand: false,
+        ..Default::default()
+    };
+    for expression in [
+        "p(spenso::mink(4,mu))*p(spenso::mink(4,nu))*q(spenso::mink(4,nu))+q(spenso::mink(4,mu))",
+        "(p(spenso::mink(4,mu))*p(spenso::mink(4,nu))*q(spenso::mink(4,nu))+q(spenso::mink(4,mu)))*p(spenso::mink(4,rho))*q(spenso::mink(4,rho))",
+        "(p(spenso::mink(4,nu))+q(spenso::mink(4,nu)))*p(spenso::mink(4,nu))*q(spenso::mink(4,mu))",
+    ] {
+        let source = SymbolicTensor::infer(input(expression)).unwrap();
+        source.reduction_observations();
+        REPLACEMENT_SCANS.with(|count| count.set(0));
+        let result = source.contract(settings).unwrap();
+        assert_eq!(result.structure, source.structure);
+        assert!(
+            result.reduction_observations().is_terminal_polynomial(),
+            "{expression}"
+        );
+        assert_eq!(
+            REPLACEMENT_SCANS.with(|count| count.get()),
+            0,
+            "{expression}"
+        );
+        let expected = source
+            .contract(Default::default())
+            .unwrap()
+            .to_dots()
+            .unwrap();
+        let dotted = result.to_dots().unwrap();
+        assert_eq!(
+            dotted.expression.expand(),
+            expected.expression.expand(),
+            "{expression}"
+        );
+        assert_eq!(
+            dotted.contract(settings).unwrap().expression,
+            dotted.expression
+        );
+    }
+}
+
+#[test]
+fn minimal_open_frontier_power_does_not_inherit_terminal_base_facts() {
+    setup();
+    let source = SymbolicTensor::infer(input(
+        "(p(spenso::mink(4,a))*q(spenso::mink(4,a))*p(spenso::mink(4,b))+x*q(spenso::mink(4,b)))^2",
+    ))
+    .unwrap();
+    let result = SlotContraction::new()
+        .expanding(false)
+        .observed(source.reduction_observations())
+        .contract_factorized(source.expression.as_view(), None, true)
+        .unwrap();
+    assert!(
+        result.observations.is_none(),
+        "the two copies still share a boundary index"
+    );
+    let expected = source.contract(Default::default()).unwrap();
+    let resumed = source
+        .with_identity_result(result.root, result.observations)
+        .unwrap()
+        .contract(Default::default())
+        .unwrap();
+    assert_eq!(resumed.expression.expand(), expected.expression.expand());
+    assert_eq!(resumed.structure, source.structure);
 }

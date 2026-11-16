@@ -428,7 +428,7 @@ impl SymbolicTensor<PartialStructure> {
         if let Some(error) = failure.lock().unwrap().take() {
             return Err(TensorInferenceError::Invalid(error));
         }
-        self.with_checked_expression(expression)
+        self.with_materialized_expression("expand_dots", expression)
     }
 
     fn component_batch_is_intrinsic(value: AtomView<'_>) -> bool {
@@ -480,6 +480,7 @@ where
 
 #[cfg(test)]
 mod test {
+    use crate::tensor::inference::tests::INFERENCE_CALLS;
 
     use crate::{Cookable, representations::Bispinor, test_support::test_initialize};
     use symbolica_utils::AtomPrintExt;
@@ -709,7 +710,9 @@ mod test {
         let source = function!(wrapper, &finite, &symbolic)
             * (parse_lit!(finite_dot_scope::x) + parse_lit!(finite_dot_scope::y));
         let value = SymbolicTensor::infer(source.clone()).unwrap();
+        INFERENCE_CALLS.with(|count| count.set(0));
         let result = value.expand_dots().unwrap();
+        assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
         assert_eq!(result.expression(), &independent_components(&source));
         let finite_result = independent_components(&finite);
         assert_eq!(
@@ -827,7 +830,7 @@ mod test {
     }
 
     #[test]
-    fn finite_dots_reject_callback_rank_loss_at_materialization_boundary() {
+    fn finite_dots_reject_callback_free_index_loss() {
         test_initialize();
         let p = spenso::vector_symbol!("finite_dot_rank::p");
         let q = spenso::vector_symbol!("finite_dot_rank::q");
@@ -849,8 +852,6 @@ mod test {
         let value = SymbolicTensor::infer(source.clone()).unwrap();
         assert_eq!(independent_components(&source), Atom::num(1));
         assert!(value.expand_dots().is_err());
-        assert_eq!(value.expression(), &source);
-        assert_eq!(value.structure().canonical().order(), 1);
     }
 
     #[test]

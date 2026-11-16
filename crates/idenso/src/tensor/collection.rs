@@ -1,5 +1,6 @@
 //! Selected algebra on the existing parsed graph and arithmetic tape.
 
+use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, OnceLock};
 
@@ -10,8 +11,7 @@ use linnet::half_edge::tree::SimpleTraversalTree;
 use linnet::tree::child_vec::ChildVecStore;
 use spenso::network::TensorNetworkError;
 use spenso::network::graph::{NetworkEdge, NetworkLeaf, NetworkNode, NetworkOp};
-use spenso::network::library::DummyLibrary;
-use spenso::network::parsing::{ParseSettings, ParseState, ShorthandParsing};
+use spenso::network::parsing::{ParseSettings, ParseState};
 use spenso::network::store::{TensorScalarStore, TensorScalarStoreMapping};
 use spenso::network::tags::SPENSO_TAG;
 use spenso::shadowing::{TensorCollectFilter, TermLeaf, TermTape};
@@ -22,14 +22,15 @@ use spenso::structure::partial::{
 use spenso::structure::representation::{LibraryRep, LibrarySlot, Representation};
 use spenso::structure::slot::{IsAbstractSlot, SlotMatcher};
 use spenso::structure::{OrderedStructure, TensorStructure};
-use symbolica::atom::{Atom, AtomCore, AtomOrView, AtomType, AtomView};
+use symbolica::atom::{AddView, Atom, AtomCore, AtomOrView, AtomView};
 use symbolica::domains::rational::Rational;
 use symbolica::id::ConditionResult;
 
 use super::composition::{self, ExplicitIndexOccurrences};
 use super::inference::{InterfaceInference, LeafInference, TensorInferenceError};
+use super::planning::{self, EnclosingLeaf, PlanningLeafSources, PlanningNetwork, PlanningSource};
 use super::simplification::observation::DomainObservations;
-use super::{SymbolicNet, SymbolicTensor};
+use super::{SymbolicTensor, TensorProofs};
 
 mod collected;
 pub(crate) use collected::{CollectedOutput, CollectedPolynomial};
@@ -41,6 +42,10 @@ thread_local! {
     pub(crate) static SHALLOW_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     pub(crate) static SHALLOW_VIEWS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     pub(crate) static SELECTED_OPENS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static PUBLISHED_TAPE_REGIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static STREAM_THRESHOLD: std::cell::Cell<usize> = const { std::cell::Cell::new(STREAM_SUM_BYTES) };
+    static PEAK_SUMMAND_NODES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static PEAK_OPEN_NODES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static ANALYZED_NODES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
@@ -53,14 +58,30 @@ pub(crate) enum CollectionMode {
     Factored,
 }
 
-type CollectionFinalizer<'a> = dyn FnMut(
-        &mut Vec<(
-            SymbolicTensor<PartialStructure>,
-            SymbolicTensor<PartialStructure>,
-        )>,
-        &[SymbolicTensor<PartialStructure>],
-    ) -> Result<()>
-    + 'a;
+type CollectionStates = Vec<(
+    SymbolicTensor<PartialStructure>,
+    SymbolicTensor<PartialStructure>,
+)>;
+type CollectionFinalizer<'a> =
+    dyn FnMut(&mut CollectionStates, &[SymbolicTensor<PartialStructure>]) -> Result<()> + 'a;
+
+enum Finalizer<'a, 'f> {
+    Rows(&'a mut dyn FnMut(&mut CollectionStates) -> Result<()>),
+    WithSpectators(&'a mut CollectionFinalizer<'f>),
+}
+
+impl Finalizer<'_, '_> {
+    fn finish(
+        &mut self,
+        states: &mut CollectionStates,
+        spectators: &[SymbolicTensor<PartialStructure>],
+    ) -> Result<()> {
+        match self {
+            Self::Rows(finish) => finish(states),
+            Self::WithSpectators(finish) => finish(states, spectators),
+        }
+    }
+}
 
 // Per-call intake state only. Graphs and arithmetic remain owned by Network and
 // TermTape; the call retains its selected leaves and interfaces.
@@ -71,6 +92,20 @@ struct CollectionInput<Select> {
     mode: CollectionMode,
     values: Vec<(SymbolicTensor<PartialStructure>, bool)>,
     positions: HashMap<(Atom, Vec<PartialSlot>, bool), usize>,
+}
+
+// Above this size the full sum graph can dominate the arithmetic tape.
+const STREAM_SUM_BYTES: usize = 1 << 20;
+
+fn stream_sum_bytes() -> usize {
+    #[cfg(test)]
+    {
+        STREAM_THRESHOLD.get()
+    }
+    #[cfg(not(test))]
+    {
+        STREAM_SUM_BYTES
+    }
 }
 
 type CollectionTree = SimpleTraversalTree<ChildVecStore<()>>;
@@ -99,7 +134,7 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
     fn parse(
         &self,
         source: &SymbolicTensor<PartialStructure>,
-    ) -> Result<Arc<SymbolicNet<AbstractIndex>>> {
+    ) -> Result<Arc<PlanningNetwork<Atom>>> {
         #[cfg(test)]
         SHALLOW_VIEWS.with(|count| count.set(count.get() + 1));
         source.shallow_graph()
@@ -108,23 +143,19 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
     fn open<'src>(
         &self,
         source: AtomView<'src>,
-    ) -> Result<SymbolicNet<AbstractIndex, AtomOrView<'src>>> {
+        admission: PlanningSource<'src>,
+    ) -> Result<PlanningNetwork<AtomOrView<'src>>> {
         #[cfg(test)]
         SELECTED_OPENS.with(|count| count.set(count.get() + 1));
-        let settings = ParseSettings {
-            precontract_scalars: false,
-            depth_limit: None,
-            shorthand_parsing: ShorthandParsing::Opaque,
-            parse_composite_scalars_as_tensors: true,
-            ..ParseSettings::default()
-        };
-        type Tensor<'src> = SymbolicTensor<OrderedStructure, AtomOrView<'src>>;
-        SymbolicNet::try_from_view::<OrderedStructure, _>(
+        let opened = planning::parse(
             source,
-            &DummyLibrary::<Tensor<'_>>::new(),
-            &settings,
-        )
-        .map_err(|error| TensorInferenceError::invalid(error.to_string()))
+            None,
+            Some(admission),
+            &ParseSettings::opaque_arithmetic(),
+        )?;
+        #[cfg(test)]
+        PEAK_OPEN_NODES.set(PEAK_OPEN_NODES.get().max(opened.graph.graph.n_nodes()));
+        Ok(opened)
     }
 
     fn selected(&mut self, value: AtomView<'_>) -> bool {
@@ -160,7 +191,7 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
 
     fn emit<E: AtomCore>(
         &self,
-        network: &SymbolicNet<AbstractIndex, E>,
+        network: &PlanningNetwork<E>,
         tree: &CollectionTree,
         node: NodeIndex,
     ) -> Result<Atom> {
@@ -214,9 +245,51 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
             .map_err(|error| TensorInferenceError::invalid(error.to_string()))
     }
 
+    fn emitted_tensor<E: AtomCore>(
+        &self,
+        network: &PlanningNetwork<E>,
+        tree: &CollectionTree,
+        node: NodeIndex,
+        interface: PartialStructure,
+        history: Arc<ExplicitIndexOccurrences>,
+    ) -> Result<SymbolicTensor<PartialStructure>> {
+        Ok(Self::tensor_for_emission(
+            self.emit(network, tree, node)?,
+            network,
+            tree,
+            node,
+            interface,
+            history,
+        ))
+    }
+
+    fn tensor_for_emission<E: AtomCore>(
+        expression: Atom,
+        network: &PlanningNetwork<E>,
+        tree: &CollectionTree,
+        node: NodeIndex,
+        interface: PartialStructure,
+        history: Arc<ExplicitIndexOccurrences>,
+    ) -> SymbolicTensor<PartialStructure> {
+        #[cfg(test)]
+        PUBLISHED_TAPE_REGIONS.with(|count| count.set(count.get() + 1));
+        let mut tensor = SymbolicTensor::from_validated_parts(expression, interface, history);
+        network.inherit_leaf_interfaces(
+            &mut tensor.proofs,
+            tree.iter_preorder_tree_nodes(&network.graph.graph, node)
+                .filter_map(|node| match &network.graph.graph[node] {
+                    NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
+                        Some(&network.store.tensors[*index])
+                    }
+                    _ => None,
+                }),
+        );
+        tensor
+    }
+
     fn analyze<E: AtomCore>(
         &mut self,
-        network: &SymbolicNet<AbstractIndex, E>,
+        network: &PlanningNetwork<E>,
         tree: &CollectionTree,
         root: NodeIndex,
     ) -> Result<CollectionAnalysis> {
@@ -284,16 +357,9 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                 }
             };
             let mut history = match &network.graph.graph[node] {
-                NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => network.store.tensors[*index]
-                    .proofs
-                    .occurrences
-                    .get()
-                    .map(|history| history.as_ref().clone())
-                    .ok_or_else(|| {
-                        TensorInferenceError::invalid(
-                            "parsed tensor is missing construction history",
-                        )
-                    })?,
+                NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
+                    network.store.tensors[*index].history.as_ref().clone()
+                }
                 NetworkNode::Leaf(NetworkLeaf::Scalar(_)) => ExplicitIndexOccurrences::default(),
                 NetworkNode::Op(NetworkOp::Product) => {
                     let mut history = ExplicitIndexOccurrences::default();
@@ -356,6 +422,10 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
             self.values.push((value, owned));
             position
         };
+        self.tape_leaf(position)
+    }
+
+    fn tape_leaf(&self, position: usize) -> TermLeaf<usize> {
         if let Ok(number) = Rational::try_from(self.values[position].0.expression.as_atom_view()) {
             TermLeaf::Number(position, number)
         } else {
@@ -365,7 +435,7 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
 
     fn scope_is_intrinsic<E: AtomCore>(
         &self,
-        network: &SymbolicNet<AbstractIndex, E>,
+        network: &PlanningNetwork<E>,
         tree: &CollectionTree,
         node: NodeIndex,
     ) -> bool {
@@ -392,7 +462,7 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
     /// Each sum binds its own dummies, so such a name may legitimately recur.
     fn distribution_joins_closed_pair<E: AtomCore>(
         &mut self,
-        network: &SymbolicNet<AbstractIndex, E>,
+        network: &PlanningNetwork<E>,
         tree: &CollectionTree,
         product: NodeIndex,
         analysis: &CollectionAnalysis,
@@ -434,7 +504,7 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
     /// history, which exports only the boundary ports of a closed sum.
     fn distributed_names<E: AtomCore>(
         &mut self,
-        network: &SymbolicNet<AbstractIndex, E>,
+        network: &PlanningNetwork<E>,
         tree: &CollectionTree,
         node: NodeIndex,
         analysis: &CollectionAnalysis,
@@ -501,10 +571,10 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
 
     fn expose_scope<E: AtomCore + Clone + From<E::Output>>(
         &mut self,
-        network: &SymbolicNet<AbstractIndex, E>,
+        network: &PlanningNetwork<E>,
         tree: &CollectionTree,
         node: NodeIndex,
-    ) -> Result<Option<SymbolicNet<AbstractIndex, Atom>>> {
+    ) -> Result<Option<PlanningNetwork<Atom>>> {
         // Prove this graph scope intrinsic before emitting a temporary body:
         // function reconstruction can itself invoke a registered normalizer.
         if !self.scope_is_intrinsic(network, tree, node) {
@@ -515,7 +585,10 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
             if matches!(expression, AtomView::Add(_) | AtomView::Mul(_)) {
                 // Expose the selected arithmetic before assigning this copy's
                 // internal labels; an opaque leaf has only its public ports.
-                let opened = self.open(expression)?;
+                let opened = self.open(
+                    expression,
+                    network.store.tensors[*index].source(expression, network.admission.as_ref()),
+                )?;
                 let opened_tree = opened.graph.expr_tree().cast::<ChildVecStore<()>>();
                 let opened_root = opened.graph.graph.node_id(opened.graph.head());
                 if !matches!(opened.graph.graph[opened_root], NetworkNode::Leaf(_)) {
@@ -531,10 +604,7 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
             if let NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) = &network.graph.graph[child]
             {
                 let tensor = &network.store.tensors[*index];
-                let history = tensor.proofs.occurrences.get().ok_or_else(|| {
-                    TensorInferenceError::invalid("parsed tensor is missing construction history")
-                })?;
-                for (slot, _) in history.entries() {
+                for (slot, _) in tensor.history.entries() {
                     self.state.reserve_index(slot.aind());
                 }
                 for index in tensor.structure.external_indices_iter() {
@@ -545,7 +615,7 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                 subset.add(hedge);
             }
         }
-        let mut graph = network.map_ref(Clone::clone, Clone::clone);
+        let mut graph = network.map_ref(|scalar| scalar, |tensor| tensor);
         graph.graph = graph.graph.extract(&subset);
         let mut boundary = Vec::new();
         for index in 0..graph.graph.graph.n_hedges() {
@@ -578,7 +648,8 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
             }
         }
         let mut unavailable = false;
-        let mapped = graph.map_occurrences(
+        let mapped = graph.map_occurrences_with_structure(
+            |tensor| &tensor.structure,
             |scalar| Ok(scalar.as_atom_view().to_owned()),
             |tensor, ports, logical_order| {
                 let fail = |message: &str| TensorNetworkError::Other(eyre::eyre!("{message}"));
@@ -605,11 +676,7 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                     .enumerate()
                     .map(|(logical, &storage)| (logical, targets[storage].to_atom()))
                     .collect::<HashMap<_, _>>();
-                let history = tensor
-                    .proofs
-                    .occurrences
-                    .get()
-                    .ok_or_else(|| fail("parsed tensor is missing construction history"))?;
+                let history = &tensor.history;
                 let stored_keys = source
                     .iter()
                     .map(|slot| slot.rep().base().slot::<AbstractIndex, _>(slot.aind()))
@@ -621,73 +688,60 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                         internal.insert(key, self.state.fresh_index());
                     }
                 }
-                let (expression, history) =
-                    if internal.is_empty() {
-                        (
-                            tensor.expression.as_atom_view().to_owned(),
-                            Arc::clone(history),
-                        )
-                    } else {
-                        // Projectors and other opaque leaves can close pairs before
-                        // their public storage ports are built. Rename these known
-                        // retained identities in the payload and history together,
-                        // including historical uses whose syntax has vanished.
-                        let mut parents = Vec::new();
-                        let mut slots = SlotMatcher::default();
-                        let expression = tensor.expression.as_atom_view().replace_map(
-                            |value, context, output| {
-                                // Only function descent increments function_level;
-                                // arithmetic keeps the same enclosing function stack.
-                                parents.truncate(context.function_level);
-                                if context.parent_type == Some(AtomType::Fun)
-                                    && !InterfaceInference::explicit_index_argument(
-                                        parents[context.function_level - 1],
-                                        value,
-                                        &mut slots,
-                                    )
-                                {
-                                    output.set_from_view(&value);
-                                    return;
-                                }
-                                if let Ok(slot) = LibrarySlot::<AbstractIndex>::try_from(value) {
-                                    let key =
-                                        slot.rep().base().slot::<AbstractIndex, _>(slot.aind());
-                                    if let Some(&index) = internal.get(&key) {
-                                        **output =
-                                            slot.rep().slot::<AbstractIndex, _>(index).to_atom();
-                                    } else {
-                                        output.set_from_view(&value);
-                                    }
-                                } else if Representation::<LibraryRep>::try_from(value).is_ok() {
-                                    // Representations own their dimension metadata.
-                                    output.set_from_view(&value);
-                                } else if let AtomView::Fun(function) = value {
-                                    let symbol = function.get_symbol();
-                                    if SPENSO_TAG.is_scalar_metadata(symbol) {
-                                        output.set_from_view(&value);
-                                    } else {
-                                        parents.push(symbol);
-                                    }
-                                }
-                            },
-                        );
-                        let history = history
-                            .mapped(|slot| {
-                                let key = slot.rep().base().slot::<AbstractIndex, _>(slot.aind());
-                                Ok::<_, TensorInferenceError>(
-                                    slot.rep()
-                                        .slot(internal.get(&key).copied().unwrap_or(slot.aind())),
-                                )
-                            })
-                            .map_err(|error| fail(&error.to_string()))?;
-                        (expression, Arc::new(history))
-                    };
-                let source_tensor = SymbolicTensor::from_validated_parts(
-                    expression,
+                let mut source_tensor = SymbolicTensor::from_validated_parts(
+                    tensor.expression.as_atom_view().to_owned(),
                     source_interface,
-                    Arc::clone(&history),
+                    Arc::clone(history),
                 );
-                let expression = composition::rewrite_interface_ports(
+                network.inherit_leaf_interfaces(&mut source_tensor.proofs, [*tensor]);
+                if !internal.is_empty() {
+                    // Opaque leaves may retain closed pairs absent from storage
+                    // ports. Map those identities and their regional witnesses
+                    // together, including uses erased by normalization.
+                    let map_slot = |slot: LibrarySlot<AbstractIndex>| {
+                        let key = slot.rep().base().slot::<AbstractIndex, _>(slot.aind());
+                        slot.rep()
+                            .slot(internal.get(&key).copied().unwrap_or(slot.aind()))
+                    };
+                    let (expression, mapped) = source_tensor
+                        .map_admitted_indices(
+                            |value| {
+                                if let Ok(slot) = LibrarySlot::<AbstractIndex>::try_from(value) {
+                                    return Ok(Some(map_slot(slot).to_atom()));
+                                }
+                                Ok(Representation::<LibraryRep>::try_from(value)
+                                    .is_ok()
+                                    .then(|| value.to_owned()))
+                            },
+                            |interface| {
+                                Ok(PartialStructure::from_logical_slots(
+                                    interface.logical_slots().into_iter().map(|slot| {
+                                        match slot.aind {
+                                            PartialIndex::Explicit(index) => {
+                                                let mapped = map_slot(slot.rep().slot(index));
+                                                mapped
+                                                    .rep()
+                                                    .slot(PartialIndex::Explicit(mapped.aind()))
+                                            }
+                                            PartialIndex::Open(_) => slot,
+                                        }
+                                    }),
+                                ))
+                            },
+                        )
+                        .map_err(|error| fail(&error.to_string()))?;
+                    let history = history
+                        .mapped(|slot| Ok::<_, TensorInferenceError>(map_slot(slot)))
+                        .map_err(|error| fail(&error.to_string()))?;
+                    let mut renamed = SymbolicTensor::from_validated_parts(
+                        expression,
+                        source_tensor.structure,
+                        Arc::new(history),
+                    );
+                    renamed.proofs.inherit_interfaces([&mapped]);
+                    source_tensor = renamed;
+                }
+                let (expression, rewritten) = composition::rewrite_interface_parts(
                     &source_tensor,
                     &replacements,
                     Some(&self.state),
@@ -698,17 +752,19 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                         let slot = targets[position];
                         slot.rep().slot(PartialIndex::Explicit(slot.aind()))
                     }));
-                if SymbolicTensor::validate_observed_interface(
+                #[cfg(debug_assertions)]
+                TensorProofs::assert_normalization_preserves_interface(
+                    "collection scope exposure",
+                    &[&source_tensor.expression],
                     &expression,
-                    &expected,
-                    LeafInference::ObserveStorage,
-                )
-                .is_err()
-                {
-                    unavailable = true;
-                    return Err(fail("normalized occurrence changed its interface"));
-                }
-                let history = history
+                    Ok(&expected),
+                    None,
+                );
+                let history = source_tensor
+                    .proofs
+                    .occurrences
+                    .get()
+                    .expect("scope source retains mapped construction history")
                     .mapped(|slot| {
                         Ok::<_, TensorInferenceError>(
                             source
@@ -718,19 +774,21 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                         )
                     })
                     .map_err(|error| fail(&error.to_string()))?;
-                let mut proofs = tensor.proofs.algebra_result();
+                let mut proofs = source_tensor.proofs.clone();
                 proofs.occurrences = OnceLock::from(Arc::new(history));
+                proofs.publish_interfaces(expression.as_view(), expected, [&rewritten]);
                 Ok(SymbolicTensor {
                     expression,
                     structure: OrderedStructure::new(targets).into_canonical(),
                     is_metric: tensor.is_metric,
                     is_composite: tensor.is_composite,
+                    work: Default::default(),
                     proofs,
                 })
             },
         );
         match mapped {
-            Ok(mapped) => Ok(Some(mapped)),
+            Ok(mapped) => Ok(Some(PlanningNetwork::from_materialized(mapped))),
             Err(_) if unavailable => Ok(None),
             Err(error) => Err(TensorInferenceError::invalid(error.to_string())),
         }
@@ -740,7 +798,7 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
     fn compile_lowered_power<E: AtomCore + Clone + From<E::Output>>(
         &mut self,
         tape: &mut TermTape<usize>,
-        network: &SymbolicNet<AbstractIndex, E>,
+        network: &PlanningNetwork<E>,
         tree: &CollectionTree,
         root: NodeIndex,
     ) -> Result<Option<(usize, (usize, usize))>> {
@@ -762,7 +820,7 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
 
     /// A sum or product node, or a leaf whose payload is one: what Monomial
     /// distribution opens when it is selected.
-    fn is_composite<E: AtomCore>(network: &SymbolicNet<AbstractIndex, E>, node: NodeIndex) -> bool {
+    fn is_composite<E: AtomCore>(network: &PlanningNetwork<E>, node: NodeIndex) -> bool {
         match &network.graph.graph[node] {
             NetworkNode::Op(NetworkOp::Sum | NetworkOp::Product) => true,
             NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => matches!(
@@ -864,7 +922,7 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
     /// factors, so pairs closed by an open square inside a term count too.
     fn selected_factors_share_closed_names<E: AtomCore + Clone + From<E::Output>>(
         &mut self,
-        network: &SymbolicNet<AbstractIndex, E>,
+        network: &PlanningNetwork<E>,
         tree: &CollectionTree,
         product: NodeIndex,
         analysis: &CollectionAnalysis,
@@ -909,7 +967,7 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
     fn compile_independent_factors<E: AtomCore + Clone + From<E::Output>>(
         &mut self,
         tape: &mut TermTape<usize>,
-        network: &SymbolicNet<AbstractIndex, E>,
+        network: &PlanningNetwork<E>,
         tree: &CollectionTree,
         product: NodeIndex,
         analysis: &CollectionAnalysis,
@@ -958,10 +1016,101 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
         Ok(tape.group(factors.into_iter(), false))
     }
 
+    /// Only an opened sum with a selected descendant is distributed. Until
+    /// the first such summand, keep opaque operands off the tape. A predicate
+    /// may have selected just the original sum, in which case the whole
+    /// opened sum must be emitted as one unselected leaf.
+    fn compile_sum(
+        &mut self,
+        tape: &mut TermTape<usize>,
+        sum: AddView<'_>,
+        proof: &TensorProofs,
+    ) -> Result<Option<TermLeaf<usize>>> {
+        let mut children = Vec::with_capacity(sum.get_nargs());
+        let mut pending = Vec::new();
+        let mut refused = false;
+        for network in planning::parse_summands(sum, PlanningSource::root(proof)) {
+            let network = network?;
+            #[cfg(test)]
+            PEAK_SUMMAND_NODES.set(PEAK_SUMMAND_NODES.get().max(network.graph.graph.n_nodes()));
+            let tree = network.graph.expr_tree().cast::<ChildVecStore<()>>();
+            let root = network.graph.graph.node_id(network.graph.head());
+            let analysis = self.analyze(&network, &tree, root)?;
+            if refused {
+                // The whole graph validates every branch before compiling
+                // the tape; a late invalid branch must still report its error.
+                continue;
+            }
+            if children.is_empty() && !analysis.0[&root] {
+                let mut sources = PlanningLeafSources::default();
+                sources.extend(
+                    &network,
+                    tree.iter_preorder_tree_nodes(&network.graph.graph, root)
+                        .filter_map(|node| match network.graph.graph[node] {
+                            NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
+                                Some(&network.store.tensors[index])
+                            }
+                            _ => None,
+                        }),
+                );
+                pending.push((
+                    self.emit(&network, &tree, root)?,
+                    analysis.1[&root].clone(),
+                    Arc::clone(&analysis.2[&root]),
+                    sources,
+                ));
+                continue;
+            }
+            for (expression, interface, history, sources) in pending.drain(..) {
+                let mut value =
+                    SymbolicTensor::from_validated_parts(expression, interface, history);
+                sources.publish(&mut value.proofs);
+                let Some(child) = tape.push_leaf(self.leaf(value, false)) else {
+                    refused = true;
+                    break;
+                };
+                children.push(child);
+            }
+            if refused {
+                continue;
+            }
+            let Some(child) = self.compile(tape, &network, &tree, root, false, &analysis)? else {
+                refused = true;
+                continue;
+            };
+            children.push(child);
+        }
+        if refused {
+            return Ok(None);
+        }
+        if let Some((_, interface, _, _)) = pending.first() {
+            let interface = interface.clone();
+            let mut history = ExplicitIndexOccurrences::from_interface(&interface);
+            let mut sources = PlanningLeafSources::default();
+            let mut operands = Vec::with_capacity(pending.len());
+            for (expression, interface, term_history, term_sources) in pending {
+                operands.push(expression);
+                history.branch_max(&term_history.scoped(&interface));
+                sources.append(term_sources);
+            }
+            history.validate()?;
+            let mut value = SymbolicTensor::from_validated_parts(
+                Atom::add_many(&operands),
+                interface,
+                Arc::new(history),
+            );
+            sources.publish(&mut value.proofs);
+            return Ok(Some(self.leaf(value, false)));
+        }
+        Ok(tape
+            .group(children.into_iter(), true)
+            .map(|(node, size)| TermLeaf::Reference(node, size)))
+    }
+
     fn compile<E: AtomCore + Clone + From<E::Output>>(
         &mut self,
         tape: &mut TermTape<usize>,
-        network: &SymbolicNet<AbstractIndex, E>,
+        network: &PlanningNetwork<E>,
         tree: &CollectionTree,
         root: NodeIndex,
         split_root_sum: bool,
@@ -1078,11 +1227,13 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                         if matches!(base_value.as_view(), AtomView::Add(_) | AtomView::Mul(_)) {
                             // Open the selected power before copying: internal
                             // dummy pairs belong to each copy, not its opaque leaf.
-                            let value = self.emit(network, tree, node)?;
-                            let opened = self.open(value.as_view())?;
+                            let value = self.emitted_tensor(
+                                network, tree, node, interfaces[&node].clone(), Arc::clone(&histories[&node]),
+                            )?;
+                            let opened = self.open(value.expression.as_view(), PlanningSource::root(&value.proofs))?;
                             let tree = opened.graph.expr_tree().cast::<ChildVecStore<()>>();
                             let root = opened.graph.graph.node_id(opened.graph.head());
-                            if matches!(value.as_view(), AtomView::Pow(_))
+                            if matches!(value.expression.as_view(), AtomView::Pow(_))
                                 && matches!(opened.graph.graph[root], NetworkNode::Op(NetworkOp::Product))
                             {
                                 let Some((compiled, size)) = self.compile_lowered_power(tape, &opened, &tree, root)? else {
@@ -1122,20 +1273,52 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                     return Ok(None);
                 }
                 let expression = self.emit(network, tree, node)?;
-                if owned[&node] && matches!(value, NetworkNode::Leaf(_))
+                let reopen = owned[&node] && matches!(value, NetworkNode::Leaf(_))
                     && (self.mode == CollectionMode::Monomials
                         || matches!(expression.as_view(), AtomView::Pow(_))
                         || (split_root_sum && node == root && matches!(expression.as_view(), AtomView::Add(_))))
-                    && matches!(expression.as_view(), AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_))
+                    && matches!(expression.as_view(), AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_));
+                // Emission may normalize a graph operation. Once its exact output
+                // is known, repeated opaque occurrences already refer to the same
+                // tape slot; only the first one supplies that slot's history/facts.
+                if !reopen {
+                    let interface = SymbolicTensor::canonical_structure(interfaces[&node].clone());
+                    let key = (expression, interface.logical_slots(), owned[&node]);
+                    let position = match self.positions.entry(key) {
+                        Entry::Occupied(entry) => *entry.get(),
+                        Entry::Vacant(entry) => {
+                            let value = Self::tensor_for_emission(
+                                entry.key().0.clone(), network, tree, node, interface, Arc::clone(&histories[&node]),
+                            );
+                            let position = self.values.len();
+                            entry.insert(position);
+                            self.values.push((value, owned[&node]));
+                            position
+                        }
+                    };
+                    return Ok(Some(self.tape_leaf(position)));
+                }
+                let emitted = Self::tensor_for_emission(
+                    expression, network, tree, node, interfaces[&node].clone(), Arc::clone(&histories[&node]),
+                );
+                let expression = emitted.expression.as_view();
                 {
                     // This leaf was selected from its retained head inventory.
                     // Preserve the established copy-local dummy machinery when
                     // opening its arithmetic; unrelated leaves remain opaque.
-                    let opened = self.open(expression.as_view())?;
+                    if let AtomView::Add(sum) = expression
+                        && expression.get_byte_size() >= stream_sum_bytes()
+                        && emitted.normalization_is_intrinsic()
+                    {
+                        let compiled = self.compile_sum(tape, sum, &emitted.proofs)?;
+                        refused = compiled.is_none();
+                        return Ok(compiled);
+                    }
+                    let opened = self.open(expression, PlanningSource::root(&emitted.proofs))?;
                     let opened_tree = opened.graph.expr_tree().cast::<ChildVecStore<()>>();
                     let opened_root = opened.graph.graph.node_id(opened.graph.head());
                     if !matches!(opened.graph.graph[opened_root], NetworkNode::Leaf(_)) {
-                        if matches!(expression.as_view(), AtomView::Pow(_))
+                        if matches!(expression, AtomView::Pow(_))
                             && matches!(opened.graph.graph[opened_root], NetworkNode::Op(NetworkOp::Product))
                         {
                             let Some((compiled, size)) = self.compile_lowered_power(tape, &opened, &opened_tree, opened_root)? else {
@@ -1145,15 +1328,13 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                             return Ok(Some(TermLeaf::Reference(compiled, size)));
                         }
                         let split_root_sum = split_root_sum && node == root
-                            && matches!(expression.as_view(), AtomView::Add(_));
+                            && matches!(expression, AtomView::Add(_));
                         let analysis = self.analyze(&opened, &opened_tree, opened_root)?;
                         return self.compile(tape, &opened, &opened_tree, opened_root, split_root_sum, &analysis)
                             .map(|compiled| compiled.map(|(node, size)| TermLeaf::Reference(node, size)));
                     }
                 }
-                let value =
-                    SymbolicTensor::from_validated_parts(expression, interfaces[&node].clone(), Arc::clone(&histories[&node]));
-                Ok(Some(self.leaf(value, owned[&node])))
+                Ok(Some(self.leaf(emitted, owned[&node])))
             })();
             match result {
                 Ok(leaf) => leaf,
@@ -1171,31 +1352,48 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
 }
 
 impl SymbolicTensor<PartialStructure> {
+    /// Check whether the factor's normalized expression and logical boundary
+    /// survive singleton multiplication unchanged. Open ports and arbitrary
+    /// normalization use the ordinary checked product path.
+    fn private_collection_factor<'plan, E: AtomCore>(
+        &self,
+        network: &'plan PlanningNetwork<E>,
+        node: NodeIndex,
+        interface: &PartialStructure,
+    ) -> Option<EnclosingLeaf<'plan>> {
+        let leaf = network.enclosing_leaf(node, interface, &self.proofs)?;
+        if leaf.expression.needs_normalization()
+            || !interface.canonical().external_structure_iter().all(|slot| matches!(
+                slot.aind, PartialIndex::Explicit(index)
+                    if InterfaceInference::partial_index(index, LeafInference::Observe) == slot.aind
+            ))
+            || !self.normalization_is_intrinsic()
+        {
+            return None;
+        }
+        Some(leaf)
+    }
+
     /// Retain the existing shallow Network and its discovered leaf interfaces
     /// with this immutable domain. A changed payload rebuilds topology while
     /// intrinsic replacements reuse the exact unchanged boundary interfaces.
-    pub(crate) fn shallow_graph(&self) -> Result<Arc<super::SymbolicNet<AbstractIndex>>> {
-        self.proofs
+    pub(crate) fn shallow_graph(&self) -> Result<Arc<PlanningNetwork<Atom>>> {
+        self.work
+            .get_or_init()
             .shallow_graph
             .get_or_init(|| {
                 #[cfg(test)]
                 SHALLOW_BUILDS.with(|count| count.set(count.get() + 1));
                 let network = crate::shorthands::schoonschip::SlotContraction::shallow_network(
                     self.expression.as_view(),
-                    (self.proofs.validated.get() == Some(&true))
-                        .then(|| self.proofs.leaf_interfaces.get_or_init(Default::default)),
+                    self.proofs
+                        .is_admitted()
+                        .then(|| self.proofs.leaf_interfaces.read_cache().unwrap_or_default())
+                        .as_ref(),
+                    Some(PlanningSource::root(&self.proofs)),
                 )
                 .map_err(|error| error.to_string())?;
-                Ok(Arc::new(network.map_ref(
-                    |scalar| scalar.as_view().to_owned(),
-                    |tensor| SymbolicTensor {
-                        expression: tensor.expression.as_view().to_owned(),
-                        structure: tensor.structure.clone(),
-                        is_metric: tensor.is_metric,
-                        is_composite: tensor.is_composite,
-                        proofs: tensor.proofs.clone(),
-                    },
-                )))
+                Ok(Arc::new(network.into_owned()))
             })
             .as_ref()
             .map(Arc::clone)
@@ -1284,7 +1482,8 @@ impl SymbolicTensor<PartialStructure> {
     /// Collect leaves selected by a predicate, retaining all unselected tensor
     /// blocks in the coefficients with their logical interfaces intact.
     /// The predicate must return the same decision for an unchanged value;
-    /// selection facts can be reused without invoking it again.
+    /// selection facts can be reused without invoking it again. The order
+    /// and number of predicate visits are unspecified.
     pub fn coefficient_list_with(
         &self,
         select: impl FnMut(AtomView<'_>) -> bool,
@@ -1346,7 +1545,28 @@ impl SymbolicTensor<PartialStructure> {
     pub(crate) fn collect_with_map(
         &self,
         mode: CollectionMode,
-        mut finalize: Option<&mut CollectionFinalizer<'_>>,
+        finalize: Option<&mut CollectionFinalizer<'_>>,
+        select: impl FnMut(AtomView<'_>) -> bool,
+        step: impl FnMut(Self, bool, &mut Self) -> Result<Self>,
+    ) -> Result<Self> {
+        self.collect_rows(mode, finalize.map(Finalizer::WithSpectators), select, step)
+    }
+
+    /// Row kernels never receive the graph's unchanged spectator factors.
+    pub(crate) fn collect_rows_with_map(
+        &self,
+        mode: CollectionMode,
+        finalize: &mut dyn FnMut(&mut CollectionStates) -> Result<()>,
+        select: impl FnMut(AtomView<'_>) -> bool,
+        step: impl FnMut(Self, bool, &mut Self) -> Result<Self>,
+    ) -> Result<Self> {
+        self.collect_rows(mode, Some(Finalizer::Rows(finalize)), select, step)
+    }
+
+    fn collect_rows(
+        &self,
+        mode: CollectionMode,
+        mut finalize: Option<Finalizer<'_, '_>>,
         mut select: impl FnMut(AtomView<'_>) -> bool,
         mut step: impl FnMut(Self, bool, &mut Self) -> Result<Self>,
     ) -> Result<Self> {
@@ -1364,7 +1584,7 @@ impl SymbolicTensor<PartialStructure> {
                     PartialStructure::from_logical_slots([]),
                     Arc::default(),
                 );
-                finalize(&mut vec![(one, self.clone())], &[])?;
+                finalize.finish(&mut vec![(one, self.clone())], &[])?;
             }
             return Ok(self.clone());
         }
@@ -1381,8 +1601,12 @@ impl SymbolicTensor<PartialStructure> {
             vec![root]
         };
         let mut tape = TermTape::<usize>::default();
+        // A finalizer that receives these tensors can clone and retain them.
+        // Only row-only kernels may leave descendant facts on the plan.
+        let private_spectators = !matches!(finalize, Some(Finalizer::WithSpectators(_)));
         let mut factors = Vec::new();
         let mut spectators = Vec::new();
+        let mut spectator_sources = Vec::new();
         let selected_count = nodes.iter().filter(|node| owned[node]).count();
         let expose = mode == CollectionMode::Monomials && selected_count > 1;
         let lowered_power = matches!(self.expression.as_view(), AtomView::Pow(_))
@@ -1392,22 +1616,46 @@ impl SymbolicTensor<PartialStructure> {
             );
         for node in nodes {
             if !owned[&node] {
-                let spectator = Self::collection_product(&[Self::from_validated_parts(
-                    input.emit(&network, &tree, node)?,
-                    interfaces[&node].clone(),
-                    Arc::clone(&histories[&node]),
-                )])?;
-                // These unchanged graph leaves retain their admitted boundary.
-                // Use the same publication path as selected factors to decode
-                // graph-local AUTO ports before reusing their regional facts.
-                spectator.observe_replacement(self);
+                let interface = &interfaces[&node];
+                let spectator = if private_spectators
+                    && let Some(leaf) = self.private_collection_factor(&network, node, interface)
+                {
+                    if !leaf.boundary_published {
+                        // Publish a new scalar root. The enclosing tensor
+                        // already supplies all of this factor's descendants.
+                        spectator_sources.push(spectators.len());
+                    }
+                    let value = Self::from_validated_parts(
+                        leaf.expression.to_owned(),
+                        interface.clone(),
+                        Arc::clone(&histories[&node]),
+                    );
+                    let _ = value.work.intrinsic.set(true);
+                    value.observe_replacement_work(self);
+                    value
+                } else {
+                    let value = Self::collection_product(&[input.emitted_tensor(
+                        &network,
+                        &tree,
+                        node,
+                        interface.clone(),
+                        Arc::clone(&histories[&node]),
+                    )?])?;
+                    value.observe_replacement(self);
+                    spectator_sources.push(spectators.len());
+                    value
+                };
                 if spectator.is_scalar()
                     && let Some(facts) = input
                         .observations
                         .certify_scalar_region(spectator.expression.as_view())
                 {
-                    let _ = spectator.proofs.intrinsic.set(true);
-                    let _ = spectator.proofs.observations.set(Arc::new(facts));
+                    let _ = spectator.work.intrinsic.set(true);
+                    let _ = spectator
+                        .work
+                        .get_or_init()
+                        .observations
+                        .set(Arc::new(facts));
                 }
                 spectators.push(spectator);
                 continue;
@@ -1454,7 +1702,8 @@ impl SymbolicTensor<PartialStructure> {
                 // tape coalescence; free boundary names still join across arms.
                 let Some(graph) = input.expose_scope(&network, &tree, node)? else {
                     let mut deferred = self.clone();
-                    deferred.proofs.frontier = super::simplification::ReductionStatus::Deferred;
+                    deferred.work.get_mut().frontier =
+                        super::simplification::ReductionStatus::Deferred;
                     return Ok(deferred);
                 };
                 let scoped_tree = graph.graph.expr_tree().cast::<ChildVecStore<()>>();
@@ -1484,7 +1733,7 @@ impl SymbolicTensor<PartialStructure> {
             let Some((compiled, _)) = compiled else {
                 // No domain callback has run; discard all refused tape scratch.
                 let mut deferred = self.clone();
-                deferred.proofs.frontier = super::simplification::ReductionStatus::Deferred;
+                deferred.work.get_mut().frontier = super::simplification::ReductionStatus::Deferred;
                 return Ok(deferred);
             };
             factors.push((node, compiled));
@@ -1544,7 +1793,7 @@ impl SymbolicTensor<PartialStructure> {
                             &mut coefficient,
                         )?
                     };
-                    frontier = frontier.max(mapped.proofs.frontier);
+                    frontier = frontier.max(mapped.work.frontier());
                     // Internal domain owners publish certified typed results. Only
                     // unchecked callbacks need to have their payload observed again.
                     let expected = if coefficient.structure == original_coefficient.structure {
@@ -1573,7 +1822,7 @@ impl SymbolicTensor<PartialStructure> {
                             "selected domain changes its established logical interface",
                         ));
                     }
-                    let mapped = if mapped.proofs.validated.get() == Some(&true) {
+                    let mapped = if mapped.proofs.is_admitted() {
                         mapped
                     } else if monomial.structure.open_positions().is_empty() {
                         monomial.with_checked_expression(mapped.expression)?
@@ -1630,7 +1879,7 @@ impl SymbolicTensor<PartialStructure> {
             && frontier != super::simplification::ReductionStatus::Capped
             && let Some(finalize) = finalize.as_mut()
         {
-            finalize(&mut states, &spectators)?;
+            finalize.finish(&mut states, &spectators)?;
         }
         let mut terms = states
             .into_iter()
@@ -1650,7 +1899,8 @@ impl SymbolicTensor<PartialStructure> {
                 if !term.normalization_is_intrinsic() {
                     // Rebuilding the payload could replay a registered normalizer.
                     let mut deferred = self.clone();
-                    deferred.proofs.frontier = super::simplification::ReductionStatus::Deferred;
+                    deferred.work.get_mut().frontier =
+                        super::simplification::ReductionStatus::Deferred;
                     return Ok(deferred);
                 }
                 *term = term.with_fresh_dummies(&renaming)?;
@@ -1663,38 +1913,34 @@ impl SymbolicTensor<PartialStructure> {
         let selected_facts = facts.clone();
         let complete = remaining.is_empty();
         let mut output = vec![selected_expression.clone()];
+        let mut remaining_proofs = Vec::with_capacity(remaining.len());
         if !remaining.is_empty() {
             facts = None;
         }
         for node in remaining {
-            let expression = network
-                .graph
-                .to_expression_at(&tree, node, &mut |_, value| match value {
-                    NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => Ok(Some(
-                        network.store.tensors[*index]
-                            .expression
-                            .as_atom_view()
-                            .to_owned(),
-                    )),
-                    NetworkNode::Leaf(NetworkLeaf::Scalar(index)) => Ok(Some(
-                        network
-                            .store
-                            .get_scalar_ref(*index)
-                            .as_atom_view()
-                            .to_owned(),
-                    )),
-                    NetworkNode::Op(_) => Ok(None),
-                    _ => unreachable!("stored symbolic leaves checked at admission"),
-                })
-                .map_err(|error| TensorInferenceError::invalid(error.to_string()))?;
-            // Convert the graph's occurrence-local ports before publishing a
-            // remaining factor with its declared logical layout.
-            let body = Self::collection_product(&[Self::from_validated_parts(
-                expression,
-                interfaces[&node].clone(),
-                Arc::clone(&histories[&node]),
-            )])?;
+            let interface = &interfaces[&node];
+            let body = if let Some(leaf) = self.private_collection_factor(&network, node, interface)
+            {
+                if leaf.boundary_published {
+                    output.push(leaf.expression.to_owned());
+                    continue;
+                }
+                Self::from_validated_parts(
+                    leaf.expression.to_owned(),
+                    interface.clone(),
+                    Arc::clone(&histories[&node]),
+                )
+            } else {
+                Self::collection_product(&[input.emitted_tensor(
+                    &network,
+                    &tree,
+                    node,
+                    interface.clone(),
+                    Arc::clone(&histories[&node]),
+                )?])?
+            };
             output.push(body.expression);
+            remaining_proofs.push(body.proofs);
         }
         facts = facts.and_then(|selected| {
             let mut needs_dots = selected.needs_dot_normalization();
@@ -1729,18 +1975,49 @@ impl SymbolicTensor<PartialStructure> {
                 &spectators,
             );
         }
-        let mut root = self.with_identity_result(expression, facts)?;
+        let structure = Self::canonical_structure(self.structure.clone());
+        let mut proofs = self.proofs.clone();
+        proofs.publish_interfaces(
+            expression.as_view(),
+            structure.clone(),
+            terms
+                .iter()
+                .chain(spectator_sources.iter().map(|&index| &spectators[index]))
+                .map(|value| &value.proofs)
+                .chain(&remaining_proofs),
+        );
+        let mut history = InterfaceInference::produced_occurrences(
+            expression.as_view(),
+            &mut SlotMatcher::default(),
+            &proofs,
+        )?;
+        if lowered_power {
+            // The parser allocated independent dummies inside each copy.
+            // Their local histories were available to the selected kernel;
+            // publishing the power exposes only its established outer scope.
+            history = history.scoped(&self.structure);
+        }
+        history.branch_max(self.explicit_index_occurrences()?);
+        history.branch_max(&ExplicitIndexOccurrences::from_interface(&self.structure));
         if single_term
-            && let Some(pairs) = ExplicitIndexOccurrences::root_product(root.expression.as_view())
-            && let Some(occurrences) = root.proofs.occurrences.get_mut()
+            && let Some(pairs) = ExplicitIndexOccurrences::root_product(expression.as_view())
         {
             // Record the pairs which the collected term contracts in the
             // outermost product, so later compositions cannot reuse them.
-            let occurrences = Arc::make_mut(occurrences);
-            occurrences.branch_max(&pairs);
-            occurrences.validate()?;
+            history.branch_max(&pairs);
         }
-        root.proofs.frontier = frontier;
+        history.validate()?;
+        let mut root = Self::from_published_parts(
+            expression,
+            structure,
+            Arc::new(history),
+            proofs.admitted_interfaces,
+            proofs.leaf_interfaces,
+        );
+        if let Some(facts) = facts {
+            root.work.set_observations(facts);
+        }
+        root.work.get_mut().frontier = frontier;
         Ok(root)
     }
 
@@ -1791,7 +2068,7 @@ impl SymbolicTensor<PartialStructure> {
         })?;
         let value =
             Self::from_validated_parts(expression, self.structure.clone(), Arc::new(history));
-        let _ = value.proofs.intrinsic.set(true);
+        let _ = value.work.intrinsic.set(true);
         Ok(value)
     }
 
@@ -1876,10 +2153,14 @@ impl SymbolicTensor<PartialStructure> {
             self.expression.pow(power)
         };
         let intrinsic = self.normalization_is_intrinsic();
-        if !intrinsic {
-            Self::validate_interface(&expression, &interface)?;
-            Self::validate_atom(&expression)?;
-        }
+        #[cfg(debug_assertions)]
+        TensorProofs::assert_normalization_preserves_interface(
+            "collection_power",
+            &[&self.expression],
+            &expression,
+            Ok(&interface),
+            None,
+        );
         let mut history = ExplicitIndexOccurrences::default();
         // A scalar base owns its internal dummy scope. Tape coalescence must
         // not export repeated copies of that history into the outer product.
@@ -1890,9 +2171,10 @@ impl SymbolicTensor<PartialStructure> {
             }
             history.validate()?;
         }
-        let value = Self::from_validated_parts(expression, interface, Arc::new(history));
+        let mut value = Self::from_validated_parts(expression, interface, Arc::new(history));
+        value.proofs.inherit_interfaces([&self.proofs]);
         if intrinsic {
-            let _ = value.proofs.intrinsic.set(true);
+            let _ = value.work.intrinsic.set(true);
         }
         Ok(value)
     }
@@ -1921,7 +2203,7 @@ impl SymbolicTensor<PartialStructure> {
         let occurrences = ExplicitIndexOccurrences::product(&values.iter().collect::<Vec<_>>())?;
         let expression = Atom::mul_many(values.iter().map(|value| &value.expression));
         if let Some(value) = values.iter().find(|value| {
-            value.proofs.validated.get() == Some(&true)
+            value.proofs.is_admitted()
                 && value.expression == expression
                 && value.structure == interface
         }) {
@@ -1931,28 +2213,37 @@ impl SymbolicTensor<PartialStructure> {
             return Ok(value.clone());
         }
         let intrinsic = values.iter().all(Self::normalization_is_intrinsic);
-        if !intrinsic {
-            Self::validate_interface(&expression, &interface)?;
-            Self::validate_atom(&expression)?;
-        }
-        let value = Self::from_validated_parts(expression, interface, Arc::new(occurrences));
+        #[cfg(debug_assertions)]
+        TensorProofs::assert_normalization_preserves_interface(
+            "collection_product",
+            &values
+                .iter()
+                .map(|value| &value.expression)
+                .collect::<Vec<_>>(),
+            &expression,
+            Ok(&interface),
+            None,
+        );
+        let mut value = Self::from_validated_parts(expression, interface, Arc::new(occurrences));
+        value
+            .proofs
+            .inherit_interfaces(values.iter().map(|source| &source.proofs));
         if value.expression.is_zero() {
             // A vanished selected word can leave ports joined to its coefficient.
             // Those nominal connections determine the typed zero's boundary, but
             // there is no surviving syntax to contract or inspect for identities.
-            let _ = value.proofs.intrinsic.set(true);
-            let _ =
-                value
-                    .proofs
-                    .observations
-                    .set(Arc::new(DomainObservations::terminal_polynomial(
-                        &value.structure,
-                        false,
-                    )));
+            let _ = value.work.intrinsic.set(true);
+            let _ = value.work.get_or_init().observations.set(Arc::new(
+                DomainObservations::terminal_polynomial(&value.structure, false),
+            ));
         } else if intrinsic {
-            let _ = value.proofs.intrinsic.set(true);
+            let _ = value.work.intrinsic.set(true);
             if let Some(observed) = Self::collection_observations(values, &value.structure, false) {
-                let _ = value.proofs.observations.set(Arc::new(observed));
+                let _ = value
+                    .work
+                    .get_or_init()
+                    .observations
+                    .set(Arc::new(observed));
             }
         }
         Ok(value)
@@ -1962,12 +2253,17 @@ impl SymbolicTensor<PartialStructure> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dirac::AGS;
     use crate::epsilon::EPSILON_SYMBOL;
     use crate::tensor::composition::TensorCompositionError;
+    use crate::tensor::inference::tests::{INFERENCE_CALLS, INFERENCE_VISITS};
     use crate::tensor::simplification::ReductionStatus;
+    use crate::tensor::{SymbolicNet, SymbolicNetParse};
     use crate::test_support;
     use spenso::mink;
+    use spenso::network::library::DummyLibrary;
     use spenso::network::library::symbolic::ETS;
+    use spenso::network::parsing::ShorthandParsing;
     use spenso::network::tags::SPENSO_TAG;
     use spenso::shadowing::SYM;
     use spenso::structure::representation::{Euclidean, Minkowski, RepName};
@@ -1975,10 +2271,341 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use symbolica::atom::{FunctionBuilder, Symbol};
     use symbolica::coefficient::CoefficientView;
-    use symbolica::symbol;
+    use symbolica::{parse_lit, symbol};
 
     fn tensor(head: Symbol, slots: &[Atom]) -> Atom {
         FunctionBuilder::new(head).add_args(slots).finish()
+    }
+
+    #[test]
+    fn streamed_summands_match_whole_tape_and_admitted_leaves() {
+        test_support::test_initialize();
+        let left = SPENSO_TAG.tensor_symbol("stream_sum_left");
+        let right = SPENSO_TAG.tensor_symbol("stream_sum_right");
+        let free = mink!(4, 97132);
+        let dummy = mink!(4, 97133);
+        let loop_leaf = tensor(left, &[free.clone(), dummy.clone(), dummy]);
+        let spectator = tensor(right, &[free]);
+        let source = SymbolicTensor::infer(
+            &loop_leaf * parse_lit!(stream_a + stream_b) + &spectator * parse_lit!(stream_c),
+        )
+        .unwrap();
+        assert_streamed_sum_matches_whole(&source, &[Some(left), Some(right), None]);
+
+        // AUTO slots are already bound to their admitted owner. Both branches
+        // must preserve those identities as well as their written port order.
+        let gamma = SymbolicTensor::<PartialStructure>::from_signature(
+            &AGS.gamma_strct::<AbstractIndex>(4),
+        )
+        .unwrap();
+        let positional = gamma
+            .try_scalar_mul(&parse_lit!(stream_s))
+            .unwrap()
+            .try_add(&gamma.try_scalar_mul(&parse_lit!(stream_t)).unwrap())
+            .unwrap();
+        assert!(!positional.structure.open_positions().is_empty());
+        assert_streamed_sum_matches_whole(&positional, &[gamma.expression.get_symbol(), None]);
+    }
+
+    #[test]
+    fn streamed_summands_bound_open_graph_size_during_collection() {
+        test_support::test_initialize();
+        let left = SPENSO_TAG.tensor_symbol("stream_nested_left");
+        let right = SPENSO_TAG.tensor_symbol("stream_nested_right");
+        let dummy = mink!(4, 97146);
+        let slot = mink!(4, 97147);
+        // Every term contracts across a product using the same written dummy.
+        // The free slot survives into each collected row.
+        let tail = tensor(right, &[dummy.clone(), slot]);
+        let sum = Atom::add_many(
+            (0..96)
+                .map(|i| tensor(left, &[Atom::num(i), dummy.clone()]) * &tail)
+                .collect::<Vec<_>>(),
+        );
+        let source = SymbolicTensor::infer(parse_lit!(stream_spectator) * sum).unwrap();
+        for mode in [CollectionMode::Monomials, CollectionMode::Factored] {
+            let run = |limit| {
+                let previous = STREAM_THRESHOLD.replace(limit);
+                PEAK_SUMMAND_NODES.set(0);
+                PEAK_OPEN_NODES.set(0);
+                let value = match mode {
+                    CollectionMode::Monomials => {
+                        source.collect(TensorCollectFilter::<0>::TaggedTensors)
+                    }
+                    CollectionMode::Factored => source.collect_with_map(
+                        mode,
+                        None,
+                        |value| TensorCollectFilter::<0>::TaggedTensors.matches(value),
+                        |value, _, _| Ok(value),
+                    ),
+                };
+                STREAM_THRESHOLD.set(previous);
+                (
+                    value.unwrap(),
+                    PEAK_SUMMAND_NODES.get(),
+                    PEAK_OPEN_NODES.get(),
+                )
+            };
+            let (whole, _, whole_nodes) = run(usize::MAX);
+            let (streamed, summand_nodes, other_nodes) = run(0);
+            assert_eq!(streamed, whole);
+            // No nested opens for these flat two-factor products: this is the
+            // peak number of live nodes in the deep planning network itself.
+            assert_eq!(summand_nodes, 3);
+            assert_eq!(other_nodes, 0);
+            assert_eq!(whole_nodes, 1 + 96 * summand_nodes);
+        }
+    }
+
+    #[test]
+    fn streamed_summands_preserve_tape_refusal() {
+        test_support::test_initialize();
+        let selected = SPENSO_TAG.tensor_symbol("stream_overflow_leaf");
+        let term = tensor(selected, &[]);
+        let source = SymbolicTensor::infer((&term + parse_lit!(stream_x)).pow(80) + &term).unwrap();
+        let AtomView::Add(sum) = source.expression.as_view() else {
+            unreachable!()
+        };
+        let mut input = CollectionInput::new(
+            &source,
+            |node| node.get_symbol() == Some(selected),
+            CollectionMode::Monomials,
+        );
+        let whole = input
+            .open(sum.as_view(), PlanningSource::root(&source.proofs))
+            .unwrap();
+        let tree = whole.graph.expr_tree().cast::<ChildVecStore<()>>();
+        let root = whole.graph.graph.node_id(whole.graph.head());
+        let analysis = input.analyze(&whole, &tree, root).unwrap();
+        assert!(
+            input
+                .compile(
+                    &mut TermTape::default(),
+                    &whole,
+                    &tree,
+                    root,
+                    true,
+                    &analysis
+                )
+                .unwrap()
+                .is_none()
+        );
+        let mut input = CollectionInput::new(
+            &source,
+            |node| node.get_symbol() == Some(selected),
+            CollectionMode::Monomials,
+        );
+        assert!(
+            input
+                .compile_sum(&mut TermTape::default(), sum, &source.proofs)
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn streamed_summands_validate_later_ports_after_refusal() {
+        test_support::test_initialize();
+        let left = SPENSO_TAG.tensor_symbol("stream_positional_left");
+        let right = SPENSO_TAG.tensor_symbol("stream_positional_right");
+        let selected = SPENSO_TAG.tensor_symbol("stream_refused_scalar");
+        let scalar = tensor(selected, &[]);
+        let source = SymbolicTensor::infer(
+            (&scalar + parse_lit!(stream_x)).pow(80) * tensor(left, &[mink!(4)])
+                + (&scalar + parse_lit!(stream_y)).pow(80) * tensor(right, &[mink!(4)]),
+        )
+        .unwrap();
+        let AtomView::Add(sum) = source.expression.as_view() else {
+            panic!("expected a sum in the positional fixture")
+        };
+        // Both possible first summands overflow the tape. Parsing the whole
+        // sum still fails: its two AUTO occurrences allocate distinct labels.
+        let owner = PlanningSource::root(&source.proofs);
+        let mut input = CollectionInput::new(
+            &source,
+            |node| node.get_symbol() == Some(selected),
+            CollectionMode::Monomials,
+        );
+        let first = planning::parse_summands(sum, owner.clone())
+            .next()
+            .unwrap()
+            .unwrap();
+        let tree = first.graph.expr_tree().cast::<ChildVecStore<()>>();
+        let root = first.graph.graph.node_id(first.graph.head());
+        let analysis = input.analyze(&first, &tree, root).unwrap();
+        assert!(
+            input
+                .compile(
+                    &mut TermTape::default(),
+                    &first,
+                    &tree,
+                    root,
+                    false,
+                    &analysis
+                )
+                .unwrap()
+                .is_none()
+        );
+        let whole = input.open(sum.as_view(), owner).unwrap_err();
+        let streamed = input
+            .compile_sum(&mut TermTape::default(), sum, &source.proofs)
+            .err()
+            .expect("later summand must be validated");
+        for error in [whole, streamed] {
+            assert!(matches!(error, TensorInferenceError::Planning(source)
+                if matches!(*source, TensorNetworkError::IncompatibleSummand(_))));
+        }
+    }
+
+    fn assert_streamed_sum_matches_whole(
+        source: &SymbolicTensor<PartialStructure>,
+        selections: &[Option<Symbol>],
+    ) {
+        let AtomView::Add(sum) = source.expression.as_view() else {
+            panic!("expected a sum in the streaming fixture")
+        };
+        for mode in [CollectionMode::Monomials, CollectionMode::Factored] {
+            // Each individual head selects a different subset of terms.
+            // An absent head leaves the entire opened sum opaque.
+            for &selection in selections {
+                let run = |stream| {
+                    let mut input = CollectionInput::new(
+                        source,
+                        |node| selection.is_some() && node.get_symbol() == selection,
+                        mode,
+                    );
+                    let mut tape = TermTape::default();
+                    let compiled = if stream {
+                        input
+                            .compile_sum(&mut tape, sum, &source.proofs)
+                            .unwrap()
+                            .and_then(|leaf| tape.push_leaf(leaf))
+                    } else {
+                        let graph = input
+                            .open(sum.as_view(), PlanningSource::root(&source.proofs))
+                            .unwrap();
+                        let tree = graph.graph.expr_tree().cast::<ChildVecStore<()>>();
+                        let root = graph.graph.graph.node_id(graph.graph.head());
+                        let analysis = input.analyze(&graph, &tree, root).unwrap();
+                        input
+                            .compile(&mut tape, &graph, &tree, root, true, &analysis)
+                            .unwrap()
+                    };
+                    let (node, size) = compiled.unwrap();
+                    tape.distribute(&mut vec![(node, 1)], &Rational::one())
+                        .unwrap();
+                    let rows = tape.take_terms();
+                    let leaves = input
+                        .values
+                        .into_iter()
+                        .map(|(value, selected)| {
+                            let history = value
+                                .explicit_index_occurrences()
+                                .unwrap()
+                                .entries()
+                                .collect::<HashMap<_, _>>();
+                            let mut regions = Vec::new();
+                            value.expression.visitor(&mut |node| {
+                                regions.push((
+                                    value.proofs.published_interface(node).cloned(),
+                                    value.proofs.leaf_interfaces.fact(node),
+                                ));
+                                true
+                            });
+                            (
+                                value.expression,
+                                value.structure,
+                                selected,
+                                history,
+                                regions,
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    (size, rows, leaves)
+                };
+                INFERENCE_CALLS.set(0);
+                assert_eq!(run(true), run(false));
+                assert_eq!(INFERENCE_CALLS.get(), 0);
+            }
+        }
+    }
+
+    #[test]
+    fn selected_generic_scalar_powers_keep_admitted_leaf_facts() {
+        test_support::test_initialize();
+        let slot = mink!(4, 71921);
+        let left = SPENSO_TAG.tensor_symbol("collection_admitted_power_left");
+        let right = SPENSO_TAG.tensor_symbol("collection_admitted_power_right");
+        let scalar = Atom::var(symbol!("collection_admitted_power_scalar"));
+        let source = SymbolicTensor::infer(
+            (tensor(left, slice::from_ref(&slot)) * tensor(right, &[slot]) + scalar).pow(2),
+        )
+        .unwrap();
+        INFERENCE_CALLS.with(|count| count.set(0));
+        INFERENCE_VISITS.with(|count| count.set(0));
+        let collected = source
+            .collect(TensorCollectFilter::<0>::TaggedTensors)
+            .unwrap();
+        assert!(collected.is_scalar());
+        collected.expression.visitor(&mut |value| {
+            if value
+                .get_symbol()
+                .is_some_and(|head| head == left || head == right)
+            {
+                assert_eq!(collected.admitted_region(value).unwrap().rank(), 1);
+                assert!(
+                    collected
+                        .proofs
+                        .leaf_interfaces
+                        .get()
+                        .unwrap()
+                        .lock()
+                        .unwrap()
+                        .contains_key(value.get_data())
+                );
+                false
+            } else {
+                true
+            }
+        });
+        let network = collected
+            .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+        assert!(network.graph.dangling_indices().is_empty());
+        assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+        assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
+    }
+
+    #[test]
+    fn materializing_generic_positional_ports_keeps_raw_order() {
+        test_support::test_initialize();
+        let head = SPENSO_TAG.tensor_symbol("collection_admitted_positional_ports");
+        let source = SymbolicTensor::infer(tensor(head, &[mink!(4), mink!(4)])).unwrap();
+        let targets = [AbstractIndex::Normal(71924), AbstractIndex::Normal(71923)];
+        INFERENCE_CALLS.with(|count| count.set(0));
+        INFERENCE_VISITS.with(|count| count.set(0));
+        let materialized = source
+            .reindex_interface_ports(&HashMap::from([(0, targets[0]), (1, targets[1])]))
+            .unwrap();
+        let ports = materialized
+            .proofs
+            .leaf_interfaces
+            .get()
+            .unwrap()
+            .lock()
+            .unwrap();
+        let written = &ports
+            .get(materialized.expression.as_view().get_data())
+            .unwrap()
+            .1;
+        assert_eq!(written, &vec![mink!(4, 71924), mink!(4, 71923)]);
+        drop(ports);
+        let network = materialized
+            .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+        assert_eq!(network.graph.dangling_indices().len(), 2);
+        assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+        assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
     }
 
     fn contract_selected(
@@ -1987,7 +2614,7 @@ mod tests {
         _coefficient: &mut SymbolicTensor<PartialStructure>,
     ) -> Result<SymbolicTensor<PartialStructure>> {
         let mut contracted = value.contract_parts(Default::default())?;
-        contracted.root.proofs.frontier = contracted.status;
+        contracted.root.work.get_mut().frontier = contracted.status;
         Ok(contracted.root)
     }
 
@@ -2413,7 +3040,11 @@ mod tests {
         let result = SymbolicTensor::collection_product(&[zero, coefficient]).unwrap();
         let survivor = SymbolicTensor::infer(spenso::q!(&b)).unwrap();
         let survivor_facts = DomainObservations::terminal_polynomial(&survivor.structure, false);
-        let _ = survivor.proofs.observations.set(Arc::new(survivor_facts));
+        let _ = survivor
+            .work
+            .get_or_init()
+            .observations
+            .set(Arc::new(survivor_facts));
 
         assert!(result.expression.is_zero());
         assert_eq!(
@@ -3578,6 +4209,48 @@ mod tests {
     }
 
     #[test]
+    fn row_only_collection_decodes_auto_spectators_before_publication() {
+        test_support::test_initialize();
+        let spectator = SymbolicTensor::<PartialStructure>::from_signature(
+            &crate::dirac::AGS.gamma_strct::<AbstractIndex>(4),
+        )
+        .unwrap()
+        .reindex_interface_ports(&HashMap::from([(2, AbstractIndex::Normal(99514))]))
+        .unwrap();
+        let head = SPENSO_TAG.tensor_symbol("collection_auto_factor");
+        let selected = SymbolicTensor::infer(tensor(head, &[])).unwrap();
+        let source = spectator.multiply(&selected).unwrap();
+        let select = |value: AtomView<'_>| value.get_symbol() == Some(head);
+
+        PUBLISHED_TAPE_REGIONS.set(0);
+        let eager = source
+            .collect_with_map(
+                CollectionMode::Monomials,
+                Some(&mut |_, spectators| {
+                    assert_eq!(spectators.len(), 1);
+                    assert_eq!(spectators[0].structure.open_positions().len(), 2);
+                    Ok(())
+                }),
+                select,
+                |value, _, _| Ok(value),
+            )
+            .unwrap();
+        let published = PUBLISHED_TAPE_REGIONS.replace(0);
+        let private = source
+            .collect_rows_with_map(
+                CollectionMode::Monomials,
+                &mut |_| Ok(()),
+                select,
+                |value, _, _| Ok(value),
+            )
+            .unwrap();
+        assert!(published >= 2);
+        assert_eq!(PUBLISHED_TAPE_REGIONS.get(), published);
+        assert_eq!(private, eager);
+        assert_eq!(private.structure.open_positions().len(), 2);
+    }
+
+    #[test]
     fn encoded_auto_scratch_is_converted_before_certified_publication() {
         crate::test_support::test_initialize();
         let source = SymbolicTensor::<PartialStructure>::from_signature(
@@ -3607,7 +4280,7 @@ mod tests {
                 PartialIndex::Explicit(AbstractIndex::Open { .. })
             )
         }));
-        assert_eq!(scratch.proofs.validated.get(), Some(&true));
+        assert!(scratch.proofs.is_admitted());
         assert!(scratch.proofs.occurrences.get().is_some());
         // Encoded graph incidences are not the public logical AUTO interface.
         assert!(
@@ -3619,7 +4292,7 @@ mod tests {
         assert_eq!(body.expression, source.expression);
         assert_eq!(body.structure, source.structure);
         assert_eq!(body.structure.open_positions(), vec![0, 1]);
-        assert_eq!(body.proofs.validated.get(), Some(&true));
+        assert!(body.proofs.is_admitted());
         SymbolicTensor::validate_interface(&body.expression, &body.structure).unwrap();
         assert_eq!(body, source);
     }
@@ -3720,14 +4393,14 @@ mod tests {
             |value| matches!(value, AtomView::Fun(function) if heads.contains(&function.get_symbol())),
             |mut selected, _, _| {
                 calls += 1;
-                selected.proofs.frontier = super::super::simplification::ReductionStatus::Capped;
+                selected.work.get_mut().frontier = super::super::simplification::ReductionStatus::Capped;
                 Ok(selected)
             },
         ).unwrap();
         assert_eq!(calls, 1);
         assert!(!complete_rows);
         assert_eq!(
-            root.proofs.frontier,
+            root.work.frontier(),
             super::super::simplification::ReductionStatus::Capped
         );
         let result = root;
@@ -4103,7 +4776,7 @@ mod tests {
             // row stays admissible and the collected value is unchanged.
             let (result, calls) = collect(source, CollectionMode::Monomials);
             assert!(calls > 0);
-            assert_ne!(result.proofs.frontier, ReductionStatus::Deferred);
+            assert_ne!(result.work.frontier(), ReductionStatus::Deferred);
             assert_ne!(&result.expression, source);
             assert_eq!(canonical(&result.expression), canonical(source), "{source}");
             // Factored collection does not distribute and is unaffected.
@@ -4118,7 +4791,7 @@ mod tests {
         ] {
             let (result, calls) = collect(&source, CollectionMode::Monomials);
             assert!(calls > 0, "{source}");
-            assert_ne!(result.proofs.frontier, ReductionStatus::Deferred);
+            assert_ne!(result.work.frontier(), ReductionStatus::Deferred);
             SymbolicTensor::infer(result.expression).unwrap();
         }
     }
@@ -4232,7 +4905,7 @@ mod tests {
             if mode == CollectionMode::Monomials {
                 // Monomial rows would join the pair with its neighbour; the
                 // collector refuses before any domain callback runs.
-                assert_eq!(root.proofs.frontier, ReductionStatus::Deferred);
+                assert_eq!(root.work.frontier(), ReductionStatus::Deferred);
                 assert_eq!(calls, 0);
             }
         }
@@ -4283,10 +4956,12 @@ mod tests {
                             structure: tensor.structure.clone(),
                             is_metric: tensor.is_metric,
                             is_composite: tensor.is_composite,
+                            work: Default::default(),
                             proofs: tensor.proofs.clone(),
                         },
                     );
-                    source.proofs.shallow_graph = OnceLock::from(Ok(Arc::new(network)));
+                    source.work.get_mut().shallow_graph =
+                        OnceLock::from(Ok(Arc::new(PlanningNetwork::from_materialized(network))));
                     let mut calls = 0;
                     let result = source.collect_with_map(
                         mode,
@@ -4311,13 +4986,14 @@ mod tests {
                         Ok(output) => {
                             if SymbolicTensor::infer(output.expression.clone()).is_err()
                                 || output.structure != source.structure
-                                || output.proofs.frontier != ReductionStatus::Complete
+                                || output.work.frontier() != ReductionStatus::Complete
                                 || calls != if monomials { 3 } else { 2 }
                                 || (output.expression == source.expression) == monomials
                             {
                                 failures.push(format!(
                                     "{row}: frontier={:?} calls={calls} payload={}",
-                                    output.proofs.frontier, output.expression
+                                    output.work.frontier(),
+                                    output.expression
                                 ));
                             }
                         }
@@ -4438,7 +5114,7 @@ mod tests {
                 keep_selected,
             )
             .unwrap();
-        assert_eq!(root.proofs.frontier, ReductionStatus::Deferred);
+        assert_eq!(root.work.frontier(), ReductionStatus::Deferred);
         assert_eq!(root.expression, source.expression);
         assert_eq!(calls.load(Ordering::Relaxed), 0);
     }
@@ -4449,6 +5125,81 @@ mod planning_tests {
     use super::*;
     use spenso::{g, mink};
     use symbolica::atom::FunctionBuilder;
+
+    #[test]
+    fn row_only_collection_keeps_exact_spectators_in_the_plan() {
+        crate::test_support::test_initialize();
+        let a = mink!(4, 98903);
+        let b = mink!(4, 98904);
+        let spectator = FunctionBuilder::new(spenso::tensor_symbol!("planning_spectator"))
+            .add_arg(&a)
+            .finish();
+        let scalar = symbolica::parse_lit!(planning_scalar);
+        let source = SymbolicTensor::infer(&scalar * &spectator * g!(&b, &a)).unwrap();
+        let select = |value: AtomView<'_>| TensorCollectFilter::<0>::Metrics.matches(value);
+
+        PUBLISHED_TAPE_REGIONS.set(0);
+        let independent = source
+            .collect_with_map(
+                CollectionMode::Monomials,
+                Some(&mut |_, spectators| {
+                    assert!(spectators.iter().any(|value| value.expression == spectator));
+                    assert!(spectators.iter().any(|value| value.expression == scalar));
+                    Ok(())
+                }),
+                select,
+                |value, _, _| Ok(value),
+            )
+            .unwrap();
+        let including_spectators = PUBLISHED_TAPE_REGIONS.replace(0);
+        let private = source
+            .collect_rows_with_map(
+                CollectionMode::Monomials,
+                &mut |_| Ok(()),
+                select,
+                |value, _, _| Ok(value),
+            )
+            .unwrap();
+        assert_eq!(including_spectators - PUBLISHED_TAPE_REGIONS.get(), 2);
+        assert_eq!(private, independent);
+        assert_eq!(
+            private.proofs.published_interface(scalar.as_view()),
+            Some(&PartialStructure::from_logical_slots([])),
+        );
+        assert_eq!(
+            private.proofs.leaf_interfaces.fact(spectator.as_view()),
+            Some((true, vec![a])),
+        );
+    }
+
+    #[test]
+    fn repeated_opaque_tape_occurrences_publish_once() {
+        crate::test_support::test_initialize();
+        let a = mink!(4, 98905);
+        let atom = FunctionBuilder::new(spenso::tensor_symbol!("planning_repeated_leaf"))
+            .add_arg(&a)
+            .finish();
+        let source = SymbolicTensor::infer(atom).unwrap();
+        let mut input =
+            CollectionInput::new(&source, |_: AtomView<'_>| true, CollectionMode::Monomials);
+        let network = input.parse(&source).unwrap();
+        let tree = network.graph.expr_tree().cast::<ChildVecStore<()>>();
+        let root = network.graph.graph.node_id(network.graph.head());
+        let analysis = input.analyze(&network, &tree, root).unwrap();
+
+        PUBLISHED_TAPE_REGIONS.set(0);
+        for _ in 0..2 {
+            let mut tape = TermTape::<usize>::default();
+            assert!(
+                input
+                    .compile(&mut tape, &network, &tree, root, false, &analysis)
+                    .unwrap()
+                    .is_some()
+            );
+        }
+        assert_eq!(PUBLISHED_TAPE_REGIONS.get(), 1);
+        assert_eq!(input.values.len(), 1);
+    }
 
     #[test]
     fn unselected_arithmetic_leaves_remain_unopened() {

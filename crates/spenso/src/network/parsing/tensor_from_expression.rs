@@ -1,30 +1,26 @@
-use std::{
-    fmt::{Debug, Display},
-    ops::AddAssign,
-};
+use std::fmt::{Debug, Display};
+use std::ops::AddAssign;
 
-use symbolica::atom::{Atom, AtomOrView, AtomView};
+use symbolica::atom::{Atom, AtomOrView, AtomView, Symbol};
 
-use super::{ParseSettings, ShorthandParsing, StructureFromAtom};
-use crate::{
-    algebra::ScalarMul,
-    network::{
-        ContractionStrategy, ExecuteOp, ExecutionResult, FastTensorSum, MinIntermediateCost,
-        Network, Ref, Sequential, TensorNetworkError,
-        library::{FunctionLibrary, Library, LibraryTensor},
-        store::NetworkStore,
-    },
-    shadowing::Concretize,
-    structure::{
-        Canonicalized, HasStructure, ScalarStructure, ScalarTensor, TensorShell, TensorStructure,
-        permuted::ApplyPendingIndexPermutation, slot::IsAbstractSlot,
-    },
-    tensors::{
-        complex::RealOrComplexTensor,
-        data::{DataTensor, DenseTensor, SparseTensor},
-        parametric::{EvalTensor, ParamOrConcrete, ParamTensor},
-    },
+use super::{LeafInterfaceCache, ParseSettings, ShorthandParsing, StructureFromAtom};
+use crate::algebra::ScalarMul;
+use crate::network::library::{FunctionLibrary, Library, LibraryTensor};
+use crate::network::store::NetworkStore;
+use crate::network::{
+    ContractionStrategy, ExecuteOp, ExecutionResult, FastTensorSum, MinIntermediateCost, Network,
+    Ref, Sequential, TensorNetworkError,
 };
+use crate::shadowing::Concretize;
+use crate::structure::permuted::ApplyPendingIndexPermutation;
+use crate::structure::slot::{IsAbstractSlot, SlotMatcher};
+use crate::structure::{
+    Canonicalized, HasStructure, ScalarStructure, ScalarTensor, StructureError, TensorShell,
+    TensorStructure,
+};
+use crate::tensors::complex::RealOrComplexTensor;
+use crate::tensors::data::{DataTensor, DenseTensor, SparseTensor};
+use crate::tensors::parametric::{EvalTensor, ParamOrConcrete, ParamTensor};
 
 /// Builds a tensor leaf from an opaque expression once its structure is known.
 ///
@@ -42,6 +38,32 @@ where
     Lib: TensorLibraryFor<S, Self, Key = K>,
     FunLib: FunctionLibrary<Self, Sc, Key = FK>,
 {
+    /// Metadata retained by the source admission owner. Component tensors do
+    /// not need an extra context; symbolic tensors reuse their regional facts.
+    type Admission: Clone;
+
+    /// Read a previously admitted boundary. Targets without an admission owner
+    /// reject this path instead of falling back to structural inference.
+    fn admitted_structure(
+        _expression: AtomView<'_>,
+        _admission: &Self::Admission,
+        _next_index: impl FnMut() -> Aind,
+    ) -> Result<Canonicalized<S>, StructureError> {
+        Err(StructureError::ParsingError(
+            "tensor target has no admitted structure provider".into(),
+        ))
+    }
+
+    /// Share operation-local recognition state across admitted parser leaves.
+    fn admitted_structure_with_matcher(
+        expression: AtomView<'_>,
+        admission: &Self::Admission,
+        _matcher: &mut SlotMatcher,
+        next_index: impl FnMut() -> Aind,
+    ) -> Result<Canonicalized<S>, StructureError> {
+        Self::admitted_structure(expression, admission, next_index)
+    }
+
     #[allow(clippy::result_large_err)]
     fn tensor_from_expression(
         expression: AtomOrView<'src>,
@@ -49,6 +71,8 @@ where
         tensor_library: &Lib,
         function_library: &FunLib,
         settings: &ParseSettings,
+        admission: Option<&Self::Admission>,
+        leaf_interfaces: Option<&LeafInterfaceCache>,
     ) -> Result<Canonicalized<Self>, TensorNetworkError<K, FK>>
     where
         K: Display,
@@ -60,6 +84,7 @@ where
     fn tensor_from_leaf(
         expression: AtomOrView<'src>,
         structure: Canonicalized<S>,
+        admission: Option<&Self::Admission>,
     ) -> Result<Canonicalized<Self>, TensorNetworkError<K, FK>>
     where
         K: Display,
@@ -99,7 +124,7 @@ impl<T, S> ExpandedTensorFromExpression for DenseTensor<T, S> {}
 impl<T, S> ExpandedTensorFromExpression for SparseTensor<T, S> {}
 
 impl<'src, S, Sc, T, K, Aind, Lib, FunLib>
-    TensorFromExpression<'src, S, Sc, K, symbolica::atom::Symbol, Aind, Lib, FunLib> for T
+    TensorFromExpression<'src, S, Sc, K, Symbol, Aind, Lib, FunLib> for T
 where
     S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
     TensorShell<S>: Concretize<T>,
@@ -116,24 +141,24 @@ where
         + ScalarMul<Sc, Output = T>
         + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
     Sc: for<'r> TryFrom<AtomView<'r>> + TryFrom<Atom> + Clone + Into<T::Scalar>,
-    TensorNetworkError<K, symbolica::atom::Symbol>: From<<Sc as TryFrom<Atom>>::Error>,
-    for<'r> TensorNetworkError<K, symbolica::atom::Symbol>:
-        From<<Sc as TryFrom<AtomView<'r>>>::Error>,
+    TensorNetworkError<K, Symbol>: From<<Sc as TryFrom<Atom>>::Error>,
+    for<'r> TensorNetworkError<K, Symbol>: From<<Sc as TryFrom<AtomView<'r>>>::Error>,
     K: Display + Debug + Clone,
     Aind: crate::structure::slot::AbsInd
         + crate::structure::slot::DummyAind
         + crate::structure::slot::ParseableAind,
     Lib: TensorLibraryFor<S, T, Key = K> + Sync,
-    FunLib: FunctionLibrary<T, Sc, Key = symbolica::atom::Symbol>,
-    NetworkStore<T, Sc>:
-        ExecuteOp<FunLib, Lib, K, symbolica::atom::Symbol, Aind, Tensor = T, Scalar = Sc>,
-    MinIntermediateCost:
-        ContractionStrategy<NetworkStore<T, Sc>, Lib, K, symbolica::atom::Symbol, Aind>,
+    FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
+    NetworkStore<T, Sc>: ExecuteOp<FunLib, Lib, K, Symbol, Aind, Tensor = T, Scalar = Sc>,
+    MinIntermediateCost: ContractionStrategy<NetworkStore<T, Sc>, Lib, K, Symbol, Aind>,
 {
+    type Admission = ();
+
     fn tensor_from_leaf(
         _expression: AtomOrView<'src>,
         structure: Canonicalized<S>,
-    ) -> Result<Canonicalized<Self>, TensorNetworkError<K, symbolica::atom::Symbol>> {
+        _admission: Option<&Self::Admission>,
+    ) -> Result<Canonicalized<Self>, TensorNetworkError<K, Symbol>> {
         let (canonical, layout) = structure.into_parts();
         let tensor = canonical.to_shell().concretize_logical(&layout)?;
         Ok(Canonicalized::from_parts(tensor, layout))
@@ -145,16 +170,24 @@ where
         tensor_library: &Lib,
         function_library: &FunLib,
         settings: &ParseSettings,
-    ) -> Result<Canonicalized<Self>, TensorNetworkError<K, symbolica::atom::Symbol>>
+        _admission: Option<&Self::Admission>,
+        leaf_interfaces: Option<&LeafInterfaceCache>,
+    ) -> Result<Canonicalized<Self>, TensorNetworkError<K, Symbol>>
     where
         K: Display,
-        symbolica::atom::Symbol: Display,
+        Symbol: Display,
     {
         let mut expanded_settings = settings.clone();
         expanded_settings.shorthand_parsing = ShorthandParsing::expand_all();
+        expanded_settings.depth_limit = None;
 
-        let mut network =
-            Network::<NetworkStore<T, Sc>, K, symbolica::atom::Symbol, Aind>::try_from_view_with_function_library::<
+        let mut network = if let Some(leaf_interfaces) = leaf_interfaces {
+            Network::<NetworkStore<T, Sc>, K, Symbol, Aind>::try_from_admitted_view_with_function_library::<S, Lib, FunLib>(
+                expression.as_view(), tensor_library, function_library, &expanded_settings,
+                leaf_interfaces.clone(), None,
+            )?
+        } else {
+            Network::<NetworkStore<T, Sc>, K, Symbol, Aind>::try_from_view_with_function_library::<
                 S,
                 Lib,
                 FunLib,
@@ -163,7 +196,8 @@ where
                 tensor_library,
                 function_library,
                 &expanded_settings,
-            )?;
+            )?
+        };
         network.execute::<Sequential, MinIntermediateCost, Lib::LibraryTensor, Lib, FunLib>(
             tensor_library,
             function_library,
@@ -235,6 +269,8 @@ mod tests {
             &TensorLib::new(),
             &FunLib::new(),
             &ParseSettings::default(),
+            None,
+            None,
         )
         .unwrap();
 
