@@ -21,6 +21,7 @@ use crate::{
     debug_tags,
     graph::Graph,
     model::Model,
+    utils::GS,
     uv::{UVgenerationSettings, UltravioletGraph, uv_graph::UVE},
 };
 
@@ -300,6 +301,61 @@ impl RStarPlan {
             count += 1;
         }
         Ok(count)
+    }
+
+    /// The local MS counterterm of a logarithmically divergent graph whose
+    /// open slots are four Minkowski slots of one representation, through its
+    /// three scalar metric channels instead of the open rank-four tensor.
+    ///
+    /// The counterterm is `sum_j K[P_j . X] T_j` over the metric pairings
+    /// `T_j` ([`RStarIntegrand::isotropic_boundary`]) with the dual projectors
+    /// `P_j = ((d+2) T_j - sum_i T_i) / (d (d-1) (d+2))`: MS acts on the
+    /// coefficients of a d-dimensional basis, which these projections are.
+    /// The momentum-free polynomial part of `sum_j tau_j P_j` closes every
+    /// root-scope remainder (as [`Self::projected_counterterm_closing_root`]);
+    /// its rational normalization joins after the Taylor step, inside this
+    /// graph's `K`. Nested children and quotients keep their open slots. The
+    /// channel markers `tau_j` are then replaced by `T_j`.
+    pub fn isotropic_counterterm(
+        &self,
+        graph: &Graph,
+        model: &Model,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+        pairings: &[Atom; 3],
+    ) -> Result<Atom> {
+        let d = Atom::var(GS.dim);
+        let markers = [
+            symbol!("gammalooprs::uv_isotropic_channel_1"; Scalar),
+            symbol!("gammalooprs::uv_isotropic_channel_2"; Scalar),
+            symbol!("gammalooprs::uv_isotropic_channel_3"; Scalar),
+        ];
+        let sum = &pairings[0] + &pairings[1] + &pairings[2];
+        let closure = markers
+            .iter()
+            .zip(pairings)
+            .fold(Atom::Zero, |closure, (marker, pairing)| {
+                closure + Atom::var(*marker) * ((&d + 2) * pairing - &sum)
+            });
+        let normalization = Atom::one() / (&d * (&d - 1) * (&d + 2));
+        let normalize = |tensor: &Atom| -> Result<Atom> { Ok(tensor * &normalization) };
+        let mut evaluation = Evaluation::new(
+            self,
+            graph,
+            model,
+            vakint,
+            uv_settings,
+            Some(&normalize),
+            ChildMass::Reference,
+        )?;
+        evaluation.root_closure = Some(closure);
+        let channels = evaluation.counterterm()?;
+        Ok(markers
+            .iter()
+            .zip(pairings)
+            .fold(channels, |tensor, (marker, pairing)| {
+                tensor.replace(Atom::var(*marker)).with(pairing.clone())
+            }))
     }
 
     /// Reconstruct all poles of the bare, infrared-finite massless propagator

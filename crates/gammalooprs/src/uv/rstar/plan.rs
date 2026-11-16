@@ -105,6 +105,17 @@ static UV_CHILDREN_ROUTE: LazyLock<UvChildrenRoute> = LazyLock::new(|| {
     UvChildrenRoute::parse(&value).unwrap_or_else(|error| panic!("{error:#}"))
 });
 
+/// R*-route children with four open Lorentz slots and no external-momentum
+/// dependence are computed through their scalar metric channels
+/// ([`RStarPlan::isotropic_counterterm`]); `GAMMALOOP_UV_CHILD_CLOSURE=off`
+/// keeps the open rank-four tensor.
+fn isotropic_children() -> bool {
+    static ON: LazyLock<bool> = LazyLock::new(|| {
+        std::env::var("GAMMALOOP_UV_CHILD_CLOSURE").map_or(true, |value| value != "off")
+    });
+    *ON
+}
+
 /// `GAMMALOOP_UV_CHILDREN_LOG=1`: one stderr line per proper UV child request
 /// of an R*-route plan (route, loops, seconds); for smoke tests and timing.
 fn uv_children_log() -> bool {
@@ -883,15 +894,38 @@ impl RStarPlan {
         settings: &UVgenerationSettings,
         route: UvChildrenRoute,
     ) -> Result<Atom> {
-        let key = format!("{}#uv-children={route}", serde_json::to_string(settings)?);
+        let isotropic = if isotropic_children() {
+            super::expression::RStarIntegrand::isotropic_boundary(graph, support)?
+        } else {
+            None
+        };
+        let key = format!(
+            "{}#uv-children={route}{}",
+            serde_json::to_string(settings)?,
+            if isotropic.is_some() { "#isotropic" } else { "" }
+        );
         cache.counterterm_with(graph, support, model, key, || {
             let started = Instant::now();
             let plan = Self::for_support(graph, model, support, settings)?
                 .with_uv_children(route)
                 .with_counterterm_cache(Arc::clone(cache));
-            let delta = plan
-                .counterterm(graph, model, vakint, settings)
-                .wrap_err_with(|| {
+            // A logarithmically divergent child with four open Lorentz slots
+            // is a constant isotropic tensor: compute its three scalar
+            // channels in its own root scope instead of the open tensor.
+            let delta = match isotropic.as_ref().filter(|_| plan.taylor_order == 0) {
+                Some(pairings) => {
+                    if uv_children_log() {
+                        eprintln!(
+                            "UV_CHILD_CLOSURE graph={} loops={} closure=isotropic",
+                            graph.name,
+                            graph.n_loops(support)
+                        );
+                    }
+                    plan.isotropic_counterterm(graph, model, vakint, settings, pairings)
+                }
+                None => plan.counterterm(graph, model, vakint, settings),
+            }
+            .wrap_err_with(|| {
                     format!(
                         "while computing the {}-loop UV child {} with R*",
                         graph.n_loops(support),

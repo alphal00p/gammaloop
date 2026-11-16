@@ -371,6 +371,44 @@ impl RStarIntegrand {
         Ok(cooking.uncook(ETS.metric(slots[0].to_atom(), slots[1].to_atom()).as_view()))
     }
 
+    /// The three metric pairings `g12 g34`, `g13 g24`, `g14 g23` of the four
+    /// open slots of the numerator over `support`, when they are exactly four
+    /// Minkowski slots of one representation; `None` otherwise. They span the
+    /// momentum-independent rank-four tensors in `d` dimensions, the tensor
+    /// structure of a logarithmically divergent four-point counterterm.
+    pub fn isotropic_boundary(graph: &Graph, support: &SuBitGraph) -> Result<Option<[Atom; 3]>> {
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let numerator = graph
+            .numerator(support, &graph.empty_subgraph())
+            .to_d_dim(GS.dim)
+            .get_single_atom()?;
+        let tensor = SymbolicTensor::infer(cooking.try_cook(numerator.as_view())?)?;
+        let mut slots = Vec::new();
+        for slot in tensor.structure().logical_slots() {
+            let spenso::structure::partial::PartialIndex::Explicit(index) = slot.aind else {
+                return Ok(None);
+            };
+            slots.push(slot.rep().slot::<spenso::structure::abstract_index::AbstractIndex, _>(index));
+        }
+        let minkowski: spenso::structure::representation::LibraryRep = Minkowski {}.into();
+        if slots.len() != 4
+            || slots.iter().any(|slot| slot.rep() != slots[0].rep() || slot.rep().rep != minkowski)
+        {
+            return Ok(None);
+        }
+        let metric = |a: usize, b: usize| ETS.metric(slots[a].to_atom(), slots[b].to_atom());
+        Ok(Some(
+            [
+                metric(0, 1) * metric(2, 3),
+                metric(0, 2) * metric(1, 3),
+                metric(0, 3) * metric(1, 2),
+            ]
+            .map(|pairing| cooking.uncook(pairing.as_view())),
+        ))
+    }
+
     /// As [`Self::new`], with an optional root closure multiplied into the
     /// remainder together with its insertions (see [`Self::root_closure`]).
     pub fn new_with_closure(
