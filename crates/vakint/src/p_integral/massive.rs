@@ -252,6 +252,68 @@ fn reset_peak() -> u64 {
     status_kib("VmRSS:")
 }
 
+thread_local! {
+    static MASSIVE_STAGES: std::cell::RefCell<Vec<(&'static str, f64)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// vk5l-physrun: wall seconds per stage of [`MassiveClosure::evaluate_batch`]
+/// on this thread since the last call (cleared by reading).
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) fn take_stage_seconds() -> Vec<(&'static str, f64)> {
+    MASSIVE_STAGES.with(|stages| std::mem::take(&mut *stages.borrow_mut()))
+}
+
+/// vk5l-physrun: `(topology, numerator)` of an input that is a product with
+/// exactly one factor `topo(...)` (one of `topologies`, to the first power)
+/// and no other factor holding a topology: the pair `coefficient_list` would
+/// give, with the numerator as the product of the remaining factors,
+/// unexpanded. `None` for any other shape.
+fn single_topology_factor(input: AtomView, topologies: &[Atom]) -> Option<(Atom, Atom)> {
+    let [topology] = topologies else {
+        return None;
+    };
+    let AtomView::Mul(product) = input else {
+        return None;
+    };
+    let mut found = false;
+    let mut rest = Vec::new();
+    for factor in product.iter() {
+        if factor == topology.as_view() && !found {
+            found = true;
+        } else if factor.contains_symbol(S.topo) {
+            return None;
+        } else {
+            rest.push(factor);
+        }
+    }
+    if !found {
+        return None;
+    }
+    let numerator = match rest.as_slice() {
+        [] => Atom::num(1),
+        [single] => single.to_owned(),
+        _ => Atom::mul_many(rest.iter().copied()),
+    };
+    Some((topology.clone(), numerator))
+}
+
+/// vk5l-physrun: add the wall time since `started` to `stage` (and restart it).
+fn stage_mark(stage: &'static str, started: &mut std::time::Instant) {
+    let seconds = started.elapsed().as_secs_f64();
+    MASSIVE_STAGES.with(|stages| {
+        let mut stages = stages.borrow_mut();
+        match stages.iter_mut().find(|(name, _)| *name == stage) {
+            Some((_, total)) => *total += seconds,
+            None => stages.push((stage, seconds)),
+        }
+    });
+    if super::phases::enabled() {
+        eprintln!("vakint-massive-stage {stage} {seconds:.3}");
+    }
+    *started = std::time::Instant::now();
+}
+
 impl MassiveClosure {
     /// Reduce `requests` in `fold` mode and finalize them: the value, and
     /// the times, counts and memory of the two stages.
@@ -711,6 +773,7 @@ impl MassiveClosure {
                 continue;
             }
             settings.validate_execution()?;
+            let mut clock = std::time::Instant::now();
             let mut topologies = Vec::new();
             input.visitor(&mut |part| {
                 if let AtomView::Fun(function) = part
@@ -723,7 +786,17 @@ impl MassiveClosure {
             });
             topologies.sort();
             topologies.dedup();
-            for (topology, numerator) in input.coefficient_list::<i16>(&topologies) {
+            stage_mark("topology_scan", &mut clock);
+            // vk5l-physrun: a closure request is `numerator * topo(...)`; take
+            // the two factors as they are instead of expanding the whole input
+            // to collect it by topology (the numerator is split without
+            // expanding it, scalar_numerator_with(expand = false)).
+            let by_topology = match single_topology_factor(input.as_view(), &topologies) {
+                Some(pair) => vec![pair],
+                None => input.coefficient_list::<i16>(&topologies),
+            };
+            stage_mark("topology_split", &mut clock);
+            for (topology, numerator) in by_topology {
                 if topology == Atom::one() {
                     let value = closure.finalize(
                         &[ReducedPropagatorValue {
@@ -743,15 +816,30 @@ impl MassiveClosure {
                     }
                     continue;
                 }
-                let mut expression = VakintExpression::try_from(topology * numerator)?;
+                let mut expression = if matches!(topology.as_view(), AtomView::Fun(function) if function.get_symbol() == S.topo)
+                    && !numerator.contains_symbol(S.topo)
+                {
+                    // What split_integrals returns for `topology * numerator`,
+                    // without collecting the product again.
+                    let vectors = crate::VakintTerm::identify_vectors_in_numerator(numerator.as_view())?;
+                    VakintExpression(vec![crate::VakintTerm {
+                        integral: topology,
+                        numerator,
+                        vectors,
+                    }])
+                } else {
+                    VakintExpression::try_from(topology * numerator)?
+                };
                 if census {
                     census_counts[0] += 1;
                     census_counts[1] += expression.0.len();
                 }
+                stage_mark("expression", &mut clock);
                 for term in &mut expression.0 {
                     if !term.normalize_propagator()? {
                         continue;
                     }
+                    stage_mark("normalize", &mut clock);
                     vakint.validate_settings(settings)?;
                     let external = term.propagator_external()?.ok_or_else(|| {
                         super::invalid("a massive closure requires a massless p-integral")
@@ -765,7 +853,9 @@ impl MassiveClosure {
                     // unexpanded (the split handles products of sums).
                     term.numerator =
                         super::scalar_numerator_with(term.numerator.as_view(), &head, false)?;
+                    stage_mark("scalar_numerator", &mut clock);
                     let matched = term.prepare_integral_specs(vakint, settings, None)?;
+                    stage_mark("match", &mut clock);
                     let method = vakint.evaluation_method(settings, &matched.canonical_topology);
                     let request = matched
                         .propagator_request(term.numerator.as_view())
@@ -829,6 +919,7 @@ impl MassiveClosure {
                             drop(request);
                             let numerator = term.numerator.clone();
                             rustred_jobs[owner].push((matched, numerator));
+                            stage_mark("request", &mut clock);
                         }
                         _ => {
                             return Err(super::invalid(
@@ -846,6 +937,7 @@ impl MassiveClosure {
                 if jobs.is_empty() {
                     continue;
                 }
+                let mut clock = std::time::Instant::now();
                 let requests = jobs
                     .iter()
                     .map(|(matched, numerator)| {
@@ -874,6 +966,7 @@ impl MassiveClosure {
                     }
                     continue;
                 }
+                stage_mark("request_build", &mut clock);
                 let started = std::time::Instant::now();
                 let reduced = crate::rustred_evaluation::p_integral::reduce_requests_factored(
                     vakint, settings, &requests, None,
@@ -886,6 +979,7 @@ impl MassiveClosure {
                         stats.census_json(requests.len(), started.elapsed().as_secs_f64()),
                     );
                 }
+                stage_mark("reduce", &mut clock);
                 for ((loops, _), values) in reduced {
                     let value = inputs[owner].0.finalize(
                         &values,
@@ -900,6 +994,7 @@ impl MassiveClosure {
                         results[owner] += value;
                     }
                 }
+                stage_mark("finalize", &mut clock);
             }
         }
         if census {
@@ -935,10 +1030,13 @@ impl MassiveClosure {
             if input.is_zero() {
                 continue;
             }
+            let mut clock = std::time::Instant::now();
             if !numerical.is_zero() {
                 *result += vakint.resolve_rustred_numerical(numerical, settings)?;
             }
+            stage_mark("numerical_resolve", &mut clock);
             *result = result.expand();
+            stage_mark("final_expand", &mut clock);
         }
         Ok(results)
     }

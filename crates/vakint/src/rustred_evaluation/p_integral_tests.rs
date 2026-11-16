@@ -2564,6 +2564,18 @@ fn massive_closure_showcase() {
             .trim_end_matches(".txt")
             .to_owned();
         let reading = std::time::Instant::now();
+        let rss = || -> u64 {
+            std::fs::read_to_string("/proc/self/status")
+                .ok()
+                .and_then(|status| {
+                    status
+                        .lines()
+                        .find(|line| line.starts_with("VmRSS:"))
+                        .and_then(|line| line.split_whitespace().nth(1)?.parse::<u64>().ok())
+                })
+                .unwrap_or(0)
+                * 1024
+        };
         let raw = std::process::Command::new("zstd")
             .args(["-qdc"])
             .arg(&file)
@@ -2571,6 +2583,8 @@ fn massive_closure_showcase() {
             .unwrap();
         assert!(raw.status.success(), "{}: zstd failed", file.display());
         let text = String::from_utf8(raw.stdout).unwrap();
+        let decompress_seconds = reading.elapsed().as_secs_f64();
+        let decompress_rss = rss();
         let field = |key: &str| {
             text.lines()
                 .find_map(|line| line.strip_prefix(key)?.strip_prefix(' '))
@@ -2584,9 +2598,18 @@ fn massive_closure_showcase() {
             power: field("closure_power").parse().unwrap(),
         };
         let input_text = field("input");
+        let parsing = std::time::Instant::now();
         let input = parse(&input_text);
+        let parse_seconds = parsing.elapsed().as_secs_f64();
+        let parse_rss = rss();
         drop(text);
         let read_seconds = reading.elapsed().as_secs_f64();
+        eprintln!(
+            "SHOWCASE {name} ingest: decompress {decompress_seconds:.1} s, parse {parse_seconds:.1} s, \
+             input {} terms, rss {:.2} GB",
+            drill_term_count(&input),
+            parse_rss as f64 / 1e9
+        );
         for mode in modes.split(',') {
             let master_mode = match mode {
                 "retain" => RustRedMasterMode::Retain,
@@ -2644,6 +2667,7 @@ fn massive_closure_showcase() {
             };
             let seconds = started.elapsed().as_secs_f64();
             let stats = super::last_stats();
+            let stages = crate::p_integral::massive::take_stage_seconds();
             let after = engine.p_relation_cache_statistics();
             let delta = after.cache.since(&before.cache);
             let (status, value_text, terms) = match &result {
@@ -2659,6 +2683,11 @@ fn massive_closure_showcase() {
             let summary = serde_json::json!({
                 "closure": name, "mode": mode, "status": status,
                 "seconds": seconds, "read_seconds": read_seconds, "peak_rss_bytes": peak(),
+                "ingest": {"decompress_s": decompress_seconds, "parse_s": parse_seconds,
+                           "rss_after_decompress": decompress_rss, "rss_after_parse": parse_rss},
+                "stages": stages.iter().map(|(stage, seconds)| (stage.to_string(), serde_json::json!(seconds)))
+                    .collect::<serde_json::Map<_, _>>(),
+                "rss_after": rss(),
                 "input_bytes": input_text.len(), "result_bytes": value_text, "result_terms": terms,
                 "epsilon_terms": epsilon_terms,
                 "reduce": {"channels": stats.channels, "reductions": stats.reductions, "pairs": stats.pairs,

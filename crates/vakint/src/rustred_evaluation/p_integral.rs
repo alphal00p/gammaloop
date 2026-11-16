@@ -1523,6 +1523,32 @@ pub(crate) struct FoldedInputs {
 /// function is reduced apart with rational inputs and multiplied in at the
 /// render level; in [`FoldMode::Coefficient`] the basis functions enter the
 /// inputs as rational functions of `d` and each folded channel is reduced once.
+/// vk5l-physrun: `VAKINT_P_KEY_DUMP=<file>` appends every reduced key of a
+/// folded channel as `loops<TAB>presentation<TAB>powers` (whole-input key
+/// statistics: distinct keys per closure and across closures).
+fn key_dump<'a>(loops: usize, keys: impl Iterator<Item = &'a (PresentationId, Vec<i64>)>) {
+    static FILE: std::sync::LazyLock<Option<std::sync::Mutex<std::fs::File>>> =
+        std::sync::LazyLock::new(|| {
+            let path = std::env::var_os("VAKINT_P_KEY_DUMP")?;
+            std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+                .ok()
+                .map(std::sync::Mutex::new)
+        });
+    let Some(file) = FILE.as_ref() else {
+        return;
+    };
+    let mut text = String::new();
+    for (presentation, powers) in keys {
+        use std::fmt::Write as _;
+        let _ = writeln!(text, "{loops}\t{}\t{powers:?}", presentation.0);
+    }
+    use std::io::Write as _;
+    let _ = file.lock().unwrap().write_all(text.as_bytes());
+}
+
 pub(crate) fn reduce_requests_folded(
     vakint: &Vakint,
     settings: &VakintSettings,
@@ -1666,6 +1692,7 @@ pub(crate) fn reduce_folded_channels(
                     stats.prepare_seconds += preparing.elapsed().as_secs_f64();
                     stats.pairs += inputs.len();
                 });
+                key_dump(channel.loops, inputs.keys());
                 let inputs = inputs
                     .into_iter()
                     .filter(|(_, value)| !value.is_zero())
