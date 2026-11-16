@@ -210,10 +210,34 @@ thread_local! {
 /// Run `f` as the R* evaluation of a proper UV child (its own complete-graph
 /// R*, nested children included). See [`uv_child_edge_remainder`].
 pub(crate) fn in_uv_child_scope<T>(f: impl FnOnce() -> T) -> T {
-    let previous = UV_CHILD_SCOPE.with(|scope| scope.replace(true));
-    let result = f();
-    UV_CHILD_SCOPE.with(|scope| scope.set(previous));
-    result
+    // Restored on unwinding too: beta catches a panicking diagram and the worker
+    // thread goes on, so a scope left set would treat later root remainders as
+    // children.
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let previous = self.0;
+            UV_CHILD_SCOPE.with(|scope| scope.set(previous));
+        }
+    }
+    let _restore = Restore(UV_CHILD_SCOPE.with(|scope| scope.replace(true)));
+    f()
+}
+
+#[cfg(test)]
+#[test]
+fn uv_child_scope_is_restored_when_the_child_panics() {
+    assert!(!UV_CHILD_SCOPE.with(|scope| scope.get()));
+    let unwound = std::panic::catch_unwind(|| {
+        in_uv_child_scope(|| {
+            assert!(UV_CHILD_SCOPE.with(|scope| scope.get()));
+            panic!("child integration failed");
+        })
+    });
+    assert!(unwound.is_err());
+    assert!(!UV_CHILD_SCOPE.with(|scope| scope.get()));
+    assert_eq!(in_uv_child_scope(|| UV_CHILD_SCOPE.with(|scope| scope.get())), true);
+    assert!(!UV_CHILD_SCOPE.with(|scope| scope.get()));
 }
 
 /// `GAMMALOOP_UV_CHILD_EDGE_REMAINDER=1` (opt-in): inside an R* child, the
