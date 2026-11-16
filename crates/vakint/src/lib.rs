@@ -7106,20 +7106,11 @@ Evaluated (n_loops=1, mu_r=1) :
     /// its own dummy index from `dummy` on, in the order of
     /// [`Self::dot_power_step`] repeated to a fixed point. `VAKINT_DOT_CONVERSION`
     /// selects `fast` (the default: the same steps applied term by term of
-    /// the one sum that holds every `dot_pow`, see
-    /// [`Self::expand_dot_powers_by_term`]), `slow` (the steps on the whole
-    /// expression) or `check` (both, panicking on any difference).
+    /// the one sum that holds every `dot_pow`, or to the factors of a product
+    /// that hold one, see [`Self::expand_dot_powers_fast`]), `slow` (the steps
+    /// on the whole expression) or `check` (both, panicking on any difference).
     fn expand_dot_powers(a: &mut Atom, dummy: &mut usize) {
-        fn slow(a: &mut Atom, dummy: &mut usize) {
-            loop {
-                let new = Vakint::dot_power_step(a.as_view(), *dummy);
-                if new == *a {
-                    break;
-                }
-                *a = new;
-                *dummy += 1;
-            }
-        }
+        let slow = Self::expand_dot_powers_stepwise;
         static MODE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
         let mode = MODE.get_or_init(|| {
             std::env::var("VAKINT_DOT_CONVERSION").unwrap_or_else(|_| "fast".to_owned())
@@ -7129,8 +7120,7 @@ Evaluated (n_loops=1, mu_r=1) :
             "check" => {
                 let (mut reference, mut reference_dummy) = (a.clone(), *dummy);
                 slow(&mut reference, &mut reference_dummy);
-                if let Some((fast, fast_dummy)) =
-                    Self::expand_dot_powers_by_term(a.as_view(), *dummy)
+                if let Some((fast, fast_dummy)) = Self::expand_dot_powers_fast(a.as_view(), *dummy)
                 {
                     assert!(
                         fast == reference && fast_dummy == reference_dummy,
@@ -7140,7 +7130,7 @@ Evaluated (n_loops=1, mu_r=1) :
                 *a = reference;
                 *dummy = reference_dummy;
             }
-            _ => match Self::expand_dot_powers_by_term(a.as_view(), *dummy) {
+            _ => match Self::expand_dot_powers_fast(a.as_view(), *dummy) {
                 Some((fast, fast_dummy)) => {
                     *a = fast;
                     *dummy = fast_dummy;
@@ -7148,6 +7138,69 @@ Evaluated (n_loops=1, mu_r=1) :
                 None => slow(a, dummy),
             },
         }
+    }
+
+    /// [`Self::dot_power_step`] repeated to its fixed point on the whole of
+    /// `a` (the reference of every faster path).
+    fn expand_dot_powers_stepwise(a: &mut Atom, dummy: &mut usize) {
+        loop {
+            let new = Vakint::dot_power_step(a.as_view(), *dummy);
+            if new == *a {
+                break;
+            }
+            *a = new;
+            *dummy += 1;
+        }
+    }
+
+    /// The fixed point of [`Self::dot_power_step`] by the fastest exact path:
+    /// [`Self::expand_dot_powers_by_term`], else
+    /// [`Self::expand_dot_powers_on_dotted_factors`]; `None` when neither
+    /// applies (the caller steps on the whole expression).
+    fn expand_dot_powers_fast(a: AtomView, dummy: usize) -> Option<(Atom, usize)> {
+        Self::expand_dot_powers_by_term(a, dummy)
+            .or_else(|| Self::expand_dot_powers_on_dotted_factors(a, dummy))
+    }
+
+    /// The fixed point of [`Self::dot_power_step`] of a product, computed on
+    /// the product of its factors that hold a `dot_pow` alone, with the
+    /// other factors multiplied back once at the end. Exactly the same steps:
+    /// a factor without `dot_pow` holds no match, so the first match of the
+    /// whole product lies in the first factor holding one, in the order the
+    /// normalized product keeps among those factors (the same order as in
+    /// their own normalized product); a step and the removal of
+    /// `dot_pow(a,b,0)` change those factors only, and normalizing a product
+    /// does not depend on how its factors are grouped. The other factors (a
+    /// vacuum numerator term carries its whole rational coefficient in d and
+    /// its metric tensors there) are then no longer matched, rebuilt and
+    /// compared at every step. `None` unless `a` is a product with factors
+    /// of both kinds.
+    fn expand_dot_powers_on_dotted_factors(a: AtomView, dummy: usize) -> Option<(Atom, usize)> {
+        let AtomView::Mul(product) = a else {
+            return None;
+        };
+        let (mut dotted, mut rest) = (Vec::new(), Vec::new());
+        for factor in product.iter() {
+            if factor.contains_symbol(S.dot_pow) {
+                dotted.push(factor);
+            } else {
+                rest.push(factor);
+            }
+        }
+        if dotted.is_empty() || rest.is_empty() {
+            return None;
+        }
+        let dotted = Atom::mul_many(dotted);
+        let (expanded, dummy) = Self::expand_dot_powers_by_term(dotted.as_view(), dummy)
+            .unwrap_or_else(|| {
+                let (mut expanded, mut dummy) = (dotted, dummy);
+                Self::expand_dot_powers_stepwise(&mut expanded, &mut dummy);
+                (expanded, dummy)
+            });
+        Some((
+            Atom::mul_many(rest.into_iter().chain(std::iter::once(expanded.as_view()))),
+            dummy,
+        ))
     }
 
     /// [`Self::dot_power_step`] of a product whose factors holding `dot_pow`
@@ -8454,6 +8507,58 @@ mod tests {
     use symbolica::parse_lit;
 
     use super::*;
+
+    /// The product path of the dot expansion (a vacuum numerator term: its
+    /// coefficient in d, metric tensors, several sums holding dot powers and
+    /// plain dot powers) takes exactly the steps of the whole-expression
+    /// fixed point: same expression, same next dummy index.
+    #[test]
+    fn dot_expansion_on_dotted_factors_matches_the_stepwise_fixed_point() {
+        Vakint::initialize_vakint_symbols();
+        let dot = |a: &str, b: &str, c: i64| format!("dot_pow(k({a}),{b},{c})");
+        let coefficient = "((4-2*ep)*(-2)+(4-2*ep)^2+(4-2*ep)^3)^(-1)*(5-2*ep)";
+        let metric = "g(hedge(0,1),hedge(10,1))*g(hedge(20,1),hedge(30,1))";
+        let sum_a = format!(
+            "(128*gs^4*{}+64*gs^4*{}*{})",
+            dot("1", "k(2)", 1),
+            dot("2", "k(2)", 2),
+            dot("1", "p(1)", 1)
+        );
+        let sum_b = format!(
+            "(-16*(4-2*ep)*gs^4*{}+32*gs^4*{}+7*{})",
+            dot("1", "k(1)", 1),
+            dot("3", "k(1)", 3),
+            dot("2", "p(1)", 2)
+        );
+        let inputs = [
+            format!("{coefficient}*{metric}*{sum_a}*{sum_b}"),
+            format!("{coefficient}*{metric}*{sum_a}*{}", dot("1", "k(1)", 2)),
+            format!(
+                "{coefficient}*{metric}*{sum_b}*{}*{}",
+                dot("3", "p(1)", 1),
+                dot("1", "k(2)", 2)
+            ),
+            format!("{coefficient}*{sum_a}^2*{}", dot("2", "k(3)", 1)),
+            format!("{metric}*{}*{}", dot("1", "k(1)", 3), dot("2", "k(1)", 1)),
+            format!("x*({}+y)*({}+z)", dot("1", "k(2)", 1), dot("2", "k(3)", 2)),
+        ];
+        for (index, input) in inputs.iter().enumerate() {
+            let input = vk_parse!(input).unwrap();
+            for start in [1, 7] {
+                let (mut reference, mut reference_dummy) = (input.clone(), start);
+                Vakint::expand_dot_powers_stepwise(&mut reference, &mut reference_dummy);
+                let (fast, fast_dummy) = Vakint::expand_dot_powers_fast(input.as_view(), start)
+                    .unwrap_or_else(|| panic!("input {index}: no fast path"));
+                assert_eq!(
+                    fast.to_canonical_string(),
+                    reference.to_canonical_string(),
+                    "input {index}"
+                );
+                assert_eq!(fast_dummy, reference_dummy, "input {index}");
+                assert!(!fast.as_view().contains_symbol(S.dot_pow), "input {index}");
+            }
+        }
+    }
 
     #[test]
     fn resource_errors_expose_the_original_standard_error_source() {
