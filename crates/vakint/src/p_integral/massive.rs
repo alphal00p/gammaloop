@@ -730,9 +730,22 @@ impl MassiveClosure {
         settings.with_resource_budget(|| {
             let mut classes = Vec::<LoweredClosure>::new();
             let mut result = Atom::Zero;
-            for (closure, input) in inputs {
+            let started = std::time::Instant::now();
+            for (index, (closure, input)) in inputs.iter().enumerate() {
                 settings.validate_execution()?;
-                match closure.lower_direct(vakint, settings, input)? {
+                let lowering = std::time::Instant::now();
+                let lowered = closure.lower_direct(vakint, settings, input)?;
+                if super::phases::enabled() {
+                    eprintln!(
+                        "vakint-direct-sum closure {}/{} {} in {:.1} s (total {:.1} s)",
+                        index + 1,
+                        inputs.len(),
+                        if lowered.is_some() { "lowered" } else { "declined" },
+                        lowering.elapsed().as_secs_f64(),
+                        started.elapsed().as_secs_f64()
+                    );
+                }
+                match lowered {
                     Some(mut lowered) => {
                         for class in classes.iter_mut() {
                             match class.absorb(lowered) {
@@ -759,7 +772,11 @@ impl MassiveClosure {
                 }
             }
             for class in classes {
+                let reducing = std::time::Instant::now();
                 result += class.evaluate(vakint, settings)?;
+                if super::phases::enabled() {
+                    eprintln!("vakint-direct-sum class reduced and finalized in {:.1} s", reducing.elapsed().as_secs_f64());
+                }
             }
             Ok(result.expand())
         })
