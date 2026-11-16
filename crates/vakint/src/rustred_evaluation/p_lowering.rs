@@ -1179,8 +1179,15 @@ pub(crate) fn lower_closure(
     }
     stats.distinct_monomials += distinct.len();
     let mut buckets = Vec::<Vec<Rational>>::with_capacity(bucket_terms.len());
+    let integer_forms = IntegerForms::new(&forms);
     for mut terms in bucket_terms {
-        let substituted = substitute(&mut terms, count, &forms);
+        let substituted = match integer_forms
+            .as_ref()
+            .and_then(|integer| substitute_integer(&terms, count, integer))
+        {
+            Some(substituted) => substituted,
+            None => substitute(&mut terms, count, &forms),
+        };
         let mut bucket = Vec::new();
         for (monomial, value) in substituted {
             if value.is_zero() {
@@ -1267,6 +1274,158 @@ fn canonical_rows(index: usize, loops: usize) -> (Vec<i64>, Vec<i64>) {
         }
     }
     (unit(index - position), unit(loops))
+}
+
+/// vk5l-physrun: the slot forms over the integers: every coefficient times the
+/// common denominator `scale` of all forms.
+struct IntegerForms {
+    scale: i128,
+    forms: Vec<(i128, Vec<(u16, i128)>)>,
+}
+
+/// An exact rational's numerator and denominator as machine integers.
+fn small_parts(value: &Rational) -> Option<(i128, i128)> {
+    match (value.numerator_ref(), value.denominator_ref()) {
+        (Integer::Single(n), Integer::Single(d)) => Some((*n as i128, *d as i128)),
+        _ => None,
+    }
+}
+
+fn gcd_i128(mut a: i128, mut b: i128) -> i128 {
+    while b != 0 {
+        (a, b) = (b, a % b);
+    }
+    a.abs()
+}
+
+fn lcm_i128(a: i128, b: i128) -> Option<i128> {
+    (a / gcd_i128(a, b)).checked_mul(b)
+}
+
+impl IntegerForms {
+    fn new(forms: &[rustred::propagator::presentation::AffineSlotForm]) -> Option<Self> {
+        let mut scale = 1i128;
+        for form in forms {
+            scale = lcm_i128(scale, small_parts(&form.constant)?.1)?;
+            for (_, coefficient) in &form.terms {
+                scale = lcm_i128(scale, small_parts(coefficient)?.1)?;
+            }
+        }
+        let integer = |value: &Rational| -> Option<i128> {
+            let (n, d) = small_parts(value)?;
+            n.checked_mul(scale / d)
+        };
+        let forms = forms
+            .iter()
+            .map(|form| {
+                Some((
+                    integer(&form.constant)?,
+                    form.terms
+                        .iter()
+                        .map(|(slot, coefficient)| Some((*slot, integer(coefficient)?)))
+                        .collect::<Option<Vec<_>>>()?,
+                ))
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Some(Self { scale, forms })
+    }
+}
+
+/// vk5l-physrun: [`substitute`] over machine integers: every term of one
+/// bucket has the same canonical degree `r` (its scale power), so with the
+/// forms scaled to integers by `D` and the values by their common denominator
+/// `L` the substituted values are exact integers over `L·D^r`. `None` (exact
+/// rational path) for mixed degrees, large numbers or an overflow.
+fn substitute_integer(
+    terms: &[(u128, Rational)],
+    vars: usize,
+    forms: &IntegerForms,
+) -> Option<HashMap<u128, Rational>> {
+    let r = degree(terms.first()?.0, vars);
+    let mut common = 1i128;
+    for (monomial, value) in terms {
+        if degree(*monomial, vars) != r {
+            return None;
+        }
+        common = lcm_i128(common, small_parts(value)?.1)?;
+    }
+    let mut integer_terms = terms
+        .iter()
+        .map(|(monomial, value)| {
+            let (n, d) = small_parts(value)?;
+            Some((*monomial, n.checked_mul(common / d)?))
+        })
+        .collect::<Option<Vec<_>>>()?;
+    OVERFLOW.with(|flag| flag.set(false));
+    let substituted = substitute_c(&mut integer_terms, vars, &forms.forms);
+    if OVERFLOW.with(|flag| flag.replace(false)) {
+        return None;
+    }
+    let denominator = Integer::from(common) * Integer::from(forms.scale).pow(r as u64);
+    Some(
+        substituted
+            .into_iter()
+            .map(|(monomial, value)| (monomial, Rational::from((Integer::from(value), denominator.clone()))))
+            .collect(),
+    )
+}
+
+/// [`substitute`] over a [`Coef`] ring with forms `(constant, [(slot, coefficient)])`.
+fn substitute_c<C: Coef>(
+    terms: &mut [(u128, C)],
+    vars: usize,
+    forms: &[(C, Vec<(u16, C)>)],
+) -> HashMap<u128, C> {
+    let mut result = HashMap::<u128, C>::new();
+    if terms.is_empty() {
+        return result;
+    }
+    let exponent = |packed: u128, var: usize| ((packed >> (BITS * var as u32)) & ((1 << BITS) - 1)) as u32;
+    let Some(var) = (0..vars).rev().find(|var| terms.iter().any(|(m, _)| exponent(*m, *var) > 0)) else {
+        let mut total = C::zero();
+        for (_, value) in terms.iter() {
+            total.add(value);
+        }
+        if !total.is_zero() {
+            result.insert(0, total);
+        }
+        return result;
+    };
+    terms.sort_unstable_by_key(|(m, _)| std::cmp::Reverse(exponent(*m, var)));
+    let top = exponent(terms[0].0, var);
+    let mask = !(((1u128 << BITS) - 1) << (BITS * var as u32));
+    let mut start = 0;
+    for power in (0..=top).rev() {
+        if !result.is_empty() {
+            let (constant, slots) = &forms[var];
+            let mut next = HashMap::<u128, C>::with_capacity(result.len() * 2);
+            for (monomial, value) in &result {
+                if !constant.is_zero() {
+                    next.entry(*monomial).or_insert_with(C::zero).add(&value.mul(constant));
+                }
+                for (slot, coefficient) in slots {
+                    let shifted = monomial + (1u128 << (BITS * u32::from(*slot)));
+                    next.entry(shifted).or_insert_with(C::zero).add(&value.mul(coefficient));
+                }
+            }
+            result = next;
+        }
+        let mut end = start;
+        while end < terms.len() && exponent(terms[end].0, var) == power {
+            end += 1;
+        }
+        let slice = &mut terms[start..end];
+        for (monomial, _) in slice.iter_mut() {
+            *monomial &= mask;
+        }
+        let inner = substitute_c(slice, var, forms);
+        for (monomial, value) in inner {
+            result.entry(monomial).or_insert_with(C::zero).add(&value);
+        }
+        start = end;
+    }
+    result.retain(|_, value| !value.is_zero());
+    result
 }
 
 /// `Σ c·Π form_d^n_d` of a polynomial in the canonical scalar products

@@ -2617,6 +2617,19 @@ fn massive_closure_showcase_sum() {
         };
         let arithmetic = std::env::var("VAKINT_TEST_CLOSURE_ARITHMETIC").ok();
         let mut settings = settings(master_mode, arithmetic.as_deref());
+        // vk5l-physrun dry listing of uncovered boxed-node arrivals:
+        // VAKINT_TEST_P_UNCOVERED=retain (PResidual symbols, Retain mode only),
+        // VAKINT_TEST_P_OUTSIDE_RECIPES=<n> (0: no run-time recipe solve),
+        // VAKINT_TEST_P_RULES_OUTSIDE=0 (no table rules outside the certified set).
+        if std::env::var("VAKINT_TEST_P_UNCOVERED").as_deref() == Ok("retain") {
+            settings.rustred_p_uncovered = crate::RustRedPUncoveredPolicy::Retain;
+        }
+        if let Some(recipes) = std::env::var("VAKINT_TEST_P_OUTSIDE_RECIPES").ok().and_then(|n| n.parse().ok()) {
+            settings.rustred_p_outside.max_recipes = recipes;
+        }
+        if std::env::var("VAKINT_TEST_P_RULES_OUTSIDE").as_deref() == Ok("0") {
+            settings.rustred_p_outside.rules_outside = false;
+        }
         settings.epsilon_symbol = "gammalooprs::ε".into();
         settings.mu_r_sq_symbol = "gammalooprs::μᵣ²".into();
         settings.integral_normalization_factor = crate::LoopNormalizationFactor::MSbar;
@@ -2764,6 +2777,19 @@ fn massive_closure_showcase() {
             // arithmetic text (exact | modular_sampled[:..] | modular_polynomial[:..]).
             let arithmetic = std::env::var("VAKINT_TEST_CLOSURE_ARITHMETIC").ok();
             let mut settings = settings(master_mode, arithmetic.as_deref());
+            // vk5l-physrun dry listing of uncovered boxed-node arrivals:
+            // VAKINT_TEST_P_UNCOVERED=retain (PResidual symbols, Retain mode only),
+            // VAKINT_TEST_P_OUTSIDE_RECIPES=<n> (0: no run-time recipe solve),
+            // VAKINT_TEST_P_RULES_OUTSIDE=0 (no table rules outside the certified set).
+            if std::env::var("VAKINT_TEST_P_UNCOVERED").as_deref() == Ok("retain") {
+                settings.rustred_p_uncovered = crate::RustRedPUncoveredPolicy::Retain;
+            }
+            if let Some(recipes) = std::env::var("VAKINT_TEST_P_OUTSIDE_RECIPES").ok().and_then(|n| n.parse().ok()) {
+                settings.rustred_p_outside.max_recipes = recipes;
+            }
+            if std::env::var("VAKINT_TEST_P_RULES_OUTSIDE").as_deref() == Ok("0") {
+                settings.rustred_p_outside.rules_outside = false;
+            }
             settings.epsilon_symbol = "gammalooprs::ε".into();
             settings.mu_r_sq_symbol = "gammalooprs::μᵣ²".into();
             settings.integral_normalization_factor = crate::LoopNormalizationFactor::MSbar;
