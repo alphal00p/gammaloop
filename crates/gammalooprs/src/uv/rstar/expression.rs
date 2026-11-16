@@ -1525,6 +1525,17 @@ impl RStarIntegrand {
                 eprintln!(
                     "CLOSED_SKIP site=outer_taylor id={unique_id} check identical={identical} equal={equal}"
                 );
+            } else if skip == ClosedSkipMode::Check && root_projector.is_some() {
+                // Diagnostics (with GAMMALOOP_ALGEBRA_DUMP): a root-projected
+                // polynomial that failed the closed-scalar test, before and
+                // after this pass, and whether the pass changed it.
+                streamed::dump("outer_taylor_open", polynomial.as_view());
+                streamed::dump("outer_taylor_open_simplified", expanded.as_view());
+                eprintln!(
+                    "CLOSED_SKIP site=outer_taylor id={unique_id} open unchanged={} closed_after={}",
+                    expanded == polynomial,
+                    closed_dot_scalar(expanded.as_view())
+                );
             }
             drop(polynomial);
             expanded
