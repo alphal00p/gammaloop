@@ -3924,6 +3924,7 @@ impl TensorExpression {
             collect_traces,
             expand,
             expand_scalar_spectators: false,
+            dot_notation: false,
             order: order.as_deref(),
             max_passes: max_steps_per_domain,
         };

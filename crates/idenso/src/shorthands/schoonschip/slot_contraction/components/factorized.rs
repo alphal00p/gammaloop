@@ -235,6 +235,151 @@ impl CoefficientSum {
     }
 }
 
+/// Sources with fewer terms are multiplied out and summed at once; larger
+/// ones are merged lazily (see [`frontier_sum`]).
+const LAZY_SOURCE_TERMS: usize = 32;
+
+/// One contribution to a frontier target: a source state times one monomial,
+/// `coefficient` times the variables of the shared map raised to `shift`.
+struct Contribution {
+    source: usize,
+    coefficient: Rational,
+    shift: Vec<u32>,
+}
+
+/// Largest exponent of every variable of `weight`.
+fn max_degrees(weight: &ScalarPolynomial) -> Vec<u32> {
+    let nvars = weight.nvars();
+    let mut degrees = vec![0u32; nvars];
+    if nvars > 0 {
+        for exponents in weight.exponents.chunks_exact(nvars) {
+            for (degree, &exponent) in degrees.iter_mut().zip(exponents) {
+                *degree = (*degree).max(exponent);
+            }
+        }
+    }
+    degrees
+}
+
+/// Sum the contributions of one frontier target in a single pass.
+///
+/// Multiplying a sorted polynomial by a monomial keeps it sorted, and every
+/// source map is a prefix of the shared map, so the target is a k-way merge of
+/// lazily shifted and scaled sources: each output monomial is written once,
+/// and no product of a source with a monomial is materialized. A source with
+/// no use left is released, and one used unchanged by a single target moves.
+fn frontier_sum(
+    sources: &mut [Option<ScalarPolynomial>],
+    uses: &mut [usize],
+    contributions: &[Contribution],
+    map: &Arc<Vec<PolyVariable>>,
+) -> Option<ScalarPolynomial> {
+    use symbolica::domains::{Ring, RingOps};
+    let nvars = map.len();
+    for contribution in contributions {
+        uses[contribution.source] -= 1;
+    }
+    if let [contribution] = contributions {
+        let source = sources[contribution.source].as_ref()?;
+        if uses[contribution.source] == 0
+            && source.nvars() == nvars
+            && Q.is_one(&contribution.coefficient)
+            && contribution.shift.iter().all(|&exponent| exponent == 0)
+        {
+            return sources[contribution.source].take();
+        }
+    }
+    let sum = {
+        let streams = contributions
+            .iter()
+            .map(|contribution| Some((sources[contribution.source].as_ref()?, contribution)))
+            .collect::<Option<Vec<_>>>()?;
+        if streams
+            .iter()
+            .any(|(source, _)| source.get_vars_ref() != &map[..source.nvars()])
+        {
+            return None;
+        }
+        // The input term count bounds the output: reserving it avoids the
+        // repeated copies of a growing buffer. Pages never written are not
+        // touched, so the unused tail costs address space only.
+        let capacity = streams
+            .iter()
+            .map(|(source, _)| source.nterms())
+            .sum::<usize>();
+        let mut sum = ScalarPolynomial::new(&Q, Some(capacity), map.clone());
+        let mut cursors = vec![0usize; streams.len()];
+        let mut current = vec![0u32; streams.len() * nvars];
+        let load = |stream: usize, cursor: usize, current: &mut [u32]| {
+            let (source, contribution) = streams[stream];
+            let width = source.nvars();
+            let exponents = &source.exponents[cursor * width..(cursor + 1) * width];
+            let target = &mut current[stream * nvars..(stream + 1) * nvars];
+            for (variable, entry) in target.iter_mut().enumerate() {
+                *entry = exponents.get(variable).copied().unwrap_or(0)
+                    + contribution.shift.get(variable).copied().unwrap_or(0);
+            }
+        };
+        let mut heap = Vec::with_capacity(streams.len());
+        for (stream, (source, _)) in streams.iter().enumerate() {
+            if !source.is_zero() {
+                load(stream, 0, &mut current);
+                heap.push(stream);
+            }
+        }
+        for index in (0..heap.len() / 2).rev() {
+            sift_down(&mut heap, index, &current, nvars);
+        }
+        while let Some(&top) = heap.first() {
+            let (source, contribution) = streams[top];
+            let cursor = cursors[top];
+            let coefficient = if Q.is_one(&contribution.coefficient) {
+                source.coefficients[cursor].clone()
+            } else {
+                Q.mul(&source.coefficients[cursor], &contribution.coefficient)
+            };
+            sum.append_monomial_back(coefficient, &current[top * nvars..(top + 1) * nvars]);
+            cursors[top] += 1;
+            if cursors[top] < source.nterms() {
+                load(top, cursors[top], &mut current);
+            } else {
+                heap.swap_remove(0);
+            }
+            sift_down(&mut heap, 0, &current, nvars);
+        }
+        sum
+    };
+    for contribution in contributions {
+        if uses[contribution.source] == 0 {
+            sources[contribution.source] = None;
+        }
+    }
+    Some(sum)
+}
+
+/// Restore the min-heap order of stream `heap[index]` by its current monomial.
+fn sift_down(heap: &mut [usize], mut index: usize, current: &[u32], nvars: usize) {
+    let key = |stream: usize| &current[stream * nvars..(stream + 1) * nvars];
+    loop {
+        let left = 2 * index + 1;
+        if left >= heap.len() {
+            return;
+        }
+        let right = left + 1;
+        let smaller = if right < heap.len() && key(heap[right]) < key(heap[left]) {
+            right
+        } else {
+            left
+        };
+        if key(heap[smaller]) < key(heap[index]) {
+            heap.swap(index, smaller);
+            index = smaller;
+        } else {
+            return;
+        }
+    }
+}
+
 /// The scalar variables of one frontier, in one append-only polynomial
 /// variable map: products and merges of frontier coefficients then never
 /// reorder and rebuild a polynomial. When enabled, small composite scalar
@@ -245,9 +390,12 @@ struct SharedScalars {
     atoms: Vec<Atom>,
     positions: AHashMap<Atom, usize>,
     dot_positions: AHashMap<Atom, usize>,
+    /// Dot-notation spelling of every position.
+    dots: Vec<Atom>,
     map: Arc<Vec<PolyVariable>>,
     expansions: AHashMap<usize, Expansion>,
     expand: bool,
+    dot_notation: bool,
 }
 
 /// Composite scalars with at most this many polynomial terms are expanded
@@ -285,11 +433,13 @@ enum Expansion {
 }
 
 impl SharedScalars {
-    fn new(expand: bool) -> Self {
+    fn new(expand: bool, dot_notation: bool) -> Self {
         Self {
             atoms: Vec::new(),
             positions: AHashMap::new(),
             dot_positions: AHashMap::new(),
+            dots: Vec::new(),
+            dot_notation,
             map: Arc::new(Vec::new()),
             expansions: AHashMap::new(),
             expand,
@@ -310,6 +460,7 @@ impl SharedScalars {
         }
         let position = self.atoms.len();
         self.atoms.push(atom.clone());
+        self.dots.push(dots.clone());
         self.dot_positions.insert(dots, position);
         self.positions.insert(atom, position);
         let mut variables = self.map.as_ref().clone();
@@ -397,14 +548,40 @@ impl SharedScalars {
         Expansion::Base(self.position(atom.clone()))
     }
 
-    /// Emit each variable in the spelling it first had in this frontier.
-    fn emit(&self, polynomial: &ScalarPolynomial) -> Option<Atom> {
-        polynomial.to_expression_with_variables(|variable| {
-            let PolyVariable::Temporary(position) = variable else {
-                unreachable!()
-            };
-            Some(self.atoms[*position].clone())
-        })
+    /// Emit each variable in the spelling it first had in this frontier, or
+    /// in dot notation when the request ends there. The polynomial is
+    /// relabelled with those atoms and written into one expression buffer,
+    /// which is normalized once.
+    fn emit(&self, mut polynomial: ScalarPolynomial) -> Option<Atom> {
+        let spellings = if self.dot_notation {
+            &self.dots
+        } else {
+            &self.atoms
+        };
+        let variables = polynomial
+            .get_vars_ref()
+            .iter()
+            .map(|variable| {
+                let PolyVariable::Temporary(position) = variable else {
+                    return None;
+                };
+                let atom = spellings.get(*position)?.clone();
+                // Only the expression of a variable is read when writing.
+                Some(match atom.as_view() {
+                    AtomView::Var(variable) => PolyVariable::Symbol(variable.get_symbol()),
+                    AtomView::Fun(function) => PolyVariable::Function(function.get_symbol(), atom),
+                    _ => PolyVariable::Power(atom),
+                })
+            })
+            .collect::<Option<Vec<_>>>()?;
+        let mut labelled = ScalarPolynomial::new(&Q, None, Arc::new(variables));
+        labelled.coefficients = std::mem::take(&mut polynomial.coefficients);
+        labelled.exponents = std::mem::take(&mut polynomial.exponents);
+        Some(
+            labelled.to_expression_with_coeff_map(|_, coefficient, out| {
+                out.to_num(coefficient.clone());
+            }),
+        )
     }
 }
 
@@ -1735,6 +1912,38 @@ impl SlotContraction {
 }
 
 impl<'a> ComponentSum<'a, '_> {
+    /// Storage of one [`frontier_sum`]: its contribution records and the
+    /// output it reserves at the input term count over the shared map.
+    #[cfg(feature = "reference-cases")]
+    fn merge_bytes(
+        sources: &[Option<ScalarPolynomial>],
+        contributions: &[Contribution],
+        nvars: usize,
+    ) -> usize {
+        let terms = contributions
+            .iter()
+            .filter_map(|contribution| sources[contribution.source].as_ref())
+            .map(ScalarPolynomial::nterms)
+            .fold(0usize, usize::saturating_add);
+        let records = contributions
+            .iter()
+            .map(|contribution| {
+                std::mem::size_of::<Contribution>().saturating_add(
+                    contribution
+                        .shift
+                        .capacity()
+                        .saturating_mul(std::mem::size_of::<u32>()),
+                )
+            })
+            .fold(0usize, usize::saturating_add);
+        terms
+            .saturating_mul(
+                std::mem::size_of::<Rational>()
+                    .saturating_add(nvars.saturating_mul(std::mem::size_of::<u32>())),
+            )
+            .saturating_add(records)
+    }
+
     /// Reuse the admitted inventory; never inspect a completed coefficient to
     /// rediscover whether its source contains an identity or an index.
     fn scalar_form(&self, value: AtomView<'a>) -> Option<bool> {
@@ -1924,7 +2133,8 @@ impl<'a> ComponentSum<'a, '_> {
         #[cfg(feature = "reference-cases")]
         let mut emitted_bytes = 0usize;
         let mut scalar_variables: AHashMap<Atom, usize> = AHashMap::new();
-        let mut shared = SharedScalars::new(self.contractor.expand_scalars);
+        let mut shared =
+            SharedScalars::new(self.contractor.expand_scalars, self.contractor.dot_notation);
         let mut scalar_form = Some(false);
         #[cfg(feature = "reference-cases")]
         let mut generated = 0usize;
@@ -1972,10 +2182,14 @@ impl<'a> ComponentSum<'a, '_> {
                 generated = generated.saturating_add(count);
             }
             let mut positions: AHashMap<Remaining<'a>, usize> = AHashMap::new();
-            let mut next: Vec<(Remaining<'a>, CoefficientSum)> = Vec::new();
-            #[cfg(feature = "reference-cases")]
-            let mut next_bytes = 0usize;
-            for (remaining, weight) in &states {
+            // Every target state collects the scaled, shifted large source
+            // states that reach it and the sum of its small products; one
+            // merge per target then builds its coefficient.
+            let mut next: Vec<(Remaining<'a>, Vec<Contribution>, Option<CoefficientSum>)> =
+                Vec::new();
+            let mut uses = vec![0usize; states.len()];
+            for (origin, (remaining, weight)) in states.iter().enumerate() {
+                let degrees = max_degrees(weight);
                 let source = remaining
                     .factors
                     .iter()
@@ -2042,8 +2256,11 @@ impl<'a> ComponentSum<'a, '_> {
                                 let atom = if let Some(value) = emitted.get(&variable) {
                                     value.clone()
                                 } else {
+                                    // Dot-notation emission discharges dot work.
+                                    let dot_notation = self.contractor.dot_notation;
                                     scalar_form = scalar_form
                                         .zip(self.variable_scalar_form(&value))
+                                        .map(|(first, second)| (first, second && !dot_notation))
                                         .map(|(first, second)| first || second);
                                     let atom = self.emit_variable(&value)?;
                                     #[cfg(feature = "reference-cases")]
@@ -2097,29 +2314,6 @@ impl<'a> ComponentSum<'a, '_> {
                             }
                         }
                     }
-                    #[cfg(feature = "reference-cases")]
-                    let incoming_bytes = weight.nterms().saturating_mul(
-                        std::mem::size_of::<Rational>()
-                            + (weight.nvars() + variables.len()) * std::mem::size_of::<u32>(),
-                    );
-                    let position = positions.get(&key).copied();
-                    // The position map and frontier both own a key.
-                    #[cfg(feature = "reference-cases")]
-                    let key_bytes = if position.is_none() {
-                        key.storage_bytes().saturating_mul(2)
-                    } else {
-                        0
-                    };
-                    // Multiplication constructs one incoming coefficient. Any
-                    // subsequent merge accounts for all retained partial sums.
-                    #[cfg(feature = "reference-cases")]
-                    crate::reference_cases::timing::frontier_workspace(
-                        state_bytes
-                            .saturating_add(next_bytes)
-                            .saturating_add(key_bytes)
-                            .saturating_add(emitted_bytes.saturating_mul(2))
-                            .saturating_add(incoming_bytes.saturating_mul(2)),
-                    );
                     // Distinct frontier variables can share one position (a
                     // nested `dot(p,q)` and this frontier's `g(p,q)`), so
                     // their exponents add.
@@ -2130,7 +2324,9 @@ impl<'a> ComponentSum<'a, '_> {
                     for (position, &exponent) in full.iter().enumerate().take(weight.nvars()) {
                         // Machine exponent capacity is not a work budget.
                         // A decline preserves the caller's exact source.
-                        weight.degree(position).checked_add(exponent)?;
+                        if exponent != 0 {
+                            degrees[position].checked_add(exponent)?;
+                        }
                     }
                     let mut monomial = ScalarPolynomial::new(&Q, Some(1), shared.map.clone())
                         .monomial(self.coefficient.clone(), full);
@@ -2142,64 +2338,100 @@ impl<'a> ComponentSum<'a, '_> {
                             monomial = &monomial * expanded;
                         }
                     }
-                    let coefficient = weight * &monomial;
-                    #[cfg(feature = "reference-cases")]
-                    let surrounding_bytes = state_bytes
-                        .saturating_add(emitted_bytes.saturating_mul(2))
-                        .saturating_add(Self::coefficient_bytes(&monomial));
-                    if coefficient.is_zero() {
+                    if monomial.is_zero() || weight.is_zero() {
                         continue;
                     }
-                    if let Some(position) = position {
-                        #[cfg(feature = "reference-cases")]
-                        {
-                            next_bytes -= next[position].1.storage_bytes();
-                        }
-                        next[position].1.push(
-                            coefficient,
-                            #[cfg(feature = "reference-cases")]
-                            surrounding_bytes.saturating_add(next_bytes),
-                        );
-                        #[cfg(feature = "reference-cases")]
-                        {
-                            next_bytes += next[position].1.storage_bytes();
-                        }
-                    } else {
-                        let coefficient = CoefficientSum::One(coefficient);
-                        #[cfg(feature = "reference-cases")]
-                        {
-                            next_bytes += coefficient.storage_bytes() + key_bytes;
-                        }
-                        positions.insert(key.clone(), next.len());
-                        next.push((key, coefficient));
+                    // Contributions address positions of the shared map.
+                    if monomial.get_vars_ref() != &shared.map[..monomial.nvars()] {
+                        return None;
                     }
-                    #[cfg(feature = "reference-cases")]
-                    crate::reference_cases::timing::frontier_workspace(
-                        surrounding_bytes.saturating_add(next_bytes),
-                    );
+                    let target = match positions.get(&key) {
+                        Some(&target) => target,
+                        None => {
+                            positions.insert(key.clone(), next.len());
+                            next.push((key, Vec::new(), None));
+                            next.len() - 1
+                        }
+                    };
+                    if weight.nterms() < LAZY_SOURCE_TERMS {
+                        // A small product is cheaper to form and fold now
+                        // than to describe for the merge.
+                        let product = weight * &monomial;
+                        match &mut next[target].2 {
+                            Some(sum) => sum.push(
+                                product,
+                                #[cfg(feature = "reference-cases")]
+                                state_bytes.saturating_add(emitted_bytes.saturating_mul(2)),
+                            ),
+                            empty => *empty = Some(CoefficientSum::One(product)),
+                        }
+                        continue;
+                    }
+                    uses[origin] += monomial.nterms();
+                    for term in 0..monomial.nterms() {
+                        next[target].1.push(Contribution {
+                            source: origin,
+                            coefficient: monomial.coefficients[term].clone(),
+                            shift: monomial.exponents(term).to_vec(),
+                        });
+                    }
                 }
             }
             self.overrides.clear();
-            states = next
+            let mut sources: Vec<Option<ScalarPolynomial>> = std::mem::take(&mut states)
                 .into_iter()
-                .filter_map(|(remaining, coefficients)| {
-                    #[cfg(feature = "reference-cases")]
-                    {
-                        next_bytes -= coefficients.storage_bytes();
-                    }
-                    let weight = coefficients.finish(
-                        #[cfg(feature = "reference-cases")]
-                        state_bytes
-                            .saturating_add(next_bytes)
-                            .saturating_add(emitted_bytes.saturating_mul(2)),
-                    );
-                    #[cfg(feature = "reference-cases")]
-                    {
-                        next_bytes += Self::coefficient_bytes(&weight);
-                    }
-                    (!weight.is_zero()).then_some((remaining, weight))
-                })
+                .map(|(_, weight)| Some(weight))
                 .collect();
+            #[cfg(feature = "reference-cases")]
+            let mut next_bytes = 0usize;
+            for (remaining, mut contributions, small) in next {
+                // Released sources only lower the retained input storage, so
+                // the step's input bytes bound it.
+                #[cfg(feature = "reference-cases")]
+                let surrounding_bytes = state_bytes
+                    .saturating_add(next_bytes)
+                    .saturating_add(emitted_bytes.saturating_mul(2));
+                let small = small.map(|sum| {
+                    sum.finish(
+                        #[cfg(feature = "reference-cases")]
+                        surrounding_bytes,
+                    )
+                });
+                let weight = match small {
+                    Some(small) if contributions.is_empty() => small,
+                    small => {
+                        if let Some(small) = small {
+                            // The folded small products are one more stream.
+                            contributions.push(Contribution {
+                                source: sources.len(),
+                                coefficient: Rational::one(),
+                                shift: Vec::new(),
+                            });
+                            sources.push(Some(small));
+                            uses.push(1);
+                        }
+                        #[cfg(feature = "reference-cases")]
+                        crate::reference_cases::timing::frontier_workspace(
+                            surrounding_bytes.saturating_add(Self::merge_bytes(
+                                &sources,
+                                &contributions,
+                                shared.map.len(),
+                            )),
+                        );
+                        frontier_sum(&mut sources, &mut uses, &contributions, &shared.map)?
+                    }
+                };
+                if !weight.is_zero() {
+                    #[cfg(feature = "reference-cases")]
+                    {
+                        next_bytes = next_bytes.saturating_add(
+                            Self::coefficient_bytes(&weight)
+                                .saturating_add(remaining.storage_bytes()),
+                        );
+                    }
+                    states.push((remaining, weight));
+                }
+            }
         }
         self.overrides.clear();
         #[cfg(feature = "reference-cases")]
@@ -2208,7 +2440,7 @@ impl<'a> ComponentSum<'a, '_> {
         );
         let mut terms = Vec::with_capacity(states.len());
         for (remaining, weight) in states {
-            let mut factors = vec![shared.emit(&weight)?];
+            let mut factors = vec![shared.emit(weight)?];
             for (position, arguments) in remaining.factors {
                 scalar_form = scalar_form
                     .zip(self.scalar_form(self.opaque_factors[position].0))
@@ -2349,6 +2581,86 @@ mod tests {
     use super::super::tests::{input, setup};
     use super::*;
     use crate::shorthands::schoonschip::Schoonschip;
+
+    #[test]
+    fn frontier_sum_merges_shifted_sources_over_prefix_maps() {
+        let map: Arc<Vec<PolyVariable>> = Arc::new((0..3).map(PolyVariable::Temporary).collect());
+        let polynomial = |nvars: usize, terms: &[(i64, &[u32])]| {
+            ScalarPolynomial::from_coefficient_list(
+                terms
+                    .iter()
+                    .map(|(coefficient, _)| Rational::from(*coefficient))
+                    .collect(),
+                terms
+                    .iter()
+                    .flat_map(|(_, exponents)| exponents.iter().copied())
+                    .collect(),
+                Arc::new(map[..nvars].to_vec()),
+                &Q,
+            )
+        };
+        let monomial = |coefficient: i64, shift: &[u32]| {
+            ScalarPolynomial::new(&Q, Some(1), map.clone())
+                .monomial(Rational::from(coefficient), shift.to_vec())
+        };
+        // Sources over prefixes of the shared map, with overlapping shifts,
+        // a non-unit scale and an exact cancellation between two streams.
+        let first = polynomial(2, &[(1, &[0, 0]), (2, &[1, 0]), (3, &[0, 2])]);
+        let second = polynomial(3, &[(1, &[1, 0, 0]), (-1, &[0, 1, 1])]);
+        let third = polynomial(1, &[(4, &[2])]);
+        let contributions = [
+            (0, 1, [0, 0, 1]),
+            (0, -2, [1, 1, 0]),
+            (1, 3, [0, 0, 0]),
+            (2, 1, [0, 0, 0]),
+            // -4*x0^2 cancels the term 4*x0^2 of the previous stream.
+            (0, -4, [2, 0, 0]),
+        ];
+        let expected = contributions
+            .iter()
+            .map(|&(source, coefficient, shift)| {
+                [&first, &second, &third][source] * &monomial(coefficient, &shift)
+            })
+            .fold(ScalarPolynomial::new(&Q, None, map.clone()), |sum, term| {
+                &sum + &term
+            });
+        let mut sources = vec![Some(first), Some(second), Some(third)];
+        let mut uses = vec![3, 1, 1];
+        let records = contributions
+            .iter()
+            .map(|&(source, coefficient, shift)| Contribution {
+                source,
+                coefficient: Rational::from(coefficient),
+                shift: shift.to_vec(),
+            })
+            .collect::<Vec<_>>();
+        let sum = frontier_sum(&mut sources, &mut uses, &records, &map).unwrap();
+        assert_eq!(sum, expected);
+        assert_eq!(sum.get_vars_ref(), map.as_ref());
+        // Every source is used up and released.
+        assert!(sources.iter().all(Option::is_none));
+
+        // A sole unscaled, unshifted use over the full map moves the source.
+        let full = polynomial(3, &[(5, &[0, 1, 2])]);
+        let mut sources = vec![Some(full.clone())];
+        let identity = [Contribution {
+            source: 0,
+            coefficient: Rational::one(),
+            shift: vec![0; 3],
+        }];
+        assert_eq!(
+            frontier_sum(&mut sources, &mut [1], &identity, &map).unwrap(),
+            full
+        );
+        assert!(sources[0].is_none());
+
+        // A source whose variables are not a prefix of the map is declined.
+        let foreign =
+            ScalarPolynomial::new(&Q, Some(1), Arc::new(vec![PolyVariable::Temporary(7)]))
+                .monomial(Rational::one(), vec![1]);
+        let mut sources = vec![Some(foreign)];
+        assert!(frontier_sum(&mut sources, &mut [2], &identity, &map).is_none());
+    }
 
     #[test]
     fn frontier_coefficient_sum_cancels_across_sizes_and_variable_orders() {

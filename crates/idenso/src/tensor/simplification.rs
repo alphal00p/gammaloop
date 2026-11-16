@@ -99,6 +99,7 @@ pub(crate) enum ReductionPolicy {
         collect_traces: bool,
         expand: bool,
         expand_scalar_spectators: bool,
+        dot_notation: bool,
         order: Option<Vec<usize>>,
         max_passes: Option<usize>,
     },
@@ -136,6 +137,7 @@ impl ReductionRequest<'_> {
                 collect_traces: settings.collect_traces,
                 expand: settings.expand,
                 expand_scalar_spectators: settings.expand_scalar_spectators,
+                dot_notation: settings.dot_notation,
                 order: settings.order.map(<[_]>::to_vec),
                 max_passes: settings.max_passes,
             },
@@ -356,6 +358,7 @@ impl SymbolicTensor<PartialStructure> {
             ReductionRequest::Contract(settings) => settings,
             ReductionRequest::Algebra(settings) => ContractSettings {
                 expand_scalar_spectators: settings.expand_scalar_spectators,
+                dot_notation: settings.contract == AlgebraContraction::Dots,
                 ..match &settings.contract {
                     AlgebraContraction::None => prerequisite_settings,
                     AlgebraContraction::Minimal => ContractSettings {
