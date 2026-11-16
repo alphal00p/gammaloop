@@ -2,7 +2,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fmt,
     sync::{
-        Mutex,
+        LazyLock, Mutex,
         atomic::{AtomicUsize, Ordering},
     },
 };
@@ -232,7 +232,7 @@ impl ParseableAind for GroupingIndex {
                     owned_index(function, "gammalooprs::vertex", Self::Vertex)
                 } else if head == feynkit_graph::symbols::edge_index() {
                     owned_index(function, "gammalooprs::edge", Self::Edge)
-                } else if head == symbol!("FeynKit::DummyIndex") {
+                } else if head == dummy_index_symbol() {
                     if function.get_nargs() != 1 {
                         return Err(GroupingIndexError::InvalidArity {
                             name: "FeynKit::DummyIndex",
@@ -282,7 +282,7 @@ impl From<GroupingIndex> for Atom {
                 )
             }
             GroupingIndex::Dummy(index) => {
-                function!(symbol!("FeynKit::DummyIndex"), index as i64)
+                function!(dummy_index_symbol(), index as i64)
             }
         }
     }
@@ -418,6 +418,13 @@ impl PreparedNumerator {
             })
         })
     }
+}
+
+/// `symbol!` takes the global symbol-table write lock even for an existing
+/// symbol; parallel sampling resolves this one once.
+fn dummy_index_symbol() -> Symbol {
+    static SYMBOL: LazyLock<Symbol> = LazyLock::new(|| symbol!("FeynKit::DummyIndex"));
+    *SYMBOL
 }
 
 type GroupingTensorLibrary = TensorLibrary<ParamTensor<ExplicitKey<GroupingIndex>>, GroupingIndex>;
@@ -753,15 +760,20 @@ pub(crate) fn group_diagrams(
         Some(total),
         zero_numerator_count,
     );
-    let mut buckets = BTreeMap::<TopologyKey, Vec<usize>>::new();
-    let mut canonical_frames = Vec::with_capacity(retained.len());
-    for (index, (diagram, numerator)) in retained.iter().zip(&mut prepared).enumerate() {
+    // Topology keys and samples are independent per diagram. Workers only
+    // compute; frames, buckets and the zero count are assembled below in
+    // retained order, so the outcome does not depend on scheduling.
+    type Sampled = (
+        CanonicalTopology,
+        Vec<SymbolicTensor<PartialStructure>>,
+        bool,
+    );
+    let sample_progress = Mutex::new((0, zero_numerator_count));
+    let sample_diagram = |(diagram, numerator): (&FeynmanDiagram, &PreparedNumerator)| {
         let canonical = canonical_topology(diagram, model, options, symmetrize_left_right)?;
-        let key = canonical.key.clone();
-        canonical_frames.push(canonical);
-        numerator.samples = numerical_tensor_samples(&numerator.sample_source, diagram, options)?;
-        let mut zero_samples = !numerator.samples.is_empty();
-        for (sample, value) in numerator.samples.iter().enumerate() {
+        let samples = numerical_tensor_samples(&numerator.sample_source, diagram, options)?;
+        let mut zero_samples = !samples.is_empty();
+        for (sample, value) in samples.iter().enumerate() {
             if !PreparedNumerator::finite_samples_equal(value.expression(), &Atom::Zero)
                 && !value
                     .coefficients_are_zero(TensorCollectFilter::Reps([
@@ -776,28 +788,76 @@ pub(crate) fn group_diagrams(
                 break;
             }
         }
+        Ok::<Sampled, GroupingError>((canonical, samples, zero_samples))
+    };
+    let report_samples = |result: &Result<Sampled, GroupingError>| {
+        let mut progress = sample_progress.lock().unwrap();
+        progress.0 += 1;
+        progress.1 += usize::from(matches!(result, Ok((_, _, true))));
+        generation_options.report_progress_with_zero_count(
+            "grouping_samples",
+            progress.0,
+            Some(total),
+            progress.1,
+        );
+    };
+    #[cfg(target_arch = "wasm32")]
+    let sampled = retained
+        .iter()
+        .zip(&prepared)
+        .map(sample_diagram)
+        .inspect(report_samples)
+        .collect::<Result<Vec<_>, _>>()?;
+    #[cfg(not(target_arch = "wasm32"))]
+    let sampled = if generation_options.threads == Some(1) {
+        retained
+            .iter()
+            .zip(&prepared)
+            .map(sample_diagram)
+            .inspect(report_samples)
+            .collect::<Result<Vec<_>, _>>()?
+    } else {
+        // One diagram per task: sampling costs vary strongly between
+        // diagrams. Collect every result first, so the reported error is the
+        // first in retained order, as in the serial path.
+        retained
+            .par_iter()
+            .zip(&prepared)
+            .with_min_len(1)
+            .with_max_len(1)
+            .map(sample_diagram)
+            .inspect(report_samples)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?
+    };
+    let mut buckets = BTreeMap::<TopologyKey, Vec<usize>>::new();
+    let mut canonical_frames = Vec::with_capacity(retained.len());
+    for (index, ((canonical, samples, zero_samples), numerator)) in
+        sampled.into_iter().zip(&mut prepared).enumerate()
+    {
+        numerator.samples = samples;
         if zero_samples {
             zero_numerator_count += 1;
         } else {
-            buckets.entry(key).or_default().push(index);
+            buckets
+                .entry(canonical.key.clone())
+                .or_default()
+                .push(index);
         }
-        generation_options.report_progress_with_zero_count(
-            "grouping_samples",
-            index + 1,
-            Some(total),
-            zero_numerator_count,
-        );
+        canonical_frames.push(canonical);
     }
-    let total = buckets.values().map(Vec::len).sum();
-    let mut completed = 0;
+    let total: usize = buckets.values().map(Vec::len).sum();
     generation_options.report_progress_with_zero_count(
         "grouping_comparison",
-        completed,
+        0,
         Some(total),
         zero_numerator_count,
     );
-    let mut groups = Vec::new();
-    for indices in buckets.into_values() {
+    // Buckets never share a group: masters are chosen within one bucket in
+    // bucket order, and buckets are concatenated in key order below.
+    let completed = Mutex::new(0);
+    let compare_bucket = |indices: Vec<usize>| -> Result<Vec<DiagramGroup>, GroupingError> {
         let mut bucket_groups: Vec<DiagramGroup> = Vec::new();
         for diagram in indices {
             let mut matching_group = None;
@@ -840,16 +900,40 @@ pub(crate) fn group_diagrams(
                     }],
                 });
             }
-            completed += 1;
+            let mut count = completed.lock().unwrap();
+            *count += 1;
             generation_options.report_progress_with_zero_count(
                 "grouping_comparison",
-                completed,
+                *count,
                 Some(total),
                 zero_numerator_count,
             );
         }
-        groups.extend(bucket_groups);
-    }
+        Ok(bucket_groups)
+    };
+    let buckets = buckets.into_values().collect::<Vec<_>>();
+    #[cfg(target_arch = "wasm32")]
+    let bucket_groups = buckets
+        .into_iter()
+        .map(compare_bucket)
+        .collect::<Result<Vec<_>, _>>()?;
+    #[cfg(not(target_arch = "wasm32"))]
+    let bucket_groups = if generation_options.threads == Some(1) {
+        buckets
+            .into_iter()
+            .map(compare_bucket)
+            .collect::<Result<Vec<_>, _>>()?
+    } else {
+        buckets
+            .into_par_iter()
+            .with_min_len(1)
+            .with_max_len(1)
+            .map(compare_bucket)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?
+    };
+    let mut groups = bucket_groups.into_iter().flatten().collect::<Vec<_>>();
     // Compare complete scalar weights after numerator ratios have been proved.
     // Opposite members can cancel even though neither numerator is zero. Keep
     // the graph numerators and retained provenance of surviving groups intact.
