@@ -52,7 +52,10 @@ use crate::{
     },
 };
 
-use super::{ChildMass, CountertermCache, RStarPlan, UvChildrenRoute, tests::canonical_tensor};
+use super::{
+    ChildMass, CountertermCache, RStarPlan, UvChildClosure, UvChildrenRoute,
+    tests::canonical_tensor,
+};
 
 const MODEL: &str = include_str!("testdata/background_qcd.json");
 const RSTAR: UvChildrenRoute = UvChildrenRoute::Rstar { min_loops: 1 };
@@ -199,6 +202,18 @@ fn compare_children(
     full_colour: bool,
     coverage: &mut Coverage,
 ) -> Result<()> {
+    compare_children_with(name, dot, vakint, max_loops, full_colour, UvChildClosure::Off, coverage)
+}
+
+fn compare_children_with(
+    name: &str,
+    dot: &str,
+    vakint: &Vakint,
+    max_loops: usize,
+    full_colour: bool,
+    closure: UvChildClosure,
+    coverage: &mut Coverage,
+) -> Result<()> {
     let diagram = if full_colour {
         load(dot)?
     } else {
@@ -232,6 +247,7 @@ fn compare_children(
             vakint,
             &settings,
             RSTAR,
+            closure,
         )
         .wrap_err_with(|| format!("{name}: R* child {}", support.string_label()))?;
         coverage.rstar_time += started.elapsed();
@@ -531,7 +547,7 @@ fn four_loop_quark_self_energy_of_41295_body() -> Result<()> {
     let cache = Arc::new(CountertermCache::default());
     let started = Instant::now();
     let automatic = RStarPlan::rstar_child_counterterm(
-        &cache, &graph, &insertion, model, &vakint, &settings, RSTAR,
+        &cache, &graph, &insertion, model, &vakint, &settings, RSTAR, UvChildClosure::Off,
     )?;
     let automatic_seconds = started.elapsed().as_secs_f64();
     ensure!(!automatic.expand().is_zero(), "zero four-loop child");
@@ -555,4 +571,44 @@ fn four_loop_quark_self_energy_of_41295_body() -> Result<()> {
         cache.stats()
     );
     assert_same_delta(&graph, "41295 four-loop child", &explicit, &automatic)
+}
+
+/// The isotropic child closure (opt-in) on the same children: every child
+/// still equals massive R exactly, and the closure is actually taken.
+#[test]
+fn isotropic_child_closure_matches_massive_r() -> Result<()> {
+    with_production_piece_limit(isotropic_child_closure_matches_massive_r_body)
+}
+
+fn isotropic_child_closure_matches_massive_r_body() -> Result<()> {
+    use std::sync::atomic::Ordering;
+    test_initialise()?;
+    let vakint = Vakint::new()?;
+    let closure = UvChildClosure::Isotropic { min_loops: 1 };
+    let before = super::plan::ISOTROPIC_CHILDREN.load(Ordering::Relaxed);
+    let mut coverage = Coverage::default();
+    for (name, dot, max_loops) in [
+        ("L2/0", include_str!("testdata/l2-d0.dot"), usize::MAX),
+        ("L3/166", include_str!("testdata/l3-d166.dot"), usize::MAX),
+        ("L4/2774", include_str!("testdata/l4-d2774.dot"), 3),
+    ] {
+        compare_children_with(name, dot, &vakint, max_loops, false, closure, &mut coverage)?;
+    }
+    let closed = super::plan::ISOTROPIC_CHILDREN.load(Ordering::Relaxed) - before;
+    eprintln!("ISOTROPIC_COVERAGE closed={closed} {coverage:?}");
+    ensure!(closed > 0, "the isotropic closure was never taken: {coverage:?}");
+    ensure!(coverage.loops.is_superset(&BTreeSet::from([1, 2, 3])), "{coverage:?}");
+    Ok(())
+}
+
+#[test]
+fn uv_child_closure_parses_the_environment_syntax() -> Result<()> {
+    assert_eq!(UvChildClosure::parse("")?, UvChildClosure::Off);
+    assert_eq!(UvChildClosure::parse("off")?, UvChildClosure::Off);
+    assert_eq!(UvChildClosure::parse("isotropic")?, UvChildClosure::Isotropic { min_loops: 1 });
+    assert_eq!(UvChildClosure::parse(" isotropic:4 ")?, UvChildClosure::Isotropic { min_loops: 4 });
+    for invalid in ["on", "true", "isotropic:x", "rstar"] {
+        ensure!(UvChildClosure::parse(invalid).is_err(), "accepted `{invalid}`");
+    }
+    Ok(())
 }
