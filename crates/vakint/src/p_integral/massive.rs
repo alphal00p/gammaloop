@@ -173,14 +173,24 @@ impl LoweredClosure {
             .copied()
             .unwrap_or(*first);
         let handle = vakint.p_library()?;
-        let reduced = rr::reduce_folded_channels(vakint, reducing, &handle, self.folded, None, rr::fold_mode(), true)?;
+        let reduced = rr::reduce_folded_channels(
+            vakint,
+            reducing,
+            &handle,
+            self.folded,
+            None,
+            rr::fold_mode(),
+            true,
+        )?;
         let mut results = Vec::with_capacity(settings.len());
         for settings in settings {
             let mode = mode_of(settings);
             let mut result = Atom::Zero;
             let mut numerical = Atom::Zero;
             for ((loops, _), values) in &reduced {
-                let value = self.closure.finalize(values, *loops, &self.head, settings, mode)?;
+                let value = self
+                    .closure
+                    .finalize(values, *loops, &self.head, settings, mode)?;
                 if mode == RustRedMasterMode::Numerical {
                     numerical += value;
                 } else {
@@ -914,7 +924,11 @@ impl MassiveClosure {
                         "vakint-direct-sum closure {}/{} {} in {:.1} s (total {:.1} s)",
                         index + 1,
                         inputs.len(),
-                        if lowered.is_some() { "lowered" } else { "declined" },
+                        if lowered.is_some() {
+                            "lowered"
+                        } else {
+                            "declined"
+                        },
                         lowering.elapsed().as_secs_f64(),
                         started.elapsed().as_secs_f64()
                     );
@@ -940,20 +954,30 @@ impl MassiveClosure {
                     }
                     None => {
                         for (result, settings) in results.iter_mut().zip(settings) {
-                            *result += Self::evaluate_batch(vakint, settings, &[(closure.clone(), input.ordinary())])?
-                                .pop()
-                                .unwrap_or_default();
+                            *result += Self::evaluate_batch(
+                                vakint,
+                                settings,
+                                &[(closure.clone(), input.ordinary())],
+                            )?
+                            .pop()
+                            .unwrap_or_default();
                         }
                     }
                 }
             }
             for class in classes {
                 let reducing = std::time::Instant::now();
-                for (result, value) in results.iter_mut().zip(class.evaluate_modes(vakint, settings)?) {
+                for (result, value) in results
+                    .iter_mut()
+                    .zip(class.evaluate_modes(vakint, settings)?)
+                {
                     *result += value;
                 }
                 if super::phases::enabled() {
-                    eprintln!("vakint-direct-sum class reduced once and finalized per mode in {:.1} s", reducing.elapsed().as_secs_f64());
+                    eprintln!(
+                        "vakint-direct-sum class reduced once and finalized per mode in {:.1} s",
+                        reducing.elapsed().as_secs_f64()
+                    );
                 }
             }
             Ok(results.into_iter().map(|result| result.expand()).collect())

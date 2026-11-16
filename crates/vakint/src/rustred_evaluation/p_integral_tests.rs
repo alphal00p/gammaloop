@@ -2588,7 +2588,12 @@ fn showcase_postprocess() {
                 symbolica::atom::AtomView::Fun(function) => {
                     let symbol = function.get_symbol();
                     let name = symbol.get_name();
-                    name.ends_with("::gamma") || name == "gamma" || name.ends_with("PGamma") || name.ends_with("PMaster") || name.ends_with("PResidual") || name.ends_with("PG")
+                    name.ends_with("::gamma")
+                        || name == "gamma"
+                        || name.ends_with("PGamma")
+                        || name.ends_with("PMaster")
+                        || name.ends_with("PResidual")
+                        || name.ends_with("PG")
                 }
                 _ => false,
             }
@@ -2596,17 +2601,30 @@ fn showcase_postprocess() {
         let mut order = Vec::<Atom>::new();
         let mut groups = std::collections::HashMap::<Atom, Vec<Atom>>::new();
         let terms = match in_d.as_view() {
-            symbolica::atom::AtomView::Add(sum) => sum.iter().map(|t| t.to_owned()).collect::<Vec<_>>(),
+            symbolica::atom::AtomView::Add(sum) => {
+                sum.iter().map(|t| t.to_owned()).collect::<Vec<_>>()
+            }
             _ => vec![in_d.clone()],
         };
         for term in terms {
             let factors = match term.as_view() {
-                symbolica::atom::AtomView::Mul(product) => product.iter().map(|f| f.to_owned()).collect::<Vec<_>>(),
+                symbolica::atom::AtomView::Mul(product) => {
+                    product.iter().map(|f| f.to_owned()).collect::<Vec<_>>()
+                }
                 _ => vec![term.clone()],
             };
-            let (masters, rest): (Vec<_>, Vec<_>) = factors.into_iter().partition(|f| is_master(f.as_view()));
-            let master = if masters.is_empty() { Atom::num(1) } else { Atom::mul_many(masters.iter().map(|a| a.as_view())) };
-            let coefficient = if rest.is_empty() { Atom::num(1) } else { Atom::mul_many(rest.iter().map(|a| a.as_view())) };
+            let (masters, rest): (Vec<_>, Vec<_>) =
+                factors.into_iter().partition(|f| is_master(f.as_view()));
+            let master = if masters.is_empty() {
+                Atom::num(1)
+            } else {
+                Atom::mul_many(masters.iter().map(|a| a.as_view()))
+            };
+            let coefficient = if rest.is_empty() {
+                Atom::num(1)
+            } else {
+                Atom::mul_many(rest.iter().map(|a| a.as_view()))
+            };
             if !groups.contains_key(&master) {
                 order.push(master.clone());
             }
@@ -2615,7 +2633,8 @@ fn showcase_postprocess() {
         let coef = crate::utils::vakint_macros::vk_symbol!("coef");
         let mut result = Atom::Zero;
         for master in &order {
-            let coefficient = Atom::add_many(groups[master].iter().map(|a| a.as_view())).collect_num();
+            let coefficient =
+                Atom::add_many(groups[master].iter().map(|a| a.as_view())).collect_num();
             result += symbolica::function!(coef, coefficient) * master;
         }
         let text = result.to_canonical_string();
@@ -2626,22 +2645,38 @@ fn showcase_postprocess() {
         let mut named = Atom::Zero;
         let mut legend = Vec::new();
         for (index, master) in order.iter().enumerate() {
-            let coefficient = Atom::add_many(groups[master].iter().map(|a| a.as_view())).collect_num();
-            named += symbolica::function!(coef, coefficient) * symbolica::function!(master_symbol, Atom::num(index as i64 + 1));
+            let coefficient =
+                Atom::add_many(groups[master].iter().map(|a| a.as_view())).collect_num();
+            named += symbolica::function!(coef, coefficient)
+                * symbolica::function!(master_symbol, Atom::num(index as i64 + 1));
             let mut pgamma = Vec::new();
             let mut gammas = Vec::new();
             for factor in match master.as_view() {
-                symbolica::atom::AtomView::Mul(product) => product.iter().map(|f| f.to_owned()).collect::<Vec<_>>(),
+                symbolica::atom::AtomView::Mul(product) => {
+                    product.iter().map(|f| f.to_owned()).collect::<Vec<_>>()
+                }
                 _ => vec![master.clone()],
             } {
                 let text = factor.to_canonical_string();
-                if text.contains("PGamma") { pgamma.push(text) } else { gammas.push(text) }
+                if text.contains("PGamma") {
+                    pgamma.push(text)
+                } else {
+                    gammas.push(text)
+                }
             }
             legend.push(serde_json::json!({"symbol": format!("vakint::Master({})", index + 1),
                 "closed_form": master.to_canonical_string(), "pgamma_tags": pgamma, "gamma_functions": gammas}));
         }
-        std::fs::write(out.join("result_exact_masters.txt"), named.to_canonical_string()).unwrap();
-        std::fs::write(out.join("result_exact_masters_legend.json"), serde_json::to_string_pretty(&legend).unwrap()).unwrap();
+        std::fs::write(
+            out.join("result_exact_masters.txt"),
+            named.to_canonical_string(),
+        )
+        .unwrap();
+        std::fs::write(
+            out.join("result_exact_masters_legend.json"),
+            serde_json::to_string_pretty(&legend).unwrap(),
+        )
+        .unwrap();
         std::fs::write(
             out.join("result_exact_d_coef.json"),
             serde_json::json!({"masters": order.len(), "terms_in_d": groups.values().map(|g| g.len()).sum::<usize>(),
@@ -2649,7 +2684,11 @@ fn showcase_postprocess() {
                                "masters_list": order.iter().map(|m| m.to_canonical_string()).collect::<Vec<_>>()}).to_string(),
         )
         .unwrap();
-        eprintln!("showcase_postprocess: {} master monomials, {} bytes", order.len(), text.len());
+        eprintln!(
+            "showcase_postprocess: {} master monomials, {} bytes",
+            order.len(),
+            text.len()
+        );
     }
     if let Some(path) = std::env::var_os("VAKINT_TEST_PP_SYMBOLIC") {
         let value = parse(&std::fs::read_to_string(&path).unwrap()).expand();
@@ -2661,26 +2700,39 @@ fn showcase_postprocess() {
                 1
             } else {
                 match power.as_view() {
-                    symbolica::atom::AtomView::Pow(p) => crate::get_integer_from_atom(p.get_base_exp().1).unwrap(),
+                    symbolica::atom::AtomView::Pow(p) => {
+                        crate::get_integer_from_atom(p.get_base_exp().1).unwrap()
+                    }
                     _ => panic!("not a power of epsilon: {power}"),
                 }
             };
             *orders.entry(order).or_insert(Atom::Zero) += coefficient;
         }
-        let min = std::env::var("VAKINT_TEST_PP_MIN_ORDER").ok().and_then(|v| v.parse().ok()).unwrap_or(-6);
+        let min = std::env::var("VAKINT_TEST_PP_MIN_ORDER")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(-6);
         let max = orders.keys().copied().max().unwrap_or(min);
         let mut json = serde_json::Map::new();
         for order in min.min(max)..=max {
             let text = match orders.get(&order) {
                 Some(coefficient) => {
                     let collected = coefficient.expand().collect_num().collect_factors();
-                    if collected.is_zero() { "0".to_owned() } else { collected.to_canonical_string() }
+                    if collected.is_zero() {
+                        "0".to_owned()
+                    } else {
+                        collected.to_canonical_string()
+                    }
                 }
                 None => "0".to_owned(),
             };
             json.insert(order.to_string(), serde_json::Value::String(text));
         }
-        std::fs::write(out.join("eps_orders_collected.json"), serde_json::to_string_pretty(&json).unwrap()).unwrap();
+        std::fs::write(
+            out.join("eps_orders_collected.json"),
+            serde_json::to_string_pretty(&json).unwrap(),
+        )
+        .unwrap();
         eprintln!("showcase_postprocess: orders {min}..{max}");
     }
 }
@@ -2881,26 +2933,39 @@ fn massive_closure_showcase_sum() {
         settings
     };
     let mode_list = modes.split(',').collect::<Vec<_>>();
-    let all_settings = mode_list.iter().map(|mode| make_settings(mode)).collect::<Vec<_>>();
+    let all_settings = mode_list
+        .iter()
+        .map(|mode| make_settings(mode))
+        .collect::<Vec<_>>();
     // vk5l-physrun: several modes share ONE lowering and ONE reduction
     // (evaluate_direct_sum_modes) unless VAKINT_TEST_SUM_SHARED=0.
-    let shared = mode_list.len() > 1 && std::env::var("VAKINT_TEST_SUM_SHARED").as_deref() != Ok("0");
+    let shared =
+        mode_list.len() > 1 && std::env::var("VAKINT_TEST_SUM_SHARED").as_deref() != Ok("0");
     let mut values = Vec::new();
     if shared {
         let started = std::time::Instant::now();
         let refs = all_settings.iter().collect::<Vec<_>>();
-        let results = crate::p_integral::MassiveClosure::evaluate_direct_sum_modes(&engine, &refs, &inputs).unwrap();
+        let results =
+            crate::p_integral::MassiveClosure::evaluate_direct_sum_modes(&engine, &refs, &inputs)
+                .unwrap();
         let seconds = started.elapsed().as_secs_f64();
-        eprintln!("SHOWCASE_SUM shared lowering + reduction for {} modes in {seconds:.1} s", mode_list.len());
+        eprintln!(
+            "SHOWCASE_SUM shared lowering + reduction for {} modes in {seconds:.1} s",
+            mode_list.len()
+        );
         values.extend(results.into_iter().map(|value| (value, seconds)));
     } else {
         for settings in &all_settings {
             let started = std::time::Instant::now();
-            let value = crate::p_integral::MassiveClosure::evaluate_direct_sum(&engine, settings, &inputs).unwrap();
+            let value =
+                crate::p_integral::MassiveClosure::evaluate_direct_sum(&engine, settings, &inputs)
+                    .unwrap();
             values.push((value, started.elapsed().as_secs_f64()));
         }
     }
-    for ((mode, settings), (value, seconds)) in mode_list.iter().copied().zip(&all_settings).zip(values) {
+    for ((mode, settings), (value, seconds)) in
+        mode_list.iter().copied().zip(&all_settings).zip(values)
+    {
         let text = value.to_canonical_string();
         std::fs::write(out.join(format!("sum.{mode}.sym")), &text).unwrap();
         let mut check = serde_json::Value::Null;
