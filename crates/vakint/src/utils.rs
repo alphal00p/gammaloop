@@ -52,7 +52,17 @@ pub(crate) mod vakint_macros {
 
     macro_rules! vk_symbol_uncached {
         ($s: expr) => {{
-            if format!("{}", $s).starts_with(format!("{}::", crate::NAMESPACE).as_str()) {
+            // A symbol with a display form is created here, at the point where the
+            // parse below would create it, so the creation order is unchanged.
+            let full_name = format!("{}", $s);
+            let full_name = if full_name.contains("::") {
+                full_name
+            } else {
+                format!("{}::{}", crate::NAMESPACE, full_name)
+            };
+            if let Some(decorated) = crate::display::create_decorated(&full_name) {
+                decorated
+            } else if format!("{}", $s).starts_with(format!("{}::", crate::NAMESPACE).as_str()) {
                 match symbolica::try_parse!($s) {
                     Ok::<Atom, String>(a) => match a {
                         Atom::Var(sym) => sym.get_symbol(),

@@ -1,0 +1,1087 @@
+{
+ "schema": "vakint.display_forms.v1",
+ "about": "Display forms of the symbols vakint defines or emits (lane vakint-symbol-format, 2026-11-16). Templates per print mode; placeholders: ⟨i⟩ argument i, ⟨i:+⟩ signed coefficient (+, -, +n, -n, +(x)), ⟨i:p⟩ argument parenthesised when composite, ⟨i:vec⟩ a one-argument vector f(n) as f_n, parenthesise_as_power_base / parenthesise_in_product: the printer wraps the form in parentheses when it is the base of a power (p·q, m_i², Re H(x)) / a factor of a product (sign-led forms such as -g_s); a form itself never carries enclosing parentheses (user rule 2026-11-16, tested), ⟨*⟩ all arguments, ⟨1*⟩ arguments from 1, ⟨init⟩ all but the last, ⟨last⟩ the last argument. Plain (Symbolica), Mathematica and Sympy printing is never overridden: canonical and plain strings are unchanged. rust=true: registered by vakint (display.rs) when its vocabulary is created; rust=false: registered only by the Python twin tools/display/vakint_display.py, because the owner is foreign or because the symbol enters RustRed (heads, polynomial variables), which accepts only exportable symbols: a Symbolica print callback makes a symbol non-exportable (rust_exclusion gives the reason).",
+ "forms": [
+  {
+   "name": "vakint::ε",
+   "owner": "vakint",
+   "rust": false,
+   "arity": 0,
+   "attributes": [],
+   "meaning": "dimensional regulator, d = 4 - 2ε (default VakintSettings::epsilon_symbol)",
+   "sample": "vakint::ε^2",
+   "latex": "\\varepsilon",
+   "mathml": "<mi>ε</mi>",
+   "typst": "epsilon",
+   "rust_exclusion": "plain variable / constant: may enter RustRed or polynomial arithmetic, which require exportable symbols"
+  },
+  {
+   "name": "vakint::ep",
+   "owner": "vakint",
+   "rust": false,
+   "arity": 0,
+   "attributes": [],
+   "meaning": "FORM / table regulator ep (Forcer, MATAD, FMFT and p-master catalogue texts); the same ε",
+   "sample": "vakint::ep",
+   "latex": "\\varepsilon",
+   "mathml": "<mi>ε</mi>",
+   "typst": "epsilon",
+   "rust_exclusion": "plain variable / constant: may enter RustRed or polynomial arithmetic, which require exportable symbols"
+  },
+  {
+   "name": "vakint::mursq",
+   "owner": "vakint",
+   "rust": false,
+   "arity": 0,
+   "attributes": [],
+   "meaning": "renormalisation scale squared μ_R² (default VakintSettings::mu_r_sq_symbol)",
+   "sample": "vakint::mursq",
+   "latex": "\\mu_R^2",
+   "mathml": "<msubsup><mi>μ</mi><mi>R</mi><mn>2</mn></msubsup>",
+   "typst": "mu_R^2",
+   "parenthesise_as_power_base": true,
+   "rust_exclusion": "plain variable / constant: may enter RustRed or polynomial arithmetic, which require exportable symbols"
+  },
+  {
+   "name": "vakint::mu",
+   "owner": "vakint",
+   "rust": false,
+   "arity": 0,
+   "attributes": [],
+   "meaning": "scale μ / Lorentz index name μ in inputs",
+   "sample": "vakint::mu",
+   "latex": "\\mu",
+   "mathml": "<mi>μ</mi>",
+   "typst": "mu",
+   "rust_exclusion": "plain variable / constant: may enter RustRed or polynomial arithmetic, which require exportable symbols"
+  },
+  {
+   "name": "vakint::nf",
+   "owner": "vakint",
+   "rust": false,
+   "arity": 0,
+   "attributes": [],
+   "meaning": "number of light flavours n_f (coefficient-ring variable of the Laurent finalizer)",
+   "sample": "vakint::nf",
+   "latex": "n_f",
+   "mathml": "<msub><mi>n</mi><mi>f</mi></msub>",
+   "typst": "n_f",
+   "rust_exclusion": "plain variable / constant: may enter RustRed or polynomial arithmetic, which require exportable symbols"
+  },
+  {
+   "name": "vakint::msq",
+   "owner": "vakint",
+   "rust": false,
+   "arity": 1,
+   "attributes": [],
+   "meaning": "mass squared of line i, msq(i) = m_i²",
+   "sample": "vakint::msq(1)",
+   "latex": "m_{⟨0⟩}^2",
+   "mathml": "<msubsup><mi>m</mi>⟨0⟩<mn>2</mn></msubsup>",
+   "typst": "m_(⟨0⟩)^2",
+   "parenthesise_as_power_base": true,
+   "rust_exclusion": "mass key of the topology matcher, passed on to RustRed"
+  },
+  {
+   "name": "vakint::logQ2mu",
+   "owner": "vakint",
+   "rust": false,
+   "arity": 0,
+   "attributes": [],
+   "meaning": "placeholder for log(Q²/μ²) = log(-dot(p,p)/mursq) in the p-finalizer",
+   "sample": "vakint::logQ2mu",
+   "latex": "\\log(Q^2/\\mu^2)",
+   "mathml": "<mi>log</mi><mo>&#x2061;</mo><mo>(</mo><msup><mi>Q</mi><mn>2</mn></msup><mo>/</mo><msup><mi>μ</mi><mn>2</mn></msup><mo>)</mo>",
+   "typst": "log(Q^2\\/mu^2)",
+   "parenthesise_as_power_base": true,
+   "rust_exclusion": "plain variable / constant: may enter RustRed or polynomial arithmetic, which require exportable symbols"
+  },
+  {
+   "name": "vakint::log_mu_sq",
+   "owner": "vakint",
+   "rust": false,
+   "arity": 0,
+   "attributes": [],
+   "meaning": "placeholder for log(μ²) in the normalisation factors",
+   "sample": "vakint::log_mu_sq",
+   "latex": "\\log\\mu^2",
+   "mathml": "<mi>log</mi><mo>&#x2061;</mo><msup><mi>μ</mi><mn>2</mn></msup>",
+   "typst": "log mu^2",
+   "parenthesise_as_power_base": true,
+   "rust_exclusion": "plain variable / constant: may enter RustRed or polynomial arithmetic, which require exportable symbols"
+  },
+  {
+   "name": "vakint::PGamma",
+   "owner": "vakint",
+   "rust": true,
+   "arity": 1,
+   "attributes": [],
+   "meaning": "Gamma tag PGamma(m) = Γ(1 + m ε), kept symbolic in Retain mode (p_integrals.md, convention C4)",
+   "sample": "vakint::PGamma(-2)^5*vakint::PGamma(1)*vakint::PGamma(5)",
+   "latex": "\\Gamma(1⟨0:+⟩\\varepsilon)",
+   "mathml": "<mi mathvariant=\"normal\">Γ</mi><mo>(</mo><mn>1</mn>⟨0:+⟩<mi>ε</mi><mo>)</mo>",
+   "typst": "Gamma(1⟨0:+⟩ epsilon)"
+  },
+  {
+   "name": "vakint::PG",
+   "owner": "vakint",
+   "rust": true,
+   "arity": 2,
+   "attributes": [],
+   "meaning": "G-scheme constant PG(x1,x2) = Forcer GschemeConstants(x1,x2) = (1+x1+x2) G(1+x1ε,1+x2ε)/(ε G(1,1))",
+   "sample": "vakint::PG(1,0)",
+   "latex": "\\mathcal{G}_{⟨0⟩,⟨1⟩}",
+   "mathml": "<msub><mi mathvariant=\"script\">G</mi><mrow>⟨0⟩<mo>,</mo>⟨1⟩</mrow></msub>",
+   "typst": "cal(G)_(⟨0⟩,⟨1⟩)"
+  },
+  {
+   "name": "vakint::PMaster",
+   "owner": "vakint",
+   "rust": true,
+   "arity": 1,
+   "attributes": [],
+   "meaning": "p-integral master PMaster(name) (Forcer Master(name) / catalogue symbol); the name is kept as the subscript",
+   "sample": "vakint::PMaster(vakint::t105)",
+   "latex": "M_{⟨0⟩}",
+   "mathml": "<msub><mi>M</mi>⟨0⟩</msub>",
+   "typst": "M_(⟨0⟩)"
+  },
+  {
+   "name": "vakint::PMasterValue",
+   "owner": "vakint",
+   "rust": true,
+   "arity": 2,
+   "attributes": [],
+   "meaning": "PMasterValue(master, k): the ε^k coefficient of a catalogue master known numerically only",
+   "sample": "vakint::PMasterValue(vakint::PMaster(vakint::t105),2)",
+   "latex": "\\left[⟨0⟩\\right]_{\\varepsilon^{⟨1⟩}}",
+   "mathml": "<msub><mrow><mo>[</mo>⟨0⟩<mo>]</mo></mrow><msup><mi>ε</mi>⟨1⟩</msup></msub>",
+   "typst": "[⟨0⟩]_(epsilon^(⟨1⟩))"
+  },
+  {
+   "name": "vakint::PResidual",
+   "owner": "vakint",
+   "rust": true,
+   "arity": "*",
+   "attributes": [],
+   "meaning": "PResidual(node, k1..kn): RustRed residual terminal of a node not mapped onto a catalogue master",
+   "sample": "vakint::PResidual(162,1,2,3)",
+   "latex": "R_{⟨0⟩}(⟨1*⟩)",
+   "mathml": "<msub><mi>R</mi>⟨0⟩</msub><mo>(</mo>⟨1*⟩<mo>)</mo>",
+   "typst": "R_(⟨0⟩)(⟨1*⟩)"
+  },
+  {
+   "name": "vakint::Master",
+   "owner": "vakint",
+   "rust": true,
+   "arity": 1,
+   "attributes": [],
+   "meaning": "Master(i): i-th master monomial of a result file (e2e result_exact_masters.txt; legend maps i to the closed form)",
+   "sample": "vakint::Master(2)",
+   "latex": "M_{⟨0⟩}",
+   "mathml": "<msub><mi>M</mi>⟨0⟩</msub>",
+   "typst": "M_(⟨0⟩)"
+  },
+  {
+   "name": "vakint::coef",
+   "owner": "vakint",
+   "rust": true,
+   "arity": 1,
+   "attributes": [],
+   "meaning": "coef(c): coefficient of one master / tag monomial in a result file, exact in d",
+   "sample": "vakint::coef(1/(vakint::d-4))*vakint::PGamma(1)",
+   "latex": "\\left[⟨0⟩\\right]",
+   "mathml": "<mrow><mo style=\"opacity:.5\">[</mo>⟨0⟩<mo style=\"opacity:.5\">]</mo></mrow>",
+   "typst": "lr([⟨0⟩])"
+  },
+  {
+   "name": "vakint::Oep",
+   "owner": "vakint",
+   "rust": true,
+   "arity": 2,
+   "attributes": [],
+   "meaning": "Oep(k, X): truncation marker ε^k·Oep(k, X), the unknown order-k tail of X",
+   "sample": "vakint::ep^3*vakint::Oep(3,vakint::PMaster(vakint::no1))",
+   "latex": "\\mathcal{O}_{⟨1⟩}(\\varepsilon^{⟨0⟩})",
+   "mathml": "<msub><mi mathvariant=\"script\">O</mi>⟨1⟩</msub><mo>(</mo><msup><mi>ε</mi>⟨0⟩</msup><mo>)</mo>",
+   "typst": "cal(O)_(⟨1⟩)(epsilon^(⟨0⟩))"
+  },
+  {
+   "name": "vakint::dot",
+   "owner": "vakint",
+   "rust": false,
+   "arity": 2,
+   "attributes": [
+    "Symmetric",
+    "Linear"
+   ],
+   "meaning": "Euclidean / Minkowski scalar product of two momenta, internal reduction form; display: p·q, p² (see display::to_spenso_dot_notation for the spenso form)",
+   "sample": "vakint::dot(vakint::p(1),vakint::k(2))+vakint::dot(vakint::p(0),vakint::p(0))^2",
+   "latex": "⟨0:vec⟩\\cdot ⟨1:vec⟩",
+   "mathml": "⟨0:vec⟩<mo>·</mo>⟨1:vec⟩",
+   "typst": "⟨0:vec⟩ dot ⟨1:vec⟩",
+   "when_args_equal": {
+    "latex": "{⟨0:vec⟩}^2",
+    "mathml": "<msup>⟨0:vec⟩<mn>2</mn></msup>",
+    "typst": "⟨0:vec⟩^2"
+   },
+   "parenthesise_as_power_base": true,
+   "rust_exclusion": "scalar-product head checked by RustRed (validate_dot_head: is_exportable)"
+  },
+  {
+   "name": "vakint::Zeta",
+   "owner": "vakint",
+   "rust": true,
+   "arity": 1,
+   "attributes": [],
+   "meaning": "Riemann zeta value Zeta(n) = ζ(n)",
+   "sample": "vakint::Zeta(3)",
+   "latex": "\\zeta_{⟨0⟩}",
+   "mathml": "<msub><mi>ζ</mi>⟨0⟩</msub>",
+   "typst": "zeta_(⟨0⟩)"
+  },
+  {
+   "name": "vakint::zeta",
+   "owner": "vakint",
+   "rust": true,
+   "arity": 1,
+   "attributes": [],
+   "meaning": "zeta(n) = ζ(n) in p-master catalogue texts",
+   "sample": "vakint::zeta(5)",
+   "latex": "\\zeta_{⟨0⟩}",
+   "mathml": "<msub><mi>ζ</mi>⟨0⟩</msub>",
+   "typst": "zeta_(⟨0⟩)"
+  },
+  {
+   "name": "vakint::MZV",
+   "owner": "vakint",
+   "rust": true,
+   "arity": "*",
+   "attributes": [],
+   "meaning": "multiple zeta value MZV(a1,..,an) = ζ(a1,..,an) (signed indices for alternating sums)",
+   "sample": "vakint::MZV(5,3)",
+   "latex": "\\zeta_{⟨*⟩}",
+   "mathml": "<msub><mi>ζ</mi><mrow>⟨*⟩</mrow></msub>",
+   "typst": "zeta_(⟨*⟩)"
+  },
+  {
+   "name": "vakint::z2",
+   "owner": "vakint",
+   "rust": false,
+   "arity": 0,
+   "attributes": [],
+   "meaning": "ζ(2)",
+   "sample": "vakint::z2",
+   "latex": "\\zeta_2",
+   "mathml": "<msub><mi>ζ</mi><mn>2</mn></msub>",
+   "typst": "zeta_2",
+   "rust_exclusion": "plain variable / constant: may enter RustRed or polynomial arithmetic, which require exportable symbols"
+  },
+  {
+   "name": "vakint::z3",
+   "owner": "vakint",
+   "rust": false,
+   "arity": 0,
+   "attributes": [],
+   "meaning": "ζ(3)",
+   "sample": "vakint::z3",
+   "latex": "\\zeta_3",
+   "mathml": "<msub><mi>ζ</mi><mn>3</mn></msub>",
+   "typst": "zeta_3",
+   "rust_exclusion": "plain variable / constant: may enter RustRed or polynomial arithmetic, which require exportable symbols"
+  },
+  {
+   "name": "vakint::z4",
+   "owner": "vakint",
+   "rust": false,
+   "arity": 0,
+   "attributes": [],
+   "meaning": "ζ(4)",
+   "sample": "vakint::z4",
+   "latex": "\\zeta_4",
+   "mathml": "<msub><mi>ζ</mi><mn>4</mn></msub>",
+   "typst": "zeta_4",
+   "rust_exclusion": "plain variable / constant: may enter RustRed or polynomial arithmetic, which require exportable symbols"
+  },
+  {
+   "name": "vakint::z5",
+   "owner": "vakint",
+   "rust": false,
+   "arity": 0,
+   "attributes": [],
+   "meaning": "ζ(5)",
+   "sample": "vakint::z5",
+   "latex": "\\zeta_5",
+   "mathml": "<msub><mi>ζ</mi><mn>5</mn></msub>",
+   "typst": "zeta_5",
+   "rust_exclusion": "plain variable / constant: may enter RustRed or polynomial arithmetic, which require exportable symbols"
+  },
+  {
+   "name": "vakint::z6",
+   "owner": "vakint",
+   "rust": false,
+   "arity": 0,
+   "attributes": [],
+   "meaning": "ζ(6)",
+   "sample": "vakint::z6",
+   "latex": "\\zeta_6",
+   "mathml": "<msub><mi>ζ</mi><mn>6</mn></msub>",
+   "typst": "zeta_6",
+   "rust_exclusion": "plain variable / constant: may enter RustRed or polynomial arithmetic, which require exportable symbols"
+  },
+  {
+   "name": "vakint::EulerGamma",
+   "owner": "vakint",
+   "rust": false,
+   "arity": 0,
+   "attributes": [],
+   "meaning": "Euler-Mascheroni constant γ_E",
+   "sample": "vakint::EulerGamma",
+   "latex": "\\gamma_E",
+   "mathml": "<msub><mi>γ</mi><mi mathvariant=\"normal\">E</mi></msub>",
+   "typst": "gamma_E",
+   "rust_exclusion": "plain variable / constant: may enter RustRed or polynomial arithmetic, which require exportable symbols"
+  },
+  {
+   "name": "vakint::sqrt3",
+   "owner": "vakint",
+   "rust": false,
+   "arity": 0,
+   "attributes": [],
+   "meaning": "√3",
+   "sample": "vakint::sqrt3",
+   "latex": "\\sqrt{3}",
+   "mathml": "<msqrt><mn>3</mn></msqrt>",
+   "typst": "sqrt(3)",
+   "rust_exclusion": "plain variable / constant: may enter RustRed or polynomial arithmetic, which require exportable symbols"
+  },
+  {
+   "name": "vakint::Sqrt",
+   "owner": "vakint",
+   "rust": true,
+   "arity": 1,
+   "attributes": [],
+   "meaning": "square root Sqrt(x) = √x (MATAD/FMFT texts)",
+   "sample": "vakint::Sqrt(5)",
+   "latex": "\\sqrt{⟨0⟩}",
+   "mathml": "<msqrt>⟨0⟩</msqrt>",
+   "typst": "sqrt(⟨0⟩)"
+  },
+  {
+   "name": "vakint::cl2",
+   "owner": "vakint",
+   "rust": false,
+   "arity": 0,
+   "attributes": [],
+   "meaning": "Clausen value Cl₂(π/3)",
+   "sample": "vakint::cl2",
+   "latex": "\\mathrm{Cl}_2(\\pi/3)",
+   "mathml": "<msub><mi>Cl</mi><mn>2</mn></msub><mo>(</mo><mi>π</mi><mo>/</mo><mn>3</mn><mo>)</mo>",
+   "typst": "\"Cl\"_2(pi\\/3)",
+   "rust_exclusion": "plain variable / constant: may enter RustRed or polynomial arithmetic, which require exportable symbols"
+  },
+  {
+   "name": "vakint::cl4",
+   "owner": "vakint",
+   "rust": false,
+   "arity": 0,
+   "attributes": [],
+   "meaning": "Clausen value Cl₄(π/3) = Im Li₄(e^(iπ/3))",
+   "sample": "vakint::cl4",
+   "latex": "\\mathrm{Cl}_4(\\pi/3)",
+   "mathml": "<msub><mi>Cl</mi><mn>4</mn></msub><mo>(</mo><mi>π</mi><mo>/</mo><mn>3</mn><mo>)</mo>",
+   "typst": "\"Cl\"_4(pi\\/3)",
+   "rust_exclusion": "plain variable / constant: may enter RustRed or polynomial arithmetic, which require exportable symbols"
+  },
+  {
+   "name": "vakint::S2",
+   "owner": "vakint",
+   "rust": false,
+   "arity": 0,
+   "attributes": [],
+   "meaning": "MATAD constant S₂ = 4/(9√3) Cl₂(π/3)",
+   "sample": "vakint::S2",
+   "latex": "S_2",
+   "mathml": "<msub><mi>S</mi><mn>2</mn></msub>",
+   "typst": "S_2",
+   "rust_exclusion": "plain variable / constant: may enter RustRed or polynomial arithmetic, which require exportable symbols"
+  },
+  {
+   "name": "vakint::s6",
+   "owner": "vakint",
+   "rust": false,
+   "arity": 0,
+   "attributes": [],
+   "meaning": "alternating Euler sum s₆ = ζ(-5,-1) + ζ(6)",
+   "sample": "vakint::s6",
+   "latex": "s_6",
+   "mathml": "<msub><mi>s</mi><mn>6</mn></msub>",
+   "typst": "s_6",
+   "rust_exclusion": "plain variable / constant: may enter RustRed or polynomial arithmetic, which require exportable symbols"
+  },
+  {
+   "name": "vakint::D6",
+   "owner": "vakint",
+   "rust": false,
+   "arity": 0,
+   "attributes": [],
+   "meaning": "MATAD constant D₆ (finite part of the D6 master)",
+   "sample": "vakint::D6",
+   "latex": "D_6",
+   "mathml": "<msub><mi>D</mi><mn>6</mn></msub>",
+   "typst": "D_6",
+   "rust_exclusion": "plain variable / constant: may enter RustRed or polynomial arithmetic, which require exportable symbols"
+  },
+  {
+   "name": "vakint::T1ep",
+   "owner": "vakint",
+   "rust": false,
+   "arity": 0,
+   "attributes": [],
+   "meaning": "MATAD constant T1ep: ε¹ coefficient of the T111 master",
+   "sample": "vakint::T1ep",
+   "latex": "T_{1\\varepsilon}",
+   "mathml": "<msub><mi>T</mi><mrow><mn>1</mn><mi>ε</mi></mrow></msub>",
+   "typst": "T_(1 epsilon)",
+   "rust_exclusion": "plain variable / constant: may enter RustRed or polynomial arithmetic, which require exportable symbols"
+  },
+  {
+   "name": "vakint::T1ep2",
+   "owner": "vakint",
+   "rust": false,
+   "arity": 0,
+   "attributes": [],
+   "meaning": "MATAD constant T1ep2: ε² coefficient of the T111 master",
+   "sample": "vakint::T1ep2",
+   "latex": "T_{1\\varepsilon^2}",
+   "mathml": "<msub><mi>T</mi><mrow><mn>1</mn><msup><mi>ε</mi><mn>2</mn></msup></mrow></msub>",
+   "typst": "T_(1 epsilon^2)",
+   "rust_exclusion": "plain variable / constant: may enter RustRed or polynomial arithmetic, which require exportable symbols"
+  },
+  {
+   "name": "vakint::HR",
+   "owner": "vakint",
+   "rust": true,
+   "arity": "*",
+   "attributes": [],
+   "meaning": "real part of a harmonic polylogarithm HR(a1,..,an, x) = Re H(a1,..,an; x)",
+   "sample": "vakint::HR(1,0,-1,vakint::om1)",
+   "latex": "\\mathrm{Re}\\,H_{⟨init⟩}(⟨last⟩)",
+   "mathml": "<mi>Re</mi><mo>&#x2061;</mo><msub><mi>H</mi><mrow>⟨init⟩</mrow></msub><mo>(</mo>⟨last⟩<mo>)</mo>",
+   "typst": "Re H_(⟨init⟩)(⟨last⟩)",
+   "parenthesise_as_power_base": true
+  },
+  {
+   "name": "vakint::HI",
+   "owner": "vakint",
+   "rust": true,
+   "arity": "*",
+   "attributes": [],
+   "meaning": "imaginary part of a harmonic polylogarithm HI(a1,..,an, x) = Im H(a1,..,an; x)",
+   "sample": "vakint::HI(1,0,-1,vakint::om1)",
+   "latex": "\\mathrm{Im}\\,H_{⟨init⟩}(⟨last⟩)",
+   "mathml": "<mi>Im</mi><mo>&#x2061;</mo><msub><mi>H</mi><mrow>⟨init⟩</mrow></msub><mo>(</mo>⟨last⟩<mo>)</mo>",
+   "typst": "Im H_(⟨init⟩)(⟨last⟩)",
+   "parenthesise_as_power_base": true
+  },
+  {
+   "name": "vakint::GPLReal",
+   "owner": "vakint",
+   "rust": true,
+   "arity": "*",
+   "attributes": [],
+   "meaning": "real part of a Goncharov polylogarithm GPLReal(a1,..,an, x) = Re G(a1,..,an; x)",
+   "sample": "vakint::GPLReal(0,0,-1,1,1)",
+   "latex": "\\mathrm{Re}\\,G(⟨init⟩;⟨last⟩)",
+   "mathml": "<mi>Re</mi><mo>&#x2061;</mo><mi>G</mi><mo>(</mo>⟨init⟩<mo>;</mo>⟨last⟩<mo>)</mo>",
+   "typst": "Re G(⟨init⟩;⟨last⟩)",
+   "parenthesise_as_power_base": true
+  },
+  {
+   "name": "vakint::GPLImag",
+   "owner": "vakint",
+   "rust": true,
+   "arity": "*",
+   "attributes": [],
+   "meaning": "imaginary part of a Goncharov polylogarithm GPLImag(a1,..,an, x) = Im G(a1,..,an; x)",
+   "sample": "vakint::GPLImag(0,-1,1)",
+   "latex": "\\mathrm{Im}\\,G(⟨init⟩;⟨last⟩)",
+   "mathml": "<mi>Im</mi><mo>&#x2061;</mo><mi>G</mi><mo>(</mo>⟨init⟩<mo>;</mo>⟨last⟩<mo>)</mo>",
+   "typst": "Im G(⟨init⟩;⟨last⟩)",
+   "parenthesise_as_power_base": true
+  },
+  {
+   "name": "vakint::PolylogReal",
+   "owner": "vakint",
+   "rust": true,
+   "arity": 2,
+   "attributes": [],
+   "meaning": "PolylogReal(n, x) = Re Li_n(x)",
+   "sample": "vakint::PolylogReal(4,1/2)",
+   "latex": "\\mathrm{Re}\\,\\mathrm{Li}_{⟨0⟩}(⟨1⟩)",
+   "mathml": "<mi>Re</mi><mo>&#x2061;</mo><msub><mi>Li</mi>⟨0⟩</msub><mo>(</mo>⟨1⟩<mo>)</mo>",
+   "typst": "Re \"Li\"_(⟨0⟩)(⟨1⟩)",
+   "parenthesise_as_power_base": true
+  },
+  {
+   "name": "vakint::PolylogImag",
+   "owner": "vakint",
+   "rust": true,
+   "arity": 2,
+   "attributes": [],
+   "meaning": "PolylogImag(n, x) = Im Li_n(x)",
+   "sample": "vakint::PolylogImag(4,1/2)",
+   "latex": "\\mathrm{Im}\\,\\mathrm{Li}_{⟨0⟩}(⟨1⟩)",
+   "mathml": "<mi>Im</mi><mo>&#x2061;</mo><msub><mi>Li</mi>⟨0⟩</msub><mo>(</mo>⟨1⟩<mo>)</mo>",
+   "typst": "Im \"Li\"_(⟨0⟩)(⟨1⟩)",
+   "parenthesise_as_power_base": true
+  },
+  {
+   "name": "vakint::RustRedMaster",
+   "owner": "vakint",
+   "rust": true,
+   "arity": "*",
+   "attributes": [],
+   "meaning": "RustRedMaster(family, n1..nk): a RustRed master integral of a family (hashed family id) with line powers n_i",
+   "sample": "vakint::RustRedMaster(vakint::rustred_family_ab12,1,1,0)",
+   "latex": "I_{⟨0⟩}(⟨1*⟩)",
+   "mathml": "<msub><mi>I</mi>⟨0⟩</msub><mo>(</mo>⟨1*⟩<mo>)</mo>",
+   "typst": "I_(⟨0⟩)(⟨1*⟩)"
+  },
+  {
+   "name": "gammalooprs::rstar_mass_squared",
+   "owner": "gammalooprs (R*)",
+   "rust": false,
+   "arity": 0,
+   "attributes": [
+    "Scalar"
+   ],
+   "meaning": "auxiliary IR mass squared m²_R* introduced by the R* infrared rearrangement (gammalooprs uv/rstar/evaluate.rs)",
+   "sample": "gammalooprs::rstar_mass_squared^2",
+   "latex": "m_{R^*}^2",
+   "mathml": "<msubsup><mi>m</mi><mrow><mi>R</mi><mo>*</mo></mrow><mn>2</mn></msubsup>",
+   "typst": "m_(R^*)^2",
+   "parenthesise_as_power_base": true
+  },
+  {
+   "name": "UFO::gs_minus",
+   "owner": "UFO model (beta team)",
+   "rust": false,
+   "arity": 0,
+   "attributes": [],
+   "meaning": "UFO coupling gs_minus = -g_s of the beta session's QCD model (model.json couplings[0])",
+   "sample": "UFO::gs_minus^4",
+   "latex": "-g_s",
+   "mathml": "<mo>−</mo><msub><mi>g</mi><mi>s</mi></msub>",
+   "typst": "-g_s",
+   "parenthesise_as_power_base": true,
+   "parenthesise_in_product": true
+  },
+  {
+   "name": "beta_projection::transverse",
+   "owner": "beta_projection (beta team)",
+   "rust": false,
+   "arity": 0,
+   "attributes": [],
+   "meaning": "transverse projector tag P_T of the self-energy split Π = P_T Π_T + P_L Π_L (beta team's projection)",
+   "sample": "beta_projection::transverse",
+   "latex": "P_{\\mathrm{T}}",
+   "mathml": "<msub><mi>P</mi><mi mathvariant=\"normal\">T</mi></msub>",
+   "typst": "P_T"
+  },
+  {
+   "name": "beta_projection::longitudinal",
+   "owner": "beta_projection (beta team)",
+   "rust": false,
+   "arity": 0,
+   "attributes": [],
+   "meaning": "longitudinal projector tag P_L of the self-energy split (beta team's projection)",
+   "sample": "beta_projection::longitudinal",
+   "latex": "P_{\\mathrm{L}}",
+   "mathml": "<msub><mi>P</mi><mi mathvariant=\"normal\">L</mi></msub>",
+   "typst": "P_L"
+  }
+ ],
+ "native": [
+  {
+   "name": "vakint::d",
+   "meaning": "space-time dimension d",
+   "reason": "prints as d in every mode"
+  },
+  {
+   "name": "vakint::𝑖",
+   "meaning": "vakint's imaginary-unit placeholder until the numerical boundary",
+   "reason": "prints as 𝑖"
+  },
+  {
+   "name": "vakint::k",
+   "meaning": "loop momentum k(i) (spenso rank-1 tensor symbol)",
+   "reason": "print function owned by spenso's register_tensor_symbol (tensor_print); MathML falls back to k(i), spenso has no MathML backend in this workspace"
+  },
+  {
+   "name": "vakint::p",
+   "meaning": "external momentum p(i) (spenso rank-1 tensor symbol)",
+   "reason": "same as vakint::k; use display::to_spenso_dot_notation for p·q"
+  },
+  {
+   "name": "vakint::g",
+   "meaning": "metric g(μ,ν) in vakint inputs (Symmetric)",
+   "reason": "input-side tensor; outputs are scalar"
+  },
+  {
+   "name": "vakint::topo",
+   "meaning": "integral head topo(Π prop(...))",
+   "reason": "input-side structure; never in a result"
+  },
+  {
+   "name": "vakint::prop",
+   "meaning": "propagator prop(id, edge, momentum, mass, power)",
+   "reason": "input-side structure"
+  },
+  {
+   "name": "vakint::edge",
+   "meaning": "edge(a,b) of a propagator",
+   "reason": "input-side structure"
+  },
+  {
+   "name": "vakint::uedge",
+   "meaning": "undirected edge (Symmetric)",
+   "reason": "input-side structure"
+  },
+  {
+   "name": "vakint::uvprop",
+   "meaning": "UV propagator of the alphaLoop path",
+   "reason": "input-side structure"
+  },
+  {
+   "name": "vakint::vxs",
+   "meaning": "vertex list of the alphaLoop path",
+   "reason": "input-side structure"
+  },
+  {
+   "name": "vakint::vec",
+   "meaning": "external vector in FORM transport",
+   "reason": "input-side structure"
+  },
+  {
+   "name": "vakint::vec1",
+   "meaning": "external vector in FORM transport",
+   "reason": "input-side structure"
+  },
+  {
+   "name": "vakint::om1",
+   "meaning": "argument of the MATAD HPLs (sixth root of unity point)",
+   "reason": "appears only inside HR/HI, whose display shows it as the argument"
+  },
+  {
+   "name": "vakint::RustRedConstant",
+   "meaning": "RustRedConstant(snapshot, c): data-snapshot transport tag",
+   "reason": "presentation::Content::display_expression already hides a single snapshot"
+  },
+  {
+   "name": "vakint::NumericalSource",
+   "meaning": "NumericalSource(...): numerical provenance tag",
+   "reason": "materialised before user output"
+  },
+  {
+   "name": "vakint::RustRedCoefficient",
+   "meaning": "RustRedCoefficient(tag, master, k): transport of a numerical master coefficient",
+   "reason": "materialised before user output"
+  },
+  {
+   "name": "vakint::RustRedFiniteLiteral",
+   "meaning": "finite literal transport tag",
+   "reason": "materialised before user output"
+  },
+  {
+   "name": "vakint::PR10D2",
+   "meaning": "FMFT period constant (name = identifier)",
+   "reason": "identifier constants keep their table name"
+  },
+  {
+   "name": "vakint::PR10D2Eps1",
+   "meaning": "FMFT period constant",
+   "reason": "identifier constants keep their table name"
+  },
+  {
+   "name": "vakint::PR15D2",
+   "meaning": "FMFT period constant",
+   "reason": "identifier constants keep their table name"
+  },
+  {
+   "name": "vakint::PR7D2",
+   "meaning": "FMFT period constant",
+   "reason": "identifier constants keep their table name"
+  },
+  {
+   "name": "vakint::PR7D2Eps1",
+   "meaning": "FMFT period constant",
+   "reason": "identifier constants keep their table name"
+  },
+  {
+   "name": "vakint::PR11d",
+   "meaning": "FMFT period constant",
+   "reason": "identifier constants keep their table name"
+  },
+  {
+   "name": "vakint::PR11dep0",
+   "meaning": "FMFT period coefficient",
+   "reason": "identifier constants keep their table name"
+  },
+  {
+   "name": "vakint::Integral",
+   "meaning": "inspection definition head Integral(...)",
+   "reason": "inspection explorer only (plain text)"
+  },
+  {
+   "name": "vakint::LoopIntegral",
+   "meaning": "inspection definition head",
+   "reason": "inspection explorer only"
+  },
+  {
+   "name": "vakint::Interval",
+   "meaning": "inspection definition head",
+   "reason": "inspection explorer only"
+  },
+  {
+   "name": "vakint::SeriesCoefficient",
+   "meaning": "inspection definition head",
+   "reason": "inspection explorer only"
+  },
+  {
+   "name": "vakint::delta",
+   "meaning": "inspection definition head",
+   "reason": "inspection explorer only"
+  },
+  {
+   "name": "vakint::t",
+   "meaning": "inspection integration variable",
+   "reason": "inspection explorer only"
+  },
+  {
+   "name": "vakint::K5Moment",
+   "meaning": "inspection definition head",
+   "reason": "inspection explorer only"
+  },
+  {
+   "name": "vakint::K5LogMoment",
+   "meaning": "inspection definition head",
+   "reason": "inspection explorer only"
+  },
+  {
+   "name": "vakint::pi",
+   "meaning": "π in catalogue texts (normalised to Symbolica's π on import)",
+   "reason": "normalised away"
+  }
+ ],
+ "internal": [
+  {
+   "name": "vakint::ERROR",
+   "reason": "error flag"
+  },
+  {
+   "name": "vakint::EuclideanDot",
+   "reason": "constant-definition scalar product, replaced before output"
+  },
+  {
+   "name": "vakint::GammaSeriesTail",
+   "reason": "test marker"
+  },
+  {
+   "name": "vakint::GschemeConstants",
+   "reason": "Forcer name, renamed to PG on import"
+  },
+  {
+   "name": "vakint::Lmu",
+   "reason": "test"
+  },
+  {
+   "name": "vakint::Lq",
+   "reason": "test"
+  },
+  {
+   "name": "vakint::MZVvalue",
+   "reason": "MZV evaluation transport"
+  },
+  {
+   "name": "vakint::RelabeledLoopIntegral",
+   "reason": "inspection placeholder"
+  },
+  {
+   "name": "vakint::RustRedMaterializeSpectator",
+   "reason": "materialisation spectator"
+  },
+  {
+   "name": "vakint::TopoName_",
+   "reason": "pattern"
+  },
+  {
+   "name": "vakint::UNKNOWN",
+   "reason": "input classification marker"
+  },
+  {
+   "name": "vakint::VakintLambdaScalingAnalysis",
+   "reason": "scaling analysis variable"
+  },
+  {
+   "name": "vakint::coordinate_limit_spectator",
+   "reason": "internal"
+  },
+  {
+   "name": "vakint::coordinate_metadata",
+   "reason": "internal"
+  },
+  {
+   "name": "vakint::different_constant_snapshot",
+   "reason": "test"
+  },
+  {
+   "name": "vakint::dot_dummy_ind",
+   "reason": "dummy Lorentz index of dot expansion"
+  },
+  {
+   "name": "vakint::dot_pow",
+   "reason": "internal dot power"
+  },
+  {
+   "name": "vakint::eps_test",
+   "reason": "test"
+  },
+  {
+   "name": "vakint::evaluation_input",
+   "reason": "internal"
+  },
+  {
+   "name": "vakint::feynkit_external_vector",
+   "reason": "ingress vector"
+  },
+  {
+   "name": "vakint::feynkit_opaque_index",
+   "reason": "ingress index"
+  },
+  {
+   "name": "vakint::foo",
+   "reason": "test"
+  },
+  {
+   "name": "foreign_sources::NumericalSource",
+   "reason": "test namespace"
+  },
+  {
+   "name": "vakint::form_imaginary_test",
+   "reason": "test"
+  },
+  {
+   "name": "gammalooprs::ε",
+   "reason": "gammalooprs' regulator, used by tests only here; prints as ε natively"
+  },
+  {
+   "name": "vakint::input_coefficient",
+   "reason": "internal"
+  },
+  {
+   "name": "vakint::input_coefficient_placeholder_1",
+   "reason": "internal"
+  },
+  {
+   "name": "vakint::inspection_test_family",
+   "reason": "test"
+  },
+  {
+   "name": "vakint::logMassiveClosure",
+   "reason": "placeholder replaced by log(m²) before output"
+  },
+  {
+   "name": "vakint::m2",
+   "reason": "test"
+  },
+  {
+   "name": "vakint::mom",
+   "reason": "alias of k in FORM transport"
+  },
+  {
+   "name": "vakint::momentum_match_parameter",
+   "reason": "internal"
+  },
+  {
+   "name": "vakint::mzv_indices",
+   "reason": "internal"
+  },
+  {
+   "name": "vakint::n_loops",
+   "reason": "internal"
+  },
+  {
+   "name": "vakint::no",
+   "reason": "Forcer master name argument (displayed inside PMaster)"
+  },
+  {
+   "name": "vakint::no1",
+   "reason": "Forcer master name argument (displayed inside PMaster)"
+  },
+  {
+   "name": "vakint::t105",
+   "reason": "Forcer master name argument (displayed inside PMaster)"
+  },
+  {
+   "name": "vakint::nothere",
+   "reason": "test"
+  },
+  {
+   "name": "vakint::normalization_input",
+   "reason": "internal"
+  },
+  {
+   "name": "vakint::numerical_coefficient",
+   "reason": "internal"
+  },
+  {
+   "name": "vakint::numerical_expression",
+   "reason": "internal"
+  },
+  {
+   "name": "vakint::opaque_master_function",
+   "reason": "internal"
+  },
+  {
+   "name": "vakint::open_mu",
+   "reason": "test"
+  },
+  {
+   "name": "vakint::open_nu",
+   "reason": "test"
+  },
+  {
+   "name": "vakint::ordered_dot_skip_regression",
+   "reason": "test"
+  },
+  {
+   "name": "vakint::p1",
+   "reason": "test"
+  },
+  {
+   "name": "vakint::partial_numerical_input",
+   "reason": "internal"
+  },
+  {
+   "name": "vakint::parts_real_spectator",
+   "reason": "internal"
+  },
+  {
+   "name": "vakint::pow",
+   "reason": "internal power tag"
+  },
+  {
+   "name": "vakint::precision_limited",
+   "reason": "test"
+  },
+  {
+   "name": "vakint::precision_unused",
+   "reason": "test"
+  },
+  {
+   "name": "projection_cache_foreign::HR",
+   "reason": "test namespace"
+  },
+  {
+   "name": "vakint::props_",
+   "reason": "pattern"
+  },
+  {
+   "name": "vakint::pySecDec_integral",
+   "reason": "pySecDec transport"
+  },
+  {
+   "name": "vakint::pysecdec_result",
+   "reason": "pySecDec transport"
+  },
+  {
+   "name": "vakint::rat",
+   "reason": "Forcer rat(a,b), converted on import"
+  },
+  {
+   "name": "vakint::replacement_constant_data",
+   "reason": "internal"
+  },
+  {
+   "name": "vakint::replacement_data",
+   "reason": "internal"
+  },
+  {
+   "name": "vakint::rustred_input",
+   "reason": "internal"
+  },
+  {
+   "name": "vakint::scalar_dot_regression",
+   "reason": "test"
+  },
+  {
+   "name": "vakint::scalar_dot_skip_regression",
+   "reason": "test"
+  },
+  {
+   "name": "vakint::series_mu",
+   "reason": "test"
+  },
+  {
+   "name": "vakint::series_nu",
+   "reason": "test"
+  },
+  {
+   "name": "vakint::series_opaque",
+   "reason": "test"
+  },
+  {
+   "name": "vakint::symmetric_dot_skip_regression",
+   "reason": "test"
+  },
+  {
+   "name": "vakint::tensor_scalar_coefficient",
+   "reason": "internal alias"
+  },
+  {
+   "name": "vakint::test_master_data",
+   "reason": "test"
+  },
+  {
+   "name": "vakint::unbound_spectator",
+   "reason": "test"
+  },
+  {
+   "name": "unconfigured_regulator::epsilon",
+   "reason": "test namespace"
+  },
+  {
+   "name": "user_space::NumericalSource",
+   "reason": "test namespace"
+  },
+  {
+   "name": "user_space::source",
+   "reason": "test namespace"
+  },
+  {
+   "name": "vakint::vakintFloat",
+   "reason": "float marker"
+  },
+  {
+   "name": "vakint::vkdot",
+   "reason": "FORM transport dot"
+  },
+  {
+   "name": "vakint::x",
+   "reason": "internal variable"
+  },
+  {
+   "name": "vakint::xa",
+   "reason": "internal"
+  },
+  {
+   "name": "vakint::y",
+   "reason": "internal"
+  },
+  {
+   "name": "vakint::ya",
+   "reason": "internal"
+  }
+ ]
+}
