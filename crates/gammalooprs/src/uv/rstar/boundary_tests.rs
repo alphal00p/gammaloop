@@ -316,10 +316,12 @@ fn test_normalization(graph: &Graph) -> ClosedRootNormalization {
     }
 }
 
-/// Off == On on production background diagrams (colour factored), through
-/// the closing-root `_scalar` entry point, under STRICT: every admitted
-/// remainder is built and evaluated by the boundary, children and one-loop
-/// remainders are silently not admitted.
+/// Off == On == Check on production background diagrams (colour factored),
+/// through the closing-root `_scalar` entry point, under STRICT: every
+/// admitted remainder is built and evaluated by the boundary (On), or built
+/// and compared pair by pair with today's closures, value and callback
+/// (Check, which errors on any MISMATCH and returns today's value);
+/// children and one-loop remainders are silently not admitted.
 #[test]
 fn boundary_matches_old_path_two_and_three_loop() -> Result<()> {
     with_production_piece_limit(|| -> Result<()> {
@@ -355,6 +357,7 @@ fn boundary_matches_old_path_two_and_three_loop() -> Result<()> {
             };
             let off = run(BoundaryMode::Off)?;
             let on = run(BoundaryMode::On)?;
+            let check = run(BoundaryMode::Check)?;
             ensure!(!off.expand().is_zero(), "{name}: zero counterterm");
             let identical = off == on;
             let difference = (&off - &on).expand();
@@ -362,7 +365,8 @@ fn boundary_matches_old_path_two_and_three_loop() -> Result<()> {
                 identical || difference.is_zero(),
                 "{name}: the boundary path differs from today's: {difference}"
             );
-            eprintln!("BOUNDARY_TEST {name} on identical={identical}");
+            ensure!(check == off, "{name}: check mode must return today's value");
+            eprintln!("BOUNDARY_TEST {name} on identical={identical} check ok");
         }
         Ok(())
     })

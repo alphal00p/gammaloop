@@ -1947,8 +1947,16 @@ impl RStarIntegrand {
             let projected = projector(&expanded)
                 .inspect_err(|_| edge_debug_dump("root_projector", &expanded))
                 .wrap_err("while projecting the complete R* outer Taylor polynomial")?;
-            drop(expanded);
-            Integrated::dimensionally_regularized(&projected)
+            if super::boundary::callback_check_active() {
+                // Remainder-boundary check mode: the callback against c·σ.
+                let regulated = Integrated::dimensionally_regularized(&projected);
+                super::boundary::check_callback(&expanded, &regulated);
+                drop(expanded);
+                regulated
+            } else {
+                drop(expanded);
+                Integrated::dimensionally_regularized(&projected)
+            }
         } else {
             expanded
         };

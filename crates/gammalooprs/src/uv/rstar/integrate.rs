@@ -26,6 +26,59 @@ use vakint::{
 
 use crate::uv::approx::integrated::Integrated;
 
+/// A closure of today's path captured in remainder-boundary check mode
+/// (DESIGN 7): its `VakintTerm.integral`, closing line, direct input (the
+/// projected numerator, unrouted) and v1 record sequence.
+#[derive(Clone, Debug)]
+pub(super) struct CapturedClosure {
+    pub(super) integral: Atom,
+    pub(super) closure: MassiveClosure,
+    pub(super) input: DirectClosureInput,
+    /// The v1 record of this closure (the boundary record's `ref_closure`,
+    /// DESIGN 6b).
+    #[allow(dead_code)]
+    pub(super) sequence: Option<usize>,
+    /// False when the census dump skipped its evaluation.
+    pub(super) evaluated: bool,
+}
+
+/// Everything captured from one [`integrate_single_mass`] call.
+#[derive(Default)]
+pub(super) struct Capture {
+    pub(super) closures: Vec<CapturedClosure>,
+    /// The value before `finish_tensor` (`result.expand()`).
+    pub(super) value: Option<Atom>,
+}
+
+thread_local! {
+    static CAPTURE: std::cell::RefCell<Option<Capture>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Run `f` (today's outer integration of one remainder) capturing its
+/// closures and value. Inert outside: one thread-local borrow per closure.
+pub(super) fn capturing_closures<T>(f: impl FnOnce() -> T) -> (T, Capture) {
+    let previous = CAPTURE.with(|slot| slot.replace(Some(Capture::default())));
+    let result = f();
+    let captured = CAPTURE.with(|slot| std::mem::replace(&mut *slot.borrow_mut(), previous));
+    (result, captured.unwrap_or_default())
+}
+
+fn capture(make: impl FnOnce() -> CapturedClosure) {
+    CAPTURE.with(|slot| {
+        if let Some(capture) = slot.borrow_mut().as_mut() {
+            capture.closures.push(make());
+        }
+    });
+}
+
+fn capture_value(value: &Atom) {
+    CAPTURE.with(|slot| {
+        if let Some(capture) = slot.borrow_mut().as_mut() {
+            capture.value = Some(value.clone());
+        }
+    });
+}
+
 /// Integrate explicit vacuum topologies with exactly one massive denominator.
 ///
 /// The mass and power must already be those of the selected surviving line.
@@ -163,11 +216,12 @@ pub fn integrate_single_mass(
         // tensor spectators. Keeping their coefficients here lets its Laurent
         // expansion include insertion poles before truncating the full product.
         let preparation_started = Instant::now();
+        let mut dumped = None;
         if let Some(dump) = super::pint6_dump::settings() {
             // Local export patch: before the direct-lowering branch, so both
             // closure paths are recorded (and skipped at >= the skip loops).
             let numerator = term.numerator.replace_multiple(&cut.routing).expand();
-            let p_loops = super::pint6_dump::write(
+            let (p_loops, sequence) = super::pint6_dump::write(
                 dump,
                 settings,
                 &cut.closure,
@@ -175,11 +229,24 @@ pub fn integrate_single_mass(
                 &cut.integrand,
                 cut.loops,
             )?;
-            if p_loops >= dump.skip_min_p_loops {
-                // Export only: the request is recorded and not evaluated.
-                timing.closure_preparation += preparation_started.elapsed();
-                continue;
-            }
+            dumped = Some((p_loops >= dump.skip_min_p_loops, sequence));
+        }
+        // Remainder-boundary check mode: after the record, before the skip.
+        capture(|| CapturedClosure {
+            integral: source.integral.clone(),
+            closure: cut.closure.clone(),
+            input: DirectClosureInput {
+                topology: cut.integrand.clone(),
+                routing: cut.routing_pairs.clone(),
+                numerator: term.numerator.clone(),
+            },
+            sequence: dumped.map(|(_, sequence)| sequence),
+            evaluated: !dumped.is_some_and(|(skipped, _)| skipped),
+        });
+        if dumped.is_some_and(|(skipped, _)| skipped) {
+            // Export only: the request is recorded and not evaluated.
+            timing.closure_preparation += preparation_started.elapsed();
+            continue;
         }
         if direct_lowering && matches!(cut.integrand.as_view(), AtomView::Fun(_)) {
             // The routing and the expansion are applied by the p-integral
@@ -235,6 +302,7 @@ pub fn integrate_single_mass(
     let combine_started = Instant::now();
     let result = result.expand();
     timing.combine += combine_started.elapsed();
+    capture_value(&result);
     if census {
         vakint::census::record(
             "single_mass",
