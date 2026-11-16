@@ -241,6 +241,35 @@ fn graded_split_declines() -> Result<()> {
     Ok(())
 }
 
+/// DESIGN 9: the split checkpoints inside a factorized P (one top-level
+/// product whose sum has more than 4,096 terms, the shape idenso returns), and
+/// an exhausted resource budget is a hard error, never a decline.
+#[test]
+fn split_checkpoints_inside_a_factorized_p() -> Result<()> {
+    use std::time::Duration;
+    use symbolica::utils::resources::{ResourceBudget, ResourceLimits};
+    test_initialise()?;
+    let terms = (1..=5000).map(|i| dot(2, 2).pow(i as i64)).collect::<Vec<_>>();
+    let p = Atom::add_many(terms.iter()) * dot(3, 3);
+    ensure!(matches!(p.as_view(), AtomView::Mul(_)), "P must be one top-level product");
+    let split = |p: Atom| -> Result<std::result::Result<usize, String>> {
+        let mut grammar = Grammar::new(&BASIS, X0, 2, *super::REFERENCE_MASS_SQUARED);
+        let mut stats = BoundaryStats::default();
+        Ok(split_into_blocks(p, &mut grammar, &mut stats)?
+            .map(|blocks| blocks.len())
+            .map_err(|decline| decline.reason))
+    };
+    let unbounded = split(p.clone())?;
+    ensure!(unbounded == Ok(1), "without a budget: {unbounded:?}");
+    let budget = ResourceBudget::new(ResourceLimits {
+        max_elapsed: Some(Duration::ZERO),
+        ..Default::default()
+    });
+    let exhausted = budget.run(|| split(p));
+    ensure!(exhausted.is_err(), "an exhausted budget must be a hard error: {exhausted:?}");
+    Ok(())
+}
+
 #[test]
 fn postconditions_reject_unmapped_loop_momenta() -> Result<()> {
     test_initialise()?;
