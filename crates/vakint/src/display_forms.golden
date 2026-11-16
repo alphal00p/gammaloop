@@ -1,0 +1,77 @@
+vakint::PGamma	plain	vakint::PGamma(1)*vakint::PGamma(5)*vakint::PGamma(-2)^5
+vakint::PGamma	latex	\Gamma(1+\varepsilon) \Gamma(1+5\varepsilon) \Gamma(1-2\varepsilon)^{5}
+vakint::PGamma	mathml	<mrow><mtable data-symbolica-product="" data-symbolica-row-gap="0.5em" columnalign="left" rowspacing="0"><mtr><mtd style="padding:0"><mrow><mrow data-symbolica-factor=""><mrow><mi mathvariant="normal">Γ</mi><mo>(</mo><mn>1</mn><mo>+</mo><mi>ε</mi><mo>)</mo></mrow></mrow><mrow data-symbolica-factor=""><mo>*</mo><mrow><mi mathvariant="normal">Γ</mi><mo>(</mo><mn>1</mn><mo>+</mo><mrow><mrow><mn>5</mn></mrow></mrow><mi>ε</mi><mo>)</mo></mrow></mrow><mrow data-symbolica-factor=""><mo>*</mo><msup><mrow><mi mathvariant="normal">Γ</mi><mo>(</mo><mn>1</mn><mo>−</mo><mrow><mrow><mn>2</mn></mrow></mrow><mi>ε</mi><mo>)</mo></mrow><mrow><mn>5</mn></mrow></msup></mrow></mrow></mtd></mtr></mtable></mrow>
+vakint::PGamma	typst	Gamma(1+ epsilon) Gamma(1+5 epsilon) Gamma(1-2 epsilon)^5
+vakint::PG	plain	vakint::PG(1,0)
+vakint::PG	latex	\mathcal{G}_{1,0}
+vakint::PG	mathml	<mrow><msub><mi mathvariant="script">G</mi><mrow><mrow><mrow><mn>1</mn></mrow></mrow><mo>,</mo><mrow><mrow><mn>0</mn></mrow></mrow></mrow></msub></mrow>
+vakint::PG	typst	cal(G)_(1,0)
+vakint::PMaster	plain	vakint::PMaster(vakint::t105)
+vakint::PMaster	latex	M_{t105}
+vakint::PMaster	mathml	<mrow><msub><mi>M</mi><mrow><mi>t105</mi></mrow></msub></mrow>
+vakint::PMaster	typst	M_("t105")
+vakint::PMasterValue	plain	vakint::PMasterValue(vakint::PMaster(vakint::t105),2)
+vakint::PMasterValue	latex	\left[M_{t105}\right]_{\varepsilon^{2}}
+vakint::PMasterValue	mathml	<mrow><msub><mrow><mo>[</mo><mrow><mrow><msub><mi>M</mi><mrow><mi>t105</mi></mrow></msub></mrow></mrow><mo>]</mo></mrow><msup><mi>ε</mi><mrow><mrow><mn>2</mn></mrow></mrow></msup></msub></mrow>
+vakint::PMasterValue	typst	[M_("t105")]_(epsilon^(2))
+vakint::PResidual	plain	vakint::PResidual(162,1,2,3)
+vakint::PResidual	latex	R_{162}(1,2,3)
+vakint::PResidual	mathml	<mrow><msub><mi>R</mi><mrow><mrow><mn>162</mn></mrow></mrow></msub><mo>(</mo><mrow><mrow><mn>1</mn></mrow></mrow><mo>,</mo><mrow><mrow><mn>2</mn></mrow></mrow><mo>,</mo><mrow><mrow><mn>3</mn></mrow></mrow><mo>)</mo></mrow>
+vakint::PResidual	typst	R_(162)(1,2,3)
+vakint::Master	plain	vakint::Master(2)
+vakint::Master	latex	M_{2}
+vakint::Master	mathml	<mrow><msub><mi>M</mi><mrow><mrow><mn>2</mn></mrow></mrow></msub></mrow>
+vakint::Master	typst	M_(2)
+vakint::coef	plain	vakint::PGamma(1)*vakint::coef(1/(-4+vakint::d))
+vakint::coef	latex	\Gamma(1+\varepsilon) \left[\frac{1}{-4+d}\right]
+vakint::coef	mathml	<mrow><mtable data-symbolica-product="" data-symbolica-row-gap="0.5em" columnalign="left" rowspacing="0"><mtr><mtd style="padding:0"><mrow><mrow data-symbolica-factor=""><mrow><mi mathvariant="normal">Γ</mi><mo>(</mo><mn>1</mn><mo>+</mo><mi>ε</mi><mo>)</mo></mrow></mrow><mrow data-symbolica-factor=""><mo>*</mo><mrow><mrow><mo style="opacity:.5">[</mo><mrow><mfrac><mn>1</mn><mrow data-symbolica-path="0"><mrow><mrow><mo>−</mo><mn>4</mn></mrow><mo>+</mo><mi>d</mi></mrow></mrow></mfrac></mrow><mo style="opacity:.5">]</mo></mrow></mrow></mrow></mrow></mtd></mtr></mtable></mrow>
+vakint::coef	typst	Gamma(1+ epsilon) lr([frac(1,-4+d)])
+vakint::Oep	plain	vakint::ep^3*vakint::Oep(3,vakint::PMaster(vakint::no1))
+vakint::Oep	latex	ep^{3} \mathcal{O}_{M_{no1}}(\varepsilon^{3})
+vakint::Oep	mathml	<mrow><mtable data-symbolica-product="" data-symbolica-row-gap="0.5em" columnalign="left" rowspacing="0"><mtr><mtd style="padding:0"><mrow><mrow data-symbolica-factor=""><msup><mi>ep</mi><mrow><mn>3</mn></mrow></msup></mrow><mrow data-symbolica-factor=""><mo>*</mo><mrow><msub><mi mathvariant="script">O</mi><mrow><mrow><msub><mi>M</mi><mrow><mi>no1</mi></mrow></msub></mrow></mrow></msub><mo>(</mo><msup><mi>ε</mi><mrow><mrow><mn>3</mn></mrow></mrow></msup><mo>)</mo></mrow></mrow></mrow></mtd></mtr></mtable></mrow>
+vakint::Oep	typst	"ep"^3 cal(O)_(M_("no1"))(epsilon^(3))
+vakint::Zeta	plain	vakint::Zeta(3)
+vakint::Zeta	latex	\zeta_{3}
+vakint::Zeta	mathml	<mrow><msub><mi>ζ</mi><mrow><mrow><mn>3</mn></mrow></mrow></msub></mrow>
+vakint::Zeta	typst	zeta_(3)
+vakint::zeta	plain	vakint::zeta(5)
+vakint::zeta	latex	\zeta_{5}
+vakint::zeta	mathml	<mrow><msub><mi>ζ</mi><mrow><mrow><mn>5</mn></mrow></mrow></msub></mrow>
+vakint::zeta	typst	zeta_(5)
+vakint::MZV	plain	vakint::MZV(5,3)
+vakint::MZV	latex	\zeta_{5,3}
+vakint::MZV	mathml	<mrow><msub><mi>ζ</mi><mrow><mrow><mrow><mn>5</mn></mrow></mrow><mo>,</mo><mrow><mrow><mn>3</mn></mrow></mrow></mrow></msub></mrow>
+vakint::MZV	typst	zeta_(5,3)
+vakint::Sqrt	plain	vakint::Sqrt(5)
+vakint::Sqrt	latex	\sqrt{5}
+vakint::Sqrt	mathml	<mrow><msqrt><mrow><mrow><mn>5</mn></mrow></mrow></msqrt></mrow>
+vakint::Sqrt	typst	sqrt(5)
+vakint::HR	plain	vakint::HR(1,0,-1,vakint::om1)
+vakint::HR	latex	\mathrm{Re}\,H_{1,0,-1}(om1)
+vakint::HR	mathml	<mrow><mi>Re</mi><mo>&#x2061;</mo><msub><mi>H</mi><mrow><mrow><mrow><mn>1</mn></mrow></mrow><mo>,</mo><mrow><mrow><mn>0</mn></mrow></mrow><mo>,</mo><mrow><mrow><mo>−</mo><mn>1</mn></mrow></mrow></mrow></msub><mo>(</mo><mrow><mi>om1</mi></mrow><mo>)</mo></mrow>
+vakint::HR	typst	Re H_(1,0,-1)("om1")
+vakint::HI	plain	vakint::HI(1,0,-1,vakint::om1)
+vakint::HI	latex	\mathrm{Im}\,H_{1,0,-1}(om1)
+vakint::HI	mathml	<mrow><mi>Im</mi><mo>&#x2061;</mo><msub><mi>H</mi><mrow><mrow><mrow><mn>1</mn></mrow></mrow><mo>,</mo><mrow><mrow><mn>0</mn></mrow></mrow><mo>,</mo><mrow><mrow><mo>−</mo><mn>1</mn></mrow></mrow></mrow></msub><mo>(</mo><mrow><mi>om1</mi></mrow><mo>)</mo></mrow>
+vakint::HI	typst	Im H_(1,0,-1)("om1")
+vakint::GPLReal	plain	vakint::GPLReal(0,0,-1,1,1)
+vakint::GPLReal	latex	\mathrm{Re}\,G(0,0,-1,1;1)
+vakint::GPLReal	mathml	<mrow><mi>Re</mi><mo>&#x2061;</mo><mi>G</mi><mo>(</mo><mrow><mrow><mn>0</mn></mrow></mrow><mo>,</mo><mrow><mrow><mn>0</mn></mrow></mrow><mo>,</mo><mrow><mrow><mo>−</mo><mn>1</mn></mrow></mrow><mo>,</mo><mrow><mrow><mn>1</mn></mrow></mrow><mo>;</mo><mrow><mrow><mn>1</mn></mrow></mrow><mo>)</mo></mrow>
+vakint::GPLReal	typst	Re G(0,0,-1,1;1)
+vakint::GPLImag	plain	vakint::GPLImag(0,-1,1)
+vakint::GPLImag	latex	\mathrm{Im}\,G(0,-1;1)
+vakint::GPLImag	mathml	<mrow><mi>Im</mi><mo>&#x2061;</mo><mi>G</mi><mo>(</mo><mrow><mrow><mn>0</mn></mrow></mrow><mo>,</mo><mrow><mrow><mo>−</mo><mn>1</mn></mrow></mrow><mo>;</mo><mrow><mrow><mn>1</mn></mrow></mrow><mo>)</mo></mrow>
+vakint::GPLImag	typst	Im G(0,-1;1)
+vakint::PolylogReal	plain	vakint::PolylogReal(4,1/2)
+vakint::PolylogReal	latex	\mathrm{Re}\,\mathrm{Li}_{4}(\frac{1}{2})
+vakint::PolylogReal	mathml	<mrow><mi>Re</mi><mo>&#x2061;</mo><msub><mi>Li</mi><mrow><mrow><mn>4</mn></mrow></mrow></msub><mo>(</mo><mrow><mrow><mfrac><mn>1</mn><mn>2</mn></mfrac></mrow></mrow><mo>)</mo></mrow>
+vakint::PolylogReal	typst	Re "Li"_(4)(1/2)
+vakint::PolylogImag	plain	vakint::PolylogImag(4,1/2)
+vakint::PolylogImag	latex	\mathrm{Im}\,\mathrm{Li}_{4}(\frac{1}{2})
+vakint::PolylogImag	mathml	<mrow><mi>Im</mi><mo>&#x2061;</mo><msub><mi>Li</mi><mrow><mrow><mn>4</mn></mrow></mrow></msub><mo>(</mo><mrow><mrow><mfrac><mn>1</mn><mn>2</mn></mfrac></mrow></mrow><mo>)</mo></mrow>
+vakint::PolylogImag	typst	Im "Li"_(4)(1/2)
+vakint::RustRedMaster	plain	vakint::RustRedMaster(vakint::rustred_family_ab12,1,1,0)
+vakint::RustRedMaster	latex	I_{rustred_family_ab12}(1,1,0)
+vakint::RustRedMaster	mathml	<mrow><msub><mi>I</mi><mrow><mi>rustred_family_ab12</mi></mrow></msub><mo>(</mo><mrow><mrow><mn>1</mn></mrow></mrow><mo>,</mo><mrow><mrow><mn>1</mn></mrow></mrow><mo>,</mo><mrow><mrow><mn>0</mn></mrow></mrow><mo>)</mo></mrow>
+vakint::RustRedMaster	typst	I_("rustred_family_ab12")(1,1,0)
+to_spenso_dots	(spenso::{symmetric,linear,scalar}::dot(vakint::{spenso::tensor,spenso::rank1}::p(0,spenso::{spenso::representation,spenso::self_dual}::mink(vakint::{}::d)),vakint::{spenso::tensor,spenso::rank1}::p(0,spenso::{spenso::representation,spenso::self_dual}::mink(vakint::{}::d))))^2*vakint::{}::coef((-4+vakint::{}::d)^(-1))+3*spenso::{symmetric,linear,scalar}::dot(vakint::{spenso::tensor,spenso::rank1}::k(2,spenso::{spenso::representation,spenso::self_dual}::mink(vakint::{}::d)),vakint::{spenso::tensor,spenso::rank1}::p(1,spenso::{spenso::representation,spenso::self_dual}::mink(vakint::{}::d)))+vakint::{symmetric,linear}::dot(vakint::{spenso::tensor,spenso::rank1}::p(1),vakint::{}::vec(1))*vakint::{}::x

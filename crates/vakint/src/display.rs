@@ -503,3 +503,365 @@ pub fn from_spenso_dot_notation(expression: AtomView<'_>) -> Atom {
         **out = crate::symbols::S.dot(vector(left), vector(right));
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::utils::vakint_macros::vk_parse;
+    use std::collections::BTreeSet;
+    use std::fmt::Write;
+
+    const GOLDEN: &str = include_str!("display_forms.golden");
+
+    fn modes() -> [(&'static str, PrintOptions); 4] {
+        [
+            ("plain", PrintOptions::file()),
+            ("latex", PrintOptions::latex()),
+            ("mathml", PrintOptions::mathml()),
+            ("typst", PrintOptions::typst()),
+        ]
+    }
+
+    /// The rendered samples of every vakint-registered form, one line per mode.
+    fn rendered() -> String {
+        crate::Vakint::initialize_vakint_symbols();
+        // Create the decorated heads as vakint does (vk_symbol!) before the
+        // samples are parsed (a parse would create them undecorated).
+        for form in DISPLAY_TABLE.forms.iter().filter(|form| form.rust) {
+            let _ = crate::utils::vakint_macros::vk_symbol!(form.name.as_str());
+        }
+        let mut out = String::new();
+        for form in DISPLAY_TABLE.forms.iter().filter(|form| form.rust) {
+            let sample = vk_parse!(form.sample.as_str()).unwrap();
+            for (mode, options) in modes() {
+                let mut text = String::new();
+                sample
+                    .as_view()
+                    .format(&mut text, &options, PrintState::new())
+                    .unwrap();
+                writeln!(out, "{}\t{}\t{}", form.name, mode, text.replace('\n', " ")).unwrap();
+            }
+        }
+        // Cross-implementation check of the spenso conversion (Python twin).
+        let dots = vk_parse!(SPENSO_SAMPLE).unwrap();
+        writeln!(
+            out,
+            "to_spenso_dots\t{}",
+            to_spenso_dots(dots.as_view()).to_canonical_string()
+        )
+        .unwrap();
+        out
+    }
+
+    /// Sample of the spenso-dot cross check (also used by the Python twin's test).
+    const SPENSO_SAMPLE: &str =
+        "dot(p(0),p(0))^2*coef(1/(d-4))+3*dot(p(1),k(2))+x*dot(vec(1),p(1))";
+
+    /// The audit made permanent: every vakint form renders as stored, and a new
+    /// symbol name in vakint's sources must be classified in display_forms.json.
+    /// Regenerate the golden file with VAKINT_DISPLAY_BLESS=1.
+    #[test]
+    fn display_forms_render_as_stored() {
+        let actual = rendered();
+        if std::env::var_os("VAKINT_DISPLAY_BLESS").is_some() {
+            std::fs::write(
+                concat!(env!("CARGO_MANIFEST_DIR"), "/src/display_forms.golden"),
+                &actual,
+            )
+            .unwrap();
+            return;
+        }
+        for form in DISPLAY_TABLE.forms.iter().filter(|form| form.rust) {
+            assert!(
+                is_decorated(crate::utils::vakint_macros::vk_symbol!(form.name.as_str())),
+                "{} has no display form",
+                form.name
+            );
+        }
+        for (expected, got) in GOLDEN.lines().zip(actual.lines()) {
+            assert_eq!(
+                expected, got,
+                "display form changed (VAKINT_DISPLAY_BLESS=1 to accept)"
+            );
+        }
+        assert_eq!(GOLDEN.lines().count(), actual.lines().count());
+    }
+
+    /// User rule (2026-11-16): a symbol's form never carries its own enclosing
+    /// parentheses; they come only from the printer state (power base, product).
+    #[test]
+    fn forms_carry_no_enclosing_parentheses() {
+        let opens = ["(", r"\left(", "<mo>(</mo>", "<mrow><mo>(</mo>"];
+        for form in &DISPLAY_TABLE.forms {
+            let mut templates = vec![&form.latex, &form.mathml, &form.typst];
+            if let Some(equal) = &form.when_args_equal {
+                templates.extend([&equal.latex, &equal.mathml, &equal.typst]);
+            }
+            for template in templates {
+                assert!(
+                    !opens.iter().any(|open| template.starts_with(open)),
+                    "{}: the form starts with a parenthesis: {template}",
+                    form.name
+                );
+            }
+        }
+        let _ = rendered();
+        let doubled = [
+            "((",
+            r"\left(\left(",
+            "<mo>(</mo><mo>(</mo>",
+            "<mo>(</mo><mrow><mo>(</mo>",
+        ];
+        for form in DISPLAY_TABLE.forms.iter().filter(|form| form.rust) {
+            let atom = vk_parse!(form.sample.as_str()).unwrap();
+            // the first factor of the sample that has this form's head
+            let mut single = None;
+            atom.visitor(&mut |part| {
+                if single.is_none()
+                    && matches!(part, AtomView::Fun(f) if f.get_symbol().get_name() == form.name)
+                {
+                    single = Some(part.to_owned());
+                }
+                single.is_none()
+            });
+            let single = single.unwrap_or(atom);
+            let x = vk_parse!("x").unwrap();
+            let contexts = [
+                single.clone(),
+                &single * &x,
+                symbolica::function!(symbolica::atom::Symbol::LOG, &single),
+                single.pow(Atom::num(2)),
+            ];
+            for (mode, options) in modes() {
+                for context in &contexts {
+                    let mut text = String::new();
+                    context
+                        .as_view()
+                        .format(&mut text, &options, PrintState::new())
+                        .unwrap();
+                    assert!(
+                        !doubled.iter().any(|d| text.contains(d)),
+                        "{} ({mode}): doubled parentheses in {text}",
+                        form.name
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn plain_printing_and_canonical_strings_are_unchanged() {
+        let _ = rendered();
+        for form in &DISPLAY_TABLE.forms {
+            if !form.rust {
+                continue;
+            }
+            let sample = vk_parse!(form.sample.as_str()).unwrap();
+            // Plain output re-parses to the same expression and carries no
+            // display markup.
+            let plain = sample.to_canonical_string();
+            assert_eq!(vk_parse!(plain.as_str()).unwrap(), sample, "{}", form.name);
+            let mut file = String::new();
+            sample
+                .as_view()
+                .format(&mut file, &PrintOptions::file(), PrintState::new())
+                .unwrap();
+            assert_eq!(vk_parse!(file.as_str()).unwrap(), sample, "{}", form.name);
+            for marker in ['⟨', '<', '\\'] {
+                assert!(!file.contains(marker), "{}: {file}", form.name);
+            }
+        }
+    }
+
+    #[test]
+    fn every_symbol_in_the_sources_is_classified() {
+        let table = &*DISPLAY_TABLE;
+        let known = table
+            .forms
+            .iter()
+            .map(|f| f.name.clone())
+            .chain(table.native.iter().map(|n| n.name.clone()))
+            .chain(table.internal.iter().map(|i| i.name.clone()))
+            .collect::<BTreeSet<_>>();
+        let patterns = [
+            regex::Regex::new(r#"vk_symbol!\(\s*"([^"]+)""#).unwrap(),
+            regex::Regex::new(r#"(?:^|[^a-z_])symbol!\(\s*"vakint::([^"]+)""#).unwrap(),
+            regex::Regex::new(
+                r#"(?:^|[^a-z_])symbol!\(\s*format!\(\s*"\{\}::([^"{}]+)"\s*,\s*crate::NAMESPACE"#,
+            )
+            .unwrap(),
+        ];
+        let mut unclassified = BTreeSet::new();
+        let mut stack = vec![std::path::PathBuf::from(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src"
+        ))];
+        while let Some(path) = stack.pop() {
+            for entry in std::fs::read_dir(&path).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    stack.push(path);
+                    continue;
+                }
+                if path.extension().is_none_or(|e| e != "rs") {
+                    continue;
+                }
+                let text = std::fs::read_to_string(&path).unwrap();
+                for pattern in &patterns {
+                    for capture in pattern.captures_iter(&text) {
+                        let name = &capture[1];
+                        // Wildcards (trailing `_`) are pattern variables.
+                        if name.ends_with('_') {
+                            continue;
+                        }
+                        let full = if name.contains("::") {
+                            name.to_string()
+                        } else {
+                            format!("{}::{name}", crate::NAMESPACE)
+                        };
+                        if !known.contains(&full) {
+                            unclassified.insert(format!("{full} ({})", path.display()));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(
+            unclassified.is_empty(),
+            "new symbols without a display classification: add them to src/display_forms.json \
+             (forms / native / internal): {unclassified:#?}"
+        );
+        assert_eq!(table.schema, "vakint.display_forms.v1");
+    }
+
+    #[test]
+    fn large_arguments_keep_the_pageable_native_mathml() {
+        let _ = rendered();
+        let big = vk_parse!(
+            (0..200)
+                .map(|i| format!("{i}*d^{i}"))
+                .collect::<Vec<_>>()
+                .join("+")
+                .as_str()
+        )
+        .unwrap();
+        let coef = vk_parse!("coef(x)")
+            .unwrap()
+            .replace(vk_parse!("x").unwrap().to_pattern())
+            .with(big.to_pattern());
+        let mut text = String::new();
+        coef.as_view()
+            .format(&mut text, &PrintOptions::mathml(), PrintState::new())
+            .unwrap();
+        assert!(
+            !text.contains("opacity"),
+            "large coef must not use the bracket form"
+        );
+        let mut small = String::new();
+        vk_parse!("coef(1/(d-4))")
+            .unwrap()
+            .as_view()
+            .format(&mut small, &PrintOptions::mathml(), PrintState::new())
+            .unwrap();
+        assert!(small.contains("opacity"), "{small}");
+    }
+
+    /// The display forms must not change the order in which symbols are created
+    /// (Symbolica orders factors by it): the symbol registry after vakint's
+    /// vocabulary, a Vakint instance and a typical parse is identical with and
+    /// without the forms (VAKINT_NO_DISPLAY_FORMS), name by name and in order.
+    #[test]
+    fn display_forms_keep_the_symbol_creation_order() {
+        const CHILD: &str = "VAKINT_DISPLAY_ORDER_CHILD";
+        if std::env::var_os(CHILD).is_some() {
+            crate::Vakint::initialize_vakint_symbols();
+            let _vakint = crate::Vakint::new().unwrap();
+            let x = vk_parse!(
+                "PGamma(2)*PGamma(-2)^2/(dot(p(1),p(1))*PMaster(no1))+coef(1/(d-4))*Master(1)+ep^2*Oep(2,PMaster(t105))"
+            )
+            .unwrap();
+            println!("PLAIN {}", x.to_canonical_string());
+            println!("DECORATED {}", is_decorated(crate::symbols::S.p_gamma));
+            for (_, name) in symbolica::state::State::symbol_iter() {
+                println!("SYMBOL {name}");
+            }
+            return;
+        }
+        let run = |disable: bool| {
+            let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+            command
+                .args([
+                    "--exact",
+                    "display::tests::display_forms_keep_the_symbol_creation_order",
+                    "--nocapture",
+                    "--test-threads",
+                    "1",
+                ])
+                .env(CHILD, "1");
+            if disable {
+                command.env("VAKINT_NO_DISPLAY_FORMS", "1");
+            } else {
+                command.env_remove("VAKINT_NO_DISPLAY_FORMS");
+            }
+            let output = command.output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .filter(|l| {
+                    l.starts_with("SYMBOL ")
+                        || l.starts_with("PLAIN ")
+                        || l.starts_with("DECORATED ")
+                })
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        };
+        let with_forms = run(false);
+        let without = run(true);
+        assert!(
+            with_forms.contains(&"DECORATED true".to_owned()),
+            "forms not active"
+        );
+        assert!(
+            without.contains(&"DECORATED false".to_owned()),
+            "switch not active"
+        );
+        let strip = |lines: &[String]| {
+            lines
+                .iter()
+                .filter(|l| !l.starts_with("DECORATED "))
+                .cloned()
+                .collect::<Vec<_>>()
+        };
+        assert!(with_forms.len() > 100, "{}", with_forms.len());
+        assert_eq!(strip(&with_forms), strip(&without));
+    }
+
+    #[test]
+    fn spenso_dot_round_trip() {
+        crate::Vakint::initialize_vakint_symbols();
+        let source = vk_parse!(
+            "dot(p(0),p(0))^2*coef(1/(d-4))+3*dot(p(1),k(2))+dot(p(1),p(2)+p(3))+x*dot(vec(1),p(1))"
+        )
+        .unwrap();
+        let spenso = to_spenso_dots(source.as_view());
+        assert_ne!(spenso, source);
+        assert!(spenso.contains_symbol(SPENSO_TAG.dot));
+        assert_eq!(from_spenso_dot_notation(spenso.as_view()), source);
+        let text = spenso.to_canonical_string();
+        assert!(text.contains("spenso::"), "{text}");
+        assert!(text.contains("mink(vakint::{}::d)"), "{text}");
+        // A gammaloop-style input with a symbolic dimension converts back too.
+        let gl = to_spenso_dot_notation(
+            vk_parse!("dot(p(1),k(1))").unwrap().as_view(),
+            symbolica::symbol!("gammalooprs::dim"),
+        );
+        assert_eq!(
+            from_spenso_dot_notation(gl.as_view()),
+            vk_parse!("dot(p(1),k(1))").unwrap()
+        );
+    }
+}
