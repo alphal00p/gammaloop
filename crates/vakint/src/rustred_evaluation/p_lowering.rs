@@ -282,6 +282,15 @@ fn degree(packed: u128, count: usize) -> u32 {
         .sum()
 }
 
+/// vk5l-physrun: `VAKINT_DIRECT_READER=prefix` multiplies prefix products
+/// into each group's coefficient (top-down) instead of the Horner evaluation.
+fn horner_reader() -> bool {
+    static ON: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+        !matches!(std::env::var("VAKINT_DIRECT_READER").as_deref(), Ok("prefix"))
+    });
+    *ON
+}
+
 /// vk5l-physrun: `VAKINT_DIRECT_PREFIX_TRIE=off` restores one product per
 /// group in [`Reader::read`] (comparison runs).
 fn prefix_trie_enabled() -> bool {
@@ -546,6 +555,21 @@ impl<C: Coef> Reader<'_, C> {
                     list.sort_unstable();
                 }
                 lists.sort_by(|left, right| left.0.cmp(&right.0));
+                if horner_reader() {
+                    // vk5l-physrun: Horner over the trie of sorted factor lists,
+                    // bottom-up: value(node) = Σ coefficients of the groups ending
+                    // at the node + Σ_children factor · value(child); every factor
+                    // multiplies a merged subtree sum once. Exact: the same total.
+                    let factors = ranked
+                        .iter()
+                        .map(|id| self.cached(factor_atoms[*id as usize].as_view()))
+                        .collect::<Result<Vec<_>, Declined>>()?;
+                    let value = self.horner(&lists, 0, &factors)?;
+                    for (k, v) in value {
+                        add_into(&mut total, k, v);
+                    }
+                    return Ok(total);
+                }
                 let mut stack: Vec<(u32, Rc<PolyC<C>>)> = Vec::new();
                 let unit = Rc::new(Self::unit());
                 for (list, coefficient) in lists {
@@ -581,6 +605,38 @@ impl<C: Coef> Reader<'_, C> {
         }
     }
 
+
+    /// vk5l-physrun: the Horner value of the sorted factor lists `lists`
+    /// (all sharing their first `depth` factors): Σ of the coefficients of the
+    /// lists that end at `depth`, plus Σ over the next factor `f` of
+    /// `factors[f] · horner(lists continuing with f, depth + 1)`.
+    #[allow(clippy::type_complexity)]
+    fn horner(
+        &mut self,
+        lists: &[(Vec<u32>, PolyC<C>)],
+        depth: usize,
+        factors: &[Rc<PolyC<C>>],
+    ) -> Result<PolyC<C>, Declined> {
+        let mut value = PolyC::<C>::new();
+        let mut start = 0;
+        while start < lists.len() && lists[start].0.len() == depth {
+            for (k, v) in &lists[start].1 {
+                add_into(&mut value, *k, v.clone());
+            }
+            start += 1;
+        }
+        while start < lists.len() {
+            let factor = lists[start].0[depth];
+            let mut end = start + 1;
+            while end < lists.len() && lists[end].0[depth] == factor {
+                end += 1;
+            }
+            let below = self.horner(&lists[start..end], depth + 1, factors)?;
+            self.multiply_into(&mut value, &factors[factor as usize], &below)?;
+            start = end;
+        }
+        Ok(value)
+    }
 
     /// One summand: numbers, spectators and loop-dependent factors.
     fn term(&mut self, term: AtomView) -> Result<PolyC<C>, Declined> {
