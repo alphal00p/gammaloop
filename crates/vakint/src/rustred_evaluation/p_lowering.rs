@@ -162,11 +162,107 @@ fn fits_natural(value: &Rational) -> bool {
         && matches!(value.denominator_ref(), Integer::Single(_))
 }
 
-fn add_into(target: &mut Poly, key: Key, value: Rational) {
+/// vk5l-physrun: polynomials over a coefficient ring.
+type PolyC<C> = HashMap<Key, C>;
+
+thread_local! {
+    /// Set when an [`i128`] coefficient operation overflowed: the read is
+    /// repeated with exact rationals.
+    static OVERFLOW: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// vk5l-physrun: the coefficients of the numerator reader: exact rationals,
+/// or machine integers (`i128`, checked: an overflow or a non-integer input
+/// makes the reader decline and the exact rational reader runs instead).
+trait Coef: Clone + std::fmt::Debug {
+    fn zero() -> Self;
+    fn one() -> Self;
+    fn from_i64(value: i64) -> Self;
+    fn from_rational(value: &Rational) -> Result<Self, Declined>;
+    fn to_rational(&self) -> Rational;
+    fn is_zero(&self) -> bool;
+    fn add(&mut self, other: &Self);
+    fn mul(&self, other: &Self) -> Self;
+    fn neg(self) -> Self;
+}
+
+impl Coef for Rational {
+    fn zero() -> Self {
+        Rational::zero()
+    }
+    fn one() -> Self {
+        Rational::one()
+    }
+    fn from_i64(value: i64) -> Self {
+        Rational::from(value)
+    }
+    fn from_rational(value: &Rational) -> Result<Self, Declined> {
+        Ok(value.clone())
+    }
+    fn to_rational(&self) -> Rational {
+        self.clone()
+    }
+    fn is_zero(&self) -> bool {
+        Rational::is_zero(self)
+    }
+    fn add(&mut self, other: &Self) {
+        *self += other;
+    }
+    fn mul(&self, other: &Self) -> Self {
+        self * other
+    }
+    fn neg(self) -> Self {
+        -self
+    }
+}
+
+impl Coef for i128 {
+    fn zero() -> Self {
+        0
+    }
+    fn one() -> Self {
+        1
+    }
+    fn from_i64(value: i64) -> Self {
+        value as i128
+    }
+    fn from_rational(value: &Rational) -> Result<Self, Declined> {
+        match (value.numerator_ref(), value.denominator_ref()) {
+            (Integer::Single(n), Integer::Single(1)) => Ok(*n as i128),
+            _ => Err(Declined("a non-integer coefficient for the machine-integer reader")),
+        }
+    }
+    fn to_rational(&self) -> Rational {
+        Rational::from(Integer::from(*self))
+    }
+    fn is_zero(&self) -> bool {
+        *self == 0
+    }
+    fn add(&mut self, other: &Self) {
+        match self.checked_add(*other) {
+            Some(sum) => *self = sum,
+            None => OVERFLOW.with(|flag| flag.set(true)),
+        }
+    }
+    fn mul(&self, other: &Self) -> Self {
+        self.checked_mul(*other).unwrap_or_else(|| {
+            OVERFLOW.with(|flag| flag.set(true));
+            0
+        })
+    }
+    fn neg(self) -> Self {
+        self.checked_neg().unwrap_or_else(|| {
+            OVERFLOW.with(|flag| flag.set(true));
+            0
+        })
+    }
+}
+
+fn add_into<C: Coef>(target: &mut HashMap<Key, C>, key: Key, value: C) {
     use std::collections::hash_map::Entry;
     match target.entry(key) {
         Entry::Occupied(mut entry) => {
-            *entry.get_mut() += &value;
+            entry.get_mut().add(&value);
             if entry.get().is_zero() {
                 entry.remove();
             }
@@ -186,33 +282,48 @@ fn degree(packed: u128, count: usize) -> u32 {
         .sum()
 }
 
+/// vk5l-physrun: `VAKINT_DIRECT_PREFIX_TRIE=off` restores one product per
+/// group in [`Reader::read`] (comparison runs).
+fn prefix_trie_enabled() -> bool {
+    static ON: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+        !matches!(std::env::var("VAKINT_DIRECT_PREFIX_TRIE").as_deref(), Ok("off" | "0"))
+    });
+    *ON
+}
+
 /// The numerator reader of one closure.
-struct Reader<'a> {
+struct Reader<'a, C: Coef> {
     /// Vacuum (or cut) loop momentum `k(i)` -> its vector over the canonical
     /// `k(1..L)` and the head.
-    momenta: &'a HashMap<Atom, Vec<Rational>>,
+    momenta: &'a HashMap<Atom, Vec<C>>,
     loops: usize,
     sigma: i64,
     /// The number of canonical scalar products `k(i)·k(j)` (i <= j), `k(i)·Q`.
     count: usize,
     spectators: &'a mut Spectators,
-    cache: HashMap<Atom, Rc<Poly>>,
+    cache: HashMap<Atom, Rc<PolyC<C>>>,
     terms: usize,
 }
 
-impl Reader<'_> {
+impl<C: Coef> Reader<'_, C> {
     fn pair_index(&self, i: usize, j: usize) -> usize {
         let (i, j) = (i.min(j), i.max(j));
         // Upper triangle by rows: (0,0..L-1), (1,1..L-1), ...
         i * self.loops - i * i.saturating_sub(1) / 2 + (j - i)
     }
 
-    fn unit() -> Poly {
-        Poly::from([((0, 0), Rational::one())])
+    fn unit() -> PolyC<C> {
+        PolyC::<C>::from([((0, 0), C::one())])
     }
 
-    fn multiply(&mut self, left: &Poly, right: &Poly) -> Result<Poly, Declined> {
-        let mut product = Poly::with_capacity(left.len().max(right.len()));
+    fn multiply(&mut self, left: &PolyC<C>, right: &PolyC<C>) -> Result<PolyC<C>, Declined> {
+        let mut product = PolyC::<C>::with_capacity(left.len().max(right.len()));
+        self.multiply_into(&mut product, left, right)?;
+        Ok(product)
+    }
+
+    /// vk5l-physrun: `target += left · right`, without a product map of its own.
+    fn multiply_into(&mut self, product: &mut PolyC<C>, left: &PolyC<C>, right: &PolyC<C>) -> Result<(), Declined> {
         for ((ls, lp), lv) in left {
             for ((rs, rp), rv) in right {
                 let packed = lp + rp;
@@ -220,17 +331,17 @@ impl Reader<'_> {
                     return Err(Declined("a numerator degree beyond the packed range"));
                 }
                 let (spectator, negate) = self.spectators.multiply(*ls, *rs);
-                let mut value = lv * rv;
+                let mut value = lv.mul(rv);
                 if negate {
-                    value = -value;
+                    value = value.neg();
                 }
-                add_into(&mut product, (spectator, packed), value);
+                add_into(product, (spectator, packed), value);
             }
         }
-        Ok(product)
+        Ok(())
     }
 
-    fn power(&mut self, base: &Poly, exponent: i64) -> Result<Poly, Declined> {
+    fn power(&mut self, base: &PolyC<C>, exponent: i64) -> Result<PolyC<C>, Declined> {
         let mut result = Self::unit();
         for _ in 0..exponent {
             result = self.multiply(&result, base)?;
@@ -240,11 +351,11 @@ impl Reader<'_> {
 
     /// A linear momentum (a loop momentum `k(i)` or a sum of them) as its
     /// vector.
-    fn vector(&self, momentum: AtomView) -> Result<Vec<Rational>, Declined> {
+    fn vector(&self, momentum: AtomView) -> Result<Vec<C>, Declined> {
         if let Some(vector) = self.momenta.get(&momentum.to_owned()) {
             return Ok(vector.clone());
         }
-        let mut total = vec![Rational::zero(); self.loops + 1];
+        let mut total = vec![C::zero(); self.loops + 1];
         let mut add_term = |term: AtomView| -> Result<(), Declined> {
             let (scale, head) = match term {
                 AtomView::Mul(product) => {
@@ -255,19 +366,19 @@ impl Reader<'_> {
                             if imaginary {
                                 return Err(Declined("an imaginary momentum coefficient"));
                             }
-                            (value, *head)
+                            (C::from_rational(&value)?, *head)
                         }
                         _ => return Err(Declined("a nonlinear momentum")),
                     }
                 }
-                other => (Rational::one(), other),
+                other => (C::one(), other),
             };
             let vector = self
                 .momenta
                 .get(&head.to_owned())
                 .ok_or(Declined("an unknown momentum in a scalar product"))?;
             for (slot, value) in total.iter_mut().zip(vector) {
-                *slot += &(&scale * value);
+                slot.add(&scale.mul(value));
             }
             Ok(())
         };
@@ -279,13 +390,13 @@ impl Reader<'_> {
     }
 
     /// A loop-dependent `dot(a, b)` as a linear polynomial.
-    fn dot(&mut self, a: AtomView, b: AtomView) -> Result<Poly, Declined> {
+    fn dot(&mut self, a: AtomView, b: AtomView) -> Result<PolyC<C>, Declined> {
         let (va, vb) = (self.vector(a)?, self.vector(b)?);
         let l = self.loops;
-        let mut poly = Poly::new();
+        let mut poly = PolyC::<C>::new();
         for i in 0..l {
             for j in 0..l {
-                let value = &va[i] * &vb[j];
+                let value = va[i].mul(&vb[j]);
                 if !value.is_zero() {
                     let index = self.pair_index(i, j);
                     add_into(&mut poly, (0, 1u128 << (BITS * index as u32)), value);
@@ -293,14 +404,16 @@ impl Reader<'_> {
             }
         }
         let external = l * (l + 1) / 2;
-        let sigma = Rational::from(self.sigma);
+        let sigma = C::from_i64(self.sigma);
         for i in 0..l {
-            let value = &(&(&va[i] * &vb[l]) + &(&va[l] * &vb[i])) * &sigma;
+            let mut value = va[i].mul(&vb[l]);
+            value.add(&va[l].mul(&vb[i]));
+            let value = value.mul(&sigma);
             if !value.is_zero() {
                 add_into(&mut poly, (0, 1u128 << (BITS * (external + i) as u32)), value);
             }
         }
-        let value = &va[l] * &vb[l];
+        let value = va[l].mul(&vb[l]);
         if !value.is_zero() {
             add_into(&mut poly, (0, 1u128 << J_SHIFT), value);
         }
@@ -312,7 +425,7 @@ impl Reader<'_> {
         view.contains_symbol(S.k)
     }
 
-    fn cached(&mut self, view: AtomView) -> Result<Rc<Poly>, Declined> {
+    fn cached(&mut self, view: AtomView) -> Result<Rc<PolyC<C>>, Declined> {
         let cacheable = !matches!(view, AtomView::Add(_)) || view.get_byte_size() <= 4096;
         if cacheable && let Some(poly) = self.cache.get(&view.to_owned()) {
             return Ok(Rc::clone(poly));
@@ -325,14 +438,14 @@ impl Reader<'_> {
     }
 
     /// The polynomial of an expression.
-    fn read(&mut self, view: AtomView) -> Result<Poly, Declined> {
+    fn read(&mut self, view: AtomView) -> Result<PolyC<C>, Declined> {
         match view {
             AtomView::Add(sum) => {
                 // Summands grouped by their loop-dependent factors: the
                 // loop-free coefficients of a group are added first and the
                 // group's loop product is multiplied once.
                 let mut order = Vec::<Atom>::new();
-                let mut groups = HashMap::<Atom, Poly>::new();
+                let mut groups = HashMap::<Atom, PolyC<C>>::new();
                 for term in sum.iter() {
                     self.terms += 1;
                     let factors = match term {
@@ -359,21 +472,97 @@ impl Reader<'_> {
                         }
                     }
                 }
-                let mut total = Poly::new();
+                if !prefix_trie_enabled() {
+                    let mut total = PolyC::<C>::new();
+                    for key in order {
+                        let coefficient = groups.remove(&key).unwrap_or_default();
+                        if coefficient.is_empty() {
+                            continue;
+                        }
+                        let product = if key == Atom::num(1) {
+                            coefficient
+                        } else {
+                            let loops = self.term(key.as_view())?;
+                            self.multiply(&coefficient, &loops)?
+                        };
+                        for (k, value) in product {
+                            add_into(&mut total, k, value);
+                        }
+                    }
+                    return Ok(total);
+                }
+                // vk5l-physrun: the loop products of the groups share factors.
+                // Each group's loop key is cut into its factors, the factors
+                // are numbered by how many groups use them (most used first),
+                // every group lists its factor numbers in increasing order, and
+                // the groups are visited in the order of those lists: a stack
+                // keeps the product of the current prefix, so a prefix shared
+                // by consecutive groups is multiplied once. Exact sums: the
+                // total is the same polynomial.
+                let mut factor_ids = HashMap::<Atom, u32>::new();
+                let mut factor_atoms = Vec::<Atom>::new();
+                let mut uses = Vec::<usize>::new();
+                let mut lists = Vec::<(Vec<u32>, PolyC<C>)>::with_capacity(order.len());
+                let mut total = PolyC::<C>::new();
                 for key in order {
                     let coefficient = groups.remove(&key).unwrap_or_default();
                     if coefficient.is_empty() {
                         continue;
                     }
-                    let product = if key == Atom::num(1) {
-                        coefficient
-                    } else {
-                        let loops = self.term(key.as_view())?;
-                        self.multiply(&coefficient, &loops)?
-                    };
-                    for (k, value) in product {
-                        add_into(&mut total, k, value);
+                    if key == Atom::num(1) {
+                        for (k, value) in coefficient {
+                            add_into(&mut total, k, value);
+                        }
+                        continue;
                     }
+                    let factors = match key.as_view() {
+                        AtomView::Mul(product) => product.iter().map(|f| f.to_owned()).collect::<Vec<_>>(),
+                        other => vec![other.to_owned()],
+                    };
+                    let mut list = Vec::with_capacity(factors.len());
+                    for factor in factors {
+                        let next = factor_atoms.len() as u32;
+                        let id = *factor_ids.entry(factor.clone()).or_insert_with(|| {
+                            factor_atoms.push(factor);
+                            uses.push(0);
+                            next
+                        });
+                        uses[id as usize] += 1;
+                        list.push(id);
+                    }
+                    lists.push((list, coefficient));
+                }
+                // Rank by use (most used first), ties by first appearance.
+                let mut ranked = (0..factor_atoms.len() as u32).collect::<Vec<_>>();
+                ranked.sort_by_key(|id| (std::cmp::Reverse(uses[*id as usize]), *id));
+                let mut rank = vec![0u32; factor_atoms.len()];
+                for (position, id) in ranked.iter().enumerate() {
+                    rank[*id as usize] = position as u32;
+                }
+                for (list, _) in &mut lists {
+                    for id in list.iter_mut() {
+                        *id = rank[*id as usize];
+                    }
+                    list.sort_unstable();
+                }
+                lists.sort_by(|left, right| left.0.cmp(&right.0));
+                let mut stack: Vec<(u32, Rc<PolyC<C>>)> = Vec::new();
+                let unit = Rc::new(Self::unit());
+                for (list, coefficient) in lists {
+                    let common = stack
+                        .iter()
+                        .zip(&list)
+                        .take_while(|((id, _), other)| id == *other)
+                        .count();
+                    stack.truncate(common);
+                    for &id in &list[common..] {
+                        let factor = self.cached(factor_atoms[ranked[id as usize] as usize].as_view())?;
+                        let previous = stack.last().map(|(_, poly)| Rc::clone(poly)).unwrap_or_else(|| Rc::clone(&unit));
+                        let product = self.multiply(&previous, &factor)?;
+                        stack.push((id, Rc::new(product)));
+                    }
+                    let loops = stack.last().map(|(_, poly)| Rc::clone(poly)).unwrap_or_else(|| Rc::clone(&unit));
+                    self.multiply_into(&mut total, &coefficient, &loops)?;
                 }
                 Ok(total)
             }
@@ -394,7 +583,7 @@ impl Reader<'_> {
 
 
     /// One summand: numbers, spectators and loop-dependent factors.
-    fn term(&mut self, term: AtomView) -> Result<Poly, Declined> {
+    fn term(&mut self, term: AtomView) -> Result<PolyC<C>, Declined> {
         let factors = match term {
             AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
             other => vec![other],
@@ -403,8 +592,8 @@ impl Reader<'_> {
     }
 
     /// The product of `factors` (one summand, or part of it).
-    fn term_factors(&mut self, factors: Vec<AtomView<'_>>) -> Result<Poly, Declined> {
-        let mut value = Rational::one();
+    fn term_factors(&mut self, factors: Vec<AtomView<'_>>) -> Result<PolyC<C>, Declined> {
+        let mut value = C::one();
         let mut imaginary = false;
         let mut spectators = Vec::new();
         let mut loops = Vec::new();
@@ -412,10 +601,10 @@ impl Reader<'_> {
             match factor {
                 AtomView::Num(_) => {
                     let (number, phase) = number(factor)?;
-                    value *= &number;
+                    value = value.mul(&C::from_rational(&number)?);
                     if phase {
                         if imaginary {
-                            value = -value;
+                            value = value.neg();
                         }
                         imaginary = !imaginary;
                     }
@@ -436,14 +625,14 @@ impl Reader<'_> {
         };
         // Smallest factors first.
         loops.sort_by_key(|poly| poly.len());
-        let mut product = Poly::from([((spectator, 0), value)]);
+        let mut product = PolyC::<C>::from([((spectator, 0), value)]);
         for poly in loops {
             product = self.multiply(&product, &poly)?;
         }
         Ok(product)
     }
 
-    fn dot_factor(&mut self, view: AtomView) -> Result<Poly, Declined> {
+    fn dot_factor(&mut self, view: AtomView) -> Result<PolyC<C>, Declined> {
         let AtomView::Fun(function) = view else {
             unreachable!()
         };
@@ -453,6 +642,65 @@ impl Reader<'_> {
         };
         self.dot(*a, *b)
     }
+}
+
+/// vk5l-physrun: the canonical polynomial of a closure numerator (times the
+/// cut graph's factor) read with coefficients `C`, as exact rationals.
+#[allow(clippy::too_many_arguments)]
+fn read_numerator<C: Coef>(
+    vacuum_momenta: &HashMap<Atom, Vec<Rational>>,
+    cut_momenta: &HashMap<Atom, Vec<Rational>>,
+    loops: usize,
+    sigma: i64,
+    count: usize,
+    spectators: &mut Spectators,
+    numerator: AtomView,
+    factor: &Atom,
+    stats: &mut DirectStats,
+) -> Result<Poly, Declined> {
+    let convert = |momenta: &HashMap<Atom, Vec<Rational>>| -> Result<HashMap<Atom, Vec<C>>, Declined> {
+        momenta
+            .iter()
+            .map(|(momentum, vector)| {
+                Ok((
+                    momentum.clone(),
+                    vector.iter().map(C::from_rational).collect::<Result<Vec<_>, _>>()?,
+                ))
+            })
+            .collect()
+    };
+    let vacuum = convert(vacuum_momenta)?;
+    let cut = convert(cut_momenta)?;
+    let mut reader = Reader::<C> {
+        momenta: &vacuum,
+        loops,
+        sigma,
+        count,
+        spectators,
+        cache: HashMap::new(),
+        terms: 0,
+    };
+    let numerator_poly = reader.read(numerator)?;
+    stats.numerator_terms += reader.terms;
+    let polynomial = if *factor == Atom::num(1) {
+        numerator_poly
+    } else {
+        let mut factor_reader = Reader::<C> {
+            momenta: &cut,
+            loops,
+            sigma,
+            count,
+            spectators: reader.spectators,
+            cache: HashMap::new(),
+            terms: 0,
+        };
+        let factor_poly = factor_reader.read(factor.as_view())?;
+        factor_reader.multiply(&numerator_poly, &factor_poly)?
+    };
+    Ok(polynomial
+        .into_iter()
+        .map(|(key, value)| (key, value.to_rational()))
+        .collect())
 }
 
 /// The integer (rational) coefficients of a linear momentum over the
@@ -680,39 +928,35 @@ pub(crate) fn lower_closure(
     let count = loops * (loops + 1) / 2 + loops;
     let phase = std::time::Instant::now();
     let mut spectators = Spectators::new();
-    let polynomial = {
-        let mut reader = Reader {
-            momenta: &vacuum_momenta,
-            loops,
-            sigma: cut.sigma,
-            count,
-            spectators: &mut spectators,
-            cache: HashMap::new(),
-            terms: 0,
-        };
-        let numerator_poly = match reader.read(numerator) {
-            Ok(poly) => poly,
-            Err(declined) => return Ok(Err(declined)),
-        };
-        stats.numerator_terms += reader.terms;
-        if cut.factor == Atom::num(1) {
-            numerator_poly
-        } else {
-            let mut factor_reader = Reader {
-                momenta: &cut_momenta,
+    // vk5l-physrun: machine-integer coefficients first (no gcd per operation,
+    // small entries); exact rationals when an input is not an integer or an
+    // operation overflows. Same polynomial either way.
+    let polynomial = match read_numerator::<i128>(
+        &vacuum_momenta,
+        &cut_momenta,
+        loops,
+        cut.sigma,
+        count,
+        &mut spectators,
+        numerator,
+        &cut.factor,
+        stats,
+    ) {
+        Ok(polynomial) if !OVERFLOW.with(|flag| flag.replace(false)) => polynomial,
+        _ => {
+            OVERFLOW.with(|flag| flag.set(false));
+            match read_numerator::<Rational>(
+                &vacuum_momenta,
+                &cut_momenta,
                 loops,
-                sigma: cut.sigma,
+                cut.sigma,
                 count,
-                spectators: reader.spectators,
-                cache: HashMap::new(),
-                terms: 0,
-            };
-            let factor = match factor_reader.read(cut.factor.as_view()) {
-                Ok(poly) => poly,
-                Err(declined) => return Ok(Err(declined)),
-            };
-            match factor_reader.multiply(&numerator_poly, &factor) {
-                Ok(poly) => poly,
+                &mut spectators,
+                numerator,
+                &cut.factor,
+                stats,
+            ) {
+                Ok(polynomial) => polynomial,
                 Err(declined) => return Ok(Err(declined)),
             }
         }

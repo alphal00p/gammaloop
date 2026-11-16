@@ -2526,6 +2526,137 @@ fn p_terminal_export() {
     eprintln!("p_terminal_export: {} terminals -> {}", records.len(), out.to_string_lossy());
 }
 
+/// vk5l-physrun: a WHOLE GRAPH through [`MassiveClosure::evaluate_direct_sum`]:
+/// all closure records of `VAKINT_TEST_CLOSURE_FILES` (`:`-separated) lowered
+/// directly and summed with one key plan per closing line, reduced once per
+/// mode (`VAKINT_TEST_CLOSURE_MODES`, default `retain`); writes
+/// `sum.<mode>.sym` and `sum.<mode>.json` to `VAKINT_TEST_CLOSURE_OUT`. With
+/// `VAKINT_TEST_CLOSURE_SUM_CHECK=<dir>` the per-closure results
+/// `<dir>/<closure>/<closure>.<mode>.sym` are added and compared (exact).
+#[test]
+fn massive_closure_showcase_sum() {
+    let (Some(files), Some(out)) = (
+        std::env::var_os("VAKINT_TEST_CLOSURE_FILES"),
+        std::env::var_os("VAKINT_TEST_CLOSURE_OUT"),
+    ) else {
+        eprintln!("massive_closure_showcase_sum: environment unset, skipped");
+        return;
+    };
+    let out = std::path::PathBuf::from(out);
+    std::fs::create_dir_all(&out).unwrap();
+    let mut engine = Vakint::new().unwrap();
+    if let Some(package) = std::env::var_os("VAKINT_TEST_P5L_DRILL_PACKAGE") {
+        let loading = std::time::Instant::now();
+        engine
+            .load_p_library_directory(std::path::Path::new(&package), false)
+            .unwrap();
+        engine.p_library().unwrap();
+        eprintln!("SHOWCASE_SUM package loaded in {:.1} s", loading.elapsed().as_secs_f64());
+    }
+    let reading = std::time::Instant::now();
+    let mut names = Vec::new();
+    let mut inputs = Vec::new();
+    let mut epsilon_terms = 0;
+    for file in std::env::split_paths(&files) {
+        let name = file
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .trim_end_matches(".zst")
+            .trim_end_matches(".txt")
+            .to_owned();
+        let raw = std::process::Command::new("zstd").args(["-qdc"]).arg(&file).output().unwrap();
+        assert!(raw.status.success(), "{}: zstd failed", file.display());
+        let text = String::from_utf8(raw.stdout).unwrap();
+        let field = |key: &str| {
+            text.lines()
+                .find_map(|line| line.strip_prefix(key)?.strip_prefix(' '))
+                .unwrap_or_else(|| panic!("{name}: no {key}"))
+                .to_owned()
+        };
+        epsilon_terms = field("epsilon_terms").parse().unwrap();
+        let closure = crate::p_integral::MassiveClosure {
+            momentum: parse(&field("closure_momentum")),
+            mass_squared: parse(&field("closure_mass_squared")),
+            power: field("closure_power").parse().unwrap(),
+        };
+        let input = parse(&field("input"));
+        let (topology, numerator) = match input.as_view() {
+            symbolica::atom::AtomView::Mul(product) => {
+                let mut topology = Atom::num(1);
+                let mut numerator = Atom::num(1);
+                for factor in product.iter() {
+                    match factor {
+                        symbolica::atom::AtomView::Fun(function)
+                            if function.get_symbol() == crate::symbols::S.topo =>
+                        {
+                            topology = factor.to_owned()
+                        }
+                        _ => numerator = numerator * factor.to_owned(),
+                    }
+                }
+                (topology, numerator)
+            }
+            other => panic!("{name}: input is not numerator * topo: {:.100}", other.to_string()),
+        };
+        let mut routing = (1..=5)
+            .map(|i| (parse(&format!("k({i})")), parse(&format!("k({i})"))))
+            .collect::<Vec<_>>();
+        routing.push((closure.momentum.clone(), closure.momentum.clone()));
+        names.push(name);
+        inputs.push((closure, crate::p_integral::DirectClosureInput { topology, routing, numerator }));
+    }
+    let read_seconds = reading.elapsed().as_secs_f64();
+    eprintln!("SHOWCASE_SUM {} closures read in {read_seconds:.1} s", inputs.len());
+    let modes = std::env::var("VAKINT_TEST_CLOSURE_MODES").unwrap_or_else(|_| "retain".into());
+    for mode in modes.split(',') {
+        let master_mode = match mode {
+            "retain" => RustRedMasterMode::Retain,
+            "numerical" => RustRedMasterMode::Numerical,
+            _ => RustRedMasterMode::Symbolic,
+        };
+        let arithmetic = std::env::var("VAKINT_TEST_CLOSURE_ARITHMETIC").ok();
+        let mut settings = settings(master_mode, arithmetic.as_deref());
+        settings.epsilon_symbol = "gammalooprs::ε".into();
+        settings.mu_r_sq_symbol = "gammalooprs::μᵣ²".into();
+        settings.integral_normalization_factor = crate::LoopNormalizationFactor::MSbar;
+        settings.number_of_terms_in_epsilon_expansion = epsilon_terms;
+        settings.run_time_decimal_precision = 100;
+        settings.use_dot_product_notation = false;
+        settings.n_cores = 1;
+        let started = std::time::Instant::now();
+        let value = crate::p_integral::MassiveClosure::evaluate_direct_sum(&engine, &settings, &inputs).unwrap();
+        let seconds = started.elapsed().as_secs_f64();
+        let text = value.to_canonical_string();
+        std::fs::write(out.join(format!("sum.{mode}.sym")), &text).unwrap();
+        let mut check = serde_json::Value::Null;
+        if let Some(dir) = std::env::var_os("VAKINT_TEST_CLOSURE_SUM_CHECK") {
+            let dir = std::path::PathBuf::from(dir);
+            let mut total = Atom::Zero;
+            let mut found = 0;
+            for name in &names {
+                let path = dir.join(name).join(format!("{name}.{mode}.sym"));
+                if let Ok(text) = std::fs::read_to_string(&path) {
+                    total += parse(&text);
+                    found += 1;
+                }
+            }
+            let total = total.expand();
+            let identical = total == value;
+            let equal = identical || (&total - &value).expand().is_zero();
+            eprintln!("SHOWCASE_SUM check {mode}: {found}/{} per-closure results, identical={identical} equal={equal}", names.len());
+            check = serde_json::json!({"found": found, "identical": identical, "equal": equal});
+        }
+        let summary = serde_json::json!({
+            "closures": names, "mode": mode, "seconds": seconds, "read_seconds": read_seconds,
+            "result_bytes": text.len(), "result_terms": drill_term_count(&value.expand()),
+            "arithmetic": settings.ordered_weight_arithmetic.to_string(), "check": check,
+        });
+        std::fs::write(out.join(format!("sum.{mode}.json")), summary.to_string()).unwrap();
+        eprintln!("SHOWCASE_SUM {mode}: {} closures in {seconds:.1} s, {} terms", names.len(), drill_term_count(&value.expand()));
+    }
+}
+
 /// vk5l WP4 end-to-end showcase: ready-made massive-closure requests
 /// (`pint6.massive-closure-request.v1`, zstd, one per file, the beta team's
 /// e2e-showcase input) through `MassiveClosure::evaluate_batch` as the R*

@@ -715,6 +715,56 @@ impl MassiveClosure {
         Ok(Ok(result))
     }
 
+    /// vk5l-physrun: the SUM of the values of `inputs` (what the R* caller adds
+    /// up) with ONE key plan per closing line: every closure is lowered
+    /// directly ([`Self::lower_direct`]), the closures with the same closing
+    /// key are absorbed into one input (exact sums per channel, basis and
+    /// key) and each class is reduced and finalized once, so a key met in
+    /// several closures is reduced once. A closure the direct lowering
+    /// declines is evaluated on its own by the ordinary path and added.
+    pub fn evaluate_direct_sum(
+        vakint: &Vakint,
+        settings: &crate::VakintSettings,
+        inputs: &[(Self, DirectClosureInput)],
+    ) -> Result<Atom, VakintError> {
+        settings.with_resource_budget(|| {
+            let mut classes = Vec::<LoweredClosure>::new();
+            let mut result = Atom::Zero;
+            for (closure, input) in inputs {
+                settings.validate_execution()?;
+                match closure.lower_direct(vakint, settings, input)? {
+                    Some(mut lowered) => {
+                        for class in classes.iter_mut() {
+                            match class.absorb(lowered) {
+                                Ok(()) => {
+                                    lowered = LoweredClosure {
+                                        closure: closure.clone(),
+                                        head: Atom::Zero,
+                                        folded: Default::default(),
+                                    };
+                                    break;
+                                }
+                                Err(back) => lowered = back,
+                            }
+                        }
+                        if !lowered.head.is_zero() {
+                            classes.push(lowered);
+                        }
+                    }
+                    None => {
+                        result += Self::evaluate_batch(vakint, settings, &[(closure.clone(), input.ordinary())])?
+                            .pop()
+                            .unwrap_or_default();
+                    }
+                }
+            }
+            for class in classes {
+                result += class.evaluate(vakint, settings)?;
+            }
+            Ok(result.expand())
+        })
+    }
+
     /// Evaluate independent closures in bounded batches. Forcer reductions of
     /// exact scalar requests share FORCER invocations; RustRed reduces each
     /// request through its p library. Every closure keeps its own mass,
