@@ -430,6 +430,7 @@ fn boundary_matches_old_path_two_and_three_loop() -> Result<()> {
         test_initialise()?;
         let vakint = Vakint::new()?;
         let settings = settings();
+        let mut total_boundaries = 0;
         for (name, dot) in [
             ("L2/0", include_str!("testdata/l2-d0.dot")),
             ("L2/8", include_str!("testdata/l2-d8.dot")),
@@ -457,9 +458,45 @@ fn boundary_matches_old_path_two_and_three_loop() -> Result<()> {
                     )
                 })
             };
+            // The summaries of a run, summed: (boundary, zero, checks,
+            // fallback, errors, uncertified); every one must end `ok`.
+            let totals = |mode: BoundaryMode| -> Result<[usize; 6]> {
+                let mut totals = [0; 6];
+                for (root, outcome, summary) in take_logged_summaries() {
+                    ensure!(outcome == "ok", "{name} {mode:?}: root {root} ended {outcome}");
+                    for (total, count) in totals.iter_mut().zip([
+                        summary.boundary,
+                        summary.zero,
+                        summary.checks,
+                        summary.fallback,
+                        summary.errors,
+                        summary.uncertified,
+                    ]) {
+                        *total += count;
+                    }
+                }
+                Ok(totals)
+            };
+            let _ = take_logged_summaries();
             let off = run(BoundaryMode::Off)?;
+            ensure!(take_logged_summaries().is_empty(), "{name}: mode off logs no summary");
             let on = run(BoundaryMode::On)?;
+            let [boundaries, _, _, fallback, errors, uncertified] = totals(BoundaryMode::On)?;
+            // Without this, On == Off would hold trivially if nothing were
+            // admitted (A7-A9 are silent under STRICT).
+            ensure!(boundaries >= 1, "{name}: no remainder took the boundary path in mode on");
+            ensure!(
+                fallback == 0 && errors == 0 && uncertified == 0,
+                "{name} on: fallback={fallback} errors={errors} uncertified={uncertified}"
+            );
             let check = run(BoundaryMode::Check)?;
+            let [checked, zero, checks, fallback, errors, _] = totals(BoundaryMode::Check)?;
+            ensure!(
+                checked == boundaries && checks == checked + zero,
+                "{name} check: {checked} built and {checks} checks against {boundaries} in mode on"
+            );
+            ensure!(fallback == 0 && errors == 0, "{name} check: fallback={fallback} errors={errors}");
+            total_boundaries += boundaries;
             ensure!(!off.expand().is_zero(), "{name}: zero counterterm");
             let identical = off == on;
             let difference = (&off - &on).expand();
@@ -468,8 +505,11 @@ fn boundary_matches_old_path_two_and_three_loop() -> Result<()> {
                 "{name}: the boundary path differs from today's: {difference}"
             );
             ensure!(check == off, "{name}: check mode must return today's value");
-            eprintln!("BOUNDARY_TEST {name} on identical={identical} check ok");
+            eprintln!(
+                "BOUNDARY_TEST {name} on identical={identical} boundaries={boundaries} check ok"
+            );
         }
+        eprintln!("BOUNDARY_TEST boundaries={total_boundaries}");
         Ok(())
     })
 }
