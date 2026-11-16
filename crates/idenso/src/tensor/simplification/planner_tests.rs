@@ -1159,3 +1159,37 @@ fn wildcard_spelled_colour_labels_reduce_through_private_aliases() {
     assert!(!result.expression.contains_symbol(crate::color::CS.f));
     assert_eq!(result.simplify_algebra(&settings).unwrap(), result);
 }
+
+#[test]
+fn public_certificates_report_producer_facts_without_scanning() {
+    use observation::{INITIAL_SCANS, REPLACEMENT_SCANS};
+
+    let reps = crate::test_support::test_initialize();
+    let vector = spenso::vector_symbol!("public_certificate_vector");
+    let inner = reps.mink_d.to_symbolic([Atom::num(99751)]);
+    let open = reps.mink_d.to_symbolic([Atom::num(99752)]);
+    let component = |index, port: &Atom| symbolica::function!(vector, Atom::num(index), port);
+    let closed = SymbolicTensor::infer(
+        (component(0, &inner) + component(1, &inner)) * (component(2, &inner) + component(3, &inner)),
+    )
+    .unwrap();
+    let terminal = SymbolicTensor::infer(
+        (component(0, &inner) + component(1, &inner))
+            * (component(2, &inner) * component(3, &open) + component(4, &inner) * component(5, &open)),
+    )
+    .unwrap();
+    // No producer facts yet: the accessors must not scan to find out.
+    let scans = INITIAL_SCANS.with(|count| count.get());
+    assert!(!closed.is_certified_closed_scalar());
+    assert_eq!(INITIAL_SCANS.with(|count| count.get()), scans);
+
+    let closed = closed.contract(Default::default()).unwrap();
+    assert!(closed.is_certified_closed_scalar());
+    assert!(closed.is_certified_terminal_polynomial());
+    let terminal = terminal.contract(Default::default()).unwrap();
+    assert!(!terminal.is_certified_closed_scalar());
+    assert!(terminal.is_certified_terminal_polynomial());
+    REPLACEMENT_SCANS.with(|count| count.set(0));
+    let _ = closed.to_dots().unwrap().is_certified_closed_scalar();
+    assert_eq!(REPLACEMENT_SCANS.with(|count| count.get()), 0);
+}

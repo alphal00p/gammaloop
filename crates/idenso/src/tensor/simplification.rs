@@ -298,6 +298,28 @@ impl SymbolicTensor<PartialStructure> {
         self.proofs.contracted
     }
 
+    /// Whether this payload carries a producer certificate that it is a
+    /// closed scalar: no open slot, and no contraction or identity candidate
+    /// left. Only cached facts are read; this never scans the expression, so
+    /// an uncertified payload (e.g. after a foreign rewrite) reports `false`.
+    pub fn is_certified_closed_scalar(&self) -> bool {
+        self.proofs
+            .observations
+            .get()
+            .is_some_and(|observed| observed.is_closed_scalar())
+    }
+
+    /// As [`Self::is_certified_closed_scalar`], also accepting a certified
+    /// terminal polynomial with open ports: a polynomial times vectors and
+    /// metrics on exactly the interface slots, with no internal connection
+    /// and no identity candidate left.
+    pub fn is_certified_terminal_polynomial(&self) -> bool {
+        self.proofs
+            .observations
+            .get()
+            .is_some_and(|observed| observed.is_terminal_polynomial())
+    }
+
     /// Both public settings types lower into this scheduler. A head is only a
     /// candidate; an unchanged kernel discharges it until its inputs change.
     pub(crate) fn plan_reduction(
