@@ -54,15 +54,44 @@ pub enum PRelationCacheLocation {
     Disabled,
 }
 
-/// The relation caches of the RustRed p library.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// The relation caches of the RustRed p library: where the three kinds of a
+/// node's service (plan ARTIFACT_THREE_KINDS) other than its table rules
+/// live: EXPLICIT key expressions (stored relations, read-only: the package's
+/// `relations/` directory and `shipped` roots), the persistent cache of keys
+/// solved by a RECIPE at run time, and their limits.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PRelationCacheSettings {
     /// The read-write persistent cache.
     pub location: PRelationCacheLocation,
     /// Read-only relation roots (shipped or pre-filled relations, e.g. the
     /// optional download), searched before the persistent cache.
     pub shipped: Vec<PathBuf>,
+    /// Use the explicit key expressions the loaded package ships in its
+    /// `relations/` directory (default); `false` ignores them.
+    pub package_relations: bool,
+    /// Size cap of the persistent cache in bytes: beyond it no new entry is
+    /// written (counted), nothing is evicted; `None`: no cap.
+    pub max_bytes: Option<u64>,
+    /// Whether relation entries without per-key evidence are used; `None`:
+    /// RustRed's default (allowed and reported).
+    pub allow_field_entries: Option<bool>,
 }
+
+impl Default for PRelationCacheSettings {
+    fn default() -> Self {
+        Self {
+            location: PRelationCacheLocation::Default,
+            shipped: Vec::new(),
+            package_relations: true,
+            max_bytes: None,
+            allow_field_entries: None,
+        }
+    }
+}
+
+/// Directory of a package's explicit key expressions (one directory per node
+/// with its `MANIFEST.json` and entries, `rustred.node-service-manifest.v1`).
+pub const P_PACKAGE_RELATIONS_DIRECTORY: &str = "relations";
 
 impl PRelationCacheSettings {
     /// The persistent cache directory these settings resolve to.
@@ -75,10 +104,22 @@ impl PRelationCacheSettings {
         }
     }
 
-    fn roots(&self, ordered_cache_directory: Option<&Path>) -> RecipeCacheRoots {
+    fn roots(
+        &self,
+        ordered_cache_directory: Option<&Path>,
+        package_relations: Option<&Path>,
+    ) -> RecipeCacheRoots {
+        let mut prefilled = self.shipped.clone();
+        if self.package_relations
+            && let Some(root) = package_relations
+        {
+            prefilled.insert(0, root.to_path_buf());
+        }
         RecipeCacheRoots {
             user: self.resolved_directory(ordered_cache_directory),
-            prefilled: self.shipped.clone(),
+            prefilled,
+            max_bytes: self.max_bytes,
+            allow_field: self.allow_field_entries,
         }
     }
 }
@@ -100,10 +141,11 @@ static INSTALLED: Mutex<Option<RecipeCacheRoots>> = Mutex::new(None);
 /// library is loaded or used). A later call with other roots changes them for
 /// the boxed nodes not used yet in this process only (module documentation);
 /// such a change is logged.
-pub(crate) fn install(settings: &VakintSettings) {
+pub(crate) fn install(settings: &VakintSettings, package_relations: Option<&Path>) {
+    rustred::propagator::recipes::set_outside_settings(settings.rustred_p_outside);
     let roots = settings
         .rustred_p_relation_cache
-        .roots(settings.ordered_cache.directory.as_deref());
+        .roots(settings.ordered_cache.directory.as_deref(), package_relations);
     let mut installed = INSTALLED
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -164,6 +206,61 @@ fn directory_bytes(path: &Path) -> u64 {
             Err(_) => 0,
         })
         .sum()
+}
+
+/// vk5l WP4: how the keys of a reduction were served, by kind (plan
+/// ARTIFACT_THREE_KINDS): `table` rule steps, `explicit` key expressions
+/// (shipped relation entries), `cached` relations of the persistent cache,
+/// `recipe_solved` recipe solves at run time (inside a certified set one per
+/// key; outside it one per attempted recipe family, failed attempts
+/// included), `refused` typed refusals. Counted per reduction call
+/// ([`crate::Vakint::p_dispatch_counters`] for the process).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PDispatchCounters {
+    pub table: u64,
+    pub explicit: u64,
+    pub cached: u64,
+    pub recipe_solved: u64,
+    pub refused: u64,
+}
+
+impl PDispatchCounters {
+    /// `self - before`.
+    pub fn since(&self, before: &Self) -> Self {
+        Self {
+            table: self.table - before.table,
+            explicit: self.explicit - before.explicit,
+            cached: self.cached - before.cached,
+            recipe_solved: self.recipe_solved - before.recipe_solved,
+            refused: self.refused - before.refused,
+        }
+    }
+}
+
+static TABLE_STEPS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static REFUSALS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Table rule steps of a reduction (its rule applications).
+pub(crate) fn count_table_steps(steps: u64) {
+    TABLE_STEPS.fetch_add(steps, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// A typed refusal of the p library.
+pub(crate) fn count_refusal() {
+    REFUSALS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The dispatch counters of this process.
+pub(crate) fn dispatch_counters() -> PDispatchCounters {
+    let cache = relation_cache_statistics();
+    let recipes = recipe_statistics();
+    PDispatchCounters {
+        table: TABLE_STEPS.load(std::sync::atomic::Ordering::Relaxed),
+        explicit: cache.shipped_hits,
+        cached: cache.cache_hits,
+        recipe_solved: recipes.solves + recipes.outside_solves,
+        refused: REFUSALS.load(std::sync::atomic::Ordering::Relaxed),
+    }
 }
 
 /// One request's relation cache counters, for the per-request diagnostics.

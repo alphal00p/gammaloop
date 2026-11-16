@@ -246,6 +246,7 @@ fn reduction_error(error: PError, integrals: &BTreeSet<String>) -> RustRedEvalua
         PError::OutsideBox { key, .. }
         | PError::OutsideCertifiedSet { key, .. }
         | PError::NodeNotClosed { key, .. } => {
+            super::p_relations::count_refusal();
             let build = reproduction_build(key.powers().len());
             RustRedEvaluationError::PRefusal {
                 error: Box::new(error),
@@ -297,6 +298,9 @@ pub(super) fn reduce_one(
         return Err(super::request_dump::skipped(1));
     }
     let result = library.reduce(p_reduction_request(options, loops, inputs, step_cache));
+    if let Ok(reduction) = &result {
+        super::p_relations::count_table_steps(reduction.statistics.work.rule_applications() as u64);
+    }
     if let Ok(reduction) = &result
         && reduction.relation_cache != Default::default()
     {
@@ -1204,13 +1208,17 @@ fn reduce_requests_with(
 ) -> Result<BTreeMap<(usize, Atom), Vec<ReducedPropagatorValue>>, VakintError> {
     // Before the library is loaded or used: a boxed node binds the relation
     // cache roots on its first use (p_relations.rs).
-    super::p_relations::install(settings);
+    let package_relations = vakint.p_library()?.relations_root.clone();
+    super::p_relations::install(settings, package_relations.as_deref());
+    let dispatch_before = super::p_relations::dispatch_counters();
     let values = match fold_mode() {
         FoldMode::Off => reduce_requests_unfolded(vakint, settings, requests, progress, factored),
         mode => reduce_requests_folded(vakint, settings, requests, progress, mode, factored),
-    };
-    let values = values?;
+    }?;
+    let dispatch = super::p_relations::dispatch_counters().since(&dispatch_before);
+    with_stats(|stats| stats.dispatch = dispatch);
     if phases::enabled() {
+        eprintln!("vakint-p-dispatch {dispatch:?}");
         let stats = last_stats();
         eprintln!(
             "vakint-p-reduce requests={} channels={} reductions={} pairs={} split={:.6} lower={:.6} \
@@ -1281,6 +1289,8 @@ pub(crate) struct PReduceStats {
     pub lowered: usize,
     pub folded: usize,
     pub keys: usize,
+    /// How the keys were served, by kind (vk5l WP4, three kinds).
+    pub dispatch: super::p_relations::PDispatchCounters,
 }
 
 impl PReduceStats {
