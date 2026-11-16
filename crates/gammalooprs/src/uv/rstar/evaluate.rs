@@ -1233,6 +1233,7 @@ impl<'a> Evaluation<'a> {
         )
         .log(self.graph, id, loops, "single_mass");
         boundary::log_stats(&self.graph.name, id, &stats);
+        boundary::record_stats(&self.graph.name, id, &stats);
         let elapsed = started.elapsed();
         self.integration_elapsed += elapsed;
         self.boundary_elapsed += elapsed;
@@ -1240,20 +1241,122 @@ impl<'a> Evaluation<'a> {
         Ok(result)
     }
 
-    /// Mode check: today's path under capture, compared with the built
-    /// boundary (DESIGN 7); returns today's value.
+    /// Mode check (DESIGN 7): the boundary's value, then today's path under
+    /// capture (its closures, value and root callback), compared per vacuum
+    /// integral; one `BOUNDARY_CHECK` line. Returns today's value; any
+    /// MISMATCH is an error.
     fn check_boundary(
         &mut self,
-        _remainder: &RStarIntegrand,
-        _built: Built,
-        _settings: &VakintSettings,
+        remainder: &RStarIntegrand,
+        built: Built,
+        settings: &VakintSettings,
         id: usize,
-        _started: Instant,
+        started: Instant,
     ) -> Result<Atom> {
-        Err(eyre!(
-            "GAMMALOOP_REMAINDER_BOUNDARY=check is not available in this build (remainder {id} of {})",
-            self.graph.name
-        ))
+        let (built, mut stats) = match built {
+            Built::Zero(stats) => {
+                self.summary.zero += 1;
+                (None, stats)
+            }
+            Built::Boundary(built, stats) => {
+                self.summary.boundary += 1;
+                (Some(built), stats)
+            }
+            Built::Declined(..) => unreachable!("declines are handled by the caller"),
+        };
+        self.summary.contracted(&stats);
+        let closed_root = self
+            .closed_root
+            .expect("admission requires the closed-root normalisation");
+        let p_loops = remainder.region.loops.saturating_sub(1);
+        let skipped =
+            super::pint6_dump::settings().is_some_and(|dump| p_loops >= dump.skip_min_p_loops);
+        let evaluate_started = Instant::now();
+        let new_value = match &built {
+            Some(_) if skipped => None,
+            Some(built) => {
+                let options = vakint::p_integral::BoundaryOptions {
+                    strict: boundary::boundary_strict()
+                        || stats.p_summands > boundary::fallback_max_summands(),
+                };
+                let (value, reads, hits) =
+                    boundary::evaluate_boundary(&built.boundary, self.vakint, settings, options)
+                        .wrap_err_with(|| {
+                            format!(
+                                "while evaluating the remainder boundary {id} of {}",
+                                self.graph.name
+                            )
+                        })?;
+                stats.block_reads = reads;
+                stats.block_hits = hits;
+                Some(value)
+            }
+            None => Some(Atom::Zero),
+        };
+        stats
+            .seconds
+            .push(("evaluate", evaluate_started.elapsed().as_secs_f64()));
+        stats.rss_gb[3] = boundary::rss_gb();
+        let seconds_new = started.elapsed().as_secs_f64();
+        self.summary.seconds_boundary += seconds_new;
+        self.boundary_elapsed += started.elapsed();
+        // Today's path, captured.
+        let old_started = Instant::now();
+        let ((today, callback), capture) = super::integrate::capturing_closures(|| {
+            boundary::with_callback_check(closed_root, || -> Result<Atom> {
+                let expression = remainder.expression()?;
+                self.integrate(remainder, expression)
+            })
+        });
+        let today = today?;
+        let seconds_old = old_started.elapsed().as_secs_f64();
+        let check_started = Instant::now();
+        let old_value = if capture.closures.iter().all(|closure| closure.evaluated) {
+            capture.value.as_ref()
+        } else {
+            None
+        };
+        let label = format!("graph={} id={id}", self.graph.name);
+        let report = boundary::compare_pairs(
+            built.as_ref(),
+            &capture.closures,
+            new_value.as_ref(),
+            old_value,
+            boundary::check_pair_max_bytes(),
+            &label,
+        );
+        let seconds_check = check_started.elapsed().as_secs_f64();
+        boundary::log_stats(&self.graph.name, id, &stats);
+        boundary::record_stats(&self.graph.name, id, &stats);
+        eprintln!(
+            "BOUNDARY_CHECK graph={} id={id} loops={} patterns={} zero_patterns={} classes={} old_closures={} pairs={} input={} value={} callback={callback} seconds_new={seconds_new:.3} seconds_old={seconds_old:.3} seconds_check={seconds_check:.3}",
+            self.graph.name,
+            remainder.region.loops,
+            stats.patterns,
+            stats.zero_patterns,
+            stats.classes,
+            report.old_closures,
+            report.pairs,
+            report.input,
+            report.value,
+        );
+        for line in &report.failing {
+            eprintln!("{line}");
+        }
+        self.summary.checks += 1;
+        if report.input.starts_with("skipped") {
+            self.summary.checks_skipped += 1;
+        }
+        if report.mismatch(callback) {
+            self.summary.errors += 1;
+            return Err(eyre!(
+                "BOUNDARY_CHECK mismatch graph={} id={id}: input={} value={} callback={callback}",
+                self.graph.name,
+                report.input,
+                report.value
+            ));
+        }
+        Ok(today)
     }
 
     fn integrate(&mut self, remainder: &RStarIntegrand, expression: &Atom) -> Result<Atom> {

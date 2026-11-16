@@ -386,6 +386,9 @@ pub(super) struct BoundarySummary {
     pub seconds_boundary: f64,
     /// Every today's-path outer integration (ordinary, IR, fallbacks, checks).
     pub seconds_today: f64,
+    /// Check mode: remainders compared, and those with a skipped input pair.
+    pub checks: usize,
+    pub checks_skipped: usize,
 }
 
 impl BoundarySummary {
@@ -419,7 +422,7 @@ impl BoundarySummary {
             }
         };
         eprintln!(
-            "BOUNDARY_SUMMARY graph={graph} root={root} remainders={} boundary={} zero={} fallback={} errors={} not_admitted={} fallback_reasons={} certified={} uncertified={} seconds_boundary={:.3} seconds_today={:.3}",
+            "BOUNDARY_SUMMARY graph={graph} root={root} remainders={} boundary={} zero={} fallback={} errors={} not_admitted={} fallback_reasons={} certified={} uncertified={} checks={} checks_skipped={} seconds_boundary={:.3} seconds_today={:.3}",
             self.remainders,
             self.boundary,
             self.zero,
@@ -429,6 +432,8 @@ impl BoundarySummary {
             list(&self.fallback_reasons),
             self.certified,
             self.uncertified,
+            self.checks,
+            self.checks_skipped,
             self.seconds_boundary,
             self.seconds_today,
         );
@@ -1980,4 +1985,351 @@ pub(super) fn evaluate_boundary(
         symbolica::utils::resources::checkpoint().map_err(|error| eyre!("{error}"))?;
         Ok((result.expand(), reads, hits))
     })
+}
+
+// ---------------------------------------------------------------------------
+// Check mode (DESIGN 7)
+// ---------------------------------------------------------------------------
+
+/// `GAMMALOOP_BOUNDARY_CHECK_PAIR_MAX_BYTES` (default 16 MiB; 0 = unlimited):
+/// the largest numerator, measured before any expansion, compared by value.
+pub(super) fn check_pair_max_bytes() -> usize {
+    static MAX: LazyLock<usize> = LazyLock::new(|| {
+        match std::env::var("GAMMALOOP_BOUNDARY_CHECK_PAIR_MAX_BYTES")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+        {
+            Some(0) => usize::MAX,
+            Some(max) => max,
+            None => 16 << 20,
+        }
+    });
+    *MAX
+}
+
+/// `GAMMALOOP_BOUNDARY_CHECK_DUMP=<dir>`: both sides of every failing pair.
+fn check_dump_directory() -> Option<&'static std::path::Path> {
+    static DIRECTORY: LazyLock<Option<std::path::PathBuf>> = LazyLock::new(|| {
+        std::env::var_os("GAMMALOOP_BOUNDARY_CHECK_DUMP")
+            .filter(|value| !value.is_empty())
+            .map(Into::into)
+    });
+    DIRECTORY.as_deref()
+}
+
+thread_local! {
+    /// The closed-root normalisation of the remainder being checked and the
+    /// outcome of the callback comparison (inert when unset).
+    static CALLBACK_CHECK: std::cell::RefCell<Option<(ClosedRootNormalization, Option<&'static str>)>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Run `f` (today's outer integration of one remainder) comparing the root
+/// callback with `factor · σ` on the real Taylor polynomial; returns the
+/// outcome (`identical`, `equal`, `MISMATCH`, `skipped`, or `none` when the
+/// callback did not run).
+pub(super) fn with_callback_check<T>(
+    normalization: &ClosedRootNormalization,
+    f: impl FnOnce() -> T,
+) -> (T, &'static str) {
+    let previous = CALLBACK_CHECK.with(|slot| slot.replace(Some((normalization.clone(), None))));
+    let result = f();
+    let outcome = CALLBACK_CHECK.with(|slot| std::mem::replace(&mut *slot.borrow_mut(), previous));
+    (result, outcome.and_then(|(_, outcome)| outcome).unwrap_or("none"))
+}
+
+/// Whether a callback comparison is pending on this thread.
+pub(super) fn callback_check_active() -> bool {
+    CALLBACK_CHECK.with(|slot| slot.borrow().is_some())
+}
+
+/// The callback comparison: `projected` (the callback's output after
+/// `dimensionally_regularized`) against `c · σ(expanded)` (also regularized).
+pub(super) fn check_callback(expanded: &Atom, projected: &Atom) {
+    CALLBACK_CHECK.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let Some((normalization, outcome)) = slot.as_mut() else {
+            return;
+        };
+        let result = if expanded.as_view().get_byte_size() > check_pair_max_bytes() {
+            "skipped"
+        } else {
+            let expected = crate::uv::approx::integrated::Integrated::dimensionally_regularized(
+                &(expanded.replace_multiple(&normalization.external_routing) * &normalization.factor),
+            );
+            if expected == *projected {
+                "identical"
+            } else if (&expected - projected).expand().is_zero() {
+                "equal"
+            } else {
+                "MISMATCH"
+            }
+        };
+        // Several calls (none expected): the worst outcome wins.
+        let rank = |value: &str| match value {
+            "MISMATCH" => 3,
+            "skipped" => 2,
+            "equal" => 1,
+            _ => 0,
+        };
+        if outcome.is_none_or(|previous| rank(result) > rank(previous)) {
+            *outcome = Some(result);
+        }
+    });
+}
+
+/// The comparison of a built boundary with today's captured closures.
+pub(super) struct CheckReport {
+    pub old_closures: usize,
+    pub pairs: usize,
+    /// `identical`, `equal`, `MISMATCH` or `skipped:<n>`.
+    pub input: String,
+    pub value: &'static str,
+    /// One `BOUNDARY_CHECK_PAIR` line per failing pair.
+    pub failing: Vec<String>,
+}
+
+impl CheckReport {
+    pub(super) fn mismatch(&self, callback: &str) -> bool {
+        self.input == "MISMATCH" || self.value == "MISMATCH" || callback == "MISMATCH"
+    }
+}
+
+/// Compare two atoms by value: `identical` (atom equality), `equal` (the
+/// expanded difference vanishes, or its `together()` below 64 KiB), else
+/// `MISMATCH`.
+fn compare_atoms(new: &Atom, old: &Atom) -> &'static str {
+    if new == old {
+        return "identical";
+    }
+    let difference = (new - old).expand();
+    if difference.is_zero() {
+        return "equal";
+    }
+    if difference.as_view().get_byte_size() < 64 << 10 && difference.together().expand().is_zero() {
+        return "equal";
+    }
+    "MISMATCH"
+}
+
+/// Group the boundary's patterns and today's captured closures by the vacuum
+/// integral `I_π` (today's `VakintTerm.integral`) and compare per group:
+/// the closing line, the cut topology and the routed, expanded inputs (after
+/// relabelling today's closing head to the boundary's when they differ).
+/// `new_value`/`old_value`: the two values before `finish_tensor` (`None`:
+/// not evaluated).
+pub(super) fn compare_pairs(
+    built: Option<&BuiltBoundary>,
+    captured: &[super::integrate::CapturedClosure],
+    new_value: Option<&Atom>,
+    old_value: Option<&Atom>,
+    max_bytes: usize,
+    label: &str,
+) -> CheckReport {
+    #[derive(Default)]
+    struct Group {
+        kept: Vec<usize>,
+        captured: Vec<usize>,
+    }
+    let mut groups = BTreeMap::<Atom, Group>::new();
+    if let Some(built) = built {
+        for (index, meta) in built.patterns.iter().enumerate() {
+            groups.entry(meta.integral.clone()).or_default().kept.push(index);
+        }
+    }
+    for (index, closure) in captured.iter().enumerate() {
+        groups
+            .entry(closure.integral.clone())
+            .or_default()
+            .captured
+            .push(index);
+    }
+    let mut failing = Vec::new();
+    let mut skipped = 0;
+    let mut worst = "identical";
+    let fail = |message: String, failing: &mut Vec<String>| {
+        failing.push(format!("BOUNDARY_CHECK_PAIR {label} {message}"));
+    };
+    for (pair, (integral, group)) in groups.iter().enumerate() {
+        let boundary = built.map(|built| &built.boundary);
+        let new_head = boundary.map(|boundary| boundary.momentum.clone());
+        // Today's closures, the head relabelled to the boundary's.
+        let today = group
+            .captured
+            .iter()
+            .map(|index| {
+                let closure = &captured[*index];
+                let relabel = match &new_head {
+                    Some(head) if *head != closure.closure.momentum => {
+                        vec![Replacement::new(closure.closure.momentum.to_pattern(), head.clone())]
+                    }
+                    _ => Vec::new(),
+                };
+                let input = vakint::p_integral::DirectClosureInput {
+                    topology: closure.input.topology.replace_multiple(&relabel),
+                    routing: closure
+                        .input
+                        .routing
+                        .iter()
+                        .map(|(key, image)| (key.clone(), image.replace_multiple(&relabel)))
+                        .collect(),
+                    numerator: closure.input.numerator.clone(),
+                };
+                (closure, input)
+            })
+            .collect::<Vec<_>>();
+        if let (Some(boundary), Some(first)) = (boundary, group.kept.first()) {
+            let pattern = &boundary.patterns[*first];
+            for (closure, input) in &today {
+                if closure.closure.mass_squared != boundary.mass_squared
+                    || closure.closure.power != pattern.closure_power
+                {
+                    fail(format!("pair={pair} closure differs: today {:?}", closure.closure), &mut failing);
+                    worst = "MISMATCH";
+                }
+                if input.topology != pattern.topology {
+                    fail(
+                        format!(
+                            "pair={pair} topology differs: today {} boundary {}",
+                            input.topology, pattern.topology
+                        ),
+                        &mut failing,
+                    );
+                    worst = "MISMATCH";
+                }
+            }
+            for index in &group.kept[1..] {
+                if boundary.patterns[*index].topology != pattern.topology {
+                    fail(format!("pair={pair} patterns of one integral with two topologies"), &mut failing);
+                    worst = "MISMATCH";
+                }
+            }
+        }
+        // Inputs, by value, below the size cap (measured before expansion).
+        let new_bytes = boundary.map_or(0, |boundary| {
+            group
+                .kept
+                .iter()
+                .flat_map(|index| boundary.patterns[*index].terms.iter())
+                .map(|(block, coefficient)| {
+                    boundary.blocks[*block].as_view().get_byte_size()
+                        + coefficient.as_view().get_byte_size()
+                })
+                .sum::<usize>()
+        });
+        let old_bytes = today
+            .iter()
+            .map(|(_, input)| input.numerator.as_view().get_byte_size())
+            .sum::<usize>();
+        if new_bytes > max_bytes || old_bytes > max_bytes {
+            skipped += 1;
+            continue;
+        }
+        let new = boundary.map_or(Atom::Zero, |boundary| {
+            Atom::add_many(
+                group
+                    .kept
+                    .iter()
+                    .map(|index| boundary.direct_input(&boundary.patterns[*index]).ordinary())
+                    .collect::<Vec<_>>()
+                    .iter(),
+            )
+        });
+        let old = Atom::add_many(
+            today
+                .iter()
+                .map(|(_, input)| input.ordinary())
+                .collect::<Vec<_>>()
+                .iter(),
+        );
+        let outcome = compare_atoms(&new, &old);
+        match outcome {
+            "MISMATCH" => {
+                fail(
+                    format!(
+                        "pair={pair} input MISMATCH integral={integral} boundary_patterns={} today_closures={}",
+                        group.kept.len(),
+                        group.captured.len()
+                    ),
+                    &mut failing,
+                );
+                if let Some(directory) = check_dump_directory() {
+                    let stem = format!(
+                        "{}/check-{}-{}-{pair}",
+                        directory.display(),
+                        std::process::id(),
+                        label.replace([' ', '='], "_")
+                    );
+                    let _ = std::fs::write(format!("{stem}.boundary.txt"), new.to_canonical_string());
+                    let _ = std::fs::write(format!("{stem}.today.txt"), old.to_canonical_string());
+                }
+                worst = "MISMATCH";
+            }
+            "equal" if worst == "identical" => worst = "equal",
+            _ => {}
+        }
+    }
+    let input = if worst == "MISMATCH" {
+        "MISMATCH".to_owned()
+    } else if skipped > 0 {
+        format!("skipped:{skipped}")
+    } else {
+        worst.to_owned()
+    };
+    let value = match (new_value, old_value) {
+        (Some(new), Some(old)) => {
+            let outcome = compare_atoms(new, old);
+            if outcome == "MISMATCH" {
+                fail(format!("value MISMATCH boundary={new} today={old}"), &mut failing);
+            }
+            outcome
+        }
+        _ => "skipped",
+    };
+    CheckReport {
+        old_closures: captured.len(),
+        pairs: groups.len(),
+        input,
+        value,
+        failing,
+    }
+}
+
+/// The census record `remainder_boundary` of one built remainder (DESIGN 8).
+pub(super) fn record_stats(graph: &str, id: usize, stats: &BoundaryStats) {
+    if !vakint::census::enabled() {
+        return;
+    }
+    vakint::census::record(
+        "remainder_boundary",
+        serde_json::json!({
+            "graph": graph,
+            "integration_id": id,
+            "loops": stats.loops,
+            "degree": stats.degree,
+            "p_summands": stats.p_summands,
+            "p_bytes": stats.p_bytes,
+            "p_truncated": stats.p_truncated,
+            "certified": stats.certified,
+            "notation_retries": stats.notation_retries,
+            "grades": stats.grades,
+            "graded_entries": stats.graded_entries,
+            "d_orders": stats.d_orders,
+            "raw_patterns": stats.raw_patterns,
+            "patterns": stats.patterns,
+            "zero_patterns": stats.zero_patterns,
+            "classes": stats.classes,
+            "blocks": stats.blocks,
+            "block_max": [stats.block_max.0, stats.block_max.1],
+            "blocks_total": [stats.blocks_total.0, stats.blocks_total.1],
+            "r": [stats.r_terms, stats.r_summands_total, stats.r_summands_max],
+            "images": stats.images,
+            "routing_terms": stats.routing_terms,
+            "block_reads": stats.block_reads,
+            "block_hits": stats.block_hits,
+            "boundary_blocks": vakint_boundary_blocks(),
+            "seconds": stats.seconds.iter().map(|(stage, seconds)| serde_json::json!([stage, seconds])).collect::<Vec<_>>(),
+            "rss_gb": stats.rss_gb,
+        }),
+    );
 }

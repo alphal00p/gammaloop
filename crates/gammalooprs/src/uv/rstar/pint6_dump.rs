@@ -330,7 +330,8 @@ fn largest_block_loops(lines: &[Line]) -> usize {
         .unwrap_or(0)
 }
 
-/// Write one closure record. Returns the remaining p-integral loop count.
+/// Write one closure record. Returns the remaining p-integral loop count and
+/// the record's sequence number.
 pub(super) fn write(
     settings: &DumpSettings,
     vakint_settings: &VakintSettings,
@@ -338,7 +339,7 @@ pub(super) fn write(
     numerator: &Atom,
     integrand: &Atom,
     vacuum_loops: usize,
-) -> Result<usize> {
+) -> Result<(usize, usize)> {
     let p_loops = vacuum_loops.saturating_sub(1);
     let sequence = SEQUENCE.fetch_add(1, Ordering::Relaxed);
     let pid = std::process::id();
@@ -455,5 +456,5 @@ pub(super) fn write(
         )?;
     }
     tsv.flush()?;
-    Ok(p_loops)
+    Ok((p_loops, sequence))
 }
