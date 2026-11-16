@@ -170,6 +170,7 @@ impl RStarPlan {
             vakint,
             uv_settings,
             Some(root_normalization),
+            ChildMass::Reference,
         )?
         .closing_root()?
         .counterterm()
@@ -195,6 +196,7 @@ impl RStarPlan {
             vakint,
             uv_settings,
             Some(root_normalization),
+            ChildMass::Zero,
         )?
         .closing_root()?
         .counterterm_from_pole_part(bare_poles)
