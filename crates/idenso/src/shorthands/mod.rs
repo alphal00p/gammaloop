@@ -29,7 +29,9 @@ impl SymbolicTensor<PartialStructure> {
         // and identity candidates, survive the rewrite.
         let facts = observed.and_then(|facts| {
             use crate::tensor::simplification::observation::DomainObservations;
-            if facts.is_closed_scalar() {
+            // A scalar interface whose observed regions certify scalar
+            // syntax is a closed scalar too (the composition rule).
+            if facts.is_closed_scalar() || (self.is_scalar() && facts.can_certify_scalar()) {
                 Some(DomainObservations::closed_scalar(false))
             } else if facts.is_terminal_polynomial() {
                 Some(DomainObservations::terminal_polynomial(

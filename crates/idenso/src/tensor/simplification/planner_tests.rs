@@ -1193,3 +1193,40 @@ fn public_certificates_report_producer_facts_without_scanning() {
     let _ = closed.to_dots().unwrap().is_certified_closed_scalar();
     assert_eq!(REPLACEMENT_SCANS.with(|count| count.get()), 0);
 }
+
+#[test]
+fn already_scalar_payloads_are_certified_by_their_observations() {
+    use observation::REPLACEMENT_SCANS;
+    use spenso::network::tags::SPENSO_TAG;
+
+    let reps = crate::test_support::test_initialize();
+    let vector = spenso::vector_symbol!("scan_certified_vector");
+    let compact = reps.mink_d.to_symbolic([]);
+    let component = |index| symbolica::function!(vector, Atom::num(index), &compact);
+    let dot = |a, b| symbolica::function!(SPENSO_TAG.dot, component(a), component(b));
+    // A scalar coefficient sum (with a log) times a dot polynomial: nothing
+    // to contract, so no frontier produces a closed-scalar certificate.
+    let coefficient = symbolica::parse_lit!(scan_certified_x + log(scan_certified_y) + 3);
+    let source = SymbolicTensor::infer(&coefficient * (dot(0, 1) + dot(1, 1) * dot(0, 0))).unwrap();
+    let simplified = source
+        .simplify_algebra(&AlgebraSettings {
+            gamma: Some(Default::default()),
+            epsilon: true,
+            ..Default::default()
+        })
+        .unwrap();
+    assert!(simplified.is_scalar());
+    assert!(simplified.is_certified_closed_scalar());
+    REPLACEMENT_SCANS.with(|count| count.set(0));
+    let dotted = simplified.to_dots().unwrap();
+    assert!(dotted.is_certified_closed_scalar());
+    assert_eq!(REPLACEMENT_SCANS.with(|count| count.get()), 0);
+    assert_eq!(
+        dotted.expression,
+        SymbolicTensor::infer(simplified.expression.clone())
+            .unwrap()
+            .to_dots()
+            .unwrap()
+            .expression
+    );
+}

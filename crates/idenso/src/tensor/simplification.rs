@@ -298,15 +298,15 @@ impl SymbolicTensor<PartialStructure> {
         self.proofs.contracted
     }
 
-    /// Whether this payload carries a producer certificate that it is a
-    /// closed scalar: no open slot, and no contraction or identity candidate
-    /// left. Only cached facts are read; this never scans the expression, so
-    /// an uncertified payload (e.g. after a foreign rewrite) reports `false`.
+    /// Whether this payload is certified as a closed scalar: no open slot, and
+    /// no contraction or identity candidate left. Either a producer
+    /// certificate, or cached observations that certify scalar syntax for a
+    /// scalar interface (the composition rule). Only cached facts are read;
+    /// this never scans, so a payload without facts reports `false`.
     pub fn is_certified_closed_scalar(&self) -> bool {
-        self.proofs
-            .observations
-            .get()
-            .is_some_and(|observed| observed.is_closed_scalar())
+        self.proofs.observations.get().is_some_and(|observed| {
+            observed.is_closed_scalar() || (self.is_scalar() && observed.can_certify_scalar())
+        })
     }
 
     /// As [`Self::is_certified_closed_scalar`], also accepting a certified

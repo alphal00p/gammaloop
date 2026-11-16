@@ -175,6 +175,21 @@ impl IndexedTensor {
         self.proofs.contracted
     }
 
+    /// See [`SymbolicTensor::<PartialStructure>::is_certified_closed_scalar`].
+    pub fn is_certified_closed_scalar(&self) -> bool {
+        self.proofs.observations.get().is_some_and(|observed| {
+            observed.is_closed_scalar() || (self.is_scalar() && observed.can_certify_scalar())
+        })
+    }
+
+    /// See [`SymbolicTensor::<PartialStructure>::is_certified_terminal_polynomial`].
+    pub fn is_certified_terminal_polynomial(&self) -> bool {
+        self.proofs
+            .observations
+            .get()
+            .is_some_and(|observed| observed.is_terminal_polynomial())
+    }
+
     pub fn reduction_status(&self) -> ReductionStatus {
         self.proofs
             .reduction
