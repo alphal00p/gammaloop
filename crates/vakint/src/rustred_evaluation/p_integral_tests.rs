@@ -2748,9 +2748,23 @@ fn showcase_postprocess() {
     std::fs::create_dir_all(&out).unwrap();
     let _ = Vakint::new().unwrap();
     let epsilon = crate::utils::vakint_macros::vk_symbol!("gammalooprs::ε");
+    // vk5l-physrun: VAKINT_TEST_PP_SCALE (an exact number, e.g. 32/729) multiplies
+    // both inputs first (colour factor removed: kinematic results); the scaled
+    // inputs are written as scaled_retain.txt / scaled_symbolic.txt.
+    let scale = std::env::var("VAKINT_TEST_PP_SCALE").ok().map(|text| parse(&text));
+    let scaled = |value: Atom, name: &str| -> Atom {
+        match &scale {
+            Some(scale) => {
+                let value = (value * scale).expand();
+                std::fs::write(out.join(name), value.to_canonical_string()).unwrap();
+                value
+            }
+            None => value,
+        }
+    };
     if let Some(path) = std::env::var_os("VAKINT_TEST_PP_RETAIN") {
         let started = std::time::Instant::now();
-        let value = parse(&std::fs::read_to_string(&path).unwrap());
+        let value = scaled(parse(&std::fs::read_to_string(&path).unwrap()), "scaled_retain.txt");
         let d = parse("d");
         let rule = symbolica::id::Replacement::new(
             Atom::var(epsilon).to_pattern(),
@@ -2917,7 +2931,7 @@ fn showcase_postprocess() {
         );
     }
     if let Some(path) = std::env::var_os("VAKINT_TEST_PP_SYMBOLIC") {
-        let value = parse(&std::fs::read_to_string(&path).unwrap()).expand();
+        let value = scaled(parse(&std::fs::read_to_string(&path).unwrap()).expand(), "scaled_symbolic.txt");
         let mut orders = std::collections::BTreeMap::<i64, Atom>::new();
         for (power, coefficient) in value.coefficient_list::<i8>(&[Atom::var(epsilon)]) {
             let order = if power == Atom::num(1) {
