@@ -650,12 +650,25 @@ impl Grade {
 /// spelling).
 pub(super) type GradedMap = BTreeMap<Grade, Atom>;
 
-/// Why a view has no graded map: a decline, or an index slot that the
-/// notation retry may still remove.
+/// Why a view has no graded map: a decline, an index slot that the
+/// notation retry may still remove, or a hard error (an exhausted resource
+/// budget), which is never a decline.
 #[derive(Debug)]
 enum Fail {
     Decline(Decline),
     Indexed(String),
+    Error(eyre::Report),
+}
+
+/// Grammar steps (sum terms visited, convolution products) between two
+/// resource checkpoints (DESIGN 9).
+const CHECKPOINT_STEPS: usize = 4096;
+
+/// A resource checkpoint of the boundary build, as a hard error.
+fn checkpoint(stage: &'static str) -> Result<()> {
+    symbolica::utils::resources::checkpoint()
+        .map_err(|error| eyre!("{error}"))
+        .wrap_err_with(|| format!("while building an R* remainder boundary ({stage})"))
 }
 
 fn decline<T>(reason: impl Into<String>) -> std::result::Result<T, Fail> {
@@ -735,6 +748,8 @@ pub(super) struct Grammar {
     cache: HashMap<Atom, GradedMap>,
     retry_images: HashMap<Atom, Atom>,
     matcher: SlotMatcher,
+    /// Grammar steps since the start of the split ([`CHECKPOINT_STEPS`]).
+    work: usize,
 }
 
 /// Non-sum factors up to this size are cached by atom (as `map_factors_cached`).
@@ -766,7 +781,18 @@ impl Grammar {
             cache: HashMap::new(),
             retry_images: HashMap::new(),
             matcher: SlotMatcher::default(),
+            work: 0,
         }
+    }
+
+    /// One grammar step; every [`CHECKPOINT_STEPS`] steps a resource
+    /// checkpoint, whose failure is a hard error.
+    fn tick(&mut self) -> std::result::Result<(), Fail> {
+        self.work += 1;
+        if self.work % CHECKPOINT_STEPS == 0 {
+            checkpoint("collect").map_err(Fail::Error)?;
+        }
+        Ok(())
     }
 
     /// The vacuum label `k(j+1)` of basis position `j`.
@@ -967,6 +993,7 @@ impl Grammar {
             AtomView::Add(sum) => {
                 let mut accumulated = BTreeMap::<Grade, Vec<Atom>>::new();
                 for term in sum.iter() {
+                    self.tick()?;
                     for (grade, coefficient) in self.grade(term, stats)? {
                         accumulated.entry(grade).or_default().push(coefficient);
                     }
@@ -978,7 +1005,7 @@ impl Grammar {
                 for factor in product.iter() {
                     factors.push(self.factor(factor, stats)?);
                 }
-                Ok(self.product(factors, stats))
+                self.product(factors, stats)
             }
             AtomView::Pow(_) | AtomView::Fun(_) => self.factor(view, stats),
         }
@@ -1028,7 +1055,7 @@ impl Grammar {
                     return Ok(single(grade, coefficient.pow(&exponent)));
                 }
                 match integer {
-                    Some(n) if n >= 1 => Ok(self.power(&base_map, n as u64, stats)),
+                    Some(n) if n >= 1 => self.power(&base_map, n as u64, stats),
                     Some(_) => decline("graded_power"),
                     None if base_map.keys().any(|grade| grade.mass_power > 0) => {
                         decline("fractional_reference_mass_power")
@@ -1083,7 +1110,11 @@ impl Grammar {
     }
 
     /// The convolution of the factors' maps, truncating `a(g) > degree`.
-    fn product(&self, factors: Vec<GradedMap>, stats: &mut BoundaryStats) -> GradedMap {
+    fn product(
+        &mut self,
+        factors: Vec<GradedMap>,
+        stats: &mut BoundaryStats,
+    ) -> std::result::Result<GradedMap, Fail> {
         // The common case: every factor has one grade.
         if factors.iter().all(|map| map.len() == 1) {
             let mut grade = Grade::default();
@@ -1095,32 +1126,35 @@ impl Grammar {
             }
             if grade.degree() > self.degree {
                 stats.p_truncated += 1;
-                return GradedMap::new();
+                return Ok(GradedMap::new());
             }
             let coefficient = Atom::mul_many(coefficients.iter());
-            return if coefficient.is_zero() {
+            return Ok(if coefficient.is_zero() {
                 GradedMap::new()
             } else {
                 single(grade, coefficient)
-            };
+            });
         }
         let mut accumulated = single(Grade::default(), Atom::num(1));
-        for (index, factor) in factors.into_iter().enumerate() {
-            if index % 4096 == 4095 {
-                let _ = symbolica::utils::resources::checkpoint();
-            }
-            accumulated = self.convolve(&accumulated, &factor, stats);
+        for factor in factors {
+            accumulated = self.convolve(&accumulated, &factor, stats)?;
             if accumulated.is_empty() {
                 break;
             }
         }
-        accumulated
+        Ok(accumulated)
     }
 
-    fn convolve(&self, a: &GradedMap, b: &GradedMap, stats: &mut BoundaryStats) -> GradedMap {
+    fn convolve(
+        &mut self,
+        a: &GradedMap,
+        b: &GradedMap,
+        stats: &mut BoundaryStats,
+    ) -> std::result::Result<GradedMap, Fail> {
         let mut accumulated = BTreeMap::<Grade, Vec<Atom>>::new();
         for (ga, ca) in a {
             for (gb, cb) in b {
+                self.tick()?;
                 let grade = ga.times(gb);
                 if grade.degree() > self.degree {
                     stats.p_truncated += 1;
@@ -1129,38 +1163,44 @@ impl Grammar {
                 accumulated.entry(grade).or_default().push(ca * cb);
             }
         }
-        collect_map(accumulated)
+        Ok(collect_map(accumulated))
     }
 
     /// `base^n` by binary powering, truncated.
-    fn power(&self, base: &GradedMap, mut n: u64, stats: &mut BoundaryStats) -> GradedMap {
+    fn power(
+        &mut self,
+        base: &GradedMap,
+        mut n: u64,
+        stats: &mut BoundaryStats,
+    ) -> std::result::Result<GradedMap, Fail> {
         let mut result = single(Grade::default(), Atom::num(1));
         let mut square = base.clone();
         while n > 0 {
             if n & 1 == 1 {
-                result = self.convolve(&result, &square, stats);
+                result = self.convolve(&result, &square, stats)?;
             }
             n >>= 1;
             if n > 0 {
-                square = self.convolve(&square, &square, stats);
+                square = self.convolve(&square, &square, stats)?;
             }
         }
-        result
+        Ok(result)
     }
 
     /// The graded map of one summand of `P`, with the notation retry: the
     /// summand's indexed factors through the R* remainder contraction
     /// ([`retry_contraction`]: cook, infer, `simplify_algebra`, `to_dots`,
     /// uncook; once per distinct product of indexed factors), then graded
-    /// again.
+    /// again. `Err` is a hard error (an exhausted resource budget).
     pub(super) fn grade_summand(
         &mut self,
         summand: AtomView<'_>,
         stats: &mut BoundaryStats,
-    ) -> std::result::Result<GradedMap, Decline> {
+    ) -> Result<std::result::Result<GradedMap, Decline>> {
         let head = match self.grade(summand, stats) {
-            Ok(map) => return Ok(map),
-            Err(Fail::Decline(decline)) => return Err(decline),
+            Ok(map) => return Ok(Ok(map)),
+            Err(Fail::Decline(decline)) => return Ok(Err(decline)),
+            Err(Fail::Error(error)) => return Err(error),
             Err(Fail::Indexed(head)) => head,
         };
         stats.notation_retries += 1;
@@ -1170,23 +1210,29 @@ impl Grammar {
             &retry_contraction,
         ) {
             Ok(Some(notated)) => notated,
-            _ => return Err(Decline::new("collect", format!("indexed:{head}"))),
+            _ => return Ok(Err(Decline::new("collect", format!("indexed:{head}")))),
         };
         match self.grade(notated.as_view(), stats) {
-            Ok(map) => Ok(map),
-            Err(Fail::Decline(decline)) => Err(decline),
-            Err(Fail::Indexed(head)) => Err(Decline::new("collect", format!("indexed:{head}"))),
+            Ok(map) => Ok(Ok(map)),
+            Err(Fail::Decline(decline)) => Ok(Err(decline)),
+            Err(Fail::Error(error)) => Err(error),
+            Err(Fail::Indexed(head)) => Ok(Err(Decline::new("collect", format!("indexed:{head}")))),
         }
     }
 
     /// The leaf rules without grading (DESIGN 2b): `p(x0)` is allowed, dots
     /// of linear combinations are expanded bilinearly, `dim -> 4-2ε`. For the
     /// denominator coefficients and the normalisation.
-    pub(super) fn map_scalar(&mut self, view: AtomView<'_>) -> std::result::Result<Atom, Decline> {
-        self.map_scalar_inner(view).map_err(|fail| match fail {
-            Fail::Decline(decline) => Decline::new("project", decline.reason),
-            Fail::Indexed(head) => Decline::new("project", format!("indexed:{head}")),
-        })
+    pub(super) fn map_scalar(
+        &mut self,
+        view: AtomView<'_>,
+    ) -> Result<std::result::Result<Atom, Decline>> {
+        match self.map_scalar_inner(view) {
+            Ok(atom) => Ok(Ok(atom)),
+            Err(Fail::Decline(decline)) => Ok(Err(Decline::new("project", decline.reason))),
+            Err(Fail::Indexed(head)) => Ok(Err(Decline::new("project", format!("indexed:{head}")))),
+            Err(Fail::Error(error)) => Err(error),
+        }
     }
 
     fn map_scalar_inner(&mut self, view: AtomView<'_>) -> std::result::Result<Atom, Fail> {
@@ -1302,12 +1348,10 @@ pub(super) fn split_into_blocks(
     let mut vectors = BTreeMap::<Grade, Vec<Atom>>::new();
     {
         let mut emit = |index: usize, summand: AtomView<'_>| -> Result<Option<Decline>> {
-            if index % 4096 == 4095 {
-                symbolica::utils::resources::checkpoint()
-                    .map_err(|error| eyre!("{error}"))
-                    .wrap_err("while splitting an R* remainder into boundary blocks")?;
+            if index % CHECKPOINT_STEPS == CHECKPOINT_STEPS - 1 {
+                checkpoint("collect")?;
             }
-            let map = match grammar.grade_summand(summand, stats) {
+            let map = match grammar.grade_summand(summand, stats)? {
                 Ok(map) => map,
                 Err(decline) => return Ok(Some(decline)),
             };
@@ -1335,6 +1379,7 @@ pub(super) fn split_into_blocks(
     drop(p);
     let mut blocks = BTreeMap::new();
     while let Some((grade, coefficients)) = vectors.pop_first() {
+        checkpoint("collect: block sums")?;
         let block = Atom::add_many(coefficients.iter());
         drop(coefficients);
         if !block.is_zero() {
@@ -1827,7 +1872,7 @@ pub(super) fn build_boundary(remainder: &RStarIntegrand, request: &BoundaryReque
             .factor
             .replace_multiple(&request.closed_root.external_routing)
             .as_view(),
-    ) {
+    )? {
         Ok(factor) => factor,
         Err(decline) => declined!(decline),
     };
@@ -1842,7 +1887,7 @@ pub(super) fn build_boundary(remainder: &RStarIntegrand, request: &BoundaryReque
         let mut mapped = Vec::with_capacity(orders.len());
         for order in orders {
             let routed = order.replace_multiple(&request.closed_root.external_routing);
-            match grammar.map_scalar(routed.as_view()) {
+            match grammar.map_scalar(routed.as_view())? {
                 Ok(order) => mapped.push(order),
                 Err(decline) => declined!(decline),
             }
@@ -1856,7 +1901,7 @@ pub(super) fn build_boundary(remainder: &RStarIntegrand, request: &BoundaryReque
         // d_{j,π} = Σ_{μ∈π} rest_μ · d_{j,μ}.
         let mut orders = vec![Vec::<Atom>::new(); request.degree + 1];
         for (monomial, rest) in &pattern.raw {
-            let rest = match grammar.map_scalar(rest.as_view()) {
+            let rest = match grammar.map_scalar(rest.as_view())? {
                 Ok(rest) => rest,
                 Err(decline) => declined!(decline),
             };
@@ -1938,7 +1983,7 @@ pub(super) fn build_boundary(remainder: &RStarIntegrand, request: &BoundaryReque
                 },
             ));
         }
-        let _ = symbolica::utils::resources::checkpoint();
+        checkpoint("project")?;
     }
     stats.images = images.len();
     stats.patterns = kept.len();
