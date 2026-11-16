@@ -463,6 +463,52 @@ impl RStarPlan {
     }
 }
 
+#[cfg(test)]
+impl RStarPlan {
+    /// Tests: the outer Taylor polynomial of every ordinary-UV remainder of a
+    /// closing-root evaluation (children included), formed exactly as
+    /// [`RStarIntegrand::integrate`] forms it, with the remainder's loop
+    /// count, its contracted expression and the idenso certificate of that
+    /// contraction ([`RStarIntegrand::contracted_certified`]). Nothing is
+    /// projected or integrated.
+    pub(super) fn closing_root_outer_taylor_polynomials(
+        &self,
+        graph: &Graph,
+        model: &Model,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+    ) -> Result<Vec<(usize, Atom, bool, Atom)>> {
+        let evaluation = Evaluation::new(
+            self,
+            graph,
+            model,
+            vakint,
+            uv_settings,
+            None,
+            ChildMass::Reference,
+        )?
+        .closing_root()?;
+        let mut polynomials = Vec::new();
+        for term in &self.ordinary_uv {
+            if term.remainder.is_scaleless(graph, self.marked_edge) {
+                continue;
+            }
+            let remainder = evaluation.remainder(term)?;
+            let (expression, certified) = remainder.contracted_certified()?;
+            let polynomial = remainder.outer_taylor(
+                expression,
+                &evaluation.root_edges,
+                usize::try_from(self.taylor_order)?,
+                evaluation.reference_mass_squared,
+                &evaluation.auxiliary_mass_squared,
+                &mut super::expression::IntegrationTimings::new(),
+            )?;
+            polynomials.push((remainder.region.loops, expression.clone(), *certified, polynomial));
+        }
+        Ok(polynomials)
+    }
+}
+
 struct Evaluation<'a> {
     plan: &'a RStarPlan,
     graph: &'a Graph,
