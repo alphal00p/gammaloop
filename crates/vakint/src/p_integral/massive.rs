@@ -756,6 +756,58 @@ impl MassiveClosure {
 
     /// One closure through the direct lowering; `Err(Declined)` when the
     /// ordinary path must evaluate it.
+    /// [`Self::lower_direct`] of the numerator `Σ blocks[t] · R_t` on
+    /// `topology` and `routing`, with the block reads shared through `cache`
+    /// (the remainder boundary). `None`: the direct reader declines.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn lower_direct_blocks(
+        &self,
+        vakint: &Vakint,
+        settings: &crate::VakintSettings,
+        topology: &Atom,
+        routing: &[(Atom, Atom)],
+        blocks: &[Atom],
+        terms: &[(usize, Atom)],
+        cache: &mut crate::rustred_evaluation::p_lowering::BlockReadCache,
+    ) -> Result<Option<LoweredClosure>, VakintError> {
+        use crate::rustred_evaluation::p_lowering as direct;
+        let head = self.validated_head(settings)?;
+        let empty = || LoweredClosure {
+            closure: self.clone(),
+            head: head.clone(),
+            folded: Default::default(),
+        };
+        if terms.is_empty() {
+            return Ok(Some(empty()));
+        }
+        let cut = match direct::match_cut(vakint, settings, topology, &head)? {
+            Ok(Some(cut)) => cut,
+            Ok(None) => return Ok(Some(empty())),
+            Err(_) => return Ok(None),
+        };
+        let handle = vakint.p_library()?;
+        let mut stats = direct::DirectStats::default();
+        match direct::lower_closure_source(
+            settings,
+            &handle,
+            &cut,
+            routing,
+            direct::NumeratorSource::Blocks {
+                blocks,
+                terms,
+                cache,
+            },
+            &mut stats,
+        )? {
+            Ok(folded) => Ok(Some(LoweredClosure {
+                closure: self.clone(),
+                head,
+                folded,
+            })),
+            Err(_) => Ok(None),
+        }
+    }
+
     fn evaluate_direct(
         &self,
         vakint: &Vakint,

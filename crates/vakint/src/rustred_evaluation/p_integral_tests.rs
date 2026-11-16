@@ -2803,6 +2803,43 @@ fn orders_len(json: &serde_json::Value) -> usize {
 /// `sum.<mode>.sym` and `sum.<mode>.json` to `VAKINT_TEST_CLOSURE_OUT`. With
 /// `VAKINT_TEST_CLOSURE_SUM_CHECK=<dir>` the per-closure results
 /// `<dir>/<closure>/<closure>.<mode>.sym` are added and compared (exact).
+/// vk4l-beta-slow tests: `topo(Π prop(id, edge, q, m, power))` with the power
+/// of its `n`-th prop factor whose momentum contains a loop momentum raised by one.
+fn raise_line_power(topology: &Atom, n: usize) -> Atom {
+    let symbolica::atom::AtomView::Fun(topo) = topology.as_view() else {
+        panic!("topology is not topo(..)");
+    };
+    let inner = topo.iter().next().unwrap();
+    let mut factors = match inner {
+        symbolica::atom::AtomView::Mul(product) => {
+            product.iter().map(|f| f.to_owned()).collect::<Vec<_>>()
+        }
+        other => vec![other.to_owned()],
+    };
+    let candidates = factors
+        .iter()
+        .enumerate()
+        .filter(|(_, factor)| {
+            matches!(factor.as_view(), symbolica::atom::AtomView::Fun(f)
+                if f.get_symbol() == crate::symbols::S.prop && factor.contains_symbol(crate::symbols::S.k))
+        })
+        .map(|(index, _)| index)
+        .collect::<Vec<_>>();
+    let index = candidates[n % candidates.len()];
+    let symbolica::atom::AtomView::Fun(prop) = factors[index].as_view() else {
+        unreachable!()
+    };
+    let mut args = prop.iter().map(|a| a.to_owned()).collect::<Vec<_>>();
+    let last = args.len() - 1;
+    args[last] = (&args[last] + Atom::num(1)).expand();
+    factors[index] = symbolica::atom::FunctionBuilder::new(prop.get_symbol())
+        .add_args(&args)
+        .finish();
+    symbolica::atom::FunctionBuilder::new(topo.get_symbol())
+        .add_arg(Atom::mul_many(factors.iter()))
+        .finish()
+}
+
 /// vk4l-beta-slow: the remainder boundary end to end on closure request files
 /// (`pint6.massive-closure-request.v1`, plain or `.zst`; path list in
 /// `VAKINT_TEST_BOUNDARY_FILES`; a five-loop package in
@@ -2935,6 +2972,48 @@ fn remainder_boundary_closure_files() {
             "{name}: (2)"
         );
         patterns_total += split.patterns.len();
+        // (4) block reuse: three patterns over the two blocks, the third on the
+        // same cut with the power of its first line raised by one; compared
+        // with lowering every assembled pattern on its own and absorbing.
+        let raised = raise_line_power(&direct.topology, 0);
+        let mut reused = split.clone();
+        reused.patterns.push(crate::p_integral::BoundaryPattern {
+            topology: raised,
+            closure_power: closure.power,
+            terms: vec![(0, Atom::num(2)), (1, Atom::num(-1))],
+        });
+        let started = std::time::Instant::now();
+        let (classes, declined, (reads, hits)) =
+            reused.lower_counted(&engine, &settings, strict).unwrap();
+        let reuse_seconds = started.elapsed().as_secs_f64();
+        assert!(declined.is_empty());
+        let started = std::time::Instant::now();
+        let mut expected: Vec<crate::p_integral::LoweredClosure> = Vec::new();
+        for pattern in &reused.patterns {
+            let lowered = reused
+                .closure(pattern)
+                .lower_direct(&engine, &settings, &reused.direct_input(pattern))
+                .unwrap()
+                .unwrap();
+            let mut lowered = Some(lowered);
+            for class in expected.iter_mut() {
+                match class.absorb(lowered.take().unwrap()) {
+                    Ok(()) => break,
+                    Err(back) => lowered = Some(back),
+                }
+            }
+            if let Some(lowered) = lowered {
+                expected.push(lowered);
+            }
+        }
+        let separate_seconds = started.elapsed().as_secs_f64();
+        assert_eq!(classes.len(), expected.len(), "{name}: (4) classes");
+        for (class, expected) in classes.iter().zip(&expected) {
+            assert_eq!(class.fingerprint(), expected.fingerprint(), "{name}: (4)");
+        }
+        eprintln!(
+            "BOUNDARY {name} reuse: 3 patterns, {reads} block reads, {hits} reuses, {reuse_seconds:.3} s (separate {separate_seconds:.3} s), identical"
+        );
         if evaluate {
             let started = std::time::Instant::now();
             let value = boundary.evaluate(&engine, &settings, strict).unwrap();
@@ -2959,6 +3038,151 @@ fn remainder_boundary_closure_files() {
         checked += 1;
     }
     eprintln!("BOUNDARY {checked} closures checked ({patterns_total} split patterns)");
+}
+
+/// vk4l-beta-slow benchmark (env-gated): one closure file
+/// (`VAKINT_TEST_SYNTH_FILE`, `.zst` or plain), its numerator multiplied by
+/// `x(1) + ... + x(m)` (fresh loop-free spectators) and expanded to about
+/// `VAKINT_TEST_SYNTH_MONOMIALS` monomials: one block shared by
+/// `VAKINT_TEST_SYNTH_PATTERNS` patterns (line i's power raised by one in
+/// pattern i). Prints the block size, `lower_counted` seconds, block reads /
+/// reuses and the peak RSS. Run with and without `VAKINT_P_BOUNDARY_BLOCKS=off`.
+#[test]
+fn remainder_boundary_synthetic_blocks() {
+    let Some(file) = std::env::var_os("VAKINT_TEST_SYNTH_FILE") else {
+        eprintln!("remainder_boundary_synthetic_blocks: VAKINT_TEST_SYNTH_FILE unset, skipped");
+        return;
+    };
+    let target: usize = std::env::var("VAKINT_TEST_SYNTH_MONOMIALS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1_000_000);
+    let patterns: usize = std::env::var("VAKINT_TEST_SYNTH_PATTERNS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(4);
+    let peak = || -> u64 {
+        std::fs::read_to_string("/proc/self/status")
+            .ok()
+            .and_then(|status| {
+                status
+                    .lines()
+                    .find(|line| line.starts_with("VmHWM:"))
+                    .and_then(|line| line.split_whitespace().nth(1)?.parse::<u64>().ok())
+            })
+            .unwrap_or(0)
+    };
+    let mut engine = Vakint::new().unwrap();
+    if let Some(package) = std::env::var_os("VAKINT_TEST_P5L_DRILL_PACKAGE") {
+        engine
+            .load_p_library_directory(std::path::Path::new(&package), false)
+            .unwrap();
+        engine.p_library().unwrap();
+    }
+    let path = std::path::PathBuf::from(&file);
+    let text = if path.to_string_lossy().ends_with(".zst") {
+        let raw = std::process::Command::new("zstd")
+            .args(["-qdc"])
+            .arg(&path)
+            .output()
+            .unwrap();
+        String::from_utf8(raw.stdout).unwrap()
+    } else {
+        std::fs::read_to_string(&path).unwrap()
+    };
+    let field = |key: &str| {
+        text.lines()
+            .find_map(|line| line.strip_prefix(key)?.strip_prefix(' '))
+            .unwrap_or_else(|| panic!("no {key}"))
+            .to_owned()
+    };
+    let mut settings = settings(RustRedMasterMode::Retain, None);
+    settings.epsilon_symbol = "gammalooprs::ε".into();
+    settings.mu_r_sq_symbol = "gammalooprs::μᵣ²".into();
+    settings.integral_normalization_factor = crate::LoopNormalizationFactor::MSbar;
+    settings.number_of_terms_in_epsilon_expansion = field("epsilon_terms").parse().unwrap();
+    settings.use_dot_product_notation = false;
+    settings.n_cores = 1;
+    let closure = crate::p_integral::MassiveClosure {
+        momentum: parse(&field("closure_momentum")),
+        mass_squared: parse(&field("closure_mass_squared")),
+        power: field("closure_power").parse().unwrap(),
+    };
+    let input = parse(&field("input"));
+    let symbolica::atom::AtomView::Mul(product) = input.as_view() else {
+        panic!("input is not numerator * topo");
+    };
+    let mut topology = Atom::num(1);
+    let mut numerator = Atom::num(1);
+    for factor in product.iter() {
+        match factor {
+            symbolica::atom::AtomView::Fun(function)
+                if function.get_symbol() == crate::symbols::S.topo =>
+            {
+                topology = factor.to_owned()
+            }
+            _ => numerator = numerator * factor.to_owned(),
+        }
+    }
+    let base_terms = match numerator.expand().as_view() {
+        symbolica::atom::AtomView::Add(sum) => sum.get_nargs(),
+        _ => 1,
+    };
+    let copies = target.div_ceil(base_terms.max(1)).max(1);
+    let building = std::time::Instant::now();
+    let spectators = Atom::add_many((1..=copies).map(|i| parse(&format!("vk4l_synth_x({i})"))));
+    let block = (numerator * spectators).expand();
+    let block_terms = match block.as_view() {
+        symbolica::atom::AtomView::Add(sum) => sum.get_nargs(),
+        _ => 1,
+    };
+    eprintln!(
+        "SYNTH block {block_terms} monomials ({base_terms} x {copies}), {} MB, built in {:.1} s, peak {} MB",
+        block.as_view().get_byte_size() >> 20,
+        building.elapsed().as_secs_f64(),
+        peak() >> 10
+    );
+    let loops: i64 = field("p_loops").parse().unwrap();
+    let mut routing = (1..=loops)
+        .map(|i| (parse(&format!("k({i})")), parse(&format!("k({i})"))))
+        .collect::<Vec<_>>();
+    routing.push((closure.momentum.clone(), closure.momentum.clone()));
+    let raise = |line: usize| raise_line_power(&topology, line);
+    let boundary = crate::p_integral::RemainderBoundary::new(
+        "synthetic",
+        closure.momentum.clone(),
+        closure.mass_squared.clone(),
+        routing,
+        vec![block],
+        (0..patterns)
+            .map(|i| crate::p_integral::BoundaryPattern {
+                topology: if i == 0 {
+                    topology.clone()
+                } else {
+                    raise(i - 1)
+                },
+                closure_power: closure.power,
+                terms: vec![(0, Atom::num(1))],
+            })
+            .collect(),
+    )
+    .unwrap();
+    let started = std::time::Instant::now();
+    let (classes, declined, (reads, hits)) = boundary
+        .lower_counted(
+            &engine,
+            &settings,
+            crate::p_integral::BoundaryOptions { strict: true },
+        )
+        .unwrap();
+    eprintln!(
+        "SYNTH lower {patterns} patterns: {:.1} s, {} key plans, {} declined, {reads} block reads, {hits} reuses, reuse={}, peak {} MB",
+        started.elapsed().as_secs_f64(),
+        classes.len(),
+        declined.len(),
+        std::env::var("VAKINT_P_BOUNDARY_BLOCKS").as_deref() != Ok("off"),
+        peak() >> 10
+    );
 }
 
 #[test]

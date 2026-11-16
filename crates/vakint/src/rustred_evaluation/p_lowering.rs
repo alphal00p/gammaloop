@@ -968,6 +968,55 @@ pub(crate) fn lower_closure(
     numerator: AtomView,
     stats: &mut DirectStats,
 ) -> Result<Result<BTreeMap<Channel, FoldedInputs>, Declined>, VakintError> {
+    lower_closure_source(
+        settings,
+        handle,
+        cut,
+        routing,
+        NumeratorSource::Single(numerator),
+        stats,
+    )
+}
+
+/// Reads of shared numerator blocks, reused by every pattern whose cut maps
+/// the vacuum loop momenta the same way (vk4l-beta-slow; the remainder
+/// boundary). Keyed by the canonical images of the vacuum momenta, the head
+/// sign and the loop count; each key owns one spectator table, so that the
+/// polynomials of its blocks share spectator ids.
+#[derive(Default)]
+pub(crate) struct BlockReadCache {
+    entries: HashMap<String, (Spectators, HashMap<usize, Rc<Poly>>)>,
+    /// Block reads served from the cache / performed.
+    pub hits: usize,
+    pub reads: usize,
+}
+
+/// The numerator of one lowering: one expression, or `Σ blocks[t] · R_t`
+/// with the block reads cached.
+pub(crate) enum NumeratorSource<'a> {
+    Single(AtomView<'a>),
+    Blocks {
+        blocks: &'a [Atom],
+        terms: &'a [(usize, Atom)],
+        cache: &'a mut BlockReadCache,
+    },
+}
+
+/// [`lower_closure`] of a [`NumeratorSource`]. For `Blocks`, the canonical
+/// polynomial is `Σ_t read(blocks[t]) · read(R_t)` (exact rational sparse
+/// polynomials, as the reader multiplies the factors of one product), then
+/// times the cut factor; the classification, slot substitution and key
+/// emission are those of a single numerator, so the folded input equals
+/// that of the assembled numerator.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn lower_closure_source(
+    settings: &VakintSettings,
+    handle: &PLibraryHandle,
+    cut: &MatchedCut,
+    routing: &[(Atom, Atom)],
+    source: NumeratorSource<'_>,
+    stats: &mut DirectStats,
+) -> Result<Result<BTreeMap<Channel, FoldedInputs>, Declined>, VakintError> {
     if cut.scaleless {
         return Ok(Ok(BTreeMap::new()));
     }
@@ -977,7 +1026,16 @@ pub(crate) fn lower_closure(
     if cut.powers.iter().any(|power| *power < 0) {
         return Ok(Err(Declined("a negative line power")));
     }
-    if !crate::utils::has_only_exact_numbers(numerator) {
+    let exact = match &source {
+        NumeratorSource::Single(numerator) => crate::utils::has_only_exact_numbers(*numerator),
+        NumeratorSource::Blocks { blocks, terms, .. } => {
+            terms.iter().all(|(block, coefficient)| {
+                crate::utils::has_only_exact_numbers(blocks[*block].as_view())
+                    && crate::utils::has_only_exact_numbers(coefficient.as_view())
+            })
+        }
+    };
+    if !exact {
         return Ok(Err(Declined("inexact numbers")));
     }
     let family = P_FAMILIES
@@ -1060,38 +1118,133 @@ pub(crate) fn lower_closure(
     }
     let count = loops * (loops + 1) / 2 + loops;
     let phase = std::time::Instant::now();
-    let mut spectators = Spectators::new();
-    // vk5l-physrun: machine-integer coefficients first (no gcd per operation,
-    // small entries); exact rationals when an input is not an integer or an
-    // operation overflows. Same polynomial either way.
-    let polynomial = match read_numerator::<i128>(
-        &vacuum_momenta,
-        &cut_momenta,
-        loops,
-        cut.sigma,
-        count,
-        &mut spectators,
-        numerator,
-        &cut.factor,
-        stats,
-    ) {
-        Ok(polynomial) if !OVERFLOW.with(|flag| flag.replace(false)) => polynomial,
-        _ => {
-            OVERFLOW.with(|flag| flag.set(false));
-            match read_numerator::<Rational>(
+    let mut local_spectators = Spectators::new();
+    let (polynomial, spectators): (Poly, &Spectators) = match source {
+        NumeratorSource::Single(numerator) => {
+            // vk5l-physrun: machine-integer coefficients first (no gcd per operation,
+            // small entries); exact rationals when an input is not an integer or an
+            // operation overflows. Same polynomial either way.
+            let polynomial = match read_numerator::<i128>(
                 &vacuum_momenta,
                 &cut_momenta,
                 loops,
                 cut.sigma,
                 count,
-                &mut spectators,
+                &mut local_spectators,
                 numerator,
                 &cut.factor,
                 stats,
             ) {
-                Ok(polynomial) => polynomial,
-                Err(declined) => return Ok(Err(declined)),
+                Ok(polynomial) if !OVERFLOW.with(|flag| flag.replace(false)) => polynomial,
+                _ => {
+                    OVERFLOW.with(|flag| flag.set(false));
+                    match read_numerator::<Rational>(
+                        &vacuum_momenta,
+                        &cut_momenta,
+                        loops,
+                        cut.sigma,
+                        count,
+                        &mut local_spectators,
+                        numerator,
+                        &cut.factor,
+                        stats,
+                    ) {
+                        Ok(polynomial) => polynomial,
+                        Err(declined) => return Ok(Err(declined)),
+                    }
+                }
+            };
+            (polynomial, &local_spectators)
+        }
+        NumeratorSource::Blocks {
+            blocks,
+            terms,
+            cache,
+        } => {
+            let mut prefix = format!("{loops}|{}|", cut.sigma);
+            let mut images = vacuum_momenta.iter().collect::<Vec<_>>();
+            images.sort_by_key(|(momentum, _)| momentum.to_canonical_string());
+            for (momentum, vector) in images {
+                prefix.push_str(&momentum.to_canonical_string());
+                prefix.push_str(&format!("{vector:?};"));
             }
+            let BlockReadCache {
+                entries,
+                hits,
+                reads: read_count,
+            } = cache;
+            let (table, reads) = entries
+                .entry(prefix)
+                .or_insert_with(|| (Spectators::new(), HashMap::new()));
+            let mut total = Poly::default();
+            for (block, coefficient) in terms.iter() {
+                let block_poly = match reads.get(block) {
+                    Some(poly) => {
+                        *hits += 1;
+                        Rc::clone(poly)
+                    }
+                    None => {
+                        *read_count += 1;
+                        let mut reader = Reader::<Rational> {
+                            momenta: &vacuum_momenta,
+                            loops,
+                            sigma: cut.sigma,
+                            count,
+                            spectators: table,
+                            cache: HashMap::new(),
+                            terms: 0,
+                        };
+                        let poly = match reader.read(blocks[*block].as_view()) {
+                            Ok(poly) => Rc::new(poly),
+                            Err(declined) => return Ok(Err(declined)),
+                        };
+                        stats.numerator_terms += reader.terms;
+                        reads.insert(*block, Rc::clone(&poly));
+                        poly
+                    }
+                };
+                let mut reader = Reader::<Rational> {
+                    momenta: &vacuum_momenta,
+                    loops,
+                    sigma: cut.sigma,
+                    count,
+                    spectators: table,
+                    cache: HashMap::new(),
+                    terms: 0,
+                };
+                let coefficient_poly = match reader.read(coefficient.as_view()) {
+                    Ok(poly) => poly,
+                    Err(declined) => return Ok(Err(declined)),
+                };
+                if let Err(declined) =
+                    reader.multiply_into(&mut total, &*block_poly, &coefficient_poly)
+                {
+                    return Ok(Err(declined));
+                }
+            }
+            total.retain(|_, value| !value.is_zero());
+            let polynomial = if cut.factor == Atom::num(1) {
+                total
+            } else {
+                let mut reader = Reader::<Rational> {
+                    momenta: &cut_momenta,
+                    loops,
+                    sigma: cut.sigma,
+                    count,
+                    spectators: table,
+                    cache: HashMap::new(),
+                    terms: 0,
+                };
+                let factor_poly = match reader.read(cut.factor.as_view()) {
+                    Ok(poly) => poly,
+                    Err(declined) => return Ok(Err(declined)),
+                };
+                match reader.multiply(&total, &factor_poly) {
+                    Ok(poly) => poly,
+                    Err(declined) => return Ok(Err(declined)),
+                }
+            };
+            (polynomial, &*table)
         }
     };
     stats.canonical_terms += polynomial.len();

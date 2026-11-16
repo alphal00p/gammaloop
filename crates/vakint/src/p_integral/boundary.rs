@@ -26,11 +26,13 @@
 //! fails with a typed error ([`BoundaryOptions::strict`]) or falls back to the
 //! ordinary path, which expands that pattern's numerator.
 //!
-//! Version 1 (this file) reads each pattern on its own. Block reuse across
-//! patterns (the loop-polynomial reading and slot substitution depend only on
-//! the presentation, the routing and the block, the line powers only enter the
-//! final keys) and chunked reading of a block with budget checkpoints are the
-//! next steps; they do not change this type.
+//! Block reuse: every block is read (Horner over its loop factors into the
+//! exact canonical polynomial) once per distinct cut routing and reused by all
+//! patterns; a pattern's polynomial is `Σ_t read(block_t) · read(R_t)` times
+//! the cut factor, then classified, slot-substituted and emitted with its own
+//! line powers (`VAKINT_P_BOUNDARY_BLOCKS=off` reads each assembled pattern
+//! numerator instead). Chunked reading of one large block with budget
+//! checkpoints is next; it does not change this type.
 use symbolica::atom::{Atom, AtomCore};
 
 use super::massive::{DirectClosureInput, LoweredClosure, MassiveClosure};
@@ -184,6 +186,25 @@ impl RemainderBoundary {
         settings: &VakintSettings,
         options: BoundaryOptions,
     ) -> Result<(Vec<LoweredClosure>, Vec<usize>), VakintError> {
+        let (classes, declined, _) = self.lower_counted(vakint, settings, options)?;
+        Ok((classes, declined))
+    }
+
+    /// [`Self::lower`] plus the block read counts `(reads, reuses)`: every
+    /// block is read once per distinct cut routing and reused by the other
+    /// patterns (`VAKINT_P_BOUNDARY_BLOCKS=off`: each pattern's assembled
+    /// numerator is read on its own, as version 1).
+    pub fn lower_counted(
+        &self,
+        vakint: &Vakint,
+        settings: &VakintSettings,
+        options: BoundaryOptions,
+    ) -> Result<(Vec<LoweredClosure>, Vec<usize>, (usize, usize)), VakintError> {
+        let reuse = !matches!(
+            std::env::var("VAKINT_P_BOUNDARY_BLOCKS").as_deref(),
+            Ok("off" | "0")
+        );
+        let mut cache = crate::rustred_evaluation::p_lowering::BlockReadCache::default();
         let mut classes = Vec::<LoweredClosure>::new();
         let mut declined = Vec::new();
         for (index, pattern) in self.patterns.iter().enumerate() {
@@ -192,8 +213,20 @@ impl RemainderBoundary {
             settings.validate_execution()?;
             crate::execution::checkpoint().map_err(VakintError::from)?;
             let closure = self.closure(pattern);
-            let input = self.direct_input(pattern);
-            match closure.lower_direct(vakint, settings, &input)? {
+            let lowered = if reuse {
+                closure.lower_direct_blocks(
+                    vakint,
+                    settings,
+                    &pattern.topology,
+                    &self.routing,
+                    &self.blocks,
+                    &pattern.terms,
+                    &mut cache,
+                )?
+            } else {
+                closure.lower_direct(vakint, settings, &self.direct_input(pattern))?
+            };
+            match lowered {
                 Some(lowered) => {
                     let mut lowered = Some(lowered);
                     for class in classes.iter_mut() {
@@ -215,7 +248,7 @@ impl RemainderBoundary {
                 None => declined.push(index),
             }
         }
-        Ok((classes, declined))
+        Ok((classes, declined, (cache.reads, cache.hits)))
     }
 
     /// The value of the remainder: Σ over patterns of the closed p-integral,
