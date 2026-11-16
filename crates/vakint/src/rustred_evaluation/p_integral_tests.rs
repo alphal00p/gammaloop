@@ -1825,9 +1825,14 @@ fn five_loop_package_drill() {
             parts.next().unwrap().trim(),
         );
         let input = parse(input);
+        let dispatch_before = engine.p_dispatch_counters();
         let started = std::time::Instant::now();
         let result = engine.evaluate(&settings, input.as_view());
         let seconds = started.elapsed().as_secs_f64();
+        eprintln!(
+            "DISPATCH {label}: {:?}",
+            engine.p_dispatch_counters().since(&dispatch_before)
+        );
         match (expected, result) {
             // An exact identity (e.g. an IBP relation with integer
             // coefficients): every summand reduced on its own must be
@@ -1979,6 +1984,10 @@ fn p_relation_cache_two_processes() {
     settings.number_of_terms_in_epsilon_expansion = 6;
     settings.rustred_p_relation_cache.location =
         crate::PRelationCacheLocation::Directory(cache.clone());
+    if let Some(shipped) = std::env::var_os("VAKINT_TEST_P5L_RELATION_SHIPPED") {
+        settings.rustred_p_relation_cache.shipped = std::env::split_paths(&shipped).collect();
+    }
+    let dispatch_before = engine.p_dispatch_counters();
     let before = engine.p_relation_cache_statistics();
     let started = std::time::Instant::now();
     let value = engine
@@ -1988,6 +1997,10 @@ fn p_relation_cache_two_processes() {
         .together()
         .expand();
     let after = engine.p_relation_cache_statistics();
+    eprintln!(
+        "DISPATCH relation-cache {role}: {:?}",
+        engine.p_dispatch_counters().since(&dispatch_before)
+    );
     let solves = after.recipes.solves - before.recipes.solves;
     let delta = after.cache.since(&before.cache);
     eprintln!(
