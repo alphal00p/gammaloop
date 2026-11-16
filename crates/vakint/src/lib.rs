@@ -7159,6 +7159,7 @@ Evaluated (n_loops=1, mu_r=1) :
     /// applies (the caller steps on the whole expression).
     fn expand_dot_powers_fast(a: AtomView, dummy: usize) -> Option<(Atom, usize)> {
         Self::expand_dot_powers_by_term(a, dummy)
+            .or_else(|| Self::expand_dot_powers_by_sums(a, dummy))
             .or_else(|| Self::expand_dot_powers_on_dotted_factors(a, dummy))
     }
 
@@ -7203,6 +7204,86 @@ Evaluated (n_loops=1, mu_r=1) :
         ))
     }
 
+    /// Whether `factor` is a plain `dot_pow(a,b,c)`: `a`, `b` symbols or
+    /// functions without `dot_pow`, `c` a positive integer.
+    fn is_plain_dot_pow(factor: AtomView) -> bool {
+        let AtomView::Fun(function) = factor else {
+            return false;
+        };
+        if function.get_symbol() != S.dot_pow || function.get_nargs() != 3 {
+            return false;
+        }
+        let mut arguments = function.iter();
+        let (a, b, c) = (
+            arguments.next().unwrap(),
+            arguments.next().unwrap(),
+            arguments.next().unwrap(),
+        );
+        matches!(a, AtomView::Var(_) | AtomView::Fun(_))
+            && matches!(b, AtomView::Var(_) | AtomView::Fun(_))
+            && !a.contains_symbol(S.dot_pow)
+            && !b.contains_symbol(S.dot_pow)
+            && get_integer_from_atom(c).is_some_and(|c| c > 0)
+    }
+
+    /// The fixed point of [`Self::dot_power_step`] of a product whose
+    /// factors holding `dot_pow` are sums of distinct lengths and plain
+    /// `dot_pow(a,b,c)`: in a normalized product a sum precedes every
+    /// function and sums are ordered by their number of terms first
+    /// (Symbolica's factor order), and a step changes neither (a step only
+    /// rewrites one term of a sum, with a fresh dummy index, so terms never
+    /// merge). The first match therefore lies in the shortest sum still
+    /// holding a `dot_pow` until all sums are done, each one stepping term by
+    /// term exactly as [`Self::expand_dot_powers_in_sum`]; then in the plain
+    /// powers ([`Self::dot_power_step_on_factors`]). The other factors are
+    /// multiplied back once. `None` for any other shape (two sums of equal
+    /// length, a powered sum, ...) or no sum at all.
+    fn expand_dot_powers_by_sums(a: AtomView, mut dummy: usize) -> Option<(Atom, usize)> {
+        let AtomView::Mul(product) = a else {
+            return None;
+        };
+        let (mut sums, mut others) = (Vec::new(), Vec::new());
+        for factor in product.iter() {
+            if !factor.contains_symbol(S.dot_pow) || Self::is_plain_dot_pow(factor) {
+                others.push(factor.to_owned());
+            } else if let AtomView::Add(sum) = factor {
+                sums.push((sum.get_nargs(), factor));
+            } else {
+                return None;
+            }
+        }
+        if sums.is_empty() || sums.windows(2).any(|pair| pair[0].0 >= pair[1].0) {
+            return None;
+        }
+        for (_, sum) in sums {
+            let (expanded, next) = Self::expand_dot_powers_in_sum(sum, dummy)?;
+            if expanded.as_view().contains_symbol(S.dot_pow) {
+                return None;
+            }
+            dummy = next;
+            others.push(expanded);
+        }
+        let mut current = Atom::mul_many(others.iter().map(Atom::as_view));
+        loop {
+            match Self::dot_power_step_on_factors(current.as_view(), dummy) {
+                Some(Some(new)) => {
+                    current = new;
+                    dummy += 1;
+                }
+                Some(None) => break,
+                // No product left (a single factor): the plain step.
+                None => {
+                    Self::expand_dot_powers_stepwise(&mut current, &mut dummy);
+                    break;
+                }
+            }
+        }
+        if current.as_view().contains_symbol(S.dot_pow) {
+            return None;
+        }
+        Some((current, dummy))
+    }
+
     /// [`Self::dot_power_step`] of a product whose factors holding `dot_pow`
     /// are plain `dot_pow(a,b,c)` (`a`, `b` symbols or functions, `c` a
     /// positive integer): the first match of the product is its first such
@@ -7215,25 +7296,7 @@ Evaluated (n_loops=1, mu_r=1) :
         let AtomView::Mul(product) = term else {
             return None;
         };
-        let plain_dot_pow = |factor: AtomView| -> bool {
-            let AtomView::Fun(function) = factor else {
-                return false;
-            };
-            if function.get_symbol() != S.dot_pow || function.get_nargs() != 3 {
-                return false;
-            }
-            let mut arguments = function.iter();
-            let (a, b, c) = (
-                arguments.next().unwrap(),
-                arguments.next().unwrap(),
-                arguments.next().unwrap(),
-            );
-            matches!(a, AtomView::Var(_) | AtomView::Fun(_))
-                && matches!(b, AtomView::Var(_) | AtomView::Fun(_))
-                && !a.contains_symbol(S.dot_pow)
-                && !b.contains_symbol(S.dot_pow)
-                && get_integer_from_atom(c).is_some_and(|c| c > 0)
-        };
+        let plain_dot_pow = Self::is_plain_dot_pow;
         let (mut dotted, mut rest) = (Vec::new(), Vec::new());
         for factor in product.iter() {
             if !factor.contains_symbol(S.dot_pow) {
@@ -7307,6 +7370,19 @@ Evaluated (n_loops=1, mu_r=1) :
             }
             _ => return None,
         };
+        let (sum, dummy) = Self::expand_dot_powers_in_sum(sum, dummy)?;
+        let result = if others.is_empty() {
+            sum
+        } else {
+            Atom::mul_many(others.into_iter().chain(std::iter::once(sum.as_view())))
+        };
+        Some((result, dummy))
+    }
+
+    /// The fixed point of [`Self::dot_power_step`] on a sum, one term at a
+    /// time (see [`Self::expand_dot_powers_by_term`]), or `None`.
+    fn expand_dot_powers_in_sum(sum: AtomView, mut dummy: usize) -> Option<(Atom, usize)> {
+        let has_dot_pow = |view: AtomView| view.contains_symbol(S.dot_pow);
         let AtomView::Add(terms_view) = sum else {
             return None;
         };
@@ -7353,13 +7429,10 @@ Evaluated (n_loops=1, mu_r=1) :
             terms.insert(low, (has_dot_pow(new.as_view()), new));
             dummy += 1;
         }
-        let sum = Atom::add_many(terms.iter().map(|(_, term)| term.as_view()));
-        let result = if others.is_empty() {
-            sum
-        } else {
-            Atom::mul_many(others.into_iter().chain(std::iter::once(sum.as_view())))
-        };
-        Some((result, dummy))
+        Some((
+            Atom::add_many(terms.iter().map(|(_, term)| term.as_view())),
+            dummy,
+        ))
     }
 
     pub fn convert_from_dot_notation(atom: AtomView) -> Atom {
@@ -8508,9 +8581,9 @@ mod tests {
 
     use super::*;
 
-    /// The product path of the dot expansion (a vacuum numerator term: its
+    /// The product paths of the dot expansion (a vacuum numerator term: its
     /// coefficient in d, metric tensors, several sums holding dot powers and
-    /// plain dot powers) takes exactly the steps of the whole-expression
+    /// plain dot powers) take exactly the steps of the whole-expression
     /// fixed point: same expression, same next dummy index.
     #[test]
     fn dot_expansion_on_dotted_factors_matches_the_stepwise_fixed_point() {
@@ -8541,6 +8614,28 @@ mod tests {
             format!("{coefficient}*{sum_a}^2*{}", dot("2", "k(3)", 1)),
             format!("{metric}*{}*{}", dot("1", "k(1)", 3), dot("2", "k(1)", 1)),
             format!("x*({}+y)*({}+z)", dot("1", "k(2)", 1), dot("2", "k(3)", 2)),
+            // The shape of the beta UV children's reduced numerators: a
+            // coefficient times a long sum of dotted terms times a plain
+            // power, and a short and a long dotted sum.
+            {
+                let long = (0..25)
+                    .map(|i| {
+                        format!(
+                            "{}*y^{}*{}*{}",
+                            i + 1,
+                            i % 4,
+                            dot(&format!("{}", 1 + i % 3), "p(1)", 1 + (i % 3) as i64),
+                            dot(&format!("{}", 1 + (i + 1) % 4), "k(4)", 1 + (i % 2) as i64)
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("+");
+                format!(
+                    "{coefficient}*{metric}*({long})*{sum_b}*{}*{}",
+                    dot("4", "p(1)", 3),
+                    dot("2", "k(3)", 1)
+                )
+            },
         ];
         for (index, input) in inputs.iter().enumerate() {
             let input = vk_parse!(input).unwrap();
@@ -8556,6 +8651,12 @@ mod tests {
                 );
                 assert_eq!(fast_dummy, reference_dummy, "input {index}");
                 assert!(!fast.as_view().contains_symbol(S.dot_pow), "input {index}");
+                // Sums of distinct lengths with plain powers take the sum path.
+                assert_eq!(
+                    Vakint::expand_dot_powers_by_sums(input.as_view(), start).is_some(),
+                    [0, 1, 2, 6].contains(&index),
+                    "input {index}"
+                );
             }
         }
     }
