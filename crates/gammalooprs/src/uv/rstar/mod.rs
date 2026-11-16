@@ -48,7 +48,7 @@ pub use crate::uv::counterterm_cache::{
 
 pub(super) static REFERENCE_MASS_SQUARED: std::sync::LazyLock<symbolica::atom::Symbol> =
     std::sync::LazyLock::new(|| symbolica::symbol!("rstar_reference_mass_squared"; Scalar));
-pub use expression::set_memory_release;
+pub use expression::{ClosedSkipMode, closed_dot_scalar, closed_skip_mode, set_memory_release};
 pub use insertion_identity::{InsertionSkeletonIdentity, InsertionSkeletonKey};
 pub use insertions::{
     GroupedInsertionPoleResult, InsertionPoleResult, PreparedInsertion, PreparedInsertionHole,

@@ -292,6 +292,102 @@ fn hard_taylor_check() -> bool {
     *CHECK
 }
 
+/// An opt-in skip of a whole-expression tensor simplification whose input is a
+/// closed scalar ([`closed_dot_scalar`]); see [`closed_skip_mode`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClosedSkipMode {
+    /// Unset (or any value but `1`/`check`): the pass always runs, unchanged.
+    Off,
+    /// `1`: a closed scalar input is used as it is; anything else is simplified.
+    Skip,
+    /// `check`: the pass runs; a closed input is compared with its result
+    /// and the outcome reported on stderr (`CLOSED_SKIP ... identical= equal=`).
+    Check,
+}
+
+/// The [`ClosedSkipMode`] of the environment variable `name` (`1`, `check`).
+pub fn closed_skip_mode(name: &str) -> ClosedSkipMode {
+    match std::env::var(name).as_deref() {
+        Ok("1") => ClosedSkipMode::Skip,
+        Ok("check") => ClosedSkipMode::Check,
+        _ => ClosedSkipMode::Off,
+    }
+}
+
+/// `GAMMALOOP_CLOSED_SKIP_SUMMAND_SIMPLIFY` (`1` or `check`): the skip of the
+/// whole-expression [`RStarIntegrand::simplify_summands`] pass after the outer
+/// Taylor step of a root-projected integral, when its Taylor polynomial is a
+/// closed scalar (the root-closed path: root metric contracted in the root
+/// scope, remainder already contracted to dots). Default off.
+fn closed_summand_skip() -> ClosedSkipMode {
+    static MODE: LazyLock<ClosedSkipMode> =
+        LazyLock::new(|| closed_skip_mode("GAMMALOOP_CLOSED_SKIP_SUMMAND_SIMPLIFY"));
+    *MODE
+}
+
+/// Whether `expression` is a closed scalar in dot notation, with nothing left
+/// for the tensor algebra (no open port, no dummy pair, no gamma, metric,
+/// colour, Levi-Civita, trace or chain): every representation occurs as the
+/// index-free payload of a rank-one tensor inside a `dot` (`Q(e, mink(d))`),
+/// and every other function (`den`, an index-free `Q(e)`, ...) has closed
+/// arguments. A conservative syntactic test of one pass over the expression;
+/// any other form, including scalar-wrapper markers, counts as not closed.
+pub fn closed_dot_scalar(expression: AtomView<'_>) -> bool {
+    fn marker(symbol: Symbol) -> bool {
+        symbol == SPENSO_TAG.chain
+            || symbol == SPENSO_TAG.trace
+            || symbol == SPENSO_TAG.pure_scalar
+            || symbol == SPENSO_TAG.scalar
+            || symbol == SPENSO_TAG.dot
+    }
+    fn representation(symbol: Symbol) -> bool {
+        symbol.has_tag(&SPENSO_TAG.representation)
+    }
+    // An operand of a dot: a rank-one tensor (or a linear combination of
+    // them) whose only representation is an index-free payload.
+    fn operand(view: AtomView<'_>) -> bool {
+        match view {
+            AtomView::Num(_) => true,
+            AtomView::Var(variable) => !representation(variable.get_symbol()),
+            AtomView::Add(sum) => sum.iter().all(operand),
+            AtomView::Mul(product) => product.iter().all(operand),
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                operand(base) && operand(exponent)
+            }
+            AtomView::Fun(function) => {
+                let symbol = function.get_symbol();
+                if representation(symbol) {
+                    function.get_nargs() <= 1 && function.iter().all(closed)
+                } else {
+                    !marker(symbol) && function.iter().all(operand)
+                }
+            }
+        }
+    }
+    fn closed(view: AtomView<'_>) -> bool {
+        match view {
+            AtomView::Num(_) => true,
+            AtomView::Var(variable) => !representation(variable.get_symbol()),
+            AtomView::Add(sum) => sum.iter().all(closed),
+            AtomView::Mul(product) => product.iter().all(closed),
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                closed(base) && closed(exponent)
+            }
+            AtomView::Fun(function) => {
+                let symbol = function.get_symbol();
+                if symbol == SPENSO_TAG.dot {
+                    function.get_nargs() == 2 && function.iter().all(operand)
+                } else {
+                    !representation(symbol) && !marker(symbol) && function.iter().all(closed)
+                }
+            }
+        }
+    }
+    closed(expression)
+}
+
 /// The original tensor slots and loop carriers survive all graph contractions.
 /// Only propagator endpoints are identified in the converter's graph.
 pub(super) struct RStarIntegrand {
@@ -1392,10 +1488,47 @@ impl RStarIntegrand {
         let polynomial = taylor.evaluate(&compensated)?;
         drop(compensated);
         timing.taylor = timing.lap();
-        let expanded = Self::simplify_summands(polynomial.as_view())
-            .inspect_err(|_| edge_debug_dump("outer_simplify", &polynomial))
-            .wrap_err("while simplifying the compensated R* outer Taylor polynomial")?;
-        drop(polynomial);
+        // GAMMALOOP_CLOSED_SKIP_SUMMAND_SIMPLIFY (default off): on the closed
+        // root path the remainder was contracted to a closed scalar before
+        // the Taylor step, which only scales, routes and truncates it (dot is
+        // linear, so routing keeps it in dot form), so this pass has nothing
+        // to contract. The skip is taken only for a root-projected integral
+        // whose polynomial passes the syntactic closed-scalar test; an IR
+        // correction closed after its quotient K still carries the open
+        // metric and is simplified as before.
+        let skip = closed_summand_skip();
+        let closed = skip != ClosedSkipMode::Off
+            && root_projector.is_some()
+            && closed_dot_scalar(polynomial.as_view());
+        if skip != ClosedSkipMode::Off {
+            eprintln!(
+                "CLOSED_SKIP site=outer_taylor id={unique_id} loops={} bytes={} root_projected={} closed={closed} action={}",
+                self.region.loops,
+                polynomial.as_view().get_byte_size(),
+                root_projector.is_some(),
+                if closed && skip == ClosedSkipMode::Skip {
+                    "skipped"
+                } else {
+                    "simplified"
+                },
+            );
+        }
+        let expanded = if closed && skip == ClosedSkipMode::Skip {
+            polynomial
+        } else {
+            let expanded = Self::simplify_summands(polynomial.as_view())
+                .inspect_err(|_| edge_debug_dump("outer_simplify", &polynomial))
+                .wrap_err("while simplifying the compensated R* outer Taylor polynomial")?;
+            if closed {
+                let identical = expanded == polynomial;
+                let equal = identical || (&expanded - &polynomial).expand().is_zero();
+                eprintln!(
+                    "CLOSED_SKIP site=outer_taylor id={unique_id} check identical={identical} equal={equal}"
+                );
+            }
+            drop(polynomial);
+            expanded
+        };
         timing.algebra = timing.lap();
         // The root is the only boundary which may be projected here. Child
         // and quotient pole maps are already complete, and no later pole map
