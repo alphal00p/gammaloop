@@ -24,8 +24,21 @@ impl SymbolicTensor<PartialStructure> {
         {
             return Ok(self.clone());
         }
-        let facts = observed.filter(|facts| facts.is_closed_scalar()).map(|_| {
-            crate::tensor::simplification::observation::DomainObservations::closed_scalar(false)
+        // Dot notation is the normal form of a terminal polynomial's scalar
+        // products: its open ports, and the absence of internal connections
+        // and identity candidates, survive the rewrite.
+        let facts = observed.and_then(|facts| {
+            use crate::tensor::simplification::observation::DomainObservations;
+            if facts.is_closed_scalar() {
+                Some(DomainObservations::closed_scalar(false))
+            } else if facts.is_terminal_polynomial() {
+                Some(DomainObservations::terminal_polynomial(
+                    &self.structure,
+                    false,
+                ))
+            } else {
+                None
+            }
         });
         self.with_identity_result(
             schoonschip::DotNormalizer::notation(self.expression().as_view()),

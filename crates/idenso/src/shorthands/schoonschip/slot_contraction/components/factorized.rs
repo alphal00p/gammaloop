@@ -235,6 +235,12 @@ impl CoefficientSum {
     }
 }
 
+/// Facts that certify scalar syntax: everything a contraction reports except
+/// a terminal polynomial with open ports, which certifies only its own root.
+fn scalar_facts(observed: &DomainObservations) -> bool {
+    observed.is_closed_scalar() || !observed.is_terminal_polynomial()
+}
+
 /// Sources with fewer terms are multiplied out and summed at once; larger
 /// ones are merged lazily (see [`frontier_sum`]).
 const LAZY_SOURCE_TERMS: usize = 32;
@@ -1340,6 +1346,7 @@ impl SlotContraction {
                         let mut result =
                             self.contract_graph(opened, opened.root, None, rank_one)?;
                         result.root = result.root.pow(power);
+                        result.observations = result.observations.filter(scalar_facts);
                         return Some(result);
                     }
                     return Some(FactorizedContraction {
@@ -1355,6 +1362,8 @@ impl SlotContraction {
                 // open sums retain their alternatives and external connections.
                 let mut result = self.contract_graph(scope, child, None, rank_one)?;
                 result.root = result.root.pow(power);
+                // A power of an open base connects its ports.
+                result.observations = result.observations.filter(scalar_facts);
                 Some(result)
             })
             .as_ref()
@@ -1587,7 +1596,7 @@ impl SlotContraction {
                             if result.root.as_view() != literal || result.status != ReductionStatus::Complete {
                                 scoped.insert((scope as *const _ as usize, node), result);
                             }
-                            if let Some(observed) = &result.observations {
+                            if let Some(observed) = result.observations.as_ref().filter(|observed| scalar_facts(observed)) {
                                 sum.scalar_forms.insert(result.root.as_view(), observed.needs_dot_normalization());
                             }
                             return Some(if scope.ports[&node].0.is_empty() {
@@ -1657,6 +1666,7 @@ impl SlotContraction {
             return self.scoped_power(scope, root, rank_one).cloned();
         }
         let scalar_boundary = scope.ports[&root].0.is_empty();
+        let root_node = root;
         if !self.expand
             && matches!(
                 scope.network.graph.graph[root],
@@ -1733,6 +1743,9 @@ impl SlotContraction {
         let mut roots = Vec::with_capacity(components.len());
         let mut status = ReductionStatus::Complete;
         let mut scalar_form = Some(false);
+        // Open slots of components that are scalar polynomials times vectors
+        // and metrics on explicit slots, with their dot-normalization need.
+        let mut terminal = Some((Vec::new(), false));
         let mut changed = false;
         let mut refused = Vec::new();
         for component in components {
@@ -1748,7 +1761,7 @@ impl SlotContraction {
                 .collect::<Vec<_>>();
             let result =
                 self.contract_component(scope, &component, &selected, &exposed_sums, rank_one);
-            let (result, component_changed) = match result {
+            let (result, component_changed, open_slots) = match result {
                 Some(result) => result,
                 None => {
                     // A refusal can follow tentative port substitutions or
@@ -1768,11 +1781,22 @@ impl SlotContraction {
                             observations: None,
                         },
                         false,
+                        None,
                     )
                 }
             };
             changed |= component_changed;
             status = status.max(result.status);
+            terminal = match (terminal, result.observations.as_ref(), open_slots) {
+                (Some((slots, needs_dots)), Some(observed), None) => {
+                    Some((slots, needs_dots || observed.needs_dot_normalization()))
+                }
+                (Some((mut slots, needs_dots)), None, Some((open, open_dots))) => {
+                    slots.extend(open);
+                    Some((slots, needs_dots || open_dots))
+                }
+                _ => None,
+            };
             scalar_form = scalar_form
                 .zip(result.observations.as_ref())
                 .map(|(needs_dots, observed)| needs_dots || observed.needs_dot_normalization());
@@ -1811,12 +1835,33 @@ impl SlotContraction {
         } else {
             Atom::mul_many(roots)
         };
+        let observations = if scalar_boundary {
+            scalar_form
+                .filter(|_| status == ReductionStatus::Complete)
+                .map(DomainObservations::closed_scalar)
+        } else {
+            // Every component is a certified scalar polynomial, and the open
+            // vectors and metrics sit exactly on the root's ports: no internal
+            // connection and no identity candidate remains. Certify the open
+            // output as terminal, so that its replacement need not be rescanned.
+            terminal
+                .filter(|_| status == ReductionStatus::Complete && changed)
+                .and_then(|(mut slots, needs_dots)| {
+                    slots.sort();
+                    let mut ports = scope.ports[&root_node].0.clone();
+                    ports.sort();
+                    (slots == ports).then(|| {
+                        DomainObservations::terminal_polynomial(
+                            &scope.ports[&root_node].1,
+                            needs_dots,
+                        )
+                    })
+                })
+        };
         Some(FactorizedContraction {
             root,
             status,
-            observations: scalar_form
-                .filter(|_| status == ReductionStatus::Complete && scalar_boundary)
-                .map(DomainObservations::closed_scalar),
+            observations,
         })
     }
 
@@ -1829,7 +1874,7 @@ impl SlotContraction {
         selected: &[usize],
         exposed_sums: &AHashSet<NodeIndex>,
         rank_one: bool,
-    ) -> Option<(FactorizedContraction, bool)> {
+    ) -> Option<(FactorizedContraction, bool, Option<(Vec<Atom>, bool)>)> {
         let mut slots = SlotMatcher::default();
         let mut sum = ComponentSum::new(self, Intake::Contraction, &mut slots);
         sum.rank_one = rank_one;
@@ -1866,6 +1911,7 @@ impl SlotContraction {
                     observations: scalar_form.map(DomainObservations::closed_scalar),
                 },
                 false,
+                None,
             ));
         }
         let mut scoped = AHashMap::new();
@@ -1897,7 +1943,8 @@ impl SlotContraction {
         for replacement in scoped.values() {
             result.status = result.status.max(replacement.status);
         }
-        Some((result, sum.contracted || !scoped.is_empty()))
+        let changed = sum.contracted || !scoped.is_empty();
+        Some((result, changed, sum.terminal_slots.take()))
     }
 
     /// The ordered rewrite is shared by refused intrinsic components and the
@@ -1961,6 +2008,24 @@ impl<'a> ComponentSum<'a, '_> {
 
     /// Reuse the admitted inventory; never inspect a completed coefficient to
     /// rediscover whether its source contains an identity or an index.
+    /// The explicit slots of a vector or metric variable, whose only open
+    /// indices are these slots; `None` for any other variable.
+    fn open_slots(&self, variable: &Variable<'a>) -> Option<Vec<Atom>> {
+        let explicit = |slot: AtomView<'_>| {
+            spenso::structure::slot::Slot::<
+                spenso::structure::representation::LibraryRep,
+                spenso::structure::abstract_index::AbstractIndex,
+            >::try_from(slot)
+            .is_ok()
+            .then(|| slot.to_owned())
+        };
+        match variable {
+            Variable::Vector(_, slot) => Some(vec![explicit(*slot)?]),
+            Variable::Metric([first, second]) => Some(vec![explicit(*first)?, explicit(*second)?]),
+            _ => None,
+        }
+    }
+
     fn scalar_form(&self, value: AtomView<'a>) -> Option<bool> {
         if let Some(&needs_dots) = self.scalar_forms.get(&value) {
             return Some(needs_dots);
@@ -2465,8 +2530,14 @@ impl<'a> ComponentSum<'a, '_> {
             crate::reference_cases::timing::Phase::ContractionEmission,
         );
         let mut terms = Vec::with_capacity(states.len());
+        // Open slots of vectors and metrics left in every state: the same
+        // sorted explicit slots in each state, or no terminal certificate.
+        let mut open_slots: Option<Vec<Atom>> = None;
+        let mut any_open = false;
+        let mut terminal = true;
         for (remaining, weight) in states {
             let mut factors = vec![shared.emit(weight)?];
+            let mut state_slots = Vec::new();
             for (position, arguments) in remaining.factors {
                 scalar_form = scalar_form
                     .zip(self.scalar_form(self.opaque_factors[position].0))
@@ -2475,6 +2546,23 @@ impl<'a> ComponentSum<'a, '_> {
                 factors.push(self.emit_factor(position, &arguments)?);
             }
             for (variable, exponent) in remaining.residual {
+                if let Some(slots) = self.open_slots(&self.variables[variable]) {
+                    // Each power repeats the slots, so a repeated (internal)
+                    // index never matches the distinct root ports.
+                    for _ in 0..exponent {
+                        state_slots.extend(slots.iter().cloned());
+                    }
+                    let atom = match emitted.get(&variable) {
+                        Some(value) => value.clone(),
+                        None => {
+                            let atom = self.emit_variable(&self.variables[variable])?;
+                            emitted.insert(variable, atom.clone());
+                            atom
+                        }
+                    };
+                    factors.push(atom.pow(exponent));
+                    continue;
+                }
                 let atom = if let Some(value) = emitted.get(&variable) {
                     value.clone()
                 } else {
@@ -2487,12 +2575,25 @@ impl<'a> ComponentSum<'a, '_> {
                 };
                 factors.push(atom.pow(exponent));
             }
+            state_slots.sort();
+            any_open |= !state_slots.is_empty();
+            match &open_slots {
+                None => open_slots = Some(state_slots),
+                Some(slots) => terminal &= *slots == state_slots,
+            }
             terms.push(Atom::mul_many(factors));
         }
+        self.terminal_slots = match (open_slots, scalar_form) {
+            (Some(slots), Some(needs_dots)) if any_open && terminal => Some((slots, needs_dots)),
+            _ => None,
+        };
         Some(FactorizedContraction {
             root: Atom::add_many(terms),
             status: ReductionStatus::Complete,
-            observations: scalar_form.map(DomainObservations::closed_scalar),
+            // Open slots leave a tensor, never a closed scalar.
+            observations: scalar_form
+                .filter(|_| !any_open)
+                .map(DomainObservations::closed_scalar),
         })
     }
 
