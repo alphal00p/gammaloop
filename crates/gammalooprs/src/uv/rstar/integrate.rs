@@ -57,10 +57,17 @@ thread_local! {
 /// Run `f` (today's outer integration of one remainder) capturing its
 /// closures and value. Inert outside: one thread-local borrow per closure.
 pub(super) fn capturing_closures<T>(f: impl FnOnce() -> T) -> (T, Capture) {
-    let previous = CAPTURE.with(|slot| slot.replace(Some(Capture::default())));
+    // Restored on unwinding too: a capture left set would keep a clone of
+    // every later closure input of the thread.
+    let scope = super::ScopedSlot::enter(&CAPTURE, Capture::default());
     let result = f();
-    let captured = CAPTURE.with(|slot| std::mem::replace(&mut *slot.borrow_mut(), previous));
-    (result, captured.unwrap_or_default())
+    (result, scope.exit().unwrap_or_default())
+}
+
+/// Whether a capture is active on this thread.
+#[cfg(test)]
+pub(super) fn capture_active() -> bool {
+    CAPTURE.with(|slot| slot.borrow().is_some())
 }
 
 fn capture(make: impl FnOnce() -> CapturedClosure) {

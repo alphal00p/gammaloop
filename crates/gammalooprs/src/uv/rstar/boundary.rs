@@ -139,10 +139,15 @@ pub(crate) fn boundary_strict() -> bool {
 /// through the environment.
 #[cfg(test)]
 pub(crate) fn with_boundary_mode<T>(mode: BoundaryMode, strict: bool, f: impl FnOnce() -> T) -> T {
-    let previous = TEST_MODE.with(|slot| slot.replace(Some((mode, strict))));
-    let result = f();
-    TEST_MODE.with(|slot| slot.set(previous));
-    result
+    struct Restore(Option<(BoundaryMode, bool)>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let previous = self.0;
+            TEST_MODE.with(|slot| slot.set(previous));
+        }
+    }
+    let _restore = Restore(TEST_MODE.with(|slot| slot.replace(Some((mode, strict)))));
+    f()
 }
 
 /// `GAMMALOOP_BOUNDARY_FALLBACK_MAX_SUMMANDS` (default 1,000,000 summands of
@@ -2205,9 +2210,11 @@ pub(super) fn with_callback_check<T>(
     normalization: &ClosedRootNormalization,
     f: impl FnOnce() -> T,
 ) -> (T, &'static str) {
-    let previous = CALLBACK_CHECK.with(|slot| slot.replace(Some((normalization.clone(), None))));
+    // Restored on unwinding too: a check left set would compare every later
+    // root projection of the thread against another graph's σ and factor.
+    let scope = super::ScopedSlot::enter(&CALLBACK_CHECK, (normalization.clone(), None));
     let result = f();
-    let outcome = CALLBACK_CHECK.with(|slot| std::mem::replace(&mut *slot.borrow_mut(), previous));
+    let outcome = scope.exit();
     (result, outcome.and_then(|(_, outcome)| outcome).unwrap_or("none"))
 }
 

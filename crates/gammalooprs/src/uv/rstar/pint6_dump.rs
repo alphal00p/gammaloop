@@ -94,10 +94,17 @@ thread_local! {
 /// Run `f` (one outer integration) with `channel` recorded in the headers of
 /// the closures it writes.
 pub(super) fn with_channel<T>(channel: ClosureChannel, f: impl FnOnce() -> T) -> T {
-    let previous = CHANNEL.with(|slot| slot.replace(Some(channel)));
+    // Restored on unwinding too (a panicking diagram).
+    let scope = super::ScopedSlot::enter(&CHANNEL, channel);
     let result = f();
-    CHANNEL.with(|slot| *slot.borrow_mut() = previous);
+    scope.exit();
     result
+}
+
+/// The channel of the outer integration running on this thread.
+#[cfg(test)]
+pub(super) fn channel_active() -> bool {
+    CHANNEL.with(|slot| slot.borrow().is_some())
 }
 
 fn loop_rank(view: AtomView) -> usize {
