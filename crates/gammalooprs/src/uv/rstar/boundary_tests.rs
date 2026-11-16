@@ -270,6 +270,51 @@ fn split_checkpoints_inside_a_factorized_p() -> Result<()> {
     Ok(())
 }
 
+/// The thread-local scopes of check mode (closure capture, callback check)
+/// and of the dump channel are restored when the integration inside them
+/// panics: beta catches a panicking diagram and the worker thread goes on
+/// with the next one, which must not inherit them.
+#[test]
+fn scopes_are_restored_when_an_integration_panics() -> Result<()> {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+    let normalization = ClosedRootNormalization {
+        external: EdgeIndex::from(X0),
+        external_routing: Vec::new(),
+        factor: Atom::num(1),
+    };
+    let channel = || super::pint6_dump::ClosureChannel {
+        channel: "projection metric",
+        taylor_order: 2,
+        normalisation: "1/(i p^2 d_A (d-1))",
+    };
+    let caught = catch_unwind(AssertUnwindSafe(|| {
+        super::integrate::capturing_closures(|| {
+            super::boundary::with_callback_check(&normalization, || {
+                super::pint6_dump::with_channel(channel(), || -> usize {
+                    panic!("test: an exhausted budget inside a contraction")
+                })
+            })
+        })
+    }));
+    ensure!(caught.is_err(), "the panic must reach the caller");
+    ensure!(!super::integrate::capture_active(), "the closure capture is left set");
+    ensure!(!super::boundary::callback_check_active(), "the callback check is left set");
+    ensure!(!super::pint6_dump::channel_active(), "the channel is left set");
+    // A normal end returns the scope's values and restores the slots too.
+    let ((value, outcome), capture) = super::integrate::capturing_closures(|| {
+        super::boundary::with_callback_check(&normalization, || {
+            super::pint6_dump::with_channel(channel(), || {
+                (super::integrate::capture_active(), super::pint6_dump::channel_active())
+            })
+        })
+    });
+    ensure!(value == (true, true), "the scopes are not active inside: {value:?}");
+    ensure!(outcome == "none" && capture.closures.is_empty(), "{outcome}");
+    ensure!(!super::integrate::capture_active() && !super::boundary::callback_check_active());
+    ensure!(!super::pint6_dump::channel_active());
+    Ok(())
+}
+
 #[test]
 fn postconditions_reject_unmapped_loop_momenta() -> Result<()> {
     test_initialise()?;

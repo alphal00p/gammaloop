@@ -48,6 +48,47 @@ pub use crate::uv::counterterm_cache::{
 
 pub(super) static REFERENCE_MASS_SQUARED: std::sync::LazyLock<symbolica::atom::Symbol> =
     std::sync::LazyLock::new(|| symbolica::symbol!("rstar_reference_mass_squared"; Scalar));
+
+/// A thread-local `RefCell<Option<T>>` set for one scope and restored when the
+/// scope ends, also when it unwinds: beta catches a panicking diagram (an
+/// exhausted budget inside idenso panics) and its worker thread goes on with
+/// the next diagram, which must not inherit the scope.
+struct ScopedSlot<T: 'static> {
+    key: &'static std::thread::LocalKey<std::cell::RefCell<Option<T>>>,
+    previous: Option<Option<T>>,
+}
+
+impl<T: 'static> ScopedSlot<T> {
+    /// Set the slot to `value` until the returned scope ends.
+    fn enter(key: &'static std::thread::LocalKey<std::cell::RefCell<Option<T>>>, value: T) -> Self {
+        let previous = key.with(|slot| slot.replace(Some(value)));
+        Self {
+            key,
+            previous: Some(previous),
+        }
+    }
+
+    /// End the scope normally: the previous value is back, and this scope's
+    /// value is returned.
+    fn exit(mut self) -> Option<T> {
+        let previous = self.previous.take().flatten();
+        self.key.with(|slot| slot.replace(previous))
+    }
+}
+
+impl<T: 'static> Drop for ScopedSlot<T> {
+    fn drop(&mut self) {
+        // Only when the scope did not end through `exit` (unwinding). Inner
+        // borrows are released before this runs; never panic here.
+        if let Some(previous) = self.previous.take() {
+            let _ = self.key.try_with(|slot| {
+                if let Ok(mut slot) = slot.try_borrow_mut() {
+                    *slot = previous;
+                }
+            });
+        }
+    }
+}
 pub use boundary::{
     BoundaryMode, ClosedRootNormalization, remainder_boundary_mode, remainder_boundary_provenance,
     startup_line, validate_remainder_boundary,
