@@ -2616,7 +2616,10 @@ fn massive_closure_showcase() {
                 "numerical" => RustRedMasterMode::Numerical,
                 _ => RustRedMasterMode::Symbolic,
             };
-            let mut settings = settings(master_mode, None);
+            // vk5l-physrun: VAKINT_TEST_CLOSURE_ARITHMETIC = RustRed ordered weight
+            // arithmetic text (exact | modular_sampled[:..] | modular_polynomial[:..]).
+            let arithmetic = std::env::var("VAKINT_TEST_CLOSURE_ARITHMETIC").ok();
+            let mut settings = settings(master_mode, arithmetic.as_deref());
             settings.epsilon_symbol = "gammalooprs::ε".into();
             settings.mu_r_sq_symbol = "gammalooprs::μᵣ²".into();
             settings.integral_normalization_factor = crate::LoopNormalizationFactor::MSbar;
@@ -2650,9 +2653,13 @@ fn massive_closure_showcase() {
                     }
                     other => panic!("{name}: input is not numerator * topo: {:.100}", other.to_string()),
                 };
-                let routing = (1..=5)
+                // vk5l-physrun: the records are already routed into the cut
+                // momenta, external included: identity routing of k(1..5) AND of
+                // the closing head (else "an unknown momentum in a scalar product").
+                let mut routing = (1..=5)
                     .map(|i| (parse(&format!("k({i})")), parse(&format!("k({i})"))))
-                    .collect();
+                    .collect::<Vec<_>>();
+                routing.push((closure.momentum.clone(), closure.momentum.clone()));
                 crate::p_integral::MassiveClosure::evaluate_direct_batch(
                     &engine,
                     &settings,
@@ -2690,6 +2697,7 @@ fn massive_closure_showcase() {
                 "rss_after": rss(),
                 "input_bytes": input_text.len(), "result_bytes": value_text, "result_terms": terms,
                 "epsilon_terms": epsilon_terms,
+                "arithmetic": settings.ordered_weight_arithmetic.to_string(),
                 "reduce": {"channels": stats.channels, "reductions": stats.reductions, "pairs": stats.pairs,
                            "split_s": stats.split_seconds, "lower_s": stats.lower_seconds,
                            "prepare_s": stats.prepare_seconds, "library_s": stats.library_seconds,
