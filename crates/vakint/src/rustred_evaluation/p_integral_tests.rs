@@ -2526,6 +2526,65 @@ fn p_terminal_export() {
     eprintln!("p_terminal_export: {} terminals -> {}", records.len(), out.to_string_lossy());
 }
 
+/// vk5l-physrun: the Laurent orders of a Symbolica canonical-string result
+/// (`VAKINT_TEST_EPS_IN`, e.g. sum.symbolic.sym) in `gammalooprs::ε`, written
+/// to `VAKINT_TEST_EPS_OUT` as JSON {"orders": {"<n>": "<canonical string>"},
+/// "symbols": [non-ε symbols present]}.
+#[test]
+fn showcase_eps_orders() {
+    let (Some(input), Some(output)) = (
+        std::env::var_os("VAKINT_TEST_EPS_IN"),
+        std::env::var_os("VAKINT_TEST_EPS_OUT"),
+    ) else {
+        eprintln!("showcase_eps_orders: environment unset, skipped");
+        return;
+    };
+    let _ = Vakint::new().unwrap();
+    let text = std::fs::read_to_string(&input).unwrap();
+    let value = parse(&text).expand();
+    let epsilon = crate::utils::vakint_macros::vk_symbol!("gammalooprs::ε");
+    let mut orders = serde_json::Map::new();
+    let mut symbols = std::collections::BTreeSet::new();
+    for (power, coefficient) in value.coefficient_list::<i8>(&[Atom::var(epsilon)]) {
+        let order = if power == Atom::num(1) {
+            0
+        } else if power == Atom::var(epsilon) {
+            1
+        } else {
+            match power.as_view() {
+                symbolica::atom::AtomView::Pow(p) => {
+                    let (_, e) = p.get_base_exp();
+                    crate::get_integer_from_atom(e).unwrap_or(i64::MAX)
+                }
+                _ => i64::MAX,
+            }
+        };
+        coefficient.as_view().visitor(&mut |part| {
+            if let symbolica::atom::AtomView::Var(v) = part {
+                symbols.insert(v.get_symbol().get_name().to_string());
+            }
+            if let symbolica::atom::AtomView::Fun(f) = part {
+                symbols.insert(format!("{}()", f.get_symbol().get_name()));
+            }
+            true
+        });
+        let key = order.to_string();
+        let previous = orders.remove(&key).and_then(|v| v.as_str().map(parse));
+        let total = match previous {
+            Some(previous) => (previous + coefficient).expand(),
+            None => coefficient,
+        };
+        orders.insert(key, serde_json::Value::String(total.to_canonical_string()));
+    }
+    let json = serde_json::json!({"orders": orders, "symbols": symbols});
+    std::fs::write(&output, serde_json::to_string_pretty(&json).unwrap()).unwrap();
+    eprintln!("showcase_eps_orders: {} orders", orders_len(&json));
+}
+
+fn orders_len(json: &serde_json::Value) -> usize {
+    json["orders"].as_object().map(|o| o.len()).unwrap_or(0)
+}
+
 /// vk5l-physrun: a WHOLE GRAPH through [`MassiveClosure::evaluate_direct_sum`]:
 /// all closure records of `VAKINT_TEST_CLOSURE_FILES` (`:`-separated) lowered
 /// directly and summed with one key plan per closing line, reduced once per
