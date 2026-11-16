@@ -867,13 +867,20 @@ impl GenerationOptions {
     /// Remove diagrams whose closed fermion loops cancel against their own
     /// reversed orientations: the numerator summed over all 2^k orientations
     /// of the k closed non-ghost fermion loops, built in the diagram's own
-    /// frame, vanishes exactly (Furry's theorem in QED, the C-merged color
-    /// zeros in QCD, and diagrams that cancel through an automorphism).
+    /// frame, vanishes (Furry's theorem in QED, the C-merged color zeros in
+    /// QCD, and diagrams that cancel through an automorphism).
     ///
-    /// Disabled by default. Only exact zeros are removed; survivors keep their
-    /// names and overall factors. Diagrams the test cannot certify, such as
-    /// loops whose species has no propagator at all, are retained and
-    /// counted in [`crate::GenerationReport::orientation_test_skipped`].
+    /// A zero of a colourless loop is group-independent. A zero of a coloured
+    /// loop is certified at the model's numeric representation dimensions
+    /// (SU(3) for QCD; colour-zero tier Z3) by the color algebra of
+    /// `exact_color_zero`, whose local rules, including Fierz, hold only for
+    /// SU(N). It is not claimed for other groups or other N.
+    ///
+    /// Disabled by default. Only certified zeros are removed, never sampled
+    /// ones; survivors keep their names and overall factors. Diagrams the test
+    /// cannot certify, such as loops whose species has no propagator at all,
+    /// are retained and counted in
+    /// [`crate::GenerationReport::orientation_test_skipped`].
     /// This option is runtime-only and is not serialized.
     pub fn cancel_closed_loop_orientations(mut self, enabled: bool) -> Self {
         self.cancel_closed_loop_orientations = enabled;

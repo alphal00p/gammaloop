@@ -15,7 +15,19 @@
 //! into the original ones exactly: `C gamma^T C^-1 = -gamma` and the spinor
 //! metric is symmetric. Spinor factors outside this allow-list fail closed.
 //! Color factors are left as built: the color algebra then decides whether
-//! the transposed color traces cancel. Only exact zeros are accepted.
+//! the transposed color traces cancel.
+//!
+//! What a removed zero means depends on the loop's colour:
+//! - colourless loops (QED, Furry's theorem): the orientation sum vanishes
+//!   identically, independent of any gauge group;
+//! - coloured loops: the zero is certified by
+//!   `grouping::exact_color_zero` at the model's numeric representation
+//!   dimensions, i.e. at SU(3) for QCD (colour-zero tier Z3). That colour
+//!   algebra uses local rules, including Fierz, which hold only for SU(N); a
+//!   removed coloured diagram is therefore not claimed to vanish for every
+//!   group (Z1) or for every SU(N) (Z2).
+//!
+//! Sampled values are never accepted as a zero; they can only show a nonzero.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -40,7 +52,9 @@ const MAX_ORIENTED_LOOPS: usize = 12;
 pub enum OrientationSumVerdict {
     /// The diagram has no closed loop of a non-ghost, non-Majorana fermion.
     NoClosedLoops,
-    /// The numerator summed over all loop orientations is exactly zero.
+    /// The numerator summed over all loop orientations vanishes:
+    /// group-independently for colourless loops, and at the model's numeric
+    /// representation dimensions (SU(3) for QCD, tier Z3) for coloured loops.
     Zero,
     /// The orientation sum was not proven to vanish.
     NonZero,
@@ -164,7 +178,9 @@ impl Generator {
             return Ok(OrientationSumVerdict::Zero);
         }
         // Admission cooks the explicit indices again and infers the open
-        // interface of the sum, which every variant shares.
+        // interface of the sum, which every variant shares. A zero found
+        // below holds at the model's numeric representation dimensions (SU(3),
+        // tier Z3), not for every group: see the module documentation.
         let numerator = NumeratorInterface::admit(sum, None)?;
         Ok(
             if grouping::exact_color_zero(diagram, &numerator, &self.model)? {

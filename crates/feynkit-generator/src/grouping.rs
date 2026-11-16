@@ -465,10 +465,17 @@ pub(crate) fn prepared_numerator(
         .map_err(color_error)
 }
 
-/// Exact zero test of a numerator in `diagram`'s frame after color algebra.
+/// Zero test of a numerator in `diagram`'s frame after color algebra.
 ///
 /// Lorentz and spinor factors are left untouched. Samples may only prove a
 /// nonzero value; `true` requires the exact symbolic fallback.
+///
+/// A colour zero found here is certified at the model's numeric
+/// representation dimensions (SU(3) for QCD; colour-zero tier Z3). The color
+/// simplification uses local rules, including Fierz, that hold only for
+/// SU(N), so `true` does not mean the zero holds for every group (Z1) or for
+/// every SU(N) (Z2). For a colourless numerator the result does not depend on
+/// any group.
 pub(crate) fn exact_color_zero(
     diagram: &FeynmanDiagram,
     numerator: &SymbolicTensor<PartialStructure>,
