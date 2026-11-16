@@ -431,3 +431,63 @@ fn weights_of_survivors_unchanged() {
         assert_eq!(total, 1 << loops);
     }
 }
+
+/// Every member of one orientation family (same undirected skeleton) must
+/// get the same verdict: the sum from any member is the same family sum up
+/// to a sign. A wrong spinor or colour transposition breaks this.
+fn assert_family_verdicts_agree(result: &GenerationResult) -> (usize, usize, usize) {
+    let mut skipped = 0;
+    let mut families = BTreeMap::<String, Vec<(String, OrientationSumVerdict)>>::new();
+    for diagram in &result.diagrams {
+        let model = diagram.model();
+        // Ghost loops are not varied, so ghost reversals are separate families.
+        if diagram
+            .edges()
+            .any(|(_, _, edge)| model.particle_by_id(edge.particle).unwrap().is_ghost())
+        {
+            continue;
+        }
+        let verdict = diagram
+            .closed_loop_orientation_sum(&GenerationOptions::default())
+            .unwrap();
+        if matches!(verdict, OrientationSumVerdict::Skipped(_)) {
+            skipped += 1;
+            continue;
+        }
+        families
+            .entry(undirected_skeleton(diagram).0)
+            .or_default()
+            .push((diagram.name().to_owned(), verdict));
+    }
+    let mut zeros = 0;
+    for members in families.values() {
+        assert!(
+            members.iter().all(|(_, verdict)| *verdict == members[0].1),
+            "{members:?}"
+        );
+        zeros += members
+            .iter()
+            .filter(|(_, verdict)| *verdict == OrientationSumVerdict::Zero)
+            .count();
+    }
+    (families.len(), zeros, skipped)
+}
+
+#[test]
+fn orientation_family_members_share_verdicts() {
+    let qed = photon_self_energy(qed_massless(), &photon_options(4));
+    let (_, zeros, skipped) = assert_family_verdicts_agree(&qed);
+    assert_eq!((zeros, skipped), (36, 0));
+    let qcd = Process::new(["B"], ["B"])
+        .generate_diagrams(
+            qcd_background(),
+            &GenerationOptions::default().with_loop_count(2, 2).unwrap(),
+        )
+        .unwrap();
+    let (families, _, skipped) = assert_family_verdicts_agree(&qcd);
+    eprintln!(
+        "QCD B->B: {} diagrams, {families} families, {skipped} skipped",
+        qcd.diagrams.len()
+    );
+    assert!(families > 0);
+}
