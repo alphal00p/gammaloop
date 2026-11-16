@@ -9,6 +9,8 @@
 
 #[cfg(test)]
 mod cache_tests;
+#[cfg(test)]
+mod closed_skip_tests;
 mod edge_experiment;
 mod evaluate;
 mod expression;

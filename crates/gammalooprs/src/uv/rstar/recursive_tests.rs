@@ -60,7 +60,7 @@ use super::{
 const MODEL: &str = include_str!("testdata/background_qcd.json");
 const RSTAR: UvChildrenRoute = UvChildrenRoute::Rstar { min_loops: 1 };
 
-fn load(dot: &str) -> Result<FeynmanDiagram> {
+pub(super) fn load(dot: &str) -> Result<FeynmanDiagram> {
     let model = Model::from_json(MODEL).map_err(|error| eyre!("{error}"))?;
     FeynmanDiagram::from_dot(model, dot).map_err(|error| eyre!("{error}"))
 }
@@ -69,7 +69,7 @@ fn load(dot: &str) -> Result<FeynmanDiagram> {
 /// vertex and propagator rule keeps the residual of its first colour row, as
 /// in a branch of beta's `color::factor_color` (which also weights rows of
 /// multi-row rules; the R* operations are linear in each local rule).
-fn colour_factored(diagram: &FeynmanDiagram) -> Result<FeynmanDiagram> {
+pub(super) fn colour_factored(diagram: &FeynmanDiagram) -> Result<FeynmanDiagram> {
     let filter = || {
         TensorCollectFilter::Reps([
             ColorAdjoint {}.into(),
@@ -98,7 +98,7 @@ fn colour_factored(diagram: &FeynmanDiagram) -> Result<FeynmanDiagram> {
 }
 
 /// The beta engine's UV settings (MS-bar, RustRed before Forcer).
-fn settings() -> UVgenerationSettings {
+pub(super) fn settings() -> UVgenerationSettings {
     UVgenerationSettings {
         renormalization_prescription: RenormalizationPrescriptionSettings {
             log_divergent: ApproximationType::PolePart,

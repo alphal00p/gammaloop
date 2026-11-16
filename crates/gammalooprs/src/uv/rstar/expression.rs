@@ -22,7 +22,7 @@ use linnet::half_edge::{
 use spenso::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG},
     structure::{
-        partial::PartialStructureExt,
+        partial::{PartialStructure, PartialStructureExt},
         representation::{Minkowski, RepName},
         slot::{IsAbstractSlot, SlotMatch, SlotMatcher},
     },
@@ -78,7 +78,7 @@ pub fn set_memory_release(release: fn()) {
 
 /// Exclusive wall-clock stages within one outer integral. Backend time may
 /// contain its own finer timing events; those must not be added to this total.
-struct IntegrationTimings {
+pub(super) struct IntegrationTimings {
     started: Instant,
     last: Instant,
     routing: f64,
@@ -92,7 +92,7 @@ struct IntegrationTimings {
 }
 
 impl IntegrationTimings {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         let started = Instant::now();
         Self {
             started,
@@ -316,9 +316,15 @@ pub fn closed_skip_mode(name: &str) -> ClosedSkipMode {
 
 /// `GAMMALOOP_CLOSED_SKIP_SUMMAND_SIMPLIFY` (`1` or `check`): the skip of the
 /// whole-expression [`RStarIntegrand::simplify_summands`] pass after the outer
-/// Taylor step of a root-projected integral, when its Taylor polynomial is a
-/// closed scalar (the root-closed path: root metric contracted in the root
-/// scope, remainder already contracted to dots). Default off.
+/// Taylor step of a root-projected integral whose remainder idenso certified a
+/// closed scalar when it contracted it (the root-closed path: root metric
+/// contracted in the root scope, remainder already contracted to dots). The
+/// certificate is a cached producer fact
+/// ([`SymbolicTensor::is_certified_closed_scalar`], read before the uncook in
+/// [`RStarIntegrand::simplify_view_certified`]); the Taylor step introduces no
+/// index (`den` is differentiated in its scalar fourth argument), so it
+/// carries over to the Taylor polynomial. `check` runs the pass anyway and
+/// compares, also against the syntactic [`closed_dot_scalar`] test. Default off.
 fn closed_summand_skip() -> ClosedSkipMode {
     static MODE: LazyLock<ClosedSkipMode> =
         LazyLock::new(|| closed_skip_mode("GAMMALOOP_CLOSED_SKIP_SUMMAND_SIMPLIFY"));
@@ -397,8 +403,11 @@ pub(super) struct RStarIntegrand {
     /// ever Taylor projected, and its truncation keeps a tiny fraction of the
     /// contracted terms: it is contracted after the Taylor step.
     routed: Atom,
-    /// [`Self::routed`] contracted to dots, built on first use.
-    contracted: OnceLock<Atom>,
+    /// [`Self::routed`] contracted to dots, built on first use, and whether
+    /// idenso certified that contraction a closed scalar (a cached producer
+    /// fact, see [`Self::simplify_view_certified`]; only the loop-basis
+    /// contraction reports it, the edge-keeping contractions report `false`).
+    contracted: OnceLock<(Atom, bool)>,
     /// Edge momenta kept as independent vectors (`GAMMALOOP_EDGE_CONTRACTION=keep`):
     /// each distinct loop-momentum combination `Σ c_e Q(e)` -> its id.
     combinations: std::sync::Mutex<std::collections::BTreeMap<Vec<(i64, Atom)>, i64>>,
@@ -662,6 +671,15 @@ impl RStarIntegrand {
     /// The routed expression contracted to dots, as the outer and physical
     /// paths consume it. It is contracted once, on first use.
     pub fn expression(&self) -> Result<&Atom> {
+        Ok(&self.contracted_certified()?.0)
+    }
+
+    /// [`Self::expression`] and whether idenso certified its contraction a
+    /// closed scalar: read from the facts cached on the contracted tensor,
+    /// never by a scan (see [`Self::simplify_view_certified`]). Only the
+    /// loop-basis contraction reports a certificate; the edge-keeping
+    /// contractions rewrite their result afterwards and report `false`.
+    pub(super) fn contracted_certified(&self) -> Result<&(Atom, bool)> {
         if let Some(contracted) = self.contracted.get() {
             return Ok(contracted);
         }
@@ -669,13 +687,19 @@ impl RStarIntegrand {
         let contracted = {
             let _algebra = StageSpan::new("gamma.remainder.algebra");
             if keeps_remainder() {
-                self.contract_keeping_edges(&self.routed)
-                    .wrap_err("while preparing the routed R* tensor expression")?
+                (
+                    self.contract_keeping_edges(&self.routed)
+                        .wrap_err("while preparing the routed R* tensor expression")?,
+                    false,
+                )
             } else if edge_contraction("remainder") {
-                Self::simplify_edge_basis(&self.routed)
-                    .wrap_err("while preparing the routed R* tensor expression")?
+                (
+                    Self::simplify_edge_basis(&self.routed)
+                        .wrap_err("while preparing the routed R* tensor expression")?,
+                    false,
+                )
             } else {
-                Self::simplify(&self.routed)
+                Self::simplify_view_certified(self.routed.as_view())
                     .wrap_err("while preparing the routed R* tensor expression")?
             }
         };
@@ -686,18 +710,32 @@ impl RStarIntegrand {
                     "loops": self.region.loops,
                     "seconds": started.elapsed().as_secs_f64(),
                     "routed_bytes": self.routed.as_view().get_byte_size(),
-                    "contracted_bytes": contracted.as_view().get_byte_size(),
+                    "contracted_bytes": contracted.0.as_view().get_byte_size(),
+                    "certified_closed_scalar": contracted.1,
                 }),
             );
         }
         Ok(self.contracted.get_or_init(|| contracted))
     }
 
+    /// Whether `expression` is this remainder's own contracted expression (the
+    /// same object, as the ordinary outer integration passes it) and idenso
+    /// certified that contraction a closed scalar. Any other expression, e.g.
+    /// an IR correction's quotient product, has no certificate.
+    fn certified_contraction(&self, expression: &Atom) -> bool {
+        self.contracted
+            .get()
+            .is_some_and(|(contracted, certified)| *certified && std::ptr::eq(contracted, expression))
+    }
+
     /// Mutable access to the contracted expression, for tests decorating it.
+    /// A decorated expression keeps no certificate.
     #[cfg(test)]
     pub fn expression_mut(&mut self) -> Result<&mut Atom> {
         self.expression()?;
-        Ok(self.contracted.get_mut().expect("contracted above"))
+        let (expression, certified) = self.contracted.get_mut().expect("contracted above");
+        *certified = false;
+        Ok(expression)
     }
 
     /// Express a two-point amplitude in its first boundary momentum, keeping
@@ -1436,6 +1474,106 @@ impl RStarIntegrand {
         root_projector: Option<&RootProjector<'_>>,
     ) -> Result<Atom> {
         let mut timing = IntegrationTimings::new();
+        let polynomial = self.outer_taylor(
+            expression,
+            root_edges,
+            degree,
+            reference_mass_squared,
+            auxiliary_mass_squared,
+            &mut timing,
+        )?;
+        // GAMMALOOP_CLOSED_SKIP_SUMMAND_SIMPLIFY (default off): on the closed
+        // root path idenso contracted the remainder (with the root closure
+        // metric) to a closed scalar before the Taylor step and certified it
+        // so. The Taylor step only routes, scales and truncates it (dot is
+        // linear, so routing keeps it in dot form; den is differentiated in
+        // its scalar fourth argument): it introduces no index, and this pass
+        // has nothing to contract. The skip is taken only for a root-projected
+        // integral of the remainder's own certified contraction; an IR
+        // correction (a quotient product, closed after its K) has no
+        // certificate and is simplified as before. The certificate is a cached
+        // fact, never a scan; `check` adds the syntactic closed_dot_scalar test
+        // as a cross-check.
+        let skip = closed_summand_skip();
+        let certified = skip != ClosedSkipMode::Off
+            && root_projector.is_some()
+            && self.certified_contraction(expression);
+        let closed = skip == ClosedSkipMode::Check
+            && root_projector.is_some()
+            && closed_dot_scalar(polynomial.as_view());
+        if skip != ClosedSkipMode::Off {
+            eprintln!(
+                "CLOSED_SKIP site=outer_taylor id={unique_id} loops={} bytes={} root_projected={} certified={certified} closed={} action={}",
+                self.region.loops,
+                polynomial.as_view().get_byte_size(),
+                root_projector.is_some(),
+                if skip == ClosedSkipMode::Check {
+                    if closed { "true" } else { "false" }
+                } else {
+                    "unchecked"
+                },
+                if certified && skip == ClosedSkipMode::Skip {
+                    "skipped"
+                } else {
+                    "simplified"
+                },
+            );
+        }
+        let expanded = if certified && skip == ClosedSkipMode::Skip {
+            polynomial
+        } else {
+            let expanded = Self::simplify_summands(polynomial.as_view())
+                .inspect_err(|_| edge_debug_dump("outer_simplify", &polynomial))
+                .wrap_err("while simplifying the compensated R* outer Taylor polynomial")?;
+            if certified || closed {
+                let identical = expanded == polynomial;
+                let equal = identical || (&expanded - &polynomial).expand().is_zero();
+                eprintln!(
+                    "CLOSED_SKIP site=outer_taylor id={unique_id} check certified={certified} closed={closed} identical={identical} equal={equal}"
+                );
+            } else if skip == ClosedSkipMode::Check && root_projector.is_some() {
+                // Diagnostics (with GAMMALOOP_ALGEBRA_DUMP): a root-projected
+                // polynomial that failed the closed-scalar test, before and
+                // after this pass, and whether the pass changed it.
+                streamed::dump("outer_taylor_open", polynomial.as_view());
+                streamed::dump("outer_taylor_open_simplified", expanded.as_view());
+                eprintln!(
+                    "CLOSED_SKIP site=outer_taylor id={unique_id} open unchanged={} closed_after={}",
+                    expanded == polynomial,
+                    closed_dot_scalar(expanded.as_view())
+                );
+            }
+            drop(polynomial);
+            expanded
+        };
+        timing.algebra = timing.lap();
+        self.integrate_polynomial(
+            expanded,
+            root_graph,
+            vakint,
+            uv_settings,
+            vakint_settings,
+            unique_id,
+            root_projector,
+            timing,
+        )
+    }
+
+    /// The outer Taylor polynomial of `expression` as [`Self::integrate`]
+    /// takes it: routed in this component's basis, the root edges scaled by
+    /// the Taylor parameter, the reference mass compensated, truncated at total
+    /// degree `degree` and evaluated at one. Laps the routing and Taylor
+    /// timings.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn outer_taylor(
+        &self,
+        expression: &Atom,
+        root_edges: &[EdgeIndex],
+        degree: usize,
+        reference_mass_squared: Symbol,
+        auxiliary_mass_squared: &Atom,
+        timing: &mut IntegrationTimings,
+    ) -> Result<Atom> {
         // The root's boundary carriers: the graph's external edges, or the full
         // crown of a proper support evaluated as its own R* root.
         // Quotient UV maps return original Q labels. Route newly introduced
@@ -1488,59 +1626,23 @@ impl RStarIntegrand {
         let polynomial = taylor.evaluate(&compensated)?;
         drop(compensated);
         timing.taylor = timing.lap();
-        // GAMMALOOP_CLOSED_SKIP_SUMMAND_SIMPLIFY (default off): on the closed
-        // root path the remainder was contracted to a closed scalar before
-        // the Taylor step, which only scales, routes and truncates it (dot is
-        // linear, so routing keeps it in dot form), so this pass has nothing
-        // to contract. The skip is taken only for a root-projected integral
-        // whose polynomial passes the syntactic closed-scalar test; an IR
-        // correction closed after its quotient K still carries the open
-        // metric and is simplified as before.
-        let skip = closed_summand_skip();
-        let closed = skip != ClosedSkipMode::Off
-            && root_projector.is_some()
-            && closed_dot_scalar(polynomial.as_view());
-        if skip != ClosedSkipMode::Off {
-            eprintln!(
-                "CLOSED_SKIP site=outer_taylor id={unique_id} loops={} bytes={} root_projected={} closed={closed} action={}",
-                self.region.loops,
-                polynomial.as_view().get_byte_size(),
-                root_projector.is_some(),
-                if closed && skip == ClosedSkipMode::Skip {
-                    "skipped"
-                } else {
-                    "simplified"
-                },
-            );
-        }
-        let expanded = if closed && skip == ClosedSkipMode::Skip {
-            polynomial
-        } else {
-            let expanded = Self::simplify_summands(polynomial.as_view())
-                .inspect_err(|_| edge_debug_dump("outer_simplify", &polynomial))
-                .wrap_err("while simplifying the compensated R* outer Taylor polynomial")?;
-            if closed {
-                let identical = expanded == polynomial;
-                let equal = identical || (&expanded - &polynomial).expand().is_zero();
-                eprintln!(
-                    "CLOSED_SKIP site=outer_taylor id={unique_id} check identical={identical} equal={equal}"
-                );
-            } else if skip == ClosedSkipMode::Check && root_projector.is_some() {
-                // Diagnostics (with GAMMALOOP_ALGEBRA_DUMP): a root-projected
-                // polynomial that failed the closed-scalar test, before and
-                // after this pass, and whether the pass changed it.
-                streamed::dump("outer_taylor_open", polynomial.as_view());
-                streamed::dump("outer_taylor_open_simplified", expanded.as_view());
-                eprintln!(
-                    "CLOSED_SKIP site=outer_taylor id={unique_id} open unchanged={} closed_after={}",
-                    expanded == polynomial,
-                    closed_dot_scalar(expanded.as_view())
-                );
-            }
-            drop(polynomial);
-            expanded
-        };
-        timing.algebra = timing.lap();
+        Ok(polynomial)
+    }
+
+    /// The rest of [`Self::integrate`] after the outer Taylor step and its
+    /// summand simplification: root projection, conversion and integration.
+    #[allow(clippy::too_many_arguments)]
+    fn integrate_polynomial(
+        &self,
+        expanded: Atom,
+        root_graph: &Graph,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+        vakint_settings: &VakintSettings,
+        unique_id: usize,
+        root_projector: Option<&RootProjector<'_>>,
+        mut timing: IntegrationTimings,
+    ) -> Result<Atom> {
         // The root is the only boundary which may be projected here. Child
         // and quotient pole maps are already complete, and no later pole map
         // can multiply finite contraction terms by another insertion pole.
@@ -1749,7 +1851,7 @@ impl RStarIntegrand {
     /// every summand alone, and a normalized sum is canonical. A large sum
     /// is simplified in chunks of summands and added up once, unless a chunk
     /// introduces a dummy index, which makes the whole sum be simplified.
-    fn simplify_summands(expression: AtomView<'_>) -> Result<Atom> {
+    pub(super) fn simplify_summands(expression: AtomView<'_>) -> Result<Atom> {
         let limit = streamed::piece_limit();
         if expression.get_byte_size() < limit || !matches!(expression, AtomView::Add(_)) {
             return Self::simplify_view(expression);
@@ -1778,6 +1880,16 @@ impl RStarIntegrand {
     }
 
     fn simplify_view(expression: AtomView<'_>) -> Result<Atom> {
+        Ok(Self::simplify_view_certified(expression)?.0)
+    }
+
+    /// [`Self::simplify_view`], also returning whether idenso certified its
+    /// result a closed scalar: no open slot, no contraction or identity
+    /// candidate left. The flag is the producer fact cached on the tensor
+    /// that `simplify_algebra(..).to_dots()` returns, read before the uncook
+    /// (which leaves a plain Atom without facts); it is never computed by a
+    /// scan, so an uncertified result reports `false`.
+    pub(super) fn simplify_view_certified(expression: AtomView<'_>) -> Result<(Atom, bool)> {
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
@@ -1785,14 +1897,17 @@ impl RStarIntegrand {
         // Reduce color identities after the quotient has closed their indices.
         // Leave trace/chain powers intact for the same reason as finish_tensor:
         // their internal spinor sums must remain independent between copies.
-        let simplified = SymbolicTensor::infer_indexed(cooking.try_cook(expression)?)?
-            .simplify_algebra(&AlgebraSettings {
-                gamma: Some(GammaSimplifySettings::canonical()),
-                epsilon: true,
-                ..Default::default()
-            })?
-            .to_dots()?;
-        Ok(cooking.uncook(simplified.expression().as_view()))
+        let simplified: SymbolicTensor<PartialStructure> =
+            SymbolicTensor::infer_indexed(cooking.try_cook(expression)?)?
+                .simplify_algebra(&AlgebraSettings {
+                    gamma: Some(GammaSimplifySettings::canonical()),
+                    epsilon: true,
+                    ..Default::default()
+                })?
+                .to_dots()?
+                .into();
+        let certified = simplified.is_certified_closed_scalar();
+        Ok((cooking.uncook(simplified.expression().as_view()), certified))
     }
 }
 
