@@ -2840,6 +2840,173 @@ fn raise_line_power(topology: &Atom, n: usize) -> Atom {
         .finish()
 }
 
+/// vk4l-beta-slow: one `pint6.massive-closure-request.v1` file (plain or
+/// `.zst`) as (closure, direct input with the identity routing, settings).
+fn closure_file_input(
+    path: &std::path::Path,
+) -> (
+    crate::p_integral::MassiveClosure,
+    crate::p_integral::DirectClosureInput,
+    crate::VakintSettings,
+) {
+    let name = path.display().to_string();
+    let text = if name.ends_with(".zst") {
+        let raw = std::process::Command::new("zstd")
+            .args(["-qdc"])
+            .arg(path)
+            .output()
+            .unwrap();
+        String::from_utf8(raw.stdout).unwrap()
+    } else {
+        std::fs::read_to_string(path).unwrap()
+    };
+    let field = |key: &str| {
+        text.lines()
+            .find_map(|line| line.strip_prefix(key)?.strip_prefix(' '))
+            .unwrap_or_else(|| panic!("{name}: no {key}"))
+            .to_owned()
+    };
+    let mut settings = settings(RustRedMasterMode::Retain, None);
+    settings.epsilon_symbol = "gammalooprs::ε".into();
+    settings.mu_r_sq_symbol = "gammalooprs::μᵣ²".into();
+    settings.integral_normalization_factor = crate::LoopNormalizationFactor::MSbar;
+    settings.number_of_terms_in_epsilon_expansion = field("epsilon_terms").parse().unwrap();
+    settings.use_dot_product_notation = false;
+    settings.n_cores = 1;
+    let closure = crate::p_integral::MassiveClosure {
+        momentum: parse(&field("closure_momentum")),
+        mass_squared: parse(&field("closure_mass_squared")),
+        power: field("closure_power").parse().unwrap(),
+    };
+    let input = parse(&field("input"));
+    let (topology, numerator) = match input.as_view() {
+        symbolica::atom::AtomView::Mul(product) => {
+            let mut topology = Atom::num(1);
+            let mut numerator = Atom::num(1);
+            for factor in product.iter() {
+                match factor {
+                    symbolica::atom::AtomView::Fun(function)
+                        if function.get_symbol() == crate::symbols::S.topo =>
+                    {
+                        topology = factor.to_owned()
+                    }
+                    _ => numerator = numerator * factor.to_owned(),
+                }
+            }
+            (topology, numerator)
+        }
+        symbolica::atom::AtomView::Fun(_) => (input.clone(), Atom::num(1)),
+        _ => panic!("{name}: input is not numerator * topo"),
+    };
+    let loops: i64 = field("p_loops").parse().unwrap();
+    let mut routing = (1..=loops)
+        .map(|i| (parse(&format!("k({i})")), parse(&format!("k({i})"))))
+        .collect::<Vec<_>>();
+    routing.push((closure.momentum.clone(), closure.momentum.clone()));
+    (
+        closure,
+        crate::p_integral::DirectClosureInput {
+            topology,
+            routing,
+            numerator,
+        },
+        settings,
+    )
+}
+
+/// vk4l-beta-slow (R5 of the producer design): `pint6.remainder-boundary.v1`
+/// records (header paths in `VAKINT_TEST_BOUNDARY_RECORDS`) read with the
+/// streaming reader; every pattern with a `ref_closure` must lower to the
+/// folded input of that v1 closure record (`closure-<pid>-<seq:06>.txt[.zst]`
+/// beside the header); with `VAKINT_TEST_BOUNDARY_EVALUATE=1` the boundary
+/// value must equal the sum of its reference closures (when every pattern has
+/// one). Five-loop records need `VAKINT_TEST_P5L_DRILL_PACKAGE`.
+#[test]
+fn remainder_boundary_records() {
+    let Some(files) = std::env::var_os("VAKINT_TEST_BOUNDARY_RECORDS") else {
+        eprintln!("remainder_boundary_records: VAKINT_TEST_BOUNDARY_RECORDS unset, skipped");
+        return;
+    };
+    let mut engine = Vakint::new().unwrap();
+    if let Some(package) = std::env::var_os("VAKINT_TEST_P5L_DRILL_PACKAGE") {
+        engine
+            .load_p_library_directory(std::path::Path::new(&package), false)
+            .unwrap();
+        engine.p_library().unwrap();
+    }
+    let evaluate = std::env::var("VAKINT_TEST_BOUNDARY_EVALUATE").as_deref() == Ok("1");
+    for header in std::env::split_paths(&files) {
+        let name = header.file_name().unwrap().to_string_lossy().into_owned();
+        let pid = name
+            .strip_prefix("boundary-")
+            .and_then(|rest| rest.split('-').next())
+            .unwrap_or_else(|| panic!("{name}: not boundary-<pid>-<seq>.txt"))
+            .to_owned();
+        let reading = std::time::Instant::now();
+        let record = crate::p_integral::read_boundary_record(&header).unwrap();
+        let read_seconds = reading.elapsed().as_secs_f64();
+        let directory = header.parent().unwrap();
+        let reference_file = |seq: &str| -> std::path::PathBuf {
+            let seq: usize = seq.parse().unwrap();
+            let plain = directory.join(format!("closure-{pid}-{seq:06}.txt"));
+            if plain.exists() {
+                plain
+            } else {
+                directory.join(format!("closure-{pid}-{seq:06}.txt.zst"))
+            }
+        };
+        let mut checked = 0;
+        let mut references = Vec::new();
+        for (index, reference) in record.ref_closures.iter().enumerate() {
+            let Some(reference) = reference else { continue };
+            let (closure, direct, settings) = closure_file_input(&reference_file(reference));
+            let expected = closure
+                .lower_direct(&engine, &settings, &direct)
+                .unwrap()
+                .unwrap_or_else(|| {
+                    panic!("{name}: the direct path declines ref_closure {reference}")
+                });
+            let lowered = record
+                .boundary
+                .lower_pattern(&engine, &settings, index)
+                .unwrap()
+                .unwrap_or_else(|reason| panic!("{name}: pattern {index} declined: {reason}"));
+            assert_eq!(
+                lowered.fingerprint(),
+                expected.fingerprint(),
+                "{name}: pattern {index} against ref_closure {reference}"
+            );
+            references.push((closure, direct, settings));
+            checked += 1;
+        }
+        eprintln!(
+            "BOUNDARY_RECORD {name}: read {read_seconds:.1} s, {} blocks, {} patterns, {checked} lowered identically to their ref_closure",
+            record.boundary.blocks.len(),
+            record.boundary.patterns.len()
+        );
+        if evaluate && checked == record.boundary.patterns.len() && checked > 0 {
+            let settings = references[0].2.clone();
+            let (value, stats) = record
+                .boundary
+                .evaluate_with_stats(
+                    &engine,
+                    &settings,
+                    crate::p_integral::BoundaryOptions { strict: true },
+                )
+                .unwrap();
+            let inputs = references
+                .into_iter()
+                .map(|(closure, direct, _)| (closure, direct))
+                .collect::<Vec<_>>();
+            let expected =
+                crate::p_integral::MassiveClosure::evaluate_direct_sum(&engine, &settings, &inputs)
+                    .unwrap();
+            assert_eq!(value, expected.expand(), "{name}: value");
+            eprintln!("BOUNDARY_RECORD {name}: value identical; {stats:?}");
+        }
+    }
+}
+
 /// vk4l-beta-slow: the remainder boundary end to end on closure request files
 /// (`pint6.massive-closure-request.v1`, plain or `.zst`; path list in
 /// `VAKINT_TEST_BOUNDARY_FILES`; a five-loop package in

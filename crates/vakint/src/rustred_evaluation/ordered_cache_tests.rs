@@ -309,13 +309,17 @@ fn ordered_cache_settings_select_the_attached_caches() {
     assert_eq!(saved.programs.len(), 1);
     assert!(saved.records_written > 0);
     assert_eq!(program_directories(directory.path()).len(), 1);
-    // Loading attaches every loaded program's cache.
+    // Loading attaches every loaded program's cache. The vacuum programs
+    // only: the built-in p library's cache is process-global data, present
+    // here when another test of the same process (cargo test, not nextest)
+    // has loaded it first.
     let loaded = engine.load_ordered_cache(&manual).unwrap();
     assert_eq!(
         loaded
             .programs
             .iter()
             .map(|program| program.program.as_str())
+            .filter(|program| !program.starts_with("p-library"))
             .collect::<Vec<_>>(),
         [
             "1L-unit-mass-vacuum-k1",

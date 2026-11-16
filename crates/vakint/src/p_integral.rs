@@ -44,7 +44,11 @@ use crate::{
     VakintTerm, get_integer_from_atom, get_prop_with_id, graph::Graph, topologies::Topology,
 };
 
-pub use boundary::{BoundaryOptions, BoundaryPattern, RemainderBoundary};
+pub use boundary::{
+    BOUNDARY_BLOCK_SCHEMA, BOUNDARY_SCHEMA, BoundaryOptions, BoundaryPattern, BoundaryRecord,
+    BoundaryStats, RemainderBoundary, read_boundary_block, read_boundary_record,
+    write_boundary_record,
+};
 pub(crate) use catalogue::{PMatch, match_graph_preferring};
 pub use dot::to_dot;
 /// FORM run record for the benchmark harness (not part of the API).

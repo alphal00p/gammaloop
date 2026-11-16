@@ -99,10 +99,11 @@ impl LoweredClosure {
         Ok(())
     }
 
-    /// Test fingerprint of the folded RustRed input (channels, bases, keys,
-    /// values), for comparing two lowerings.
-    #[cfg(test)]
-    pub(crate) fn fingerprint(&self) -> String {
+    /// A canonical text of the folded RustRed input (closing line, channels,
+    /// ε-bases, keys and exact values; channels and bases whose values all
+    /// cancelled are left out): two lowerings give the same RustRed input,
+    /// hence the same reduction, iff their fingerprints are equal.
+    pub fn fingerprint(&self) -> String {
         // Channels and ε-bases whose values all cancelled carry no input.
         let live = self
             .folded
@@ -715,42 +716,53 @@ impl MassiveClosure {
         settings: &crate::VakintSettings,
         input: &DirectClosureInput,
     ) -> Result<Option<LoweredClosure>, VakintError> {
+        let mut stats = crate::rustred_evaluation::p_lowering::DirectStats::default();
+        Ok(self
+            .lower_direct_explained(vakint, settings, input, &mut stats)?
+            .ok())
+    }
+
+    /// [`Self::lower_direct`] with the reason of a decline (`Ok(Err(reason))`)
+    /// and the stage seconds and counts in `stats`.
+    pub(crate) fn lower_direct_explained(
+        &self,
+        vakint: &Vakint,
+        settings: &crate::VakintSettings,
+        input: &DirectClosureInput,
+        stats: &mut crate::rustred_evaluation::p_lowering::DirectStats,
+    ) -> Result<Result<LoweredClosure, &'static str>, VakintError> {
         use crate::rustred_evaluation::p_lowering as direct;
         let head = self.validated_head(settings)?;
+        let empty = || LoweredClosure {
+            closure: self.clone(),
+            head: head.clone(),
+            folded: Default::default(),
+        };
         if input.numerator.is_zero() {
-            return Ok(Some(LoweredClosure {
-                closure: self.clone(),
-                head,
-                folded: Default::default(),
-            }));
+            return Ok(Ok(empty()));
         }
+        let matching = std::time::Instant::now();
         let cut = match direct::match_cut(vakint, settings, &input.topology, &head)? {
             Ok(Some(cut)) => cut,
-            Ok(None) => {
-                return Ok(Some(LoweredClosure {
-                    closure: self.clone(),
-                    head,
-                    folded: Default::default(),
-                }));
-            }
-            Err(_) => return Ok(None),
+            Ok(None) => return Ok(Ok(empty())),
+            Err(declined) => return Ok(Err(declined.0)),
         };
+        stats.match_seconds += matching.elapsed().as_secs_f64();
         let handle = vakint.p_library()?;
-        let mut stats = direct::DirectStats::default();
         match direct::lower_closure(
             settings,
             &handle,
             &cut,
             &input.routing,
             input.numerator.as_view(),
-            &mut stats,
+            stats,
         )? {
-            Ok(folded) => Ok(Some(LoweredClosure {
+            Ok(folded) => Ok(Ok(LoweredClosure {
                 closure: self.clone(),
                 head,
                 folded,
             })),
-            Err(_) => Ok(None),
+            Err(declined) => Ok(Err(declined.0)),
         }
     }
 
@@ -758,7 +770,8 @@ impl MassiveClosure {
     /// ordinary path must evaluate it.
     /// [`Self::lower_direct`] of the numerator `Σ blocks[t] · R_t` on
     /// `topology` and `routing`, with the block reads shared through `cache`
-    /// (the remainder boundary). `None`: the direct reader declines.
+    /// (the remainder boundary). `Ok(Err(reason))`: the direct reader
+    /// declines; the stage seconds and counts go into `stats`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn lower_direct_blocks(
         &self,
@@ -769,7 +782,8 @@ impl MassiveClosure {
         blocks: &[Atom],
         terms: &[(usize, Atom)],
         cache: &mut crate::rustred_evaluation::p_lowering::BlockReadCache,
-    ) -> Result<Option<LoweredClosure>, VakintError> {
+        stats: &mut crate::rustred_evaluation::p_lowering::DirectStats,
+    ) -> Result<Result<LoweredClosure, &'static str>, VakintError> {
         use crate::rustred_evaluation::p_lowering as direct;
         let head = self.validated_head(settings)?;
         let empty = || LoweredClosure {
@@ -778,15 +792,16 @@ impl MassiveClosure {
             folded: Default::default(),
         };
         if terms.is_empty() {
-            return Ok(Some(empty()));
+            return Ok(Ok(empty()));
         }
+        let matching = std::time::Instant::now();
         let cut = match direct::match_cut(vakint, settings, topology, &head)? {
             Ok(Some(cut)) => cut,
-            Ok(None) => return Ok(Some(empty())),
-            Err(_) => return Ok(None),
+            Ok(None) => return Ok(Ok(empty())),
+            Err(declined) => return Ok(Err(declined.0)),
         };
+        stats.match_seconds += matching.elapsed().as_secs_f64();
         let handle = vakint.p_library()?;
-        let mut stats = direct::DirectStats::default();
         match direct::lower_closure_source(
             settings,
             &handle,
@@ -797,14 +812,14 @@ impl MassiveClosure {
                 terms,
                 cache,
             },
-            &mut stats,
+            stats,
         )? {
-            Ok(folded) => Ok(Some(LoweredClosure {
+            Ok(folded) => Ok(Ok(LoweredClosure {
                 closure: self.clone(),
                 head,
                 folded,
             })),
-            Err(_) => Ok(None),
+            Err(declined) => Ok(Err(declined.0)),
         }
     }
 
