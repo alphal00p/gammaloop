@@ -966,7 +966,7 @@ impl QcdMassReference {
                         .iter()
                         .map(|den| den.source_edge)
                         .collect::<BTreeSet<_>>()
-                        == outside.iter().copied().collect()
+                        == outside.iter().copied().collect::<BTreeSet<_>>()
                 );
                 for den in &terms[0].denominators {
                     let native_momentum = function!(GS.emr_mom, den.source_edge.0);

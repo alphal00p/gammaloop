@@ -3591,7 +3591,7 @@ impl QcdMassReference {
             let logical = aligned.structure().logical_slots();
             let axes = common_slots.iter().map(|slot| logical.iter().position(|candidate| candidate == slot)
                 .ok_or_else(|| eyre!("common kinetic frame lost a logical slot"))).collect::<Result<Vec<_>>>()?;
-            ensure!(axes.iter().copied().collect::<BTreeSet<_>>() == (0..axes.len()).collect());
+            ensure!(axes.iter().copied().collect::<BTreeSet<_>>() == (0..axes.len()).collect::<BTreeSet<_>>());
             let partial: SymbolicTensor<PartialStructure> = aligned.into();
             let ordered = partial.permuted(&axes)?;
             let mut unpermute = vec![0; axes.len()];
@@ -4279,7 +4279,7 @@ impl QcdMassReference {
             .filter(|(_, edges)| !edges.is_empty())
             .cloned()
             .collect::<BTreeSet<_>>();
-        ensure!(proper_keys == prefixes.keys().cloned().collect());
+        ensure!(proper_keys == prefixes.keys().cloned().collect::<BTreeSet<_>>());
         ensure!(
             all_inputs.contains(&("D03".to_owned(), Vec::new()))
                 && all_inputs.contains(&("D03".to_owned(), vec![5]))
@@ -4460,7 +4460,7 @@ fn native_two_loop_overall_os_mass_condition_matches_independent_reference() -> 
             .filter(|(_, edges)| !edges.is_empty())
             .cloned()
             .collect::<BTreeSet<_>>()
-            == prefixes.keys().cloned().collect()
+            == prefixes.keys().cloned().collect::<BTreeSet<_>>()
     );
     ensure!(
         completed.contains(&("D03".to_owned(), Vec::new()))

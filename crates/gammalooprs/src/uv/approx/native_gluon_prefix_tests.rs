@@ -284,7 +284,7 @@ impl QcdMassReference {
                         .filter(|edge| **edge != quark)
                         .copied()
                         .collect::<BTreeSet<_>>()
-                        == crown_edges.iter().copied().collect()
+                        == crown_edges.iter().copied().collect::<BTreeSet<_>>()
                 );
                 for edge in &outside {
                     ensure!(
@@ -368,7 +368,7 @@ impl QcdMassReference {
                         .iter()
                         .map(|den| den.source_edge)
                         .collect::<BTreeSet<_>>()
-                        == outside.iter().copied().collect()
+                        == outside.iter().copied().collect::<BTreeSet<_>>()
                 );
 
                 let denominators = terms

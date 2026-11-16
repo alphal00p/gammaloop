@@ -2684,7 +2684,7 @@ impl<'a> GraphThreeDSource<'a> {
             ));
         }
         eyre::ensure!(
-            original_ids == (0..denominators.len()).collect()
+            original_ids == (0..denominators.len()).collect::<BTreeSet<_>>()
                 && expected_powers == reconstructed_powers,
             "denominator certificate changed propagator multiplicities"
         );

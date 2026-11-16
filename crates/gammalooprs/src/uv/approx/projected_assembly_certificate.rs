@@ -611,7 +611,8 @@ impl ProjectedAssemblyCertificate {
                         });
                     }
                     ensure!(
-                        !calls.is_empty() && calls == local.call_weights.keys().cloned().collect(),
+                        !calls.is_empty()
+                            && calls == local.call_weights.keys().cloned().collect::<BTreeSet<_>>(),
                         "recorded child-call occurrence inventory differs from the actual sector"
                     );
                     ensure!(

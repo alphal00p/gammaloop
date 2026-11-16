@@ -820,7 +820,7 @@ fn gamma_star_ttx_nlo_matches_reference(case: GammaStarTtxCase) -> Result<()> {
                         .collect::<BTreeSet<_>>();
                     assert_eq!(
                         orders,
-                        (1..=group.related_esurface_group.max_occurence).collect()
+                        (1..=group.related_esurface_group.max_occurence).collect::<BTreeSet<_>>()
                     );
                 }
                 assert_eq!(term.cut_group_data.pass_two_evaluators.len(), 2);

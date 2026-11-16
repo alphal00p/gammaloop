@@ -4224,7 +4224,7 @@ impl QcdMassReference {
                     .iter()
                     .map(|d| d.source_edge)
                     .collect::<BTreeSet<_>>(),
-                cograph_edges.iter().copied().collect()
+                cograph_edges.iter().copied().collect::<BTreeSet<_>>()
             );
 
             // The child boundary gluon becomes an INTERNAL summed parent slot.
