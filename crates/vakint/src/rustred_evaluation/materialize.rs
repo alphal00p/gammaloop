@@ -294,6 +294,13 @@ pub(super) fn evaluate_ordered_batch(
     let cohort_total = channels.len();
     let mut skipped = 0;
     let arithmetic = settings.rustred_ordered_weight_arithmetic();
+    // Channels with the same input (keys and weights, in the same order)
+    // differ only by their spectator and mass power: the reduction
+    // (deterministic) and its rendering are done once per batch and reused.
+    // Not with a request dump or an observer, which see every channel.
+    let mut reductions =
+        std::collections::HashMap::<Vec<(IntegralKey, rustred::algebra::Coefficient)>, Atom>::new();
+    let mut reused_channels = 0usize;
     for (cohort_index, ((mass, spectator, exponent), terms)) in channels.into_iter().enumerate() {
         let setup = StageSpan::new("rustred.lower.cohort_setup");
         if let Some(progress) = progress {
@@ -325,6 +332,19 @@ pub(super) fn evaluate_ordered_batch(
             continue;
         }
         drop(setup);
+        let reusable = dump.is_none() && observation.is_none();
+        if let Some(masters) = reductions.get(&terms).filter(|_| reusable) {
+            reused_channels += 1;
+            let _accumulation = StageSpan::new("rustred.lower.accumulate_channel");
+            let spectator = spectator
+                .replace(rustred_dimension.to_pattern())
+                .with(dimension.to_pattern());
+            raw.entry(mass.clone())
+                .or_default()
+                .push(masters * spectator * mass.pow(exponent));
+            continue;
+        }
+        let reuse_key = reusable.then(|| terms.clone());
         let _math = MathSpan::new();
         let reduction = request_dump::observe_native(
             dump.as_mut(),
@@ -395,6 +415,9 @@ pub(super) fn evaluate_ordered_batch(
                 })
                 .sum::<Atom>()
         };
+        if let Some(key) = reuse_key {
+            reductions.insert(key, masters.clone());
+        }
         let _accumulation = StageSpan::new("rustred.lower.accumulate_channel");
         let spectator = spectator
             .replace(rustred_dimension.to_pattern())
@@ -409,6 +432,12 @@ pub(super) fn evaluate_ordered_batch(
     if skipped != 0 {
         return Err(request_dump::skipped(skipped));
     }
+    tracing::info!(target: "vakint::batch_sizes",
+        loops = first.loop_count,
+        contributions = contributions.len(),
+        channels = cohort_total,
+        reused_channels,
+        "lower-loop ordered batch sizes");
     let mut value = Atom::Zero;
     for (mass, raw) in raw {
         let raw = {

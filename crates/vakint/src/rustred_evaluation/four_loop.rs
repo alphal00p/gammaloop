@@ -526,6 +526,19 @@ pub(super) fn evaluate_ordered_batch(
     let cohort_total = channels.len();
     let mut skipped = 0;
     let arithmetic = settings.rustred_ordered_weight_arithmetic();
+    // Channels with the same program and the same input (keys and weights,
+    // in the same order) differ only by their spectator and mass power: the
+    // reduction (deterministic) and its rendering are done once per batch and
+    // reused, with every channel's contributions pushed in the same order as
+    // before. Not with a request dump or an observer, which see every channel.
+    let mut reductions = std::collections::HashMap::<
+        (
+            usize,
+            Vec<(rustred::family::IntegralKey, rustred::algebra::Coefficient)>,
+        ),
+        Arc<Vec<(Atom, Atom)>>,
+    >::new();
+    let mut reused_channels = 0usize;
     for (cohort_index, ((index, mass, spectator, exponent), terms)) in
         channels.into_iter().enumerate()
     {
@@ -565,51 +578,75 @@ pub(super) fn evaluate_ordered_batch(
             skipped += 1;
             continue;
         }
-        let step_cache = vakint.ordered_step_cache(settings, &program.step_cache)?;
-        let _math = MathSpan::new();
-        let _ibp = StageSpan::new("rustred.lower.native_ibp");
-        let reduced = request_dump::observe_native(
-            dump.as_mut(),
-            observation.as_deref_mut(),
-            |observation| {
-                program
-                    .native
-                    .reduce_linear_combination_ordered_with_arithmetic(
-                        terms,
-                        settings.rustred_application_options.reduction_limits,
-                        arithmetic,
-                        super::ordered_scheduler(settings),
-                        step_cache,
-                        observation,
-                    )
-            },
-        )??;
-        drop(_ibp);
-        if let Some(dump) = dump {
-            dump.finish(
-                request_dump::family_terms(reduced.family_fingerprint(), reduced.terms()),
-                reduced.nonzero_conditions(),
-                Some(*reduced.progress()),
-            )?;
-        }
         let family = program.native.family_shared();
         let family_dimension = family.dimension().to_expression();
+        let reusable = dump.is_none() && observation.is_none();
+        let key = (index, terms);
+        let rendered = match reductions.get(&key).filter(|_| reusable) {
+            Some(rendered) => {
+                reused_channels += 1;
+                Arc::clone(rendered)
+            }
+            None => {
+                let step_cache = vakint.ordered_step_cache(settings, &program.step_cache)?;
+                let _math = MathSpan::new();
+                let _ibp = StageSpan::new("rustred.lower.native_ibp");
+                let reduced = request_dump::observe_native(
+                    dump.as_mut(),
+                    observation.as_deref_mut(),
+                    |observation| {
+                        program
+                            .native
+                            .reduce_linear_combination_ordered_with_arithmetic(
+                                key.1.clone(),
+                                settings.rustred_application_options.reduction_limits,
+                                arithmetic,
+                                super::ordered_scheduler(settings),
+                                step_cache,
+                                observation,
+                            )
+                    },
+                )??;
+                drop(_ibp);
+                if let Some(dump) = dump {
+                    dump.finish(
+                        request_dump::family_terms(reduced.family_fingerprint(), reduced.terms()),
+                        reduced.nonzero_conditions(),
+                        Some(*reduced.progress()),
+                    )?;
+                }
+                // Each master's coefficient, rendered in the physical dimension.
+                let rendered = Arc::new(
+                    reduced
+                        .terms()
+                        .iter()
+                        .map(|(master, coefficient)| {
+                            (
+                                data.masters.symbol(family.fingerprint(), master.powers()),
+                                coefficient
+                                    .to_expression()
+                                    .replace(family_dimension.to_pattern())
+                                    .with(dimension.to_pattern()),
+                            )
+                        })
+                        .collect::<Vec<_>>(),
+                );
+                if reusable {
+                    reductions.insert(key, Arc::clone(&rendered));
+                }
+                rendered
+            }
+        };
         let spectator = spectator
             .replace(family_dimension.to_pattern())
             .with(dimension.to_pattern())
             * mass.pow(exponent);
         let per_master = raw.entry(mass.clone()).or_default();
-        for (master, coefficient) in reduced.terms() {
+        for (master, coefficient) in rendered.iter() {
             per_master
-                .entry(data.masters.symbol(family.fingerprint(), master.powers()))
+                .entry(master.clone())
                 .or_default()
-                .push(
-                    coefficient
-                        .to_expression()
-                        .replace(family_dimension.to_pattern())
-                        .with(dimension.to_pattern())
-                        * &spectator,
-                );
+                .push(coefficient * &spectator);
         }
     }
     if let Some(progress) = progress {
@@ -622,6 +659,7 @@ pub(super) fn evaluate_ordered_batch(
         loops = 4,
         contributions = contributions.len(),
         channels = cohort_total,
+        reused_channels,
         masters = raw.values().map(BTreeMap::len).sum::<usize>(),
         channel_terms = raw.values().flat_map(BTreeMap::values).map(Vec::len).sum::<usize>(),
         raw_bytes = raw
