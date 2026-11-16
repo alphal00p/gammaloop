@@ -626,7 +626,7 @@ impl MassiveClosure {
         };
         let handle = vakint.p_library()?;
         let mut stats = direct::DirectStats::default();
-        match direct::lower_closure(vakint, settings, &handle, &cut, &input.routing, input.numerator.as_view(), &mut stats)? {
+        match direct::lower_closure(settings, &handle, &cut, &input.routing, input.numerator.as_view(), &mut stats)? {
             Ok(folded) => Ok(Some(LoweredClosure { closure: self.clone(), head, folded })),
             Err(_) => Ok(None),
         }
@@ -681,7 +681,6 @@ impl MassiveClosure {
         stats.match_seconds += matching.elapsed().as_secs_f64();
         let handle = vakint.p_library()?;
         let folded = match direct::lower_closure(
-            vakint,
             settings,
             &handle,
             &cut,

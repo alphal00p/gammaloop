@@ -887,11 +887,46 @@ pub(crate) fn match_cut(
     })))
 }
 
+/// vk5l-physrun (shared path, rule 17): a plain p-integral request (any loop
+/// count) through the direct reader and the Horner slot substitution: its
+/// canonical numerator is already in the canonical momenta and the user head,
+/// so the cut is the request itself (no replacement rules, identity routing).
+/// `Err(Declined)`: the ordinary split and lowering run.
+pub(crate) fn lower_request(
+    settings: &VakintSettings,
+    handle: &PLibraryHandle,
+    request: &PropagatorRequest,
+    stats: &mut DirectStats,
+) -> Result<Result<BTreeMap<Channel, FoldedInputs>, Declined>, VakintError> {
+    let (head, sigma) = external_head(&request.external)?;
+    let scaleless = parts::split(
+        request.family,
+        request.powers,
+        Atom::num(1).as_view(),
+        &request.external,
+    )?
+    .is_none();
+    let cut = MatchedCut {
+        request_family: request.family,
+        powers: request.powers.to_vec(),
+        external: request.external.clone(),
+        head: head.clone(),
+        sigma,
+        factor: Atom::num(1),
+        rules: ReplacementRules::default(),
+        scaleless,
+    };
+    let mut routing = (1..=request.family.loops as i64)
+        .map(|index| (function!(S.k, index), function!(S.k, index)))
+        .collect::<Vec<_>>();
+    routing.push((head.clone(), head));
+    lower_closure(settings, handle, &cut, &routing, request.canonical_numerator, stats)
+}
+
 /// The folded channels of one closure, lowered directly; `Err(Declined)` for
 /// the ordinary path.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn lower_closure(
-    _vakint: &Vakint,
     settings: &VakintSettings,
     handle: &PLibraryHandle,
     cut: &MatchedCut,
@@ -901,6 +936,12 @@ pub(crate) fn lower_closure(
 ) -> Result<Result<BTreeMap<Channel, FoldedInputs>, Declined>, VakintError> {
     if cut.scaleless {
         return Ok(Ok(BTreeMap::new()));
+    }
+    // vk5l-physrun: a negative line power is a numerator factor of the
+    // ordinary split (`negative_powers` in parts::split_with), which this
+    // lowering does not form: the ordinary path takes the request.
+    if cut.powers.iter().any(|power| *power < 0) {
+        return Ok(Err(Declined("a negative line power")));
     }
     if !crate::utils::has_only_exact_numbers(numerator) {
         return Ok(Err(Declined("inexact numbers")));

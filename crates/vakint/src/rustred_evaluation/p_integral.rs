@@ -786,6 +786,18 @@ impl RequestMemo {
     }
 }
 
+/// vk5l-physrun: `VAKINT_P_DIRECT_REQUESTS=off` keeps plain requests on the
+/// ordinary split and lowering.
+fn direct_requests_enabled() -> bool {
+    static ENABLED: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+        !matches!(
+            std::env::var("VAKINT_P_DIRECT_REQUESTS").as_deref(),
+            Ok("off" | "0" | "false")
+        )
+    });
+    *ENABLED
+}
+
 fn request_memo_enabled() -> bool {
     static ENABLED: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
         !matches!(
@@ -817,6 +829,45 @@ fn fold_request(
     {
         with_stats(|stats| stats.memo_hits += 1);
         return Ok(found);
+    }
+    // vk5l-physrun (rule 17): every request first through the direct reader
+    // (Horner over its loop-factor trie) and the Horner slot substitution; the
+    // folded inputs are those of the split and lowering below, which run when
+    // the direct lowering declines. VAKINT_P_DIRECT_REQUESTS=off skips it.
+    if direct_requests_enabled() {
+        let started = std::time::Instant::now();
+        let mut direct_stats = super::p_lowering::DirectStats::default();
+        if let Ok(folded) = super::p_lowering::lower_request(settings, handle, request, &mut direct_stats)? {
+            let split_channels = folded.len();
+            let mut pairs = 0;
+            let targets = folded
+                .into_iter()
+                .map(|(channel, inputs)| {
+                    pairs += inputs.by_basis.values().map(|keys| keys.len()).sum::<usize>();
+                    (channel, inputs.by_basis)
+                })
+                .collect();
+            with_stats(|stats| {
+                stats.split_seconds += direct_stats.read_seconds + direct_stats.classify_seconds;
+                stats.lower_seconds += started.elapsed().as_secs_f64()
+                    - direct_stats.read_seconds
+                    - direct_stats.classify_seconds;
+            });
+            let value = Arc::new(FoldedRequest {
+                targets,
+                split_channels,
+                integral: integral_name(request),
+                pairs,
+            });
+            if let Some(key) = key {
+                let max_pairs = settings
+                    .ordered_cache
+                    .max_resident_bytes
+                    .map(|bytes| bytes / MEMO_BYTES_PER_PAIR);
+                handle.request_memo().insert(key, Arc::clone(&value), max_pairs);
+            }
+            return Ok(value);
+        }
     }
     let splitting = std::time::Instant::now();
     let mut pending = PendingChannels::new();
