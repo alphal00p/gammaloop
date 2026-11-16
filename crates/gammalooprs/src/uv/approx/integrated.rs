@@ -1356,7 +1356,15 @@ pub(crate) fn to_vakint_integrand<
     let check_groups = grouped_mode && streamed::check("topology_groups");
     let check_reference = check_groups.then(|| materialized.clone());
     let mut grouped: Option<TopologyGroups> = None;
-    let in_pieces = materialized.as_view().get_byte_size() >= limit;
+    // GAMMALOOP_STREAM_BY_ESTIMATE=1 (opt-in): also in pieces when the
+    // estimated expansion reaches the limit (a small product of large sums);
+    // the pieces add up to the same atom.
+    let in_pieces = materialized.as_view().get_byte_size() >= limit
+        || (streamed::stream_by_estimate()
+            && match materialized_size {
+                Some((_, (_, estimated_bytes))) => estimated_bytes >= limit as f64,
+                None => streamed::expansion_size(materialized.as_view(), true) >= limit,
+            });
     let streamed_input = if in_pieces {
         let expansion_stage = StageSpan::new("gamma.adaptor.expand");
         let streamed_input = if grouped_mode {
