@@ -10,7 +10,8 @@
 //! the photon (PDG 22). `MODEL.json` may be `builtin:qed`: the built-in QED
 //! model with massive electrons, restricted to `[a, e-]` as in the hepkit runs.
 //! With `NF`, only diagrams with exactly that many closed fermion loops are
-//! generated.
+//! generated. With `ORIENTATION_CHECK_GROUPS=PATH`, the groups are written to
+//! PATH as `master<TAB>member<TAB>ratio` lines in result order.
 
 use std::{collections::BTreeMap, time::Instant};
 
@@ -92,6 +93,20 @@ fn main() {
     let start = Instant::now();
     let result = process.generate_diagrams(model, &options).unwrap();
     let seconds = start.elapsed().as_secs_f64();
+    if let Some(path) = std::env::var_os("ORIENTATION_CHECK_GROUPS") {
+        let mut lines = String::new();
+        for (diagram, group) in result.diagrams.iter().zip(&result.groups) {
+            for member in &group.members {
+                lines.push_str(&format!(
+                    "{}\t{}\t{}\n",
+                    diagram.name(),
+                    member.source_name,
+                    member.ratio
+                ));
+            }
+        }
+        std::fs::write(path, lines).unwrap();
+    }
     let mut per_nf = BTreeMap::<usize, usize>::new();
     let mut members_per_nf = BTreeMap::<usize, usize>::new();
     for (diagram, group) in result.diagrams.iter().zip(&result.groups) {
