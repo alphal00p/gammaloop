@@ -2803,6 +2803,164 @@ fn orders_len(json: &serde_json::Value) -> usize {
 /// `sum.<mode>.sym` and `sum.<mode>.json` to `VAKINT_TEST_CLOSURE_OUT`. With
 /// `VAKINT_TEST_CLOSURE_SUM_CHECK=<dir>` the per-closure results
 /// `<dir>/<closure>/<closure>.<mode>.sym` are added and compared (exact).
+/// vk4l-beta-slow: the remainder boundary end to end on closure request files
+/// (`pint6.massive-closure-request.v1`, plain or `.zst`; path list in
+/// `VAKINT_TEST_BOUNDARY_FILES`; a five-loop package in
+/// `VAKINT_TEST_P5L_DRILL_PACKAGE` when the closures are five-loop). For every
+/// closure: (1) the boundary of the direct input lowers to exactly the folded
+/// RustRed input of `lower_direct`; (2) the numerator split into two blocks
+/// (two patterns on the same topology) lowers to the same key plan in one
+/// class; (3) with `VAKINT_TEST_BOUNDARY_EVALUATE=1`, the boundary value equals
+/// `evaluate_direct_sum`. Strict mode: a decline fails the test.
+#[test]
+fn remainder_boundary_closure_files() {
+    let Some(files) = std::env::var_os("VAKINT_TEST_BOUNDARY_FILES") else {
+        eprintln!("remainder_boundary_closure_files: VAKINT_TEST_BOUNDARY_FILES unset, skipped");
+        return;
+    };
+    let mut engine = Vakint::new().unwrap();
+    if let Some(package) = std::env::var_os("VAKINT_TEST_P5L_DRILL_PACKAGE") {
+        engine
+            .load_p_library_directory(std::path::Path::new(&package), false)
+            .unwrap();
+        engine.p_library().unwrap();
+    }
+    let evaluate = std::env::var("VAKINT_TEST_BOUNDARY_EVALUATE").as_deref() == Ok("1");
+    let strict = crate::p_integral::BoundaryOptions { strict: true };
+    let (mut checked, mut patterns_total) = (0usize, 0usize);
+    for file in std::env::split_paths(&files) {
+        let name = file.file_name().unwrap().to_string_lossy().into_owned();
+        let text = if name.ends_with(".zst") {
+            let raw = std::process::Command::new("zstd")
+                .args(["-qdc"])
+                .arg(&file)
+                .output()
+                .unwrap();
+            String::from_utf8(raw.stdout).unwrap()
+        } else {
+            std::fs::read_to_string(&file).unwrap()
+        };
+        let field = |key: &str| {
+            text.lines()
+                .find_map(|line| line.strip_prefix(key)?.strip_prefix(' '))
+                .unwrap_or_else(|| panic!("{name}: no {key}"))
+                .to_owned()
+        };
+        let mut settings = settings(RustRedMasterMode::Retain, None);
+        settings.epsilon_symbol = "gammalooprs::ε".into();
+        settings.mu_r_sq_symbol = "gammalooprs::μᵣ²".into();
+        settings.integral_normalization_factor = crate::LoopNormalizationFactor::MSbar;
+        settings.number_of_terms_in_epsilon_expansion = field("epsilon_terms").parse().unwrap();
+        settings.use_dot_product_notation = false;
+        settings.n_cores = 1;
+        let closure = crate::p_integral::MassiveClosure {
+            momentum: parse(&field("closure_momentum")),
+            mass_squared: parse(&field("closure_mass_squared")),
+            power: field("closure_power").parse().unwrap(),
+        };
+        let input = parse(&field("input"));
+        let symbolica::atom::AtomView::Mul(product) = input.as_view() else {
+            panic!("{name}: input is not numerator * topo");
+        };
+        let mut topology = Atom::num(1);
+        let mut numerator = Atom::num(1);
+        for factor in product.iter() {
+            match factor {
+                symbolica::atom::AtomView::Fun(function)
+                    if function.get_symbol() == crate::symbols::S.topo =>
+                {
+                    topology = factor.to_owned()
+                }
+                _ => numerator = numerator * factor.to_owned(),
+            }
+        }
+        let loops: i64 = field("p_loops").parse().unwrap();
+        let mut routing = (1..=loops)
+            .map(|i| (parse(&format!("k({i})")), parse(&format!("k({i})"))))
+            .collect::<Vec<_>>();
+        routing.push((closure.momentum.clone(), closure.momentum.clone()));
+        let direct = crate::p_integral::DirectClosureInput {
+            topology,
+            routing,
+            numerator,
+        };
+        let started = std::time::Instant::now();
+        let reference = closure
+            .lower_direct(&engine, &settings, &direct)
+            .unwrap()
+            .unwrap_or_else(|| panic!("{name}: the direct path declines this closure"));
+        let direct_seconds = started.elapsed().as_secs_f64();
+        // (1) one block, one pattern.
+        let boundary = crate::p_integral::RemainderBoundary::from_direct(&closure, &direct);
+        let started = std::time::Instant::now();
+        let (classes, declined) = boundary.lower(&engine, &settings, strict).unwrap();
+        let boundary_seconds = started.elapsed().as_secs_f64();
+        assert!(declined.is_empty());
+        assert_eq!(classes.len(), 1, "{name}");
+        assert_eq!(
+            classes[0].fingerprint(),
+            reference.fingerprint(),
+            "{name}: (1)"
+        );
+        // (2) two blocks on two patterns of the same topology.
+        let terms = match direct.numerator.as_view() {
+            symbolica::atom::AtomView::Add(sum) => {
+                sum.iter().map(|t| t.to_owned()).collect::<Vec<_>>()
+            }
+            other => vec![other.to_owned()],
+        };
+        let half = terms.len() / 2;
+        let (first, second) = terms.split_at(half.max(1).min(terms.len()));
+        let blocks = vec![Atom::add_many(first.iter()), Atom::add_many(second.iter())];
+        let pattern = |block: usize| crate::p_integral::BoundaryPattern {
+            topology: direct.topology.clone(),
+            closure_power: closure.power,
+            terms: vec![(block, Atom::num(1))],
+        };
+        let split = crate::p_integral::RemainderBoundary::new(
+            name.clone(),
+            closure.momentum.clone(),
+            closure.mass_squared.clone(),
+            direct.routing.clone(),
+            blocks,
+            vec![pattern(0), pattern(1)],
+        )
+        .unwrap();
+        let (classes, declined) = split.lower(&engine, &settings, strict).unwrap();
+        assert!(declined.is_empty());
+        assert_eq!(classes.len(), 1, "{name}: same closing line, one key plan");
+        assert_eq!(
+            classes[0].fingerprint(),
+            reference.fingerprint(),
+            "{name}: (2)"
+        );
+        patterns_total += split.patterns.len();
+        if evaluate {
+            let started = std::time::Instant::now();
+            let value = boundary.evaluate(&engine, &settings, strict).unwrap();
+            let boundary_value_seconds = started.elapsed().as_secs_f64();
+            let started = std::time::Instant::now();
+            let expected = crate::p_integral::MassiveClosure::evaluate_direct_sum(
+                &engine,
+                &settings,
+                &[(closure.clone(), direct.clone())],
+            )
+            .unwrap();
+            assert_eq!(value, expected.expand(), "{name}: (3)");
+            eprintln!(
+                "BOUNDARY {name} evaluate {boundary_value_seconds:.3} s, direct sum {:.3} s, identical",
+                started.elapsed().as_secs_f64()
+            );
+        }
+        eprintln!(
+            "BOUNDARY {name} lowered identically: direct {direct_seconds:.3} s, boundary {boundary_seconds:.3} s, {} numerator terms",
+            terms.len()
+        );
+        checked += 1;
+    }
+    eprintln!("BOUNDARY {checked} closures checked ({patterns_total} split patterns)");
+}
+
 #[test]
 fn massive_closure_showcase_sum() {
     let (Some(files), Some(out)) = (

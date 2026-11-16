@@ -99,6 +99,27 @@ impl LoweredClosure {
         Ok(())
     }
 
+    /// Test fingerprint of the folded RustRed input (channels, bases, keys,
+    /// values), for comparing two lowerings.
+    #[cfg(test)]
+    pub(crate) fn fingerprint(&self) -> String {
+        // Channels and ε-bases whose values all cancelled carry no input.
+        let live = self
+            .folded
+            .iter()
+            .map(|(channel, inputs)| {
+                let bases = inputs
+                    .by_basis
+                    .iter()
+                    .filter(|(_, values)| !values.is_empty())
+                    .collect::<Vec<_>>();
+                (channel, bases)
+            })
+            .filter(|(_, bases)| !bases.is_empty())
+            .collect::<Vec<_>>();
+        format!("{:?}|{:?}", self.closing_key(), live)
+    }
+
     /// Reduce and finalise once (RustRed master mode of the settings).
     pub fn evaluate(
         self,

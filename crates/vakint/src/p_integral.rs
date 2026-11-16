@@ -11,6 +11,7 @@
 //! p-master table (`masters`) and the exact tag-basis comparison (`compare`);
 //! the Forcer backend and its frozen fixtures live in `forcer`.
 
+pub(crate) mod boundary;
 mod catalogue;
 #[doc(hidden)]
 pub mod compare;
@@ -43,6 +44,7 @@ use crate::{
     VakintTerm, get_integer_from_atom, get_prop_with_id, graph::Graph, topologies::Topology,
 };
 
+pub use boundary::{BoundaryOptions, BoundaryPattern, RemainderBoundary};
 pub(crate) use catalogue::{PMatch, match_graph_preferring};
 pub use dot::to_dot;
 /// FORM run record for the benchmark harness (not part of the API).
