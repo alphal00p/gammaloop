@@ -281,6 +281,55 @@ fn free_trace_results_discharge_cleanup_without_entering_contraction() {
 }
 
 #[test]
+fn contracted_open_port_polynomials_reuse_producer_observations() {
+    use observation::{INITIAL_SCANS, REPLACEMENT_SCANS};
+
+    let reps = crate::test_support::test_initialize();
+    let vector = spenso::vector_symbol!("contracted_open_observation_vector");
+    let spectator = symbolica::parse_lit!((contracted_open_x + contracted_open_y) ^ 20);
+    for representation in [&reps.mink4, &reps.mink_d] {
+        let slot = |index: i64| representation.to_symbolic([Atom::num(index)]);
+        let (inner, left, right) = (slot(99741), slot(99742), slot(99743));
+        let component = |index, port: &Atom| symbolica::function!(vector, Atom::num(index), port);
+        // A contracted pair, then two open slots carried by vectors only.
+        let source = SymbolicTensor::infer(
+            &spectator
+                * (component(0, &inner) + component(1, &inner))
+                * (component(2, &inner) * component(3, &left)
+                    + component(4, &inner) * component(5, &left))
+                * (component(6, &right) + component(7, &right)),
+        )
+        .unwrap();
+        source.reduction_observations();
+        let scans = INITIAL_SCANS.with(|count| count.get());
+        REPLACEMENT_SCANS.with(|count| count.set(0));
+
+        let contracted = source.contract(Default::default()).unwrap();
+        assert_eq!(contracted.reduction_status(), ReductionStatus::Complete);
+        let observed = contracted.reduction_observations();
+        assert!(observed.is_terminal_polynomial() && !observed.is_closed_scalar());
+        let dotted = contracted.to_dots().unwrap();
+        assert!(dotted.reduction_observations().is_terminal_polynomial());
+        // The producer's facts replace the replacement scan of the output.
+        assert_eq!(REPLACEMENT_SCANS.with(|count| count.get()), 0);
+        assert_eq!(INITIAL_SCANS.with(|count| count.get()), scans);
+
+        // The facts change no atom: an independently observed copy agrees,
+        // and the certified result is a fixed point of contraction.
+        let rescanned = SymbolicTensor::infer(contracted.expression.clone())
+            .unwrap()
+            .to_dots()
+            .unwrap();
+        assert_eq!(dotted.expression, rescanned.expression);
+        assert_eq!(dotted.structure, rescanned.structure);
+        assert_eq!(
+            dotted.contract(Default::default()).unwrap().expression,
+            dotted.expression
+        );
+    }
+}
+
+#[test]
 fn contracted_scalar_results_reuse_producer_observations() {
     use observation::{INITIAL_SCANS, REPLACEMENT_SCANS};
     use spenso::network::tags::SPENSO_TAG;

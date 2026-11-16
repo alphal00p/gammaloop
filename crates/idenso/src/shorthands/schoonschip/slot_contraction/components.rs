@@ -145,6 +145,11 @@ struct ComponentSum<'a, 'b> {
     // Scalar notation facts established by selected scoped replacements. The
     // source domain owns original-region facts; generated powers reuse these.
     scalar_forms: AHashMap<AtomView<'a>, bool>,
+    /// The open slots of a frontier whose every state is a certified scalar
+    /// polynomial times vectors and metrics on exactly these explicit slots
+    /// (sorted, each once), with its dot-normalization need. `contract_graph`
+    /// certifies such an output as terminal when the slots are its root ports.
+    terminal_slots: Option<(Vec<Atom>, bool)>,
 }
 
 impl SlotContraction {
@@ -395,6 +400,7 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
             scalar_interfaces: AHashMap::new(),
             metadata_certificates: AHashMap::new(),
             scalar_forms: AHashMap::new(),
+            terminal_slots: None,
         }
     }
 
