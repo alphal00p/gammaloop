@@ -24,6 +24,7 @@ use feynkit_generator::{
 };
 use feynkit_graph::FeynmanDiagram;
 use feynkit_model::Model;
+use rayon::prelude::*;
 use symbolica::graph::Graph;
 
 const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/orientation");
@@ -473,13 +474,32 @@ fn weights_of_survivors_unchanged() {
     }
 }
 
+/// Orientation-sum verdicts of all diagrams, computed on 8 threads.
+fn verdicts(result: &GenerationResult) -> Vec<OrientationSumVerdict> {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(8)
+        .build()
+        .unwrap()
+        .install(|| {
+            result
+                .diagrams
+                .par_iter()
+                .map(|diagram| {
+                    diagram
+                        .closed_loop_orientation_sum(&GenerationOptions::default())
+                        .unwrap()
+                })
+                .collect()
+        })
+}
+
 /// Every member of one orientation family (same undirected skeleton) must
 /// get the same verdict: the sum from any member is the same family sum up
 /// to a sign. A wrong spinor or colour transposition breaks this.
 fn assert_family_verdicts_agree(result: &GenerationResult) -> (usize, usize, usize) {
     let mut skipped = 0;
     let mut families = BTreeMap::<String, Vec<(String, OrientationSumVerdict)>>::new();
-    for diagram in &result.diagrams {
+    for (diagram, verdict) in result.diagrams.iter().zip(verdicts(result)) {
         let model = diagram.model();
         // Ghost loops are not varied, so ghost reversals are separate families.
         if diagram
@@ -488,9 +508,6 @@ fn assert_family_verdicts_agree(result: &GenerationResult) -> (usize, usize, usi
         {
             continue;
         }
-        let verdict = diagram
-            .closed_loop_orientation_sum(&GenerationOptions::default())
-            .unwrap();
         if matches!(verdict, OrientationSumVerdict::Skipped(_)) {
             skipped += 1;
             continue;
@@ -531,4 +548,102 @@ fn orientation_family_members_share_verdicts() {
         qcd.diagrams.len()
     );
     assert!(families > 0);
+}
+
+fn background_self_energy(model: Model, options: &GenerationOptions) -> GenerationResult {
+    Process::new(["B"], ["B"])
+        .generate_diagrams(model, options)
+        .unwrap()
+}
+
+fn has_vertex(diagram: &FeynmanDiagram, rule: &str) -> bool {
+    let model = diagram.model();
+    diagram.vertices().any(|(_, vertex)| {
+        vertex
+            .interaction
+            .is_some_and(|id| model.vertex_rule_by_id(id).unwrap().name == rule)
+    })
+}
+
+/// Background-field QCD B->B at three loops. The rebuild of a reversed
+/// variant fills the two identical B legs of V_BBQQ and V_ccBB first-fit and
+/// can swap them against the input (before: 109 of these 2377 diagrams skipped,
+/// 231 of 3805 with self-loops; always one B <-> B exchange). Both rules are certified
+/// symmetric under that exchange, so no diagram is skipped any more.
+#[test]
+fn qcd_identical_leg_slot_swaps_are_certified() {
+    let options = GenerationOptions::default()
+        .with_loop_count(3, 3)
+        .unwrap()
+        .threads(8);
+    let off = background_self_energy(qcd_background(), &options);
+    let on = background_self_energy(
+        qcd_background(),
+        &options.clone().cancel_closed_loop_orientations(true),
+    );
+    assert_eq!(off.report.retained_count, 2377);
+    assert_eq!(on.report.orientation_test_skipped, 0);
+    assert_eq!(on.report.orientation_zero_count, 21);
+    assert_eq!(on.report.retained_count, 2377 - 21);
+    let (families, _, skipped) = assert_family_verdicts_agree(&off);
+    assert!(families > 600);
+    assert_eq!(skipped, 0);
+    // Every three-loop zero is already a colour zero of its own orientation:
+    // the census has no C-merged-only zero below five loops.
+    let colour = background_self_energy(qcd_background(), &options.filter_zero_color(true));
+    let kept = colour
+        .diagrams
+        .iter()
+        .map(|diagram| diagram.name().to_owned())
+        .collect::<std::collections::BTreeSet<_>>();
+    let survivors = on
+        .diagrams
+        .iter()
+        .map(|diagram| diagram.name().to_owned())
+        .collect::<std::collections::BTreeSet<_>>();
+    for diagram in &off.diagrams {
+        if !survivors.contains(diagram.name()) {
+            assert!(!kept.contains(diagram.name()), "{}", diagram.name());
+        }
+    }
+}
+
+/// V_BBQQ without its third color x Lorentz channel is not symmetric under
+/// either identical-leg exchange; every diagram that needs it fails closed.
+#[test]
+fn asymmetric_four_point_rule_fails_closed() {
+    let mut definition: serde_json::Value =
+        serde_json::from_str(&fixture("qcd_l5/model.json")).unwrap();
+    let rule = definition["vertex_rules"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|rule| rule["name"] == "V_BBQQ")
+        .unwrap();
+    rule["couplings"][2][2] = serde_json::Value::Null;
+    let model = Model::from_json(&definition.to_string()).unwrap();
+    let options = GenerationOptions::default()
+        .with_loop_count(3, 3)
+        .unwrap()
+        .threads(8);
+    let off = background_self_energy(model.clone(), &options);
+    let on = background_self_energy(model, &options.cancel_closed_loop_orientations(true));
+    let mut expected_skips = 0;
+    for (diagram, verdict) in off.diagrams.iter().zip(verdicts(&off)) {
+        let needs_rule = closed_fermion_loops(diagram) > 0 && has_vertex(diagram, "V_BBQQ");
+        match verdict {
+            OrientationSumVerdict::Skipped(reason) => {
+                assert!(needs_rule, "{}: {reason}", diagram.name());
+                assert!(
+                    reason.starts_with("V_BBQQ is not certified symmetric"),
+                    "{}: {reason}",
+                    diagram.name()
+                );
+                expected_skips += 1;
+            }
+            verdict => assert!(!needs_rule, "{}: {verdict:?}", diagram.name()),
+        }
+    }
+    assert!(expected_skips > 0);
+    assert_eq!(on.report.orientation_test_skipped, expected_skips);
 }
