@@ -1668,8 +1668,9 @@ impl Model {
     }
 
     /// Resolve a particle's explicit or default propagator, then its antiparticle's.
-    /// The boolean records whether the template belongs to the antiparticle and
-    /// its numerator slots must be reversed during instantiation.
+    /// The boolean records whether the template belongs to the antiparticle:
+    /// it is then read on the reversed line, with its numerator slots swapped
+    /// and the edge momentum negated during instantiation.
     pub fn particle_propagator(
         &self,
         particle: &Particle,

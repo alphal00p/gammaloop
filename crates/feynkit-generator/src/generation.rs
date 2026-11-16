@@ -369,6 +369,12 @@ impl fmt::Display for NumeratorOwner {
 struct NumeratorInstantiation<'a> {
     owner: NumeratorOwner,
     legs: &'a [NumeratorHalfEdge],
+    /// The template is the antiparticle's propagator, read on the reversed
+    /// edge: `legs` already list the edge's half-edges in the template's
+    /// order (sink first), and its momentum runs against the stored edge
+    /// direction, so every `Q(edge)` the template produces is `-Q(edge)`.
+    /// The `flow` of each leg still names the stored edge's endpoint.
+    reversed: bool,
 }
 
 impl NumeratorInstantiation<'_> {
@@ -426,18 +432,20 @@ impl NumeratorInstantiation<'_> {
             AtomView::Fun(function) if Self::is_model_symbol(function.get_symbol(), "P") => {
                 let arguments = function.iter().collect::<Vec<_>>();
                 let momentum = match arguments.as_slice() {
-                    [] => self.momentum(self.default_leg()?, None)?,
-                    [index] => self.momentum(
+                    [] => self.template_momentum(self.default_leg()?, None)?,
+                    [index] => self.template_momentum(
                         self.default_leg()?,
                         Some(self.localize_index_argument(*index)?),
                     )?,
                     [index, momentum_leg] => {
                         let leg = self.leg(self.local_leg_number(*momentum_leg)?)?;
-                        let momentum =
-                            self.momentum(leg, Some(self.localize_index_argument(*index)?))?;
+                        let momentum = self
+                            .template_momentum(leg, Some(self.localize_index_argument(*index)?))?;
                         // The UFO all-incoming convention reverses momentum on
-                        // the source half-edge of an interaction.
-                        if leg.flow == Flow::Source {
+                        // the source half-edge of an interaction. On a reversed
+                        // template the leg is a source of the template exactly
+                        // when it is the stored edge's sink.
+                        if (leg.flow == Flow::Source) != self.reversed {
                             -momentum
                         } else {
                             momentum
@@ -464,7 +472,7 @@ impl NumeratorInstantiation<'_> {
                     localized = localized.add_arg(self.localize_index_argument(*index)?);
                 }
                 localized = localized.add_arg(self.momentum(leg, None)?);
-                Ok(Some(localized.finish()))
+                Ok(Some(self.orient(localized.finish())))
             }
             AtomView::Fun(function)
                 if Self::is_model_symbol(function.get_symbol(), "Slash")
@@ -474,9 +482,11 @@ impl NumeratorInstantiation<'_> {
                     }) =>
             {
                 Ok(Some(
-                    FunctionBuilder::new(function.get_symbol())
-                        .add_arg(self.momentum(self.default_leg()?, None)?)
-                        .finish(),
+                    self.orient(
+                        FunctionBuilder::new(function.get_symbol())
+                            .add_arg(self.momentum(self.default_leg()?, None)?)
+                            .finish(),
+                    ),
                 ))
             }
             _ => Ok(None),
@@ -1314,6 +1324,24 @@ impl NumeratorInstantiation<'_> {
             momentum = momentum.add_arg(index);
         }
         Ok(momentum.finish())
+    }
+
+    /// The momentum of `leg`'s edge along the template's particle flow.
+    fn template_momentum(
+        &self,
+        leg: NumeratorHalfEdge,
+        index: Option<Atom>,
+    ) -> Result<Atom, GenerationError> {
+        Ok(self.orient(self.momentum(leg, index)?))
+    }
+
+    /// Negate a factor linear in the edge momentum on a reversed template.
+    fn orient(&self, linear_in_momentum: Atom) -> Atom {
+        if self.reversed {
+            -linear_in_momentum
+        } else {
+            linear_in_momentum
+        }
     }
 
     fn invalid_index(&self, index: AtomView<'_>) -> GenerationError {
@@ -3189,6 +3217,7 @@ impl Generator {
             let instantiation = NumeratorInstantiation {
                 owner: NumeratorOwner::Vertex(vertex.0),
                 legs: &legs,
+                reversed: false,
             };
             vertices.push((vertex, self.interaction_numerator(rule_id, &instantiation)?));
         }
@@ -3433,6 +3462,10 @@ impl Generator {
         }
         let particle = self.model.particle_by_id(particle_id)?;
         let (propagator, reversed) = self.propagator_numerator(particle)?;
+        // A reversed template is the antiparticle's propagator on the same
+        // line read backwards: its first slot is this edge's sink and its
+        // momentum is -Q(edge). Swapping the slots alone would flip the sign
+        // of every momentum-odd term (the fermion slash term).
         let flows = if reversed {
             [Flow::Sink, Flow::Source]
         } else {
@@ -3448,6 +3481,7 @@ impl Generator {
         let instantiation = NumeratorInstantiation {
             owner: NumeratorOwner::Edge(edge),
             legs: &legs,
+            reversed,
         };
         let spin = instantiation.instantiate(&propagator, NumeratorSector::Spin)?;
         let numerator = match instantiation.edge_color_identity(particle.color)? {
@@ -7005,6 +7039,7 @@ mod tests {
         let localized = NumeratorInstantiation {
             owner: NumeratorOwner::Edge(internal_edge),
             legs: &legs,
+            reversed: used_antiparticle_fallback,
         }
         .instantiate(&propagator, NumeratorSector::Spin)
         .unwrap();
@@ -7219,6 +7254,7 @@ mod tests {
             NumeratorInstantiation {
                 owner: NumeratorOwner::Edge(0),
                 legs: &legs,
+                reversed: false,
             }
             .instantiate(propagator, NumeratorSector::Spin)
             .unwrap()
@@ -7348,6 +7384,7 @@ mod tests {
         let instantiation = NumeratorInstantiation {
             owner: NumeratorOwner::Vertex(7),
             legs: &legs[..3],
+            reversed: false,
         };
         let numerator = generator
             .interaction_numerator(model.vertex_rule_id("V").unwrap(), &instantiation)
@@ -7374,6 +7411,7 @@ mod tests {
         let instantiation = NumeratorInstantiation {
             owner: NumeratorOwner::Vertex(7),
             legs: &legs[..3],
+            reversed: false,
         };
         let error = generator
             .interaction_numerator(model.vertex_rule_id("V").unwrap(), &instantiation)
@@ -7397,6 +7435,7 @@ mod tests {
         let instantiation = NumeratorInstantiation {
             owner: NumeratorOwner::Vertex(7),
             legs: &legs,
+            reversed: false,
         };
         let gamma = instantiation
             .instantiate(&test_atom("Gamma(3,2,1)"), NumeratorSector::Spin)
@@ -7438,6 +7477,7 @@ mod tests {
         let instantiation = NumeratorInstantiation {
             owner: NumeratorOwner::Edge(30),
             legs: &legs[2..],
+            reversed: false,
         };
         let numerator = instantiation
             .instantiate(
@@ -7494,6 +7534,7 @@ mod tests {
         let instantiation = NumeratorInstantiation {
             owner: NumeratorOwner::Vertex(7),
             legs: &legs,
+            reversed: false,
         };
         let lowered = instantiation
             .instantiate(&test_atom("Epsilon(1,2,3,4)"), NumeratorSector::Spin)
@@ -7589,6 +7630,7 @@ mod tests {
         let instantiation = NumeratorInstantiation {
             owner: NumeratorOwner::Vertex(7),
             legs: &legs,
+            reversed: false,
         };
         let lower = |structure: &str| {
             instantiation
@@ -7631,6 +7673,7 @@ mod tests {
         let instantiation = NumeratorInstantiation {
             owner: NumeratorOwner::Vertex(7),
             legs: &legs,
+            reversed: false,
         };
         let charge_conjugation = instantiation
             .instantiate(&test_atom("C(1,2)"), NumeratorSector::Spin)
@@ -7666,6 +7709,7 @@ mod tests {
         let instantiation = NumeratorInstantiation {
             owner: NumeratorOwner::Vertex(7),
             legs: &legs,
+            reversed: false,
         };
         let tensors = instantiation
             .instantiate(
@@ -7700,6 +7744,7 @@ mod tests {
         let instantiation = NumeratorInstantiation {
             owner: NumeratorOwner::Edge(5),
             legs: &legs,
+            reversed: false,
         };
         let slash = instantiation
             .instantiate(
@@ -7749,6 +7794,7 @@ mod tests {
         let instantiation = NumeratorInstantiation {
             owner: NumeratorOwner::Vertex(0),
             legs: &legs,
+            reversed: false,
         };
         let tensor = instantiation
             .instantiate(&test_atom("d(1,2,3)"), NumeratorSector::Color)
@@ -7788,6 +7834,7 @@ mod tests {
         let incompatible = NumeratorInstantiation {
             owner: NumeratorOwner::Vertex(0),
             legs: &legs,
+            reversed: false,
         };
         assert!(
             incompatible
@@ -7824,6 +7871,7 @@ mod tests {
             let instantiation = NumeratorInstantiation {
                 owner: NumeratorOwner::Vertex(0),
                 legs: &legs,
+                reversed: false,
             };
             let tensor = instantiation
                 .instantiate(
@@ -7876,6 +7924,7 @@ mod tests {
         let closed = NumeratorInstantiation {
             owner: NumeratorOwner::Vertex(3),
             legs: &[],
+            reversed: false,
         };
         assert_eq!(
             simplify(
@@ -7914,6 +7963,7 @@ mod tests {
         let instantiation = NumeratorInstantiation {
             owner: NumeratorOwner::Vertex(2),
             legs: &legs,
+            reversed: false,
         };
         let trace = instantiation
             .instantiate(&test_atom("T(1,-1,-2)*T(2,-2,-1)"), NumeratorSector::Color)
@@ -7968,6 +8018,7 @@ mod tests {
         let instantiation = NumeratorInstantiation {
             owner: NumeratorOwner::Vertex(9),
             legs: &legs,
+            reversed: false,
         };
         let numerator = generator
             .interaction_numerator(model.vertex_rule_id("V_78").unwrap(), &instantiation)
@@ -9095,5 +9146,11 @@ mod tests {
 
         include!("focused-tests.rs");
         include!("physical-order-tests.rs");
+    }
+
+    mod reversed_propagator {
+        use super::*;
+
+        include!("reversed-propagator-tests.rs");
     }
 }
