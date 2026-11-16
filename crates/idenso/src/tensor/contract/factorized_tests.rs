@@ -1053,3 +1053,47 @@ fn metric_and_dot_spellings_of_one_scalar_multiply() {
         );
     }
 }
+
+#[test]
+fn dot_requests_emit_frontier_scalars_in_dot_notation() {
+    use crate::tensor::{AlgebraContraction, AlgebraSettings};
+    setup();
+    let algebra = |source: &Atom, contract: AlgebraContraction| {
+        SymbolicTensor::<PartialStructure>::infer(source.clone())
+            .unwrap()
+            .simplify_algebra(&AlgebraSettings {
+                contract,
+                ..Default::default()
+            })
+            .unwrap()
+    };
+    for source in [
+        "(p(spenso::mink(4,a))+q(spenso::mink(4,a)))*(p(spenso::mink(4,a))+2*q(spenso::mink(4,a)))*(p(spenso::mink(4,b))-q(spenso::mink(4,b)))*(q(spenso::mink(4,b))+3*p(spenso::mink(4,b)))",
+        "(x+y)^3*(spenso::g(p(spenso::mink(4)),p(spenso::mink(4)))+spenso::g(q(spenso::mink(4)),q(spenso::mink(4))))*(t(spenso::mink(4,a),spenso::mink(4,b))+u(spenso::mink(4,a),spenso::mink(4,b)))*(p(spenso::mink(4,a))+q(spenso::mink(4,a)))",
+        "spenso::dot(p(spenso::mink(4)),q(spenso::mink(4)))*spenso::g(spenso::mink(4,mu),spenso::mink(4,nu))*p(spenso::mink(4,mu))*q(spenso::mink(4,nu))*(x+p(spenso::mink(4,a))*q(spenso::mink(4,a)))",
+    ] {
+        let source = input(source);
+        let dots = algebra(&source, AlgebraContraction::Dots);
+        let fully = algebra(&source, AlgebraContraction::Fully)
+            .to_dots()
+            .unwrap();
+        assert_eq!(dots.reduction_status(), ReductionStatus::Complete);
+        assert_eq!(dots.structure, fully.structure, "{source}");
+        assert_eq!(
+            dots.expression.expand(),
+            fully.expression.expand(),
+            "{source}"
+        );
+        // The emitted spelling is already the dot normal form.
+        assert_eq!(
+            dots.to_dots().unwrap().expression,
+            dots.expression,
+            "{source}"
+        );
+        assert_eq!(
+            algebra(&dots.expression, AlgebraContraction::Dots).expression,
+            dots.expression,
+            "{source}"
+        );
+    }
+}

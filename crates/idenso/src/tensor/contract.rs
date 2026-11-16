@@ -48,6 +48,10 @@ pub struct ContractSettings<'a> {
     /// short closed trace) over their base variables while contracting, so
     /// equal monomials merge. False keeps every scalar sum factored.
     pub expand_scalar_spectators: bool,
+    /// Emit closed scalar products of factorized contractions in dot notation,
+    /// as [`crate::tensor::SymbolicTensor::to_dots`] would write them. Set by
+    /// algebra requests that end in dot notation; false keeps `g(p,q)`.
+    pub dot_notation: bool,
     /// Optional limit on successful planning rounds per domain. `None` is unlimited.
     pub max_passes: Option<usize>,
 }
@@ -63,6 +67,7 @@ impl Default for ContractSettings<'_> {
             collect_traces: true,
             expand: true,
             expand_scalar_spectators: false,
+            dot_notation: false,
             max_passes: None,
         }
     }
@@ -151,6 +156,7 @@ impl SymbolicTensor<PartialStructure> {
                 let contractor =
                     SlotContraction::configured(settings.metrics, settings.representations)
                         .expanding_scalars(settings.expand_scalar_spectators)
+                        .emitting_dots(settings.dot_notation)
                         .observed(observed);
                 let contractor = match self.shallow_graph() {
                     Ok(graph) => contractor.planned(
@@ -352,6 +358,7 @@ impl SymbolicTensor<PartialStructure> {
         };
         let contractor = SlotContraction::configured(settings.metrics, settings.representations)
             .expanding_scalars(settings.expand_scalar_spectators)
+            .emitting_dots(settings.dot_notation)
             .expanding(settings.expand)
             .observed(result.root.reduction_observations());
         if self.reduction_observations().candidates.intrinsic
@@ -446,6 +453,7 @@ impl SymbolicTensor<PartialStructure> {
             let expression =
                 SlotContraction::configured(settings.metrics, settings.representations)
                     .expanding_scalars(settings.expand_scalar_spectators)
+                    .emitting_dots(settings.dot_notation)
                     .expanding(settings.expand)
                     .contract_inner_products(result.root.expression.as_view());
             result.root = result.root.with_identity_result(expression, None)?;
@@ -472,6 +480,7 @@ impl SymbolicTensor<PartialStructure> {
             let contractor =
                 SlotContraction::configured(settings.metrics, settings.representations)
                     .expanding_scalars(settings.expand_scalar_spectators)
+                    .emitting_dots(settings.dot_notation)
                     .expanding(settings.expand)
                     .observed(updated);
             let contractor = match result.root.shallow_graph() {
@@ -618,6 +627,7 @@ impl SymbolicTensor<PartialStructure> {
             let expression =
                 SlotContraction::configured(settings.metrics, settings.representations)
                     .expanding_scalars(settings.expand_scalar_spectators)
+                    .emitting_dots(settings.dot_notation)
                     .contract_ordered(
                         source.as_view(),
                         settings.rank_one,
@@ -634,6 +644,7 @@ impl SymbolicTensor<PartialStructure> {
         let domain = self.with_identity_result(source, None)?;
         let contractor = SlotContraction::configured(settings.metrics, settings.representations)
             .expanding_scalars(settings.expand_scalar_spectators)
+            .emitting_dots(settings.dot_notation)
             .expanding(settings.expand)
             .observed(domain.reduction_observations());
         let contractor = match domain.shallow_graph() {

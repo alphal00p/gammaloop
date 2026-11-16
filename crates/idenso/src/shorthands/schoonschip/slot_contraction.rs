@@ -74,6 +74,7 @@ pub(crate) struct SlotContraction {
     metrics: bool,
     expand: bool,
     expand_scalars: bool,
+    dot_notation: bool,
     representations: Option<Vec<LibraryRep>>,
     observations:
         Option<std::sync::Arc<crate::tensor::simplification::observation::DomainObservations>>,
@@ -96,6 +97,7 @@ impl SlotContraction {
             metrics: true,
             expand: true,
             expand_scalars: false,
+            dot_notation: false,
             representations: None,
             observations: None,
             graph: None,
@@ -133,6 +135,13 @@ impl SlotContraction {
     /// inside factorized frontiers (see `ContractSettings::expand_scalar_spectators`).
     pub(crate) fn expanding_scalars(mut self, expand: bool) -> Self {
         self.expand_scalars = expand;
+        self
+    }
+
+    /// Emit closed scalar products of factorized frontiers in dot notation
+    /// (see `ContractSettings::dot_notation`).
+    pub(crate) fn emitting_dots(mut self, dots: bool) -> Self {
+        self.dot_notation = dots;
         self
     }
 
