@@ -1066,6 +1066,9 @@ impl<'a> Evaluation<'a> {
     /// 6a, 7).
     fn integrate_ordinary(&mut self, term: &UvPreparationTerm) -> Result<Atom> {
         let mode = boundary::remainder_boundary_mode()?;
+        if let Some(message) = boundary::census_dump_refusal(mode) {
+            return Err(eyre!("{message} ({})", self.graph.name));
+        }
         let remainder = self.remainder(term)?;
         if mode == BoundaryMode::Off {
             return self.integrate(&remainder, remainder.expression()?);

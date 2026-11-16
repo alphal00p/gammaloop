@@ -26,9 +26,9 @@ use crate::{
 use super::{
     RStarPlan, TaylorExpansion,
     boundary::{
-        BoundaryMode, BoundaryStats, ClosedRootNormalization, Grammar, Role, denominator_orders,
-        fallback_max_summands, large_decline, split_into_blocks, verify_vakint_scalar,
-        with_boundary_mode,
+        BoundaryMode, BoundaryStats, ClosedRootNormalization, Grammar, Role, census_dump_refusal,
+        denominator_orders, fallback_max_summands, large_decline, split_into_blocks,
+        validate_remainder_boundary, verify_vakint_scalar, with_boundary_mode, with_census_dump,
     },
     expression::RStarIntegrand,
     recursive_tests::{colour_factored, load, settings},
@@ -383,6 +383,58 @@ fn boundary_matches_old_path_two_and_three_loop() -> Result<()> {
             ensure!(check == off, "{name}: check mode must return today's value");
             eprintln!("BOUNDARY_TEST {name} on identical={identical} check ok");
         }
+        Ok(())
+    })
+}
+
+/// Mode on under a census dump is refused until the boundary dump (DESIGN
+/// 6b, step 4) exists, at start-up and at the first ordinary remainder, so a
+/// census can never come out empty without an error; check and off are not.
+#[test]
+fn mode_on_refuses_the_census_dump() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        for (mode, dump, refused) in [
+            (BoundaryMode::On, true, true),
+            (BoundaryMode::On, false, false),
+            (BoundaryMode::Check, true, false),
+            (BoundaryMode::Off, true, false),
+        ] {
+            let refusal = with_census_dump(dump, || census_dump_refusal(mode));
+            ensure!(refusal.is_some() == refused, "{mode:?} dump={dump}: {refusal:?}");
+            let startup = with_census_dump(dump, || {
+                with_boundary_mode(mode, false, validate_remainder_boundary)
+            });
+            ensure!(startup.is_err() == refused, "{mode:?} dump={dump}: start-up {startup:?}");
+        }
+        // Wired into the ordinary loop: before any remainder is integrated.
+        let vakint = Vakint::new()?;
+        let settings = settings();
+        let diagram = colour_factored(&load(include_str!("testdata/l2-d0.dot"))?)?;
+        let graph = diagram.to_gamma_loop_graph(None, true)?;
+        let model = diagram.model();
+        let plan = RStarPlan::with_automatic_edge(&graph, model, &settings)?;
+        let closed_root = test_normalization(&graph);
+        let callback = |tensor: &Atom| -> Result<Atom> {
+            Ok(tensor.replace_multiple(&closed_root.external_routing) * &closed_root.factor)
+        };
+        let result = with_census_dump(true, || {
+            with_boundary_mode(BoundaryMode::On, false, || {
+                plan.projected_counterterm_closing_root_scalar(
+                    &graph,
+                    model,
+                    &vakint,
+                    &settings,
+                    &callback,
+                    &closed_root,
+                )
+            })
+        });
+        let error = match result {
+            Ok(value) => return Err(eyre!("mode on under a census dump returned {value}")),
+            Err(error) => format!("{error:#}"),
+        };
+        ensure!(error.contains("PINT6_CLOSURE_DUMP"), "unexpected error: {error}");
         Ok(())
     })
 }

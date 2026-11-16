@@ -50,7 +50,7 @@ pub(super) static REFERENCE_MASS_SQUARED: std::sync::LazyLock<symbolica::atom::S
     std::sync::LazyLock::new(|| symbolica::symbol!("rstar_reference_mass_squared"; Scalar));
 pub use boundary::{
     BoundaryMode, ClosedRootNormalization, remainder_boundary_mode, remainder_boundary_provenance,
-    startup_line,
+    startup_line, validate_remainder_boundary,
 };
 pub use expression::{ClosedSkipMode, closed_dot_scalar, closed_skip_mode, set_memory_release};
 pub use insertion_identity::{InsertionSkeletonIdentity, InsertionSkeletonKey};
