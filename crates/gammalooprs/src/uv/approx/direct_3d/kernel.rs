@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::sync::LazyLock;
 
 use color_eyre::Result;
@@ -27,7 +28,10 @@ use crate::{
 #[cfg(test)]
 use crate::uv::approx::local_3d::Local3DLoopRescaling;
 
-use super::{branches::DirectResidueBranches, forest::Direct3dApproximation};
+use super::{
+    branches::DirectResidueBranches, coefficients::is_factor_call, forest::Direct3dApproximation,
+};
+use thermal_soft::{SoftBranchRole, SoftBranches};
 
 /// One independently framed connected part of a direct forest sector.
 /// Disconnected replay keeps these frames separate until an enclosing Taylor
@@ -310,10 +314,59 @@ pub(super) fn coordinate_lmb<S: ForestNodeLike>(
     Ok((canonical_component_lmb, coordinate_lmb))
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Local3DDeformation {
     Ordinary,
+    /// U of a component acting on its own completed thermal soft branch. The
+    /// branch scope replaces the mass scope, so enclosing operations co-scale
+    /// the result together with the soft branch it subtracts from.
+    OrdinaryOnSoftBranch,
     Soft,
+}
+
+impl Local3DDeformation {
+    fn is_ordinary(self) -> bool {
+        matches!(self, Self::Ordinary | Self::OrdinaryOnSoftBranch)
+    }
+
+    /// Last retained power of the inverted Taylor parameter.
+    fn series_endpoint(self) -> i64 {
+        if self.is_ordinary() { 0 } else { -1 }
+    }
+}
+
+/// Terminal masses of an ordinary on-shell-energy projection, in the scope
+/// of the operation that applies it.
+#[derive(Clone)]
+struct OrdinaryEnergyMasses {
+    vacuum_squared: Atom,
+    expansion_squared: Atom,
+}
+
+impl OrdinaryEnergyMasses {
+    /// Normalize a rescaled invariant before inversion so its Laurent series
+    /// never contains a square root of a negative parameter power.
+    fn normalize(&self, invariant: Atom) -> Atom {
+        let rescale_squared = Atom::var(GS.rescale).pow(2);
+        if invariant.contains_symbol(GS.m_uv_vacuum) {
+            // An inner U already supplied this terminal vacuum
+            // energy. Scale its actual vacuum mass with the
+            // active loop before factoring the energy, rather
+            // than applying the MUV rearrangement a second time.
+            // This relies on mUV being reserved for terminal
+            // masses inside an active OSE argument.
+            invariant
+                .replace(GS.m_uv_vacuum)
+                .with(Atom::var(GS.m_uv_vacuum) * GS.rescale)
+                / rescale_squared
+        } else {
+            // A fresh projection keeps the expansion mass in
+            // Taylor coefficients and uses the vacuum mass in
+            // the terminal on-shell energy.
+            (&self.vacuum_squared * &rescale_squared + invariant - &self.expansion_squared)
+                / rescale_squared
+        }
+    }
 }
 
 /// Unit-valued support tag retained until the last local forest operation.
@@ -327,6 +380,18 @@ enum Local3DDeformation {
 /// tag by one before numerical compilation.
 pub(crate) static LOCAL_3D_MASS_SCOPE: LazyLock<Symbol> =
     LazyLock::new(|| symbol!("gammalooprs::local_3d_mass_scope"));
+
+/// Unit-valued mass scope of a completed finite-temperature soft branch.
+///
+/// The argument is the `S_<label>` symbol of the expanded support, which also
+/// replaces the integer owner of every on-shell energy the branch expanded.
+/// A strictly enclosing local operation treats the branch as a frozen vertex:
+/// it co-scales this scope, the branch's energies and the temperature of its
+/// retained occupations with its own loop momenta, so that only the reduced
+/// cograph is projected and expanded. The component's own U keeps the scope as
+/// its expansion scope. Final-integrand construction replaces it by one.
+pub(crate) static LOCAL_3D_SOFT_SCOPE: LazyLock<Symbol> =
+    LazyLock::new(|| symbol!("gammalooprs::local_3d_soft_scope"));
 
 /// Apply one local-3D Taylor operation to a complete residue-map family.
 /// Selectors remain outside the atoms. Newly attached factors share one
@@ -347,6 +412,34 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
     let active_subgraph = active_subgraph
         .as_ref()
         .map(|active| active.intersection(current.subgraph()));
+    let medium_mode = orientation.cff_options()?.medium_mode;
+    let ordinary_only = match current.renormalization_scheme() {
+        ApproximationType::MUV | ApproximationType::PolePart => true,
+        ApproximationType::IR => current.dod() == 0,
+        ApproximationType::OS | ApproximationType::Unsubtracted => false,
+    };
+    if medium_mode.is_finite_temperature() && ordinary_only {
+        // U first projects every unfrozen active occupation to vacuum. When
+        // that annihilates the input, as for the whole-graph U on a chain
+        // without a frozen soft branch, skip the numerator and Taylor work.
+        let support = active_subgraph
+            .as_ref()
+            .unwrap_or_else(|| current.subgraph());
+        let projected = integrands.fallible_map(|_, atom| {
+            Direct3dApproximation::project_unfrozen_occupations(
+                ctx,
+                atom,
+                support,
+                Local3DDeformation::Ordinary,
+            )
+        })?;
+        if projected
+            .iter_keys()
+            .all(|(_, roots)| roots.iter().all(|(_, atom)| atom.is_zero()))
+        {
+            return Ok(projected);
+        }
+    }
     let reduced = current.reduced_subgraph(given);
     let mut numerator = ctx
         .graph
@@ -379,12 +472,11 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
     for mass in physical_masses {
         numerator = numerator.replace(mass.clone()).with(mass * &mass_scope);
     }
-    // Every local UV kernel starts from the vacuum-explicit reduced graph, including
-    // thermal runs; the medium dependence lives in the unreduced observable.
-    // Replacements recurse into thermal_weight(...). Keep surviving N calls in
-    // edge-ID form so the retained wrapper stays independent of the Taylor variable.
+    // Finite-temperature S Taylor-expands the occupations together with the
+    // completed CFF. Defer their vacuum limit to U; other medium modes retain
+    // the existing vacuum soft counterterm.
     let vacuum_integrands;
-    let integrands = if orientation.cff_options()?.medium_mode == MediumMode::Vacuum {
+    let integrands = if medium_mode == MediumMode::Vacuum || medium_mode.is_finite_temperature() {
         integrands
     } else {
         vacuum_integrands = integrands.map_expressions(|atom| {
@@ -439,6 +531,11 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
                     lmb,
                 );
             }
+            if medium_mode.is_finite_temperature() && ctx.settings.generate_integrated {
+                return Err(eyre!(
+                    "thermal soft counterterms require generate_integrated = false"
+                ));
+            }
             let soft = Direct3dApproximation::t(
                 Local3DDeformation::Soft,
                 ctx,
@@ -448,6 +545,37 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
                 active_subgraph.as_ref(),
                 lmb,
             )?;
+            if medium_mode.is_finite_temperature() {
+                // The soft branch is a frozen vertex for every enclosing
+                // operation, whose U therefore subtracts only the reduced
+                // cograph. U(X) and U(S(X)) must keep separate expansion
+                // scopes: the ordinary scope stays fixed under enclosing
+                // operations, the branch scope is co-scaled with it.
+                let support = active_subgraph
+                    .as_ref()
+                    .unwrap_or_else(|| current.subgraph());
+                let soft =
+                    Direct3dApproximation::freeze_soft_branch(&soft, support, lmb, &mass_scope)?;
+                let uv = Direct3dApproximation::t(
+                    Local3DDeformation::Ordinary,
+                    ctx,
+                    current,
+                    given,
+                    &started,
+                    active_subgraph.as_ref(),
+                    lmb,
+                )?;
+                let uv_on_soft = Direct3dApproximation::t(
+                    Local3DDeformation::OrdinaryOnSoftBranch,
+                    ctx,
+                    current,
+                    given,
+                    &soft,
+                    active_subgraph.as_ref(),
+                    lmb,
+                )?;
+                return soft.zip_add(&uv)?.zip_add(&-uv_on_soft);
+            }
             // The Taylor projector U is linear, so
             // U(X) + S(X) - U(S(X)) = S(X) + U(X - S(X)). Applying U
             // once to the completed soft remainder preserves the exact
@@ -613,10 +741,7 @@ impl Local3DLoopRescaling {
             true,
         )?;
         let rescaled_subgraph = active_subgraph.unwrap_or_else(|| current.subgraph());
-        let endpoint = match deformation {
-            Local3DDeformation::Ordinary => 0,
-            Local3DDeformation::Soft => -1,
-        };
+        let endpoint = deformation.series_endpoint();
         let series = atomarg
             .series(GS.rescale, Atom::Zero, endpoint)
             .map_err(|error| {
@@ -672,12 +797,31 @@ impl Direct3dApproximation<'_> {
         let graph = ctx.graph;
         let reduced = current.reduced_subgraph(given);
         let rescaled_subgraph = active_subgraph.unwrap_or_else(|| current.subgraph());
+        let soft_branches = SoftBranches::new(rescaled_subgraph, graph.n_hedges(), deformation);
+        // U takes the vacuum limit of every active occupation except those
+        // retained by a frozen soft branch, whose temperature is co-scaled
+        // below instead. Disjoint thermal coefficients keep their owners.
+        let vacuum_integrand;
+        let integrand = if deformation.is_ordinary() {
+            vacuum_integrand =
+                Self::project_unfrozen_occupations(ctx, integrand, rescaled_subgraph, deformation)?;
+            &vacuum_integrand
+        } else {
+            integrand
+        };
         let scope_edge = lmb
             .loop_edges
             .first()
             .copied()
             .unwrap_or_else(|| current.lmb_id());
-        let mass_scope = function!(*LOCAL_3D_MASS_SCOPE, usize::from(scope_edge) as i64);
+        // U on its own soft branch expands with that branch's scope, which
+        // enclosing operations co-scale; every other operation uses the
+        // ordinary scope.
+        let mass_scope = if deformation == Local3DDeformation::OrdinaryOnSoftBranch {
+            thermal_soft::soft_branch_scope(rescaled_subgraph)
+        } else {
+            function!(*LOCAL_3D_MASS_SCOPE, usize::from(scope_edge) as i64)
+        };
 
         // Only apply replacements for edges in the reduced graph. Route both
         // canonical momentum images through the same component-local LMB:
@@ -735,6 +879,25 @@ impl Direct3dApproximation<'_> {
                 .replace(mass_scope.clone())
                 .with(mass_scope.clone() * GS.rescale);
         }
+        // A frozen soft branch is a vertex of this operation: its masses scale
+        // with the loop momenta, as the soft deformation scaled them.
+        let mut tag_error = None;
+        atomarg = atomarg.replace_map(|view, _, output| {
+            let AtomView::Fun(scope) = view else {
+                return;
+            };
+            if tag_error.is_some() || scope.get_symbol() != *LOCAL_3D_SOFT_SCOPE {
+                return;
+            }
+            match soft_branches.tag_role(view) {
+                Ok(Some(SoftBranchRole::Frozen)) => **output = view.to_owned() * GS.rescale,
+                Ok(_) => {}
+                Err(error) => tag_error = Some(error),
+            }
+        });
+        if let Some(error) = tag_error {
+            return Err(error);
+        }
         debug_tags!(#generation, #profile, #uv, #local, #summary;
             stage = "local_3d_t_after_loop_rescale",
             byte_size = atomarg.as_view().get_byte_size(),
@@ -755,17 +918,9 @@ impl Direct3dApproximation<'_> {
             if mass.get_symbol() != GS.m_uv_vacuum {
                 return;
             }
-            let owner = match mass.get_nargs() {
-                1 => match mass.get(0) {
-                    AtomView::Var(owner) => owner
-                        .get_symbol()
-                        .get_stripped_name()
-                        .strip_prefix("S_")
-                        .and_then(|label| SuBitGraph::from_base62(label, graph.n_hedges())),
-                    _ => None,
-                },
-                _ => None,
-            };
+            let owner = (mass.get_nargs() == 1)
+                .then(|| thermal_soft::component_owner(mass.get(0), graph.n_hedges()))
+                .flatten();
             let Some(owner) = owner else {
                 invalid_mass_owner = Some("a direct vacuum mass has no valid component owner");
                 return;
@@ -786,51 +941,66 @@ impl Direct3dApproximation<'_> {
         // series never contains a square root of a negative parameter power.
         // Ordinary U performs the established MUV rearrangement. Soft S
         // factors the co-scaled physical energy without introducing MUV.
-        let rescale_squared = Atom::var(GS.rescale).pow(2);
-        let uv_expansion_mass_squared = (Atom::var(GS.m_uv_expansion) * &mass_scope).pow(2);
-        let uv_vacuum_mass_squared = (Atom::var(GS.m_uv_vacuum) * &mass_scope).pow(2);
+        let uv_masses = OrdinaryEnergyMasses {
+            vacuum_squared: (Atom::var(GS.m_uv_vacuum) * &mass_scope).pow(2),
+            expansion_squared: (Atom::var(GS.m_uv_expansion) * &mass_scope).pow(2),
+        };
         for eid in &lmb.loop_edges {
             let eid = eid.0 as i64;
-            let rescale_squared = rescale_squared.clone();
-            let uv_expansion_mass_squared = uv_expansion_mass_squared.clone();
-            let uv_vacuum_mass_squared = uv_vacuum_mass_squared.clone();
+            let uv_masses = uv_masses.clone();
             atomarg = atomarg
                 .replace(function!(GS.on_shell_energy, eid, W_.prop_))
                 .with_map(move |matched| {
                     let invariant = matched.get(W_.prop_).unwrap().to_atom();
-                    let normalized_invariant = match deformation {
-                        Local3DDeformation::Ordinary
-                            if invariant.contains_symbol(GS.m_uv_vacuum) =>
-                        {
-                            // An inner U already supplied this terminal vacuum
-                            // energy. Scale its actual vacuum mass with the
-                            // active loop before factoring the energy, rather
-                            // than applying the MUV rearrangement a second time.
-                            // This relies on mUV being reserved for terminal
-                            // masses inside an active OSE argument.
-                            invariant
-                                .replace(GS.m_uv_vacuum)
-                                .with(Atom::var(GS.m_uv_vacuum) * GS.rescale)
-                                / &rescale_squared
-                        }
-                        Local3DDeformation::Ordinary => {
-                            // A fresh projection keeps the expansion mass in
-                            // Taylor coefficients and uses the vacuum mass in
-                            // the terminal on-shell energy.
-                            (&uv_vacuum_mass_squared * &rescale_squared + invariant
-                                - &uv_expansion_mass_squared)
-                                / &rescale_squared
-                        }
-                        Local3DDeformation::Soft => invariant / &rescale_squared,
+                    let normalized_invariant = if deformation.is_ordinary() {
+                        uv_masses.normalize(invariant)
+                    } else {
+                        invariant / Atom::var(GS.rescale).pow(2)
                     };
                     function!(GS.on_shell_energy, eid, normalized_invariant) * GS.rescale
                 });
+        }
+        // Energies of a completed soft branch are owned by its support symbol.
+        // A frozen branch scales like the soft deformation that produced it,
+        // while the component's own U expands its branch like a fresh energy.
+        let mut tag_error = None;
+        atomarg = atomarg.replace_map(|view, _, output| {
+            let AtomView::Fun(energy) = view else {
+                return;
+            };
+            if tag_error.is_some() || energy.get_symbol() != GS.on_shell_energy {
+                return;
+            }
+            let normalized_invariant = match soft_branches.tag_role(view) {
+                Ok(Some(SoftBranchRole::Frozen)) => {
+                    energy.get(1).to_owned() / Atom::var(GS.rescale).pow(2)
+                }
+                Ok(Some(SoftBranchRole::Own)) => uv_masses.normalize(energy.get(1).to_owned()),
+                Ok(Some(SoftBranchRole::Disjoint) | None) => return,
+                Err(error) => {
+                    tag_error = Some(error);
+                    return;
+                }
+            };
+            **output =
+                function!(GS.on_shell_energy, energy.get(0), normalized_invariant) * GS.rescale;
+        });
+        if let Some(error) = tag_error {
+            return Err(error);
         }
         debug_tags!(#generation, #profile, #uv, #local, #summary;
             stage = "local_3d_t_after_ose_rescale",
             byte_size = atomarg.as_view().get_byte_size(),
             "Local 3D T size checkpoint"
         );
+
+        atomarg = Self::compensate_thermal_distributions(
+            ctx,
+            rescaled_subgraph,
+            &atomarg,
+            deformation,
+            soft_branches,
+        )?;
 
         // The supplied LMB is the integration-space authority. In particular,
         // a remainder which is a tree in the original incidence can become a
@@ -895,10 +1065,7 @@ impl Direct3dApproximation<'_> {
                     false,
                 )
             })?;
-        let endpoint = match deformation {
-            Local3DDeformation::Ordinary => 0,
-            Local3DDeformation::Soft => -1,
-        };
+        let endpoint = deformation.series_endpoint();
         let series = rescaled.series_preserving_numerators(
             GS.rescale, Atom::Zero.as_view(), endpoint, DirectResidueBranches::numerator_scope().1,
         ).map_err(|error| eyre!(
@@ -911,7 +1078,7 @@ impl Direct3dApproximation<'_> {
             branch_count = series.iter_keys().count(),
             "Shared local 3D Taylor coefficients prepared"
         );
-        let series = if matches!(deformation, Local3DDeformation::Ordinary) {
+        let series = if deformation.is_ordinary() {
             // Recollect the known Laurent polynomial only in its bookkeeping
             // scale. Retained graph numerators remain opaque, and each residue
             // map/cut keeps its own scalar cancellation problem.
@@ -926,13 +1093,17 @@ impl Direct3dApproximation<'_> {
                 };
                 let result =
                     Atom::add_many(coefficients.into_iter().map(|(power, coefficient)| {
-                        let mut keys = std::collections::BTreeSet::new();
+                        let mut keys = BTreeSet::new();
                         let family = symbol!("gammalooprs::uv::numerator_family");
                         coefficient.visitor(&mut |part| {
                             if let AtomView::Fun(call) = part
                                 && call.get_symbol() == family
                             {
-                                keys.insert(part.to_owned());
+                                // Homogeneous factors are closed scalars:
+                                // plain function indeterminates to together().
+                                if !is_factor_call(part) {
+                                    keys.insert(part.to_owned());
+                                }
                                 return false;
                             }
                             true
@@ -983,6 +1154,9 @@ impl Direct3dApproximation<'_> {
 #[cfg(test)]
 #[path = "soft_tests.rs"]
 mod soft_tests;
+
+#[path = "thermal_soft.rs"]
+mod thermal_soft;
 
 #[cfg(test)]
 #[path = "pole_audit.rs"]

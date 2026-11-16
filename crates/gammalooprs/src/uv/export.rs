@@ -285,7 +285,12 @@ fn export_graph(
             "UV forest export does not support uv.orchestrator = compare"
         ));
     }
-    validate_local_counterterm_schemes(graph, &cut_structure, &generation_settings.uv)?;
+    validate_local_counterterm_schemes(
+        graph,
+        &cut_structure,
+        &generation_settings.uv,
+        &generation_settings.medium,
+    )?;
 
     let mut forest_dot = String::new();
     let mut node_terms = Vec::new();

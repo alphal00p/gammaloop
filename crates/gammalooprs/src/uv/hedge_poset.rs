@@ -195,7 +195,7 @@ impl Wood {
                     })?,
             );
         }
-        graph.remove_full_observable_spinney(&mut spinneys, &settings.medium);
+        graph.restrict_full_observable_spinney(&mut spinneys, &settings.uv, &settings.medium);
 
         Ok(Self::from_spinneys(spinneys, graph, cuts, &settings.uv))
     }
@@ -1985,7 +1985,11 @@ mod tests {
                             &settings.uv,
                             &graph.loop_momentum_basis,
                         )?;
-                        graph.remove_full_observable_spinney(&mut spinneys, &settings.medium);
+                        graph.restrict_full_observable_spinney(
+                            &mut spinneys,
+                            &settings.uv,
+                            &settings.medium,
+                        );
                         assert_eq!(
                             &spinneys
                                 .iter()

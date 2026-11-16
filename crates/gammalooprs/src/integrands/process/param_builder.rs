@@ -126,6 +126,25 @@ pub trait ParamBuilderGraph {
         edges: impl IntoIterator<Item = EdgeIndex>,
     ) -> Result<Atom> {
         let edges = edges.into_iter().collect::<BTreeSet<_>>();
+        self.make_selected_thermal_distributions_explicit(atom, limit, |call| {
+            Ok(edges.contains(&call.edge))
+        })
+    }
+    /// Replace each distribution call accepted by `select` with its explicit
+    /// body in the `limit` medium, evaluated at the call's energy. Rejected
+    /// calls and all other subexpressions are left unchanged.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first error from parsing a distribution call, from
+    /// `select`, or from building an explicit body; no partial result is
+    /// returned.
+    fn make_selected_thermal_distributions_explicit(
+        &self,
+        atom: &Atom,
+        limit: MediumMode,
+        mut select: impl FnMut(&ThermalDistributionCall) -> Result<bool>,
+    ) -> Result<Atom> {
         let mut error = None;
         let explicit = atom.replace_map(|term, _, out| {
             if error.is_some() {
@@ -145,16 +164,22 @@ pub trait ParamBuilderGraph {
                     return;
                 }
             };
+            match select(&call) {
+                Ok(true) => {}
+                Ok(false) => return,
+                Err(select_error) => {
+                    error = Some(select_error);
+                    return;
+                }
+            }
             let ThermalDistributionCall {
                 edge,
                 derivative_order,
                 thermal_sign,
                 orientation_sign,
+                energy,
                 ..
             } = call;
-            if !edges.contains(&edge) {
-                return;
-            }
             match self.explicit_thermal_distribution_atom(
                 edge,
                 derivative_order,
@@ -162,7 +187,7 @@ pub trait ParamBuilderGraph {
                 orientation_sign,
                 limit,
             ) {
-                Ok(replacement) => **out = replacement,
+                Ok(replacement) => **out = replacement.replace(GS.ose(edge)).with(energy),
                 Err(distribution_error) => error = Some(distribution_error),
             }
         });
@@ -2333,6 +2358,32 @@ mod tests {
                 for order in orders {
                     for thermal_sign in [-1, 0, 1] {
                         for orientation_sign in [-1, 1] {
+                            let deformed_energy = GS.ose(edge) * Atom::num(2);
+                            let deformed = ThermalDistributionCall::atom_at_energy(
+                                0,
+                                order,
+                                Atom::num(i64::from(limit.is_finite_temperature())),
+                                thermal_sign,
+                                orientation_sign,
+                                &deformed_energy,
+                            );
+                            let deformed_body = graph
+                                .explicit_thermal_distribution_atom(
+                                    edge,
+                                    order as usize,
+                                    Atom::num(thermal_sign),
+                                    Atom::num(orientation_sign),
+                                    limit,
+                                )
+                                .unwrap()
+                                .replace(GS.ose(edge))
+                                .with(deformed_energy);
+                            assert_eq!(
+                                graph
+                                    .make_thermal_distributions_explicit(&deformed, limit, [edge])
+                                    .unwrap(),
+                                deformed_body,
+                            );
                             let expressions = [
                                 ThermalDistributionCall::atom(
                                     0,
@@ -2350,19 +2401,26 @@ mod tests {
                                         limit,
                                     )
                                     .unwrap(),
+                                deformed,
+                                deformed_body,
                             ];
-                            let [registered, explicit] = expressions.map(|expression| {
-                                expression
-                                    .evaluator(&params)
-                                    .function_map(graph.param_builder.fn_map.clone())
-                                    .build()
-                                    .unwrap()
-                                    .map_coeff(&|coefficient| coefficient.re.to_f64())
-                                    .evaluate_single(&input)
-                            });
+                            let [registered, explicit, deformed, explicit_deformed] = expressions
+                                .map(|expression| {
+                                    expression
+                                        .evaluator(&params)
+                                        .function_map(graph.param_builder.fn_map.clone())
+                                        .build()
+                                        .unwrap()
+                                        .map_coeff(&|coefficient| coefficient.re.to_f64())
+                                        .evaluate_single(&input)
+                                });
                             assert!(
                                 (registered - explicit).abs() < 1e-13,
                                 "{particle}: {limit:?}, order {order}, thermal sign {thermal_sign}, orientation {orientation_sign}"
+                            );
+                            assert!(
+                                (deformed - explicit_deformed).abs() < 1e-13,
+                                "{particle}: {limit:?}, order {order}: explicit energy was lost"
                             );
                             if order == 0 {
                                 let shifted_energy = input[0]

@@ -51,7 +51,7 @@ impl CutWoods {
                         graph.name
                     )
                 })?;
-            graph.remove_full_observable_spinney(&mut spinneys, &settings.medium);
+            graph.restrict_full_observable_spinney(&mut spinneys, &settings.uv, &settings.medium);
 
             for spinney in spinneys.iter() {
                 debug_tags!(#uv, #graph, #spinney,#generation;

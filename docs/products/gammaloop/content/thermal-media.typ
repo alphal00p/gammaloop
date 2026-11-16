@@ -17,7 +17,8 @@ LTD supports vacuum integrands only; requests containing LTD, including mixed CF
 generation, are rejected.
 
 #boundary("Infrared safety and thresholds", [
-  GammaLoop has no thermal infrared subtraction or resummation, so only infrared-safe
+  Thermal soft subtraction is experimental and has not established local finiteness.
+  GammaLoop has no thermal resummation, so only infrared-safe
   fixed-order amplitudes can be evaluated. At finite temperature, soft bosonic modes, whose
   occupation grows like `T/E`, eventually require resummation that GammaLoop does not perform.
   Threshold subtraction is also unavailable, so choose kinematics without thresholds, including
@@ -127,7 +128,10 @@ With
 #link("reference/cli/settings/cli/global/generation/medium/#setting-cli-global-generation-medium-vacuum-subtraction-622cb5e219356a31")[`vacuum_subtraction = true`],
 only the medium-dependent part is generated: each distribution weight is replaced by its
 difference from the vacuum limit, and UV counterterms covering all loops are omitted,
-including when bridges remain in the graph.
+including when bridges remain in the graph. At finite temperature with local soft (`IR`)
+counterterms and `generate_integrated = false`, the all-loop counterterm is instead kept as a
+plain UV operation: it subtracts the UV divergence of each soft counterterm's reduced
+cograph, whose soft coefficient enclosing operations treat as a fixed vertex.
 This option requires a medium mode.
 
 GammaLoop keeps equilibrium vacuum amplitudes in its Minkowski convention. For the complete

@@ -62,6 +62,7 @@ not (binary(/pysecdec/) or test(=test_integrate_1l_decorated_indices_pysecdec)) 
     test(=uv::tests::failing::tri_box_tri_LU) or
     test(=uv::tests::failing::tta_uv)
 ) and not (
+    binary(=thermal_soft_ct) or
     test(=aa_aa::aa_aa_integrated_graph_histogram_bins) or
     test(=se1l_uv) or
     test(=integrations::scalar_mercedes) or
@@ -141,6 +142,13 @@ test-group = "integration"
 # This thermal acceptance does not match the generic integration-name filter.
 filter = "test(=cool_qm_eos::cool_qm_eos_nlo_matches_example_target)"
 test-group = "integration"
+
+[[profile.default.overrides]]
+# Full mixed-ring generation and UV/soft scans take tens of minutes in ci-optim.
+# Run both chemical potentials serially in the main slow lane.
+filter = "binary(=thermal_soft_ct)"
+test-group = "soft-ct-serial"
+slow-timeout = { period = "10m", terminate-after = 12, on-timeout = "fail" }
 
 [[profile.default.overrides]]
 filter = "test(/(^|::)epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes$/) or test(/(^|::)epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_routes$/) or test(/(^|::)gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections$/) or test(/(^|::)gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections$/) or test(=test_integrated_uv_cts::scalar_bubble_integrated) or test(=sunrise_scalar_1_uv) or test(=dotted_sunrise_uv) or test(=thermal_sunrise_uv)"
@@ -290,6 +298,7 @@ store-success-output = true
 [profile.ci_slow]
 inherits = "ci_full"
 default-filter = '''
+binary(=thermal_soft_ct) or
 test(=aa_aa::aa_aa_integrated_graph_histogram_bins) or
     test(=se1l_uv) or
     test(=integrations::scalar_mercedes) or

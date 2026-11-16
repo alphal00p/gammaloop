@@ -104,6 +104,12 @@ impl FermiSurfaceSector {
                 expression = expression.replace(key.to_pattern()).with(Atom::Zero);
                 continue;
             }
+            ensure!(
+                call.energy == GS.ose(call.edge),
+                "Fermi-surface localization requires the original edge energy; \
+                 deformed energy {} in {key} needs a separate surface map",
+                call.energy
+            );
             let sign = i64::try_from(call.thermal_sign.as_view())
                 .map_err(|_| eyre!("Fermi-surface thermal sign must be resolved in {key}"))?;
             let orientation = i64::try_from(call.orientation_sign.as_view()).map_err(|_| {
@@ -422,6 +428,7 @@ mod tests {
             ThermalDistributionCall::atom(1, 1, 0, 1, 0),
             ThermalDistributionCall::atom(1, -1, 0, 1, 1),
             ThermalDistributionCall::atom(1, 1, 2, 1, 1),
+            ThermalDistributionCall::atom_at_energy(1, 1, 0, 1, 1, GS.ose(EdgeIndex(0))),
             function!(GS.thermal_distribution, 1, 1, 0, 1),
         ] {
             assert!(

@@ -1,6 +1,7 @@
 use std::{collections::HashSet, sync::LazyLock};
 
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
+use symbolica::state::State;
 use symbolica::{
     atom::{Atom, AtomOrView, AtomView, FunctionBuilder, Symbol},
     function, symbol,
@@ -83,9 +84,34 @@ impl ThreeDimensionalRepSymbols {
 // symbol table before spenso has installed its concrete-index attributes.
 pub fn thermal_distribution_symbol() -> Symbol {
     // A cold call can trigger GammaLoop's initializer, which also registers N.
-    // Use Symbolica's interned lookup without holding a reentrant LazyLock.
-    symbol!("gammalooprs::N")
+    // Probe before taking the lazy lock, as with spenso's SymbolicaInitLazy.
+    // Symbolica's probe is reentrant inside its registered initializers.
+    let _ = State::is_builtin("__three_dimensional_reps_symbolica_init_probe__");
+    *THERMAL_DISTRIBUTION
 }
+
+static THERMAL_DISTRIBUTION: LazyLock<Symbol> = LazyLock::new(|| {
+    symbol!(
+        "gammalooprs::N",
+        der = |view, argument, out| {
+            if let AtomView::Fun(call) = view
+                && call.get_nargs() == 6
+                && argument == 5
+            {
+                // Energy derivatives remove the constant contour offset. Use
+                // one contour representative so equivalent derivatives cancel.
+                **out = FunctionBuilder::new(call.get_symbol())
+                    .add_arg(call.get(0))
+                    .add_arg(call.get(1).to_owned() + Atom::one())
+                    .add_arg(call.get(2))
+                    .add_arg(-1)
+                    .add_arg(call.get(4))
+                    .add_arg(call.get(5))
+                    .finish();
+            }
+        }
+    )
+});
 
 pub static THERMAL_WEIGHT_WRAPPER: LazyLock<Symbol> = LazyLock::new(|| {
     symbol!(
@@ -98,6 +124,15 @@ pub static THERMAL_WEIGHT_WRAPPER: LazyLock<Symbol> = LazyLock::new(|| {
                 && f.iter().next().unwrap().is_zero()
             {
                 **out = Atom::Zero;
+            }
+        },
+        der = |view, argument, out| {
+            if let AtomView::Fun(call) = view
+                && call.get_nargs() == 1
+                && argument == 0
+            {
+                // This wrapper protects factorization; numerically it is the identity.
+                **out = Atom::one();
             }
         }
     )

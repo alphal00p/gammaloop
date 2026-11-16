@@ -12,7 +12,7 @@ use crate::{
         Integrands, UVgenerationSettings, UltravioletGraph,
         approx::{
             ForestNodeLike,
-            direct_3d::{Direct3dCts, DirectResidueBranches},
+            direct_3d::{Direct3dCts, DirectResidueBranches, LOCAL_3D_SOFT_SCOPE},
             integrated::IntegratedCts,
             local_3d::{LOCAL_3D_MASS_SCOPE, Localizer},
             projected_4d::Projected4dCts,
@@ -563,6 +563,8 @@ impl<'a> FinalIntegrandBuilder<'a> {
             // They are mathematically one and disappear only on this final evaluator copy.
             let mut atom = atom
                 .replace(function!(*LOCAL_3D_MASS_SCOPE, W_.a_))
+                .with(Atom::one())
+                .replace(function!(*LOCAL_3D_SOFT_SCOPE, W_.a_))
                 .with(Atom::one())
                 .replace_multiple(&energy_replacements)
                 .replace(function!(GS.ose, W_.mass_, W_.prop_))

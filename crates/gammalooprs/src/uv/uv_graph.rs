@@ -210,9 +210,14 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         Ok(classified)
     }
 
-    fn remove_full_observable_spinney<E, V, H>(
+    /// Restrict the operation covering every loop under vacuum subtraction.
+    ///
+    /// It is omitted, unless thermal soft branches are frozen and a soft
+    /// component exists; it is then kept as a plain U.
+    fn restrict_full_observable_spinney<E, V, H>(
         &self,
         spinneys: &mut Vec<Spinney>,
+        settings: &UVgenerationSettings,
         medium: &MediumSettings,
     ) where
         Self: AsRef<HedgeGraph<E, V, H>>,
@@ -222,13 +227,35 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         }
 
         // Completed thermal weights already carry (1 - V). An operation covering
-        // all loops leaves no medium dependence, even when tree edges survive.
-        // Omit it before either 4D or 3D computation; spinneys contain no bridges.
+        // all loops leaves no medium dependence, even when tree edges survive,
+        // so its U vanishes on every branch that projects all occupations.
+        // Spinneys contain no bridges.
         let graph = self.as_ref();
         let full_observable =
             InternalSubGraph::cleaned_filter_pessimist(graph.non_bridges(), graph);
-        spinneys
-            .retain(|spinney| spinney.subgraph.is_empty() || spinney.subgraph != full_observable);
+        // A frozen soft component is a vertex for every enclosing operation,
+        // so the whole-graph U is the UV subtraction of its reduced cograph.
+        // Keep that U alone: without external momenta, the whole graph's soft
+        // expansion would reproduce the integrand.
+        let has_soft_component = settings.freezes_thermal_soft_branches(medium)
+            && spinneys.iter().any(|spinney| {
+                spinney.renormalization_scheme == ApproximationType::IR
+                    && spinney.dod > 0
+                    && spinney.subgraph != full_observable
+            });
+        if has_soft_component {
+            for spinney in spinneys
+                .iter_mut()
+                .filter(|spinney| spinney.subgraph == full_observable)
+            {
+                spinney.renormalization_scheme = ApproximationType::MUV;
+            }
+        } else {
+            // Omit it before either 4D or 3D computation.
+            spinneys.retain(|spinney| {
+                spinney.subgraph.is_empty() || spinney.subgraph != full_observable
+            });
+        }
     }
 
     fn all_cycle_unions<E, V, H, S: SubGraphLike<Base = SuBitGraph>>(

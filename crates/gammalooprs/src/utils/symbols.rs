@@ -1191,7 +1191,10 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
         "Esurface"; Scalar;
         norm = |view, out| {
             if let AtomView::Fun(call) = view {
-                let sum = Atom::add_many(call.iter());
+                // Soft projections can make -(E1 + E2) + E1 + E2 vanish.
+                // Distribute numeric coefficients before determining its
+                // Laurent order; an opaque zero surface would divide by zero.
+                let sum = Atom::add_many(call.iter()).expand_num();
                 if let AtomView::Add(terms) = sum.as_view() {
                     // Pull explicit Laurent monomials outside the function
                     // before series expansion. Otherwise a function callback
@@ -1712,7 +1715,13 @@ mod tests {
 
         let t = symbol!("esurface_laurent_test::t"; Scalar);
         let x = Atom::var(t);
+        let spectator = Atom::var(symbol!("esurface_laurent_test::spectator"; Scalar));
+        let exact_zero = GS
+            .esurface
+            .call_args([-(&spectator + 1), spectator.clone(), Atom::one()]);
+        assert!(exact_zero.is_zero());
         for sum in [
+            -(&spectator + (Atom::one() + &x).pow((1, 2))) + &spectator + 1,
             (Atom::one() + &x).pow((1, 2)) - 1,
             (Atom::one() + &x).pow((1, 2)) - 1 - &x / 2,
             &x + x.pow(-1),

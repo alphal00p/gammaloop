@@ -1,5 +1,7 @@
+use std::collections::BTreeSet;
 use std::{borrow::Borrow, ops::Deref};
 
+use eyre::{Result, ensure, eyre};
 use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph, NodeIndex,
@@ -94,6 +96,42 @@ pub trait FeynmanGraph {
 }
 
 impl Graph {
+    fn thermal_distribution_entry(
+        edge: EdgeIndex,
+        derivative_order: usize,
+        medium_mode: MediumMode,
+        contour: i64,
+        body: &Atom,
+    ) -> FnMapEntry {
+        let orientation_sign = symbol!("orientation_sign");
+        let thermal_energy = symbol!("thermal_energy");
+        let lhs = ThermalDistributionCall::atom_at_energy(
+            edge.0,
+            derivative_order,
+            Atom::num(i64::from(medium_mode.is_finite_temperature())),
+            contour,
+            orientation_sign,
+            thermal_energy,
+        );
+        let AtomView::Fun(call) = lhs.as_view() else {
+            unreachable!("thermal distribution builder returns a function");
+        };
+        // The four tags retain physical ownership; orientation and energy are arguments.
+        let tags = call.iter().take(4).map(|arg| arg.to_owned()).collect();
+        FnMapEntry {
+            inlining: InliningPolicy::Always,
+            is_alias: false,
+            lhs,
+            rhs: body
+                .replace(symbol!("thermal_sign"))
+                .with(Atom::num(contour))
+                .replace(ose_atom_from_index(edge))
+                .with(thermal_energy),
+            args: vec![orientation_sign.into(), thermal_energy.into()],
+            tags,
+        }
+    }
+
     /// Thermal functions are needed only after a process selects a medium.
     /// Replacing the mode also removes definitions from a previous generation.
     pub(crate) fn set_medium_mode(&mut self, medium_mode: MediumMode) -> eyre::Result<()> {
@@ -121,7 +159,6 @@ impl Graph {
                 // of particles without a chemical potential.
                 0
             };
-            let temperature_flag = Atom::num(i64::from(medium_mode.is_finite_temperature()));
             for edge in thermal_edges {
                 let energy = Indeterminate::try_from(ose_atom_from_index(edge)).unwrap();
                 let mut previous_body: Option<Atom> = None;
@@ -150,31 +187,13 @@ impl Graph {
                     // Keep all offsets available to direct distribution calls,
                     // including positive orders not emitted by CFF recursion.
                     for contour in [-1, 0, 1] {
-                        let lhs = ThermalDistributionCall::atom(
-                            edge.0 as i64,
-                            derivative_order as i64,
-                            temperature_flag.clone(),
+                        entries.push(Self::thermal_distribution_entry(
+                            edge,
+                            derivative_order,
+                            medium_mode,
                             contour,
-                            orientation_sign,
-                        );
-                        let AtomView::Fun(call) = lhs.as_view() else {
-                            unreachable!("thermal distribution builder returns a function");
-                        };
-                        // Function-map tags are the call prefix before its one
-                        // runtime argument, the physical orientation.
-                        let tags = call
-                            .iter()
-                            .take(call.get_nargs() - 1)
-                            .map(|arg| arg.to_owned())
-                            .collect();
-                        entries.push(FnMapEntry {
-                            inlining: InliningPolicy::Always,
-                            is_alias: false,
-                            lhs,
-                            rhs: body.replace(thermal_sign).with(Atom::num(contour)),
-                            args: vec![orientation_sign.into()],
-                            tags,
-                        });
+                            &body,
+                        ));
                     }
                     previous_body = Some(body);
                 }
@@ -189,6 +208,93 @@ impl Graph {
         self.param_builder.fn_map = function_map;
         self.param_builder.reps = entries;
         self.param_builder.medium_mode = medium_mode;
+        Ok(())
+    }
+
+    /// Bind finite-temperature derivatives actually emitted by local Taylor operations.
+    /// The caller includes retained scalar and numerator bodies without expanding them.
+    pub(crate) fn ensure_thermal_distribution_calls<'a>(
+        &mut self,
+        expressions: impl IntoIterator<Item = &'a Atom>,
+    ) -> Result<()> {
+        let mode = self.param_builder.medium_mode;
+        if !mode.is_finite_temperature() {
+            // Positive zero-temperature orders belong to Fermi-surface extraction.
+            return Ok(());
+        }
+        let edges = self
+            .iter_loop_edges()
+            .map(|(_, edge, _)| edge)
+            .collect::<BTreeSet<_>>();
+        let registered = self.param_builder.reps.iter().filter(|entry| {
+            matches!(entry.lhs.as_view(), AtomView::Fun(call) if call.get_symbol() == GS.thermal_distribution)
+        }).map(|entry| {
+            let call = ThermalDistributionCall::try_from(entry.lhs.as_view())?;
+            let contour = i64::try_from(call.thermal_sign.as_view())
+                .map_err(|_| eyre!("registered thermal contour must be an integer"))?;
+            Ok((call.edge, call.derivative_order, contour))
+        }).collect::<Result<BTreeSet<_>>>()?;
+        let mut required = BTreeSet::new();
+        for expression in expressions {
+            let mut error = None;
+            expression.visitor(&mut |view| {
+                if error.is_some() {
+                    return false;
+                }
+                if let AtomView::Fun(call) = view
+                    && call.get_symbol() == GS.thermal_distribution
+                {
+                    let parsed = (|| -> Result<_> {
+                        let call = ThermalDistributionCall::try_from(view)?;
+                        ensure!(
+                            call.temperature_flag.is_one(),
+                            "finite-temperature graph contains a nonthermal distribution: {view}"
+                        );
+                        ensure!(
+                            edges.contains(&call.edge),
+                            "thermal distribution refers to a non-loop edge: {view}"
+                        );
+                        let contour = i64::try_from(call.thermal_sign.as_view())
+                            .map_err(|_| eyre!("thermal contour must be resolved in {view}"))?;
+                        ensure!(
+                            matches!(contour, -1..=1),
+                            "invalid thermal contour in {view}"
+                        );
+                        Ok((call.edge, call.derivative_order, contour))
+                    })();
+                    match parsed {
+                        Ok(key) if !registered.contains(&key) => {
+                            required.insert(key);
+                        }
+                        Ok(_) => {}
+                        Err(parse_error) => error = Some(parse_error),
+                    }
+                    return false;
+                }
+                true
+            });
+            if let Some(error) = error {
+                return Err(error);
+            }
+        }
+        for (edge, derivative_order, contour) in required {
+            let body = self.explicit_thermal_distribution_atom(
+                edge,
+                derivative_order,
+                Atom::var(symbol!("thermal_sign")),
+                Atom::var(symbol!("orientation_sign")),
+                mode,
+            )?;
+            self.param_builder
+                .add_function_entry(Self::thermal_distribution_entry(
+                    edge,
+                    derivative_order,
+                    mode,
+                    contour,
+                    &body,
+                ))
+                .map_err(|error| eyre!(error))?;
+        }
         Ok(())
     }
 
@@ -1221,6 +1327,99 @@ mod tests {
         evaluate::{CompileOptions, ExportSettings, FunctionMap, OptimizationSettings},
         symbol,
     };
+
+    #[test]
+    fn completed_thermal_jets_bind_derivatives_from_retained_bodies() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(
+            digraph thermal_jet_binding {
+                node [num=1]; edge [particle="d" num=1];
+                a -> b [id=0];
+                b -> a [id=1];
+            }
+        )?;
+        graph.set_medium_mode(MediumMode::ThermodynamicEquilibrium)?;
+        let edge = EdgeIndex(0);
+        let energy = symbol!("thermal_binding_energy");
+        let shift = symbol!("thermal_binding_shift");
+        let scale = symbol!("thermal_binding_scale");
+        let source = ThermalDistributionCall::atom_at_energy(
+            edge.0,
+            2,
+            1,
+            -1,
+            -1,
+            Atom::var(energy) + Atom::var(scale) * shift,
+        );
+        let jet = source
+            .series(scale, Atom::Zero, 2)?
+            .to_atom()
+            .replace(scale)
+            .with(1);
+        let mu = graph[edge]
+            .chemical_potential_atom()
+            .expect("d carries its chemical potential");
+        let params = [
+            Atom::var(energy),
+            Atom::var(shift),
+            Atom::var(GS.inverse_temperature),
+            mu,
+        ];
+        assert!(
+            jet.evaluator(&params)
+                .function_map(graph.param_builder.fn_map.clone())
+                .build()
+                .is_err(),
+            "the two-edge source map must not already bind the fourth derivative"
+        );
+
+        let family = symbol!("thermal_binding_retained_numerator");
+        let root = family.call_args([Atom::Zero]);
+        let definition = FnMapEntry {
+            lhs: root.clone(),
+            rhs: jet,
+            args: vec![],
+            tags: vec![Atom::Zero],
+            inlining: InliningPolicy::Always,
+            is_alias: false,
+        };
+        // The root contains no N call: completed shared bodies must be scanned too.
+        graph.ensure_thermal_distribution_calls([&root, &definition.rhs])?;
+        let count = graph.param_builder.reps.len();
+        graph.ensure_thermal_distribution_calls([&root, &definition.rhs])?;
+        assert_eq!(
+            graph.param_builder.reps.len(),
+            count,
+            "registration must be idempotent"
+        );
+        let expected = graph.make_thermal_distributions_explicit(
+            &definition.rhs,
+            MediumMode::ThermodynamicEquilibrium,
+            [edge],
+        )?;
+        graph
+            .param_builder
+            .add_function_entry(definition)
+            .map_err(|error| eyre!(error))?;
+        let [actual, expected] = [root, expected].map(|expression| {
+            expression
+                .evaluator(&params)
+                .function_map(graph.param_builder.fn_map.clone())
+                .build()
+                .unwrap()
+                .map_coeff(&|coefficient| coefficient.re.to_f64())
+                .evaluate_single(&[2.5, 0.2, 0.8, 0.7])
+        });
+        assert!((actual - expected).abs() < 1e-13);
+        for invalid in [
+            ThermalDistributionCall::atom_at_energy(99, 4, 1, -1, -1, energy),
+            ThermalDistributionCall::atom_at_energy(0, 4, 0, -1, -1, energy),
+            ThermalDistributionCall::atom_at_energy(0, 4, 1, 2, -1, energy),
+        ] {
+            assert!(graph.ensure_thermal_distribution_calls([&invalid]).is_err());
+        }
+        Ok(())
+    }
 
     #[test]
     fn thermal_parameter_validation_tracks_modes_and_runtime_values() -> eyre::Result<()> {

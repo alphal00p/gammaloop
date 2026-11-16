@@ -12,11 +12,11 @@ use symbolica::atom::{Atom, AtomCore};
 use three_dimensional_reps::RepresentationMode;
 use vakint::Vakint;
 
+use crate::settings::global::{GenerationSettings, MediumSettings};
 use crate::{
     graph::{Graph, cuts::CutSet, feynman_graph::FeynmanGraph},
     numerator::aind::Aind,
     processes::GraphGenerationStats,
-    settings::global::GenerationSettings,
     uv::{
         Integrands, RenormalizationPart, UVOrchestrator, UVgenerationSettings, UltravioletGraph,
         approx::{
@@ -46,7 +46,7 @@ impl UVOrchestrator {
                 "4D parametric UV integrands are not supported yet; this mode is planned for a future implementation"
             ));
         }
-        validate_local_counterterm_schemes(graph, &cut_structure, &settings.uv)?;
+        validate_local_counterterm_schemes(graph, &cut_structure, &settings.uv, &settings.medium)?;
 
         settings.validate_medium_uv_compatibility()?;
 
@@ -77,7 +77,7 @@ impl UVOrchestrator {
             ),
         }?;
         let marker = UvMarker::new(&settings.uv);
-        result
+        let result: BTreeMap<_, Vec<_>> = result
             .into_iter()
             .map(|(representation, integrands)| {
                 let started = Instant::now();
@@ -88,7 +88,21 @@ impl UVOrchestrator {
                 stats.representation_mut(representation).total_time += started.elapsed();
                 Ok((representation, integrands))
             })
-            .collect()
+            .collect::<Result<_>>()?;
+        graph.ensure_thermal_distribution_calls(result.values().flatten().flat_map(|program| {
+            let integrands = &program.integrands;
+            integrands
+                .iter()
+                .map(|(_, atom)| atom)
+                .chain(integrands.numerators().iter().map(|entry| &entry.rhs))
+                .chain(
+                    integrands
+                        .scalar_definitions()
+                        .iter()
+                        .map(|entry| &entry.rhs),
+                )
+        }))?;
+        Ok(result)
     }
 
     pub(crate) fn renormalization_part(
@@ -101,7 +115,12 @@ impl UVOrchestrator {
             final_integrand: FinalIntegrandDimension::FourD,
             ..settings.clone()
         };
-        validate_local_counterterm_schemes(graph, &CutStructure::empty(graph), &settings)?;
+        validate_local_counterterm_schemes(
+            graph,
+            &CutStructure::empty(graph),
+            &settings,
+            &MediumSettings::default(),
+        )?;
         let mut result = match self {
             Self::LegacyDagForest => legacy_renormalization_part(graph, orientation, &settings),
             Self::HedgePoset => hedge_poset_renormalization_part(graph, &settings),
@@ -116,6 +135,7 @@ pub(crate) fn validate_local_counterterm_schemes(
     graph: &Graph,
     cuts: &CutStructure,
     settings: &UVgenerationSettings,
+    medium: &MediumSettings,
 ) -> Result<()> {
     if !settings.subtract_uv {
         return Ok(());
@@ -125,7 +145,7 @@ pub(crate) fn validate_local_counterterm_schemes(
     uncut.subtract_with(&graph.initial_state_cut.left);
     for (cut_index, cut) in cuts.cuts.iter().enumerate() {
         let subgraph = uncut.subtract(&cut.union);
-        let spinneys = graph
+        let mut spinneys = graph
             .classified_spinneys(&subgraph, settings, &graph.loop_momentum_basis)
             .wrap_err_with(|| {
                 format!(
@@ -133,6 +153,7 @@ pub(crate) fn validate_local_counterterm_schemes(
                     graph.name
                 )
             })?;
+        graph.restrict_full_observable_spinney(&mut spinneys, settings, medium);
         let ir_components = spinneys.iter().filter(|spinney| {
             spinney.n_components() == 1
                 && spinney.renormalization_scheme == crate::uv::ApproximationType::IR
@@ -145,8 +166,24 @@ pub(crate) fn validate_local_counterterm_schemes(
             spinney.n_components() == 1
                 && spinney.renormalization_scheme == crate::uv::ApproximationType::PolePart
         });
+        // The direct local-3D kernel has no integrated thermal soft branch.
+        if medium.mode.is_finite_temperature()
+            && settings.generate_integrated
+            && settings.final_integrand == FinalIntegrandDimension::ThreeD
+            && let Some(soft) = ir_components.clone().find(|spinney| spinney.dod > 0)
+        {
+            return Err(eyre!(
+                "graph '{}' cut {cut_index}: thermal soft counterterm component {} (d={}) is local-only; set uv.generate_integrated=false",
+                graph.name,
+                soft.filter().string_label(),
+                soft.dod,
+            ));
+        }
+        // A frozen soft branch makes the enclosing U the local subtraction of
+        // the soft component's reduced cograph.
+        let ordinary_parent_is_local = settings.freezes_thermal_soft_branches(medium);
         if let Some((child, parent)) = ir_components.clone().find_map(|child| {
-            (child.dod > 0).then(|| {
+            (!ordinary_parent_is_local && child.dod > 0).then(|| {
                 spinneys
                     .iter()
                     .find(|parent| {
@@ -511,10 +548,12 @@ mod tests {
         uv::{ApproximationType, CTRenormalizationRule, RenormalizationPrescriptionSettings},
     };
     use idenso::{bis, gamma};
+    use linnet::half_edge::involution::EdgeIndex;
     use linnet::half_edge::subgraph::SubSetLike;
     use spenso::{chain, mink, p};
     use std::collections::BTreeSet;
     use symbolica::symbol;
+    use three_dimensional_reps::MediumMode;
 
     #[test]
     fn compare_canonicalizes_contracted_uv_indices() {
@@ -574,8 +613,13 @@ mod tests {
             ..Default::default()
         };
 
-        validate_local_counterterm_schemes(&graph, &CutStructure::empty(&graph), &settings)
-            .expect("the shared integration path supports soft counterterms");
+        validate_local_counterterm_schemes(
+            &graph,
+            &CutStructure::empty(&graph),
+            &settings,
+            &MediumSettings::default(),
+        )
+        .expect("the shared integration path supports soft counterterms");
     }
 
     #[test]
@@ -616,8 +660,13 @@ mod tests {
         );
 
         graph.loop_momentum_basis.loop_edges.clear();
-        let error = validate_local_counterterm_schemes(&graph, &cuts, &settings)
-            .expect_err("an incompatible selected component route must fail closed");
+        let error = validate_local_counterterm_schemes(
+            &graph,
+            &cuts,
+            &settings,
+            &MediumSettings::default(),
+        )
+        .expect_err("an incompatible selected component route must fail closed");
         let message = format!("{error:#}");
         assert!(
             message.contains(&format!("graph '{}'", graph.name)),
@@ -652,16 +701,181 @@ mod tests {
             ..Default::default()
         };
 
-        let error =
-            validate_local_counterterm_schemes(&graph, &CutStructure::empty(&graph), &settings)
-                .expect_err("integrated local on-shell generation must fail at the orchestrator");
+        let error = validate_local_counterterm_schemes(
+            &graph,
+            &CutStructure::empty(&graph),
+            &settings,
+            &MediumSettings::default(),
+        )
+        .expect_err("integrated local on-shell generation must fail at the orchestrator");
         let message = error.to_string();
         assert!(message.contains("local on-shell/OS counterterms"));
         assert!(message.contains("generate_integrated=false"));
     }
 
     #[test]
-    fn soft_child_rejects_positive_degree_muv_parent() {
+    fn vacuum_subtraction_restricts_full_observable_in_scheme_validation() {
+        test_initialise().unwrap();
+        let model = load_generic_model("sm");
+        let graph: Graph =
+            include_str!("../../../../tests/resources/graphs/sunrise_qcd_vacuum.dot")
+                .into_graph(&model)
+                .unwrap();
+        let child = graph
+            .get_edge_subgraph(EdgeIndex(0))
+            .union(&graph.get_edge_subgraph(EdgeIndex(1)));
+        let settings = UVgenerationSettings {
+            generate_integrated: false,
+            renormalization_prescription: RenormalizationPrescriptionSettings {
+                overrides: vec![CTRenormalizationRule::new(
+                    graph.ct_identifier(&child),
+                    ApproximationType::IR,
+                )],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let spinneys = graph
+            .classified_spinneys(&graph.full_filter(), &settings, &graph.loop_momentum_basis)
+            .unwrap();
+        assert!(
+            spinneys.iter().any(|spinney| {
+                spinney.filter() == &child
+                    && spinney.dod > 0
+                    && spinney.renormalization_scheme == ApproximationType::IR
+            }),
+            "the quark bubble must select a positive-degree IR gluon self-energy"
+        );
+        assert!(
+            spinneys.iter().any(|spinney| {
+                spinney.filter() == &graph.full_filter()
+                    && spinney.dod > 0
+                    && spinney.renormalization_scheme == ApproximationType::MUV
+            }),
+            "the unsubtracted full observable must retain its MUV prescription"
+        );
+        let cuts = CutStructure::empty(&graph);
+        let mut medium = MediumSettings {
+            mode: MediumMode::ZeroTemperatureEquilibrium,
+            vacuum_subtraction: false,
+        };
+        let error = validate_local_counterterm_schemes(&graph, &cuts, &settings, &medium)
+            .expect_err("the retained full-graph MUV parent must reject its IR child");
+        assert!(error.to_string().contains("positive-degree MUV component"));
+
+        medium.vacuum_subtraction = true;
+        validate_local_counterterm_schemes(&graph, &cuts, &settings, &medium)
+            .expect("the omitted full-observable counterterm must not constrain its IR child");
+
+        // At finite temperature an enclosing U freezes the soft child, so the
+        // full-graph U is the local subtraction of its reduced cograph.
+        medium = MediumSettings {
+            mode: MediumMode::ThermodynamicEquilibrium,
+            vacuum_subtraction: false,
+        };
+        validate_local_counterterm_schemes(&graph, &cuts, &settings, &medium)
+            .expect("a finite-temperature U parent must accept its frozen soft child");
+        medium.vacuum_subtraction = true;
+        validate_local_counterterm_schemes(&graph, &cuts, &settings, &medium)
+            .expect("the retained full-graph U must accept its frozen soft child");
+        let mut retained = spinneys.clone();
+        graph.restrict_full_observable_spinney(&mut retained, &settings, &medium);
+        assert!(
+            retained.iter().any(|spinney| {
+                spinney.filter() == &graph.full_filter()
+                    && spinney.renormalization_scheme == ApproximationType::MUV
+            }),
+            "vacuum subtraction must keep the full-graph U above a thermal soft child"
+        );
+        assert!(retained.iter().any(|spinney| {
+            spinney.filter() == &child && spinney.renormalization_scheme == ApproximationType::IR
+        }));
+
+        // A full graph classified IR keeps only its U: without external
+        // momenta, its soft expansion would reproduce the integrand.
+        let full_ir_settings = UVgenerationSettings {
+            renormalization_prescription: RenormalizationPrescriptionSettings {
+                overrides: vec![
+                    CTRenormalizationRule::new(graph.ct_identifier(&child), ApproximationType::IR),
+                    CTRenormalizationRule::new(
+                        graph.ct_identifier(&graph.full_filter()),
+                        ApproximationType::IR,
+                    ),
+                ],
+                ..Default::default()
+            },
+            ..settings.clone()
+        };
+        let mut retained = graph
+            .classified_spinneys(
+                &graph.full_filter(),
+                &full_ir_settings,
+                &graph.loop_momentum_basis,
+            )
+            .unwrap();
+        assert!(retained.iter().any(|spinney| {
+            spinney.filter() == &graph.full_filter()
+                && spinney.renormalization_scheme == ApproximationType::IR
+        }));
+        graph.restrict_full_observable_spinney(&mut retained, &full_ir_settings, &medium);
+        assert!(retained.iter().any(|spinney| {
+            spinney.filter() == &graph.full_filter()
+                && spinney.renormalization_scheme == ApproximationType::MUV
+        }));
+
+        // Without a soft component, or on a route that does not freeze soft
+        // branches, the full-graph counterterm is omitted as before.
+        let ordinary_settings = UVgenerationSettings {
+            generate_integrated: false,
+            ..Default::default()
+        };
+        let mut retained = graph
+            .classified_spinneys(
+                &graph.full_filter(),
+                &ordinary_settings,
+                &graph.loop_momentum_basis,
+            )
+            .unwrap();
+        graph.restrict_full_observable_spinney(&mut retained, &ordinary_settings, &medium);
+        assert!(
+            retained
+                .iter()
+                .all(|spinney| spinney.filter() != &graph.full_filter())
+        );
+        let legacy_settings = UVgenerationSettings {
+            orchestrator: UVOrchestrator::LegacyDagForest,
+            ..settings.clone()
+        };
+        let mut retained = spinneys;
+        graph.restrict_full_observable_spinney(&mut retained, &legacy_settings, &medium);
+        assert!(
+            retained
+                .iter()
+                .all(|spinney| spinney.filter() != &graph.full_filter())
+        );
+        medium.vacuum_subtraction = false;
+        let error = validate_local_counterterm_schemes(&graph, &cuts, &legacy_settings, &medium)
+            .expect_err("the legacy forest has no frozen soft branch");
+        assert!(error.to_string().contains("positive-degree MUV component"));
+
+        // Integrated thermal soft counterterms are rejected before any forest work.
+        let integrated_settings = UVgenerationSettings {
+            generate_integrated: true,
+            ..settings
+        };
+        let error =
+            validate_local_counterterm_schemes(&graph, &cuts, &integrated_settings, &medium)
+                .expect_err("thermal soft counterterms are local-only");
+        let message = error.to_string();
+        assert!(
+            message.contains("thermal soft counterterm component"),
+            "{message}"
+        );
+        assert!(message.contains("generate_integrated=false"), "{message}");
+    }
+
+    #[test]
+    fn soft_child_rejects_retained_positive_degree_muv_parent() {
         test_initialise().unwrap();
         let graph: Graph = dot!(
             digraph nested_positive_degree_hu {
@@ -675,6 +889,8 @@ mod tests {
                 v2 -> v3 [id=4 particle=scalar_2]
                 v3 -> v4 [id=5]
                 v1 -> v4 [id=6]
+                v4 -> v5 [id=7]
+                v5 -> v5 [id=8]
             },
             "scalars"
         )
@@ -734,9 +950,13 @@ mod tests {
         // Appendix B.15--B.16 needs the parent's S-US branch to cancel the
         // reduced-cograph limit of the finite child refinement. A positive-
         // degree ordinary parent has no such branch in the local-only phase.
-        let error =
-            validate_local_counterterm_schemes(&graph, &CutStructure::empty(&graph), &settings)
-                .expect_err("a positive-degree U parent over an H child must be rejected");
+        let error = validate_local_counterterm_schemes(
+            &graph,
+            &CutStructure::empty(&graph),
+            &settings,
+            &MediumSettings::default(),
+        )
+        .expect_err("a positive-degree U parent over an H child must be rejected");
         let message = error.to_string();
         assert!(
             message.contains("positive-degree MUV component"),
@@ -746,6 +966,39 @@ mod tests {
             message.contains("deferred finite scheme-change/integrated policy"),
             "{message}"
         );
+
+        // The bridged spectator loop makes this parent a proper component of
+        // the full observable, so vacuum subtraction must preserve its guard.
+        let mut medium = MediumSettings {
+            mode: MediumMode::ZeroTemperatureEquilibrium,
+            vacuum_subtraction: true,
+        };
+        let mut retained = classified;
+        graph.restrict_full_observable_spinney(&mut retained, &settings, &medium);
+        assert!(
+            retained
+                .iter()
+                .any(|spinney| spinney.filter() == parent.filter())
+        );
+        let error = validate_local_counterterm_schemes(
+            &graph,
+            &CutStructure::empty(&graph),
+            &settings,
+            &medium,
+        )
+        .expect_err("a retained positive-degree MUV parent must still reject its IR child");
+        assert!(error.to_string().contains("positive-degree MUV component"));
+
+        // At finite temperature the parent's U freezes the soft child and is
+        // therefore the local subtraction of its reduced cograph.
+        medium.mode = MediumMode::ThermodynamicEquilibrium;
+        validate_local_counterterm_schemes(
+            &graph,
+            &CutStructure::empty(&graph),
+            &settings,
+            &medium,
+        )
+        .expect("a finite-temperature U parent must accept its frozen soft child");
     }
 
     #[test]
@@ -785,9 +1038,13 @@ mod tests {
             ..Default::default()
         };
 
-        let error =
-            validate_local_counterterm_schemes(&graph, &CutStructure::empty(&graph), &settings)
-                .expect_err("soft and pole-part components must not share a phase-1 wood");
+        let error = validate_local_counterterm_schemes(
+            &graph,
+            &CutStructure::empty(&graph),
+            &settings,
+            &MediumSettings::default(),
+        )
+        .expect_err("soft and pole-part components must not share a phase-1 wood");
         assert!(error.to_string().contains("cannot be combined"));
     }
 
@@ -900,9 +1157,13 @@ mod tests {
             "the disconnected union must retain only its neutral aggregate scheme"
         );
 
-        let error =
-            validate_local_counterterm_schemes(&graph, &CutStructure::empty(&graph), &settings)
-                .expect_err("disjoint soft and pole-part factors must not share a phase-1 wood");
+        let error = validate_local_counterterm_schemes(
+            &graph,
+            &CutStructure::empty(&graph),
+            &settings,
+            &MediumSettings::default(),
+        )
+        .expect_err("disjoint soft and pole-part factors must not share a phase-1 wood");
         let message = format!("{error:#}");
         assert!(
             message.contains("local soft/IR and PolePart counterterms")
