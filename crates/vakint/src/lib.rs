@@ -1,6 +1,6 @@
 #![allow(mixed_script_confusables)]
-pub mod stage_timing;
 pub mod census;
+pub mod stage_timing;
 
 /// M5 batch 2: mimalloc serves the Rust allocations of every binary linking vakint
 /// (default feature `mimalloc`; see Cargo.toml).
@@ -70,6 +70,9 @@ pub fn parse_rustred_ordered_weight_arithmetic(
     text.parse().map_err(|error| format!("{error}"))
 }
 pub use p_integral::ForcerOptions;
+/// Run-time solves at keys outside a boxed node's certified set (RustRed):
+/// recipe families, trace-row and wall bounds, the d = 4 preference.
+pub use rustred::propagator::recipes::POutsideSettings as RustRedPOutsideSettings;
 pub use rustred::scalar_numerator::ScalarNumeratorLimits as RustRedScalarNumeratorLimits;
 use rustred::solver::CandidateRoutedApplicationObserver;
 use rustred_evaluation::MathSpan;
@@ -95,15 +98,12 @@ pub use rustred_evaluation::{
     ShippedOrderedCacheMetadata, ShippedOrderedCacheProgram, ShippedOrderedCacheStatus,
     ShippedOrderedCacheUse, ordered_cache_producer,
 };
-pub use rustred_evaluation::{RustRedEvaluationError, RustRedEvaluationOptions, RustRedMasterMode};
 pub use rustred_evaluation::{
     P_PACKAGE_RELATIONS_DIRECTORY, P_RELATION_CACHE_DIRECTORY, PDispatchCounters,
     PRelationCacheLocation, PRelationCacheSettings, PRelationCacheStatistics, PTerminalRecord,
     VAKINT_CACHE_DIR_VARIABLE,
 };
-/// Run-time solves at keys outside a boxed node's certified set (RustRed):
-/// recipe families, trace-row and wall bounds, the d = 4 preference.
-pub use rustred::propagator::recipes::POutsideSettings as RustRedPOutsideSettings;
+pub use rustred_evaluation::{RustRedEvaluationError, RustRedEvaluationOptions, RustRedMasterMode};
 pub use truncation_guard::{MissingMasterOrder, MissingMasterOrders};
 
 use regex::Regex;
@@ -3467,9 +3467,7 @@ impl VakintTerm {
         while let Some(m) = vector_matcher.next_detailed() {
             if let Match::FunctionName(vec_symbol) = m.match_stack.get(vk_symbol!("vec_")).unwrap()
             {
-                if *vec_symbol == S.k
-                    || *vec_symbol == S.p
-                {
+                if *vec_symbol == S.k || *vec_symbol == S.p {
                     vectors.insert((
                         vec_symbol.get_stripped_name().into(),
                         get_integer_from_atom(
@@ -7415,7 +7413,9 @@ Evaluated (n_loops=1, mu_r=1) :
             if found {
                 return false;
             }
-            found = Self::indexed_vector_indices(part).iter().any(Option::is_some);
+            found = Self::indexed_vector_indices(part)
+                .iter()
+                .any(Option::is_some);
             !found
         });
         found
@@ -7569,8 +7569,7 @@ Evaluated (n_loops=1, mu_r=1) :
         while let Some(m) = vector_matcher.next_detailed() {
             if let Match::FunctionName(vec_symbol) = m.match_stack.get(vk_symbol!("vec_")).unwrap()
             {
-                if [vk_symbol!("vec1"), vk_symbol!("vec")].contains(vec_symbol)
-                {
+                if [vk_symbol!("vec1"), vk_symbol!("vec")].contains(vec_symbol) {
                     indices.insert(m.match_stack.get(vk_symbol!("idx_")).unwrap().to_atom());
                 }
             } else {

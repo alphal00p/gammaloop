@@ -229,7 +229,9 @@ impl Coef for i128 {
     fn from_rational(value: &Rational) -> Result<Self, Declined> {
         match (value.numerator_ref(), value.denominator_ref()) {
             (Integer::Single(n), Integer::Single(1)) => Ok(*n as i128),
-            _ => Err(Declined("a non-integer coefficient for the machine-integer reader")),
+            _ => Err(Declined(
+                "a non-integer coefficient for the machine-integer reader",
+            )),
         }
     }
     fn to_rational(&self) -> Rational {
@@ -286,7 +288,10 @@ fn degree(packed: u128, count: usize) -> u32 {
 /// into each group's coefficient (top-down) instead of the Horner evaluation.
 fn horner_reader() -> bool {
     static ON: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
-        !matches!(std::env::var("VAKINT_DIRECT_READER").as_deref(), Ok("prefix"))
+        !matches!(
+            std::env::var("VAKINT_DIRECT_READER").as_deref(),
+            Ok("prefix")
+        )
     });
     *ON
 }
@@ -295,7 +300,10 @@ fn horner_reader() -> bool {
 /// group in [`Reader::read`] (comparison runs).
 fn prefix_trie_enabled() -> bool {
     static ON: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
-        !matches!(std::env::var("VAKINT_DIRECT_PREFIX_TRIE").as_deref(), Ok("off" | "0"))
+        !matches!(
+            std::env::var("VAKINT_DIRECT_PREFIX_TRIE").as_deref(),
+            Ok("off" | "0")
+        )
     });
     *ON
 }
@@ -332,7 +340,12 @@ impl<C: Coef> Reader<'_, C> {
     }
 
     /// vk5l-physrun: `target += left · right`, without a product map of its own.
-    fn multiply_into(&mut self, product: &mut PolyC<C>, left: &PolyC<C>, right: &PolyC<C>) -> Result<(), Declined> {
+    fn multiply_into(
+        &mut self,
+        product: &mut PolyC<C>,
+        left: &PolyC<C>,
+        right: &PolyC<C>,
+    ) -> Result<(), Declined> {
         for ((ls, lp), lv) in left {
             for ((rs, rp), rv) in right {
                 let packed = lp + rp;
@@ -419,7 +432,11 @@ impl<C: Coef> Reader<'_, C> {
             value.add(&va[l].mul(&vb[i]));
             let value = value.mul(&sigma);
             if !value.is_zero() {
-                add_into(&mut poly, (0, 1u128 << (BITS * (external + i) as u32)), value);
+                add_into(
+                    &mut poly,
+                    (0, 1u128 << (BITS * (external + i) as u32)),
+                    value,
+                );
             }
         }
         let value = va[l].mul(&vb[l]);
@@ -461,8 +478,9 @@ impl<C: Coef> Reader<'_, C> {
                         AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
                         other => vec![other],
                     };
-                    let (loops, rest): (Vec<_>, Vec<_>) =
-                        factors.into_iter().partition(|factor| Self::has_loop(*factor));
+                    let (loops, rest): (Vec<_>, Vec<_>) = factors
+                        .into_iter()
+                        .partition(|factor| Self::has_loop(*factor));
                     let key = match loops.as_slice() {
                         [] => Atom::num(1),
                         [single] => single.to_owned(),
@@ -525,7 +543,9 @@ impl<C: Coef> Reader<'_, C> {
                         continue;
                     }
                     let factors = match key.as_view() {
-                        AtomView::Mul(product) => product.iter().map(|f| f.to_owned()).collect::<Vec<_>>(),
+                        AtomView::Mul(product) => {
+                            product.iter().map(|f| f.to_owned()).collect::<Vec<_>>()
+                        }
                         other => vec![other.to_owned()],
                     };
                     let mut list = Vec::with_capacity(factors.len());
@@ -580,12 +600,19 @@ impl<C: Coef> Reader<'_, C> {
                         .count();
                     stack.truncate(common);
                     for &id in &list[common..] {
-                        let factor = self.cached(factor_atoms[ranked[id as usize] as usize].as_view())?;
-                        let previous = stack.last().map(|(_, poly)| Rc::clone(poly)).unwrap_or_else(|| Rc::clone(&unit));
+                        let factor =
+                            self.cached(factor_atoms[ranked[id as usize] as usize].as_view())?;
+                        let previous = stack
+                            .last()
+                            .map(|(_, poly)| Rc::clone(poly))
+                            .unwrap_or_else(|| Rc::clone(&unit));
                         let product = self.multiply(&previous, &factor)?;
                         stack.push((id, Rc::new(product)));
                     }
-                    let loops = stack.last().map(|(_, poly)| Rc::clone(poly)).unwrap_or_else(|| Rc::clone(&unit));
+                    let loops = stack
+                        .last()
+                        .map(|(_, poly)| Rc::clone(poly))
+                        .unwrap_or_else(|| Rc::clone(&unit));
                     self.multiply_into(&mut total, &coefficient, &loops)?;
                 }
                 Ok(total)
@@ -604,7 +631,6 @@ impl<C: Coef> Reader<'_, C> {
             _ => Err(Declined("a loop momentum outside a scalar product")),
         }
     }
-
 
     /// vk5l-physrun: the Horner value of the sorted factor lists `lists`
     /// (all sharing their first `depth` factors): Σ of the coefficients of the
@@ -714,17 +740,21 @@ fn read_numerator<C: Coef>(
     factor: &Atom,
     stats: &mut DirectStats,
 ) -> Result<Poly, Declined> {
-    let convert = |momenta: &HashMap<Atom, Vec<Rational>>| -> Result<HashMap<Atom, Vec<C>>, Declined> {
-        momenta
-            .iter()
-            .map(|(momentum, vector)| {
-                Ok((
-                    momentum.clone(),
-                    vector.iter().map(C::from_rational).collect::<Result<Vec<_>, _>>()?,
-                ))
-            })
-            .collect()
-    };
+    let convert =
+        |momenta: &HashMap<Atom, Vec<Rational>>| -> Result<HashMap<Atom, Vec<C>>, Declined> {
+            momenta
+                .iter()
+                .map(|(momentum, vector)| {
+                    Ok((
+                        momentum.clone(),
+                        vector
+                            .iter()
+                            .map(C::from_rational)
+                            .collect::<Result<Vec<_>, _>>()?,
+                    ))
+                })
+                .collect()
+        };
     let vacuum = convert(vacuum_momenta)?;
     let cut = convert(cut_momenta)?;
     let mut reader = Reader::<C> {
@@ -761,11 +791,7 @@ fn read_numerator<C: Coef>(
 
 /// The integer (rational) coefficients of a linear momentum over the
 /// canonical `k(1..L)` and the user head.
-fn canonical_vector(
-    momentum: &Atom,
-    loops: usize,
-    head: &Atom,
-) -> Result<Vec<Rational>, Declined> {
+fn canonical_vector(momentum: &Atom, loops: usize, head: &Atom) -> Result<Vec<Rational>, Declined> {
     let expanded = momentum.expand();
     let mut vector = vec![Rational::zero(); loops + 1];
     let mut add = |term: AtomView| -> Result<(), Declined> {
@@ -845,9 +871,9 @@ pub(crate) fn match_cut(
         return Ok(Ok(None));
     }
     vakint.validate_settings(settings)?;
-    let external = term
-        .propagator_external()?
-        .ok_or_else(|| crate::p_integral::invalid("a massive closure requires a massless p-integral"))?;
+    let external = term.propagator_external()?.ok_or_else(|| {
+        crate::p_integral::invalid("a massive closure requires a massless p-integral")
+    })?;
     if &external != closure_head {
         return Err(crate::p_integral::invalid(format!(
             "the cut graph uses {external}, but the closing line uses {closure_head}"
@@ -860,7 +886,8 @@ pub(crate) fn match_cut(
         return Ok(Err(Declined("not a p-integral topology")));
     }
     match vakint.evaluation_method(settings, &matched.canonical_topology) {
-        Some(EvaluationMethod::RustRed(_)) if crate::p_integral::massive::rustred_max_rank().is_none() => {}
+        Some(EvaluationMethod::RustRed(_))
+            if crate::p_integral::massive::rustred_max_rank().is_none() => {}
         _ => return Ok(Err(Declined("not reduced by RustRed alone"))),
     }
     let one = Atom::num(1);
@@ -920,7 +947,14 @@ pub(crate) fn lower_request(
         .map(|index| (function!(S.k, index), function!(S.k, index)))
         .collect::<Vec<_>>();
     routing.push((head.clone(), head));
-    lower_closure(settings, handle, &cut, &routing, request.canonical_numerator, stats)
+    lower_closure(
+        settings,
+        handle,
+        &cut,
+        &routing,
+        request.canonical_numerator,
+        stats,
+    )
 }
 
 /// The folded channels of one closure, lowered directly; `Err(Declined)` for
@@ -949,7 +983,9 @@ pub(crate) fn lower_closure(
     let family = P_FAMILIES
         .iter()
         .position(|family| family.name == cut.request_family.name)
-        .ok_or_else(|| crate::p_integral::invalid(format!("unknown family {}", cut.request_family.name)))?;
+        .ok_or_else(|| {
+            crate::p_integral::invalid(format!("unknown family {}", cut.request_family.name))
+        })?;
     let top: PTop = handle.top(family)?;
     let presentation = handle.library.presentation(top.presentation);
     let loops = cut.request_family.loops;
@@ -1138,7 +1174,11 @@ pub(crate) fn lower_closure(
         let (a, b) = canonical_rows(index, loops);
         match presentation.express_scalar_product(&a, &b) {
             Ok(form) => forms.push(form),
-            Err(_) => return Ok(Err(Declined("a scalar product the presentation cannot express"))),
+            Err(_) => {
+                return Ok(Err(Declined(
+                    "a scalar product the presentation cannot express",
+                )));
+            }
         }
     }
     // Gather the canonical loop polynomial of every bucket
@@ -1159,11 +1199,15 @@ pub(crate) fn lower_closure(
             (false, true) => (real, false),
             (true, false) => (imaginary, true),
             (false, false) => {
-                return Ok(Err(Declined("a canonical coefficient with real and imaginary parts")));
+                return Ok(Err(Declined(
+                    "a canonical coefficient with real and imaginary parts",
+                )));
             }
         };
         if !fits_natural(&value) {
-            return Ok(Err(Declined("a canonical coefficient beyond a machine rational")));
+            return Ok(Err(Declined(
+                "a canonical coefficient beyond a machine rational",
+            )));
         }
         let r = degree(loop_monomial, count) as i64;
         let scale_power = 2 * loops as i64 - total_power + r;
@@ -1248,7 +1292,9 @@ pub(crate) fn lower_closure(
         let basis = bases.atoms[basis_id as usize].clone();
         let previous = target.by_basis.insert(basis, inputs);
         if previous.is_some() {
-            return Ok(Err(Declined("two spectator classes share a channel and basis")));
+            return Ok(Err(Declined(
+                "two spectator classes share a channel and basis",
+            )));
         }
     }
     stats.folded += folded.len();
@@ -1365,7 +1411,12 @@ fn substitute_integer(
     Some(
         substituted
             .into_iter()
-            .map(|(monomial, value)| (monomial, Rational::from((Integer::from(value), denominator.clone()))))
+            .map(|(monomial, value)| {
+                (
+                    monomial,
+                    Rational::from((Integer::from(value), denominator.clone())),
+                )
+            })
             .collect(),
     )
 }
@@ -1380,8 +1431,12 @@ fn substitute_c<C: Coef>(
     if terms.is_empty() {
         return result;
     }
-    let exponent = |packed: u128, var: usize| ((packed >> (BITS * var as u32)) & ((1 << BITS) - 1)) as u32;
-    let Some(var) = (0..vars).rev().find(|var| terms.iter().any(|(m, _)| exponent(*m, *var) > 0)) else {
+    let exponent =
+        |packed: u128, var: usize| ((packed >> (BITS * var as u32)) & ((1 << BITS) - 1)) as u32;
+    let Some(var) = (0..vars)
+        .rev()
+        .find(|var| terms.iter().any(|(m, _)| exponent(*m, *var) > 0))
+    else {
         let mut total = C::zero();
         for (_, value) in terms.iter() {
             total.add(value);
@@ -1401,11 +1456,15 @@ fn substitute_c<C: Coef>(
             let mut next = HashMap::<u128, C>::with_capacity(result.len() * 2);
             for (monomial, value) in &result {
                 if !constant.is_zero() {
-                    next.entry(*monomial).or_insert_with(C::zero).add(&value.mul(constant));
+                    next.entry(*monomial)
+                        .or_insert_with(C::zero)
+                        .add(&value.mul(constant));
                 }
                 for (slot, coefficient) in slots {
                     let shifted = monomial + (1u128 << (BITS * u32::from(*slot)));
-                    next.entry(shifted).or_insert_with(C::zero).add(&value.mul(coefficient));
+                    next.entry(shifted)
+                        .or_insert_with(C::zero)
+                        .add(&value.mul(coefficient));
                 }
             }
             result = next;
@@ -1441,8 +1500,12 @@ fn substitute(
         return result;
     }
     // The highest variable present.
-    let exponent = |packed: u128, var: usize| ((packed >> (BITS * var as u32)) & ((1 << BITS) - 1)) as u32;
-    let Some(var) = (0..vars).rev().find(|var| terms.iter().any(|(m, _)| exponent(*m, *var) > 0)) else {
+    let exponent =
+        |packed: u128, var: usize| ((packed >> (BITS * var as u32)) & ((1 << BITS) - 1)) as u32;
+    let Some(var) = (0..vars)
+        .rev()
+        .find(|var| terms.iter().any(|(m, _)| exponent(*m, *var) > 0))
+    else {
         let mut total = Rational::zero();
         for (_, value) in terms.iter() {
             total += value;

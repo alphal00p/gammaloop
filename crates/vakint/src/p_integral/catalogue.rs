@@ -17,8 +17,8 @@ use std::sync::{LazyLock, Mutex, OnceLock};
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::graph::Graph as NativeGraph;
 
-use super::{PFamily, families};
 use super::input::{PGraph, VertexClasses, is_scaleless};
+use super::{PFamily, families};
 use crate::VakintError;
 use crate::routing::{self, linear_momentum};
 use crate::symbols::S;
@@ -124,10 +124,7 @@ impl PCatalogue {
     }
 
     /// [`Self::lookup`] with the catalogue key of the graph.
-    fn lookup_keyed(
-        &self,
-        graph: &PGraph,
-    ) -> Option<(&CatalogueEntry, BTreeMap<i64, usize>, Key)> {
+    fn lookup_keyed(&self, graph: &PGraph) -> Option<(&CatalogueEntry, BTreeMap<i64, usize>, Key)> {
         let stratum = self.stratum(graph.loops, graph.lines.len())?;
         let mut vertices = graph
             .lines
@@ -259,8 +256,9 @@ fn contractions(family: &PFamily, lines: usize) -> Vec<(Key, CatalogueEntry)> {
 /// first use. Used only when the catalogue representative's family is not
 /// available to the caller ([`match_graph_preferring`]).
 fn family_stratum(family: usize, lines: usize) -> std::sync::Arc<HashMap<Key, CatalogueEntry>> {
-    static STRATA: LazyLock<Mutex<HashMap<(usize, usize), std::sync::Arc<HashMap<Key, CatalogueEntry>>>>> =
-        LazyLock::new(Default::default);
+    static STRATA: LazyLock<
+        Mutex<HashMap<(usize, usize), std::sync::Arc<HashMap<Key, CatalogueEntry>>>>,
+    > = LazyLock::new(Default::default);
     if let Some(stratum) = STRATA
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -343,7 +341,11 @@ pub(crate) fn match_graph_preferring(
                     && family.lines.len() >= graph.lines.len()
                     && available(family.index)
             })
-            .find_map(|family| family_stratum(family.index, graph.lines.len()).get(&key).cloned())
+            .find_map(|family| {
+                family_stratum(family.index, graph.lines.len())
+                    .get(&key)
+                    .cloned()
+            })
     };
     if let Some(alternative) = &alternative {
         log::debug!(

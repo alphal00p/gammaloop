@@ -31,10 +31,12 @@ fn combined_program(inputs: &[&ForcerInput]) -> Result<(String, Vec<String>), Va
         .map(|index| format!("vakintchannel{index}"))
         .collect::<Vec<_>>();
     locals.insert(0, format!("S {};", channels.join(",")));
-    if inputs
-        .iter()
-        .any(|input| input.polynomials.iter().any(|polynomial| polynomial.contains("rat(")))
-    {
+    if inputs.iter().any(|input| {
+        input
+            .polynomials
+            .iter()
+            .any(|polynomial| polynomial.contains("rat("))
+    }) {
         locals.insert(0, "PolyRatFun rat;".to_owned());
     }
     substitutions.push(format!("Drop {};", names.join(",")));

@@ -1757,7 +1757,11 @@ fn drill_largest_coefficient(values: &[Atom]) -> f64 {
                     let text = factor.to_string();
                     let parsed = text
                         .split('/')
-                        .map(|part| part.trim().trim_end_matches(|c: char| c == '`' || c.is_ascii_digit() && false).parse::<f64>())
+                        .map(|part| {
+                            part.trim()
+                                .trim_end_matches(|c: char| c == '`' || c.is_ascii_digit() && false)
+                                .parse::<f64>()
+                        })
                         .collect::<Vec<_>>();
                     let magnitude = match parsed.as_slice() {
                         [Ok(a)] => a.abs(),
@@ -1840,7 +1844,9 @@ fn five_loop_package_drill() {
             // reduction of the whole input must vanish identically.
             ("zero", Ok(value)) => {
                 let summands: Vec<Atom> = match input.as_view() {
-                    symbolica::atom::AtomView::Add(add) => add.iter().map(|t| t.to_owned()).collect(),
+                    symbolica::atom::AtomView::Add(add) => {
+                        add.iter().map(|t| t.to_owned()).collect()
+                    }
                     _ => vec![input.clone()],
                 };
                 let mut total = Atom::Zero;
@@ -1884,7 +1890,10 @@ fn five_loop_package_drill() {
                     summands.len(),
                     drill_term_count(&total)
                 );
-                assert!(nonzero >= 2, "{label}: fewer than two nonzero summands, no check");
+                assert!(
+                    nonzero >= 2,
+                    "{label}: fewer than two nonzero summands, no check"
+                );
                 if drill_mode == RustRedMasterMode::Numerical {
                     // Numerical masters: every coefficient of the sum must
                     // vanish to the working precision, relative to the
@@ -1905,7 +1914,10 @@ fn five_loop_package_drill() {
                     );
                     continue;
                 } else {
-                    assert!(whole.is_zero() && total.is_zero(), "{label}: identity violated");
+                    assert!(
+                        whole.is_zero() && total.is_zero(),
+                        "{label}: identity violated"
+                    );
                 }
                 eprintln!(
                     "DRILL {label}: IDENTITY HOLDS EXACTLY ({} summands, {nonzero} nonzero)",
@@ -2041,7 +2053,10 @@ fn p_relation_cache_two_processes() {
     let saved = cache.join("value.txt");
     match role.as_str() {
         "cold" => {
-            assert!(solves > 0, "cold: no recipe solve; the input reaches no run-time key");
+            assert!(
+                solves > 0,
+                "cold: no recipe solve; the input reaches no run-time key"
+            );
             assert!(delta.inserts > 0, "cold: nothing inserted");
             assert!(after.bytes_on_disk > 0);
             std::fs::write(&saved, value.to_canonical_string()).unwrap();
@@ -2050,7 +2065,11 @@ fn p_relation_cache_two_processes() {
             assert_eq!(solves, 0, "warm: a recipe was solved again");
             assert!(delta.cache_hits > 0, "warm: no hit in the persistent cache");
             let cold = std::fs::read_to_string(&saved).unwrap();
-            assert_eq!(value.to_canonical_string(), cold, "warm value differs from cold");
+            assert_eq!(
+                value.to_canonical_string(),
+                cold,
+                "warm value differs from cold"
+            );
             eprintln!("RELATION-CACHE warm: SERVED FROM DISK WITHOUT A SOLVE, value identical");
         }
         other => panic!("VAKINT_TEST_P5L_RELATION_ROLE {other}: cold or warm"),
@@ -2358,7 +2377,9 @@ fn spectator_terms_split_off_the_rational_functions_of_epsilon() {
         .collect::<BTreeSet<_>>();
     assert_eq!(
         monomials,
-        [parse("T"), parse("L")].into_iter().collect::<BTreeSet<_>>()
+        [parse("T"), parse("L")]
+            .into_iter()
+            .collect::<BTreeSet<_>>()
     );
 }
 
@@ -2526,7 +2547,11 @@ fn p_terminal_export() {
         text.push('\n');
     }
     std::fs::write(&out, text).unwrap();
-    eprintln!("p_terminal_export: {} terminals -> {}", records.len(), out.to_string_lossy());
+    eprintln!(
+        "p_terminal_export: {} terminals -> {}",
+        records.len(),
+        out.to_string_lossy()
+    );
 }
 
 /// vk5l-physrun: the Laurent orders of a Symbolica canonical-string result
@@ -2613,7 +2638,10 @@ fn massive_closure_showcase_sum() {
             .load_p_library_directory(std::path::Path::new(&package), false)
             .unwrap();
         engine.p_library().unwrap();
-        eprintln!("SHOWCASE_SUM package loaded in {:.1} s", loading.elapsed().as_secs_f64());
+        eprintln!(
+            "SHOWCASE_SUM package loaded in {:.1} s",
+            loading.elapsed().as_secs_f64()
+        );
     }
     let reading = std::time::Instant::now();
     let mut names = Vec::new();
@@ -2627,7 +2655,11 @@ fn massive_closure_showcase_sum() {
             .trim_end_matches(".zst")
             .trim_end_matches(".txt")
             .to_owned();
-        let raw = std::process::Command::new("zstd").args(["-qdc"]).arg(&file).output().unwrap();
+        let raw = std::process::Command::new("zstd")
+            .args(["-qdc"])
+            .arg(&file)
+            .output()
+            .unwrap();
         assert!(raw.status.success(), "{}: zstd failed", file.display());
         let text = String::from_utf8(raw.stdout).unwrap();
         let field = |key: &str| {
@@ -2659,17 +2691,30 @@ fn massive_closure_showcase_sum() {
                 }
                 (topology, numerator)
             }
-            other => panic!("{name}: input is not numerator * topo: {:.100}", other.to_string()),
+            other => panic!(
+                "{name}: input is not numerator * topo: {:.100}",
+                other.to_string()
+            ),
         };
         let mut routing = (1..=5)
             .map(|i| (parse(&format!("k({i})")), parse(&format!("k({i})"))))
             .collect::<Vec<_>>();
         routing.push((closure.momentum.clone(), closure.momentum.clone()));
         names.push(name);
-        inputs.push((closure, crate::p_integral::DirectClosureInput { topology, routing, numerator }));
+        inputs.push((
+            closure,
+            crate::p_integral::DirectClosureInput {
+                topology,
+                routing,
+                numerator,
+            },
+        ));
     }
     let read_seconds = reading.elapsed().as_secs_f64();
-    eprintln!("SHOWCASE_SUM {} closures read in {read_seconds:.1} s", inputs.len());
+    eprintln!(
+        "SHOWCASE_SUM {} closures read in {read_seconds:.1} s",
+        inputs.len()
+    );
     let modes = std::env::var("VAKINT_TEST_CLOSURE_MODES").unwrap_or_else(|_| "retain".into());
     for mode in modes.split(',') {
         let master_mode = match mode {
@@ -2686,7 +2731,10 @@ fn massive_closure_showcase_sum() {
         if std::env::var("VAKINT_TEST_P_UNCOVERED").as_deref() == Ok("retain") {
             settings.rustred_p_uncovered = crate::RustRedPUncoveredPolicy::Retain;
         }
-        if let Some(recipes) = std::env::var("VAKINT_TEST_P_OUTSIDE_RECIPES").ok().and_then(|n| n.parse().ok()) {
+        if let Some(recipes) = std::env::var("VAKINT_TEST_P_OUTSIDE_RECIPES")
+            .ok()
+            .and_then(|n| n.parse().ok())
+        {
             settings.rustred_p_outside.max_recipes = recipes;
         }
         if std::env::var("VAKINT_TEST_P_RULES_OUTSIDE").as_deref() == Ok("0") {
@@ -2700,7 +2748,9 @@ fn massive_closure_showcase_sum() {
         settings.use_dot_product_notation = false;
         settings.n_cores = 1;
         let started = std::time::Instant::now();
-        let value = crate::p_integral::MassiveClosure::evaluate_direct_sum(&engine, &settings, &inputs).unwrap();
+        let value =
+            crate::p_integral::MassiveClosure::evaluate_direct_sum(&engine, &settings, &inputs)
+                .unwrap();
         let seconds = started.elapsed().as_secs_f64();
         let text = value.to_canonical_string();
         std::fs::write(out.join(format!("sum.{mode}.sym")), &text).unwrap();
@@ -2719,7 +2769,10 @@ fn massive_closure_showcase_sum() {
             let total = total.expand();
             let identical = total == value;
             let equal = identical || (&total - &value).expand().is_zero();
-            eprintln!("SHOWCASE_SUM check {mode}: {found}/{} per-closure results, identical={identical} equal={equal}", names.len());
+            eprintln!(
+                "SHOWCASE_SUM check {mode}: {found}/{} per-closure results, identical={identical} equal={equal}",
+                names.len()
+            );
             check = serde_json::json!({"found": found, "identical": identical, "equal": equal});
         }
         let summary = serde_json::json!({
@@ -2728,7 +2781,11 @@ fn massive_closure_showcase_sum() {
             "arithmetic": settings.ordered_weight_arithmetic.to_string(), "check": check,
         });
         std::fs::write(out.join(format!("sum.{mode}.json")), summary.to_string()).unwrap();
-        eprintln!("SHOWCASE_SUM {mode}: {} closures in {seconds:.1} s, {} terms", names.len(), drill_term_count(&value.expand()));
+        eprintln!(
+            "SHOWCASE_SUM {mode}: {} closures in {seconds:.1} s, {} terms",
+            names.len(),
+            drill_term_count(&value.expand())
+        );
     }
 }
 
@@ -2759,7 +2816,10 @@ fn massive_closure_showcase() {
             .load_p_library_directory(std::path::Path::new(&package), false)
             .unwrap();
         engine.p_library().unwrap();
-        eprintln!("SHOWCASE package loaded in {:.1} s", loading.elapsed().as_secs_f64());
+        eprintln!(
+            "SHOWCASE package loaded in {:.1} s",
+            loading.elapsed().as_secs_f64()
+        );
     }
     let peak = || -> u64 {
         std::fs::read_to_string("/proc/self/status")
@@ -2773,7 +2833,8 @@ fn massive_closure_showcase() {
             .unwrap_or(0)
             * 1024
     };
-    let modes = std::env::var("VAKINT_TEST_CLOSURE_MODES").unwrap_or_else(|_| "retain,symbolic".into());
+    let modes =
+        std::env::var("VAKINT_TEST_CLOSURE_MODES").unwrap_or_else(|_| "retain,symbolic".into());
     for file in std::env::split_paths(&files) {
         let name = file
             .file_name()
@@ -2846,7 +2907,10 @@ fn massive_closure_showcase() {
             if std::env::var("VAKINT_TEST_P_UNCOVERED").as_deref() == Ok("retain") {
                 settings.rustred_p_uncovered = crate::RustRedPUncoveredPolicy::Retain;
             }
-            if let Some(recipes) = std::env::var("VAKINT_TEST_P_OUTSIDE_RECIPES").ok().and_then(|n| n.parse().ok()) {
+            if let Some(recipes) = std::env::var("VAKINT_TEST_P_OUTSIDE_RECIPES")
+                .ok()
+                .and_then(|n| n.parse().ok())
+            {
                 settings.rustred_p_outside.max_recipes = recipes;
             }
             if std::env::var("VAKINT_TEST_P_RULES_OUTSIDE").as_deref() == Ok("0") {
@@ -2883,7 +2947,10 @@ fn massive_closure_showcase() {
                         }
                         (topology, numerator)
                     }
-                    other => panic!("{name}: input is not numerator * topo: {:.100}", other.to_string()),
+                    other => panic!(
+                        "{name}: input is not numerator * topo: {:.100}",
+                        other.to_string()
+                    ),
                 };
                 // vk5l-physrun: the records are already routed into the cut
                 // momenta, external included: identity routing of k(1..5) AND of
@@ -2895,7 +2962,14 @@ fn massive_closure_showcase() {
                 crate::p_integral::MassiveClosure::evaluate_direct_batch(
                     &engine,
                     &settings,
-                    &[(closure.clone(), crate::p_integral::DirectClosureInput { topology, routing, numerator })],
+                    &[(
+                        closure.clone(),
+                        crate::p_integral::DirectClosureInput {
+                            topology,
+                            routing,
+                            numerator,
+                        },
+                    )],
                 )
             } else {
                 crate::p_integral::MassiveClosure::evaluate_batch(
@@ -2941,7 +3015,10 @@ fn massive_closure_showcase() {
                             "failures": after.recipes.failures - before.recipes.failures},
             });
             std::fs::write(out.join(format!("{name}.{mode}.json")), summary.to_string()).unwrap();
-            eprintln!("SHOWCASE {name} {mode}: {status:.200} in {seconds:.1} s, {terms} terms, peak {:.2} GB", peak() as f64 / 1e9);
+            eprintln!(
+                "SHOWCASE {name} {mode}: {status:.200} in {seconds:.1} s, {terms} terms, peak {:.2} GB",
+                peak() as f64 / 1e9
+            );
         }
     }
 }

@@ -23,14 +23,15 @@ fn failure(message: impl Into<String>) -> VakintError {
 }
 
 pub(crate) fn snapshot_reference(part: AtomView) -> bool {
-    static HEADS: std::sync::LazyLock<[symbolica::atom::Symbol; 4]> = std::sync::LazyLock::new(|| {
-        [
-            vk_symbol!("RustRedMaster"),
-            vk_symbol!("RustRedCoefficient"),
-            vk_symbol!("RustRedFiniteLiteral"),
-            vk_symbol!("RustRedConstant"),
-        ]
-    });
+    static HEADS: std::sync::LazyLock<[symbolica::atom::Symbol; 4]> =
+        std::sync::LazyLock::new(|| {
+            [
+                vk_symbol!("RustRedMaster"),
+                vk_symbol!("RustRedCoefficient"),
+                vk_symbol!("RustRedFiniteLiteral"),
+                vk_symbol!("RustRedConstant"),
+            ]
+        });
     matches!(part, AtomView::Fun(function) if HEADS.contains(&function.get_symbol()))
 }
 

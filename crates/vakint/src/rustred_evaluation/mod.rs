@@ -19,18 +19,18 @@ mod official;
 #[cfg(all(unix, not(target_arch = "wasm32")))]
 pub use official::{ExternalDataLoadReport, ExternalDataLoopReport, OfficialExternalDataOptions};
 pub(crate) mod cache;
-pub use p_relations::{
-    P_PACKAGE_RELATIONS_DIRECTORY, P_RELATION_CACHE_DIRECTORY, PDispatchCounters,
-    PRelationCacheLocation, PRelationCacheSettings, PRelationCacheStatistics,
-    VAKINT_CACHE_DIR_VARIABLE,
-};
-pub use p_data::PTerminalRecord;
 pub use cache::{
     DEFAULT_ORDERED_CACHE_MAX_RESIDENT_BYTES, OrderedCacheAutosave, OrderedCacheMode,
     OrderedCacheProgramSaveReport, OrderedCacheProgramStatistics, OrderedCacheSaveReport,
     OrderedCacheSettings, OrderedCacheStatistics, OrderedCacheWarmReport,
     RustRedOrderedStepCacheSaveReport, RustRedOrderedStepCacheShardStatistics,
     RustRedOrderedStepCacheStatistics,
+};
+pub use p_data::PTerminalRecord;
+pub use p_relations::{
+    P_PACKAGE_RELATIONS_DIRECTORY, P_RELATION_CACHE_DIRECTORY, PDispatchCounters,
+    PRelationCacheLocation, PRelationCacheSettings, PRelationCacheStatistics,
+    VAKINT_CACHE_DIR_VARIABLE,
 };
 pub(crate) mod shipped_cache;
 pub use shipped_cache::{
@@ -51,8 +51,8 @@ mod numerator;
 mod ordered;
 pub(crate) mod p_data;
 pub(crate) mod p_integral;
-pub(crate) mod p_relations;
 pub(crate) mod p_lowering;
+pub(crate) mod p_relations;
 pub(crate) mod p_shipped_cache;
 #[cfg(test)]
 mod p_shipped_cache_tests;

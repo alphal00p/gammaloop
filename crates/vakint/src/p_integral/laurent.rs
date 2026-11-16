@@ -528,8 +528,7 @@ fn monomial_term(
         } else {
             let name = masters::p_master_name(base.as_view())
                 .ok_or_else(|| failure(format!("invalid {base}")))?;
-            let value =
-                Laurent::from_polynomial(&master(&name, epsilon)?, epsilon)?;
+            let value = Laurent::from_polynomial(&master(&name, epsilon)?, epsilon)?;
             for _ in 0..power {
                 tabulated = Some(match tabulated {
                     None => value.clone(),

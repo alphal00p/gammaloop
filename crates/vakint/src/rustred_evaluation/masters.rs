@@ -4,8 +4,8 @@
 //! The caller restores target mass powers and measure normalization exactly once.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::OnceLock;
 use std::sync::Arc;
+use std::sync::OnceLock;
 
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -590,7 +590,6 @@ pub(crate) fn common_exact_numeric_phase(expanded: &Atom) -> Atom {
         Atom::num(1)
     }
 }
-
 
 /// One expanded term: its rational coefficient, its integer powers of bare
 /// symbols, and all remaining factors in canonical order.

@@ -310,7 +310,10 @@ pub(super) fn reduce_one(
             if reduction.outside_certified.is_empty() {
                 String::new()
             } else {
-                format!(" outside_certified_keys={}", reduction.outside_certified.len())
+                format!(
+                    " outside_certified_keys={}",
+                    reduction.outside_certified.len()
+                )
             }
         );
     }
@@ -376,7 +379,11 @@ enum UnitLowering {
 }
 
 /// The lowering of the unit monomial `dots` (sorted) of a sector.
-fn lower_unit(top: PTop, dots: &[(PDot, i64)], forms: &BTreeMap<PDot, AffineSlotForm>) -> UnitLowering {
+fn lower_unit(
+    top: PTop,
+    dots: &[(PDot, i64)],
+    forms: &BTreeMap<PDot, AffineSlotForm>,
+) -> UnitLowering {
     let degree = dots.iter().map(|(_, exponent)| *exponent).sum();
     if packable(top, degree) {
         UnitLowering::Packed(lower_unit_packed(dots, forms))
@@ -837,13 +844,19 @@ fn fold_request(
     if direct_requests_enabled() {
         let started = std::time::Instant::now();
         let mut direct_stats = super::p_lowering::DirectStats::default();
-        if let Ok(folded) = super::p_lowering::lower_request(settings, handle, request, &mut direct_stats)? {
+        if let Ok(folded) =
+            super::p_lowering::lower_request(settings, handle, request, &mut direct_stats)?
+        {
             let split_channels = folded.len();
             let mut pairs = 0;
             let targets = folded
                 .into_iter()
                 .map(|(channel, inputs)| {
-                    pairs += inputs.by_basis.values().map(|keys| keys.len()).sum::<usize>();
+                    pairs += inputs
+                        .by_basis
+                        .values()
+                        .map(|keys| keys.len())
+                        .sum::<usize>();
                     (channel, inputs.by_basis)
                 })
                 .collect();
@@ -864,7 +877,9 @@ fn fold_request(
                     .ordered_cache
                     .max_resident_bytes
                     .map(|bytes| bytes / MEMO_BYTES_PER_PAIR);
-                handle.request_memo().insert(key, Arc::clone(&value), max_pairs);
+                handle
+                    .request_memo()
+                    .insert(key, Arc::clone(&value), max_pairs);
             }
             return Ok(value);
         }
@@ -1024,7 +1039,9 @@ fn fold_request(
                         if value.is_zero() {
                             continue;
                         }
-                        let entry = input_key(sector, &|s| ((monomial >> (PACKED_BITS * s as u32)) & mask) as u32);
+                        let entry = input_key(sector, &|s| {
+                            ((monomial >> (PACKED_BITS * s as u32)) & mask) as u32
+                        });
                         *inputs.entry(entry).or_insert_with(Rational::zero) += &value;
                     }
                     for ((sector, monomial), value) in std::mem::take(&mut unpacked[slot]) {

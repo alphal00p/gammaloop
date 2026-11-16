@@ -379,15 +379,16 @@ fn a_five_loop_sector_is_matched_into_an_available_family() {
         "topo(P3dc41bbf2115e501_e15(p(1),1,1,1,1,2,1,1,1,0,1,0,1,1,0))"
     )
     .unwrap();
-    let Normalized::Graph { graph, .. } = PGraph::parse(input.as_view())
-        .unwrap()
-        .normalize()
-        .unwrap()
+    let Normalized::Graph { graph, .. } =
+        PGraph::parse(input.as_view()).unwrap().normalize().unwrap()
     else {
         panic!("the T185 sector is not scaleless");
     };
     let representative = match_graph(&graph).unwrap().unwrap();
-    assert_eq!(P_FAMILIES[representative.family].name, "P05373c99ef72fce4_e13");
+    assert_eq!(
+        P_FAMILIES[representative.family].name,
+        "P05373c99ef72fce4_e13"
+    );
     let held = match_graph_preferring(&graph, &|family| family == named)
         .unwrap()
         .unwrap();

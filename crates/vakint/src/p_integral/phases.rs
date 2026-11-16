@@ -37,4 +37,3 @@ pub(crate) fn time<T>(name: &str, work: impl FnOnce() -> T) -> T {
     end(name, started);
     value
 }
-

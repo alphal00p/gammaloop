@@ -101,7 +101,9 @@ fn closure_replay() {
                     continue;
                 }
                 let external = term.propagator_external().unwrap().unwrap();
-                term.numerator = crate::p_integral::scalar_numerator(term.numerator.as_view(), &external).unwrap();
+                term.numerator =
+                    crate::p_integral::scalar_numerator(term.numerator.as_view(), &external)
+                        .unwrap();
                 let matched = term.prepare_integral_specs(&vakint, &base, None).unwrap();
                 head = Some(external);
                 jobs.push((matched, term.numerator.clone()));

@@ -24,8 +24,8 @@ use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use symbolica::domains::integer::{IntegerRing, Z};
 use symbolica::domains::rational::Q;
 use symbolica::domains::rational_polynomial::RationalPolynomial;
-use symbolica::poly::{PolyVariable, polynomial::MultivariatePolynomial};
 use symbolica::function;
+use symbolica::poly::{PolyVariable, polynomial::MultivariatePolynomial};
 use version_compare::{Cmp, compare_to};
 
 use super::ForcerOptions;
@@ -325,7 +325,10 @@ type EpsilonRational = RationalPolynomial<IntegerRing, u32>;
 /// and every `R_j` is a nonzero rational function of `epsilon` alone. Real
 /// rational numbers join `R_j`; other numbers stay in `S_j`. `None` when a
 /// factor mixes `epsilon` with other symbols.
-fn epsilon_coordinates(coefficient: &Atom, epsilon: Symbol) -> Option<Vec<(Atom, EpsilonRational)>> {
+fn epsilon_coordinates(
+    coefficient: &Atom,
+    epsilon: Symbol,
+) -> Option<Vec<(Atom, EpsilonRational)>> {
     let expanded = coefficient.expand();
     let terms = match expanded.as_view() {
         AtomView::Add(sum) => sum.iter().collect::<Vec<_>>(),
@@ -529,7 +532,11 @@ fn epsilon_channels(parts: Vec<super::parts::PPart>, epsilon: Symbol) -> Vec<Eps
             }
             for (polynomial, coordinates) in &members {
                 for (spectator, value) in coordinates {
-                    add(&mut channels[offset + index_of[spectator]], value, polynomial);
+                    add(
+                        &mut channels[offset + index_of[spectator]],
+                        value,
+                        polynomial,
+                    );
                 }
             }
         }
@@ -544,7 +551,10 @@ fn epsilon_channels(parts: Vec<super::parts::PPart>, epsilon: Symbol) -> Vec<Eps
 /// sorts: a measured four-loop request then needed 268 s and 2 GB instead of
 /// 28 s and 184 MB, with identical output.
 pub(crate) fn with_input_rat_coefficients(locals: String, polynomials: &[String]) -> String {
-    if polynomials.iter().any(|polynomial| polynomial.contains("rat(")) {
+    if polynomials
+        .iter()
+        .any(|polynomial| polynomial.contains("rat("))
+    {
         format!("PolyRatFun rat;\n{locals}")
     } else {
         locals

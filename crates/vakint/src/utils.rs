@@ -20,7 +20,9 @@ pub(crate) mod vakint_macros {
     macro_rules! vk_parse {
         ($s: literal) => {{
             static PARSED: std::sync::LazyLock<Result<symbolica::atom::Atom, String>> =
-                std::sync::LazyLock::new(|| symbolica::try_parse!($s, default_namespace = crate::NAMESPACE));
+                std::sync::LazyLock::new(|| {
+                    symbolica::try_parse!($s, default_namespace = crate::NAMESPACE)
+                });
             PARSED.clone()
         }};
         ($s: expr) => {{ symbolica::try_parse!($s, default_namespace = crate::NAMESPACE) }};

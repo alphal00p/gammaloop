@@ -111,8 +111,14 @@ fn forcer_battery(file: &str, frozen_json: &str) -> Vec<(Case, Vec<ReducedPropag
                 // live requests reduce epsilon-rational factors inside FORM,
                 // so equal values can differ in their algebraic form.
                 assert_eq!(
-                    reduced.iter().map(|value| value.scale_power).collect::<Vec<_>>(),
-                    frozen.iter().map(|value| value.scale_power).collect::<Vec<_>>(),
+                    reduced
+                        .iter()
+                        .map(|value| value.scale_power)
+                        .collect::<Vec<_>>(),
+                    frozen
+                        .iter()
+                        .map(|value| value.scale_power)
+                        .collect::<Vec<_>>(),
                     "{}: live Forcer scale powers differ from the fixture",
                     case.name
                 );
@@ -810,7 +816,10 @@ fn epsilon_coordinates_separate_epsilon_free_spectators() {
     assert_eq!(coordinates[0].0, parse("b"));
     // Epsilon mixed with another symbol keeps the coefficient outside FORM.
     assert!(epsilon_coordinates(&parse("a/(a+ε)"), epsilon()).is_none());
-    assert_eq!(epsilon_coordinates(&parse("a*b"), epsilon()).unwrap().len(), 1);
+    assert_eq!(
+        epsilon_coordinates(&parse("a*b"), epsilon()).unwrap().len(),
+        1
+    );
 }
 
 #[test]
@@ -827,9 +836,10 @@ fn proportional_and_spanning_coefficients_share_channels() {
     let plain = forcer_input(family, &powers, numerator.as_view(), &external)
         .unwrap()
         .unwrap();
-    let moved = forcer_input_with_epsilon(family, &powers, numerator.as_view(), &external, epsilon())
-        .unwrap()
-        .unwrap();
+    let moved =
+        forcer_input_with_epsilon(family, &powers, numerator.as_view(), &external, epsilon())
+            .unwrap()
+            .unwrap();
     assert_eq!(plain.parts.len(), 3);
     assert_eq!(moved.parts.len(), 2, "{}", moved.program);
     assert!(moved.program.contains("rat("));
@@ -848,8 +858,14 @@ fn epsilon_rational_channels_match_reductions_with_external_coefficients() {
     let powers = [1, 1, 2, 1, 1];
     let external = parse("-p(3)");
     let terms = [
-        (parse("t*192/((3-2*ε)*(4-2*ε))"), parse("dot(k(1),k(1))*dot(k(2),p(3))")),
-        (parse("t*(1+ε)/(6-2*ε)"), parse("dot(k(1),k(2))*dot(k(2),p(3))")),
+        (
+            parse("t*192/((3-2*ε)*(4-2*ε))"),
+            parse("dot(k(1),k(1))*dot(k(2),p(3))"),
+        ),
+        (
+            parse("t*(1+ε)/(6-2*ε)"),
+            parse("dot(k(1),k(2))*dot(k(2),p(3))"),
+        ),
         (parse("l*(2-ε)^2"), parse("dot(k(1),p(3))^2")),
         (parse("l/(3-2*ε)"), parse("dot(k(1),k(1))*dot(k(2),p(3))")),
         (parse("t*l"), parse("dot(k(2),k(2))")),
@@ -858,9 +874,10 @@ fn epsilon_rational_channels_match_reductions_with_external_coefficients() {
     let plain = forcer_input(family, &powers, numerator.as_view(), &external)
         .unwrap()
         .unwrap();
-    let moved = forcer_input_with_epsilon(family, &powers, numerator.as_view(), &external, epsilon())
-        .unwrap()
-        .unwrap();
+    let moved =
+        forcer_input_with_epsilon(family, &powers, numerator.as_view(), &external, epsilon())
+            .unwrap()
+            .unwrap();
     assert!(moved.parts.len() < plain.parts.len());
     assert!(moved.program.contains("rat("));
 

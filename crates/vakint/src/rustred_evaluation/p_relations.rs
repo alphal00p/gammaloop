@@ -143,9 +143,10 @@ static INSTALLED: Mutex<Option<RecipeCacheRoots>> = Mutex::new(None);
 /// such a change is logged.
 pub(crate) fn install(settings: &VakintSettings, package_relations: Option<&Path>) {
     rustred::propagator::recipes::set_outside_settings(settings.rustred_p_outside);
-    let roots = settings
-        .rustred_p_relation_cache
-        .roots(settings.ordered_cache.directory.as_deref(), package_relations);
+    let roots = settings.rustred_p_relation_cache.roots(
+        settings.ordered_cache.directory.as_deref(),
+        package_relations,
+    );
     let mut installed = INSTALLED
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);

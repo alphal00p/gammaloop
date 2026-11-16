@@ -517,9 +517,7 @@ impl PLibraryHandle {
     }
 
     /// The request memo of this library.
-    pub(crate) fn request_memo(
-        &self,
-    ) -> std::sync::MutexGuard<'_, super::p_integral::RequestMemo> {
+    pub(crate) fn request_memo(&self) -> std::sync::MutexGuard<'_, super::p_integral::RequestMemo> {
         self.request_memo
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -806,7 +804,9 @@ fn built_in_master_catalogue() -> Option<Arc<crate::p_integral::PMasterCatalogue
             ) {
                 Ok(catalogue) => Some(Arc::new(catalogue)),
                 Err(error) => {
-                    log::error!("vakint: the built-in five-loop p master catalogue is invalid: {error}");
+                    log::error!(
+                        "vakint: the built-in five-loop p master catalogue is invalid: {error}"
+                    );
                     None
                 }
             }
@@ -835,7 +835,10 @@ fn variable_master_catalogue() -> Option<Option<Arc<crate::p_integral::PMasterCa
             Some(Some(catalogue))
         }
         Err(error) => {
-            log::error!("vakint: {P_MASTER_CATALOGUE_VARIABLE}={}: {error}", path.display());
+            log::error!(
+                "vakint: {P_MASTER_CATALOGUE_VARIABLE}={}: {error}",
+                path.display()
+            );
             Some(None)
         }
     }
@@ -1089,7 +1092,11 @@ impl Vakint {
                 presentation: spec.presentation.0,
                 loops: presentation.loops,
                 family: presentation.family.name().to_owned(),
-                slots: presentation.slots.iter().map(|slot| format!("{slot:?}")).collect(),
+                slots: presentation
+                    .slots
+                    .iter()
+                    .map(|slot| format!("{slot:?}"))
+                    .collect(),
             });
         }
         Ok(records)
