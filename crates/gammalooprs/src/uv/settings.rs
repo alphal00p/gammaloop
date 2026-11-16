@@ -443,6 +443,8 @@ impl VakintSettings {
             rustred_product_limits: Default::default(),
             rustred_momentum_match_limits: Default::default(),
             rustred_p_uncovered: Default::default(),
+            rustred_p_relation_cache: Default::default(),
+            rustred_p_outside: Default::default(),
             verify_numerator_identification: false,
             run_time_decimal_precision: self.run_time_decimal_precision as u32,
             allow_unknown_integrals: false,

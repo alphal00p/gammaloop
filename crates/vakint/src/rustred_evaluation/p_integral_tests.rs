@@ -2356,7 +2356,10 @@ fn spectator_terms_split_off_the_rational_functions_of_epsilon() {
         .iter()
         .map(|(m, ..)| m.clone())
         .collect::<BTreeSet<_>>();
-    assert_eq!(monomials, [parse("T"), parse("L")].into_iter().collect());
+    assert_eq!(
+        monomials,
+        [parse("T"), parse("L")].into_iter().collect::<BTreeSet<_>>()
+    );
 }
 
 /// vk5l WP4 like-for-like timing of `reduce_requests` on dumped requests
