@@ -213,8 +213,10 @@ pub struct GenerationReport {
     pub retained_count: usize,
     pub zero_numerator_count: usize,
     pub completed: bool,
-    /// Diagrams removed because their closed fermion loops sum to an exact
-    /// zero over all orientations. Only counted with
+    /// Diagrams removed because their closed fermion loops sum to zero over
+    /// all orientations: group-independently for colourless loops, at the
+    /// model's numeric representation dimensions (SU(3), tier Z3) for coloured
+    /// loops. Only counted with
     /// [`GenerationOptions::cancel_closed_loop_orientations`].
     #[serde(default, skip_serializing_if = "is_zero_count")]
     pub orientation_zero_count: usize,
@@ -1404,7 +1406,9 @@ pub trait FeynmanDiagramRulesExt {
 
     /// Test whether this diagram's numerator, summed over both orientations
     /// of each closed non-ghost fermion loop in its own frame, vanishes
-    /// exactly. This is the per-diagram test behind
+    /// (group-independently for colourless loops; at the model's numeric
+    /// representation dimensions, SU(3) for QCD, for coloured loops). This is
+    /// the per-diagram test behind
     /// [`GenerationOptions::cancel_closed_loop_orientations`]; only the
     /// options' numerator prefactor and projector policy are used.
     fn closed_loop_orientation_sum(

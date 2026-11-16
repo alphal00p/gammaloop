@@ -966,10 +966,13 @@ impl PyProcess {
     ///     before numerator grouping. Defaults to False, independently of grouping.
     /// cancel_closed_loop_orientations : bool, optional
     ///     Discard diagrams whose numerator, summed over both orientations of each
-    ///     closed non-ghost fermion loop in the diagram's own frame, is exactly zero
+    ///     closed non-ghost fermion loop in the diagram's own frame, is zero
     ///     (Furry's theorem, orientation-summed color zeros, and self-cancelling
-    ///     graphs that numerator grouping keeps). Survivors keep their names and
-    ///     factors. Defaults to False; the setting is not serialized.
+    ///     graphs that numerator grouping keeps). Zeros of colourless loops are
+    ///     group-independent; zeros of coloured loops are certified at the
+    ///     model's numeric representation dimensions (SU(3) for QCD), using
+    ///     SU(N)-only color rules. Survivors keep their names and factors.
+    ///     Defaults to False; the setting is not serialized.
     /// progress : {"auto"}, Callable[[GenerationProgress], None] or None, optional
     ///     Defaults to "auto": show progress when marimo.running_in_notebook()
     ///     is true, with stage, counts, and elapsed time. None disables progress.
@@ -1184,10 +1187,13 @@ impl PyProcess {
     ///     before numerator grouping. Defaults to False, independently of grouping.
     /// cancel_closed_loop_orientations : bool, optional
     ///     Discard diagrams whose numerator, summed over both orientations of each
-    ///     closed non-ghost fermion loop in the diagram's own frame, is exactly zero
+    ///     closed non-ghost fermion loop in the diagram's own frame, is zero
     ///     (Furry's theorem, orientation-summed color zeros, and self-cancelling
-    ///     graphs that numerator grouping keeps). Survivors keep their names and
-    ///     factors. Defaults to False; the setting is not serialized.
+    ///     graphs that numerator grouping keeps). Zeros of colourless loops are
+    ///     group-independent; zeros of coloured loops are certified at the
+    ///     model's numeric representation dimensions (SU(3) for QCD), using
+    ///     SU(N)-only color rules. Survivors keep their names and factors.
+    ///     Defaults to False; the setting is not serialized.
     /// progress : {"auto"}, Callable[[GenerationProgress], None] or None, optional
     ///     Defaults to "auto": show progress when marimo.running_in_notebook()
     ///     is true, with stage, counts, and elapsed time. None disables progress.
@@ -1411,10 +1417,13 @@ impl PyProcess {
     ///     before numerator grouping. Defaults to False, independently of grouping.
     /// cancel_closed_loop_orientations : bool, optional
     ///     Discard diagrams whose numerator, summed over both orientations of each
-    ///     closed non-ghost fermion loop in the diagram's own frame, is exactly zero
+    ///     closed non-ghost fermion loop in the diagram's own frame, is zero
     ///     (Furry's theorem, orientation-summed color zeros, and self-cancelling
-    ///     graphs that numerator grouping keeps). Survivors keep their names and
-    ///     factors. Defaults to False; the setting is not serialized.
+    ///     graphs that numerator grouping keeps). Zeros of colourless loops are
+    ///     group-independent; zeros of coloured loops are certified at the
+    ///     model's numeric representation dimensions (SU(3) for QCD), using
+    ///     SU(N)-only color rules. Survivors keep their names and factors.
+    ///     Defaults to False; the setting is not serialized.
     /// progress : {"auto"}, Callable[[GenerationProgress], None] or None, optional
     ///     Defaults to "auto": show progress when marimo.running_in_notebook()
     ///     is true, with stage, counts, and elapsed time. None disables progress.
@@ -2337,7 +2346,8 @@ impl PyGenerationReport {
         self.inner.zero_numerator_count
     }
     /// Return the number of diagrams removed because their closed fermion loops
-    /// cancel exactly when summed over both orientations.
+    /// cancel when summed over both orientations (group-independently for
+    /// colourless loops, at SU(3) for coloured QCD loops).
     ///
     /// Always zero unless ``cancel_closed_loop_orientations=True``.
     ///
