@@ -27,7 +27,8 @@ use super::{
     RStarPlan, TaylorExpansion,
     boundary::{
         BoundaryMode, BoundaryStats, ClosedRootNormalization, Grammar, Role, denominator_orders,
-        split_into_blocks, verify_vakint_scalar, with_boundary_mode,
+        fallback_max_summands, large_decline, split_into_blocks, verify_vakint_scalar,
+        with_boundary_mode,
     },
     expression::RStarIntegrand,
     recursive_tests::{colour_factored, load, settings},
@@ -273,6 +274,20 @@ fn postconditions_reject_unmapped_loop_momenta() -> Result<()> {
     let reason = check(Atom::var(GS.dim) * vdot(&k(1), &k(1)), Role::Block);
     ensure!(reason.starts_with("postcondition:block:"), "dim: {reason}");
     Ok(())
+}
+
+/// DESIGN 10c with Addendum C: a decline before the contraction is large from
+/// six loops on (its |P| is unknown), after it by the summand count of P.
+#[test]
+fn pre_contraction_declines_of_six_loop_remainders_are_large() {
+    let mut stats = BoundaryStats::default();
+    assert!(!large_decline(&stats, 5));
+    assert!(large_decline(&stats, 6));
+    stats.contracted = true;
+    stats.p_summands = 10;
+    assert!(!large_decline(&stats, 6));
+    stats.p_summands = fallback_max_summands().saturating_add(1);
+    assert!(fallback_max_summands() == usize::MAX || large_decline(&stats, 2));
 }
 
 /// The physical external rules of a two-point graph, as beta builds them:

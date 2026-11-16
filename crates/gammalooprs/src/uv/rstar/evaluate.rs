@@ -1159,7 +1159,7 @@ impl<'a> Evaluation<'a> {
         let large_limit = boundary::fallback_max_summands();
         let built = match built {
             Built::Declined(decline, stats) => {
-                let large = stats.p_summands > large_limit;
+                let large = boundary::large_decline(&stats, remainder.region.loops);
                 eprintln!(
                     "BOUNDARY_FALLBACK graph={} id={id} loops={} stage={} reason={} p_summands={} large={large}",
                     self.graph.name,
@@ -1173,15 +1173,25 @@ impl<'a> Evaluation<'a> {
                 self.boundary_elapsed += started.elapsed();
                 self.summary.seconds_boundary += started.elapsed().as_secs_f64();
                 if large {
+                    self.summary.errors += 1;
                     return Err(eyre!(
-                        "BOUNDARY_DECLINED_LARGE graph={} id={id}: {}:{} with {} summands of P (limit {large_limit})",
+                        "BOUNDARY_DECLINED_LARGE graph={} id={id} loops={}: {}:{} ({}; no fallback to today's path)",
                         self.graph.name,
+                        remainder.region.loops,
                         decline.stage,
                         decline.reason,
-                        stats.p_summands
+                        if stats.contracted {
+                            format!("{} summands of P, limit {large_limit}", stats.p_summands)
+                        } else {
+                            format!(
+                                "before the contraction, at least {} loops or a census dump",
+                                boundary::LARGE_PRE_CONTRACTION_LOOPS
+                            )
+                        }
                     ));
                 }
                 if strict {
+                    self.summary.errors += 1;
                     return Err(eyre!(
                         "BOUNDARY strict: the remainder boundary {id} of {} declined at {}: {}",
                         self.graph.name,
