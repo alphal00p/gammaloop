@@ -247,6 +247,15 @@ struct Contribution {
     shift: Vec<u32>,
 }
 
+/// A cooperative resource-budget checkpoint of the frontier (see the per-term
+/// checkpoint in `contract_states`). The frontier cannot decline once
+/// started, so an exhausted budget aborts the operation.
+fn budget_checkpoint() {
+    if let Err(error) = symbolica::utils::resources::checkpoint() {
+        panic!("resource budget exhausted in a factorized contraction: {error}");
+    }
+}
+
 /// Largest exponent of every variable of `weight`.
 fn max_degrees(weight: &ScalarPolynomial) -> Vec<u32> {
     let nvars = weight.nvars();
@@ -330,7 +339,13 @@ fn frontier_sum(
         for index in (0..heap.len() / 2).rev() {
             sift_down(&mut heap, index, &current, nvars);
         }
+        let mut appended = 0usize;
         while let Some(&top) = heap.first() {
+            // The merge writes the next frontier: budgets must see it grow.
+            appended = appended.wrapping_add(1);
+            if appended % 4096 == 0 {
+                budget_checkpoint();
+            }
             let (source, contribution) = streams[top];
             let cursor = cursors[top];
             let coefficient = if Q.is_one(&contribution.coefficient) {
@@ -2208,10 +2223,8 @@ impl<'a> ComponentSum<'a, '_> {
                     // checkpoint runs. The frontier cannot decline once
                     // started, so an exhausted budget aborts the operation.
                     budget_checks = budget_checks.wrapping_add(1);
-                    if budget_checks % 4096 == 0
-                        && let Err(error) = symbolica::utils::resources::checkpoint()
-                    {
-                        panic!("resource budget exhausted in a factorized contraction: {error}");
+                    if budget_checks % 4096 == 0 {
+                        budget_checkpoint();
                     }
                     self.reset_components(coefficient);
                     for &(factor, exponent) in factors {
@@ -2397,6 +2410,7 @@ impl<'a> ComponentSum<'a, '_> {
             #[cfg(feature = "reference-cases")]
             let mut next_bytes = 0usize;
             for (remaining, mut contributions, small) in next {
+                budget_checkpoint();
                 // Released sources only lower the retained input storage, so
                 // the step's input bytes bound it.
                 #[cfg(feature = "reference-cases")]
