@@ -5,11 +5,12 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet},
-    sync::Arc,
+    sync::{Arc, LazyLock},
+    time::Instant,
 };
 
 use color_eyre::Result;
-use eyre::{ensure, eyre};
+use eyre::{WrapErr, ensure, eyre};
 use linnet::half_edge::{
     HedgeGraph, PowersetIterator,
     involution::{EdgeIndex, HedgePair},
@@ -29,8 +30,99 @@ use crate::{
         approx::CutStructure,
         counterterm_cache::{CountertermCache, CountertermRequest},
         hedge_poset::{Forests, Wood},
+        literal_zero_if_vanishing,
     },
 };
+
+/// How the proper UV children `Delta(S)` of an R* plan are computed.
+///
+/// `Massive` is the established route: the massive R operation (Bogoliubov
+/// preparation, Taylor expansion to massive vacuum integrals). `Rstar` applies
+/// the complete-graph R* procedure of this module to the child itself: the
+/// child's support is the root of its own plan (automatic marked edge, IR
+/// corrections, outer Taylor expansion in all of its boundary momenta up to its
+/// local degree, single-mass closures onto massless p-integrals) and its own
+/// children follow the same route recursively. Children with fewer than
+/// `min_loops` loops keep the massive route. The returned polynomial has the
+/// massive route's contract: open boundary slots, every boundary momentum, no
+/// projector and no graph prefactor.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum UvChildrenRoute {
+    Massive,
+    Rstar { min_loops: usize },
+}
+
+impl std::fmt::Display for UvChildrenRoute {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Massive => write!(f, "massive"),
+            Self::Rstar { min_loops } => write!(f, "rstar:{min_loops}"),
+        }
+    }
+}
+
+impl UvChildrenRoute {
+    /// The process-wide route selected by `GAMMALOOP_UV_CHILDREN`.
+    pub fn from_environment() -> Self {
+        *UV_CHILDREN_ROUTE
+    }
+
+    /// `massive` (also unset or empty), `rstar` (every child) or `rstar:N`
+    /// (children with at least N loops; smaller ones stay massive).
+    pub fn parse(value: &str) -> Result<Self> {
+        let value = value.trim();
+        if value.is_empty() || value == "massive" {
+            return Ok(Self::Massive);
+        }
+        let (name, threshold) = match value.split_once(':') {
+            Some((name, threshold)) => (name.trim(), Some(threshold.trim())),
+            None => (value, None),
+        };
+        ensure!(
+            name == "rstar",
+            "GAMMALOOP_UV_CHILDREN must be `massive`, `rstar` or `rstar:N`, not `{value}`"
+        );
+        let min_loops = match threshold {
+            None => 1,
+            Some(threshold) => threshold.parse::<usize>().wrap_err_with(|| {
+                format!("GAMMALOOP_UV_CHILDREN loop threshold `{threshold}` is not an integer")
+            })?,
+        };
+        Ok(Self::Rstar {
+            min_loops: min_loops.max(1),
+        })
+    }
+
+    fn uses_rstar(&self, loops: usize) -> bool {
+        matches!(self, Self::Rstar { min_loops } if loops >= *min_loops)
+    }
+}
+
+/// `GAMMALOOP_UV_CHILDREN`, read once. Unset keeps the massive route, so the
+/// default evaluation is unchanged. An invalid value fails closed.
+static UV_CHILDREN_ROUTE: LazyLock<UvChildrenRoute> = LazyLock::new(|| {
+    let value = std::env::var("GAMMALOOP_UV_CHILDREN").unwrap_or_default();
+    UvChildrenRoute::parse(&value).unwrap_or_else(|error| panic!("{error:#}"))
+});
+
+/// `GAMMALOOP_UV_CHILDREN_LOG=1`: one stderr line per proper UV child request
+/// of an R*-route plan (route, loops, seconds); for smoke tests and timing.
+fn uv_children_log() -> bool {
+    static LOG: LazyLock<bool> =
+        LazyLock::new(|| std::env::var_os("GAMMALOOP_UV_CHILDREN_LOG").is_some());
+    *LOG
+}
+
+/// Which values of the reference mass a consumer of the proper UV children
+/// needs. `Zero`: only the massless limit (the physical remainders of
+/// `counterterm_from_pole_part` and `prepare_physical_uv_terms`). `Reference`:
+/// the complete polynomial in the marked line's reference mass, as the
+/// compensated root Taylor operation requires.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ChildMass {
+    Reference,
+    Zero,
+}
 
 /// A local polynomial replaces this support, with its original open indices.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -338,6 +430,12 @@ pub struct RStarPlan {
     pub counterterms: Vec<CountertermCall>,
     catalogue: Vec<Spinney>,
     pub(super) counterterm_cache: Option<Arc<CountertermCache>>,
+    /// Route of the proper UV children, `GAMMALOOP_UV_CHILDREN` by default.
+    pub(super) uv_children: UvChildrenRoute,
+    /// `Some(crown)` when the root is a proper support of the graph (a UV
+    /// child evaluated by R*): its boundary carriers are the full crown of
+    /// `support` rather than the graph's external edges.
+    pub(super) root_boundary: Option<SuBitGraph>,
 }
 
 impl RStarPlan {
@@ -346,6 +444,45 @@ impl RStarPlan {
     pub fn with_counterterm_cache(mut self, cache: Arc<CountertermCache>) -> Self {
         self.counterterm_cache = Some(cache);
         self
+    }
+
+    /// Select how this plan's proper UV children are computed (the default is
+    /// the process-wide `GAMMALOOP_UV_CHILDREN`).
+    pub fn with_uv_children(mut self, route: UvChildrenRoute) -> Self {
+        self.uv_children = route;
+        self
+    }
+
+    pub fn uv_children(&self) -> UvChildrenRoute {
+        self.uv_children
+    }
+
+    /// An R* plan whose root is the proper support `support` of `graph`, with
+    /// the automatic marked edge. The boundary of the root is the full crown
+    /// of `support`; all edge and half-edge labels are those of `graph`.
+    /// [`Self::counterterm`] of this plan is the local MS counterterm of the
+    /// subgraph, with the contract of the massive R operation's `Delta(S)`.
+    pub fn for_support(
+        graph: &Graph,
+        model: &Model,
+        support: &SuBitGraph,
+        settings: &UVgenerationSettings,
+    ) -> Result<Self> {
+        Self::for_support_with_edge(graph, model, support, None, settings)
+    }
+
+    /// [`Self::for_support`] with an explicit marked edge (automatic if `None`).
+    pub fn for_support_with_edge(
+        graph: &Graph,
+        model: &Model,
+        support: &SuBitGraph,
+        marked_edge: Option<EdgeIndex>,
+        settings: &UVgenerationSettings,
+    ) -> Result<Self> {
+        let mut plan =
+            Self::build_for_support(graph, model, support.clone(), marked_edge, settings)?;
+        plan.root_boundary = Some(graph.dummy_less_full_crown(support));
+        Ok(plan)
     }
 
     pub fn new(
@@ -393,6 +530,16 @@ impl RStarPlan {
         let support = graph
             .no_dummy()
             .subtract(&graph.external_filter::<SuBitGraph>());
+        Self::build_for_support(graph, model, support, marked_edge, settings)
+    }
+
+    fn build_for_support(
+        graph: &Graph,
+        model: &Model,
+        support: SuBitGraph,
+        marked_edge: Option<EdgeIndex>,
+        settings: &UVgenerationSettings,
+    ) -> Result<Self> {
         ensure!(
             marked_edge.is_none_or(|marked| graph
                 .iter_edges_of(&support)
@@ -497,6 +644,8 @@ impl RStarPlan {
             counterterms,
             catalogue,
             counterterm_cache: None,
+            uv_children: UvChildrenRoute::from_environment(),
+            root_boundary: None,
         })
     }
 
@@ -526,7 +675,18 @@ impl RStarPlan {
         }
         let reference_mass = Atom::var(*super::REFERENCE_MASS_SQUARED).sqrt();
         let (family, settings) = self.uv_family(graph, &reference_mass, settings);
-        self.uv_family_requests(family, model, settings)
+        let requests = self.uv_family_requests(family, model, settings);
+        if self.uv_children == UvChildrenRoute::Massive {
+            return requests;
+        }
+        // R*-route children are computed on demand; only the children below
+        // the loop threshold certainly use the massive route.
+        self.counterterms
+            .iter()
+            .zip(requests)
+            .filter(|(call, _)| !self.uv_children.uses_rstar(call.argument.loops))
+            .map(|(_, request)| request)
+            .collect()
     }
 
     fn uv_family(
@@ -586,7 +746,176 @@ impl RStarPlan {
     /// polynomials retain its powers and their original open tensor slots.
     /// The N-loop root is excluded before forest construction, so this never
     /// computes the massive vacuum integral that the R* rearrangement replaces.
+    ///
+    /// Under [`UvChildrenRoute::Rstar`] eligible children are instead computed
+    /// by R* on their own support (see [`Self::evaluate_uv_children_for`]).
     pub fn evaluate_uv_children(
+        &self,
+        graph: &Graph,
+        model: &Model,
+        reference_mass: &Atom,
+        vakint: &Vakint,
+        settings: &UVgenerationSettings,
+    ) -> Result<BTreeMap<SuBitGraph, Atom>> {
+        self.evaluate_uv_children_for(
+            graph,
+            model,
+            reference_mass,
+            vakint,
+            settings,
+            ChildMass::Reference,
+        )
+    }
+
+    /// [`Self::evaluate_uv_children`] for a consumer that needs the children
+    /// only at the given reference mass. The massive route ignores
+    /// `child_mass` and is unchanged.
+    ///
+    /// The R* route computes a child `S` by R* on the massless `graph`
+    /// restricted to `S` when `S` has at least the route's loop threshold and
+    /// is a connected 1PI support. The reference mass of the family sits in a
+    /// denominator only, so `Delta(S)` depends on it through even powers,
+    /// which require `S` to contain the marked line and to have a degree of at
+    /// least two. Only such children, when the consumer needs the reference
+    /// mass, keep the massive route (as do children below the threshold).
+    pub(crate) fn evaluate_uv_children_for(
+        &self,
+        graph: &Graph,
+        model: &Model,
+        reference_mass: &Atom,
+        vakint: &Vakint,
+        settings: &UVgenerationSettings,
+        child_mass: ChildMass,
+    ) -> Result<BTreeMap<SuBitGraph, Atom>> {
+        if self.uv_children == UvChildrenRoute::Massive {
+            return self.evaluate_massive_uv_children(
+                graph,
+                model,
+                reference_mass,
+                vakint,
+                settings,
+            );
+        }
+        let cache = self
+            .counterterm_cache
+            .clone()
+            .unwrap_or_else(|| Arc::new(CountertermCache::default()));
+        let marked = graph[&self.marked_edge].1;
+        let (family, family_settings) = self.uv_family(graph, reference_mass, settings);
+        let requests = self.uv_family_requests(family, model, family_settings);
+        let mut children = BTreeMap::new();
+        for (call, request) in self.counterterms.iter().zip(requests) {
+            let support = &call.argument.support;
+            let started = Instant::now();
+            let route = if !self.uv_children.uses_rstar(call.argument.loops) {
+                "massive"
+            } else if child_mass == ChildMass::Reference
+                && support.includes(&marked)
+                && call.taylor_order >= 2
+            {
+                "massive_reference_mass"
+            } else if !Self::admits_support_root(graph, support) {
+                "massive_structure"
+            } else {
+                "rstar"
+            };
+            let polynomial = if route == "rstar" {
+                Self::rstar_child_counterterm(
+                    &cache,
+                    graph,
+                    support,
+                    model,
+                    vakint,
+                    settings,
+                    self.uv_children,
+                )?
+            } else {
+                request
+                    .evaluate(&cache, vakint)?
+                    .replace(GS.m_uv_expansion)
+                    .with(GS.m_uv_vacuum)
+            };
+            tracing::info!(
+                uv = true,
+                rstar = true,
+                timing = true,
+                stage = "rstar_uv_child",
+                graph = %graph.name,
+                route,
+                loops = call.argument.loops,
+                degree = call.taylor_order,
+                seconds = started.elapsed().as_secs_f64(),
+                "Proper UV child of an R*-route plan"
+            );
+            if uv_children_log() {
+                eprintln!(
+                    "UV_CHILD graph={} route={route} loops={} degree={} parent_loops={} seconds={:.3}",
+                    graph.name,
+                    call.argument.loops,
+                    call.taylor_order,
+                    graph.n_loops(&self.support),
+                    started.elapsed().as_secs_f64()
+                );
+            }
+            children.insert(support.clone(), polynomial);
+        }
+        Ok(children)
+    }
+
+    /// The structural requirements of an R* root on a proper support.
+    fn admits_support_root(graph: &Graph, support: &SuBitGraph) -> bool {
+        graph.is_connected(support)
+            && graph.n_loops(support) > 0
+            && graph.bridges_of(support).is_empty()
+    }
+
+    /// `Delta(S)` of the support `S` of the massless `graph`, computed by the
+    /// complete-graph R* procedure applied to `S` and memoised in `cache`
+    /// under a key distinct from the massive route's raw entries. The result
+    /// is identified (it carries no auxiliary UV mass) and is free of every
+    /// reference mass.
+    pub(crate) fn rstar_child_counterterm(
+        cache: &Arc<CountertermCache>,
+        graph: &Graph,
+        support: &SuBitGraph,
+        model: &Model,
+        vakint: &Vakint,
+        settings: &UVgenerationSettings,
+        route: UvChildrenRoute,
+    ) -> Result<Atom> {
+        let key = format!("{}#uv-children={route}", serde_json::to_string(settings)?);
+        cache.counterterm_with(graph, support, model, key, || {
+            let started = Instant::now();
+            let plan = Self::for_support(graph, model, support, settings)?
+                .with_uv_children(route)
+                .with_counterterm_cache(Arc::clone(cache));
+            let delta = plan
+                .counterterm(graph, model, vakint, settings)
+                .wrap_err_with(|| {
+                    format!(
+                        "while computing the {}-loop UV child {} with R*",
+                        graph.n_loops(support),
+                        support.string_label()
+                    )
+                })?;
+            tracing::info!(
+                uv = true,
+                rstar = true,
+                timing = true,
+                stage = "rstar_uv_child_computed",
+                graph = %graph.name,
+                loops = graph.n_loops(support),
+                marked_edge = usize::from(plan.marked_edge),
+                taylor_order = plan.taylor_order,
+                children = plan.counterterms.len(),
+                seconds = started.elapsed().as_secs_f64(),
+                "Computed a proper UV child with R*"
+            );
+            Ok(literal_zero_if_vanishing(delta))
+        })
+    }
+
+    fn evaluate_massive_uv_children(
         &self,
         graph: &Graph,
         model: &Model,

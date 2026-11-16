@@ -47,9 +47,28 @@ static CHECK_LIMIT: LazyLock<Option<usize>> = LazyLock::new(|| {
         .and_then(|value| value.parse().ok())
 });
 
+#[cfg(test)]
+thread_local! {
+    static TEST_PIECE_LIMIT: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+}
+
+/// Tests only: run `f` on this thread with the production piece limit, for
+/// tests that compare results rather than the streamed maps themselves.
+#[cfg(test)]
+pub(crate) fn with_production_piece_limit<T>(f: impl FnOnce() -> T) -> T {
+    let previous = TEST_PIECE_LIMIT.with(|limit| limit.replace(Some(*PIECE_LIMIT)));
+    let result = f();
+    TEST_PIECE_LIMIT.with(|limit| limit.set(previous));
+    result
+}
+
 /// Tests stream every piece, so that the streamed maps are compared with the
 /// whole maps on every expression a test reaches.
 pub(crate) fn piece_limit() -> usize {
+    #[cfg(test)]
+    if let Some(limit) = TEST_PIECE_LIMIT.with(|limit| limit.get()) {
+        return limit;
+    }
     if cfg!(test) { 1 } else { *PIECE_LIMIT }
 }
 

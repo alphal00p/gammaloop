@@ -1280,6 +1280,7 @@ impl RStarIntegrand {
         &self,
         expression: &Atom,
         root_graph: &Graph,
+        root_edges: &[EdgeIndex],
         degree: usize,
         reference_mass_squared: Symbol,
         auxiliary_mass_squared: &Atom,
@@ -1290,11 +1291,8 @@ impl RStarIntegrand {
         root_projector: Option<&RootProjector<'_>>,
     ) -> Result<Atom> {
         let mut timing = IntegrationTimings::new();
-        let root_external = root_graph.external_filter::<SuBitGraph>();
-        let root_edges = root_graph
-            .iter_edges_of(&root_external)
-            .map(|(_, edge, _)| edge)
-            .collect::<Vec<_>>();
+        // The root's boundary carriers: the graph's external edges, or the full
+        // crown of a proper support evaluated as its own R* root.
         // Quotient UV maps return original Q labels. Route newly introduced
         // component edges, preserving this component's independent hard loops.
         let routed = if self.region.loops == 0 {
@@ -1313,7 +1311,7 @@ impl RStarIntegrand {
             .basis
             .loop_edges
             .iter()
-            .chain(&root_edges)
+            .chain(root_edges)
             .map(|edge| usize::from(*edge))
             .chain(self.combination_ids())
             .collect::<BTreeSet<_>>();
@@ -1337,7 +1335,7 @@ impl RStarIntegrand {
         let taylor = TaylorExpansion::new(parameter, degree);
         // Each intermediate is dropped as soon as its successor exists: on the
         // largest diagrams each of them is hundreds of megabytes.
-        let scaled = Self::scale_edges(&routed, &root_edges, parameter);
+        let scaled = Self::scale_edges(&routed, root_edges, parameter);
         drop(routed);
         let compensated =
             taylor.compensate_mass(&scaled, reference_mass_squared, auxiliary_mass_squared);

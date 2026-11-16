@@ -506,13 +506,44 @@ impl CountertermCache {
         vakint: &Vakint,
         settings: &UVgenerationSettings,
     ) -> Result<Atom> {
+        self.lookup(graph, support, model, serde_json::to_string(settings)?, || {
+            self.compute(graph, support, model, vakint, settings)
+        })
+    }
+
+    /// A complete counterterm of `support` computed by another route.
+    ///
+    /// `settings_key` must identify that route and its settings; it must differ
+    /// from every key of [`Self::counterterm`], whose raw entries keep both
+    /// auxiliary masses apart for massive parents. The entry shares this
+    /// cache's single-flight fill, compute permits, canonical boundary
+    /// transport and statistics. `compute` runs only on a miss.
+    pub(crate) fn counterterm_with(
+        &self,
+        graph: &Graph,
+        support: &SuBitGraph,
+        model: &Model,
+        settings_key: String,
+        compute: impl FnOnce() -> Result<Atom>,
+    ) -> Result<Atom> {
+        self.lookup(graph, support, model, settings_key, compute)
+    }
+
+    fn lookup(
+        &self,
+        graph: &Graph,
+        support: &SuBitGraph,
+        model: &Model,
+        settings_key: String,
+        compute: impl FnOnce() -> Result<Atom>,
+    ) -> Result<Atom> {
         let _stage = StageSpan::new("gamma.delta.lookup");
         let mut timing = self.timings.start();
         let identity_stage = StageSpan::new("gamma.delta.identity");
         let identity = CountertermIdentity::new(graph, support, model)?;
         let key = Key {
             graph: identity.key.clone(),
-            settings: serde_json::to_string(settings)?,
+            settings: settings_key,
         };
         timing.lap(CacheTimingPhase::Key);
         drop(identity_stage);
@@ -543,7 +574,7 @@ impl CountertermCache {
         let resolve_stage = StageSpan::new("gamma.delta.cache_resolve");
         let result = timing.resolve(&entry, |timing| {
             self.misses.fetch_add(1, Ordering::Relaxed);
-            let result = self.compute(graph, support, model, vakint, settings);
+            let result = compute();
             timing.lap(CacheTimingPhase::Initializer);
             let _stage = StageSpan::new("gamma.delta.cache_store");
             let result = result
