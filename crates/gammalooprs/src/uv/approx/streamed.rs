@@ -56,9 +56,15 @@ thread_local! {
 /// tests that compare results rather than the streamed maps themselves.
 #[cfg(test)]
 pub(crate) fn with_production_piece_limit<T>(f: impl FnOnce() -> T) -> T {
-    let previous = TEST_PIECE_LIMIT.with(|limit| limit.replace(Some(*PIECE_LIMIT)));
+    with_piece_limit(*PIECE_LIMIT, f)
+}
+
+/// Tests only: run `f` on this thread with the given piece limit.
+#[cfg(test)]
+pub(crate) fn with_piece_limit<T>(limit: usize, f: impl FnOnce() -> T) -> T {
+    let previous = TEST_PIECE_LIMIT.with(|cell| cell.replace(Some(limit)));
     let result = f();
-    TEST_PIECE_LIMIT.with(|limit| limit.set(previous));
+    TEST_PIECE_LIMIT.with(|cell| cell.set(previous));
     result
 }
 

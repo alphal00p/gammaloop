@@ -47,7 +47,7 @@ use crate::{
     utils::{GS, W_},
     uv::{
         ApproximationType, RenormalizationPrescriptionSettings, UVgenerationSettings,
-        approx::streamed::with_production_piece_limit,
+        approx::streamed::{with_piece_limit, with_production_piece_limit},
         settings::VakintSettings as GammaVakintSettings, uv_graph::UVE,
     },
 };
@@ -505,7 +505,12 @@ fn edges(graph: &Graph, selected: &[usize]) -> SuBitGraph {
 #[test]
 #[ignore = "computes a four-loop UV child of a five-loop diagram twice (minutes)"]
 fn four_loop_quark_self_energy_of_41295_is_independent_of_the_marked_line() -> Result<()> {
-    with_production_piece_limit(four_loop_quark_self_energy_of_41295_body)
+    // Its outer Taylor polynomial exceeds the production piece limit: the
+    // streamed simplification of an open Dirac chain is a different spelling
+    // than the whole map's, which the test-only `report_check` rejects. Use
+    // whole maps here; the streamed path is checked end to end by the zb of
+    // diagram 41295 (IMPLEMENTATION.md).
+    with_piece_limit(usize::MAX, four_loop_quark_self_energy_of_41295_body)
 }
 
 fn four_loop_quark_self_energy_of_41295_body() -> Result<()> {
