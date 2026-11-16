@@ -201,6 +201,24 @@ pub(crate) fn settings_gate(settings: &VakintSettings) -> std::result::Result<()
     }
 }
 
+/// Remainders with at least this many loops are large when they decline
+/// before their numerator is contracted (DESIGN Addendum C): the summand
+/// count of `P` is not known yet there, and today's path would contract the
+/// whole remainder (1237: about 40 GB).
+pub(crate) const LARGE_PRE_CONTRACTION_LOOPS: usize = 6;
+
+/// Whether a decline must not fall back to today's path (DESIGN 10c and
+/// Addendum C): after the contraction, more summands of `P` than the limit;
+/// before it, a remainder of at least [`LARGE_PRE_CONTRACTION_LOOPS`] loops,
+/// or any remainder of a census dump (`PINT6_CLOSURE_DUMP`).
+pub(super) fn large_decline(stats: &BoundaryStats, loops: usize) -> bool {
+    if stats.contracted {
+        stats.p_summands > fallback_max_summands()
+    } else {
+        loops >= LARGE_PRE_CONTRACTION_LOOPS || super::pint6_dump::settings().is_some()
+    }
+}
+
 /// `VAKINT_P_BOUNDARY_BLOCKS`: `reuse` (default) or `off`.
 pub(crate) fn vakint_boundary_blocks() -> &'static str {
     match std::env::var("VAKINT_P_BOUNDARY_BLOCKS").as_deref() {
@@ -1032,9 +1050,10 @@ impl Grammar {
     }
 
     /// The graded map of one summand of `P`, with the notation retry: the
-    /// summand's indexed factors through today's dot-notation pass (cook,
-    /// infer, `to_dots`, uncook; once per distinct product of indexed
-    /// factors), then graded again.
+    /// summand's indexed factors through the R* remainder contraction
+    /// ([`retry_contraction`]: cook, infer, `simplify_algebra`, `to_dots`,
+    /// uncook; once per distinct product of indexed factors), then graded
+    /// again.
     pub(super) fn grade_summand(
         &mut self,
         summand: AtomView<'_>,
