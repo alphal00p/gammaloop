@@ -3647,6 +3647,34 @@ fn render_integral_result(
 
 #[cfg(test)]
 mod tests {
+
+    /// `orientation_descriptions_use_colored_signs` switches `colored`'s
+    /// process-wide override on for a moment, which would put ANSI codes into
+    /// the plain-text renderings of tests running in parallel. That test holds
+    /// this lock exclusively; every other test of this module holds it shared.
+    static COLOURED_OUTPUT: std::sync::RwLock<()> = std::sync::RwLock::new(());
+
+    fn plain_output() -> std::sync::RwLockReadGuard<'static, ()> {
+        COLOURED_OUTPUT.read().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// Exclusive access with the colour override on; switches it off again on
+    /// drop (as the test did before), also when the test panics.
+    struct ColouredOutput(#[allow(dead_code)] std::sync::RwLockWriteGuard<'static, ()>);
+
+    impl ColouredOutput {
+        fn new() -> Self {
+            let guard = COLOURED_OUTPUT.write().unwrap_or_else(|poisoned| poisoned.into_inner());
+            control::set_override(true);
+            Self(guard)
+        }
+    }
+
+    impl Drop for ColouredOutput {
+        fn drop(&mut self) {
+            control::set_override(false);
+        }
+    }
     use super::*;
     use crate::{UnitVolumeIntegrand, UnitVolumeSettings};
     use colored::control;
@@ -3999,6 +4027,7 @@ mod tests {
 
     #[test]
     fn correlated_core_iteration_state_populates_slot_statistics() {
+        let _plain = plain_output();
         let settings_a = RuntimeSettings::default();
         let settings_b = RuntimeSettings::default();
         let integrand_a = Integrand::UnitVolume(UnitVolumeIntegrand::new(
@@ -4076,6 +4105,7 @@ mod tests {
 
     #[test]
     fn max_weight_details_table_renders_titled_table_without_wrapping_parentheses() {
+        let _plain = plain_output();
         let mut accumulator = ComplexAccumulator::new();
         accumulator.re.max_eval_positive = F(2.3840672847728);
         accumulator.re.max_eval_positive_xs = Some(Sample::Discrete(
@@ -4152,6 +4182,7 @@ mod tests {
 
     #[test]
     fn iteration_status_block_uses_compact_header_and_optional_statistics() {
+        let _plain = plain_output();
         let state = make_integration_state();
         let view_options = IntegrationStatusViewOptions {
             show_statistics: false,
@@ -4201,6 +4232,7 @@ mod tests {
 
     #[test]
     fn iteration_status_block_omits_delta_columns_when_no_target_is_provided() {
+        let _plain = plain_output();
         let state = make_integration_state();
         let view_options = IntegrationStatusViewOptions {
             show_statistics: true,
@@ -4232,6 +4264,7 @@ mod tests {
 
     #[test]
     fn tabled_statistics_panel_uses_global_scope_label() {
+        let _plain = plain_output();
         let state = make_integration_state();
         let view_options = IntegrationStatusViewOptions {
             show_statistics: true,
@@ -4263,6 +4296,7 @@ mod tests {
 
     #[test]
     fn live_iteration_status_block_uses_progress_header() {
+        let _plain = plain_output();
         let mut state = make_integration_state();
         state.iter = 2;
         state.num_points = 125_000;
@@ -4306,6 +4340,7 @@ mod tests {
 
     #[test]
     fn iteration_status_block_shows_discrete_contributions_and_discrete_max_weights() {
+        let _plain = plain_output();
         let state = make_discrete_integration_state();
         let view_options = IntegrationStatusViewOptions {
             show_statistics: false,
@@ -4354,6 +4389,7 @@ mod tests {
 
     #[test]
     fn grouped_graph_descriptions_include_all_group_members() {
+        let _plain = plain_output();
         let description =
             graph_group_description(["GL0".to_string(), "GL1".to_string(), "GL2".to_string()]);
 
@@ -4362,6 +4398,7 @@ mod tests {
 
     #[test]
     fn explicit_single_graph_subset_monitors_the_root_graph_axis() {
+        let _plain = plain_output();
         let grid = Grid::Discrete(
             DiscreteGrid::new(
                 vec![Some(Grid::Continuous(
@@ -4383,6 +4420,7 @@ mod tests {
 
     #[test]
     fn tabled_single_graph_subset_keeps_the_graph_row() {
+        let _plain = plain_output();
         let state = make_single_graph_discrete_integration_state();
         let view_options = IntegrationStatusViewOptions {
             show_statistics: false,
@@ -4405,6 +4443,7 @@ mod tests {
 
     #[test]
     fn iteration_status_block_hides_spanned_metadata_header_separators() {
+        let _plain = plain_output();
         let state = make_discrete_integration_state();
         let view_options = IntegrationStatusViewOptions {
             show_statistics: false,
@@ -4448,6 +4487,7 @@ mod tests {
 
     #[test]
     fn integration_result_always_contains_first_non_trivial_discrete_breakdown() {
+        let _plain = plain_output();
         let state = make_discrete_integration_state();
         let result =
             build_integration_result(&state, &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None]);
@@ -4476,6 +4516,7 @@ mod tests {
 
     #[test]
     fn orientation_descriptions_use_colored_signs() {
+        let _coloured = ColouredOutput::new();
         let mut state = make_discrete_integration_state();
         state.first_non_trivial_discrete_label = Some("orientation".to_string());
         state.first_non_trivial_discrete_bin_descriptions =
@@ -4487,7 +4528,6 @@ mod tests {
             }
         }
 
-        control::set_override(true);
         let expected_plus = "+".green().bold().to_string();
         let expected_minus = "-".red().bold().to_string();
 
@@ -4519,7 +4559,6 @@ mod tests {
             ),
             &tabled_options_for_view(&view_options),
         );
-        control::set_override(false);
 
         assert!(ansi.contains(&expected_plus), "{ansi}");
         assert!(ansi.contains(&expected_minus), "{ansi}");
@@ -4528,6 +4567,7 @@ mod tests {
 
     #[test]
     fn mismatched_bin_descriptions_fall_back_to_indices_with_warning() {
+        let _plain = plain_output();
         let (descriptions, warning) = coalesce_first_non_trivial_discrete_bin_descriptions(
             "graph",
             &[
@@ -4551,6 +4591,7 @@ mod tests {
 
     #[test]
     fn format_max_eval_sample_keeps_full_discrete_coordinates() {
+        let _plain = plain_output();
         let axis_labels = vec!["graph".to_string(), "LMB channel".to_string()];
         let full_sample = Sample::Discrete(
             F(1.0),
@@ -4579,6 +4620,7 @@ mod tests {
 
     #[test]
     fn format_max_eval_sample_wraps_long_coordinate_lists() {
+        let _plain = plain_output();
         let axis_labels = vec!["graph".to_string(), "orientation".to_string()];
         let sample = Sample::Discrete(
             F(1.0),
@@ -4609,6 +4651,7 @@ mod tests {
 
     #[test]
     fn discrete_bin_prefixes_use_fixed_width_within_each_range() {
+        let _plain = plain_output();
         assert_eq!(status_update::format_discrete_bin_prefix(2, 99), "#2: ");
         assert_eq!(status_update::format_discrete_bin_prefix(12, 99), "#12:");
         assert_eq!(status_update::format_discrete_bin_prefix(2, 999), "#2:  ");
@@ -4626,6 +4669,7 @@ mod tests {
 
     #[test]
     fn final_summary_omits_discrete_max_weight_block_when_disabled() {
+        let _plain = plain_output();
         let state = make_discrete_integration_state();
         let rendered = render_saved_integration_summary(
             &state,
@@ -4655,6 +4699,7 @@ mod tests {
 
     #[test]
     fn results_output_summary_renders_tabled_workspace_rows() {
+        let _plain = plain_output();
         let workspace = Path::new("/tmp/gl_workspace");
         let rendered = render_results_output_summary_table(Some(workspace), &[], &[])
             .expect("workspace summary should render");
@@ -4676,6 +4721,7 @@ mod tests {
 
     #[test]
     fn results_output_summary_skips_missing_observable_outputs() {
+        let _plain = plain_output();
         let settings = RuntimeSettings::default();
         let slot = IntegrationSlot::new(
             SlotMeta {
@@ -4703,6 +4749,7 @@ mod tests {
 
     #[test]
     fn results_output_summary_lists_all_emitted_observable_files() {
+        let _plain = plain_output();
         let base = std::env::temp_dir().join(format!(
             "gammaloop_results_output_summary_{}",
             std::process::id()
@@ -4750,6 +4797,7 @@ mod tests {
 
     #[test]
     fn ratatui_overview_shows_eta_and_all_slot_metrics() {
+        let _plain = plain_output();
         let state = make_integration_state();
         let view_options = IntegrationStatusViewOptions {
             show_statistics: true,
@@ -4807,6 +4855,7 @@ mod tests {
 
     #[test]
     fn live_status_updates_use_current_batch_statistics_in_bottom_panels() {
+        let _plain = plain_output();
         let state = make_integration_state();
         let slots = make_preview_test_slots(&state.slot_metas);
         let core_state = make_preview_test_core_state(&state);
@@ -4950,6 +4999,7 @@ mod tests {
 
     #[test]
     fn ratatui_statistics_panels_can_toggle_to_focused_slot_scope() {
+        let _plain = plain_output();
         let state = make_integration_state();
         let view_options = IntegrationStatusViewOptions {
             show_statistics: true,
@@ -4993,6 +5043,7 @@ mod tests {
 
     #[test]
     fn slot_scoped_statistics_rows_hide_shared_integrator_overhead() {
+        let _plain = plain_output();
         let state = make_integration_state();
         let update = build_status_update(
             StatusUpdateBuildRequest::new(
@@ -5023,6 +5074,7 @@ mod tests {
 
     #[test]
     fn ratatui_overview_chart_phase_toggle_updates_convergence_label() {
+        let _plain = plain_output();
         let state = make_integration_state();
         let view_options = IntegrationStatusViewOptions {
             show_statistics: false,
@@ -5059,6 +5111,7 @@ mod tests {
 
     #[test]
     fn ratatui_integrand_targets_are_trimmed_for_display() {
+        let _plain = plain_output();
         let state = make_integration_state();
         let view_options = IntegrationStatusViewOptions {
             show_statistics: false,
@@ -5102,6 +5155,7 @@ mod tests {
 
     #[test]
     fn ratatui_overview_shows_eta_to_target_when_configured() {
+        let _plain = plain_output();
         let state = make_integration_state();
         let view_options = IntegrationStatusViewOptions {
             target_relative_accuracy: Some(0.05),
@@ -5137,6 +5191,7 @@ mod tests {
 
     #[test]
     fn eta_to_target_specification_formats_relative_and_absolute_targets() {
+        let _plain = plain_output();
         let state = make_integration_state();
         let relative_view_options = IntegrationStatusViewOptions {
             target_relative_accuracy: Some(0.05),
@@ -5258,6 +5313,7 @@ mod tests {
 
     #[test]
     fn target_accuracy_status_uses_either_absolute_or_relative_condition() {
+        let _plain = plain_output();
         let state = make_integration_state();
 
         let reached_by_absolute = status_update::evaluate_target_accuracy(
@@ -5285,6 +5341,7 @@ mod tests {
 
     #[test]
     fn target_accuracy_status_requires_all_slots_to_reach_relative_target() {
+        let _plain = plain_output();
         let mut state = make_integration_state();
         state.all_integrals[0].re.avg = F(1.0);
         state.all_integrals[0].re.err = F(1.0e-5);
@@ -5308,6 +5365,7 @@ mod tests {
 
     #[test]
     fn target_accuracy_status_requires_all_displayed_components_to_reach_target() {
+        let _plain = plain_output();
         let mut state = make_integration_state();
         state.all_integrals[0].re.avg = F(1.0);
         state.all_integrals[0].re.err = F(1.0e-5);
@@ -5331,6 +5389,7 @@ mod tests {
 
     #[test]
     fn target_accuracy_status_reports_infinite_eta_for_unreachable_absolute_target() {
+        let _plain = plain_output();
         let state = make_integration_state();
         let status = status_update::evaluate_target_accuracy(
             &state,
@@ -5348,6 +5407,7 @@ mod tests {
 
     #[test]
     fn target_accuracy_status_prefers_finite_relative_eta_over_infinite_absolute_eta() {
+        let _plain = plain_output();
         let state = make_integration_state();
         let status = status_update::evaluate_target_accuracy(
             &state,
@@ -5366,6 +5426,7 @@ mod tests {
 
     #[test]
     fn ratatui_overview_displays_infinite_eta_to_target() {
+        let _plain = plain_output();
         let state = make_integration_state();
         let view_options = IntegrationStatusViewOptions {
             target_absolute_accuracy: Some(1.0e-99),
@@ -5401,6 +5462,7 @@ mod tests {
 
     #[test]
     fn ratatui_overview_prefers_finite_relative_eta_over_infinite_absolute_eta() {
+        let _plain = plain_output();
         let state = make_integration_state();
         let view_options = IntegrationStatusViewOptions {
             target_relative_accuracy: Some(1.0e-3),
@@ -5437,6 +5499,7 @@ mod tests {
 
     #[test]
     fn ratatui_recent_history_window_tracks_current_iteration_points() {
+        let _plain = plain_output();
         let mut dashboard = RatatuiDashboardState::new();
         let mut state = make_integration_state();
         let view_options = IntegrationStatusViewOptions {
@@ -5522,6 +5585,7 @@ mod tests {
 
     #[test]
     fn ratatui_full_history_preserves_origin_after_compaction() {
+        let _plain = plain_output();
         let mut dashboard = RatatuiDashboardState::new();
         let mut state = make_integration_state();
         let view_options = IntegrationStatusViewOptions {
@@ -5566,6 +5630,7 @@ mod tests {
 
     #[test]
     fn ratatui_convergence_title_shows_active_y_span() {
+        let _plain = plain_output();
         let state = make_integration_state();
         let view_options = IntegrationStatusViewOptions {
             show_statistics: false,
@@ -5599,6 +5664,7 @@ mod tests {
 
     #[test]
     fn ratatui_discrete_tab_renders_selected_bin_detail() {
+        let _plain = plain_output();
         let state = make_discrete_integration_state();
         let view_options = IntegrationStatusViewOptions {
             show_statistics: false,
@@ -5641,6 +5707,7 @@ mod tests {
 
     #[test]
     fn ratatui_single_graph_subset_keeps_the_graph_row() {
+        let _plain = plain_output();
         let state = make_single_graph_discrete_integration_state();
         let view_options = IntegrationStatusViewOptions {
             show_statistics: false,
@@ -5667,6 +5734,7 @@ mod tests {
 
     #[test]
     fn ratatui_max_weight_tab_preserves_full_scientific_exponent() {
+        let _plain = plain_output();
         let mut state = make_discrete_integration_state();
         let max_eval = 3.8477312059601813_f64;
         let expected = format!("{:+.16e}", max_eval);
