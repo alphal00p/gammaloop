@@ -136,12 +136,54 @@ impl CountertermIdentity {
         Self::build(graph, support, model, true, true)
     }
 
+    /// `GAMMALOOP_IR_HARD`: the identity of an R* IR hard component. The marked
+    /// line carries the reference mass, and each edge in `decorated` (the
+    /// contracted spinney of a preparation term) is coloured as well, so the
+    /// certificate separates the marked position and the preparation term.
+    pub(crate) fn for_rstar_hard(
+        graph: &Graph,
+        support: &SuBitGraph,
+        model: &Model,
+        marked: Option<linnet::half_edge::involution::EdgeIndex>,
+        decorated: &BTreeSet<usize>,
+    ) -> Result<Self> {
+        Self::build_decorated(graph, support, model, false, false, marked, decorated)
+    }
+
+    /// A 64-bit digest of the key, stable within one process.
+    pub(crate) fn key_digest(&self) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        self.key.hash(&mut hasher);
+        hasher.finish()
+    }
+
     fn build(
         graph: &Graph,
         support: &SuBitGraph,
         model: &Model,
         bare_skeleton: bool,
         fixed_boundary: bool,
+    ) -> Result<Self> {
+        Self::build_decorated(
+            graph,
+            support,
+            model,
+            bare_skeleton,
+            fixed_boundary,
+            None,
+            &BTreeSet::new(),
+        )
+    }
+
+    fn build_decorated(
+        graph: &Graph,
+        support: &SuBitGraph,
+        model: &Model,
+        bare_skeleton: bool,
+        fixed_boundary: bool,
+        marked: Option<linnet::half_edge::involution::EdgeIndex>,
+        decorated: &BTreeSet<usize>,
     ) -> Result<Self> {
         ensure!(
             graph.is_connected(support),
@@ -239,7 +281,14 @@ impl CountertermIdentity {
                 mass: if is_boundary {
                     Atom::Zero
                 } else {
-                    data.data.mass_atom(model)
+                    let mut mass = data.data.mass_atom(model);
+                    if marked == Some(edge) {
+                        mass = mass + Atom::var(symbol!("ir_hard_identity_marked"));
+                    }
+                    if decorated.contains(&edge_id) {
+                        mass = mass + Atom::var(symbol!("ir_hard_identity_contracted"));
+                    }
+                    mass
                 },
                 power: if is_boundary {
                     0

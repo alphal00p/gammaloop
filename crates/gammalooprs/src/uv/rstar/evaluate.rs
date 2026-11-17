@@ -34,6 +34,23 @@ use super::{
     physical::PreparedPhysicalUvTerm,
 };
 
+/// `GAMMALOOP_IR_HARD_KEYS` (any value): log the canonical identities of the
+/// IR hard components (`IR_HARD`, `IR_HARD_PLAN`) and their costs
+/// (`IR_HARD_COST`). Diagnostics only.
+fn ir_hard_keys() -> bool {
+    static KEYS: std::sync::LazyLock<bool> =
+        std::sync::LazyLock::new(|| std::env::var_os("GAMMALOOP_IR_HARD_KEYS").is_some());
+    *KEYS
+}
+
+/// `GAMMALOOP_IR_HARD_DRYRUN` (any value): plan only. Every R* counterterm is
+/// returned as zero after its `IR_HARD` lines; results are meaningless.
+fn ir_hard_dryrun() -> bool {
+    static DRY: std::sync::LazyLock<bool> =
+        std::sync::LazyLock::new(|| std::env::var_os("GAMMALOOP_IR_HARD_DRYRUN").is_some());
+    *DRY
+}
+
 impl RStarPlan {
     /// Complete every original proper-UV child and prepare its physical
     /// quotient without reducing or integrating the remaining loop tensors.
@@ -773,6 +790,13 @@ impl<'a> Evaluation<'a> {
             return Ok(Atom::Zero);
         }
         let mut prepared = Atom::Zero;
+        if ir_hard_keys() {
+            self.log_ir_hard_keys();
+        }
+        if ir_hard_dryrun() {
+            self.log_timing();
+            return Ok(Atom::Zero);
+        }
         for term in &self.plan.ordinary_uv {
             if term
                 .remainder
@@ -782,8 +806,8 @@ impl<'a> Evaluation<'a> {
             }
             prepared += self.integrate_ordinary(term)?;
         }
-        for correction in &self.plan.ir {
-            for term in &correction.preparation {
+        for (correction_index, correction) in self.plan.ir.iter().enumerate() {
+            for (term_index, term) in correction.preparation.iter().enumerate() {
                 if term
                     .remainder
                     .is_scaleless(self.graph, self.plan.marked_edge)
@@ -793,18 +817,105 @@ impl<'a> Evaluation<'a> {
                 // The hard part feeds quotient counterterms (a `K` each): it
                 // keeps its open root slots, closed after the quotient below.
                 let hard = self.open_remainder(term)?;
-                let polynomial = hard
-                    .taylor(usize::try_from(correction.taylor_order)?)
-                    .wrap_err("while Taylor-expanding the prepared hard component")?;
-                let covariant = hard.project_hard(&polynomial)?;
-                let moments = hard_moments(&covariant, hard.soft_edges()).wrap_err_with(|| {
-                    format!(
-                        "while separating hard moments: hard={}, remaining={}, soft={:?}, covariant={covariant}",
-                        correction.hard.string_label(),
-                        term.remainder.remaining.string_label(),
-                        hard.soft_edges(),
+                let order = usize::try_from(correction.taylor_order)?;
+                // GAMMALOOP_IR_HARD=closed|check (prototype, default off).
+                let mode = super::closed::closed_mode();
+                let mut closed_stats = super::closed::ClosedStats::default();
+                let closed_started = Instant::now();
+                let closed = if mode == super::closed::ClosedMode::Off {
+                    None
+                } else {
+                    Some(
+                        hard.closed_moments(order, &mut closed_stats)
+                            .wrap_err("while computing closed hard moments")?,
                     )
-                })?;
+                };
+                let closed_seconds = closed_started.elapsed().as_secs_f64();
+                let use_closed =
+                    mode == super::closed::ClosedMode::On && matches!(closed, Some(Ok(_)));
+                let (mut taylor_seconds, mut taylor_bytes, mut project_seconds, mut project_bytes) =
+                    (0.0, 0, 0.0, 0);
+                let today = if use_closed {
+                    None
+                } else {
+                    let cost_started = Instant::now();
+                    let polynomial = hard
+                        .taylor(order)
+                        .wrap_err("while Taylor-expanding the prepared hard component")?;
+                    taylor_seconds = cost_started.elapsed().as_secs_f64();
+                    taylor_bytes = polynomial.as_view().get_byte_size();
+                    let project_started = Instant::now();
+                    let covariant = hard.project_hard(&polynomial)?;
+                    drop(polynomial);
+                    project_seconds = project_started.elapsed().as_secs_f64();
+                    project_bytes = covariant.as_view().get_byte_size();
+                    Some(hard_moments(&covariant, hard.soft_edges()).wrap_err_with(|| {
+                        format!(
+                            "while separating hard moments: hard={}, remaining={}, soft={:?}, covariant={covariant}",
+                            correction.hard.string_label(),
+                            term.remainder.remaining.string_label(),
+                            hard.soft_edges(),
+                        )
+                    })?)
+                };
+                if let Some(closed) = &closed {
+                    let (outcome, check) = match (closed, &today) {
+                        (Err(reason), _) => (format!("declined:{reason}"), String::new()),
+                        (Ok(_), None) => ("closed".to_owned(), String::new()),
+                        (Ok(moments), Some(reference)) => {
+                            let point = |rows: &[(Atom, Atom)]| {
+                                rows.iter()
+                                    .fold(Atom::Zero, |sum, (coefficient, insertion)| {
+                                        sum + super::closed::random_point(coefficient)
+                                            * super::closed::random_point(insertion)
+                                    })
+                            };
+                            let mut ours = moments
+                                .iter()
+                                .map(|(_, i)| i.to_canonical_string())
+                                .collect::<Vec<_>>();
+                            let mut theirs = reference
+                                .iter()
+                                .map(|(_, i)| i.to_canonical_string())
+                                .collect::<Vec<_>>();
+                            ours.sort();
+                            theirs.sort();
+                            let equal = (point(moments) - point(reference)).is_zero();
+                            (
+                                "checked".to_owned(),
+                                format!(
+                                    " equal={equal} insertions_same={} ours={} today={}",
+                                    ours == theirs,
+                                    ours.len(),
+                                    theirs.len()
+                                ),
+                            )
+                        }
+                    };
+                    eprintln!(
+                        "IR_CLOSED graph={} corr={correction_index} term={term_index} hard_loops={} rem_loops={} order={order} outcome={outcome}{check} slots={} sectors={} odd={} closures={} seconds={closed_seconds:.3} taylor_s={:.3} polarize_s={:.3} close_s={:.3} taylor_bytes={} closed_bytes={} today_taylor_s={taylor_seconds:.3} today_project_s={project_seconds:.3} today_taylor_bytes={taylor_bytes} today_project_bytes={project_bytes}",
+                        self.graph.name,
+                        self.graph.n_loops(&correction.hard),
+                        term.remainder.loops,
+                        closed_stats.slots,
+                        closed_stats.sectors,
+                        closed_stats.odd_sectors,
+                        closed_stats.closures,
+                        closed_stats.taylor_seconds,
+                        closed_stats.polarize_seconds,
+                        closed_stats.close_seconds,
+                        closed_stats.taylor_bytes,
+                        closed_stats.closed_bytes,
+                    );
+                }
+                let moments = match (today, closed) {
+                    (Some(today), _) => today,
+                    (None, Some(Ok(closed))) => closed,
+                    _ => unreachable!("the closed path runs only when it succeeded"),
+                };
+                let downstream_started = Instant::now();
+                let quotient_before = self.quotient_elapsed;
+                let integration_before = self.integration_elapsed;
                 for forest in &correction.forest {
                     let mut expression = Atom::Zero;
                     for (coefficient, insertion) in &moments {
@@ -817,11 +928,131 @@ impl<'a> Evaluation<'a> {
                         prepared += self.integrate(&hard, &expression)?;
                     }
                 }
+                if ir_hard_keys() {
+                    eprintln!(
+                        "IR_HARD_COST graph={} corr={correction_index} term={term_index} rem_loops={} taylor_s={taylor_seconds:.3} taylor_bytes={taylor_bytes} project_s={project_seconds:.3} project_bytes={project_bytes} moments={} quotient_s={:.3} integrate_s={:.3} downstream_s={:.3}",
+                        self.graph.name,
+                        term.remainder.loops,
+                        moments.len(),
+                        (self.quotient_elapsed - quotient_before).as_secs_f64(),
+                        (self.integration_elapsed - integration_before).as_secs_f64(),
+                        downstream_started.elapsed().as_secs_f64(),
+                    );
+                }
             }
         }
         let result = -self.poles(&prepared)?;
         self.log_timing();
         Ok(result)
+    }
+
+    /// `GAMMALOOP_IR_HARD_KEYS`: one `IR_HARD` line per IR preparation term of
+    /// this evaluation, with the canonical identity of its hard component
+    /// (marked line coloured; `key_nomark` without it) and of the term (the
+    /// contracted spinney coloured as well). Plan-only: no Taylor operation.
+    fn log_ir_hard_keys(&self) {
+        let scope = if self.plan.root_boundary.is_some() {
+            "child"
+        } else {
+            "root"
+        };
+        let support_loops = self.graph.n_loops(&self.plan.support);
+        let empty = std::collections::BTreeSet::new();
+        let digest = |support: &SuBitGraph,
+                      marked: Option<EdgeIndex>,
+                      decorated: &std::collections::BTreeSet<usize>| {
+            crate::uv::counterterm_identity::CountertermIdentity::for_rstar_hard(
+                self.graph, support, self.model, marked, decorated,
+            )
+            .map(|identity| format!("{:016x}", identity.key_digest()))
+            .unwrap_or_else(|error| format!("err:{}", format!("{error}").replace(' ', "_")))
+        };
+        let support_key = digest(&self.plan.support, Some(self.plan.marked_edge), &empty);
+        eprintln!(
+            "IR_HARD_PLAN graph={} scope={scope} support_loops={support_loops} support_key={support_key} marked={} ordinary={} ordinary_live={} corrections={} taylor_order={}",
+            self.graph.name,
+            usize::from(self.plan.marked_edge),
+            self.plan.ordinary_uv.len(),
+            self.plan
+                .ordinary_uv
+                .iter()
+                .filter(|term| !term
+                    .remainder
+                    .is_scaleless(self.graph, self.plan.marked_edge))
+                .count(),
+            self.plan.ir.len(),
+            self.plan.taylor_order,
+        );
+        for (correction_index, correction) in self.plan.ir.iter().enumerate() {
+            let boundary = self.graph.dummy_less_full_crown(&correction.hard);
+            let mut legs = Vec::new();
+            let mut external_legs = 0;
+            for (pair, edge, data) in self.graph.iter_edges_of(&boundary) {
+                if !pair.is_paired() {
+                    external_legs += 1;
+                }
+                legs.push(format!(
+                    "{}:{}",
+                    usize::from(edge),
+                    data.data
+                        .particle()
+                        .map(|particle| particle.index() as i64)
+                        .unwrap_or(-1)
+                ));
+            }
+            let key = digest(&correction.hard, Some(self.plan.marked_edge), &empty);
+            let key_nomark = digest(&correction.hard, None, &empty);
+            let live = correction
+                .preparation
+                .iter()
+                .filter(|term| {
+                    !term
+                        .remainder
+                        .is_scaleless(self.graph, self.plan.marked_edge)
+                })
+                .count();
+            for (term_index, term) in correction.preparation.iter().enumerate() {
+                let scaleless = term
+                    .remainder
+                    .is_scaleless(self.graph, self.plan.marked_edge);
+                let contracted = term
+                    .remainder
+                    .insertions
+                    .iter()
+                    .flat_map(|slot| {
+                        self.graph
+                            .iter_edges_of(&slot.support)
+                            .filter(|(pair, _, _)| pair.is_paired())
+                            .map(|(_, edge, _)| usize::from(edge))
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<std::collections::BTreeSet<_>>();
+                let term_key = if scaleless {
+                    "-".to_owned()
+                } else {
+                    digest(&correction.hard, Some(self.plan.marked_edge), &contracted)
+                };
+                eprintln!(
+                    "IR_HARD graph={} scope={scope} support_loops={support_loops} marked={} corr={correction_index} hard={} hard_loops={} order={} legs={} ext_legs={external_legs} leg_particles={} key={key} key_nomark={key_nomark} terms={} live={live} forests={} forest_steps={} term={term_index} rem_loops={} children={} scaleless={scaleless} term_key={term_key}",
+                    self.graph.name,
+                    usize::from(self.plan.marked_edge),
+                    correction.hard.string_label(),
+                    self.graph.n_loops(&correction.hard),
+                    correction.taylor_order,
+                    legs.len(),
+                    legs.join(","),
+                    correction.preparation.len(),
+                    correction.forest.len(),
+                    correction
+                        .forest
+                        .iter()
+                        .map(|forest| forest.steps.len())
+                        .sum::<usize>(),
+                    term.remainder.loops,
+                    term.counterterms.len(),
+                );
+            }
+        }
     }
 
     /// The remainder-boundary summary of this evaluation, when the mode is

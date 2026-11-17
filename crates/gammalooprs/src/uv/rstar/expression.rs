@@ -1315,6 +1315,26 @@ impl RStarIntegrand {
         Ok(result)
     }
 
+    /// `GAMMALOOP_IR_HARD=closed`: the `(coefficient, insertion)` moments of
+    /// this hard component at Taylor order `degree` through polarized metric
+    /// closures ([`super::closed`]), or a decline reason (today's path then).
+    pub(super) fn closed_moments(
+        &self,
+        degree: usize,
+        stats: &mut super::closed::ClosedStats,
+    ) -> Result<std::result::Result<Vec<(Atom, Atom)>, String>> {
+        if !self.combination_ids().is_empty() {
+            return Ok(Err("kept_edges".into()));
+        }
+        super::closed::closed_moments(
+            &self.routed,
+            &self.soft_edges,
+            degree,
+            &|expression| Self::simplify_hard_taylor(expression),
+            stats,
+        )
+    }
+
     /// Put the bare hard term and its local counterterms in the same covariant
     /// basis before a quotient's pole projection. Hard scalar integrals remain
     /// unevaluated, including the dimension-dependent projector coefficients.

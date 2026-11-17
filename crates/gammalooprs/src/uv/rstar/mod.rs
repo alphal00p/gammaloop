@@ -12,6 +12,7 @@ mod boundary;
 mod boundary_tests;
 #[cfg(test)]
 mod cache_tests;
+mod closed;
 #[cfg(test)]
 mod closed_skip_tests;
 mod edge_experiment;
