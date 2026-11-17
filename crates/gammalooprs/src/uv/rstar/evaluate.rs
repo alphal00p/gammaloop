@@ -893,7 +893,7 @@ impl<'a> Evaluation<'a> {
                         }
                     };
                     eprintln!(
-                        "IR_CLOSED graph={} corr={correction_index} term={term_index} hard_loops={} rem_loops={} order={order} outcome={outcome}{check} slots={} sectors={} odd={} closures={} seconds={closed_seconds:.3} taylor_s={:.3} polarize_s={:.3} close_s={:.3} taylor_bytes={} closed_bytes={} today_taylor_s={taylor_seconds:.3} today_project_s={project_seconds:.3} today_taylor_bytes={taylor_bytes} today_project_bytes={project_bytes}",
+                        "IR_CLOSED graph={} corr={correction_index} term={term_index} hard_loops={} rem_loops={} order={order} outcome={outcome}{check} slots={} sectors={} odd={} closures={} seconds={closed_seconds:.3} taylor_s={:.3} polarize_s={:.3} close_s={:.3} taylor_bytes={} closed_bytes={} certified={} uncertified={} dropped_zero={} today_taylor_s={taylor_seconds:.3} today_project_s={project_seconds:.3} today_taylor_bytes={taylor_bytes} today_project_bytes={project_bytes}",
                         self.graph.name,
                         self.graph.n_loops(&correction.hard),
                         term.remainder.loops,
@@ -906,6 +906,9 @@ impl<'a> Evaluation<'a> {
                         closed_stats.close_seconds,
                         closed_stats.taylor_bytes,
                         closed_stats.closed_bytes,
+                        closed_stats.certified,
+                        closed_stats.uncertified,
+                        closed_stats.dropped_zero,
                     );
                 }
                 let moments = match (today, closed) {
