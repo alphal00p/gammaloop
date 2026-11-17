@@ -1682,8 +1682,8 @@ impl<'a> Evaluation<'a> {
     }
 
     /// `GAMMALOOP_UV_STREAM=on|auto`: integrate the remainder's edge-basis
-    /// contraction piece by piece ([`RStarIntegrand::stream_contracted`]),
-    /// adding up only the integrated pieces; all pieces share one integration
+    /// contraction batch by batch ([`RStarIntegrand::stream_contracted`]),
+    /// adding up only the integrated batches; all batches share one integration
     /// id (it labels the restored dummy indices of [`RStarIntegrand::integrate`]).
     /// `None` when the stream does not apply; the caller takes the whole path.
     fn integrate_streamed(&mut self, remainder: &RStarIntegrand) -> Result<Option<Atom>> {
