@@ -144,8 +144,7 @@ fn series_orders(view: AtomView<'_>, parameter: Symbol, degree: usize) -> (Vec<f
                 .and_then(|power| usize::try_from(power).ok())
                 .filter(|power| *power <= degree);
             if let Some(index) = index {
-                counts[index] =
-                    super::streamed::expansion_estimate(coefficient.as_view()).0;
+                counts[index] = super::streamed::expansion_estimate(coefficient.as_view()).0;
                 coefficients[index] = coefficient.clone();
             }
         }
@@ -201,8 +200,9 @@ pub(crate) fn taylor_shape(
             AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
             other => vec![*other],
         };
-        let (dens, rest): (Vec<_>, Vec<_>) =
-            factors.into_iter().partition(|factor| is_denominator(*factor));
+        let (dens, rest): (Vec<_>, Vec<_>) = factors
+            .into_iter()
+            .partition(|factor| is_denominator(*factor));
         d_factors = d_factors.max(dens.len());
         mixed_factors += rest
             .iter()
@@ -278,12 +278,14 @@ pub(crate) fn taylor_shape(
         p_summands = summands.len();
         p_bytes = compensated.get_byte_size();
         if distinct_d.len() != 1 {
-            d_orders = distinct_d.values().fold(vec![0.0; degree + 1], |mut total, d| {
-                for (sum, value) in total.iter_mut().zip(d) {
-                    *sum += value;
-                }
-                total
-            });
+            d_orders = distinct_d
+                .values()
+                .fold(vec![0.0; degree + 1], |mut total, d| {
+                    for (sum, value) in total.iter_mut().zip(d) {
+                        *sum += value;
+                    }
+                    total
+                });
         }
     }
     serde_json::json!({

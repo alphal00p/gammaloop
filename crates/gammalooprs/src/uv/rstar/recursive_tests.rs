@@ -31,11 +31,11 @@ use idenso::{
     representations::{ColorAdjoint, ColorFundamental, ColorSextet},
     tensor::SymbolicTensor,
 };
-use spenso::shadowing::TensorCollectFilter;
 use linnet::half_edge::{
     involution::EdgeIndex,
     subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetLike},
 };
+use spenso::shadowing::TensorCollectFilter;
 use symbolica::atom::{Atom, AtomCore};
 use vakint::Vakint;
 
@@ -48,7 +48,8 @@ use crate::{
     uv::{
         ApproximationType, RenormalizationPrescriptionSettings, UVgenerationSettings,
         approx::streamed::{with_piece_limit, with_production_piece_limit},
-        settings::VakintSettings as GammaVakintSettings, uv_graph::UVE,
+        settings::VakintSettings as GammaVakintSettings,
+        uv_graph::UVE,
     },
 };
 
@@ -202,7 +203,15 @@ fn compare_children(
     full_colour: bool,
     coverage: &mut Coverage,
 ) -> Result<()> {
-    compare_children_with(name, dot, vakint, max_loops, full_colour, UvChildClosure::Off, coverage)
+    compare_children_with(
+        name,
+        dot,
+        vakint,
+        max_loops,
+        full_colour,
+        UvChildClosure::Off,
+        coverage,
+    )
 }
 
 fn compare_children_with(
@@ -317,8 +326,14 @@ fn background_two_and_three_loop_children_match_massive_r_body() -> Result<()> {
     }
     eprintln!("RECURSIVE_COVERAGE full colour: {full:?}");
     ensure!(coverage.quark > 0 && coverage.ghost > 0, "{coverage:?}");
-    ensure!(coverage.loops.contains(&2) && coverage.nested > 0, "{coverage:?}");
-    ensure!(coverage.degrees.is_superset(&BTreeSet::from([0, 1, 2])), "{coverage:?}");
+    ensure!(
+        coverage.loops.contains(&2) && coverage.nested > 0,
+        "{coverage:?}"
+    );
+    ensure!(
+        coverage.degrees.is_superset(&BTreeSet::from([0, 1, 2])),
+        "{coverage:?}"
+    );
     ensure!(coverage.nonzero > 0, "{coverage:?}");
     Ok(())
 }
@@ -374,7 +389,8 @@ fn rstar_route_reproduces_plan_children_and_root_counterterms_body() -> Result<(
             RStarPlan::with_automatic_edge(&graph, model, &settings)?.with_uv_children(RSTAR);
         assert_eq!(massive_plan.marked_edge, rstar_plan.marked_edge);
         let marked = graph[&rstar_plan.marked_edge].1;
-        let massive = massive_plan.evaluate_uv_children(&graph, model, &mass, &vakint, &settings)?;
+        let massive =
+            massive_plan.evaluate_uv_children(&graph, model, &mass, &vakint, &settings)?;
         let rstar = rstar_plan.evaluate_uv_children(&graph, model, &mass, &vakint, &settings)?;
         let massless = rstar_plan.evaluate_uv_children_for(
             &graph,
@@ -399,7 +415,10 @@ fn rstar_route_reproduces_plan_children_and_root_counterterms_body() -> Result<(
         }
         let expected = massive_plan.counterterm(&graph, model, &vakint, &settings)?;
         let actual = rstar_plan.counterterm(&graph, model, &vakint, &settings)?;
-        ensure!(!expected.expand().is_zero(), "{name}: zero root counterterm");
+        ensure!(
+            !expected.expand().is_zero(),
+            "{name}: zero root counterterm"
+        );
         assert_same_delta(&graph, &format!("{name} root"), &actual, &expected)?;
         // Extraction mode: bare poles plus the original forest, whose children
         // are consumed only at zero reference mass.
@@ -418,7 +437,9 @@ fn rstar_route_reproduces_plan_children_and_root_counterterms_body() -> Result<(
 /// is computed by R* for the massless consumers. Both roots stay exact.
 #[test]
 fn mass_dependent_children_keep_the_massive_route_only_when_needed() -> Result<()> {
-    with_production_piece_limit(mass_dependent_children_keep_the_massive_route_only_when_needed_body)
+    with_production_piece_limit(
+        mass_dependent_children_keep_the_massive_route_only_when_needed_body,
+    )
 }
 
 fn mass_dependent_children_keep_the_massive_route_only_when_needed_body() -> Result<()> {
@@ -451,7 +472,8 @@ fn mass_dependent_children_keep_the_massive_route_only_when_needed_body() -> Res
         let massive_plan = RStarPlan::new(&graph, model, marked, &settings)?
             .with_uv_children(UvChildrenRoute::Massive);
         let rstar_plan = RStarPlan::new(&graph, model, marked, &settings)?.with_uv_children(RSTAR);
-        let massive = massive_plan.evaluate_uv_children(&graph, model, &mass, &vakint, &settings)?;
+        let massive =
+            massive_plan.evaluate_uv_children(&graph, model, &mass, &vakint, &settings)?;
         let rstar = rstar_plan.evaluate_uv_children(&graph, model, &mass, &vakint, &settings)?;
         let massless = rstar_plan.evaluate_uv_children_for(
             &graph,
@@ -478,14 +500,22 @@ fn mass_dependent_children_keep_the_massive_route_only_when_needed_body() -> Res
         }
         let expected = massive_plan.counterterm(&graph, model, &vakint, &settings)?;
         let actual = rstar_plan.counterterm(&graph, model, &vakint, &settings)?;
-        assert_same_delta(&graph, &format!("{name} marked-inside root"), &actual, &expected)?;
+        assert_same_delta(
+            &graph,
+            &format!("{name} marked-inside root"),
+            &actual,
+            &expected,
+        )?;
         eprintln!(
             "RECURSIVE_MASS_DEPENDENT {name} marked={} child_loops={}",
             usize::from(marked),
             quadratic.argument.loops
         );
     }
-    ensure!(fallbacks >= 2, "only {fallbacks} mass-dependent children exercised");
+    ensure!(
+        fallbacks >= 2,
+        "only {fallbacks} mass-dependent children exercised"
+    );
     Ok(())
 }
 
@@ -547,7 +577,14 @@ fn four_loop_quark_self_energy_of_41295_body() -> Result<()> {
     let cache = Arc::new(CountertermCache::default());
     let started = Instant::now();
     let automatic = RStarPlan::rstar_child_counterterm(
-        &cache, &graph, &insertion, model, &vakint, &settings, RSTAR, UvChildClosure::Off,
+        &cache,
+        &graph,
+        &insertion,
+        model,
+        &vakint,
+        &settings,
+        RSTAR,
+        UvChildClosure::Off,
     )?;
     let automatic_seconds = started.elapsed().as_secs_f64();
     ensure!(!automatic.expand().is_zero(), "zero four-loop child");
@@ -596,8 +633,14 @@ fn isotropic_child_closure_matches_massive_r_body() -> Result<()> {
     }
     let closed = super::plan::ISOTROPIC_CHILDREN.load(Ordering::Relaxed) - before;
     eprintln!("ISOTROPIC_COVERAGE closed={closed} {coverage:?}");
-    ensure!(closed > 0, "the isotropic closure was never taken: {coverage:?}");
-    ensure!(coverage.loops.is_superset(&BTreeSet::from([1, 2, 3])), "{coverage:?}");
+    ensure!(
+        closed > 0,
+        "the isotropic closure was never taken: {coverage:?}"
+    );
+    ensure!(
+        coverage.loops.is_superset(&BTreeSet::from([1, 2, 3])),
+        "{coverage:?}"
+    );
     Ok(())
 }
 
@@ -605,10 +648,19 @@ fn isotropic_child_closure_matches_massive_r_body() -> Result<()> {
 fn uv_child_closure_parses_the_environment_syntax() -> Result<()> {
     assert_eq!(UvChildClosure::parse("")?, UvChildClosure::Off);
     assert_eq!(UvChildClosure::parse("off")?, UvChildClosure::Off);
-    assert_eq!(UvChildClosure::parse("isotropic")?, UvChildClosure::Isotropic { min_loops: 1 });
-    assert_eq!(UvChildClosure::parse(" isotropic:4 ")?, UvChildClosure::Isotropic { min_loops: 4 });
+    assert_eq!(
+        UvChildClosure::parse("isotropic")?,
+        UvChildClosure::Isotropic { min_loops: 1 }
+    );
+    assert_eq!(
+        UvChildClosure::parse(" isotropic:4 ")?,
+        UvChildClosure::Isotropic { min_loops: 4 }
+    );
     for invalid in ["on", "true", "isotropic:x", "rstar"] {
-        ensure!(UvChildClosure::parse(invalid).is_err(), "accepted `{invalid}`");
+        ensure!(
+            UvChildClosure::parse(invalid).is_err(),
+            "accepted `{invalid}`"
+        );
     }
     Ok(())
 }

@@ -688,7 +688,8 @@ thread_local! {
 /// (`Q(id, x___) -> Σ c Q(e, x___)`) applied before the momentum routing of
 /// every term, factor by factor.
 pub(crate) fn with_momentum_combinations<T>(rules: &[Replacement], f: impl FnOnce() -> T) -> T {
-    let previous = MOMENTUM_COMBINATIONS.with(|c| std::mem::replace(&mut *c.borrow_mut(), rules.to_vec()));
+    let previous =
+        MOMENTUM_COMBINATIONS.with(|c| std::mem::replace(&mut *c.borrow_mut(), rules.to_vec()));
     let result = f();
     MOMENTUM_COMBINATIONS.with(|c| *c.borrow_mut() = previous);
     result
@@ -1109,7 +1110,9 @@ impl TermRewrites {
                 factor => others.push(factor),
             }
             if denominators.is_empty() || others.iter().any(|factor| structural(*factor)) {
-                groups.rest.push(self.after_contraction_whole(term.to_owned()));
+                groups
+                    .rest
+                    .push(self.after_contraction_whole(term.to_owned()));
                 return;
             }
             let key = match denominators[..] {
@@ -1131,27 +1134,38 @@ impl TermRewrites {
                         |factor| matches!(factor, AtomView::Fun(f) if f.get_symbol() == vk_topo),
                     );
                     match topologies[..] {
-                        [topology] if !rest.iter().any(|factor| structural(*factor)) => Some((
-                            topology.to_owned(),
-                            Atom::mul_many(rest.iter().copied()),
-                        )),
+                        [topology] if !rest.iter().any(|factor| structural(*factor)) => {
+                            Some((topology.to_owned(), Atom::mul_many(rest.iter().copied())))
+                        }
                         _ => None,
                     }
                 })
                 .clone();
             let Some((topology, rest)) = split else {
                 let image = cache[&key].clone();
-                groups
-                    .rest
-                    .push(Atom::mul_many(others.iter().copied().chain(std::iter::once(image.as_view()))));
+                groups.rest.push(Atom::mul_many(
+                    others
+                        .iter()
+                        .copied()
+                        .chain(std::iter::once(image.as_view())),
+                ));
                 return;
             };
             let numerator = if rest == Atom::num(1) {
                 Atom::mul_many(others.iter().copied())
             } else {
-                Atom::mul_many(others.iter().copied().chain(std::iter::once(rest.as_view())))
+                Atom::mul_many(
+                    others
+                        .iter()
+                        .copied()
+                        .chain(std::iter::once(rest.as_view())),
+                )
             };
-            groups.by_topology.entry(topology).or_default().push(numerator);
+            groups
+                .by_topology
+                .entry(topology)
+                .or_default()
+                .push(numerator);
         };
         match integrand {
             AtomView::Add(sum) => sum.iter().for_each(&mut group),
@@ -1500,7 +1514,13 @@ pub(crate) fn to_vakint_integrand<
             let mut terms = expression
                 .0
                 .iter()
-                .map(|term| (term.integral.clone(), term.numerator.clone(), term.vectors.clone()))
+                .map(|term| {
+                    (
+                        term.integral.clone(),
+                        term.numerator.clone(),
+                        term.vectors.clone(),
+                    )
+                })
                 .collect::<Vec<_>>();
             terms.sort_by(|x, y| x.0.cmp(&y.0));
             terms
@@ -1849,7 +1869,8 @@ pub(crate) fn to_vakint_integrand<
                     Minkowski {}.to_symbolic([W_.b__])
                 ))
         };
-        t.numerator = map_factors_switched("vakint_symbols", &t.numerator, &mut rename_images, &rename);
+        t.numerator =
+            map_factors_switched("vakint_symbols", &t.numerator, &mut rename_images, &rename);
         notation_seconds += notation_started.elapsed().as_secs_f64();
         drop(notation_stage);
         debug_tags!(#uv, #integrated, #vakint, #trace;
@@ -1864,11 +1885,10 @@ pub(crate) fn to_vakint_integrand<
     }
 
     let call_counts = counting.then(|| {
-        let topology_summands = a
-            .0
-            .iter()
-            .map(|t| vakint::census::summands(t.numerator.as_view()))
-            .collect::<Vec<_>>();
+        let topology_summands =
+            a.0.iter()
+                .map(|t| vakint::census::summands(t.numerator.as_view()))
+                .collect::<Vec<_>>();
         let (input_summands, input_bytes) = input_size.unwrap_or_default();
         let (materialized_summands, (estimated_summands, estimated_bytes)) =
             materialized_size.unwrap_or_default();
@@ -1897,22 +1917,19 @@ pub(crate) fn to_vakint_integrand<
     });
     if let Some((output_summands, output_bytes)) = census_input {
         let (rewritten_summands, rewritten_bytes) = rewrites.rewritten_summands.get();
-        let numerator_summands = a
-            .0
-            .iter()
-            .map(|t| vakint::census::summands(t.numerator.as_view()))
-            .sum::<usize>();
-        let numerator_bytes = a
-            .0
-            .iter()
-            .map(|t| t.numerator.as_view().get_byte_size())
-            .sum::<usize>();
-        let max_numerator_summands = a
-            .0
-            .iter()
-            .map(|t| vakint::census::summands(t.numerator.as_view()))
-            .max()
-            .unwrap_or(0);
+        let numerator_summands =
+            a.0.iter()
+                .map(|t| vakint::census::summands(t.numerator.as_view()))
+                .sum::<usize>();
+        let numerator_bytes =
+            a.0.iter()
+                .map(|t| t.numerator.as_view().get_byte_size())
+                .sum::<usize>();
+        let max_numerator_summands =
+            a.0.iter()
+                .map(|t| vakint::census::summands(t.numerator.as_view()))
+                .max()
+                .unwrap_or(0);
         vakint::census::record(
             "to_vakint",
             serde_json::json!({

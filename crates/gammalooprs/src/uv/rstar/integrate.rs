@@ -109,7 +109,8 @@ pub fn integrate_single_mass(
         }
         let tensor_started = Instant::now();
         let mut term = source.clone();
-        let factored = if direct_lowering && !crate::uv::approx::streamed::legacy("tensor_factors") {
+        let factored = if direct_lowering && !crate::uv::approx::streamed::legacy("tensor_factors")
+        {
             tensor_reduce_by_factors(vakint, &tensor_settings, source, &mut tensor_images)?
         } else {
             None
@@ -383,8 +384,9 @@ fn tensor_reduce_by_factors(
             AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
             single => vec![single],
         };
-        let (scalars, tensors): (Vec<_>, Vec<_>) =
-            factors.into_iter().partition(|factor| closed_scalar(*factor));
+        let (scalars, tensors): (Vec<_>, Vec<_>) = factors
+            .into_iter()
+            .partition(|factor| closed_scalar(*factor));
         if tensors.is_empty() {
             scalar_terms.push(summand.to_owned());
             continue;

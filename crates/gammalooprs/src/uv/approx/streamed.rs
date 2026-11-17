@@ -363,10 +363,12 @@ fn has_opaque_composite_power(expression: AtomView<'_>) -> bool {
 /// before it normalizes. In floating point: it never overflows.
 pub(crate) fn expansion_estimate(expression: AtomView<'_>) -> (f64, f64) {
     match expression {
-        AtomView::Add(sum) => sum.iter().map(expansion_estimate).fold(
-            (0.0, 0.0),
-            |(terms, bytes), (more_terms, more_bytes)| (terms + more_terms, bytes + more_bytes),
-        ),
+        AtomView::Add(sum) => sum
+            .iter()
+            .map(expansion_estimate)
+            .fold((0.0, 0.0), |(terms, bytes), (more_terms, more_bytes)| {
+                (terms + more_terms, bytes + more_bytes)
+            }),
         AtomView::Mul(product) => {
             let (mut terms, mut summand_bytes) = (1.0, 0.0);
             for factor in product.iter() {
@@ -862,15 +864,17 @@ mod tests {
         assert_eq!(terms, 3.0 * 2.0 + 2.0 * 2.0 + 1.0);
         assert!(bytes > 0.0);
         let unexpanded = parse!("(a+b)*(c+d)");
-        assert_eq!(expansion_size(unexpanded.as_view(), false), unexpanded.as_view().get_byte_size());
+        assert_eq!(
+            expansion_size(unexpanded.as_view(), false),
+            unexpanded.as_view().get_byte_size()
+        );
         assert!(expansion_size(unexpanded.as_view(), true) >= unexpanded.as_view().get_byte_size());
     }
 
     #[test]
     fn pieces_by_estimate_add_up_to_the_whole_expansion() {
-        let expression = parse!(
-            "(a+b+c+d)*(x1+x2+x3+x4+x5)*(y1+y2)^2*z + (p+q)*(r+s+t) + 3*u^2*(v+w)^(-1)"
-        );
+        let expression =
+            parse!("(a+b+c+d)*(x1+x2+x3+x4+x5)*(y1+y2)^2*z + (p+q)*(r+s+t) + 3*u^2*(v+w)^(-1)");
         let whole = expression.expand();
         for limit in [1, 64, 256, 1024, 1 << 20] {
             for by_estimate in [false, true] {
@@ -880,7 +884,11 @@ mod tests {
                     Ok(())
                 })
                 .unwrap();
-                assert_eq!(Atom::add_many(pieces.iter()), whole, "limit {limit} by_estimate {by_estimate}");
+                assert_eq!(
+                    Atom::add_many(pieces.iter()),
+                    whole,
+                    "limit {limit} by_estimate {by_estimate}"
+                );
                 if by_estimate && limit <= 256 {
                     assert!(pieces.len() > 1, "limit {limit}: {} piece(s)", pieces.len());
                 }

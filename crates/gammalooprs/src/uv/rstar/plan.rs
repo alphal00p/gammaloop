@@ -115,7 +115,9 @@ static UV_CHILDREN_ROUTE: LazyLock<UvChildrenRoute> = LazyLock::new(|| {
 pub enum UvChildClosure {
     #[default]
     Off,
-    Isotropic { min_loops: usize },
+    Isotropic {
+        min_loops: usize,
+    },
 }
 
 impl std::fmt::Display for UvChildClosure {
@@ -963,7 +965,9 @@ impl RStarPlan {
         closure: UvChildClosure,
     ) -> Result<Atom> {
         let key = match closure {
-            UvChildClosure::Off => format!("{}#uv-children={route}", serde_json::to_string(settings)?),
+            UvChildClosure::Off => {
+                format!("{}#uv-children={route}", serde_json::to_string(settings)?)
+            }
             closure => format!(
                 "{}#uv-children={route}#child-closure={closure}",
                 serde_json::to_string(settings)?
@@ -984,7 +988,9 @@ impl RStarPlan {
             } else {
                 None
             };
-            let delta = super::expression::in_uv_child_scope(plan.taylor_order, || match isotropic.as_ref() {
+            let delta = super::expression::in_uv_child_scope(plan.taylor_order, || match isotropic
+                .as_ref()
+            {
                 Some(pairings) => {
                     #[cfg(test)]
                     ISOTROPIC_CHILDREN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -1000,12 +1006,12 @@ impl RStarPlan {
                 None => plan.counterterm(graph, model, vakint, settings),
             })
             .wrap_err_with(|| {
-                    format!(
-                        "while computing the {}-loop UV child {} with R*",
-                        graph.n_loops(support),
-                        support.string_label()
-                    )
-                })?;
+                format!(
+                    "while computing the {}-loop UV child {} with R*",
+                    graph.n_loops(support),
+                    support.string_label()
+                )
+            })?;
             tracing::info!(
                 uv = true,
                 rstar = true,

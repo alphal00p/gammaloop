@@ -158,9 +158,7 @@ fn topology_keys(lines: &[Line], external: &Atom) -> Result<(String, String, i64
             degree.entry(*b).or_default().push(index);
         }
         let Some((vertex, pair)) = degree.iter().find(|(vertex, incident)| {
-            incident.len() == 2
-                && incident[0] != incident[1]
-                && !external_vertices.contains(vertex)
+            incident.len() == 2 && incident[0] != incident[1] && !external_vertices.contains(vertex)
         }) else {
             break;
         };
@@ -190,10 +188,20 @@ fn topology_keys(lines: &[Line], external: &Atom) -> Result<(String, String, i64
         }
         for (a, b, power) in &edges {
             graph
-                .add_edge(index[a], index[b], false, if with_powers { *power } else { 1 })
+                .add_edge(
+                    index[a],
+                    index[b],
+                    false,
+                    if with_powers { *power } else { 1 },
+                )
                 .map_err(|error| eyre!(error))?;
         }
-        Ok(graph.canonize().graph.to_string().trim().replace('\n', "; "))
+        Ok(graph
+            .canonize()
+            .graph
+            .to_string()
+            .trim()
+            .replace('\n', "; "))
     };
     let dots = edges.iter().map(|(_, _, power)| power - 1).sum();
     Ok((canonical(false)?, canonical(true)?, dots, edges.len()))
@@ -246,7 +254,15 @@ fn largest_block_loops(lines: &[Line]) -> usize {
         (0, BTreeMap::new(), BTreeMap::new(), BTreeSet::new());
     for vertex in adjacency.keys() {
         if !discovery.contains_key(vertex) {
-            visit(*vertex, None, &adjacency, &mut time, &mut discovery, &mut low, &mut bridges);
+            visit(
+                *vertex,
+                None,
+                &adjacency,
+                &mut time,
+                &mut discovery,
+                &mut low,
+                &mut bridges,
+            );
         }
     }
     // Union-find over non-bridge edges; cyclomatic number per component.
@@ -297,7 +313,9 @@ pub(super) fn write(
     let pid = std::process::id();
     if SETTINGS_WRITTEN.set(()).is_ok() {
         std::fs::write(
-            settings.directory.join(format!("vakint-settings-{pid}.txt")),
+            settings
+                .directory
+                .join(format!("vakint-settings-{pid}.txt")),
             format!("{vakint_settings:#?}\n"),
         )?;
     }
@@ -327,7 +345,9 @@ pub(super) fn write(
         .max()
         .unwrap_or(0);
     let stem = format!("closure-{pid}-{sequence:06}");
-    let mut out = BufWriter::new(File::create(settings.directory.join(format!("{stem}.txt")))?);
+    let mut out = BufWriter::new(File::create(
+        settings.directory.join(format!("{stem}.txt")),
+    )?);
     writeln!(out, "schema pint6.massive-closure-request.v1")?;
     writeln!(out, "sequence {sequence}")?;
     writeln!(out, "context {context}")?;
@@ -335,8 +355,16 @@ pub(super) fn write(
     writeln!(out, "p_loops {p_loops}")?;
     writeln!(out, "largest_block_loops {}", largest_block_loops(&lines))?;
     writeln!(out, "evaluated {}", p_loops < settings.skip_min_p_loops)?;
-    writeln!(out, "closure_momentum {}", closure.momentum.to_canonical_string())?;
-    writeln!(out, "closure_mass_squared {}", closure.mass_squared.to_canonical_string())?;
+    writeln!(
+        out,
+        "closure_momentum {}",
+        closure.momentum.to_canonical_string()
+    )?;
+    writeln!(
+        out,
+        "closure_mass_squared {}",
+        closure.mass_squared.to_canonical_string()
+    )?;
     writeln!(out, "closure_power {}", closure.power)?;
     writeln!(
         out,
@@ -361,17 +389,26 @@ pub(super) fn write(
     writeln!(out, "dots {dots}")?;
     writeln!(out, "numerator_monomials {}", monomials.len())?;
     writeln!(out, "max_loop_rank {max_rank}")?;
-    writeln!(out, "numerator_bytes {}", numerator.as_view().get_byte_size())?;
+    writeln!(
+        out,
+        "numerator_bytes {}",
+        numerator.as_view().get_byte_size()
+    )?;
     // Instrumentation: the counts of the to_vakint call that produced this
     // closure (see uv::approx::counts); a new key, before the input line.
     if let Some(counts) = crate::uv::approx::counts::last_counts() {
         writeln!(out, "to_vakint_counts {counts}")?;
     }
     // Exactly the Atom MassiveClosure::evaluate_batch receives with this closure.
-    writeln!(out, "input {}", (numerator * integrand).to_canonical_string())?;
+    writeln!(
+        out,
+        "input {}",
+        (numerator * integrand).to_canonical_string()
+    )?;
     out.flush()?;
-    let mut tsv =
-        BufWriter::new(File::create(settings.directory.join(format!("{stem}.monomials.tsv")))?);
+    let mut tsv = BufWriter::new(File::create(
+        settings.directory.join(format!("{stem}.monomials.tsv")),
+    )?);
     for (monomial, _) in &monomials {
         writeln!(
             tsv,
