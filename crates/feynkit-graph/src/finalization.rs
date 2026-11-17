@@ -57,6 +57,7 @@ impl FeynmanDiagramBuilder {
         let mut externals = BTreeMap::new();
         let mut internal = Vec::new();
         for (id, (endpoints, edge)) in self.edges.iter().enumerate() {
+            edge.validate_propagator_power(id)?;
             let external = endpoints
                 .source
                 .and_then(|v| self.generation_externals.get(&v))
@@ -207,6 +208,16 @@ impl FeynmanDiagramBuilder {
         }
         for (incoming, outgoing) in connections.values() {
             if let (Some(incoming), Some(outgoing)) = (incoming, outgoing) {
+                let incoming_power = self.edges[*incoming].1.propagator_power;
+                let outgoing_power = self.edges[*outgoing].1.propagator_power;
+                if incoming_power != outgoing_power {
+                    return Err(DiagramError::InconsistentPropagatorPowers {
+                        incoming: *incoming,
+                        outgoing: *outgoing,
+                        incoming_power,
+                        outgoing_power,
+                    });
+                }
                 logical.insert(EdgeId(*outgoing), logical[&EdgeId(*incoming)]);
                 add_external(*outgoing, Flow::Source, &mut builder)?;
             }

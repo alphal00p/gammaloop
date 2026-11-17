@@ -193,6 +193,19 @@ impl FeynmanDiagramCffExt for FeynmanDiagram {
         subgraph: &S,
         options: CffOptions,
     ) -> Result<CffResult, CffError> {
+        for (pair, edge, data) in self.underlying().iter_edges_of(subgraph) {
+            if pair.is_paired()
+                && data.data.external.is_none()
+                && !data.data.is_dummy
+                && !options.contracted_edges().contains(&edge)
+                && data.data.propagator_power != 1
+            {
+                return Err(CffError::UnsupportedPropagatorPower {
+                    edge,
+                    power: data.data.propagator_power,
+                });
+            }
+        }
         let roles = self
             .underlying()
             .iter_edges()
@@ -1438,6 +1451,52 @@ mod tests {
         assert_eq!(result.report.candidate_orientations, 4);
         assert_eq!(result.report.acyclic_orientations, 2);
         assert_eq!(result.report.unfolded_terms, 2);
+    }
+
+    #[test]
+    fn diagram_generation_rejects_raised_powers_instead_of_integrating_unit_powers() {
+        let diagram = FeynmanDiagram::from_dot(
+            Model::phi3(),
+            r#"digraph master {
+                a -> b [particle="phi", power=2];
+                a -> b [particle="phi"];
+                b -> a [particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            diagram.build_cff(CffOptions::default()),
+            Err(CffError::UnsupportedPropagatorPower { power: 2, .. })
+        ));
+    }
+
+    #[test]
+    fn diagram_power_guard_respects_contractions_and_subgraph_selection() {
+        let diagram = FeynmanDiagram::from_dot(
+            Model::phi3(),
+            "digraph { ext [style=invis]; a -> b [particle=phi, power=2]; b -> c [particle=phi]; c -> a [particle=phi]; ext -> a [particle=phi]; ext -> b [particle=phi]; c -> ext [particle=phi]; }",
+        ).unwrap();
+        let raised = diagram
+            .edges()
+            .find(|(_, _, data)| data.propagator_power == 2)
+            .unwrap()
+            .0;
+        let contracted = diagram
+            .build_cff(CffOptions::default().with_contracted_edge(edge(raised.0)))
+            .unwrap();
+        assert!(!contracted.expression.orientations().is_empty());
+        let graph = diagram.underlying();
+        let mut selected: SuBitGraph = graph.empty_subgraph();
+        for half in diagram.half_edges() {
+            if half.edge != raised {
+                selected.add(diagram.half_edge_id(half).unwrap());
+            }
+        }
+        assert!(
+            diagram
+                .build_cff_subgraph(&selected, CffOptions::default())
+                .is_ok()
+        );
     }
 
     #[test]
