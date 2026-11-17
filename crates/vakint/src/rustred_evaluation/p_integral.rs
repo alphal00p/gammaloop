@@ -1342,7 +1342,15 @@ pub(crate) fn fold_mode() -> FoldMode {
 }
 
 impl FoldMode {
-    /// The mode when `VAKINT_P_FOLD` is unset (or `on`).
+    /// vk5l-physrun: `VAKINT_P_CHANNEL_REPLAY=1` reduces the coefficient-folded
+/// channels of one loop count together (RustRed channel replay).
+pub(crate) fn channel_replay() -> bool {
+    static ON: std::sync::LazyLock<bool> =
+        std::sync::LazyLock::new(|| std::env::var("VAKINT_P_CHANNEL_REPLAY").as_deref() == Ok("1"));
+    *ON
+}
+
+/// The mode when `VAKINT_P_FOLD` is unset (or `on`).
     pub(crate) const DEFAULT: FoldMode = FoldMode::Coefficient;
 }
 
@@ -1812,6 +1820,96 @@ pub(crate) fn reduce_folded_channels(
     };
     let total = folded.len();
     let mut values = BTreeMap::<(usize, Atom), Vec<ReducedPropagatorValue>>::new();
+    // vk5l-physrun channel replay (VAKINT_P_CHANNEL_REPLAY=1): the channels of
+    // one loop count are reduced together by PLibrary::reduce_channels (one
+    // forward pass over a random mix, one replay per channel; RustRed falls
+    // back to one reduction per channel on any failed zero check).
+    if mode == FoldMode::Coefficient && FoldMode::channel_replay() {
+        let mut prepared = Vec::new();
+        for (channel, FoldedInputs { by_basis, integrals }) in folded {
+            let preparing = std::time::Instant::now();
+            let inputs = coefficient_inputs(context, by_basis, epsilon, &epsilon_at_d, exact)?;
+            with_stats(|stats| {
+                stats.prepare_seconds += preparing.elapsed().as_secs_f64();
+                stats.pairs += inputs.len();
+            });
+            key_dump(channel.loops, inputs.iter().map(|(key, _)| key));
+            let inputs = inputs
+                .into_iter()
+                .filter(|(_, value)| !value.is_zero())
+                .map(|((presentation, powers), value)| {
+                    let key = IntegralKey::try_new(powers)
+                        .map_err(|error| invalid(format!("integral key: {error}")))?;
+                    Ok((presentation, key, value))
+                })
+                .collect::<Result<Vec<_>, RustRedEvaluationError>>()?;
+            if !inputs.is_empty() {
+                prepared.push((channel, inputs, integrals));
+            }
+        }
+        let mut groups = BTreeMap::<usize, Vec<usize>>::new();
+        for (at, (channel, _, _)) in prepared.iter().enumerate() {
+            groups.entry(channel.loops).or_default().push(at);
+        }
+        let mut reductions: Vec<Option<PReduction>> = (0..prepared.len()).map(|_| None).collect();
+        let mut inputs_of: Vec<Option<Vec<(PresentationId, IntegralKey, Coefficient)>>> =
+            prepared.iter_mut().map(|(_, inputs, _)| Some(std::mem::take(inputs))).collect();
+        for (loops, members) in groups {
+            if members.len() == 1 {
+                let at = members[0];
+                let inputs = inputs_of[at].take().unwrap_or_default();
+                reductions[at] = Some(reduce_inputs(&reducer, &prepared[at].0, inputs, &prepared[at].2)?);
+                continue;
+            }
+            let integrals: BTreeSet<String> =
+                members.iter().flat_map(|&at| prepared[at].2.iter().cloned()).collect();
+            let channels: Vec<_> = members.iter().map(|&at| inputs_of[at].take().unwrap_or_default()).collect();
+            let reducing = std::time::Instant::now();
+            let reduced = {
+                let _math = MathSpan::new();
+                handle
+                    .library
+                    .reduce_channels(
+                        channels,
+                        p_reduction_request(&reducer.options, loops, Vec::new(), reducer.step_cache.clone()),
+                    )
+                    .map_err(|error| reduction_error(error, &integrals))?
+            };
+            with_stats(|stats| {
+                stats.library_seconds += reducing.elapsed().as_secs_f64();
+                stats.reductions += members.len();
+            });
+            for (&at, reduction) in members.iter().zip(reduced) {
+                super::p_relations::count_table_steps(reduction.statistics.work.rule_applications() as u64);
+                if reduction.dimension != loops as i64 {
+                    return Err(invalid(format!(
+                        "a {loops}-loop request returned a reduction of dimension {}",
+                        reduction.dimension
+                    ))
+                    .into());
+                }
+                reductions[at] = Some(reduction);
+            }
+        }
+        for ((channel, _, _), reduction) in prepared.into_iter().zip(reductions) {
+            let Some(reduction) = reduction else { continue };
+            let rendering = std::time::Instant::now();
+            let terms = render_terms(&handle, &reduction, epsilon)?;
+            let reduced = collect_terms(terms);
+            with_stats(|stats| stats.render_seconds += rendering.elapsed().as_secs_f64());
+            if reduced.is_zero() {
+                continue;
+            }
+            let Channel { loops, head, scale_power, coefficient } = channel;
+            let value = if factored {
+                ReducedPropagatorValue { scale_power, reduced, spectator: Some(coefficient) }
+            } else {
+                ReducedPropagatorValue { scale_power, reduced: reduced * &coefficient, spectator: None }
+            };
+            values.entry((loops, head)).or_default().push(value);
+        }
+        return Ok(values);
+    }
     for (
         index,
         (
