@@ -55,6 +55,15 @@ impl RowMode {
             },
         )
     }
+
+    /// `FEYNKIT_TENSORREDUCE_DISPATCH=wide` keeps the earlier block-path
+    /// dispatch (`has_tensor_sum_legacy`) with the current
+    /// row strategy, for comparison.
+    pub(super) fn wide_dispatch() -> bool {
+        static WIDE: OnceLock<bool> = OnceLock::new();
+        *WIDE
+            .get_or_init(|| std::env::var("FEYNKIT_TENSORREDUCE_DISPATCH").as_deref() == Ok("wide"))
+    }
 }
 
 /// Whether a pooled dot label would occur more than twice in one product once
