@@ -1,4 +1,6 @@
 //! Exact native QCD mass projections and independent integrated reference checks.
+use crate::numerator::aind::Aind;
+use crate::utils::GS;
 use crate::{
     model::{InputParamCard, ModelGammaLoopExt},
     numerator::symbolica_ext::NumeratorAtomExt,
@@ -18,9 +20,11 @@ use feynkit_kinematics::Kinematics;
 use feynkit_model::Model;
 use idenso::color::{CS, ColorCasimirSettings, ColorSimplifier, ColorSimplifySettings};
 use idenso::dirac::GammaSimplifySettings;
-use idenso::representations::{ColorAdjoint, ColorFundamental};
+use idenso::representations::{Bispinor, ColorAdjoint, ColorFundamental};
 use idenso::tensor::{AlgebraSettings, ContractSettings, SymbolicTensor};
 use idenso::{CookMode, CookSettings};
+use spenso::structure::representation::LibrarySlot;
+use spenso::structure::slot::IsAbstractSlot;
 use spenso::structure::{
     IndexedStructure, TensorStructure,
     partial::PartialStructure,
@@ -1611,13 +1615,31 @@ fn native_qcd_mass_projections_certify_all_one_and_two_loop_sources() -> Result<
                 Ok(cooking.try_cook(slot.get(1))?)
             })
             .collect::<Result<Vec<_>>>()?;
-        let error = admit(&contextless)
-            .expect_err("contextless hedge-index cooking must not establish a native source port");
-        ensure!(
-            error
-                .to_string()
-                .contains("native source endpoint slot admission")
-        );
+        // Native cooking preserves an already valid source-port index.
+        ensure!(contextless == indices);
+        admit(&contextless)?;
+        for endpoint in 0..indices.len() {
+            let mut foreign = indices.clone();
+            foreign[endpoint] = typed[endpoint]
+                .aind()
+                .scoped(symbol!("native_mass_projection::foreign_endpoint"))
+                .to_atom();
+            ensure!(foreign[0] != foreign[1]);
+            for frame in [&source_slots, &projector_slots] {
+                ensure!(
+                    !frame
+                        .iter()
+                        .any(|slot| slot.aind().to_atom() == foreign[endpoint])
+                );
+            }
+            let error = admit(&foreign)
+                .expect_err("a foreign endpoint must not establish a native source port");
+            ensure!(
+                error
+                    .to_string()
+                    .contains("native source endpoint slot admission")
+            );
+        }
         for (label, tensor, opposite) in [
             ("closing projector", &projector, &source),
             ("native open source", &source, &projector),
@@ -5753,9 +5775,8 @@ fn native_d09_positive_gluon_mass_preserves_all_three_vacuum_inputs() -> Result<
             }
         }
     }
-    // O allocates a fresh contracted spinor port at every invocation. Compare
-    // through the existing native index owner after binding every prescribed
-    // denominator occurrence; no momentum, mass or provenance is normalized away.
+    // Keep every original denominator occurrence while comparing algebraically
+    // equivalent numerators; no momentum, mass or provenance is normalized away.
     let denominator_inventory = |value: &SymbolicTensor<IndexedStructure>| {
         let sector = FourDSector::new(value.clone(), Vec::new(), Vec::new());
         let mut inventory = sector
@@ -5783,17 +5804,11 @@ fn native_d09_positive_gluon_mass_preserves_all_three_vacuum_inputs() -> Result<
         Ok::<_, color_eyre::eyre::Report>(inventory)
     };
     // The only freshly allocated labels admitted here are the internal bis4
-    // projector ports of this rest-frame two-component forest. Original source
+    // projector ports of this rest-frame two-component forest. External source
     // ports and every prescribed denominator are held literally fixed.
     let exact_vacuum_equal = |left: &SymbolicTensor<IndexedStructure>,
                               right: &SymbolicTensor<IndexedStructure>|
      -> Result<()> {
-        use crate::numerator::aind::Aind;
-        use idenso::representations::Bispinor;
-        use spenso::structure::{
-            representation::{LibrarySlot, RepName},
-            slot::IsAbstractSlot,
-        };
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
@@ -5827,8 +5842,8 @@ fn native_d09_positive_gluon_mass_preserves_all_three_vacuum_inputs() -> Result<
         };
         let raw_left = cooking.uncook(left.expression().as_view());
         let raw_right = cooking.uncook(right.expression().as_view());
-        let left_indices = fresh_ports(&raw_left)?.into_iter().collect::<Vec<_>>();
-        let right_indices = fresh_ports(&raw_right)?.into_iter().collect::<Vec<_>>();
+        let left_indices = fresh_ports(&raw_left)?;
+        let right_indices = fresh_ports(&raw_right)?;
         ensure!(left_indices.len() == right_indices.len());
         for tensor in [left, right] {
             for slot in tensor.structure().logical_slots() {
@@ -5841,48 +5856,13 @@ fn native_d09_positive_gluon_mass_preserves_all_three_vacuum_inputs() -> Result<
         }
         for term in &original_denominators {
             for (edge, momentum, mass, polynomial) in term {
-                let complete = function!(crate::utils::GS.den, *edge, momentum, mass, polynomial);
+                let complete = function!(GS.den, *edge, momentum, mass, polynomial);
                 ensure!(fresh_ports(&cooking.uncook(complete.as_view()))?.is_empty());
             }
         }
-        let mut candidates = vec![right_indices.clone()];
-        if right_indices.len() == 2 {
-            candidates.push(vec![right_indices[1], right_indices[0]]);
-        }
-        for candidate in candidates {
-            let map = left_indices
-                .iter()
-                .copied()
-                .zip(candidate.iter().copied())
-                .collect::<BTreeMap<_, _>>();
-            let inverse = candidate
-                .iter()
-                .copied()
-                .zip(left_indices.iter().copied())
-                .collect::<BTreeMap<_, _>>();
-            let rename = |source: &Atom, map: &BTreeMap<Aind, Aind>| {
-                source.replace_map(|view, _, output| {
-                    if let Ok(slot) = LibrarySlot::<Aind>::try_from(view)
-                        && let Some(index) = map.get(&slot.aind)
-                    {
-                        **output = slot.rep().slot::<Aind, _>(*index).to_atom();
-                    }
-                })
-            };
-            let renamed = rename(&raw_left, &map);
-            ensure!(rename(&renamed, &inverse) == raw_left);
-            let native = left.with_checked_expression(cooking.try_cook(renamed.as_view())?)?;
-            ensure!(native.structure().logical_slots() == left.structure().logical_slots());
-            ensure!(denominator_inventory(&native)? == original_denominators);
-            // Literal equality of the COMPLETE W is the certificate. Only its
-            // two witnessed contracted spinor labels may have changed.
-            if native.same_value(right) {
-                return Ok(());
-            }
-        }
-        Err(eyre!(
-            "D09 complete W has no exact fresh-projector-port bijection"
-        ))
+        // Internal contracted labels and factorization are not unique. Prove
+        // equality in formal D with every original denominator held fixed.
+        QcdMassReference::certify_vacuum_rational_identity("D09 complete W", left, right)
     };
     let original_child = uv_limit(&empty, &ctx, child, &root, child, &root)?;
     let regulated_child = uv_limit(&empty, &regulated_ctx, child, &root, child, &root)?;
@@ -5903,7 +5883,7 @@ fn native_d09_positive_gluon_mass_preserves_all_three_vacuum_inputs() -> Result<
     let wrong_weight = child_w.with_checked_expression(child_w.expression() * Atom::num(2))?;
     ensure!(
         exact_vacuum_equal(child_w, &wrong_weight).is_err(),
-        "projector-port renaming must retain the complete scalar weight"
+        "vacuum equality must retain the complete scalar weight"
     );
     let backend = vakint::VakintSettings {
         number_of_terms_in_epsilon_expansion: 3,

@@ -14,6 +14,7 @@ use crate::{
         orchestrator::validate_local_counterterm_schemes,
     },
 };
+use color_eyre::eyre::ensure;
 use idenso::{
     color::{CS, ColorSimplifySettings},
     dirac::GammaSimplifySettings,
@@ -267,12 +268,40 @@ fn native_d09_laurent_grid_preserves_factors_and_rejects_unsupported_domains() -
 }
 
 impl QcdMassReference {
+    /// Exact d-dimensional comparison retaining every original pole descriptor.
+    pub(in crate::uv) fn certify_vacuum_rational_identity(
+        label: &str,
+        left: &SymbolicTensor<IndexedStructure>,
+        right: &SymbolicTensor<IndexedStructure>,
+    ) -> Result<()> {
+        for (ordinal, numerator) in Self::vacuum_difference_classes(left, right)?
+            .into_iter()
+            .enumerate()
+        {
+            Self::certify_parent_tensor_zero(
+                &format!("{label}, denominator class {ordinal}"),
+                &numerator,
+            )?;
+        }
+        Ok(())
+    }
+
     /// Same-sector finite component identity, preserving every original pole descriptor.
     pub(in crate::uv) fn certify_fixed_component_rational_identity(
         label: &str,
         left: &SymbolicTensor<IndexedStructure>,
         right: &SymbolicTensor<IndexedStructure>,
     ) -> Result<()> {
+        for numerator in Self::vacuum_difference_classes(left, right)? {
+            Self::certify_finite_tagged_rows_zero(label, numerator)?;
+        }
+        Ok(())
+    }
+
+    fn vacuum_difference_classes(
+        left: &SymbolicTensor<IndexedStructure>,
+        right: &SymbolicTensor<IndexedStructure>,
+    ) -> Result<Vec<SymbolicTensor<IndexedStructure>>> {
         eyre::ensure!(left.structure().logical_slots() == right.structure().logical_slots());
         // Same signed-numerator bucket core as the parent chart certificates,
         // with stricter original descriptors for an unchanged sector. Repeated
@@ -306,10 +335,7 @@ impl QcdMassReference {
                 }
             }
         }
-        for numerator in classes.into_values() {
-            Self::certify_finite_tagged_rows_zero(label, numerator)?;
-        }
-        Ok(())
+        Ok(classes.into_values().collect())
     }
 
     fn certify_parent_tensor_zero(
@@ -2738,11 +2764,33 @@ impl QcdMassReference {
                                 continue;
                             }
                             let negative = normalize_phi_body(&(-body))?;
-                            let (representative, sign) = if body <= &negative {
+                            let (mut representative, mut sign) = if body <= &negative {
                                 (body.clone(), 1i64)
                             } else {
                                 (negative, -1i64)
                             };
+                            // Compact collection is not a unique normal form.
+                            // Join only after proving this complete finite Phi
+                            // body equals an existing same-cut body up to sign.
+                            'binding: for (cut, candidate) in coefficient_classes.keys() {
+                                if *cut != row.0 {
+                                    continue;
+                                }
+                                for candidate_sign in [1i64, -1] {
+                                    let difference = body - Atom::num(candidate_sign) * candidate;
+                                    if normalize_phi_body(&difference)?.is_zero() {
+                                        let wrong =
+                                            normalize_phi_body(&(&difference + Atom::one()))?;
+                                        ensure!(
+                                            normalize_phi_body(&(wrong - Atom::one()))?.is_zero(),
+                                            "D09 signed body binding must prove the unit perturbation equals one"
+                                        );
+                                        representative = candidate.clone();
+                                        sign = candidate_sign;
+                                        break 'binding;
+                                    }
+                                }
+                            }
                             eyre::ensure!(
                                 normalize_phi_body(&(body - Atom::num(sign) * &representative))?
                                     .is_zero(),

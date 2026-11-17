@@ -2,6 +2,7 @@
 //! The causal propagators are kept separate from numerator pinch identities.
 
 use super::*;
+use crate::utils::{FUN_LIB, TENSORLIB};
 use crate::{
     graph::Graph,
     numerator::{AppliedFeynmanRule, aind::Aind},
@@ -21,7 +22,9 @@ use linnet::half_edge::{
     involution::{EdgeIndex, Flow},
     subgraph::{SubSetLike, SubSetOps},
 };
+use spenso::iterators::IteratableTensor;
 use spenso::network::parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing};
+use spenso::network::{ExecutionResult, MinResultRank, SequentialRef};
 
 #[test]
 fn native_os_quark_proper_prefix_matches_mass_and_field_insertions() -> Result<()> {
@@ -1133,6 +1136,80 @@ impl QcdMassReference {
                         result = result
                             .try_add(&input.with_checked_expression(word.expression() * scalar)?)?;
                     }
+                    // Addition returns canonical axes. Restore the caller's order
+                    // using complete labels, representations, dimensions and variance.
+                    let expected_slots = input.structure().logical_slots();
+                    let result_slots = result.structure().logical_slots();
+                    ensure!(result.rank() == input.rank());
+                    let axes = expected_slots
+                        .iter()
+                        .map(|slot| {
+                            result_slots
+                                .iter()
+                                .position(|candidate| candidate == slot)
+                                .ok_or_else(|| eyre!("open truncation lost a complete native port"))
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    ensure!(
+                        axes.iter().copied().collect::<BTreeSet<_>>()
+                            == (0..axes.len()).collect::<BTreeSet<_>>()
+                    );
+                    let partial: SymbolicTensor<PartialStructure> = result.into();
+                    let ordered = partial.permuted(&axes)?;
+                    let mut inverse = vec![0; axes.len()];
+                    for (target, source) in axes.iter().copied().enumerate() {
+                        inverse[source] = target;
+                    }
+                    ensure!(ordered.permuted(&inverse)?.same_value(&partial));
+                    ensure!(ordered.expression() == partial.expression());
+                    // Independently execute the finite specialization in both declared
+                    // layouts. The unspecialized D-dimensional carrier stays unchanged.
+                    let components = |tensor: &SymbolicTensor<PartialStructure>|
+                     -> Result<BTreeMap<Vec<usize>, Atom>> {
+                        let tensor = tensor.map_representation_dimensions(|_, dimension| {
+                            dimension.replace(d.to_pattern()).with(4)
+                        })?;
+                        let decoding = CookSettings::indices()
+                            .with_mode(CookMode::ReversibleEncoding);
+                        let library = TENSORLIB.read().unwrap();
+                        let lowered = tensor.into_network(
+                            &*library,
+                            &*FUN_LIB,
+                            &ParseSettings::default(),
+                            Some(&decoding),
+                        )?;
+                        let (mut network, layout) = lowered.into_parts();
+                        network.execute::<SequentialRef, MinResultRank, _, _, _>(
+                            &*library,
+                            &*FUN_LIB,
+                        )?;
+                        let ExecutionResult::Val(tensor) = network.result_tensor(&*library)? else {
+                            return Err(eyre!(
+                                "finite open truncation lost its ranked component carrier"
+                            ));
+                        };
+                        Ok(tensor
+                            .iter_expanded()
+                            .map(|(indices, value)| {
+                                (layout.canonical_to_logical(&indices), value.to_owned())
+                            })
+                            .collect())
+                    };
+                    let before = components(&partial)?;
+                    let after = components(&ordered)?;
+                    let mapped = before
+                        .into_iter()
+                        .map(|(coordinate, value)| {
+                            (
+                                axes.iter()
+                                    .map(|axis| coordinate[*axis])
+                                    .collect::<Vec<_>>(),
+                                value,
+                            )
+                        })
+                        .collect::<BTreeMap<_, _>>();
+                    ensure!(mapped == after);
+                    let result = ordered.try_into_indexed()?;
                     ensure!(
                         result.structure().logical_slots() == input.structure().logical_slots()
                     );

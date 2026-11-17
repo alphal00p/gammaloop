@@ -2,24 +2,24 @@
 //! Shared by the overlap and on-shell test certificates. Neither
 //! scalar nor tensor-valued graph numerators are polynomial-expanded here.
 
-use std::{
-    collections::{HashMap, HashSet},
-    ops::Deref,
-};
+use std::collections::{HashMap, HashSet};
+use std::ops::Deref;
 
-use color_eyre::{Result, eyre::ensure};
-use spenso::{
-    iterators::IteratableTensor,
-    network::{ExecutionResult, MinResultRank, SequentialRef},
-    structure::{TensorStructure, slot::IsAbstractSlot},
-};
-use symbolica::{coefficient::Coefficient, prelude::*};
+use color_eyre::Result;
+use color_eyre::eyre::ensure;
+use idenso::tensor::SymbolicTensor;
+use idenso::{CookMode, CookSettings};
+use spenso::iterators::IteratableTensor;
+use spenso::network::{ExecutionResult, MinResultRank, SequentialRef};
+use spenso::structure::TensorStructure;
+use spenso::structure::slot::IsAbstractSlot;
+use symbolica::coefficient::Coefficient;
+use symbolica::prelude::*;
 
-use crate::{
-    cff::expression::OrientationID,
-    numerator::symbolica_ext::{NumeratorAtomExt, ScalarRationalSize},
-    utils::{FUN_LIB, GS, TENSORLIB},
-};
+use crate::cff::expression::OrientationID;
+use crate::debug_tags;
+use crate::numerator::symbolica_ext::{NumeratorAtomExt, ScalarRationalSize};
+use crate::utils::{FUN_LIB, GS, TENSORLIB};
 
 const MAX_BODY_BYTES: usize = 2 * 1024 * 1024;
 const MAX_COMPONENTS: usize = 4096;
@@ -205,7 +205,7 @@ impl NumeratorJetCache {
                 let raw = value;
                 value = raw.collect_compact_factors();
                 if ordinal == 0 {
-                    crate::debug_tags!(#uv, #algebra, #trace;
+                    debug_tags!(#uv, #algebra, #trace;
                         pass, stage = "finite_component_compact_input",
                         file.raw = %raw.to_plain_string(),
                         file.compact = %value.to_plain_string(),
@@ -316,14 +316,14 @@ impl NumeratorJetCache {
                         }
                     }
                     if ordinal == 0 {
-                        crate::debug_tags!(#uv, #algebra, #trace;
+                        debug_tags!(#uv, #algebra, #trace;
                             pass, stage = "finite_component_literal_keys",
                             file.keys = ?keys,
                             file.key_admission = ?keys.iter().map(|key| {
-                                idenso::CookSettings::indices()
-                                    .with_mode(idenso::CookMode::ReversibleEncoding)
+                                CookSettings::indices()
+                                    .with_mode(CookMode::ReversibleEncoding)
                                     .try_cook(key.as_view()).map_err(|error| error.to_string())
-                                    .and_then(|cooked| idenso::tensor::SymbolicTensor::infer_indexed(cooked)
+                                    .and_then(|cooked| SymbolicTensor::infer_indexed(cooked)
                                         .map(|tensor| tensor.is_scalar()).map_err(|error| error.to_string()))
                             }).collect::<Vec<_>>(),
                             "Selected complete scalar factor owners"
@@ -343,7 +343,7 @@ impl NumeratorJetCache {
                         };
                         let rows = selected.coefficient_list_exact(&keys);
                         if ordinal == 0 {
-                            crate::debug_tags!(#uv, #algebra, #trace;
+                            debug_tags!(#uv, #algebra, #trace;
                                 pass, stage = "finite_component_literal_rows",
                                 admitted = rows.is_some(),
                                 file.selected = %selected.to_plain_string(),
@@ -361,7 +361,7 @@ impl NumeratorJetCache {
                                 ))
                                 .collect_compact_factors();
                             if ordinal == 0 {
-                                crate::debug_tags!(#uv, #algebra, #trace;
+                                debug_tags!(#uv, #algebra, #trace;
                                     pass, stage = "finite_component_literal_recomposition",
                                     accepted = collected.as_view().get_byte_size() < value.as_view().get_byte_size(),
                                     file.recomposed = %collected.to_plain_string(),
@@ -379,27 +379,59 @@ impl NumeratorJetCache {
                     break;
                 }
             }
-            if !value.is_zero() && ScalarRationalSize::estimate(value.as_view()).is_some() {
-                // Bound the collection before entering native monomial enumeration.
-                // Finite execution has fixed every tensor coordinate. Select
-                // those scalar coordinate atoms, not the surrounding graph,
-                // to prove identities between their retained polynomial powers.
-                let cooking = idenso::CookSettings::indices()
-                    .with_mode(idenso::CookMode::ReversibleEncoding)
+            if !value.is_zero() {
+                // Finite execution has fixed every tensor coordinate. A zero
+                // scalar factor proves this component zero without distributing
+                // any surrounding factor or increasing the collection budget.
+                let factors = match value.as_view() {
+                    AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+                    scalar => vec![scalar],
+                };
+                let cooking = CookSettings::indices()
+                    .with_mode(CookMode::ReversibleEncoding)
                     .with_representation_payloads(true, true);
-                // This is an additional exact zero certificate, not a rewrite
-                // of nonzero content keys. Refused or inconclusive collection
-                // retains the original finite value and its existing budgets.
-                if let Ok(cooked) = cooking.try_cook(value.as_view())
-                    && let Ok(scalar) = idenso::tensor::SymbolicTensor::infer_indexed(cooked)
-                    && scalar.is_scalar()
-                    && matches!(
-                        scalar.coefficients_are_zero(
-                            spenso::shadowing::TensorCollectFilter::<0>::TaggedTensors,
-                        ),
-                        Ok(symbolica::id::ConditionResult::True)
-                    )
-                {
+                let proved_zero = factors.into_iter().any(|factor| {
+                    // Preflight each factor before exact rational cancellation;
+                    // refusing or failing to prove a factor leaves it unchanged.
+                    if ScalarRationalSize::estimate(factor).is_some()
+                        && let Ok(cooked) = cooking.try_cook(factor)
+                        && let Ok(scalar) = SymbolicTensor::infer_indexed(cooked)
+                        && scalar.is_scalar()
+                        && scalar.expression().together().is_zero()
+                    {
+                        return true;
+                    }
+                    let AtomView::Add(sum) = factor else {
+                        return false;
+                    };
+                    // An off-diagonal component can retain A*B - A*C where
+                    // bounded B and C are two exact forms of the same scalar.
+                    // Factor only individual bounded scalar factors in a proof
+                    // copy. Never collect the oversized product, and retain the
+                    // original content key unless the complete copy proves zero.
+                    let proof = Atom::add_many(sum.iter().map(|term| {
+                        let factors = match term {
+                            AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+                            scalar => vec![scalar],
+                        };
+                        Atom::mul_many(factors.into_iter().map(|factor| {
+                            if matches!(factor, AtomView::Add(_) | AtomView::Pow(_))
+                                && ScalarRationalSize::estimate(factor).is_some()
+                                && let Ok(cooked) = cooking.try_cook(factor)
+                                && let Ok(scalar) = SymbolicTensor::infer_indexed(cooked)
+                                && scalar.is_scalar()
+                            {
+                                let factored = scalar.expression().factor();
+                                cooking.uncook(factored.as_view())
+                            } else {
+                                factor.to_owned()
+                            }
+                        }))
+                    }));
+                    proof.as_view().get_byte_size() <= MAX_RESULT_BYTES
+                        && proof.collect_compact_factors().is_zero()
+                });
+                if proved_zero {
                     value = Atom::Zero;
                 }
             }
@@ -698,6 +730,169 @@ mod tests {
     }
 
     #[test]
+    fn captured_ir_parent_component_proves_zero_factor_with_large_spectator() {
+        test_initialise().unwrap();
+        // An exact finite component from the OS-child / IR-parent forest.
+        // Keep its inherited products and square; only the scalar proof engine
+        // may collect this bounded factor after all tensor coordinates are fixed.
+        let zero = parse_lit!(
+            q0_3 ^ 2 * q2_3
+                ^ 3 * q3_3
+                    - q2_0
+                        * (-q0_0
+                            * q2_0
+                            * (-q0_0 * q2_0 * q3_0
+                                + q2_1 * (q0_0 * q3_1 + 2 * q0_1 * q3_0)
+                                + q2_2 * (q0_0 * q3_2 + 2 * q0_2 * q3_0)
+                                + q2_3 * (q0_0 * q3_3 + 2 * q0_3 * q3_0))
+                            + q0_3 * q2_3
+                            ^ 2 * (2 * q0_0 * q3_3 + q0_3 * q3_0)
+                                + q2_1
+                                    * (q0_1 * q2_1 * (2 * q0_0 * q3_1 + q0_1 * q3_0)
+                                        + q2_2
+                                            * (2 * q0_0 * (q0_1 * q3_2 + q0_2 * q3_1)
+                                                + 2 * q0_1 * q0_2 * q3_0)
+                                        + q2_3
+                                            * (2 * q0_0 * (q0_1 * q3_3 + q0_3 * q3_1)
+                                                + 2 * q0_1 * q0_3 * q3_0))
+                                + q2_2
+                                    * (q0_2 * q2_2 * (2 * q0_0 * q3_2 + q0_2 * q3_0)
+                                        + q2_3
+                                            * (2 * q0_0 * (q0_2 * q3_3 + q0_3 * q3_2)
+                                                + 2 * q0_2 * q0_3 * q3_0)))
+                    + q2_1
+                        * (q0_1
+                            * q2_1
+                            * (q0_1 * q2_1 * q3_1
+                                + q2_2 * (q0_1 * q3_2 + 2 * q0_2 * q3_1)
+                                + q2_3 * (q0_1 * q3_3 + 2 * q0_3 * q3_1))
+                            + q0_3 * q2_3
+                            ^ 2 * (2 * q0_1 * q3_3 + q0_3 * q3_1)
+                                + q2_2
+                                    * (q0_2 * q2_2 * (2 * q0_1 * q3_2 + q0_2 * q3_1)
+                                        + q2_3
+                                            * (2 * q0_1 * (q0_2 * q3_3 + q0_3 * q3_2)
+                                                + 2 * q0_2 * q0_3 * q3_1)))
+                    + q2_2
+                        * (q0_2
+                            * q2_2
+                            * (q0_2 * q2_2 * q3_2 + q2_3 * (q0_2 * q3_3 + 2 * q0_3 * q3_2))
+                            + q0_3 * q2_3
+                            ^ 2 * (2 * q0_2 * q3_3 + q0_3 * q3_2))
+                    + (q0_0 * q2_0 - q0_1 * q2_1 - q0_2 * q2_2 - q0_3 * q2_3)
+                ^ 2 * (q2_0 * q3_0 - q2_1 * q3_1 - q2_2 * q3_2 - q2_3 * q3_3)
+        );
+        let off_diagonal = parse_lit!(
+            (q2_0
+                * (-2
+                    * q2_1
+                    * (2 * q2_0 * q3_0 - 2 * q2_1 * q3_1 - 2 * q2_2 * q3_2 - 2 * q2_3 * q3_3)
+                    + 2 * q3_1 * (q2_0 ^ 2 - q2_1 ^ 2 - q2_2 ^ 2 - q2_3 ^ 2))
+                + (-q2_0 * q3_1 + q2_1 * q3_0) * (q2_0 ^ 2 - q2_1 ^ 2 - q2_2 ^ 2 - q2_3 ^ 2))
+                * (q0_0
+                    ^ 2 * q2_0
+                    ^ 3 * q3_0 - q0_0
+                    ^ 2 * q2_0
+                    ^ 2 * q2_1 * q3_1 - q0_0
+                    ^ 2 * q2_0
+                    ^ 2 * q2_2 * q3_2 - q0_0
+                    ^ 2 * q2_0
+                    ^ 2 * q2_3 * q3_3 - 2 * q0_0 * q0_1 * q2_0
+                    ^ 2 * q2_1 * q3_0 + 2 * q0_0 * q0_1 * q2_0 * q2_1
+                    ^ 2 * q3_1
+                        + 2 * q0_0 * q0_1 * q2_0 * q2_1 * q2_2 * q3_2
+                        + 2 * q0_0 * q0_1 * q2_0 * q2_1 * q2_3 * q3_3
+                        - 2 * q0_0 * q0_2 * q2_0
+                    ^ 2 * q2_2 * q3_0
+                        + 2 * q0_0 * q0_2 * q2_0 * q2_1 * q2_2 * q3_1
+                        + 2 * q0_0 * q0_2 * q2_0 * q2_2
+                    ^ 2 * q3_2 + 2 * q0_0 * q0_2 * q2_0 * q2_2 * q2_3 * q3_3
+                        - 2 * q0_0 * q0_3 * q2_0
+                    ^ 2 * q2_3 * q3_0
+                        + 2 * q0_0 * q0_3 * q2_0 * q2_1 * q2_3 * q3_1
+                        + 2 * q0_0 * q0_3 * q2_0 * q2_2 * q2_3 * q3_2
+                        + 2 * q0_0 * q0_3 * q2_0 * q2_3
+                    ^ 2 * q3_3 + q0_1
+                    ^ 2 * q2_0 * q2_1
+                    ^ 2 * q3_0 - q0_1
+                    ^ 2 * q2_1
+                    ^ 3 * q3_1 - q0_1
+                    ^ 2 * q2_1
+                    ^ 2 * q2_2 * q3_2 - q0_1
+                    ^ 2 * q2_1
+                    ^ 2 * q2_3 * q3_3 + 2 * q0_1 * q0_2 * q2_0 * q2_1 * q2_2 * q3_0
+                        - 2 * q0_1 * q0_2 * q2_1
+                    ^ 2 * q2_2 * q3_1 - 2 * q0_1 * q0_2 * q2_1 * q2_2
+                    ^ 2 * q3_2 - 2 * q0_1 * q0_2 * q2_1 * q2_2 * q2_3 * q3_3
+                        + 2 * q0_1 * q0_3 * q2_0 * q2_1 * q2_3 * q3_0
+                        - 2 * q0_1 * q0_3 * q2_1
+                    ^ 2 * q2_3 * q3_1
+                        - 2 * q0_1 * q0_3 * q2_1 * q2_2 * q2_3 * q3_2
+                        - 2 * q0_1 * q0_3 * q2_1 * q2_3
+                    ^ 2 * q3_3 + q0_2
+                    ^ 2 * q2_0 * q2_2
+                    ^ 2 * q3_0 - q0_2
+                    ^ 2 * q2_1 * q2_2
+                    ^ 2 * q3_1 - q0_2
+                    ^ 2 * q2_2
+                    ^ 3 * q3_2 - q0_2
+                    ^ 2 * q2_2
+                    ^ 2 * q2_3 * q3_3 + 2 * q0_2 * q0_3 * q2_0 * q2_2 * q2_3 * q3_0
+                        - 2 * q0_2 * q0_3 * q2_1 * q2_2 * q2_3 * q3_1
+                        - 2 * q0_2 * q0_3 * q2_2
+                    ^ 2 * q2_3 * q3_2 - 2 * q0_2 * q0_3 * q2_2 * q2_3
+                    ^ 2 * q3_3 + q0_3
+                    ^ 2 * q2_0 * q2_3
+                    ^ 2 * q3_0 - q0_3
+                    ^ 2 * q2_1 * q2_3
+                    ^ 2 * q3_1 - q0_3
+                    ^ 2 * q2_2 * q2_3
+                    ^ 2 * q3_2 - q0_3
+                    ^ 2 * q2_3
+                    ^ 3 * q3_3)
+                + (-q2_0
+                    * (-q2_1
+                        * (4 * q2_0 * q3_0 - 4 * q2_1 * q3_1 - 4 * q2_2 * q3_2 - 4 * q2_3 * q3_3)
+                        + q3_1 * (q2_0 ^ 2 - q2_1 ^ 2 - q2_2 ^ 2 - q2_3 ^ 2))
+                    - q2_1 * q3_0 * (q2_0 ^ 2 - q2_1 ^ 2 - q2_2 ^ 2 - q2_3 ^ 2))
+                    * (q0_0 * q2_0 - q0_1 * q2_1 - q0_2 * q2_2 - q0_3 * q2_3)
+                ^ 2 * (q2_0 * q3_0 - q2_1 * q3_1 - q2_2 * q3_2 - q2_3 * q3_3)
+        );
+        let spectator = parse_lit!((a + b) ^ 11 * opaque(c + d));
+        assert!(ScalarRationalSize::estimate(zero.as_view()).is_some());
+        assert!(ScalarRationalSize::estimate((&spectator * &zero).as_view()).is_none());
+        let mut cache = NumeratorJetCache::default();
+        assert!(cache.canonicalize(&zero).unwrap().is_zero);
+        assert!(ScalarRationalSize::estimate(off_diagonal.as_view()).is_none());
+        assert!(cache.canonicalize(&off_diagonal).unwrap().is_zero);
+        assert!(
+            cache
+                .canonicalize(&(&spectator * &off_diagonal))
+                .unwrap()
+                .is_zero
+        );
+        assert!(
+            !cache
+                .canonicalize(&(&spectator * (&off_diagonal + 1)))
+                .unwrap()
+                .is_zero
+        );
+
+        assert!(!cache.canonicalize(&(&off_diagonal + 1)).unwrap().is_zero);
+
+        assert!(cache.canonicalize(&(&spectator * &zero)).unwrap().is_zero);
+        let wrong = cache.canonicalize(&(&spectator * (&zero + 1))).unwrap();
+        assert!(!wrong.is_zero);
+        assert!(wrong.key.contains(&parse_lit!((a + b) ^ 11)));
+        assert!(
+            !cache
+                .canonicalize(&(&spectator * &zero + 1))
+                .unwrap()
+                .is_zero
+        );
+    }
+
+    #[test]
     fn opaque_common_factors_cancel_without_opening_their_bodies() {
         test_initialise().unwrap();
         let [a, b, c, d, e, f] = ["a", "b", "c", "d", "e", "f"].map(|name| {
@@ -926,7 +1121,7 @@ mod tests {
                 ("without numeric and coupling prefactors", without_coupling),
                 ("renamed mass variables", renamed_masses),
             ] {
-                crate::debug_tags!(#uv, #algebra, #trace;
+                debug_tags!(#uv, #algebra, #trace;
                     stage = "recorded_finite_component_replay", fixture, label,
                     file.input = %value.to_plain_string(),
                     "Replay exact coefficient representation toggle"
@@ -934,7 +1129,7 @@ mod tests {
                 let result = cache.canonicalize(&value).unwrap();
                 let nonzero = cache.canonicalize(&(&spectator * (&value + 1))).unwrap();
                 let control = cache.canonicalize(&spectator).unwrap();
-                crate::debug_tags!(#uv, #algebra, #trace;
+                debug_tags!(#uv, #algebra, #trace;
                     stage = "recorded_finite_component_result", fixture, label,
                     is_zero = result.is_zero, nonzero_control = nonzero == control,
                     file.result = %result.key.to_plain_string(),

@@ -2123,12 +2123,26 @@ mod tests {
                 rows.iter()
                     .map(|(monomial, coefficient)| monomial * coefficient),
             );
+            let difference =
+                normalized.with_checked_expression(normalized.expression() - &recomposed)?;
+            // Check the complete finite tensor, including equivalent factored
+            // scalar forms that generic coefficient collection cannot certify.
+            let wrong = normalized
+                .with_checked_expression(difference.expression() + normalized.expression())?;
+            QcdMassReference::certify_finite_tagged_rows_zero(
+                &format!(
+                    "{operation}: scale-log rows exactly reconstruct the original finite tensor"
+                ),
+                difference,
+            )?;
             assert!(
-                normalized
-                    .with_checked_expression(normalized.expression() - recomposed)?
-                    .coefficients_are_zero(TensorCollectFilter::<0>::Tensors)?
-                    .is_true(),
-                "{operation}: all scale-log rows must exactly reconstruct the original finite tensor",
+                QcdMassReference::certify_finite_tagged_rows_zero(
+                    &format!(
+                        "{operation}: nonzero finite tensor perturbation of scale-log recomposition"
+                    ),
+                    wrong,
+                )
+                .is_err()
             );
             let coefficient = rows
                 .iter()
