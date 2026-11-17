@@ -15,7 +15,9 @@ use spenso::network::library::symbolic::ETS;
 use spenso::network::parsing::ParseState;
 use spenso::network::tags::SPENSO_TAG;
 use spenso::structure::abstract_index::AbstractIndex;
-use spenso::structure::partial::{PartialStructure, PartialStructureExt};
+use spenso::structure::partial::{
+    PartialIndex, PartialSlot, PartialStructure, PartialStructureExt,
+};
 use spenso::structure::representation::{BaseRepName, LibraryRep, Minkowski};
 use spenso::structure::slot::IsAbstractSlot;
 use std::collections::{HashMap, HashSet};
@@ -26,15 +28,20 @@ use symbolica::utils::resources::ResourceBudget;
 
 /// Row strategy of the block path.
 ///
-/// The default opens every `dot(k, q)^n` with dummies keyed by `(k, q, copy)`,
-/// so that equal tensor structures become equal collector rows.
-/// `FEYNKIT_TENSORREDUCE_ROWS=legacy` restores the earlier path for
-/// comparison: a fresh dummy per opened dot and one contraction per labelled
-/// pair of pairings.
+/// Both non-legacy modes open every `dot(k, q)^n` with dummies keyed by
+/// `(k, q, copy)`, so that equal tensor structures become equal collector
+/// rows, and project each row once per pairing sigma of its ports.
+/// [`RowMode::Relabel`] (the default) builds the pieces of a row with
+/// explicit ports by relabelling them, without tensor inference or
+/// multiplication; other rows use [`RowMode::Grouped`]. The environment
+/// variable `FEYNKIT_TENSORREDUCE_ROWS` selects `grouped` or `legacy` for
+/// comparison. `legacy` is the earlier path: a fresh dummy per opened dot and
+/// one contraction per labelled pair of pairings.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum RowMode {
     Legacy,
-    Default,
+    Grouped,
+    Relabel,
 }
 
 impl RowMode {
@@ -43,7 +50,8 @@ impl RowMode {
         *MODE.get_or_init(
             || match std::env::var("FEYNKIT_TENSORREDUCE_ROWS").as_deref() {
                 Ok("legacy") => RowMode::Legacy,
-                _ => RowMode::Default,
+                Ok("grouped") => RowMode::Grouped,
+                _ => RowMode::Relabel,
             },
         )
     }
@@ -190,7 +198,7 @@ impl TensorReducer {
         let mode = self.row_mode();
         let deterministic = match mode {
             RowMode::Legacy => None,
-            RowMode::Default => self.open_block_dots(source, true)?,
+            RowMode::Grouped | RowMode::Relabel => self.open_block_dots(source, true)?,
         };
         let indexed = match deterministic {
             Some(indexed) => indexed,
@@ -209,10 +217,10 @@ impl TensorReducer {
     /// `prod_j k(D(k,q,j)) q(D(k,q,j))` with one label per `(k, q, copy)` from
     /// a pool that avoids every label of `source`. The selected outside
     /// structures of the collector are then equal whenever their tensor
-    /// structure is, so equal rows merge. The same label can occur twice in one
-    /// product only if the same dot occurs at two nesting levels of it; such an
-    /// expression fails the source check and this returns `None`, and the
-    /// caller opens with fresh dummies instead. Without `deterministic` every
+    /// structure is, so equal rows merge. If the same dot occurs at two nesting
+    /// levels of one product its label would occur more than twice once the
+    /// collector distributes the sum; this returns `None` then (and when the
+    /// source check fails), and the caller opens with fresh dummies instead. Without `deterministic` every
     /// occurrence gets a fresh dummy (`undo_dots`).
     pub(super) fn open_block_dots(
         &self,
@@ -345,6 +353,10 @@ impl TensorReducer {
         let mode = self.row_mode();
         // The Weingarten weights of one rank, for every pair of pairings.
         let mut tables: HashMap<usize, PairingTable> = HashMap::new();
+        // Relabelling needs the source's explicit open labels; one shared pool
+        // of pair labels serves every row, since rows are separate summands.
+        let source_ports = explicit_ports(source.structure());
+        let mut pair_labels: Vec<AbstractIndex> = Vec::new();
         let mut terms = Vec::new();
         let mut max_rank = 0;
         for (outside, inside) in rows {
@@ -361,6 +373,32 @@ impl TensorReducer {
                 .map_err(|e| TensorReductionError::TensorAlgebra(e.to_string()))?;
             let rank = slots.len();
             max_rank = max_rank.max(rank);
+            if mode == RowMode::Relabel && external.is_none() {
+                if rank % 2 == 1 {
+                    continue;
+                }
+                if let Some(source_ports) = &source_ports
+                    && let Some(plan) = RelabelPlan::new(source_ports, &outside, &inside)
+                {
+                    if !tables.contains_key(&rank) {
+                        tables.insert(rank, self.pairing_table(rank)?);
+                    }
+                    while pair_labels.len() < rank / 2 {
+                        pair_labels.push(state.fresh_index());
+                    }
+                    if self.project_relabelled_row(
+                        source,
+                        &outside,
+                        &inside,
+                        &plan,
+                        &tables[&rank],
+                        &pair_labels,
+                        &mut terms,
+                    )? {
+                        continue;
+                    }
+                }
+            }
             let indices = (0..rank).map(|_| state.fresh_index()).collect::<Vec<_>>();
             let fresh = slots
                 .iter()
@@ -477,6 +515,151 @@ impl TensorReducer {
             });
         }
         Ok(())
+    }
+
+    /// Project one row by relabelling its ports; `false` if it cannot.
+    ///
+    /// The vacuum average of the row is
+    /// `sum_(sigma,tau) W(sigma,tau) (I g_sigma)(O g_tau)`. Contracting a
+    /// metric is a relabelling, so `B_sigma = I g_sigma` is `I` with both
+    /// ports of every pair of sigma joined, and `O_tau = O g_tau` is `O` with,
+    /// for every pair of tau, the leg on the outside renamed to the other port
+    /// (two outside legs then contract; an outside leg paired with an open
+    /// source slot takes over its label), or times the metric of two open
+    /// source slots. Each piece has a known interface (`B_sigma` is a scalar,
+    /// `O_tau` is `O` with these changes), so it is built without inferring a
+    /// projector or multiplying tensors.
+    ///
+    /// If every summand of `I` holds each port on a direct vector factor,
+    /// `B_sigma` is the sum of the other factors times
+    /// `prod_(a,b in sigma) dot(v_a, v_b)`. Otherwise the ports are relabelled
+    /// to one fresh label per pair and `B_sigma` is contracted. The row adds
+    /// `B_sigma sum_tau W(sigma,tau) O_tau` for every sigma, each checked once
+    /// against the source interface. Nothing is added when this returns
+    /// `false` (a port spelling that does not occur in its piece).
+    #[allow(clippy::too_many_arguments)]
+    fn project_relabelled_row(
+        &self,
+        source: &SymbolicTensor<PartialStructure>,
+        outside: &SymbolicTensor<PartialStructure>,
+        inside: &SymbolicTensor<PartialStructure>,
+        plan: &RelabelPlan,
+        table: &PairingTable,
+        pair_labels: &[AbstractIndex],
+        terms: &mut Vec<TensorReductionTerm>,
+    ) -> Result<bool, TensorReductionError> {
+        let mut outsides = Vec::with_capacity(table.pairings.len());
+        for tau in &table.pairings {
+            resources::checkpoint()?;
+            let Some(piece) = plan.outside(outside, tau) else {
+                return Ok(false);
+            };
+            outsides.push(
+                piece
+                    .contract(block_contract_settings())?
+                    .to_dots()?
+                    .into_expression(),
+            );
+        }
+        let monomials = self.port_monomials(plan, inside.expression().as_view())?;
+        let mut row = Vec::with_capacity(table.pairings.len());
+        for (sigma_index, sigma) in table.pairings.iter().enumerate() {
+            resources::checkpoint()?;
+            let mut weighted = Atom::Zero;
+            for (tau_index, piece) in outsides.iter().enumerate() {
+                let weight = &table.weights[sigma_index][tau_index];
+                if !weight.is_zero() && !piece.is_zero() {
+                    weighted += weight * piece;
+                }
+            }
+            if weighted.is_zero() {
+                continue;
+            }
+            let block = match &monomials {
+                Some(monomials) => paired_monomials(monomials, sigma)?,
+                None => {
+                    let Some(block) = plan.inside(inside, sigma, pair_labels) else {
+                        return Ok(false);
+                    };
+                    block
+                        .contract(block_contract_settings())?
+                        .to_dots()?
+                        .into_expression()
+                }
+            };
+            row.push(block * weighted);
+        }
+        for term in row {
+            resources::checkpoint()?;
+            let tensor = source.with_checked_expression(term)?;
+            self.push_block_term(terms, Atom::one(), tensor)?;
+        }
+        Ok(true)
+    }
+
+    /// Split every summand of a row's inside into its port vectors (compact,
+    /// by port) and the product of its other factors. `None` unless each port
+    /// occurs exactly once per summand, as a direct vector factor, and no
+    /// other factor holds a port (a metric, a sum or a function argument).
+    fn port_monomials(
+        &self,
+        plan: &RelabelPlan,
+        inside: AtomView<'_>,
+    ) -> Result<Option<Vec<PortMonomial>>, TensorReductionError> {
+        let summands = match inside {
+            AtomView::Add(sum) => sum.iter().collect::<Vec<_>>(),
+            term => vec![term],
+        };
+        let holds_port = |factor: AtomView<'_>| {
+            let mut found = false;
+            factor.visitor(&mut |node| {
+                if let AtomView::Fun(function) = node
+                    && function.get_nargs() == 2
+                    && function.get_symbol() == Minkowski::selfless_symbol()
+                    && plan.port_atoms.iter().any(|port| port.as_view() == node)
+                {
+                    found = true;
+                }
+                !found
+            });
+            found
+        };
+        let mut monomials = Vec::with_capacity(summands.len());
+        for term in summands {
+            resources::checkpoint()?;
+            let factors = match term {
+                AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+                factor => vec![factor],
+            };
+            let mut vectors = vec![None; plan.port_atoms.len()];
+            let mut rest = Vec::with_capacity(factors.len());
+            for factor in factors {
+                let port = match self.indexed_vector(factor) {
+                    Ok(Some(vector)) => plan
+                        .port_atoms
+                        .iter()
+                        .position(|port| *port == vector.slot)
+                        .map(|port| (port, vector.compact)),
+                    _ => None,
+                };
+                match port {
+                    Some((port, compact)) if vectors[port].is_none() => {
+                        vectors[port] = Some(compact)
+                    }
+                    Some(_) => return Ok(None),
+                    None if holds_port(factor) => return Ok(None),
+                    None => rest.push(factor),
+                }
+            }
+            let Some(vectors) = vectors.into_iter().collect::<Option<Vec<_>>>() else {
+                return Ok(None);
+            };
+            let rest = rest
+                .into_iter()
+                .fold(Atom::one(), |product, factor| product * factor.to_owned());
+            monomials.push(PortMonomial { rest, vectors });
+        }
+        Ok(Some(monomials))
     }
 
     /// Weingarten weights of every (sigma, tau) pair of pairings of `rank`
@@ -647,6 +830,197 @@ struct PairingTable {
     weights: Vec<Vec<Atom>>,
 }
 
+/// The slot atoms of an interface whose slots are all explicitly labelled.
+fn explicit_ports(structure: &PartialStructure) -> Option<HashSet<Atom>> {
+    structure
+        .logical_slots()
+        .into_iter()
+        .map(|slot| {
+            matches!(slot.aind, PartialIndex::Explicit(_)).then(|| composition::port_atom(slot))
+        })
+        .collect()
+}
+
+/// The ports of a row whose projection can be built by relabelling.
+///
+/// It exists only if every slot of both row pieces is explicitly labelled,
+/// every slot of the inside is a Minkowski port of one representation (so
+/// that a projected inside is a scalar and its port labels are the only
+/// labels to rename), and every port either connects to the outside or is an
+/// open slot of the source, never both. Other rows take the grouped path.
+pub(super) struct RelabelPlan {
+    ports: Vec<PartialSlot>,
+    port_atoms: Vec<Atom>,
+    connects: Vec<bool>,
+}
+
+impl RelabelPlan {
+    pub(super) fn new(
+        source_ports: &HashSet<Atom>,
+        outside: &SymbolicTensor<PartialStructure>,
+        inside: &SymbolicTensor<PartialStructure>,
+    ) -> Option<Self> {
+        let ports = inside.structure().logical_slots();
+        let outside_ports = explicit_ports(outside.structure())?;
+        let representation = ports.first().map(|slot| slot.rep());
+        if ports.iter().any(|slot| {
+            !matches!(slot.aind, PartialIndex::Explicit(_))
+                || slot.rep().rep != LibraryRep::from(Minkowski {})
+                || Some(slot.rep()) != representation
+        }) {
+            return None;
+        }
+        let port_atoms = ports
+            .iter()
+            .map(|slot| composition::port_atom(*slot))
+            .collect::<Vec<_>>();
+        let connects = port_atoms
+            .iter()
+            .map(|port| {
+                let connects = outside_ports.contains(port);
+                (connects != source_ports.contains(port)).then_some(connects)
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Some(Self {
+            ports,
+            port_atoms,
+            connects,
+        })
+    }
+
+    /// `B_sigma` before contraction: the inside with both ports of every pair
+    /// of `sigma` renamed to one label of `pair_labels`. Its interface is
+    /// empty. `None` if a port spelling does not occur in the inside.
+    pub(super) fn inside(
+        &self,
+        inside: &SymbolicTensor<PartialStructure>,
+        sigma: &[usize],
+        pair_labels: &[AbstractIndex],
+    ) -> Option<SymbolicTensor<PartialStructure>> {
+        let mut renames = Vec::with_capacity(sigma.len());
+        for (pair, left) in (0..sigma.len())
+            .filter(|left| *left < sigma[*left])
+            .enumerate()
+        {
+            let label = self.ports[left]
+                .rep()
+                .slot::<AbstractIndex, _>(pair_labels[pair])
+                .to_atom();
+            renames.push((self.port_atoms[left].clone(), label.clone()));
+            renames.push((self.port_atoms[sigma[left]].clone(), label));
+        }
+        Some(SymbolicTensor::new(
+            relabel(inside.expression().as_view(), &renames)?,
+            PartialStructure::from_logical_slots([]),
+        ))
+    }
+
+    /// `O_tau` before contraction: the outside times the metrics of `tau`, as
+    /// a relabelling. Two outside legs contract (one is renamed to the other);
+    /// an outside leg paired with an open source slot takes over that label;
+    /// two open source slots get their metric. `None` if a port spelling does
+    /// not occur in the outside.
+    pub(super) fn outside(
+        &self,
+        outside: &SymbolicTensor<PartialStructure>,
+        tau: &[usize],
+    ) -> Option<SymbolicTensor<PartialStructure>> {
+        let mut slots = outside.structure().logical_slots();
+        let position = |slots: &[PartialSlot], port: &Atom| {
+            slots
+                .iter()
+                .position(|slot| composition::port_atom(*slot) == *port)
+        };
+        let mut renames = Vec::new();
+        let mut metrics = Atom::one();
+        for left in (0..tau.len()).filter(|left| *left < tau[*left]) {
+            let right = tau[left];
+            match (self.connects[left], self.connects[right]) {
+                (true, true) => {
+                    renames.push((
+                        self.port_atoms[right].clone(),
+                        self.port_atoms[left].clone(),
+                    ));
+                    slots.remove(position(&slots, &self.port_atoms[left])?);
+                    slots.remove(position(&slots, &self.port_atoms[right])?);
+                }
+                (true, false) | (false, true) => {
+                    let (leg, open) = if self.connects[left] {
+                        (left, right)
+                    } else {
+                        (right, left)
+                    };
+                    renames.push((self.port_atoms[leg].clone(), self.port_atoms[open].clone()));
+                    let at = position(&slots, &self.port_atoms[leg])?;
+                    slots[at] = self.ports[open];
+                }
+                (false, false) => {
+                    metrics = metrics
+                        * FunctionBuilder::new(ETS.metric)
+                            .add_arg(&self.port_atoms[left])
+                            .add_arg(&self.port_atoms[right])
+                            .finish();
+                    slots.push(self.ports[left]);
+                    slots.push(self.ports[right]);
+                }
+            }
+        }
+        Some(SymbolicTensor::new(
+            relabel(outside.expression().as_view(), &renames)? * metrics,
+            PartialStructure::from_logical_slots(slots),
+        ))
+    }
+}
+
+/// One summand of a row's inside: its port vectors (compact, by port) and
+/// the product of its other factors.
+struct PortMonomial {
+    rest: Atom,
+    vectors: Vec<Atom>,
+}
+
+/// `B_sigma` of monomial-shaped insides:
+/// `sum_i rest_i prod_(a < sigma[a]) dot(v_ia, v_i,sigma[a])`.
+fn paired_monomials(
+    monomials: &[PortMonomial],
+    sigma: &[usize],
+) -> Result<Atom, TensorReductionError> {
+    let mut block = Atom::Zero;
+    for monomial in monomials {
+        resources::checkpoint()?;
+        let mut term = monomial.rest.clone();
+        for left in (0..sigma.len()).filter(|left| *left < sigma[*left]) {
+            term = term
+                * FunctionBuilder::new(SPENSO_TAG.dot)
+                    .add_arg(&monomial.vectors[left])
+                    .add_arg(&monomial.vectors[sigma[left]])
+                    .finish();
+        }
+        block += term;
+    }
+    Ok(block)
+}
+
+/// Rename explicit Minkowski slot atoms (`from -> to`, all at once). `None`
+/// if some `from` does not occur.
+fn relabel(expression: AtomView<'_>, renames: &[(Atom, Atom)]) -> Option<Atom> {
+    if renames.is_empty() {
+        return Some(expression.to_owned());
+    }
+    let mut applied = vec![false; renames.len()];
+    let relabelled = expression.replace_map(|value, _, out| {
+        if let AtomView::Fun(function) = value
+            && function.get_nargs() == 2
+            && function.get_symbol() == Minkowski::selfless_symbol()
+            && let Some(rename) = renames.iter().position(|(from, _)| from.as_view() == value)
+        {
+            applied[rename] = true;
+            **out = renames[rename].1.clone();
+        }
+    });
+    applied.iter().all(|applied| *applied).then_some(relabelled)
+}
+
 /// `prod_(a < pairing[a]) g(slots[a], slots[pairing[a]])`.
 fn metric_pairing(slots: &[Atom], pairing: &[usize]) -> Atom {
     (0..pairing.len())
@@ -794,13 +1168,7 @@ mod tests {
             .with_row_mode(RowMode::Legacy)
             .reduce_blocks(&source, None)
             .unwrap();
-        let current = reducer
-            .clone()
-            .with_row_mode(RowMode::Default)
-            .reduce_blocks(&source, None)
-            .unwrap();
         assert_eq!(legacy.terms().len(), 3);
-        assert_eq!(current.terms().len(), 1);
         let expected = parse!(
             "(block_rows::x1+block_rows::x2+block_rows::x3)
             *spenso::dot(block_rows::k(spenso::mink(D)),block_rows::k(spenso::mink(D)))
@@ -808,7 +1176,15 @@ mod tests {
         )
         .expand();
         assert_eq!(contracted(legacy), expected);
-        assert_eq!(contracted(current), expected);
+        for mode in [RowMode::Grouped, RowMode::Relabel] {
+            let current = reducer
+                .clone()
+                .with_row_mode(mode)
+                .reduce_blocks(&source, None)
+                .unwrap();
+            assert_eq!(current.terms().len(), 1, "{mode:?}");
+            assert_eq!(contracted(current), expected, "{mode:?}");
+        }
     }
 
     #[test]
@@ -834,7 +1210,7 @@ mod tests {
               +block_clash::x*spenso::dot(block_clash::q(spenso::mink(D)),block_clash::q(spenso::mink(D)))*block_clash::q(spenso::mink(D,mu)))"
         )
         .expand();
-        for mode in [RowMode::Legacy, RowMode::Default] {
+        for mode in [RowMode::Legacy, RowMode::Grouped, RowMode::Relabel] {
             let reduction = reducer
                 .clone()
                 .with_row_mode(mode)
@@ -867,16 +1243,257 @@ mod tests {
             .with_row_mode(RowMode::Legacy)
             .reduce_blocks(&source, None)
             .unwrap();
-        let grouped = reducer
-            .clone()
-            .with_row_mode(RowMode::Default)
-            .reduce_blocks(&source, None)
-            .unwrap();
         assert_eq!(pairs.max_rank(), 4);
         assert_eq!(pairs.terms().len(), 9, "3 x 3 labelled (sigma, tau) terms");
-        assert_eq!(grouped.terms().len(), 3, "one term per sigma");
         let pairs = contracted(pairs);
         assert!(!pairs.is_zero());
-        assert_eq!(pairs, contracted(grouped));
+        for mode in [RowMode::Grouped, RowMode::Relabel] {
+            let grouped = reducer
+                .clone()
+                .with_row_mode(mode)
+                .reduce_blocks(&source, None)
+                .unwrap();
+            assert_eq!(grouped.terms().len(), 3, "one term per sigma ({mode:?})");
+            assert_eq!(pairs, contracted(grouped), "{mode:?}");
+        }
+    }
+
+    /// Small block inputs of inside rank 0, 2 or 4 whose ports mix open
+    /// source slots, dummies to an outside vector and opened dots.
+    fn random_block_inputs() -> Vec<(usize, Atom)> {
+        let _ = (
+            spenso::vector_symbol!("block_relabel::k"),
+            spenso::vector_symbol!("block_relabel::q"),
+            spenso::vector_symbol!("block_relabel::p"),
+        );
+        let vector = |head: &str, index: Option<&str>| {
+            let slot = match index {
+                Some(index) => format!("spenso::mink(D,block_relabel::{index})"),
+                None => "spenso::mink(D)".to_owned(),
+            };
+            parse!(format!("block_relabel::{head}({slot})"))
+        };
+        let dot = |left: &str, right: &str| {
+            FunctionBuilder::new(SPENSO_TAG.dot)
+                .add_arg(vector(left, None))
+                .add_arg(vector(right, None))
+                .finish()
+        };
+        // A scalar sum keeps every input on the block path.
+        let block = parse!(
+            "block_relabel::x+block_relabel::y*spenso::dot(block_relabel::k(spenso::mink(D)),block_relabel::k(spenso::mink(D)))"
+        );
+        let mut seed = 0x2545_f491_4f6c_dd1d_u64;
+        let mut next = |bound: u64| {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed % bound
+        };
+        let mut inputs = Vec::new();
+        for case in 0..30 {
+            let rank = [0, 2, 4][case % 3];
+            let mut atom = block.clone();
+            let mut placed = 0;
+            let mut open = 0;
+            while placed < rank {
+                match next(7) {
+                    // A metric between two open source slots (contraction path).
+                    4 if rank - placed >= 2 => {
+                        let (left, right) = (format!("e{}", open + 1), format!("e{}", open + 2));
+                        open += 2;
+                        atom = atom
+                            * parse!(format!(
+                                "spenso::g(spenso::mink(D,block_relabel::{left}),spenso::mink(D,block_relabel::{right}))"
+                            ));
+                        placed += 2;
+                    }
+                    // A sum carrying an open port (contraction path).
+                    5 => {
+                        open += 1;
+                        let leg = vector("k", Some(&format!("e{open}")));
+                        atom =
+                            atom * (parse!("block_relabel::z") * leg.clone() + dot("k", "k") * leg);
+                        placed += 1;
+                    }
+                    // An open source slot carried by the loop vector.
+                    0 | 4 => {
+                        open += 1;
+                        atom = atom * vector("k", Some(&format!("e{open}")));
+                        placed += 1;
+                    }
+                    // A dummy to an outside spectator.
+                    1 => {
+                        let index = format!("d{placed}");
+                        let spectator = ["q", "p"][next(2) as usize];
+                        atom = atom * vector("k", Some(&index)) * vector(spectator, Some(&index));
+                        placed += 1;
+                    }
+                    // An opened dot, possibly squared (two copies).
+                    _ => {
+                        let spectator = ["q", "p"][next(2) as usize];
+                        let power = if rank - placed >= 2 && next(2) == 0 {
+                            2
+                        } else {
+                            1
+                        };
+                        atom = atom * dot("k", spectator).pow(Atom::num(power));
+                        placed += power as usize;
+                    }
+                }
+            }
+            // Some outside slots are not ports at all.
+            if next(2) == 0 {
+                open += 1;
+                atom = atom * vector("p", Some(&format!("e{open}")));
+            }
+            if rank == 0 {
+                atom = atom * vector("q", Some("e9"));
+            }
+            inputs.push((rank, atom));
+        }
+        inputs
+    }
+
+    #[test]
+    fn relabelled_pieces_have_the_inferred_interfaces() {
+        let inputs = random_block_inputs();
+        let reducer =
+            TensorReducer::new(parse!("D")).with_integrated_head(symbol!("block_relabel::k"));
+        let mut planned = [0_usize; 3];
+        // Rows on the contraction path and on the monomial (dot) path.
+        let mut paths = [0_usize; 2];
+        for (rank, input) in inputs {
+            let source = SymbolicTensor::infer(input.clone()).unwrap();
+            let indexed = reducer.open_block_dots(&source, true).unwrap().unwrap();
+            let source_ports = explicit_ports(source.structure()).unwrap();
+            let table = reducer.pairing_table(rank).unwrap();
+            let state = ParseState::<AbstractIndex>::default();
+            state.reserve_indices(indexed.expression().as_view());
+            let labels = (0..rank / 2)
+                .map(|_| state.fresh_index())
+                .collect::<Vec<_>>();
+            for (outside, inside) in reducer.block_rows(&indexed).unwrap() {
+                assert_eq!(inside.structure().logical_slots().len(), rank, "{input}");
+                let plan = RelabelPlan::new(&source_ports, &outside, &inside)
+                    .unwrap_or_else(|| panic!("explicit row of {input}"));
+                planned[rank / 2] += 1;
+                let monomial = reducer
+                    .port_monomials(&plan, inside.expression().as_view())
+                    .unwrap()
+                    .is_some();
+                paths[usize::from(monomial)] += 1;
+                for pairing in &table.pairings {
+                    for piece in [
+                        plan.inside(&inside, pairing, &labels).unwrap(),
+                        plan.outside(&outside, pairing).unwrap(),
+                    ] {
+                        // The same slots; the logical order of an all-explicit
+                        // interface follows the spelling and is not compared.
+                        let inferred = SymbolicTensor::infer(piece.expression().clone()).unwrap();
+                        assert_eq!(
+                            piece.structure().canonical(),
+                            inferred.structure().canonical(),
+                            "{} in {input}",
+                            piece.expression()
+                        );
+                    }
+                }
+            }
+            let legacy = contracted(
+                reducer
+                    .clone()
+                    .with_row_mode(RowMode::Legacy)
+                    .reduce_blocks(&source, None)
+                    .unwrap(),
+            );
+            for mode in [RowMode::Grouped, RowMode::Relabel] {
+                let reduction = reducer
+                    .clone()
+                    .with_row_mode(mode)
+                    .reduce_blocks(&source, None)
+                    .unwrap();
+                for term in reduction.terms() {
+                    assert_eq!(term.tensor().structure(), source.structure());
+                }
+                assert_eq!(contracted(reduction), legacy, "{mode:?} for {input}");
+            }
+        }
+        assert!(planned.iter().all(|rows| *rows > 0), "{planned:?}");
+        assert!(paths.iter().all(|rows| *rows > 0), "{paths:?}");
+    }
+
+    #[test]
+    fn rows_with_unlabelled_ports_fall_back_to_the_grouped_path() {
+        let _ = (
+            spenso::vector_symbol!("block_open::k"),
+            spenso::vector_symbol!("block_open::q"),
+        );
+        let input = parse!(
+            "spenso::dot(block_open::k(spenso::mink(D)),block_open::q(spenso::mink(D)))
+            *block_open::k(spenso::mink(D,mu))
+            *(block_open::x+block_open::y*spenso::dot(block_open::k(spenso::mink(D)),block_open::k(spenso::mink(D))))"
+        );
+        let source = SymbolicTensor::infer(input).unwrap();
+        let reducer =
+            TensorReducer::new(parse!("D")).with_integrated_head(symbol!("block_open::k"));
+        let indexed = reducer.open_block_dots(&source, true).unwrap().unwrap();
+        let source_ports = explicit_ports(source.structure()).unwrap();
+        let rows = reducer.block_rows(&indexed).unwrap();
+        assert_eq!(rows.len(), 1);
+        let (outside, inside) = &rows[0];
+        assert!(RelabelPlan::new(&source_ports, outside, inside).is_some());
+        // The same row with one unlabelled (open) port, on either piece.
+        let unlabel = |tensor: &SymbolicTensor<PartialStructure>| {
+            let mut slots = tensor.structure().logical_slots();
+            slots[0].set_aind(PartialIndex::Open(spenso::structure::partial::OpenPortId(
+                0,
+            )));
+            SymbolicTensor::new(
+                tensor.expression().clone(),
+                PartialStructure::from_logical_slots(slots),
+            )
+        };
+        assert!(RelabelPlan::new(&source_ports, outside, &unlabel(inside)).is_none());
+        assert!(RelabelPlan::new(&source_ports, &unlabel(outside), inside).is_none());
+        // A source with an open slot disables relabelling for every row.
+        assert!(explicit_ports(unlabel(&source).structure()).is_none());
+        // A port that is neither an outside leg nor a source slot.
+        assert!(RelabelPlan::new(&HashSet::new(), outside, inside).is_none());
+
+        // An inside with a non-Minkowski slot (here a Euclidean index to an
+        // outside tensor) keeps the row off the relabel path; the grouped
+        // path gives the same projection as the legacy one.
+        let (tensor, vector) = (
+            spenso::tensor_symbol!("block_open::T"),
+            spenso::tensor_symbol!("block_open::V"),
+        );
+        let input = source.expression().clone()
+            * FunctionBuilder::new(tensor)
+                .add_arg(parse!("spenso::mink(D,block_open::nu)"))
+                .add_arg(parse!("spenso::euc(2,block_open::i)"))
+                .finish()
+            * FunctionBuilder::new(vector)
+                .add_arg(parse!("spenso::euc(2,block_open::i)"))
+                .finish();
+        let source = SymbolicTensor::infer(input).unwrap();
+        let source_ports = explicit_ports(source.structure()).unwrap();
+        let indexed = reducer.open_block_dots(&source, true).unwrap().unwrap();
+        let rows = reducer.block_rows(&indexed).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert!(RelabelPlan::new(&source_ports, &rows[0].0, &rows[0].1).is_none());
+        let legacy = reducer
+            .clone()
+            .with_row_mode(RowMode::Legacy)
+            .reduce_blocks(&source, None)
+            .unwrap();
+        let relabel = reducer
+            .with_row_mode(RowMode::Relabel)
+            .reduce_blocks(&source, None)
+            .unwrap();
+        assert_eq!(relabel.terms().len(), 1);
+        let legacy = contracted(legacy);
+        assert!(!legacy.is_zero());
+        assert_eq!(legacy, contracted(relabel));
     }
 }
