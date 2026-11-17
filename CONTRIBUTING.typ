@@ -778,6 +778,21 @@ An unchanged successful Nix check can be reused without executing its tests agai
 `nix flake check --impure` additionally builds the CLI, standalone Rustdoc,
 persistent Typst renderer and WASM checks exported by the flake.
 
+`just test-nix-all`, `just doctest-nix` and the documentation step in
+`just ci-checks` run the executable packages `nix-ci-check-gammaloop-nextest`,
+`nix-ci-check-gammaloop-doctest` and `nix-ci-check-alphal00p-docs`, respectively.
+Their default local report paths are printed on invocation. To render pages
+directly, give the documentation executable an absent or empty output directory:
+
+```sh
+nix run .#alphal00p-docs-pages -- target/docs-pages
+nix run .#alphal00p-docs-snapshot-fixture -- target/docs-snapshot
+```
+
+These packages retain cacheable compiled inputs; rendered pages are produced
+locally each time the executable runs. Building either package only prepares
+its runner.
+
 On `itphlies`, run the following before pushing CI-enabled work, including
 updates to a PR already in final review. The host's Nix daemon is configured to
 download from the NixCI cache using its signing key and machine credentials.

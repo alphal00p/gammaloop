@@ -12,11 +12,11 @@ doc-nix:
 
 # Run doctests via Nix (same as CI)
 doctest-nix:
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-doctest
+    nix run .#nix-ci-check-gammaloop-doctest
 
 # Run workspace nextest via Nix (same as CI)
 test-nix-all:
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-nextest
+    nix run .#nix-ci-check-gammaloop-nextest
 
 # Run workspace nextest via Nix
 test-nix:
@@ -27,8 +27,8 @@ coverage-nix:
     nix build .#packages.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-llvm-coverage
 
 # Run all CI checks locally (same as CI)
-ci-checks: clippy-nix fmt-check-nix ci-graph-check doctest-nix test-nix
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').alphal00p-docs
+ci-checks: clippy-nix fmt-check-nix ci-graph-check doctest-nix test-nix-all
+    nix run .#nix-ci-check-alphal00p-docs
 
 # Check static inputs and upload compiled producers; leave runtime tests to NixCI.
 # See https://nix-ci.com/documentation/nix-ci-cache
@@ -38,22 +38,20 @@ ci-checks-and-upload:
     netrc="${NIXCI_NETRC:-$HOME/.netrc}"
     test -r "$netrc" || { echo 'Set up ~/.netrc or NIXCI_NETRC before uploading.' >&2; exit 1; }
 
-    selection=$(nix eval --impure --raw --expr '
-      let
-        system = builtins.currentSystem;
-        ci = import ./nix/ci.nix {
-          inherit system;
-          workspaceGraph = builtins.fromJSON (builtins.readFile ./nix/ci-workspace-graph.json);
-        };
-      in builtins.concatStringsSep "\n" ci.configuration.onlyBuild
-    ')
+    # Non-colocated JJ workspaces can select an exact Git-backed source so
+    # documentation retains its revision and ignored build trees stay excluded.
+    flake_ref="${GAMMALOOP_CI_FLAKE_REF:-.}"
+    system=$(nix eval --impure --raw --expr 'builtins.currentSystem')
+    selection=$(nix eval --impure --raw \
+        "$flake_ref#lib.$system.cachePublication.local" \
+        --apply 'builtins.concatStringsSep "\n"')
     targets=()
-    while IFS= read -r target; do targets+=(".#$target"); done <<< "$selection"
+    while IFS= read -r target; do targets+=("$flake_ref#$target"); done <<< "$selection"
     tmp=$(mktemp -d)
     trap 'rm -rf "$tmp"' EXIT
 
     # Scheduled builds include static checks, runtime launchers and their producers.
-    # Do not realize test-result checks: NixCI runs them after these inputs arrive.
+    # Building a runtime launcher does not run it; NixCI executes it after upload.
     started=$SECONDS
     # Keep all selected closures rooted until the upload finishes, including
     # across the gap between realization and nix copy on a shared daemon.

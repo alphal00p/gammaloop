@@ -56,8 +56,12 @@ jobs:
           persist-credentials: false
       - name: Test the CI timing and comparison tools
         env:
-          PYTHONPATH: ${{ github.workspace }}/.gammabench-framework/src
-        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+          PYTHONPATH: ${{ github.workspace }}/.gammabench-framework/src:${{ github.workspace }}/.github/scripts
+        run: >-
+          python3 -m unittest
+          test_export_test_timings
+          test_performance_changes
+          test_run_performance
 
       - uses: NixOS/nix-installer-action@main
 

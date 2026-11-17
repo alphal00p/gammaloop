@@ -102,6 +102,7 @@
         workspaceRoot = ./.;
         incrementalBaselineRoot = /. + builtins.unsafeDiscardStringContext self.inputs.ci-cache-base.outPath;
       };
+      requestedTestProfile = builtins.getEnv "GAMMALOOP_NIX_TEST_PROFILE";
       notebookWasmToolchain = fenix.packages.${system}.combine [
         ciToolchain
         fenix.packages.${system}.targets.wasm32-unknown-emscripten.stable.rust-std
@@ -111,6 +112,16 @@
         toolchain = notebookWasmToolchain;
         workspaceRoot = ./.;
       };
+      testWorkspace =
+        if requestedTestProfile == "" || requestedTestProfile == workspace.ciCargoProfile
+        then workspace
+        else
+          import ./nix/rust-workspace.nix {
+            inherit self pkgs docsPkgs craneLib wasmCraneLib ciToolchain wasmTarget system nixCiArtifactBarrier;
+            workspaceRoot = ./.;
+            testCargoProfile = requestedTestProfile;
+            incrementalBaselineRoot = /. + builtins.unsafeDiscardStringContext self.inputs.ci-cache-base.outPath;
+          };
       inherit
         (workspace)
         docsTypst
@@ -126,6 +137,7 @@
         clinnet-cli
         gammaloop-python-module
         nextestUfoPython
+        symbolicaRenderData
         nixCiConfiguration
         guppyWorkspaceGraphJson
         linnest-wasm
@@ -141,6 +153,7 @@
         craneTestDependencyOutputs
         craneTestBinaryPackageOutputs
         nextestContextualTestOutputs
+        nextestCrateChecks
         impureCheckRunnerPackages
         commonArgs
         workspaceTestSrc
@@ -182,7 +195,10 @@
           nickel
           nls
           docsTypst
-          linnetPython
+          # One environment rather than separate Python packages: their setup
+          # hook would put this Python's `_sysconfigdata` on PYTHONPATH, where
+          # any other interpreter, e.g. a uv-managed Python, would read it.
+          (linnetPython.withPackages (ps: [ps.virtualenv]))
           docsPkgs.roboto
           cargo-nextest
           pkg-config
@@ -204,7 +220,6 @@
           poppler-utils
           rust-analyzer
           maturin
-          virtualenv
         ]
         ++ lib.optionals (!pkgs.stdenv.hostPlatform.isDarwin) [
           valgrind
@@ -220,6 +235,9 @@
             # `typst.withPackages` injects this only into its executable wrapper.
             # The persistent Rust renderer and typst-py need the same package tree directly.
             TYPST_PACKAGE_CACHE_PATH = "${docsTypst}/lib/typst/packages";
+            shellHook = ''
+              export SYMBOLICA_DATA_DIRECTORY="${symbolicaRenderData}''${SYMBOLICA_DATA_DIRECTORY:+:$SYMBOLICA_DATA_DIRECTORY}"
+            '';
 
             CC = nixCc;
             CXX = nixCxx;
@@ -240,7 +258,12 @@
             RUSTFLAGS = rustFlags;
           });
     in {
-      checks = allChecks;
+      lib.cachePublication =
+        (import ./nix/ci.nix {
+          inherit system;
+          workspaceGraph = builtins.fromJSON (builtins.readFile ./nix/ci-workspace-graph.json);
+        }).publication;
+      checks = builtins.removeAttrs allChecks workspace.licensedCheckNames;
 
       hydraJobs = hestiaChecks;
 
@@ -254,6 +277,7 @@
           inherit clinnet-cli;
           "gammaloop-python-module" = nixCiArtifactBarrier "gammaloop-python-module" gammaloop-python-module;
           "gammaloop-ufo-python-runtime" = nextestUfoPython;
+          "gammaloop-render-data" = symbolicaRenderData;
           "alphal00p-docs-cargo-artifacts" = alphal00pDocsCargoArtifacts;
           "alphal00p-docs-svg-assets" = workspace.docsSvgAssets;
           "alphal00p-docs-pages" = alphal00pDocsPages;
@@ -293,6 +317,7 @@
         // craneTestDependencyOutputs
         // craneTestBinaryPackageOutputs
         // nextestContextualTestOutputs
+        // testWorkspace.nextestCrateChecks
         // impureCheckRunnerPackages
         // lib.optionalAttrs (!pkgs.stdenv.hostPlatform.isDarwin) {
           gammaloop-llvm-coverage = craneLib.cargoLlvmCov (commonArgs
