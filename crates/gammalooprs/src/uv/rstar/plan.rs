@@ -984,7 +984,7 @@ impl RStarPlan {
             } else {
                 None
             };
-            let delta = super::expression::in_uv_child_scope(|| match isotropic.as_ref() {
+            let delta = super::expression::in_uv_child_scope(plan.taylor_order, || match isotropic.as_ref() {
                 Some(pairings) => {
                     #[cfg(test)]
                     ISOTROPIC_CHILDREN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
