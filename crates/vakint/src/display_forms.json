@@ -927,6 +927,11 @@
    "name": "vakint::ggppss_new_31",
    "meaning": "GGPPSS new five-loop master new[31] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
    "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_31); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::p_our_1",
+   "meaning": "our[1] of our master exchanges (hep-ph/0601165 procedure on our keys, helper VH 2 exchange_list our_exchanges id 1): the T211 (0,1) key pres:1061 (1^12,0,-1,0^6) that replaces ggppss_int(72); the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_p_our_1); the dashboard maps it to its key via the masters legend"
   }
  ],
  "internal": [

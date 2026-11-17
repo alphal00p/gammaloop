@@ -413,7 +413,12 @@ fn a_layer_never_feeds_its_own_exchanges_and_names_known_masters() {
                 "{}",
                 exchange.old
             );
-            for (master, num, den) in &exchange.terms {
+            for term in &exchange.terms {
+                let (num, den) = (&term.num, &term.den);
+                let Some(master) = &term.master else {
+                    assert!(!num.is_empty() && !den.is_empty());
+                    continue;
+                };
                 assert!(
                     !old.contains(master.as_str()),
                     "{name}: {} feeds {master}",
@@ -430,7 +435,7 @@ fn a_layer_never_feeds_its_own_exchanges_and_names_known_masters() {
         // a layer's new masters are its square block's columns
         let used: BTreeSet<&str> = exchanges
             .iter()
-            .flat_map(|e| e.terms.iter().map(|(m, _, _)| m.as_str()))
+            .flat_map(|e| e.terms.iter().filter_map(|t| t.master.as_deref()))
             .filter(|m| layer.new_masters.iter().any(|n| n == m))
             .collect();
         assert_eq!(used.len(), layer.new_masters.len(), "{name}: new masters");
@@ -595,6 +600,9 @@ fn rotation_round_trips_through_the_inverse_at_points() {
 /// points, and in the rotated result no master's coefficient has a pole
 /// beyond the master's known depth (need = -valuation at d = 4 <= q). Files:
 /// VAKINT_TEST_P_MASTER_BASIS_VECTORS (':'-separated); skipped when unset.
+/// With a layer of ours loaded the reference is `expected_output_ours` (T211
+/// (0,1): the 15 masters beyond their depth in the GGPPSS basis are all
+/// bounded once int72 is exchanged for our(1)).
 #[test]
 fn rotation_equals_the_reference_on_its_test_vectors() {
     let Some(paths) = std::env::var("VAKINT_TEST_P_MASTER_BASIS_VECTORS").ok() else {
@@ -660,7 +668,14 @@ fn rotation_equals_the_reference_on_its_test_vectors() {
             serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
         for key in vectors["keys"].as_array().unwrap() {
             let original = total(&parse(&key["input"]));
-            let expected_terms = parse(&key["expected_output"]);
+            // with a layer of ours: the reference with our exchanges applied
+            let field = if basis.layers.len() > 1 {
+                "expected_output_ours"
+            } else {
+                "expected_output"
+            };
+            assert!(key.get(field).is_some(), "{path}: no {field}");
+            let expected_terms = parse(&key[field]);
             let expected = total(&expected_terms);
             let rotated = basis.rotate(&original, &catalogue, epsilon()).unwrap();
             for point in ["3/11", "-5/7"] {
@@ -693,8 +708,11 @@ fn rotation_equals_the_reference_on_its_test_vectors() {
                             .to_pattern(),
                     )
                     .with(Atom::num(1).to_pattern());
-                let valuation = valuation(&rational)
-                    .unwrap_or_else(|| panic!("{path} key {}: no valuation of {id}", key["idx"]));
+                // an exactly cancelled coefficient needs no order (key K* of
+                // our(1) itself: every other coefficient cancels)
+                let Some(valuation) = valuation(&rational) else {
+                    continue;
+                };
                 let symbol = catalogue.symbol_of_id(&id).unwrap();
                 let q = catalogue.master(symbol).unwrap().known_through;
                 assert!(

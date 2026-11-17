@@ -38,7 +38,9 @@
 //! ```
 //!
 //! `num` / `den` are the integer coefficients of the numerator and the
-//! denominator polynomial in `ε`, ascending powers. Every file vakint reads is
+//! denominator polynomial in `ε`, ascending powers. A term may carry
+//! `"tag": [[m, e], ..]` (the factor `Π PGamma(m)^e`) and `"master": null` (a
+//! closed part): our exchanges (helper VH 2 `our_exchanges`) have both. Every file vakint reads is
 //! checked against the manifest's sha256 and size; a different
 //! catalogue/rotation version is refused. The new masters' values (catalogue
 //! schema: exact through their known order, unknown from the next one) extend
@@ -64,7 +66,7 @@ use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use symbolica::id::Replacement;
 
 use super::master_catalogue::PMasterCatalogue;
-use super::p_master_symbol;
+use super::{p_gamma_symbol, p_master_symbol};
 use crate::VakintError;
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
 
@@ -191,17 +193,31 @@ struct ExchangeFile {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct TermFile {
-    master: String,
+    /// `null`: a closed part (no master).
+    master: Option<String>,
     num: Vec<String>,
     den: Vec<String>,
+    /// `[[m, e], ..]`: the factor `Π PGamma(m)^e`, `PGamma(m) = Γ(1 + m ε)`.
+    #[serde(default)]
+    tag: Vec<[i64; 2]>,
+}
+
+/// One term of an exchange: `num(ε)/den(ε) · Π PGamma(m)^e · PMaster(master)`
+/// (no master: a closed part).
+#[derive(Debug, Clone)]
+pub(crate) struct Term {
+    pub(crate) master: Option<String>,
+    pub(crate) num: Vec<String>,
+    pub(crate) den: Vec<String>,
+    pub(crate) tag: Vec<[i64; 2]>,
 }
 
 /// One exchange: `old = Σ coefficient(ε)·master` (catalogue ids).
 #[derive(Debug, Clone)]
 pub(crate) struct Exchange {
     pub(crate) old: String,
-    /// `(master id, numerator, denominator)`, integer coefficients ascending in ε.
-    pub(crate) terms: Vec<(String, Vec<String>, Vec<String>)>,
+    /// Numerators and denominators: integer coefficients ascending in ε.
+    pub(crate) terms: Vec<Term>,
 }
 
 /// One layer: its name, the masters it introduces, its exchanges.
@@ -343,10 +359,19 @@ impl PMasterBasisData {
                         if term.den.iter().all(|c| c.trim_start_matches('-') == "0") {
                             Err(invalid(
                                 source,
-                                format!("{}: zero denominator of {}", exchange.old, term.master),
+                                format!(
+                                    "{}: zero denominator of {}",
+                                    exchange.old,
+                                    term.master.as_deref().unwrap_or("its closed part")
+                                ),
                             ))
                         } else {
-                            Ok((term.master, term.num, term.den))
+                            Ok(Term {
+                                master: term.master,
+                                num: term.num,
+                                den: term.den,
+                                tag: term.tag,
+                            })
                         }
                     })
                     .collect::<Result<Vec<_>, _>>()?;
@@ -505,10 +530,18 @@ impl PMasterBasisData {
                 let old =
                     p_master_symbol().call(&[Atom::var(vk_symbol!(&symbol(&exchange.old)?))][..]);
                 let mut value = Atom::Zero;
-                for (master, num, den) in &exchange.terms {
-                    let basis =
-                        p_master_symbol().call(&[Atom::var(vk_symbol!(&symbol(master)?))][..]);
-                    value += polynomial(num)? / polynomial(den)? * basis;
+                for term in &exchange.terms {
+                    let mut factor = polynomial(&term.num)? / polynomial(&term.den)?;
+                    for [m, e] in &term.tag {
+                        factor *= p_gamma_symbol()
+                            .call(&[Atom::num(*m)][..])
+                            .pow(Atom::num(*e));
+                    }
+                    if let Some(master) = &term.master {
+                        factor *=
+                            p_master_symbol().call(&[Atom::var(vk_symbol!(&symbol(master)?))][..]);
+                    }
+                    value += factor;
                 }
                 rules.push((old, value));
             }
