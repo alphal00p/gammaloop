@@ -517,7 +517,7 @@ pub fn read_boundary_record(path: &std::path::Path) -> Result<BoundaryRecord, Va
         .map_err(|error| super::invalid(format!("{}: {error}", path.display())))?;
     let directory = path.parent().unwrap_or(std::path::Path::new("."));
     let mut lines = text.lines();
-    if lines.next().map(str::trim) != Some(&format!("schema {BOUNDARY_SCHEMA}")) {
+    if lines.next().map(str::trim) != Some(format!("schema {BOUNDARY_SCHEMA}").as_str()) {
         return Err(super::invalid(format!(
             "{}: not a {BOUNDARY_SCHEMA} header",
             path.display()
