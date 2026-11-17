@@ -1,9 +1,9 @@
 # /// script
 # requires-python = ">=3.10"
 # dependencies = [
-#     "linnet-py==0.1.0",
-#     "marimo==0.24.0",
-#     "typst==0.15.0",
+#     "symbolica==3.0.1",
+#     "marimo==0.25.1",
+#     "anywidget>=0.9,<1",
 # ]
 # ///
 
@@ -19,8 +19,8 @@ app = marimo.App(width="medium")
 def _():
     from dataclasses import dataclass
 
-    import linnet_py as lp
     import marimo as mo
+    from symbolica.community import graph as lp
 
     @dataclass(eq=False)
     class TaskRecord:
@@ -50,14 +50,14 @@ def _(mo):
     mo.md(r"""
     # Linnet Python rendering
 
-    A graph's ordinary notebook representation is a model-neutral Linnest
-    drawing. `Graph._repr_svg_()` powers the automatic display; `to_svg()` and
-    `render(path)` expose the same in-process typst-py 0.15 pipeline explicitly.
+    `graph.render()` prepares a reusable `DiagramView`. Displaying it lets
+    the notebook browser measure MathML labels before Rust lays out and draws
+    the graph. The same view retains the completed snapshot for explicit exports.
 
     Domain-specific conventions are ordinary Python render settings, not modes
     built into Linnet. The example data below is an application workflow: every
     node, edge, and half-edge carries an arbitrary Python dataclass instance
-    that is never serialized to Typst.
+    that remains in Python.
     """)
     return
 
@@ -84,17 +84,13 @@ def _(lp, mo):
         value=False,
         label="Custom Python line theme (optional)",
     )
-    show_half_edge_ids = mo.ui.checkbox(
-        value=False,
-        label="Half-edge IDs (optional)",
-    )
     controls = mo.hstack(
-        [node_store, layout_algorithm, custom_theme, show_half_edge_ids],
+        [node_store, layout_algorithm, custom_theme],
         justify="start",
         gap=1.5,
     )
     controls
-    return custom_theme, layout_algorithm, node_store, show_half_edge_ids
+    return custom_theme, layout_algorithm, node_store
 
 
 @app.cell
@@ -107,7 +103,6 @@ def _(
     lp,
     mo,
     node_store,
-    show_half_edge_ids,
 ):
     runtime_context = object()
     receive_data = TaskRecord("platform", 3, runtime_context)
@@ -214,24 +209,22 @@ def _(
     )
 
     if layout_algorithm.value == lp.LayoutAlgorithm.Force:
-        _layouts = lp.LayoutOptions(
+        _layouts = lp.LayoutSettings(
             algorithm=lp.LayoutAlgorithm.Force,
             direction=lp.LayoutDirection.Right,
-            steps=260,
             directional_force=0.55,
             label_steps=60,
         )
     else:
-        _layouts = lp.LayoutOptions(
+        _layouts = lp.LayoutSettings(
             algorithm=lp.LayoutAlgorithm.StableLayered,
             direction=lp.LayoutDirection.Right,
             label_steps=60,
         )
 
-    graph.render_config = lp.RenderConfig(
+    graph.render_config = lp.RenderSettings(
         title="Document intake workflow",
         layouts=_layouts,
-        drawing=lp.DrawOptions(show_half_edge_ids=show_half_edge_ids.value),
     )
     if custom_theme.value:
         _channel_colors = {
@@ -288,8 +281,8 @@ def _(custom_theme, graph, mo):
     mo.md(f"""
     ## Automatic rich display
 
-    The next cell returns the `Graph` itself, so Marimo discovers
-    `_repr_svg_()` and performs a fresh render. Generic drawings show
+    The next cell keeps and displays a `DiagramView`, so the notebook browser
+    measures its labels before drawing. Generic drawings show
     $n_i$ and $e_i$; the optional control adds $h_i$. {_overlay_note}
 
     `{graph!r}`
@@ -299,32 +292,58 @@ def _(custom_theme, graph, mo):
 
 @app.cell
 def _(graph):
-    graph
-    return
+    view = graph.render()
+    view
+    return (view,)
 
 
 @app.cell
-def _(graph, mo):
-    import time
-
-    _started_at = time.perf_counter()
-    svg = graph.to_svg()
-    _elapsed = time.perf_counter() - _started_at
-    explicit_render = mo.vstack(
+def _(mo, view):
+    snapshot_request = mo.ui.run_button(
+        label="Capture measured SVG", disabled=view is None
+    )
+    mo.vstack(
         [
             mo.md(
-                f"""
-                ## Explicit `to_svg()`
+                """
+                ## Export the measured drawing
 
-                Returned **{len(svg):,} characters** of SVG in
-                **{_elapsed:.3f} s**. A sparse per-call `RenderConfig` can
-                override this render without mutating `graph.render_config`.
+                Wait for the drawing above, then capture the snapshot from that
+                same `view`. If measurement is still pending, wait and click again.
+                Changing graph controls prepares a new view and resets this action.
                 """
             ),
-            mo.Html(f'<div data-linnet-render-ready="generic">{svg}</div>'),
+            snapshot_request,
         ]
     )
-    explicit_render
+    return (snapshot_request,)
+
+
+@app.cell
+def _(mo, snapshot_request, view):
+    mo.stop(not snapshot_request.value)
+    try:
+        snapshot = view.measured()
+    except RuntimeError as _error:
+        mo.stop(
+            True,
+            mo.callout(
+                mo.md(f"{_error}\n\nWait for the drawing, then click capture again."),
+                kind="warn",
+            ),
+        )
+    svg = snapshot.to_svg()
+    mo.vstack(
+        [
+            mo.md(f"Captured **{len(svg):,} characters** from the measured drawing."),
+            mo.download(
+                data=svg.encode("utf-8"),
+                filename="workflow.svg",
+                mimetype="image/svg+xml",
+                label="Download SVG",
+            ),
+        ]
+    )
     return (svg,)
 
 
@@ -336,7 +355,7 @@ def _(
     request_channel,
     request_port,
     runtime_context,
-    svg,
+    view,
 ):
     _node_identity = graph.node("receive").data is receive_data
     _edge_identity = graph.edge("requests").data is request_channel
@@ -357,7 +376,7 @@ def _(
     - edge payload identity preserved: **{_edge_identity}**
     - half-edge payload identity preserved: **{_half_edge_identity}**
     - shared runtime object remains aliased: **{_shared_alias}**
-    - SVG starts with: `{svg[:40]!r}`
+    - Retained drawing: `{view!r}`
     """)
     return
 

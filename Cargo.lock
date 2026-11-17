@@ -3389,17 +3389,37 @@ version = "0.1.0"
 dependencies = [
  "ciborium",
  "dot-parser",
- "include_dir",
- "kurvst",
  "linnest",
  "linnet",
+ "linnet-render-py",
  "pyo3",
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",
  "serde",
  "serde_json",
+ "symbolica",
+]
+
+[[package]]
+name = "linnet-render-py"
+version = "0.1.0"
+dependencies = [
+ "krilla",
+ "krilla-svg",
+ "linnest",
+ "linnet",
+ "pyo3",
+ "pyo3-stub-gen",
+ "pyo3-stub-gen-derive",
+ "resvg",
+ "roxmltree 0.21.1",
+ "serde",
+ "serde_json",
+ "symbolica",
+ "symbolica-data",
+ "symbolica-notation",
  "tempfile",
- "walkdir",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
