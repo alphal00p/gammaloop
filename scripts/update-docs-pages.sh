@@ -199,6 +199,77 @@ require_bundle() {
     require_generated_reference_surface "$bundle" "$product"
 }
 
+# Product snapshots can reference shared content-addressed runtime assets.
+# Validate collisions before changing any existing publication, then only add
+# immutable versions; latest portal refreshes must retain older snapshot inputs.
+check_shared_runtime_assets() {
+    local source destination name
+    local namespace manifest
+    for namespace in notebook-runtime notebook-runtime-files documentation-runtime; do
+        manifest=runtime-manifest.json
+        [ "$namespace" != documentation-runtime ] || manifest=manifest.json
+        for source in "$build_root/assets/$namespace/"*; do
+            [ -d "$source" ] || continue
+            name=$(basename "$source")
+            [[ "$name" =~ ^[a-f0-9]{64}$ ]] || fail "unsafe runtime identity: $name"
+            if [ "$namespace" = notebook-runtime-files ]; then
+                python3 - "$source" "$name" <<'PY'
+import gzip
+import hashlib
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+for path in root.iterdir():
+    data = path.read_bytes()
+    if path.suffix == ".gz":
+        data = gzip.decompress(data)
+    if hashlib.sha256(data).hexdigest() != sys.argv[2]:
+        raise SystemExit(f"runtime file hash differs: {path}")
+PY
+            else
+                [ -f "$source/$manifest" ] || fail "missing runtime manifest: $namespace/$name"
+            fi
+            if [ "$namespace" = documentation-runtime ]; then
+                [ "$(python3 "$(dirname "${BASH_SOURCE[0]}")/prepare-documentation-cells.py" --verify --bundle "$source")" = "$name" ] || fail "documentation runtime hash differs: $name"
+            fi
+            destination="$pages_root/assets/$namespace/$name"
+            if [ -e "$destination" ] && ! diff -qr "$source" "$destination" >/dev/null; then
+                fail "immutable $namespace differs: $name"
+            fi
+        done
+    done
+    for source in "$build_root/"notebook-cache-worker-*.js; do
+        [ -f "$source" ] || continue
+        name=$(basename "$source")
+        [[ "$name" =~ ^notebook-cache-worker-[a-f0-9]{64}\.js$ ]] || fail "unsafe cache worker identity: $name"
+        [ "$name" = "notebook-cache-worker-$(sha256sum "$source" | cut -d ' ' -f 1).js" ] || fail "cache worker hash differs: $name"
+        destination="$pages_root/$name"
+        if [ -e "$destination" ] && ! cmp -s "$source" "$destination"; then
+            fail "immutable notebook cache worker differs: $name"
+        fi
+    done
+}
+
+publish_shared_runtime_assets() {
+    local source destination namespace
+    for namespace in notebook-runtime notebook-runtime-files documentation-runtime; do
+        for source in "$build_root/assets/$namespace/"*; do
+            [ -d "$source" ] || continue
+            destination="$pages_root/assets/$namespace/$(basename "$source")"
+            if [ ! -e "$destination" ]; then
+                mkdir -p "$pages_root/assets/$namespace"
+                cp -a "$source" "$destination"
+            fi
+        done
+    done
+    for source in "$build_root/"notebook-cache-worker-*.js; do
+        [ -f "$source" ] || continue
+        destination="$pages_root/$(basename "$source")"
+        [ -e "$destination" ] || cp -a "$source" "$destination"
+    done
+}
+
 [ "$#" -ge 3 ] && [ "$#" -le 4 ] || usage
 
 mode=$1
@@ -267,6 +338,8 @@ case "$mode" in
             fail "latest build has no people page"
         [ -f "$build_root/about/index.html" ] ||
             fail "latest build has no about page"
+        [ -f "$build_root/libraries/index.html" ] ||
+            fail "latest build has no libraries page"
         [ -f "$build_root/talks/index.html" ] ||
             fail "latest build has no talks page"
         [ -f "$build_root/publications/index.html" ] ||
@@ -298,12 +371,19 @@ case "$mode" in
                 fail "latest build has no redirect for $product"
         done
 
+        check_shared_runtime_assets
         install -m 0644 "$build_root/index.html" "$pages_root/index.html"
         install -m 0644 "$build_root/search-index.json" "$pages_root/search-index.json"
         install -m 0644 "$build_root/.nojekyll" "$pages_root/.nojekyll"
-        rm -rf -- "$pages_root/assets" "$pages_root/citations"
-        cp -a "$build_root/assets" "$pages_root/assets"
-        for portal_page in about people talks publications; do
+        mkdir -p "$pages_root/assets"
+        find "$pages_root/assets" -mindepth 1 -maxdepth 1 ! -name notebook-runtime ! -name notebook-runtime-files ! -name documentation-runtime -exec rm -rf -- {} +
+        rm -rf -- "$pages_root/citations"
+        for source in "$build_root/assets/"*; do
+            case "$(basename "$source")" in notebook-runtime|notebook-runtime-files|documentation-runtime) continue;; esac
+            cp -a "$source" "$pages_root/assets/"
+        done
+        publish_shared_runtime_assets
+        for portal_page in about libraries people talks publications; do
             rm -rf -- "$pages_root/$portal_page"
             cp -a "$build_root/$portal_page" "$pages_root/$portal_page"
         done
@@ -340,6 +420,8 @@ case "$mode" in
             fi
         done
 
+        check_shared_runtime_assets
+        publish_shared_runtime_assets
         # A snapshot publication never changes the portal, redirects, or latest
         # documentation. Check every existing snapshot before copying any new
         # bundle so a conflict leaves the worktree untouched.

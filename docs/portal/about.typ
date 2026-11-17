@@ -3,21 +3,17 @@
 
 #let about = [
   #about-hero[
-    #kicker[About the collaboration]
-
-    = Precision through local cancellation.
+    = Research on Local Unitarity
 
     #portal.summary
   ]
   #about-origin[
     #about-origin-copy[
-      #kicker[Why αLoop]
+        == Precision is another path to discovery.
 
-      == Precision is another path to discovery.
+      Precision predictions test the Standard Model and help us search for indirect evidence of new physics through small departures from its expectations.
 
-      The lack of obvious sign of new physics phenomenon in collider experiments is an opportunity to take a step back and reflect on the amazing theory we have discovered so far: the Standard Model. In particular, we must now strive to make ever more precise predictions so as to hunt for indirect evidence of new physics in small departure from expectations.
-
-      For this reason, our collaboration is dedicated to theoretical and algorithmic research for the automated computation of cross-sections in Quantum Field Theories at arbitrary perturbative orders. In particular, we develop a new theoretical framework called _Local Unitarity_ (LU) which approaches this problem from an unorthodox way, particularly suited to numerical computations.
+      Our collaboration develops theoretical methods and algorithms for the automated computation of cross-sections in quantum field theory at arbitrary perturbative orders. _Local Unitarity_ (LU) puts real and virtual contributions into a shared numerical representation, so infrared singularities cancel locally before integration.
 
       #navigation("Learn about Local Unitarity")[
         #button("https://arxiv.org/abs/2110.15662", [Read the introduction #arrow()], primary: true)
@@ -34,17 +30,13 @@
   ]
   #about-pillars[
     #section-header[
-      #kicker[From method to software]
-
-      #anchored-heading(2, "about-pillars-title")[One research programme, connected structures.]
+        #anchored-heading(2, "about-pillars-title")[From Local Unitarity to software]
     ]
     #pillar-grid[#for pillar in portal.pillar { about-pillar(pillar) }]
   ]
   #about-affiliations[
     #section-header[
-      #kicker[Affiliations]
-
-      #anchored-heading(2, "about-affiliations-title")[Research across institutions.]
+        #anchored-heading(2, "about-affiliations-title")[Research across institutions.]
 
       αLoop connects collider-physics research, mathematical structures, and open scientific-software development.
     ]
@@ -57,15 +49,11 @@
     title-id: "about-funding-title",
     about: true,
   )[
-      #kicker[Funding]
-
-      #anchored-heading(2, "about-funding-title")[Publicly funded research]
+        #anchored-heading(2, "about-funding-title")[Publicly funded research]
 
       #portal.funding
   ]
   #about-next[
-    #kicker[The collaboration]
-
     == Meet the people doing the work.
 
     #navigation("Explore the collaboration")[
