@@ -9,6 +9,14 @@
   presenting development documentation as a complete release history.
 ])
 
+== Drawing exported graphs
+
+The drawing recipes in the `justfile` that `save dot` writes no longer stop with
+`failed to read style file` before compiling. All of them except `draw-single` listed Linnest's
+`ec-layout.wasm` as a style input, which GammaLoop never extracted. Linnest no longer ships that
+unused plugin. The model's generated `edge-style.typ` also no longer imports `mi`, which
+`physics-edge-style.typ` stopped providing, so it no longer fails with an unresolved import.
+
 == Components and version sources
 
 - Repository revision: #link("https://github.com/alphal00p/gammaloop/tags")[GammaLoop tags and releases].
