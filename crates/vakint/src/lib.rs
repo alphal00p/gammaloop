@@ -4,9 +4,15 @@ pub mod stage_timing;
 
 /// M5 batch 2: mimalloc serves the Rust allocations of every binary linking vakint
 /// (default feature `mimalloc`; see Cargo.toml).
+/// Wrapped in [`alloc_account::Counting`]: per-job live-byte accounting for the
+/// driver's RSS guard (one relaxed atomic add per allocation on registered job
+/// threads, nothing elsewhere).
 #[cfg(feature = "mimalloc")]
 #[global_allocator]
-static VAKINT_GLOBAL_ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+static VAKINT_GLOBAL_ALLOCATOR: alloc_account::Counting<mimalloc::MiMalloc> =
+    alloc_account::Counting(mimalloc::MiMalloc);
+
+pub mod alloc_account;
 
 pub mod alphaloop_numerics;
 mod citations;
