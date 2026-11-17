@@ -199,9 +199,7 @@ impl<T: KinematicScalar> FourMomentum<T> {
     pub fn helicity_spinor(&self, helicity: Sign) -> [Complex<T>; 2] {
         let p = self.spatial.norm();
         let zero = self.temporal.value.zero();
-        if (self.spatial.pz < zero && self.spatial.py == zero && self.spatial.px == zero)
-            || self.spatial.pz == -p.clone()
-        {
+        if self.spatial.pz <= zero && self.spatial.py == zero && self.spatial.px == zero {
             let z = Complex::new(zero.clone(), zero);
             let one = z.one();
             return match helicity {
@@ -209,13 +207,21 @@ impl<T: KinematicScalar> FourMomentum<T> {
                 Sign::Negative => [one, z],
             };
         }
-        let factor = (p.from_usize(2) * p.clone() * (p.clone() + self.spatial.pz.clone()))
-            .sqrt()
-            .inv();
+        let (upper, factor) = if self.spatial.pz < zero {
+            // Rationalize p+pz = pt^2/(p-pz), retaining the off-axis azimuthal phase.
+            let pt = self.pt();
+            let p_minus_pz = p.clone() - &self.spatial.pz;
+            let lower = (p_minus_pz.clone() / (p.from_usize(2) * &p)).sqrt();
+            (pt.clone() / p_minus_pz * &lower, lower / pt)
+        } else {
+            let p_plus_pz = p.clone() + &self.spatial.pz;
+            let factor = (p.from_usize(2) * p * &p_plus_pz).sqrt().inv();
+            (factor.clone() * p_plus_pz, factor)
+        };
         let mut xi = [
-            Complex::new(factor.clone() * (p + self.spatial.pz.clone()), zero),
+            Complex::new(upper, zero),
             Complex::new(
-                self.spatial.px.clone() * factor.clone(),
+                self.spatial.px.clone() * &factor,
                 self.spatial.py.clone() * factor,
             ),
         ];
@@ -342,5 +348,129 @@ impl<T: KinematicScalar> FourMomentum<T> {
             _ => unreachable!("adjoints returned above"),
         };
         Wavefunction::from_components(kind, components)
+    }
+}
+
+#[cfg(test)]
+mod helicity_spinor_tests {
+    use numerica::domains::float::Float;
+
+    use super::*;
+
+    fn check_near_negative_axis_spinors<T: KinematicScalar>(offsets: &[T], tolerance: &T) {
+        let one = tolerance.one();
+        let zero = tolerance.zero();
+        let tolerance_squared = tolerance.clone() * tolerance;
+        for (x, y) in [(3, 4), (-3, 4), (3, -4), (-3, -4), (0, 5), (5, 0)] {
+            for helicity in [Sign::Positive, Sign::Negative] {
+                let mut previous: Option<([Complex<T>; 2], T)> = None;
+                for offset in offsets {
+                    let p = FourMomentum::from_args(
+                        one.from_usize(2),
+                        offset.clone() * one.from_i64(x),
+                        offset.clone() * one.from_i64(y),
+                        -one.clone(),
+                    );
+                    let xi = p.helicity_spinor(helicity);
+                    let norm = xi[0].norm_squared() + xi[1].norm_squared();
+                    assert!((norm - &one).pow(2) < tolerance_squared, "{p:?}: {xi:?}");
+
+                    // Independent half-angle reference, including the azimuthal phase.
+                    let half_angle =
+                        (offset.clone() * one.from_usize(5)).atan2(&one) / one.from_usize(2);
+                    let small = half_angle.sin();
+                    let large = half_angle.cos();
+                    let real = one.from_i64(x) / one.from_usize(5) * &large;
+                    let imag = one.from_i64(y) / one.from_usize(5) * large;
+                    let target = match helicity {
+                        Sign::Positive => {
+                            [Complex::new(small, zero.clone()), Complex::new(real, imag)]
+                        }
+                        Sign::Negative => {
+                            [Complex::new(-real, imag), Complex::new(small, zero.clone())]
+                        }
+                    };
+                    let eigenvalue = match helicity {
+                        Sign::Positive => p.spatial.norm(),
+                        Sign::Negative => -p.spatial.norm(),
+                    };
+                    let sigma_xi = [
+                        &xi[0] * &p.spatial.pz
+                            + Complex::new(p.spatial.px.clone(), -p.spatial.py.clone()) * &xi[1],
+                        Complex::new(p.spatial.px.clone(), p.spatial.py.clone()) * &xi[0]
+                            - &xi[1] * &p.spatial.pz,
+                    ];
+                    for (i, expected) in target.iter().enumerate() {
+                        // Relative component checks retain sensitivity to the small component.
+                        assert!(
+                            (&xi[i] - expected).norm_squared()
+                                < tolerance_squared.clone() * expected.norm_squared(),
+                            "{p:?}, {helicity:?}: {xi:?} != {target:?}"
+                        );
+                        assert!(
+                            (&sigma_xi[i] - &xi[i] * &eigenvalue).norm_squared()
+                                < tolerance_squared.clone()
+                                    * xi[i].norm_squared()
+                                    * eigenvalue.clone()
+                                    * &eigenvalue,
+                            "{p:?}, {helicity:?}: sigma.p xi != h |p| xi"
+                        );
+                    }
+                    if let Some((previous_xi, previous_offset)) = previous {
+                        let bound = previous_offset * one.from_usize(5);
+                        for (current, previous) in xi.iter().zip(previous_xi) {
+                            assert!((current - previous).norm_squared() < bound.clone() * &bound);
+                        }
+                    }
+                    previous = Some((xi, offset.clone()));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn near_negative_axis_spinors_are_normalized_eigenvectors_with_continuous_phases() {
+        let offsets = [1e-3, 1e-6, 1e-7, 1e-8, 1e-10, 1e-20];
+        check_near_negative_axis_spinors(&offsets, &2e-14);
+    }
+
+    #[test]
+    fn rounded_negative_axis_keeps_nonzero_transverse_components() {
+        let rounded_axis = FourMomentum::from_args(2., 3e-20, 4e-20, -1.);
+        assert_eq!(rounded_axis.spatial.pz, -rounded_axis.spatial.norm());
+        check_near_negative_axis_spinors(&[1e-20], &2e-14);
+    }
+
+    #[test]
+    fn helicity_spinor_phases_are_continuous_between_hemispheres() {
+        let equator = FourMomentum::from_args(6., 3., 4., 0.);
+        for helicity in [Sign::Positive, Sign::Negative] {
+            let target = equator.helicity_spinor(helicity);
+            for pz in [-1e-12, 1e-12] {
+                let p = FourMomentum::from_args(6., 3., 4., pz);
+                for (a, b) in p.helicity_spinor(helicity).into_iter().zip(target) {
+                    assert!((a - b).norm_squared() < 1e-24);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn near_negative_axis_spinors_preserve_mpfr_precision() {
+        let offsets = ["1e-3", "1e-20", "1e-38", "1e-40", "1e-60", "1e-100"]
+            .map(|value| Float::parse(value, Some(256)).unwrap());
+        let tolerance = Float::parse("1e-60", Some(256)).unwrap();
+        check_near_negative_axis_spinors(&offsets, &tolerance);
+    }
+
+    #[test]
+    fn exact_axis_and_rest_spinor_phases_are_preserved() {
+        for pz in [-2., 0.] {
+            let p = FourMomentum::from_args(4., 0., 0., pz);
+            let zero = Complex::new(0., 0.);
+            let one = Complex::new(1., 0.);
+            assert_eq!(p.helicity_spinor(Sign::Positive), [zero, -one]);
+            assert_eq!(p.helicity_spinor(Sign::Negative), [one, zero]);
+        }
     }
 }
