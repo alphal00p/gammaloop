@@ -62,6 +62,8 @@ struct Hider<'a> {
     matcher: SlotMatcher,
     index: HashMap<Atom, usize>,
     values: Vec<Atom>,
+    /// The flags of every product factor, by [`node_key`].
+    factors: HashMap<(usize, usize), Flags>,
 }
 
 impl Hider<'_> {
@@ -95,59 +97,80 @@ impl Hider<'_> {
         Ok(flags)
     }
 
-    /// Rebuild `value` with hidden scalar products; `None` if unchanged.
-    fn walk(&mut self, value: AtomView<'_>) -> Result<(Option<Atom>, Flags), TensorReductionError> {
+    /// The flags of `value`. Records the flags of every product factor so that
+    /// [`Hider::rebuild`] decides which factors to hide without walking them.
+    fn flags(&mut self, value: AtomView<'_>) -> Result<Flags, TensorReductionError> {
         resources::checkpoint()?;
         Ok(match value {
-            AtomView::Num(_) => (None, Flags::default()),
-            AtomView::Var(_) => (
-                None,
-                Flags {
-                    slot: false,
-                    selected: (self.select)(value)?,
-                },
-            ),
-            AtomView::Fun(_) => (None, self.function(value)?),
+            AtomView::Num(_) => Flags::default(),
+            AtomView::Var(_) => Flags {
+                slot: false,
+                selected: (self.select)(value)?,
+            },
+            AtomView::Fun(_) => self.function(value)?,
             AtomView::Pow(power) => {
                 let (base, exponent) = power.get_base_exp();
-                let (rebuilt, flags) = self.walk(base)?;
-                let (_, exponent_flags) = self.walk(exponent)?;
-                let mut flags = flags.or(exponent_flags);
+                let mut flags = self.flags(base)?.or(self.flags(exponent)?);
                 flags.selected |= (self.select)(value)?;
-                (rebuilt.map(|base| base.pow(exponent.to_owned())), flags)
+                flags
             }
             AtomView::Add(sum) => {
                 let mut flags = Flags::default();
-                let mut summands = Vec::new();
-                let mut changed = false;
                 for term in sum.iter() {
-                    let (rebuilt, term_flags) = self.walk(term)?;
-                    flags = flags.or(term_flags);
-                    changed |= rebuilt.is_some();
-                    summands.push(rebuilt.unwrap_or_else(|| term.to_owned()));
+                    flags = flags.or(self.flags(term)?);
                 }
                 flags.selected |= (self.select)(value)?;
-                (changed.then(|| Atom::add_many(summands.iter())), flags)
+                flags
             }
             AtomView::Mul(product) => {
                 let mut flags = Flags::default();
+                for factor in product.iter() {
+                    let factor_flags = self.flags(factor)?;
+                    self.factors.insert(node_key(factor), factor_flags);
+                    flags = flags.or(factor_flags);
+                }
+                flags.selected |= (self.select)(value)?;
+                flags
+            }
+        })
+    }
+
+    /// Rebuild `value` with hidden scalar products; `None` if unchanged.
+    /// Needs the factor flags recorded by [`Hider::flags`] on `value`; a factor
+    /// hidden whole is neither walked nor rebuilt.
+    fn rebuild(&mut self, value: AtomView<'_>) -> Result<Option<Atom>, TensorReductionError> {
+        resources::checkpoint()?;
+        Ok(match value {
+            AtomView::Num(_) | AtomView::Var(_) | AtomView::Fun(_) => None,
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                self.rebuild(base)?
+                    .map(|base| base.pow(exponent.to_owned()))
+            }
+            AtomView::Add(sum) => {
+                let mut summands = Vec::new();
+                let mut changed = false;
+                for term in sum.iter() {
+                    let rebuilt = self.rebuild(term)?;
+                    changed |= rebuilt.is_some();
+                    summands.push(rebuilt.unwrap_or_else(|| term.to_owned()));
+                }
+                changed.then(|| Atom::add_many(summands.iter()))
+            }
+            AtomView::Mul(product) => {
                 let mut kept = Vec::new();
                 let mut hidden = Vec::new();
                 let mut changed = false;
                 for factor in product.iter() {
-                    let (rebuilt, factor_flags) = self.walk(factor)?;
-                    if !factor_flags.slot
-                        && !factor_flags.selected
-                        && !matches!(factor, AtomView::Num(_))
-                    {
+                    let flags = self.factors[&node_key(factor)];
+                    if !flags.slot && !flags.selected && !matches!(factor, AtomView::Num(_)) {
                         hidden.push(factor);
                         continue;
                     }
-                    flags = flags.or(factor_flags);
+                    let rebuilt = self.rebuild(factor)?;
                     changed |= rebuilt.is_some();
                     kept.push(rebuilt.unwrap_or_else(|| factor.to_owned()));
                 }
-                flags.selected |= (self.select)(value)?;
                 // One hidden variable alone gains nothing.
                 if hidden.len() > 1
                     || hidden
@@ -165,10 +188,17 @@ impl Hider<'_> {
                 } else {
                     kept.extend(hidden.into_iter().map(|factor| factor.to_owned()));
                 }
-                (changed.then(|| Atom::mul_many(kept.iter())), flags)
+                changed.then(|| Atom::mul_many(kept.iter()))
             }
         })
     }
+}
+
+/// A node by its position in the walked expression: product factors borrow
+/// their bytes from the expression, so distinct factors have distinct keys.
+fn node_key(value: AtomView<'_>) -> (usize, usize) {
+    let data = value.get_data();
+    (data.as_ptr() as usize, data.len())
 }
 
 impl HiddenScalars {
@@ -184,11 +214,13 @@ impl HiddenScalars {
             matcher: SlotMatcher::default(),
             index: HashMap::new(),
             values: Vec::new(),
+            factors: HashMap::new(),
         };
         if expression.contains_symbol(*HIDDEN) {
             return Ok(None);
         }
-        let (rebuilt, _) = hider.walk(expression)?;
+        hider.flags(expression)?;
+        let rebuilt = hider.rebuild(expression)?;
         if hider.values.is_empty() {
             return Ok(None);
         }
@@ -248,6 +280,20 @@ impl HiddenScalars {
     #[cfg(test)]
     pub(super) fn len(&self) -> usize {
         self.values.len()
+    }
+
+    /// Whether `expression` uses every placeholder of the table.
+    #[cfg(test)]
+    pub(super) fn all_used_in(&self, expression: AtomView<'_>) -> bool {
+        (0..self.values.len()).all(|number| {
+            let placeholder = FunctionBuilder::new(*HIDDEN).add_arg(number).finish();
+            let mut found = false;
+            expression.visitor(&mut |node| {
+                found |= node == placeholder.as_view();
+                !found
+            });
+            found
+        })
     }
 }
 

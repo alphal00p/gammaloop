@@ -2004,4 +2004,22 @@ mod tests {
                 .is_none()
         );
     }
+
+    #[test]
+    fn hidden_scalars_table_holds_only_used_placeholders() {
+        let _ = spenso::vector_symbol!("block_unused::k");
+        // The scalar sum is hidden whole with x and y, so the products inside it
+        // must not get placeholders of their own.
+        let input = parse!(
+            "block_unused::x*block_unused::y*(block_unused::a*block_unused::b+block_unused::c*block_unused::d)
+            *(block_unused::a*block_unused::c+block_unused::b)^2
+            *block_unused::k(spenso::mink(D,block_unused::mu))"
+        );
+        let (hidden, scalars) = scalars::HiddenScalars::hide(input.as_view(), &mut |_| Ok(false))
+            .unwrap()
+            .unwrap();
+        assert_eq!(scalars.len(), 1, "{hidden}");
+        assert!(scalars.all_used_in(hidden.as_view()), "{hidden}");
+        assert_eq!(scalars.substitute(hidden.as_view()).unwrap(), input);
+    }
 }
