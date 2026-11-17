@@ -231,7 +231,14 @@ impl RStarPlan {
         uv_settings: &UVgenerationSettings,
         root_normalization: &dyn Fn(&Atom) -> Result<Atom>,
     ) -> Result<usize> {
-        self.bare_terms_only_closing(graph, model, vakint, uv_settings, Some(root_normalization), true)
+        self.bare_terms_only_closing(
+            graph,
+            model,
+            vakint,
+            uv_settings,
+            Some(root_normalization),
+            true,
+        )
     }
 
     /// Local export patch: as [`Self::projected_bare_terms_only`], without a
@@ -284,8 +291,7 @@ impl RStarPlan {
         }
         let mut count = 0;
         for term in &self.ordinary_uv {
-            if !term.counterterms.is_empty()
-                || term.remainder.is_scaleless(graph, self.marked_edge)
+            if !term.counterterms.is_empty() || term.remainder.is_scaleless(graph, self.marked_edge)
             {
                 continue;
             }
@@ -334,12 +340,13 @@ impl RStarPlan {
         let markers_sum = markers
             .iter()
             .fold(Atom::Zero, |sum, marker| sum + Atom::var(*marker));
-        let closure = markers
-            .iter()
-            .zip(pairings)
-            .fold(Atom::Zero, |closure, (marker, pairing)| {
-                closure + ((&d + 2) * Atom::var(*marker) - &markers_sum) * pairing
-            });
+        let closure =
+            markers
+                .iter()
+                .zip(pairings)
+                .fold(Atom::Zero, |closure, (marker, pairing)| {
+                    closure + ((&d + 2) * Atom::var(*marker) - &markers_sum) * pairing
+                });
         let normalization = Atom::one() / (&d * (&d - 1) * (&d + 2));
         let normalize = |tensor: &Atom| -> Result<Atom> { Ok(tensor * &normalization) };
         let mut evaluation = Evaluation::new(
@@ -503,7 +510,12 @@ impl RStarPlan {
                 &evaluation.auxiliary_mass_squared,
                 &mut super::expression::IntegrationTimings::new(),
             )?;
-            polynomials.push((remainder.region.loops, expression.clone(), *certified, polynomial));
+            polynomials.push((
+                remainder.region.loops,
+                expression.clone(),
+                *certified,
+                polynomial,
+            ));
         }
         Ok(polynomials)
     }
@@ -647,7 +659,10 @@ impl<'a> Evaluation<'a> {
 
     /// Close the root metric in every root-scope remainder of this evaluation.
     fn closing_root(mut self) -> Result<Self> {
-        self.root_closure = Some(RStarIntegrand::root_closure(self.graph, &self.plan.support)?);
+        self.root_closure = Some(RStarIntegrand::root_closure(
+            self.graph,
+            &self.plan.support,
+        )?);
         Ok(self)
     }
 

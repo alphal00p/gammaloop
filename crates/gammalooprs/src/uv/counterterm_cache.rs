@@ -319,7 +319,10 @@ impl ComputeLimit {
         }
         let mut available = self.available.lock().expect("counterterm permits poisoned");
         while *available == 0 {
-            available = self.released.wait(available).expect("counterterm permits poisoned");
+            available = self
+                .released
+                .wait(available)
+                .expect("counterterm permits poisoned");
         }
         *available -= 1;
         HOLDS_COMPUTE_PERMIT.set(true);
@@ -330,7 +333,11 @@ impl ComputeLimit {
 impl Drop for ComputePermit<'_> {
     fn drop(&mut self) {
         HOLDS_COMPUTE_PERMIT.set(false);
-        *self.0.available.lock().expect("counterterm permits poisoned") += 1;
+        *self
+            .0
+            .available
+            .lock()
+            .expect("counterterm permits poisoned") += 1;
         self.0.released.notify_one();
     }
 }
@@ -506,9 +513,13 @@ impl CountertermCache {
         vakint: &Vakint,
         settings: &UVgenerationSettings,
     ) -> Result<Atom> {
-        self.lookup(graph, support, model, serde_json::to_string(settings)?, || {
-            self.compute(graph, support, model, vakint, settings)
-        })
+        self.lookup(
+            graph,
+            support,
+            model,
+            serde_json::to_string(settings)?,
+            || self.compute(graph, support, model, vakint, settings),
+        )
     }
 
     /// A complete counterterm of `support` computed by another route.

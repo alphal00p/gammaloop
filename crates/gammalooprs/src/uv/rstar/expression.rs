@@ -249,13 +249,17 @@ enum ChildEdgeRemainder {
     All,
 }
 
-static UV_CHILD_EDGE_REMAINDER: LazyLock<ChildEdgeRemainder> = LazyLock::new(|| {
-    match std::env::var("GAMMALOOP_UV_CHILD_EDGE_REMAINDER").as_deref().map(str::trim) {
-        Ok("1") => ChildEdgeRemainder::DegreeZero,
-        Ok("all") => ChildEdgeRemainder::All,
-        _ => ChildEdgeRemainder::Off,
-    }
-});
+static UV_CHILD_EDGE_REMAINDER: LazyLock<ChildEdgeRemainder> =
+    LazyLock::new(|| {
+        match std::env::var("GAMMALOOP_UV_CHILD_EDGE_REMAINDER")
+            .as_deref()
+            .map(str::trim)
+        {
+            Ok("1") => ChildEdgeRemainder::DegreeZero,
+            Ok("all") => ChildEdgeRemainder::All,
+            _ => ChildEdgeRemainder::Off,
+        }
+    });
 
 #[cfg(test)]
 #[test]
@@ -294,7 +298,8 @@ fn uv_child_scope_is_restored_when_the_child_panics() {
             assert_eq!(UV_CHILD_SCOPE.with(|scope| scope.get()), enclosing);
             // A nested child of the other degree sets and restores its own value.
             let nested = in_uv_child_scope(order, || {
-                let inner = in_uv_child_scope(1 - order, || UV_CHILD_SCOPE.with(|scope| scope.get()));
+                let inner =
+                    in_uv_child_scope(1 - order, || UV_CHILD_SCOPE.with(|scope| scope.get()));
                 (inner, UV_CHILD_SCOPE.with(|scope| scope.get()))
             });
             assert_eq!(nested, (expected(1 - order), expected(order)));
@@ -573,7 +578,9 @@ impl RStarIntegrand {
             .into_iter()
             .map(|slot| match slot.aind {
                 spenso::structure::partial::PartialIndex::Explicit(index) => {
-                    Ok(slot.rep().slot::<spenso::structure::abstract_index::AbstractIndex, _>(index))
+                    Ok(slot
+                        .rep()
+                        .slot::<spenso::structure::abstract_index::AbstractIndex, _>(index))
                 }
                 _ => Err(eyre!(
                     "the root closure needs explicitly named external slots"
@@ -609,7 +616,10 @@ impl RStarIntegrand {
             idenso::dirac::AGS.projm,
             *idenso::epsilon::EPSILON_SYMBOL,
         ];
-        if parity_odd.iter().any(|symbol| numerator.contains_symbol(*symbol)) {
+        if parity_odd
+            .iter()
+            .any(|symbol| numerator.contains_symbol(*symbol))
+        {
             return Ok(None);
         }
         let tensor = SymbolicTensor::infer(cooking.try_cook(numerator.as_view())?)?;
@@ -618,11 +628,16 @@ impl RStarIntegrand {
             let spenso::structure::partial::PartialIndex::Explicit(index) = slot.aind else {
                 return Ok(None);
             };
-            slots.push(slot.rep().slot::<spenso::structure::abstract_index::AbstractIndex, _>(index));
+            slots.push(
+                slot.rep()
+                    .slot::<spenso::structure::abstract_index::AbstractIndex, _>(index),
+            );
         }
         let minkowski: spenso::structure::representation::LibraryRep = Minkowski {}.into();
         if slots.len() != 4
-            || slots.iter().any(|slot| slot.rep() != slots[0].rep() || slot.rep().rep != minkowski)
+            || slots
+                .iter()
+                .any(|slot| slot.rep() != slots[0].rep() || slot.rep().rep != minkowski)
         {
             return Ok(None);
         }
@@ -837,7 +852,9 @@ impl RStarIntegrand {
     fn certified_contraction(&self, expression: &Atom) -> bool {
         self.contracted
             .get()
-            .is_some_and(|(contracted, certified)| *certified && std::ptr::eq(contracted, expression))
+            .is_some_and(|(contracted, certified)| {
+                *certified && std::ptr::eq(contracted, expression)
+            })
     }
 
     /// Mutable access to the contracted expression, for tests decorating it.
@@ -1225,7 +1242,9 @@ impl RStarIntegrand {
             );
         }
         if back {
-            return Ok(projected.replace_multiple(&self.combination_rules()).expand());
+            return Ok(projected
+                .replace_multiple(&self.combination_rules())
+                .expand());
         }
         Ok(projected)
     }
@@ -1262,7 +1281,11 @@ impl RStarIntegrand {
                 return None;
             }
             let edge = i64::try_from(function.get(0)).ok()?;
-            Some((edge, coefficient, function.iter().skip(1).map(|a| a.to_owned()).collect()))
+            Some((
+                edge,
+                coefficient,
+                function.iter().skip(1).map(|a| a.to_owned()).collect(),
+            ))
         };
         let mut combinations = self.combinations.lock().unwrap();
         let renamed = expression.replace_map(|view, _, out| {
@@ -1306,7 +1329,12 @@ impl RStarIntegrand {
             **out = if others.is_empty() {
                 vector
             } else {
-                Atom::add_many(others.iter().copied().chain(std::iter::once(vector.as_view())))
+                Atom::add_many(
+                    others
+                        .iter()
+                        .copied()
+                        .chain(std::iter::once(vector.as_view())),
+                )
             };
         });
         drop(combinations);
@@ -1394,12 +1422,18 @@ impl RStarIntegrand {
                     let rules = self.combination_rules();
                     self.combinations.lock().unwrap().clear();
                     if edge_project_log() {
-                        eprintln!("EDGE_PRE loops={} kept_bytes={kept_bytes} back=true", self.region.loops);
+                        eprintln!(
+                            "EDGE_PRE loops={} kept_bytes={kept_bytes} back=true",
+                            self.region.loops
+                        );
                     }
                     kept.replace_multiple(&rules).expand()
                 } else {
                     if edge_project_log() {
-                        eprintln!("EDGE_PRE loops={} kept_bytes={kept_bytes} back=false", self.region.loops);
+                        eprintln!(
+                            "EDGE_PRE loops={} kept_bytes={kept_bytes} back=false",
+                            self.region.loops
+                        );
                     }
                     kept
                 }
@@ -1481,7 +1515,11 @@ impl RStarIntegrand {
         let message = payload
             .downcast_ref::<String>()
             .cloned()
-            .or_else(|| payload.downcast_ref::<&str>().map(|text| (*text).to_owned()))
+            .or_else(|| {
+                payload
+                    .downcast_ref::<&str>()
+                    .map(|text| (*text).to_owned())
+            })
             .unwrap_or_default();
         if !message.starts_with("resource budget exhausted") {
             std::panic::resume_unwind(payload);
@@ -1787,17 +1825,20 @@ impl RStarIntegrand {
             if !rules.is_empty() {
                 edge_debug_dump("to_vakint_input", &expanded);
             }
-            let input = crate::uv::approx::integrated::with_momentum_combinations(&rules, || -> Result<_> {
-                to_vakint_integrand(
-                    expanded,
-                    &self.graph.underlying,
-                    &self.region.remaining,
-                    &self.graph.empty_subgraph::<SuBitGraph>(),
-                    &uv_settings.vakint,
-                    false,
-                )
-                .wrap_err("while converting with kept edge momenta")
-            })?;
+            let input = crate::uv::approx::integrated::with_momentum_combinations(
+                &rules,
+                || -> Result<_> {
+                    to_vakint_integrand(
+                        expanded,
+                        &self.graph.underlying,
+                        &self.region.remaining,
+                        &self.graph.empty_subgraph::<SuBitGraph>(),
+                        &uv_settings.vakint,
+                        false,
+                    )
+                    .wrap_err("while converting with kept edge momenta")
+                },
+            )?;
             timing.conversion = timing.lap();
             let integrated = integrate_single_mass(vakint, vakint_settings, &input)
                 .inspect_err(|_| edge_debug_dump("single_mass_error", &Atom::num(1)))?;
@@ -1910,7 +1951,11 @@ impl RStarIntegrand {
             if edge >= OFFSET {
                 return None;
             }
-            Some((edge, coefficient, function.iter().skip(1).map(|a| a.to_owned()).collect()))
+            Some((
+                edge,
+                coefficient,
+                function.iter().skip(1).map(|a| a.to_owned()).collect(),
+            ))
         };
         let mut combinations = std::collections::BTreeMap::<Vec<(i64, Atom)>, i64>::new();
         let renamed = expression.replace_map(|view, _, out| {
@@ -1949,7 +1994,9 @@ impl RStarIntegrand {
                 let image = Atom::add_many(
                     terms
                         .iter()
-                        .map(|(edge, coefficient)| coefficient * function!(head, Atom::num(*edge), W_.x___))
+                        .map(|(edge, coefficient)| {
+                            coefficient * function!(head, Atom::num(*edge), W_.x___)
+                        })
                         .collect::<Vec<_>>()
                         .iter(),
                 );

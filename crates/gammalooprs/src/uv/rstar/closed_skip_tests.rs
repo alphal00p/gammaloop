@@ -65,7 +65,11 @@ fn closed_root_taylor_polynomials_are_certified_fixed_points_of_the_summand_simp
                         "{name} remainder {index}: uncertified, loops={loops} contracted_bytes={} closed_dot_scalar={} contracted={}",
                         contracted.as_view().get_byte_size(),
                         closed_dot_scalar(contracted.as_view()),
-                        contracted.to_canonical_string().chars().take(300).collect::<String>()
+                        contracted
+                            .to_canonical_string()
+                            .chars()
+                            .take(300)
+                            .collect::<String>()
                     );
                     uncertified += 1;
                     continue;
@@ -87,7 +91,10 @@ fn closed_root_taylor_polynomials_are_certified_fixed_points_of_the_summand_simp
         eprintln!(
             "closed-skip spot checks: {checked} certified polynomials (remainder loops {certified_loops:?}), {uncertified} uncertified, {with_children} terms with children"
         );
-        assert!(checked >= 8 && with_children > 0, "{checked} {with_children}");
+        assert!(
+            checked >= 8 && with_children > 0,
+            "{checked} {with_children}"
+        );
         Ok(())
     })
 }

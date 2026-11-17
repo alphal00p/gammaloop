@@ -3655,7 +3655,9 @@ mod tests {
     static COLOURED_OUTPUT: std::sync::RwLock<()> = std::sync::RwLock::new(());
 
     fn plain_output() -> std::sync::RwLockReadGuard<'static, ()> {
-        COLOURED_OUTPUT.read().unwrap_or_else(|poisoned| poisoned.into_inner())
+        COLOURED_OUTPUT
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     /// Exclusive access with the colour override on; switches it off again on
@@ -3664,7 +3666,9 @@ mod tests {
 
     impl ColouredOutput {
         fn new() -> Self {
-            let guard = COLOURED_OUTPUT.write().unwrap_or_else(|poisoned| poisoned.into_inner());
+            let guard = COLOURED_OUTPUT
+                .write()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             control::set_override(true);
             Self(guard)
         }
