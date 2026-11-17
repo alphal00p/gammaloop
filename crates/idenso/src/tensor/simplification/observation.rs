@@ -185,6 +185,7 @@ impl RegionObservation {
                 self.head(head);
                 self.scalar_interface &= head.is_scalar()
                     || !(head.has_tag(&SPENSO_TAG.tensor)
+                        || head.has_tag(&SPENSO_TAG.tensor_word)
                         || head.has_tag(&SPENSO_TAG.rank1)
                         || head.has_tag(&SPENSO_TAG.representation)
                         || [
@@ -639,6 +640,7 @@ impl DomainObservations {
         ) || matches!(value, AtomView::Fun(function)
             if function.get_symbol().is_scalar()
                 || function.get_symbol().has_tag(&SPENSO_TAG.tensor)
+                || function.get_symbol().has_tag(&SPENSO_TAG.tensor_word)
                 || function.get_symbol().has_tag(&SPENSO_TAG.rank1)
                 || [SPENSO_TAG.chain, SPENSO_TAG.trace, SPENSO_TAG.bracket,
                     SPENSO_TAG.scalar, SPENSO_TAG.pure_scalar, SPENSO_TAG.dot, ETS.metric,
