@@ -353,12 +353,17 @@ fn uv_child_edge_remainder() -> bool {
 /// - `on`: stream it ([`RStarIntegrand::stream_contracted`]): split the input
 ///   product into pieces, then contract, substitute and integrate one piece at
 ///   a time and add up only the integrated results;
-/// - `auto`: contract the first piece, extrapolate the emitted bytes to all
-///   pieces and stream only when that estimate reaches
-///   `GAMMALOOP_UV_STREAM_MIN_BYTES` (default 256 MiB); otherwise take the
-///   whole path (the first piece's contraction is the only extra work).
+/// - `auto`: stream only when the input product distributes into at least
+///   `GAMMALOOP_UV_STREAM_MIN_COMBOS` (default 729 = 3^6) term combinations
+///   (the product of the term counts of its sums); otherwise the whole path.
 ///
 /// `GAMMALOOP_UV_STREAM_PIECES` (default 81) is the target number of pieces.
+/// Contracted pieces are added up into batches of at least
+/// `GAMMALOOP_UV_STREAM_BATCH_BYTES` (default 256 MiB) of emitted expression,
+/// and each batch is integrated as one: a remainder that emits less than one
+/// batch is integrated once, as on the whole path; a large one in bounded
+/// batches. (A first-piece extrapolation is not robust: a first piece can
+/// contract to zero while the remainder emits hundreds of MB.)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum UvStream {
     Off,
@@ -391,14 +396,24 @@ fn uv_stream_pieces() -> usize {
     *PIECES
 }
 
-fn uv_stream_min_bytes() -> usize {
+fn uv_stream_batch_bytes() -> usize {
     static BYTES: LazyLock<usize> = LazyLock::new(|| {
-        std::env::var("GAMMALOOP_UV_STREAM_MIN_BYTES")
+        std::env::var("GAMMALOOP_UV_STREAM_BATCH_BYTES")
             .ok()
             .and_then(|value| value.parse().ok())
             .unwrap_or(256 << 20)
     });
     *BYTES
+}
+
+fn uv_stream_min_combos() -> usize {
+    static COMBOS: LazyLock<usize> = LazyLock::new(|| {
+        std::env::var("GAMMALOOP_UV_STREAM_MIN_COMBOS")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(729)
+    });
+    *COMBOS
 }
 
 /// Whether hard components keep edge momenta.
@@ -2279,8 +2294,8 @@ impl RStarIntegrand {
     }
 
     /// `GAMMALOOP_UV_STREAM=on|auto` ([`uv_stream`]): this remainder's
-    /// edge-basis contraction as a stream of pieces, each handed to `sink`
-    /// contracted and substituted, never summed here.
+    /// edge-basis contraction as a stream of batches of pieces, each piece
+    /// contracted and substituted, each batch handed to `sink`.
     ///
     /// The routed remainder of a degree-0 UV child is a small product (a few
     /// KB) of Feynman-rule factors with several momentum sums, whose
@@ -2294,8 +2309,8 @@ impl RStarIntegrand {
     ///
     /// Returns false, having emitted nothing, when the stream does not apply:
     /// switch off, not a degree-0 UV child in the edge basis, nothing to split,
-    /// the first piece introduces a dummy index, or (`auto`) the extrapolated
-    /// output stays below `GAMMALOOP_UV_STREAM_MIN_BYTES`. A later piece that
+    /// the first piece introduces a dummy index, or (`auto`) fewer than
+    /// `GAMMALOOP_UV_STREAM_MIN_COMBOS` term combinations. A later piece that
     /// introduces a dummy index is an error (never observed).
     pub(super) fn stream_contracted(
         &self,
@@ -2331,6 +2346,12 @@ impl RStarIntegrand {
                 _ => None,
             })
             .collect::<Vec<_>>();
+        let combos = sums
+            .iter()
+            .fold(1usize, |product, (_, terms)| product.saturating_mul(*terms));
+        if mode == UvStream::Auto && combos < uv_stream_min_combos() {
+            return Ok(false);
+        }
         sums.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
         let target = uv_stream_pieces();
         let mut chosen = Vec::new();
@@ -2376,19 +2397,31 @@ impl RStarIntegrand {
                 Self::edge_substitute(contracted.as_view(), rules)?
             }))
         };
+        let batch_limit = uv_stream_batch_bytes();
+        let mut batch = streamed::SumAccumulator::default();
+        let (mut batch_bytes, mut emitted, mut pieces, mut batches) =
+            (0usize, 0usize, 0usize, 0usize);
         let mut digits = vec![0usize; choices.len()];
-        let Some(first) = contract_piece(&digits)? else {
-            eprintln!("UV_STREAM declined=dummy loops={}", self.region.loops);
-            return Ok(false);
-        };
-        let estimate = first.as_view().get_byte_size().saturating_mul(count);
-        if mode == UvStream::Auto && estimate < uv_stream_min_bytes() {
-            return Ok(false);
-        }
-        let mut emitted = first.as_view().get_byte_size();
-        sink(first)?;
-        let mut pieces = 1usize;
         'pieces: loop {
+            let Some(mapped) = contract_piece(&digits)? else {
+                if pieces == 0 {
+                    eprintln!("UV_STREAM declined=dummy loops={}", self.region.loops);
+                    return Ok(false);
+                }
+                return Err(eyre!(
+                    "a UV stream piece introduced a dummy index after {pieces} pieces"
+                ));
+            };
+            let bytes = mapped.as_view().get_byte_size();
+            emitted += bytes;
+            batch_bytes += bytes;
+            pieces += 1;
+            batch.push(mapped);
+            if batch_bytes >= batch_limit {
+                sink(std::mem::take(&mut batch).finish())?;
+                batch_bytes = 0;
+                batches += 1;
+            }
             let mut k = 0;
             loop {
                 if k == digits.len() {
@@ -2401,17 +2434,13 @@ impl RStarIntegrand {
                 digits[k] = 0;
                 k += 1;
             }
-            let Some(mapped) = contract_piece(&digits)? else {
-                return Err(eyre!(
-                    "a UV stream piece introduced a dummy index after {pieces} pieces were integrated"
-                ));
-            };
-            emitted += mapped.as_view().get_byte_size();
-            pieces += 1;
-            sink(mapped)?;
+        }
+        if batch_bytes > 0 || batches == 0 {
+            sink(batch.finish())?;
+            batches += 1;
         }
         eprintln!(
-            "UV_STREAM pieces={pieces} in_bytes={} estimate_bytes={estimate} emitted_bytes={emitted} seconds={:.1} loops={}",
+            "UV_STREAM pieces={pieces} batches={batches} combos={combos} in_bytes={} emitted_bytes={emitted} seconds={:.1} loops={}",
             input.get_byte_size(),
             started.elapsed().as_secs_f64(),
             self.region.loops
