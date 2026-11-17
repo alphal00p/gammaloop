@@ -4,8 +4,10 @@
 use super::external::ExternalProjector;
 use super::{
     Outside, TensorMonomial, TensorReducer, TensorReduction, TensorReductionError,
-    TensorReductionTerm, indexed_vector,
+    TensorReductionTerm, coset_key_from_parts, indexed_vector, matching_coset_key,
+    perfect_matching_count, perfect_matchings,
 };
+use crate::OrthogonalWeingarten;
 use idenso::shorthands::UndoShorthands;
 use idenso::tensor::composition;
 use idenso::tensor::{ContractSettings, SymbolicTensor};
@@ -340,6 +342,9 @@ impl TensorReducer {
     ) -> Result<TensorReduction, TensorReductionError> {
         let state = ParseState::<AbstractIndex>::default();
         state.reserve_indices(indexed.expression().as_view());
+        let mode = self.row_mode();
+        // The Weingarten weights of one rank, for every pair of pairings.
+        let mut tables: HashMap<usize, PairingTable> = HashMap::new();
         let mut terms = Vec::new();
         let mut max_rank = 0;
         for (outside, inside) in rows {
@@ -382,124 +387,56 @@ impl TensorReducer {
                 })
                 .collect();
             let renamed = inside.reindex_interface_ports(&replacements)?;
-            let probe = SPENSO_TAG.rank_one_tensor_symbol("FeynKit::BlockProbe");
-            // Probe vectors use the same native representation as the block
-            // ports; the raw scalar dimension belongs only to projector weights.
-            let mut probe_index = 0_usize;
-            let probes = representations
-                .iter()
-                .map(|representation| {
-                    loop {
-                        resources::checkpoint()?;
-                        let candidate = FunctionBuilder::new(probe)
-                            .add_arg(probe_index)
-                            .add_arg(representation)
-                            .finish();
-                        probe_index = probe_index
-                            .checked_add(1)
-                            .ok_or(TensorReductionError::CounterOverflow)?;
-                        if !self.external_vectors.contains(&candidate) {
-                            break Ok::<_, TensorReductionError>(candidate);
-                        }
-                    }
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            let monomial = TensorMonomial {
-                scalar: Atom::one(),
-                integrated: probes.clone(),
-                outside: slots
-                    .iter()
-                    .map(|slot| {
-                        let AtomView::Fun(function) = slot.as_view() else {
-                            unreachable!()
-                        };
-                        let index = function.iter().last().unwrap().to_owned();
-                        Outside::Index {
-                            slot: slot.clone(),
-                            index,
-                        }
-                    })
-                    .collect(),
-            };
-            let projected = if let Some(external) = external {
-                self.reduce_external_monomial(monomial, external)?
-            } else if rank % 2 == 0 {
-                self.reduce_monomial(monomial)?
-            } else {
-                Vec::new()
-            };
-            for term in projected {
+            if mode == RowMode::Legacy || external.is_some() {
+                self.project_row_pairs(
+                    source,
+                    &outside,
+                    &renamed,
+                    &slots,
+                    &fresh,
+                    &representations,
+                    external,
+                    &mut terms,
+                )?;
+                continue;
+            }
+            if rank % 2 == 1 {
+                continue;
+            }
+            if !tables.contains_key(&rank) {
+                tables.insert(rank, self.pairing_table(rank)?);
+            }
+            let table = &tables[&rank];
+            // The projector term (sigma, tau) is W(sigma, tau) times metrics on
+            // the block ports (sigma) and metrics on the outside slots (tau).
+            // By bilinearity, sum_(sigma,tau) W (I.sigma)(O.tau) equals
+            // sum_sigma (I.sigma)(O.sum_tau W tau): contract the large block
+            // once per sigma instead of once per (sigma, tau).
+            for (sigma_index, sigma) in table.pairings.iter().enumerate() {
                 resources::checkpoint()?;
-                // Apply the existing projector to a general covariant block:
-                // every probe occurrence denotes one of its open tensor ports.
-                let projector = term.tensor.expression().replace_map(|value, _, out| {
-                    let AtomView::Fun(function) = value else {
-                        return;
-                    };
-                    if function.get_symbol() != SPENSO_TAG.dot {
-                        return;
+                let mut weights = Atom::Zero;
+                for (tau_index, tau) in table.pairings.iter().enumerate() {
+                    let weight = &table.weights[sigma_index][tau_index];
+                    if !weight.is_zero() {
+                        weights += weight * metric_pairing(&slots, tau);
                     }
-                    let args = function.iter().collect::<Vec<_>>();
-                    if args.len() != 2 {
-                        return;
-                    }
-                    let positions = args
-                        .iter()
-                        .map(|arg| probes.iter().position(|probe| probe.as_view() == *arg))
-                        .collect::<Vec<_>>();
-                    **out = match positions.as_slice() {
-                        [Some(left), Some(right)] => FunctionBuilder::new(ETS.metric)
-                            .add_arg(&fresh[*left])
-                            .add_arg(&fresh[*right])
-                            .finish(),
-                        [Some(position), None] | [None, Some(position)] => {
-                            let other = if positions[0].is_none() {
-                                args[0]
-                            } else {
-                                args[1]
-                            };
-                            let AtomView::Fun(slot) = fresh[*position].as_view() else {
-                                unreachable!()
-                            };
-                            indexed_vector(
-                                &other.to_owned(),
-                                &slot.iter().last().unwrap().to_owned(),
-                            )
-                        }
-                        _ => return,
-                    };
-                });
-                // The probe recipe becomes a new tensor projector with these
-                // explicit boundary slots. Existing inside/outside bodies stay typed.
-                let projector = SymbolicTensor::infer(projector)?;
-                let tensor = renamed
-                    .multiply(&outside)?
-                    .multiply(&projector)?
-                    .contract(ContractSettings {
-                        expand: false,
-                        collect_chains: false,
-                        collect_traces: false,
-                        ..Default::default()
-                    })?
+                }
+                if weights.is_zero() {
+                    continue;
+                }
+                let block = renamed
+                    .multiply(&SymbolicTensor::infer(metric_pairing(&fresh, sigma))?)?
+                    .contract(block_contract_settings())?
+                    .to_dots()?;
+                let weighted = outside
+                    .multiply(&SymbolicTensor::infer(weights)?)?
+                    .contract(block_contract_settings())?;
+                let tensor = block
+                    .multiply(&weighted)?
+                    .contract(block_contract_settings())?
                     .to_dots()?;
                 let tensor = source.with_checked_expression(tensor.expression().clone())?;
-                if !tensor.is_zero() {
-                    terms.push(TensorReductionTerm {
-                        coefficient: term.coefficient,
-                        tensor,
-                        integrated_orbit: None,
-                        projector_orbit: None,
-                        budget: ResourceBudget::capture_current(),
-                    });
-                }
-                if let Some(limit) = self.output_term_limit
-                    && terms.len() > limit
-                {
-                    return Err(TensorReductionError::OutputLimit {
-                        terms: terms.len(),
-                        limit,
-                    });
-                }
+                self.push_block_term(&mut terms, Atom::one(), tensor)?;
             }
         }
         let fully_contracted = source
@@ -514,6 +451,221 @@ impl TensorReducer {
             fully_contracted,
             budget: ResourceBudget::capture_current(),
         })
+    }
+
+    fn push_block_term(
+        &self,
+        terms: &mut Vec<TensorReductionTerm>,
+        coefficient: Atom,
+        tensor: SymbolicTensor<PartialStructure>,
+    ) -> Result<(), TensorReductionError> {
+        if !tensor.is_zero() {
+            terms.push(TensorReductionTerm {
+                coefficient,
+                tensor,
+                integrated_orbit: None,
+                projector_orbit: None,
+                budget: ResourceBudget::capture_current(),
+            });
+        }
+        if let Some(limit) = self.output_term_limit
+            && terms.len() > limit
+        {
+            return Err(TensorReductionError::OutputLimit {
+                terms: terms.len(),
+                limit,
+            });
+        }
+        Ok(())
+    }
+
+    /// Weingarten weights of every (sigma, tau) pair of pairings of `rank`
+    /// slots, with the reducer's pairing diagnostics.
+    fn pairing_table(&self, rank: usize) -> Result<PairingTable, TensorReductionError> {
+        resources::checkpoint()?;
+        let pairing_count = perfect_matching_count(rank)?;
+        if let Some(limit) = self.pairing_limit
+            && pairing_count > limit
+        {
+            return Err(TensorReductionError::PairingLimit {
+                rank,
+                pairings: pairing_count,
+                limit,
+            });
+        }
+        if let Some(limit) = self.pairing_product_limit {
+            let products = pairing_count
+                .checked_mul(pairing_count)
+                .ok_or(TensorReductionError::CounterOverflow)?;
+            if products > limit {
+                return Err(TensorReductionError::PairingProductLimit {
+                    rank,
+                    products,
+                    limit,
+                });
+            }
+        }
+        let pairings = perfect_matchings(rank)?;
+        let table = OrthogonalWeingarten::new(rank / 2, self.dimension.clone())?;
+        let by_key = table
+            .coefficients()
+            .map(|(coset, coefficient)| {
+                Ok((coset_key_from_parts(coset.parts())?, coefficient.clone()))
+            })
+            .collect::<Result<HashMap<_, _>, TensorReductionError>>()?;
+        let weights = pairings
+            .iter()
+            .map(|sigma| {
+                pairings
+                    .iter()
+                    .map(|tau| Ok(by_key[&matching_coset_key(sigma, tau)?].clone()))
+                    .collect::<Result<Vec<_>, TensorReductionError>>()
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(PairingTable { pairings, weights })
+    }
+
+    /// The previous row projection: one probe monomial reduced per row and
+    /// one contraction of the whole row per labelled (sigma, tau) term. Used
+    /// with an external projector and for `FEYNKIT_TENSORREDUCE_ROWS=legacy`.
+    #[allow(clippy::too_many_arguments)]
+    fn project_row_pairs(
+        &self,
+        source: &SymbolicTensor<PartialStructure>,
+        outside: &SymbolicTensor<PartialStructure>,
+        renamed: &SymbolicTensor<PartialStructure>,
+        slots: &[Atom],
+        fresh: &[Atom],
+        representations: &[Atom],
+        external: Option<&ExternalProjector>,
+        terms: &mut Vec<TensorReductionTerm>,
+    ) -> Result<(), TensorReductionError> {
+        let rank = slots.len();
+        let probe = SPENSO_TAG.rank_one_tensor_symbol("FeynKit::BlockProbe");
+        // Probe vectors use the same native representation as the block
+        // ports; the raw scalar dimension belongs only to projector weights.
+        let mut probe_index = 0_usize;
+        let probes = representations
+            .iter()
+            .map(|representation| {
+                loop {
+                    resources::checkpoint()?;
+                    let candidate = FunctionBuilder::new(probe)
+                        .add_arg(probe_index)
+                        .add_arg(representation)
+                        .finish();
+                    probe_index = probe_index
+                        .checked_add(1)
+                        .ok_or(TensorReductionError::CounterOverflow)?;
+                    if !self.external_vectors.contains(&candidate) {
+                        break Ok::<_, TensorReductionError>(candidate);
+                    }
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let monomial = TensorMonomial {
+            scalar: Atom::one(),
+            integrated: probes.clone(),
+            outside: slots
+                .iter()
+                .map(|slot| {
+                    let AtomView::Fun(function) = slot.as_view() else {
+                        unreachable!()
+                    };
+                    let index = function.iter().last().unwrap().to_owned();
+                    Outside::Index {
+                        slot: slot.clone(),
+                        index,
+                    }
+                })
+                .collect(),
+        };
+        let projected = if let Some(external) = external {
+            self.reduce_external_monomial(monomial, external)?
+        } else if rank % 2 == 0 {
+            self.reduce_monomial(monomial)?
+        } else {
+            Vec::new()
+        };
+        for term in projected {
+            resources::checkpoint()?;
+            // Apply the existing projector to a general covariant block:
+            // every probe occurrence denotes one of its open tensor ports.
+            let projector = term.tensor.expression().replace_map(|value, _, out| {
+                let AtomView::Fun(function) = value else {
+                    return;
+                };
+                if function.get_symbol() != SPENSO_TAG.dot {
+                    return;
+                }
+                let args = function.iter().collect::<Vec<_>>();
+                if args.len() != 2 {
+                    return;
+                }
+                let positions = args
+                    .iter()
+                    .map(|arg| probes.iter().position(|probe| probe.as_view() == *arg))
+                    .collect::<Vec<_>>();
+                **out = match positions.as_slice() {
+                    [Some(left), Some(right)] => FunctionBuilder::new(ETS.metric)
+                        .add_arg(&fresh[*left])
+                        .add_arg(&fresh[*right])
+                        .finish(),
+                    [Some(position), None] | [None, Some(position)] => {
+                        let other = if positions[0].is_none() {
+                            args[0]
+                        } else {
+                            args[1]
+                        };
+                        let AtomView::Fun(slot) = fresh[*position].as_view() else {
+                            unreachable!()
+                        };
+                        indexed_vector(&other.to_owned(), &slot.iter().last().unwrap().to_owned())
+                    }
+                    _ => return,
+                };
+            });
+            // The probe recipe becomes a new tensor projector with these
+            // explicit boundary slots. Existing inside/outside bodies stay typed.
+            let projector = SymbolicTensor::infer(projector)?;
+            let tensor = renamed
+                .multiply(outside)?
+                .multiply(&projector)?
+                .contract(block_contract_settings())?
+                .to_dots()?;
+            let tensor = source.with_checked_expression(tensor.expression().clone())?;
+            self.push_block_term(terms, term.coefficient, tensor)?;
+        }
+        Ok(())
+    }
+}
+
+/// The Weingarten weights of one rank: `weights[sigma][tau]` for the
+/// perfect matchings `pairings` (each as its partner array).
+struct PairingTable {
+    pairings: Vec<Vec<usize>>,
+    weights: Vec<Vec<Atom>>,
+}
+
+/// `prod_(a < pairing[a]) g(slots[a], slots[pairing[a]])`.
+fn metric_pairing(slots: &[Atom], pairing: &[usize]) -> Atom {
+    (0..pairing.len())
+        .filter(|left| *left < pairing[*left])
+        .fold(Atom::one(), |product, left| {
+            product
+                * FunctionBuilder::new(ETS.metric)
+                    .add_arg(&slots[left])
+                    .add_arg(&slots[pairing[left]])
+                    .finish()
+        })
+}
+
+fn block_contract_settings() -> ContractSettings<'static> {
+    ContractSettings {
+        expand: false,
+        collect_chains: false,
+        collect_traces: false,
+        ..Default::default()
     }
 }
 
@@ -690,5 +842,41 @@ mod tests {
                 .unwrap();
             assert_eq!(contracted(reduction), expected, "{mode:?}");
         }
+    }
+
+    #[test]
+    fn per_sigma_grouping_equals_the_per_pair_projection() {
+        let _ = (
+            spenso::vector_symbol!("block_sigma::k"),
+            spenso::vector_symbol!("block_sigma::q"),
+            spenso::vector_symbol!("block_sigma::p"),
+        );
+        // Rank-four block: ports D(k,q) and rho connect to the outside
+        // (q and p), mu and nu are open. The scalar sum keeps it a block.
+        let input = parse!(
+            "spenso::dot(block_sigma::k(spenso::mink(D)),block_sigma::q(spenso::mink(D)))
+            *block_sigma::k(spenso::mink(D,mu))*block_sigma::k(spenso::mink(D,nu))
+            *block_sigma::k(spenso::mink(D,rho))*block_sigma::p(spenso::mink(D,rho))
+            *(block_sigma::x+block_sigma::y*spenso::dot(block_sigma::k(spenso::mink(D)),block_sigma::k(spenso::mink(D))))"
+        );
+        let source = SymbolicTensor::infer(input).unwrap();
+        let reducer =
+            TensorReducer::new(parse!("D")).with_integrated_head(symbol!("block_sigma::k"));
+        let pairs = reducer
+            .clone()
+            .with_row_mode(RowMode::Legacy)
+            .reduce_blocks(&source, None)
+            .unwrap();
+        let grouped = reducer
+            .clone()
+            .with_row_mode(RowMode::Default)
+            .reduce_blocks(&source, None)
+            .unwrap();
+        assert_eq!(pairs.max_rank(), 4);
+        assert_eq!(pairs.terms().len(), 9, "3 x 3 labelled (sigma, tau) terms");
+        assert_eq!(grouped.terms().len(), 3, "one term per sigma");
+        let pairs = contracted(pairs);
+        assert!(!pairs.is_zero());
+        assert_eq!(pairs, contracted(grouped));
     }
 }
