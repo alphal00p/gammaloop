@@ -84,7 +84,7 @@ or semantics, and do not satisfy the completion standard above.
   columns: (1.2fr, 1fr, 2.2fr),
   table.header([*Package*], [*Surface snapshot*], [*Immediate interpretation*]),
   [`gammaloop-python`], [40 exports; 262 members], [65 member descriptions are blank, chiefly around public integration-result records; core examples depend on an unspecified state and point.],
-  [`linnet-py`], [21 exports; 178 members], [54 member descriptions are blank and the generated reference contains no runnable examples.],
+  [`linnet`], [21 exports; 178 members], [54 member descriptions are blank and the generated reference contains no runnable examples.],
   [`spynso3`], [14 exports; 119 members], [34 member descriptions are blank; numerous examples are fragments or violate the documented registration workflow.],
   [`idenso-community`], [16 functions], [All exports have prose, but only nine have examples and none is runtime-verified.],
   [`vakint-community`], [4 classes; 20 members], [Member prose exists, but examples are non-standalone and exception contracts are absent.],
@@ -152,9 +152,9 @@ registration-to-execution journey with an asserted result.
 
 === APIDOC-004 · Idenso identity claims require scientific review
 
-*Priority:* P0 · *Status:* In progress · *Surface:* `idenso-community` Python reference
+*Priority:* P0 · *Status:* In progress · *Surface:* Idenso methods on `spynso3.TensorExpression`
 
-The `simplify_color` prose contains index-inconsistent contractions and a Fierz formula
+The `simplify_algebra` prose contains index-inconsistent contractions and a Fierz formula
 that is not consistent with the stated normalization. Gamma-trace and gamma-five
 claims also lack the dimensional-scheme qualifications needed to interpret them.
 
@@ -415,7 +415,7 @@ correlated entries in one bin.
 
 === APIDOC-203 · Linnet Python algorithms and proxies
 
-*Priority:* P1 · *Status:* Open · *Surface:* `linnet-py`
+*Priority:* P1 · *Status:* Open · *Surface:* `linnet`
 
 The reference has no examples. It does not explain the spanning-forest result from
 `cycle_basis`, the left/cut/right parts of `all_cuts`, traversal flags, callback
@@ -453,7 +453,7 @@ compilation, mutation, and result-kind errors.
 
 === APIDOC-205 · Idenso Python transformation coverage
 
-*Priority:* P1 · *Status:* In progress · *Surface:* `idenso-community`
+*Priority:* P1 · *Status:* In progress · *Surface:* Idenso methods on `spynso3.TensorExpression`
 
 `dirac_adjoint`, bispinor/color/metric/Minkowski expansion, initialization, and color
 simplification lack checked examples. Existing authored examples are syntax-compiled

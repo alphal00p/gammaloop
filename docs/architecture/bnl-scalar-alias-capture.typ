@@ -1,4 +1,4 @@
-= BNL Scalar Alias Capture
+= BNL scalar alias capture
 
 #quote(block: true)[
 #strong[Status:] Archived raw-output evidence

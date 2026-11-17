@@ -1,7 +1,8 @@
 {
   "normal_dependencies": {
     "alphal00p-docs-builder": [
-      "alphal00p-docs-schema"
+      "alphal00p-docs-schema",
+      "linnest"
     ],
     "alphal00p-docs-catalogs": [
       "alphal00p-docs-macros",
@@ -217,7 +218,10 @@
   },
   "normal_dependency_features": {
     "alphal00p-docs-builder": {
-      "alphal00p-docs-schema": []
+      "alphal00p-docs-schema": [],
+      "linnest": [
+        "svg"
+      ]
     },
     "alphal00p-docs-catalogs": {
       "alphal00p-docs-macros": [],
@@ -623,7 +627,10 @@
   ],
   "resolved_normal_dependencies": {
     "alphal00p-docs-builder": [
-      "alphal00p-docs-schema"
+      "alphal00p-docs-schema",
+      "kurvst",
+      "linnest",
+      "linnet"
     ],
     "alphal00p-docs-catalogs": [
       "alphal00p-docs-macros",
@@ -926,7 +933,10 @@
   },
   "resolved_test_dependencies": {
     "alphal00p-docs-builder": [
-      "alphal00p-docs-schema"
+      "alphal00p-docs-schema",
+      "kurvst",
+      "linnest",
+      "linnet"
     ],
     "alphal00p-docs-catalogs": [
       "alphal00p-docs-macros",
@@ -1311,7 +1321,8 @@
   ],
   "test_dependencies": {
     "alphal00p-docs-builder": [
-      "alphal00p-docs-schema"
+      "alphal00p-docs-schema",
+      "linnest"
     ],
     "alphal00p-docs-catalogs": [
       "alphal00p-docs-macros",
@@ -1548,7 +1559,10 @@
   },
   "test_dependency_features": {
     "alphal00p-docs-builder": {
-      "alphal00p-docs-schema": []
+      "alphal00p-docs-schema": [],
+      "linnest": [
+        "svg"
+      ]
     },
     "alphal00p-docs-catalogs": {
       "alphal00p-docs-macros": [],

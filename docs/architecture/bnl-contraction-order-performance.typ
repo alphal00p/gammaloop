@@ -1,4 +1,4 @@
-= BNL Contraction Order Performance Notes
+= BNL contraction order performance notes
 
 #quote(block: true)[
 #strong[Status:] Archived, partially reproducible performance evidence

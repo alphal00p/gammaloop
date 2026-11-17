@@ -81,60 +81,45 @@
   ))
 ]
 
-#let landing-art(graphs, body) = group(class: "portal-hero-art")[
-  #group(class: "portal-wordmark", attrs: (
-    "aria-label": "αLoop collaboration mark",
-    role: "img",
-  ))[]
+#let landing-art(graphs) = group(class: "portal-hero-art")[
   #group(class: "portal-graph-field", attrs: (
     role: "img",
     "aria-label": "A jumble of Feynman graphs rendered by GammaLoop from real process and test data",
   ))[
     #for graph in graphs { portal-process-graph(graph) }
   ]
-  #el("p")[#body]
 ]
 
-#let task-choice(product, href, order, label, product-line, tagline) = el(
-  "a",
-  class: "portal-task-link",
-  attrs: ("data-product": product, href: href),
-)[
-  #el("span", class: "portal-task-order")[#order]
-  #el("span", class: "portal-task-copy")[
-    #el("strong")[#label]
-    #el("span")[#product-line]
-    #el("small")[#tagline]
-  ]
-  #el("span", class: "portal-task-arrow", attrs: ("aria-hidden": "true"))[→]
-]
-
-#let task-section(body) = region(
-  class: "portal-section portal-task-chooser",
-  id: "tasks",
-  labelled-by: "tasks-title",
+#let topic-card(id, body) = panel(class: "portal-topic-card", id: id, body)
+#let topic-links(title, body) = navigation(title, class: "portal-topic-links", body)
+#let topic-libraries(body) = styled-paragraph("portal-topic-libraries", body)
+#let topic-section(body) = region(
+  class: "portal-section portal-topics",
+  id: "topics",
+  labelled-by: "topics-title",
   body,
 )
-#let task-heading(body) = el("header", class: "portal-task-heading", body)
-#let task-grid(body) = navigation("Documentation by task", class: "portal-task-grid", body)
-#let heading-copy(body) = group(body)
+#let topic-heading(body) = el("header", class: "portal-topic-heading", body)
+#let topic-grid(body) = group(class: "portal-topic-grid", body)
 
-#let projects-section(body) = region(
-  class: "portal-section portal-projects",
-  id: "projects",
-  labelled-by: "projects-title",
+#let examples-section(body) = region(
+  class: "portal-section portal-examples",
+  id: "examples",
+  labelled-by: "examples-title",
   body,
 )
-#let portal-section-heading(body) = group(class: "portal-section-heading", body)
+#let example-row(href, runtime, body) = el("a", class: "portal-example", attrs: (
+  href: href,
+  "data-runtime": runtime,
+), body)
+#let example-runtime(body) = el("span", class: "portal-example-runtime", body)
+#let library-note(body) = group(class: "portal-library-note", body)
 #let project-grid(body) = group(class: "portal-project-grid", body)
 #let project-card(product, body) = panel(
   class: "portal-project-card",
   attrs: ("data-product": product),
   body,
 )
-#let project-meta(order, role) = group(class: "portal-project-meta")[
-  #el("span")[#order]#el("span")[#role]
-]
 #let project-summary(body) = styled-paragraph("portal-project-summary", body)
 #let package-list(title, packages) = el("div", class: "portal-packages", attrs: (
   "aria-label": title + " crates and modules",
@@ -145,12 +130,6 @@
 #let project-links(title, body) = navigation(
   title + " documentation",
   class: "portal-card-links",
-  body,
-)
-#let project-overview-link(href, body) = el(
-  "a",
-  class: "portal-card-primary",
-  attrs: (href: href),
   body,
 )
 // The animated tour mounts itself into the data-showcase host once site.js has loaded the
@@ -261,10 +240,9 @@
 
 #let talks-hero(body) = page-hero(class: "talks-page-hero portal-page-hero-compact", body)
 #let talks-provenance(body) = styled-paragraph("talks-provenance", body)
-#let talk-card(id, datetime, date, year, body) = panel(class: "talk-card", id: id)[
+#let talk-card(id, datetime, date, year, body) = panel(class: "talk-card", id: id, attrs: ("data-talk": "", "data-year": year))[
   #group(class: "talk-card-date")[
     #el("time", attrs: (datetime: datetime))[#date]
-    #el("span")[#year]
   ]
   #group(class: "talk-card-copy")[#body]
 ]
@@ -280,6 +258,7 @@
 #let publication-record(publication, body) = panel(class: "publication-card", attrs: (
   "data-publication": "",
   "data-title": publication.title,
+  "data-arxiv": publication.at("arxiv", default: ""),
   "data-people": publication.people.join(" "),
   "data-year": str(publication.year),
   "data-date": publication.date,
@@ -289,41 +268,61 @@
 #let publication-metadata(publication, venue) = group(class: "publication-card-meta")[
   #el("time", attrs: (datetime: publication.date))[#str(publication.year)]
   #if venue != none { el("span")[#venue] }
-  #el("span")[#str(publication.citations) citations]
+  #el("span")[#str(publication.citations) #if publication.citations == 1 { [citation] } else { [citations] }]
 ]
 #let publication-authors(body) = styled-paragraph("publication-authors", body)
 #let publication-provenance(body) = styled-paragraph("publication-provenance", body)
+// Native fields retain associated labels inside a shared inset frame.
+#let record-field(label, body, quiet: false) = el("label", class: "record-field" + if quiet { " record-field-quiet" } else { "" })[
+  #el("span", class: "record-field-label")[#label]
+  #group(class: "record-field-control")[#body]
+]
+#let talk-filters(years, count) = el("form", class: "record-filters talk-filters", attrs: ("data-talk-filters": "", "aria-label": "Filter talks"), {
+  record-field("Search talks", quiet: true)[
+    #void("input", attrs: (type: "search", "aria-label": "Search talks", "data-talk-search": "", placeholder: "Title, speaker or event"))
+  ]
+  record-field("Year", quiet: true)[
+    #el("select", attrs: ("data-talk-year": "", "aria-label": "Year"))[
+      #el("option", attrs: (value: ""))[All years]
+      #for year in years { el("option", attrs: (value: year))[#year] }
+    ]
+  ]
+  el("output", attrs: ("data-talk-count": "", "aria-live": "polite"))[#str(count) talks]
+  el("button", class: "record-reset", attrs: (type: "reset"))[Reset filters]
+})
 #let publication-filters(authors, years, kinds, kind-label, count) = el(
   "form",
-  class: "publication-filters",
-  attrs: ("data-publication-filters": ""),
+  class: "record-filters publication-filters",
+  attrs: ("data-publication-filters": "", "aria-label": "Filter publications"),
   {
     // Join controls in code so markup whitespace cannot become extra grid items.
-    el("label", [Search] + void("input", attrs: (
+    record-field("Search publications", quiet: true, void("input", attrs: (
       type: "search",
+      "aria-label": "Search publications",
       "data-publication-search": "",
-      placeholder: "Title or author",
+      placeholder: "Title, author or arXiv ID",
     )))
-    el("label", [Author] + el("select", attrs: ("data-publication-author": ""))[
+    record-field("Author", quiet: true, el("select", attrs: ("data-publication-author": "", "aria-label": "Author"))[
       #el("option", attrs: (value: ""))[All authors]
       #for author in authors { el("option", attrs: (value: author.id))[#author.name] }
     ])
-    el("label", [Year] + el("select", attrs: ("data-publication-year": ""))[
+    record-field("Year", quiet: true, el("select", attrs: ("data-publication-year": "", "aria-label": "Year"))[
       #el("option", attrs: (value: ""))[All years]
       #for year in years { el("option", attrs: (value: str(year)))[#str(year)] }
     ])
-    el("label", [Type] + el("select", attrs: ("data-publication-type": ""))[
+    record-field("Type", quiet: true, el("select", attrs: ("data-publication-type": "", "aria-label": "Type"))[
       #el("option", attrs: (value: ""))[All types]
       #for kind in kinds { el("option", attrs: (value: kind))[#kind-label(kind)] }
     ])
-    el("label", [Sort] + el("select", attrs: ("data-publication-sort": ""))[
-      #el("option", attrs: (value: "newest"))[Newest]
-      #el("option", attrs: (value: "cited"))[Most cited]
+    record-field("Sort", quiet: true, el("select", attrs: ("data-publication-sort": "", "aria-label": "Sort"))[
+      #el("option", attrs: (value: "newest"))[Newest first]
+      #el("option", attrs: (value: "cited"))[Most cited first]
     ])
     el("output", attrs: (
       "data-publication-count": "",
       "aria-live": "polite",
     ))[#str(count) publications]
+    el("button", class: "record-reset", attrs: (type: "reset"))[Reset filters]
   },
 )
 #let publication-list(body) = region(
@@ -341,53 +340,58 @@
   (href: href)
 }
 
-#let portal-header(root: "", home: "", active: none, search: false) = el(
+// Theme variants are decorative inside the single named brand link.
+#let brand-art(root: "") = [
+  #for theme in ("light", "dark") {
+    void("img", class: "site-brand-logo site-brand-logo-" + theme + " portal-graph-theme-" + theme, attrs: (
+      src: root + "assets/alphalooplogo-" + theme + ".svg",
+      alt: "",
+      "aria-hidden": "true",
+    ))
+  }
+]
+
+#let portal-header(root: "", home: "", active: none) = el(
   "header",
   class: "portal-header",
 )[
   #el("a", class: "portal-brand", attrs: (href: home, "aria-label": "αLoop home"))[
-    #el("span", class: "portal-brand-logo", attrs: ("aria-hidden": "true"))[]
-    #el("span", class: "portal-brand-copy")[
-      #el("strong")[αLoop]
-      #el("small")[Local Unitarity research]
-    ]
+    #brand-art(root: root)
   ]
-  #el("nav", class: "portal-nav", attrs: ("aria-label": "Primary"))[
+  #el("nav", class: "portal-nav", attrs: (id: "portal-navigation", "aria-label": "Primary"))[
+    #el("a", attrs: nav-attrs(root + "libraries/", "libraries", active))[Documentation]
     #el("a", attrs: nav-attrs(root + "about/", "about", active))[About]
-    #el("a", attrs: (href: root + "#projects"))[Projects]
     #el("a", attrs: nav-attrs(root + "people/", "people", active))[People]
     #el("a", attrs: nav-attrs(root + "talks/", "talks", active))[Talks]
     #el("a", attrs: nav-attrs(root + "publications/", "publications", active))[Publications]
-    #el("a", attrs: (href: root + "developers/"))[Developers]
   ]
-  #el("div", class: "portal-header-actions")[
-    #if search {
-      el("button", class: "portal-search-button", attrs: (
-        type: "button",
-        "data-search-open": "",
-      ))[
-        Search #el("span", class: "header-button-label")[⌘K]
-      ]
-    }
-    #el("a", class: "portal-source-link", attrs: (
-      href: "https://github.com/alphal00p/gammaloop",
-    ))[GitHub #arrow()]
-    #el("button", class: "portal-theme-button", attrs: (
+  #el("div", class: "portal-header-actions", {
+    el("button", class: "portal-search-button", attrs: (
+      type: "button", "data-search-open": "",
+      "aria-label": "Search all documentation", title: "Search (⌘/Ctrl+K)",
+    ))[#el("span", class: "header-search-icon", attrs: ("aria-hidden": "true"))[]]
+    el("button", class: "portal-theme-button", attrs: (
       type: "button",
       "data-theme-toggle": "",
-      "aria-label": "Toggle color theme",
+      "aria-label": "Toggle color theme", title: "Change theme",
     ))[#el("span", attrs: ("aria-hidden": "true"))[◐]]
-  ]
+    el("button", class: "portal-menu-button", attrs: (
+      type: "button", "data-portal-menu-toggle": "",
+      "aria-controls": "portal-navigation", "aria-expanded": "false",
+      "aria-label": "Open navigation", title: "Navigation",
+    ))[#el("span", attrs: ("aria-hidden": "true"))[☰]]
+
+  })
 ]
 
 #let portal-footer(root: "") = el("footer", class: "portal-footer")[
   #el("div")[
-    #el("span", class: "portal-footer-mark", attrs: ("aria-hidden": "true"))[]
+    #brand-art(root: root)
     #el("p")[#el("strong")[αLoop] #el("br")[] Local Unitarity research software]
   ]
   #el("nav", attrs: ("aria-label": "Footer"))[
     #el("a", attrs: (href: root + "about/"))[About]
-    #el("a", attrs: (href: root + "#projects"))[Projects]
+    #el("a", attrs: (href: root + "libraries/"))[Documentation]
     #el("a", attrs: (href: root + "people/"))[People]
     #el("a", attrs: (href: root + "talks/"))[Talks]
     #el("a", attrs: (href: root + "publications/"))[Publications]
@@ -407,11 +411,10 @@
       placeholder: "Search all projects and developer notes",
       "aria-label": "Search all documentation",
     ))
-    #el("button", class: "header-button", attrs: (value: "close"))[Close]
+    #el("button", class: "header-button", attrs: (type: "button", "data-search-close": ""))[Close]
   ]
   #el("ul", class: "search-results", attrs: (
     "data-search-results": "",
-    "aria-live": "polite",
   ))[]
 ]
 
@@ -435,12 +438,12 @@
     #void("link", attrs: (
       rel: "icon",
       type: "image/svg+xml",
-      href: root + "assets/local-unitarity-light.svg",
+      href: root + "assets/alphalooplogo-light.svg",
     ))
     #void("link", attrs: (
       rel: "icon",
       type: "image/svg+xml",
-      href: root + "assets/local-unitarity-dark.svg",
+      href: root + "assets/alphalooplogo-dark.svg",
       media: "(prefers-color-scheme: dark)",
     ))
     #el("title")[#if landing { [αLoop · #title] } else { [#title · αLoop] }]
@@ -450,14 +453,10 @@
   #el(
     "body",
     class: if landing { "portal-body" } else { "portal-body portal-subpage-body" },
-    attrs: if landing {
-      ("data-search-index": "search-index.json", "data-search-root": "")
-    } else {
-      (:)
-    },
+    attrs: ("data-search-index": root + "search-index.json", "data-search-root": root),
   )[
     #el("a", class: "skip-link", attrs: (href: "#main-content"))[Skip to content]
-    #portal-header(root: root, home: home, active: active, search: landing)
+    #portal-header(root: root, home: if landing { "./" } else { home }, active: active)
     #el(
       "main",
       class: if landing { "portal-main" } else { "portal-main portal-subpage-main" },
@@ -470,6 +469,6 @@
       #body
     ]
     #portal-footer(root: root)
-    #if landing { search-dialog }
+    #search-dialog
   ]
 ]

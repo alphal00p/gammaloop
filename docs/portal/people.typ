@@ -2,7 +2,7 @@
 #import "components.typ": *
 
 #let profile-links(person) = [
-  #link(person.url)[Professional profile #arrow()]
+  #if person.id != "nic-fink" { link(person.url)[Professional profile #arrow()] }
   #link(person.github)[GitHub #arrow()]
   #if "inspire_recid" in person {
     link("https://inspirehep.net/authors/" + str(person.inspire_recid))[
@@ -25,6 +25,7 @@
 #let people = [
   #page-hero(class: "portal-page-hero-compact")[
     = People
+
   ]
   #people-grid[
     #for person in portal.people { person-entry(person) }
@@ -33,7 +34,7 @@
 
 #let people-page = portal-document(
   "People",
-  "Researchers and collaborators building GammaLoop.",
+  "Researchers and collaborators developing Local Unitarity and the αLoop software libraries.",
   people,
   active: "people",
 )

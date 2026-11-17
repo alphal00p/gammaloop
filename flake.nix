@@ -258,9 +258,22 @@
           "alphal00p-docs-svg-assets" = workspace.docsSvgAssets;
           "alphal00p-docs-pages" = alphal00pDocsPages;
           "alphal00p-docs-snapshot-fixture" = alphal00pDocsSnapshotFixture;
+          "alphal00p-docs-notebooks" = workspace.alphal00pDocsNotebooks;
+          "alphal00p-docs-cells" = workspace.alphal00pDocsCells;
+          "test-documentation-cells" = workspace.alphal00pDocsCellsTest;
+          "profile-notebook-startup" = workspace.alphal00pDocsNotebookProfile;
+          "alphal00p-docs-publication" = workspace.alphal00pDocsPublication;
           "notebook-wasm-toolchain" = notebookWasmToolchain;
           "notebook-wasm-deps" = notebookWasm.notebookWasmDeps;
           "notebook-wasm-wheel" = notebookWasm.notebookWasmWheel;
+          "notebook-ufo-wheel" = workspace.notebookUfoWheel;
+          "test-native-notebook-examples" = workspace.alphal00pDocsNativeNotebooks;
+          "test-notebook-examples" = import ./nix/notebook-tests.nix {
+            inherit pkgs;
+            alphal00pDocsNotebooks = workspace.alphal00pDocsNotebooks;
+            notebookWasmWheel = notebookWasm.notebookWasmWheel;
+            notebookUfoWheel = workspace.notebookUfoWheel;
+          };
           "ci-workspace-graph-json" = guppyWorkspaceGraphJson;
           "nix-ci-config" = nixCiConfiguration;
           inherit linnest-wasm;

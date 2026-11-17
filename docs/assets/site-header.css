@@ -1,0 +1,124 @@
+/* Shared by portal, generated documentation and the existing Rustdoc bar.
+   Header geometry owns the sticky and anchor offsets at each breakpoint. */
+.portal-header {
+  --nav-accent: color-mix(in srgb, var(--link) 22%, var(--ink-strong));
+  --nav-separator: color-mix(in srgb, var(--nav-accent) 12%, var(--canvas));
+  --nav-rule: color-mix(in srgb, var(--nav-accent) 23%, var(--canvas));
+  --nav-mark: color-mix(in srgb, var(--nav-accent) 56%, var(--canvas));
+  position: sticky;
+  inset: 0 0 auto;
+  z-index: 60;
+  height: 56px;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  width: 100%;
+  margin-inline: auto;
+  padding-inline: max(12px, calc((100% - 82rem) / 2));
+  border-bottom: 1px solid var(--nav-rule);
+  background: var(--canvas);
+}
+.portal-brand { display: flex; align-items: center; min-width: 0; padding-inline: 12px; text-decoration: none; }
+.portal-header .site-brand-logo { width: 88px; height: 32px; max-height: none; object-fit: contain; }
+.portal-brand-logo, .portal-footer-mark {
+  flex: 0 0 auto;
+  width: 2.7rem;
+  height: 2.7rem;
+  background: center / contain no-repeat url("local-unitarity-light.svg");
+}
+:root[data-theme="dark"] .portal-brand-logo,
+:root[data-theme="dark"] .portal-footer-mark { background-image: url("local-unitarity-dark.svg"); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .portal-brand-logo,
+  :root:not([data-theme]) .portal-footer-mark { background-image: url("local-unitarity-dark.svg"); }
+}
+.portal-brand-copy { display: grid; line-height: 1.15; }
+.portal-brand-copy strong { font-family: var(--font-serif); font-size: 1.25rem; font-weight: 600; letter-spacing: -0.02em; }
+.portal-brand-copy small { color: var(--ink-muted); font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.02em; }
+.portal-nav {
+  position: relative;
+  display: flex;
+  justify-self: center;
+  height: 100%;
+  background: linear-gradient(var(--nav-separator), var(--nav-separator)) left top / 1px 100% no-repeat,
+    linear-gradient(var(--nav-separator), var(--nav-separator)) right top / 1px 100% no-repeat;
+}
+.portal-header .portal-nav a {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 9px 11px;
+  color: var(--ink-strong);
+  font: 400 12px/1.4 var(--font-ui);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.portal-nav a + a::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 1px; background: var(--nav-separator); pointer-events: none; }
+.portal-nav a::after, .portal-nav::after {
+  content: "";
+  position: absolute;
+  left: -4px;
+  bottom: -1px;
+  width: 9px;
+  height: 5px;
+  background: linear-gradient(var(--nav-mark), var(--nav-mark)) center bottom / 9px 1px no-repeat,
+    linear-gradient(var(--nav-mark), var(--nav-mark)) center bottom / 1px 5px no-repeat;
+  pointer-events: none;
+}
+.portal-nav::after { left: auto; right: -4px; }
+.portal-nav a[aria-current="page"] { color: var(--nav-accent); font-weight: 600; --nav-mark: var(--nav-accent); }
+.portal-nav a:hover { background: var(--accent-soft); }
+.portal-header-actions { display: flex; justify-self: end; align-items: center; padding-inline: 4px; }
+.portal-header-actions > :is(a, button) {
+  display: flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; padding: 0; border: 0; border-radius: 0; box-shadow: none;
+  color: var(--ink-strong); background: transparent; cursor: pointer; text-decoration: none;
+}
+.portal-header-actions > :is(a, button):hover { background: var(--accent-soft); }
+.header-search-icon {
+  display: block;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  background: currentColor;
+  font-size: 0;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='black' stroke-linecap='round' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m16 16 5 5'/%3E%3C/g%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='black' stroke-linecap='round' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m16 16 5 5'/%3E%3C/g%3E%3C/svg%3E") center / contain no-repeat;
+}
+.portal-header-actions .header-search-icon { display: block; width: 18px; height: 18px; flex-basis: 18px; }
+.portal-theme-button { font-size: 18px; }
+.portal-header-actions > .portal-menu-button { display: none; font-size: 22px; }
+.portal-menu-button[aria-expanded="true"] span { font-size: 0; }
+.portal-menu-button[aria-expanded="true"] span::before { content: "×"; font-size: 28px; }
+@media (max-width: 52rem) {
+  .portal-header { grid-template-columns: minmax(0, 1fr) auto; }
+  .portal-header .site-brand-logo { width: 88px; height: 28px; }
+  .portal-header-actions { grid-column: 2; grid-row: 1; }
+  .js .portal-header-actions > .portal-menu-button { display: flex; }
+  .portal-nav { position: absolute; top: 100%; left: -1px; right: -1px; height: auto;
+    display: flex; flex-direction: column; justify-self: stretch; background: var(--canvas);
+    border: 1px solid var(--nav-rule); padding: .4rem; }
+  .portal-header .portal-nav a { justify-content: start; min-height: 48px; padding-inline: 1rem; }
+  .portal-nav a + a::before, .portal-nav a::before, .portal-nav a::after, .portal-nav::after { content: none; }
+  .js .portal-nav:not(.portal-nav-open) { display: none; }
+  /* No-script destinations remain reachable in normal flow. */
+  html:not(.js) .portal-header { height: auto; }
+  html:not(.js) .portal-nav { position: static; grid-column: 1 / -1; }
+}
+
+.site-header { position: fixed; }
+.site-brand-logo-dark { display: none; }
+:root[data-theme="dark"] .site-brand-logo-light { display: none; }
+:root[data-theme="dark"] .site-brand-logo-dark { display: block; }
+.portal-header .site-brand-logo { max-width: 100%; }
+.portal-header .portal-header-actions > button:focus-visible,
+.portal-header .portal-brand:focus-visible,
+.portal-header .portal-nav a:focus-visible { border-radius: 0; outline: 2px solid var(--link); outline-offset: -3px; }
+@media (max-width: 52rem) {
+  .portal-header { padding-inline: 8px; }
+  .portal-nav { max-height: calc(100dvh - 56px); overflow-y: auto; }
+  .portal-header .portal-brand { padding-inline: 8px; }
+}
+@media print { .portal-header { display: none !important; } }

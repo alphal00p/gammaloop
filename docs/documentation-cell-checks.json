@@ -1,0 +1,27 @@
+[
+  {
+    "id": "check:adjoint-exact-conjugation-and-nonzero-control",
+    "file": "check:adjoint",
+    "language": "python",
+    "depends": [
+      "docs/products/spenso/content/python.typ:10"
+    ],
+    "source": "expected = TensorExpression(\n    (1 - 2 * E(\"1\ud835\udc56\")) * gamma(\"j\", \"i\", \"mu\").to_expression() * gamma(\"l\", \"k\", \"mu\").to_expression()\n    + (3 + E(\"1\ud835\udc56\")) * gamma(\"l\", \"i\", \"nu\").to_expression() * gamma(\"j\", \"k\", \"nu\").to_expression()\n)\nassert (adjoint.canonize().to_expression() - expected.canonize().to_expression()).expand() == E(\"0\")\nwrong_coefficient = TensorExpression((2 + 2 * E(\"1\ud835\udc56\")) * direct + (3 - E(\"1\ud835\udc56\")) * crossed)\nassert (restored.canonize().to_expression() - wrong_coefficient.canonize().to_expression()).expand() != E(\"0\")\n"
+  },
+  {
+    "id": "check:namespace-plain",
+    "file": "check:namespace-plain",
+    "language": "python",
+    "depends": [],
+    "source": "from symbolica import S\nI = S(\"I\")\nassert I == S(\"I\")"
+  },
+  {
+    "id": "check:namespace-tensor",
+    "file": "check:namespace-tensor",
+    "language": "python",
+    "depends": [
+      "docs/products/spenso/content/api.typ:2"
+    ],
+    "source": "assert identity[0, 0] == 1.0\nassert identity[1, 1] == 1.0"
+  }
+]

@@ -82,6 +82,7 @@ dependencies = [
  "clap",
  "comemo",
  "eyre",
+ "linnest",
  "notify",
  "percent-encoding",
  "regex",
