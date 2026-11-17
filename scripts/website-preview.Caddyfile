@@ -1,0 +1,27 @@
+# Run with WEBSITE_PREVIEW_ROOT and WEBSITE_PREVIEW_PORT using the pinned Caddy.
+# Tailscale Serve owns HTTPS; this listener stays on loopback only.
+{
+	admin off
+	auto_https off
+}
+
+http://:{$WEBSITE_PREVIEW_PORT} {
+	bind 127.0.0.1
+	root * {$WEBSITE_PREVIEW_ROOT}
+	@immutable path_regexp immutable ^/assets/(notebook-runtime|notebook-runtime-files|documentation-runtime)/[a-f0-9]{64}/
+	@worker path_regexp worker ^/notebook-cache-worker-[a-f0-9]{64}\.js$
+	route {
+		header Cache-Control "no-cache"
+		header @immutable {
+			Cache-Control "public, max-age=31536000, immutable"
+			match status 200 206 304
+		}
+		header @worker {
+			Cache-Control "public, max-age=31536000, immutable"
+			match status 200 206 304
+		}
+		file_server {
+			precompressed gzip
+		}
+	}
+}

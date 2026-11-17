@@ -192,19 +192,23 @@ docs-svg-assets-check:
 
     scripts/render-docs-svg-assets.sh "$check_root"
     checked_assets=(
+        docs/assets/about-*.svg
+        docs/assets/gammaloop-construction-*.svg
         docs/assets/graphs/portal-*.svg
         docs/assets/local-unitarity-*.svg
         docs/assets/spensologo.svg
         assets/gammalooplogo*.svg
     )
     generated_assets=(
+        "$check_root"/docs/assets/about-*.svg
+        "$check_root"/docs/assets/gammaloop-construction-*.svg
         "$check_root"/docs/assets/graphs/portal-*.svg
         "$check_root"/docs/assets/local-unitarity-*.svg
         "$check_root"/docs/assets/spensologo.svg
         "$check_root"/assets/gammalooplogo*.svg
     )
-    [ "${#checked_assets[@]}" -eq 28 ]
-    [ "${#generated_assets[@]}" -eq 28 ]
+    [ "${#checked_assets[@]}" -eq 34 ]
+    [ "${#generated_assets[@]}" -eq 34 ]
     for checked in "${checked_assets[@]}"; do
         cmp "$checked" "$check_root/$checked"
     done

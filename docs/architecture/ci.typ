@@ -4,7 +4,9 @@ Use `just ci-checks` for the selected local suite and `just ci-checks-and-upload
 before final review. The latter runs static checks and publishes compiled runtime
 producers without running the runtime suite. NixCI runs that suite after the push.
 See #link("../../CONTRIBUTING.typ#nixci-cache")[CONTRIBUTING.typ] for credentials,
-licenses and retries. `just check` runs Cargo checking only.
+licenses and retries.
+
+== Local CI preparation
 
 On `itphlies`, run `just ci-checks-and-upload` before pushing CI-enabled work.
 The configured Nix daemon downloads matching cached outputs as needed; the
@@ -12,6 +14,31 @@ command checks static inputs, builds missing runtime producers and uploads their
 closures. Finish the upload before pushing so NixCI can reuse that
 work. Keep substitution enabled rather than downloading the whole cache or
 forcing rebuilds.
+
+In a non-colocated JJ workspace, `GAMMALOOP_CI_FLAKE_REF` can select the exact
+Git-backed flake URI for the final commit. Job selection comes from that
+flake's exposed `lib.SYSTEM.cachePublication.local`, and the same command builds
+and uploads those selected jobs from that source, retaining its revision in generated documentation links
+and excluding ignored local build artifacts. Its default remains the local
+flake; the selected revision must match the code being qualified and pushed.
+
+The local selection is `configuration.onlyBuild` in `nix/ci.nix` for the current
+system: static checks, group Nextest producers, test dependency and binary
+producers, runtime launchers and support/barrier outputs. Use the preview below
+to inspect the selection for the current workspace graph. Publication follows
+actual output references, including runtime closures and barriers;
+licensed test results remain local execution output. Request-specific native
+development builds and Python wheels are not default upload roots.
+
+GitHub's shared producer job publishes a compact five-root closure:
+`alphal00p-docs-cargo-artifacts`, `crane-ci-prebuild`, `gammaloop`,
+`gammaloop-python-module` and the `gammaloop-nextest-binaries` check. Its 8 GiB
+raw NAR limit is intentional. Self-contained full merged archives drop input
+references, so this closure omits many intermediate archives selected by the
+local upload command. A successful GitHub producer publication does not imply
+that every local CI producer is available from the cache. Closure size and
+coverage must be measured from realized outputs; a partial local store cannot
+establish the full publication size or all omitted producers.
 
 == Configuration and cache boundaries
 
@@ -21,9 +48,12 @@ forcing rebuilds.
   [`flake.nix`], [Compose public packages, checks, apps and development shells],
   [`nix/rust-workspace.nix`], [Rust sources, features, build profiles and artifact reuse],
   [`nix/documentation.nix`], [Documentation sources, reusable build artifacts and publication checks],
+  [`nix/cargo-runtime.nix`], [Prepared Cargo environments for licensed doctest and documentation execution as the invoking user],
   [`nix/ci.nix`], [Test groups, required producers and NixCI scheduling],
   [`nix/ci-workspace-graph.json`, `nix-ci.nix`], [Generated workspace graph and self-contained NixCI configuration],
+  [`justfile`, `just/tests.just`], [Public native development commands],
   [`just/ci.just`], [Local checks, uploads, regeneration and reporting],
+  [`.github/scripts/run-nix-ci-check.sh`, `.github/workflows/nix.yml`], [Realize check inputs, execute each runtime runner and export timing metadata],
   [`.github/scripts/ci-report.mjs`], [Collect and compare existing CI runs],
 )
 
@@ -46,14 +76,47 @@ collection keeps a 4–8 GiB free-space watermark; the producer checks for at le
 of temporary compiler/store usage.
 
 Automatic NixCI work covers tests, Clippy, doctests, formatting, graph validation,
-the full five-product documentation check, necessary producers and final success.
+the full documentation publication check, necessary producers and final success.
 The documentation check validates generated references and examples, renders
 latest and snapshot sites, checks their HTML, and exercises publication behavior.
-It uses the existing licensed-check runner with `SYMBOLICA_LICENSE_SIGNED`; its
-reusable Cargo artifacts are scheduled separately. `just ci-checks` selects the
-same documentation check; uploads select its launcher and compiled producers.
-Packaging, standalone Rustdoc, the persistent Typst renderer and WASM remain
-additional checks in `nix flake check --impure`.
+It executes as the invoking user with a runtime license; reusable Cargo
+artifacts are scheduled separately. `just ci-checks` selects the same runtime
+suite; uploads select its runners and compiled producers. Public flake `checks`
+exclude licensed runtime checks. `nix flake check` covers unlicensed build/static
+checks, including packaging, standalone Rustdoc, the persistent Typst renderer
+and WASM; it does not establish licensed test success.
+
+`hydraJobs` and `hydraJobsMain` retain executable runner derivations at their
+licensed attributes. NixCI invokes `nix-ci-check-*` packages through its run
+jobs. The Actions matrix explicitly restores runtime rows omitted by Hestia's
+cache filter and executes each runner after building or substituting it.
+`.github/scripts/run-nix-ci-check.sh` separates build and runtime exit status;
+either failure fails the job. A cached runner still runs its tests.
+
+`just test-nix-all`, `just doctest-nix` and the documentation step of
+`just ci-checks` execute `nix-ci-check-gammaloop-nextest`,
+`nix-ci-check-gammaloop-doctest` and `nix-ci-check-alphal00p-docs`.
+These wrappers print their local report directory and accept an explicit
+destination as their first argument. The Nextest runner also accepts runtime
+selection arguments after that destination.
+
+`nix/cargo-runtime.nix` preserves Crane's vendoring, toolchain and artifact hooks
+in a prepared, unlicensed environment. Its runner resolves the caller's license
+and enters that environment with `nix develop` to unpack private sources and run
+the licensed phase locally. It sets the same three workspace-root overrides
+for that invocation, uses private home/cache/Cargo/temp directories, suppresses
+environment dumps, and removes
+temporary state on exit. License values are never evaluation inputs or
+derivation attributes. This boundary does not remove older derivations or
+outputs that already contained a license from existing stores or caches.
+
+The generic documentation packages `alphal00p-docs-pages` and
+`alphal00p-docs-snapshot-fixture` are executables accepting one absent or empty
+output directory. For example, `nix run .#alphal00p-docs-pages -- target/docs-pages`
+renders and validates pages locally. Compiled documentation inputs stay
+cacheable; building the package prepares its runner rather than rendering pages.
+The pages runner reads `ALPHAL00P_DOCS_CHANNEL` (`latest` by default) and requires
+`ALPHAL00P_DOCS_SNAPSHOT_TAG` exactly when the channel is `snapshot`.
 
 Compilation stays per crate. Source filtering preserves unaffected packages;
 manifest and lockfile changes still invalidate broadly. Test dependencies avoid
@@ -67,6 +130,11 @@ separate because their global type registries can change the generated APIs when
 combined. Unit-test crates and Rustdoc snippets still require their own compilation.
 Clippy and doctests share check dependencies but retain workspace-wide source
 inputs, so their rebuild isolation differs from package test artifacts.
+
+Test-only Rust modules belong in the `ownTest` source list in
+`nix/rust-workspace.nix`. Production library inputs exclude those files; unit-test
+producers include them. Native and WASM arithmetic, Python embedding and extension
+linking, and the lean/full Typst renderer remain distinct configurations.
 
 Prebuild and normal dependency commands omit feature selections already encoded
 by their generated Cargo anchors. Test dependency commands retain features on
@@ -86,6 +154,33 @@ cannot select individual tests. Explicitly requesting
 
 The NLO acceptance cases share one executable. Their assertions, workloads
 and runtime worker reservations are unchanged.
+
+== Browser and widget coverage
+
+`packages.x86_64-linux.nix-ci-check-gammaloop-nextest-browser` is a separate
+licensed runtime executable, scheduled by the `gammaloop-nextest-browser` NixCI
+launcher. Run it with
+`nix run .#nix-ci-check-gammaloop-nextest-browser -- target/test-reports/browser`.
+It reuses
+per-crate nextest archives for Linnet rendering, Spynso and FeynKit. Nixpkgs
+from `flake.lock` supplies Chromium, Python Playwright, AnyWidget, Marimo and typst-py;
+there is no browser installation or package resolution at test time. The same
+pinned STIX Two Math assets used by the documentation renderer enter through
+`SYMBOLICA_DATA_DIRECTORY`. Browser font requests are fulfilled from that bundle.
+
+The check runs the ignored real widget/Chromium regressions, the native MathML
+producer/client round trip, tensor font/layout and library-grid checks, and
+FeynKit CFF/LTD/scoped energy displays. Fixtures come from the archived native
+owners, with disposable loopback servers and browser processes owned by the
+runner. Fresh per-package JUnit identities select validators for the producers
+that actually ran. The live MathML producer shares the caller's native test
+selection while the runner coordinates its client. Browser runners reject
+Nextest stress options before launching native tests.
+Optional Typst-only tests also run in this dependency-complete group. Ordinary Spynso nextest runs include the paging harness; only
+its live AnyWidget case skips when that optional package cannot import.
+The embedded interpreter is the PyO3 compile interpreter, whose store closure
+contains Python's standard library. The browser group adds its optional Python
+packages through `PYTHONPATH`, without changing the compiled interpreter.
 
 == Fast tests and the full main suite
 
@@ -111,11 +206,13 @@ external-backend checks remain explicit exclusions in the configuration;
 their absence from automatic coverage does not establish that they are
 unsupported. Ignored tests are not enabled wholesale.
 
-Each successful Nix runtime result retains per-package JUnit reports with
-individual case durations. GitHub Actions exports test names, statuses and
+Each Nextest runtime copies available per-package JUnit reports with individual
+case durations into its local report directory, including reports emitted by a
+failed test run. GitHub Actions exports test names, statuses and
 durations to a CSV artifact. Captured test output, expressions and raw logs
-are excluded. A failed Nix derivation has no registered report output; the
-build still fails, even when there is no timing CSV to upload.
+are excluded. A failed preparation or runtime still fails the job, even when
+there is no report or timing CSV to upload. Reports are execution output outside
+the Nix store.
 Nextest reservations continue to protect shared
 generated-state folders and large evaluator allocations. Four shards permit
 separate workers to run long cases concurrently; they do not remove these
@@ -130,13 +227,12 @@ test mocks Typst and checks the missing-optional-renderer behavior.
 Merged artifacts are self-contained compressed archives. Recursive inheritance,
 writable extraction, Cargo fingerprints and epoch-1 timestamps must survive
 changes to archive handling. Stable publication outputs depend on the artifacts,
-not the commit. Lightweight test runners request the corresponding Nix check
-result before fetching compiler state or test binaries. NixCI launches a cached
-runner too, but a matching cached check result can avoid executing its tests.
-The local upload command selects static checks, runtime launchers and compiled
-producers, not runtime check results. Uncached runtime checks run in NixCI using
-those prepared inputs. An empty successful test output alone does not retain
-the necessary producers. Test groups are scheduled and reported independently.
+not the commit. Runners retain the archives and runtime inputs needed to execute
+their selected tests. The local upload command selects static checks, runtime
+runners and compiled producers; runtime results are not cacheable Nix checks.
+Building or substituting these outputs is preparation only. Every NixCI run
+executes the selected runtime suite using those inputs and requires its success.
+Test groups are scheduled and reported independently.
 
 The local upload command keeps all selected outputs rooted through temporary
 result links until cache publication finishes. The command removes those links
@@ -264,8 +360,17 @@ vacuum graphs keep nested forests with vacuum subtraction, but each takes
 minutes and over 1 GB to generate on one worker.
 
 Generation uses Hyperfine 2.0.0 to measure the complete import, generation and state-save CLI process. Its raw export is retained and verified against the numeric metric; this scope supersedes the earlier Python-controller clock.
-For scalar cases, graph enumeration is outside this timing because the graph
-is supplied as a fixed DOT input. GL15 also runs graph enumeration.
+Graph enumeration is outside this timing because every workload imports a fixed
+DOT input. GL15 retains the original top-pentagon topology, projector, loop basis
+and numerical corpus independently of generator numbering. Its import and
+integrand construction are still measured on both revisions.
+The companion `benchmarks/performance/gg-hhh-topology.toml` card supports a
+separate local topology-generation comparison. It enumerates the complete
+ungrouped gg → hhh process with the same explicit projector. Compare fresh CLI
+processes in five alternating baseline/candidate pairs, and verify the exported
+particle/vertex topology multiset with fixed external labels and overall factors
+outside the timed process. This diagnostic is separate from the thirteen-case
+CI gate and does not certify symbolic numerator equivalence by topology alone.
 Numeric metadata retains the native per-graph total and the Spenso, Symbolica
 and compilation durations from `generation_summary.json`. The native total
 excludes CLI initialization, import and state saving. Probe cases also gate
@@ -518,7 +623,8 @@ this repository does not install a CI-to-agent wake-up service. See
 == Branch maintenance
 
 After rebasing an active branch onto the CI changes, preserve its test groups and
-source filters, run `just ci-update`, and commit both generated files. FeynKit
+source filters, run `just ci-update`, and commit `nix/ci-workspace-graph.json`
+and `nix-ci.nix`. There is no separate development test metadata file. FeynKit
 needs its eighth group, nine extracted crates, embedded fixtures, optional Python
 dependencies, boundary checks and Python stub checks. Its extracted libraries
 must remain independent of GammaLoop and its private workspace-hack dependency.
@@ -530,7 +636,18 @@ reachable in published history. Refresh deliberately after a green revision with
 reason to invalidate it. See the #link("nix-crane-cache-reuse.typ")[cache-reuse audit]
 for earlier investigation and implementation details.
 
+The optional `ci-compiler-state` package collects compiler state for a compatible
+baseline; neither ordinary local uploads nor the compact GitHub producer job
+select it. Publish that baseline once after its revision is publishable, then
+pin it with `just ci-cache-base FULL_COMMIT_SHA`. Do not publish every commit's
+compiler state as part of the ordinary upload cycle.
+
 == Measured results
+
+These measurements describe earlier implementations and revisions, not validation
+of the current FeynKit Nix port. The historical warm implementation could reuse
+cached test-result checks. Current runners always execute licensed tests; their
+runtime cost and correctness require fresh evidence for the candidate revision.
 
 The Cargo dependency cleanup was compared locally with `246c03693` on Rust
 1.98.1, using eight jobs, `ci-optim`, no incremental compilation, and the same 631
@@ -670,8 +787,10 @@ Metric interpretation:
 - `Compiling`, `Checking` and Cargo command durations remain separate by context.
   Repeated crate names can mean different features or profiles. Only the same
   full derivation path built under different job URLs establishes repeated Nix work.
-- Test execution is `executed`, `reused` or `unknown`. Fetching a runner wrapper
-  does not prove reuse of its test result. Nextest `failed` includes `timedOut`;
+- Historical test execution is classified as `executed`, `reused` or `unknown`.
+  Fetching a runner wrapper proves neither execution nor test-result reuse;
+  current licensed runners must provide fresh execution evidence. Nextest
+  `failed` includes `timedOut`;
   do not add those counters together.
 
 To replay without network calls, add `offline` to an entry, with `suite`, `checks`,

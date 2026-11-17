@@ -6,6 +6,11 @@
 #import "content/tutorial.typ": tutorial
 #import "content/networks.typ": networks
 #import "content/python.typ": python
+#import "content/showcase.typ": showcase
+#import "content/example-api-tour.typ": api_tour
+#import "content/example-current-kernel.typ": current_kernel
+#import "content/example-notation.typ": notation
+#import "content/example-tensor-explorer.typ": tensor_explorer
 #import "content/api.typ": api
 #import "content/changelog.typ": changelog
 #import "content/spenso-releases.typ": spenso-releases
@@ -26,6 +31,11 @@
     #tutorial
     #networks
     #python
+    #showcase
+    #api_tour
+    #current_kernel
+    #notation
+    #tensor_explorer
     #api
     #changelog
     #spenso-releases

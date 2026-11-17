@@ -22,6 +22,7 @@
       workspaceAnchorCargoTomlFor workspacePrebuildDependencyPackages
       workspacePrebuildPackage workspacePrebuildPackageDir craneCiFeaturesFor;
     nativeCargoArtifacts = cranePackageDependencyArtifacts."gammaloop-api";
+    notebookCargoArtifacts = cranePackageDependencyArtifacts."feynkit-py";
   };
   inherit (documentation) docsTypst docsFontPath documentationDeveloperScopeSources;
 

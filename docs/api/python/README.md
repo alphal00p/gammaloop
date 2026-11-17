@@ -40,6 +40,7 @@ The FeynKit invocation also checks the registered runtime exports, documentation
 coverage, and example syntax. It writes or checks both
 `crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi` and
 `docs/api/python/feynkit-community.pyi`, including the default UFO bindings.
+See the [FeynKit manual](../../products/feynkit/content/overview.typ) for usage.
 
 The Linnet invocation renders one canonical StubInfo surface, including its
 deterministic `__all__`, and writes or checks both

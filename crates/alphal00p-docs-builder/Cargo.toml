@@ -22,6 +22,7 @@ clap = { workspace = true, features = ["derive", "env"] }
 chrono.workspace = true
 comemo = { version = "=0.5.1", optional = true }
 eyre.workspace = true
+linnest = { workspace = true, features = ["svg"] }
 notify = { workspace = true, optional = true }
 percent-encoding.workspace = true
 regex.workspace = true
@@ -44,3 +45,4 @@ typst-kit = { version = "=0.15.1", default-features = false, features = [
 ], optional = true }
 typst-pdf = { version = "=0.15.1", optional = true }
 walkdir.workspace = true
+
