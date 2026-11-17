@@ -67,6 +67,46 @@ pub trait Library<S> {
     ) -> Result<Self::Key, LibraryError<Self::Key>>
     where
         S: TensorStructure;
+
+    /// Resolve components for an ordinary selected-slot tensor declaration.
+    ///
+    /// This is an explicit realization policy, independent of ordinary symbolic
+    /// key lookup. Implementations must resolve the complete declared signature,
+    /// including its original name, metadata and ordered representations. The
+    /// supplied component data must satisfy the tensor's declared symmetries.
+    /// A general-purpose or universal `key_for_structure` does not opt in.
+    ///
+    /// # Errors
+    ///
+    /// The default rejects every request with [`LibraryError::InvalidKey`].
+    /// Implementations must reject signatures for which no selected-slot
+    /// component realization has been registered.
+    ///
+    /// # Example
+    ///
+    /// A library without an explicit selected-slot policy refuses lookup:
+    ///
+    /// ```
+    /// use spenso::network::library::{DummyLibrary, Library, LibraryError};
+    /// use spenso::structure::partial::{PartialStructure, PartialStructureExt};
+    ///
+    /// let signature = PartialStructure::from_logical_slots([]);
+    /// let library = DummyLibrary::<()>::new();
+    /// assert!(matches!(
+    ///     library.key_for_selected_slot_structure(&signature),
+    ///     Err(LibraryError::InvalidKey)
+    /// ));
+    /// ```
+    fn key_for_selected_slot_structure(
+        &self,
+        _structure: &Canonicalized<S>,
+    ) -> Result<Self::Key, LibraryError<Self::Key>>
+    where
+        S: TensorStructure,
+    {
+        Err(LibraryError::InvalidKey)
+    }
+
     fn get<'a>(&'a self, key: &Self::Key) -> Result<Cow<'a, Self::Value>, LibraryError<Self::Key>>;
 }
 
