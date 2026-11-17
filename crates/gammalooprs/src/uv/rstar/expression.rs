@@ -222,13 +222,19 @@ pub(crate) fn in_uv_child_scope<T>(taylor_order: i32, f: impl FnOnce() -> T) -> 
             UV_CHILD_SCOPE.with(|scope| scope.set(previous));
         }
     }
-    let edge_basis = match *UV_CHILD_EDGE_REMAINDER {
+    let edge_basis = child_edge_basis(*UV_CHILD_EDGE_REMAINDER, taylor_order);
+    let _restore = Restore(UV_CHILD_SCOPE.with(|scope| scope.replace(edge_basis)));
+    f()
+}
+
+/// Whether a child of `taylor_order` contracts its ordinary remainders in the
+/// edge basis under `mode`.
+fn child_edge_basis(mode: ChildEdgeRemainder, taylor_order: i32) -> bool {
+    match mode {
         ChildEdgeRemainder::Off => false,
         ChildEdgeRemainder::DegreeZero => taylor_order <= 0,
         ChildEdgeRemainder::All => true,
-    };
-    let _restore = Restore(UV_CHILD_SCOPE.with(|scope| scope.replace(edge_basis)));
-    f()
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -253,23 +259,48 @@ static UV_CHILD_EDGE_REMAINDER: LazyLock<ChildEdgeRemainder> = LazyLock::new(|| 
 
 #[cfg(test)]
 #[test]
+fn child_edge_basis_follows_the_mode_and_the_taylor_order() {
+    use ChildEdgeRemainder::*;
+    for order in [-1, 0, 1, 2] {
+        assert!(!child_edge_basis(Off, order));
+        assert!(child_edge_basis(All, order));
+        assert_eq!(child_edge_basis(DegreeZero, order), order <= 0);
+    }
+}
+
+#[cfg(test)]
+#[test]
 fn uv_child_scope_is_restored_when_the_child_panics() {
-    assert!(!UV_CHILD_SCOPE.with(|scope| scope.get()));
-    // The switch is read once; without it the scope stays false, which is what
-    // the restoration has to preserve either way.
-    let inside = *UV_CHILD_EDGE_REMAINDER != ChildEdgeRemainder::Off;
-    UV_CHILD_SCOPE.with(|scope| scope.set(true));
-    let unwound = std::panic::catch_unwind(|| {
-        in_uv_child_scope(0, || {
-            assert_eq!(UV_CHILD_SCOPE.with(|scope| scope.get()), inside);
-            panic!("child integration failed");
-        })
-    });
-    assert!(unwound.is_err());
-    assert!(UV_CHILD_SCOPE.with(|scope| scope.get()));
+    // The mode is read once per process; check against whatever it is here.
+    let expected = |order| child_edge_basis(*UV_CHILD_EDGE_REMAINDER, order);
+    for enclosing in [false, true] {
+        for order in [0, 1] {
+            UV_CHILD_SCOPE.with(|scope| scope.set(enclosing));
+            let seen = std::cell::Cell::new(None);
+            let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                in_uv_child_scope(order, || {
+                    seen.set(Some(UV_CHILD_SCOPE.with(|scope| scope.get())));
+                    panic!("child integration failed");
+                })
+            }));
+            assert!(unwound.is_err());
+            assert_eq!(seen.get(), Some(expected(order)));
+            // Restored to the enclosing value, which differs from the child's in
+            // at least one of the four cases whatever the mode is.
+            assert_eq!(UV_CHILD_SCOPE.with(|scope| scope.get()), enclosing);
+            // Normal return: the child sees its own value, the enclosing one comes back.
+            let inside = in_uv_child_scope(order, || UV_CHILD_SCOPE.with(|scope| scope.get()));
+            assert_eq!(inside, expected(order));
+            assert_eq!(UV_CHILD_SCOPE.with(|scope| scope.get()), enclosing);
+            // A nested child of the other degree sets and restores its own value.
+            let nested = in_uv_child_scope(order, || {
+                let inner = in_uv_child_scope(1 - order, || UV_CHILD_SCOPE.with(|scope| scope.get()));
+                (inner, UV_CHILD_SCOPE.with(|scope| scope.get()))
+            });
+            assert_eq!(nested, (expected(1 - order), expected(order)));
+        }
+    }
     UV_CHILD_SCOPE.with(|scope| scope.set(false));
-    assert!(!in_uv_child_scope(0, || false));
-    assert!(!UV_CHILD_SCOPE.with(|scope| scope.get()));
 }
 
 /// `GAMMALOOP_UV_CHILD_EDGE_REMAINDER=1|all` (opt-in): inside an R* child of
