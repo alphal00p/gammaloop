@@ -5,6 +5,12 @@
     "checks.x86_64-linux.gammaloop-clippy" = [
       "packages.x86_64-linux.cargoCheckArtifacts"
     ];
+    "checks.x86_64-linux.gammaloop-nextest-binaries-browser" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-test-binaries-feynkit-py"
+      "packages.x86_64-linux.crate-test-binaries-linnet-render-py"
+      "packages.x86_64-linux.crate-test-binaries-spynso3"
+    ];
     "checks.x86_64-linux.gammaloop-nextest-binaries-clinnet" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-test-binaries-clinnet"
@@ -506,11 +512,17 @@
     ];
     "packages.x86_64-linux.nix-ci-check-alphal00p-docs" = [
       "packages.x86_64-linux.alphal00p-docs-cargo-artifacts"
+      "packages.x86_64-linux.gammaloop-render-data"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-doctest" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.cargoCheckArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.gammaloop-render-data"
+    ];
+    "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-browser" = [
+      "checks.x86_64-linux.gammaloop-nextest-binaries-browser"
+      "packages.x86_64-linux.gammaloop-render-data"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-clinnet" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-clinnet"
@@ -521,15 +533,18 @@
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-docs" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-docs"
+      "packages.x86_64-linux.gammaloop-render-data"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-feynkit" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-feynkit"
+      "packages.x86_64-linux.gammaloop-render-data"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-integration" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-integration"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-linnet" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-linnet"
+      "packages.x86_64-linux.gammaloop-render-data"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-python-api" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-python-api"
@@ -537,6 +552,7 @@
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-spenso" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-spenso"
+      "packages.x86_64-linux.gammaloop-render-data"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-vakint" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-vakint"
@@ -560,6 +576,7 @@
     "checks.x86_64-linux.gammaloop-clippy"
     "checks.x86_64-linux.gammaloop-fmt"
     "checks.x86_64-linux.gammaloop-guppy-workspace-graph"
+    "checks.x86_64-linux.gammaloop-nextest-binaries-browser"
     "checks.x86_64-linux.gammaloop-nextest-binaries-clinnet"
     "checks.x86_64-linux.gammaloop-nextest-binaries-core"
     "checks.x86_64-linux.gammaloop-nextest-binaries-docs"
@@ -648,9 +665,11 @@
     "packages.x86_64-linux.crate-test-dependencies-three-dimensional-reps"
     "packages.x86_64-linux.crate-test-dependencies-vakint"
     "packages.x86_64-linux.gammaloop-python-module"
+    "packages.x86_64-linux.gammaloop-render-data"
     "packages.x86_64-linux.gammaloop-ufo-python-runtime"
     "packages.x86_64-linux.nix-ci-check-alphal00p-docs"
     "packages.x86_64-linux.nix-ci-check-gammaloop-doctest"
+    "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-browser"
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-clinnet"
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-core"
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-docs"
@@ -677,6 +696,14 @@
     gammaloop-doctest = {
       in-repo = true;
       package = "packages.x86_64-linux.nix-ci-check-gammaloop-doctest";
+      secrets = [
+        "SYMBOLICA_LICENSE_SIGNED"
+      ];
+      system = "x86_64-linux";
+    };
+    gammaloop-nextest-browser = {
+      in-repo = true;
+      package = "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-browser";
       secrets = [
         "SYMBOLICA_LICENSE_SIGNED"
       ];

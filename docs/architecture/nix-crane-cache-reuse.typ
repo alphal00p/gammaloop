@@ -3,6 +3,8 @@
 #quote(block: true)[
 #strong[Status:] Historical Rust CI investigation and current documentation
 cache record, reviewed 2026-09-14 against PR 108 and the documentation stack.
+The runtime contract below describes the FeynKit Nix port; the historical
+measurements do not validate this candidate.
 
 The Rust CI experiments below are historical. Uses of “now” or “current”
 describe the surrounding experiment, not the final implementation. See
@@ -16,6 +18,26 @@ separates the final Rust CI contract from this experiment log.
 ]
 
 This note records the cache-reuse audit for the NixCI Rust build graph.
+
+== Current runtime execution boundary
+<current-runtime-execution-boundary>
+
+Nix caches compiler artifacts, per-crate test archives and executable runners.
+Licensed Nextest tests, doctests and documentation execute as the invoking user
+outside Nix builders on every invocation, including when their runners and
+compiled inputs are cached. Building a runner is preparation only; it does not
+establish a passing test result or produce rendered pages.
+
+Licenses are resolved at runtime and do not enter derivation attributes.
+Documentation runners render into local output directories. The maintained
+#link("ci.typ")[CI guide] owns the commands, license precedence, private runtime
+directories and report contract. Earlier terminal-derivation and store-result
+descriptions below record the implementation used for those experiments;
+their measured results do not measure or validate this execution boundary.
+Command and log listings in the investigation sections are historical, including
+the removed licensed `checks.*.gammaloop-nextest-*` attributes. Current execution
+uses the runners documented in the CI guide. The retained
+`checks.*.gammaloop-nextest-binaries-*` attributes prepare archives only.
 
 == Sources checked
 <sources-checked>
@@ -471,7 +493,7 @@ runCommand\'s default working directory made insta miss snapshots. The
 runner additionally installs dummy targets for workspace members outside
 the narrowed nextest source so `cargo metadata` succeeds.
 
-Local runner checks:
+Historical local runner checks, using the since-removed licensed check attributes:
 
 ```text
 checks.x86_64-linux.gammaloop-nextest-linnet:
@@ -481,10 +503,10 @@ checks.x86_64-linux.gammaloop-nextest-spenso:
   350 tests run: 350 passed, 27 skipped
 ```
 
-`checks.x86_64-linux.gammaloop-nextest-core` also runs from the archive,
-but in the local environment it fails test initialization with
-`OEM license key not set`. That is a compile-time license input issue,
-not a cache-reuse or archive layout issue.
+In that experiment, `checks.x86_64-linux.gammaloop-nextest-core` also ran from
+the archive, but failed local test initialization with `OEM license key not set`.
+The recorded issue concerned that revision's compile-time license input,
+not cache reuse or archive layout. Current runners resolve licenses at runtime.
 
 === Remaining caveats
 <remaining-caveats>
@@ -1256,6 +1278,9 @@ normal Rust feature family.
 
 == Source and test-artifact ownership split
 <source-and-test-artifact-ownership-split>
+This section records the original source split and its measurements. Its run
+derivations have since become invoking-user runners, as described above.
+
 The test cache boundary now follows source and artifact ownership
 instead of recursively carrying dependency test units:
 
@@ -1506,9 +1531,11 @@ The `gammaloop-render-data` runtime package copies the checked-in MathML font
 and its license using the `linnet-render-py` asset manifest. The documentation test
 closure
 also stages the shared browser font and its license from `linnet-render-py/fonts`.
-Renderers retain their compiled hash checks. Only rendering test groups and
-documentation receive this resource closure; it remains separate from compiled
+Renderers retain their compiled hash checks. Only rendering test groups, doctests
+and documentation receive this resource closure; it remains separate from compiled
 producers.
+The development shell adds it to `SYMBOLICA_DATA_DIRECTORY`, preserving any
+additional directories already configured by the user.
 UFO import tests use the released wheels locked in `nix/ufo-runtime/uv.lock`
 (Symbolica 3.0.0 and ufo-model-loader 1.0.1). This runtime lock is independent
 of the root environment's standalone Symbolica pin and the combined Community
@@ -1909,7 +1936,9 @@ are independently runnable executables sharing the compiled Cargo producer.
 Each accepts an absent or empty local output directory. The full documentation
 runner invokes both on every run, installs their fresh trees through the Pages
 history updater, and checks latest and snapshot routes for all six products,
-the portal, developer pages and generated API material. Lower-level renderer
+the portal, developer pages and generated API material. NixCI schedules its
+runner after the required compiled producers; building or substituting those
+inputs never skips the renders or publication assertions. Lower-level renderer
 tests retain deterministic-output and persistent-session coverage. Hosted
 runtime duration under this execution model still requires fresh measurement.
 
