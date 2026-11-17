@@ -81,7 +81,7 @@ On macOS, if a GNU-compiler link fails with missing `__emul...` symbols, retry t
 `EXTRA_MACOS_LIBS_FOR_GNU_GCC=T` set.
 
 The default tensor projector comes from
-FeynKit.
+#product-link("feynkit", page: "guides/tensor-reduction/", label: "FeynKit").
 Vakint is used by #product-link("gammaloop", label: "GammaLoop") for vacuum-integral work, but it
 owns its topology and evaluation conventions independently. Use this guide and the generated
 API/topology references for the selected version. Contributors can follow topology construction,

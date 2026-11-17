@@ -1,4 +1,4 @@
-#import "layout.typ": layout, layout-with-cut-curves
+#import "layout.typ": layout, layout-with-cut-curves, parse-graph
 #import "../theme.typ": palette
 #import "../../../../assets/embedded/drawing/templates/physics-edge-style.typ": (
   momentum-arrow-defaults,
@@ -20,7 +20,7 @@
   let draw-layout = if cut-curves { layout-with-cut-curves } else { layout }
 
   context draw-layout(
-    input,
+    parse-graph(input),
     columns: 1,
     unit: 1.5,
     typst-fields: "plain",
@@ -37,7 +37,6 @@
     amplitude-mode: amplitude-mode,
     cross-section-mode: cross-section-mode,
     additional-data: (
-      steps: 1200,
       seed: 42,
     ),
   )

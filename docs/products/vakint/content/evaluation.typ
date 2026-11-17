@@ -34,7 +34,7 @@ expressions rather than input spelling when testing equivalence.
 
 Tensor numerators are reduced to scalar integrals before analytic evaluation where required.
 Reduction depends on the topology, Lorentz rank, dimension convention, and scalar-product
-normalization. The default FeynKit projector
+normalization. The default #product-link("feynkit", page: "guides/tensor-reduction/", label: "FeynKit projector")
 works without FORM. Select the AlphaLoop tensor backend explicitly to use the legacy FORM
 projector; retaining its input and temporary directory helps diagnose a reduction failure.
 The #link("#tensor-reduction-backends")[backend examples below] show both selectors.

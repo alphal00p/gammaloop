@@ -1297,6 +1297,8 @@ println!("{}", evaluate_sample(&mut loaded.state, &request)?);`;
     const clampT = (t) => clamp(t, 0, duration);
     let current = 0;
     const fmtTime = (s) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, '0')}`;
+    const roundedDuration = Math.round(duration);
+    const durationLabel = `${Math.floor(roundedDuration / 60)}:${String(roundedDuration % 60).padStart(2, '0')}`;
 
     function fit() {
       const width = render ? W : frame.clientWidth || W;
@@ -1327,7 +1329,7 @@ println!("{}", evaluate_sample(&mut loaded.state, &request)?);`;
       'button',
       { class: 'gl-showcase-cover', type: 'button', 'aria-label': 'Play the GammaLoop tour' },
       el('span', { class: 'gl-showcase-cover-button', 'aria-hidden': 'true' }, '▶'),
-      el('span', { class: 'gl-showcase-cover-label' }, `Play the tour · ${fmtTime(duration)}${music.available ? ' · with sound' : ''}`),
+      el('span', { class: 'gl-showcase-cover-label' }, `Play the tour · ${durationLabel}${music.available ? ' · with sound' : ''}`),
     );
     frame.append(cover);
     const playBtn = el('button', { type: 'button', class: 'gl-showcase-play', 'aria-label': 'Play' }, 'Play');
@@ -1341,7 +1343,7 @@ println!("{}", evaluate_sample(&mut loaded.state, &request)?);`;
 
     updatePlayer = () => {
       range.value = String(Math.round(current * 1000));
-      timeEl.textContent = `${fmtTime(current)} / ${fmtTime(duration)}`;
+      timeEl.textContent = started ? `${fmtTime(current)} / ${fmtTime(duration)}` : `0:00 / ${durationLabel}`;
       const sc = scenes.find((s) => current >= s.start && current < s.end);
       sceneEl.textContent = sc ? sc.name : '';
     };
@@ -1380,6 +1382,8 @@ println!("{}", evaluate_sample(&mut loaded.state, &request)?);`;
       requestAnimationFrame(tick);
     }
     function scrub(t) {
+      started = true;
+      cover.hidden = true;
       seek(t);
       origin = performance.now() - current * 1000;
       if (playing && music.active) music.start(current);
