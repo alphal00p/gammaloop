@@ -414,6 +414,9 @@ the external slots and preserves their logical order. Anonymous axes first
 become explicit fresh indices through `materialized()`, including for ranked
 zero, so their identity survives adjunction. The option retains the historical
 boundary-endpoint transpose convention; it does not relax interface validation.
+Payload conjugation dualizes explicitly registered representations, including
+custom dual and self-dual spaces, while retaining exact dimension and index
+payloads. Compact representation metadata and Scalar containers remain opaque.
 Spinor words receive the required gamma-zero construction and cleanup. Pure
 scalar and color expressions retain the existing conjugation semantics. The
 typed operation uses `AbstractIndex` directly without a whole-payload

@@ -764,7 +764,13 @@ impl IndexTooling for AtomView<'_> {
 
 #[cfg(test)]
 pub mod test {
+    use crate::representations::ColorFundamental;
+    use crate::tensor::SymbolicTensor;
     use insta::assert_snapshot;
+    use spenso::structure::IndexedStructure;
+    use spenso::structure::representation::{LibraryRep, RepName};
+    use spenso::structure::slot::DualSlotTo;
+    use spenso::tensor_symbol;
     use spenso::{
         network::tags::SPENSO_TAG,
         p, slot,
@@ -782,6 +788,59 @@ pub mod test {
         AdjointError, CanonicalizationError, Cookable, IndexTooling, NetworkToolingError, gamma,
         test_support::test_initialize, u,
     };
+
+    #[test]
+    fn typed_adjoint_dualizes_registered_representations() {
+        test_initialize();
+        let field = tensor_symbol!("typed_adjoint::multiplet");
+        let custom = LibraryRep::new_dual("typed_adjoint::custom").unwrap();
+        let self_dual = LibraryRep::new_self_dual("typed_adjoint::self_dual").unwrap();
+        let color = LibraryRep::from(ColorFundamental {});
+        let mut failures = Vec::new();
+        for representation in [self_dual, custom, custom.dual(), color, color.dual()] {
+            let raw = function!(field, representation.new_rep(3).to_symbolic([Atom::num(7)]));
+            let source = SymbolicTensor::<IndexedStructure>::infer_indexed(raw).unwrap();
+            let expected_slots = source
+                .structure()
+                .logical_slots()
+                .into_iter()
+                .map(|slot| slot.dual())
+                .collect::<Vec<_>>();
+            for preserve_indices in [false, true] {
+                let adjoint = match source.dirac_adjoint(preserve_indices) {
+                    Ok(adjoint) => adjoint,
+                    Err(error) => {
+                        failures.push(format!(
+                            "{representation:?}, preserve_indices={preserve_indices}: {error}"
+                        ));
+                        continue;
+                    }
+                };
+                assert_eq!(adjoint.structure().logical_slots(), expected_slots);
+                assert!(
+                    source
+                        .clone()
+                        .multiply(adjoint.clone())
+                        .unwrap()
+                        .is_scalar()
+                );
+                assert!(
+                    adjoint
+                        .dirac_adjoint(preserve_indices)
+                        .unwrap()
+                        .same_value(&source)
+                );
+                let zero = source
+                    .with_checked_expression(Atom::Zero)
+                    .unwrap()
+                    .dirac_adjoint(preserve_indices)
+                    .unwrap();
+                assert!(zero.is_zero());
+                assert_eq!(zero.structure().logical_slots(), expected_slots);
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
 
     #[test]
     fn typed_adjoint_keeps_native_logical_axes_and_ranked_zero() {
