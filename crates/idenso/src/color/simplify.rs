@@ -1332,6 +1332,125 @@ impl ColorAlgebraSimplifier {
                 }
             }
         }
+        self.reduce_adjoint_line_network(product)
+    }
+
+    /// A connected network of adjoint lines, with the structure constants
+    /// joined to them, whose labels are summed within it except for none or
+    /// two free ports is a group invariant times the ports' metric (Schur's
+    /// lemma). The rules above contract a line's adjacent pairs and open one
+    /// line, or a closed pair of lines, only when an identity then fires on
+    /// the exposed structure constants; lines that share their summed labels
+    /// crosswise and keep two ports, e.g. chain(a,b,F^q F^c) chain(c,p,F^a F^b),
+    /// match none of them. Such a network is reduced at once by the
+    /// closed-network reducer, closed by the metric of its ports. Its summed
+    /// labels must belong to it alone, and each port may occur at most once
+    /// more outside it: otherwise the network is left as it is.
+    fn reduce_adjoint_line_network(&self, product: &ProductView) -> Option<Atom> {
+        if !self.settings.closed_networks || !self.settings.evaluate_traces {
+            return None;
+        }
+        let adjoint_slots = |factor: &ProductFactor<'_>| {
+            matches!(factor.atom, AtomView::Fun(function)
+                if function.iter().all(|slot| color_adjoint_dimension(&slot).is_some()))
+        };
+        let members: Vec<usize> = product
+            .factors
+            .iter()
+            .enumerate()
+            .filter(|(_, factor)| {
+                factor
+                    .chain
+                    .as_ref()
+                    .is_some_and(|chain| chain.adjoint_representation().is_some())
+                    || (factor.structure.is_some() && adjoint_slots(factor))
+            })
+            .map(|(index, _)| index)
+            .collect();
+        if !members
+            .iter()
+            .any(|&index| product.factors[index].chain.is_some())
+        {
+            return None;
+        }
+        let slots: Vec<SlotCounts<'_>> = members
+            .iter()
+            .map(|&index| SlotCounts::of(product.factors[index].atom))
+            .collect();
+        let mut assigned = vec![false; members.len()];
+        for seed in 0..members.len() {
+            if assigned[seed] || product.factors[members[seed]].chain.is_none() {
+                continue;
+            }
+            assigned[seed] = true;
+            let mut group = vec![seed];
+            let mut next = 0;
+            while next < group.len() {
+                let current = group[next];
+                next += 1;
+                for other in 0..members.len() {
+                    if !assigned[other] && slots[current].meets(&slots[other]) {
+                        assigned[other] = true;
+                        group.push(other);
+                    }
+                }
+            }
+            let mut excluded = vec![false; product.len()];
+            for &member in &group {
+                excluded[members[member]] = true;
+            }
+            let network = SlotCounts::of_factors(
+                group
+                    .iter()
+                    .map(|&member| product.factors[members[member]].atom),
+            );
+            let outside = SlotCounts::of_factors(
+                product
+                    .factors
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, _)| !excluded[*index])
+                    .map(|(_, factor)| factor.atom),
+            );
+            if network.opaque
+                || outside.opaque
+                || network.counts.iter().any(|(_, count, _)| *count > 2)
+                || !network.captured_by(&outside).is_empty()
+            {
+                continue;
+            }
+            let ports: Vec<_> = network
+                .counts
+                .iter()
+                .filter(|(_, count, _)| *count == 1)
+                .collect();
+            if ports.iter().any(|(key, ..)| {
+                outside.get(key).is_some_and(|count| count > 1) || outside.bound.contains(key)
+            }) {
+                continue;
+            }
+            let mut factors: Vec<AtomView<'_>> = group
+                .iter()
+                .map(|&member| product.factors[members[member]].atom)
+                .collect();
+            let (value, metric) = match ports.as_slice() {
+                [] => (super::network::reduce_closed(&factors), None),
+                [(.., first), (.., second)] => {
+                    let metric = color_metric(first.to_owned(), second.to_owned());
+                    factors.push(metric.as_view());
+                    (super::network::reduce_two_legs(&factors), Some(metric))
+                }
+                _ => continue,
+            };
+            let Ok(Some(value)) = value else {
+                continue;
+            };
+            let replacement = match metric {
+                Some(metric) => value * metric,
+                None => value,
+            };
+            return Some(product.excluding(&excluded, replacement));
+        }
         None
     }
 
@@ -4998,7 +5117,7 @@ mod reconstruction_tests {
     }
 
     #[test]
-    fn joint_adjoint_chain_opening_rejects_captured_mixed_and_open_components() {
+    fn joint_adjoint_chain_opening_rejects_captured_and_mixed_components_and_reduces_open_ones() {
         test_support::test_initialize();
         let [d0, d1, d2, d3, open] =
             adjoint_slots("joint_chain_guard", ["d_0", "d_1", "d_2", "d_3", "open"]);
@@ -5059,26 +5178,44 @@ mod reconstruction_tests {
         // Raw component payloads are rejected at native admission; the
         // internal owner must not mistake them for summed abstract indices.
         assert!(SymbolicTensor::infer(fixed.clone()).is_err());
-        for expression in [
-            captured,
-            &left * mixed_right,
-            open_source,
-            &left * foreign_right,
-            fixed,
-        ] {
+        let connection = |expression: &Atom, whole_term: bool| {
             let dummies = ParseState::default();
             dummies.reserve_indices(expression.as_view());
             let simplifier = ColorAlgebraSimplifier::new(Default::default(), dummies);
+            simplifier.simplify_adjoint_chain_connection(
+                &ProductView::parse(expression.as_view()),
+                whole_term,
+            )
+        };
+        // A summed label of the open component that another factor spells
+        // too is captured, as in the closed one.
+        let captured_open = &open_source * function!(foreign, &d1);
+        for expression in [
+            captured,
+            captured_open,
+            &left * mixed_right,
+            &left * foreign_right,
+            fixed,
+        ] {
             for whole_term in [false, true] {
-                assert!(
-                    simplifier
-                        .simplify_adjoint_chain_connection(
-                            &ProductView::parse(expression.as_view()),
-                            whole_term,
-                        )
-                        .is_none()
-                );
+                let result = connection(&expression, whole_term);
+                assert!(result.is_none(), "{expression} -> {result:?}");
             }
+        }
+        // The open component is the crossed pair of lines: its labels are
+        // summed within it except for the ports d_3 and open, so it is an
+        // invariant times their metric (Schur's lemma), here C_A^2/2.
+        let crossed = adjoint_casimir_for_dimension(Atom::num(8)).pow(Atom::num(2))
+            / Atom::num(2)
+            * color_metric(d3.clone(), open.clone());
+        for whole_term in [false, true] {
+            let result = connection(&open_source, whole_term)
+                .unwrap_or_else(|| panic!("{open_source} was not reduced"));
+            assert_eq!(
+                (&result - &crossed).expand(),
+                Atom::Zero,
+                "{open_source} -> {result}"
+            );
         }
     }
 

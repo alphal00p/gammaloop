@@ -66,10 +66,17 @@ impl ClosedNetwork {
     /// The group invariants of the network: `cas`, `idx`, `gram`,
     /// dimensions and the higher named invariants.
     pub(crate) fn reduce(self) -> Result<Atom, Failure> {
+        self.reduce_times(poly::Mono::ONE)
+    }
+
+    /// [`Self::reduce`] times the monomial `factor` of the invariants.
+    fn reduce_times(self, factor: poly::Mono) -> Result<Atom, Failure> {
         reduce::trim_memo();
         poly::take_overflow();
         let mut reducer = reduce::Reducer::new();
-        let value = reducer.evaluate(self.net).map(|v| v.scale(&self.coefficient).with_fundamental_closures());
+        let value = reducer
+            .evaluate(self.net)
+            .map(|v| v.scale(&self.coefficient).mul_mono(&factor).with_fundamental_closures());
         if poly::take_overflow() {
             // Values computed in this reduction (and memoized) are garbage.
             reduce::clear_memo();
@@ -84,6 +91,16 @@ impl ClosedNetwork {
 /// network.
 pub(crate) fn reduce_closed(factors: &[AtomView<'_>]) -> Result<Option<Atom>, Failure> {
     parse_closed(factors).map(ClosedNetwork::reduce).transpose()
+}
+
+/// The invariant `c` of a colour network `G` with two adjoint legs `a, b`,
+/// `G(a, b) = c delta(a, b)` (Schur's lemma). `factors` are `G` closed by
+/// the metric `delta(a, b)`: the closed value is `c N_A`. `Ok(None)` if they
+/// are not a supported closed network.
+pub(crate) fn reduce_two_legs(factors: &[AtomView<'_>]) -> Result<Option<Atom>, Failure> {
+    parse_closed(factors)
+        .map(|network| network.reduce_times(poly::Mono::var(poly::NA, -1)))
+        .transpose()
 }
 
 /// Reduce a closed colour network given as a product (or a single factor).
