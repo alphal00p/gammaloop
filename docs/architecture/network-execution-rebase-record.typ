@@ -212,7 +212,7 @@ Validation run:
 - `cargo check --package gammalooprs --test large_spenso_actual --profile dev-optim`
 - `cargo check --package gammalooprs --tests --profile dev-optim`
 
-=== Contraction Order MWE And MinResultRank Diagnostic
+=== Contraction order MWE and MinResultRank diagnostic
 
 Trace commit: `nlzmnxqt`.
 

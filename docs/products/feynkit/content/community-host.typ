@@ -1,0 +1,325 @@
+#import "../../shared.typ": source-link
+
+#let community-host = [
+= Integrating the Symbolica community host
+
+`feynkit-py` is an `rlib` implementing `SymbolicaCommunityModule`. The combined
+#link("https://github.com/symbolica-dev/symbolica-community")[Symbolica community host] owns the
+single `symbolica.core` extension. Link FeynKit into that host so all community modules exchange
+the same Symbolica expression type and global state.
+
+== Register and package the module
+
+Add `feynkit-py` from the checkout revision that the host is testing. During local integration a
+path dependency is explicit:
+
+// docs-example: syntax
+```toml
+[dependencies]
+feynkit-py = { path = "../gammaloop/crates/feynkit-py" }
+```
+
+For a release, replace the path with the repository URL and a tested Git `rev`. Keep Symbolica,
+PyO3, and the other community modules compatible with this checkout. The `ufo` feature is enabled
+by default in the Python adapter; disable default features if the host intentionally omits UFO
+loading. The pure Rust facade has different defaults.
+
+The optional native `oneloop` feature registers the pinned OneLOop scalar-master
+adapter in the same kernel. Package `hepkit/oneloop` alongside the main Python
+wrapper to expose `from symbolica.community.hepkit import oneloop`. The notebook
+host enables this feature for its native numerical showcase. Browser builds omit
+only the independent OneLOop reference; the symbolic and numerical CFF/LTD
+showcase runs without it.
+
+The 3.0.1 dependency versions alone do not select the Community extension and
+resource-budget APIs used by this checkout. Pin Symbolica, Numerica and Graphica together to the
+compatible public Symbolica revision below, alongside the Typst atom payload.
+These are the patches used by both this repository's root manifest and
+`examples/notebooks/symbolica-host/Cargo.toml`. Put them in the consuming host's
+root manifest so they apply to FeynKit and Spenso transitively, and retain the
+resolved Cargo lockfile with the host release:
+
+// docs-example: syntax
+```toml
+[patch.crates-io]
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
+symbolica-typst-plugin = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "57b7455b37c30f4f87353c0073e49f5225e937ab" }
+```
+
+Only the top-level workspace's patches apply; dependency workspaces do not
+forward their patch tables. The root, notebook host and separate `tydenso/`
+Typst WASM workspace each own their patch selection. When building a separate
+Typst plugin, align its resolved kernel and payload revisions with the host in
+that build root too, then rebuild both artifacts.
+Changing a Cargo patch does not update an already compiled Typst plugin or
+native renderer. The notebook MathML path does not use the plugin.
+
+In the host's existing core module, after `create_symbolica_module(m)?`, use its registration
+macro:
+
+// docs-example: syntax
+```rust
+register_module!(m, feynkit_py::FeynkitModule);
+```
+
+The host creates `symbolica.community.feynkit_native` and supplies `initialize_module()`.
+Copy the package containing
+#source-link("crates/feynkit-py/python/symbolica/community/hepkit/__init__.py", label: "the Python wrapper")
+into the host's `python/symbolica/community/hepkit` tree. Its wrapper imports the native module and
+calls the initializer. FeynKit itself must not declare another PyO3 extension entry point.
+Registration must not construct symbolic expressions: callers need to import Symbolica before
+calling `set_license_key`. Keep expression-valued constants as static methods. After rebuilding
+the native host, run `python crates/feynkit-py/tests/installed_import.py` against that installation
+to check that importing `E` and `hepkit` defers the license banner until the first operation.
+Notebook figures use native Rust SVG geometry and direct MathML labels measured
+in the notebook browser by AnyWidget. The native extension embeds no Rust Typst
+compiler. Complete expression HTML also emits direct MathML; `formatted()`,
+`paged()` and expression `to_html()` reject custom `notation_source`.
+Bare `to_typst()` remains source-only;
+`to_typst_project(..., notation_source=...)` exports `main.typ`, `render.typ`,
+`notation.typ` and `tree.cbor` as a `dict[str, bytes]` without a compiler.
+Expression `to_svg()` and graph `view.outlined()` use optional Python typst-py
+(distribution `typst`).
+The host supplies the verified font resources
+listed in `crates/linnet-render-py/data.json` through
+`SYMBOLICA_DATA_DIRECTORY` before rendering. This directory contains the extracted
+`render/fonts/` assets; the renderer checks their compiled hashes.
+Register `linnet_render_py::GraphModule` to install the shared
+`symbolica.community.graph_native` module from `linnet-render-py`. Package
+`crates/linnet-render-py/python/symbolica/community/graph` alongside HepKit so
+`symbolica.community.graph` exposes its shared settings, views, snapshots and type information.
+
+GammaLoop and the isolated notebook host in this checkout declare optional
+`notebook-display` (`anywidget>=0.9,<1`), `graph-export`
+(`playwright>=1.55,<2`) and `typst-export` (`typst>=0.15`) extras. These extras
+are not currently released in the external Community assembly. Install the
+equivalent dependencies when integrating another host; headless export also
+requires installing Chromium:
+
+// docs-example: syntax
+```sh
+python -m pip install "anywidget>=0.9,<1" "playwright>=1.55,<2" "typst>=0.15"
+python -m playwright install chromium
+```
+
+`owner.render()` returns a `DiagramView` for generic and physics graphs,
+networks, processes, amplitudes, generation collections, CFF and LTD. Static
+exports work immediately through `view.snapshot()`; live widgets can complete
+browser measurement. The migration section below distinguishes static defaults,
+strict measured exports and outlined vector exports.
+
+Native consumers prepare scenes with `PyDiagramView::from_scene` or
+`from_scenes`; the former synchronous `PyDiagramRender::from_scene` entry point
+is replaced by this measurement lifecycle. `PyDiagramRender` is the completed
+snapshot. Views cloned in Rust share completion state, and a receipt belongs to
+the exact view that requested it.
+
+Bindings call the tensor owner's borrowed `display::atom_to_html`,
+`display::structured_to_html` and `display::format_atom` APIs directly.
+They do not import canonical Python modules to locate native functions.
+The complete Spenso `mathml::expression` export returns `Result<String,
+ExportError>`; the bounded semantic `mathml::render` callback retains its
+optional notation contract. Native label import and measurement validation
+return `LabelError`, while process scene construction returns `DiagramError`.
+Convert those failures to host diagnostics at the presentation boundary.
+
+When adding another component or class extension, follow the
+#link("https://github.com/symbolica-dev/symbolica-community/blob/cad32c8f589c8a29531414f94b3fbe58020e0308/docs/writing-extensions.md")[Community extension guide].
+Use the actual owner types and one native host. Run the same interoperability
+assertions in separate standalone and Community processes, including a standalone
+host without canonical package aliases and with canonical imports blocked.
+
+Include the UFO loader release documented in the #link("guides/showcases/ufo/")[UFO import example]
+when offering raw UFO import. Install it with `--no-deps` into the existing host environment:
+the host supplies the single Symbolica extension. The checkout's `uv.lock` instead installs a
+standalone Symbolica 3 kernel for GammaLoop development; do not sync that environment over a
+community host containing its own native extension.
+
+== Migrating notebook and Python display code
+
+Compared with the former embedded-Typst host, rich display now follows
+Symbolica's MIME and Marimo contract. Replace direct calls to the removed
+`_repr_html_()` and `_repr_svg_()` hooks with `to_html()` or `to_svg()` for
+exports, and let the notebook call `_repr_mimebundle_()` or `_display_()` for
+display. MIME bundles always include plain text and complete static HTML or
+SVG. When `anywidget` is installed they additionally offer a live widget;
+without it, static display remains usable in notebooks and saved output.
+
+Graph-like `render()` methods now return a `DiagramView`, rather than a
+completed `DiagramRender`. Default `view.to_svg()`, `view.to_html()` and
+`view.snapshot()` produce complete static output without launching a browser.
+The snapshot uses completed browser measurements when available, otherwise
+optional typst-py outlining when installed, otherwise estimated label bounds
+with the offline STIX MathML font. Estimates do not complete measurement.
+A snapshot is immutable: subsequent widget measurement changes later exports,
+not previously returned snapshots. Collections apply this choice to each child.
+
+`view.measured()` is the stricter operation: it reuses a completed measurement
+and raises while labels are pending. Displaying the live widget completes its
+view using the browser's actual label bounds. Scripts explicitly request
+`view.measured(browser="chromium")`, or pass the complete receipt from that
+same view's `measurement_request()` as `measurements=receipt`. Do not pass both
+arguments. Receipts are view-specific and repeated identical receipts are
+idempotent. Use `view.outlined()` to request vector labels through typst-py
+without a browser; PDF and PNG export require those outlined labels.
+
+`TensorNetwork.to_svg()` continues to export tensor #emph[notation], matching
+its expression display, and requires the optional Python distribution `typst`
+(typst-py). Use `network.render().to_svg()` for the network #emph[diagram].
+The native host no longer contains the embedded Rust Typst compiler, its
+plugin interpreter, or its bundled document fonts. `to_typst()` and
+`to_typst_project()` remain source exports; explicitly compiled vector output
+uses typst-py. Install that package only when those exports are needed.
+
+Notation and tensor `print` mappings now accept an allowlisted MathML subset,
+rather than arbitrary backend markup. Plain, LaTeX and Typst text overrides
+are escaped literal text; use the validated `mathml` mapping for structured
+notation. Register notation through the symbol's owning constructor. The
+registry is process-local: identical registration is accepted, conflicting
+registration raises, and canonical symbol strings and ordinary state exports
+do not serialize it. Explicit validated `spenso.notation` portable attachments
+are the transport for notation; reconstructing a symbol alone is insufficient.
+
+Font resources are discovered through `symbolica.data`, independently of
+compiler installation. Install `symbolica-fonts`, or point
+`SYMBOLICA_DATA_DIRECTORY` at an extracted resource bundle; Python callers can
+also use `symbolica.data.set_directory()` or `set_directories()`. The host's
+`symbolica.data.manifest()` lists expected names, hashes, sizes and loaded
+status. Resources are read lazily and checked against compiled hashes; a
+missing resource can be supplied and the same operation retried. Repository-built
+resource bundles and embedded font exports include the STIX font license.
+
+== Export the documented Python surface
+
+Forward `feynkit-py/python-stubs` from the host's stub-generation feature, alongside its other
+community modules. Generic graph conversion, graph-valued topology callbacks, and Linnet selection
+interoperability additionally require `feynkit-py/linnet-python` and registration
+of `linnet_py::GraphModule` in place of the display-only module. Leave that
+feature off in a display-only Community host. Python drawing selectors also
+require the generic module, since their callbacks receive live graph views.
+The documentation exporter updates both the package stub and the reference
+input from the same native module:
+
+// docs-example: syntax
+```sh
+cargo run --locked -p alphal00p-docs-python-exporter --features feynkit -- \
+  feynkit-community docs/api/python/feynkit-community.pyi
+cargo run --locked -p alphal00p-docs-python-exporter --features feynkit -- \
+  feynkit-community docs/api/python/feynkit-community.pyi --check
+```
+
+Export the display-only rendering stub:
+
+// docs-example: syntax
+```sh
+cargo run --locked -p linnet-render-py --features python-stubs --bin linnet-render-stubgen
+```
+
+The public stub is generated from native signatures and docstrings. Its documentation audit
+requires examples and parameter descriptions. The product's
+#link("reference/python/feynkit-community/")[Python API pages] use that same registered surface;
+refresh and check the generated inputs when the API changes. The check also validates runtime
+exports and the syntax of documented Python examples.
+
+Build the product documentation or keep its local preview running with:
+
+// docs-example: syntax
+```sh
+just docs-site feynkit
+just docs-watch feynkit 8117
+```
+
+The preview is served at `http://127.0.0.1:8117`. These commands use the registered Rust and
+Python components, manual pages, and example catalog.
+
+== Build the browser showcases
+
+The #link("guides/showcases/")[showcase gallery] runs in Marimo's browser Python runtime.
+The repository's combined host packages Symbolica, FeynKit, Spenso, and Idenso into one
+WebAssembly wheel. Its `wasm` feature selects portable numeric backends; its default
+`native` feature retains the desktop backends. Browser Symbolica runs without a license key.
+The browser wheel uses Zstandard level 22 inside the wheel's ZIP archive. Installing
+it requires Python 3.14 with Zstandard support, as provided by the pinned Pyodide
+runtime. Its ABI3 tag describes extension compatibility, not archive decompression
+support in older Python installers.
+
+The wheel command builds through the Nix flake with pinned Rust, Emscripten, and
+Pyodide inputs. Compilation runs offline and reuses a separate dependency archive. Then export the executable
+cells and start the existing documentation watcher:
+
+// docs-example: syntax
+```sh
+just notebook-wheel
+just notebook-ufo-wheel
+just docs-notebooks /path/to/symbolica-wasm.whl feynkit docs/generated/notebooks target/notebook-ufo-wheel/ufo_model_loader-1.0.1-py3-none-any.whl
+just docs-watch feynkit 8117
+```
+
+Pass the actual Symbolica wheel filename produced by the build. `notebook-ufo-wheel` exports
+the fixed-hash released `ufo-model-loader==1.0.1` pure Python wheel, matching the notebook dependency.
+`docs-notebooks` stages generated assets
+under `docs/generated/notebooks`, which `docs-site` and `docs-watch` include automatically.
+Rerun the export after editing a notebook; the watcher reloads the changed assets. The output
+argument can instead point to an already built site. Generated wheels and notebook assets
+remain local build outputs.
+
+The shared Spenso + Idenso showcases use the same host wheel for network figures:
+
+// docs-example: syntax
+```sh
+just docs-notebooks /path/to/symbolica-wasm.whl spenso docs/generated/notebooks
+just docs-notebooks /path/to/symbolica-wasm.whl idenso docs/generated/notebooks
+```
+
+The flake builds the wheels and assembles the complete site:
+
+// docs-example: syntax
+```sh
+nix run .#alphal00p-docs-publication -- target/docs-pages
+```
+
+The command validates and renders the documentation, then exports the live cells for Linnet,
+GammaLoop, Spenso, Idenso, and FeynKit. It requires a user Symbolica license for the native
+documentation checks, loaded through the usual development environment. Nix reuses the compiled
+documentation artifacts, the WASM dependency archive, the browser wheels, and the pinned
+Marimo exporter. Editing website prose or styling does not rebuild the wheel.
+For a snapshot, set `ALPHAL00P_DOCS_CHANNEL=snapshot` and
+`ALPHAL00P_DOCS_SNAPSHOT_TAG` to the release tag before running the command.
+The lower-level `alphal00p-docs-notebooks` exporter also accepts `--browser-smoke`
+and `--browser-executable /path/to/chromium` to check the exported cells in a browser.
+Its Nix environment includes the Playwright client; supply the browser executable separately.
+The documentation tests provide Chromium and execute every browser example. Run them
+against an already rendered site with `nix run .#test-notebook-examples -- target/notebook-tests target/docs-pages`.
+The numerical CFF/LTD example runs in the browser without the independent OneLOop
+reference and in the native installed-wheel tests through Marimo;
+`nix run .#test-native-notebook-examples -- target/native-notebook-tests` runs that check separately.
+
+Publication builds the host wheel from the documented source and adds the notebook assets
+to the versioned site. Its wheel cache follows the Rust, Python, and embedded-asset inputs, so
+website styling changes do not trigger another WebAssembly compilation. The FeynKit notebooks use built-in model constructors, so neither
+native execution nor browser export needs separate model JSON files. The UFO-loading
+tutorial deliberately retains its raw UFO fixture to demonstrate importing external models.
+
+== Verify an installed host
+
+Build and install the host's combined wheel, then run the repository smoke program in that
+environment:
+
+// docs-example: syntax
+```sh
+python crates/feynkit-py/tests/installed_import_smoke.py
+```
+
+It checks imports, representative classes, kinematics, and tensor reduction against the installed
+Symbolica kernel. The repository also tests FeynKit/Spenso interoperability in both import orders,
+but an in-process registration test does not replace this installed-wheel check.
+== Citations
+
+Call `symbolica.get_citations()` after a calculation to collect Symbolica's citation
+and references from the community packages used in that process. Each entry is a
+`Citation`; `entry.to_bibtex()` exports its bibliography record. Importing a package
+alone does not count as use. The collection is cumulative, deduplicates references,
+and does not reset usage. Individual HEP entry points do not expose separate getters.
+]

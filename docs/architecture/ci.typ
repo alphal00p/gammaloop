@@ -4,7 +4,9 @@ Use `just ci-checks` for the selected local suite and `just ci-checks-and-upload
 before final review. The latter runs static checks and publishes compiled runtime
 producers without running the runtime suite. NixCI runs that suite after the push.
 See #link("../../CONTRIBUTING.typ#nixci-cache")[CONTRIBUTING.typ] for credentials,
-licenses and retries. `just check` runs Cargo checking only.
+licenses and retries.
+
+== Local CI preparation
 
 On `itphlies`, run `just ci-checks-and-upload` before pushing CI-enabled work.
 The configured Nix daemon downloads matching cached outputs as needed; the
@@ -12,6 +14,20 @@ command checks static inputs, builds missing runtime producers and uploads their
 closures. Finish the upload before pushing so NixCI can reuse that
 work. Keep substitution enabled rather than downloading the whole cache or
 forcing rebuilds.
+
+The local selection is `configuration.onlyBuild` in `nix/ci.nix` for the current
+system: static checks, group Nextest producers, test dependency and binary
+producers, runtime launchers and support/barrier outputs.
+
+GitHub's shared producer job publishes a compact five-root closure:
+`alphal00p-docs-cargo-artifacts`, `crane-ci-prebuild`, `gammaloop`,
+`gammaloop-python-module` and the `gammaloop-nextest-binaries` check. Its 8 GiB
+raw NAR limit is intentional. Self-contained full merged archives drop input
+references, so this closure omits many intermediate archives selected by the
+local upload command. A successful GitHub producer publication does not imply
+that every local CI producer is available from the cache. Closure size and
+coverage must be measured from realized outputs; a partial local store cannot
+establish the full publication size or all omitted producers.
 
 == Configuration and cache boundaries
 
@@ -21,8 +37,10 @@ forcing rebuilds.
   [`flake.nix`], [Compose public packages, checks, apps and development shells],
   [`nix/rust-workspace.nix`], [Rust sources, features, build profiles and artifact reuse],
   [`nix/documentation.nix`], [Documentation sources, reusable build artifacts and publication checks],
+  [`nix/cargo-runtime.nix`], [Prepared Cargo environments for licensed documentation execution as the invoking user],
   [`nix/ci.nix`], [Test groups, required producers and NixCI scheduling],
   [`nix/ci-workspace-graph.json`, `nix-ci.nix`], [Generated workspace graph and self-contained NixCI configuration],
+  [`justfile`, `just/tests.just`], [Public native development commands],
   [`just/ci.just`], [Local checks, uploads, regeneration and reporting],
   [`.github/scripts/ci-report.mjs`], [Collect and compare existing CI runs],
 )
@@ -46,14 +64,34 @@ collection keeps a 4–8 GiB free-space watermark; the producer checks for at le
 of temporary compiler/store usage.
 
 Automatic NixCI work covers tests, Clippy, doctests, formatting, graph validation,
-the full five-product documentation check, necessary producers and final success.
-The documentation check validates generated references and examples, renders
-latest and snapshot sites, checks their HTML, and exercises publication behavior.
-It uses the existing licensed-check runner with `SYMBOLICA_LICENSE_SIGNED`; its
-reusable Cargo artifacts are scheduled separately. `just ci-checks` selects the
-same documentation check; uploads select its launcher and compiled producers.
+necessary producers and final success. The full documentation publication check
+validates generated references and examples, renders latest and snapshot sites,
+checks their HTML, and exercises publication behavior. It is a
+`nix/cargo-runtime.nix` runner that takes an absent or empty output directory.
+Its NixCI launcher and `just ci-checks` build `checks.<system>.alphal00p-docs`,
+which prepares the runner and its reusable Cargo artifacts but does not execute
+it. Uploads select its launcher and compiled producers.
 Packaging, standalone Rustdoc, the persistent Typst renderer and WASM remain
 additional checks in `nix flake check --impure`.
+
+`nix/cargo-runtime.nix` preserves Crane's vendoring, toolchain and artifact hooks
+in a prepared, unlicensed environment. Its runner resolves the caller's license
+and enters that environment with `nix develop` to unpack private sources and run
+the licensed phase locally. It sets `GAMMALOOP_WORKSPACE_ROOT`,
+`NEXTEST_WORKSPACE_ROOT` and `INSTA_WORKSPACE_ROOT` for that invocation, uses
+private home/cache/Cargo/temp directories, suppresses
+environment dumps, and removes
+temporary state on exit. License values are never evaluation inputs or
+derivation attributes. This boundary does not remove older derivations or
+outputs that already contained a license from existing stores or caches.
+
+The generic documentation packages `alphal00p-docs-pages` and
+`alphal00p-docs-snapshot-fixture` are executables accepting one absent or empty
+output directory. For example, `nix run .#alphal00p-docs-pages -- target/docs-pages`
+renders and validates pages locally. Compiled documentation inputs stay
+cacheable; building the package prepares its runner rather than rendering pages.
+The pages runner reads `ALPHAL00P_DOCS_CHANNEL` (`latest` by default) and requires
+`ALPHAL00P_DOCS_SNAPSHOT_TAG` exactly when the channel is `snapshot`.
 
 Compilation stays per crate. Source filtering preserves unaffected packages;
 manifest and lockfile changes still invalidate broadly. Test dependencies avoid
@@ -67,6 +105,11 @@ separate because their global type registries can change the generated APIs when
 combined. Unit-test crates and Rustdoc snippets still require their own compilation.
 Clippy and doctests share check dependencies but retain workspace-wide source
 inputs, so their rebuild isolation differs from package test artifacts.
+
+Test-only Rust modules belong in the `ownTest` source list in
+`nix/rust-workspace.nix`. Production library inputs exclude those files; unit-test
+producers include them. Native and WASM arithmetic, Python embedding and extension
+linking, and the lean/full Typst renderer remain distinct configurations.
 
 Prebuild and normal dependency commands omit feature selections already encoded
 by their generated Cargo anchors. Test dependency commands retain features on
@@ -518,7 +561,8 @@ this repository does not install a CI-to-agent wake-up service. See
 == Branch maintenance
 
 After rebasing an active branch onto the CI changes, preserve its test groups and
-source filters, run `just ci-update`, and commit both generated files. FeynKit
+source filters, run `just ci-update`, and commit `nix/ci-workspace-graph.json`
+and `nix-ci.nix`. There is no separate development test metadata file. FeynKit
 needs its eighth group, nine extracted crates, embedded fixtures, optional Python
 dependencies, boundary checks and Python stub checks. Its extracted libraries
 must remain independent of GammaLoop and its private workspace-hack dependency.
@@ -529,6 +573,12 @@ reachable in published history. Refresh deliberately after a green revision with
 `just ci-cache-base FULL_COMMIT_SHA`; rebasing or cleaning history alone is not a
 reason to invalidate it. See the #link("nix-crane-cache-reuse.typ")[cache-reuse audit]
 for earlier investigation and implementation details.
+
+The optional `ci-compiler-state` package collects compiler state for a compatible
+baseline; neither ordinary local uploads nor the compact GitHub producer job
+select it. Publish that baseline once after its revision is publishable, then
+pin it with `just ci-cache-base FULL_COMMIT_SHA`. Do not publish every commit's
+compiler state as part of the ordinary upload cycle.
 
 == Measured results
 

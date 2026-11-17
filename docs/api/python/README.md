@@ -39,6 +39,7 @@ actually installed into a fresh community module.
 The FeynKit invocation also checks the registered runtime exports, documentation
 coverage, and example syntax. Its package stub includes the default UFO
 bindings and supplies the documentation's downloadable copy.
+See the [FeynKit manual](../../products/feynkit/content/overview.typ) for usage.
 
 Linnet generates the graph package stub and its deterministic `__all__`.
 The documentation links to this packaged file, and the import test compares

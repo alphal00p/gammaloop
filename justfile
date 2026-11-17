@@ -183,7 +183,7 @@ docs-svg-assets-check:
     trap 'rm -rf -- "$output"' EXIT
     bash scripts/render-docs-svg-assets.sh "$output" --check
 
-# Build one product documentation site, or all five sites.
+# Build one product documentation site, or all registered sites.
 docs-site PRODUCT="all" CHANNEL="latest" SNAPSHOT_TAG="" OUTPUT="target/alphal00p-docs":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -221,7 +221,7 @@ docs-site PRODUCT="all" CHANNEL="latest" SNAPSHOT_TAG="" OUTPUT="target/alphal00
     just docs-check
     cargo run --locked -p alphal00p-docs-builder -- "${args[@]}"
 
-# Add executable cells to a product in a previously built documentation site.
+# Generate executable cells consumed by docs-site and docs-watch, or a chosen site output.
 docs-notebooks WHEEL PRODUCT="linnet" OUTPUT="docs/generated/notebooks" DEPENDENCY_WHEEL="":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -230,12 +230,32 @@ docs-notebooks WHEEL PRODUCT="linnet" OUTPUT="docs/generated/notebooks" DEPENDEN
     if [ -n "$dependency_wheel" ]; then
         args+=(--dependency-wheel "$dependency_wheel")
     fi
-    uv run --no-project --with marimo==0.24.0 python crates/linnet-py/examples/export_wasm.py --docs {{ quote(PRODUCT) }} \
+    nix run .#alphal00p-docs-notebooks -- --docs {{ quote(PRODUCT) }} \
         --wheel {{ quote(WHEEL) }} \
         --output {{ quote(OUTPUT + "/products/" + PRODUCT + "/latest/assets/notebooks") }} \
         "${args[@]}"
 
-# Validate the five-product documentation registry and generated inputs.
+# Edit a community showcase with an installed combined Symbolica host.
+notebook NAME="spenso_idenso_display" PYTHON="python":
+    {{ quote(PYTHON) }} -m marimo edit {{ quote("examples/notebooks/" + NAME + ".py") }}
+
+# Export the pinned pure Python UFO loader wheel from the Nix store.
+notebook-ufo-wheel OUTPUT="target/notebook-ufo-wheel":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    wheel=$(nix build --no-link --print-out-paths .#notebook-ufo-wheel)
+    mkdir -p {{ quote(OUTPUT) }}
+    cp "$wheel/"*.whl {{ quote(OUTPUT) }}/
+
+# Build the shared Symbolica/FeynKit/Spenso/Idenso wheel for browser showcases.
+notebook-wheel OUTPUT="target/notebook-wheels":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    wheels=$(nix build --no-link --print-out-paths .#notebook-wasm-wheel)
+    mkdir -p {{ quote(OUTPUT) }}
+    cp "$wheels/"*.whl {{ quote(OUTPUT) }}/
+
+# Validate the documentation registry and generated inputs.
 docs-check:
     python3 examples/notebooks/symbolica-host/sync-stubs.py --check
     cargo run --locked -p alphal00p-docs-python-exporter --features feynkit -- feynkit-community docs/api/python/feynkit-community.pyi --check
