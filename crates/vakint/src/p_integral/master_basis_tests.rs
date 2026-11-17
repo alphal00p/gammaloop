@@ -87,18 +87,37 @@ fn inverse_at(
     rotated_at_point: &Atom,
     point: &Atom,
 ) -> Atom {
-    assert_eq!(basis.layers.len(), 1, "inverse_at: one layer");
-    let (_, exchanges) = &basis.layers[0];
     let rules = basis.rules(catalogue, epsilon()).unwrap();
-    let news: Vec<String> = {
-        let mut seen = BTreeSet::new();
-        exchanges
-            .iter()
-            .flat_map(|e| e.terms.iter().map(|(m, _, _)| m.clone()))
-            .filter(|m| m.starts_with("ggppss_new(") && seen.insert(m.clone()))
-            .collect()
-    };
-    let n = exchanges.len();
+    // the layers undone last to first, each through the inverse of its block
+    let mut ends = Vec::new();
+    let mut end = 0;
+    for layer in &basis.layers {
+        ends.push((end, end + layer.exchanges.len()));
+        end += layer.exchanges.len();
+    }
+    let mut back = rotated_at_point.clone();
+    for (layer, &(start, end)) in basis.layers.iter().zip(&ends).rev() {
+        back = inverse_layer_at(
+            catalogue,
+            &rules[start..end],
+            &layer.new_masters,
+            &back,
+            point,
+        );
+    }
+    back
+}
+
+/// One layer undone at `point`: `old = B new + rest` (its rules) solved for
+/// its new masters `news` (B square) and substituted into `expression`.
+fn inverse_layer_at(
+    catalogue: &PMasterCatalogue,
+    rules: &[(Atom, Atom)],
+    news: &[String],
+    expression: &Atom,
+    point: &Atom,
+) -> Atom {
+    let n = rules.len();
     assert_eq!(news.len(), n, "B must be square");
     let new_atoms: Vec<Atom> = news.iter().map(|id| master(catalogue, id)).collect();
     // old_m = sum_n B_mn new_n + rest_m  (all at the point)
@@ -152,7 +171,7 @@ fn inverse_at(
             Replacement::new(new_atoms[i].to_pattern(), value.expand())
         })
         .collect();
-    rotated_at_point.replace_multiple(&replacements).expand()
+    expression.replace_multiple(&replacements).expand()
 }
 
 /// The in-repo fixture: the masters directory restricted to the one
@@ -173,6 +192,158 @@ fn full_directory() -> Option<std::path::PathBuf> {
 /// The complete data if given, else the fixture.
 fn basis() -> PMasterBasisData {
     PMasterBasisData::from_directory(&full_directory().unwrap_or_else(fixture_directory)).unwrap()
+}
+
+/// The fixture plus a second layer of ours (as `our_exchanges` of helper VH 2
+/// will add): `ggppss_new(1) = (2 + eps) our(1) + 1/(1 - eps) ggppss_int(1)`,
+/// with `our(1)` a new master whose orders are all unknown. The first layer
+/// is kept byte-identical (its data version in `layer_versions`); the masters
+/// file and the basis version are new. Written under the scratch directory.
+fn two_layer_directory() -> std::path::PathBuf {
+    use std::io::{Read, Write};
+    let gz = |value: &serde_json::Value| -> Vec<u8> {
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        encoder.write_all(value.to_string().as_bytes()).unwrap();
+        encoder.finish().unwrap()
+    };
+    let ungz = |bytes: &[u8]| -> serde_json::Value {
+        let mut text = String::new();
+        flate2::read::GzDecoder::new(bytes)
+            .read_to_string(&mut text)
+            .unwrap();
+        serde_json::from_str(&text).unwrap()
+    };
+    let source = fixture_directory();
+    let directory = std::env::temp_dir().join(format!(
+        "vakint-master-basis-two-layers-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(directory.join("basis-change")).unwrap();
+    std::fs::create_dir_all(directory.join("pole-bounded")).unwrap();
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(source.join("MANIFEST.json")).unwrap()).unwrap();
+    let first_version = manifest["basis_version"].as_str().unwrap().to_owned();
+    let version = format!("{first_version}+ours-test-1");
+    let first_layer = "basis-change/00-ggppss-2104.08272-new-basis.json.gz";
+    std::fs::copy(source.join(first_layer), directory.join(first_layer)).unwrap();
+    let masters_path = manifest["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["role"] == "pole-bounded-masters")
+        .unwrap()["path"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let mut masters = ungz(&std::fs::read(source.join(&masters_path)).unwrap());
+    masters["data_version"] = serde_json::json!(version);
+    masters["masters"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({
+            "id": "our(1)", "symbol": "p_our_1", "loops": 5,
+            "graph": "test master of a second layer", "leading_order": -5, "coefficients": {}
+        }));
+    let second = serde_json::json!({
+        "schema": P_MASTER_BASIS_SCHEMA, "version": P_MASTER_BASIS_VERSION,
+        "data_version": version, "variable": "eps", "dimension": "d = 4 - 2*eps",
+        "normalisation": "g-scheme (as the p master catalogue)",
+        "layer": {
+            "name": "01-ours-test", "source": "test", "direction": "old = sum of terms",
+            "new_masters": ["our(1)"],
+            "exchanges": [{"old": "ggppss_new(1)", "terms": [
+                {"master": "our(1)", "num": ["2", "1"], "den": ["1"]},
+                {"master": "ggppss_int(1)", "num": ["1"], "den": ["1", "-1"]}
+            ]}]
+        }
+    });
+    let mut files = Vec::new();
+    let mut put = |path: &str, bytes: Vec<u8>, role: &str| {
+        std::fs::write(directory.join(path), &bytes).unwrap();
+        files.push(serde_json::json!({
+            "path": path, "role": role,
+            "sha256": format!("{:x}", Sha256::digest(&bytes)), "bytes": bytes.len()
+        }));
+    };
+    put(
+        first_layer,
+        std::fs::read(source.join(first_layer)).unwrap(),
+        "basis-change",
+    );
+    put(
+        "basis-change/01-ours-test.json.gz",
+        gz(&second),
+        "basis-change",
+    );
+    let new_masters_path = format!("pole-bounded/masters.{version}.json.gz");
+    put(&new_masters_path, gz(&masters), "pole-bounded-masters");
+    manifest["basis_version"] = serde_json::json!(version);
+    manifest["layers"] = serde_json::json!(["00-ggppss-2104.08272-new-basis", "01-ours-test"]);
+    manifest["layer_versions"] =
+        serde_json::json!({ "00-ggppss-2104.08272-new-basis": first_version });
+    manifest["files"] = serde_json::Value::Array(files);
+    std::fs::write(directory.join("MANIFEST.json"), manifest.to_string()).unwrap();
+    directory
+}
+
+#[test]
+fn a_second_layer_of_ours_applies_after_the_first_and_round_trips() {
+    let directory = two_layer_directory();
+    let basis = PMasterBasisData::from_directory(&directory).unwrap();
+    assert_eq!(
+        basis.record().layers,
+        vec!["00-ggppss-2104.08272-new-basis", "01-ours-test"]
+    );
+    assert!(basis.record().data_version.ends_with("+ours-test-1"));
+    let catalogue = basis.extended_catalogue(&catalogue()).unwrap();
+    let ep = Atom::var(epsilon());
+    let combination = master(&catalogue, "ggppss_int(137)") * (&ep + Atom::num(3))
+        + master(&catalogue, "ggppss_int(2)") / (Atom::num(1) + &ep);
+    let rotated = basis.rotate(&combination, &catalogue, epsilon()).unwrap();
+    let left = by_master(&rotated);
+    for gone in ["ggppss_int(137)", "ggppss_new(1)"] {
+        let symbol = catalogue.symbol_of_id(gone).unwrap();
+        assert!(
+            !left.keys().any(|m| m.contains(&format!("{symbol})"))),
+            "{gone} survived the rotation"
+        );
+    }
+    assert!(
+        left.keys().any(|m| m.contains("p_our_1)")),
+        "our(1) missing"
+    );
+    // undoing the second layer gives the first layer's rotation (the
+    // fixture's first layer is a subset, not invertible on its own)
+    let first = PMasterBasisData::from_directory(&fixture_directory()).unwrap();
+    let first_rotated = first.rotate(&combination, &catalogue, epsilon()).unwrap();
+    let rules = basis.rules(&catalogue, epsilon()).unwrap();
+    let start = basis.layers[0].exchanges.len();
+    for point in ["3/11", "-5/7"] {
+        let point = vk_parse!(point).unwrap();
+        let back = inverse_layer_at(
+            &catalogue,
+            &rules[start..],
+            &basis.layers[1].new_masters,
+            &at(&rotated, &point),
+            &point,
+        );
+        assert_eq!(
+            by_master(&back),
+            by_master(&at(&first_rotated, &point)),
+            "second layer round trip at eps = {point}"
+        );
+    }
+    // the first layer alone keeps its own data version: a wrong one is refused
+    let manifest_path = directory.join("MANIFEST.json");
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
+    manifest["layer_versions"] = serde_json::json!({});
+    std::fs::write(&manifest_path, manifest.to_string()).unwrap();
+    let refused = PMasterBasisData::from_directory(&directory)
+        .unwrap_err()
+        .to_string();
+    assert!(refused.contains("do not match the manifest"), "{refused}");
+    std::fs::remove_dir_all(&directory).unwrap();
 }
 
 #[test]
@@ -226,7 +397,10 @@ fn a_layer_never_feeds_its_own_exchanges_and_names_known_masters() {
     let basis = basis();
     let basis = &basis;
     let catalogue = basis.extended_catalogue(&catalogue()).unwrap();
-    for (name, exchanges) in &basis.layers {
+    // masters exchanged by an earlier layer never come back in a later one
+    let mut gone: BTreeSet<&str> = BTreeSet::new();
+    for layer in &basis.layers {
+        let (name, exchanges) = (&layer.name, &layer.exchanges);
         let old: BTreeSet<&str> = exchanges.iter().map(|e| e.old.as_str()).collect();
         assert_eq!(
             old.len(),
@@ -246,12 +420,28 @@ fn a_layer_never_feeds_its_own_exchanges_and_names_known_masters() {
                     exchange.old
                 );
                 assert!(catalogue.symbol_of_id(master).is_some(), "{master} unknown");
+                assert!(
+                    !gone.contains(master.as_str()),
+                    "{name}: {master} was exchanged by an earlier layer"
+                );
                 assert!(!num.is_empty() && !den.is_empty());
             }
         }
+        // a layer's new masters are its square block's columns
+        let used: BTreeSet<&str> = exchanges
+            .iter()
+            .flat_map(|e| e.terms.iter().map(|(m, _, _)| m.as_str()))
+            .filter(|m| layer.new_masters.iter().any(|n| n == m))
+            .collect();
+        assert_eq!(used.len(), layer.new_masters.len(), "{name}: new masters");
+        if full_directory().is_some() || layer.name.starts_with("01-") {
+            // the in-repo fixture's first layer is a subset (one exchange)
+            assert_eq!(used.len(), exchanges.len(), "{name}: B is not square");
+        }
+        gone.extend(old);
     }
     if full_directory().is_some() {
-        assert_eq!(basis.layers[0].1.len(), 31);
+        assert_eq!(basis.layers[0].exchanges.len(), 31);
     }
 }
 
@@ -266,7 +456,11 @@ fn check_new_master_values(only: &[&str]) {
     let catalogue = basis.extended_catalogue(&catalogue()).unwrap();
     let rules = basis.rules(&catalogue, epsilon()).unwrap();
     let source = PMasterSource::new(Some(&catalogue), "master basis test");
-    let olds: Vec<&str> = basis.layers[0].1.iter().map(|e| e.old.as_str()).collect();
+    let olds: Vec<&str> = basis.layers[0]
+        .exchanges
+        .iter()
+        .map(|e| e.old.as_str())
+        .collect();
     let mut checked = 0usize;
     for ((old, value), id) in rules.iter().zip(&olds) {
         if !only.is_empty() && !only.contains(id) {
@@ -368,17 +562,18 @@ fn rotation_round_trips_through_the_inverse_at_points() {
     let catalogue = basis.extended_catalogue(&catalogue()).unwrap();
     let ep = Atom::var(epsilon());
     let mut combination = master(&catalogue, "ggppss_int(1)") * (&ep + Atom::num(3));
-    for (i, (_, exchanges)) in basis.layers.iter().enumerate() {
-        for (j, exchange) in exchanges.iter().enumerate() {
+    for (i, layer) in basis.layers.iter().enumerate() {
+        for (j, exchange) in layer.exchanges.iter().enumerate() {
             combination += master(&catalogue, &exchange.old)
                 * (Atom::num((i + j + 1) as i64) + &ep * &ep / Atom::num((j + 2) as i64));
         }
     }
     let rotated = basis.rotate(&combination, &catalogue, epsilon()).unwrap();
     assert!(
-        !by_master(&rotated).keys().any(|m| basis.layers[0]
-            .1
+        !by_master(&rotated).keys().any(|m| basis
+            .layers
             .iter()
+            .flat_map(|layer| &layer.exchanges)
             .any(|e| m.contains(&format!("{})", catalogue.symbol_of_id(&e.old).unwrap())))),
         "an exchanged master survived the rotation"
     );
@@ -416,6 +611,8 @@ fn rotation_equals_the_reference_on_its_test_vectors() {
             None
         } else if let Some(n) = name.strip_prefix("new[") {
             Some(format!("ggppss_new({})", n.trim_end_matches(']')))
+        } else if let Some(n) = name.strip_prefix("our[") {
+            Some(format!("our({})", n.trim_end_matches(']')))
         } else {
             Some(name.to_owned())
         }

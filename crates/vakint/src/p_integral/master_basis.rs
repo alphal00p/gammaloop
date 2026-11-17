@@ -20,11 +20,17 @@
 //! ```text
 //! MANIFEST.json                              schema vk5l.p-masters-manifest.v1: catalogue_version,
 //!                                            rotation_version (equal), basis_version, layers (apply
-//!                                            order), every file with role, sha256 and bytes
+//!                                            order), optional layer_versions {layer: data_version}
+//!                                            (a layer not listed carries basis_version), every
+//!                                            file with role, sha256 and bytes
 //! original/ggppss_catalogue.<v>.json.gz      the GGPPSS masters and terminal rows (catalogue schema)
 //! pole-bounded/masters.<v>.json.gz           the new masters (schema vakint.p-master-basis-masters.v1:
 //!                                            catalogue master entries + definitions)
-//! basis-change/<NN>-<name>.json.gz           one layer each (schema vakint.p-master-basis-change.v1):
+//! basis-change/<NN>-<name>.json.gz           one layer each (schema vakint.p-master-basis-change.v1;
+//!                                            later layers may exchange masters an earlier one
+//!                                            introduced, and introduce masters of their own,
+//!                                            e.g. `our(i)` of our hep-ph/0601165 exchanges; the
+//!                                            masters file holds the new masters of every layer):
 //!   { "schema", "version": 1, "data_version", "variable": "eps", "dimension": "d = 4 - 2*eps",
 //!     "normalisation": "g-scheme ..", "layer": { "name", "source", "direction", "new_masters",
 //!       "exchanges": [ { "old": "ggppss_int(116)", "terms": [ { "master": "ggppss_new(1)",
@@ -121,6 +127,10 @@ struct Manifest {
     rotation_version: String,
     basis_version: String,
     layers: Vec<String>,
+    /// The data version of a layer when it differs from `basis_version` (a
+    /// layer kept byte-identical when a later one is added).
+    #[serde(default)]
+    layer_versions: BTreeMap<String, String>,
     files: Vec<ManifestFile>,
 }
 
@@ -167,7 +177,6 @@ struct LayerFile {
     source: String,
     #[allow(dead_code)]
     direction: String,
-    #[allow(dead_code)]
     new_masters: Vec<String>,
     exchanges: Vec<ExchangeFile>,
 }
@@ -195,13 +204,21 @@ pub(crate) struct Exchange {
     pub(crate) terms: Vec<(String, Vec<String>, Vec<String>)>,
 }
 
+/// One layer: its name, the masters it introduces, its exchanges.
+#[derive(Debug, Clone)]
+pub(crate) struct Layer {
+    pub(crate) name: String,
+    pub(crate) new_masters: Vec<String>,
+    pub(crate) exchanges: Vec<Exchange>,
+}
+
 /// A parsed basis change (no symbol created yet).
 #[derive(Debug)]
 pub struct PMasterBasisData {
     source_name: String,
     data_version: String,
     sha256: String,
-    pub(crate) layers: Vec<(String, Vec<Exchange>)>,
+    pub(crate) layers: Vec<Layer>,
     masters: serde_json::Value,
     /// The catalogue extended by the new masters, per base catalogue (its
     /// data version and master count).
@@ -296,7 +313,11 @@ impl PMasterBasisData {
                     ),
                 ));
             }
-            if document.data_version != manifest.basis_version
+            let data_version = manifest
+                .layer_versions
+                .get(name)
+                .unwrap_or(&manifest.basis_version);
+            if document.data_version != *data_version
                 || document.variable != "eps"
                 || document.normalisation.split_whitespace().next() != Some("g-scheme")
                 || document.layer.name != *name
@@ -309,7 +330,7 @@ impl PMasterBasisData {
                         document.variable,
                         document.normalisation,
                         document.layer.name,
-                        manifest.basis_version
+                        data_version
                     ),
                 ));
             }
@@ -334,7 +355,11 @@ impl PMasterBasisData {
                     terms,
                 });
             }
-            layers.push((name.clone(), exchanges));
+            layers.push(Layer {
+                name: name.clone(),
+                new_masters: document.layer.new_masters,
+                exchanges,
+            });
         }
         let masters_path = manifest
             .files
@@ -363,6 +388,26 @@ impl PMasterBasisData {
                 ),
             ));
         }
+        let ids: Vec<&str> = masters
+            .masters
+            .as_array()
+            .map(|list| list.iter().filter_map(|m| m["id"].as_str()).collect())
+            .unwrap_or_default();
+        for layer in &layers {
+            if let Some(missing) = layer
+                .new_masters
+                .iter()
+                .find(|id| !ids.contains(&id.as_str()))
+            {
+                return Err(invalid(
+                    source,
+                    format!(
+                        "layer {}: new master {missing} is not in {masters_path}",
+                        layer.name
+                    ),
+                ));
+            }
+        }
         Ok(Self {
             source_name,
             data_version: manifest.basis_version,
@@ -380,7 +425,7 @@ impl PMasterBasisData {
             basis: PMasterBasis::PoleBounded.to_string(),
             data_version: self.data_version.clone(),
             sha256: self.sha256.clone(),
-            layers: self.layers.iter().map(|(name, _)| name.clone()).collect(),
+            layers: self.layers.iter().map(|layer| layer.name.clone()).collect(),
             directory: self.source_name.clone(),
         }
     }
@@ -455,8 +500,8 @@ impl PMasterBasisData {
                 .with(epsilon_atom.to_pattern()))
         };
         let mut rules = Vec::new();
-        for (_, exchanges) in &self.layers {
-            for exchange in exchanges {
+        for layer in &self.layers {
+            for exchange in &layer.exchanges {
                 let old =
                     p_master_symbol().call(&[Atom::var(vk_symbol!(&symbol(&exchange.old)?))][..]);
                 let mut value = Atom::Zero;
@@ -488,9 +533,10 @@ impl PMasterBasisData {
         // (checked by the tests), so a layer is one simultaneous rewrite;
         // consecutive layers are applied one after the other.
         let mut start = 0;
-        for (_, exchanges) in &self.layers {
-            let layer = &rules[start..start + exchanges.len()];
-            start += exchanges.len();
+        for layer in &self.layers {
+            let count = layer.exchanges.len();
+            let layer = &rules[start..start + count];
+            start += count;
             if !layer.iter().any(|(old, _)| contains(&rotated, old)) {
                 continue;
             }
