@@ -637,6 +637,104 @@ pub(crate) fn for_each_summand_chunk(
     flush(&mut chunk, visit)
 }
 
+/// Pieces of [`map_term_local`]: `GAMMALOOP_UV_MAP_PIECE_BYTES` (default 64 MiB).
+fn term_local_piece_bytes() -> usize {
+    static BYTES: LazyLock<usize> = LazyLock::new(|| {
+        std::env::var("GAMMALOOP_UV_MAP_PIECE_BYTES")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(64 << 20)
+    });
+    *BYTES
+}
+
+/// A resource checkpoint of every budget active on this thread (the process RSS
+/// guard of the beta driver), as an error naming `stage`.
+pub(crate) fn guard_checkpoint(stage: &str) -> Result<()> {
+    symbolica::utils::resources::checkpoint()
+        .map_err(|error| color_eyre::eyre::eyre!("resource budget exhausted in {stage}: {error}"))
+}
+
+/// Apply a term-local map `f` to `expression` in pieces, with a resource
+/// checkpoint before every piece.
+///
+/// `f` must commute with sums and products: `f(a + b) = f(a) + f(b)` and
+/// `f(a * b) = f(a) * f(b)` after normalization. A replacement of function or
+/// symbol patterns whose images do not depend on the surrounding term (momentum
+/// routing, edge scaling, the edge-combination substitution) is such a map.
+/// A sum is mapped in chunks of consecutive summands (a summand larger than a
+/// piece is mapped recursively), a product factor by factor, anything else
+/// whole; normalized sums and products are canonical, so the result is the
+/// atom `f(expression)`. The whole-expression map holds the input, its copy
+/// under construction and the normalization buffers at once (the r5 kernel
+/// OOMs); here only one piece is in flight, and a process over its RSS guard
+/// fails this diagram at the next piece instead of growing until the kernel
+/// kills the process.
+pub(crate) fn map_term_local(
+    stage: &str,
+    expression: AtomView<'_>,
+    f: &dyn Fn(AtomView<'_>) -> Atom,
+) -> Result<Atom> {
+    map_term_local_with(stage, expression, term_local_piece_bytes(), f)
+}
+
+pub(crate) fn map_term_local_with(
+    stage: &str,
+    expression: AtomView<'_>,
+    limit: usize,
+    f: &dyn Fn(AtomView<'_>) -> Atom,
+) -> Result<Atom> {
+    guard_checkpoint(stage)?;
+    if expression.get_byte_size() < limit {
+        return Ok(f(expression));
+    }
+    match expression {
+        AtomView::Add(sum) => {
+            let mut accumulated = SumAccumulator::default();
+            let mut chunk = Vec::new();
+            let mut chunk_bytes = 0;
+            let flush =
+                |chunk: &mut Vec<AtomView<'_>>, accumulated: &mut SumAccumulator| -> Result<()> {
+                    if chunk.is_empty() {
+                        return Ok(());
+                    }
+                    guard_checkpoint(stage)?;
+                    let piece = Atom::add_many(chunk.iter().copied());
+                    accumulated.push(f(piece.as_view()));
+                    chunk.clear();
+                    Ok(())
+                };
+            for term in sum.iter() {
+                let bytes = term.get_byte_size();
+                if bytes >= limit {
+                    flush(&mut chunk, &mut accumulated)?;
+                    chunk_bytes = 0;
+                    accumulated.push(map_term_local_with(stage, term, limit, f)?);
+                    continue;
+                }
+                if chunk_bytes + bytes >= limit {
+                    flush(&mut chunk, &mut accumulated)?;
+                    chunk_bytes = 0;
+                }
+                chunk.push(term);
+                chunk_bytes += bytes;
+            }
+            flush(&mut chunk, &mut accumulated)?;
+            guard_checkpoint(stage)?;
+            Ok(accumulated.finish())
+        }
+        AtomView::Mul(product) => {
+            let mut factors = Vec::with_capacity(product.get_nargs());
+            for factor in product.iter() {
+                factors.push(map_term_local_with(stage, factor, limit, f)?);
+            }
+            guard_checkpoint(stage)?;
+            Ok(Atom::mul_many(factors.iter()))
+        }
+        _ => Ok(f(expression)),
+    }
+}
+
 /// A running sum of normalized atoms. Pending summands are merged into the
 /// accumulated sum whenever they outgrow it, so that the unmerged part never
 /// holds much more than the result. A normalized sum is canonical, so the
@@ -869,6 +967,26 @@ mod tests {
             unexpanded.as_view().get_byte_size()
         );
         assert!(expansion_size(unexpanded.as_view(), true) >= unexpanded.as_view().get_byte_size());
+    }
+
+    #[test]
+    fn term_local_map_in_pieces_is_the_whole_map() {
+        use symbolica::id::Replacement;
+        let expression = parse!(
+            "(f(1,x)+2*f(2,y)+3)*(f(1,z)+g(4)+f(1,x)*f(2,x))*h(f(1,x)) + 5*f(1,y)^2 + f(3,x) + (f(1,x)+f(2,x))^3 + f(1,x)*f(1,y)"
+        );
+        let rules = vec![Replacement::new(
+            parse!("f(1,x___)").to_pattern(),
+            parse!("a*f(1,x___)+f(9,x___)").to_pattern(),
+        )];
+        let whole = expression.replace_multiple(&rules);
+        for limit in [1, 8, 32, 64, 128, 1 << 20] {
+            let pieces = map_term_local_with("test", expression.as_view(), limit, &|piece| {
+                piece.replace_multiple(&rules)
+            })
+            .unwrap();
+            assert_eq!(pieces, whole, "limit {limit}");
+        }
     }
 
     #[test]

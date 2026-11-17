@@ -1360,6 +1360,9 @@ impl<'a> Evaluation<'a> {
         let mode = boundary::remainder_boundary_mode()?;
         let remainder = self.remainder(term)?;
         if mode == BoundaryMode::Off {
+            if let Some(result) = self.integrate_streamed(&remainder)? {
+                return Ok(result);
+            }
             return self.integrate(&remainder, remainder.expression()?);
         }
         self.summary.remainders += 1;
@@ -1372,6 +1375,9 @@ impl<'a> Evaluation<'a> {
                 ));
             }
             *self.summary.not_admitted.entry(reason).or_default() += 1;
+            if let Some(result) = self.integrate_streamed(&remainder)? {
+                return Ok(result);
+            }
             return self.integrate(&remainder, remainder.expression()?);
         }
         let errors = self.summary.errors;
@@ -1716,6 +1722,63 @@ impl<'a> Evaluation<'a> {
             ));
         }
         Ok(today)
+    }
+
+    /// `GAMMALOOP_UV_STREAM=on|auto`: integrate the remainder's edge-basis
+    /// contraction piece by piece ([`RStarIntegrand::stream_contracted`]),
+    /// adding up only the integrated pieces; all pieces share one integration
+    /// id (it labels the restored dummy indices of [`RStarIntegrand::integrate`]).
+    /// `None` when the stream does not apply; the caller takes the whole path.
+    fn integrate_streamed(&mut self, remainder: &RStarIntegrand) -> Result<Option<Atom>> {
+        if super::expression::uv_stream() == super::expression::UvStream::Off {
+            return Ok(None);
+        }
+        let id = self.integration_id + 1;
+        let mut settings = self.settings.clone();
+        settings.number_of_terms_in_epsilon_expansion = i64::try_from(remainder.region.loops)?;
+        let started = Instant::now();
+        let channel = super::pint6_dump::ClosureChannel {
+            channel: self.channel.0,
+            taylor_order: i64::from(self.plan.taylor_order),
+            normalisation: self.channel.1,
+        };
+        let degree = usize::try_from(self.plan.taylor_order)?;
+        let (graph, root_edges, reference, auxiliary, vakint, uv_settings, projector) = (
+            self.graph,
+            &self.root_edges,
+            self.reference_mass_squared,
+            &self.auxiliary_mass_squared,
+            self.vakint,
+            self.uv_settings,
+            self.root_projector,
+        );
+        let mut sum = crate::uv::approx::streamed::SumAccumulator::default();
+        let streamed = remainder.stream_contracted(&mut |piece| {
+            let integrated = super::pint6_dump::with_channel(channel.clone(), || {
+                remainder.integrate(
+                    &piece,
+                    graph,
+                    root_edges,
+                    degree,
+                    reference,
+                    auxiliary,
+                    vakint,
+                    uv_settings,
+                    &settings,
+                    id,
+                    projector,
+                )
+            })?;
+            sum.push(integrated);
+            Ok(())
+        })?;
+        if !streamed {
+            return Ok(None);
+        }
+        self.integration_id = id;
+        self.integration_elapsed += started.elapsed();
+        self.summary.seconds_today += started.elapsed().as_secs_f64();
+        Ok(Some(sum.finish()))
     }
 
     fn integrate(&mut self, remainder: &RStarIntegrand, expression: &Atom) -> Result<Atom> {
