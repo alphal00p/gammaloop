@@ -1783,7 +1783,7 @@ anchor = "ci-checks-and-upload:"
 # cachePublication.local selection for both uploads and builds. Independent
 # review cleared the recipe; differing-schedule fixture tests cover both
 # added and removed selected jobs. Scientific/runtime boundaries stay intact.
-digest = "0f8a76ea61d80a7847d9e8d16756e9914e245ae2"
+digest = "73ef172e1e0c601ee1d4413c9b13941c00daa97f"
 
 [[section.note]]
 id = "feynkit-merge-readiness"
@@ -2074,7 +2074,7 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # linnet-render-py's iframe.js to production assets and Spynso's evaluator_horner.py
 # plus FeynKit's installed_squared_amplitude_display.py to compile-time test inputs.
 # The documented source ownership and producer/runtime boundaries are unchanged.
-digest = "9a1fb2070856b1b49a3356f06cb89110d0a3644d"
+digest = "5efb7f8ae06edd47459e3f4e32cc623472a7942b"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
@@ -2157,7 +2157,7 @@ end_anchor = "sortedUnique ="
 # Reviewed 2026-10-25: browser CI declares native fixture and browser-script source
 # ownership, with pinned Chromium/Playwright/AnyWidget/Marimo runtime tools. The
 # separate nextest group reuses per-crate producers; ci.typ records this added coverage.
-digest = "0a568cb5712045aee37d96bfb2f91d3d32b7e9b9"
+digest = "311d8dbf20da058cf60c74c651491629d7eb6ce6"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -2197,7 +2197,7 @@ anchor = 'name = "docs";'
 end_anchor = 'name = "integration";'
 # Reviewed 2026-10-15: The existing documentation test group receives the native-renderer font
 # bundle at runtime; its package and test selection are unchanged.
-digest = "2084c83a58875b3ae7563ef5e4adb7408fec0ccb"
+digest = "6f841f176b4d76719aaaaf4f1a0e32c0ff7eb405"
 
 [[section]]
 id = "documentation"

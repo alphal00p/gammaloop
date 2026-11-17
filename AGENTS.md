@@ -4,6 +4,10 @@ Agents and human contributors follow the same repository guidance. Before making
 changes, read [CONTRIBUTING.typ](CONTRIBUTING.typ) and treat it as authoritative
 for this repository.
 
+When reviewing Cargo manifest changes, check that standalone `feynkit-*` crates
+remain independent of `gammalooprs`. Review workspace-inherited, renamed, and
+transitive dependencies as well as direct entries in each crate's `Cargo.toml`.
+
 Before editing Rust, read the [Rust policy](CONTRIBUTING.typ#rust-style) and
 applicable local guidance. Compliance is mandatory for new and substantially
 modified code. Check the final diff against the policy, including design rules
