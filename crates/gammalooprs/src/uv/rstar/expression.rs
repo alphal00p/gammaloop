@@ -208,8 +208,10 @@ thread_local! {
 }
 
 /// Run `f` as the R* evaluation of a proper UV child (its own complete-graph
-/// R*, nested children included). See [`uv_child_edge_remainder`].
-pub(crate) fn in_uv_child_scope<T>(f: impl FnOnce() -> T) -> T {
+/// R*, nested children included) whose Taylor order is `taylor_order`. See
+/// [`uv_child_edge_remainder`]. A nested child sets its own scope and the
+/// enclosing one is restored afterwards.
+pub(crate) fn in_uv_child_scope<T>(taylor_order: i32, f: impl FnOnce() -> T) -> T {
     // Restored on unwinding too: beta catches a panicking diagram and the worker
     // thread goes on, so a scope left set would treat later root remainders as
     // children.
@@ -220,37 +222,65 @@ pub(crate) fn in_uv_child_scope<T>(f: impl FnOnce() -> T) -> T {
             UV_CHILD_SCOPE.with(|scope| scope.set(previous));
         }
     }
-    let _restore = Restore(UV_CHILD_SCOPE.with(|scope| scope.replace(true)));
+    let edge_basis = match *UV_CHILD_EDGE_REMAINDER {
+        ChildEdgeRemainder::Off => false,
+        ChildEdgeRemainder::DegreeZero => taylor_order <= 0,
+        ChildEdgeRemainder::All => true,
+    };
+    let _restore = Restore(UV_CHILD_SCOPE.with(|scope| scope.replace(edge_basis)));
     f()
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ChildEdgeRemainder {
+    Off,
+    /// `1`: only logarithmically divergent (Taylor order 0) children. Their
+    /// open-slot remainders collapse in the edge basis; children of degree >= 1
+    /// need the boundary-momentum dependence in the outer Taylor step, where
+    /// the edge-kept form is slower (FIX1-VALIDATION.md section 5).
+    DegreeZero,
+    /// `all`: every child, as before.
+    All,
+}
+
+static UV_CHILD_EDGE_REMAINDER: LazyLock<ChildEdgeRemainder> = LazyLock::new(|| {
+    match std::env::var("GAMMALOOP_UV_CHILD_EDGE_REMAINDER").as_deref().map(str::trim) {
+        Ok("1") => ChildEdgeRemainder::DegreeZero,
+        Ok("all") => ChildEdgeRemainder::All,
+        _ => ChildEdgeRemainder::Off,
+    }
+});
 
 #[cfg(test)]
 #[test]
 fn uv_child_scope_is_restored_when_the_child_panics() {
     assert!(!UV_CHILD_SCOPE.with(|scope| scope.get()));
+    // The switch is read once; without it the scope stays false, which is what
+    // the restoration has to preserve either way.
+    let inside = *UV_CHILD_EDGE_REMAINDER != ChildEdgeRemainder::Off;
+    UV_CHILD_SCOPE.with(|scope| scope.set(true));
     let unwound = std::panic::catch_unwind(|| {
-        in_uv_child_scope(|| {
-            assert!(UV_CHILD_SCOPE.with(|scope| scope.get()));
+        in_uv_child_scope(0, || {
+            assert_eq!(UV_CHILD_SCOPE.with(|scope| scope.get()), inside);
             panic!("child integration failed");
         })
     });
     assert!(unwound.is_err());
-    assert!(!UV_CHILD_SCOPE.with(|scope| scope.get()));
-    assert_eq!(in_uv_child_scope(|| UV_CHILD_SCOPE.with(|scope| scope.get())), true);
+    assert!(UV_CHILD_SCOPE.with(|scope| scope.get()));
+    UV_CHILD_SCOPE.with(|scope| scope.set(false));
+    assert!(!in_uv_child_scope(0, || false));
     assert!(!UV_CHILD_SCOPE.with(|scope| scope.get()));
 }
 
-/// `GAMMALOOP_UV_CHILD_EDGE_REMAINDER=1` (opt-in): inside an R* child, the
-/// ordinary remainders are contracted in the edge basis, exactly as
+/// `GAMMALOOP_UV_CHILD_EDGE_REMAINDER=1|all` (opt-in): inside an R* child of
+/// Taylor order 0 (`1`) or inside every R* child (`all`), the ordinary
+/// remainders are contracted in the edge basis, exactly as
 /// `GAMMALOOP_EDGE_CONTRACTION=remainder` does everywhere. A child keeps its
 /// boundary slots open, and the edge-basis contraction of those open-index
 /// remainders is much cheaper; the closed root keeps the loop basis, where
 /// the edge basis is slower. Any other value or unset: unchanged.
 fn uv_child_edge_remainder() -> bool {
-    static ON: LazyLock<bool> = LazyLock::new(|| {
-        std::env::var("GAMMALOOP_UV_CHILD_EDGE_REMAINDER").is_ok_and(|value| value.trim() == "1")
-    });
-    *ON && UV_CHILD_SCOPE.with(|scope| scope.get())
+    UV_CHILD_SCOPE.with(|scope| scope.get())
 }
 
 /// Whether hard components keep edge momenta.
