@@ -27,6 +27,10 @@
 //! sector (one, one or three pairings), no gamma5/projector/Levi-Civita
 //! symbol. Anything else declines with a reason and the caller uses today's
 //! path.
+//!
+//! Fail-closed in production ([`guarded`]): an error, a panic or an exhausted
+//! resource budget anywhere in the closed computation declines the term
+//! (`error:..`, `panic:..`, `budget`), and today's path computes it.
 
 use std::sync::LazyLock;
 
@@ -72,6 +76,124 @@ pub fn closed_mode() -> ClosedMode {
     *MODE
 }
 
+/// `GAMMALOOP_IR_HARD_ZERO_TEST_BYTES` (default 4 MiB): coefficients up to
+/// this size are tested for a hidden zero (random point, then expansion) and
+/// dropped. Larger ones are kept untested, as today's path keeps its
+/// zero-coefficient insertions: a zero coefficient contributes zero.
+fn zero_test_bytes() -> usize {
+    static BYTES: LazyLock<usize> = LazyLock::new(|| {
+        std::env::var("GAMMALOOP_IR_HARD_ZERO_TEST_BYTES")
+            .ok()
+            .and_then(|value| value.trim().parse().ok())
+            .unwrap_or(4 << 20)
+    });
+    *BYTES
+}
+
+/// `GAMMALOOP_IR_HARD_BUDGET_GIB` (default 24): the process RSS may grow by
+/// this much over its value at the start of one closed term before the term
+/// declines (`budget`). `0` keeps only the outer (process) budget.
+pub(super) fn budget_extra_bytes() -> Option<u64> {
+    static BYTES: LazyLock<Option<u64>> = LazyLock::new(|| {
+        let gib: f64 = std::env::var("GAMMALOOP_IR_HARD_BUDGET_GIB")
+            .ok()
+            .and_then(|value| value.trim().parse().ok())
+            .unwrap_or(24.0);
+        (gib > 0.0).then(|| (gib * (1u64 << 30) as f64) as u64)
+    });
+    *BYTES
+}
+
+/// A decline reason without whitespace (one token of the `IR_CLOSED` line).
+fn reason_token(prefix: &str, message: &str) -> String {
+    let token = message
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .chars()
+        .map(|c| if c.is_whitespace() { '_' } else { c })
+        .take(160)
+        .collect::<String>();
+    format!("{prefix}:{token}")
+}
+
+/// Runs one closed term fail-closed under a scoped resource budget
+/// (`max_process_rss_bytes = limit`; a nested budget never relaxes an outer
+/// one), as `simplify_hard_taylor_or_keep` does for today's contraction:
+/// - an exhausted budget (idenso's/spenso's `resource budget exhausted`
+///   panics, or an error carrying a `ResourceLimitError`) declines with
+///   `budget`, after the freed pages are returned (`release`);
+/// - any other error or panic declines with `error:..` / `panic:..`.
+///
+/// The caller then computes the term on today's path, unchanged.
+pub(super) fn guarded<T>(
+    limit: Option<u64>,
+    release: Option<fn()>,
+    work: impl FnOnce() -> Result<std::result::Result<T, String>>,
+) -> std::result::Result<T, String> {
+    use symbolica::utils::resources::{ResourceBudget, ResourceLimitError, ResourceLimits};
+    let budget = ResourceBudget::new(ResourceLimits {
+        max_process_rss_bytes: limit,
+        ..ResourceLimits::default()
+    });
+    let started = std::time::Instant::now();
+    let attempt = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| budget.run(work)));
+    let (message, panicked, limit_error) = match attempt {
+        Ok(Ok(outcome)) => return outcome,
+        Ok(Err(error)) => {
+            let limit_error = error
+                .chain()
+                .any(|cause| cause.downcast_ref::<ResourceLimitError>().is_some());
+            (format!("{error:#}"), false, limit_error)
+        }
+        Err(payload) => {
+            let message = payload
+                .downcast_ref::<String>()
+                .cloned()
+                .or_else(|| payload.downcast_ref::<&str>().map(|text| (*text).to_owned()))
+                .unwrap_or_default();
+            drop(payload);
+            (message, true, false)
+        }
+    };
+    let exhausted = limit_error || message.contains("resource budget exhausted");
+    let outcome = if exhausted {
+        "budget"
+    } else if panicked {
+        "panic"
+    } else {
+        "error"
+    };
+    eprintln!(
+        "IR_CLOSED_GUARD outcome={outcome} after={:.1}s limit_bytes={} reason={}",
+        started.elapsed().as_secs_f64(),
+        limit.map_or_else(|| "none".to_owned(), |bytes| bytes.to_string()),
+        message.lines().next().unwrap_or_default(),
+    );
+    if exhausted {
+        // Return the aborted frontier's pages before today's path runs (the
+        // allocator keeps freed memory).
+        if let Some(release) = release {
+            release();
+            std::thread::sleep(std::time::Duration::from_millis(1500));
+        }
+        return Err(outcome.into());
+    }
+    Err(reason_token(outcome, &message))
+}
+
+/// Whether `coefficient` is a hidden zero to drop. Tested only up to `limit`
+/// bytes (larger ones are kept and counted in `zero_test_skipped`): a nonzero
+/// value at the random point proves nonzero; only a zero value pays for the
+/// exact expansion.
+fn droppable_zero(coefficient: &Atom, limit: usize, stats: &mut ClosedStats) -> bool {
+    if coefficient.as_view().get_byte_size() > limit {
+        stats.zero_test_skipped += 1;
+        return false;
+    }
+    random_point(coefficient).is_zero() && coefficient.expand().is_zero()
+}
+
 /// Counts of one closed evaluation, for the `IR_CLOSED` line.
 #[derive(Debug, Default)]
 pub struct ClosedStats {
@@ -90,6 +212,8 @@ pub struct ClosedStats {
     pub uncertified: usize,
     /// Moments whose coefficient expands to zero, dropped before the quotient.
     pub dropped_zero: usize,
+    /// Coefficients above `GAMMALOOP_IR_HARD_ZERO_TEST_BYTES`, kept untested.
+    pub zero_test_skipped: usize,
 }
 
 /// A slot of a sector tensor: an open slot of the hard part, or the
@@ -478,10 +602,9 @@ pub(super) fn closed_moments(
             if coefficient.is_zero() {
                 continue;
             }
-            // Zero coefficients that are not literally zero (equal channels):
-            // a nonzero value at the random point proves nonzero; only a zero
-            // value pays for the exact expansion.
-            if random_point(&coefficient).is_zero() && coefficient.expand().is_zero() {
+            // Zero coefficients that are not literally zero (equal channels),
+            // tested below the size limit only.
+            if droppable_zero(&coefficient, zero_test_bytes(), stats) {
                 stats.dropped_zero += 1;
                 continue;
             }
@@ -496,9 +619,8 @@ pub(super) fn closed_moments(
     }
     // The sum over sectors can cancel as well (equal insertions summed).
     let before = moments.len();
-    moments.retain(|(coefficient, _)| {
-        !(random_point(coefficient).is_zero() && coefficient.expand().is_zero())
-    });
+    let limit = zero_test_bytes();
+    moments.retain(|(coefficient, _)| !droppable_zero(coefficient, limit, stats));
     stats.dropped_zero += before - moments.len();
     Ok(Ok(moments))
 }
@@ -711,6 +833,79 @@ mod tests {
             * Atom::var(idenso::dirac::AGS.gamma5);
         let (moments, _) = closed(&odd, &[4], 0)?;
         assert_eq!(moments.expect_err("parity odd"), "parity_odd");
+        Ok(())
+    }
+
+    /// One open root slot rho at order 1 (a root leg on the hard part; its
+    /// partner ends in the insertion Q_a(rho)), and three open slots at
+    /// order 1 (the 69327 shape: 3 Lorentz legs, omega = 1, rank 4).
+    #[test]
+    fn open_root_slots_at_order_one() -> Result<()> {
+        test_initialise()?;
+        let (mu, nu, rho) = (slot(10), slot(11), slot(12));
+        let k = vector(0);
+        let one = indexed(0, &rho) * dot(&k, &vector(4)) + indexed(4, &rho) * dot(&k, &k)
+            + indexed(0, &rho) * dot(&k, &k);
+        let stats = assert_same(&one, &[4], &[0], 1)?;
+        assert_eq!(stats.slots, 1);
+        let three = indexed(0, &mu) * indexed(0, &nu) * indexed(0, &rho) * dot(&k, &vector(4))
+            + function!(ETS.metric, &mu, &nu) * indexed(4, &rho) * dot(&k, &k)
+            + function!(ETS.metric, &nu, &rho) * indexed(0, &mu) * dot(&k, &vector(5))
+            + function!(ETS.metric, &mu, &rho) * indexed(0, &nu) * dot(&k, &k);
+        let stats = assert_same(&three, &[4, 5], &[0], 1)?;
+        assert_eq!(stats.slots, 3);
+        assert!(stats.closures >= 3);
+        Ok(())
+    }
+
+    /// The zero test runs only below its size limit; above it a hidden zero
+    /// is kept (as today's path keeps it) and counted.
+    #[test]
+    fn zero_test_respects_its_size_limit() -> Result<()> {
+        test_initialise()?;
+        let x = Atom::var(symbol!("gammalooprs::ir_closed_test_x"));
+        let hidden = (&x + 1).pow(2) - &x * &x - &x * 2 - 1;
+        assert!(!hidden.is_zero());
+        let mut stats = ClosedStats::default();
+        assert!(droppable_zero(&hidden, 1 << 20, &mut stats));
+        assert!(!droppable_zero(&(&x + 1), 1 << 20, &mut stats));
+        assert!(!droppable_zero(&hidden, 1, &mut stats));
+        assert_eq!(stats.zero_test_skipped, 1);
+        Ok(())
+    }
+
+    /// The guard declines on an exhausted budget (panic or error), on any
+    /// other error or panic, and passes outcomes through unchanged.
+    #[test]
+    fn guard_declines_fail_closed() -> Result<()> {
+        use symbolica::utils::resources::{ResourceLimitError, checkpoint};
+        let passed: std::result::Result<u8, String> = guarded(None, None, || Ok(Ok(7)));
+        assert_eq!(passed, Ok(7));
+        let declined: std::result::Result<u8, String> =
+            guarded(None, None, || Ok(Err("slots:5".to_owned())));
+        assert_eq!(declined, Err("slots:5".to_owned()));
+        let budget: std::result::Result<u8, String> = guarded(None, None, || {
+            panic!("resource budget exhausted in a factorized contraction: test")
+        });
+        assert_eq!(budget, Err("budget".to_owned()));
+        // A real RSS budget of one byte: the first checkpoint fails.
+        let real: std::result::Result<u8, String> = guarded(Some(1), None, || {
+            checkpoint().map_err(eyre::Report::new)?;
+            Ok(Ok(0))
+        });
+        assert_eq!(real, Err("budget".to_owned()));
+        let typed: std::result::Result<u8, String> = guarded(None, None, || {
+            Err(eyre::Report::new(ResourceLimitError::MonitorUnavailable {
+                resource: "process RSS",
+                message: "test".into(),
+            }))
+        });
+        assert_eq!(typed, Err("budget".to_owned()));
+        let error: std::result::Result<u8, String> =
+            guarded(None, None, || Err(eyre!("taylor failed here")));
+        assert_eq!(error, Err("error:taylor_failed_here".to_owned()));
+        let panic: std::result::Result<u8, String> = guarded(None, None, || panic!("boom"));
+        assert_eq!(panic, Err("panic:boom".to_owned()));
         Ok(())
     }
 }
