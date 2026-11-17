@@ -204,44 +204,95 @@ docs-check:
     cargo run --locked -p alphal00p-docs-catalogs --features gammaloop-reference --bin alphal00p-docs-gammaloop-reference -- --check
     cargo run --locked -p alphal00p-docs-catalogs --features vakint-reference --bin alphal00p-docs-vakint-reference -- --check
     cargo run --locked -p alphal00p-docs-python-exporter --features gammaloop -- gammaloop-python docs/api/python/gammaloop-python.pyi --check
-    cargo run --locked -p alphal00p-docs-python-exporter --features linnet -- linnet-py docs/api/python/linnet-py.pyi --check
+    cargo run --locked -p alphal00p-docs-python-exporter --features linnet -- linnet-graph docs/api/python/linnet-graph.pyi --check
     cargo run --locked -p alphal00p-docs-python-exporter --features spenso -- spynso3 docs/api/python/spynso3.pyi --check
     cargo run --locked -p alphal00p-docs-python-exporter --features idenso -- idenso-community docs/api/python/idenso-community.pyi --check
     cargo run --locked -p alphal00p-docs-python-exporter --features vakint -- vakint-community docs/api/python/vakint-community.pyi --check
     cargo test --locked -p alphal00p-docs-python-exporter
     cargo test --locked -p alphal00p-docs-python-exporter --features gammaloop gammaloop_runtime_surface_and_signatures_match_the_docs_stub
+    cargo test --locked -p alphal00p-docs-python-exporter --features linnet linnet_package_and_docs_share_the_typed_stub_info_surface
     cargo test --locked -p alphal00p-docs-examples
     cargo run --locked -p alphal00p-docs-builder -- check
     just docs-svg-assets-check
-    just docs-linnet-python-check
+    just docs-linnet-graph-check
 
 # Render the front-page tour to target/showcase/ (needs Node, Playwright's Chromium, and ffmpeg).
 showcase-video *ARGS:
     node scripts/render-showcase-video.mjs {{ ARGS }}
 
-# Build Linnet's extension and compare its real import surface with the checked-in stub.
-docs-linnet-python-check:
+# Install the compiled Community graph module and run its native Python suites.
+docs-linnet-graph-check:
     #!/usr/bin/env bash
     set -euo pipefail
-
-    temp_base=${TMPDIR:-/tmp}
-    test_root=$(mktemp -d "$temp_base/alphal00p-docs-linnet-python.XXXXXX")
-    cleanup() {
-        case "$test_root" in
-            "$temp_base"/alphal00p-docs-linnet-python.*)
-                rm -rf -- "$test_root"
-                ;;
-        esac
+    root="{{ justfile_directory() }}"
+    scratch=$(mktemp -d)
+    trap 'rm -rf -- "$scratch"' EXIT
+    cd "$scratch"
+    mkdir -p src python/symbolica/community
+    cp -R "$root/crates/linnet-py/python/symbolica/community/graph" python/symbolica/community/
+    touch python/symbolica/community/__init__.py
+    echo 'from .core import *' >python/symbolica/__init__.py
+    cat >pyproject.toml <<'TOML'
+    [build-system]
+    requires = ["maturin>=1,<2"]
+    build-backend = "maturin"
+    [project]
+    name = "symbolica"
+    version = "3.0.1"
+    [tool.maturin]
+    module-name = "symbolica.core"
+    python-source = "python"
+    TOML
+    cp "$root/Cargo.lock" Cargo.lock
+    python3 - "$root" <<'PYTHON'
+    import json, pathlib, sys, tomllib
+    root = pathlib.Path(sys.argv[1])
+    workspace = tomllib.loads((root / "Cargo.toml").read_text())
+    with open("Cargo.toml", "w") as fp:
+        fp.write('[workspace]\n[package]\nname="linnet-graph-host"\nversion="0.1.0"\nedition="2024"\n[lib]\nname="core"\ncrate-type=["cdylib"]\n[dependencies]\n')
+        fp.write('linnet-py = {path=' + json.dumps(str(root / "crates/linnet-py")) + '}\n')
+        fp.write('pyo3 = {version="0.28",features=["abi3-py310","extension-module"]}\nsymbolica = {version="=3.0.1",default-features=false,features=["python_export","integer-gmp","float-mpfr"]}\n')
+        fp.write('[patch.crates-io]\n')
+        for name, props in workspace.get('patch', {}).get('crates-io', {}).items():
+            props = dict(props)
+            if 'path' in props:
+                props['path'] = str(root / props['path'])
+            fp.write(name + ' = {' + ', '.join(k + '=' + json.dumps(v) for k, v in props.items()) + '}\n')
+    PYTHON
+    cat >src/lib.rs <<'RUST'
+    use pyo3::{prelude::*, wrap_pyfunction};
+    use pyo3::types::PyModule;
+    use symbolica::api::python::{create_symbolica_module, SymbolicaCommunityModule};
+    #[pyfunction]
+    fn initialize_module(py: Python) -> PyResult<()> { linnet_py::GraphModule::initialize(py) }
+    #[pymodule]
+    fn core(module: &Bound<'_, PyModule>) -> PyResult<()> {
+        create_symbolica_module(module)?;
+        let graph = PyModule::new(module.py(), "graph_native")?;
+        graph.add_function(wrap_pyfunction!(initialize_module, &graph)?)?;
+        linnet_py::GraphModule::register_module(&graph)?;
+        module.add_submodule(&graph)?;
+        module.py().import("sys")?.getattr("modules")?.set_item("symbolica.community.graph_native", graph)?;
+        Ok(())
     }
-    trap cleanup EXIT
-
-    python_bin=${PYTHON_BIN_PATH:-python3}
-    uv venv "$test_root/venv" --python "$python_bin"
-    VIRTUAL_ENV="$test_root/venv" maturin develop --uv --locked --manifest-path crates/linnet-py/Cargo.toml --features extension-module,abi3
-    "$test_root/venv/bin/python" -m unittest \
-      crates/linnet-py/tests/test_basic.py \
-      crates/linnet-py/tests/test_wasm.py \
-      crates/linnet-py/tests/test_streaming.py
+    RUST
+    cargo metadata --format-version 1 > /dev/null
+    python3 - "$root/Cargo.lock" <<'PYTHON'
+    import pathlib, sys, tomllib
+    def packages(file):
+        return {(p["name"], p["version"], p["source"]) for p in tomllib.loads(pathlib.Path(file).read_text())["package"] if "source" in p}
+    extra = packages("Cargo.lock") - packages(sys.argv[1])
+    if extra:
+        raise SystemExit(f"test host resolved dependencies outside the workspace lock: {sorted(extra)}")
+    PYTHON
+    uv venv venv --python "${PYTHON_BIN_PATH:-python3}"
+    maturin build --locked --out wheels
+    uv pip install --python venv/bin/python --no-deps wheels/*.whl
+    python_check="$scratch/venv/bin/python"
+    cd "$root"
+    for suite in test_basic.py test_wasm.py test_streaming.py; do
+        "$python_check" -m unittest discover -s crates/linnet-py/tests -p "$suite"
+    done
 
 # Regenerate source-backed CLI/settings and topology/dependency snapshots.
 docs-generated:
