@@ -1326,15 +1326,26 @@ impl RStarIntegrand {
         if !self.combination_ids().is_empty() {
             return Ok(Err("kept_edges".into()));
         }
-        super::closed::closed_moments(
-            &self.routed,
-            &self.soft_edges,
-            degree,
-            // One root scope: idenso certifies a closed scalar result
-            // (frontier certificate), read before the uncook.
-            &|expression| Self::simplify_view_certified(expression.as_view()),
-            stats,
-        )
+        // Fail-closed under a scoped budget (GAMMALOOP_IR_HARD_BUDGET_GIB over
+        // the RSS now): an exhausted budget, an error or a panic declines the
+        // term to today's path.
+        let limit = super::closed::budget_extra_bytes()
+            .and_then(|extra| process_rss_bytes().map(|rss| rss + extra));
+        Ok(super::closed::guarded(
+            limit,
+            MEMORY_RELEASE.get().copied(),
+            || {
+                super::closed::closed_moments(
+                    &self.routed,
+                    &self.soft_edges,
+                    degree,
+                    // One root scope: idenso certifies a closed scalar result
+                    // (frontier certificate), read before the uncook.
+                    &|expression| Self::simplify_view_certified(expression.as_view()),
+                    stats,
+                )
+            },
+        ))
     }
 
     /// Put the bare hard term and its local counterterms in the same covariant
