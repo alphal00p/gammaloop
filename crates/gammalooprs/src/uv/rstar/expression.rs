@@ -344,6 +344,63 @@ fn uv_child_edge_remainder() -> bool {
     UV_CHILD_SCOPE.with(|scope| scope.get())
 }
 
+/// `GAMMALOOP_UV_STREAM=off|on|auto` (default off): how the edge-basis
+/// remainder of a degree-0 UV child (`GAMMALOOP_UV_CHILD_EDGE_REMAINDER=1`) is
+/// integrated.
+///
+/// - `off`: contract the whole remainder, substitute the edge combinations
+///   back, integrate the result (today's path);
+/// - `on`: stream it ([`RStarIntegrand::stream_contracted`]): split the input
+///   product into pieces, then contract, substitute and integrate one piece at
+///   a time and add up only the integrated results;
+/// - `auto`: contract the first piece, extrapolate the emitted bytes to all
+///   pieces and stream only when that estimate reaches
+///   `GAMMALOOP_UV_STREAM_MIN_BYTES` (default 256 MiB); otherwise take the
+///   whole path (the first piece's contraction is the only extra work).
+///
+/// `GAMMALOOP_UV_STREAM_PIECES` (default 81) is the target number of pieces.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum UvStream {
+    Off,
+    On,
+    Auto,
+}
+
+pub(super) fn uv_stream() -> UvStream {
+    static MODE: LazyLock<UvStream> = LazyLock::new(|| {
+        match std::env::var("GAMMALOOP_UV_STREAM")
+            .as_deref()
+            .map(str::trim)
+        {
+            Ok("on") | Ok("1") => UvStream::On,
+            Ok("auto") => UvStream::Auto,
+            _ => UvStream::Off,
+        }
+    });
+    *MODE
+}
+
+fn uv_stream_pieces() -> usize {
+    static PIECES: LazyLock<usize> = LazyLock::new(|| {
+        std::env::var("GAMMALOOP_UV_STREAM_PIECES")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .filter(|&pieces: &usize| pieces >= 2)
+            .unwrap_or(81)
+    });
+    *PIECES
+}
+
+fn uv_stream_min_bytes() -> usize {
+    static BYTES: LazyLock<usize> = LazyLock::new(|| {
+        std::env::var("GAMMALOOP_UV_STREAM_MIN_BYTES")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(256 << 20)
+    });
+    *BYTES
+}
+
 /// Whether hard components keep edge momenta.
 fn keeps_hard() -> bool {
     edge_contraction("keep") || edge_contraction("keep_hard") || edge_contraction("auto")
@@ -1900,14 +1957,17 @@ impl RStarIntegrand {
         let routed = if self.region.loops == 0 {
             Cow::Borrowed(expression)
         } else {
-            Cow::Owned(
-                expression.replace_multiple(self.graph.normal_emr_replacement(
-                    &self.region.remaining,
-                    &self.basis,
-                    &[W_.x___],
-                    HedgePair::is_paired,
-                )),
-            )
+            let routing = self.graph.normal_emr_replacement(
+                &self.region.remaining,
+                &self.basis,
+                &[W_.x___],
+                HedgePair::is_paired,
+            );
+            Cow::Owned(streamed::map_term_local(
+                "the outer-Taylor routing",
+                expression.as_view(),
+                &|piece| piece.replace_multiple(&routing),
+            )?)
         };
         let allowed_edges = self
             .basis
@@ -1937,11 +1997,17 @@ impl RStarIntegrand {
         let taylor = TaylorExpansion::new(parameter, degree);
         // Each intermediate is dropped as soon as its successor exists: on the
         // largest diagrams each of them is hundreds of megabytes.
-        let scaled = Self::scale_edges(&routed, root_edges, parameter);
+        let scaled = streamed::map_term_local(
+            "the outer-Taylor edge scaling",
+            routed.as_view(),
+            &|piece| Self::scale_edges_view(piece, root_edges, parameter),
+        )?;
         drop(routed);
+        streamed::guard_checkpoint("the outer-Taylor mass compensation")?;
         let compensated =
             taylor.compensate_mass(&scaled, reference_mass_squared, auxiliary_mass_squared);
         drop(scaled);
+        streamed::guard_checkpoint("the outer-Taylor expansion")?;
         // Instrumentation (opt-in, no value depends on it): the P_i x D_j
         // shape of this product, reported by the next to_vakint call.
         if self.region.loops != 0 && counts::enabled() {
@@ -2087,6 +2153,16 @@ impl RStarIntegrand {
     }
 
     pub(super) fn scale_edges(expression: &Atom, edges: &[EdgeIndex], parameter: Symbol) -> Atom {
+        Self::scale_edges_view(expression.as_view(), edges, parameter)
+    }
+
+    /// [`Self::scale_edges`] of a view (a term-local map, see
+    /// [`streamed::map_term_local`]).
+    pub(super) fn scale_edges_view(
+        expression: AtomView<'_>,
+        edges: &[EdgeIndex],
+        parameter: Symbol,
+    ) -> Atom {
         let replacements = edges
             .iter()
             .map(|edge| {
@@ -2097,14 +2173,10 @@ impl RStarIntegrand {
         expression.replace_multiple(&replacements)
     }
 
-    /// [`Self::simplify`] with every momentum linear combination in an index
-    /// slot (an edge momentum after routing, `Σ c_e Q(e, slot)`) replaced by
-    /// one independent vector before the contraction, and substituted back
-    /// afterwards, factor by factor and without expanding. Contraction is
-    /// linear in each vector, so this is the same tensor expression; the
-    /// contraction no longer distributes the sums of the loop-momentum basis
-    /// (on 27105's hard Taylor input: 47 s and 2.7 GB instead of > 90 GiB).
-    pub(super) fn simplify_edge_basis(expression: &Atom) -> Result<Atom> {
+    /// The edge-momentum combinations of `expression` (sums `Σ c_e Q(e, slot)`
+    /// in an index slot) renamed to independent vectors, and the rules that
+    /// substitute them back; `None` when there is no combination.
+    fn edge_rename(expression: &Atom) -> Option<(Atom, Vec<Replacement>)> {
         const OFFSET: i64 = 2_000_000;
         let head = GS.emr_mom;
         let term_of = |term: AtomView<'_>| -> Option<(i64, Atom, Vec<Atom>)> {
@@ -2161,9 +2233,8 @@ impl RStarIntegrand {
                 .finish();
         });
         if combinations.is_empty() {
-            return Self::simplify_view(expression.as_view());
+            return None;
         }
-        let simplified = Self::simplify_view(renamed.as_view())?;
         let rules = combinations
             .iter()
             .map(|(terms, id)| {
@@ -2180,7 +2251,172 @@ impl RStarIntegrand {
                 Replacement::new(pattern.to_pattern(), image.to_pattern())
             })
             .collect::<Vec<_>>();
-        Ok(simplified.replace_multiple(&rules))
+        Some((renamed, rules))
+    }
+
+    /// Substitute the edge combinations back ([`Self::edge_rename`]): a
+    /// term-local replacement, applied in checkpointed pieces.
+    fn edge_substitute(expression: AtomView<'_>, rules: &[Replacement]) -> Result<Atom> {
+        streamed::map_term_local("the edge-combination substitution", expression, &|piece| {
+            piece.replace_multiple(rules)
+        })
+    }
+
+    /// [`Self::simplify`] with every momentum linear combination in an index
+    /// slot (an edge momentum after routing, `Σ c_e Q(e, slot)`) replaced by
+    /// one independent vector before the contraction, and substituted back
+    /// afterwards, factor by factor and without expanding. Contraction is
+    /// linear in each vector, so this is the same tensor expression; the
+    /// contraction no longer distributes the sums of the loop-momentum basis
+    /// (on 27105's hard Taylor input: 47 s and 2.7 GB instead of > 90 GiB).
+    pub(super) fn simplify_edge_basis(expression: &Atom) -> Result<Atom> {
+        let Some((renamed, rules)) = Self::edge_rename(expression) else {
+            return Self::simplify_view(expression.as_view());
+        };
+        let simplified = Self::simplify_view(renamed.as_view())?;
+        drop(renamed);
+        Self::edge_substitute(simplified.as_view(), &rules)
+    }
+
+    /// `GAMMALOOP_UV_STREAM=on|auto` ([`uv_stream`]): this remainder's
+    /// edge-basis contraction as a stream of pieces, each handed to `sink`
+    /// contracted and substituted, never summed here.
+    ///
+    /// The routed remainder of a degree-0 UV child is a small product (a few
+    /// KB) of Feynman-rule factors with several momentum sums, whose
+    /// contraction distributes into GBs (nf0 32: 10 KB → 4 GB, 40 GB peak,
+    /// then > 64 GB in the substitution). The sums with the most terms are split
+    /// into their terms until there are at least `GAMMALOOP_UV_STREAM_PIECES`
+    /// pieces (the cartesian product of the chosen terms times the other
+    /// factors). Contraction, substitution and every later step of the
+    /// integration are linear, and a normalized sum is canonical, so the sum of
+    /// the integrated pieces is the integrated whole.
+    ///
+    /// Returns false, having emitted nothing, when the stream does not apply:
+    /// switch off, not a degree-0 UV child in the edge basis, nothing to split,
+    /// the first piece introduces a dummy index, or (`auto`) the extrapolated
+    /// output stays below `GAMMALOOP_UV_STREAM_MIN_BYTES`. A later piece that
+    /// introduces a dummy index is an error (never observed).
+    pub(super) fn stream_contracted(
+        &self,
+        sink: &mut dyn FnMut(Atom) -> Result<()>,
+    ) -> Result<bool> {
+        let mode = uv_stream();
+        if mode == UvStream::Off
+            || !uv_child_edge_remainder()
+            || keeps_remainder()
+            || self.contracted.get().is_some()
+        {
+            return Ok(false);
+        }
+        let _algebra = StageSpan::new("gamma.remainder.algebra");
+        let renamed = Self::edge_rename(&self.routed);
+        let input = match &renamed {
+            Some((renamed, _)) => renamed.as_view(),
+            None => self.routed.as_view(),
+        };
+        let rules = renamed
+            .as_ref()
+            .map(|(_, rules)| rules.as_slice())
+            .unwrap_or(&[]);
+        let AtomView::Mul(product) = input else {
+            return Ok(false);
+        };
+        let factors = product.iter().collect::<Vec<_>>();
+        let mut sums = factors
+            .iter()
+            .enumerate()
+            .filter_map(|(i, f)| match f {
+                AtomView::Add(sum) if sum.get_nargs() > 1 => Some((i, sum.get_nargs())),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        sums.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        let target = uv_stream_pieces();
+        let mut chosen = Vec::new();
+        let mut count = 1usize;
+        for (index, terms) in sums {
+            if count >= target {
+                break;
+            }
+            chosen.push(index);
+            count *= terms;
+        }
+        if chosen.is_empty() {
+            return Ok(false);
+        }
+        let choices = chosen
+            .iter()
+            .map(|&i| match factors[i] {
+                AtomView::Add(sum) => sum.iter().collect::<Vec<_>>(),
+                _ => unreachable!("chosen factors are sums"),
+            })
+            .collect::<Vec<_>>();
+        let rest = Atom::mul_many(
+            factors
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| !chosen.contains(i))
+                .map(|(_, f)| *f),
+        );
+        let started = Instant::now();
+        let contract_piece = |digits: &[usize]| -> Result<Option<Atom>> {
+            let mut piece = rest.clone();
+            for (terms, &digit) in choices.iter().zip(digits) {
+                piece = piece * terms[digit].to_owned();
+            }
+            let contracted = Self::simplify_view(piece.as_view())?;
+            if streamed::introduces_dummies(piece.as_view(), contracted.as_view()) {
+                return Ok(None);
+            }
+            drop(piece);
+            Ok(Some(if rules.is_empty() {
+                contracted
+            } else {
+                Self::edge_substitute(contracted.as_view(), rules)?
+            }))
+        };
+        let mut digits = vec![0usize; choices.len()];
+        let Some(first) = contract_piece(&digits)? else {
+            eprintln!("UV_STREAM declined=dummy loops={}", self.region.loops);
+            return Ok(false);
+        };
+        let estimate = first.as_view().get_byte_size().saturating_mul(count);
+        if mode == UvStream::Auto && estimate < uv_stream_min_bytes() {
+            return Ok(false);
+        }
+        let mut emitted = first.as_view().get_byte_size();
+        sink(first)?;
+        let mut pieces = 1usize;
+        'pieces: loop {
+            let mut k = 0;
+            loop {
+                if k == digits.len() {
+                    break 'pieces;
+                }
+                digits[k] += 1;
+                if digits[k] < choices[k].len() {
+                    break;
+                }
+                digits[k] = 0;
+                k += 1;
+            }
+            let Some(mapped) = contract_piece(&digits)? else {
+                return Err(eyre!(
+                    "a UV stream piece introduced a dummy index after {pieces} pieces were integrated"
+                ));
+            };
+            emitted += mapped.as_view().get_byte_size();
+            pieces += 1;
+            sink(mapped)?;
+        }
+        eprintln!(
+            "UV_STREAM pieces={pieces} in_bytes={} estimate_bytes={estimate} emitted_bytes={emitted} seconds={:.1} loops={}",
+            input.get_byte_size(),
+            started.elapsed().as_secs_f64(),
+            self.region.loops
+        );
+        Ok(true)
     }
 
     pub(super) fn simplify(expression: &Atom) -> Result<Atom> {
