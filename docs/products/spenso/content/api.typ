@@ -19,6 +19,49 @@ relevant crate, then use its revision-specific Rustdoc when a method is unavaila
 particular tensor type. Symbolica integration and symbolic parallelism controls require the
 `symbolica` Cargo feature.
 
+== Symmetry of selected tensor arguments
+
+`network::tensor_symmetry::TensorSlotSymmetry` registers disjoint symmetric or
+antisymmetric argument groups on a flat tensor head. Positions count all function
+arguments, including scalar metadata; arguments outside the groups retain their
+positions. The selected arguments must carry identical representations and
+dimensions. Overlapping groups and cyclic/general permutation groups are rejected.
+
+```rust
+use spenso::{network::tensor_symmetry::TensorSlotSymmetry, shadowing::FactorProjector};
+use symbolica::{atom::{SymbolAttribute, UserData}, wrap_symbol};
+
+let symmetry = TensorSlotSymmetry::new([
+    (FactorProjector::Antisymmetric, vec![0, 2]),
+])?;
+let field_strength = symmetry.register_symbol(
+    wrap_symbol!("my_theory::F"),
+    vec![SymbolAttribute::Real],
+    vec!["my_theory::field_strength".into()],
+    UserData::None,
+)?;
+```
+
+Here the first and third arguments are antisymmetric, while the middle argument
+can remain an independent derivative or internal spectator. Normalization uses
+Symbolica's subgroup helper heads and keeps the physical tensor head compact.
+Unresolved representation arguments acquire distinct identities at native
+materialization before symmetry acts; equal written antisymmetric indices vanish.
+Typed tensor construction must retain the declared interface of such a zero.
+One immutable head can accept arbitrary trailing derivative spectators: a leading
+scalar derivative-count argument with selected positions `[1, 2]` keeps the same
+Lorentz pair at every order. Component-shadow realization currently requires an
+explicit policy and returns a diagnostic; use symbolic tensor operations for
+these heads.
+
+The complete group declaration is serialized in the symbol tags. Symbolica does
+not serialize Rust normalization callbacks. Before importing atoms in a fresh
+process, call `TensorSlotSymmetry::restore_symbol` with the archived name,
+attributes, tags, and structured data. Native admission rejects a group-tagged
+head without its registered callback. Importing first and then registering the
+same symbol is an error; it does not silently repair an incompletely restored
+scientific declaration.
+
 == Proc macros and HEP data
 
 `spenso-macros` is a separate proc-macro crate. Its `SimpleRepresentation` derive generates the
