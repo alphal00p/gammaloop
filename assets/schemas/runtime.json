@@ -4,12 +4,15 @@
   "type": "object",
   "properties": {
     "general": {
+      "description": "Evaluation scales, backend, caching, event generation, and output-unit controls.",
       "$ref": "#/$defs/GeneralSettings"
     },
     "h_function": {
+      "description": "Damping profile shared by Local Unitarity threshold terms.",
       "$ref": "#/$defs/HFunctionSettings"
     },
     "integrand": {
+      "description": "Optional built-in test integrand used instead of a generated process integrand.",
       "anyOf": [
         {
           "$ref": "#/$defs/IntegrandSettings"
@@ -20,39 +23,48 @@
       ]
     },
     "integrator": {
+      "description": "Adaptive Monte Carlo iteration, accuracy, learning, and output controls.",
       "$ref": "#/$defs/IntegratorSettings"
     },
     "kinematics": {
+      "description": "Center-of-mass energy, external momenta, helicities, and phase-space improvement.",
       "$ref": "#/$defs/KinematicsSettings"
     },
     "model": {
+      "description": "Per-integrand overrides for external model parameters.",
       "$ref": "#/$defs/RuntimeModelSettings"
     },
     "observables": {
+      "description": "Named histograms and other observable accumulators.",
       "type": "object",
       "additionalProperties": {
         "$ref": "#/$defs/ObservableSettings"
       }
     },
     "quantities": {
+      "description": "Named derived quantities available to selectors and observables.",
       "type": "object",
       "additionalProperties": {
         "$ref": "#/$defs/QuantitySettings"
       }
     },
     "sampling": {
+      "description": "Continuous parameterization and discrete graph/orientation/channel sampling strategy.",
       "$ref": "#/$defs/SamplingSettings"
     },
     "selectors": {
+      "description": "Named event-selection predicates applied before observable accumulation.",
       "type": "object",
       "additionalProperties": {
         "$ref": "#/$defs/SelectorSettings"
       }
     },
     "stability": {
+      "description": "Precision escalation, rotated checks, and optional stability diagnostics.",
       "$ref": "#/$defs/StabilitySettings"
     },
     "subtraction": {
+      "description": "Local and integrated threshold/ultraviolet subtraction controls.",
       "$ref": "#/$defs/SubtractionSettings"
     }
   },
@@ -384,21 +396,25 @@
     "Externals": {
       "oneOf": [
         {
+          "description": "Use one fixed list of external momenta and helicities for every evaluation.",
           "type": "object",
           "properties": {
             "data": {
               "type": "object",
               "properties": {
                 "helicities": {
+                  "description": "Helicity assigned to each external particle in process order.",
                   "type": "array",
                   "items": {
                     "$ref": "#/$defs/Helicity"
                   }
                 },
                 "improvement_settings": {
+                  "description": "Optional on-shell phase-space improvement applied before evaluation.",
                   "$ref": "#/$defs/PhaseSpaceImprovementSettings"
                 },
                 "momenta": {
+                  "description": "External four-momenta; exactly one entry may be marked dependent.",
                   "type": "array",
                   "items": {
                     "$ref": "#/$defs/ExternalMomenta"
@@ -446,6 +462,7 @@
       "type": "object",
       "properties": {
         "additional_param_values": {
+          "description": "Values assigned, in order, to extra symbolic parameters expected by the evaluator.",
           "type": "array",
           "items": {
             "type": "number",
@@ -453,45 +470,58 @@
           }
         },
         "debug_cache": {
+          "description": "Emit additional cache consistency diagnostics while evaluating samples.",
           "type": "boolean"
         },
         "disable_flux_factor": {
+          "description": "Omit the incoming-state flux factor from the returned integrand value.",
           "type": "boolean"
         },
         "enable_cache": {
+          "description": "Cache reusable evaluation data between phase-space samples.",
           "type": "boolean"
         },
         "evaluator_method": {
+          "description": "Evaluator backend used for generated integrands.",
           "$ref": "#/$defs/EvaluatorMethod"
         },
         "generate_events": {
+          "description": "Return generated events in addition to accumulating integration statistics.",
           "type": "boolean"
         },
         "integral_unit": {
+          "description": "Unit used to report integrated cross-sections; `auto` selects picobarns for scattering.",
           "$ref": "#/$defs/IntegralUnit"
         },
         "load_compiled_cff": {
+          "description": "Load a previously compiled causal-flow function instead of rebuilding it for this run.",
           "type": "boolean"
         },
         "m_uv": {
+          "description": "Ultraviolet reference mass used by local counterterms, in the model's energy units.",
           "type": "number",
           "format": "double"
         },
         "mu_r": {
+          "description": "Renormalization scale used by running parameters and scale-dependent terms.",
           "type": "number",
           "format": "double"
         },
         "orientation_pat": {
+          "description": "Optional orientation pattern restricting which causal-flow orientations are evaluated.",
           "$ref": "#/$defs/OrientationPattern"
         },
         "renormalization_localization_scale": {
+          "description": "Localization scale applied to ultraviolet counterterms, in the model's energy units.",
           "type": "number",
           "format": "double"
         },
         "store_additional_weights_in_event": {
+          "description": "Persist every configured additional weight on each generated event.",
           "type": "boolean"
         },
         "use_ltd": {
+          "description": "Evaluate through the loop-tree-duality representation where the selected integrand supports it.",
           "type": "boolean"
         }
       },
@@ -510,12 +540,15 @@
       "type": "object",
       "properties": {
         "enabled_dampening": {
+          "description": "Apply the damping profile; disabling it leaves the corresponding factor equal to one.",
           "type": "boolean"
         },
         "function": {
+          "description": "Functional form of the counterterm damping profile.",
           "$ref": "#/$defs/HFunction"
         },
         "power": {
+          "description": "Optional polynomial power overriding the profile's built-in choice.",
           "type": [
             "integer",
             "null"
@@ -524,6 +557,7 @@
           "minimum": 0
         },
         "sigma": {
+          "description": "Characteristic width of the damping profile.",
           "type": "number",
           "format": "double"
         }
@@ -640,9 +674,11 @@
     "IntegratedCounterTermRange": {
       "oneOf": [
         {
+          "description": "Integrate over the full radial domain and regulate it with an H-function profile.",
           "type": "object",
           "properties": {
             "h_function_settings": {
+              "description": "Damping profile used to make the infinite-domain counterterm integral convergent.",
               "$ref": "#/$defs/HFunctionSettings"
             },
             "type": {
@@ -657,6 +693,7 @@
           ]
         },
         {
+          "description": "Integrate over the compact radial domain without an infinite-tail damping profile.",
           "type": "object",
           "properties": {
             "type": {
@@ -675,6 +712,7 @@
       "type": "object",
       "properties": {
         "range": {
+          "description": "Integration domain and damping function used for integrated counterterms.",
           "$ref": "#/$defs/IntegratedCounterTermRange"
         }
       },
@@ -692,6 +730,7 @@
       "type": "object",
       "properties": {
         "bin_number_evolution": {
+          "description": "Optional per-iteration bin counts, overriding the fixed `n_bins` value as training proceeds.",
           "type": [
             "array",
             "null"
@@ -703,57 +742,70 @@
           }
         },
         "continuous_dim_learning_rate": {
+          "description": "Update rate for adaptive grids over continuous integration dimensions.",
           "type": "number",
           "format": "double"
         },
         "discrete_dim_learning_rate": {
+          "description": "Update rate for learned probabilities over discrete sampling choices.",
           "type": "number",
           "format": "double"
         },
         "integrated_phase": {
+          "description": "Complex component to integrate: real, imaginary, or both.",
           "$ref": "#/$defs/IntegratedPhase"
         },
         "max_prob_ratio": {
+          "description": "Cap the ratio used when turning sampled weights into adaptive probabilities.",
           "type": "number",
           "format": "double"
         },
         "min_samples_for_update": {
+          "description": "Minimum accumulated samples before an adaptive grid or discrete probability is updated.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "n_bins": {
+          "description": "Number of bins maintained along each continuous integration dimension.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "n_increase": {
+          "description": "Samples added to each successive Monte Carlo iteration.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "n_max": {
+          "description": "Hard upper bound on the total number of integrand evaluations.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "n_start": {
+          "description": "Number of samples in the first Monte Carlo iteration.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "observables_output": {
+          "description": "File formats used when writing observable histograms and distributions.",
           "$ref": "#/$defs/ObservablesOutputSettings"
         },
         "seed": {
+          "description": "Seed for deterministic initialization of Monte Carlo random-number streams.",
           "type": "integer",
           "format": "uint64",
           "minimum": 0
         },
         "show_max_wgt_info": {
+          "description": "Include maximum-weight diagnostics in integration progress and result data.",
           "type": "boolean"
         },
         "target_absolute_accuracy": {
+          "description": "Stop once the estimated absolute uncertainty reaches this value, if configured.",
           "type": [
             "number",
             "null"
@@ -761,6 +813,7 @@
           "format": "double"
         },
         "target_relative_accuracy": {
+          "description": "Stop once the estimated relative uncertainty reaches this value, if configured.",
           "type": [
             "number",
             "null"
@@ -768,6 +821,7 @@
           "format": "double"
         },
         "train_on_avg": {
+          "description": "Train adaptive distributions on iteration averages instead of individual sample weights.",
           "type": "boolean"
         }
       },
@@ -785,10 +839,12 @@
       "type": "object",
       "properties": {
         "e_cm": {
+          "description": "Center-of-mass energy used to normalize and construct external momenta.",
           "type": "number",
           "format": "double"
         },
         "externals": {
+          "description": "External momentum and helicity configuration evaluated by the integrand.",
           "$ref": "#/$defs/Externals"
         }
       },
@@ -805,6 +861,7 @@
       "type": "object",
       "properties": {
         "uv_localisation": {
+          "description": "Widths and override controls for ultraviolet-counterterm localization dampers.",
           "$ref": "#/$defs/UVLocalisationSettings"
         }
       },
@@ -962,6 +1019,7 @@
       "type": "object",
       "properties": {
         "format": {
+          "description": "Output formats written for configured observables; duplicates and `none` are ignored.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/ObservableFileFormat"
@@ -974,6 +1032,7 @@
       "type": "object",
       "properties": {
         "pat": {
+          "description": "Symbolica pattern matched against serialized causal orientations.",
           "anyOf": [
             {
               "$ref": "#/$defs/ParseableAtom"
@@ -990,9 +1049,11 @@
       "type": "object",
       "properties": {
         "check_global_center": {
+          "description": "Validate that the selected global center lies inside every required E-surface.",
           "type": "boolean"
         },
         "force_global_center": {
+          "description": "Explicit three-vector center used for every threshold overlap, when provided.",
           "type": [
             "array",
             "null"
@@ -1008,9 +1069,11 @@
           }
         },
         "try_origin": {
+          "description": "Try the loop-momentum origin as the global center before solving for another point.",
           "type": "boolean"
         },
         "try_origin_all_lmbs": {
+          "description": "Try the origin independently for every available loop-momentum basis.",
           "type": "boolean"
         }
       },
@@ -1046,6 +1109,7 @@
       "type": "object",
       "properties": {
         "large_deformation_check": {
+          "description": "Maximum dimensionless deformation before the improved point is rejected.",
           "anyOf": [
             {
               "$ref": "#/$defs/F"
@@ -1056,9 +1120,11 @@
           ]
         },
         "mode": {
+          "description": "On-shell improvement algorithm, or `none` to preserve the supplied momenta.",
           "$ref": "#/$defs/ImprovementMode"
         },
         "only_warn_on_large_deformation": {
+          "description": "Warn instead of failing when an improvement exceeds the deformation threshold.",
           "type": "boolean"
         }
       },
@@ -1428,14 +1494,17 @@
           "type": "object",
           "properties": {
             "alpha": {
+              "description": "First Euler angle, in radians.",
               "type": "number",
               "format": "double"
             },
             "beta": {
+              "description": "Second Euler angle, in radians.",
               "type": "number",
               "format": "double"
             },
             "gamma": {
+              "description": "Third Euler angle, in radians.",
               "type": "number",
               "format": "double"
             },
@@ -1474,26 +1543,32 @@
       "type": "object",
       "properties": {
         "alpha": {
+          "description": "Exponent controlling the sharpness of multichannel weights.",
           "type": "number",
           "format": "double"
         },
         "b": {
+          "description": "Scale parameter of the selected radial mapping.",
           "type": "number",
           "format": "double"
         },
         "coordinate_system": {
+          "description": "Coordinate system used to parameterize loop momenta.",
           "$ref": "#/$defs/CoordinateSystem"
         },
         "graph_names": {
+          "description": "Optional graph-name allow-list for discrete graph sampling.",
           "type": "array",
           "items": {
             "type": "string"
           }
         },
         "graphs": {
+          "description": "Whether graph contributions are summed deterministically or sampled as a discrete axis.",
           "$ref": "#/$defs/SumMode"
         },
         "lmb_basis_ids": {
+          "description": "Explicit loop-momentum-basis identifiers keyed by graph name.",
           "type": "object",
           "additionalProperties": {
             "type": "array",
@@ -1505,21 +1580,27 @@
           }
         },
         "lmb_channel_weight": {
+          "description": "Rule used to construct the relative probability of each loop-momentum-basis channel.",
           "$ref": "#/$defs/LmbChannelWeight"
         },
         "lmb_channels": {
+          "description": "Whether loop-momentum-basis channels are summed or sampled discretely.",
           "$ref": "#/$defs/SumMode"
         },
         "lmb_multichanneling": {
+          "description": "Enable multichannel sampling over loop-momentum bases.",
           "type": "boolean"
         },
         "mapping": {
+          "description": "Mapping from the unit hypercube to unbounded radial coordinates.",
           "$ref": "#/$defs/ParameterizationMapping"
         },
         "orientations": {
+          "description": "Whether causal orientations are summed deterministically or sampled as a discrete axis.",
           "$ref": "#/$defs/SumMode"
         },
         "power": {
+          "description": "Power parameter of the selected radial mapping.",
           "type": "number",
           "format": "double"
         }
@@ -1550,17 +1631,21 @@
       "type": "object",
       "properties": {
         "escalate_for_large_weight_threshold": {
+          "description": "Ratio threshold for the large-weight escalation check; a non-positive value disables it.",
           "type": "number",
           "format": "double"
         },
         "precision": {
+          "description": "Numeric precision used for this escalation level.",
           "$ref": "#/$defs/Precision"
         },
         "required_precision_for_im": {
+          "description": "Maximum accepted relative error in the imaginary component before escalating.",
           "type": "number",
           "format": "double"
         },
         "required_precision_for_re": {
+          "description": "Maximum accepted relative error in the real component before escalating.",
           "type": "number",
           "format": "double"
         }
@@ -1577,12 +1662,15 @@
       "type": "object",
       "properties": {
         "record_all_stability_levels": {
+          "description": "Record the result produced at every attempted numerical-precision level.",
           "type": "boolean"
         },
         "record_loop_momenta_escalation": {
+          "description": "Record evaluations escalated because of the loop-momentum norm threshold.",
           "type": "boolean"
         },
         "record_rotated_results": {
+          "description": "Record the values obtained at rotated phase-space points.",
           "type": "boolean"
         }
       },
@@ -1592,23 +1680,28 @@
       "type": "object",
       "properties": {
         "check_on_norm": {
+          "description": "Compare rotated results after normalizing by the result magnitude.",
           "type": "boolean"
         },
         "escalate_if_exact_zero": {
+          "description": "Escalate precision when a result is exactly zero at the current level.",
           "type": "boolean",
           "default": false
         },
         "levels": {
+          "description": "Ordered numerical-precision levels and tolerances used during stability escalation.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/StabilityLevelSetting"
           }
         },
         "loop_momenta_norm_escalation_factor": {
+          "description": "Escalate when the loop-momentum norm exceeds this factor; a negative value disables it.",
           "type": "number",
           "format": "double"
         },
         "recording": {
+          "description": "Optional diagnostics retained for rotated, escalated, and high-precision evaluations.",
           "anyOf": [
             {
               "$ref": "#/$defs/StabilityRecordingSettings"
@@ -1619,6 +1712,7 @@
           ]
         },
         "rotation_axis": {
+          "description": "Rotations applied when comparing an unstable sample with an equivalent phase-space point.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/RotationSetting"
@@ -1631,6 +1725,7 @@
       "type": "object",
       "properties": {
         "disable_threshold_subtraction": {
+          "description": "Disable local threshold subtraction while leaving the original integrand unchanged.",
           "type": "boolean"
         },
         "esurface_existence_threshold": {
@@ -1640,12 +1735,15 @@
           "minimum": 0.0
         },
         "integrated_ct_settings": {
+          "description": "Configuration for analytically integrated counterterm contributions.",
           "$ref": "#/$defs/IntegratedCounterTermSettings"
         },
         "local_ct_settings": {
+          "description": "Configuration for local ultraviolet counterterms in the numerical integrand.",
           "$ref": "#/$defs/LocalCounterTermSettings"
         },
         "overlap_settings": {
+          "description": "Strategy used to choose centers shared by overlapping threshold surfaces.",
           "$ref": "#/$defs/OverlapSettings"
         },
         "radial_root_residual_tolerance": {
@@ -1668,16 +1766,20 @@
       "type": "object",
       "properties": {
         "dynamic_width": {
+          "description": "Derive the localization width dynamically from the sampled ultraviolet configuration.",
           "type": "boolean"
         },
         "force_uv_dampers_to_one": {
+          "description": "Replace ultraviolet localization dampers by one for diagnostic comparisons.",
           "type": "boolean"
         },
         "gaussian_width": {
+          "description": "Width of the Gaussian ultraviolet localization factor.",
           "type": "number",
           "format": "double"
         },
         "sliver_width": {
+          "description": "Width of the transition region used by the ultraviolet sliver damper.",
           "type": "number",
           "format": "double"
         }
@@ -1688,6 +1790,7 @@
       "type": "object",
       "properties": {
         "n_3d_momenta": {
+          "description": "Number of independent three-momenta used to construct the unit-surface test dimension.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
@@ -1701,6 +1804,7 @@
       "type": "object",
       "properties": {
         "n_3d_momenta": {
+          "description": "Number of independent three-momenta used to construct the unit-volume test dimension.",
           "type": "integer",
           "format": "uint",
           "minimum": 0

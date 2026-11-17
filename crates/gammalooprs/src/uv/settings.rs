@@ -340,6 +340,39 @@ impl Default for PySecDecSettings {
     }
 }
 
+/// Master basis of Vakint's five-loop p results (vakint `p_master_basis`).
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[derive(
+    Debug, Clone, Copy, Default, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum VakintPMasterBasis {
+    /// The published GGPPSS five-loop masters (default; unchanged results).
+    #[default]
+    Original,
+    /// GGPPSS's new basis plus further exchanges (a versioned data file):
+    /// no reduction coefficient has a pole deeper than its master's known order.
+    PoleBounded,
+}
+
+impl Display for VakintPMasterBasis {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Original => write!(f, "original"),
+            Self::PoleBounded => write!(f, "pole_bounded"),
+        }
+    }
+}
+
+impl From<VakintPMasterBasis> for vakint::PMasterBasis {
+    fn from(value: VakintPMasterBasis) -> Self {
+        match value {
+            VakintPMasterBasis::Original => Self::Original,
+            VakintPMasterBasis::PoleBounded => Self::PoleBounded,
+        }
+    }
+}
+
 /// Numerator tensor-reduction backend used by Vakint.
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(
@@ -421,6 +454,9 @@ pub struct VakintSettings {
     /// Extra symbolic normalization factor multiplied into every Vakint result.
     #[serde(skip_serializing_if = "is_minus_one_string")]
     pub additional_normalization: String,
+    /// Master basis of five-loop p results: `original` (published GGPPSS masters) or `pole_bounded`.
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub p_master_basis: VakintPMasterBasis,
 }
 
 impl VakintSettings {
@@ -445,6 +481,7 @@ impl VakintSettings {
             rustred_p_uncovered: Default::default(),
             rustred_p_relation_cache: Default::default(),
             rustred_p_outside: Default::default(),
+            p_master_basis: self.p_master_basis.into(),
             verify_numerator_identification: false,
             run_time_decimal_precision: self.run_time_decimal_precision as u32,
             allow_unknown_integrals: false,
@@ -528,6 +565,7 @@ impl Default for VakintSettings {
             temporary_directory: None,
             normalization: "MSbar".to_string(),
             additional_normalization: "-1".to_string(),
+            p_master_basis: VakintPMasterBasis::Original,
         }
     }
 }

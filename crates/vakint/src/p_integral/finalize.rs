@@ -221,6 +221,28 @@ pub(crate) fn finalize_with(
         return Ok(Atom::Zero);
     }
     let reduced = source.resolve_terminals(&reduced, mode, epsilon)?;
+    // The five-loop master basis (`settings.p_master_basis`): with the
+    // default `Original` nothing below runs and no symbol is created.
+    let extended;
+    let (reduced, source) = match (settings.p_master_basis, source.catalogue()) {
+        (super::master_basis::PMasterBasis::PoleBounded, Some(catalogue)) => {
+            let basis = super::master_basis::load(source.masters_directory())?;
+            extended = basis.extended_catalogue(catalogue)?;
+            let rotated = super::phases::time("finalize.master_basis", || {
+                basis.rotate(&reduced, &extended, epsilon)
+            })?;
+            let record = basis.record();
+            log::info!(
+                "vakint p result in the {} master basis: data {}, sha256 {}, layers {:?}",
+                record.basis,
+                record.data_version,
+                record.sha256,
+                record.layers
+            );
+            (rotated, source.with_catalogue(&extended))
+        }
+        _ => (reduced, source),
+    };
     source.require_coefficients(&reduced, mode)?;
     super::compare::check_symbols_with(&reduced, &source.extra_names())?;
     let l = loops as i64;

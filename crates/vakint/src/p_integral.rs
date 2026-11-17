@@ -23,6 +23,7 @@ mod frontend_tests;
 mod input;
 mod laurent;
 pub(crate) mod massive;
+pub mod master_basis;
 pub mod master_catalogue;
 pub(crate) mod masters;
 pub(crate) mod mzv;
@@ -60,6 +61,10 @@ pub use forcer::benchmark as forcer_benchmark;
 pub use forcer::fixtures as forcer_fixtures;
 pub(crate) use input::{Normalized, PGraph, PLine};
 pub use massive::{DirectClosureInput, LoweredClosure, MassiveClosure};
+pub use master_basis::{
+    P_MASTER_BASIS_SCHEMA, P_MASTER_BASIS_VERSION, P_MASTERS_DIRECTORY_VARIABLE, PMasterBasis,
+    PMasterBasisRecord,
+};
 pub use master_catalogue::{
     P_MASTER_CATALOGUE_SCHEMA, P_MASTER_CATALOGUE_VERSION, P_MASTER_NORMALISATION,
     PMasterCatalogue, PMasterCatalogueError,

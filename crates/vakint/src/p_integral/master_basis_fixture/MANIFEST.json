@@ -1,0 +1,31 @@
+{
+ "schema": "vk5l.p-masters-manifest.v1",
+ "version": 1,
+ "catalogue_version": "ggppss-5L-v3",
+ "rotation_version": "ggppss-5L-v3",
+ "basis_version": "ggppss-new-v1-fixture-int137",
+ "layers": [
+  "00-ggppss-2104.08272-new-basis"
+ ],
+ "files": [
+  {
+   "path": "basis-change/00-ggppss-2104.08272-new-basis.json.gz",
+   "role": "basis-change",
+   "sha256": "80fc3a57b6e89086b823503eb6ccdbe5320bd03ab76b72bc1a535eb7bebd9600",
+   "bytes": 250489
+  },
+  {
+   "path": "pole-bounded/masters.ggppss-new-v1-fixture-int137.json.gz",
+   "role": "pole-bounded-masters",
+   "sha256": "bd29f158da20692281a987002832c7ac14ffde63361fc83e04a5ba82f7bbf007",
+   "bytes": 1495
+  }
+ ],
+ "exchanges": 1,
+ "new_masters": 8,
+ "producer": {
+  "lane": "vk5l-mastermap",
+  "tools": "SCRATCHPAD/vk5l-mastermap/tools/{bc_convert,assemble_masters_dir}.py",
+  "note": "FIXTURE: a subset of the exchanges (['ggppss_int(137)'])"
+ }
+}

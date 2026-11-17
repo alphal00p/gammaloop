@@ -1806,6 +1806,15 @@ fn five_loop_package_drill() {
     };
     let mut settings = settings(drill_mode, None);
     settings.number_of_terms_in_epsilon_expansion = 6;
+    // lane vk5l-mastermap: the five-loop master basis of the drill's results
+    // (VAKINT_TEST_P5L_DRILL_BASIS=pole_bounded; default original).
+    if std::env::var("VAKINT_TEST_P5L_DRILL_BASIS").as_deref() == Ok("pole_bounded") {
+        settings.p_master_basis = crate::p_integral::PMasterBasis::PoleBounded;
+        eprintln!(
+            "five_loop_package_drill: master basis {:?}",
+            engine.p_master_basis_record(&settings).unwrap()
+        );
+    }
     settings.n_cores = std::env::var("VAKINT_TEST_P5L_DRILL_CORES")
         .ok()
         .and_then(|cores| cores.parse().ok())

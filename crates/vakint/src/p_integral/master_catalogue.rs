@@ -392,6 +392,124 @@ fn p_master(symbol: &str) -> Atom {
     p_master_symbol().call(&[Atom::var(vk_symbol!(symbol))][..])
 }
 
+/// Validate one catalogue master and insert it under its symbol (shared by
+/// [`PMasterCatalogue::from_json`] and [`PMasterCatalogue::with_masters_json`]).
+fn insert_master(
+    catalogue: &mut PMasterCatalogue,
+    ids: &mut BTreeMap<String, String>,
+    forcer: &[&str],
+    master: MasterFile,
+    invalid: &dyn Fn(String) -> PMasterCatalogueError,
+) -> Result<(), PMasterCatalogueError> {
+    let name = format!("master {}", master.id);
+    if !plain_identifier(&master.symbol) {
+        return Err(invalid(format!(
+            "{name}: symbol {:?} is not a plain identifier",
+            master.symbol
+        )));
+    }
+    if forcer.contains(&master.symbol.as_str()) {
+        return Err(invalid(format!(
+            "{name}: symbol {} is a vendored Forcer master",
+            master.symbol
+        )));
+    }
+    if ids
+        .insert(master.id.clone(), master.symbol.clone())
+        .is_some()
+    {
+        return Err(invalid(format!("{name} is defined twice")));
+    }
+    let mut coefficients = BTreeMap::new();
+    for (order, coefficient) in master.coefficients {
+        let order: i64 = order
+            .parse()
+            .map_err(|_| invalid(format!("{name}: order {order:?} is not an integer")))?;
+        let at = format!("{name} coefficient epsilon^{order}");
+        if order < master.leading_order {
+            return Err(invalid(format!(
+                "{at} is below its leading order {}",
+                master.leading_order
+            )));
+        }
+        if master.unknown_from.is_some_and(|unknown| order >= unknown) {
+            return Err(invalid(format!(
+                "{at} lies in its unknown tail (unknown from epsilon^{})",
+                master.unknown_from.unwrap()
+            )));
+        }
+        let exact = coefficient
+            .exact
+            .as_deref()
+            .map(|text| parse_constant(text).map_err(|detail| invalid(format!("{at}: {detail}"))))
+            .transpose()?;
+        if let Some(text) = &coefficient.numerical {
+            let number = Float::parse(text, Some(64)).map_err(|error| {
+                invalid(format!("{at} has an invalid numerical value: {error}"))
+            })?;
+            if !number.as_raw().is_finite() {
+                return Err(invalid(format!("{at} has a non-finite numerical value")));
+            }
+        }
+        if exact.is_none() && coefficient.numerical.is_none() {
+            return Err(invalid(format!(
+                "{at} has neither an exact nor a numerical value"
+            )));
+        }
+        coefficients.insert(
+            order,
+            PCoefficient {
+                exact,
+                numerical: coefficient.numerical,
+                significant_digits: coefficient.significant_digits.or(master.significant_digits),
+            },
+        );
+    }
+    let mut known_through = master.leading_order - 1;
+    while coefficients.contains_key(&(known_through + 1)) {
+        known_through += 1;
+    }
+    if let Some((order, _)) = coefficients.range(known_through + 1..).next() {
+        return Err(invalid(format!(
+            "{name}: coefficient epsilon^{order} follows the missing epsilon^{}",
+            known_through + 1
+        )));
+    }
+    if let Some(declared) = master.known_through
+        && declared != known_through
+    {
+        return Err(invalid(format!(
+            "{name}: known_through {declared}, but its coefficients reach epsilon^{known_through}"
+        )));
+    }
+    if let Some(unknown) = master.unknown_from
+        && unknown != known_through + 1
+        && !coefficients.is_empty()
+    {
+        return Err(invalid(format!(
+            "{name}: unknown from epsilon^{unknown}, but its coefficients reach epsilon^{known_through}"
+        )));
+    }
+    if catalogue.masters.contains_key(&master.symbol) {
+        return Err(invalid(format!(
+            "{name}: symbol {} is used twice",
+            master.symbol
+        )));
+    }
+    catalogue.masters.insert(
+        master.symbol.clone(),
+        PCatalogueMaster {
+            id: master.id,
+            loops: master.loops,
+            graph: master.graph,
+            leading_order: master.leading_order,
+            known_through,
+            coefficients,
+        },
+    );
+    Ok(())
+}
+
 impl PMasterCatalogue {
     /// Parse and validate a catalogue file; `source_name` names it in errors.
     pub fn from_json(source_name: &str, text: &str) -> Result<Self, PMasterCatalogueError> {
@@ -432,116 +550,7 @@ impl PMasterCatalogue {
         };
         let mut ids = BTreeMap::new();
         for master in file.masters {
-            let name = format!("master {}", master.id);
-            if !plain_identifier(&master.symbol) {
-                return Err(invalid(format!(
-                    "{name}: symbol {:?} is not a plain identifier",
-                    master.symbol
-                )));
-            }
-            if forcer.contains(&master.symbol.as_str()) {
-                return Err(invalid(format!(
-                    "{name}: symbol {} is a vendored Forcer master",
-                    master.symbol
-                )));
-            }
-            if ids
-                .insert(master.id.clone(), master.symbol.clone())
-                .is_some()
-            {
-                return Err(invalid(format!("{name} is defined twice")));
-            }
-            let mut coefficients = BTreeMap::new();
-            for (order, coefficient) in master.coefficients {
-                let order: i64 = order
-                    .parse()
-                    .map_err(|_| invalid(format!("{name}: order {order:?} is not an integer")))?;
-                let at = format!("{name} coefficient epsilon^{order}");
-                if order < master.leading_order {
-                    return Err(invalid(format!(
-                        "{at} is below its leading order {}",
-                        master.leading_order
-                    )));
-                }
-                if master.unknown_from.is_some_and(|unknown| order >= unknown) {
-                    return Err(invalid(format!(
-                        "{at} lies in its unknown tail (unknown from epsilon^{})",
-                        master.unknown_from.unwrap()
-                    )));
-                }
-                let exact = coefficient
-                    .exact
-                    .as_deref()
-                    .map(|text| {
-                        parse_constant(text).map_err(|detail| invalid(format!("{at}: {detail}")))
-                    })
-                    .transpose()?;
-                if let Some(text) = &coefficient.numerical {
-                    let number = Float::parse(text, Some(64)).map_err(|error| {
-                        invalid(format!("{at} has an invalid numerical value: {error}"))
-                    })?;
-                    if !number.as_raw().is_finite() {
-                        return Err(invalid(format!("{at} has a non-finite numerical value")));
-                    }
-                }
-                if exact.is_none() && coefficient.numerical.is_none() {
-                    return Err(invalid(format!(
-                        "{at} has neither an exact nor a numerical value"
-                    )));
-                }
-                coefficients.insert(
-                    order,
-                    PCoefficient {
-                        exact,
-                        numerical: coefficient.numerical,
-                        significant_digits: coefficient
-                            .significant_digits
-                            .or(master.significant_digits),
-                    },
-                );
-            }
-            let mut known_through = master.leading_order - 1;
-            while coefficients.contains_key(&(known_through + 1)) {
-                known_through += 1;
-            }
-            if let Some((order, _)) = coefficients.range(known_through + 1..).next() {
-                return Err(invalid(format!(
-                    "{name}: coefficient epsilon^{order} follows the missing epsilon^{}",
-                    known_through + 1
-                )));
-            }
-            if let Some(declared) = master.known_through
-                && declared != known_through
-            {
-                return Err(invalid(format!(
-                    "{name}: known_through {declared}, but its coefficients reach epsilon^{known_through}"
-                )));
-            }
-            if let Some(unknown) = master.unknown_from
-                && unknown != known_through + 1
-                && !coefficients.is_empty()
-            {
-                return Err(invalid(format!(
-                    "{name}: unknown from epsilon^{unknown}, but its coefficients reach epsilon^{known_through}"
-                )));
-            }
-            if catalogue.masters.contains_key(&master.symbol) {
-                return Err(invalid(format!(
-                    "{name}: symbol {} is used twice",
-                    master.symbol
-                )));
-            }
-            catalogue.masters.insert(
-                master.symbol.clone(),
-                PCatalogueMaster {
-                    id: master.id,
-                    loops: master.loops,
-                    graph: master.graph,
-                    leading_order: master.leading_order,
-                    known_through,
-                    coefficients,
-                },
-            );
+            insert_master(&mut catalogue, &mut ids, &forcer, master, &invalid)?;
         }
         let d = Atom::var(vk_symbol!("d"));
         let dimension = Atom::num(4) - Atom::num(2) * Atom::var(table_epsilon());
@@ -700,6 +709,51 @@ impl PMasterCatalogue {
         (self.masters.len(), self.terminals.len())
     }
 
+    /// This catalogue with further masters (a JSON array of master entries in
+    /// the catalogue's `masters` schema), e.g. the new masters of a master
+    /// basis change ([`super::master_basis`]). Validated like
+    /// [`Self::from_json`]; a symbol or id already present is refused.
+    pub(crate) fn with_masters_json(
+        &self,
+        source_name: &str,
+        masters: &serde_json::Value,
+    ) -> Result<Self, PMasterCatalogueError> {
+        let invalid = |detail: String| PMasterCatalogueError::Invalid {
+            source_name: source_name.to_owned(),
+            detail,
+        };
+        let masters: Vec<MasterFile> = serde_json::from_value(masters.clone())
+            .map_err(|error| invalid(format!("not a list of catalogue masters: {error}")))?;
+        let forcer = masters::p_master_names().map_err(|error| invalid(error.to_string()))?;
+        let mut extended = self.clone();
+        let mut ids: BTreeMap<String, String> = self
+            .masters
+            .iter()
+            .map(|(symbol, master)| (master.id.clone(), symbol.clone()))
+            .collect();
+        for master in masters {
+            insert_master(&mut extended, &mut ids, &forcer, master, &invalid)?;
+        }
+        Ok(extended)
+    }
+
+    /// The `PMaster` symbol name of the master with catalogue id `id`
+    /// (e.g. `ggppss_int(137)`).
+    pub(crate) fn symbol_of_id(&self, id: &str) -> Option<&str> {
+        self.masters
+            .iter()
+            .find(|(_, master)| master.id == id)
+            .map(|(symbol, _)| symbol.as_str())
+    }
+
+    /// `(symbol, id)` of every master (tests).
+    #[cfg(test)]
+    pub(crate) fn masters_ids(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.masters
+            .iter()
+            .map(|(symbol, master)| (symbol.as_str(), master.id.as_str()))
+    }
+
     #[cfg(test)]
     pub(crate) fn master(&self, symbol: &str) -> Option<&PCatalogueMaster> {
         self.masters.get(symbol)
@@ -790,6 +844,9 @@ fn check_coefficient(coefficient: &Atom) -> Result<(), String> {
 pub struct PMasterSource<'a> {
     catalogue: Option<&'a PMasterCatalogue>,
     request: &'a str,
+    /// The five-loop package's masters directory (the pole-bounded master
+    /// basis reads its data there), if a package directory is loaded.
+    masters_directory: Option<&'a std::path::Path>,
 }
 
 impl<'a> PMasterSource<'a> {
@@ -798,12 +855,46 @@ impl<'a> PMasterSource<'a> {
         Self {
             catalogue: None,
             request: "",
+            masters_directory: None,
+        }
+    }
+
+    /// The catalogue of this source, if any.
+    pub(crate) fn catalogue(&self) -> Option<&'a PMasterCatalogue> {
+        self.catalogue
+    }
+
+    /// The same request with `catalogue` instead (a master basis change
+    /// extends the catalogue by its new masters).
+    pub(crate) fn with_catalogue<'b>(&self, catalogue: &'b PMasterCatalogue) -> PMasterSource<'b>
+    where
+        'a: 'b,
+    {
+        PMasterSource {
+            catalogue: Some(catalogue),
+            request: self.request,
+            masters_directory: self.masters_directory,
         }
     }
 
     /// The Forcer table and `catalogue` (if any) for `request`.
     pub fn new(catalogue: Option<&'a PMasterCatalogue>, request: &'a str) -> Self {
-        Self { catalogue, request }
+        Self {
+            catalogue,
+            request,
+            masters_directory: None,
+        }
+    }
+
+    /// The same source with the five-loop package's masters directory.
+    pub(crate) fn with_masters_directory(mut self, directory: Option<&'a std::path::Path>) -> Self {
+        self.masters_directory = directory;
+        self
+    }
+
+    /// The five-loop package's masters directory, if known.
+    pub(crate) fn masters_directory(&self) -> Option<&'a std::path::Path> {
+        self.masters_directory
     }
 
     fn request(&self) -> String {

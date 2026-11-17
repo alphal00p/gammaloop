@@ -186,6 +186,9 @@ pub(crate) struct PLibraryHandle {
     /// vk5l WP4: the p master catalogue the package ships next to its
     /// library (`<package>/p-master-catalogue.json`), if any.
     pub(crate) master_catalogue: Option<Arc<crate::p_integral::PMasterCatalogue>>,
+    /// lane vk5l-mastermap: the package directory this library was loaded
+    /// from (its `masters/` holds the five-loop master basis data), if any.
+    pub(crate) package_directory: Option<PathBuf>,
     /// vk5l WP4: split and lowered requests met before
     /// ([`super::p_integral::RequestMemo`]).
     request_memo: Mutex<super::p_integral::RequestMemo>,
@@ -324,6 +327,7 @@ impl PLibraryHandle {
             tops,
             residuals: Mutex::new(BTreeMap::new()),
             master_catalogue: None,
+            package_directory: None,
             relations_root: None,
             request_memo: Mutex::default(),
             dimension,
@@ -712,6 +716,7 @@ pub(crate) fn load_directory(
     }
     let mut handle = PLibraryHandle::new(library, PLibraryOrigin::ExternalData)?;
     handle.master_catalogue = package_master_catalogue(&directory.path)?;
+    handle.package_directory = Some(directory.path.clone());
     handle.relations_root = package_relations_root(&directory.path);
     let handle = Arc::new(handle);
     if directory.listed.is_some()
@@ -759,6 +764,7 @@ fn load_package(
     library.set_source(directory.display().to_string());
     let mut handle = PLibraryHandle::new(library, PLibraryOrigin::Package)?;
     handle.master_catalogue = package_master_catalogue(directory)?;
+    handle.package_directory = Some(directory.to_owned());
     handle.relations_root = package_relations_root(directory);
     Ok(Arc::new(handle))
 }
@@ -1115,6 +1121,32 @@ impl Vakint {
     /// [`crate::VakintSettings::rustred_p_relation_cache`].
     pub fn p_relation_cache_statistics(&self) -> super::p_relations::PRelationCacheStatistics {
         super::p_relations::statistics()
+    }
+
+    /// lane vk5l-mastermap: the masters directory of this engine's five-loop
+    /// package (`<package>/masters`), where the pole-bounded master basis
+    /// data lives; `None` without a package directory.
+    pub(crate) fn p_masters_directory(&self) -> Option<PathBuf> {
+        self.loaded_p_library()
+            .and_then(|handle| handle.package_directory.clone())
+            .map(|package| crate::p_integral::master_basis::package_masters_directory(&package))
+    }
+
+    /// The master basis record of this engine's five-loop p results finalized
+    /// with `settings` (result metadata: basis version, sha256 of the masters
+    /// manifest, layers, directory; `None` in the original basis). Reads the
+    /// basis data only when the pole-bounded basis is selected.
+    pub fn p_master_basis_record(
+        &self,
+        settings: &crate::VakintSettings,
+    ) -> Result<Option<crate::p_integral::PMasterBasisRecord>, crate::VakintError> {
+        match settings.p_master_basis {
+            crate::p_integral::PMasterBasis::Original => Ok(None),
+            crate::p_integral::PMasterBasis::PoleBounded => Ok(Some(
+                crate::p_integral::master_basis::load(self.p_masters_directory().as_deref())?
+                    .record(),
+            )),
+        }
     }
 
     /// vk5l WP4: no default five-loop p master catalogue for this engine

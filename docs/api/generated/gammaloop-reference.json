@@ -16611,6 +16611,14 @@
       "possible_values": []
     },
     {
+      "path": "cli.global.generation.uv.vakint.forcer_cache",
+      "value_type": "boolean",
+      "description": "Reuse raw FORCER reductions and share in-flight requests.",
+      "required": false,
+      "default": true,
+      "possible_values": []
+    },
+    {
       "path": "cli.global.generation.uv.vakint.form_exe_path",
       "value_type": "string",
       "description": "FORM executable used by analytic Vakint evaluation backends.",
@@ -16651,12 +16659,31 @@
       "possible_values": []
     },
     {
+      "path": "cli.global.generation.uv.vakint.n_cores",
+      "value_type": "integer",
+      "description": "Worker budget for each Vakint evaluation, including RustRed and FORM.",
+      "required": false,
+      "default": 1,
+      "possible_values": []
+    },
+    {
       "path": "cli.global.generation.uv.vakint.normalization",
       "value_type": "string",
       "description": "Named normalization convention applied to matched vacuum integrals.",
       "required": false,
       "default": "MSbar",
       "possible_values": []
+    },
+    {
+      "path": "cli.global.generation.uv.vakint.p_master_basis",
+      "value_type": "string",
+      "description": "Master basis of five-loop p results: `original` (published GGPPSS masters) or `pole_bounded`.",
+      "required": false,
+      "default": "original",
+      "possible_values": [
+        "original",
+        "pole_bounded"
+      ]
     },
     {
       "path": "cli.global.generation.uv.vakint.pysecdec.max_n_evals",

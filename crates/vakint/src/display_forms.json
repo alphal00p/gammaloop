@@ -772,6 +772,161 @@
    "name": "vakint::pi",
    "meaning": "π in catalogue texts (normalised to Symbolica's π on import)",
    "reason": "normalised away"
+  },
+  {
+   "name": "vakint::ggppss_new_1",
+   "meaning": "GGPPSS new five-loop master new[1] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_1); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_2",
+   "meaning": "GGPPSS new five-loop master new[2] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_2); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_3",
+   "meaning": "GGPPSS new five-loop master new[3] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_3); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_4",
+   "meaning": "GGPPSS new five-loop master new[4] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_4); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_5",
+   "meaning": "GGPPSS new five-loop master new[5] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_5); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_6",
+   "meaning": "GGPPSS new five-loop master new[6] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_6); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_7",
+   "meaning": "GGPPSS new five-loop master new[7] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_7); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_8",
+   "meaning": "GGPPSS new five-loop master new[8] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_8); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_9",
+   "meaning": "GGPPSS new five-loop master new[9] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_9); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_10",
+   "meaning": "GGPPSS new five-loop master new[10] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_10); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_11",
+   "meaning": "GGPPSS new five-loop master new[11] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_11); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_12",
+   "meaning": "GGPPSS new five-loop master new[12] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_12); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_13",
+   "meaning": "GGPPSS new five-loop master new[13] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_13); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_14",
+   "meaning": "GGPPSS new five-loop master new[14] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_14); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_15",
+   "meaning": "GGPPSS new five-loop master new[15] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_15); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_16",
+   "meaning": "GGPPSS new five-loop master new[16] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_16); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_17",
+   "meaning": "GGPPSS new five-loop master new[17] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_17); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_18",
+   "meaning": "GGPPSS new five-loop master new[18] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_18); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_19",
+   "meaning": "GGPPSS new five-loop master new[19] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_19); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_20",
+   "meaning": "GGPPSS new five-loop master new[20] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_20); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_21",
+   "meaning": "GGPPSS new five-loop master new[21] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_21); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_22",
+   "meaning": "GGPPSS new five-loop master new[22] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_22); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_23",
+   "meaning": "GGPPSS new five-loop master new[23] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_23); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_24",
+   "meaning": "GGPPSS new five-loop master new[24] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_24); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_25",
+   "meaning": "GGPPSS new five-loop master new[25] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_25); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_26",
+   "meaning": "GGPPSS new five-loop master new[26] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_26); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_27",
+   "meaning": "GGPPSS new five-loop master new[27] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_27); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_28",
+   "meaning": "GGPPSS new five-loop master new[28] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_28); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_29",
+   "meaning": "GGPPSS new five-loop master new[29] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_29); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_30",
+   "meaning": "GGPPSS new five-loop master new[30] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_30); the dashboard maps it to its graph via the masters legend"
+  },
+  {
+   "name": "vakint::ggppss_new_31",
+   "meaning": "GGPPSS new five-loop master new[31] (arXiv:2104.08272 anc/NewMastersDef.m), the argument of PMaster(..) in the pole-bounded master basis; created only when that basis is selected",
+   "reason": "a readable identifier kept as the subscript of PMaster (M_ggppss_new_31); the dashboard maps it to its graph via the masters legend"
   }
  ],
  "internal": [
@@ -1082,6 +1237,10 @@
   {
    "name": "vakint::ya",
    "reason": "internal"
+  },
+  {
+   "name": "vakint::p_master_basis_eps",
+   "reason": "placeholder variable while the pole-bounded master basis data is parsed (replaced by the epsilon symbol at once)"
   }
  ]
 }

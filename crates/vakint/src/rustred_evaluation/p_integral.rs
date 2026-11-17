@@ -1999,6 +1999,12 @@ pub(crate) fn finalize_reduced(
     let mut result = Atom::Zero;
     for ((loops, head), values) in reduced {
         let catalogue = p_master_catalogue(vakint, loops);
+        // lane vk5l-mastermap: the pole-bounded master basis reads its data
+        // from the five-loop package (only when selected).
+        let masters_directory = (loops >= 5
+            && settings.p_master_basis == crate::p_integral::PMasterBasis::PoleBounded)
+            .then(|| vakint.p_masters_directory())
+            .flatten();
         let request = match names.get(&(loops, head.clone())) {
             Some(integrals) if !integrals.is_empty() => format!(
                 "the {loops}-loop p-integrals {} of external {head}",
@@ -2014,7 +2020,8 @@ pub(crate) fn finalize_reduced(
                 settings,
                 mode,
                 "RustRed",
-                PMasterSource::new(catalogue.as_deref(), &request),
+                PMasterSource::new(catalogue.as_deref(), &request)
+                    .with_masters_directory(masters_directory.as_deref()),
             )
         })?;
         result += phases::time("p.final_simplify_real", || {
