@@ -1,0 +1,21 @@
+--- a/marimo/_export/local_modules.py
++++ b/marimo/_export/local_modules.py
+@@ -221,17 +221,7 @@
+     files: Sequence[Path], roots: Sequence[Path]
+ ) -> tuple[str, ...]:
+     return (
+-        _uv_bin(),
+-        "--quiet",
+-        "--no-progress",
+-        "tool",
+-        "run",
+-        "--from",
+-        _RUFF_REQUIREMENT,
+-        "--python",
+-        sys.executable,
+-        "--no-python-downloads",
+-        "ruff",
++        "@ruff@",
+         "analyze",
+         "graph",
+         "--preview",
