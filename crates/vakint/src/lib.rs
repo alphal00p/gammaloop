@@ -2563,6 +2563,11 @@ pub struct VakintSettings {
     /// lifetime of the engine. Replayed steps are identical to checked ones,
     /// so results never depend on this setting.
     pub ordered_cache: OrderedCacheSettings,
+    /// vk5l-physrun level-1 checkpoints of p-integral reductions: a run
+    /// directory where every completed unit (reduced channel, finalised key
+    /// plan) is written atomically under the fingerprint of its inputs and
+    /// reused by a later run with the same fingerprint. `None` (default): off.
+    pub p_checkpoint_dir: Option<std::path::PathBuf>,
     /// Per-call numerator lowering allowances for the saved five-loop lane.
     /// These do not change entry admission, legacy lower-loop programs, or
     /// the independent lower-factor product policy.
@@ -2935,6 +2940,7 @@ impl Default for VakintSettings {
                 ..Default::default()
             },
             ordered_cache: OrderedCacheSettings::default(),
+            p_checkpoint_dir: None,
             rustred_scalar_numerator_limits: Default::default(),
             rustred_product_limits: Default::default(),
             rustred_momentum_match_limits: Default::default(),

@@ -103,6 +103,17 @@ impl LoweredClosure {
     /// ε-bases, keys and exact values; channels and bases whose values all
     /// cancelled are left out): two lowerings give the same RustRed input,
     /// hence the same reduction, iff their fingerprints are equal.
+    /// vk5l-physrun diagnostics: (channels, lowered key entries over all
+    /// channels and ε-bases) of this key plan.
+    pub fn size(&self) -> (usize, usize) {
+        let entries = self
+            .folded
+            .values()
+            .map(|inputs| inputs.by_basis.values().map(|keys| keys.len()).sum::<usize>())
+            .sum();
+        (self.folded.len(), entries)
+    }
+
     pub fn fingerprint(&self) -> String {
         // Channels and ε-bases whose values all cancelled carry no input.
         let live = self
@@ -210,6 +221,20 @@ impl LoweredClosure {
             .copied()
             .unwrap_or(*first);
         let handle = vakint.p_library()?;
+        // Level-1 checkpoint of the finalised values of this key plan, one per mode.
+        let plan = rr::Checkpoints::new(reducing, format!("{:?}\n{:?}", handle.cache, handle.relations_root)).map(|c| {
+            let key = c.key(
+                "plan",
+                &mut std::iter::once(self.fingerprint()).chain(settings.iter().map(|s| format!("{:?} {}", mode_of(s), s.epsilon_symbol))),
+            );
+            (c, key)
+        });
+        if let Some((c, key)) = &plan {
+            let stored: Vec<Option<Atom>> = (0..settings.len()).map(|i| c.load(&format!("{key}-{i}"))).collect();
+            if stored.iter().all(Option::is_some) {
+                return Ok(stored.into_iter().flatten().collect());
+            }
+        }
         let before = rr::last_stats();
         let clock = std::time::Instant::now();
         let reduced = rr::reduce_folded_channels(vakint, reducing, &handle, self.folded, None, rr::fold_mode(), true)?;
@@ -233,6 +258,11 @@ impl LoweredClosure {
                 result += vakint.resolve_rustred_numerical(numerical, settings)?;
             }
             results.push(result.expand());
+        }
+        if let Some((c, key)) = &plan {
+            for (i, value) in results.iter().enumerate() {
+                c.store(&format!("{key}-{i}"), value);
+            }
         }
         Ok(results)
     }

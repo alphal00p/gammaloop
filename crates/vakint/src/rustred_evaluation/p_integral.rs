@@ -1367,6 +1367,11 @@ pub(crate) struct PReduceStats {
     pub render_seconds: f64,
     /// Requests served by the request memo ([`RequestMemo`]).
     pub memo_hits: usize,
+    /// vk5l-physrun level-1 checkpoints reused / written.
+    pub checkpoints_resumed: usize,
+    pub checkpoints_written: usize,
+    /// vk5l-physrun channel replay decisions (one line per loop count).
+    pub channel_replay: Vec<String>,
     /// Census: split parts, their loop-dot monomials, lowered (channel, key)
     /// entries, folded channels and distinct integral keys.
     pub parts: usize,
@@ -1824,7 +1829,15 @@ pub(crate) fn reduce_folded_channels(
     // one loop count are reduced together by PLibrary::reduce_channels (one
     // forward pass over a random mix, one replay per channel; RustRed falls
     // back to one reduction per channel on any failed zero check).
-    if mode == FoldMode::Coefficient && FoldMode::channel_replay() {
+    let checkpoints = Checkpoints::new(
+        settings,
+        format!(
+            "{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{}",
+            handle.cache, handle.relations_root, reducer.options.arithmetic_for(5), reducer.options.uncovered,
+            reducer.options.master_mode, settings.epsilon_symbol
+        ),
+    );
+    if mode == FoldMode::Coefficient && (FoldMode::channel_replay() || checkpoints.is_some()) {
         let mut prepared = Vec::new();
         for (channel, FoldedInputs { by_basis, integrals }) in folded {
             let preparing = std::time::Instant::now();
@@ -1847,14 +1860,98 @@ pub(crate) fn reduce_folded_channels(
                 prepared.push((channel, inputs, integrals));
             }
         }
-        let mut groups = BTreeMap::<usize, Vec<usize>>::new();
-        for (at, (channel, _, _)) in prepared.iter().enumerate() {
-            groups.entry(channel.loops).or_default().push(at);
+        // Level-1 checkpoints: a channel whose reduced value is stored is not reduced again.
+        let keys: Vec<Option<String>> = prepared
+            .iter()
+            .map(|(channel, inputs, _)| {
+                checkpoints.as_ref().map(|c| {
+                    c.key(
+                        "channel",
+                        &mut std::iter::once(format!("{channel:?}")).chain(
+                            inputs.iter().map(|(p, k, v)| format!("{} {:?} {}", p.0, k.powers(), v)),
+                        ),
+                    )
+                })
+            })
+            .collect();
+        let mut resumed: Vec<Option<Atom>> = keys
+            .iter()
+            .map(|key| key.as_ref().and_then(|key| checkpoints.as_ref()?.load(key)))
+            .collect();
+        // Channel replay only pays when channels share their trace: record
+        // together only the channels whose most complex input (dots + numerator
+        // rank) reaches the class maximum; the others are reduced on their own
+        // (their trace is a small part of the shared one). Measured predictor,
+        // written to the log and the run record (stats.channel_replay).
+        let complexity = |inputs: &[(PresentationId, IntegralKey, Coefficient)]| -> i64 {
+            inputs
+                .iter()
+                .map(|(_, key, _)| {
+                    key.powers().iter().map(|&p| if p > 1 { p - 1 } else if p < 0 { -p } else { 0 }).sum::<i64>()
+                })
+                .max()
+                .unwrap_or(0)
+        };
+        let mut groups = BTreeMap::<(usize, bool), Vec<usize>>::new();
+        let mut by_loops = BTreeMap::<usize, Vec<(usize, i64)>>::new();
+        for (at, (channel, inputs, _)) in prepared.iter().enumerate() {
+            if resumed[at].is_none() {
+                by_loops.entry(channel.loops).or_default().push((at, complexity(inputs)));
+            }
+        }
+        for (loops, members) in by_loops {
+            let top = members.iter().map(|(_, w)| *w).max().unwrap_or(0);
+            let shared: Vec<usize> = members.iter().filter(|(_, w)| *w == top).map(|(at, _)| *at).collect();
+            let replay = FoldMode::channel_replay() && shared.len() >= 2;
+            let note = format!(
+                "loops {loops}: channel complexities {:?}, top {top}, recorded together {:?}",
+                members.iter().map(|(_, w)| *w).collect::<Vec<_>>(),
+                if replay { shared.clone() } else { Vec::new() }
+            );
+            eprintln!("vakint-channel-replay {note}");
+            with_stats(|stats| stats.channel_replay.push(note));
+            for (at, _) in members {
+                let together = replay && shared.contains(&at);
+                groups.entry((loops, together)).or_default().push(at);
+            }
         }
         let mut reductions: Vec<Option<PReduction>> = (0..prepared.len()).map(|_| None).collect();
+        let input_sizes: Vec<usize> = prepared.iter().map(|(_, inputs, _)| inputs.len()).collect();
+        // VAKINT_P_CHANNEL_LIMIT=<k>: reduce at most k channels in this run
+        // (smallest first), then stop with an error; checkpoints are kept.
+        let channel_limit: Option<usize> = std::env::var("VAKINT_P_CHANNEL_LIMIT").ok().and_then(|v| v.parse().ok());
+        let mut reduced_here = 0usize;
         let mut inputs_of: Vec<Option<Vec<(PresentationId, IntegralKey, Coefficient)>>> =
             prepared.iter_mut().map(|(_, inputs, _)| Some(std::mem::take(inputs))).collect();
-        for (loops, members) in groups {
+        for ((loops, together), members) in groups {
+            if members.len() == 1 || !together {
+                let mut members = members;
+                members.sort_by_key(|&at| input_sizes[at]);
+                for &at in &members {
+                    if channel_limit.is_some_and(|limit| reduced_here >= limit) {
+                        return Err(invalid(format!("channel limit reached after {reduced_here} channels (checkpoints kept)")).into());
+                    }
+                    let inputs = inputs_of[at].take().unwrap_or_default();
+                    let clock = std::time::Instant::now();
+                    let reduction = reduce_inputs(&reducer, &prepared[at].0, inputs, &prepared[at].2)?;
+                    reduced_here += 1;
+                    eprintln!(
+                        "vakint-channel loops {loops} channel {at}: {} input keys reduced in {:.1} s (peak RSS {:.1} GB)",
+                        input_sizes[at],
+                        clock.elapsed().as_secs_f64(),
+                        std::fs::read_to_string("/proc/self/status").ok().and_then(|t| t.lines().find(|l| l.starts_with("VmHWM:")).and_then(|l| l.split_whitespace().nth(1)?.parse::<f64>().ok())).unwrap_or(0.0) / 1048576.0
+                    );
+                    if let (Some(c), Some(key)) = (&checkpoints, &keys[at]) {
+                        let terms = render_terms(&handle, &reduction, epsilon)?;
+                        let reduced = collect_terms(terms);
+                        c.store(key, &reduced);
+                        resumed[at] = Some(reduced);
+                    } else {
+                        reductions[at] = Some(reduction);
+                    }
+                }
+                continue;
+            }
             if members.len() == 1 {
                 let at = members[0];
                 let inputs = inputs_of[at].take().unwrap_or_default();
@@ -1891,12 +1988,20 @@ pub(crate) fn reduce_folded_channels(
                 reductions[at] = Some(reduction);
             }
         }
-        for ((channel, _, _), reduction) in prepared.into_iter().zip(reductions) {
-            let Some(reduction) = reduction else { continue };
-            let rendering = std::time::Instant::now();
-            let terms = render_terms(&handle, &reduction, epsilon)?;
-            let reduced = collect_terms(terms);
-            with_stats(|stats| stats.render_seconds += rendering.elapsed().as_secs_f64());
+        for (at, ((channel, _, _), reduction)) in prepared.into_iter().zip(reductions).enumerate() {
+            let reduced = if let Some(value) = resumed[at].take() {
+                value
+            } else {
+                let Some(reduction) = reduction else { continue };
+                let rendering = std::time::Instant::now();
+                let terms = render_terms(&handle, &reduction, epsilon)?;
+                let reduced = collect_terms(terms);
+                with_stats(|stats| stats.render_seconds += rendering.elapsed().as_secs_f64());
+                if let (Some(c), Some(key)) = (&checkpoints, &keys[at]) {
+                    c.store(key, &reduced);
+                }
+                reduced
+            };
             if reduced.is_zero() {
                 continue;
             }
@@ -2228,3 +2333,52 @@ pub(crate) fn evaluate_ordered_batch(
 #[cfg(test)]
 #[path = "p_integral_tests.rs"]
 mod tests;
+
+/// vk5l-physrun level-1 checkpoints ([`crate::VakintSettings::p_checkpoint_dir`]).
+/// Bump when the stored form or the meaning of a unit changes.
+pub(crate) const P_CHECKPOINT_VERSION: &str = "vk5l-physrun.p-checkpoint.v1";
+
+/// One checkpoint directory with the salt every unit key includes (version,
+/// library identity, relation root, arithmetic, uncovered policy, master
+/// mode, epsilon symbol).
+pub(crate) struct Checkpoints {
+    dir: std::path::PathBuf,
+    salt: String,
+}
+
+impl Checkpoints {
+    pub(crate) fn new(settings: &VakintSettings, salt: String) -> Option<Self> {
+        let dir = settings.p_checkpoint_dir.clone()?;
+        std::fs::create_dir_all(&dir).ok()?;
+        Some(Self { dir, salt: format!("{P_CHECKPOINT_VERSION}\n{salt}") })
+    }
+
+    /// The key of a unit: blake3 of the salt, the unit kind and its parts.
+    pub(crate) fn key(&self, kind: &str, parts: &mut dyn Iterator<Item = String>) -> String {
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(self.salt.as_bytes());
+        hasher.update(kind.as_bytes());
+        for part in parts {
+            hasher.update(b"\x1f");
+            hasher.update(part.as_bytes());
+        }
+        format!("{kind}-{}", hasher.finalize().to_hex())
+    }
+
+    pub(crate) fn load(&self, key: &str) -> Option<Atom> {
+        let text = std::fs::read_to_string(self.dir.join(format!("{key}.txt"))).ok()?;
+        let value = crate::utils::vakint_macros::vk_parse!(&text).ok()?;
+        with_stats(|stats| stats.checkpoints_resumed += 1);
+        Some(value)
+    }
+
+    pub(crate) fn store(&self, key: &str, value: &Atom) {
+        let path = self.dir.join(format!("{key}.txt"));
+        let tmp = self.dir.join(format!(".{key}.tmp"));
+        if std::fs::write(&tmp, value.to_canonical_string()).is_ok() {
+            let _ = std::fs::rename(&tmp, &path);
+            with_stats(|stats| stats.checkpoints_written += 1);
+        }
+    }
+}
+

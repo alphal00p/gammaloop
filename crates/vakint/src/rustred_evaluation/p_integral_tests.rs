@@ -5097,3 +5097,117 @@ fn zero_sector_pruning_boundary_drill() {
         started.elapsed().as_secs_f64()
     );
 }
+
+
+/// vk5l-physrun: a factorised (remainder boundary) graph through vakint +
+/// RustRed, timed by stage, for the dashboard: VAKINT_TEST_BOUNDARY_HEADER
+/// (boundary-<pid>-<seq>.txt), VAKINT_TEST_BOUNDARY_OUT (directory),
+/// VAKINT_TEST_P5L_DRILL_PACKAGE, optional VAKINT_TEST_BOUNDARY_PLANS
+/// (comma-separated key-plan indices; default all), VAKINT_TEST_ORDERED_CACHE=off.
+/// Modes: Retain and the record's own (Symbolic), reduced once per key plan.
+#[test]
+fn boundary_showcase() {
+    let (Some(header), Some(out)) = (
+        std::env::var_os("VAKINT_TEST_BOUNDARY_HEADER"),
+        std::env::var_os("VAKINT_TEST_BOUNDARY_OUT"),
+    ) else {
+        eprintln!("boundary_showcase: environment unset, skipped");
+        return;
+    };
+    let header = std::path::PathBuf::from(header);
+    let out = std::path::PathBuf::from(out);
+    std::fs::create_dir_all(&out).unwrap();
+    let rss = || -> f64 {
+        std::fs::read_to_string("/proc/self/status")
+            .ok()
+            .and_then(|s| s.lines().find(|l| l.starts_with("VmHWM:")).map(|l| l.split_whitespace().nth(1).unwrap().parse::<f64>().unwrap() / 1048576.0))
+            .unwrap_or(0.0)
+    };
+    let started = std::time::Instant::now();
+    let mut engine = Vakint::new().unwrap();
+    if let Some(package) = std::env::var_os("VAKINT_TEST_P5L_DRILL_PACKAGE") {
+        engine.load_p_library_directory(std::path::Path::new(&package), false).unwrap();
+        engine.p_library().unwrap();
+    }
+    let package_seconds = started.elapsed().as_secs_f64();
+    let reading = std::time::Instant::now();
+    let record = crate::p_integral::read_boundary_record(&header).unwrap();
+    let read_seconds = reading.elapsed().as_secs_f64();
+    // The settings of the graph-sum harness (massive_closure_showcase_sum),
+    // epsilon terms from the boundary header.
+    let header_text = std::fs::read_to_string(&header).unwrap();
+    let epsilon_terms: i64 = header_text
+        .lines()
+        .find_map(|line| line.strip_prefix("epsilon_terms "))
+        .expect("epsilon_terms in the header")
+        .trim()
+        .parse()
+        .unwrap();
+    let make = |mode: RustRedMasterMode| {
+        let arithmetic = std::env::var("VAKINT_TEST_CLOSURE_ARITHMETIC").ok();
+        let mut s = settings(mode, arithmetic.as_deref());
+        s.epsilon_symbol = "gammalooprs::ε".into();
+        s.mu_r_sq_symbol = "gammalooprs::μᵣ²".into();
+        s.integral_normalization_factor = crate::LoopNormalizationFactor::MSbar;
+        s.number_of_terms_in_epsilon_expansion = epsilon_terms;
+        s.run_time_decimal_precision = 100;
+        s.use_dot_product_notation = false;
+        s.n_cores = 1;
+        s
+    };
+    let mut symbolic = make(RustRedMasterMode::Symbolic);
+    if std::env::var("VAKINT_TEST_ORDERED_CACHE").as_deref() == Ok("off") {
+        symbolic.ordered_cache = crate::OrderedCacheSettings::off();
+    }
+    if let Some(dir) = std::env::var_os("VAKINT_TEST_P_CHECKPOINT") {
+        symbolic.p_checkpoint_dir = Some(std::path::PathBuf::from(dir));
+    }
+    let mut retain = make(RustRedMasterMode::Retain);
+    retain.ordered_cache = symbolic.ordered_cache.clone();
+    retain.p_checkpoint_dir = symbolic.p_checkpoint_dir.clone();
+    let lowering = std::time::Instant::now();
+    let (plans, stats) = record
+        .boundary
+        .lower_with_stats(&engine, &symbolic, crate::p_integral::BoundaryOptions { strict: true })
+        .unwrap();
+    let lower_seconds = lowering.elapsed().as_secs_f64();
+    let rss_after_lowering = rss();
+    let sizes: Vec<(usize, usize)> = plans.iter().map(|p| p.size()).collect();
+    eprintln!("BOUNDARY_SHOWCASE read {read_seconds:.1} s, lowered {} patterns into {} key plans in {lower_seconds:.1} s, plans (channels, key entries) {sizes:?}, peak RSS {rss_after_lowering:.1} GB", stats.patterns, plans.len());
+    let wanted: Option<Vec<usize>> = std::env::var("VAKINT_TEST_BOUNDARY_PLANS").ok().map(|v| v.split(',').map(|x| x.trim().parse().unwrap()).collect());
+    let mut values = vec![Atom::Zero, Atom::Zero];
+    let mut plan_records = Vec::new();
+    for (index, plan) in plans.into_iter().enumerate() {
+        if wanted.as_ref().is_some_and(|w| !w.contains(&index)) {
+            continue;
+        }
+        let (channels, entries) = sizes[index];
+        let clock = std::time::Instant::now();
+        let before = crate::rustred_evaluation::p_integral::last_stats();
+        let results = plan.evaluate_modes(&engine, &[&retain, &symbolic]).unwrap();
+        let after = crate::rustred_evaluation::p_integral::last_stats();
+        let seconds = clock.elapsed().as_secs_f64();
+        for (value, result) in values.iter_mut().zip(results) {
+            *value += result;
+        }
+        let record = serde_json::json!({"plan": index, "channels": channels, "key_entries": entries, "seconds": seconds,
+            "prepare_s": after.prepare_seconds - before.prepare_seconds, "library_s": after.library_seconds - before.library_seconds,
+            "render_s": after.render_seconds - before.render_seconds, "reductions": after.reductions - before.reductions,
+            "keys": after.pairs - before.pairs, "peak_rss_gb": rss(),
+            "checkpoints_resumed": after.checkpoints_resumed - before.checkpoints_resumed,
+            "checkpoints_written": after.checkpoints_written - before.checkpoints_written,
+            "channel_replay": after.channel_replay.iter().skip(before.channel_replay.len()).cloned().collect::<Vec<_>>()});
+        eprintln!("BOUNDARY_SHOWCASE plan {record}");
+        plan_records.push(record);
+    }
+    for (mode, value) in ["retain", "symbolic"].iter().zip(&values) {
+        std::fs::write(out.join(format!("sum.{mode}.sym")), value.expand().to_canonical_string()).unwrap();
+    }
+    let summary = serde_json::json!({"header": header.to_string_lossy(), "package_seconds": package_seconds, "read_seconds": read_seconds,
+        "lower_seconds": lower_seconds, "boundary_stats": format!("{stats:?}"), "plans": plan_records, "plan_sizes": sizes,
+        "peak_rss_gb": rss(), "total_seconds": started.elapsed().as_secs_f64(),
+        "channel_replay": crate::rustred_evaluation::p_integral::FoldMode::channel_replay(),
+        "arithmetic": symbolic.ordered_weight_arithmetic.to_string()});
+    std::fs::write(out.join("boundary_showcase.json"), serde_json::to_string_pretty(&summary).unwrap()).unwrap();
+    eprintln!("BOUNDARY_SHOWCASE done in {:.1} s", started.elapsed().as_secs_f64());
+}
