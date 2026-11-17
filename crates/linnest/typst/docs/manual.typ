@@ -1592,17 +1592,7 @@
     .join("\n")
   block(raw(displayed-code, lang: "typ", block: true))
 }
-#let _api-link(prefix, name, display: none) = {
-  raw(if display == none { name } else { display }, lang: none)
-}
-
-#let _tidy-scope = (
-  api-link: _api-link,
-  draw: draw,
-  graph: graph,
-  layout: layout,
-  subgraph: subgraph,
-)
+#import "example-scope.typ": scope as _tidy-scope
 
 #let _show-reference(
   source,

@@ -48,7 +48,7 @@ const PRODUCT_IDS: [&str; 6] = [
     "vakint",
     "feynkit",
 ];
-const PORTAL_SCHEMA_VERSION: u32 = 2;
+const PORTAL_SCHEMA_VERSION: u32 = 3;
 const TALKS_SCHEMA_VERSION: u32 = 1;
 const DEVELOPER_SCHEMA_VERSION: u32 = 3;
 const LEGACY_PROSE_SCHEMA_VERSION: u32 = 1;
@@ -304,7 +304,9 @@ struct PortalConfig {
     #[serde(default)]
     graphs: Vec<String>,
     #[serde(default)]
-    task: Vec<PortalTask>,
+    topic: Vec<PortalTopic>,
+    #[serde(default)]
+    example: Vec<PortalExample>,
     #[serde(default)]
     pillar: Vec<PortalPillar>,
     #[serde(default)]
@@ -314,10 +316,34 @@ struct PortalConfig {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-struct PortalTask {
-    label: String,
+struct PortalDestination {
     product: String,
-    role: String,
+    page: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct PortalTopic {
+    id: String,
+    title: String,
+    summary: String,
+    products: Vec<String>,
+    guide: PortalDestination,
+    examples: PortalDestination,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct PortalExample {
+    title: String,
+    summary: String,
+    target: PortalDestination,
+    runtime: NotebookRuntime,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum NotebookRuntime {
+    Browser,
+    Native,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -1121,21 +1147,58 @@ impl SiteBuilder {
                 && !self.portal.graphs.is_empty(),
             "portal must define research pillars, people, affiliations, and graph assets"
         );
-        let task_products = self
+        let topic_products = self
             .portal
-            .task
+            .topic
             .iter()
-            .map(|task| task.product.as_str())
+            .flat_map(|topic| topic.products.iter().map(String::as_str))
             .collect::<BTreeSet<_>>();
         ensure!(
-            task_products == ids && self.portal.task.len() == ids.len(),
-            "portal tasks must cover every product exactly once"
+            topic_products == ids,
+            "portal topics must cover every registered library"
         );
-        for task in &self.portal.task {
+        let mut topic_ids = BTreeSet::new();
+        for topic in &self.portal.topic {
+            validate_route_segment(&topic.id)?;
             ensure!(
-                !task.label.trim().is_empty() && !task.role.trim().is_empty(),
-                "portal task for {} is incomplete",
-                task.product
+                topic_ids.insert(&topic.id),
+                "duplicate portal topic {}",
+                topic.id
+            );
+            ensure!(
+                !topic.title.trim().is_empty()
+                    && !topic.summary.trim().is_empty()
+                    && !topic.products.is_empty()
+                    && topic.products.iter().collect::<BTreeSet<_>>().len() == topic.products.len(),
+                "portal topic {} is incomplete or repeats a library",
+                topic.id
+            );
+        }
+        ensure!(
+            !self.portal.example.is_empty(),
+            "portal must define worked examples"
+        );
+        for example in &self.portal.example {
+            ensure!(
+                !example.title.trim().is_empty() && !example.summary.trim().is_empty(),
+                "portal example metadata must not be empty"
+            );
+        }
+        for destination in self
+            .portal
+            .topic
+            .iter()
+            .flat_map(|topic| [&topic.guide, &topic.examples])
+            .chain(self.portal.example.iter().map(|example| &example.target))
+        {
+            ensure!(
+                self.registry.product.iter().any(|product| {
+                    product.id == destination.product
+                        && product.pages.iter().any(|page| page.id == destination.page)
+                }),
+                "portal destination {}/{} is not a registered page",
+                destination.product,
+                destination.page
             );
         }
         ensure!(
@@ -1290,6 +1353,16 @@ impl SiteBuilder {
             );
         }
         self.require_file(Path::new("docs/assets/site.css"))?;
+        self.require_file(Path::new("docs/assets/fonts.css"))?;
+        self.require_file(Path::new("docs/assets/code.css"))?;
+        self.require_file(Path::new("docs/assets/documentation-full.css"))?;
+        self.require_file(Path::new("docs/assets/code-blocks.js"))?;
+        self.require_file(Path::new("docs/assets/alphalooplogo-light.svg"))?;
+        self.require_file(Path::new("docs/assets/alphalooplogo-dark.svg"))?;
+        ensure!(
+            self.root.join("docs/assets/fonts").is_dir(),
+            "documentation fonts directory is missing"
+        );
         self.require_file(Path::new("docs/assets/site.js"))?;
         self.require_file(Path::new("docs/assets/showcase.css"))?;
         self.require_file(Path::new("docs/assets/showcase.js"))?;
@@ -1305,6 +1378,7 @@ impl SiteBuilder {
             "docs/portal/shared.typ",
             "docs/portal/components.typ",
             "docs/portal/index.typ",
+            "docs/portal/libraries.typ",
             "docs/portal/about.typ",
             "docs/portal/people.typ",
             "docs/portal/talks.typ",
@@ -2203,6 +2277,64 @@ impl SiteBuilder {
             self.write_rust_reference_with_availability(product, &site, options.include_rustdoc)?;
             self.write_reference_hub(product, &site)?;
         }
+        if options.include_rustdoc {
+            // Refresh presentation even when the Rustdoc or reference tree is reused.
+            let theme = site.join("reference/rust/theme.css");
+            fs::remove_file(&theme)?;
+            fs::copy(self.root.join("docs/assets/rustdoc.css"), theme)?;
+            let script = r#"<script type="module" data-source-frames>import(new URL("../../assets/code-blocks.js", new URL(document.querySelector('meta[name="rustdoc-vars"]').dataset.rootPath, location.href))).then(module => module.initializeRustdoc());</script>"#;
+            for entry in WalkDir::new(site.join("reference/rust")) {
+                let entry = entry?;
+                let path = entry.path();
+                if !entry.file_type().is_file()
+                    || path.extension().is_none_or(|value| value != "html")
+                {
+                    continue;
+                }
+                let html = fs::read_to_string(path)?;
+                let relative = path.strip_prefix(site.join("reference/rust"))?;
+                let mut rust_root = "../".repeat(relative.components().count().saturating_sub(1));
+                if rust_root.is_empty() {
+                    rust_root.push_str("./");
+                }
+                let product_root = format!("{rust_root}../../");
+                let portal_root = if options.scope == BuildScope::ProductPreview {
+                    format!("{PUBLISHED_DOCS_ROOT}/")
+                } else if metadata.channel == BuildChannel::Snapshot {
+                    format!("{product_root}../../../../")
+                } else {
+                    format!("{product_root}../../../")
+                };
+                let header = SiteHeader {
+                    portal_root: &portal_root,
+                    assets_root: &format!("{product_root}assets/"),
+                }
+                .render();
+                let bar = format!("<div class=\"alphal00p-rustdoc-bar\">{header}</div>");
+                let mut updated = html.clone();
+                if let Some(start) = updated.find("<nav class=\"alphal00p-rustdoc-bar\"") {
+                    if let Some(end) = updated[start..].find("</nav>") {
+                        updated.replace_range(start..start + end + "</nav>".len(), &bar);
+                    }
+                } else if let Some(start) = updated.find("<div class=\"alphal00p-rustdoc-bar\"")
+                    && let Some(end) = updated[start..].find("</header></div>")
+                {
+                    updated.replace_range(start..start + end + "</header></div>".len(), &bar);
+                }
+                // Font requests use CORS; preload with the same credentials mode.
+                updated = updated.replace(
+                    "rel=\"preload\" as=\"font\"",
+                    "rel=\"preload\" crossorigin as=\"font\"",
+                );
+                if updated.contains("class=\"rustdoc") && !updated.contains("data-source-frames") {
+                    updated = updated.replacen("</body>", &format!("{script}</body>"), 1);
+                }
+                if updated != html {
+                    fs::remove_file(path)?;
+                    fs::write(path, updated)?;
+                }
+            }
+        }
         self.decorate_site_pages_with_generated(
             product,
             &metadata,
@@ -2301,7 +2433,24 @@ impl SiteBuilder {
         fs::create_dir_all(&assets)?;
         for (source, name) in [
             ("docs/assets/site.css", "site.css"),
+            ("docs/assets/fonts.css", "fonts.css"),
+            ("docs/assets/code.css", "code.css"),
+            (
+                "docs/assets/documentation-full.css",
+                "documentation-full.css",
+            ),
+            ("docs/assets/code-blocks.js", "code-blocks.js"),
+            (
+                "docs/assets/alphalooplogo-light.svg",
+                "alphalooplogo-light.svg",
+            ),
+            (
+                "docs/assets/alphalooplogo-dark.svg",
+                "alphalooplogo-dark.svg",
+            ),
             ("docs/assets/site.js", "site.js"),
+            ("docs/assets/site-header.css", "site-header.css"),
+            ("docs/assets/navigation.js", "navigation.js"),
             ("docs/assets/showcase.css", "showcase.css"),
             ("docs/assets/showcase.js", "showcase.js"),
             (
@@ -2345,6 +2494,7 @@ impl SiteBuilder {
             fs::copy(self.root.join(source), target)
                 .wrap_err_with(|| format!("failed to copy documentation asset {source}"))?;
         }
+        replace_cached_tree(&self.root.join("docs/assets/fonts"), &assets.join("fonts"))?;
         for asset in about_assets() {
             let target = assets.join(&asset);
             match fs::remove_file(&target) {
@@ -2858,7 +3008,7 @@ impl SiteBuilder {
             fs::write(
                 &rustdoc_before_content,
                 format!(
-                    "<nav class=\"alphal00p-rustdoc-bar\" aria-label=\"αLoop documentation\"><a href=\"{PUBLISHED_DOCS_ROOT}/\">αLoop docs</a><span aria-hidden=\"true\">/</span><span>{} · Rust API</span></nav>",
+                    "<nav class=\"alphal00p-rustdoc-bar\" aria-label=\"αLoop documentation\"><span>{} · Rust API</span></nav>",
                     escape_html(&product.title),
                 ),
             )?;
@@ -3146,7 +3296,7 @@ impl SiteBuilder {
                 &product.title,
                 "Rust API",
                 &format!(
-                    "<p>Rustdoc is the canonical Rust API reference. It already provides the familiar crate hierarchy, exact signatures, trait implementations, feature-gated items, source links, and native symbol search without translating those structures into a second UI.</p><p>Use the authored interface guide for product-level boundaries and choose a crate below when you need item-level detail. Presence in Rustdoc describes the compiled public surface; it is not by itself a compatibility promise. The structured catalogs remain build artifacts for coverage and consistency checks, not a competing public reference.</p><nav class=\"reference-guide-links\" aria-label=\"Related Rust documentation\"><a href=\"reference/interfaces/\">Understand the Rust interfaces</a><a href=\"quickstart/rust/\">{}</a></nav><div class=\"api-component-grid\">{cards}</div>",
+                    "<p>Rustdoc is the canonical Rust API reference.</p><p>Use the authored interface guide for product-level boundaries and choose a crate below when you need item-level detail. Presence in Rustdoc describes the compiled public surface; it is not by itself a compatibility promise.</p><nav class=\"reference-guide-links\" aria-label=\"Related Rust documentation\"><a href=\"reference/interfaces/\">Understand the Rust interfaces</a><a href=\"quickstart/rust/\">{}</a></nav><div class=\"api-component-grid\">{cards}</div>",
                     escape_html(&interface_guide_title(&product.title, "rust")),
                 ),
             ),
@@ -3161,7 +3311,7 @@ impl SiteBuilder {
             .find(|page| page.route == "reference/interfaces/")
             .map(|page| {
                 format!(
-                    "<article class=\"reference-hub-card\"><p class=\"portal-kicker\">Choose an interface</p><h2><a href=\"{}\">{}</a></h2><p>{}</p></article>",
+                    "<article class=\"reference-hub-card\"><h2><a href=\"{}\">{}</a></h2><p>{}</p></article>",
                     escape_html(&page.route),
                     escape_html(&page.title),
                     escape_html(&page.summary),
@@ -3169,7 +3319,7 @@ impl SiteBuilder {
             })
             .unwrap_or_default();
         cards.push_str(&format!(
-            "<article class=\"reference-hub-card\"><p class=\"portal-kicker\">Canonical Rustdoc</p><h2><a href=\"reference/rust/\">Rust API</a></h2><p>{} crates in their native Rust documentation interface, with authored guidance for choosing the right boundary.</p></article><article class=\"reference-hub-card\"><p class=\"portal-kicker\">Python-native reference</p><h2><a href=\"reference/python/\">Python API</a></h2><p>{} modules with one flat page per supported class, function, or constant; stubs remain downloadable for type checkers.</p></article>",
+            "<article class=\"reference-hub-card\"><h2><a href=\"reference/rust/\">Rust API</a></h2><p>{} crates in their native Rust documentation interface, with authored guidance for choosing the right boundary.</p></article><article class=\"reference-hub-card\"><h2><a href=\"reference/python/\">Python API</a></h2><p>{} modules with one flat page per supported class, function, or constant; stubs remain downloadable for type checkers.</p></article>",
             product.rust_components.len(),
             product.python_components.len(),
         ));
@@ -3178,11 +3328,11 @@ impl SiteBuilder {
             .iter()
             .any(|page| page.route == "reference/typst/");
         if has_typst {
-            cards.push_str("<article class=\"reference-hub-card\"><p class=\"portal-kicker\">Typst-native reference</p><h2><a href=\"reference/typst/\">Typst API</a></h2><p>Package exports grouped by graph construction, layout, drawing, domain templates, and subgraph operations.</p></article>");
+            cards.push_str("<article class=\"reference-hub-card\"><h2><a href=\"reference/typst/\">Typst API</a></h2><p>Package exports grouped by graph construction, layout, drawing, domain templates, and subgraph operations.</p></article>");
         }
         if let Some((route, title)) = supplemental_reference(&product.id) {
             cards.push_str(&format!(
-                "<article class=\"reference-hub-card\"><p class=\"portal-kicker\">Generated from the implementation</p><h2><a href=\"{route}\">{}</a></h2><p>Version-specific reference data, also available as JSON for tooling.</p></article>",
+                "<article class=\"reference-hub-card\"><h2><a href=\"{route}\">{}</a></h2><p>Version-specific reference data, also available as JSON for tooling.</p></article>",
                 escape_html(title),
             ));
         }
@@ -3378,10 +3528,12 @@ impl SiteBuilder {
             body.replace_range(range, &interactive);
         }
         body = body.replace("<nav><a href=\"../../\">Documentation home</a></nav>", "");
+        promote_heading_hierarchy(&mut body);
+        if page.route.starts_with("version-history/") {
+            body = omit_empty_release_headings(&body)?;
+        }
         if page.route.is_empty() {
             body = format!("{}{body}", product_hero(product));
-        } else {
-            promote_heading_hierarchy(&mut body);
         }
         let docs_root = page_root_prefix(&page.route);
         body = rewrite_page_links(&body, &docs_root)?;
@@ -3494,21 +3646,19 @@ impl SiteBuilder {
         };
         let sidebar =
             self.site_sidebar(product, metadata, page, &docs_root, scope, generated_pages);
-        let product_options = self.product_options(product, metadata, &docs_root, scope);
         let page_navigation = render_page_navigation(previous, next, &docs_root);
         let product_root = if docs_root.is_empty() {
             "./"
         } else {
             &docs_root
         };
-        let portal = match metadata.channel {
-            BuildChannel::Latest => format!("{docs_root}../../../"),
-            BuildChannel::Snapshot => format!("{docs_root}../../../../"),
-        };
-        let site_home = if scope == BuildScope::FullSite {
-            &portal
+        let portal = if scope == BuildScope::ProductPreview {
+            format!("{PUBLISHED_DOCS_ROOT}/")
         } else {
-            product_root
+            match metadata.channel {
+                BuildChannel::Latest => format!("{docs_root}../../../"),
+                BuildChannel::Snapshot => format!("{docs_root}../../../../"),
+            }
         };
         let version = match metadata.channel {
             BuildChannel::Latest => "latest".to_owned(),
@@ -3601,9 +3751,16 @@ impl SiteBuilder {
         } else {
             format!(" / {}", escape_html(&page.title))
         };
+        let header = SiteHeader {
+            portal_root: &portal,
+            assets_root: &format!("{docs_root}assets/"),
+        }
+        .render();
+        let local_navigation =
+            SiteHeader::local_navigation(&format!("{} · {version}", product.title));
         let favicon = favicon_links(&format!("{docs_root}assets/"));
         let html = format!(
-            "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"description\" content=\"{}\">{favicon}<title>{} · {}</title><link rel=\"stylesheet\" href=\"{}assets/site.css\"><script defer src=\"{}assets/site.js\"></script></head><body data-reference-language=\"{}\" data-has-toc=\"{}\" data-docs-root=\"{}\" data-search-index=\"{}search-index.json\" data-search-root=\"{}\"><a class=\"skip-link\" href=\"#main-content\">Skip to content</a><header class=\"site-header\"><button class=\"header-button menu-button\" type=\"button\" data-menu-toggle aria-label=\"Open navigation\" aria-controls=\"docs-sidebar\" aria-expanded=\"false\">☰</button><a class=\"site-brand\" href=\"{}\"><span class=\"site-brand-mark\">α</span><span class=\"site-brand-name\">αLoop docs</span></a><div class=\"site-header-tools\"><select class=\"product-select\" data-product-select aria-label=\"Select project\">{}</select><button class=\"header-button\" type=\"button\" data-search-open aria-label=\"Search all documentation\"><span class=\"header-search-label\">Search</span> <span class=\"header-button-label\">⌘K</span><span class=\"header-search-icon\" aria-hidden=\"true\">⌕</span></button><button class=\"header-button\" type=\"button\" data-theme-toggle aria-label=\"Toggle color theme\">◐</button></div></header><div class=\"docs-shell\">{sidebar}<main class=\"docs-main\" id=\"main-content\"><nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\"><a href=\"{}\">{}</a> / {}{}</nav>{inline_toc}<article class=\"docs-article\">{body}</article>{page_navigation}{feedback}<footer class=\"page-footer\">{} · <a href=\"{}manual.pdf\">Complete PDF manual</a> · documented revision <code>{}</code></footer></main>{toc_markup}</div><button class=\"sidebar-backdrop\" type=\"button\" data-sidebar-backdrop aria-label=\"Close navigation\"></button><dialog class=\"search-dialog\" data-search-dialog><form class=\"search-form\" method=\"dialog\"><input class=\"search-input\" type=\"search\" data-search-input placeholder=\"Search all projects and developer notes\" aria-label=\"Search all documentation\"><button class=\"header-button\" value=\"close\">Close</button></form><ul class=\"search-results\" data-search-results aria-live=\"polite\"></ul></dialog></body></html>",
+            "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"description\" content=\"{}\">{favicon}<title>{} · {}</title><link rel=\"stylesheet\" href=\"{}assets/site.css\"><script defer src=\"{}assets/site.js\"></script></head><body data-reference-language=\"{}\" data-has-toc=\"{}\" data-docs-root=\"{}\" data-search-index=\"{}search-index.json\" data-search-root=\"{}\"><a class=\"skip-link\" href=\"#main-content\">Skip to content</a>{header}{local_navigation}<div class=\"docs-shell\">{sidebar}<main class=\"docs-main\" id=\"main-content\"><nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\"><a href=\"{}\">{}</a> / {}{}</nav>{inline_toc}<article class=\"docs-article\">{body}</article>{page_navigation}{feedback}<footer class=\"page-footer\">{} · <a href=\"{}manual.pdf\">Complete PDF manual</a> · documented revision <code>{}</code></footer></main>{toc_markup}</div><button class=\"sidebar-backdrop\" type=\"button\" data-sidebar-backdrop aria-label=\"Close navigation\"></button><dialog class=\"search-dialog\" data-search-dialog><form class=\"search-form\" method=\"dialog\"><input class=\"search-input\" type=\"search\" data-search-input placeholder=\"Search all projects and developer notes\" aria-label=\"Search all documentation\"><button class=\"header-button\" type=\"button\" data-search-close>Close</button></form><ul class=\"search-results\" data-search-results></ul></dialog></body></html>",
             escape_html(&format!("{} — {}", product.tagline, page.title)),
             escape_html(&product.title),
             escape_html(&page.title),
@@ -3614,8 +3771,6 @@ impl SiteBuilder {
             escape_html(&docs_root),
             escape_html(search_root),
             escape_html(search_root),
-            escape_html(site_home),
-            product_options,
             escape_html(product_root),
             escape_html(&product.title),
             escape_html(&page.group),
@@ -3640,11 +3795,16 @@ impl SiteBuilder {
         let mut groups = BTreeMap::<String, Vec<(String, String)>>::new();
         let mut group_order = Vec::new();
         for page in &product.pages {
-            if !groups.contains_key(&page.group) {
-                group_order.push(page.group.clone());
+            let group = if page.group == "Getting started" {
+                "Start here"
+            } else {
+                &page.group
+            };
+            if !groups.contains_key(group) {
+                group_order.push(group.to_owned());
             }
             groups
-                .entry(page.group.clone())
+                .entry(group.to_owned())
                 .or_default()
                 .push((page.route.clone(), page.title.clone()));
         }
@@ -3678,7 +3838,10 @@ impl SiteBuilder {
                     .map(|page| {
                         let label = page.route[module_route.len()..]
                             .trim_end_matches('/')
-                            .replace('/', ".");
+                            .split('/')
+                            .map(|segment| segment.strip_suffix("-function").map_or_else(|| segment.to_owned(), |name| format!("{name}()")))
+                            .collect::<Vec<_>>()
+                            .join(".");
                         format!(
                             "<a class=\"sidebar-link sidebar-python-symbol\" href=\"{}{}\"{}><code>{}</code></a>",
                             escape_html(docs_root),
@@ -3843,8 +4006,18 @@ impl SiteBuilder {
                 })
                 .collect::<String>();
             navigation.push_str(&format!(
-                "<section class=\"sidebar-group\"><p class=\"sidebar-group-title\">{}</p>{links}</section>",
-                escape_html(&group)
+                "<section class=\"sidebar-group\">{}{links}</section>",
+                if groups
+                    .get(&group)
+                    .is_some_and(|pages| pages.len() == 1 && pages[0].1 == group)
+                {
+                    String::new()
+                } else {
+                    format!(
+                        "<p class=\"sidebar-group-title\">{}</p>",
+                        escape_html(&group)
+                    )
+                }
             ));
             if group == "Reference" {
                 navigation.push_str(&python_navigation);
@@ -3862,8 +4035,9 @@ impl SiteBuilder {
             BuildChannel::Latest => "latest".to_owned(),
             BuildChannel::Snapshot => metadata.snapshot_tag.unwrap_or("unknown").to_owned(),
         };
+        let product_options = self.product_options(product, metadata, docs_root, scope);
         format!(
-            "<aside class=\"docs-sidebar\" id=\"docs-sidebar\" aria-label=\"{} manual\">{navigation}<p class=\"sidebar-meta\"><strong>{}</strong><br><code>{}</code><br><a href=\"{}manual.pdf\">Download PDF</a></p></aside>",
+            "<aside class=\"docs-sidebar\" id=\"docs-sidebar\" aria-label=\"{} manual\"><div class=\"sidebar-project\"><label for=\"project-select\">Project</label><select id=\"project-select\" class=\"product-select\" data-product-select aria-label=\"Select project\">{product_options}</select><span>{version}</span></div>{navigation}<p class=\"sidebar-meta\"><strong>{}</strong><br><code>{}</code><br><a href=\"{}manual.pdf\">Download PDF</a></p></aside>",
             escape_html(&product.title),
             escape_html(&product.title),
             escape_html(&version),
@@ -4225,7 +4399,8 @@ impl SiteBuilder {
             let product_entries = serde_json::from_slice::<Vec<SearchEntry>>(&fs::read(&path)?)
                 .wrap_err_with(|| format!("failed to parse {}", path.display()))?;
             entries.extend(product_entries.into_iter().map(|mut entry| {
-                entry.href = format!("products/{}/{channel_route}/{}", product.id, entry.href);
+                let href = entry.href.strip_suffix("index.html").unwrap_or(&entry.href);
+                entry.href = format!("products/{}/{channel_route}/{href}", product.id);
                 entry.kind = format!("{} · {}", product.title, entry.kind);
                 entry
             }));
@@ -4515,7 +4690,7 @@ impl SiteBuilder {
                 escape_html(freshness),
             );
             let article = format!(
-                "<header class=\"developer-note-hero\"><p class=\"product-eyebrow\">For developers</p><div class=\"developer-note-title\"><h1>{}</h1><div class=\"developer-note-badges\"><span class=\"developer-status developer-status-{}\">{}</span><span class=\"developer-kind\">{}</span><span class=\"developer-lifecycle\">{}</span></div></div><p>{}</p><p class=\"developer-source\"><a href=\"{}\">View the source note <span aria-hidden=\"true\">↗</span></a></p></header>{record}{body}",
+                "<header class=\"developer-note-hero\"><div class=\"developer-note-title\"><h1>{}</h1><div class=\"developer-note-badges\"><span class=\"developer-status developer-status-{}\">{}</span><span class=\"developer-kind\">{}</span><span class=\"developer-lifecycle\">{}</span></div></div><p>{}</p><p class=\"developer-source\"><a href=\"{}\">View the source note <span aria-hidden=\"true\">↗</span></a></p></header>{record}{body}",
                 escape_html(&note.title),
                 escape_html(&status_class),
                 escape_html(&note.status),
@@ -4612,7 +4787,7 @@ impl SiteBuilder {
             .map(|section| {
                 let render_card = |note: &DeveloperNote| {
                     format!(
-                        "<article class=\"developer-card\"><div class=\"developer-card-meta\"><span class=\"developer-status developer-status-{}\">{}</span><span class=\"developer-lifecycle\">{}</span><span>{}</span></div><h3><a href=\"architecture/{}/\">{}</a></h3><p>{}</p><a class=\"portal-text-link\" href=\"architecture/{}/\">Read note <span aria-hidden=\"true\">→</span></a></article>",
+                        "<article class=\"developer-card\"><div class=\"developer-card-meta\"><span class=\"developer-status developer-status-{}\">{}</span><span class=\"developer-lifecycle\">{}</span><span>{}</span></div><h3><a href=\"architecture/{}/\">{}</a></h3><p>{}</p></article>",
                         escape_html(&slug(&note.status)),
                         escape_html(&note.status),
                         escape_html(&note.lifecycle),
@@ -4620,7 +4795,6 @@ impl SiteBuilder {
                         escape_html(&note.id),
                         escape_html(&note.title),
                         escape_html(&note.summary),
-                        escape_html(&note.id),
                     )
                 };
                 let notes = section
@@ -4643,7 +4817,7 @@ impl SiteBuilder {
                     )
                 };
                 format!(
-                    "<section class=\"developer-section\" id=\"{}\"><div class=\"developer-section-heading\"><p class=\"portal-kicker\">Developer notes</p><h2>{}</h2><p>{}</p></div><div class=\"developer-card-grid\">{notes}{superseded}</div></section>",
+                    "<section class=\"developer-section\" id=\"{}\"><div class=\"developer-section-heading\"><h2>{}</h2><p>{}</p></div><div class=\"developer-card-grid\">{notes}{superseded}</div></section>",
                     escape_html(&section.id),
                     escape_html(&section.title),
                     escape_html(&section.summary),
@@ -4660,7 +4834,7 @@ impl SiteBuilder {
             escape_html(&issue_url),
         );
         let main = format!(
-            "<nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\"><a href=\"../\">αLoop</a> / Developers</nav><article class=\"docs-article developer-article\"><header class=\"developer-hero\"><span class=\"developer-hero-logo\" role=\"img\" aria-label=\"Construction of the GammaLoop logo\"></span><p class=\"product-eyebrow\">For developers</p><h1>{}</h1><p>{}</p><aside class=\"developer-audience\" aria-label=\"Documentation audience\"><strong>Looking for usage documentation?</strong><span>Product guides and reference live with each research project. This area documents implementation details, design work, and engineering investigations for contributors.</span><a href=\"../#projects\">Browse project documentation <span aria-hidden=\"true\">→</span></a></aside></header>{sections}</article>{feedback}<footer class=\"page-footer\">{} classified notes · documented revision <code>{}</code></footer>",
+            "<nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\"><a href=\"../\">αLoop</a> / Developers</nav><article class=\"docs-article developer-article\"><header class=\"developer-hero\"><h1>{}</h1><p>{}</p><aside class=\"developer-audience\" aria-label=\"Documentation audience\"><strong>Looking for usage documentation?</strong><span>Product guides and reference live with each research project. This area documents implementation details, design work, and engineering investigations for contributors.</span><a href=\"../libraries/\">Browse project documentation <span aria-hidden=\"true\">→</span></a></aside></header>{sections}</article>{feedback}<footer class=\"page-footer\">{} classified notes · documented revision <code>{}</code></footer>",
             escape_html(&self.developers.title),
             escape_html(&self.developers.summary),
             self.developers
@@ -4725,7 +4899,7 @@ impl SiteBuilder {
             ));
         }
         format!(
-            "<aside class=\"docs-sidebar developer-sidebar\" id=\"docs-sidebar\" aria-label=\"Developer architecture\">{navigation}<p class=\"sidebar-meta\"><strong>For developers</strong><br>Implementation and engineering notes.<br><a href=\"{}../#projects\">Product guides and reference</a></p></aside>",
+            "<aside class=\"docs-sidebar developer-sidebar\" id=\"docs-sidebar\" aria-label=\"Developer architecture\">{navigation}<p class=\"sidebar-meta\"><strong>For developers</strong><br>Implementation and engineering notes.<br><a href=\"{}../libraries/\">Product guides and reference</a></p></aside>",
             escape_html(docs_root),
         )
     }
@@ -4782,6 +4956,7 @@ impl SiteBuilder {
             "people/index.html",
             "talks/index.html",
             "publications/index.html",
+            "libraries/index.html",
         ] {
             ensure!(
                 bundle.join(page).is_file(),
@@ -5611,6 +5786,46 @@ fn developer_heading_search_entry(
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+struct SiteHeader<'a> {
+    portal_root: &'a str,
+    assets_root: &'a str,
+}
+
+impl SiteHeader<'_> {
+    fn render(self) -> String {
+        let portal = escape_html(self.portal_root);
+        let assets = escape_html(self.assets_root);
+        let links = [
+            ("libraries", "Documentation"),
+            ("about", "About"),
+            ("people", "People"),
+            ("talks", "Talks"),
+            ("publications", "Publications"),
+        ]
+        .into_iter()
+        .map(|(route, label)| {
+            let current = if route == "libraries" {
+                " aria-current=\"page\""
+            } else {
+                ""
+            };
+            format!("<a href=\"{portal}{route}/\"{current}>{label}</a>")
+        })
+        .collect::<String>();
+        format!(
+            r#"<header class="portal-header site-header"><a class="portal-brand" href="{portal}" aria-label="αLoop home"><img class="site-brand-logo site-brand-logo-light" src="{assets}alphalooplogo-light.svg" alt="" aria-hidden="true"><img class="site-brand-logo site-brand-logo-dark" src="{assets}alphalooplogo-dark.svg" alt="" aria-hidden="true"></a><nav class="portal-nav" id="portal-navigation" aria-label="Primary">{links}</nav><div class="portal-header-actions"><button class="portal-search-button" type="button" data-search-open aria-label="Search all documentation" title="Search (⌘/Ctrl+K)"><span class="header-search-icon" aria-hidden="true"></span></button><button class="portal-theme-button" type="button" data-theme-toggle aria-label="Toggle color theme">◐</button><button class="portal-menu-button" type="button" data-portal-menu-toggle aria-controls="portal-navigation" aria-expanded="false" aria-label="Open site navigation"><span aria-hidden="true">☰</span></button></div></header>"#
+        )
+    }
+
+    fn local_navigation(label: &str) -> String {
+        format!(
+            r#"<div class="docs-local-bar"><span>{}</span><button class="menu-button" type="button" data-menu-toggle aria-controls="docs-sidebar" aria-expanded="false" aria-label="Open documentation contents">Contents ⌄</button></div>"#,
+            escape_html(label)
+        )
+    }
+}
+
 fn developer_document(
     metadata: (&str, &str),
     docs_root: &str,
@@ -5621,22 +5836,21 @@ fn developer_document(
     toc: &str,
 ) -> String {
     let (title, description) = metadata;
-    let home = if docs_root.is_empty() {
-        "./"
-    } else {
-        docs_root
-    };
+    let header = SiteHeader {
+        portal_root,
+        assets_root: &format!("{docs_root}assets/"),
+    }
+    .render();
+    let local_navigation = SiteHeader::local_navigation("Developer notes");
     let favicon = favicon_links(&format!("{docs_root}assets/"));
     format!(
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"description\" content=\"{}\"><meta name=\"theme-color\" content=\"#f9f6f0\">{favicon}<title>{}</title><link rel=\"stylesheet\" href=\"{}assets/site.css\">{extra_head}<script defer src=\"{}assets/site.js\"></script></head><body class=\"developer-body\" data-docs-root=\"{}\" data-search-index=\"{}search-index.json\" data-search-root=\"{}\"><a class=\"skip-link\" href=\"#main-content\">Skip to content</a><header class=\"site-header\"><button class=\"header-button menu-button\" type=\"button\" data-menu-toggle aria-label=\"Open navigation\" aria-controls=\"docs-sidebar\" aria-expanded=\"false\">☰</button><a class=\"site-brand\" href=\"{}\"><span class=\"site-brand-mark\">α</span><span class=\"site-brand-name\">Developer notes</span></a><div class=\"site-header-tools\"><a class=\"header-button header-link\" href=\"{}\" aria-label=\"Research documentation\"><span class=\"header-link-label\">Research docs</span><span aria-hidden=\"true\">←</span></a><button class=\"header-button\" type=\"button\" data-search-open aria-label=\"Search all documentation\"><span class=\"header-search-label\">Search</span> <span class=\"header-button-label\">⌘K</span><span class=\"header-search-icon\" aria-hidden=\"true\">⌕</span></button><button class=\"header-button\" type=\"button\" data-theme-toggle aria-label=\"Toggle color theme\">◐</button></div></header><div class=\"docs-shell\">{sidebar}<main class=\"docs-main developer-main\" id=\"main-content\">{main}</main>{toc}</div><button class=\"sidebar-backdrop\" type=\"button\" data-sidebar-backdrop aria-label=\"Close navigation\"></button><dialog class=\"search-dialog\" data-search-dialog><form class=\"search-form\" method=\"dialog\"><input class=\"search-input\" type=\"search\" data-search-input placeholder=\"Search all projects and developer notes\" aria-label=\"Search all documentation\"><button class=\"header-button\" value=\"close\">Close</button></form><ul class=\"search-results\" data-search-results aria-live=\"polite\"></ul></dialog></body></html>",
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"description\" content=\"{}\"><meta name=\"theme-color\" content=\"#f9f6f0\">{favicon}<title>{}</title><link rel=\"stylesheet\" href=\"{}assets/site.css\">{extra_head}<script defer src=\"{}assets/site.js\"></script></head><body class=\"developer-body\" data-docs-root=\"{}\" data-search-index=\"{}search-index.json\" data-search-root=\"{}\"><a class=\"skip-link\" href=\"#main-content\">Skip to content</a>{header}{local_navigation}<div class=\"docs-shell\">{sidebar}<main class=\"docs-main developer-main\" id=\"main-content\">{main}</main>{toc}</div><button class=\"sidebar-backdrop\" type=\"button\" data-sidebar-backdrop aria-label=\"Close navigation\"></button><dialog class=\"search-dialog\" data-search-dialog><form class=\"search-form\" method=\"dialog\"><input class=\"search-input\" type=\"search\" data-search-input placeholder=\"Search all projects and developer notes\" aria-label=\"Search all documentation\"><button class=\"header-button\" type=\"button\" data-search-close>Close</button></form><ul class=\"search-results\" data-search-results></ul></dialog></body></html>",
         escape_html(description),
         escape_html(title),
         escape_html(docs_root),
         escape_html(docs_root),
         escape_html(docs_root),
         escape_html(portal_root),
-        escape_html(portal_root),
-        escape_html(home),
         escape_html(portal_root),
     )
 }
@@ -5710,7 +5924,7 @@ fn product_hero(product: &ProductConfig) -> String {
         )
     });
     format!(
-        "<header class=\"product-hero\">{logo}<p class=\"product-eyebrow\">Research software documentation</p><h1>{}</h1><p>{}</p><div class=\"hero-actions\"><a class=\"hero-action primary\" href=\"{}\">Get started</a><a class=\"hero-action\" href=\"{}\">Read the guides</a><a class=\"hero-action\" href=\"reference/\">Browse reference</a></div></header>",
+        "<header class=\"product-hero\">{logo}<h1>{}</h1><p>{}</p><div class=\"hero-actions\"><a class=\"hero-action primary\" href=\"{}\">Get started</a><a class=\"hero-action\" href=\"{}\">Read the guides</a><a class=\"hero-action\" href=\"reference/\">Browse reference</a></div></header>",
         escape_html(&product.title),
         escape_html(&product.tagline),
         escape_html(&quickstart.route),
@@ -5727,6 +5941,27 @@ fn promote_heading_hierarchy(body: &mut String) {
             .replace(&format!("<h{level}"), &format!("<h{}", level - 1))
             .replace(&format!("</h{level}>"), &format!("</h{}>", level - 1));
     }
+}
+
+fn omit_empty_release_headings(body: &str) -> Result<String> {
+    let heading = Regex::new(r"(?s)<h(?P<level>[1-6])\b[^>]*>.*?</h[1-6]>")?;
+    let headings = heading.captures_iter(body).collect::<Vec<_>>();
+    let mut rendered = body.to_owned();
+    for (index, current) in headings.iter().enumerate().rev() {
+        let whole = current.get(0).expect("release heading capture");
+        let next = headings.get(index + 1);
+        let end = next.map_or(body.len(), |next| {
+            next.get(0).expect("next release heading capture").start()
+        });
+        // A deeper heading belongs to this release. Keep that parent even when
+        // its content starts immediately with a Fixed/Added/etc. subsection.
+        if next.is_none_or(|next| next["level"] <= current["level"])
+            && body[whole.end()..end].trim().is_empty()
+        {
+            rendered.replace_range(whole.range(), "");
+        }
+    }
+    Ok(rendered)
 }
 
 fn rewrite_page_links(body: &str, docs_root: &str) -> Result<String> {
@@ -6113,7 +6348,13 @@ fn link_python_symbols(html: &str, links: &BTreeMap<String, String>) -> String {
 }
 
 fn render_signature_code(signature: &str, links: &BTreeMap<String, String>) -> String {
-    link_python_symbols(&escape_html(signature), links)
+    // Break qualified names and nested types at syntax boundaries. Insert these
+    // before linking so markup and destinations never acquire break elements.
+    let escaped = escape_html(signature)
+        .replace('.', ".<wbr>")
+        .replace('[', "[<wbr>")
+        .replace(',', ",<wbr>");
+    link_python_symbols(&escaped, links)
 }
 
 fn python_human_callable_signature(signature: &str) -> String {
@@ -6593,7 +6834,7 @@ fn render_python_item_page(
         body.push_str("</section>");
     }
     if !item.params.is_empty() {
-        body.push_str("<h2>Parameters</h2><div class=\"reference-table-wrap\"><table class=\"api-parameter-table\"><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>");
+        body.push_str("<h2>Parameters</h2><div class=\"reference-table-wrap\"><table class=\"api-parameter-table\" role=\"table\"><thead role=\"rowgroup\"><tr role=\"row\"><th scope=\"col\">Name</th><th scope=\"col\">Type</th><th scope=\"col\">Default</th><th scope=\"col\">Description</th></tr></thead><tbody role=\"rowgroup\">");
         for parameter in &item.params {
             let default = match parameter.default.as_deref() {
                 Some("...") => "runtime default",
@@ -6608,7 +6849,7 @@ fn render_python_item_page(
                     "<span aria-label=\"No description available\">—</span>".to_owned()
                 });
             body.push_str(&format!(
-                "<tr><td><code>{}</code>{}</td><td><code>{}</code></td><td><code>{}</code></td><td>{}</td></tr>",
+                "<tr role=\"row\"><th scope=\"row\" role=\"rowheader\"><span class=\"api-parameter-label\" aria-hidden=\"true\">Name</span><code>{}</code>{}</th><td role=\"cell\"><span class=\"api-parameter-label\" aria-hidden=\"true\">Type</span><code>{}</code></td><td role=\"cell\"><span class=\"api-parameter-label\" aria-hidden=\"true\">Default</span><code>{}</code></td><td role=\"cell\"><span class=\"api-parameter-label\" aria-hidden=\"true\">Description</span>{}</td></tr>",
                 escape_html(&parameter.name),
                 if parameter.required {
                     " <span class=\"api-kind\">required</span>"
@@ -6727,7 +6968,7 @@ fn render_api_members_flat(
             ));
         }
         body.push_str(&format!(
-            "<section class=\"api-member api-member-flat\" id=\"{}\"><header class=\"api-member-heading\"><h{heading}><code>{}</code></h{heading}><span class=\"api-kind\">{kind}</span></header><div class=\"api-member-body\">",
+            "<section class=\"api-member api-member-flat\" id=\"{}\"><header class=\"api-member-heading\"><h{heading}><code>{}</code></h{heading}><span class=\"api-kind\">{kind}</span>",
             escape_html(anchor),
             escape_html(&member.name),
         ));
@@ -6741,6 +6982,7 @@ fn render_api_members_flat(
                 escape_html(&member.name),
             )),
         ));
+        body.push_str("</header><div class=\"api-member-body\">");
         if let Some(signature) = python_member_display_signature(member) {
             body.push_str(&format!(
                 "<pre class=\"api-member-signature\"><code data-lang=\"python\">{}</code></pre>",
@@ -6927,7 +7169,7 @@ fn render_member_parameters(
     }
     let heading = (level + 1).clamp(3, 6);
     body.push_str(&format!(
-        "<h{heading}>Parameters</h{heading}><div class=\"reference-table-wrap\"><table class=\"api-parameter-table\"><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>"
+        "<h{heading}>Parameters</h{heading}><div class=\"reference-table-wrap\"><table class=\"api-parameter-table\" role=\"table\"><thead role=\"rowgroup\"><tr role=\"row\"><th scope=\"col\">Name</th><th scope=\"col\">Type</th><th scope=\"col\">Default</th><th scope=\"col\">Description</th></tr></thead><tbody role=\"rowgroup\">"
     ));
     for parameter in parameters {
         let default = match parameter.default.as_deref() {
@@ -6941,7 +7183,7 @@ fn render_member_parameters(
             .map(|docs| render_doc_text(docs, (heading + 1).clamp(5, 6)))
             .unwrap_or_else(|| "<span class=\"reference-missing\">—</span>".to_owned());
         body.push_str(&format!(
-            "<tr><td><code>{}</code></td><td><code>{}</code></td><td><code>{}</code></td><td>{}</td></tr>",
+            "<tr role=\"row\"><th scope=\"row\" role=\"rowheader\"><span class=\"api-parameter-label\" aria-hidden=\"true\">Name</span><code>{}</code></th><td role=\"cell\"><span class=\"api-parameter-label\" aria-hidden=\"true\">Type</span><code>{}</code></td><td role=\"cell\"><span class=\"api-parameter-label\" aria-hidden=\"true\">Default</span><code>{}</code></td><td role=\"cell\"><span class=\"api-parameter-label\" aria-hidden=\"true\">Description</span>{}</td></tr>",
             escape_html(&parameter.name),
             render_signature_code(parameter.signature.as_deref().unwrap_or("—"), item_links),
             escape_html(default),
@@ -7280,7 +7522,16 @@ fn render_doc_text_omitting_parameters(
         );
     }
 
-    let render_paragraphs = |lines: &[&str]| render_prose_blocks(lines, docs.format);
+    let render_paragraphs = |lines: &[&str]| {
+        if lines
+            .iter()
+            .any(|line| line.trim_start().starts_with(">>>"))
+        {
+            render_python_example(lines)
+        } else {
+            render_prose_blocks(lines, docs.format)
+        }
+    };
 
     let lines = docs.body.lines().collect::<Vec<_>>();
     let mut sections = vec![];
@@ -10486,6 +10737,21 @@ mod tests {
     }
 
     #[test]
+    fn python_doctests_without_an_examples_heading_render_as_source() {
+        let rendered = render_doc_text(
+            &alphal00p_docs_schema::DocText::new(
+                DocFormat::PythonDocstring,
+                "Call with a value:\n\n>>> value = 2\n>>> value * value\n4",
+            ),
+            3,
+        );
+
+        assert!(rendered.contains("<p>Call with a value:</p>"));
+        assert!(rendered.contains("<code data-lang=\"python\">value = 2\nvalue * value</code>"));
+        assert!(!rendered.contains("&gt;&gt;&gt;"));
+    }
+
+    #[test]
     fn python_doctest_main_remains_at_module_scope() {
         let rendered = render_doc_text(
             &alphal00p_docs_schema::DocText::new(
@@ -11479,6 +11745,17 @@ mod tests {
     }
 
     #[test]
+    fn release_headings_omit_only_empty_sections() {
+        let body = "<h1>Versions</h1>\n<h2>Unreleased</h2>\n<h2>0.5.6</h2>\n<h3>Fixed</h3><ul><li>Metric initialization</li></ul>\n<h2>0.5.5</h2><p>Kept notes</p>\n<h2>Empty tail</h2>\n";
+        let rendered = omit_empty_release_headings(body).unwrap();
+        assert!(!rendered.contains("Unreleased"));
+        assert!(!rendered.contains("Empty tail"));
+        assert!(rendered.contains("<h2>0.5.6</h2>\n<h3>Fixed</h3>"));
+        assert!(rendered.contains("<li>Metric initialization</li>"));
+        assert!(rendered.contains("<h2>0.5.5</h2><p>Kept notes</p>"));
+    }
+
+    #[test]
     fn pagination_keeps_generated_reference_before_version_history() {
         let builder = SiteBuilder::discover().unwrap();
         for product in &builder.registry.product {
@@ -12168,6 +12445,19 @@ mod tests {
             "id=\"engine-run-method\" href=\"{engine_route}#engine-run-method\" data-reference-redirect tabindex=\"-1\" aria-hidden=\"true\""
         )));
 
+        let member = engine_page
+            .split("id=\"engine-run-method\"")
+            .nth(1)
+            .unwrap();
+        let heading = member.split("</header>").next().unwrap();
+        assert!(heading.contains("reference-permalink"));
+        assert!(
+            !member
+                .split("api-member-body")
+                .nth(1)
+                .unwrap()
+                .starts_with("\"><a class=\"reference-permalink")
+        );
         assert!(engine_page.contains("Engine(state: str = None)"));
         assert!(!engine_page.contains("class Engine:"));
         assert!(engine_page.contains(
@@ -12207,7 +12497,10 @@ mod tests {
         )));
         assert!(!engine_page.contains(&format!("href=\"{engine_route}\">Engine</a>")));
         assert!(engine_page.contains("class=\"api-parameter-table\""));
-        assert!(engine_page.contains("<td><code>value</code></td><td><code>int</code></td>"));
+        assert!(engine_page.contains("<th scope=\"col\">Type</th>"));
+        assert!(engine_page.contains("scope=\"row\" role=\"rowheader\""));
+        assert!(engine_page.contains("aria-hidden=\"true\">Name</span><code>value</code></th>"));
+        assert!(engine_page.contains("aria-hidden=\"true\">Type</span><code>int</code></td>"));
         assert!(engine_page.contains("class=\"api-doc-section api-doc-returns\""));
         assert!(engine_page.contains("class=\"api-doc-section api-doc-raises\""));
         assert!(engine_page.contains("class=\"api-doc-section api-doc-examples\""));
@@ -12483,6 +12776,24 @@ mod tests {
             .find(|page| page.id == "quickstart")
             .unwrap();
         quickstart.id = "getting-started".to_owned();
+        // Keep portal links valid so this fixture reaches the quickstart invariant.
+        for destination in builder
+            .portal
+            .topic
+            .iter_mut()
+            .flat_map(|topic| [&mut topic.guide, &mut topic.examples])
+            .chain(
+                builder
+                    .portal
+                    .example
+                    .iter_mut()
+                    .map(|example| &mut example.target),
+            )
+        {
+            if destination.product == "gammaloop" && destination.page == "quickstart" {
+                destination.page = "getting-started".to_owned();
+            }
+        }
 
         let error = builder.check().unwrap_err();
         assert!(format!("{error:#}").contains("has no quickstart page"));
@@ -12513,10 +12824,51 @@ mod tests {
     }
 
     #[test]
+    fn developer_header_shares_site_destinations_and_one_named_brand() {
+        for docs_root in ["", "../../"] {
+            let html = developer_document(
+                ("Developer notes", "Architecture"),
+                docs_root,
+                "../../../",
+                "",
+                "",
+                "<h1>Architecture</h1>",
+                "",
+            );
+            assert!(html.contains(&format!(
+                "href=\"{docs_root}assets/local-unitarity-light.svg\""
+            )));
+            assert!(html.contains("href=\"../../../libraries/\" aria-current=\"page\""));
+            assert_eq!(html.matches("aria-label=\"αLoop home\"").count(), 1);
+            assert!(html.contains("class=\"portal-nav\""));
+            for route in ["about", "people", "talks", "publications"] {
+                assert!(html.contains(&format!("href=\"../../../{route}/\"")));
+            }
+            assert!(!html.contains("data-product-select"));
+            assert!(html.contains("aria-label=\"αLoop home\""));
+            assert!(html.contains("data-search-open"));
+            assert!(html.contains("data-menu-toggle"));
+        }
+    }
+
+    #[test]
     fn site_assets_replace_read_only_generated_files() {
         let builder = SiteBuilder::discover().unwrap();
         let output = tempfile::tempdir().unwrap();
         builder.write_site_assets(output.path()).unwrap();
+        let source_fonts = builder.root.join("docs/assets/fonts");
+        for entry in WalkDir::new(&source_fonts) {
+            let entry = entry.unwrap();
+            if entry.file_type().is_file() {
+                let relative = entry.path().strip_prefix(&source_fonts).unwrap();
+                let copied = output.path().join("assets/fonts").join(relative);
+                assert_eq!(fs::read(&copied).unwrap(), fs::read(entry.path()).unwrap());
+                let mut permissions = fs::metadata(&copied).unwrap().permissions();
+                permissions.set_readonly(true);
+                fs::set_permissions(&copied, permissions).unwrap();
+            }
+        }
+        fs::write(output.path().join("assets/fonts/obsolete.woff2"), "stale").unwrap();
         let font = output.path().join("assets/STIXTwoMath-Regular.woff2");
         let mut permissions = fs::metadata(&font).unwrap().permissions();
         permissions.set_readonly(true);
@@ -12524,6 +12876,17 @@ mod tests {
 
         builder.write_site_assets(output.path()).unwrap();
 
+        assert!(!output.path().join("assets/fonts/obsolete.woff2").exists());
+        for entry in WalkDir::new(&source_fonts) {
+            let entry = entry.unwrap();
+            if entry.file_type().is_file() {
+                let relative = entry.path().strip_prefix(&source_fonts).unwrap();
+                assert_eq!(
+                    fs::read(output.path().join("assets/fonts").join(relative)).unwrap(),
+                    fs::read(entry.path()).unwrap()
+                );
+            }
+        }
         assert_eq!(
             fs::read(font).unwrap(),
             fs::read(
@@ -12652,6 +13015,7 @@ mod tests {
             "people/index.html",
             "talks/index.html",
             "publications/index.html",
+            "libraries/index.html",
         ] {
             let html = fs::read_to_string(output.path().join(page)).unwrap();
             assert!(html.contains("assets/site.css"));
@@ -12674,6 +13038,12 @@ mod tests {
             "spensologo.svg",
             "STIXTwoMath-Regular.woff2",
             "STIX-Two-OFL.txt",
+            "fonts.css",
+            "code.css",
+            "documentation-full.css",
+            "code-blocks.js",
+            "alphalooplogo-light.svg",
+            "alphalooplogo-dark.svg",
             "publications.json",
         ] {
             assert!(output.path().join("assets").join(asset).is_file());
@@ -12732,7 +13102,7 @@ mod tests {
     }
 
     #[test]
-    fn portal_task_chooser_routes_each_goal_to_the_registered_quickstart() {
+    fn portal_topics_and_examples_follow_registered_pages_in_each_channel() {
         let builder = SiteBuilder::discover().unwrap();
         for (channel, tag, channel_route) in [
             (BuildChannel::Latest, None, "latest"),
@@ -12741,26 +13111,72 @@ mod tests {
             let output = tempfile::tempdir().unwrap();
             write_test_portal(&builder, output.path(), channel, tag);
             let html = fs::read_to_string(output.path().join("index.html")).unwrap();
-
-            for task in &builder.portal.task {
-                let product_id = &task.product;
+            assert!(html.contains("Software for perturbative quantum field theory"));
+            assert_eq!(
+                html.matches("class=\"portal-topic-card\"").count(),
+                builder.portal.topic.len()
+            );
+            for example in &builder.portal.example {
+                let (runtime, label) = match example.runtime {
+                    NotebookRuntime::Browser => ("browser", "Browser example"),
+                    NotebookRuntime::Native => ("native", "Run locally"),
+                };
+                assert!(html.contains(&format!("data-runtime=\"{runtime}\"")));
+                assert!(html.contains(label));
+            }
+            for destination in builder
+                .portal
+                .topic
+                .iter()
+                .flat_map(|topic| [&topic.guide, &topic.examples])
+                .chain(builder.portal.example.iter().map(|example| &example.target))
+            {
                 let product = builder
                     .registry
                     .product
                     .iter()
-                    .find(|product| product.id == task.product)
+                    .find(|product| product.id == destination.product)
                     .unwrap();
-                let quickstart = product
+                let page = product
                     .pages
                     .iter()
-                    .find(|page| page.id == "quickstart")
+                    .find(|page| page.id == destination.page)
                     .unwrap();
                 assert!(html.contains(&format!(
-                    "href=\"products/{product_id}/{channel_route}/{}\"",
-                    quickstart.route
+                    "href=\"products/{}/{channel_route}/{}\"",
+                    product.id, page.route
                 )));
             }
+            let libraries = fs::read_to_string(output.path().join("libraries/index.html")).unwrap();
+            for product in &builder.registry.product {
+                for route in ["quickstart/", "reference/rust/", "reference/python/"] {
+                    assert!(libraries.contains(&format!(
+                        "href=\"../products/{}/{channel_route}/{route}\"",
+                        product.id
+                    )));
+                }
+            }
         }
+    }
+
+    #[test]
+    fn portal_topics_reject_unknown_destinations_and_duplicate_ids() {
+        let mut builder = SiteBuilder::discover().unwrap();
+        builder.portal.topic[0].guide.page = "missing-page".to_owned();
+        assert!(format!("{:#}", builder.check().unwrap_err()).contains("is not a registered page"));
+
+        let mut builder = SiteBuilder::discover().unwrap();
+        builder.portal.topic[0]
+            .products
+            .push("missing-library".to_owned());
+        assert!(
+            format!("{:#}", builder.check().unwrap_err())
+                .contains("must cover every registered library")
+        );
+
+        let mut builder = SiteBuilder::discover().unwrap();
+        builder.portal.topic[1].id = builder.portal.topic[0].id.clone();
+        assert!(format!("{:#}", builder.check().unwrap_err()).contains("duplicate portal topic"));
     }
 
     #[test]
@@ -12971,7 +13387,7 @@ mod tests {
         let developer_root = output.path().join("developers");
         assert!(!stale.exists());
         let hub = fs::read_to_string(developer_root.join("index.html")).unwrap();
-        assert!(hub.contains("For developers"));
+        assert!(!hub.contains("class=\"product-eyebrow\""));
         assert!(hub.contains("href=\"assets/local-unitarity-light.svg\""));
         assert!(hub.contains("Implemented architecture"));
         assert!(hub.contains("Design proposals"));
@@ -13008,7 +13424,7 @@ mod tests {
         let parsing =
             fs::read_to_string(developer_root.join("architecture/schoonschip-network/index.html"))
                 .unwrap();
-        assert!(parsing.contains("For developers"));
+        assert!(!parsing.contains("class=\"product-eyebrow\""));
         assert!(parsing.contains("schoonschip-net-parsing.typ"));
 
         let search = serde_json::from_slice::<Vec<SearchEntry>>(
@@ -13173,6 +13589,13 @@ mod tests {
             let rendered = fs::read_to_string(destination.join("index.html")).unwrap();
             assert!(rendered.contains(&format!("data-search-index=\"{expected_search}\"")));
             assert!(!rendered.contains("citations/"));
+            assert_eq!(rendered.matches("aria-label=\"αLoop home\"").count(), 1);
+            let header_start = rendered.find("<header class=\"portal-header").unwrap();
+            let header_end = rendered[header_start..].find("</header>").unwrap() + header_start;
+            assert!(!rendered[header_start..header_end].contains("data-product-select"));
+            assert!(rendered.contains("class=\"sidebar-project\""));
+            let expected_home = expected_search.replace("search-index.json", "libraries/");
+            assert!(rendered.contains(&format!("href=\"{expected_home}\" aria-current=\"page\"")));
             assert!(rendered.contains(&format!(
                 "https://github.com/alphal00p/gammaloop/blob/0123456789abcdef/{expected_source}"
             )));

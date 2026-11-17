@@ -1,7 +1,11 @@
 #import "../../shared.typ": callout, boundary, developer-link, product-link
 
 #let overview = [
-= Overview
+#context if target() == "html" {
+  html.elem("span", attrs: (id: "overview"))[]
+} else {
+  heading(level: 1)[Overview]
+}
 
 Vakint matches single-scale vacuum integrals to a library of known topologies, canonicalizes
 their momentum routing, reduces tensor numerators, and evaluates them analytically or

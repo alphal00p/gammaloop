@@ -43,8 +43,8 @@ selectors and run the affected cell with its play button.
   geometric positions, while the layered layout organizes the workflow in its chosen direction.
 - Enable *Custom Python line theme*. Edge selectors inspect each channel's protocol to choose
   its color, label, and pattern. Endpoint selectors place direction marks using source/sink flow.
-- Enable *Half-edge IDs* to see how the incoming request and outgoing publication differ from
-  internal edges. The notebook reports the node, edge, and half-edge counts below the drawings.
+- Compare the incoming request and outgoing publication with internal edges. The notebook
+  reports the node, edge, and half-edge counts below the drawings.
 - Switch the node store and inspect the payload checks. Node, edge, and endpoint dataclass
   instances remain attached by identity, including their shared runtime object.
 
@@ -60,7 +60,7 @@ config = linnet.RenderSettings(
         algorithm=linnet.LayoutAlgorithm.Impred,
         impred_parallel_balance=1.0,
         impred_pull=0.45,
-        impred_external_max_points=2,
+        impred_external_max_points=0,
     )
 )
 view = graph.render(config=config)
@@ -68,7 +68,9 @@ view
 ```
 
 The #link("reference/typst/layout/")[layout guide] describes every ImPrEd control.
-Python uses underscores where the Typst names use hyphens. Explicit layouts
+Python uses underscores where the Typst names use hyphens.
+Here, `impred_external_max_points=0` disables insertion of intermediate points
+on external routes. Explicit layouts
 such as `LayoutAlgorithm.Force` continue to select their respective algorithms.
 
 == The rendering boundary

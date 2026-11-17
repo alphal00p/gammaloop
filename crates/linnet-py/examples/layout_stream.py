@@ -3,7 +3,7 @@
 # dependencies = [
 #     "symbolica==3.0.1",
 #     "anywidget==0.9.18",
-#     "marimo==0.24.0",
+#     "marimo==0.25.1",
 # ]
 # ///
 

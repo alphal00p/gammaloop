@@ -949,7 +949,6 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
                     .last()
                     .is_some_and(|port| self.permits_slot(port)))
             || head.is_scalar()
-            || !self.plain(head)
             || !matches!(self.slots.classify(function.as_view()), SlotMatch::Other)
         {
             return None;
@@ -958,6 +957,8 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         let ports = if let Some(ports) = self.tensor_ports.get(&value) {
             ports.clone()
         } else {
+            // Builtin tensor symmetries preserve explicit ports. The interface
+            // proof below guards admission; emission normalizes signs and zeros.
             if !self.inference.algebra_preserves_leaf_interfaces(value) {
                 return None;
             }

@@ -1491,7 +1491,7 @@ with sync_playwright() as driver:
                     const module = await import(url);
                     const original = [...new DOMParser().parseFromString(html, 'text/html')
                         .querySelectorAll('svg[data-linnet-interactive]')].map(attributes);
-                    const state = {request: {id: 'channels', labels: []}, scripts: [controls], rendered: {id: 'channels', html: html + '<script>window.untrustedScriptRan = true</script>'}};
+                    const state = {request: {id: 'channels', labels: []}, scripts: [controls], rendered: {id: 'channels', html: html + '<script>window.untrustedScriptRan = true</script><button hidden id=untrusted onclick="window.untrustedHandlerRan=true">Untrusted</button>'}};
                     const ready = new Promise((resolve, reject) => {
                         timer = setTimeout(() => reject(new Error('render event timed out')), 10000);
                         el.addEventListener('linnet:rendered', resolve, {once: true});
@@ -1499,7 +1499,10 @@ with sync_playwright() as driver:
                     const model = {get: name => state[name], on() {}, off() {}, send() {}};
                     cleanup = await module.default.render({model, el});
                     const doc = (await ready).detail.document;
-                    assert(el.querySelector('iframe').getAttribute('sandbox') === 'allow-same-origin', 'mount frame sandbox changed');
+                    assert(el.querySelector('iframe').getAttribute('sandbox') === 'allow-same-origin allow-scripts', 'display frame sandbox changed');
+                    assert(doc.querySelector('meta[http-equiv="Content-Security-Policy"]').content.includes("script-src 'none'"), 'display frame must block markup scripts and handlers');
+                    doc.querySelector('#untrusted').click();
+                    assert(!doc.defaultView.untrustedHandlerRan, 'snapshot inline handler executed');
                     assert(!doc.defaultView.untrustedScriptRan, 'snapshot script escaped the sandbox');
                     const settle = async () => {
                         for (let i = 0; i < 4; i++) await new Promise(resolve => doc.defaultView.requestAnimationFrame(resolve));

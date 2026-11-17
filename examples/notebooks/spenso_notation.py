@@ -1,3 +1,12 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "symbolica==3.0.1",
+#     "marimo==0.25.1",
+#     "anywidget>=0.9,<1",
+# ]
+# ///
+
 """An executable guide to Spenso's symbolic and component notation."""
 
 # ruff: noqa: PLR1711 -- marimo uses explicit cell returns.
@@ -813,8 +822,18 @@ def _(
             assert (_a - _b).expand() == 0
     assert isinstance(Symbol.I * gamma, TensorExpression)
     assert isinstance(gamma * Symbol.I, TensorExpression)
+    notation_verified = True
     mo.md(
         "**Verified:** matching components, retained tensor types, and one remaining spinor axis in each supplied example."
+    )
+    return (notation_verified,)
+
+
+@app.cell(hide_code=True)
+def _(mo, notation_verified):
+    assert notation_verified
+    mo.Html(
+        '<span data-notebook-ready="spenso_notation">Example computations completed.</span>'
     )
     return
 

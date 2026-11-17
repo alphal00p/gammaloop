@@ -5,10 +5,6 @@
 
 This tour joins the model, generator, and graph APIs through `symbolica.community.hepkit`. Inspect the generation report, the diagram-wide factor, and the particle metadata on every edge.
 
-The notebook runs in the browser when this site's notebook assets are available. Its cells
-are editable; run a changed cell to update the dependent results. The first load downloads
-Symbolica, the notebook runtime, and this example's data.
-
 #context if target() == "html" {
   html.elem("div", attrs: (
     class: "live-notebook",

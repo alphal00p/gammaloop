@@ -2,7 +2,7 @@
 # requires-python = ">=3.11"
 # dependencies = [
 #     "anywidget>=0.9,<1",
-#     "marimo==0.24.0",
+#     "marimo==0.25.1",
 #     "symbolica==3.0.1",
 # ]
 # ///
@@ -13,8 +13,9 @@ __generated_with = "0.24.0"
 app = marimo.App(width="medium", app_title="FeynKit: Models, generation, and graphs")
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _():
+    # documentation: setup-only
     from functools import partial
 
     import marimo as mo

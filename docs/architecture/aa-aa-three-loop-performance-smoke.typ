@@ -1,4 +1,4 @@
-= Three-Loop aa to aa Performance Smoke
+= Three-loop aa to aa performance smoke
 
 #quote(block: true)[
 #strong[Status:] Archived, partially reproducible performance evidence

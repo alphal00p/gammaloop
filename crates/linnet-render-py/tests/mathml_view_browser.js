@@ -16,7 +16,7 @@ const box = element => {
     width:r.width, height:r.height, centerY:(r.top+r.bottom)/2};
 };
 
-export async function inspect(doc = document, request = null) {
+export async function inspect(doc = document, request = null, widgetFrame = false) {
   // Rendered means controls and fallback layout are ready. Exact geometry
   // checks additionally need the separately delivered font stylesheet.
   const deadline = performance.now() + 5000;
@@ -32,7 +32,17 @@ export async function inspect(doc = document, request = null) {
   const svg = doc.querySelector('svg[data-linnet-interactive]');
   assert(svg && svg.linnetSelection !== undefined, 'native SVG controls did not initialize');
   assert(svg.querySelectorAll('.linnet-viewport').length === 1, 'viewport must initialize once');
-  assert(svg.querySelectorAll('.linnet-toolbar').length === 1, 'toolbar must initialize once');
+  assert(Boolean(doc.body?.hasAttribute('data-linnet-frame-owner')) === widgetFrame, 'wrong display owner');
+  if (widgetFrame) {
+    const row = svg.previousElementSibling;
+    assert(row?.classList.contains('linnet-control-row'), 'graph must own a separate control row');
+    assert(row.querySelectorAll('.linnet-toolbar').length === 1, 'toolbar must initialize once');
+    assert(!svg.querySelector('.linnet-toolbar'), 'toolbar must not cover graph labels');
+    assert(box(row).bottom <= box(svg).top + 1, 'control row overlaps graph labels');
+  } else {
+    assert(svg.querySelectorAll('.linnet-toolbar').length === 1, 'standalone toolbar must initialize once');
+    assert(!doc.querySelector('.linnet-control-row'), 'standalone controls must remain in the SVG');
+  }
   const labels = [...svg.querySelectorAll('.linnet-math-label')];
   assert(labels.length === 9, `lost native labels: ${labels.length}`);
   const diagnostic = {labels:[],regressions:[]};
@@ -211,7 +221,7 @@ export async function mountPair(engine, width) {
       `ready event preceded controls or was duplicated: ${JSON.stringify(record.events)}`);
     const doc=record.host.querySelector('iframe').contentDocument;
     captures.push({name:record.name,request_id:record.request.id,events:record.events,
-      source_labels:record.request.labels,receipt:record.receipt,geometry:await inspect(doc,record.request)});
+      source_labels:record.request.labels,receipt:record.receipt,geometry:await inspect(doc,record.request,true)});
   }
   const firstDoc=records[0].host.querySelector('iframe').contentDocument;
   const secondDoc=records[1].host.querySelector('iframe').contentDocument;
@@ -253,7 +263,7 @@ export async function disposeAndRemount() {
     await ready;
     assert(record.messages.filter(message=>message.action === 'measure').length === before,
       'completed notebook view silently remeasured');
-    await inspect(record.host.querySelector('iframe').contentDocument,record.request);
+    await inspect(record.host.querySelector('iframe').contentDocument,record.request,true);
     record.dispose();
     assert([...record.callbacks.values()].every(callbacks=>callbacks.size === 0), 'remounted callbacks leaked');
   }

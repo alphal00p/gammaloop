@@ -15,6 +15,7 @@
 #import "content/showcase-numerical-integration.typ": showcase-numerical-integration
 #import "content/showcase-kinematics.typ": showcase-kinematics
 #import "content/showcase-ufo.typ": showcase-ufo
+#import "content/showcase-four-loop-numerator.typ": showcase-four-loop-numerator
 #import "content/showcase-tensor-reduction.typ": showcase-tensor-reduction
 #import "content/community-host.typ": community-host
 #import "content/api.typ": api
@@ -42,6 +43,7 @@
     #showcase-numerical-integration
     #showcase-kinematics
     #showcase-ufo
+    #showcase-four-loop-numerator
     #showcase-tensor-reduction
     #community-host
     #api

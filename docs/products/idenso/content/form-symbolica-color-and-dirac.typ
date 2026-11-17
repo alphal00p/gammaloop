@@ -41,7 +41,7 @@ chain(cof(Nc,i),dind(cof(Nc,j)),
 ```
 This is a specification-level pattern notation. GammaLoop currently has internal helpers named `spenso::gamma_chain` and `spenso::gamma_trace`; those names are mentioned only when documenting the implementation source.
 
-== Source Inventory
+== Source inventory
 
 - FORM manual gamma-algebra section: #source(form-manual).
 - FORM current source repository, gamma trace implementation: #source(opera).
@@ -54,7 +54,7 @@ This is a specification-level pattern notation. GammaLoop currently has internal
 - spenso Rust crate documentation: #source(spenso-doc), symbolic tensor-library source: #source(spenso-symbolic).
 - Typst syntax and math documentation: #source(typst-syntax), #source(typst-math).
 
-== Notational Conventions
+== Notational conventions
 
 Lorentz indices are written as $μ, ν, ρ, σ$ and are raised and lowered with $η^(μ ν)$ and $η_(μ ν)$. The dimension is denoted by $D$ in dimension-generic identities and fixed to $4$ in the four-dimensional FORM `trace4` rules. Repeated Lorentz labels are contracted.
 

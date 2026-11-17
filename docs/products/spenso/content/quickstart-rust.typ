@@ -59,9 +59,10 @@ Run `cargo run`. Success means the assertion passes and the printed result conta
 component selected by the two remaining free indices. Spenso matches index identity and duality,
 not merely equal dimensions.
 
-#callout("The docs run this example", [
-  The documentation test compiles and executes this program against the current workspace. The
-  contraction itself needs neither Symbolica nor Spenso's optional `shadowing` feature.
+#callout("Running locally", [
+  Run this Rust program locally with `cargo run`; it cannot run in the browser. The contraction
+  itself needs neither Symbolica nor Spenso's optional `shadowing` feature. A cold dependency
+  build takes longer than this small contraction.
 ])
 
 Continue with the #link("tutorial/")[first tensor workflow] for a more deliberate explanation of

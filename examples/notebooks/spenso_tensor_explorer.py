@@ -1,3 +1,12 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "symbolica==3.0.1",
+#     "marimo==0.25.1",
+#     "anywidget>=0.9,<1",
+# ]
+# ///
+
 """Explore a concrete rank-three spinor current and its matrix slices."""
 
 # ruff: noqa: B018, PLR1711 -- marimo uses final expressions and explicit cell returns.
@@ -26,9 +35,8 @@ def _():
 def _(Representation, TensorExpression, TensorName):
     spinor = Representation.bis(4)
     Jbar = TensorName("Jbar", print={"typst": "macron(J)", "latex": r"\bar{J}"})(spinor)
-    J = TensorName("J")(spinor)
     gamma = TensorExpression.dirac_gamma(4)
-    current = Jbar(1) * gamma(1, 2, 1) * gamma(2, 3, 2) * gamma(3, 4, 3) 
+    current = Jbar(1) * gamma(1, 2, 1) * gamma(2, 3, 2) * gamma(3, 4, 3)
     current
     return (current,)
 
@@ -85,6 +93,37 @@ def _(Representation, S, TensorName):
 @app.cell
 def _(kernel):
     kernel.structure
+    return
+
+
+@app.cell
+def _(kernel, mo):
+    assert kernel.shape == (4, 4, 4, 4)
+    component_index = mo.ui.slider(
+        0, 255, value=0, label="Flat component index", show_value=True
+    )
+    component_index
+    return (component_index,)
+
+
+@app.cell
+def _(component_index, kernel, mo):
+    selected_component = kernel[component_index.value]
+    mo.vstack(
+        [
+            mo.md(f"Component **{component_index.value}** of the 256-entry current"),
+            mo.as_html(selected_component),
+        ]
+    )
+    return (selected_component,)
+
+
+@app.cell(hide_code=True)
+def _(mo, selected_component):
+    assert selected_component is not None
+    mo.Html(
+        '<span data-notebook-ready="spenso_tensor_explorer">Example computations completed.</span>'
+    )
     return
 
 

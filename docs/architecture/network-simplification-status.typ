@@ -171,7 +171,7 @@ SchoonschipSettings::with_chain_like_functions()
 SchoonschipSettings::with_contraction_order(...)
 ```
 
-== Contraction Ordering Knobs
+== Contraction ordering knobs
 <contraction-ordering-knobs>
 The current ordering enum is:
 

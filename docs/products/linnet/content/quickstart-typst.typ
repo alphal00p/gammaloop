@@ -32,7 +32,10 @@ From a GammaLoop checkout, save this as `linnest-quickstart.typ` in the reposito
   )
 })
 
-#draw(layout(g))
+#context {
+  let g = graph.style(g, edge-label: edge => edge.label)
+  draw(layout(g))
+}
 ```
 
 Compile it from the same repository root:

@@ -1,19 +1,15 @@
 #import "../../shared.typ": source-link
 
 #let showcase-cff = [
-= Cross-Free Families
+= Cross-free families
 
 The `feynkit-cff` showcase starts from a one-loop scalar diagram. Edge IDs connect orientation constraints to the graph; each generated surface retains the energy and external-momentum data behind its Symbolica symbol.
-
-The notebook runs in the browser when this site's notebook assets are available. Its cells
-are editable; run a changed cell to update the dependent results. The first load downloads
-Symbolica, the notebook runtime, and this example's data.
 
 #context if target() == "html" {
   html.elem("div", attrs: (
     class: "live-notebook",
     "data-notebook": "02_cff_and_symbolica_marimo",
-    "aria-label": "FeynKit: Cross-Free Families",
+    "aria-label": "FeynKit: Cross-free families",
   ))[
     #html.elem("p", attrs: (class: "live-notebook-fallback"))[
       This notebook needs JavaScript and this documentation build's notebook assets.

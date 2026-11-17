@@ -3,9 +3,11 @@
 #import "people.typ": people-page
 #import "talks.typ": talks-page
 #import "publications.typ": publications-page
+#import "libraries.typ": libraries-page
 
 #document("index.html")[#index-page]
 #document("about/index.html")[#about-page]
 #document("people/index.html")[#people-page]
 #document("talks/index.html")[#talks-page]
 #document("publications/index.html")[#publications-page]
+#document("libraries/index.html")[#libraries-page]

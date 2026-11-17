@@ -36,6 +36,10 @@ pyo3-stub-gen = { workspace = true, default-features = false, features = ["infer
 pyo3-stub-gen-derive = { workspace = true }
 spynso3 = { path = "../spynso3", default-features = false }
 
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# Native notebooks use the same independent OneLOop reference as the Community host.
+oneloop-python = { optional = true, git = "https://github.com/alphal00p/oneloopmaster", rev = "73102242c9c35e92be30f4e1f877e141b8f73c6c", default-features = false, features = ["community"] }
+
 [dev-dependencies]
 tempfile = "3.8"
 
@@ -46,6 +50,7 @@ features = ["python_export"]
 
 [features]
 default = ["ufo", "native"]
+oneloop = ["dep:oneloop-python", "native"]
 # Generic Linnet graph exports are opt-in; callbacks use core Symbolica graphs.
 linnet-python = ["dep:linnet-py"]
 native = [

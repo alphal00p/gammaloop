@@ -5,10 +5,6 @@
 
 This notebook covers `feynkit-model`, `feynkit-generator`, and `feynkit-graph` together. It shows immutable parameter updates, inclusive loop ranges, model-owned generation, JSON/DOT interchange, and signed momentum routing.
 
-The notebook runs in the browser when this site's notebook assets are available. Its cells
-are editable; run a changed cell to update the dependent results. The first load downloads
-Symbolica, the notebook runtime, and this example's data.
-
 #context if target() == "html" {
   html.elem("div", attrs: (
     class: "live-notebook",

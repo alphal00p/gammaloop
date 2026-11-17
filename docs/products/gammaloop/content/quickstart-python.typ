@@ -76,6 +76,8 @@ be persisted and explicitly execute a save command before closing the session.
   before building a long-running workflow around mutable state.
 ])
 
-The documentation harness syntax-checks this script. Runtime execution additionally needs the
-native wheel or source build and a Symbolica license mode appropriate for the user.
+Run this script locally with the native GammaLoop wheel or source build and an appropriate
+`SYMBOLICA_LICENSE`. The browser runtime does not include GammaLoop or its generated evaluator
+and state files. A cold build and process generation are the costly steps; reuse the saved
+state for subsequent evaluations.
 ]
