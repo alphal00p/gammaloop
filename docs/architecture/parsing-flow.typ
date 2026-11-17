@@ -5,16 +5,24 @@ networks in `crates/spenso/src/network/parsing`. It focuses on the
 control flow, shorthand expansion, opaque leaves, structure inference,
 and edge cases that affect Schoonschip-style notation.
 
-#strong[Audit status:] reviewed 2026-10-01 against jj change `xuoqsyop`.
+#strong[Audit status:] reviewed 2026-09-29 against the unified reduction and admitted-parser implementation.
+Scalar coefficient assembly reviewed 2026-10-16.
 Lifecycle: current implementation architecture.
+
+Opaque target construction returns the realized tensor and its canonical
+layout together. Eager contraction can remove internal ports, whereas a
+symbolic target retains the original interface. Eager construction uses the
+network's tensor-result boundary so completed lazy scalar multiples and sums
+are materialized with their coefficients intact.
 
 == Entry Points
 <entry-points>
 External parsing starts from `NetworkParse` methods such as `parse_to_atom_net`.
 The parser first rejects chains or traces nested inside another chain or
 trace, because they share one global `in`/`out` placeholder scope. It then
-creates a fresh `ParseState`, reserves the serialized names of input slot
-indices, and calls `try_from_view_impl` on the input `AtomView`. Parser
+creates a fresh `ParseState`, reserves the original admitted input slot-index
+spellings without replaying their normalizers, and calls `try_from_view_impl`
+on the input `AtomView`. Parser
 clones share both the allocator and reservation set, so newly generated
 dummies cannot collide with written indices or each other.
 
@@ -84,11 +92,21 @@ structure-attempt timer also includes cache lookup and slot reconstruction.
     meaning.],
 )
 
-When scalar precontraction is enabled, sum parsing collects borrowed pure-scalar
-summands and constructs their sum once with `Atom::add_many` only if tensor
-summands remain. An entirely scalar sum reuses the already normalized input
-atom. This avoids repeatedly copying a growing scalar sum; compatibility checks
-and tensor summands retain their existing meaning.
+When scalar precontraction is enabled, an entirely scalar sum reuses the
+already normalized input atom. A mixed scalar/tensor sum first parses and
+admits every child, retaining its original pure-scalar summands. If their
+leading numeric coefficients are exact complex rationals, the parser constructs
+that scalar coefficient once with `Atom::add_many`. Only Symbolica's `Natural`
+and `Large` coefficient representations are admitted; a variable, function or
+power has an implicit unit coefficient. Function bodies, powers, inverse
+denominators and scalar alias handles remain intact.
+
+Other coefficient domains retain the existing ordered fold: remaining source
+summands first, then the original first summand if scalar. In particular,
+inexact arithmetic is not reassociated. A nested additive operand is not
+admitted by the shallow exact-coefficient check. This avoids repeated copying
+of exact scalar prefixes without changing child callbacks, compatibility
+checks, tensor order, depth limits or first-term structure discovery.
 
 == Option Examples
 <option-examples>
@@ -108,9 +126,10 @@ and tensor summands retain their existing meaning.
     Tensorial-syntax classification rejects the wrapper, then the scalar
     parser unwraps its single argument, so opaque mode never sees it as
     a tensor leaf.],
-    [`dot(a,b,c)`], [Dot syntax is accepted only with two arguments. A
-    three-argument dot is rejected before scalar fallback, opaque
-    inference, or expand-mode materialization.],
+    [`dot(a,b,c)`], [Dot syntax requires two compatible rank-one operands.
+    Wrong arity or non-vector operands are rejected before scalar fallback,
+    opaque inference, or expand-mode materialization. Partial contractions
+    with a tensor's open port use metric syntax.],
     [`precontract_scalars = true`], [In `(a + b) * F(mink(D,i))`,
     `a + b` can be kept as one scalar factor next to the tensor network
     instead of a separate graph node.],
@@ -136,7 +155,7 @@ else -> scalar fallback
 ```
 
 Products, sums, and powers may hit the depth leaf boundary before they
-recurse. Function parsing validates dot arity, handles broadcast wrappers,
+recurse. Function parsing validates dot operands, handles broadcast wrappers,
 applies `is_tensorial(strict_tensor_filter)`, and
 uses the opaque tensor-expression boundary only for recognized shorthand
 roots.
@@ -193,7 +212,7 @@ Pow
 Fun
 ==== `AtomView::Fun`
 <atomviewfun>
-+ Check dot arity.
++ Check dot arity and compatible rank-one operands.
 + Handle broadcast wrappers.
 + Apply the strict tensor-syntax filter.
 + Keep recognized shorthand roots opaque when requested.
@@ -208,7 +227,7 @@ Parse directly as scalars.
 <function-parsing>
 #strong[Function];`try_from_fun(fun)`
 ↓
-#strong[Decision];`dot` with anything other than two args?
+#strong[Decision];`dot` without two compatible rank-one operands?
 Yes
 ==== Syntax error
 <syntax-error>
@@ -324,6 +343,10 @@ Dot
 <compact-scalar-product>
 `dot(p(rep), q(rep))` or `g(p(rep), q(rep))`
 
+Both dot operands are compatible rank-one vectors, including scalar-weighted
+vector expressions. A metric can instead connect a vector to an exposed port
+of a higher-rank tensor; that partial contraction is not scalar-product syntax.
+
 + Allocate one fresh dummy slot `d`.
 + Build `p(d) * q(d)`.
 + Parse that expression into a network.
@@ -368,8 +391,8 @@ trace
 <function-flow>
 Function parsing has the most important ordering rules.
 
-+ Reject malformed `dot` syntax first. Dot has exactly two arguments in
-  parser syntax.
++ Reject malformed `dot` syntax first. Dot requires exactly two compatible
+  rank-one operands.
 + If the head has the `broadcast` tag, require one argument, parse that
   argument recursively, and apply the head to the result.
 + Apply `is_tensorial(settings.strict_tensor_filter)`. If it rejects the
@@ -394,7 +417,8 @@ Function parsing has the most important ordering rules.
 #link("../../crates/spenso/src/network/parsing/mod.rs#L606")[crates/spenso/src/network/parsing/mod.rs:606]
 
 ```
-if symbol == SPENSO_TAG.dot && value.get_nargs() != 2 {
+if symbol == SPENSO_TAG.dot
+    && matcher.compact_inner_product_parts::<Aind>(value).is_none() {
     return Err(TensorNetworkError::InvalidDotFunction(...));
 }
 
@@ -823,7 +847,7 @@ parse(atom):
   dispatch by atom kind
 
 parse_fun(fun):
-  if fun is dot with arg count != 2:
+  if fun is dot without two compatible rank-one operands:
     return InvalidDotFunction
 
   if fun is a broadcast wrapper:

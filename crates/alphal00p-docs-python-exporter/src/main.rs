@@ -1,13 +1,24 @@
 //! Emit one pyo3-stub-gen inventory as a deterministic checked-in stub.
 
-use std::{env, error::Error, fs, path::PathBuf};
+use std::env;
+use std::error::Error;
+use std::fs;
+use std::path::{Path, PathBuf};
 
-#[cfg(any(feature = "gammaloop", feature = "idenso", feature = "vakint"))]
-use pyo3::types::{PyAnyMethods as _, PyDictMethods as _, PyModuleMethods as _};
 #[cfg(any(
+    feature = "feynkit",
     feature = "gammaloop",
-    feature = "idenso",
+    feature = "vakint",
+    feature = "linnet"
+))]
+use pyo3::types::{PyAnyMethods as _, PyDictMethods as _, PyModuleMethods as _};
+#[cfg(feature = "linnet")]
+use pyo3::types::{PyStringMethods as _, PyTypeMethods as _};
+#[cfg(any(
+    feature = "feynkit",
+    feature = "gammaloop",
     feature = "spenso",
+    feature = "linnet",
     feature = "vakint"
 ))]
 use std::collections::BTreeSet;
@@ -36,17 +47,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         .modules
         .get(module_name)
         .ok_or_else(|| format!("{component} inventory has no module {module_name}"))?;
-    #[cfg(feature = "gammaloop")]
-    if component == "gammaloop-python" {
-        validate_gammaloop_stub_surface(module)?;
+    #[cfg(any(feature = "feynkit", feature = "gammaloop", feature = "linnet"))]
+    if matches!(
+        component.as_str(),
+        "feynkit-community" | "gammaloop-python" | "linnet-graph"
+    ) {
+        validate_runtime_stub_surface(module_name, module)?;
     }
     #[cfg(feature = "spenso")]
     if component == "spynso3" {
         validate_spenso_stub_surface(module)?;
-    }
-    #[cfg(feature = "idenso")]
-    if component == "idenso-community" {
-        validate_idenso_stub_surface(module)?;
     }
     #[cfg(feature = "vakint")]
     if component == "vakint-community" {
@@ -57,14 +67,37 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let rendered = render(&component, module)?;
     let mut normalized = rendered
+        .trim_end()
         .lines()
         .map(str::trim_end)
         .collect::<Vec<_>>()
         .join("\n");
     normalized.push('\n');
     let mut outputs = vec![output];
-    if component == "linnet-py" {
-        outputs.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../linnet-py/linnet_py.pyi"));
+    // Nextest owns relocated test roots; standalone exporters can select the same source tree.
+    let root = match env::var_os("NEXTEST_WORKSPACE_ROOT")
+        .or_else(|| env::var_os("GAMMALOOP_WORKSPACE_ROOT"))
+    {
+        Some(root) => PathBuf::from(root),
+        None => Path::new(env!("CARGO_MANIFEST_DIR"))
+            .ancestors()
+            .nth(2)
+            .ok_or("documentation exporter is not inside a workspace")?
+            .to_path_buf(),
+    };
+    match component.as_str() {
+        "feynkit-community" => outputs
+            .push(root.join("crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi")),
+        "linnet-graph" => outputs.extend([
+            root.join("crates/linnet-py/python/symbolica/community/graph/__init__.pyi"),
+            root.join(
+                "examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi",
+            ),
+        ]),
+        "spynso3" => outputs.push(root.join(
+            "examples/notebooks/symbolica-host/python/symbolica/community/tensor/__init__.pyi",
+        )),
+        _ => {}
     }
     outputs.sort();
     outputs.dedup();
@@ -72,8 +105,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         if check {
             let checked_in = fs::read_to_string(&output)?;
             if checked_in != normalized {
-                let hint = if component == "linnet-py" {
-                    "regenerate the shared Linnet package/docs surface"
+                let hint = if matches!(
+                    component.as_str(),
+                    "feynkit-community" | "linnet-graph" | "spynso3"
+                ) {
+                    "regenerate the shared package/docs surface"
                 } else {
                     "regenerate the checked-in snapshot"
                 };
@@ -93,21 +129,73 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-#[cfg(feature = "gammaloop")]
-fn validate_gammaloop_stub_surface(
+#[cfg(any(feature = "feynkit", feature = "gammaloop", feature = "linnet"))]
+fn validate_runtime_stub_surface(
+    module_name: &str,
     module: &pyo3_stub_gen::generate::Module,
 ) -> Result<(), Box<dyn Error>> {
     let runtime = pyo3::Python::attach(|py| {
-        let module = pyo3::types::PyModule::new(py, "gammaloop._gammaloop")?;
-        gammaloop_api::python::register_python_api_for_docs(&module)?;
+        let module = match module_name {
+            #[cfg(feature = "linnet")]
+            "symbolica.community.graph" => {
+                let module = pyo3::types::PyModule::new(py, module_name)?;
+                linnet_py::register(&module)?;
+                module
+            }
+            #[cfg(feature = "feynkit")]
+            "symbolica.community.hepkit" => {
+                let module = pyo3::types::PyModule::new(py, module_name)?;
+                feynkit_py::initialize_feynkit(&module)?;
+                module
+            }
+            #[cfg(feature = "gammaloop")]
+            "gammaloop._gammaloop" => {
+                let module = pyo3::types::PyModule::new(py, module_name)?;
+                gammaloop_api::python::register_python_api_for_docs(&module)?;
+                module
+            }
+            _ => unreachable!("component has no runtime stub validator"),
+        };
         public_module_names(&module)
     })?;
     let stub = stub_names(module);
+    #[cfg(feature = "linnet")]
+    let stub = if module_name == "symbolica.community.graph" {
+        // Macro-generated classes need the same name normalization as the shipped stub.
+        pyo3::Python::attach(|py| -> pyo3::PyResult<BTreeSet<String>> {
+            let source = linnet_py::canonical_stub(module)
+                .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))?;
+            let ast = py.import("ast")?;
+            let mut names = BTreeSet::new();
+            for node in ast
+                .call_method1("parse", (source,))?
+                .getattr("body")?
+                .try_iter()?
+            {
+                let node = node?;
+                let kind = node.get_type().name()?;
+                if matches!(kind.to_str()?, "ClassDef" | "FunctionDef") {
+                    let name: String = node.getattr("name")?.extract()?;
+                    if !name.starts_with('_') {
+                        names.insert(name);
+                    }
+                } else if kind.to_str()? == "AnnAssign" {
+                    let name: String = node.getattr("target")?.getattr("id")?.extract()?;
+                    if !name.starts_with('_') {
+                        names.insert(name);
+                    }
+                }
+            }
+            Ok(names)
+        })?
+    } else {
+        stub
+    };
     if stub == runtime {
         return Ok(());
     }
     Err(format!(
-        "GammaLoop StubInfo does not match runtime registration: missing {:?}; unreachable {:?}",
+        "{module_name} StubInfo does not match runtime registration: missing {:?}; unreachable {:?}",
         runtime.difference(&stub).collect::<Vec<_>>(),
         stub.difference(&runtime).collect::<Vec<_>>()
     )
@@ -243,6 +331,8 @@ fn validate_exact_surface(
 
 fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Box<dyn Error>> {
     let gathered: Result<_, Box<dyn Error>> = match component {
+        #[cfg(feature = "feynkit")]
+        "feynkit-community" => Ok(("symbolica.community.hepkit", feynkit_py::stub_info()?)),
         #[cfg(feature = "gammaloop")]
         "gammaloop-python" => {
             let mut stub_info = gammaloop_api::python::stub_info()?;
@@ -283,13 +373,11 @@ fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Bo
             Ok(("gammaloop._gammaloop", stub_info))
         }
         #[cfg(feature = "linnet")]
-        "linnet-py" => Ok(("linnet_py", linnet_py::stub_info()?)),
+        "linnet-graph" => Ok(("symbolica.community.graph", linnet_py::stub_info()?)),
         #[cfg(feature = "spenso")]
-        "spynso3" => Ok(("symbolica.community.spenso", spynso3::stub_info()?)),
-        #[cfg(feature = "idenso")]
-        "idenso-community" => Ok(("symbolica.community.idenso", idenso::stub_info()?)),
+        "spynso3" => Ok(("symbolica.community.tensor", spynso3::stub_info()?)),
         #[cfg(feature = "vakint")]
-        "vakint-community" => Ok(("symbolica.community.vakint", vakint::stub_info()?)),
+        "vakint-community" => Ok(("symbolica.community.hepkit.vakint", vakint::stub_info()?)),
         _ => Err(format!(
             "component {component} is not enabled; select its matching Cargo feature"
         )
@@ -297,10 +385,10 @@ fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Bo
     };
     let (module_name, stub_info) = gathered?;
     #[cfg(any(
-        feature = "gammaloop",
         feature = "linnet",
         feature = "spenso",
-        feature = "idenso",
+        feature = "feynkit",
+        feature = "gammaloop",
         feature = "vakint"
     ))]
     let stub_info = scope_symbolica_floats(stub_info);
@@ -308,10 +396,10 @@ fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Bo
 }
 
 #[cfg(any(
-    feature = "gammaloop",
     feature = "linnet",
     feature = "spenso",
-    feature = "idenso",
+    feature = "feynkit",
+    feature = "gammaloop",
     feature = "vakint"
 ))]
 fn scope_symbolica_floats(mut stub_info: pyo3_stub_gen::StubInfo) -> pyo3_stub_gen::StubInfo {
@@ -320,6 +408,7 @@ fn scope_symbolica_floats(mut stub_info: pyo3_stub_gen::StubInfo) -> pyo3_stub_g
 
     // Numerica leaves these two classes unscoped in its stub inventory.
     // They belong to Symbolica, even when another product gathers first.
+    // Their metadata may be enabled alongside GammaLoop's standalone f64 API.
     let float_types = [
         TypeId::of::<PythonFloat>(),
         TypeId::of::<PythonComplexFloat>(),
@@ -555,23 +644,25 @@ def validate(runtime_module, stub_source):
     #[cfg(feature = "linnet")]
     #[test]
     fn linnet_package_and_docs_share_the_typed_stub_info_surface() {
-        let (module_name, stub_info) = super::gather("linnet-py").unwrap();
-        let canonical = super::render("linnet-py", &stub_info.modules[module_name]).unwrap();
-        assert_eq!(canonical, include_str!("../../linnet-py/linnet_py.pyi"));
+        let (module_name, info) = super::gather("linnet-graph").unwrap();
+        let module = info.modules.get(module_name).unwrap();
+        let canonical = linnet_py::canonical_stub(module).unwrap();
         assert_eq!(
             canonical,
-            include_str!("../../../docs/api/python/linnet-py.pyi")
+            include_str!("../../linnet-py/python/symbolica/community/graph/__init__.pyi")
+        );
+        assert_eq!(
+            canonical,
+            include_str!("../../../docs/api/python/linnet-graph.pyi")
         );
         for declaration in [
             "_NativeValue: typing.TypeAlias = (",
             "def __new__(cls, *, encode_node: typing.Callable[[NodeValue], DotVertexData]",
             "def build(*items: _GraphItem, name: _OptionalString = None",
             "def map(self, *, node: typing.Callable[[Node], typing.Any] | None = None",
-            "def render(self, output: builtins.str | os.PathLike[builtins.str], *, config: RenderConfig | None = None)",
-            "subgraph: _DrawSubgraphs = ...",
+            "def render(self, *, config: RenderSettings | None = None)",
             "node_outset: _AutoNumber = ...",
             "_Padding: typing.TypeAlias = builtins.int | builtins.float | _NativeArray | _NativeDict | Insets",
-            "show_half_edge_ids: _Boolean = ...",
             "def call(self, *args: _NativeValue, **kwargs: _NativeValue) -> TypstCall",
         ] {
             assert!(canonical.contains(declaration), "missing `{declaration}`");
@@ -588,7 +679,7 @@ def validate(runtime_module, stub_source):
     #[cfg(feature = "linnet")]
     #[test]
     fn linnet_stub_keeps_aliases_before_import_like_docstrings() {
-        let (module_name, mut stub_info) = super::gather("linnet-py").unwrap();
+        let (module_name, mut stub_info) = super::gather("linnet-graph").unwrap();
         let module = stub_info.modules.get_mut(module_name).unwrap();
         module
             .class
@@ -597,7 +688,7 @@ def validate(runtime_module, stub_source):
             .unwrap()
             .doc = "Construct a graph\nfrom its nodes and edges.\nimport drawing data as needed.";
 
-        let canonical = super::render("linnet-py", module).unwrap();
+        let canonical = super::render("linnet-graph", module).unwrap();
         let graph = canonical.find("class Graph:").unwrap();
         assert!(canonical.find("\n__all__ = [\n").unwrap() < graph);
         assert!(canonical.find("\n_NativeValue: typing.TypeAlias").unwrap() < graph);
@@ -614,11 +705,33 @@ def validate(runtime_module, stub_source):
             .modules
             .get(module_name)
             .expect("GammaLoop extension module");
-        super::validate_gammaloop_stub_surface(module)
+        let symbolica_module = stub_info
+            .modules
+            .get("symbolica")
+            .expect("Symbolica owns its numeric type definitions");
+        for (type_id, name) in [
+            (
+                std::any::TypeId::of::<symbolica::domains::float::PythonFloat>(),
+                "Float",
+            ),
+            (
+                std::any::TypeId::of::<symbolica::domains::float::PythonComplexFloat>(),
+                "ComplexFloat",
+            ),
+        ] {
+            assert!(!module.class.contains_key(&type_id));
+            assert_eq!(
+                symbolica_module.class.get(&type_id).map(|class| class.name),
+                Some(name),
+                "numeric definitions must remain available from their owning module"
+            );
+        }
+        super::validate_runtime_stub_surface(module_name, module)
             .expect("StubInfo and runtime registration match");
 
         let mut rendered = module
             .to_string()
+            .trim_end()
             .lines()
             .map(str::trim_end)
             .collect::<Vec<_>>()

@@ -189,3 +189,13 @@ When importing a covariant partner collection into a new process, supply its phy
 This choice preserves one factorized source numerator for each graph through ordinary and raised residues, all UV routes and local/integrated threshold counterterms. It avoids assigning a cut-dependent tensor after raised-cut alternatives have already been merged. As with any imported subset of gauge diagrams, a selected WW graph alone is not the complete physical observable: imported graph collections must contain the full covariant partner sum. Vertex/diagram filters retain their requested subsets and emit a generation diagnostic explaining that those subsets may be gauge dependent. The `vector_polarization_sum_gauge` setting continues to control external initial-state sums, independently of the internal gauge contract.
 
 The Higgs regression generates the actual six charged and four neutral Born graphs, then contracts their model numerators with exact rational components at two on-shell Higgs masses and both rest and boosted kinematics. It checks every VV, VG, GG and ghost weight, their graph symmetry factors, and their sum against three explicitly constructed physical vector polarizations. For MW=3, MH=10 and vev=6, the charged weights are 36, two copies of −209/4, 2500/9 and two copies of −9/4, totaling 1843/9. The neutral identical-state symmetry gives half that total at the corresponding equal-mass benchmark. The requested scalar and photon-mediated QCD acceptances remain separate phase regressions; they do not substitute for these electroweak certificates.
+
+Complete loop and coupling orders do not trigger the incomplete-partner
+diagnostic. Diagram selections, particle/vertex restrictions and active topology
+vetoes can remove required partners, including filters scoped to a cut amplitude.
+Disabled vetoes do not count as restrictions. The selection options own this
+distinction so the diagnostic also covers private diagram selections and callbacks.
+A declared massive quartet additionally rejects a known zero numerical pole:
+its physical longitudinal state is undefined there. An adjustable mass remains
+structurally massive for graph construction; this validation does not change
+that separate classification.

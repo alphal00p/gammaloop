@@ -72,7 +72,7 @@ rust_components = [
   { id = "linnet", package = "linnet", kind = "library", version_source = "crates/linnet/Cargo.toml", features = ["native", "nodestore-vec", "serde", "bincode", "drawing", "symbolica"] },
 ]
 python_components = [
-  { id = "linnet-py", package = "linnet-py", kind = "maturin-distribution", version_source = "crates/linnet-py/pyproject.toml", module = "linnet_py", features = ["extension-module", "abi3"] },
+  { id = "linnet-graph", package = "linnet-py", kind = "symbolica-community-module", version_source = "crates/linnet-py/Cargo.toml", module = "symbolica.community.graph", features = ["python_stubgen"] },
 ]
 
 [[product]]
@@ -81,7 +81,7 @@ title = "Spenso"
 tagline = "Typed tensors, symbolic structures, and executable tensor networks"
 logo = "spenso"
 source = "docs/products/spenso/main.typ"
-citation = { title = "Spenso", creators = ["Lucien Huber", "Valentin Hirschi", "Ben Ruijl", "Mathijs Fraaije"], year = 2026, repository = "https://github.com/alphal00p/spenso", doi = "10.5281/zenodo.18248388" }
+citation = { title = "Spenso", creators = ["Lucien Huber"], year = 2026, repository = "https://github.com/alphal00p/spenso", doi = "10.5281/zenodo.18248388" }
 pages = [
   { id = "overview", title = "Overview", summary = "Typed tensor structures, data representations, contractions, networks, and companion packages.", source = "docs/products/spenso/content/overview.typ", symbol = "overview", route = "", group = "Start here" },
   { id = "quickstart", title = "Build your first Spenso tensor", summary = "Choose Python or Rust and reach a checked representation-aware tensor result.", source = "docs/products/spenso/content/quickstart.typ", symbol = "quickstart", route = "quickstart/", group = "Start here" },
@@ -90,6 +90,11 @@ pages = [
   { id = "tutorial", title = "Your first tensor workflow", summary = "Define tensor structure, attach data, and inspect a first pairwise contraction before moving to networks.", source = "docs/products/spenso/content/tutorial.typ", symbol = "tutorial", route = "tutorial/", group = "Tutorial" },
   { id = "networks", title = "Tensor networks", summary = "Dense and sparse data, contraction planning, Symbolica shadowing, representations, and HEP helpers.", source = "docs/products/spenso/content/networks.typ", symbol = "networks", route = "guides/networks/", aliases = ["manual/networks/"], group = "Guides" },
   { id = "python", title = "Python tensor workflows", summary = "Construct tensors, register reusable data, execute networks, and evaluate symbolic batches through the Spenso community module.", source = "docs/products/spenso/content/python.typ", symbol = "python", route = "guides/python/", group = "Guides" },
+  { id = "showcase", title = "Spenso + Idenso live showcase", summary = "Explore typed tensor expressions, Idenso identities, configurable notation, and a concrete network in Marimo.", source = "docs/products/spenso/content/showcase.typ", symbol = "showcase", route = "guides/showcase/", group = "Guides" },
+  { id = "api-tour", title = "Spenso Python API tour", summary = "Execute symbolic composition, component data, network and evaluator examples.", source = "docs/products/spenso/content/example-api-tour.typ", symbol = "api_tour", route = "guides/api-tour/", group = "Examples" },
+  { id = "current-kernel", title = "Derive a quark current", summary = "Contract the quark–gluon vertex and propagator and evaluate the four current components.", source = "docs/products/spenso/content/example-current-kernel.typ", symbol = "current_kernel", route = "guides/current-kernel/", group = "Examples" },
+  { id = "notation", title = "Read tensor notation", summary = "Explore indices, scalar products, Dirac matrices and display conventions.", source = "docs/products/spenso/content/example-notation.typ", symbol = "notation", route = "guides/notation/", group = "Examples" },
+  { id = "tensor-explorer", title = "Explore a spinor tensor", summary = "Execute a rank-three spinor current and inspect its component structure.", source = "docs/products/spenso/content/example-tensor-explorer.typ", symbol = "tensor_explorer", route = "guides/tensor-explorer/", group = "Examples" },
   { id = "interfaces", title = "Rust, macros, and Python", summary = "Core Rust APIs, derive macros, HEP helpers, feature flags, and Python bindings.", source = "docs/products/spenso/content/api.typ", symbol = "api", route = "reference/interfaces/", aliases = ["manual/interfaces/"], group = "Reference" },
   { id = "releases", title = "Version history", summary = "Release-note coverage, component versions, compatibility risks, and practical upgrade checks.", source = "docs/products/spenso/content/changelog.typ", symbol = "changelog", route = "version-history/", aliases = ["manual/releases/"], group = "Version history" },
   { id = "spenso-releases", title = "Spenso versions", summary = "Canonical release notes for the core Spenso tensor library.", source = "docs/products/spenso/content/spenso-releases.typ", symbol = "spenso-releases", route = "version-history/spenso/", group = "Version history" },
@@ -113,7 +118,7 @@ id = "idenso"
 title = "Idenso"
 tagline = "Symbolic tensor identities for Spenso and Symbolica"
 source = "docs/products/idenso/main.typ"
-citation = { title = "Idenso", creators = ["Lucien Huber", "Valentin Hirschi", "Ben Ruijl", "Mathijs Fraaije"], year = 2026, repository = "https://github.com/alphal00p/spenso", doi = "10.5281/zenodo.18248409" }
+citation = { title = "Idenso", creators = ["Lucien Huber", "Ben Ruijl"], year = 2026, repository = "https://github.com/alphal00p/spenso", doi = "10.5281/zenodo.18248409" }
 pages = [
   { id = "overview", title = "Overview", summary = "Symbolic tensor identities, controlled rewrite stages, representation setup, and reversible cooking.", source = "docs/products/idenso/content/overview.typ", symbol = "overview", route = "", group = "Start here" },
   { id = "quickstart", title = "Simplify your first tensor expression", summary = "Choose Python or Rust to apply an Idenso identity while preserving the free-index structure.", source = "docs/products/idenso/content/quickstart.typ", symbol = "quickstart", route = "quickstart/", group = "Start here" },

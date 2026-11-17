@@ -692,12 +692,10 @@ fn split_top_level_once(source: &str, delimiter: char) -> Option<(&str, &str)> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
-
     use alphal00p_docs_schema::{ApiLanguage, DocItemKind, DocMemberKind};
 
     use super::*;
-    use crate::{CatalogRequest, export_catalog, first_sentence};
+    use crate::{CatalogRequest, export_catalog, first_sentence, tests};
 
     #[test]
     fn parses_python_exports_in_declared_order() {
@@ -1063,16 +1061,12 @@ def run(value: str, strict: bool = False) -> str:
 
     #[test]
     fn existing_snapshots_generate_deterministic_nested_catalogs() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .ancestors()
-            .nth(2)
-            .unwrap();
+        let root = tests::workspace_root();
         let components = [
             ("gammaloop-python", "gammaloop._gammaloop"),
-            ("linnet-py", "linnet_py"),
-            ("spynso3", "symbolica.community.spenso"),
-            ("idenso-community", "symbolica.community.idenso"),
-            ("vakint-community", "symbolica.community.vakint"),
+            ("linnet-graph", "symbolica.community.graph"),
+            ("spynso3", "symbolica.community.tensor"),
+            ("vakint-community", "symbolica.community.hepkit.vakint"),
         ];
         let mut catalogs = BTreeMap::new();
         for (component, module) in components {
@@ -1090,8 +1084,8 @@ def run(value: str, strict: bool = False) -> str:
             let stub = root
                 .join("docs/api/python")
                 .join(format!("{component}.pyi"));
-            let first = export_catalog(&request, root, Some(&stub)).unwrap();
-            let second = export_catalog(&request, root, Some(&stub)).unwrap();
+            let first = export_catalog(&request, &root, Some(&stub)).unwrap();
+            let second = export_catalog(&request, &root, Some(&stub)).unwrap();
             assert_eq!(
                 serde_json::to_vec(&first).unwrap(),
                 serde_json::to_vec(&second).unwrap()
@@ -1118,7 +1112,7 @@ def run(value: str, strict: bool = False) -> str:
         assert_eq!(canonical.members[1].name, "short_form");
         assert_eq!(canonical.members[1].default.as_deref(), Some("None"));
 
-        let linnet = &catalogs["linnet-py"].root.scopes["exports"].items["Graph"];
+        let linnet = &catalogs["linnet-graph"].root.scopes["exports"].items["Graph"];
         assert!(linnet.members.iter().any(|member| {
             member.name == "global_data" && member.kind == DocMemberKind::Getter
         }));
@@ -1128,7 +1122,7 @@ def run(value: str, strict: bool = False) -> str:
         assert!(linnet.members.iter().any(|member| {
             member.name == "from_dot" && member.kind == DocMemberKind::AssociatedFunction
         }));
-        let auto = &catalogs["linnet-py"].root.scopes["exports"].items["AUTO"];
+        let auto = &catalogs["linnet-graph"].root.scopes["exports"].items["AUTO"];
         assert_eq!(auto.kind, DocItemKind::PythonConstant);
         assert_eq!(
             auto.docs.as_ref().unwrap().body,
@@ -1188,7 +1182,7 @@ def run(value: str, strict: bool = False) -> str:
                 .iter()
                 .map(|member| member.name.as_str())
                 .collect::<Vec<_>>(),
-            ["Auto", "Serial", "Parallel"]
+            ["Auto", "Serial", "Parallel", "__int__"]
         );
     }
 }
