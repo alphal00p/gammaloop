@@ -168,7 +168,61 @@ impl TensorReducer {
         self
     }
 
+    /// Whether the block path is needed: a sum holding an indexed Minkowski
+    /// slot (`mink(dim, index)`) occurs as a factor or as a power base, as in
+    /// `(k(mu) + q(mu)) x`. The collector of the monomial path cannot
+    /// separate the tensor legs of such a sum. The root sum, sums of compact
+    /// vectors and dots, and sums inside function arguments (a propagator
+    /// `denom(...)`) do not count.
     pub(super) fn has_tensor_sum(expression: AtomView<'_>) -> Result<bool, TensorReductionError> {
+        fn indexed(value: AtomView<'_>) -> bool {
+            let mut found = false;
+            value.visitor(&mut |node| {
+                if let AtomView::Fun(f) = node
+                    && f.get_symbol() == Minkowski::selfless_symbol()
+                    && f.get_nargs() == 2
+                {
+                    found = true;
+                }
+                !found
+            });
+            found
+        }
+        fn visit(value: AtomView<'_>, factor: bool) -> Result<bool, TensorReductionError> {
+            resources::checkpoint()?;
+            Ok(match value {
+                AtomView::Add(sum) => {
+                    if factor && indexed(value) {
+                        return Ok(true);
+                    }
+                    for term in sum.iter() {
+                        if visit(term, false)? {
+                            return Ok(true);
+                        }
+                    }
+                    false
+                }
+                AtomView::Mul(product) => {
+                    for item in product.iter() {
+                        if visit(item, true)? {
+                            return Ok(true);
+                        }
+                    }
+                    false
+                }
+                AtomView::Pow(power) => visit(power.get_base(), true)?,
+                AtomView::Num(_) | AtomView::Var(_) | AtomView::Fun(_) => false,
+            })
+        }
+        visit(expression, false)
+    }
+
+    /// The dispatch before `has_tensor_sum` was narrowed: any sum that
+    /// mentions the Minkowski representation, including the root sum and
+    /// compact sums in function arguments (`FEYNKIT_TENSORREDUCE_ROWS=legacy`).
+    pub(super) fn has_tensor_sum_legacy(
+        expression: AtomView<'_>,
+    ) -> Result<bool, TensorReductionError> {
         let mut found = false;
         let mut resource_error = None;
         expression.visitor(&mut |value| {
@@ -1495,5 +1549,74 @@ mod tests {
         let legacy = contracted(legacy);
         assert!(!legacy.is_zero());
         assert_eq!(legacy, contracted(relabel));
+    }
+
+    #[test]
+    fn only_indexed_sums_under_a_product_select_the_block_path() {
+        let _ = (
+            spenso::vector_symbol!("block_sum::k"),
+            spenso::vector_symbol!("block_sum::q"),
+        );
+        let narrowed = |text: &str| TensorReducer::has_tensor_sum(parse!(text).as_view()).unwrap();
+        let legacy =
+            |text: &str| TensorReducer::has_tensor_sum_legacy(parse!(text).as_view()).unwrap();
+        // A root sum of monomials is the monomial path's input.
+        let root = "block_sum::k(spenso::mink(D,mu))*block_sum::x+block_sum::q(spenso::mink(D,mu))";
+        assert!(!narrowed(root));
+        assert!(legacy(root));
+        // A sum inside a function argument, such as a propagator.
+        let denominator = "block_sum::denom(spenso::dot(block_sum::k(spenso::mink(D)),block_sum::k(spenso::mink(D)))+block_sum::m)*block_sum::k(spenso::mink(D,mu))";
+        assert!(!narrowed(denominator));
+        assert!(legacy(denominator));
+        let indexed_argument = "block_sum::f(block_sum::k(spenso::mink(D,mu))+block_sum::q(spenso::mink(D,mu)))*block_sum::x";
+        assert!(!narrowed(indexed_argument));
+        // A sum of compact vectors and dots carries no tensor leg.
+        assert!(!narrowed(
+            "(block_sum::x+spenso::dot(block_sum::k(spenso::mink(D)),block_sum::q(spenso::mink(D))))*block_sum::k(spenso::mink(D,mu))"
+        ));
+        // Indexed sums under a product or a power.
+        assert!(narrowed(
+            "(block_sum::k(spenso::mink(D,mu))+block_sum::q(spenso::mink(D,mu)))*block_sum::x"
+        ));
+        assert!(narrowed(
+            "block_sum::y+(block_sum::k(spenso::mink(D,mu))+block_sum::q(spenso::mink(D,mu)))*block_sum::x*block_sum::k(spenso::mink(D,nu))*block_sum::k(spenso::mink(D,nu))"
+        ));
+        assert!(narrowed(
+            "(block_sum::k(spenso::mink(D,mu))*block_sum::k(spenso::mink(D,mu))+block_sum::x)^2"
+        ));
+    }
+
+    #[test]
+    fn the_monomial_path_and_the_block_path_agree() {
+        // `(x + y dot(k,k))` no longer selects the block path; both paths give
+        // the same projection.
+        let _ = (
+            spenso::vector_symbol!("block_paths::k"),
+            spenso::vector_symbol!("block_paths::q"),
+            spenso::vector_symbol!("block_paths::p"),
+        );
+        let input = parse!(
+            "spenso::dot(block_paths::k(spenso::mink(D)),block_paths::q(spenso::mink(D)))
+            *block_paths::k(spenso::mink(D,mu))*block_paths::k(spenso::mink(D,nu))
+            *block_paths::k(spenso::mink(D,rho))*block_paths::p(spenso::mink(D,rho))
+            *(block_paths::x+block_paths::y*spenso::dot(block_paths::k(spenso::mink(D)),block_paths::k(spenso::mink(D))))"
+        );
+        let source = SymbolicTensor::infer(input).unwrap();
+        assert!(!TensorReducer::has_tensor_sum(source.expression().as_view()).unwrap());
+        let reducer =
+            TensorReducer::new(parse!("D")).with_integrated_head(symbol!("block_paths::k"));
+        let monomial = contracted(reducer.reduce(&source).unwrap());
+        assert!(!monomial.is_zero());
+        for mode in [RowMode::Legacy, RowMode::Grouped, RowMode::Relabel] {
+            let blocks = reducer
+                .clone()
+                .with_row_mode(mode)
+                .reduce_blocks(&source, None)
+                .unwrap();
+            assert!(
+                (contracted(blocks) - &monomial).together().is_zero(),
+                "{mode:?}"
+            );
+        }
     }
 }

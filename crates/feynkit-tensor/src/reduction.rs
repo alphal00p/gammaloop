@@ -587,7 +587,12 @@ impl TensorReducer {
             .to_dots()
             .map_err(|error| TensorReductionError::TensorAlgebra(error.to_string()))?;
         resources::checkpoint()?;
-        if Self::has_tensor_sum(normalized.expression().as_view())? {
+        let tensor_sum = if self.row_mode() == blocks::RowMode::Legacy {
+            Self::has_tensor_sum_legacy(normalized.expression().as_view())?
+        } else {
+            Self::has_tensor_sum(normalized.expression().as_view())?
+        };
+        if tensor_sum {
             return self.reduce_blocks(&normalized, external.as_ref());
         }
         let rows = normalized
