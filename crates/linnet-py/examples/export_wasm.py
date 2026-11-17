@@ -1113,6 +1113,7 @@ def browser_smoke(
     browser_executable: Path | None,
     *,
     docs: bool = False,
+    cache_report: Path | None = None,
 ) -> None:
     try:
         from playwright.sync_api import TimeoutError as BrowserTimeoutError
@@ -1961,6 +1962,18 @@ def browser_smoke(
                     flush=True,
                 )
                 page.close()
+            if cache_report:
+                from cache_wasm import cache_navigation_smoke
+
+                cache_navigation_smoke(
+                    browser,
+                    base_url,
+                    documentation_site(artifacts[0][1].parent),
+                    cache_report,
+                    timeout,
+                    EXECUTION_TRACKING,
+                    wait_for_cells,
+                )
         finally:
             browser.close()
 
@@ -2007,6 +2020,11 @@ def parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
         "--browser-executable",
         type=Path,
         help="Chromium executable for --browser-smoke (for example from Nix)",
+    )
+    parser.add_argument(
+        "--cache-report",
+        type=Path,
+        help="Test cache, reload and cross-product navigation flows",
     )
     parser.add_argument("--runtime", type=Path, help="Pinned, prepared islands runtime")
     parser.add_argument(
@@ -2162,6 +2180,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 options.timeout,
                 options.browser_executable,
                 docs=bool(options.docs),
+                cache_report=options.cache_report,
             )
 
     print(f"Marimo WASM notebooks exported to {output}")
