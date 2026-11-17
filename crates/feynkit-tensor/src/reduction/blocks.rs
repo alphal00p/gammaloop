@@ -2,6 +2,7 @@
 //! contractions and vertex sums are coefficients, not projector monomials.
 
 use super::external::ExternalProjector;
+use super::scalars;
 use super::{
     Outside, TensorMonomial, TensorReducer, TensorReduction, TensorReductionError,
     TensorReductionTerm, coset_key_from_parts, indexed_vector, matching_coset_key,
@@ -14,6 +15,7 @@ use idenso::tensor::{ContractSettings, SymbolicTensor};
 use spenso::network::library::symbolic::ETS;
 use spenso::network::parsing::ParseState;
 use spenso::network::tags::SPENSO_TAG;
+use spenso::shadowing::TensorCollectFilter;
 use spenso::structure::abstract_index::AbstractIndex;
 use spenso::structure::partial::{
     PartialIndex, PartialSlot, PartialStructure, PartialStructureExt,
@@ -56,13 +58,50 @@ impl RowMode {
         )
     }
 
-    /// `FEYNKIT_TENSORREDUCE_DISPATCH=wide` keeps the earlier block-path
-    /// dispatch (`has_tensor_sum_legacy`) with the current
-    /// row strategy, for comparison.
-    pub(super) fn wide_dispatch() -> bool {
-        static WIDE: OnceLock<bool> = OnceLock::new();
-        *WIDE
-            .get_or_init(|| std::env::var("FEYNKIT_TENSORREDUCE_DISPATCH").as_deref() == Ok("wide"))
+    /// Whether the collectors hide unselected scalar factors
+    /// ([`super::scalars`]); `FEYNKIT_TENSORREDUCE_COLLECT=full` turns it off
+    /// for comparison, and the legacy rows never hide.
+    pub(super) fn hides_scalars(self) -> bool {
+        static FULL: OnceLock<bool> = OnceLock::new();
+        self != RowMode::Legacy
+            && !*FULL.get_or_init(|| {
+                std::env::var("FEYNKIT_TENSORREDUCE_COLLECT").as_deref() == Ok("full")
+            })
+    }
+}
+
+/// Which sources take the block path instead of the monomial path.
+///
+/// `FEYNKIT_TENSORREDUCE_DISPATCH` selects it for comparison:
+/// * `wide` (the default): a sum that mentions the Minkowski representation,
+///   at the root or in a product, but not inside a function argument
+///   ([`TensorReducer::has_tensor_sum`]);
+/// * `narrow`: only a sum holding an indexed slot under a product or power
+///   ([`TensorReducer::has_tensor_sum_narrow`]);
+/// * `legacy`: any sum that mentions the Minkowski representation, including
+///   compact sums in function arguments
+///   ([`TensorReducer::has_tensor_sum_legacy`]).
+///
+/// Without the variable, `FEYNKIT_TENSORREDUCE_ROWS=legacy` takes the legacy
+/// dispatch, so that it reproduces the earlier reducer.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Dispatch {
+    Wide,
+    Narrow,
+    Legacy,
+}
+
+impl Dispatch {
+    fn from_env() -> Option<Self> {
+        static DISPATCH: OnceLock<Option<Dispatch>> = OnceLock::new();
+        *DISPATCH.get_or_init(
+            || match std::env::var("FEYNKIT_TENSORREDUCE_DISPATCH").as_deref() {
+                Ok("wide") => Some(Dispatch::Wide),
+                Ok("narrow") => Some(Dispatch::Narrow),
+                Ok("legacy") => Some(Dispatch::Legacy),
+                _ => None,
+            },
+        )
     }
 }
 
@@ -177,13 +216,67 @@ impl TensorReducer {
         self
     }
 
-    /// Whether the block path is needed: a sum holding an indexed Minkowski
-    /// slot (`mink(dim, index)`) occurs as a factor or as a power base, as in
-    /// `(k(mu) + q(mu)) x`. The collector of the monomial path cannot
-    /// separate the tensor legs of such a sum. The root sum, sums of compact
-    /// vectors and dots, and sums inside function arguments (a propagator
-    /// `denom(...)`) do not count.
+    pub(super) fn dispatch(&self) -> Dispatch {
+        self.dispatch
+            .or_else(Dispatch::from_env)
+            .unwrap_or(match self.row_mode() {
+                RowMode::Legacy => Dispatch::Legacy,
+                RowMode::Grouped | RowMode::Relabel => Dispatch::Wide,
+            })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_dispatch(mut self, dispatch: Dispatch) -> Self {
+        self.dispatch = Some(dispatch);
+        self
+    }
+
+    /// Whether `expression` takes the block path under this reducer's
+    /// [`Dispatch`].
+    pub(super) fn takes_block_path(
+        &self,
+        expression: AtomView<'_>,
+    ) -> Result<bool, TensorReductionError> {
+        match self.dispatch() {
+            Dispatch::Wide => Self::has_tensor_sum(expression),
+            Dispatch::Narrow => Self::has_tensor_sum_narrow(expression),
+            Dispatch::Legacy => Self::has_tensor_sum_legacy(expression),
+        }
+    }
+
+    /// Whether the block path is needed: a sum that mentions the Minkowski
+    /// representation is the root, a factor or a power base, as in
+    /// `(k(mu) + q(mu)) x` or the root sum of a factored numerator. Sums
+    /// inside function arguments (a propagator `denom(a + b)`) do not count:
+    /// the collector keeps a function whole. Otherwise this is the earlier
+    /// dispatch ([`Self::has_tensor_sum_legacy`]).
     pub(super) fn has_tensor_sum(expression: AtomView<'_>) -> Result<bool, TensorReductionError> {
+        fn visit(value: AtomView<'_>) -> Result<bool, TensorReductionError> {
+            resources::checkpoint()?;
+            Ok(match value {
+                AtomView::Add(_) => value.contains_symbol(Minkowski::selfless_symbol()),
+                AtomView::Mul(product) => {
+                    for factor in product.iter() {
+                        if visit(factor)? {
+                            return Ok(true);
+                        }
+                    }
+                    false
+                }
+                AtomView::Pow(power) => visit(power.get_base())?,
+                AtomView::Num(_) | AtomView::Var(_) | AtomView::Fun(_) => false,
+            })
+        }
+        visit(expression)
+    }
+
+    /// The dispatch of `FEYNKIT_TENSORREDUCE_DISPATCH=narrow`: only a sum
+    /// holding an indexed Minkowski slot (`mink(dim, index)`) as a factor or
+    /// as a power base. The root sum, sums of compact vectors and dots, and
+    /// sums inside function arguments do not count.
+    pub(super) fn has_tensor_sum_narrow(
+        expression: AtomView<'_>,
+    ) -> Result<bool, TensorReductionError> {
         fn indexed(value: AtomView<'_>) -> bool {
             let mut found = false;
             value.visitor(&mut |node| {
@@ -226,9 +319,9 @@ impl TensorReducer {
         visit(expression, false)
     }
 
-    /// The dispatch before `has_tensor_sum` was narrowed: any sum that
-    /// mentions the Minkowski representation, including the root sum and
-    /// compact sums in function arguments (`FEYNKIT_TENSORREDUCE_ROWS=legacy`).
+    /// The original dispatch (`FEYNKIT_TENSORREDUCE_DISPATCH=legacy`): any sum
+    /// that mentions the Minkowski representation, including the root sum and
+    /// compact sums in function arguments.
     pub(super) fn has_tensor_sum_legacy(
         expression: AtomView<'_>,
     ) -> Result<bool, TensorReductionError> {
@@ -373,35 +466,49 @@ impl TensorReducer {
     }
 
     /// Split an opened block source into (selected outside, coefficient) rows.
-    /// The collector merges rows whose selected structures are equal.
+    /// The collector merges rows whose selected structures are equal. Unless
+    /// the row mode is legacy, it sees only the factors it has to split
+    /// ([`super::scalars`]).
     pub(super) fn block_rows(
         &self,
         indexed: &SymbolicTensor<PartialStructure>,
     ) -> Result<BlockRows, TensorReductionError> {
-        resources::checkpoint()?;
-        let mut admission_error = None;
-        let rows = indexed
-            .coefficient_list_with(|value| {
-                match self.indexed_vector(value) {
-                    Ok(Some(vector)) => !self.is_integrated(&vector),
-                    Err(error) => {
-                        admission_error = Some(error);
-                        false
-                    }
-                    Ok(None) => {
-                        // Metrics rotate covariantly with the loop block. Other
-                        // Lorentz tensors (including spin matrices) stay fixed.
-                        matches!(value, AtomView::Fun(f) if f.get_symbol() != ETS.metric && f.get_symbol() != SPENSO_TAG.dot)
-                            && value.contains_symbol(Minkowski::selfless_symbol())
-                    }
+        Ok(self
+            .block_rows_with(indexed, self.row_mode().hides_scalars())?
+            .0)
+    }
+
+    /// Rows of the monomial path: every Minkowski leaf is selected, including
+    /// dots and denominators. With `hide`, the collector sees only the
+    /// factors it has to split ([`super::scalars`]); the flag tells
+    /// whether it did.
+    pub(super) fn monomial_rows(
+        &self,
+        normalized: &SymbolicTensor<PartialStructure>,
+        hide: bool,
+    ) -> Result<(BlockRows, bool), TensorReductionError> {
+        let filter = TensorCollectFilter::Reps([LibraryRep::from(Minkowski {})]);
+        scalars::collect_rows(normalized, hide, &mut |value: AtomView<'_>| {
+            Ok(filter.matches(value))
+        })
+    }
+
+    pub(super) fn block_rows_with(
+        &self,
+        indexed: &SymbolicTensor<PartialStructure>,
+        hide: bool,
+    ) -> Result<(BlockRows, bool), TensorReductionError> {
+        scalars::collect_rows(indexed, hide, &mut |value: AtomView<'_>| {
+            Ok(match self.indexed_vector(value)? {
+                Some(vector) => !self.is_integrated(&vector),
+                // Metrics rotate covariantly with the loop block. Other
+                // Lorentz tensors (including spin matrices) stay fixed.
+                None => {
+                    matches!(value, AtomView::Fun(f) if f.get_symbol() != ETS.metric && f.get_symbol() != SPENSO_TAG.dot)
+                        && value.contains_symbol(Minkowski::selfless_symbol())
                 }
             })
-            .map_err(|e| TensorReductionError::TensorAlgebra(e.to_string()))?;
-        resources::checkpoint()?;
-        if let Some(error) = admission_error {
-            return Err(error);
-        }
-        Ok(rows)
+        })
     }
 
     fn project_block_rows(
@@ -1266,6 +1373,17 @@ mod tests {
         let source = SymbolicTensor::infer(input).unwrap();
         let reducer =
             TensorReducer::new(parse!("D")).with_integrated_head(symbol!("block_clash::k"));
+        // The source check alone (the probe's only fallback trigger) accepts
+        // the pooled label at both levels, since idenso scopes the dummies of
+        // the nested sum; the occurrence count catches it.
+        let pooled = parse!(
+            "block_clash::k(spenso::mink(D,block_clash::d))*block_clash::q(spenso::mink(D,block_clash::d))
+            *(block_clash::y*block_clash::k(spenso::mink(D,mu))
+              +block_clash::x*block_clash::k(spenso::mink(D,block_clash::d))*block_clash::q(spenso::mink(D,block_clash::d))*block_clash::q(spenso::mink(D,mu)))"
+        );
+        assert!(source.with_checked_expression(pooled.clone()).is_ok());
+        let label = parse!("block_clash::d");
+        assert!(reuses_pooled_label(pooled.as_view(), &HashSet::from([label])).unwrap());
         assert!(reducer.open_block_dots(&source, true).unwrap().is_none());
         let expected = parse!(
             "spenso::dot(block_clash::k(spenso::mink(D)),block_clash::k(spenso::mink(D)))/D
@@ -1561,44 +1679,102 @@ mod tests {
     }
 
     #[test]
-    fn only_indexed_sums_under_a_product_select_the_block_path() {
+    fn the_dispatch_counts_root_and_product_sums_but_not_function_arguments() {
         let _ = (
             spenso::vector_symbol!("block_sum::k"),
             spenso::vector_symbol!("block_sum::q"),
         );
-        let narrowed = |text: &str| TensorReducer::has_tensor_sum(parse!(text).as_view()).unwrap();
-        let legacy =
-            |text: &str| TensorReducer::has_tensor_sum_legacy(parse!(text).as_view()).unwrap();
-        // A root sum of monomials is the monomial path's input.
-        let root = "block_sum::k(spenso::mink(D,mu))*block_sum::x+block_sum::q(spenso::mink(D,mu))";
-        assert!(!narrowed(root));
-        assert!(legacy(root));
-        // A sum inside a function argument, such as a propagator.
-        let denominator = "block_sum::denom(spenso::dot(block_sum::k(spenso::mink(D)),block_sum::k(spenso::mink(D)))+block_sum::m)*block_sum::k(spenso::mink(D,mu))";
-        assert!(!narrowed(denominator));
-        assert!(legacy(denominator));
-        let indexed_argument = "block_sum::f(block_sum::k(spenso::mink(D,mu))+block_sum::q(spenso::mink(D,mu)))*block_sum::x";
-        assert!(!narrowed(indexed_argument));
-        // A sum of compact vectors and dots carries no tensor leg.
-        assert!(!narrowed(
-            "(block_sum::x+spenso::dot(block_sum::k(spenso::mink(D)),block_sum::q(spenso::mink(D))))*block_sum::k(spenso::mink(D,mu))"
-        ));
-        // Indexed sums under a product or a power.
-        assert!(narrowed(
-            "(block_sum::k(spenso::mink(D,mu))+block_sum::q(spenso::mink(D,mu)))*block_sum::x"
-        ));
-        assert!(narrowed(
-            "block_sum::y+(block_sum::k(spenso::mink(D,mu))+block_sum::q(spenso::mink(D,mu)))*block_sum::x*block_sum::k(spenso::mink(D,nu))*block_sum::k(spenso::mink(D,nu))"
-        ));
-        assert!(narrowed(
-            "(block_sum::k(spenso::mink(D,mu))*block_sum::k(spenso::mink(D,mu))+block_sum::x)^2"
-        ));
+        let check = |text: &str| {
+            let view = parse!(text);
+            [
+                TensorReducer::has_tensor_sum(view.as_view()).unwrap(),
+                TensorReducer::has_tensor_sum_narrow(view.as_view()).unwrap(),
+                TensorReducer::has_tensor_sum_legacy(view.as_view()).unwrap(),
+            ]
+        };
+        // [wide (default), narrow, legacy]
+        // A root sum counts, as in the legacy dispatch.
+        assert_eq!(
+            check("block_sum::k(spenso::mink(D,mu))*block_sum::x+block_sum::q(spenso::mink(D,mu))"),
+            [true, false, true]
+        );
+        assert_eq!(
+            check(
+                "block_sum::x*spenso::dot(block_sum::k(spenso::mink(D)),block_sum::q(spenso::mink(D)))+block_sum::y"
+            ),
+            [true, false, true]
+        );
+        // A sum inside a function argument, such as a propagator, does not.
+        assert_eq!(
+            check(
+                "block_sum::denom(spenso::dot(block_sum::k(spenso::mink(D)),block_sum::k(spenso::mink(D)))+block_sum::m)*block_sum::k(spenso::mink(D,mu))"
+            ),
+            [false, false, true]
+        );
+        assert_eq!(
+            check(
+                "block_sum::f(block_sum::k(spenso::mink(D,mu))+block_sum::q(spenso::mink(D,mu)))*block_sum::x"
+            ),
+            [false, false, true]
+        );
+        // A sum without the Minkowski representation does not.
+        assert_eq!(
+            check("(block_sum::x+block_sum::y)*block_sum::k(spenso::mink(D,mu))"),
+            [false, false, false]
+        );
+        // A product-level sum with Minkowski content counts, indexed or not.
+        assert_eq!(
+            check(
+                "(block_sum::k(spenso::mink(D,mu))+block_sum::q(spenso::mink(D,mu)))*block_sum::x"
+            ),
+            [true, true, true]
+        );
+        assert_eq!(
+            check(
+                "(block_sum::x+spenso::dot(block_sum::k(spenso::mink(D)),block_sum::q(spenso::mink(D))))*block_sum::k(spenso::mink(D,mu))"
+            ),
+            [true, false, true]
+        );
+        assert_eq!(
+            check(
+                "(block_sum::k(spenso::mink(D,mu))*block_sum::k(spenso::mink(D,mu))+block_sum::x)^2"
+            ),
+            [true, true, true]
+        );
+        // The reducer's dispatch follows its setting; legacy rows imply the
+        // legacy dispatch unless one is set.
+        let reducer = TensorReducer::new(parse!("D")).with_integrated_head(symbol!("block_sum::k"));
+        let denominator = parse!(
+            "block_sum::denom(spenso::dot(block_sum::k(spenso::mink(D)),block_sum::k(spenso::mink(D)))+block_sum::m)*block_sum::k(spenso::mink(D,mu))"
+        );
+        for (dispatch, expected) in [
+            (Dispatch::Wide, false),
+            (Dispatch::Narrow, false),
+            (Dispatch::Legacy, true),
+        ] {
+            let reducer = reducer.clone().with_dispatch(dispatch);
+            assert_eq!(
+                reducer.takes_block_path(denominator.as_view()).unwrap(),
+                expected,
+                "{dispatch:?}"
+            );
+        }
+        if Dispatch::from_env().is_none() {
+            assert_eq!(
+                reducer.clone().with_row_mode(RowMode::Legacy).dispatch(),
+                Dispatch::Legacy
+            );
+            assert_eq!(
+                reducer.with_row_mode(RowMode::Relabel).dispatch(),
+                Dispatch::Wide
+            );
+        }
     }
 
     #[test]
     fn the_monomial_path_and_the_block_path_agree() {
-        // `(x + y dot(k,k))` no longer selects the block path; both paths give
-        // the same projection.
+        // `(x + y dot(k,k))` selects the block path only in the wide and legacy
+        // dispatches; both paths give the same projection.
         let _ = (
             spenso::vector_symbol!("block_paths::k"),
             spenso::vector_symbol!("block_paths::q"),
@@ -1611,10 +1787,17 @@ mod tests {
             *(block_paths::x+block_paths::y*spenso::dot(block_paths::k(spenso::mink(D)),block_paths::k(spenso::mink(D))))"
         );
         let source = SymbolicTensor::infer(input).unwrap();
-        assert!(!TensorReducer::has_tensor_sum(source.expression().as_view()).unwrap());
+        assert!(!TensorReducer::has_tensor_sum_narrow(source.expression().as_view()).unwrap());
+        assert!(TensorReducer::has_tensor_sum(source.expression().as_view()).unwrap());
         let reducer =
             TensorReducer::new(parse!("D")).with_integrated_head(symbol!("block_paths::k"));
-        let monomial = contracted(reducer.reduce(&source).unwrap());
+        let monomial = contracted(
+            reducer
+                .clone()
+                .with_dispatch(Dispatch::Narrow)
+                .reduce(&source)
+                .unwrap(),
+        );
         assert!(!monomial.is_zero());
         for mode in [RowMode::Legacy, RowMode::Grouped, RowMode::Relabel] {
             let blocks = reducer
@@ -1627,5 +1810,198 @@ mod tests {
                 "{mode:?}"
             );
         }
+        let wide = contracted(
+            reducer
+                .with_dispatch(Dispatch::Wide)
+                .reduce(&source)
+                .unwrap(),
+        );
+        assert!((wide - &monomial).together().is_zero());
+    }
+
+    /// Random sums of products of a scalar part (variables, numbers, dots,
+    /// propagator functions, their powers, scalar sums with and without a
+    /// propagator) and a tensor part with one open slot `mu` (vectors, opened
+    /// dots, nested tensor sums).
+    fn random_collector_inputs() -> Vec<Atom> {
+        let _ = (
+            spenso::vector_symbol!("block_hide::k"),
+            spenso::vector_symbol!("block_hide::q"),
+            spenso::vector_symbol!("block_hide::p"),
+        );
+        let scalars = [
+            "block_hide::x",
+            "block_hide::y",
+            "3",
+            "spenso::dot(block_hide::k(spenso::mink(D)),block_hide::k(spenso::mink(D)))",
+            "spenso::dot(block_hide::p(spenso::mink(D)),block_hide::q(spenso::mink(D)))^2",
+            "block_hide::den(block_hide::k(spenso::mink(D)),block_hide::m)",
+            "block_hide::den(block_hide::q(spenso::mink(D)),block_hide::m)^-1",
+            "(block_hide::x+block_hide::y*block_hide::z)",
+            "(block_hide::x+spenso::dot(block_hide::k(spenso::mink(D)),block_hide::q(spenso::mink(D))))",
+            "(block_hide::y+block_hide::den(block_hide::p(spenso::mink(D)),block_hide::m))",
+            "block_hide::g(block_hide::x,block_hide::z)",
+        ];
+        let tensors = [
+            "block_hide::k(spenso::mink(D,block_hide::mu))",
+            "block_hide::q(spenso::mink(D,block_hide::mu))*spenso::dot(block_hide::k(spenso::mink(D)),block_hide::q(spenso::mink(D)))",
+            "(block_hide::x*block_hide::k(spenso::mink(D,block_hide::mu))+spenso::dot(block_hide::k(spenso::mink(D)),block_hide::k(spenso::mink(D)))*block_hide::y*block_hide::q(spenso::mink(D,block_hide::mu)))",
+            "block_hide::k(spenso::mink(D,block_hide::mu))*block_hide::k(spenso::mink(D,block_hide::nu))*block_hide::p(spenso::mink(D,block_hide::nu))*block_hide::z",
+            "(block_hide::k(spenso::mink(D,block_hide::mu))+block_hide::y*block_hide::p(spenso::mink(D,block_hide::mu)))*(block_hide::k(spenso::mink(D,block_hide::nu))*block_hide::q(spenso::mink(D,block_hide::nu))*block_hide::x*block_hide::den(block_hide::k(spenso::mink(D)),block_hide::m)+block_hide::z)",
+        ];
+        let mut seed = 0x9e37_79b9_7f4a_7c15_u64;
+        let mut next = |bound: u64| {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed % bound
+        };
+        let mut inputs = Vec::new();
+        for _ in 0..24 {
+            let mut sum = Atom::Zero;
+            for _ in 0..1 + next(4) {
+                let mut term = parse!(tensors[next(tensors.len() as u64) as usize]);
+                for _ in 0..next(4) {
+                    term = term * parse!(scalars[next(scalars.len() as u64) as usize]);
+                }
+                sum += term;
+            }
+            inputs.push(sum);
+        }
+        inputs
+    }
+
+    /// Rows keyed by their selected structure, with interfaces.
+    fn keyed_rows(rows: BlockRows) -> HashMap<Atom, (Atom, String, String)> {
+        let mut keyed = HashMap::new();
+        for (selected, coefficient) in rows {
+            let previous = keyed.insert(
+                selected.expression().clone(),
+                (
+                    coefficient.expression().clone(),
+                    format!("{:?}", selected.structure().canonical()),
+                    format!("{:?}", coefficient.structure().canonical()),
+                ),
+            );
+            assert!(previous.is_none(), "one row per selected structure");
+        }
+        keyed
+    }
+
+    fn assert_same_rows(hidden: BlockRows, full: BlockRows, input: &Atom) {
+        let (hidden, full) = (keyed_rows(hidden), keyed_rows(full));
+        assert_eq!(hidden.len(), full.len(), "{input}");
+        for (selected, (coefficient, outside, inside)) in &full {
+            let (other, other_outside, other_inside) = hidden
+                .get(selected)
+                .unwrap_or_else(|| panic!("row {selected} of {input}"));
+            assert!(
+                (other - coefficient).expand().is_zero(),
+                "{selected}: {other} against {coefficient} in {input}"
+            );
+            assert!(
+                !other.contains_symbol(symbol!("feynkit_tensor::hidden_scalar")),
+                "{other}"
+            );
+            assert_eq!((outside, inside), (other_outside, other_inside), "{input}");
+        }
+    }
+
+    #[test]
+    fn hiding_scalar_factors_keeps_the_collector_rows() {
+        let inputs = random_collector_inputs();
+        let reducer =
+            TensorReducer::new(parse!("D")).with_integrated_head(symbol!("block_hide::k"));
+        let mut hidden_inputs = [0_usize; 2];
+        for input in inputs {
+            let source = SymbolicTensor::infer(input.clone()).unwrap();
+            let normalized = source
+                .contract(ContractSettings {
+                    rank_one: false,
+                    collect_chains: false,
+                    collect_traces: false,
+                    expand: false,
+                    ..Default::default()
+                })
+                .unwrap()
+                .to_dots()
+                .unwrap();
+            // The monomial collector on the normalized source.
+            let (hidden, hid) = reducer.monomial_rows(&normalized, true).unwrap();
+            let (full, unhidden) = reducer.monomial_rows(&normalized, false).unwrap();
+            assert!(!unhidden);
+            hidden_inputs[0] += usize::from(hid);
+            assert_same_rows(hidden, full, &input);
+            // The block collector on the opened source.
+            let indexed = reducer
+                .open_block_dots(&normalized, true)
+                .unwrap()
+                .unwrap_or_else(|| {
+                    reducer
+                        .open_block_dots(&normalized, false)
+                        .unwrap()
+                        .unwrap()
+                });
+            let (hidden, hid) = reducer.block_rows_with(&indexed, true).unwrap();
+            hidden_inputs[1] += usize::from(hid);
+            assert_same_rows(
+                hidden,
+                reducer.block_rows_with(&indexed, false).unwrap().0,
+                &input,
+            );
+            // And the whole projection.
+            let full = contracted(
+                reducer
+                    .clone()
+                    .with_row_mode(RowMode::Legacy)
+                    .reduce_blocks(&normalized, None)
+                    .unwrap(),
+            );
+            let current = contracted(reducer.reduce_blocks(&normalized, None).unwrap());
+            assert!((current - full).expand().is_zero(), "{input}");
+        }
+        assert!(
+            hidden_inputs.iter().all(|count| *count > 12),
+            "{hidden_inputs:?}"
+        );
+    }
+
+    #[test]
+    fn hidden_scalars_skip_slots_selected_factors_and_function_arguments() {
+        let _ = (
+            spenso::vector_symbol!("block_hidden::k"),
+            spenso::vector_symbol!("block_hidden::q"),
+        );
+        let input = parse!(
+            "block_hidden::x*block_hidden::y*spenso::dot(block_hidden::k(spenso::mink(D)),block_hidden::k(spenso::mink(D)))
+            *block_hidden::den(block_hidden::k(spenso::mink(D)))
+            *block_hidden::f(block_hidden::x*block_hidden::y)
+            *(block_hidden::x*block_hidden::y*block_hidden::k(spenso::mink(D,block_hidden::mu))+block_hidden::q(spenso::mink(D,block_hidden::mu)))"
+        );
+        let reducer =
+            TensorReducer::new(parse!("D")).with_integrated_head(symbol!("block_hidden::k"));
+        let (hidden, scalars) = scalars::HiddenScalars::hide(input.as_view(), &mut |value| {
+            Ok(match reducer.indexed_vector(value)? {
+                Some(vector) => !reducer.is_integrated(&vector),
+                None => {
+                    matches!(value, AtomView::Fun(f) if f.get_symbol() != SPENSO_TAG.dot)
+                        && value.contains_symbol(Minkowski::selfless_symbol())
+                }
+            })
+        })
+        .unwrap()
+        .unwrap();
+        // x y dot(k,k) f(x y) outside, x y inside the tensor sum.
+        assert_eq!(scalars.len(), 2, "{hidden}");
+        assert!(hidden.contains_symbol(symbol!("block_hidden::den")));
+        assert!(!hidden.contains_symbol(SPENSO_TAG.dot), "{hidden}");
+        assert_eq!(scalars.substitute(hidden.as_view()).unwrap(), input);
+        // A source that already uses the placeholder is left alone.
+        let clash = input * parse!("feynkit_tensor::hidden_scalar(0)");
+        assert!(
+            scalars::HiddenScalars::hide(clash.as_view(), &mut |_| Ok(false))
+                .unwrap()
+                .is_none()
+        );
     }
 }

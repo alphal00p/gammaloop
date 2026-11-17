@@ -39,13 +39,10 @@ use feynkit_graph::FeynmanDiagram;
 use idenso::tensor::{ContractSettings, SymbolicTensor};
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use spenso::network::{library::symbolic::ETS, tags::SPENSO_TAG};
-use spenso::{
-    shadowing::TensorCollectFilter,
-    structure::{
-        partial::{PartialStructure, PartialStructureExt},
-        representation::{BaseRepName, LibraryRep, Minkowski},
-        slot::IsAbstractSlot,
-    },
+use spenso::structure::{
+    partial::{PartialStructure, PartialStructureExt},
+    representation::{BaseRepName, LibraryRep, Minkowski},
+    slot::IsAbstractSlot,
 };
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
 use symbolica::utils::resources;
@@ -54,6 +51,7 @@ use thiserror::Error;
 
 mod blocks;
 mod external;
+mod scalars;
 
 use crate::{
     OrthogonalWeingarten, WeingartenError,
@@ -353,6 +351,8 @@ pub struct TensorReducer {
     resource_limits: ResourceLimits,
     /// Block-path strategy; `None` reads `FEYNKIT_TENSORREDUCE_ROWS` once.
     row_mode: Option<blocks::RowMode>,
+    /// Block-path dispatch; `None` reads `FEYNKIT_TENSORREDUCE_DISPATCH` once.
+    dispatch: Option<blocks::Dispatch>,
 }
 
 impl TensorReducer {
@@ -384,6 +384,7 @@ impl TensorReducer {
             output_term_limit: None,
             resource_limits: ResourceLimits::default(),
             row_mode: None,
+            dispatch: None,
         }
     }
 
@@ -587,18 +588,10 @@ impl TensorReducer {
             .to_dots()
             .map_err(|error| TensorReductionError::TensorAlgebra(error.to_string()))?;
         resources::checkpoint()?;
-        let tensor_sum =
-            if self.row_mode() == blocks::RowMode::Legacy || blocks::RowMode::wide_dispatch() {
-                Self::has_tensor_sum_legacy(normalized.expression().as_view())?
-            } else {
-                Self::has_tensor_sum(normalized.expression().as_view())?
-            };
-        if tensor_sum {
+        if self.takes_block_path(normalized.expression().as_view())? {
             return self.reduce_blocks(&normalized, external.as_ref());
         }
-        let rows = normalized
-            .coefficient_list(TensorCollectFilter::Reps([LibraryRep::from(Minkowski {})]))
-            .map_err(|error| TensorReductionError::TensorAlgebra(error.to_string()))?;
+        let (rows, _) = self.monomial_rows(&normalized, self.row_mode().hides_scalars())?;
         resources::checkpoint()?;
         if let Some(limit) = self.output_term_limit
             && rows.len() > limit
@@ -2042,6 +2035,7 @@ mod tests {
     use feynkit_graph::{DiagramEdge, DiagramVertex, NumeratorInterface};
     use feynkit_model::Model;
     use idenso::shorthands::UndoShorthands;
+    use spenso::shadowing::TensorCollectFilter;
     use spenso::structure::abstract_index::AbstractIndex;
     use spenso::{broadcast_symbol, tensor_symbol, vector_symbol};
     use std::sync::Arc;
