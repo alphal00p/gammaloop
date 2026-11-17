@@ -351,6 +351,8 @@ pub struct TensorReducer {
     pairing_product_limit: Option<u128>,
     output_term_limit: Option<usize>,
     resource_limits: ResourceLimits,
+    /// Block-path strategy; `None` reads `FEYNKIT_TENSORREDUCE_ROWS` once.
+    row_mode: Option<blocks::RowMode>,
 }
 
 impl TensorReducer {
@@ -381,6 +383,7 @@ impl TensorReducer {
             pairing_product_limit: None,
             output_term_limit: None,
             resource_limits: ResourceLimits::default(),
+            row_mode: None,
         }
     }
 
