@@ -1233,9 +1233,21 @@ impl ColorAlgebraSimplifier {
             );
             let internally_closed =
                 ports.counts.iter().all(|(_, count, _)| *count == 2) && !outside.meets(&ports);
+            // A colour label summed inside the line itself (a generator pair
+            // F^x .. F^x that is not adjacent, or a generator labelled by an
+            // endpoint) closes a cycle of structure constants within the
+            // line, e.g. F^x F^y F^x = -C_A/2 F^y. The chain rules only
+            // contract adjacent pairs, so such a line with two free ends
+            // would otherwise stay a word of generators for good. The summed
+            // label must belong to the line alone: a slot that occurs a
+            // third time, or that another factor also spells, is captured.
+            let self_contracted = ports.counts.iter().any(|(_, count, _)| *count == 2)
+                && ports.counts.iter().all(|(_, count, _)| *count <= 2)
+                && ports.captured_by(&outside).is_empty();
             if ports.opaque
                 || outside.opaque
                 || (!internally_closed
+                    && !self_contracted
                     && ports
                         .ports()
                         .filter(|port| outside.get(port) == Some(1))
@@ -5086,23 +5098,35 @@ mod reconstruction_tests {
                 color_f!(&x, Atom::var(T.chain_in), Atom::var(T.chain_out)),
             )
         };
-        for expression in [
-            network(&x, &b) * function!(foreign, &a),
-            network(&other_x, &b),
-            network(&x, &c),
-        ] {
+        let connection = |expression: &Atom| {
             let dummies = ParseState::default();
             dummies.reserve_indices(expression.as_view());
             let simplifier = ColorAlgebraSimplifier::new(Default::default(), dummies);
-            assert!(
-                simplifier
-                    .simplify_adjoint_chain_connection(
-                        &ProductView::parse(expression.as_view()),
-                        false,
-                    )
-                    .is_none()
-            );
+            simplifier.simplify_adjoint_chain_connection(
+                &ProductView::parse(expression.as_view()),
+                false,
+            )
+        };
+        for expression in [
+            network(&x, &b) * function!(foreign, &a),
+            network(&other_x, &b),
+        ] {
+            let result = connection(&expression);
+            assert!(result.is_none(), "{expression} -> {result:?}");
         }
+        // With two free ends the summed labels a and x close cycles inside the
+        // line (F^x F^c F^x = -C_A/2 F^c), which the opened line contracts.
+        let self_contracted = network(&x, &c);
+        let reduced = connection(&self_contracted)
+            .unwrap_or_else(|| panic!("{self_contracted} was not contracted"));
+        assert!(
+            reduced.as_view().get_byte_size() < self_contracted.as_view().get_byte_size(),
+            "{self_contracted} -> {reduced}"
+        );
+        assert!(
+            !reduced.to_string().contains(&x.to_string()),
+            "{self_contracted} -> {reduced}"
+        );
     }
 
     #[test]
