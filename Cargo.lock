@@ -5794,7 +5794,7 @@ dependencies = [
 [[package]]
 name = "rustred"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?rev=cb7b67c205918eacfa4909782da3dd43ab07973e#cb7b67c205918eacfa4909782da3dd43ab07973e"
+source = "git+https://github.com/alphal00p/rustred?rev=d5b63a659b759f558f0def8d9e8c491aec9b42cc#d5b63a659b759f558f0def8d9e8c491aec9b42cc"
 dependencies = [
  "bincode 2.0.1",
  "blake3",
@@ -5815,7 +5815,7 @@ dependencies = [
 [[package]]
 name = "rustred-app"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?rev=cb7b67c205918eacfa4909782da3dd43ab07973e#cb7b67c205918eacfa4909782da3dd43ab07973e"
+source = "git+https://github.com/alphal00p/rustred?rev=d5b63a659b759f558f0def8d9e8c491aec9b42cc#d5b63a659b759f558f0def8d9e8c491aec9b42cc"
 dependencies = [
  "bincode 2.0.1",
  "blake3",
@@ -5831,7 +5831,7 @@ dependencies = [
 [[package]]
 name = "rustred-campaign-contract"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?rev=cb7b67c205918eacfa4909782da3dd43ab07973e#cb7b67c205918eacfa4909782da3dd43ab07973e"
+source = "git+https://github.com/alphal00p/rustred?rev=d5b63a659b759f558f0def8d9e8c491aec9b42cc#d5b63a659b759f558f0def8d9e8c491aec9b42cc"
 dependencies = [
  "blake3",
  "serde",
@@ -5841,12 +5841,12 @@ dependencies = [
 [[package]]
 name = "rustred-order"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?rev=cb7b67c205918eacfa4909782da3dd43ab07973e#cb7b67c205918eacfa4909782da3dd43ab07973e"
+source = "git+https://github.com/alphal00p/rustred?rev=d5b63a659b759f558f0def8d9e8c491aec9b42cc#d5b63a659b759f558f0def8d9e8c491aec9b42cc"
 
 [[package]]
 name = "rustred-topology"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?rev=cb7b67c205918eacfa4909782da3dd43ab07973e#cb7b67c205918eacfa4909782da3dd43ab07973e"
+source = "git+https://github.com/alphal00p/rustred?rev=d5b63a659b759f558f0def8d9e8c491aec9b42cc#d5b63a659b759f558f0def8d9e8c491aec9b42cc"
 dependencies = [
  "graphica",
  "serde",
