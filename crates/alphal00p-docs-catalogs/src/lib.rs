@@ -945,7 +945,7 @@ fn python_required_exports(component: &str) -> Result<&'static [&'static str]> {
             "to_typst",
             "trace",
         ]),
-        "linnet-py" | "idenso-community" | "vakint-community" => Ok(&[]),
+        "linnet-graph" | "idenso-community" | "vakint-community" => Ok(&[]),
         _ => {
             bail!("unknown Python component {component}");
         }
@@ -954,7 +954,7 @@ fn python_required_exports(component: &str) -> Result<&'static [&'static str]> {
 
 fn python_export_is_supported(component: &str, name: &str) -> Result<bool> {
     match component {
-        "linnet-py" | "idenso-community" | "vakint-community" => Ok(true),
+        "linnet-graph" | "idenso-community" | "vakint-community" => Ok(true),
         "gammaloop-python" | "spynso3" => Ok(python_required_exports(component)?.contains(&name)),
         _ => {
             bail!("unknown Python component {component}");

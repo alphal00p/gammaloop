@@ -552,7 +552,23 @@ impl SiteBuilder {
             .tempdir_in(session)?;
         let root = directory.path().join("site");
         let api_root = directory.path().join("api");
-        copy_tree(&self.root.join("docs/api"), &api_root)?;
+        copy_tree(
+            &self.api_root.join("generated"),
+            &api_root.join("generated"),
+        )?;
+        let stubs = api_root.join("python");
+        fs::create_dir_all(&stubs)?;
+        // Copy the registered package stubs into the preview's private API tree.
+        for product in &self.registry.product {
+            for component in &product.python_components {
+                let destination = stubs.join(format!("{}.pyi", component.id));
+                if !destination.exists()
+                    && let Some(stub) = self.python_stub_source(component)
+                {
+                    fs::copy(stub, destination)?;
+                }
+            }
+        }
         if changed.is_empty() {
             // Checked-in `.pyi` files are deliberate normal-watch inputs. Refresh only the
             // source-backed Rust references before the first publication so startup remains

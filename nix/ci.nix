@@ -18,6 +18,7 @@
   groups = [
     {
       name = "feynkit";
+      runtimeRenderData = true;
       packages = ["feynkit-model" "feynkit-ufo"];
     }
     {
@@ -39,6 +40,7 @@
     }
     {
       name = "docs";
+      runtimeRenderData = true;
       packages = [
         "alphal00p-docs-builder"
         "alphal00p-docs-catalogs"
@@ -67,15 +69,18 @@
     }
     {
       name = "linnet";
+      runtimeRenderData = true;
       packages = [
         "kurvst"
         "linnet"
         "linnet-py"
+        "linnet-render-py"
         "linnest"
       ];
     }
     {
       name = "spenso";
+      runtimeRenderData = true;
       packages = [
         "idenso"
         "spenso"

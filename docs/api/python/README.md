@@ -20,7 +20,7 @@ Regenerate each inventory in a separate Cargo invocation:
 cargo run --locked -p alphal00p-docs-python-exporter --features gammaloop -- \
   gammaloop-python docs/api/python/gammaloop-python.pyi
 cargo run --locked -p alphal00p-docs-python-exporter --features linnet -- \
-  linnet-py docs/api/python/linnet-py.pyi
+  linnet-graph docs/api/python/linnet-graph.pyi
 cargo run --locked -p alphal00p-docs-python-exporter --features spenso -- \
   spynso3 docs/api/python/spynso3.pyi
 cargo run --locked -p alphal00p-docs-python-exporter --features idenso -- \
@@ -35,10 +35,9 @@ isolated inventories. The Idenso and Vakint invocations also compare StubInfo
 with the single declaration used by production registration and with the names
 actually installed into a fresh community module.
 
-The Linnet invocation renders one canonical StubInfo surface, including its
-deterministic `__all__`, and writes or checks both
-`crates/linnet-py/linnet_py.pyi` and `docs/api/python/linnet-py.pyi`. Its import
-test compares that same surface with the extension's real runtime exports.
+Linnet generates the graph package stub and its deterministic `__all__`.
+The documentation links to this packaged file, and the import test compares
+its exports with the native extension.
 
 Do not combine the inventory features: PyO3 stub registration uses a
 process-wide inventory. GammaLoop's additional callable-signature acceptance

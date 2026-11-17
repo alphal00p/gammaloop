@@ -62,33 +62,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         .collect::<Vec<_>>()
         .join("\n");
     normalized.push('\n');
-    let mut outputs = vec![output];
-    if component == "linnet-py" {
-        outputs.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../linnet-py/linnet_py.pyi"));
-    }
-    outputs.sort();
-    outputs.dedup();
-    for output in outputs {
-        if check {
-            let checked_in = fs::read_to_string(&output)?;
-            if checked_in != normalized {
-                let hint = if component == "linnet-py" {
-                    "regenerate the shared Linnet package/docs surface"
-                } else {
-                    "regenerate the checked-in snapshot"
-                };
-                return Err(format!(
-                    "generated Python stub drifted: {}; {hint}",
-                    output.display(),
-                )
-                .into());
-            }
-        } else {
-            if let Some(parent) = output.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            fs::write(output, &normalized)?;
+    if check {
+        if fs::read_to_string(&output)? != normalized {
+            return Err(format!(
+                "generated Python stub drifted: {}; regenerate the checked-in stub",
+                output.display()
+            )
+            .into());
         }
+    } else {
+        fs::write(output, normalized)?;
     }
     Ok(())
 }
@@ -120,7 +103,7 @@ fn render(
 ) -> Result<String, Box<dyn Error>> {
     match component {
         #[cfg(feature = "linnet")]
-        "linnet-py" => Ok(linnet_py::canonical_stub_from_module(module)),
+        "linnet-graph" => Ok(linnet_py::canonical_stub(module)?),
         _ => Ok(module.to_string()),
     }
 }
@@ -278,7 +261,7 @@ fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Bo
             Ok(("gammaloop._gammaloop", stub_info))
         }
         #[cfg(feature = "linnet")]
-        "linnet-py" => Ok(("linnet_py", linnet_py::stub_info()?)),
+        "linnet-graph" => Ok(("symbolica.community.graph", linnet_py::stub_info()?)),
         #[cfg(feature = "spenso")]
         "spynso3" => Ok(("symbolica.community.spenso", spynso3::stub_info()?)),
         #[cfg(feature = "idenso")]
@@ -550,23 +533,21 @@ def validate(runtime_module, stub_source):
     #[cfg(feature = "linnet")]
     #[test]
     fn linnet_package_and_docs_share_the_typed_stub_info_surface() {
-        let (module_name, stub_info) = super::gather("linnet-py").unwrap();
-        let canonical = super::render("linnet-py", &stub_info.modules[module_name]).unwrap();
-        assert_eq!(canonical, include_str!("../../linnet-py/linnet_py.pyi"));
+        let (module_name, info) = super::gather("linnet-graph").unwrap();
+        let module = info.modules.get(module_name).unwrap();
+        let canonical = linnet_py::canonical_stub(module).unwrap();
         assert_eq!(
             canonical,
-            include_str!("../../../docs/api/python/linnet-py.pyi")
+            include_str!("../../linnet-py/python/symbolica/community/graph/__init__.pyi")
         );
         for declaration in [
             "_NativeValue: typing.TypeAlias = (",
             "def __new__(cls, *, encode_node: typing.Callable[[NodeValue], DotVertexData]",
             "def build(*items: _GraphItem, name: _OptionalString = None",
             "def map(self, *, node: typing.Callable[[Node], typing.Any] | None = None",
-            "def render(self, output: builtins.str | os.PathLike[builtins.str], *, config: RenderConfig | None = None)",
-            "subgraph: _DrawSubgraphs = ...",
+            "def render(self, *, config: RenderSettings | None = None)",
             "node_outset: _AutoNumber = ...",
             "_Padding: typing.TypeAlias = builtins.int | builtins.float | _NativeArray | _NativeDict | Insets",
-            "show_half_edge_ids: _Boolean = ...",
             "def call(self, *args: _NativeValue, **kwargs: _NativeValue) -> TypstCall",
         ] {
             assert!(canonical.contains(declaration), "missing `{declaration}`");
@@ -583,7 +564,7 @@ def validate(runtime_module, stub_source):
     #[cfg(feature = "linnet")]
     #[test]
     fn linnet_stub_keeps_aliases_before_import_like_docstrings() {
-        let (module_name, mut stub_info) = super::gather("linnet-py").unwrap();
+        let (module_name, mut stub_info) = super::gather("linnet-graph").unwrap();
         let module = stub_info.modules.get_mut(module_name).unwrap();
         module
             .class
@@ -592,7 +573,7 @@ def validate(runtime_module, stub_source):
             .unwrap()
             .doc = "Construct a graph\nfrom its nodes and edges.\nimport drawing data as needed.";
 
-        let canonical = super::render("linnet-py", module).unwrap();
+        let canonical = super::render("linnet-graph", module).unwrap();
         let graph = canonical.find("class Graph:").unwrap();
         assert!(canonical.find("\n__all__ = [\n").unwrap() < graph);
         assert!(canonical.find("\n_NativeValue: typing.TypeAlias").unwrap() < graph);

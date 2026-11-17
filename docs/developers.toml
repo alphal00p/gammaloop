@@ -1250,7 +1250,7 @@ end_anchor = "# Exercise the embedded Typst watcher"
 # Reviewed 2026-10-12: ABI/Python capability names are updated and
 # watcher/server checks are grouped under watch; reusable compiler and
 # terminal publication boundaries are retained.
-digest = "2c7dc06eb8221eb03f5d2925fbea9dc4fd61536d"
+digest = "6254c11f064bedd7b7d67dace6de4c9f0be912b1"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
@@ -1267,7 +1267,7 @@ end_anchor = "documentationRegistry = builtins.fromTOML"
 # No-impact attestation 2026-09-29: the documentation source adds the Kurvst
 # knot-logo example imported by the GammaLoop marks; cache boundaries are
 # unchanged.
-digest = "d708625460bb56d215bac269d7a065d2f6411acd"
+digest = "e858c914cc72e0d6a29b74132cfdf86e664ab28e"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -1298,7 +1298,7 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Reviewed 2026-10-12: Package source ownership now includes the shared
 # Linnest asset builder used by GammaLoop and Clinnet; the existing per-
 # package filtering boundary is retained.
-digest = "a29ad4069c365d75c6b74c1aa63700d5f5ac2704"
+digest = "22131d6f9eaffe67fda286634e555fa338ef7884"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
@@ -1319,7 +1319,7 @@ end_anchor = "\nin\n{\n  inherit"
 # terminal publication boundaries are retained.
 # Reviewed 2026-10-12: documentation validation runs the feature-enabled
 # GammaLoop and Linnet exporter tests; reusable producer inputs are unchanged.
-digest = "1bd156d545ec772453e72d1c1a53346e0cd91b34"
+digest = "9c1f6842081d8e84ce377f1711fbfbd403672240"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -1359,14 +1359,14 @@ end_anchor = "fn refresh_initial_api("
 # validation while reusing atomically published component catalogues.
 # Reviewed 2026-09-14: watch generations now warn on verified-content drift;
 # malformed scopes and ordinary check/build publication remain strict.
-digest = "424eac149bd4dbf3be82b19f746d6f003829cf61"
+digest = "590ea24dd05473264c2851ebb6076ac99158c4fc"
 
 [[section.note.scope]]
 path = "nix/ci.nix"
 symbol = "documentation test group coverage"
 anchor = 'name = "docs";'
 end_anchor = 'name = "integration";'
-digest = "2084c83a58875b3ae7563ef5e4adb7408fec0ccb"
+digest = "6f841f176b4d76719aaaaf4f1a0e32c0ff7eb405"
 
 [[section]]
 id = "documentation"

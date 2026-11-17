@@ -15,7 +15,7 @@
   inherit (pkgs) lib;
 
   documentation = import ./documentation.nix {
-    inherit self pkgs docsPkgs craneLib workspaceRoot cargoSources localCargoPatchSources nonCargoBuildSources
+    inherit self pkgs docsPkgs craneLib workspaceRoot cargoSources localCargoPatchSources nonCargoBuildSources symbolicaRenderData
       ciArgs ciCargoProfile
       dummyCargoTarget normalizeWorkspaceHackBuildScriptTimestampScript
       workspacePackageSrcFor workspaceMissingCargoTargetsScript
@@ -100,7 +100,6 @@
     (workspaceRoot + "/crates/linnest/typst/src")
     (workspaceRoot + "/crates/linnest/typst/typst.toml")
     (workspaceRoot + "/crates/linnet-py/README.md")
-    (workspaceRoot + "/crates/linnet-py/vendor")
     (workspaceRoot + "/crates/spynso3/typst")
     (workspaceRoot + "/crates/vakint/form_src")
     (workspaceRoot + "/crates/vakint/templates")
@@ -111,6 +110,12 @@
     (workspaceRoot + "/crates/linnest/typst/ec-layout.wasm")
     (workspaceRoot + "/crates/linnest/typst/LICENSE.clarabel")
     (workspaceRoot + "/crates/linnest/typst/LICENSE.ec-layout")
+    (workspaceRoot + "/crates/linnet-py/typst/subgraph.css")
+    (workspaceRoot + "/crates/linnet-render-py/data.json")
+    (workspaceRoot + "/crates/linnet-render-py/fonts")
+    (workspaceRoot + "/crates/linnet-render-py/src/view.py")
+    (workspaceRoot + "/crates/linnet-render-py/src/view.js")
+    (workspaceRoot + "/crates/linnet-render-py/src/iframe.js")
   ];
 
   snapshotSources = lib.fileset.unions [
@@ -151,7 +156,7 @@
       (workspaceRoot + "/docs/api/python")
       (workspaceRoot + "/docs/examples.toml")
       (workspaceRoot + "/docs/products")
-      (workspaceRoot + "/crates/linnet-py/linnet_py.pyi")
+      (workspaceRoot + "/crates/linnet-py/python/symbolica/community/graph/__init__.pyi")
     ] ++ workspacePackageExtraFilesetsForSourcePackages "compileTimeTest" workspaceMemberPackages);
   };
 
@@ -408,9 +413,15 @@
     ];
     "feynkit-ufo" = ["crates/feynkit-ufo/src/model_metadata.py"];
     "feynkit-model" = ["crates/feynkit-model/data/sm.json.zlib"];
+    "linnet-render-py" = [
+      "crates/linnet-render-py/fonts"
+      "crates/linnet-render-py/data.json"
+      "crates/linnet-render-py/src/view.py"
+      "crates/linnet-render-py/src/view.js"
+      "crates/linnet-render-py/src/iframe.js"
+    ];
     "alphal00p-docs-catalogs" = documentationCatalogAnnotatedItemSourcePaths;
     "alphal00p-docs-examples" = [
-      "crates/linnet-py/pyproject.toml"
       "docs/api/python"
       "docs/examples.toml"
       "docs/products"
@@ -460,7 +471,7 @@
       "crates/linnest/typst/LICENSE"
       "crates/linnest/typst/src"
       "crates/linnest/typst/typst.toml"
-      "crates/linnet-py/vendor"
+      "crates/linnet-py/typst/subgraph.css"
     ];
     spynso3 = ["crates/spynso3/typst"];
     vakint = [
@@ -470,6 +481,14 @@
   };
 
   workspacePackageExtraSourceRoots.compileTimeTest = {
+    "linnet-py" = [
+      "crates/linnet-py/tests/test_svg_interaction.py"
+      "crates/linnet-py/tests/rendering_metrics.py"
+    ];
+    "linnet-render-py" = [
+      "crates/linnet-render-py/tests/mathml_view_support.py"
+      "crates/linnet-render-py/tests/mathml_view_collections.py"
+    ];
     "linnet" = ["crates/linnet/src/half_edge/layout/impred/fixtures"];
     "linnest" = [
       "crates/linnest/layout/native/fixtures"
@@ -480,7 +499,10 @@
       "assets/models/json/sm/sm.json"
     ];
     "alphal00p-docs-macros" = ["crates/alphal00p-docs-macros/tests/ui"];
-    "alphal00p-docs-python-exporter" = ["crates/linnet-py/linnet_py.pyi" "docs/api/python"];
+    "alphal00p-docs-python-exporter" = [
+      "docs/api/python"
+      "crates/linnet-py/python/symbolica/community/graph/__init__.pyi"
+    ];
     "clinnet" = [
       "assets/embedded/drawing/templates/impl/physics-edge-style.typ"
       "assets/embedded/drawing/templates/layout-core.typ"
@@ -513,6 +535,7 @@
   };
 
   workspacePackageExtraSourceRoots.runtimeTest = {
+    "linnet-render-py" = ["crates/linnet-render-py/tests"];
     "alphal00p-docs-builder" = [
       "assets/embedded/drawing/templates"
       "assets/gammalooplogo-dark.svg"
@@ -602,10 +625,47 @@
     roots = lib.concatMap (sourcePackage: workspacePackageExtraSourceRoots.${kind}.${sourcePackage} or []) sourcePackages;
     # The packaged SM fixture is a symlink to the workspace model.
     fixtureTarget = lib.optional (lib.elem "crates/feynkit-model/tests/fixtures" roots) "assets/models/json/sm/sm.json";
-  in sortedUnique (roots ++ fixtureTarget);
+    # The documentation stubs link to the type declarations shipped by the bindings.
+    stubTargets = lib.optionals (lib.elem "docs" roots || lib.elem "docs/api/python" roots) [
+      "crates/linnet-py/python/symbolica/community/graph/__init__.pyi"
+    ];
+  in sortedUnique (roots ++ fixtureTarget ++ stubTargets);
 
   workspacePackageExtraFilesetsForSourcePackages = kind: sourcePackages:
     map (sourceRoot: workspaceRoot + "/${sourceRoot}") (workspacePackageExtraSourceRootsForSourcePackages kind sourcePackages);
+
+  # Supply the host-owned assets expected by the native renderers. Keep this
+  # runtime closure separate from compiled producers and notebook resource wheels.
+  symbolicaRenderData = let
+    assets = lib.fileset.toSource {
+      root = workspaceRoot;
+      fileset = lib.fileset.unions
+        (workspacePackageExtraFilesetsForSourcePackages "production" ["linnet-render-py"]);
+    };
+  in pkgs.runCommand "gammaloop-render-data" {
+    nativeBuildInputs = [pkgs.python313];
+  } ''
+    python3 - <<'PY'
+    import json, os, shutil
+    from pathlib import Path
+    destination = Path(os.environ["out"])
+    for consumer in ("linnet-render-py",):
+        root = Path("${assets}") / "crates" / consumer
+        for asset in json.loads((root / "data.json").read_text())["assets"]:
+            name, path = Path(asset["name"]), Path(asset["path"])
+            assert not name.is_absolute() and ".." not in name.parts
+            assert not path.is_absolute() and ".." not in path.parts
+            assert asset.get("package") is None
+            source = root / path
+            output = destination / name
+            output.parent.mkdir(parents=True, exist_ok=True)
+            if output.exists():
+                assert output.read_bytes() == source.read_bytes(), name
+            else:
+                shutil.copyfile(source, output)
+    shutil.copyfile(Path("${assets}") / "crates/linnet-render-py/fonts/STIX-Two-OFL.txt", destination / "STIX-Two-OFL.txt")
+    PY
+  '';
 
   workspacePackageExtraSourceRestoreInDummySrcScriptFor = sourcePackages:
     ''
@@ -2761,7 +2821,7 @@
   }: let
     junitPath = "target/nextest/${profile}/junit.xml";
   in
-    pkgs.runCommand name {
+    pkgs.runCommand name ({
       nativeBuildInputs = [
         ciToolchain
         pkgs.cargo-nextest
@@ -2780,7 +2840,11 @@
       RUST_BACKTRACE = "1";
       RUST_LIB_BACKTRACE = "1";
       SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
-    } (''
+    }
+    // lib.optionalAttrs (target.runtimeRenderData or false) {
+      # Native renderers read host-owned fonts through symbolica-data.
+      SYMBOLICA_DATA_DIRECTORY = symbolicaRenderData;
+    }) (''
       if [ -z "''${SYMBOLICA_LICENSE:-}" ]; then
         echo "Missing SYMBOLICA_LICENSE environment variable" >&2
         exit 1
