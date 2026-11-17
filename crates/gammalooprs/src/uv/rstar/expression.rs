@@ -1330,7 +1330,9 @@ impl RStarIntegrand {
             &self.routed,
             &self.soft_edges,
             degree,
-            &|expression| Self::simplify_hard_taylor(expression),
+            // One root scope: idenso certifies a closed scalar result
+            // (frontier certificate), read before the uncook.
+            &|expression| Self::simplify_view_certified(expression.as_view()),
             stats,
         )
     }

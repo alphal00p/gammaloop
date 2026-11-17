@@ -84,6 +84,12 @@ pub struct ClosedStats {
     pub close_seconds: f64,
     pub taylor_bytes: usize,
     pub closed_bytes: usize,
+    /// Closures idenso certified a closed scalar (the producer fact of
+    /// `simplify_view_certified`), and those that needed the slot scan.
+    pub certified: usize,
+    pub uncertified: usize,
+    /// Moments whose coefficient expands to zero, dropped before the quotient.
+    pub dropped_zero: usize,
 }
 
 /// A slot of a sector tensor: an open slot of the hard part, or the
@@ -215,16 +221,18 @@ fn contains_soft(expression: AtomView<'_>, edge: usize) -> bool {
 }
 
 /// The perfect matchings of `legs` (all, in a fixed order); `r <= 4`.
-fn pairings(legs: &[Leg]) -> Vec<Vec<(Leg, Leg)>> {
+/// `None` for any other rank: the caller declines (fails closed). A rank > 4
+/// sector is never truncated to fewer pairings.
+fn pairings(legs: &[Leg]) -> Option<Vec<Vec<(Leg, Leg)>>> {
     match legs.len() {
-        0 => vec![vec![]],
-        2 => vec![vec![(legs[0], legs[1])]],
-        4 => vec![
+        0 => Some(vec![vec![]]),
+        2 => Some(vec![vec![(legs[0], legs[1])]]),
+        4 => Some(vec![
             vec![(legs[0], legs[1]), (legs[2], legs[3])],
             vec![(legs[0], legs[2]), (legs[1], legs[3])],
             vec![(legs[0], legs[3]), (legs[1], legs[2])],
-        ],
-        _ => unreachable!("pairings are built for r <= 4 only"),
+        ]),
+        _ => None,
     }
 }
 
@@ -286,7 +294,7 @@ pub(super) fn closed_moments(
     routed: &Atom,
     soft_edges: &[EdgeIndex],
     degree: usize,
-    simplify: &dyn Fn(&Atom) -> Result<Atom>,
+    simplify: &dyn Fn(&Atom) -> Result<(Atom, bool)>,
     stats: &mut ClosedStats,
 ) -> Result<std::result::Result<Vec<(Atom, Atom)>, String>> {
     let parity_odd = [
@@ -408,7 +416,11 @@ pub(super) fn closed_moments(
                     .map(|(index, edge)| Leg::Alpha { index, edge: *edge }),
             )
             .collect::<Vec<_>>();
-        let matchings = pairings(&legs);
+        // Fails closed: every rank other than 0, 2, 4 declines the whole term.
+        let Some(matchings) = pairings(&legs) else {
+            return Ok(Err(format!("rank:{}", legs.len())));
+        };
+        debug_assert_eq!(matchings.len(), [1, 0, 1, 0, 3][legs.len()]);
         let channels = (0..matchings.len())
             .map(|j| symbol!(format!("gammalooprs::ir_closed_tau{j}").as_str()))
             .collect::<Vec<_>>();
@@ -418,7 +430,20 @@ pub(super) fn closed_moments(
             .fold(Atom::Zero, |sum, (pairing, channel)| {
                 sum + Atom::var(*channel) * pairing_tensor(pairing, &open, &alphas)
             });
-        let closed = simplify(&(tensor * closure))?;
+        let (closed, certified) = simplify(&(tensor * closure))?;
+        // The closure must leave a closed scalar. Without idenso's certificate,
+        // scan for open slots: a leaked spinor index (an open trace or chain)
+        // or any other open slot declines the term.
+        if certified {
+            stats.certified += 1;
+        } else {
+            stats.uncertified += 1;
+            match open_slots(&closed) {
+                Ok(0) => {}
+                Ok(count) => return Ok(Err(format!("open_after_closure:{count}"))),
+                Err(reason) => return Ok(Err(format!("open_after_closure:{reason}"))),
+            }
+        }
         stats.closures += matchings.len();
         stats.closed_bytes += closed.as_view().get_byte_size();
         // The channel markers occur linearly, possibly inside unexpanded
@@ -446,11 +471,18 @@ pub(super) fn closed_moments(
                     .map(|p| ((&dimension + 2) * p - &sum) * &normalization)
                     .collect()
             }
-            _ => unreachable!(),
+            _ => return Ok(Err(format!("pairings:{}", matchings.len()))),
         };
         stats.close_seconds += close_started.elapsed().as_secs_f64();
         for (pairing, coefficient) in matchings.iter().zip(coefficients) {
             if coefficient.is_zero() {
+                continue;
+            }
+            // Zero coefficients that are not literally zero (equal channels):
+            // a nonzero value at the random point proves nonzero; only a zero
+            // value pays for the exact expansion.
+            if random_point(&coefficient).is_zero() && coefficient.expand().is_zero() {
+                stats.dropped_zero += 1;
                 continue;
             }
             let coefficient =
@@ -462,7 +494,23 @@ pub(super) fn closed_moments(
             }
         }
     }
+    // The sum over sectors can cancel as well (equal insertions summed).
+    let before = moments.len();
+    moments.retain(|(coefficient, _)| {
+        !(random_point(coefficient).is_zero() && coefficient.expand().is_zero())
+    });
+    stats.dropped_zero += before - moments.len();
     Ok(Ok(moments))
+}
+
+/// The number of open slots of a (closed) expression.
+fn open_slots(expression: &Atom) -> std::result::Result<usize, String> {
+    let cooking = cooking();
+    let cooked = cooking
+        .try_cook(expression.as_view())
+        .map_err(|error| format!("cook:{error}"))?;
+    let tensor = SymbolicTensor::infer(cooked).map_err(|error| format!("infer:{error}"))?;
+    Ok(tensor.structure().logical_slots().len())
 }
 
 /// A fixed rational for every variable and function of `expression` (by its
@@ -511,4 +559,158 @@ fn multisets(
 #[allow(dead_code)]
 fn unused() -> Result<()> {
     Err(eyre!("unused"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::{
+        expression::RStarIntegrand, moments::hard_moments, project::project_hard_vacuum,
+    };
+    use super::*;
+    use crate::initialisation::test_initialise;
+    use idenso::representations::Bispinor;
+
+    fn slot(hedge: u16) -> Atom {
+        Minkowski {}
+            .new_rep(GS.dim)
+            .to_symbolic([Aind::Hedge(hedge, 0).to_atom()])
+    }
+    fn spinor(hedge: u16) -> Atom {
+        Bispinor {}.new_rep(4).to_symbolic([Aind::Hedge(hedge, 1).to_atom()])
+    }
+    fn vector(edge: usize) -> Atom {
+        soft_vector(edge, None)
+    }
+    fn indexed(edge: usize, slot: &Atom) -> Atom {
+        soft_vector(edge, Some(slot))
+    }
+    fn dot(a: &Atom, b: &Atom) -> Atom {
+        function!(SPENSO_TAG.dot, a, b)
+    }
+    fn gamma(left: &Atom, right: &Atom, argument: &Atom) -> Atom {
+        function!(idenso::dirac::AGS.gamma, left, right, argument)
+    }
+    fn edges(list: &[usize]) -> Vec<EdgeIndex> {
+        list.iter().map(|edge| EdgeIndex::from(*edge)).collect()
+    }
+
+    /// Today's path: Taylor, contraction, vacuum projection, moments.
+    fn today(expression: &Atom, soft: &[usize], hard: &[usize], degree: usize) -> Result<Vec<(Atom, Atom)>> {
+        let lambda = symbol!("rstar_hard_taylor"; Scalar);
+        let scaled = RStarIntegrand::scale_edges(expression, &edges(soft), lambda);
+        let polynomial = TaylorExpansion::new(lambda, degree).evaluate(&scaled)?;
+        let simplified = RStarIntegrand::simplify(&polynomial)?;
+        let projected = project_hard_vacuum(&simplified, &edges(hard))?;
+        hard_moments(&projected, &edges(soft))
+    }
+
+    fn closed(
+        expression: &Atom,
+        soft: &[usize],
+        degree: usize,
+    ) -> Result<(std::result::Result<Vec<(Atom, Atom)>, String>, ClosedStats)> {
+        let mut stats = ClosedStats::default();
+        let moments = closed_moments(
+            expression,
+            &edges(soft),
+            degree,
+            &|expression| RStarIntegrand::simplify_view_certified(expression.as_view()),
+            &mut stats,
+        )?;
+        Ok((moments, stats))
+    }
+
+    fn value(rows: &[(Atom, Atom)]) -> Atom {
+        rows.iter().fold(Atom::Zero, |sum, (coefficient, insertion)| {
+            sum + random_point(coefficient) * random_point(insertion)
+        })
+    }
+
+    /// The closed moments equal today's at a random rational point, and
+    /// neither is zero.
+    fn assert_same(expression: &Atom, soft: &[usize], hard: &[usize], degree: usize) -> Result<ClosedStats> {
+        let reference = today(expression, soft, hard, degree)?;
+        let (moments, stats) = closed(expression, soft, degree)?;
+        let moments = moments.map_err(|reason| eyre!("declined: {reason}"))?;
+        assert!(!value(&reference).is_zero(), "the reference is zero: {reference:?}");
+        assert!(
+            (value(&moments) - value(&reference)).is_zero(),
+            "closed {moments:?}\ntoday {reference:?}"
+        );
+        Ok(stats)
+    }
+
+    /// Mixed Q_a.Q_b (b != a), a slot vector Q_a(mu), and the multidegree
+    /// normalization prod_a m_a! = 1 (not |m|! = 2) of the {a,b} sector.
+    #[test]
+    fn mixed_soft_momenta_rank_four() -> Result<()> {
+        test_initialise()?;
+        let (mu, nu) = (slot(10), slot(11));
+        let k = vector(0);
+        let expression = indexed(0, &mu) * indexed(0, &nu) * dot(&k, &vector(4)) * dot(&k, &vector(5))
+            + dot(&vector(4), &vector(5)) * dot(&k, &k) * function!(ETS.metric, &mu, &nu)
+            + indexed(4, &mu) * dot(&k, &vector(5)) * indexed(0, &nu)
+            + dot(&k, &k) * function!(ETS.metric, &mu, &nu);
+        let stats = assert_same(&expression, &[4, 5], &[0], 2)?;
+        assert!(stats.closures > 0);
+        Ok(())
+    }
+
+    /// The {a,a} sector: two derivatives give 2 (k.Q)^2 -> 1/2! restores it.
+    #[test]
+    fn repeated_soft_momentum_normalization() -> Result<()> {
+        test_initialise()?;
+        let (mu, nu) = (slot(10), slot(11));
+        let k = vector(0);
+        let q = vector(4);
+        let expression = dot(&k, &q).pow(2) * indexed(0, &mu) * indexed(0, &nu)
+            + dot(&q, &q) * dot(&k, &k) * function!(ETS.metric, &mu, &nu)
+            + indexed(4, &mu) * indexed(4, &nu) * dot(&k, &k);
+        assert_same(&expression, &[4], &[0], 2)?;
+        Ok(())
+    }
+
+    /// A slashed soft momentum inside a closed Dirac trace (gamma.Q_a ->
+    /// gamma^alpha after polarization), with a hard slash and open mu, nu.
+    #[test]
+    fn slashed_soft_momentum_in_a_trace() -> Result<()> {
+        test_initialise()?;
+        let (mu, nu) = (slot(10), slot(11));
+        let (a, b, c, e) = (spinor(20), spinor(21), spinor(22), spinor(23));
+        let k = vector(0);
+        let trace = gamma(&a, &b, &mu) * gamma(&b, &c, &vector(4)) * gamma(&c, &e, &k) * gamma(&e, &a, &nu);
+        let expression = trace * dot(&k, &vector(5));
+        let stats = assert_same(&expression, &[4, 5], &[0], 2)?;
+        assert_eq!(stats.slots, 2);
+        Ok(())
+    }
+
+    /// A rank-6 sector declines (fails closed), it is never truncated.
+    #[test]
+    fn rank_above_four_declines() -> Result<()> {
+        test_initialise()?;
+        let slots = [slot(10), slot(11), slot(12), slot(13)];
+        let k = vector(0);
+        let expression = slots.iter().fold(dot(&k, &vector(4)).pow(2), |product, slot| product * indexed(0, slot));
+        let (moments, _) = closed(&expression, &[4], 2)?;
+        let reason = moments.expect_err("a rank-6 sector must decline");
+        assert!(reason.starts_with("rank"), "{reason}");
+        Ok(())
+    }
+
+    /// Open spinor slots (a quark leg) and parity-odd content decline.
+    #[test]
+    fn spinor_legs_and_parity_odd_decline() -> Result<()> {
+        test_initialise()?;
+        let mu = slot(10);
+        let k = vector(0);
+        let open_chain = gamma(&spinor(20), &spinor(21), &mu) * dot(&k, &vector(4));
+        let (moments, _) = closed(&open_chain, &[4], 1)?;
+        assert!(moments.expect_err("open spinor slots").starts_with("slot_rep"));
+        let odd = dot(&k, &k) * function!(ETS.metric, &mu, &slot(11))
+            * Atom::var(idenso::dirac::AGS.gamma5);
+        let (moments, _) = closed(&odd, &[4], 0)?;
+        assert_eq!(moments.expect_err("parity odd"), "parity_odd");
+        Ok(())
+    }
 }
