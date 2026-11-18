@@ -30,9 +30,7 @@ use symbolica::atom::{Atom, AtomCore, AtomView};
 
 use super::{ColourBranch, Projection, SYMBOLS};
 use crate::rustred_evaluation::p_gate::{GateView, ZeroSectorCount};
-use crate::rustred_evaluation::p_handover::{
-    self, Matched, PEdge, PLine, VectorRef, match_lines,
-};
+use crate::rustred_evaluation::p_handover::{self, Matched, PEdge, PLine, VectorRef, match_lines};
 use crate::rustred_evaluation::p_integral::{Channel, FoldedInputs};
 use crate::rustred_evaluation::p_lowering::DirectStats;
 use crate::utils::vakint_macros::vk_symbol;
@@ -151,10 +149,14 @@ pub fn colour_terms(diagram: &FeynmanDiagram, merge: bool) -> Result<(Vec<Colour
     }
     let mut rows = Vec::new();
     for (_, vertex) in diagram.vertices() {
-        rows.push(split_local_colour(&NumeratorInterface::export(&vertex.numerator).0)?);
+        rows.push(split_local_colour(
+            &NumeratorInterface::export(&vertex.numerator).0,
+        )?);
     }
     for (_, _, edge) in diagram.edges() {
-        rows.push(split_local_colour(&NumeratorInterface::export(&edge.numerator).0)?);
+        rows.push(split_local_colour(
+            &NumeratorInterface::export(&edge.numerator).0,
+        )?);
     }
     let multi = rows
         .iter()
@@ -172,7 +174,10 @@ pub fn colour_terms(diagram: &FeynmanDiagram, merge: bool) -> Result<(Vec<Colour
     loop {
         let mut colour = Atom::num(1);
         for (position, local) in rows.iter().enumerate() {
-            let k = multi.iter().position(|p| *p == position).map_or(0, |axis| choice[axis]);
+            let k = multi
+                .iter()
+                .position(|p| *p == position)
+                .map_or(0, |axis| choice[axis]);
             colour = colour * &local[k].colour;
         }
         let coefficient = colour_coefficient(&colour, ColourMode::Invariants)?;
@@ -272,7 +277,9 @@ fn contract_branch_edges(
         metric
     } else {
         Atom::var(s.metric_tag) * metric
-            + Atom::var(s.qq_tag) * super::indexed(momentum, &left)? * super::indexed(momentum, &right)?
+            + Atom::var(s.qq_tag)
+                * super::indexed(momentum, &left)?
+                * super::indexed(momentum, &right)?
     };
     let simplified = SymbolicTensor::infer_indexed(&cooked * &projector)?.simplify_algebra(
         &AlgebraSettings {
@@ -340,9 +347,13 @@ pub fn contract_edges(
         let product = branch
             .residuals
             .iter()
-            .fold(Atom::num(1), |product, residual| product * couplings(residual));
+            .fold(Atom::num(1), |product, residual| {
+                product * couplings(residual)
+            });
         let product = match compact {
-            Some((lines, chosen)) => lines.route_compact(&product, chosen).map_err(|e| eyre::eyre!(e))?,
+            Some((lines, chosen)) => lines
+                .route_compact(&product, chosen)
+                .map_err(|e| eyre::eyre!(e))?,
             None if options.routed => basis.route_expression(&product),
             None => product,
         };
@@ -482,7 +493,11 @@ impl Lines {
             .filter(|e| e.id < LOOP_EDGE_BASE)
             .map(|e| (e.id, vector(&e.loops, e.head)))
             .collect::<Vec<_>>();
-        let lines = self.lines.iter().map(|l| (l.id, vector(&l.loops, l.head))).collect::<Vec<_>>();
+        let lines = self
+            .lines
+            .iter()
+            .map(|l| (l.id, vector(&l.loops, l.head)))
+            .collect::<Vec<_>>();
         let size_of = |routes: &[(Vec<i64>, i64)]| {
             routes
                 .iter()
@@ -506,7 +521,10 @@ impl Lines {
             }
             let mut ok = true;
             for &k in &choose {
-                let (a, b) = (find(&mut parent, index(self.lines[k].source)), find(&mut parent, index(self.lines[k].target)));
+                let (a, b) = (
+                    find(&mut parent, index(self.lines[k].source)),
+                    find(&mut parent, index(self.lines[k].target)),
+                );
                 if a == b {
                     ok = false;
                     break;
@@ -516,13 +534,20 @@ impl Lines {
             if ok {
                 trees += 1;
                 let cotree = (0..e).filter(|k| !choose.contains(k)).collect::<Vec<_>>();
-                let columns = cotree.iter().map(|&k| lines[k].1 .0.clone()).collect::<Vec<_>>();
+                let columns = cotree
+                    .iter()
+                    .map(|&k| lines[k].1.0.clone())
+                    .collect::<Vec<_>>();
                 let mut routes = Vec::with_capacity(e);
                 let mut fine = true;
                 for (_, (l, x)) in &lines {
                     match solve_integral(&columns, l) {
                         Some(sigma) => {
-                            let xs = x - sigma.iter().zip(&cotree).map(|(s, &k)| s * lines[k].1 .1).sum::<i64>();
+                            let xs = x - sigma
+                                .iter()
+                                .zip(&cotree)
+                                .map(|(s, &k)| s * lines[k].1.1)
+                                .sum::<i64>();
                             routes.push((sigma, xs));
                         }
                         None => {
@@ -558,11 +583,18 @@ impl Lines {
             }
         }
         let (size, cotree_ids, cotree) = best.ok_or("no spanning tree")?;
-        let columns = cotree.iter().map(|&k| lines[k].1 .0.clone()).collect::<Vec<_>>();
+        let columns = cotree
+            .iter()
+            .map(|&k| lines[k].1.0.clone())
+            .collect::<Vec<_>>();
         let mut routes = std::collections::BTreeMap::new();
         for (id, (l, x)) in &all_edges {
             let sigma = solve_integral(&columns, l).ok_or("an edge outside the cotree span")?;
-            let xs = x - sigma.iter().zip(&cotree).map(|(s, &k)| s * lines[k].1 .1).sum::<i64>();
+            let xs = x - sigma
+                .iter()
+                .zip(&cotree)
+                .map(|(s, &k)| s * lines[k].1.1)
+                .sum::<i64>();
             routes.insert(*id, (sigma, xs));
         }
         Ok(CompactBasis {
@@ -577,7 +609,11 @@ impl Lines {
     /// Route `product` in a compact basis: `Q(e, args..)` -> `Σ σ_i K(i, args..)
     /// + x P(args..)` (FeynKit's symbols; numerical multiples collected as
     /// `route_expression` does).
-    pub fn route_compact(&self, product: &Atom, basis: &CompactBasis) -> std::result::Result<Atom, String> {
+    pub fn route_compact(
+        &self,
+        product: &Atom,
+        basis: &CompactBasis,
+    ) -> std::result::Result<Atom, String> {
         let q = feynkit_graph::symbols::momentum();
         let k = feynkit_graph::symbols::loop_momentum();
         let mut failure = None;
@@ -654,7 +690,11 @@ pub fn lines_of(
     };
     let (first, first_ends, _) = &legs[0];
     let (_, along) = coefficients(first).ok_or("a leg without routing")?;
-    let into = if first_ends.source.is_none() { along } else { -along };
+    let into = if first_ends.source.is_none() {
+        along
+    } else {
+        -along
+    };
     let orientation = match into {
         1 => 1,
         -1 => -1,
@@ -719,7 +759,10 @@ impl Lines {
         if f.get_symbol() == feynkit_graph::symbols::loop_momentum() {
             let i = i64::try_from(first).ok()?;
             return match &self.loop_edges {
-                Some(cotree) => usize::try_from(i).ok().and_then(|i| cotree.get(i)).map(|&e| VectorRef::Edge(e)),
+                Some(cotree) => usize::try_from(i)
+                    .ok()
+                    .and_then(|i| cotree.get(i))
+                    .map(|&e| VectorRef::Edge(e)),
                 None => (0..LOOP_EDGE_BASE)
                     .contains(&i)
                     .then_some(VectorRef::Edge(LOOP_EDGE_BASE + i)),
@@ -799,10 +842,13 @@ pub fn lower_graph(
             continue;
         }
         let started = Instant::now();
-        let scalar = match matched.rename(&numerator, SPENSO_TAG.dot, |v| lines.vector(v), &forbidden) {
-            Ok(scalar) => scalar.replace(Atom::var(SYMBOLS.d)).with(in_epsilon.clone()),
-            Err(reason) => return Ok(DirectOutcome::Declined(reason)),
-        };
+        let scalar =
+            match matched.rename(&numerator, SPENSO_TAG.dot, |v| lines.vector(v), &forbidden) {
+                Ok(scalar) => scalar
+                    .replace(Atom::var(SYMBOLS.d))
+                    .with(in_epsilon.clone()),
+                Err(reason) => return Ok(DirectOutcome::Declined(reason)),
+            };
         seconds.handover += started.elapsed().as_secs_f64();
         let mut dots = std::collections::BTreeSet::new();
         scalar.as_view().visitor(&mut |node| {
@@ -855,4 +901,269 @@ pub fn gate_view(
 /// Exact equality of two Laurent expansions (`(a - b).expand() == 0`).
 pub fn values_equal(a: &Atom, b: &Atom) -> bool {
     (a - b).expand().is_zero()
+}
+
+/// R3 on one DOT graph end to end, in the shape of [`super::run_graph`]
+/// (parse, zero tests, colour terms, kinematics, weight, [`lower_graph`] with
+/// reduction).
+pub struct DirectRun {
+    /// Why the graph is an exact zero before the hand-over, if it is.
+    pub zero_reason: Option<String>,
+    pub outcome: Option<DirectOutcome>,
+    /// Colour terms handed to idenso (merged or R2's branches).
+    pub terms: usize,
+    pub seconds: DirectSeconds,
+    pub settings: VakintSettings,
+}
+
+pub fn run_graph_direct(
+    vakint: &Vakint,
+    model: &std::sync::Arc<feynkit_model::Model>,
+    dot: &str,
+    projection: Projection,
+    extra_terms: i64,
+    merge_colour: bool,
+    options: DirectOptions,
+) -> Result<DirectRun> {
+    let s = &*SYMBOLS;
+    let diagram = FeynmanDiagram::from_dot(std::sync::Arc::clone(model), dot)?;
+    eyre::ensure!(
+        diagram.projector().expression().is_one()
+            && diagram.numerator_prefactor().expression().is_one(),
+        "the reference path expects projector 1 and numerator_prefactor 1"
+    );
+    let settings = super::vakint_settings(diagram.loop_count() as i64 + extra_terms);
+    let mut run = DirectRun {
+        zero_reason: None,
+        outcome: None,
+        terms: 0,
+        seconds: DirectSeconds::default(),
+        settings: settings.clone(),
+    };
+    if super::scaleless_contact(&diagram) {
+        run.zero_reason = Some("no internal edge carries the external momentum: scaleless".into());
+        return Ok(run);
+    }
+    let (terms, _) = colour_terms(&diagram, merge_colour)?;
+    run.terms = terms.len();
+    if terms.is_empty() {
+        run.zero_reason = Some("every colour branch vanishes".into());
+        return Ok(run);
+    }
+    let dimension = Atom::var(s.d);
+    let kinematics = feynkit_kinematics::Kinematics::in_dimension(&dimension)?;
+    let family = diagram.propagator_family(&kinematics)?;
+    let [momentum] = family.external_momenta() else {
+        eyre::bail!("a two-point graph needs one independent external momentum");
+    };
+    let momentum = momentum.clone();
+    let q_squared = feynkit_kinematics::Kinematics::in_dimension(&dimension)?
+        .with_momenta([momentum.clone()])?
+        .scalar_product(&momentum, &momentum)?;
+    let weight =
+        feynkit_graph::expressions::evaluate_overall_factor(diagram.overall_factor().as_view())
+            * Atom::var(s.nf).pow(Atom::num(super::closed_quark_loops(&diagram)? as i64));
+    let outcome = lower_graph(
+        vakint,
+        &settings,
+        &diagram,
+        &terms,
+        &momentum,
+        &q_squared,
+        &weight,
+        projection,
+        true,
+        options,
+        &mut run.seconds,
+    )?;
+    run.outcome = Some(outcome);
+    Ok(run)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::rustred_evaluation::p_gate::compare_gate_views;
+    use std::path::PathBuf;
+
+    fn fixture_dirs() -> Vec<PathBuf> {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/bb");
+        ["L1", "L2", "L3"].iter().map(|l| root.join(l)).collect()
+    }
+
+    /// A template engine with a p library covering L1-L3 (the test data of the
+    /// gate configuration, else whatever the engine resolves); `None`: no
+    /// library in this environment (the test then says so and skips).
+    fn template() -> Option<Vakint> {
+        let mut engine = Vakint::new().unwrap();
+        if let Some(directory) = std::env::var_os("VAKINT_TEST_P_LIBRARY_1_4") {
+            engine
+                .load_p_library_directory(std::path::Path::new(&directory), false)
+                .unwrap();
+        }
+        engine.p_library().is_ok().then_some(engine)
+    }
+
+    /// R3 hands RustRed exactly R2's folded inputs (key by key, zero-sector
+    /// keys dropped on both sides) and gives R2's values, in every option
+    /// combination, on B -> B fixtures of one to three loops (gluon, ghost,
+    /// quark loops, quartic vertices = several colour branches).
+    #[test]
+    fn r3_equals_r2_key_by_key_on_the_bb_fixtures() {
+        let Some(template) = template() else {
+            eprintln!("skipped: no p library for L1-L3 in this environment");
+            return;
+        };
+        let variants = [
+            (false, DirectOptions::default()),
+            (
+                false,
+                DirectOptions {
+                    routed: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                true,
+                DirectOptions {
+                    routed: true,
+                    compact: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                true,
+                DirectOptions {
+                    routed: true,
+                    compact: true,
+                    dots: true,
+                },
+            ),
+        ];
+        let mut lowered = 0;
+        for dir in fixture_dirs() {
+            let model = super::super::load_model(&dir).unwrap();
+            let mut files = std::fs::read_dir(&dir)
+                .unwrap()
+                .filter_map(|e| e.ok().map(|e| e.path()))
+                .filter(|p| p.extension().is_some_and(|x| x == "dot"))
+                .collect::<Vec<_>>();
+            files.sort();
+            for file in files {
+                let dot = std::fs::read_to_string(&file).unwrap();
+                let reference = super::super::run_graph(
+                    &super::super::fresh_engine(&template).unwrap(),
+                    &model,
+                    &dot,
+                    &super::super::RunOptions {
+                        count_terms: false,
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+                for (merge, options) in variants {
+                    let engine = super::super::fresh_engine(&template).unwrap();
+                    let run = run_graph_direct(
+                        &engine,
+                        &model,
+                        &dot,
+                        Projection::Metric,
+                        1,
+                        merge,
+                        options,
+                    )
+                    .unwrap();
+                    let label = format!("{} merge {merge} {options:?}", file.display());
+                    match run.outcome {
+                        None => assert!(
+                            reference.results.is_empty() && reference.zero_reason.is_some(),
+                            "{label}: zero only in R3"
+                        ),
+                        Some(DirectOutcome::Declined(reason)) => {
+                            panic!("{label}: declined: {reason}")
+                        }
+                        Some(DirectOutcome::Zero(_)) => assert!(
+                            reference
+                                .results
+                                .iter()
+                                .all(|r| super::super::gate_view(r).0.is_empty()),
+                            "{label}: zero only in R3"
+                        ),
+                        Some(DirectOutcome::Lowered(projections)) => {
+                            assert_eq!(projections.len(), reference.results.len(), "{label}");
+                            for (projection, expected) in projections.iter().zip(&reference.results)
+                            {
+                                let (view, _) =
+                                    gate_view(&engine, &run.settings, projection).unwrap();
+                                let difference =
+                                    compare_gate_views(&super::super::gate_view(expected).0, &view);
+                                assert!(difference.is_empty(), "{label}: {difference:?}");
+                                assert!(
+                                    values_equal(
+                                        projection.value.as_ref().unwrap(),
+                                        &expected.value
+                                    ),
+                                    "{label}: values differ"
+                                );
+                                lowered += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(lowered >= 4 * 8, "too few lowered projections: {lowered}");
+    }
+
+    /// The hand-over refuses (never reads silently) an unidentified vector and
+    /// leftover tensor notation.
+    #[test]
+    fn the_hand_over_refuses_what_it_cannot_read() {
+        let Some(template) = template() else {
+            eprintln!("skipped: no p library for L1-L3 in this environment");
+            return;
+        };
+        let dir = &fixture_dirs()[0];
+        let model = super::super::load_model(dir).unwrap();
+        let dot = std::fs::read_to_string(dir.join("diagram-000000.dot")).unwrap();
+        let diagram = FeynmanDiagram::from_dot(std::sync::Arc::clone(&model), &dot).unwrap();
+        let dimension = Atom::var(SYMBOLS.d);
+        let kinematics = feynkit_kinematics::Kinematics::in_dimension(&dimension).unwrap();
+        let family = diagram.propagator_family(&kinematics).unwrap();
+        let momentum = family.external_momenta()[0].clone();
+        let lines = lines_of(&diagram, &momentum).unwrap();
+        let engine = super::super::fresh_engine(&template).unwrap();
+        let settings = super::super::vakint_settings(2);
+        let Matched::Ready(matched) =
+            match_lines(&engine, &settings, lines.loops, &lines.lines, &lines.edges).unwrap()
+        else {
+            panic!("the one-loop fixture must match");
+        };
+        let q = feynkit_graph::symbols::momentum();
+        let rep = spenso::structure::representation::Minkowski {}.new_rep(SYMBOLS.d);
+        let edge = |e: i64| rep.vector(symbolica::function!(q, e).as_view(), []);
+        let known = lines.lines[0].id;
+        let fine = rep.inner_product(&edge(known), &edge(known));
+        assert!(
+            matched
+                .rename(&fine, SPENSO_TAG.dot, |v| lines.vector(v), &[])
+                .is_ok()
+        );
+        let unknown = rep.inner_product(&edge(known), &edge(424_242));
+        assert!(
+            matched
+                .rename(&unknown, SPENSO_TAG.dot, |v| lines.vector(v), &[])
+                .is_err()
+        );
+        let leftover = &fine
+            * spenso::network::library::symbolic::ETS.metric(
+                rep.to_symbolic([Atom::num(1)]),
+                rep.to_symbolic([Atom::num(2)]),
+            );
+        assert!(
+            matched
+                .rename(&leftover, SPENSO_TAG.dot, |v| lines.vector(v), &[])
+                .is_err()
+        );
+    }
 }
