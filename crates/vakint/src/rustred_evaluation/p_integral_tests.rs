@@ -5428,6 +5428,54 @@ fn boundary_showcase() {
     );
 }
 
+/// gl-gate14: the rest of the reviewer's eleven Laurent-depth controls
+/// (acceptance/laurent/replay.py) beside
+/// [`equal_inputs_with_cancelling_unknown_master_orders_agree`]: a shifted
+/// PG bubble (`ε^6·PG(1,0)·PMaster(no)` = the control `20 ζ(5) ε^4`), a
+/// rational prefactor pole (refused: PMaster(no) orders 8..9 missing, first
+/// affected order 3), two negative-valuation masters (`ε^7·PMaster(no1)^2` =
+/// `ε^5·(-5ζ(5))^2`), three (`ε^8·PMaster(no1)^3` = `ε^5·(-5ζ(5))^3`), and the
+/// whole refusal tuple of `ε^-3·PMaster(no)` (8, 8, 4).
+#[test]
+fn reviewer_laurent_depth_controls_complete() {
+    let engine = engine();
+    let mut settings = settings(RustRedMasterMode::Symbolic, None);
+    settings.number_of_terms_in_epsilon_expansion = 6;
+    let top = "topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))";
+    let evaluate = |numerator: &str| {
+        engine.evaluate(&settings, parse(&format!("({numerator})*{top}")).as_view())
+    };
+    let equal = |numerator: &str, reference: &str| {
+        let (value, expected) = (evaluate(numerator).unwrap(), evaluate(reference).unwrap());
+        assert!(!expected.is_zero(), "{reference} is zero");
+        assert!(
+            (&value - &expected).expand().is_zero(),
+            "{numerator}: {value} vs {reference}: {expected}"
+        );
+    };
+    equal("ε^6*PG(1,0)*PMaster(no)", "ε^5*20*zeta(5)");
+    equal("ε^7*PMaster(no1)^2", "ε^5*(-5*zeta(5))^2");
+    equal("ε^8*PMaster(no1)^3", "ε^5*(-5*zeta(5))^3");
+    let refusal = |numerator: &str| match evaluate(numerator) {
+        Err(crate::VakintError::MissingMasterOrders(missing)) => {
+            assert_eq!(missing.masters.len(), 1, "{numerator}: {missing}");
+            let master = &missing.masters[0];
+            (
+                master.first_missing_order,
+                master.last_needed_order,
+                master.first_affected_result_order,
+            )
+        }
+        other => panic!("{numerator}: expected MissingMasterOrders, got {other:?}"),
+    };
+    assert_eq!(refusal("ε^(-3)*PMaster(no)"), (8, Some(8), 4));
+    assert_eq!(
+        refusal("ε^(-4)*PMaster(no)*(ε*PG(0,0)-(1-ε))"),
+        (8, Some(8), 4)
+    );
+    assert_eq!(refusal("(ε^(-4)/(1-ε))*PMaster(no)"), (8, Some(9), 3));
+}
+
 /// Lane laurent-depth (reviewer O2 "orders", 2026-11-18), through the
 /// ordinary `Vakint::evaluate` in Symbolic mode: inputs equal by
 /// `ε·PG(0,0) = 1` give equal results. `ε^-4·PMaster(no)·(ε·PG(0,0) - 1 +
