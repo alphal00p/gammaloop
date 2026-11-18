@@ -548,6 +548,73 @@ pub fn contract(
     Ok(out)
 }
 
+/// D6 (lane d6-open-indices): the colour-weighted sum of the branches
+/// contracted by [`contract`]'s idenso chain with the external Lorentz ports
+/// left OPEN (the indices that occur once, found as [`contract`] finds them),
+/// couplings expanded (`gs = 1`), no projector and no normalisation. Returns
+/// the open numerator and its ports (`mink(D, ..)` slots, canonical order).
+pub fn contract_open(
+    diagram: &FeynmanDiagram,
+    branches: &[ColourBranch],
+) -> Result<(Atom, Vec<Atom>)> {
+    let s = &*SYMBOLS;
+    let d = Atom::var(s.d);
+    let basis = diagram.loop_momentum_basis();
+    let mut sum = Atom::Zero;
+    let mut ports: Option<Vec<Atom>> = None;
+    for branch in branches {
+        let product = branch
+            .residuals
+            .iter()
+            .fold(Atom::num(1), |product, residual| product * residual);
+        let routed = basis.route_expression(&product);
+        let continued = routed
+            .replace(Minkowski {}.to_symbolic([Atom::var(W_.d_), Atom::var(W_.a___)]))
+            .with(Minkowski {}.to_symbolic([d.clone(), Atom::var(W_.a___)]));
+        let (open, branch_ports) = contract_branch_open(&continued)?;
+        match &ports {
+            None => ports = Some(branch_ports),
+            Some(known) => ensure!(
+                *known == branch_ports,
+                "the colour branches have different open ports: {known:?} and {branch_ports:?}"
+            ),
+        }
+        sum += &branch.coefficient * open;
+    }
+    let value = diagram
+        .model()
+        .expand_couplings(&sum)
+        .replace(Atom::var(symbol!("UFO::gs")))
+        .with(Atom::num(1));
+    Ok((value, ports.unwrap_or_default()))
+}
+
+/// [`contract_branch`] without a projector: the open Lorentz ports stay.
+fn contract_branch_open(product: &Atom) -> Result<(Atom, Vec<Atom>)> {
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let cooked = cooking.try_cook(product.as_view())?;
+    let mut ports = Vec::new();
+    for port in cooked.list_dangling::<AbstractIndex>()?.iter() {
+        let slot = LibrarySlot::<AbstractIndex>::try_from(port.as_view())?;
+        ensure!(
+            slot.rep_name() == (Minkowski {}).into(),
+            "an open index outside the Lorentz representation: {}",
+            cooking.uncook(slot.to_atom().as_view())
+        );
+        ports.push(cooking.uncook(slot.to_atom().as_view()));
+    }
+    ports.sort_by_key(|port| port.to_canonical_string());
+    let simplified = SymbolicTensor::infer_indexed(cooked)?.simplify_algebra(&AlgebraSettings {
+        gamma: Some(GammaSimplifySettings::canonical()),
+        epsilon: true,
+        ..Default::default()
+    })?;
+    let reduced = simplified.to_dots()?;
+    Ok((cooking.uncook(reduced.expression().as_view()), ports))
+}
+
 fn reset_peak_rss() -> bool {
     std::fs::write("/proc/self/clear_refs", "5").is_ok()
 }
