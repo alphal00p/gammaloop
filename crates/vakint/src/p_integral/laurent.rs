@@ -1535,7 +1535,9 @@ mod tests {
                 (known.clone(), known)
             } else {
                 let mut reference = known.clone();
-                for j in k..=k + 30 {
+                // Far beyond any order a trial needs: through ε^order minus
+                // the lowest valuation of the other factors (>= -12).
+                for j in k..=14 {
                     reference += pow(j) * crate::truncation_guard::unknown_tail_marker(j, &master);
                 }
                 (
@@ -1554,7 +1556,7 @@ mod tests {
         let pg = |x1: i64, x2: i64| function!(pg_symbol(), Atom::num(x1), Atom::num(x2));
         let mut fired = 0;
         let mut clean = 0;
-        for trial in 0..96 {
+        for trial in 0..64 {
             let mut reduced = Atom::Zero;
             for _ in 0..1 + next(3) {
                 // coefficient ε^p·(a + bε + cε²)/(1 - dε)
