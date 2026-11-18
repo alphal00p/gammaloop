@@ -136,12 +136,21 @@ fn main() -> eyre::Result<()> {
         })
         .collect::<Vec<_>>();
     files.sort();
-    let number = |path: &PathBuf| -> usize {
+    // `diagram-<stem>.dot`: the stem keys the output files; the leading number
+    // (`diagram-000012.dot`, `diagram-000012.xid1.t003.dot`) is the graph number.
+    let stem = |path: &PathBuf| -> String {
         let name = path.file_stem().unwrap().to_str().unwrap();
-        name.trim_start_matches("diagram-").parse().unwrap()
+        name.trim_start_matches("diagram-").to_string()
+    };
+    let number = |path: &PathBuf| -> usize {
+        let stem = stem(path);
+        stem.split('.').next().unwrap().parse().unwrap()
     };
     let selected = match &graphs {
         Some(list) => {
+            if files.iter().any(|p| stem(p).contains('.')) {
+                eyre::bail!("--graphs needs plain diagram-NNNNNN.dot names");
+            }
             let by_number = files.iter().map(|p| (number(p), p.clone())).collect::<BTreeMap<_, _>>();
             list.iter()
                 .map(|n| by_number.get(n).cloned().ok_or_else(|| eyre::eyre!("no diagram {n}")))
@@ -183,6 +192,7 @@ fn main() -> eyre::Result<()> {
         let graph_started = Instant::now();
         let dot = std::fs::read_to_string(path)?;
         let graph = number(path);
+        let id = stem(path);
         let mut rep_seconds = Vec::new();
         let mut first = None;
         let mut rss = Vec::new();
@@ -203,9 +213,9 @@ fn main() -> eyre::Result<()> {
             let run = match run {
                 Ok(run) => run,
                 Err(error) => {
-                    let record = json!({"graph": graph, "file": path.display().to_string(), "rep": rep, "error": format!("{error:?}")});
+                    let record = json!({"graph": graph, "id": id, "file": path.display().to_string(), "rep": rep, "error": format!("{error:?}")});
                     writeln!(results, "{record}")?;
-                    eprintln!("[direct_bb] diagram {graph}: ERROR {error:?}");
+                    eprintln!("[direct_bb] diagram {id}: ERROR {error:?}");
                     break;
                 }
             };
@@ -215,7 +225,7 @@ fn main() -> eyre::Result<()> {
             } else if let Some(reference) = &first {
                 for (a, b) in reference.results.iter().zip(&run.results) {
                     if !(&a.value - &b.value).expand().is_zero() {
-                        eprintln!("[direct_bb] diagram {graph}: repetition {rep} differs");
+                        eprintln!("[direct_bb] diagram {id}: repetition {rep} differs");
                     }
                 }
             }
@@ -257,7 +267,7 @@ fn main() -> eyre::Result<()> {
                     ("producer".to_string(), "vakint refpath R2 (helper VH lane refpath)".to_string()),
                 ]);
                 std::fs::write(
-                    out.join("gate").join(format!("{graph:06}.{}.gate", result.projection)),
+                    out.join("gate").join(format!("{id}.{}.gate", result.projection)),
                     p_gate::write_gate_view(&view, &header),
                 )?;
             }
@@ -282,13 +292,14 @@ fn main() -> eyre::Result<()> {
         for (name, numerator) in &run.numerators {
             values_text.push_str(&format!("numerator.{name}.bytes\t{}\n", numerator.to_canonical_string().len()));
         }
-        std::fs::write(out.join("values").join(format!("{graph:06}.txt")), values_text)?;
+        std::fs::write(out.join("values").join(format!("{id}.txt")), values_text)?;
         let post_seconds = post.elapsed().as_secs_f64();
         let record = json!({
             "post_seconds": post_seconds,
             "graph_total_seconds": graph_started.elapsed().as_secs_f64(),
             "gate_view_seconds": view_seconds,
             "graph": graph,
+            "id": id,
             "file": path.display().to_string(),
             "name": run.name,
             "loops": run.loops,
@@ -311,7 +322,7 @@ fn main() -> eyre::Result<()> {
         writeln!(results, "{record}")?;
         results.flush()?;
         eprintln!(
-            "[direct_bb] diagram {graph} L{} q{} branches {}/{} parse {:.3} colour {:.3} contract {:.3} lower {:.3} reduce {:.3} finalise {:.3} terms {} rss {:.2} GB {}",
+            "[direct_bb] diagram {id} L{} q{} branches {}/{} parse {:.3} colour {:.3} contract {:.3} lower {:.3} reduce {:.3} finalise {:.3} terms {} rss {:.2} GB {}",
             run.loops,
             run.quark_loops,
             run.branches,
