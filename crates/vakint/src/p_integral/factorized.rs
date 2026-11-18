@@ -48,8 +48,11 @@ mod colour;
 mod evaluate;
 #[cfg(feature = "feynkit-ingress")]
 mod feynkit;
+#[cfg(feature = "feynkit-ingress")]
+pub mod graph;
 mod oracle;
 mod text;
+pub mod vacuum;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -63,8 +66,11 @@ pub use colour::{
 pub use evaluate::{FactorizedValue, contract_to_vakint_dots, evaluate_factorized, vakint_input};
 #[cfg(feature = "feynkit-ingress")]
 pub use feynkit::{FromFeynkitOptions, ProjectorChoice};
+#[cfg(feature = "feynkit-ingress")]
+pub use graph::{GraphIntegral, GraphValue, evaluate_graph};
 pub use oracle::contract_with_idenso;
 pub use text::{parse_factorized_records, read_factorized_records};
+pub use vacuum::{VacuumValue, evaluate_factorized_vacuum};
 
 /// Schema line of the text form (first line of every record).
 pub const FACTORIZED_SCHEMA: &str = "pint6.factorized-numerator.v1";
