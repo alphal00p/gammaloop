@@ -202,19 +202,29 @@ pub fn auxiliary_mass_squared() -> Symbol {
     symbolica::symbol!("rstar_mass_squared"; Scalar)
 }
 
-/// A result linear in the auxiliary mass squared split as `[M²^0, M²^1]`
-/// (each `together`), or an error when a higher or non-polynomial dependence
-/// remains. For partial R* sums (`GAMMALOOP_RSTAR_TERMS=bare|nonbare`), whose
-/// mass terms cancel only in the complete sum.
+/// A partial R* result split by its power of the auxiliary mass squared,
+/// `[M²^0, M²^1]` (each `together`); `log(M²)` is kept inside the
+/// coefficients (a partial sum is not local: its logarithms of `M²` and
+/// `μ²` and its `p²` dependence cancel only in the complete sum). An error
+/// when a higher power or another dependence on `M²` remains. For
+/// `GAMMALOOP_RSTAR_TERMS=bare|nonbare`.
 pub fn split_auxiliary_mass(expression: &Atom) -> Result<[Atom; 2]> {
+    use symbolica::{function, id::Replacement};
     let mass = auxiliary_mass_squared();
-    let constant = expression.replace(mass).with(Atom::Zero).together();
-    let linear = expression.derivative(mass).replace(mass).with(Atom::Zero).together();
-    let rest = (expression - &constant - Atom::var(mass) * &linear).together();
+    let log = function!(Symbol::LOG, Atom::var(mass));
+    let placeholder = Atom::var(symbolica::symbol!("top_mass_log_rstar_mass_squared"));
+    let hidden = expression.replace_multiple(&[Replacement::new(log.to_pattern(), placeholder.clone())]);
+    let restore = |atom: Atom| {
+        atom.replace_multiple(&[Replacement::new(placeholder.to_pattern(), log.clone())])
+            .together()
+    };
+    let constant = hidden.replace(mass).with(Atom::Zero).together();
+    let linear = hidden.derivative(mass).replace(mass).with(Atom::Zero).together();
+    let rest = (&hidden - &constant - Atom::var(mass) * &linear).together();
     if !rest.is_zero() {
         return Err(eyre!("the result is not linear in rstar_mass_squared: rest {rest}"));
     }
-    Ok([constant, linear])
+    Ok([restore(constant), restore(linear)])
 }
 
 thread_local! {
