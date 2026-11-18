@@ -50,6 +50,14 @@ retries = 0
 test-group = "five-loop-reduction"
 
 [[profile.default.overrides]]
+# D6 (helper VH): every three-loop background-field graph (392) and an optional
+# listed four-loop sample through the open-index route and the projected
+# route: about one to two minutes for L3 on a busy host.
+filter = "binary(p_integral_open_index_graph_tests)"
+slow-timeout = { period = "60s", terminate-after = 10 }
+retries = 0
+
+[[profile.default.overrides]]
 # Mark integration tests as slow
 filter = "test(integration)"
 test-group = "integration"
