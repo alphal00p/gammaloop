@@ -107,16 +107,26 @@ fn graph_identity(engine: &Vakint, model: &Arc<feynkit_model::Model>, path: &Pat
             panic!("port {port}")
         };
         let index = slot.iter().nth(1).unwrap().to_owned();
-        open = open.replace(index.to_pattern()).with(Atom::num(label).to_pattern());
+        open = open
+            .replace(index.to_pattern())
+            .with(Atom::num(label).to_pattern());
     }
-    let weight = feynkit_graph::expressions::evaluate_overall_factor(diagram.overall_factor().as_view())
-        * Atom::var(refpath::SYMBOLS.nf).pow(Atom::num(refpath::closed_quark_loops(&diagram).unwrap() as i64));
+    let weight =
+        feynkit_graph::expressions::evaluate_overall_factor(diagram.overall_factor().as_view())
+            * Atom::var(refpath::SYMBOLS.nf).pow(Atom::num(
+                refpath::closed_quark_loops(&diagram).unwrap() as i64,
+            ));
     let dimension_symbol = refpath::SYMBOLS.d;
     let kinematics = Kinematics::in_dimension(&Atom::var(dimension_symbol)).unwrap();
     let family = diagram.propagator_family(&kinematics).unwrap();
     let input = Atom::from(
-        VakintExpression::from_diagram(&diagram, &family, &(open * &weight), &DiagramIntegralOptions::default())
-            .unwrap_or_else(|error| panic!("{}: {error}", path.display())),
+        VakintExpression::from_diagram(
+            &diagram,
+            &family,
+            &(open * &weight),
+            &DiagramIntegralOptions::default(),
+        )
+        .unwrap_or_else(|error| panic!("{}: {error}", path.display())),
     )
     .replace(Atom::var(dimension_symbol))
     .with(in_epsilon.clone());
@@ -124,7 +134,11 @@ fn graph_identity(engine: &Vakint, model: &Arc<feynkit_model::Model>, path: &Pat
         .evaluate(&settings, input.as_view())
         .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
     let rendered = value.to_canonical_string();
-    assert!(!rendered.contains("topo("), "{}: unreduced {rendered}", path.display());
+    assert!(
+        !rendered.contains("topo("),
+        "{}: unreduced {rendered}",
+        path.display()
+    );
 
     let q2 = vakint_parse!("dot(p(1),p(1))").unwrap();
     let i = Atom::i();
@@ -158,7 +172,9 @@ fn run_set(set: &str) {
     let engine = Vakint::new().unwrap();
     let mut counts = BTreeMap::<&str, usize>::new();
     for path in dots(&directory) {
-        *counts.entry(graph_identity(&engine, &model, &path)).or_default() += 1;
+        *counts
+            .entry(graph_identity(&engine, &model, &path))
+            .or_default() += 1;
     }
     eprintln!("D6 graph identity {set}: {counts:?}");
     assert!(counts.get("checked").copied().unwrap_or(0) > 0);

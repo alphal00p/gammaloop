@@ -465,7 +465,10 @@ mod tests {
             }
             println!(
                 "D6_EXTERNAL_IDENTITY rank={n} vectors={} structures={structures} reduce_seconds={seconds:.4}",
-                vectors.iter().map(|v| if **v == k { "k" } else { "q" }).collect::<String>()
+                vectors
+                    .iter()
+                    .map(|v| if **v == k { "k" } else { "q" })
+                    .collect::<String>()
             );
         }
     }

@@ -208,18 +208,34 @@ fn a_three_loop_rank_two_tensor_equals_the_scalar_path() {
 fn a_loop_momentum_contracted_with_another_vector_is_reduced() {
     let engine = engine();
     let settings = settings(3);
-    let open = evaluate(&engine, &settings, &format!("dot(k(1),p(2))*k(1,1)*{BUBBLE_12}"));
+    let open = evaluate(
+        &engine,
+        &settings,
+        &format!("dot(k(1),p(2))*k(1,1)*{BUBBLE_12}"),
+    );
     let rendered = open.to_canonical_string();
     assert!(!rendered.contains("topo("), "unreduced result: {rendered}");
     // Closing q with p(1) gives back the scalar path.
-    let replaced = open.replace(parse("p(2,x_)").to_pattern()).with(parse("p(1,x_)").to_pattern());
+    let replaced = open
+        .replace(parse("p(2,x_)").to_pattern())
+        .with(parse("p(1,x_)").to_pattern());
     let replaced = replaced
         .replace(parse("dot(p(2),y_)").to_pattern())
         .with(parse("dot(p(1),y_)").to_pattern())
         .replace(parse("dot(y_,p(2))").to_pattern())
         .with(parse("dot(y_,p(1))").to_pattern());
-    let scalar = evaluate(&engine, &settings, &format!("dot(k(1),p(1))*k(1,1)*p(1,1)*{BUBBLE_12}"));
-    assert_closed_case(&replaced, &parse("p(1,1)"), &scalar, epsilon(&settings), "foreign vector");
+    let scalar = evaluate(
+        &engine,
+        &settings,
+        &format!("dot(k(1),p(1))*k(1,1)*p(1,1)*{BUBBLE_12}"),
+    );
+    assert_closed_case(
+        &replaced,
+        &parse("p(1,1)"),
+        &scalar,
+        epsilon(&settings),
+        "foreign vector",
+    );
 }
 
 /// The isotropic FORM projector cannot reduce a p-integral: refused by name.
@@ -258,7 +274,10 @@ fn the_default_configuration_without_form_runs_open_indices() {
         python_exe_path: "/d6-missing-python".into(),
         ..VakintSettings::default()
     };
-    assert_eq!(settings.tensor_reduction_method, TensorReductionMethod::FeynKit);
+    assert_eq!(
+        settings.tensor_reduction_method,
+        TensorReductionMethod::FeynKit
+    );
     let engine = engine();
     for input in [
         format!("k(1,1)*k(1,2)*{BUBBLE_11}"),
@@ -267,7 +286,10 @@ fn the_default_configuration_without_form_runs_open_indices() {
     ] {
         let value = evaluate(&engine, &settings, &input);
         let rendered = value.to_canonical_string();
-        assert!(!rendered.contains("topo("), "{input}: unreduced result {rendered}");
+        assert!(
+            !rendered.contains("topo("),
+            "{input}: unreduced result {rendered}"
+        );
         assert!(
             !value.is_zero() && (rendered.contains("g(") || rendered.contains("p(1,")),
             "{input}: no open-index tensor in {rendered}"
@@ -296,9 +318,7 @@ fn the_vacuum_input_scope_is_accepted() {
     let slotted = evaluate(
         &engine,
         &settings,
-        &format!(
-            "k(1,spenso::mink(4-2*ε,1))*k(1,spenso::mink(4-2*ε,2))*{BUBBLE_12}"
-        ),
+        &format!("k(1,spenso::mink(4-2*ε,1))*k(1,spenso::mink(4-2*ε,2))*{BUBBLE_12}"),
     );
     for closing in closing_tensors(&["1", "2"]) {
         let scalar = evaluate(
@@ -306,7 +326,13 @@ fn the_vacuum_input_scope_is_accepted() {
             &settings,
             &format!("k(1,1)*k(1,2)*({closing})*{BUBBLE_12}"),
         );
-        assert_closed_case(&slotted, &parse(&closing), &scalar, epsilon(&settings), "Spenso slots");
+        assert_closed_case(
+            &slotted,
+            &parse(&closing),
+            &scalar,
+            epsilon(&settings),
+            "Spenso slots",
+        );
     }
     // An opaque gamma-like tensor carrying the open slot is bridged.
     let gamma = evaluate(
@@ -335,7 +361,10 @@ fn the_scope_edges_are_refused() {
             .unwrap_or_else(|error| error.to_string())
     };
     let bare = error(format!("k(1)*{BUBBLE_12}"));
-    assert!(bare.contains("loop momentum k(1) outside a scalar product"), "{bare}");
+    assert!(
+        bare.contains("loop momentum k(1) outside a scalar product"),
+        "{bare}"
+    );
     for input in [
         format!("dot(k(1),p(2))^-1*k(1,1)*{BUBBLE_12}"),
         format!("k(1,1)*k(1,1)*k(1,1)*p(1,2)*{BUBBLE_12}"),

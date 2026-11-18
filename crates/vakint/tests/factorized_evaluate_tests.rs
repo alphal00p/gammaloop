@@ -408,7 +408,13 @@ fn open_ports_close_to_refpath_on_every_l1_and_l2_graph() {
                 checked += 1;
                 continue;
             };
-            assert_eq!(first.ports.len(), 2, "{}: ports {:?}", path.display(), first.ports);
+            assert_eq!(
+                first.ports.len(),
+                2,
+                "{}: ports {:?}",
+                path.display(),
+                first.ports
+            );
             let index = |port: &Atom| match port.as_view() {
                 symbolica::atom::AtomView::Fun(slot) => slot.iter().nth(1).unwrap().to_owned(),
                 _ => panic!("port {port}"),

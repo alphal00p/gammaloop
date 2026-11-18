@@ -164,7 +164,9 @@ pub fn contract_to_vakint_dots(value: &FactorizedNumerator) -> Result<(Atom, f64
     // is contracted and this changes nothing.
     let mapped = if value.projector.is_none() && !value.ports.is_empty() {
         let port_index = |view: AtomView<'_>| match view {
-            AtomView::Fun(rep) if rep.get_symbol().get_name() == names::MINK && rep.get_nargs() == 2 => {
+            AtomView::Fun(rep)
+                if rep.get_symbol().get_name() == names::MINK && rep.get_nargs() == 2 =>
+            {
                 rep.iter().nth(1).map(|index| index.to_owned())
             }
             _ => None,
@@ -207,7 +209,9 @@ pub fn contract_to_vakint_dots(value: &FactorizedNumerator) -> Result<(Atom, f64
             }
         });
         if let Some(edge) = unknown.get() {
-            return Err(evaluation(format!("an open index on the unknown edge {edge}")));
+            return Err(evaluation(format!(
+                "an open index on the unknown edge {edge}"
+            )));
         }
         open
     } else {

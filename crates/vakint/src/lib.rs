@@ -4050,7 +4050,10 @@ impl VakintTerm {
     /// The compact Spenso form `p(1, mink(D))` of a p-integral's external
     /// momentum head `p(1)`, with its dimension cooked as
     /// [`Self::tensor_reduce_feynkit_term`] cooks the numerator's slots.
-    fn compact_external_vector(external: AtomView<'_>, dimension: &Atom) -> Result<Atom, VakintError> {
+    fn compact_external_vector(
+        external: AtomView<'_>,
+        dimension: &Atom,
+    ) -> Result<Atom, VakintError> {
         let AtomView::Fun(head) = external else {
             return Err(VakintError::InvalidNumerator(format!(
                 "p-integral: the external momentum {external} is not a vector head"
@@ -9205,7 +9208,11 @@ mod tests {
                         integral: Atom::one(),
                         vectors: Vec::new(),
                     };
-                    assert!(scalar_only.tensor_reduce_feynkit(&settings, true, None).is_err());
+                    assert!(
+                        scalar_only
+                            .tensor_reduce_feynkit(&settings, true, None)
+                            .is_err()
+                    );
                     assert_eq!(scalar_only.numerator, input);
                 }
             }
@@ -9401,7 +9408,11 @@ mod tests {
                 integral: Atom::one(),
                 vectors: Vec::new(),
             };
-            assert!(rejected.tensor_reduce_feynkit(&settings, true, None).is_err());
+            assert!(
+                rejected
+                    .tensor_reduce_feynkit(&settings, true, None)
+                    .is_err()
+            );
             assert_eq!(rejected.numerator, input);
         }
     }
@@ -9443,7 +9454,11 @@ mod tests {
                 integral: Atom::one(),
                 vectors: Vec::new(),
             };
-            assert!(rejected.tensor_reduce_feynkit(&settings, true, None).is_err());
+            assert!(
+                rejected
+                    .tensor_reduce_feynkit(&settings, true, None)
+                    .is_err()
+            );
             assert_eq!(rejected.numerator, input);
         }
     }

@@ -674,7 +674,10 @@ mod numerators {
         let bubble = BUBBLE;
         for (left, right) in [
             ("k(1,mu)", "k(2,mu)"),
-            ("k(1,mu)*k(1,nu)*dot(k(1),p(1))", "k(2,mu)*k(2,nu)*dot(k(2),p(1))"),
+            (
+                "k(1,mu)*k(1,nu)*dot(k(1),p(1))",
+                "k(2,mu)*k(2,nu)*dot(k(2),p(1))",
+            ),
             ("dot(k(1),p(2))", "dot(k(2),p(2))"),
         ] {
             let left = format!("{left}*{bubble}");

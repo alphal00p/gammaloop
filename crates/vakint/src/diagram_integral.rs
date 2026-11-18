@@ -642,7 +642,8 @@ impl VakintExpression {
 fn minkowski_index(slot: AtomView<'_>) -> Option<AtomView<'_>> {
     match slot {
         AtomView::Fun(function)
-            if function.get_symbol() == Minkowski::selfless_symbol() && function.get_nargs() == 2 =>
+            if function.get_symbol() == Minkowski::selfless_symbol()
+                && function.get_nargs() == 2 =>
         {
             function.iter().nth(1)
         }
@@ -677,7 +678,10 @@ fn open_index_images(numerator: &Atom, momenta: &[Atom], targets: &[Atom]) -> At
             && let [left, right] = arguments.as_slice()
             && let (Some(left), Some(right)) = (minkowski_index(*left), minkowski_index(*right))
         {
-            **out = FunctionBuilder::new(S.g).add_arg(left).add_arg(right).finish();
+            **out = FunctionBuilder::new(S.g)
+                .add_arg(left)
+                .add_arg(right)
+                .finish();
             return;
         }
         let Some((last, head)) = arguments.split_last() else {

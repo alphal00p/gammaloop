@@ -171,8 +171,7 @@ pub fn epsilon_coefficients(value: &Atom, epsilon: Symbol) -> BTreeMap<i64, Atom
         for factor in factors {
             match factor.as_view() {
                 AtomView::Var(variable) if variable.get_symbol() == epsilon => order += 1,
-                AtomView::Pow(power)
-                    if matches!(power.get_base_exp().0, AtomView::Var(v) if v.get_symbol() == epsilon) =>
+                AtomView::Pow(power) if matches!(power.get_base_exp().0, AtomView::Var(v) if v.get_symbol() == epsilon) =>
                 {
                     order += i64::try_from(power.get_base_exp().1).unwrap();
                 }
