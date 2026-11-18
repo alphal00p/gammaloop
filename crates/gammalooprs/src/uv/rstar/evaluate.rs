@@ -1162,7 +1162,20 @@ impl<'a> Evaluation<'a> {
         mode: super::closed::ChildMode,
     ) -> Result<Option<Atom>> {
         let started = Instant::now();
-        let attempt = if mode == super::closed::ChildMode::Check {
+        // GAMMALOOP_IR_HARD_CHILD_GUARD=1 (opt-in): the closed path's scoped
+        // budget around the whole H(γ). Off by default: its RSS checks run
+        // inside every vakint integration of H and cost as much system time
+        // as the work itself (L4s: 370 s sys against 4 s); the process
+        // budget (BETA_PROCESS_RSS_LIMIT_GIB) applies either way.
+        static GUARD: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+            matches!(
+                std::env::var("GAMMALOOP_IR_HARD_CHILD_GUARD")
+                    .as_deref()
+                    .map(str::trim),
+                Ok("1")
+            )
+        });
+        let attempt = if mode == super::closed::ChildMode::Check || !*GUARD {
             self.ir_hard_child(correction_index, correction)?
         } else {
             // Fail-closed under the closed path's scoped budget
