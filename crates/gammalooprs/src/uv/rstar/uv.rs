@@ -144,6 +144,17 @@ impl<'a> MassiveUvEvaluator<'a> {
         region: &GraphRegion,
         insertions: &[Atom],
     ) -> Result<Graph> {
+        self.decorated_graph_with_dod(region, insertions, None)
+    }
+
+    /// [`Self::decorated_graph`], with the decorated vertices' degrees given
+    /// (`dods`, one per insertion) instead of the structural upper bound.
+    pub(super) fn decorated_graph_with_dod(
+        &self,
+        region: &GraphRegion,
+        insertions: &[Atom],
+        dods: Option<&[i32]>,
+    ) -> Result<Graph> {
         let mut graph = self.graph.clone();
         let mut contracted: SuBitGraph = graph.empty_subgraph();
         for slot in &region.insertions {
@@ -185,7 +196,7 @@ impl<'a> MassiveUvEvaluator<'a> {
         )
         .wrap_err("could not route the decorated UV quotient")?;
 
-        for (slot, polynomial) in region.insertions.iter().zip(insertions) {
+        for (index, (slot, polynomial)) in region.insertions.iter().zip(insertions).enumerate() {
             let nodes = graph
                 .iter_nodes_of(&slot.support)
                 .map(|(node, _, _)| node)
@@ -198,7 +209,10 @@ impl<'a> MassiveUvEvaluator<'a> {
             vertex.vertex_rule = None;
             // Spinney enumeration first uses this structural upper bound,
             // then computes the actual degree from the explicit polynomial.
-            vertex.dod = Autogen::explicit(self.graph.local_dod(&slot.support).max(0));
+            vertex.dod = Autogen::explicit(match dods {
+                Some(dods) => dods[index],
+                None => self.graph.local_dod(&slot.support).max(0),
+            });
             graph.underlying.identify_nodes(&nodes, vertex);
         }
         // Historical vertices still carry their old numerators until removed.

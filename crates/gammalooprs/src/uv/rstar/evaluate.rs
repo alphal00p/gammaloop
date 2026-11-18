@@ -1656,8 +1656,19 @@ impl<'a> Evaluation<'a> {
                         let difference = (&reference - &value).expand();
                         let without_muv =
                             difference.replace(GS.m_uv_vacuum).with(Atom::Zero).expand();
+                        let sample = if without_muv.is_zero() {
+                            String::new()
+                        } else {
+                            let text = format!(
+                                " degree={:?} insertion={} difference={}",
+                                insertion_degree(insertion),
+                                insertion,
+                                without_muv
+                            );
+                            text.chars().take(1500).collect()
+                        };
                         format!(
-                            "equal={} equal_without_muv={} massive_has_muv={} massive_s={massive_seconds:.3} rstar_s={:.3}",
+                            "equal={} equal_without_muv={} massive_has_muv={} massive_s={massive_seconds:.3} rstar_s={:.3}{sample}",
                             difference.is_zero(),
                             without_muv.is_zero(),
                             reference.contains_symbol(GS.m_uv_vacuum),
@@ -1713,9 +1724,18 @@ impl<'a> Evaluation<'a> {
         if call.argument.loops == 0 || insertion.is_zero() {
             return Ok(Ok(Atom::Zero));
         }
-        let graph = self
-            .uv
-            .decorated_graph(&call.argument, std::slice::from_ref(insertion))?;
+        // The decorated vertex carries the insertion's own momentum degree:
+        // R* power-counts UV and IR subgraphs with it (the massive forest
+        // recomputes it from the polynomial; the structural bound would
+        // misstate the IR degrees).
+        let Some(degree) = insertion_degree(insertion) else {
+            return Ok(Err("inhomogeneous_insertion".into()));
+        };
+        let graph = self.uv.decorated_graph_with_dod(
+            &call.argument,
+            std::slice::from_ref(insertion),
+            Some(&[degree]),
+        )?;
         let support = &call.argument.remaining;
         if graph.compute_dod(support) < 0 {
             return Ok(Ok(Atom::Zero));
@@ -2359,4 +2379,50 @@ impl<'a> Evaluation<'a> {
         }
         Ok(())
     }
+}
+
+/// The momentum degree of a homogeneous insertion polynomial: the common
+/// number of edge momenta (`Q`) in its expanded summands; `None` when the
+/// summands differ in degree.
+fn insertion_degree(insertion: &Atom) -> Option<i32> {
+    use symbolica::atom::AtomView;
+    fn count(view: AtomView<'_>) -> Option<i64> {
+        match view {
+            AtomView::Fun(function) if function.get_symbol() == GS.emr_mom => Some(1),
+            AtomView::Fun(function) => {
+                let mut total = 0;
+                for argument in function.iter() {
+                    total += count(argument)?;
+                }
+                Some(total)
+            }
+            AtomView::Mul(product) => {
+                let mut total = 0;
+                for factor in product.iter() {
+                    total += count(factor)?;
+                }
+                Some(total)
+            }
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                let inner = count(base)?;
+                if inner == 0 {
+                    Some(0)
+                } else {
+                    Some(inner * i64::try_from(exponent).ok()?)
+                }
+            }
+            AtomView::Add(sum) => {
+                let mut degrees = sum
+                    .iter()
+                    .map(count)
+                    .collect::<Option<std::collections::BTreeSet<_>>>()?;
+                degrees.remove(&-1);
+                (degrees.len() <= 1).then(|| degrees.into_iter().next().unwrap_or(0))
+            }
+            _ => Some(0),
+        }
+    }
+    let expanded = insertion.expand();
+    count(expanded.as_view()).and_then(|degree| i32::try_from(degree).ok())
 }
