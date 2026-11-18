@@ -28,6 +28,13 @@
 //!     [--shared-engine]          one engine for all graphs of the run (warm caches; default: a fresh one per graph)
 //!     [--no-gate]                no per-graph gate dump
 //!     [--stop-file <path>]       stop between graphs while it exists (repeatable; exit 3)
+//!     [--r3 <options>]           R3 (`refpath::direct`, lane idenso-audit) instead of R2's
+//!                                contraction + ingress + ordinary lowering: idenso contracts
+//!                                (routed into the chosen loop basis), ONE denominator match per
+//!                                graph, the hand-over to the direct reader, one lowering per
+//!                                graph, then one reduction per master mode. <options>: comma
+//!                                list of routed, compact, merge (merged colour terms), dots;
+//!                                `default` = routed,compact,merge (gate request 3)
 //!     [--refinalise-from <cfg dir>]  RE-FINALISE: take each graph's Retain value from
 //!                                the records of an earlier run (same configuration but the
 //!                                binary) and compute the Symbolic value with THIS binary's
@@ -271,6 +278,56 @@ struct RunSettings {
     environment_content: BTreeMap<String, String>,
     /// Re-finalisation: the reduction run whose Retain values are finalised.
     refinalise_from: Option<RefinaliseSource>,
+    /// R3 (`--r3`): its options and whether the colour terms are merged.
+    r3: Option<R3Choice>,
+}
+
+/// The R3 path of `--r3` (lane idenso-audit, gate request 3).
+#[derive(Clone, Copy, Debug)]
+struct R3Choice {
+    options: refpath::direct::DirectOptions,
+    merge_colour: bool,
+}
+
+impl R3Choice {
+    fn parse(text: &str) -> eyre::Result<Self> {
+        let text = if text == "default" {
+            "routed,compact,merge"
+        } else {
+            text
+        };
+        let mut choice = R3Choice {
+            options: refpath::direct::DirectOptions::default(),
+            merge_colour: false,
+        };
+        for word in text.split(',').filter(|w| !w.is_empty()) {
+            match word {
+                "routed" => choice.options.routed = true,
+                "compact" => choice.options.compact = true,
+                "dots" => choice.options.dots = true,
+                "merge" => choice.merge_colour = true,
+                other => eyre::bail!(
+                    "--r3: unknown option {other} (routed, compact, merge, dots, default)"
+                ),
+            }
+        }
+        Ok(choice)
+    }
+
+    fn label(&self) -> String {
+        let o = &self.options;
+        [
+            ("routed", o.routed),
+            ("compact", o.compact),
+            ("merge", self.merge_colour),
+            ("dots", o.dots),
+        ]
+        .iter()
+        .filter(|(_, on)| *on)
+        .map(|(name, _)| *name)
+        .collect::<Vec<_>>()
+        .join(",")
+    }
 }
 
 /// The configuration directory of an earlier run whose Retain values are
@@ -390,6 +447,12 @@ fn config(settings: &RunSettings) -> (Value, String) {
             "meaning": "Retain values (lowering, reduction, Retain finalisation) of that configuration's binary, byte-identical by sha256; Symbolic values by this binary's finaliser from them",
         });
     }
+    if let Some(r3) = &settings.r3 {
+        value["path"] = json!(format!(
+            "R3 (refpath::direct, lane idenso-audit): {}; one denominator match per graph, hand-over to the direct reader, one lowering per graph, one reduction per master mode",
+            r3.label()
+        ));
+    }
     let digest = sha256_hex(canonical_json(&value).as_bytes());
     (value, digest)
 }
@@ -464,6 +527,17 @@ struct Prepared {
     loops: usize,
     /// per projection: the vakint input, or why it is zero
     inputs: Vec<(&'static str, Result<Atom, String>)>,
+    /// `--r3`: what R3 lowers (then `inputs` is empty unless the graph is zero).
+    r3: Option<R3Input>,
+}
+
+/// One graph's R3 input: the diagram, the colour terms and the kinematics.
+struct R3Input {
+    diagram: feynkit_graph::FeynmanDiagram,
+    terms: Vec<refpath::ColourBranch>,
+    momentum: Atom,
+    q_squared: Atom,
+    weight: Atom,
 }
 
 fn prepare(
@@ -478,6 +552,7 @@ fn prepare(
     let zero_all = |record: Value, loops: usize, reason: &str| Prepared {
         record,
         loops,
+        r3: None,
         inputs: names
             .iter()
             .map(|name| (*name, Err(reason.to_string())))
@@ -551,6 +626,27 @@ fn prepare(
     let q_squared = Kinematics::in_dimension(&dimension)?
         .with_momenta([momentum.clone()])?
         .scalar_product(&momentum, &momentum)?;
+    if let Some(r3) = &settings.r3 {
+        // R3: the colour terms of the diagram (R2's branches, or merged); the
+        // contraction and the lowering run in `evaluate_r3` (they need the engine).
+        let started = Instant::now();
+        let (terms, total) = refpath::direct::colour_terms(&diagram, r3.merge_colour)?;
+        seconds.insert("r3_colour_terms", started.elapsed().as_secs_f64());
+        record["r3_colour_terms"] = json!(terms.len());
+        record["r3_colour_branches"] = json!(total);
+        return Ok(Prepared {
+            record,
+            loops,
+            inputs: Vec::new(),
+            r3: Some(R3Input {
+                diagram,
+                terms,
+                momentum,
+                q_squared,
+                weight,
+            }),
+        });
+    }
     let started = Instant::now();
     let numerators = refpath::contract(
         &diagram,
@@ -586,6 +682,7 @@ fn prepare(
         record,
         loops,
         inputs,
+        r3: None,
     })
 }
 
@@ -732,6 +829,185 @@ fn evaluate(
                         (
                             "producer".to_string(),
                             "vakint refpath_batch (helper VH lane l5-stage1)".to_string(),
+                        ),
+                    ]);
+                    write_atomic(
+                        &gate.join(format!("{id}.{name}.gate")),
+                        &p_gate::write_gate_view(&view, &header),
+                    )?;
+                }
+            }
+            modes.insert(mode.to_string(), entry);
+        }
+        entries.push(json!({"projection": name, "status": "VALUE", "modes": modes}));
+    }
+    Ok(entries)
+}
+
+/// `--r3`: lower the graph ONCE (R3: idenso contraction, one denominator
+/// match, hand-over, direct reader), then per projection and master mode one
+/// reduction ([`refpath::direct::reduce_projection`]); the records, value
+/// files and gate dumps have R2's form (the gate dump is R3's folded inputs
+/// without zero-sector keys, as R2's observation writes them).
+fn evaluate_r3(
+    template: Option<&Vakint>,
+    prepared: &Prepared,
+    settings: &RunSettings,
+    epsilon: Symbol,
+    outputs: &Outputs<'_>,
+    seconds: &mut BTreeMap<&'static str, f64>,
+) -> eyre::Result<Vec<Value>> {
+    let r3 = prepared.r3.as_ref().expect("an R3 input");
+    let choice = settings.r3.expect("--r3");
+    let loops = prepared.loops as i64;
+    let window = (-loops, settings.extra_terms - 1);
+    let id = outputs.id;
+    let template = template.ok_or_else(|| eyre::eyre!("no engine"))?;
+    let fresh;
+    let engine = if settings.shared_engine {
+        template
+    } else {
+        fresh = refpath::fresh_engine(template)?;
+        &fresh
+    };
+    let mode_settings = |mode: RustRedMasterMode| {
+        let mut vakint_settings = refpath::vakint_settings(loops + settings.extra_terms);
+        vakint_settings.evaluation_order =
+            EvaluationOrder(vec![EvaluationMethod::RustRed(RustRedEvaluationOptions {
+                master_mode: mode,
+            })]);
+        vakint_settings
+    };
+    let first_mode = *settings
+        .modes
+        .first()
+        .ok_or_else(|| eyre::eyre!("no master mode"))?;
+    let lowering_settings = mode_settings(first_mode);
+    let mut stages = refpath::direct::DirectSeconds::default();
+    let outcome = refpath::direct::lower_graph(
+        engine,
+        &lowering_settings,
+        &r3.diagram,
+        &r3.terms,
+        &r3.momentum,
+        &r3.q_squared,
+        &r3.weight,
+        settings.projection,
+        false,
+        choice.options,
+        &mut stages,
+    )?;
+    seconds.insert("r3_tree", stages.routing);
+    seconds.insert("r3_contract", stages.contract);
+    seconds.insert("r3_match", stages.matching);
+    seconds.insert("r3_handover", stages.handover);
+    seconds.insert("r3_lower", stages.lower);
+    let projections = match outcome {
+        refpath::direct::DirectOutcome::Declined(reason) => {
+            eyre::bail!("R3 declined this graph: {reason}")
+        }
+        refpath::direct::DirectOutcome::Zero(reason) => {
+            if reason != "scaleless after the match" {
+                // every projection's contracted numerator vanished
+                return Ok(projection_names(settings.projection)
+                    .into_iter()
+                    .map(|name| {
+                        json!({"projection": name, "status": "PROVED_ZERO",
+                        "reason": "the contracted numerator is 0"})
+                    })
+                    .collect());
+            }
+            Vec::new()
+        }
+        refpath::direct::DirectOutcome::Lowered(projections) => projections,
+    };
+    let mut entries = Vec::new();
+    for name in projection_names(settings.projection) {
+        let projection = projections.iter().find(|p| p.projection == name);
+        if projection.is_none() && !projections.is_empty() {
+            entries.push(json!({"projection": name, "status": "PROVED_ZERO",
+                "reason": "the contracted numerator is 0"}));
+            continue;
+        }
+        let mut modes = serde_json::Map::new();
+        for (index, mode) in settings.modes.iter().enumerate() {
+            let vakint_settings = mode_settings(*mode);
+            let (before, _) = rustred_stats_since(u64::MAX);
+            let tails = Vakint::p_laurent_tail_in_range_terms();
+            let cpu_start = cpu_seconds();
+            let started = Instant::now();
+            // a graph scaleless after the match: the integral is 0, no reduction
+            let (value, observation) = p_gate::observe(|| match projection {
+                Some(projection) => {
+                    refpath::direct::reduce_projection(engine, &vakint_settings, projection)
+                }
+                None => Ok(Atom::Zero),
+            });
+            let wall = started.elapsed().as_secs_f64();
+            let cpu = cpu_seconds() - cpu_start;
+            let value = value.map_err(|e| eyre::eyre!("{name} {mode}: {e}"))?;
+            let reduce = observation.prepare_seconds + observation.library_seconds;
+            let finalise = observation.render_seconds + observation.finalize_seconds;
+            let (_, rustred) = rustred_stats_since(before);
+            let text = value.to_canonical_string();
+            let file = format!("{id}.{name}.{mode}.txt");
+            write_atomic(&outputs.values.join(&file), &text)?;
+            let mut entry = json!({
+                "file": file, "sha256": sha256_hex(text.as_bytes()), "bytes": text.len(),
+                "wall": wall, "cpu": cpu, "lower": wall - reduce - finalise - observation.observer_seconds,
+                "reduce": reduce, "finalise": finalise, "reductions": observation.reductions,
+                "pairs": observation.pairs, "folded_channels": observation.folded,
+                "request_memo_hits": observation.memo_hits, "rustred": rustred,
+                "laurent_tail_in_range_terms": Vakint::p_laurent_tail_in_range_terms() - tails,
+                "path": "R3: lowered once per graph (seconds.r3_*); this entry is the reduction and finalisation",
+            });
+            if *mode == RustRedMasterMode::Retain {
+                entry["window"] = json!("exact in eps: the reduced master-basis expression");
+            } else {
+                let foreign = foreign_symbols(&value, epsilon);
+                eyre::ensure!(
+                    foreign.is_empty(),
+                    "{name} {mode}: symbols foreign to the value's basis: {foreign:?}"
+                );
+                let support = laurent_support(&value, epsilon);
+                entry["window"] = json!([window.0, window.1]);
+                entry["support"] = json!(support);
+                eyre::ensure!(
+                    support.iter().all(|k| *k >= window.0 && *k <= window.1),
+                    "{name} {mode}: Laurent support {support:?} outside the declared window {window:?}"
+                );
+                entry["oep"] = json!(text.contains("Oep("));
+                entry["residual"] = json!(text.contains("PResidual("));
+                entry["value"] = json!(text);
+            }
+            if index == 0 {
+                let (view, count) = match projection {
+                    Some(projection) => {
+                        refpath::direct::gate_view(engine, &lowering_settings, projection)?
+                    }
+                    None => (Default::default(), Default::default()),
+                };
+                entry["keys"] = json!(count.total);
+                entry["keys_zero_sector"] = json!(count.zero);
+                entry["keys_census_unknown"] = json!(count.unknown);
+                entry["keys_kept"] = json!(view.len());
+                if projection.is_some_and(|p| p.counts().slot_products > 0) {
+                    entry["r3_counts"] = json!(format!("{:?}", projection.unwrap().counts()));
+                }
+                if let Some(gate) = outputs.gate {
+                    let header = BTreeMap::from([
+                        ("graph".to_string(), id.to_string()),
+                        ("projection".to_string(), name.to_string()),
+                        ("loops".to_string(), loops.to_string()),
+                        ("zero_sectors_dropped".to_string(), count.zero.to_string()),
+                        ("keys_before_drop".to_string(), count.total.to_string()),
+                        ("census_unknown_kept".to_string(), count.unknown.to_string()),
+                        (
+                            "producer".to_string(),
+                            format!(
+                                "vakint refpath_batch --r3 {} (helper VH lane idenso-audit)",
+                                choice.label()
+                            ),
                         ),
                     ]);
                     write_atomic(
@@ -961,6 +1237,7 @@ fn main() -> eyre::Result<()> {
     let mut gate = true;
     let mut stop_files = Vec::new();
     let mut refinalise_from = None;
+    let mut r3 = None;
     let mut index = 0;
     while index < args.len() {
         let value = || args.get(index + 1).cloned().expect("missing value");
@@ -1014,6 +1291,10 @@ fn main() -> eyre::Result<()> {
             }
             "--refinalise-from" => {
                 refinalise_from = Some(PathBuf::from(value()));
+                index += 1;
+            }
+            "--r3" => {
+                r3 = Some(R3Choice::parse(&value())?);
                 index += 1;
             }
             "--loop-sign-in-overall" => loop_sign_in_overall = true,
@@ -1079,7 +1360,12 @@ fn main() -> eyre::Result<()> {
         environment,
         environment_content,
         refinalise_from: None,
+        r3,
     };
+    eyre::ensure!(
+        settings.r3.is_none() || (refinalise_from.is_none() && !settings.contract_only),
+        "--r3 lowers and reduces: not with --refinalise-from or --contract-only"
+    );
     let mut settings = settings;
     if let Some(dir) = refinalise_from {
         settings.refinalise_from = Some(refinalise_source(&dir, &settings)?);
@@ -1228,6 +1514,17 @@ fn run(request: &Request<'_>, settings: &RunSettings) -> eyre::Result<Value> {
         };
         let result = prepare(&model, &dot, settings, epsilon, &mut seconds).and_then(|prepared| {
             let (entries, provenance) = match &settings.refinalise_from {
+                None if prepared.r3.is_some() => (
+                    evaluate_r3(
+                        template.as_ref(),
+                        &prepared,
+                        settings,
+                        epsilon,
+                        &outputs,
+                        &mut seconds,
+                    )?,
+                    Value::Null,
+                ),
                 None => (
                     evaluate(template.as_ref(), &prepared, settings, epsilon, &outputs)?,
                     Value::Null,
@@ -1344,6 +1641,7 @@ mod tests {
             environment: BTreeMap::new(),
             environment_content: BTreeMap::new(),
             refinalise_from: None,
+            r3: None,
         }
     }
 
@@ -1356,6 +1654,13 @@ mod tests {
         let d0 = digest(&base);
         let variants: Vec<(&str, RunSettings)> = vec![
             ("projection", settings(Projection::Transverse)),
+            (
+                "r3",
+                RunSettings {
+                    r3: Some(R3Choice::parse("default").unwrap()),
+                    ..base.clone()
+                },
+            ),
             (
                 "binary",
                 RunSettings {
