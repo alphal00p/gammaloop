@@ -1397,6 +1397,8 @@ impl RStarIntegrand {
                 &[W_.x___],
                 |_| true,
             ));
+            // GAMMALOOP_LINEARIZE_MOMENTA: flatten the substituted sums.
+            expression = super::linearize::linearize(expression);
         }
         let minkowski = Minkowski {}.new_rep(GS.dim).to_symbolic([]);
         for (pair, edge, data) in graph.iter_edges_of(&region.remaining) {
@@ -2734,7 +2736,7 @@ impl RStarIntegrand {
             Cow::Owned(streamed::map_term_local(
                 "the outer-Taylor routing",
                 expression.as_view(),
-                &|piece| piece.replace_multiple(&routing),
+                &|piece| super::linearize::linearize(piece.replace_multiple(&routing)),
             )?)
         };
         let allowed_edges = self
@@ -2988,7 +2990,7 @@ impl RStarIntegrand {
     /// term-local replacement, applied in checkpointed pieces.
     fn edge_substitute(expression: AtomView<'_>, rules: &[Replacement]) -> Result<Atom> {
         streamed::map_term_local("the edge-combination substitution", expression, &|piece| {
-            piece.replace_multiple(rules)
+            super::linearize::linearize(piece.replace_multiple(rules))
         })
     }
 

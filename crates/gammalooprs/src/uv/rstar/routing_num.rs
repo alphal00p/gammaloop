@@ -14,7 +14,7 @@
 
 use std::collections::BTreeMap;
 
-use symbolica::atom::{AtomCore, AtomView};
+use symbolica::atom::AtomView;
 
 use crate::utils::GS;
 
@@ -130,26 +130,96 @@ fn make_add(children: Vec<Node>) -> Node {
     if rest.len() == 1 { rest.pop().unwrap() } else { Node::Add(rest) }
 }
 
-fn build(view: AtomView<'_>) -> Node {
+/// The distinct linear forms `Σ c_e Q(e)` of the numerator (one momentum
+/// slot each); the circuit variables are their ids.
+#[derive(Default)]
+struct Forms {
+    ids: BTreeMap<Vec<(u32, u64)>, u32>,
+    forms: Vec<Vec<(u32, f64)>>,
+}
+
+impl Forms {
+    fn id(&mut self, mut form: Vec<(u32, f64)>) -> u32 {
+        form.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)));
+        let key = form.iter().map(|(e, c)| (*e, c.to_bits())).collect::<Vec<_>>();
+        let next = self.forms.len() as u32;
+        *self.ids.entry(key).or_insert_with(|| {
+            self.forms.push(form);
+            next
+        })
+    }
+}
+
+fn leaf(id: u32) -> Node {
+    Node::Poly(vec![(vec![(id, 1)], 1.0)])
+}
+
+/// `c * Q(e, slot...)` with a numeric `c`: (edge, c, slot arguments).
+fn scaled_momentum<'a>(view: AtomView<'a>) -> Option<(u32, f64, Vec<AtomView<'a>>)> {
+    let momentum = |f: symbolica::atom::representation::FunView<'a>| -> Option<(u32, Vec<AtomView<'a>>)> {
+        (f.get_symbol() == GS.emr_mom)
+            .then(|| usize::try_from(f.get(0)).ok())
+            .flatten()
+            .map(|edge| (edge as u32, f.iter().skip(1).collect()))
+    };
+    match view {
+        AtomView::Fun(f) => momentum(f).map(|(e, slot)| (e, 1.0, slot)),
+        AtomView::Mul(product) if product.get_nargs() == 2 => {
+            let mut coefficient = None;
+            let mut found = None;
+            for factor in product.iter() {
+                match factor {
+                    AtomView::Num(_) => coefficient = Some(i64::try_from(factor).ok()? as f64),
+                    AtomView::Fun(f) => found = momentum(f),
+                    _ => return None,
+                }
+            }
+            let (e, slot) = found?;
+            Some((e, coefficient?, slot))
+        }
+        _ => None,
+    }
+}
+
+/// A sum of numeric multiples of edge momenta in one common slot.
+fn linear_form(view: AtomView<'_>) -> Option<Vec<(u32, f64)>> {
+    let AtomView::Add(sum) = view else {
+        return None;
+    };
+    let mut slot: Option<Vec<AtomView<'_>>> = None;
+    let mut form = Vec::new();
+    for term in sum.iter() {
+        let (edge, coefficient, s) = scaled_momentum(term)?;
+        match &slot {
+            None => slot = Some(s),
+            Some(existing) if *existing == s => {}
+            Some(_) => return None,
+        }
+        form.push((edge, coefficient));
+    }
+    Some(form)
+}
+
+fn build(view: AtomView<'_>, forms: &mut Forms) -> Node {
     match view {
         AtomView::Num(_) | AtomView::Var(_) => one(),
         AtomView::Fun(f) => {
             if f.get_symbol() == GS.emr_mom {
                 match usize::try_from(f.get(0)) {
-                    Ok(edge) => Node::Poly(vec![(vec![(edge as u32, 1)], 1.0)]),
+                    Ok(edge) => leaf(forms.id(vec![(edge as u32, 1.0)])),
                     Err(_) => one(),
                 }
             } else if f.get_symbol() == GS.den {
                 one()
             } else {
-                make_mul(f.iter().map(build).collect())
+                make_mul(f.iter().map(|a| build(a, forms)).collect())
             }
         }
         AtomView::Pow(p) => {
             let (base, exponent) = p.get_base_exp();
             match i64::try_from(exponent) {
                 Ok(n) if n > 0 => {
-                    let base = build(base);
+                    let base = build(base, forms);
                     match base {
                         Node::Poly(ref b) if b.len() == 1 && b[0].0.is_empty() => one(),
                         Node::Poly(b) => {
@@ -174,8 +244,11 @@ fn build(view: AtomView<'_>) -> Node {
                 _ => one(),
             }
         }
-        AtomView::Mul(m) => make_mul(m.iter().map(build).collect()),
-        AtomView::Add(a) => make_add(a.iter().map(build).collect()),
+        AtomView::Mul(m) => make_mul(m.iter().map(|f| build(f, forms)).collect()),
+        AtomView::Add(a) => match linear_form(view) {
+            Some(form) => leaf(forms.id(form)),
+            None => make_add(a.iter().map(|t| build(t, forms)).collect()),
+        },
     }
 }
 
@@ -202,7 +275,9 @@ fn series_mul(a: &[f64], b: &[f64], degree: usize) -> Series {
 #[derive(Clone, Debug)]
 pub(crate) struct NumeratorProfile {
     root: Node,
-    /// Edges whose momentum appears, with their maximal power in one term.
+    /// The linear forms `Σ c_e Q(e)` (circuit variables).
+    pub forms: Vec<Vec<(u32, f64)>>,
+    /// Forms that appear, with their maximal power in one term.
     pub max_power: BTreeMap<u32, u32>,
     /// Maximal total momentum degree of one term.
     pub max_degree: u32,
@@ -275,79 +350,102 @@ fn sizes(node: &Node) -> (usize, usize) {
 
 impl NumeratorProfile {
     pub(crate) fn new(view: AtomView<'_>) -> Self {
-        let root = build(view);
+        let mut forms = Forms::default();
+        let root = build(view, &mut forms);
         let (max_power, max_degree) = max_powers(&root);
         let (nodes, monomials) = sizes(&root);
-        Self { root, max_power, max_degree, nodes, monomials }
+        Self { root, forms: forms.forms, max_power, max_degree, nodes, monomials }
     }
 
     /// Terms of the routed numerator per boundary order `0..=degree`, with
-    /// `terms[e] = (l_e, r_e)` (an edge absent from `terms` counts as one
-    /// boundary momentum).
+    /// `terms(e) = (l_e, r_e)` (an edge absent from the remainder counts as
+    /// one boundary momentum).
     pub(crate) fn orders(&self, terms: &dyn Fn(u32) -> (f64, f64), degree: usize) -> Series {
-        let mut cache: BTreeMap<(u32, u32), Series> = BTreeMap::new();
-        eval(&self.root, terms, degree, &mut cache)
+        let degree = degree.min(MAX_ORDER - 1);
+        let mut cache: BTreeMap<(u32, u32), Fixed> = BTreeMap::new();
+        eval(&self.root, terms, degree, &mut cache)[..=degree].to_vec()
     }
+}
+
+/// Orders kept by the fixed-size evaluation.
+const MAX_ORDER: usize = 5;
+type Fixed = [f64; MAX_ORDER];
+
+fn fixed_one() -> Fixed {
+    let mut a = [0.0; MAX_ORDER];
+    a[0] = 1.0;
+    a
+}
+
+fn fixed_mul(a: &Fixed, b: &Fixed, degree: usize) -> Fixed {
+    let mut out = [0.0; MAX_ORDER];
+    for i in 0..=degree {
+        if a[i] == 0.0 {
+            continue;
+        }
+        for j in 0..=degree - i {
+            out[i + j] += a[i] * b[j];
+        }
+    }
+    out
 }
 
 fn eval(
     node: &Node,
     terms: &dyn Fn(u32) -> (f64, f64),
     degree: usize,
-    cache: &mut BTreeMap<(u32, u32), Series>,
-) -> Series {
+    cache: &mut BTreeMap<(u32, u32), Fixed>,
+) -> Fixed {
     match node {
         Node::Poly(p) => {
-            let mut total = vec![0.0; degree + 1];
+            let mut total = [0.0; MAX_ORDER];
             for (m, c) in p {
-                let mut s = vec![0.0; degree + 1];
+                let mut s = [0.0; MAX_ORDER];
                 s[0] = *c;
                 for (e, k) in m {
                     let factor = cache.entry((*e, *k)).or_insert_with(|| {
                         let (l, r) = terms(*e);
-                        let mut base = vec![0.0; degree + 1];
+                        let mut base = [0.0; MAX_ORDER];
                         base[0] = l;
                         if degree >= 1 {
                             base[1] = r;
                         }
-                        let mut acc = vec![0.0; degree + 1];
-                        acc[0] = 1.0;
+                        let mut acc = fixed_one();
                         for _ in 0..*k {
-                            acc = series_mul(&acc, &base, degree);
+                            acc = fixed_mul(&acc, &base, degree);
                         }
                         acc
                     });
-                    s = series_mul(&s, factor, degree);
+                    s = fixed_mul(&s, factor, degree);
                 }
-                for (t, x) in total.iter_mut().zip(s) {
-                    *t += x;
+                for i in 0..=degree {
+                    total[i] += s[i];
                 }
             }
             total
         }
         Node::Mul(children) => {
-            let mut acc = vec![0.0; degree + 1];
-            acc[0] = 1.0;
+            let mut acc = fixed_one();
             for child in children {
-                acc = series_mul(&acc, &eval(child, terms, degree, cache), degree);
+                acc = fixed_mul(&acc, &eval(child, terms, degree, cache), degree);
             }
             acc
         }
         Node::Add(children) => {
-            let mut total = vec![0.0; degree + 1];
+            let mut total = [0.0; MAX_ORDER];
             for child in children {
-                for (t, x) in total.iter_mut().zip(eval(child, terms, degree, cache)) {
-                    *t += x;
+                let x = eval(child, terms, degree, cache);
+                for i in 0..=degree {
+                    total[i] += x[i];
                 }
             }
             total
         }
         Node::Pow(base, n) => {
             let b = eval(base, terms, degree, cache);
-            let mut acc = vec![0.0; degree + 1];
-            acc[0] = 1.0;
+            let mut acc = fixed_one();
             for _ in 0..*n {
-                acc = series_mul(&acc, &b, degree);
+                acc = fixed_mul(&acc, &b, degree);
             }
             acc
         }

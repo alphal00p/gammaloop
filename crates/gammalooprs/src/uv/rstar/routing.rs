@@ -914,6 +914,10 @@ struct TreeCost {
     /// Per arc: loop momenta and boundary momenta in its routed momentum.
     arc_loops: Vec<u32>,
     arc_roots: Vec<u32>,
+    /// With `signatures`: per arc, its routed momentum as signed
+    /// coefficients over the loop momenta (one per arc position, nonzero
+    /// for cotree arcs) and the boundary sources (after the arcs).
+    sig: Vec<Vec<i32>>,
 }
 
 fn tree_cost(
@@ -923,7 +927,13 @@ fn tree_cost(
     root: usize,
     sources: &[usize],
     marked: Option<EdgeIndex>,
+    signatures: bool,
 ) -> TreeCost {
+    let columns = arcs.len() + sources.len();
+    let mut sig = if signatures { vec![vec![0i32; columns]; arcs.len()] } else { Vec::new() };
+    let forward = |a: usize, from: usize, to: usize| -> i32 {
+        if arcs[a].u == from && arcs[a].v == to { 1 } else { -1 }
+    };
     let mut adjacency = vec![Vec::new(); n];
     for &a in tree {
         adjacency[arcs[a].u].push((arcs[a].v, a));
@@ -948,11 +958,14 @@ fn tree_cost(
     let mut arc_roots = vec![0u32; arcs.len()];
     let mut arc_loops = vec![0u32; arcs.len()];
     let mut root_terms = 0;
-    for &s in sources {
+    for (j, &s) in sources.iter().enumerate() {
         let mut x = s;
         while let Some((p, a)) = parent[x] {
             on_path[a] = true;
             arc_roots[a] += 1;
+            if signatures {
+                sig[a][arcs.len() + j] += forward(a, x, p);
+            }
             root_terms += 1;
             x = p;
         }
@@ -966,17 +979,27 @@ fn tree_cost(
         if in_tree[i] {
             continue;
         }
-        let (mut x, mut y) = (arc.u, arc.v);
+        // k_i flows u -> v along the arc and back v -> u through the tree.
+        let (mut x, mut y) = (arc.v, arc.u);
         let mut length = 1;
         arc_loops[i] += 1;
+        if signatures {
+            sig[i][i] = 1;
+        }
         while x != y {
             if depth[x] >= depth[y] {
                 if let Some((p, a)) = parent[x] {
                     arc_loops[a] += 1;
+                    if signatures {
+                        sig[a][i] += forward(a, x, p);
+                    }
                     x = p;
                 }
             } else if let Some((p, a)) = parent[y] {
                 arc_loops[a] += 1;
+                if signatures {
+                    sig[a][i] += forward(a, p, y);
+                }
                 y = p;
             }
             length += 1;
@@ -990,6 +1013,7 @@ fn tree_cost(
         loop_terms,
         arc_loops,
         arc_roots,
+        sig,
     }
 }
 
@@ -1042,7 +1066,10 @@ fn enumerate_guide<G: GraphAccess>(
         arc_of.insert(usize::from(arc.edge) as u32, i);
     }
     let self_loop_set: Vec<u32> = self_loops.iter().map(|e| usize::from(*e) as u32).collect();
+    // log >= 1: the compact-free tree's numerator weight; log >= 3: also the
+    // estimate of every tree (costly on large numerators).
     let track = profile.is_some() && log_level() >= 1;
+    let track_est = profile.is_some() && log_level() >= 3;
     let loops = (arcs.len() + self_loops.len() + 1).saturating_sub(n);
     let dens = arcs.len() + self_loops.len();
     let degree = profile.map_or(0, |p| {
@@ -1052,24 +1079,52 @@ fn enumerate_guide<G: GraphAccess>(
         let Some(p) = profile else {
             return (0, 0.0);
         };
-        let lr = |e: u32| -> (f64, f64) {
-            if let Some(&i) = arc_of.get(&e) {
-                (f64::from(c.arc_loops[i]), f64::from(c.arc_roots[i]))
-            } else if self_loop_set.contains(&e) {
-                (1.0, 0.0)
-            } else {
-                (0.0, 1.0)
-            }
-        };
+        // Terms of each linear form Σ c_e Q(e) after routing and
+        // linearisation: the nonzero loop and boundary coefficients of
+        // Σ c_e sig(e); a self-loop edge is its own loop momentum, an edge
+        // outside the remainder its own boundary momentum.
+        let columns = arcs.len() + sources.len();
+        let counts: Vec<(f64, f64)> = p
+            .forms
+            .iter()
+            .map(|form| {
+                let mut acc = vec![0.0f64; columns];
+                let mut extra: Vec<(u32, f64)> = Vec::new();
+                for &(e, coefficient) in form {
+                    if let Some(&i) = arc_of.get(&e) {
+                        for (slot, x) in acc.iter_mut().zip(&c.sig[i]) {
+                            *slot += coefficient * f64::from(*x);
+                        }
+                    } else if let Some(entry) = extra.iter_mut().find(|(x, _)| *x == e) {
+                        entry.1 += coefficient;
+                    } else {
+                        extra.push((e, coefficient));
+                    }
+                }
+                let mut l = acc[..arcs.len()].iter().filter(|x| **x != 0.0).count() as f64;
+                let mut r = acc[arcs.len()..].iter().filter(|x| **x != 0.0).count() as f64;
+                for (e, coefficient) in extra {
+                    if coefficient != 0.0 {
+                        if self_loop_set.contains(&e) {
+                            l += 1.0;
+                        } else {
+                            r += 1.0;
+                        }
+                    }
+                }
+                (l, r)
+            })
+            .collect();
+        let lr = |f: u32| -> (f64, f64) { counts.get(f as usize).copied().unwrap_or((0.0, 1.0)) };
         let numw: u64 = p
             .max_power
             .iter()
-            .map(|(e, k)| {
-                let (l, r) = lr(*e);
+            .map(|(f, k)| {
+                let (l, r) = lr(*f);
                 u64::from(*k) * (l + r) as u64
             })
             .sum();
-        if !track && !matches!(rule, RootRouting::NumEst | RootRouting::NumEstDen) {
+        if !track_est && !matches!(rule, RootRouting::NumEst | RootRouting::NumEstDen) {
             return (numw, 0.0);
         }
         let porders = p.orders(&lr, degree);
@@ -1146,7 +1201,7 @@ fn enumerate_guide<G: GraphAccess>(
         walk(i + 1, chosen, uf, arcs, n, count, visit);
     }
     let mut visit = |tree: &[usize]| {
-        let cost = tree_cost(&arcs, n, tree, root, &sources, marked);
+        let cost = tree_cost(&arcs, n, tree, root, &sources, marked, profile.is_some());
         let (numw, est) = numerics(&cost);
         let k = key(&cost, numw, est);
         let total = (cost.loop_terms + cost.root_terms) as u64;

@@ -21,6 +21,7 @@ mod expression;
 mod insertion_identity;
 mod insertions;
 mod integrate;
+mod linearize;
 mod massive;
 #[cfg(test)]
 mod massive_regression_tests;
@@ -36,12 +37,18 @@ pub mod pint6_dump;
 mod plan;
 #[cfg(test)]
 mod pole_tests;
+mod routing;
+mod routing_num;
+
+/// [`linearize::linearize`] (`GAMMALOOP_LINEARIZE_MOMENTA`) for the converters
+/// outside R*.
+pub(crate) fn linearize_momenta(atom: symbolica::atom::Atom) -> symbolica::atom::Atom {
+    linearize::linearize(atom)
+}
 mod project;
 mod propagator;
 #[cfg(test)]
 mod recursive_tests;
-mod routing;
-mod routing_num;
 #[cfg(test)]
 mod scalar;
 mod taylor;
