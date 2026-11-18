@@ -56,6 +56,7 @@ use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
 use symbolica::symbol;
 
 use crate::diagram_integral::DiagramIntegralOptions;
+use crate::p_integral::FactorizedNumerator;
 use crate::rustred_evaluation::p_gate::{self, GateObservation, GateView, ZeroSectorCount};
 use crate::utils::vakint_macros::vk_symbol;
 use crate::{Vakint, VakintExpression, VakintSettings};
@@ -356,6 +357,63 @@ pub fn colour_branches(diagram: &FeynmanDiagram) -> Result<(Vec<ColourBranch>, u
         }
     }
     Ok((branches, total))
+}
+
+/// The colour branches of the input type's values of one graph
+/// ([`FactorizedNumerator::from_feynkit`] in `ColourMode::Invariants`, with
+/// `dimension` = this chain's `D` and no projector: one value per non-zero
+/// colour branch), for [`contract`]: the coefficient is the value's colour
+/// coefficient in this chain's symbols ([`map_invariants`], as in
+/// [`colour_branches`]) times its pulled scalars (couplings, `𝑖`, numbers,
+/// the graph's `numerator_prefactor`); the one residual is the product of its
+/// factors. The weight is [`factorized_weight`].
+pub fn factorized_branches(values: &[FactorizedNumerator]) -> Result<Vec<ColourBranch>> {
+    values
+        .iter()
+        .map(|value| {
+            ensure!(
+                value.projector.is_none() && value.dimension == SYMBOLS.d,
+                "{}: the chain closes the ports itself (no projector) in its own D",
+                value.label
+            );
+            Ok(ColourBranch {
+                coefficient: factorized_colour(value) * &value.prefactor.scalars,
+                residuals: vec![value.factor_product()],
+            })
+        })
+        .collect()
+}
+
+/// The colour coefficient of an input-type value (`ColourMode::Invariants`)
+/// in this chain's symbols, as [`colour_branches`] writes it: `C_A`, `C_F`,
+/// `T_F`, `N_A`, higher invariants named (`gram(4, coad, cof)` ->
+/// `refpath::gram_4AR`, ...).
+pub fn factorized_colour(value: &FactorizedNumerator) -> Atom {
+    let adjoint = Atom::var(symbol!("spenso::dA"));
+    let fundamental = Atom::var(CS.nc);
+    map_invariants(&value.prefactor.colour, &adjoint, &fundamental)
+        .expand()
+        .together()
+}
+
+/// The weight of the input type's values of one graph in this chain's
+/// symbols: `overall × loop_sign × n_f^nf_power` ([`Prefactor`] without
+/// scalars and colour), the same for every value (checked).
+///
+/// [`Prefactor`]: crate::p_integral::factorized::Prefactor
+pub fn factorized_weight(values: &[FactorizedNumerator]) -> Result<Atom> {
+    let mut weights = BTreeMap::new();
+    for value in values {
+        let p = &value.prefactor;
+        let weight = &p.overall
+            * Atom::num(p.loop_sign)
+            * Atom::var(SYMBOLS.nf).pow(Atom::num(p.nf_power as i64));
+        weights.insert(weight.to_canonical_string(), weight);
+    }
+    match weights.len() {
+        1 => Ok(weights.into_values().next().unwrap()),
+        n => Err(eyre!("{n} different weights over the colour branches")),
+    }
 }
 
 /// Closed quark loops of a diagram (components of the quark subgraph).
@@ -803,6 +861,14 @@ pub fn run_graph(
     let started = Instant::now();
     let diagram = FeynmanDiagram::from_dot(Arc::clone(model), dot)?;
     seconds.parse = started.elapsed().as_secs_f64();
+    // FeynKit reads a DOT without `overall_factor` as weight 1 (no 1/AutG, no
+    // loop or ordering sign): the beta thread's DOT input must carry it.
+    ensure!(
+        crate::p_integral::factorized::dot_sets_graph_attribute(dot, "overall_factor"),
+        "graph {}: the DOT graph attribute overall_factor is missing (required: 1/AutG and the \
+         closed-loop and external ordering signs)",
+        diagram.name()
+    );
     ensure!(
         diagram.projector().expression().is_one()
             && diagram.numerator_prefactor().expression().is_one(),

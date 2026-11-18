@@ -563,3 +563,355 @@ fn factors_denote_the_dot_numerator_on_a_three_loop_sample() {
         assert!(non_zero >= 6);
     }
 }
+
+/// The refpath batch driver's front end (helper VH lane l5-stage1): the input
+/// type's colour branches (projector none, the chain's `D`) contracted by
+/// `refpath::contract` give EXACTLY the numerators of refpath's own colour
+/// split (`refpath::colour_branches`), and `refpath::factorized_weight` is the
+/// graph's evaluated overall factor times `n_f` per closed quark loop.
+fn factorized_branches_contract_like_refpath(level: &str, n: Option<usize>) -> (usize, usize) {
+    use feynkit_kinematics::Kinematics;
+    use vakint::refpath::{self, Projection};
+    let Some(root) = root() else { return (0, 0) };
+    let dir = root.join(level);
+    let model = model(&dir);
+    let s = &*refpath::SYMBOLS;
+    let options = FromFeynkitOptions {
+        dimension: s.d,
+        projector: ProjectorChoice::None,
+        ..Default::default()
+    };
+    let (mut graphs, mut branches) = (0, 0);
+    for path in files(&dir, n) {
+        let (_, diagram) = load(&model, &path);
+        if refpath::scaleless_contact(&diagram) {
+            continue;
+        }
+        let values = FactorizedNumerator::from_feynkit(&diagram, &model, &options).unwrap();
+        let (reference, _) = refpath::colour_branches(&diagram).unwrap();
+        assert_eq!(values.len(), reference.len(), "{}", path.display());
+        if values.is_empty() {
+            continue;
+        }
+        let overall =
+            feynkit_graph::expressions::evaluate_overall_factor(diagram.overall_factor().as_view());
+        let quark_loops = refpath::closed_quark_loops(&diagram).unwrap();
+        let weight = refpath::factorized_weight(&values).unwrap();
+        let expected = &overall * Atom::var(s.nf).pow(Atom::num(quark_loops as i64));
+        assert!(
+            (&weight - &expected).expand().is_zero(),
+            "{}",
+            path.display()
+        );
+        let dimension = Atom::var(s.d);
+        let family = diagram
+            .propagator_family(&Kinematics::in_dimension(&dimension).unwrap())
+            .unwrap();
+        let momentum = family.external_momenta()[0].clone();
+        let q2 = Kinematics::in_dimension(&dimension)
+            .unwrap()
+            .with_momenta([momentum.clone()])
+            .unwrap()
+            .scalar_product(&momentum, &momentum)
+            .unwrap();
+        let ours = refpath::factorized_branches(&values).unwrap();
+        for projection in [Projection::Metric, Projection::Both] {
+            let left = refpath::contract(&diagram, &ours, &momentum, &q2, projection).unwrap();
+            let right =
+                refpath::contract(&diagram, &reference, &momentum, &q2, projection).unwrap();
+            for ((name, a), (_, b)) in left.iter().zip(&right) {
+                assert!(
+                    (a - b).expand().is_zero(),
+                    "{} {name}: the input type's branches contract differently",
+                    path.display()
+                );
+            }
+        }
+        graphs += 1;
+        branches += values.len();
+    }
+    eprintln!("{level}: {graphs} graphs, {branches} colour branches: contractions identical");
+    (graphs, branches)
+}
+
+#[test]
+fn input_type_branches_contract_like_refpath_at_one_to_three_loops() {
+    factorized_branches_contract_like_refpath("L1", None);
+    factorized_branches_contract_like_refpath("L2", None);
+    factorized_branches_contract_like_refpath("L3", Some(40));
+}
+
+/// `FromFeynkitOptions::loop_sign_in_overall` on the beta thread's REDUCED
+/// five-loop DOT set (the closed-loop sign inside an EVALUATED
+/// `overall_factor`; `$VAKINT_TEST_REDUCED_L5_DOTS`, default
+/// `/common/ben/beta/results/symmetry-generation-20261113/reduced/L5`), through
+/// the DOT entry `from_feynkit_dot`: with the option every graph is accepted,
+/// `loop_sign` is `(-1)^(closed loops)` and the weight is the graph's
+/// evaluated overall factor times `n_f^(quark loops)` (as the reference path
+/// reads it); without it an evaluated weight is refused; on a parsed diagram
+/// (`from_feynkit`) an evaluated weight is refused (its presence in the DOT
+/// cannot be seen there).
+#[test]
+fn reduced_five_loop_graphs_take_the_loop_sign_from_the_overall_factor() {
+    use vakint::refpath;
+    let dir = std::env::var("VAKINT_TEST_REDUCED_L5_DOTS")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            PathBuf::from("/common/ben/beta/results/symmetry-generation-20261113/reduced/L5")
+        });
+    if !dir.join("model.json").is_file() {
+        eprintln!("SKIP: no reduced L5 DOTs under {}", dir.display());
+        return;
+    }
+    let model = model(&dir);
+    let s = &*refpath::SYMBOLS;
+    let (mut odd, mut checked) = (0, 0);
+    // The nf^4 class (14 graphs) and a spread of the others.
+    let graphs = [
+        62528, 62684, 62697, 69253, 69654, 69664, 69734, 79643, 80270, 80273, 80279, 80338, 80477,
+        80680, 828, 5211, 23512, 34868, 40685, 59988,
+    ];
+    let with = FromFeynkitOptions {
+        dimension: s.d,
+        projector: ProjectorChoice::None,
+        loop_sign_in_overall: true,
+        ..Default::default()
+    };
+    for graph in graphs {
+        let text = std::fs::read_to_string(dir.join(format!("diagram-{graph:06}.dot"))).unwrap();
+        let (diagram, values) =
+            FactorizedNumerator::from_feynkit_dot(&text, &model, &with).unwrap();
+        let parsed = FactorizedNumerator::from_feynkit(&diagram, &model, &with);
+        assert!(
+            matches!(parsed, Err(FactorizedError::OverallFactor { .. })),
+            "{graph}: {parsed:?}"
+        );
+        let without = FromFeynkitOptions {
+            loop_sign_in_overall: false,
+            ..with.clone()
+        };
+        let declined = FactorizedNumerator::from_feynkit_dot(&text, &model, &without);
+        assert!(
+            matches!(declined, Err(FactorizedError::OverallFactor { .. })),
+            "{graph}: {:?}",
+            declined.map(|v| v.1.len())
+        );
+        if refpath::scaleless_contact(&diagram) || values.is_empty() {
+            continue;
+        }
+        let closed = values[0].closed_loops().unwrap().len();
+        let sign = if closed % 2 == 1 { -1 } else { 1 };
+        assert!(
+            values.iter().all(|v| v.prefactor.loop_sign == sign),
+            "{graph}"
+        );
+        let overall =
+            feynkit_graph::expressions::evaluate_overall_factor(diagram.overall_factor().as_view());
+        let quark_loops = refpath::closed_quark_loops(&diagram).unwrap();
+        let expected = &overall * Atom::var(s.nf).pow(Atom::num(quark_loops as i64));
+        let weight = refpath::factorized_weight(&values).unwrap();
+        assert!((&weight - &expected).expand().is_zero(), "{graph}");
+        odd += usize::from(sign == -1);
+        checked += 1;
+    }
+    eprintln!("reduced L5: {checked} graphs ({odd} with an odd number of closed loops)");
+    assert!(checked >= 15 && odd >= 1);
+}
+
+/// The text of a DOT file without its graph attribute `overall_factor` (as
+/// the reviewer's control does it: `, overall_factor="..."` removed).
+fn without_overall_factor(text: &str) -> String {
+    let start = text
+        .find(", overall_factor=\"")
+        .expect("an overall_factor attribute");
+    let value = start + ", overall_factor=\"".len();
+    let end = value + text[value..].find('"').unwrap() + 1;
+    format!("{}{}", &text[..start], &text[end..])
+}
+
+/// GUARD (B), the reviewer's ingress control (O3/ingress-controls): removing
+/// ONLY the DOT attribute `overall_factor` from the genuine L1 gluon, ghost
+/// and quark graphs must not silently give weights (1, 1, 1) instead of
+/// (1/2, -1, -1): `from_feynkit_dot` refuses it (FactorizedError::OverallFactor
+/// naming the graph), so does `from_feynkit` on the parsed diagram (no AutG
+/// factor: not the generator form), and so does the reference path
+/// (`refpath::run_graph`, behind `direct_bb`). The explicit path for inputs
+/// without the attribute, `OverallFactorSource::Supplied`, with the supplied
+/// weights gives exactly the original values; supplying a weight for a DOT
+/// that carries its own is refused.
+#[test]
+fn a_dot_without_overall_factor_is_refused_and_a_supplied_weight_restores_it() {
+    use vakint::p_integral::factorized::{OverallFactorSource, dot_sets_graph_attribute};
+    let Some(root) = root() else { return };
+    let dir = root.join("L1");
+    let model = model(&dir);
+    let weights = [("1/2", 1i64), ("-1", -1), ("-1", -1)];
+    for (graph, (weight, loop_sign)) in weights.iter().enumerate() {
+        let text = std::fs::read_to_string(dir.join(format!("diagram-{graph:06}.dot"))).unwrap();
+        let stripped = without_overall_factor(&text);
+        assert!(dot_sets_graph_attribute(&text, "overall_factor"));
+        assert!(!dot_sets_graph_attribute(&stripped, "overall_factor"));
+        let options = FromFeynkitOptions::default();
+        let (_, original) = FactorizedNumerator::from_feynkit_dot(&text, &model, &options).unwrap();
+        let total = &original[0].prefactor.overall * Atom::num(original[0].prefactor.loop_sign);
+        assert_eq!(total, parse(weight), "graph {graph}: the genuine weight");
+        assert_eq!(original[0].prefactor.loop_sign, *loop_sign);
+        let refused = FactorizedNumerator::from_feynkit_dot(&stripped, &model, &options);
+        match refused {
+            Err(FactorizedError::OverallFactor {
+                graph: name,
+                detail,
+            }) => {
+                assert!(detail.contains("missing"), "{detail}");
+                assert!(!name.is_empty());
+            }
+            other => panic!("graph {graph}: {:?}", other.map(|v| v.1.len())),
+        }
+        let diagram = FeynmanDiagram::from_dot(Arc::clone(&model), &stripped).unwrap();
+        assert!(matches!(
+            FactorizedNumerator::from_feynkit(&diagram, &model, &options),
+            Err(FactorizedError::OverallFactor { .. })
+        ));
+        let engine = vakint::Vakint::new().unwrap();
+        let contract_only = vakint::refpath::RunOptions {
+            contract_only: true,
+            ..Default::default()
+        };
+        let error = vakint::refpath::run_graph(&engine, &model, &stripped, &contract_only)
+            .err()
+            .expect("refpath accepted a DOT without overall_factor");
+        assert!(error.to_string().contains("overall_factor"), "{error}");
+        assert!(vakint::refpath::run_graph(&engine, &model, &text, &contract_only).is_ok());
+        // The explicit path: the caller supplies the weight.
+        let supplied = FromFeynkitOptions {
+            overall_factor: OverallFactorSource::Supplied(parse(weight)),
+            ..Default::default()
+        };
+        let (_, restored) =
+            FactorizedNumerator::from_feynkit_dot(&stripped, &model, &supplied).unwrap();
+        assert_eq!(restored, original, "graph {graph}");
+        assert!(matches!(
+            FactorizedNumerator::from_feynkit_dot(&text, &model, &supplied),
+            Err(FactorizedError::OverallFactor { .. })
+        ));
+    }
+}
+
+/// `dot_sets_graph_attribute`: a key of the `graph [...]` list or a top-level
+/// statement counts; the same text inside a quoted value, on a node or an edge
+/// does not.
+#[test]
+fn the_dot_attribute_scanner_reads_only_graph_attributes() {
+    use vakint::p_integral::factorized::dot_sets_graph_attribute as has;
+    let name = "overall_factor";
+    assert!(has(
+        "digraph g {\n graph [a=1, overall_factor=\"1/2\"];\n}",
+        name
+    ));
+    assert!(has("digraph g {\n overall_factor = 2;\n}", name));
+    assert!(!has(
+        "digraph g {\n graph [a=\"x, overall_factor=2\"];\n}",
+        name
+    ));
+    assert!(!has(
+        "digraph g {\n n0 [overall_factor=2];\n n0 -> n1 [overall_factor=2];\n}",
+        name
+    ));
+    assert!(!has("digraph g {\n graph [a=1];\n}", name));
+}
+
+/// GENERAL GROUP (reviewer O3, orbits.md): on the 21 retained five-loop graphs
+/// whose generic colour has a third channel (SU(N)-specialised count 2), the
+/// input type's colour split in invariants mode keeps every channel with its
+/// non-SU(N) invariants (d44AR, d44AA): the branch colours of
+/// `from_feynkit_dot` (in refpath's symbols, `refpath::factorized_colour`)
+/// equal, channel by channel up to the channel's frame sign, the
+/// producer's general-invariant table `c_inv-L1-L5.tsv`
+/// (`$VAKINT_TEST_C_INV_TSV`, default
+/// /common/ben/beta/results/colour-invariants/frame/c_inv-L1-L5.tsv; basis v1:
+/// cA, cR, I2R, NA, d44XY = d_X^{abcd} d_Y^{abcd}).
+#[test]
+fn general_invariant_channels_survive_on_the_21_retained_graphs() {
+    use vakint::refpath;
+    let graphs = [
+        53617, 53644, 55264, 55270, 55281, 55285, 55331, 55357, 55389, 55402, 55407, 55411, 64362,
+        64368, 64393, 64399, 64417, 64430, 64437, 64919, 64927,
+    ];
+    let dir = std::env::var("VAKINT_TEST_REDUCED_L5_DOTS")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            PathBuf::from("/common/ben/beta/results/symmetry-generation-20261113/reduced/L5")
+        });
+    let table = std::env::var("VAKINT_TEST_C_INV_TSV")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            PathBuf::from("/common/ben/beta/results/colour-invariants/frame/c_inv-L1-L5.tsv")
+        });
+    if !dir.join("model.json").is_file() || !table.is_file() {
+        eprintln!("SKIP: no reduced L5 DOTs or no c_inv table");
+        return;
+    }
+    let mut expected = std::collections::BTreeMap::<usize, Vec<Atom>>::new();
+    for line in std::fs::read_to_string(&table).unwrap().lines() {
+        let fields = line.split('\t').collect::<Vec<_>>();
+        if line.starts_with('#') || fields.len() < 4 || fields[0] != "5" {
+            continue;
+        }
+        let Ok(graph) = fields[1].parse::<usize>() else {
+            continue;
+        };
+        if !graphs.contains(&graph) {
+            continue;
+        }
+        let text = fields[3]
+            .replace("beta::{}::cA", "refpath::CA")
+            .replace("beta::{}::cR", "refpath::CF")
+            .replace("beta::{}::I2R", "refpath::TF")
+            .replace("beta::{}::NA", "refpath::NA")
+            .replace("beta::{}::d44AR", "refpath::gram_4AR")
+            .replace("beta::{}::d44AA", "refpath::gram_4AA")
+            .replace("beta::{}::d44RR", "refpath::gram_4RR");
+        assert!(!text.contains("beta::"), "unmapped symbol in {text}");
+        expected.entry(graph).or_default().push(parse(&text));
+    }
+    let model = model(&dir);
+    let options = FromFeynkitOptions {
+        dimension: refpath::SYMBOLS.d,
+        projector: ProjectorChoice::None,
+        loop_sign_in_overall: true,
+        ..Default::default()
+    };
+    let rename = |a: &Atom| {
+        a.replace(parse("refpath::gram_4RA"))
+            .with(parse("refpath::gram_4AR"))
+            .expand()
+    };
+    for graph in graphs {
+        let text = std::fs::read_to_string(dir.join(format!("diagram-{graph:06}.dot"))).unwrap();
+        let (_, values) = FactorizedNumerator::from_feynkit_dot(&text, &model, &options).unwrap();
+        let ours = values
+            .iter()
+            .map(|v| rename(&refpath::factorized_colour(v)))
+            .collect::<Vec<_>>();
+        let theirs = &expected[&graph];
+        assert_eq!(theirs.len(), 3, "graph {graph}: the table's channels");
+        assert_eq!(ours.len(), theirs.len(), "graph {graph}: ours {ours:?}");
+        assert!(
+            ours.iter()
+                .any(|c| c.to_canonical_string().contains("gram_4")),
+            "graph {graph}: no d44 invariant survived: {ours:?}"
+        );
+        for channel in theirs {
+            let found = ours
+                .iter()
+                .any(|c| (c - channel).expand().is_zero() || (c + channel).expand().is_zero());
+            assert!(
+                found,
+                "graph {graph}: channel {channel} not among ours {ours:?}"
+            );
+        }
+    }
+    eprintln!(
+        "21 retained graphs: every generic channel (with d44AR / d44AA) present, frame sign aside"
+    );
+}

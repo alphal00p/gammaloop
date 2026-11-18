@@ -106,6 +106,12 @@ python_stubgen = [
 symbolica_community_module = ["dep:pyo3", "dep:pyo3-stub-gen-derive", "symbolica/python_export", "feynkit-ingress", "dep:feynkit-py"]
 
 [[example]]
+name = "refpath_batch"
+required-features = ["feynkit-ingress"]
+# its acceptance tests (configuration-bound reuse, cold vs warm) run with the test suite
+test = true
+
+[[example]]
 name = "direct_bb"
 required-features = ["feynkit-ingress"]
 
