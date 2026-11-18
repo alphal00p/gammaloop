@@ -798,12 +798,19 @@ fn switch_list(variable: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// The next `GAMMALOOP_ALGEBRA_DUMP` file number (the counter of [`dump`]).
+pub(crate) fn dump_next() -> usize {
+    DUMP_NEXT.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+static DUMP_NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 /// Diagnostics: with `GAMMALOOP_ALGEBRA_DUMP=<directory>`, write the first
 /// `GAMMALOOP_ALGEBRA_DUMP_COUNT` (default 40) inputs that are smaller than
 /// `GAMMALOOP_ALGEBRA_DUMP_MAX_BYTES` (default 2 MB) to
 /// `<directory>/<stage>-<n>.txt`, only of `GAMMALOOP_ALGEBRA_DUMP_STAGE` if set.
 pub(crate) fn dump(stage: &str, expression: AtomView<'_>) {
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::Ordering;
     static DIRECTORY: LazyLock<Option<String>> =
         LazyLock::new(|| std::env::var("GAMMALOOP_ALGEBRA_DUMP").ok());
     static COUNT: LazyLock<usize> = LazyLock::new(|| {
@@ -812,7 +819,6 @@ pub(crate) fn dump(stage: &str, expression: AtomView<'_>) {
             .and_then(|value| value.parse().ok())
             .unwrap_or(40)
     });
-    static NEXT: AtomicUsize = AtomicUsize::new(0);
     static STAGE: LazyLock<Option<String>> =
         LazyLock::new(|| std::env::var("GAMMALOOP_ALGEBRA_DUMP_STAGE").ok());
     static MAX_BYTES: LazyLock<usize> = LazyLock::new(|| {
@@ -833,7 +839,7 @@ pub(crate) fn dump(stage: &str, expression: AtomView<'_>) {
     if expression.get_byte_size() > *MAX_BYTES {
         return;
     }
-    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    let n = DUMP_NEXT.fetch_add(1, Ordering::Relaxed);
     if n >= *COUNT {
         return;
     }

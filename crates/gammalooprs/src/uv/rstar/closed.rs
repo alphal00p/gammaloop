@@ -432,6 +432,93 @@ fn pairing_insertion(pairing: &[(Leg, Leg)], open: &[Atom]) -> Atom {
     })
 }
 
+/// Diagnostics (`GAMMALOOP_IR_HARD_CENSUS` / `GAMMALOOP_IR_HARD_DECLARE`):
+/// every open slot of `expression` as `(representation, slot atom)`.
+pub(super) fn open_slot_list(
+    expression: &Atom,
+) -> std::result::Result<Vec<(String, String)>, String> {
+    let cooking = cooking();
+    let cooked = cooking
+        .try_cook(expression.as_view())
+        .map_err(|error| format!("cook:{error}"))?;
+    let tensor = SymbolicTensor::infer(cooked).map_err(|error| format!("infer:{error}"))?;
+    let mut slots = Vec::new();
+    for slot in tensor.structure().logical_slots() {
+        let spenso::structure::partial::PartialIndex::Explicit(index) = slot.aind else {
+            slots.push((format!("{}", slot.rep().rep), "implicit".to_owned()));
+            continue;
+        };
+        let atom = slot.rep().slot::<AbstractIndex, _>(index).to_atom();
+        slots.push((
+            format!("{}", slot.rep().rep),
+            cooking.uncook(atom.as_view()).to_canonical_string(),
+        ));
+    }
+    Ok(slots)
+}
+
+/// Diagnostics (`GAMMALOOP_IR_HARD_DECLARE`): the Taylor sectors of the hard
+/// routed product (the multidegrees `m` in the soft momenta with `|m| <=
+/// degree`) as `(edges of m, the sector is nonzero)`, computed as
+/// [`closed_moments`] computes its homogeneous sectors.
+pub(super) fn taylor_sectors(
+    routed: &Atom,
+    soft_edges: &[EdgeIndex],
+    degree: usize,
+) -> Result<Vec<(Vec<usize>, bool)>> {
+    let edges = soft_edges
+        .iter()
+        .map(|edge| usize::from(*edge))
+        .collect::<Vec<_>>();
+    let mut sectors = Vec::new();
+    for n in 0..=degree {
+        let mut current = Vec::new();
+        multisets(edges.len(), n, 0, &mut current, &mut |indices| {
+            sectors.push(indices.iter().map(|i| edges[*i]).collect::<Vec<_>>());
+        });
+    }
+    let lambda = symbol!("rstar_hard_taylor"; Scalar);
+    let mu = symbol!("gammalooprs::ir_closed_mu"; Scalar);
+    let scale = |expression: &Atom, edges: &[usize], parameter: Symbol| {
+        let replacements = edges
+            .iter()
+            .map(|edge| {
+                let momentum = function!(GS.emr_mom, *edge, W_.x___);
+                Replacement::new(momentum.to_pattern(), Atom::var(parameter) * momentum)
+            })
+            .collect::<Vec<_>>();
+        expression.replace_multiple(&replacements)
+    };
+    let mut result = Vec::new();
+    for multidegree in sectors {
+        let others = edges
+            .iter()
+            .copied()
+            .filter(|edge| !multidegree.contains(edge))
+            .collect::<Vec<_>>();
+        let mut sector = routed.clone();
+        if !others.is_empty() {
+            sector = TaylorExpansion::new(mu, 0)
+                .orders(&scale(&sector, &others, mu))?
+                .swap_remove(0);
+        }
+        let mut counts = std::collections::BTreeMap::new();
+        for edge in &multidegree {
+            *counts.entry(*edge).or_insert(0usize) += 1;
+        }
+        for (edge, count) in &counts {
+            if sector.is_zero() {
+                break;
+            }
+            sector = TaylorExpansion::new(lambda, *count)
+                .orders(&scale(&sector, &[*edge], lambda))?
+                .swap_remove(*count);
+        }
+        result.push((multidegree, !sector.is_zero()));
+    }
+    Ok(result)
+}
+
 /// The open slots of `expression` when all are explicit Minkowski slots.
 fn open_minkowski_slots(expression: &Atom) -> std::result::Result<Vec<Atom>, String> {
     let cooking = cooking();
