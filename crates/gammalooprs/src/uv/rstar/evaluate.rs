@@ -1260,94 +1260,115 @@ impl<'a> Evaluation<'a> {
             .saturating_sub(hard_loops);
         let edge_basis = super::expression::ir_hard_child_edge_basis(omega);
         let (closures_before, integrated_before) = super::integrate::single_mass_counts();
-        let started = Instant::now();
-        let mut groups = BTreeMap::<usize, Atom>::new();
-        let mut representative = None;
-        let mut soft = Vec::new();
-        let mut terms = 0_usize;
-        for (term_index, term) in correction.preparation.iter().enumerate() {
-            if term
-                .remainder
-                .is_scaleless(self.graph, self.plan.marked_edge)
-            {
-                continue;
-            }
-            let term_started = Instant::now();
-            let (closures, _) = super::integrate::single_mass_counts();
-            let remainder = self.open_remainder(term)?;
-            soft = remainder.soft_edges().to_vec();
-            let remainder = remainder.with_ir_hard_truncation(&soft, omega)?;
-            let routed_bytes = remainder.routed_bytes();
-            let value = self
-                .integrate_ir_hard_term(&remainder, &soft, degree, quotient_loops, edge_basis)
-                .wrap_err_with(|| {
-                    format!(
-                        "while integrating the IR hard part corr={correction_index} term={term_index} of {}",
-                        self.graph.name
-                    )
-                })?;
-            drop(remainder);
-            eprintln!(
-                "IR_HARD_CHILD_TERM graph={} corr={correction_index} term={term_index} hard_loops={hard_loops} rem_loops={} children={} omega={omega} edge={edge_basis} routed_bytes={routed_bytes} h_bytes={} closures={} seconds={:.3}",
-                self.graph.name,
-                term.remainder.loops,
-                term.counterterms.len(),
-                value.as_view().get_byte_size(),
-                super::integrate::single_mass_counts().0 - closures,
-                term_started.elapsed().as_secs_f64(),
-            );
-            representative.get_or_insert(term_index);
-            *groups.entry(term.remainder.loops).or_insert(Atom::Zero) += value;
-            terms += 1;
-        }
-        let h_seconds = started.elapsed().as_secs_f64();
-        let (closures_after, integrated_after) = super::integrate::single_mass_counts();
-        let Some(representative) = representative else {
-            return Ok(Ok((Atom::Zero, " terms=0".into())));
-        };
-        let mut rows = Vec::new();
-        let mut h_bytes = 0;
-        for (loops, h) in &groups {
-            h_bytes += h.as_view().get_byte_size();
-            if h.is_zero() {
-                continue;
-            }
-            let moments = match hard_moments(h, &soft) {
-                Ok(moments) => moments,
-                Err(error) => {
-                    let reason = format!("{error}")
-                        .chars()
-                        .map(|c| if c.is_whitespace() { '_' } else { c })
-                        .take(120)
-                        .collect::<String>();
-                    return Ok(Err(format!("moments:{reason}")));
+        // The Laurent depth of H beyond its own poles: the quotient's loops
+        // (the pole bound of Z̃_F(G/γ)), raised when the quotient factors
+        // actually carry more poles (an inserted pole part outside γ, as in
+        // a propagator-insertion surrogate); then H is computed again.
+        let mut extra = quotient_loops;
+        let mut attempts = 0_usize;
+        loop {
+            attempts += 1;
+            let started = Instant::now();
+            let mut groups = BTreeMap::<usize, Atom>::new();
+            let mut representative = None;
+            let mut soft = Vec::new();
+            let mut terms = 0_usize;
+            for (term_index, term) in correction.preparation.iter().enumerate() {
+                if term
+                    .remainder
+                    .is_scaleless(self.graph, self.plan.marked_edge)
+                {
+                    continue;
                 }
+                let term_started = Instant::now();
+                let (closures, _) = super::integrate::single_mass_counts();
+                let remainder = self.open_remainder(term)?;
+                soft = remainder.soft_edges().to_vec();
+                let remainder = remainder.with_ir_hard_truncation(&soft, omega)?;
+                let routed_bytes = remainder.routed_bytes();
+                let value = self
+                    .integrate_ir_hard_term(&remainder, &soft, degree, extra, edge_basis)
+                    .wrap_err_with(|| {
+                        format!(
+                            "while integrating the IR hard part corr={correction_index} term={term_index} of {}",
+                            self.graph.name
+                        )
+                    })?;
+                drop(remainder);
+                eprintln!(
+                    "IR_HARD_CHILD_TERM graph={} corr={correction_index} term={term_index} attempt={attempts} hard_loops={hard_loops} rem_loops={} children={} omega={omega} edge={edge_basis} extra_depth={extra} routed_bytes={routed_bytes} h_bytes={} closures={} seconds={:.3}",
+                    self.graph.name,
+                    term.remainder.loops,
+                    term.counterterms.len(),
+                    value.as_view().get_byte_size(),
+                    super::integrate::single_mass_counts().0 - closures,
+                    term_started.elapsed().as_secs_f64(),
+                );
+                representative.get_or_insert(term_index);
+                *groups.entry(term.remainder.loops).or_insert(Atom::Zero) += value;
+                terms += 1;
+            }
+            let h_seconds = started.elapsed().as_secs_f64();
+            let (closures_after, integrated_after) = super::integrate::single_mass_counts();
+            let Some(representative) = representative else {
+                return Ok(Ok((Atom::Zero, " terms=0".into())));
             };
-            rows.extend(
-                moments
-                    .into_iter()
-                    .map(|(h, insertion)| (h, insertion, *loops)),
-            );
+            let mut rows = Vec::new();
+            let mut h_bytes = 0;
+            for (loops, h) in &groups {
+                h_bytes += h.as_view().get_byte_size();
+                if h.is_zero() {
+                    continue;
+                }
+                let moments = match hard_moments(h, &soft) {
+                    Ok(moments) => moments,
+                    Err(error) => {
+                        let reason = format!("{error}")
+                            .chars()
+                            .map(|c| if c.is_whitespace() { '_' } else { c })
+                            .take(120)
+                            .collect::<String>();
+                        return Ok(Err(format!("moments:{reason}")));
+                    }
+                };
+                rows.extend(
+                    moments
+                        .into_iter()
+                        .map(|(h, insertion)| (h, insertion, *loops)),
+                );
+            }
+            let hard = self.open_remainder(&correction.preparation[representative])?;
+            let outer_started = Instant::now();
+            let outcome = self.ir_outer_integrated(&hard, &correction.forest, &rows)?;
+            let (value, outer_stats, valuation) = match outcome {
+                Ok(outcome) => outcome,
+                Err(reason) => return Ok(Err(reason)),
+            };
+            let needed = usize::try_from(-valuation.min(0)).unwrap_or(0);
+            if needed > extra {
+                eprintln!(
+                    "IR_HARD_CHILD_DEPTH graph={} corr={correction_index} attempt={attempts} extra_depth={extra} needed={needed}",
+                    self.graph.name
+                );
+                if attempts >= 3 {
+                    return Ok(Err(format!("depth:{needed}")));
+                }
+                extra = needed;
+                continue;
+            }
+            return Ok(Ok((
+                value,
+                format!(
+                    " quotient_loops={quotient_loops} extra_depth={extra} attempts={attempts} terms={terms} groups={} rows={} h_bytes={h_bytes} h_s={h_seconds:.3} closures={} integrated_terms={} edge={edge_basis} forests={} outer_s={:.3}{outer_stats}",
+                    groups.len(),
+                    rows.len(),
+                    closures_after - closures_before,
+                    integrated_after - integrated_before,
+                    correction.forest.len(),
+                    outer_started.elapsed().as_secs_f64(),
+                ),
+            )));
         }
-        let hard = self.open_remainder(&correction.preparation[representative])?;
-        let outer_started = Instant::now();
-        let outcome = self.ir_outer_integrated(&hard, &correction.forest, &rows)?;
-        let (value, outer_stats) = match outcome {
-            Ok(outcome) => outcome,
-            Err(reason) => return Ok(Err(reason)),
-        };
-        Ok(Ok((
-            value,
-            format!(
-                " quotient_loops={quotient_loops} terms={terms} groups={} rows={} h_bytes={h_bytes} h_s={h_seconds:.3} closures={} integrated_terms={} edge={edge_basis} forests={} outer_s={:.3}{outer_stats}",
-                groups.len(),
-                rows.len(),
-                closures_after - closures_before,
-                integrated_after - integrated_before,
-                correction.forest.len(),
-                outer_started.elapsed().as_secs_f64(),
-            ),
-        )))
     }
 
     /// One remainder of an IR hard part `H(γ)` ([`Self::ir_hard_child`]):
@@ -1420,7 +1441,7 @@ impl<'a> Evaluation<'a> {
         hard: &RStarIntegrand,
         forests: &[IrForestTerm],
         rows: &[(Atom, Atom, usize)],
-    ) -> Result<std::result::Result<(Atom, String), String>> {
+    ) -> Result<std::result::Result<(Atom, String, i64), String>> {
         use symbolica::{function, id::Replacement};
         let projector = self.root_projector;
         let mode = self.top_mass.unwrap_or(TopMassTerms::Keep);
@@ -1443,6 +1464,7 @@ impl<'a> Evaluation<'a> {
         let placeholder = symbolica::symbol!("ir_hard_child_integral");
         let mut assembled = Vec::new();
         let mut uses = 0_usize;
+        let mut valuation = 0_i64;
         for forest in forests {
             for (i, (_, insertion, loops)) in rows.iter().enumerate() {
                 let Some(power) = powers[i] else {
@@ -1479,6 +1501,25 @@ impl<'a> Evaluation<'a> {
                     );
                     if factor.is_zero() {
                         continue;
+                    }
+                    let regulated = Integrated::dimensionally_regularized(value);
+                    let series = regulated
+                        .series(
+                            GS.dim_epsilon,
+                            0,
+                            symbolica::poly::series::SeriesDepth::relative(1),
+                        )
+                        .wrap_err("could not find the Laurent order of an IR quotient factor")?;
+                    if !series.is_zero() {
+                        let exponent = series.get_trailing_exponent();
+                        let Some(pole) = exponent
+                            .is_integer()
+                            .then(|| exponent.numerator().to_i64())
+                            .flatten()
+                        else {
+                            return Ok(Err("quotient_epsilon_power".into()));
+                        };
+                        valuation = valuation.min(pole);
                     }
                     assembled.push(&h * factor * value);
                 }
@@ -1523,6 +1564,7 @@ impl<'a> Evaluation<'a> {
                     .flatten()
                     .collect::<std::collections::BTreeSet<_>>()
             ),
+            valuation,
         )))
     }
 
