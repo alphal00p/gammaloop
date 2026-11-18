@@ -1218,6 +1218,42 @@ impl<'a> Evaluation<'a> {
                 Ok("1")
             )
         });
+        // GAMMALOOP_IR_HARD_CHILD_SELECT=all|omega1|omega1-spinor (default
+        // all): which corrections take the child route; the others stay on
+        // the closed path. `omega1`: hard Taylor order ω >= 1 only (order-0
+        // hard parts close to a few scalar channels, cheaper than an open
+        // tensor integration); `omega1-spinor`: also ω = 0 with spinor slots
+        // (which the closed path declines to the projected path).
+        static SELECT: std::sync::LazyLock<u8> =
+            std::sync::LazyLock::new(|| {
+                match std::env::var("GAMMALOOP_IR_HARD_CHILD_SELECT")
+                    .as_deref()
+                    .map(str::trim)
+                {
+                    Ok("omega1") => 1,
+                    Ok("omega1-spinor") => 2,
+                    _ => 0,
+                }
+            });
+        if *SELECT != 0 && correction.taylor_order < 1 {
+            let spinor = *SELECT == 2
+                && correction
+                    .preparation
+                    .iter()
+                    .find(|term| term.counterterms.is_empty())
+                    .and_then(|term| self.open_remainder(term).ok())
+                    .and_then(|hard| super::closed::open_slot_list(hard.routed_expression()).ok())
+                    .is_some_and(|slots| slots.iter().any(|(rep, _)| !rep.contains("mink")));
+            if !spinor {
+                eprintln!(
+                    "IR_HARD_CHILD graph={} corr={correction_index} hard_loops={} omega={} outcome=skipped:select seconds=0.000",
+                    self.graph.name,
+                    self.graph.n_loops(&correction.hard),
+                    correction.taylor_order,
+                );
+                return Ok(None);
+            }
+        }
         let attempt = if mode == super::closed::ChildMode::Check || !*GUARD {
             self.ir_hard_child(correction_index, correction)?
         } else {
