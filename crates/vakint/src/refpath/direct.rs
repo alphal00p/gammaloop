@@ -178,7 +178,7 @@ pub fn colour_terms(diagram: &FeynmanDiagram, merge: bool) -> Result<(Vec<Colour
                 .iter()
                 .position(|p| *p == position)
                 .map_or(0, |axis| choice[axis]);
-            colour = colour * &local[k].colour;
+            colour *= &local[k].colour;
         }
         let coefficient = colour_coefficient(&colour, ColourMode::Invariants)?;
         if !coefficient.is_zero() {
@@ -441,20 +441,20 @@ fn solve_integral(columns: &[Vec<i64>], b: &[i64]) -> Option<Vec<i64>> {
         let pivot = (col..n).find(|&r| m[r][col].0 != 0)?;
         m.swap(col, pivot);
         let (pn, pd) = m[col][col];
-        for k in col..=n {
-            let (a, b) = m[col][k];
-            m[col][k] = norm((a * pd, b * pn));
+        for entry in &mut m[col][col..=n] {
+            let (a, b) = *entry;
+            *entry = norm((a * pd, b * pn));
         }
-        for r in 0..n {
-            if r == col || m[r][col].0 == 0 {
+        let pivot_row = m[col].clone();
+        for (r, row) in m.iter_mut().enumerate() {
+            if r == col || row[col].0 == 0 {
                 continue;
             }
-            let (fn_, fd) = m[r][col];
-            for k in col..=n {
-                let (a, b) = m[r][k];
-                let (c, d) = m[col][k];
+            let (fn_, fd) = row[col];
+            for (entry, &(c, d)) in row[col..=n].iter_mut().zip(&pivot_row[col..=n]) {
+                let (a, b) = *entry;
                 // a/b - (fn/fd)(c/d)
-                m[r][k] = norm((a * fd * d - fn_ * c * b, b * fd * d));
+                *entry = norm((a * fd * d - fn_ * c * b, b * fd * d));
             }
         }
     }

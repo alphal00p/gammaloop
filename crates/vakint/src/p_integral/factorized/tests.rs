@@ -478,7 +478,7 @@ fn merged_value(merged: &[MergedColourTerm], key: &[usize]) -> Atom {
     for term in merged {
         let mut product = term.coefficient.clone();
         for (vector, row) in term.weights.iter().zip(key) {
-            product = product * Atom::num(vector[*row].clone());
+            product *= Atom::num(vector[*row].clone());
         }
         sum += product;
     }
@@ -511,7 +511,9 @@ fn merged_colour_terms_reconstruct_every_channel() {
     let cf = Atom::var(symbolica::symbol!("spenso::share_test_CF"));
     let n = |v: i64| Atom::num(v);
     let q = |a: i64, b: i64| Atom::num(symbolica::domains::rational::Rational::from((a, b)));
-    let cases: Vec<(Vec<usize>, Vec<(Vec<usize>, Atom)>, usize)> = vec![
+    // (dims, channels (choices, coefficient), expected number of merged terms)
+    type Case = (Vec<usize>, Vec<(Vec<usize>, Atom)>, usize);
+    let cases: Vec<Case> = vec![
         // A rank-one 3x3 tensor (a_i b_j): one term.
         (
             vec![3, 3],

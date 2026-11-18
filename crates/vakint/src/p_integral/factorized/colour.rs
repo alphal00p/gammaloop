@@ -450,9 +450,10 @@ fn rank_factors(
                 continue;
             }
             let factor = reduced[row][column].clone();
-            for position in 0..columns.len() {
-                let eliminated = &factor * &reduced[rank][position];
-                reduced[row][position] = &reduced[row][position] - &eliminated;
+            let pivot_row = reduced[rank].clone();
+            for (target, value) in reduced[row].iter_mut().zip(&pivot_row) {
+                let eliminated = &factor * value;
+                *target = &*target - &eliminated;
             }
         }
         pivots.push(column);
