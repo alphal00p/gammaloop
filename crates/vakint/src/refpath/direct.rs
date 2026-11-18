@@ -1112,7 +1112,9 @@ mod tests {
                 }
             }
         }
-        assert!(lowered >= 4 * 8, "too few lowered projections: {lowered}");
+        // 7 of the 10 fixtures have a non-zero metric projection (the other 3 are
+        // exact zeros on both sides), each lowered in all 4 option combinations.
+        assert_eq!(lowered, 4 * 7, "lowered projections");
     }
 
     /// The hand-over refuses (never reads silently) an unidentified vector and
