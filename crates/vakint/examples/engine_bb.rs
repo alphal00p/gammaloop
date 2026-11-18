@@ -10,12 +10,16 @@
 //!     [--ref]                run the reference R2 live, paired (gate + timing + values)
 //!     [--ref-dir <dir>]      lane refpath's stored run (gate/<NNNNNN>.<projection>.gate, values/)
 //!     [--per-branch]         also gate every colour branch against R2 on that branch
+//!     [--ref-dump]           with --ref: write R2's gate views and values in
+//!                            direct_bb's format (`<out>/ref/gate/<graph>.<projection>.gate`,
+//!                            `<out>/ref/values/<graph>.txt`): reference dumps for later gates
 //!     [--no-reduce]          engine: stop after the folded inputs (no value)
 //!     [--order greedy|natural] [--no-prune] [--trace idenso|idenso-basis|naive]
 //!     [--extra-terms <k>] [--p-library <dir>] [--warmup] [--steps]
 //! ```
-//! Writes `<out>/results.jsonl` (one object per graph) and, for every gate
-//! mismatch, `<out>/mismatch/<graph>.<projection>.txt`.
+//! Writes `<out>/results.jsonl` (one object per graph), the engine's gate views
+//! `<out>/gate/<graph>.<projection>.gate` and, for every gate mismatch,
+//! `<out>/mismatch/<graph>.<projection>.txt`.
 use std::collections::BTreeMap;
 use std::io::Write as _;
 use std::path::PathBuf;
@@ -189,6 +193,7 @@ fn main() -> eyre::Result<()> {
     let mut live = false;
     let mut ref_dir: Option<PathBuf> = None;
     let mut per_branch = false;
+    let mut ref_dump = false;
     let mut warmup = false;
     let mut steps = false;
     let mut index = 0;
@@ -252,6 +257,7 @@ fn main() -> eyre::Result<()> {
             }
             "--ref" => live = true,
             "--per-branch" => per_branch = true,
+            "--ref-dump" => ref_dump = true,
             "--no-reduce" => options.reduce = false,
             "--no-prune" => options.contract.prune = false,
             "--warmup" => warmup = true,
@@ -458,6 +464,58 @@ fn main() -> eyre::Result<()> {
             continue;
         }
         let run = &engine_runs[0];
+        // The reference's gate views (zero-sector keys dropped), once per
+        // projection: compared below and, with --ref-dump, written as dumps.
+        let ref_views = ref_runs
+            .first()
+            .map(|reference| {
+                reference
+                    .results
+                    .iter()
+                    .map(refpath::gate_view)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        if ref_dump && let Some(reference) = ref_runs.first() {
+            let dump = out.join("ref");
+            std::fs::create_dir_all(dump.join("gate"))?;
+            std::fs::create_dir_all(dump.join("values"))?;
+            let mut values_text = String::new();
+            for (result, (view, count)) in reference.results.iter().zip(&ref_views) {
+                // direct_bb's header and text form, so that these files are
+                // byte-identical to what direct_bb writes for the graph.
+                let header = BTreeMap::from([
+                    ("graph".to_string(), reference.name.clone()),
+                    ("file".to_string(), path.display().to_string()),
+                    ("projection".to_string(), result.projection.to_string()),
+                    ("loops".to_string(), reference.loops.to_string()),
+                    ("zero_sectors_dropped".to_string(), count.zero.to_string()),
+                    ("keys_before_drop".to_string(), count.total.to_string()),
+                    ("census_unknown_kept".to_string(), count.unknown.to_string()),
+                    (
+                        "producer".to_string(),
+                        "vakint refpath R2 (helper VH lane refpath)".to_string(),
+                    ),
+                ]);
+                std::fs::write(
+                    dump.join("gate")
+                        .join(format!("{graph}.{}.gate", result.projection)),
+                    p_gate::write_gate_view(view, &header),
+                )?;
+                values_text.push_str(&format!(
+                    "{}\t{}\n",
+                    result.projection,
+                    result.value.to_canonical_string()
+                ));
+            }
+            for (name, numerator) in &reference.numerators {
+                values_text.push_str(&format!(
+                    "numerator.{name}.bytes\t{}\n",
+                    numerator.to_canonical_string().len()
+                ));
+            }
+            std::fs::write(dump.join("values").join(format!("{graph}.txt")), values_text)?;
+        }
         let mut gates = Vec::new();
         let mut graph_pass = true;
         std::fs::create_dir_all(out.join("gate"))?;
@@ -491,8 +549,8 @@ fn main() -> eyre::Result<()> {
             });
             if let Some(reference) = ref_runs.first() {
                 if let Some(ref_result) = reference.results.get(position) {
-                    let (view, count) = refpath::gate_view(ref_result);
-                    let difference = p_gate::compare_gate_views(&view, &result.view);
+                    let (view, count) = &ref_views[position];
+                    let difference = p_gate::compare_gate_views(view, &result.view);
                     if !difference.is_empty() {
                         graph_pass = false;
                         write_mismatch(
@@ -500,7 +558,7 @@ fn main() -> eyre::Result<()> {
                             &graph,
                             &format!("{}.live", result.projection),
                             &difference,
-                            &view,
+                            view,
                             &result.view,
                         )?;
                     }
