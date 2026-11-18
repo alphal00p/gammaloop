@@ -28,7 +28,21 @@
 //!     [--shared-engine]          one engine for all graphs of the run (warm caches; default: a fresh one per graph)
 //!     [--no-gate]                no per-graph gate dump
 //!     [--stop-file <path>]       stop between graphs while it exists (repeatable; exit 3)
+//!     [--refinalise-from <cfg dir>]  RE-FINALISE: take each graph's Retain value from
+//!                                the records of an earlier run (same configuration but the
+//!                                binary) and compute the Symbolic value with THIS binary's
+//!                                finaliser, without lowering or reduction
 //! ```
+//!
+//! RE-FINALISATION (`--refinalise-from`, 2026-11-18, gammaloop 3129d12f): the
+//! Retain value is the reduced master-basis expression, exact in eps; the
+//! Symbolic value is its Laurent expansion (`Vakint::refinalise_p_retained`).
+//! The source configuration must equal this one in every field but the binary;
+//! per graph the source record must be OK for the same DOT, the input type of
+//! this binary must give the same graph fields, every PROVED_ZERO the same
+//! reason, and every Retain file its recorded sha256 and print back to itself.
+//! The record names both binaries (`reduction_binary_sha256`,
+//! `finalisation_binary_sha256`); its configuration binds the source's digest.
 //!
 //! REUSE IS BOUND TO THE CONFIGURATION: every output lives in
 //! `<out>/cfg-<digest>/`, the digest of `config.json` = the binary's sha256,
@@ -255,6 +269,70 @@ struct RunSettings {
     /// For each bound variable whose value names an existing file or
     /// directory: the sha256 of the file / the [`content_digest`] of the directory.
     environment_content: BTreeMap<String, String>,
+    /// Re-finalisation: the reduction run whose Retain values are finalised.
+    refinalise_from: Option<RefinaliseSource>,
+}
+
+/// The configuration directory of an earlier run whose Retain values are
+/// re-finalised (`--refinalise-from`).
+#[derive(Clone, Debug)]
+struct RefinaliseSource {
+    dir: PathBuf,
+    cfg_digest: String,
+    binary_sha256: String,
+}
+
+/// The source of a re-finalisation: its `config.json` must hash to its
+/// directory name (and `summary.json`'s digest) and equal `ours` in every field
+/// but `binary_sha256`; its modes must be Retain then Symbolic.
+fn refinalise_source(dir: &Path, ours: &RunSettings) -> eyre::Result<RefinaliseSource> {
+    let text = std::fs::read_to_string(dir.join("config.json"))?;
+    let source: Value = serde_json::from_str(&text)?;
+    let digest = sha256_hex(canonical_json(&source).as_bytes());
+    let name = dir.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+    eyre::ensure!(
+        name == format!("cfg-{}", &digest[..16]),
+        "{}: config.json hashes to {digest}, not the directory's digest",
+        dir.display()
+    );
+    if let Ok(summary) = std::fs::read_to_string(dir.join("summary.json")) {
+        let summary: Value = serde_json::from_str(&summary)?;
+        eyre::ensure!(
+            summary["cfg_digest"] == digest.as_str(),
+            "{}: summary.json names another configuration",
+            dir.display()
+        );
+    }
+    eyre::ensure!(
+        ours.refinalise_from.is_none()
+            && ours.modes == [RustRedMasterMode::Retain, RustRedMasterMode::Symbolic],
+        "re-finalisation needs --modes retain,symbolic"
+    );
+    let (mine, _) = config(ours);
+    let keys = mine
+        .as_object()
+        .unwrap()
+        .keys()
+        .chain(source.as_object().map(|o| o.keys()).into_iter().flatten())
+        .collect::<std::collections::BTreeSet<_>>();
+    let differing = keys
+        .into_iter()
+        .filter(|k| k.as_str() != "binary_sha256" && mine[k.as_str()] != source[k.as_str()])
+        .cloned()
+        .collect::<Vec<_>>();
+    eyre::ensure!(
+        differing.is_empty(),
+        "{}: the reduction configuration differs from this one in {differing:?}: refused",
+        dir.display()
+    );
+    Ok(RefinaliseSource {
+        dir: dir.to_path_buf(),
+        cfg_digest: digest,
+        binary_sha256: source["binary_sha256"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string(),
+    })
 }
 
 /// The variables of the environment that are bound into the configuration.
@@ -303,6 +381,15 @@ fn config(settings: &RunSettings) -> (Value, String) {
         "environment": settings.environment,
         "environment_content_sha256": settings.environment_content,
     });
+    let mut value = value;
+    if let Some(source) = &settings.refinalise_from {
+        value["refinalise_from"] = json!({
+            "cfg_digest": source.cfg_digest,
+            "binary_sha256": source.binary_sha256,
+            "dir": source.dir.display().to_string(),
+            "meaning": "Retain values (lowering, reduction, Retain finalisation) of that configuration's binary, byte-identical by sha256; Symbolic values by this binary's finaliser from them",
+        });
+    }
     let digest = sha256_hex(canonical_json(&value).as_bytes());
     (value, digest)
 }
@@ -579,6 +666,7 @@ fn evaluate(
                     master_mode: *mode,
                 })]);
             let (before, _) = rustred_stats_since(u64::MAX);
+            let tails = Vakint::p_laurent_tail_in_range_terms();
             let cpu_start = cpu_seconds();
             let started = Instant::now();
             let (value, observation) =
@@ -599,7 +687,8 @@ fn evaluate(
                 "pairs": observation.pairs, "folded_channels": observation.folded,
                 "request_memo_hits": observation.memo_hits, "direct_lowered": observation.direct_lowered,
                 "direct_declined": observation.direct_declined, "rustred": rustred,
-                "step_memo": "not exposed by rustred d5b63a659 (only with its opt-in fwd-profile feature)",
+                "laurent_tail_in_range_terms": Vakint::p_laurent_tail_in_range_terms() - tails,
+                "step_memo": "not exposed by rustred 002ef41d (12d; only its opt-in fwd-profile build reports step_memo_at_end)",
             });
             if *mode == RustRedMasterMode::Retain {
                 entry["window"] = json!("exact in eps: the reduced master-basis expression");
@@ -662,6 +751,145 @@ fn evaluate(
 /// (`Vakint::p_master_catalogue`): `VAKINT_P_MASTER_CATALOGUE` (a file or `off`),
 /// else the package's `p-master-catalogue.json`, else the built-in one compiled
 /// into this binary: (source, sha256 of the file's bytes, its data version).
+/// One graph re-finalised (`--refinalise-from`): the projections of `prepared`
+/// (this binary's input type) against the source record; the Retain file copied
+/// (sha256 checked), the Symbolic value from it by this binary's finaliser.
+/// Returns the entries and the record's provenance fields.
+fn refinalise(
+    template: Option<&Vakint>,
+    prepared: &Prepared,
+    settings: &RunSettings,
+    epsilon: Symbol,
+    outputs: &Outputs<'_>,
+    source: &RefinaliseSource,
+    dot_sha256: &str,
+) -> eyre::Result<(Vec<Value>, Value)> {
+    let id = outputs.id;
+    let path = source.dir.join("graphs").join(format!("{id}.json"));
+    let record_text = std::fs::read_to_string(&path)
+        .map_err(|e| eyre::eyre!("no reduction record {}: {e}", path.display()))?;
+    let record: Value = serde_json::from_str(&record_text)?;
+    eyre::ensure!(
+        record["schema"] == GRAPH_SCHEMA
+            && record["cfg_digest"] == source.cfg_digest.as_str()
+            && record["binary_sha256"] == source.binary_sha256.as_str()
+            && record["dot_sha256"] == dot_sha256
+            && record["status"] == "OK",
+        "{}: not an OK record of the reduction configuration for this DOT file",
+        path.display()
+    );
+    for (key, value) in prepared.record.as_object().unwrap() {
+        eyre::ensure!(
+            &record[key] == value,
+            "graph {id}: this input type gives {key} = {value}, the reduction record {}",
+            record[key]
+        );
+    }
+    let loops = prepared.loops as i64;
+    let window = (-loops, settings.extra_terms - 1);
+    let engine = template.ok_or_else(|| eyre::eyre!("no engine"))?;
+    let recorded = record["projections"]
+        .as_array()
+        .ok_or_else(|| eyre::eyre!("graph {id}: the reduction record has no projections"))?;
+    let mut entries = Vec::new();
+    for (name, input) in &prepared.inputs {
+        let entry = recorded
+            .iter()
+            .find(|e| e["projection"] == *name)
+            .ok_or_else(|| eyre::eyre!("graph {id}: no {name} entry in the reduction record"))?;
+        if let Err(reason) = input {
+            eyre::ensure!(
+                entry["status"] == "PROVED_ZERO" && entry["reason"] == reason.as_str(),
+                "graph {id} {name}: PROVED_ZERO ({reason}) here, {} in the reduction record",
+                entry["status"]
+            );
+            entries.push(entry.clone());
+            continue;
+        }
+        eyre::ensure!(
+            entry["status"] == "VALUE",
+            "graph {id} {name}: a value here, {} in the reduction record",
+            entry["status"]
+        );
+        let retain = &entry["modes"]["retain"];
+        let file = retain["file"]
+            .as_str()
+            .ok_or_else(|| eyre::eyre!("graph {id} {name}: no Retain file"))?;
+        let retained_text = std::fs::read_to_string(source.dir.join("values").join(file))?;
+        let retained_sha256 = sha256_hex(retained_text.as_bytes());
+        eyre::ensure!(
+            retain["sha256"] == retained_sha256.as_str(),
+            "graph {id} {name}: the Retain file {file} does not match its record"
+        );
+        write_atomic(&outputs.values.join(file), &retained_text)?;
+        if let Some(gate) = outputs.gate {
+            let dump = format!("{id}.{name}.gate");
+            if source.dir.join("gate").join(&dump).is_file() {
+                std::fs::copy(source.dir.join("gate").join(&dump), gate.join(&dump))?;
+            }
+        }
+        let retained = symbolica::try_parse!(retained_text.as_str())
+            .map_err(|e| eyre::eyre!("graph {id} {name}: the Retain text does not parse: {e}"))?;
+        eyre::ensure!(
+            retained.to_canonical_string() == retained_text,
+            "graph {id} {name}: the parsed Retain value does not print back to its text"
+        );
+        let mut modes = serde_json::Map::new();
+        let mut copied = retain.clone();
+        copied["copied_from"] = json!({
+            "cfg_digest": source.cfg_digest, "binary_sha256": source.binary_sha256,
+            "note": "lowering, reduction and Retain finalisation of the reduction binary (file byte-identical)",
+        });
+        modes.insert("retain".to_string(), copied);
+        let mut vakint_settings = refpath::vakint_settings(loops + settings.extra_terms);
+        vakint_settings.evaluation_order =
+            EvaluationOrder(vec![EvaluationMethod::RustRed(RustRedEvaluationOptions {
+                master_mode: RustRedMasterMode::Symbolic,
+            })]);
+        let tails = Vakint::p_laurent_tail_in_range_terms();
+        let cpu_start = cpu_seconds();
+        let started = Instant::now();
+        let value = engine
+            .refinalise_p_retained(&vakint_settings, retained.as_view(), prepared.loops)
+            .map_err(|e| eyre::eyre!("{name} symbolic (re-finalised): {e}"))?;
+        let wall = started.elapsed().as_secs_f64();
+        let cpu = cpu_seconds() - cpu_start;
+        let text = value.to_canonical_string();
+        let file = format!("{id}.{name}.symbolic.txt");
+        write_atomic(&outputs.values.join(&file), &text)?;
+        let foreign = foreign_symbols(&value, epsilon);
+        eyre::ensure!(
+            foreign.is_empty(),
+            "{name} symbolic (re-finalised): symbols foreign to the value's basis: {foreign:?}"
+        );
+        let support = laurent_support(&value, epsilon);
+        eyre::ensure!(
+            support.iter().all(|k| *k >= window.0 && *k <= window.1),
+            "{name} symbolic (re-finalised): Laurent support {support:?} outside the declared window {window:?}"
+        );
+        modes.insert(
+            "symbolic".to_string(),
+            json!({
+                "file": file, "sha256": sha256_hex(text.as_bytes()), "bytes": text.len(),
+                "wall": wall, "cpu": cpu, "lower": 0.0, "reduce": 0.0, "finalise": wall,
+                "reductions": 0, "refinalised_from_retain_sha256": retained_sha256,
+                "laurent_tail_in_range_terms": Vakint::p_laurent_tail_in_range_terms() - tails,
+                "window": [window.0, window.1], "support": support,
+                "oep": text.contains("Oep("), "residual": text.contains("PResidual("), "value": text,
+            }),
+        );
+        entries.push(json!({"projection": name, "status": "VALUE", "modes": modes}));
+    }
+    let provenance = json!({
+        "refinalised": true,
+        "reduction_binary_sha256": source.binary_sha256,
+        "reduction_cfg_digest": source.cfg_digest,
+        "reduction_record_sha256": sha256_hex(record_text.as_bytes()),
+        "finalisation_binary_sha256": settings.binary_sha256,
+    });
+    Ok((entries, provenance))
+}
+
 fn catalogue_identity(library: Option<&Path>) -> eyre::Result<CatalogueIdentity> {
     const BUILT_IN: &[u8] = include_bytes!("../data/p_master/p-master-catalogue-5l.json");
     let version = |bytes: &[u8]| {
@@ -732,6 +960,7 @@ fn main() -> eyre::Result<()> {
     let mut shared_engine = false;
     let mut gate = true;
     let mut stop_files = Vec::new();
+    let mut refinalise_from = None;
     let mut index = 0;
     while index < args.len() {
         let value = || args.get(index + 1).cloned().expect("missing value");
@@ -781,6 +1010,10 @@ fn main() -> eyre::Result<()> {
             }
             "--stop-file" => {
                 stop_files.push(PathBuf::from(value()));
+                index += 1;
+            }
+            "--refinalise-from" => {
+                refinalise_from = Some(PathBuf::from(value()));
                 index += 1;
             }
             "--loop-sign-in-overall" => loop_sign_in_overall = true,
@@ -845,7 +1078,12 @@ fn main() -> eyre::Result<()> {
         shared_engine,
         environment,
         environment_content,
+        refinalise_from: None,
     };
+    let mut settings = settings;
+    if let Some(dir) = refinalise_from {
+        settings.refinalise_from = Some(refinalise_source(&dir, &settings)?);
+    }
     let request = Request {
         directory: &directory,
         out: &out,
@@ -989,8 +1227,22 @@ fn run(request: &Request<'_>, settings: &RunSettings) -> eyre::Result<Value> {
             id: &id,
         };
         let result = prepare(&model, &dot, settings, epsilon, &mut seconds).and_then(|prepared| {
-            let entries = evaluate(template.as_ref(), &prepared, settings, epsilon, &outputs)?;
-            Ok((prepared.record, entries))
+            let (entries, provenance) = match &settings.refinalise_from {
+                None => (
+                    evaluate(template.as_ref(), &prepared, settings, epsilon, &outputs)?,
+                    Value::Null,
+                ),
+                Some(source) => refinalise(
+                    template.as_ref(),
+                    &prepared,
+                    settings,
+                    epsilon,
+                    &outputs,
+                    source,
+                    &dot_sha256,
+                )?,
+            };
+            Ok((prepared.record, entries, provenance))
         });
         record["seconds"] = json!(seconds);
         record["wall"] = json!(started.elapsed().as_secs_f64());
@@ -999,8 +1251,11 @@ fn run(request: &Request<'_>, settings: &RunSettings) -> eyre::Result<Value> {
         record["peak_rss_bytes"] = json!(rss);
         peak = peak.max(rss);
         match result {
-            Ok((graph_record, entries)) => {
+            Ok((graph_record, entries, provenance)) => {
                 for (key, value) in graph_record.as_object().unwrap() {
+                    record[key] = value.clone();
+                }
+                for (key, value) in provenance.as_object().into_iter().flatten() {
                     record[key] = value.clone();
                 }
                 record["class"] = json!(request.class.map_or_else(
@@ -1088,6 +1343,7 @@ mod tests {
             shared_engine: false,
             environment: BTreeMap::new(),
             environment_content: BTreeMap::new(),
+            refinalise_from: None,
         }
     }
 
@@ -1181,6 +1437,17 @@ mod tests {
                 "environment (pruning mode VAKINT_P_ZERO_PRUNE and the like)",
                 RunSettings {
                     environment: BTreeMap::from([("VAKINT_P_ZERO_PRUNE".into(), "early".into())]),
+                    ..base.clone()
+                },
+            ),
+            (
+                "re-finalisation source",
+                RunSettings {
+                    refinalise_from: Some(RefinaliseSource {
+                        dir: PathBuf::from("/x/cfg-0"),
+                        cfg_digest: "0".into(),
+                        binary_sha256: "b0".into(),
+                    }),
                     ..base.clone()
                 },
             ),
@@ -1316,6 +1583,100 @@ mod tests {
         std::fs::write(copy.join("diagram-000000.dot"), format!("{text}\n")).unwrap();
         let error = run(&request(&copy, &out, &[0]), &metric).unwrap_err();
         assert!(error.to_string().contains("DOT file"), "{error}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// RE-FINALISATION (gammaloop 3129d12f): the L1 graphs evaluated in full
+    /// (Retain + Symbolic, one binary), then re-finalised from those records by
+    /// a "second binary" (another binary sha256, same settings): every Retain
+    /// and Symbolic file is byte-identical to the full run's, every record names
+    /// both binaries; a source of another configuration (projection) is refused.
+    /// L1 and L2 prepared graphs. Needs the 1-4 loop p package (`VAKINT_TEST_P_LIBRARY_1_4`).
+    #[test]
+    fn refinalised_records_equal_full_evaluations_at_one_and_two_loops() {
+        let Some(l1) = l1() else { return };
+        let Some(library) = std::env::var_os("VAKINT_TEST_P_LIBRARY_1_4").map(PathBuf::from) else {
+            eprintln!("SKIP: VAKINT_TEST_P_LIBRARY_1_4 unset");
+            return;
+        };
+        let l2 = l1.with_file_name("L2");
+        for (level, dir, graphs) in [
+            ("L1", l1.clone(), vec![0usize, 1, 2]),
+            ("L2", l2.clone(), (0..12).collect::<Vec<usize>>()),
+        ] {
+            if !dir.join("model.json").is_file() {
+                eprintln!("SKIP {level}: no DOTs");
+                continue;
+            }
+            refinalise_level(&dir, &graphs, &library, level);
+        }
+    }
+
+    fn refinalise_level(dir: &Path, graphs: &[usize], library: &Path, level: &str) {
+        let root =
+            std::env::temp_dir().join(format!("refpath_refinalise_{}_{level}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let library = library.to_path_buf();
+        let full_settings = RunSettings {
+            library: Some(library),
+            contract_only: false,
+            ..settings(Projection::Metric)
+        };
+        let full = run(&request(dir, &root.join("full"), graphs), &full_settings).unwrap();
+        assert_eq!(full["complete"], true, "{full}");
+        let source_dir = PathBuf::from(full["cfg_dir"].as_str().unwrap());
+        let second = RunSettings {
+            binary_sha256: "b-second".into(),
+            ..full_settings.clone()
+        };
+        let mut refinalising = second.clone();
+        refinalising.refinalise_from = Some(refinalise_source(&source_dir, &second).unwrap());
+        let again = run(&request(dir, &root.join("again"), graphs), &refinalising).unwrap();
+        assert_eq!(again["complete"], true, "{again}");
+        let again_dir = PathBuf::from(again["cfg_dir"].as_str().unwrap());
+        let mut values = 0;
+        for &graph in graphs {
+            let read = |d: &Path| -> Value {
+                serde_json::from_str(
+                    &std::fs::read_to_string(d.join("graphs").join(format!("{graph:06}.json")))
+                        .unwrap(),
+                )
+                .unwrap()
+            };
+            let (a, b) = (read(&source_dir), read(&again_dir));
+            assert_eq!(b["refinalised"], true);
+            assert_eq!(b["reduction_binary_sha256"], "b");
+            assert_eq!(b["finalisation_binary_sha256"], "b-second");
+            for (pa, pb) in a["projections"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .zip(b["projections"].as_array().unwrap())
+            {
+                assert_eq!(pa["status"], pb["status"], "graph {graph}");
+                for mode in ["retain", "symbolic"] {
+                    if pa["status"] == "VALUE" {
+                        assert_eq!(
+                            pa["modes"][mode]["sha256"], pb["modes"][mode]["sha256"],
+                            "graph {graph} {mode}"
+                        );
+                        values += 1;
+                    }
+                }
+            }
+        }
+        assert!(values > 0, "{level}: no value compared");
+        // a source of another configuration is refused
+        let transverse = RunSettings {
+            binary_sha256: "b-second".into(),
+            ..RunSettings {
+                library: full_settings.library.clone(),
+                contract_only: false,
+                ..settings(Projection::Transverse)
+            }
+        };
+        let error = refinalise_source(&source_dir, &transverse).unwrap_err();
+        assert!(error.to_string().contains("differs"), "{error}");
         let _ = std::fs::remove_dir_all(&root);
     }
 
