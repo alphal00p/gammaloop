@@ -1343,14 +1343,15 @@ pub(crate) fn fold_mode() -> FoldMode {
 
 impl FoldMode {
     /// vk5l-physrun: `VAKINT_P_CHANNEL_REPLAY=1` reduces the coefficient-folded
-/// channels of one loop count together (RustRed channel replay).
-pub(crate) fn channel_replay() -> bool {
-    static ON: std::sync::LazyLock<bool> =
-        std::sync::LazyLock::new(|| std::env::var("VAKINT_P_CHANNEL_REPLAY").as_deref() == Ok("1"));
-    *ON
-}
+    /// channels of one loop count together (RustRed channel replay).
+    pub(crate) fn channel_replay() -> bool {
+        static ON: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+            std::env::var("VAKINT_P_CHANNEL_REPLAY").as_deref() == Ok("1")
+        });
+        *ON
+    }
 
-/// The mode when `VAKINT_P_FOLD` is unset (or `on`).
+    /// The mode when `VAKINT_P_FOLD` is unset (or `on`).
     pub(crate) const DEFAULT: FoldMode = FoldMode::Coefficient;
 }
 
@@ -1652,7 +1653,8 @@ fn coefficient_inputs(
             epsilon_at_d,
             exact,
         )?);
-        let index = u32::try_from(index).map_err(|_| invalid("too many epsilon basis functions"))?;
+        let index =
+            u32::try_from(index).map_err(|_| invalid("too many epsilon basis functions"))?;
         for (key, value) in lowered {
             if !value.is_zero() {
                 parts.entry(key).or_default().push((index, value));
@@ -1668,7 +1670,11 @@ fn coefficient_inputs(
                 let mut sum: Option<Coefficient> = None;
                 for (index, value) in &list {
                     let term = context
-                        .try_mul(&weights[*index as usize], &coefficient(context, value, exact)?, exact)
+                        .try_mul(
+                            &weights[*index as usize],
+                            &coefficient(context, value, exact)?,
+                            exact,
+                        )
                         .map_err(native)?;
                     sum = Some(match sum {
                         Some(sum) => context.try_add(&sum, &term, exact).map_err(native)?,
@@ -1833,13 +1839,24 @@ pub(crate) fn reduce_folded_channels(
         settings,
         format!(
             "{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{}",
-            handle.cache, handle.relations_root, checkpoint_arithmetic(&reducer.options), reducer.options.uncovered,
-            reducer.options.master_mode, settings.epsilon_symbol
+            handle.cache,
+            handle.relations_root,
+            checkpoint_arithmetic(&reducer.options),
+            reducer.options.uncovered,
+            reducer.options.master_mode,
+            settings.epsilon_symbol
         ),
     );
     if mode == FoldMode::Coefficient && (FoldMode::channel_replay() || checkpoints.is_some()) {
         let mut prepared = Vec::new();
-        for (channel, FoldedInputs { by_basis, integrals }) in folded {
+        for (
+            channel,
+            FoldedInputs {
+                by_basis,
+                integrals,
+            },
+        ) in folded
+        {
             let preparing = std::time::Instant::now();
             let inputs = coefficient_inputs(context, by_basis, epsilon, &epsilon_at_d, exact)?;
             with_stats(|stats| {
@@ -1868,7 +1885,9 @@ pub(crate) fn reduce_folded_channels(
                     c.key(
                         "channel",
                         &mut std::iter::once(format!("{channel:?}")).chain(
-                            inputs.iter().map(|(p, k, v)| format!("{} {:?} {}", p.0, k.powers(), v)),
+                            inputs
+                                .iter()
+                                .map(|(p, k, v)| format!("{} {:?} {}", p.0, k.powers(), v)),
                         ),
                     )
                 })
@@ -1887,7 +1906,18 @@ pub(crate) fn reduce_folded_channels(
             inputs
                 .iter()
                 .map(|(_, key, _)| {
-                    key.powers().iter().map(|&p| if p > 1 { p - 1 } else if p < 0 { -p } else { 0 }).sum::<i64>()
+                    key.powers()
+                        .iter()
+                        .map(|&p| {
+                            if p > 1 {
+                                p - 1
+                            } else if p < 0 {
+                                -p
+                            } else {
+                                0
+                            }
+                        })
+                        .sum::<i64>()
                 })
                 .max()
                 .unwrap_or(0)
@@ -1896,12 +1926,19 @@ pub(crate) fn reduce_folded_channels(
         let mut by_loops = BTreeMap::<usize, Vec<(usize, i64)>>::new();
         for (at, (channel, inputs, _)) in prepared.iter().enumerate() {
             if resumed[at].is_none() {
-                by_loops.entry(channel.loops).or_default().push((at, complexity(inputs)));
+                by_loops
+                    .entry(channel.loops)
+                    .or_default()
+                    .push((at, complexity(inputs)));
             }
         }
         for (loops, members) in by_loops {
             let top = members.iter().map(|(_, w)| *w).max().unwrap_or(0);
-            let shared: Vec<usize> = members.iter().filter(|(_, w)| *w == top).map(|(at, _)| *at).collect();
+            let shared: Vec<usize> = members
+                .iter()
+                .filter(|(_, w)| *w == top)
+                .map(|(at, _)| *at)
+                .collect();
             let replay = FoldMode::channel_replay() && shared.len() >= 2;
             let note = format!(
                 "loops {loops}: channel complexities {:?}, top {top}, recorded together {:?}",
@@ -1919,27 +1956,42 @@ pub(crate) fn reduce_folded_channels(
         let input_sizes: Vec<usize> = prepared.iter().map(|(_, inputs, _)| inputs.len()).collect();
         // VAKINT_P_CHANNEL_LIMIT=<k>: reduce at most k channels in this run
         // (smallest first), then stop with an error; checkpoints are kept.
-        let channel_limit: Option<usize> = std::env::var("VAKINT_P_CHANNEL_LIMIT").ok().and_then(|v| v.parse().ok());
+        let channel_limit: Option<usize> = std::env::var("VAKINT_P_CHANNEL_LIMIT")
+            .ok()
+            .and_then(|v| v.parse().ok());
         let mut reduced_here = 0usize;
-        let mut inputs_of: Vec<Option<Vec<(PresentationId, IntegralKey, Coefficient)>>> =
-            prepared.iter_mut().map(|(_, inputs, _)| Some(std::mem::take(inputs))).collect();
+        let mut inputs_of: Vec<Option<Vec<(PresentationId, IntegralKey, Coefficient)>>> = prepared
+            .iter_mut()
+            .map(|(_, inputs, _)| Some(std::mem::take(inputs)))
+            .collect();
         for ((loops, together), members) in groups {
             if members.len() == 1 || !together {
                 let mut members = members;
                 members.sort_by_key(|&at| input_sizes[at]);
                 for &at in &members {
                     if channel_limit.is_some_and(|limit| reduced_here >= limit) {
-                        return Err(invalid(format!("channel limit reached after {reduced_here} channels (checkpoints kept)")).into());
+                        return Err(invalid(format!(
+                            "channel limit reached after {reduced_here} channels (checkpoints kept)"
+                        ))
+                        .into());
                     }
                     let inputs = inputs_of[at].take().unwrap_or_default();
                     let clock = std::time::Instant::now();
-                    let reduction = reduce_inputs(&reducer, &prepared[at].0, inputs, &prepared[at].2)?;
+                    let reduction =
+                        reduce_inputs(&reducer, &prepared[at].0, inputs, &prepared[at].2)?;
                     reduced_here += 1;
                     eprintln!(
                         "vakint-channel loops {loops} channel {at}: {} input keys reduced in {:.1} s (peak RSS {:.1} GB)",
                         input_sizes[at],
                         clock.elapsed().as_secs_f64(),
-                        std::fs::read_to_string("/proc/self/status").ok().and_then(|t| t.lines().find(|l| l.starts_with("VmHWM:")).and_then(|l| l.split_whitespace().nth(1)?.parse::<f64>().ok())).unwrap_or(0.0) / 1048576.0
+                        std::fs::read_to_string("/proc/self/status")
+                            .ok()
+                            .and_then(|t| t
+                                .lines()
+                                .find(|l| l.starts_with("VmHWM:"))
+                                .and_then(|l| l.split_whitespace().nth(1)?.parse::<f64>().ok()))
+                            .unwrap_or(0.0)
+                            / 1048576.0
                     );
                     if let (Some(c), Some(key)) = (&checkpoints, &keys[at]) {
                         let terms = render_terms(&handle, &reduction, epsilon)?;
@@ -1955,12 +2007,22 @@ pub(crate) fn reduce_folded_channels(
             if members.len() == 1 {
                 let at = members[0];
                 let inputs = inputs_of[at].take().unwrap_or_default();
-                reductions[at] = Some(reduce_inputs(&reducer, &prepared[at].0, inputs, &prepared[at].2)?);
+                reductions[at] = Some(reduce_inputs(
+                    &reducer,
+                    &prepared[at].0,
+                    inputs,
+                    &prepared[at].2,
+                )?);
                 continue;
             }
-            let integrals: BTreeSet<String> =
-                members.iter().flat_map(|&at| prepared[at].2.iter().cloned()).collect();
-            let channels: Vec<_> = members.iter().map(|&at| inputs_of[at].take().unwrap_or_default()).collect();
+            let integrals: BTreeSet<String> = members
+                .iter()
+                .flat_map(|&at| prepared[at].2.iter().cloned())
+                .collect();
+            let channels: Vec<_> = members
+                .iter()
+                .map(|&at| inputs_of[at].take().unwrap_or_default())
+                .collect();
             let reducing = std::time::Instant::now();
             let reduced = {
                 let _math = MathSpan::new();
@@ -1968,7 +2030,12 @@ pub(crate) fn reduce_folded_channels(
                     .library
                     .reduce_channels(
                         channels,
-                        p_reduction_request(&reducer.options, loops, Vec::new(), reducer.step_cache.clone()),
+                        p_reduction_request(
+                            &reducer.options,
+                            loops,
+                            Vec::new(),
+                            reducer.step_cache.clone(),
+                        ),
                     )
                     .map_err(|error| reduction_error(error, &integrals))?
             };
@@ -1977,7 +2044,9 @@ pub(crate) fn reduce_folded_channels(
                 stats.reductions += members.len();
             });
             for (&at, reduction) in members.iter().zip(reduced) {
-                super::p_relations::count_table_steps(reduction.statistics.work.rule_applications() as u64);
+                super::p_relations::count_table_steps(
+                    reduction.statistics.work.rule_applications() as u64,
+                );
                 if reduction.dimension != loops as i64 {
                     return Err(invalid(format!(
                         "a {loops}-loop request returned a reduction of dimension {}",
@@ -2005,11 +2074,24 @@ pub(crate) fn reduce_folded_channels(
             if reduced.is_zero() {
                 continue;
             }
-            let Channel { loops, head, scale_power, coefficient } = channel;
+            let Channel {
+                loops,
+                head,
+                scale_power,
+                coefficient,
+            } = channel;
             let value = if factored {
-                ReducedPropagatorValue { scale_power, reduced, spectator: Some(coefficient) }
+                ReducedPropagatorValue {
+                    scale_power,
+                    reduced,
+                    spectator: Some(coefficient),
+                }
             } else {
-                ReducedPropagatorValue { scale_power, reduced: reduced * &coefficient, spectator: None }
+                ReducedPropagatorValue {
+                    scale_power,
+                    reduced: reduced * &coefficient,
+                    spectator: None,
+                }
             };
             values.entry((loops, head)).or_default().push(value);
         }
@@ -2032,8 +2114,7 @@ pub(crate) fn reduce_folded_channels(
         let reduced = match mode {
             FoldMode::Coefficient => {
                 let preparing = std::time::Instant::now();
-                let inputs =
-                    coefficient_inputs(context, by_basis, epsilon, &epsilon_at_d, exact)?;
+                let inputs = coefficient_inputs(context, by_basis, epsilon, &epsilon_at_d, exact)?;
                 with_stats(|stats| {
                     stats.prepare_seconds += preparing.elapsed().as_secs_f64();
                     stats.pairs += inputs.len();
@@ -2360,7 +2441,10 @@ impl Checkpoints {
     pub(crate) fn new(settings: &VakintSettings, salt: String) -> Option<Self> {
         let dir = settings.p_checkpoint_dir.clone()?;
         std::fs::create_dir_all(&dir).ok()?;
-        Some(Self { dir, salt: format!("{P_CHECKPOINT_VERSION}\n{salt}") })
+        Some(Self {
+            dir,
+            salt: format!("{P_CHECKPOINT_VERSION}\n{salt}"),
+        })
     }
 
     /// The key of a unit: blake3 of the salt, the unit kind and its parts.
@@ -2391,4 +2475,3 @@ impl Checkpoints {
         }
     }
 }
-

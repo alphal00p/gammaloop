@@ -2777,7 +2777,9 @@ fn showcase_postprocess() {
     // vk5l-physrun: VAKINT_TEST_PP_SCALE (an exact number, e.g. 32/729) multiplies
     // both inputs first (colour factor removed: kinematic results); the scaled
     // inputs are written as scaled_retain.txt / scaled_symbolic.txt.
-    let scale = std::env::var("VAKINT_TEST_PP_SCALE").ok().map(|text| parse(&text));
+    let scale = std::env::var("VAKINT_TEST_PP_SCALE")
+        .ok()
+        .map(|text| parse(&text));
     let scaled = |value: Atom, name: &str| -> Atom {
         match &scale {
             Some(scale) => {
@@ -2790,7 +2792,10 @@ fn showcase_postprocess() {
     };
     if let Some(path) = std::env::var_os("VAKINT_TEST_PP_RETAIN") {
         let started = std::time::Instant::now();
-        let value = scaled(parse(&std::fs::read_to_string(&path).unwrap()), "scaled_retain.txt");
+        let value = scaled(
+            parse(&std::fs::read_to_string(&path).unwrap()),
+            "scaled_retain.txt",
+        );
         let d = parse("d");
         let rule = symbolica::id::Replacement::new(
             Atom::var(epsilon).to_pattern(),
@@ -2885,7 +2890,11 @@ fn showcase_postprocess() {
             legend.push(serde_json::json!({"symbol": format!("vakint::Master({})", index + 1),
                 "closed_form": master.to_canonical_string(), "pgamma_tags": pgamma, "gamma_functions": gammas}));
         }
-        std::fs::write(out.join("result_exact_masters.txt"), named.to_canonical_string()).unwrap();
+        std::fs::write(
+            out.join("result_exact_masters.txt"),
+            named.to_canonical_string(),
+        )
+        .unwrap();
         // vk5l-physrun (user): the result with vakint's OWN kept-symbolic atoms
         // (PGamma / PG / PMaster / PResidual, unrenamed) times coef(...); the
         // closed-form Gamma functions stay in the coefficients.
@@ -2898,7 +2907,10 @@ fn showcase_postprocess() {
                 symbolica::atom::AtomView::Fun(function) => {
                     let symbol = function.get_symbol();
                     let name = symbol.get_name();
-                    name.ends_with("PGamma") || name.ends_with("PMaster") || name.ends_with("PResidual") || name.ends_with("::PG")
+                    name.ends_with("PGamma")
+                        || name.ends_with("PMaster")
+                        || name.ends_with("PResidual")
+                        || name.ends_with("::PG")
                 }
                 _ => false,
             }
@@ -2907,15 +2919,21 @@ fn showcase_postprocess() {
         let mut symbol_groups = std::collections::HashMap::<Atom, Vec<Atom>>::new();
         let mut distinct = std::collections::BTreeSet::<String>::new();
         let all_terms = match in_d.as_view() {
-            symbolica::atom::AtomView::Add(sum) => sum.iter().map(|t| t.to_owned()).collect::<Vec<_>>(),
+            symbolica::atom::AtomView::Add(sum) => {
+                sum.iter().map(|t| t.to_owned()).collect::<Vec<_>>()
+            }
             _ => vec![in_d.clone()],
         };
         for term in all_terms {
             let factors = match term.as_view() {
-                symbolica::atom::AtomView::Mul(product) => product.iter().map(|f| f.to_owned()).collect::<Vec<_>>(),
+                symbolica::atom::AtomView::Mul(product) => {
+                    product.iter().map(|f| f.to_owned()).collect::<Vec<_>>()
+                }
                 _ => vec![term.clone()],
             };
-            let (kept, rest): (Vec<_>, Vec<_>) = factors.into_iter().partition(|f| is_vakint_symbol(f.as_view()));
+            let (kept, rest): (Vec<_>, Vec<_>) = factors
+                .into_iter()
+                .partition(|f| is_vakint_symbol(f.as_view()));
             for factor in &kept {
                 let base = match factor.as_view() {
                     symbolica::atom::AtomView::Pow(power) => power.get_base_exp().0.to_owned(),
@@ -2923,8 +2941,16 @@ fn showcase_postprocess() {
                 };
                 distinct.insert(base.to_canonical_string());
             }
-            let monomial = if kept.is_empty() { Atom::num(1) } else { Atom::mul_many(kept.iter().map(|a| a.as_view())) };
-            let coefficient = if rest.is_empty() { Atom::num(1) } else { Atom::mul_many(rest.iter().map(|a| a.as_view())) };
+            let monomial = if kept.is_empty() {
+                Atom::num(1)
+            } else {
+                Atom::mul_many(kept.iter().map(|a| a.as_view()))
+            };
+            let coefficient = if rest.is_empty() {
+                Atom::num(1)
+            } else {
+                Atom::mul_many(rest.iter().map(|a| a.as_view()))
+            };
             if !symbol_groups.contains_key(&monomial) {
                 symbol_order.push(monomial.clone());
             }
@@ -2932,17 +2958,26 @@ fn showcase_postprocess() {
         }
         let mut with_symbols = Atom::Zero;
         for monomial in &symbol_order {
-            let coefficient = Atom::add_many(symbol_groups[monomial].iter().map(|a| a.as_view())).collect_num();
+            let coefficient =
+                Atom::add_many(symbol_groups[monomial].iter().map(|a| a.as_view())).collect_num();
             with_symbols += symbolica::function!(coef, coefficient) * monomial;
         }
-        std::fs::write(out.join("result_exact_symbols.txt"), with_symbols.to_canonical_string()).unwrap();
+        std::fs::write(
+            out.join("result_exact_symbols.txt"),
+            with_symbols.to_canonical_string(),
+        )
+        .unwrap();
         std::fs::write(
             out.join("result_exact_symbols.json"),
             serde_json::json!({"monomials": symbol_order.iter().map(|m| m.to_canonical_string()).collect::<Vec<_>>(),
                                "symbols": distinct}).to_string(),
         )
         .unwrap();
-        std::fs::write(out.join("result_exact_masters_legend.json"), serde_json::to_string_pretty(&legend).unwrap()).unwrap();
+        std::fs::write(
+            out.join("result_exact_masters_legend.json"),
+            serde_json::to_string_pretty(&legend).unwrap(),
+        )
+        .unwrap();
         std::fs::write(
             out.join("result_exact_d_coef.json"),
             serde_json::json!({"masters": order.len(), "terms_in_d": groups.values().map(|g| g.len()).sum::<usize>(),
@@ -2957,7 +2992,10 @@ fn showcase_postprocess() {
         );
     }
     if let Some(path) = std::env::var_os("VAKINT_TEST_PP_SYMBOLIC") {
-        let value = scaled(parse(&std::fs::read_to_string(&path).unwrap()).expand(), "scaled_symbolic.txt");
+        let value = scaled(
+            parse(&std::fs::read_to_string(&path).unwrap()).expand(),
+            "scaled_symbolic.txt",
+        );
         let mut orders = std::collections::BTreeMap::<i64, Atom>::new();
         for (power, coefficient) in value.coefficient_list::<i8>(&[Atom::var(epsilon)]) {
             let order = if power == Atom::num(1) {
@@ -5124,7 +5162,6 @@ fn zero_sector_pruning_boundary_drill() {
     );
 }
 
-
 /// vk5l-physrun: a factorised (remainder boundary) graph through vakint +
 /// RustRed, timed by stage, for the dashboard: VAKINT_TEST_BOUNDARY_HEADER
 /// (boundary-<pid>-<seq>.txt), VAKINT_TEST_BOUNDARY_OUT (directory),
@@ -5146,13 +5183,19 @@ fn boundary_showcase() {
     let rss = || -> f64 {
         std::fs::read_to_string("/proc/self/status")
             .ok()
-            .and_then(|s| s.lines().find(|l| l.starts_with("VmHWM:")).map(|l| l.split_whitespace().nth(1).unwrap().parse::<f64>().unwrap() / 1048576.0))
+            .and_then(|s| {
+                s.lines().find(|l| l.starts_with("VmHWM:")).map(|l| {
+                    l.split_whitespace().nth(1).unwrap().parse::<f64>().unwrap() / 1048576.0
+                })
+            })
             .unwrap_or(0.0)
     };
     let started = std::time::Instant::now();
     let mut engine = Vakint::new().unwrap();
     if let Some(package) = std::env::var_os("VAKINT_TEST_P5L_DRILL_PACKAGE") {
-        engine.load_p_library_directory(std::path::Path::new(&package), false).unwrap();
+        engine
+            .load_p_library_directory(std::path::Path::new(&package), false)
+            .unwrap();
         engine.p_library().unwrap();
     }
     let package_seconds = started.elapsed().as_secs_f64();
@@ -5178,7 +5221,10 @@ fn boundary_showcase() {
         s.number_of_terms_in_epsilon_expansion = epsilon_terms;
         s.run_time_decimal_precision = 100;
         s.use_dot_product_notation = false;
-        s.n_cores = std::env::var("VAKINT_TEST_P5L_DRILL_CORES").ok().and_then(|c| c.parse().ok()).unwrap_or(1);
+        s.n_cores = std::env::var("VAKINT_TEST_P5L_DRILL_CORES")
+            .ok()
+            .and_then(|c| c.parse().ok())
+            .unwrap_or(1);
         s
     };
     let mut symbolic = make(RustRedMasterMode::Symbolic);
@@ -5194,13 +5240,23 @@ fn boundary_showcase() {
     let lowering = std::time::Instant::now();
     let (plans, stats) = record
         .boundary
-        .lower_with_stats(&engine, &symbolic, crate::p_integral::BoundaryOptions { strict: true })
+        .lower_with_stats(
+            &engine,
+            &symbolic,
+            crate::p_integral::BoundaryOptions { strict: true },
+        )
         .unwrap();
     let lower_seconds = lowering.elapsed().as_secs_f64();
     let rss_after_lowering = rss();
     let sizes: Vec<(usize, usize)> = plans.iter().map(|p| p.size()).collect();
-    eprintln!("BOUNDARY_SHOWCASE read {read_seconds:.1} s, lowered {} patterns into {} key plans in {lower_seconds:.1} s, plans (channels, key entries) {sizes:?}, peak RSS {rss_after_lowering:.1} GB", stats.patterns, plans.len());
-    let wanted: Option<Vec<usize>> = std::env::var("VAKINT_TEST_BOUNDARY_PLANS").ok().map(|v| v.split(',').map(|x| x.trim().parse().unwrap()).collect());
+    eprintln!(
+        "BOUNDARY_SHOWCASE read {read_seconds:.1} s, lowered {} patterns into {} key plans in {lower_seconds:.1} s, plans (channels, key entries) {sizes:?}, peak RSS {rss_after_lowering:.1} GB",
+        stats.patterns,
+        plans.len()
+    );
+    let wanted: Option<Vec<usize>> = std::env::var("VAKINT_TEST_BOUNDARY_PLANS")
+        .ok()
+        .map(|v| v.split(',').map(|x| x.trim().parse().unwrap()).collect());
     let mut values = vec![Atom::Zero, Atom::Zero];
     let mut plan_records = Vec::new();
     for (index, plan) in plans.into_iter().enumerate() {
@@ -5227,13 +5283,24 @@ fn boundary_showcase() {
         plan_records.push(record);
     }
     for (mode, value) in ["retain", "symbolic"].iter().zip(&values) {
-        std::fs::write(out.join(format!("sum.{mode}.sym")), value.expand().to_canonical_string()).unwrap();
+        std::fs::write(
+            out.join(format!("sum.{mode}.sym")),
+            value.expand().to_canonical_string(),
+        )
+        .unwrap();
     }
     let summary = serde_json::json!({"header": header.to_string_lossy(), "package_seconds": package_seconds, "read_seconds": read_seconds,
         "lower_seconds": lower_seconds, "boundary_stats": format!("{stats:?}"), "plans": plan_records, "plan_sizes": sizes,
         "peak_rss_gb": rss(), "total_seconds": started.elapsed().as_secs_f64(),
         "channel_replay": crate::rustred_evaluation::p_integral::FoldMode::channel_replay(),
         "arithmetic": symbolic.ordered_weight_arithmetic.to_string()});
-    std::fs::write(out.join("boundary_showcase.json"), serde_json::to_string_pretty(&summary).unwrap()).unwrap();
-    eprintln!("BOUNDARY_SHOWCASE done in {:.1} s", started.elapsed().as_secs_f64());
+    std::fs::write(
+        out.join("boundary_showcase.json"),
+        serde_json::to_string_pretty(&summary).unwrap(),
+    )
+    .unwrap();
+    eprintln!(
+        "BOUNDARY_SHOWCASE done in {:.1} s",
+        started.elapsed().as_secs_f64()
+    );
 }

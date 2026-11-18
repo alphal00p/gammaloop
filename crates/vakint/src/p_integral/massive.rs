@@ -109,7 +109,13 @@ impl LoweredClosure {
         let entries = self
             .folded
             .values()
-            .map(|inputs| inputs.by_basis.values().map(|keys| keys.len()).sum::<usize>())
+            .map(|inputs| {
+                inputs
+                    .by_basis
+                    .values()
+                    .map(|keys| keys.len())
+                    .sum::<usize>()
+            })
             .sum();
         (self.folded.len(), entries)
     }
@@ -171,7 +177,15 @@ impl LoweredClosure {
             .unwrap_or(RustRedMasterMode::Symbolic);
         let before = rr::last_stats();
         let clock = std::time::Instant::now();
-        let reduced = rr::reduce_folded_channels(vakint, settings, &handle, self.folded, None, rr::fold_mode(), true)?;
+        let reduced = rr::reduce_folded_channels(
+            vakint,
+            settings,
+            &handle,
+            self.folded,
+            None,
+            rr::fold_mode(),
+            true,
+        )?;
         direct_sum_reduce_line(&before, clock.elapsed().as_secs_f64());
         let mut result = Atom::Zero;
         let mut numerical = Atom::Zero;
@@ -222,22 +236,40 @@ impl LoweredClosure {
             .unwrap_or(*first);
         let handle = vakint.p_library()?;
         // Level-1 checkpoint of the finalised values of this key plan, one per mode.
-        let plan = rr::Checkpoints::new(reducing, format!("{:?}\n{:?}", handle.cache, handle.relations_root)).map(|c| {
+        let plan = rr::Checkpoints::new(
+            reducing,
+            format!("{:?}\n{:?}", handle.cache, handle.relations_root),
+        )
+        .map(|c| {
             let key = c.key(
                 "plan",
-                &mut std::iter::once(self.fingerprint()).chain(settings.iter().map(|s| format!("{:?} {}", mode_of(s), s.epsilon_symbol))),
+                &mut std::iter::once(self.fingerprint()).chain(
+                    settings
+                        .iter()
+                        .map(|s| format!("{:?} {}", mode_of(s), s.epsilon_symbol)),
+                ),
             );
             (c, key)
         });
         if let Some((c, key)) = &plan {
-            let stored: Vec<Option<Atom>> = (0..settings.len()).map(|i| c.load(&format!("{key}-{i}"))).collect();
+            let stored: Vec<Option<Atom>> = (0..settings.len())
+                .map(|i| c.load(&format!("{key}-{i}")))
+                .collect();
             if stored.iter().all(Option::is_some) {
                 return Ok(stored.into_iter().flatten().collect());
             }
         }
         let before = rr::last_stats();
         let clock = std::time::Instant::now();
-        let reduced = rr::reduce_folded_channels(vakint, reducing, &handle, self.folded, None, rr::fold_mode(), true)?;
+        let reduced = rr::reduce_folded_channels(
+            vakint,
+            reducing,
+            &handle,
+            self.folded,
+            None,
+            rr::fold_mode(),
+            true,
+        )?;
         direct_sum_reduce_line(&before, clock.elapsed().as_secs_f64());
         let mut results = Vec::with_capacity(settings.len());
         for settings in settings {
@@ -2426,7 +2458,10 @@ mod tests {
 mod replay_tests;
 
 /// vk5l-physrun (local): where a class's reduction time goes (phases on).
-fn direct_sum_reduce_line(before: &crate::rustred_evaluation::p_integral::PReduceStats, seconds: f64) {
+fn direct_sum_reduce_line(
+    before: &crate::rustred_evaluation::p_integral::PReduceStats,
+    seconds: f64,
+) {
     if !super::phases::enabled() {
         return;
     }
