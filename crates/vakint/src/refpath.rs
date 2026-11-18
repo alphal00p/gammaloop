@@ -310,19 +310,53 @@ fn open_adjoint_slots(product: &Atom) -> Vec<Atom> {
         .collect()
 }
 
-/// idenso's invariants → `CA`, `CF`, `TF`.
+/// The name of a higher invariant `name(args)` (idenso's color.h names, `gram`)
+/// as a plain symbol `refpath::<name>_<args>`, an argument `coad(N_A)` written
+/// `A`, `cof(N_R)` written `R`, a number as it is: e.g. `gram(3, cof, cof)` →
+/// `refpath::gram_3RR`. vakint's ingress refuses `spenso::` symbols in a
+/// numerator, and the gate view needs plain spectators.
+fn invariant_symbol(function: AtomView<'_>) -> Option<Atom> {
+    let AtomView::Fun(f) = function else {
+        return None;
+    };
+    let symbol = f.get_symbol();
+    let full = symbol.get_name();
+    let name = full.rsplit("::").next().unwrap_or(full);
+    let mut arguments = String::new();
+    for argument in f.iter() {
+        match argument {
+            AtomView::Fun(rep) if rep.get_symbol() == CS.adjoint_rep => arguments.push('A'),
+            AtomView::Fun(rep) if rep.get_symbol() == CS.fundamental_rep => arguments.push('R'),
+            AtomView::Num(_) => arguments.push_str(&argument.to_string()),
+            _ => return None,
+        }
+    }
+    Some(Atom::var(symbol!(&format!("refpath::{name}_{arguments}"))))
+}
+
+/// idenso's invariants → `CA`, `CF`, `TF`, the higher ones → plain symbols
+/// ([`invariant_symbol`]), then `N_R = T_F N_A / C_F` (the beta thread's
+/// colour basis v1).
 fn named_invariants(value: &Atom) -> Atom {
     let s = &*SYMBOLS;
     let adjoint = ColorAdjoint {}.to_symbolic([Atom::var(s.na)]);
     let fundamental = ColorFundamental {}.to_symbolic([Atom::var(s.nr)]);
-    value
+    let named = value
         .replace(CS.cas(Atom::num(2), adjoint))
         .with(Atom::var(s.ca))
         .replace(CS.cas(Atom::num(2), fundamental.clone()))
         .with(Atom::var(s.cf))
         .replace(CS.idx(Atom::num(2), fundamental))
-        .with(Atom::var(s.tf))
-        // The beta thread's colour basis v1: N_R = I2R·N_A/C_R.
+        .with(Atom::var(s.tf));
+    let named = named.replace_map(|view, _, out| {
+        if let AtomView::Fun(_) = view
+            && (view.contains_symbol(CS.adjoint_rep) || view.contains_symbol(CS.fundamental_rep))
+            && let Some(symbol) = invariant_symbol(view)
+        {
+            **out = symbol;
+        }
+    });
+    named
         .replace(Atom::var(s.nr))
         .with(Atom::var(s.tf) * Atom::var(s.na) / Atom::var(s.cf))
 }
@@ -380,6 +414,9 @@ pub fn colour_branches(diagram: &FeynmanDiagram) -> Result<(Vec<ColourBranch>, u
     let mut branches = Vec::new();
     for (colour, residuals) in partial {
         let coefficient = colour_coefficient(&colour)?;
+        if std::env::var_os("REFPATH_DEBUG_COLOUR").is_some() {
+            eprintln!("[refpath] colour {} -> {}", colour.to_canonical_string(), coefficient.to_canonical_string());
+        }
         if !coefficient.is_zero() {
             branches.push(ColourBranch {
                 coefficient,
@@ -718,12 +755,22 @@ pub fn run_graph(
             continue;
         }
         let started = Instant::now();
-        let input = Atom::from(VakintExpression::from_diagram(
+        let input = match VakintExpression::from_diagram(
             &diagram,
             &family,
             numerator,
             &DiagramIntegralOptions::default(),
-        )?);
+        ) {
+            Ok(input) => Atom::from(input),
+            Err(error) => {
+                if let Some(directory) = std::env::var_os("REFPATH_DEBUG_DIR") {
+                    let path = std::path::Path::new(&directory)
+                        .join(format!("{}.{name}.numerator", run.name));
+                    let _ = std::fs::write(path, numerator.to_canonical_string());
+                }
+                return Err(error.into());
+            }
+        };
         let input = input.replace(Atom::var(s.d)).with(in_epsilon.clone());
         let ingress = started.elapsed().as_secs_f64();
         let (value, observation) =
