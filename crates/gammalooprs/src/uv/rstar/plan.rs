@@ -949,6 +949,26 @@ impl RStarPlan {
             && graph.bridges_of(support).is_empty()
     }
 
+    /// The Δ-cache settings key of an R* child: the serialised settings, the
+    /// route, the child closure when on, and the root-truncation suffix when
+    /// `GAMMALOOP_UV_CHILD_TRUNCATE` is on (absent otherwise, so the key is
+    /// byte-identical to the key without the switch).
+    pub(super) fn rstar_child_key(
+        settings: String,
+        route: UvChildrenRoute,
+        closure: UvChildClosure,
+        truncation: Option<String>,
+    ) -> String {
+        let mut key = match closure {
+            UvChildClosure::Off => format!("{settings}#uv-children={route}"),
+            closure => format!("{settings}#uv-children={route}#child-closure={closure}"),
+        };
+        if let Some(suffix) = truncation {
+            key.push_str(&suffix);
+        }
+        key
+    }
+
     /// `Delta(S)` of the support `S` of the massless `graph`, computed by the
     /// complete-graph R* procedure applied to `S` and memoised in `cache`
     /// under a key distinct from the massive route's raw entries. The result
@@ -964,21 +984,24 @@ impl RStarPlan {
         route: UvChildrenRoute,
         closure: UvChildClosure,
     ) -> Result<Atom> {
-        let key = match closure {
-            UvChildClosure::Off => {
-                format!("{}#uv-children={route}", serde_json::to_string(settings)?)
-            }
-            closure => format!(
-                "{}#uv-children={route}#child-closure={closure}",
-                serde_json::to_string(settings)?
-            ),
-        };
+        // GAMMALOOP_UV_CHILD_TRUNCATE (when on): the child's Taylor order, in
+        // the key as `#uv-child-truncate={mode}@{d}`.
+        let mut truncation_degree = None;
+        let truncation = super::expression::uv_child_truncation_key(|| {
+            *truncation_degree.insert(graph.local_dod(support))
+        });
+        let key =
+            Self::rstar_child_key(serde_json::to_string(settings)?, route, closure, truncation);
         cache.counterterm_with(graph, support, model, key, || {
             let started = Instant::now();
             let plan = Self::for_support(graph, model, support, settings)?
                 .with_uv_children(route)
                 .with_uv_child_closure(closure)
                 .with_counterterm_cache(Arc::clone(cache));
+            debug_assert!(
+                truncation_degree.is_none_or(|degree| degree == plan.taylor_order),
+                "the truncation degree of the child key differs from the plan's Taylor order"
+            );
             // A logarithmically divergent child with four open Lorentz slots
             // is a constant isotropic tensor: compute its three scalar
             // channels in its own root scope instead of the open tensor.
