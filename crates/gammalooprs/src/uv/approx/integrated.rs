@@ -1661,16 +1661,22 @@ pub(crate) fn to_vakint_integrand<
                 "momentum_routing",
                 &t.numerator,
                 &mut std::collections::HashMap::new(),
-                &|factor| factor.replace_multiple(&momentum_solution.replacements),
+                &|factor| {
+                    crate::uv::rstar::linearize_momenta(
+                        factor.replace_multiple(&momentum_solution.replacements),
+                    )
+                },
             )
         } else {
             map_factors_cached(
                 t.numerator.as_view(),
                 &mut std::collections::HashMap::new(),
                 &|factor| {
-                    factor
-                        .replace_multiple(&combinations)
-                        .replace_multiple(&momentum_solution.replacements)
+                    crate::uv::rstar::linearize_momenta(
+                        factor
+                            .replace_multiple(&combinations)
+                            .replace_multiple(&momentum_solution.replacements),
+                    )
                 },
             )
         };

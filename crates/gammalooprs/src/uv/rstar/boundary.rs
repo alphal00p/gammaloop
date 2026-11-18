@@ -1951,11 +1951,13 @@ pub(super) fn build_boundary(
 
     // project: R_{π,g} = c̃ · P[ρ_{π,g}], expanded.
     let normalization = match grammar.map_scalar(
-        request
-            .closed_root
-            .factor
-            .replace_multiple(&request.closed_root.external_routing)
-            .as_view(),
+        super::linearize::linearize(
+            request
+                .closed_root
+                .factor
+                .replace_multiple(&request.closed_root.external_routing),
+        )
+        .as_view(),
     )? {
         Ok(factor) => factor,
         Err(decline) => declined!(decline),
@@ -1970,7 +1972,9 @@ pub(super) fn build_boundary(
     for (monomial, orders) in &by_monomial {
         let mut mapped = Vec::with_capacity(orders.len());
         for order in orders {
-            let routed = order.replace_multiple(&request.closed_root.external_routing);
+            let routed = super::linearize::linearize(
+                order.replace_multiple(&request.closed_root.external_routing),
+            );
             match grammar.map_scalar(routed.as_view())? {
                 Ok(order) => mapped.push(order),
                 Err(decline) => declined!(decline),

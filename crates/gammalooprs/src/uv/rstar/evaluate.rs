@@ -488,7 +488,9 @@ impl RStarPlan {
             ChildMass::Reference,
         )?;
         let result = -evaluation.counterterm()? - evaluation.physical_uv_preparation()?;
-        evaluation.poles(&result.replace_multiple(&external_routing))
+        evaluation.poles(&super::linearize::linearize(
+            result.replace_multiple(&external_routing),
+        ))
     }
 
     /// Recover the original local MS counterterm from independently known bare
@@ -1141,7 +1143,7 @@ impl<'a> Evaluation<'a> {
         // introduce tensor contractions with evanescent scalar coefficients.
         // Complete them before K, just as for an ordinary integrated UV node.
         let prepared = RStarIntegrand::finish_tensor(
-            prepared.replace_multiple(&external_routing),
+            super::linearize::linearize(prepared.replace_multiple(&external_routing)),
             self.integration_id + 1,
         )?;
         let result = -self.poles(&prepared)?;
