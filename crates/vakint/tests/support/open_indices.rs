@@ -223,3 +223,54 @@ pub fn assert_series_through(left: &Atom, right: &Atom, last: i64, what: &str, e
         );
     }
 }
+
+/// Every closing tensor of rank `indices.len()` built from metrics and `p(1)`:
+/// a set of indices carried by `p(1)` and a metric pairing of the others.
+pub fn closing_tensors(indices: &[&str]) -> Vec<String> {
+    fn pairings(points: &[&str]) -> Vec<Vec<(String, String)>> {
+        if points.is_empty() {
+            return vec![vec![]];
+        }
+        let mut out = Vec::new();
+        for i in 1..points.len() {
+            let rest = points[1..i]
+                .iter()
+                .chain(&points[i + 1..])
+                .copied()
+                .collect::<Vec<_>>();
+            for mut pairing in pairings(&rest) {
+                pairing.push((points[0].to_owned(), points[i].to_owned()));
+                out.push(pairing);
+            }
+        }
+        out
+    }
+    let n = indices.len();
+    let mut out = Vec::new();
+    for mask in 0..(1u32 << n) {
+        let carried = (0..n)
+            .filter(|i| mask & (1 << i) != 0)
+            .map(|i| indices[i])
+            .collect::<Vec<_>>();
+        let rest = (0..n)
+            .filter(|i| mask & (1 << i) == 0)
+            .map(|i| indices[i])
+            .collect::<Vec<_>>();
+        if rest.len() % 2 == 1 {
+            continue;
+        }
+        for pairing in pairings(&rest) {
+            let factors = carried
+                .iter()
+                .map(|index| format!("p(1,{index})"))
+                .chain(pairing.iter().map(|(a, b)| format!("g({a},{b})")))
+                .collect::<Vec<_>>();
+            out.push(if factors.is_empty() {
+                "1".to_owned()
+            } else {
+                factors.join("*")
+            });
+        }
+    }
+    out
+}
