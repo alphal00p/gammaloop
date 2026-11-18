@@ -12,8 +12,9 @@
 //! cooking hashes. It is written to be reused by the reference chain (lane
 //! refpath): one implementation of the split for the helper.
 //!
-//! Differences to the beta crate (stated, not hidden): no branch merging
-//! (`merge_channels`): one value per non-zero channel; rows are normalised by
+//! Differences to the beta crate (stated, not hidden): branch merging
+//! ([`merge_colour_channels`], the beta's `merge_channels`) only as an option
+//! of `from_feynkit` (default: one value per non-zero channel); rows are normalised by
 //! taking each colour product with unit numeric coefficient (the sign stays in
 //! the residual), not by the beta's residual-key sign rule.
 
@@ -26,6 +27,7 @@ use idenso::{
 };
 use spenso::network::library::symbolic::ETS;
 use symbolica::atom::{Atom, AtomCore, AtomView};
+use symbolica::domains::rational::Rational;
 
 use super::{FactorizedError, Result, as_slot, contains_colour_slot, is_colour_rep, names};
 
@@ -303,4 +305,223 @@ fn reduce_su3(closed: &Atom) -> Result<Atom> {
             .map_err(|e| err(format!("colour algebra: {e}")))?;
     }
     Ok(cooking.uncook(reduced.expression().as_view()))
+}
+
+/// One term of a merged colour decomposition ([`merge_colour_channels`]):
+/// per multi-row local its weights over the local's rows (exact rationals,
+/// the first non-zero weight is 1) and the colour coefficient of the term.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MergedColourTerm {
+    pub weights: Vec<Vec<Rational>>,
+    pub coefficient: Atom,
+}
+
+/// An exact rational number atom (`None`: a symbol, a complex or a float).
+pub(crate) fn rational_number(view: AtomView<'_>) -> Option<Rational> {
+    use symbolica::coefficient::CoefficientView;
+    let AtomView::Num(number) = view else {
+        return None;
+    };
+    match number.get_coeff_view() {
+        CoefficientView::Natural(n, d, 0, _) => Some(Rational::from((n, d))),
+        CoefficientView::Large(re, im) if im.is_zero() => Some(re.to_rat()),
+        _ => None,
+    }
+}
+
+/// `coefficient = Σ_m c_m M_m`: the colour monomials `M_m` (products of
+/// invariants, `1` in SU(3) mode) with exact rational `c_m`, keyed by the
+/// canonical string of `M_m`. `None` when a term's number is not a rational.
+fn colour_monomials(coefficient: &Atom) -> Option<BTreeMap<String, (Atom, Rational)>> {
+    let expanded = coefficient.expand();
+    let mut out = BTreeMap::<String, (Atom, Rational)>::new();
+    let mut add = |term: AtomView<'_>| -> Option<()> {
+        let factors = match term {
+            AtomView::Mul(m) => m.iter().collect::<Vec<_>>(),
+            other => vec![other],
+        };
+        let mut value = Rational::one();
+        let mut monomial = Atom::num(1);
+        for factor in factors {
+            match factor {
+                AtomView::Num(_) => value = &value * &rational_number(factor)?,
+                other => monomial *= other.to_owned(),
+            }
+        }
+        let entry = out
+            .entry(monomial.to_canonical_string())
+            .or_insert_with(|| (monomial, Rational::zero()));
+        entry.1 += &value;
+        Some(())
+    };
+    match expanded.as_view() {
+        AtomView::Add(sum) => {
+            for term in sum.iter() {
+                add(term)?;
+            }
+        }
+        view if view.is_zero() => {}
+        view => add(view)?,
+    }
+    out.retain(|_, (_, value)| !value.is_zero());
+    Some(out)
+}
+
+/// Exact rank factorisation of the channel tensor `c(k_1, ..., k_m)` over Q
+/// (the beta crate's `rank_factors`, Gauss-Jordan on the unfolding of the
+/// first axis, recursively): terms `(prod_v w_v(k_v), coefficient)`.
+fn rank_factors(
+    dims: &[usize],
+    entries: &BTreeMap<Vec<usize>, Rational>,
+) -> Vec<(Vec<Vec<Rational>>, Rational)> {
+    let Some((&rows, rest)) = dims.split_first() else {
+        return entries
+            .get(&Vec::new())
+            .filter(|value| !value.is_zero())
+            .map(|value| vec![(Vec::new(), value.clone())])
+            .unwrap_or_default();
+    };
+    let columns = entries
+        .keys()
+        .map(|key| key[1..].to_vec())
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let original = (0..rows)
+        .map(|row| {
+            columns
+                .iter()
+                .map(|column| {
+                    let mut key = vec![row];
+                    key.extend_from_slice(column);
+                    entries.get(&key).cloned().unwrap_or_else(Rational::zero)
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let mut reduced = original.clone();
+    let mut pivots = Vec::new();
+    for column in 0..columns.len() {
+        let rank = pivots.len();
+        if rank == rows {
+            break;
+        }
+        let Some(pivot) = (rank..rows).find(|row| !reduced[*row][column].is_zero()) else {
+            continue;
+        };
+        reduced.swap(rank, pivot);
+        let scale = reduced[rank][column].clone();
+        for value in reduced[rank].iter_mut() {
+            *value = &*value / &scale;
+        }
+        for row in 0..rows {
+            if row == rank || reduced[row][column].is_zero() {
+                continue;
+            }
+            let factor = reduced[row][column].clone();
+            for position in 0..columns.len() {
+                let eliminated = &factor * &reduced[rank][position];
+                reduced[row][position] = &reduced[row][position] - &eliminated;
+            }
+        }
+        pivots.push(column);
+    }
+    let mut merged = Vec::new();
+    for (index, pivot) in pivots.iter().enumerate() {
+        let weights = (0..rows)
+            .map(|row| original[row][*pivot].clone())
+            .collect::<Vec<_>>();
+        let slice = columns
+            .iter()
+            .zip(&reduced[index])
+            .filter(|(_, value)| !value.is_zero())
+            .map(|(column, value)| (column.clone(), value.clone()))
+            .collect::<BTreeMap<_, _>>();
+        for (mut rest_weights, coefficient) in rank_factors(rest, &slice) {
+            rest_weights.insert(0, weights.clone());
+            merged.push((rest_weights, coefficient));
+        }
+    }
+    merged
+}
+
+/// MERGED COLOUR TERMS (helper VH lane share, experiment A1; the beta crate's
+/// `merge_channels` / `merge_symbolic_channels`): the non-zero colour channels
+/// of a graph, `channels[i] = (row of every multi-row local, coefficient)`
+/// with `dims[v]` rows at multi-row local `v`, written as a sum of product
+/// terms `coefficient_t × Π_v (Σ_k w_{t,v,k} row_{v,k})`.
+///
+/// Exact and simple with SYMBOLIC colour: every coefficient is split into its
+/// colour monomials `Σ_m c_m M_m` with rational `c_m` (in SU(3) mode one
+/// monomial, `1`), the monomials become one more axis of the tensor
+/// `c(k_1, .., k_m, m)` of rationals, and that tensor is rank-factorised over
+/// Q. The local weights are therefore RATIONAL numbers (each local factor
+/// stays a colour-free tensor with rational coefficients, as CONTRACT-v1
+/// requires) and the coefficient of a term is `Σ_m w_m M_m`, a polynomial in
+/// the invariants. Not chosen: a rank factorisation over the field of
+/// rational functions of the invariants (fewer terms possible, but weights
+/// would carry colour symbols into the factors); merging only proportional
+/// channels (a special case of this one). The identity
+/// `Σ_channels c(k) Π_v row_{v,k_v} = Σ_t coefficient_t Π_v Σ_k w_{t,v,k} row_{v,k}`
+/// holds exactly (test `merged_colour_terms_reconstruct_every_channel`).
+///
+/// `None` when a coefficient is not a rational combination of monomials.
+/// Each weight vector is normalised to its first non-zero entry.
+pub fn merge_colour_channels(
+    dims: &[usize],
+    channels: &[(Vec<usize>, Atom)],
+) -> Option<Vec<MergedColourTerm>> {
+    let mut monomials = BTreeMap::<String, Atom>::new();
+    let mut split = Vec::with_capacity(channels.len());
+    for (choices, coefficient) in channels {
+        if choices.len() != dims.len() || choices.iter().zip(dims).any(|(k, n)| k >= n) {
+            return None;
+        }
+        let parts = colour_monomials(coefficient)?;
+        for (key, (monomial, _)) in &parts {
+            monomials
+                .entry(key.clone())
+                .or_insert_with(|| monomial.clone());
+        }
+        split.push((choices, parts));
+    }
+    let position = monomials
+        .keys()
+        .enumerate()
+        .map(|(index, key)| (key.clone(), index))
+        .collect::<BTreeMap<_, _>>();
+    let mut entries = BTreeMap::new();
+    for (choices, parts) in &split {
+        for (key, (_, value)) in parts {
+            let mut index = choices.to_vec();
+            index.push(position[key]);
+            entries.insert(index, value.clone());
+        }
+    }
+    let mut axes = dims.to_vec();
+    axes.push(monomials.len());
+    let monomials = monomials.into_values().collect::<Vec<_>>();
+    let mut merged = Vec::new();
+    for (mut weights, mut value) in rank_factors(&axes, &entries) {
+        let colour = weights.pop()?;
+        for vector in weights.iter_mut() {
+            let first = vector.iter().find(|weight| !weight.is_zero())?.clone();
+            for weight in vector.iter_mut() {
+                *weight = &*weight / &first;
+            }
+            value = &value * &first;
+        }
+        let coefficient = Atom::add_many(
+            colour
+                .iter()
+                .zip(&monomials)
+                .filter(|(weight, _)| !weight.is_zero())
+                .map(|(weight, monomial)| Atom::num(&value * weight) * monomial),
+        );
+        merged.push(MergedColourTerm {
+            weights,
+            coefficient: coefficient.expand(),
+        });
+    }
+    Some(merged)
 }

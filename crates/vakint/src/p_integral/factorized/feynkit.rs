@@ -25,9 +25,9 @@ use spenso::network::library::symbolic::ETS;
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 
 use super::{
-    ColourBranchInfo, ColourMode, Endpoint, FactorizedEdge, FactorizedError, FactorizedKind,
-    FactorizedNumerator, FactorizedVertex, LineKind, Prefactor, Projector, Result,
-    colour_coefficient, contains_tensor_content, names, split_local_colour,
+    ColourBranchInfo, ColourMode, ColourRow, Endpoint, FactorizedEdge, FactorizedError,
+    FactorizedKind, FactorizedNumerator, FactorizedVertex, LineKind, Prefactor, Projector, Result,
+    colour_coefficient, contains_tensor_content, merge_colour_channels, names, split_local_colour,
 };
 
 /// Which projector [`FactorizedNumerator::from_feynkit`] attaches to the two
@@ -55,6 +55,14 @@ pub struct FromFeynkitOptions {
     /// Move index-free, momentum-free factors of each local into
     /// [`Prefactor::scalars`] (default true).
     pub pull_scalars: bool,
+    /// MERGED COLOUR TERMS (helper VH lane share, experiment A1; default
+    /// false = one value per non-zero colour channel): the channels are
+    /// rank-factorised exactly ([`merge_colour_channels`]) and one value is
+    /// returned per merged term, its multi-row locals carrying the rational
+    /// combination `Σ_k w_k residual_k` of their rows; used only when it gives
+    /// fewer values than channels (as the beta crate). The sum over the values
+    /// of `prefactor.total() × contraction` is the same graph.
+    pub merge_colour: bool,
 }
 
 impl Default for FromFeynkitOptions {
@@ -64,6 +72,7 @@ impl Default for FromFeynkitOptions {
             colour: ColourMode::default(),
             projector: ProjectorChoice::default(),
             pull_scalars: true,
+            merge_colour: false,
         }
     }
 }
@@ -140,6 +149,90 @@ fn split_overall(overall: &Atom) -> Result<(Atom, i64)> {
         return Err(ctor(format!("overall factor {rest} is not a scalar")));
     }
     Ok((rest, sign))
+}
+
+/// Per value of a graph: the row choice (informational), the colour
+/// coefficient and the `(scalar, tensor)` of every local.
+type Term = (Vec<usize>, Atom, Vec<(Atom, Atom)>);
+
+/// The merged colour terms of a graph (option `merge_colour`): `rows` per
+/// local, `branches` = the non-zero channels (row choice per local,
+/// coefficient). The multi-row locals of a term carry `Σ_k w_k residual_k`
+/// over the rows with non-zero weight; their scalars (pulled when `pull`)
+/// must be rational multiples of each other (the ratio joins the weight).
+/// `None`: nothing to merge, no fewer terms than channels, or scalars that
+/// are not rational multiples (the caller keeps the channels).
+fn merged_terms(
+    rows: &[Vec<ColourRow>],
+    branches: &[(Vec<usize>, Atom)],
+    pull: bool,
+) -> Option<Vec<Term>> {
+    let multi = rows
+        .iter()
+        .enumerate()
+        .filter(|(_, local_rows)| local_rows.len() > 1)
+        .map(|(position, _)| position)
+        .collect::<Vec<_>>();
+    if multi.is_empty() || branches.len() < 2 {
+        return None;
+    }
+    let dims = multi.iter().map(|p| rows[*p].len()).collect::<Vec<_>>();
+    let channels = branches
+        .iter()
+        .map(|(choice, coefficient)| {
+            (
+                multi.iter().map(|p| choice[*p]).collect::<Vec<_>>(),
+                coefficient.clone(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let merged = merge_colour_channels(&dims, &channels)?;
+    if merged.len() >= branches.len() {
+        return None;
+    }
+    let split = |residual: &Atom| {
+        if pull {
+            pull_scalars(residual)
+        } else {
+            (Atom::num(1), residual.clone())
+        }
+    };
+    let mut out = Vec::with_capacity(merged.len());
+    for term in merged {
+        let mut choice = Vec::with_capacity(rows.len());
+        let mut parts = Vec::with_capacity(rows.len());
+        for (position, local_rows) in rows.iter().enumerate() {
+            let Some(axis) = multi.iter().position(|p| *p == position) else {
+                choice.push(0);
+                parts.push(split(&local_rows[0].residual));
+                continue;
+            };
+            let mut scalar: Option<Atom> = None;
+            let mut first = None;
+            let mut sum = Vec::new();
+            for (k, weight) in term.weights[axis].iter().enumerate() {
+                if weight.is_zero() {
+                    continue;
+                }
+                first.get_or_insert(k);
+                let (s, tensor) = split(&local_rows[k].residual);
+                let ratio = match &scalar {
+                    None => {
+                        scalar = Some(s);
+                        symbolica::domains::rational::Rational::one()
+                    }
+                    Some(reference) => {
+                        super::colour::rational_number((&s / reference).expand().as_view())?
+                    }
+                };
+                sum.push(Atom::num(weight * &ratio) * tensor);
+            }
+            choice.push(first?);
+            parts.push((scalar?, Atom::add_many(sum.iter())));
+        }
+        out.push((choice, term.coefficient, parts));
+    }
+    Some(out)
 }
 
 /// The local factors of the diagram, vertices (by id) then edges (by id).
@@ -325,19 +418,43 @@ impl FactorizedNumerator {
             .collect::<Result<BTreeMap<_, _>>>()?;
         let loop_edges = lmb.loop_edges.iter().map(|e| Some(e.0)).collect::<Vec<_>>();
         let external_edges = independent.iter().map(|e| Some(e.0)).collect::<Vec<_>>();
-        let count = branches.len();
+        // Per value: the row choice (informational), the colour coefficient
+        // and the (scalar, tensor) of every local.
+        let unmerged = |branches: Vec<(Vec<usize>, Atom)>| {
+            branches
+                .into_iter()
+                .map(|(choice, coefficient)| {
+                    let parts = choice
+                        .iter()
+                        .zip(&rows)
+                        .map(|(r, local_rows)| {
+                            let residual = &local_rows[*r].residual;
+                            if options.pull_scalars {
+                                pull_scalars(residual)
+                            } else {
+                                (Atom::num(1), residual.clone())
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    (choice, coefficient, parts)
+                })
+                .collect::<Vec<_>>()
+        };
+        let terms = if options.merge_colour {
+            match merged_terms(&rows, &branches, options.pull_scalars) {
+                Some(merged) => merged,
+                None => unmerged(branches),
+            }
+        } else {
+            unmerged(branches)
+        };
+        let count = terms.len();
         let mut values = Vec::with_capacity(count);
-        for (index, (choice, coefficient)) in branches.into_iter().enumerate() {
+        for (index, (choice, coefficient, parts)) in terms.into_iter().enumerate() {
             let mut scalars = numerator_prefactor.clone();
             let mut edges = edges.clone();
             let mut vertices = Vec::new();
-            for ((local, _), (r, local_rows)) in locals.iter().zip(choice.iter().zip(&rows)) {
-                let residual = &local_rows[*r].residual;
-                let (scalar, tensor) = if options.pull_scalars {
-                    pull_scalars(residual)
-                } else {
-                    (Atom::num(1), residual.clone())
-                };
+            for ((local, _), (scalar, tensor)) in locals.iter().zip(parts) {
                 scalars *= scalar;
                 match local {
                     Local::Vertex(v) => vertices.push(FactorizedVertex {

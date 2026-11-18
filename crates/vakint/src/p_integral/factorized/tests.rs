@@ -471,3 +471,110 @@ fn the_flavour_symbol_is_the_callers() {
     assert_eq!(in_vakint.coefficient(vakint_nf.as_view()), Atom::num(-1));
     assert_eq!(in_vakint.coefficient(beta_nf.as_view()), Atom::num(0));
 }
+
+/// `Σ_t coefficient_t Π_v w_{t,v}(k_v)` at one channel.
+fn merged_value(merged: &[MergedColourTerm], key: &[usize]) -> Atom {
+    let mut sum = Atom::Zero;
+    for term in merged {
+        let mut product = term.coefficient.clone();
+        for (vector, row) in term.weights.iter().zip(key) {
+            product = product * Atom::num(vector[*row].clone());
+        }
+        sum += product;
+    }
+    sum.expand()
+}
+
+fn all_keys(dims: &[usize]) -> Vec<Vec<usize>> {
+    let mut keys = vec![Vec::new()];
+    for &rows in dims {
+        keys = keys
+            .into_iter()
+            .flat_map(|key| {
+                (0..rows).map(move |row| {
+                    let mut next = key.clone();
+                    next.push(row);
+                    next
+                })
+            })
+            .collect();
+    }
+    keys
+}
+
+/// Lane share (A1): the merged colour terms reproduce every channel exactly
+/// (including the absent, i.e. zero, ones), numeric and symbolic, and give
+/// the expected number of terms on tensors of known rank.
+#[test]
+fn merged_colour_terms_reconstruct_every_channel() {
+    let ca = Atom::var(symbolica::symbol!("spenso::share_test_CA"));
+    let cf = Atom::var(symbolica::symbol!("spenso::share_test_CF"));
+    let n = |v: i64| Atom::num(v);
+    let q = |a: i64, b: i64| Atom::num(symbolica::domains::rational::Rational::from((a, b)));
+    let cases: Vec<(Vec<usize>, Vec<(Vec<usize>, Atom)>, usize)> = vec![
+        // A rank-one 3x3 tensor (a_i b_j): one term.
+        (
+            vec![3, 3],
+            all_keys(&[3, 3])
+                .into_iter()
+                .map(|k| {
+                    let (a, b) = ([1, -2, 3][k[0]], [2, 1, -1][k[1]]);
+                    (k, n(a * b))
+                })
+                .collect(),
+            1,
+        ),
+        // One multi-row local (three rows): any vector is one term.
+        (
+            vec![3],
+            vec![(vec![0], n(1)), (vec![1], n(1)), (vec![2], n(2))],
+            1,
+        ),
+        // Symbolic: c(k) = CA^2 x_k + CA CF y_k, x and y independent: two terms.
+        (
+            vec![3],
+            vec![
+                (vec![0], &ca * &ca * n(2) + &ca * &cf),
+                (vec![1], &ca * &ca * q(1, 2)),
+                (vec![2], &ca * &cf * n(-3)),
+            ],
+            2,
+        ),
+        // Symbolic, proportional channels: one term.
+        (
+            vec![3, 3],
+            all_keys(&[3, 3])
+                .into_iter()
+                .filter(|k| k != &vec![1, 1])
+                .map(|k| (k.clone(), (&ca - &cf) * n(1 + k[0] as i64)))
+                .collect(),
+            0, // checked by reconstruction only
+        ),
+    ];
+    for (dims, channels, expected) in cases {
+        let merged = merge_colour_channels(&dims, &channels).expect("mergeable");
+        if expected > 0 {
+            assert_eq!(merged.len(), expected, "{dims:?}");
+        }
+        for term in &merged {
+            for vector in &term.weights {
+                let first = vector.iter().find(|w| !w.is_zero()).unwrap();
+                assert!(first.is_one(), "weights normalised to a leading 1");
+            }
+        }
+        let table = channels
+            .iter()
+            .cloned()
+            .collect::<std::collections::BTreeMap<_, _>>();
+        for key in all_keys(&dims) {
+            let expected = table.get(&key).cloned().unwrap_or(Atom::Zero).expand();
+            let found = merged_value(&merged, &key);
+            assert!(
+                (&expected - &found).expand().is_zero(),
+                "{dims:?} {key:?}: {expected} vs {found}"
+            );
+        }
+    }
+    // A non-rational number refuses the merge.
+    assert!(merge_colour_channels(&[2], &[(vec![0], Atom::num(1.5)), (vec![1], n(1))]).is_none());
+}

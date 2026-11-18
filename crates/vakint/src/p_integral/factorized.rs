@@ -56,7 +56,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use symbolica::coefficient::CoefficientView;
 
-pub use colour::{ColourMode, ColourRow, colour_coefficient, split_local_colour};
+pub use colour::{
+    ColourMode, ColourRow, MergedColourTerm, colour_coefficient, merge_colour_channels,
+    split_local_colour,
+};
 pub use evaluate::{FactorizedValue, contract_to_vakint_dots, evaluate_factorized, vakint_input};
 #[cfg(feature = "feynkit-ingress")]
 pub use feynkit::{FromFeynkitOptions, ProjectorChoice};
