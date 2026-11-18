@@ -57,6 +57,7 @@ pub(crate) mod p_relations;
 pub(crate) mod p_shipped_cache;
 #[cfg(test)]
 mod p_shipped_cache_tests;
+pub(crate) mod p_zero;
 pub(crate) mod parallel;
 #[cfg(test)]
 mod postprocessing_profile_tests;
