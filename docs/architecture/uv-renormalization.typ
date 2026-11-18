@@ -187,9 +187,17 @@ coefficient-free support also leave their constituents available to the
 collector; complete positive-power bases remain opaque. Unrelated product
 factors stay outside the exact coefficient rows. Recomposition can expose another cancellation, so the same
 deterministic pass repeats only after a strict size decrease, at most eight
-times. Unsupported collection or the pass limit leaves an unproven residual.
-The certificate takes no numerical samples, forms no common denominators, and
-never distributes a graph numerator.
+times.
+
+For a residual at fixed tensor coordinates, the test certificate can prove
+a product zero by proving any one scalar factor zero. It checks the size
+and scalar interface of that factor before combining its rational terms
+over a common denominator. A large spectator can therefore stay intact.
+For a sum of products, the certificate can also factor bounded scalar sums
+and powers in a copy of each term. It accepts this proof only if the
+reassembled sum fits the result-size limit and collects to exact zero.
+An inconclusive proof preserves the residual and its factors. Both checks
+use exact algebra and preserve graph numerator factorization.
 
 Compact scalar collection also canonicalizes the precision metadata of an
 exactly zero component in a complex floating coefficient to its nonzero

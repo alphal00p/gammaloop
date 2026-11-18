@@ -570,7 +570,11 @@ end_anchor = "\n#[cfg(test)]"
 # Reviewed 2026-10-18: finite scalar entries use the existing bounded preflight
 # before native zero certification; only explicit True removes an entry.
 # Nonzero/unproved content and complete graph numerator factors are retained.
-digest = "f29939cd134b3940b022d7ca72ad7c92c912e3c2"
+# Scope review 2026-11-18 against ad413346. The UV note now describes
+# exact zero proofs on bounded scalar factors at fixed tensor coordinates.
+# The captured IR-parent regression checks both a zero with an oversized
+# spectator and perturbed nonzero controls. This module is test-only.
+digest = "ec19cc6dd3544f1a8c7d8464eb9cfb5fbbb56ff6"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/approx/local_3d/integrated_localizer.rs"
