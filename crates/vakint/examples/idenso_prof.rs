@@ -19,10 +19,13 @@
 //!                          the markers `[idenso_prof] EVAL graph G rep r` and `EVAL-END`)
 //!     [--direct]           with --evaluate: also R3 (`refpath::direct`: edge-basis contraction, denominator-first
 //!                          match, direct read without expansion), paired with R2, gated against it
+//!     [--r3-routed]        R3 contracts the ROUTED product exactly as R2 (loop basis); only the hand-over differs
 //!     [--r3-dots]          R3 asks idenso for dot notation directly (AlgebraContraction::Dots, no to_dots)
 //!     [--edge-contract]    idenso alone: R3's edge-basis contraction timed next to R2's (no vakint; L5)
 //!     [--ref-dir <dir>]    with --direct: also gate R3 against lane refpath's stored dumps (gate/<NNNNNN>.<projection>.gate)
 //!     [--no-staged]        skip the stage-by-stage replay of R2's contraction and the colour split timing
+//!     [--stem-list <file>]  inputs by file stem (`diagram-<stem>.dot`, dumps `<stem>.<projection>.gate`), e.g. the
+//!                          xi-derivative sets `000000.xid1.t000`; the record's `graph` is the stem's leading number
 //!     [--merge-colour]     R3 with merged colour terms (refpath::direct::colour_terms)
 //!     [--dump-dir <dir>]   per graph and branch: `<graph>.<b>.bin` = the `infer_indexed` input
 //!                          (Symbolica binary export with its symbol state), `<graph>.<b>.out` = the
@@ -471,9 +474,11 @@ fn main() -> eyre::Result<()> {
     let mut direct = false;
     let mut merge_colour = false;
     let mut r3_dots = false;
+    let mut r3_routed = false;
     let mut edge_contract = false;
     let mut ref_dir: Option<PathBuf> = None;
     let mut no_staged = false;
+    let mut stems: Option<Vec<String>> = None;
     let mut library = std::env::var_os("VAKINT_TEST_P_LIBRARY_1_4").map(PathBuf::from);
     let mut i = 2;
     while i < args.len() {
@@ -509,8 +514,14 @@ fn main() -> eyre::Result<()> {
             "--direct" => direct = true,
             "--merge-colour" => merge_colour = true,
             "--r3-dots" => r3_dots = true,
+            "--r3-routed" => r3_routed = true,
             "--edge-contract" => edge_contract = true,
             "--no-staged" => no_staged = true,
+            "--stem-list" => {
+                let text = std::fs::read_to_string(&args[i + 1])?;
+                stems = Some(text.split_whitespace().map(str::to_owned).collect());
+                i += 1;
+            }
             "--ref-dir" => {
                 ref_dir = Some(PathBuf::from(&args[i + 1]));
                 i += 1;
@@ -569,20 +580,27 @@ fn main() -> eyre::Result<()> {
     };
     let mut out = std::io::BufWriter::new(std::fs::File::create(&out_path)?);
     let metric_only = projection == Projection::Metric;
-    for graph in graphs {
-        let file = directory.join(format!("diagram-{graph:06}.dot"));
+    let stems = stems.unwrap_or_else(|| graphs.iter().map(|g| format!("{g:06}")).collect());
+    for stem in stems {
+        // the graph number is the stem's leading digits; files and dumps are named by the stem
+        let graph: usize = stem
+            .split('.')
+            .next()
+            .and_then(|digits| digits.parse().ok())
+            .ok_or_else(|| eyre::eyre!("a stem without a leading graph number: {stem}"))?;
+        let file = directory.join(format!("diagram-{stem}.dot"));
         let dot = std::fs::read_to_string(&file)?;
         refpath::start_peak_rss();
         let started = Instant::now();
         let diagram = FeynmanDiagram::from_dot(Arc::clone(&model), &dot)?;
         let parse = started.elapsed().as_secs_f64();
         if refpath::scaleless_contact(&diagram) {
-            writeln!(out, "{}", json!({"graph": graph, "zero": "scaleless"}))?;
+            writeln!(out, "{}", json!({"graph": graph, "stem": stem, "zero": "scaleless"}))?;
             continue;
         }
         let (branches, total) = refpath::colour_branches(&diagram)?;
         if branches.is_empty() {
-            writeln!(out, "{}", json!({"graph": graph, "zero": "colour", "branches_total": total}))?;
+            writeln!(out, "{}", json!({"graph": graph, "stem": stem, "zero": "colour", "branches_total": total}))?;
             continue;
         }
         let dimension = Atom::var(refpath::SYMBOLS.d);
@@ -641,8 +659,8 @@ fn main() -> eyre::Result<()> {
             colour_staged(&diagram, &mut clocks, counter.as_ref())?;
             if let (Some(dir), Some(dump)) = (&dump_dir, &dump) {
                 for (b, (input, output)) in dump.iter().enumerate() {
-                    std::fs::write(dir.join(format!("{graph:06}.{b}.bin")), input)?;
-                    std::fs::write(dir.join(format!("{graph:06}.{b}.out")), output)?;
+                    std::fs::write(dir.join(format!("{stem}.{b}.bin")), input)?;
+                    std::fs::write(dir.join(format!("{stem}.{b}.out")), output)?;
                 }
             }
             for ((_, a), (_, b)) in value_whole.iter().zip(&value_staged) {
@@ -678,7 +696,8 @@ fn main() -> eyre::Result<()> {
                 let wall = Instant::now();
                 let cpu = cpu_seconds();
                 let value = refpath::direct::contract_edges(
-                    &diagram, &terms, &momentum, &q_squared, projection, r3_dots,
+                    &diagram, &terms, &momentum, &q_squared, projection,
+                    refpath::direct::DirectOptions { dots: r3_dots, routed: r3_routed },
                 )?;
                 edge_runs.push((wall.elapsed().as_secs_f64(), cpu_seconds() - cpu));
                 edge_terms = value.iter().map(|(_, v)| terms_of(&v.expand())).sum();
@@ -686,7 +705,7 @@ fn main() -> eyre::Result<()> {
             edge = json!({
                 "wall": median(edge_runs.iter().map(|r| r.0).collect()),
                 "cpu": median(edge_runs.iter().map(|r| r.1).collect()),
-                "terms": edge_terms, "colour_terms": terms.len(), "dots": r3_dots, "merge_colour": merge_colour,
+                "terms": edge_terms, "colour_terms": terms.len(), "dots": r3_dots, "routed": r3_routed, "merge_colour": merge_colour,
                 "routed_terms": reference_terms.unwrap_or(0),
             });
         }
@@ -748,12 +767,12 @@ fn main() -> eyre::Result<()> {
                     let r2_turn = (turn == 0) == (rep % 2 == 0);
                     if r2_turn {
                         let engine = refpath::fresh_engine(template)?;
-                        eprintln!("[idenso_prof] EVAL graph {graph} rep {rep}");
+                        eprintln!("[idenso_prof] EVAL graph {stem} rep {rep}");
                         let wall = Instant::now();
                         let cpu = cpu_seconds();
                         let run = refpath::run_graph(&engine, &model, &dot, &options)?;
                         let (wall, cpu) = (wall.elapsed().as_secs_f64(), cpu_seconds() - cpu);
-                        eprintln!("[idenso_prof] EVAL-END graph {graph} rep {rep}");
+                        eprintln!("[idenso_prof] EVAL-END graph {stem} rep {rep}");
                         let keys: usize = run
                             .results
                             .iter()
@@ -783,7 +802,9 @@ fn main() -> eyre::Result<()> {
                         let colour_seconds = colour_started.elapsed().as_secs_f64();
                         let outcome = refpath::direct::lower_graph(
                             &engine, &settings, &diagram, &terms, &momentum, &q_squared,
-                            &weight, projection, true, r3_dots, &mut seconds,
+                            &weight, projection, true,
+                            refpath::direct::DirectOptions { dots: r3_dots, routed: r3_routed },
+                            &mut seconds,
                         )?;
                         direct_terms = terms.len();
                         direct_colour.push(colour_seconds);
@@ -833,7 +854,7 @@ fn main() -> eyre::Result<()> {
                     let mut stored_identical = 0;
                     let mut stored_missing = 0;
                     for (name, view, _) in views {
-                        let file = dir.join("gate").join(format!("{graph:06}.{name}.gate"));
+                        let file = dir.join("gate").join(format!("{stem}.{name}.gate"));
                         match std::fs::read_to_string(&file) {
                             Ok(text) => {
                                 let (sview, _) = vakint::rustred_evaluation::p_gate::read_gate_view(&text)
@@ -853,7 +874,7 @@ fn main() -> eyre::Result<()> {
                 let pass = status == "lowered" && differing.is_empty() && identical == reference.len()
                     || (status.starts_with("zero") && r2_nonzero == 0);
                 if !pass {
-                    eprintln!("[idenso_prof] R3 GATE FAIL graph {graph}: {status} {differing:?} (R2 projections {})", reference.len());
+                    eprintln!("[idenso_prof] R3 GATE FAIL graph {stem}: {status} {differing:?} (R2 projections {})", reference.len());
                 }
                 let d = |f: &dyn Fn(&refpath::direct::DirectSeconds) -> f64| {
                     median(direct_runs.iter().map(|r| f(&r.0)).collect())
@@ -865,7 +886,7 @@ fn main() -> eyre::Result<()> {
                     "lower": d(&|s| s.lower), "reduce": d(&|s| s.reduce), "finalise": d(&|s| s.finalise),
                     "wall": median(direct_runs.iter().map(|r| r.1).collect()),
                     "cpu": median(direct_runs.iter().map(|r| r.2).collect()),
-                    "colour": median(direct_colour.clone()), "terms": direct_terms, "merge_colour": merge_colour, "dots": r3_dots,
+                    "colour": median(direct_colour.clone()), "terms": direct_terms, "merge_colour": merge_colour, "dots": r3_dots, "routed": r3_routed,
                 });
             }
             let m = |f: &dyn Fn(&refpath::StageSeconds) -> f64| {
@@ -884,6 +905,7 @@ fn main() -> eyre::Result<()> {
         }
         let record = json!({
             "graph": graph,
+            "stem": stem,
             "evaluation": evaluation,
             "branches": branches.len(),
             "branches_total": total,
