@@ -192,7 +192,14 @@ pub(crate) struct PLibraryHandle {
     /// vk5l WP4: split and lowered requests met before
     /// ([`super::p_integral::RequestMemo`]).
     request_memo: Mutex<super::p_integral::RequestMemo>,
+    /// lane prune: the zero-sector table of each top presentation the direct
+    /// lowering met, or why it has none ([`super::p_zero`]).
+    zero_sectors: Mutex<BTreeMap<PresentationId, ZeroOracle>>,
 }
+
+/// lane prune: a top presentation's zero-sector table, or why the oracle is
+/// unknown there.
+pub(crate) type ZeroOracle = Result<Arc<super::p_zero::ZeroSectors>, &'static str>;
 
 impl fmt::Debug for PLibraryHandle {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -330,6 +337,7 @@ impl PLibraryHandle {
             package_directory: None,
             relations_root: None,
             request_memo: Mutex::default(),
+            zero_sectors: Mutex::default(),
             dimension,
             cache,
         })
@@ -525,6 +533,24 @@ impl PLibraryHandle {
         self.request_memo
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// lane prune: the zero sectors of `top` from the library's census, built
+    /// once per presentation ([`super::p_zero::ZeroSectors::from_census`]).
+    pub(crate) fn zero_sectors(&self, top: PTop) -> ZeroOracle {
+        self.zero_sectors
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .entry(top.presentation)
+            .or_insert_with(|| {
+                super::p_zero::ZeroSectors::from_census(
+                    &self.library,
+                    top.presentation,
+                    top.line_count,
+                )
+                .map(Arc::new)
+            })
+            .clone()
     }
 
     /// Whether the library holds the top of the [`P_FAMILIES`] entry `family`.
