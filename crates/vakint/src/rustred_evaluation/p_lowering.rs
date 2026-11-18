@@ -41,6 +41,7 @@
 //! would not read as a rational number, ...) the caller falls back to the
 //! ordinary path (`None`).
 
+use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
 
 use ahash::AHashMap as HashMap;
@@ -54,6 +55,7 @@ use symbolica::function;
 
 use super::p_data::{PLibraryHandle, PTop};
 use super::p_integral::{Channel, FoldedInputs, spectator_terms};
+use super::p_zero::{ZeroPrune, ZeroSectors, zero_prune};
 use crate::p_integral::{P_FAMILIES, PropagatorRequest, external_head, parts};
 use crate::symbols::S;
 use crate::utils::vakint_macros::vk_symbol;
@@ -86,6 +88,24 @@ pub(crate) struct DirectStats {
     pub match_seconds: f64,
     pub reduce_seconds: f64,
     pub finalize_seconds: f64,
+    /// lane prune ([`super::p_zero`]): partial products of the slot
+    /// substitution dropped because they already lie in a zero sector
+    /// (early pruning), and lowered key entries dropped at emission.
+    pub pruned_early: usize,
+    pub pruned_end: usize,
+    /// lane prune: products formed by the slot substitution (a term times a
+    /// slot form's constant or slot term), a measure of its work.
+    pub slot_products: usize,
+    /// lane prune: lowerings with pruning on that pruned (a zero-sector table
+    /// was known), that had no table (unknown oracle: nothing pruned), and
+    /// that did not prune because two of their buckets share a channel and
+    /// ε-basis (the decline of the unpruned lowering is kept).
+    pub prune_known: usize,
+    pub prune_unknown: usize,
+    pub prune_shared_channel: usize,
+    /// lane prune, `check` mode: buckets compared with their unpruned
+    /// substitution.
+    pub prune_checked: usize,
 }
 
 /// Why the direct lowering declined a closure (the ordinary path runs).
@@ -1374,6 +1394,55 @@ pub(crate) fn lower_closure_source(
         bucket_terms[bucket].push((loop_monomial, value));
     }
     stats.distinct_monomials += distinct.len();
+    // lane prune: with zero-sector pruning on, the census table of the top
+    // (unknown: nothing is pruned). A lowering whose buckets share a channel
+    // and ε-basis is declined below when its buckets are not empty; pruning
+    // could empty one and so change that decline: such a lowering does not
+    // prune.
+    let prune_mode = zero_prune();
+    let zero_table = match prune_mode {
+        ZeroPrune::Off => None,
+        ZeroPrune::End | ZeroPrune::Early | ZeroPrune::Check => match handle.zero_sectors(top) {
+            Ok(table) => Some(table),
+            Err(_) => {
+                stats.prune_unknown += 1;
+                None
+            }
+        },
+    };
+    let zero_table = zero_table.filter(|_| {
+        let mut targets = ahash::AHashSet::new();
+        let separate = bucket_ids
+            .keys()
+            .all(|(monomial_id, phase, scale_power, basis_id)| {
+                let monomial = &monomials.atoms[*monomial_id as usize];
+                let coefficient = if *phase {
+                    monomial * &imaginary_unit
+                } else {
+                    monomial.clone()
+                };
+                targets.insert((*scale_power, coefficient, *basis_id))
+            });
+        if !separate {
+            stats.prune_shared_channel += 1;
+        }
+        separate
+    });
+    let slot_prune = zero_table.as_deref().map(|zero| SlotPrune {
+        zero,
+        lines: base[..top.line_count]
+            .iter()
+            .map(|power| *power as u32)
+            .collect(),
+    });
+    if slot_prune.is_some() {
+        stats.prune_known += 1;
+    }
+    let work = SlotWork {
+        early: slot_prune.as_ref().filter(|_| prune_mode.early()),
+        products: Cell::new(0),
+        dropped: Cell::new(0),
+    };
     // vk5l-physrun: a lowered key is a function of its packed slot monomial
     // (the line powers are fixed per closure): key ids by monomial, each key
     // vector built once; a bucket holds its (key id, value) pairs (the
@@ -1382,16 +1451,59 @@ pub(crate) fn lower_closure_source(
     let integer_forms = IntegerForms::new(&forms);
     let mut monomial_ids = HashMap::<u128, usize>::new();
     for mut terms in bucket_terms {
+        let unpruned =
+            (prune_mode == ZeroPrune::Check && work.early.is_some()).then(|| terms.clone());
         let substituted = match integer_forms
             .as_ref()
-            .and_then(|integer| substitute_integer(&terms, count, integer))
+            .and_then(|integer| substitute_integer(&terms, count, integer, &work))
         {
             Some(substituted) => substituted,
-            None => substitute(&mut terms, count, &forms),
+            None => substitute(&mut terms, count, &forms, &work),
         };
+        // lane prune, `VAKINT_P_ZERO_PRUNE=check`: the bucket substituted
+        // without pruning has the same keys outside zero sectors, with the
+        // same values.
+        if let (Some(mut terms), Some(prune)) = (unpruned, &slot_prune) {
+            let plain = SlotWork {
+                early: None,
+                products: Cell::new(0),
+                dropped: Cell::new(0),
+            };
+            let full = match integer_forms
+                .as_ref()
+                .and_then(|integer| substitute_integer(&terms, count, integer, &plain))
+            {
+                Some(full) => full,
+                None => substitute(&mut terms, count, &forms, &plain),
+            };
+            let live = |polynomial: &HashMap<u128, Rational>| {
+                polynomial
+                    .iter()
+                    .filter(|(monomial, value)| !value.is_zero() && !prune.is_zero(**monomial))
+                    .map(|(monomial, value)| (*monomial, value.clone()))
+                    .collect::<BTreeMap<_, _>>()
+            };
+            let (expected, actual) = (live(&full), live(&substituted));
+            if expected != actual {
+                return Err(crate::p_integral::invalid(format!(
+                    "VAKINT_P_ZERO_PRUNE=check: early pruning changed the lowered keys outside \
+                     the zero sectors of presentation {} ({} keys unpruned, {} pruned)",
+                    top.presentation.0,
+                    expected.len(),
+                    actual.len()
+                )));
+            }
+            stats.prune_checked += 1;
+        }
         let mut bucket = Vec::with_capacity(substituted.len());
         for (monomial, value) in substituted {
             if value.is_zero() {
+                continue;
+            }
+            if let Some(prune) = &slot_prune
+                && prune.is_zero(monomial)
+            {
+                stats.pruned_end += 1;
                 continue;
             }
             let next = keys.len();
@@ -1409,6 +1521,8 @@ pub(crate) fn lower_closure_source(
         }
         buckets.push(bucket);
     }
+    stats.pruned_early += work.dropped.get();
+    stats.slot_products += work.products.get() - work.dropped.get();
     stats.scatter_seconds += phase.elapsed().as_secs_f64();
     let phase = std::time::Instant::now();
     let integral = super::p_integral::integral_name(&PropagatorRequest {
@@ -1475,6 +1589,73 @@ fn canonical_rows(index: usize, loops: usize) -> (Vec<i64>, Vec<i64>) {
     (unit(index - position), unit(loops))
 }
 
+/// lane prune: the zero-sector test of one closure's lowered slot monomials
+/// ([`super::p_zero`]).
+struct SlotPrune<'a> {
+    zero: &'a ZeroSectors,
+    /// The request's power of every line slot (the key of a slot monomial is
+    /// this power minus the slot's exponent on a line, minus the exponent on
+    /// an ISP).
+    lines: Vec<u32>,
+}
+
+impl SlotPrune<'_> {
+    /// The sector of a packed slot monomial's key: the lines whose power stays
+    /// positive.
+    fn support(&self, monomial: u128) -> u64 {
+        self.lines
+            .iter()
+            .enumerate()
+            .filter(|(slot, power)| {
+                (((monomial >> (BITS * *slot as u32)) & ((1 << BITS) - 1)) as u32) < **power
+            })
+            .fold(0, |support, (slot, _)| support | 1 << slot)
+    }
+
+    /// Whether the key of a packed slot monomial lies in a zero sector.
+    fn is_zero(&self, monomial: u128) -> bool {
+        self.zero.is_zero(self.support(monomial))
+    }
+}
+
+/// lane prune: the work counters of one closure's slot substitution and, for
+/// early pruning, its zero-sector test.
+struct SlotWork<'a> {
+    early: Option<&'a SlotPrune<'a>>,
+    /// Products formed or dropped (a term times a form's constant or slot term).
+    products: Cell<usize>,
+    /// Products dropped by early pruning.
+    dropped: Cell<usize>,
+}
+
+impl SlotWork<'_> {
+    fn count(&self, terms: usize, form_terms: usize) {
+        self.products.set(self.products.get() + terms * form_terms);
+    }
+
+    /// Early pruning: `shifted`, a product with the slot term of `slot`, is
+    /// dropped (and counted) iff that slot is a line whose power it has just
+    /// cancelled (its exponent reached the request's power: every slot term
+    /// raises one exponent by one) and the remaining support is a zero
+    /// sector. Every later factor only raises exponents, so every descendant
+    /// of `shifted` lies in a sub-support, a zero sector too (the table is
+    /// closed under cancelling lines).
+    #[inline]
+    fn drops(&self, shifted: u128, slot: u16) -> bool {
+        let Some(prune) = self.early else {
+            return false;
+        };
+        let slot = usize::from(slot);
+        let dropped = slot < prune.lines.len()
+            && ((shifted >> (BITS * slot as u32)) & ((1 << BITS) - 1)) as u32 == prune.lines[slot]
+            && prune.is_zero(shifted);
+        if dropped {
+            self.dropped.set(self.dropped.get() + 1);
+        }
+        dropped
+    }
+}
+
 /// vk5l-physrun: the slot forms over the integers: every coefficient times the
 /// common denominator `scale` of all forms.
 struct IntegerForms {
@@ -1539,6 +1720,7 @@ fn substitute_integer(
     terms: &[(u128, Rational)],
     vars: usize,
     forms: &IntegerForms,
+    work: &SlotWork,
 ) -> Option<HashMap<u128, Rational>> {
     let r = degree(terms.first()?.0, vars);
     let mut common = 1i128;
@@ -1556,8 +1738,13 @@ fn substitute_integer(
         })
         .collect::<Option<Vec<_>>>()?;
     OVERFLOW.with(|flag| flag.set(false));
-    let substituted = substitute_c(&mut integer_terms, vars, &forms.forms);
+    let products = work.products.get();
+    let dropped = work.dropped.get();
+    let substituted = substitute_c(&mut integer_terms, vars, &forms.forms, work);
     if OVERFLOW.with(|flag| flag.replace(false)) {
+        // The exact rational path redoes (and counts) this bucket.
+        work.products.set(products);
+        work.dropped.set(dropped);
         return None;
     }
     let denominator = Integer::from(common) * Integer::from(forms.scale).pow(r as u64);
@@ -1579,6 +1766,7 @@ fn substitute_c<C: Coef>(
     terms: &mut [(u128, C)],
     vars: usize,
     forms: &[(C, Vec<(u16, C)>)],
+    work: &SlotWork,
 ) -> HashMap<u128, C> {
     let mut result = HashMap::<u128, C>::new();
     if terms.is_empty() {
@@ -1606,6 +1794,7 @@ fn substitute_c<C: Coef>(
     for power in (0..=top).rev() {
         if !result.is_empty() {
             let (constant, slots) = &forms[var];
+            work.count(result.len(), slots.len() + usize::from(!constant.is_zero()));
             let mut next = HashMap::<u128, C>::with_capacity(result.len() * 2);
             for (monomial, value) in &result {
                 if !constant.is_zero() {
@@ -1615,6 +1804,9 @@ fn substitute_c<C: Coef>(
                 }
                 for (slot, coefficient) in slots {
                     let shifted = monomial + (1u128 << (BITS * u32::from(*slot)));
+                    if work.drops(shifted, *slot) {
+                        continue;
+                    }
                     next.entry(shifted)
                         .or_insert_with(C::zero)
                         .add(&value.mul(coefficient));
@@ -1630,7 +1822,7 @@ fn substitute_c<C: Coef>(
         for (monomial, _) in slice.iter_mut() {
             *monomial &= mask;
         }
-        let inner = substitute_c(slice, var, forms);
+        let inner = substitute_c(slice, var, forms, work);
         for (monomial, value) in inner {
             result.entry(monomial).or_insert_with(C::zero).add(&value);
         }
@@ -1647,6 +1839,7 @@ fn substitute(
     terms: &mut [(u128, Rational)],
     vars: usize,
     forms: &[rustred::propagator::presentation::AffineSlotForm],
+    work: &SlotWork,
 ) -> HashMap<u128, Rational> {
     let mut result = HashMap::<u128, Rational>::new();
     if terms.is_empty() {
@@ -1674,7 +1867,7 @@ fn substitute(
     let mut start = 0;
     for power in (0..=top).rev() {
         if !result.is_empty() {
-            result = multiply_form(&result, &forms[var]);
+            result = multiply_form(&result, &forms[var], work);
         }
         let mut end = start;
         while end < terms.len() && exponent(terms[end].0, var) == power {
@@ -1684,7 +1877,7 @@ fn substitute(
         for (monomial, _) in slice.iter_mut() {
             *monomial &= mask;
         }
-        let inner = substitute(slice, var, forms);
+        let inner = substitute(slice, var, forms, work);
         for (monomial, value) in inner {
             match result.get_mut(&monomial) {
                 Some(sum) => *sum += &value,
@@ -1699,11 +1892,17 @@ fn substitute(
     result
 }
 
-/// `polynomial · form` on packed slot exponents.
+/// `polynomial · form` on packed slot exponents (without the products that
+/// [`SlotWork::drops`]).
 fn multiply_form(
     polynomial: &HashMap<u128, Rational>,
     form: &rustred::propagator::presentation::AffineSlotForm,
+    work: &SlotWork,
 ) -> HashMap<u128, Rational> {
+    work.count(
+        polynomial.len(),
+        form.terms.len() + usize::from(!form.constant.is_zero()),
+    );
     let mut next = HashMap::<u128, Rational>::with_capacity(polynomial.len() * 2);
     for (monomial, value) in polynomial {
         if !form.constant.is_zero() {
@@ -1711,6 +1910,9 @@ fn multiply_form(
         }
         for (slot, coefficient) in &form.terms {
             let shifted = monomial + (1u128 << (BITS * u32::from(*slot)));
+            if work.drops(shifted, *slot) {
+                continue;
+            }
             *next.entry(shifted).or_insert_with(Rational::zero) += &(value * coefficient);
         }
     }

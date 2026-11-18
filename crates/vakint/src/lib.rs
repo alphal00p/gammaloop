@@ -12,9 +12,9 @@ pub mod alphaloop_numerics;
 mod citations;
 #[cfg(feature = "feynkit-ingress")]
 pub mod diagram_integral;
-#[cfg(feature = "feynkit-ingress")]
-pub mod refpath;
 pub mod display;
+#[cfg(feature = "feynkit-ingress")]
+pub mod engine_gate;
 mod execution;
 pub mod fmft;
 pub mod fmft_numerics;
@@ -29,6 +29,8 @@ pub mod matad_numerics;
 pub mod p_integral;
 pub mod precision;
 mod presentation;
+#[cfg(feature = "feynkit-ingress")]
+pub mod refpath;
 mod routing;
 pub mod rustred_evaluation;
 pub mod symbols;

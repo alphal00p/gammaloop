@@ -3955,3 +3955,1066 @@ fn massive_closure_showcase() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// lane prune (helper VH, 2026-11-18): zero-sector pruning of the direct
+// lowering (`super::super::p_zero`, `VAKINT_P_ZERO_PRUNE`).
+
+use super::super::p_zero::{ZeroPrune, ZeroSectors, with_zero_prune};
+
+/// Folded inputs by channel.
+type Folded = BTreeMap<Channel, FoldedInputs>;
+
+/// The zero-sector tables of the library tops, by presentation.
+struct PruneTables<'a> {
+    handle: &'a PLibraryHandle,
+    tables: HashMap<PresentationId, Arc<ZeroSectors>>,
+}
+
+impl<'a> PruneTables<'a> {
+    fn new(handle: &'a PLibraryHandle) -> Self {
+        Self {
+            handle,
+            tables: HashMap::new(),
+        }
+    }
+
+    /// Whether the key `powers` of `presentation` (a library top) lies in a
+    /// zero sector: its support (line slots with a positive power) has the
+    /// census fate `Zero`.
+    fn is_zero(&mut self, presentation: PresentationId, powers: &[i64]) -> bool {
+        let handle = self.handle;
+        let table = self.tables.entry(presentation).or_insert_with(|| {
+            let top = (0..crate::p_integral::P_FAMILIES.len())
+                .find_map(|family| {
+                    handle
+                        .top(family)
+                        .ok()
+                        .filter(|top| top.presentation == presentation)
+                })
+                .expect("a key on a library top");
+            handle.zero_sectors(top).expect("a zero-sector table")
+        });
+        let support = powers
+            .iter()
+            .take(table.lines)
+            .enumerate()
+            .filter(|(_, power)| **power > 0)
+            .fold(0_u64, |support, (slot, _)| support | 1 << slot);
+        table.is_zero(support)
+    }
+
+    /// `folded` split into its keys outside zero sectors and its keys in zero
+    /// sectors (channels and bases with no key left out).
+    fn split(&mut self, folded: &Folded) -> (Folded, Folded) {
+        let (mut kept, mut removed) = (Folded::new(), Folded::new());
+        for (channel, inputs) in folded {
+            for (basis, values) in &inputs.by_basis {
+                for ((presentation, powers), value) in values {
+                    let target: &mut Folded = if self.is_zero(*presentation, powers) {
+                        &mut removed
+                    } else {
+                        &mut kept
+                    };
+                    let entry = target.entry(channel.clone()).or_default();
+                    entry.integrals = inputs.integrals.clone();
+                    entry
+                        .by_basis
+                        .entry(basis.clone())
+                        .or_default()
+                        .insert((*presentation, powers.clone()), value.clone());
+                }
+            }
+        }
+        (kept, removed)
+    }
+}
+
+/// The canonical text of folded inputs as [`crate::p_integral::LoweredClosure::fingerprint`]
+/// writes it (channels, ε-bases, keys and exact values; empty bases and
+/// channels left out; integral names not included).
+fn folded_text(folded: &Folded) -> String {
+    let live = folded
+        .iter()
+        .map(|(channel, inputs)| {
+            let bases = inputs
+                .by_basis
+                .iter()
+                .filter(|(_, values)| !values.is_empty())
+                .collect::<Vec<_>>();
+            (channel, bases)
+        })
+        .filter(|(_, bases)| !bases.is_empty())
+        .collect::<Vec<_>>();
+    format!("{live:?}")
+}
+
+/// The number of (channel, ε-basis, key) entries of folded inputs.
+fn folded_entries(folded: &Folded) -> usize {
+    folded
+        .values()
+        .flat_map(|inputs| inputs.by_basis.values())
+        .map(BTreeMap::len)
+        .sum()
+}
+
+/// One synthetic request per family top of the library up to four loops, all
+/// line powers 1, and one with a dot on the first line: a numerator of
+/// canonical scalar products up to rank 4 (rank 3 at four loops) with a
+/// spectator symbol, chosen to cancel many lines.
+fn synthetic_prune_requests(handle: &PLibraryHandle) -> Vec<(usize, Vec<i64>, Atom)> {
+    let mut requests = Vec::new();
+    for (index, family) in crate::p_integral::P_FAMILIES.iter().enumerate() {
+        let Ok(top) = handle.top(index) else {
+            continue;
+        };
+        let loops = family.loops;
+        if loops > 4 {
+            continue;
+        }
+        let mut dots = Vec::new();
+        for i in 1..=loops {
+            for j in i..=loops {
+                dots.push(format!("dot(k({i}),k({j}))"));
+            }
+        }
+        for i in 1..=loops {
+            dots.push(format!("dot(k({i}),p(1))"));
+        }
+        let rank = if loops == 4 { 3 } else { 4 };
+        let terms = (0..8)
+            .map(|t| {
+                let degree = 1 + t % rank;
+                let factors = (0..degree)
+                    .map(|m| dots[(t * 7 + m * 3 + m * m) % dots.len()].clone())
+                    .collect::<Vec<_>>()
+                    .join("*");
+                let coefficient = if t % 3 == 0 {
+                    format!("{}/{}", t + 1, t + 2)
+                } else {
+                    format!("{}*prune_x", 2 * t + 1)
+                };
+                format!("{coefficient}*{factors}")
+            })
+            .collect::<Vec<_>>()
+            .join("+");
+        let numerator = parse(&terms);
+        let ones = vec![1; top.line_count];
+        let mut dotted = ones.clone();
+        dotted[0] = 2;
+        requests.push((index, ones, numerator.clone()));
+        requests.push((index, dotted, numerator));
+    }
+    requests
+}
+
+/// lane prune, the correctness gate of the pruning on plain requests: the
+/// 1-4 loop requests of `p_split_requests.txt` in the library's scope and the
+/// synthetic requests of [`synthetic_prune_requests`] (one per family top,
+/// with and without a dot), lowered directly with `VAKINT_P_ZERO_PRUNE` =
+/// end, early and check: the folded inputs are EXACTLY those of the unpruned
+/// lowering without its zero-sector keys (same channels, ε-bases, keys and
+/// rational values, compared as canonical text); the dropped keys reduce to
+/// zero, key by key (up to 24 per request) and per channel; the reductions
+/// of the pruned and unpruned inputs give identical values (`Debug` text),
+/// and so does the whole batch of fixture requests through
+/// `reduce_requests_folded` (request memo keyed by the pruning).
+#[test]
+fn zero_sector_pruning_keeps_every_other_key_and_value() {
+    let engine = library_engine();
+    let settings = settings(RustRedMasterMode::Symbolic, None);
+    let handle = engine.p_library().unwrap();
+    let mut tables = PruneTables::new(&handle);
+    let records = request_records(include_str!("../../tests/fixtures/p_split_requests.txt"))
+        .into_iter()
+        .filter(|(family, ..)| has_p_data(&engine, family.loops))
+        .collect::<Vec<_>>();
+    let synthetic = synthetic_prune_requests(&handle);
+    let mut requests = records
+        .iter()
+        .map(|(family, powers, external, numerator)| PropagatorRequest {
+            family,
+            powers,
+            canonical_numerator: numerator.as_view(),
+            external: external.clone(),
+        })
+        .collect::<Vec<_>>();
+    let fixture_count = requests.len();
+    let head = parse("p(1)");
+    requests.extend(
+        synthetic
+            .iter()
+            .map(|(index, powers, numerator)| PropagatorRequest {
+                family: registry_family(crate::p_integral::P_FAMILIES[*index].name).unwrap(),
+                powers,
+                canonical_numerator: numerator.as_view(),
+                external: head.clone(),
+            }),
+    );
+    let reduce = |folded: Folded| {
+        reduce_folded_channels(
+            &engine,
+            &settings,
+            &handle,
+            folded,
+            None,
+            FoldMode::Coefficient,
+            true,
+        )
+        .unwrap()
+    };
+    let (mut lowered, mut dropped, mut early_drops, mut declined) = (0, 0, 0, 0);
+    for (number, request) in requests.iter().enumerate() {
+        let label = format!(
+            "request {number} ({} {:?})",
+            request.family.name, request.powers
+        );
+        let lower = |mode: ZeroPrune| {
+            with_zero_prune(mode, || {
+                let mut stats = super::super::p_lowering::DirectStats::default();
+                let folded = super::super::p_lowering::lower_request(
+                    &settings, &handle, request, &mut stats,
+                )
+                .unwrap();
+                (folded.map_err(|declined| declined.0), stats)
+            })
+        };
+        let (off, off_stats) = lower(ZeroPrune::Off);
+        let Ok(off) = off else {
+            declined += 1;
+            for mode in [ZeroPrune::End, ZeroPrune::Early, ZeroPrune::Check] {
+                assert_eq!(lower(mode).0.err(), off.as_ref().err().copied(), "{label}");
+            }
+            continue;
+        };
+        assert_eq!(off_stats.pruned_early + off_stats.pruned_end, 0, "{label}");
+        let (kept, removed) = tables.split(&off);
+        let expected = folded_text(&kept);
+        let removed_entries = folded_entries(&removed);
+        for mode in [ZeroPrune::End, ZeroPrune::Early, ZeroPrune::Check] {
+            let (pruned, stats) = lower(mode);
+            let pruned = pruned.unwrap_or_else(|reason| panic!("{label} {mode:?}: {reason}"));
+            if stats.prune_shared_channel > 0 {
+                // Two buckets share a channel and ε-basis: no pruning.
+                assert_eq!(folded_text(&pruned), folded_text(&off), "{label} {mode:?}");
+                continue;
+            }
+            assert_eq!(folded_text(&pruned), expected, "{label} {mode:?}");
+            assert_eq!(stats.prune_known, 1, "{label} {mode:?}");
+            assert_eq!(
+                stats.lowered + removed_entries,
+                off_stats.lowered,
+                "{label} {mode:?}"
+            );
+            match mode {
+                ZeroPrune::End => assert_eq!(stats.pruned_end, removed_entries, "{label}"),
+                _ => early_drops += stats.pruned_early,
+            }
+            if mode == ZeroPrune::Check {
+                assert!(stats.prune_checked > 0, "{label}");
+            }
+        }
+        lowered += off_stats.lowered;
+        dropped += removed_entries;
+        if !removed.is_empty() {
+            // Every dropped key alone reduces to zero, and so does every
+            // channel of dropped keys.
+            let mut singles = 0;
+            'keys: for (channel, inputs) in &removed {
+                for (basis, values) in &inputs.by_basis {
+                    for (key, value) in values {
+                        if singles == 24 {
+                            break 'keys;
+                        }
+                        singles += 1;
+                        let single = BTreeMap::from([(
+                            channel.clone(),
+                            FoldedInputs {
+                                by_basis: BTreeMap::from([(
+                                    basis.clone(),
+                                    BTreeMap::from([(key.clone(), value.clone())]),
+                                )]),
+                                integrals: inputs.integrals.clone(),
+                            },
+                        )]);
+                        assert!(reduce(single).is_empty(), "{label}: key {key:?}");
+                    }
+                }
+            }
+            assert!(reduce(removed).is_empty(), "{label}");
+        }
+        let on = lower(ZeroPrune::Early).0.unwrap();
+        assert_eq!(
+            format!("{:?}", reduce(off)),
+            format!("{:?}", reduce(on)),
+            "{label}"
+        );
+    }
+    eprintln!(
+        "ZERO_PRUNE requests {} ({fixture_count} fixture), declined {declined}, lowered entries {lowered}, \
+         dropped {dropped} ({:.1} %), early drops {early_drops}",
+        requests.len(),
+        100.0 * dropped as f64 / lowered.max(1) as f64
+    );
+    assert!(dropped > 0 && early_drops > 0);
+    // The fixture batch end to end, each mode with its own memo entries.
+    let batch = &requests[..fixture_count];
+    let values = |mode: ZeroPrune| {
+        with_zero_prune(mode, || {
+            format!(
+                "{:?}",
+                reduce_requests_folded(
+                    &engine,
+                    &settings,
+                    batch,
+                    None,
+                    FoldMode::Coefficient,
+                    true
+                )
+                .unwrap()
+            )
+        })
+    };
+    let off = values(ZeroPrune::Off);
+    for mode in [
+        ZeroPrune::End,
+        ZeroPrune::Early,
+        ZeroPrune::Off,
+        ZeroPrune::Early,
+    ] {
+        assert_eq!(values(mode), off, "{mode:?}");
+    }
+}
+
+/// lane prune: the zero-sector table of every family top of the library is
+/// known: the census holds all 2^lines supports of the top and its zero set
+/// is closed under cancelling lines (checked by `ZeroSectors::from_census`);
+/// the empty support is zero and the full one is not. Libraries: the default
+/// p data, the 1-4 loop package of `VAKINT_TEST_P_LIBRARY_1_4`, and with
+/// `VAKINT_TEST_P5L_DRILL_PACKAGE` a five-loop package (a five-loop build).
+#[test]
+fn zero_sector_tables_cover_every_top() {
+    let mut engines = vec![("default", Vakint::new().unwrap())];
+    if std::env::var_os("VAKINT_TEST_P_LIBRARY_1_4").is_some() {
+        engines.push(("1-4 package", library_engine()));
+    }
+    if let Some(package) = std::env::var_os("VAKINT_TEST_P5L_DRILL_PACKAGE") {
+        let mut engine = Vakint::new().unwrap();
+        engine
+            .load_p_library_directory(std::path::Path::new(&package), false)
+            .unwrap();
+        engines.push(("five-loop package", engine));
+    }
+    for (name, engine) in &engines {
+        let Ok(handle) = engine.p_library() else {
+            eprintln!("ZERO_TABLE {name}: no p library, skipped");
+            continue;
+        };
+        let mut tops = 0;
+        let mut by_loops = BTreeMap::<usize, (usize, usize, usize)>::new();
+        for (index, family) in crate::p_integral::P_FAMILIES.iter().enumerate() {
+            let Ok(top) = handle.top(index) else {
+                continue;
+            };
+            let table = handle
+                .zero_sectors(top)
+                .unwrap_or_else(|reason| panic!("{name} {}: {reason}", family.name));
+            assert_eq!(table.lines, top.line_count, "{name} {}", family.name);
+            assert!(table.is_zero(0), "{name} {}", family.name);
+            assert!(
+                !table.is_zero((1 << top.line_count) - 1),
+                "{name} {}",
+                family.name
+            );
+            let entry = by_loops.entry(family.loops).or_default();
+            entry.0 += 1;
+            entry.1 += 1 << table.lines;
+            entry.2 += table.zero_count;
+            eprintln!(
+                "ZERO_TABLE {name} {} presentation {} lines {} zero {}/{}",
+                family.name,
+                top.presentation.0,
+                table.lines,
+                table.zero_count,
+                1_u64 << table.lines
+            );
+            tops += 1;
+        }
+        for (loops, (count, supports, zero)) in &by_loops {
+            eprintln!(
+                "ZERO_TABLE {name} {loops} loops: {count} tops, {supports} supports, {zero} zero, all complete and closed"
+            );
+        }
+        assert!(tops > 0, "{name}");
+    }
+}
+
+/// User-space instructions retired by this thread (Linux `perf_event_open`,
+/// `PERF_COUNT_HW_INSTRUCTIONS`, kernel and hypervisor excluded); `None` when
+/// the counter cannot be opened. Paired lowerings in one process compare by
+/// it on a shared host.
+struct InstructionCounter(i32);
+
+impl InstructionCounter {
+    fn open() -> Option<Self> {
+        #[repr(C)]
+        #[derive(Default)]
+        struct Attributes {
+            kind: u32,
+            size: u32,
+            config: u64,
+            sample_period: u64,
+            sample_type: u64,
+            read_format: u64,
+            flags: u64,
+            wakeup_events: u32,
+            bp_type: u32,
+            config1: u64,
+            config2: u64,
+            branch_sample_type: u64,
+            sample_regs_user: u64,
+            sample_stack_user: u32,
+            clockid: i32,
+            sample_regs_intr: u64,
+            aux_watermark: u32,
+            sample_max_stack: u16,
+            reserved2: u16,
+            aux_sample_size: u32,
+            reserved3: u32,
+            sig_data: u64,
+            config3: u64,
+        }
+        let attributes = Attributes {
+            kind: 0, // PERF_TYPE_HARDWARE
+            size: std::mem::size_of::<Attributes>() as u32,
+            config: 1,                  // PERF_COUNT_HW_INSTRUCTIONS
+            flags: (1 << 5) | (1 << 6), // exclude_kernel, exclude_hv
+            ..Default::default()
+        };
+        // SAFETY: a valid attribute struct of the stated size; this thread,
+        // any CPU, no group, no flags.
+        let fd = unsafe {
+            libc::syscall(
+                libc::SYS_perf_event_open,
+                &attributes as *const Attributes,
+                0,
+                -1,
+                -1,
+                0,
+            )
+        };
+        (fd >= 0).then_some(Self(fd as i32))
+    }
+
+    fn read(&self) -> u64 {
+        let mut value = 0_u64;
+        // SAFETY: reads 8 bytes into a u64 from the counter's descriptor.
+        let read = unsafe { libc::read(self.0, (&mut value as *mut u64).cast(), 8) };
+        if read == 8 { value } else { 0 }
+    }
+}
+
+impl Drop for InstructionCounter {
+    fn drop(&mut self) {
+        // SAFETY: closes the descriptor this value owns.
+        unsafe {
+            libc::close(self.0);
+        }
+    }
+}
+
+/// CPU seconds of this process (user + system) from `/proc/self/stat`.
+fn process_cpu_seconds() -> f64 {
+    let stat = std::fs::read_to_string("/proc/self/stat").unwrap_or_default();
+    let fields = stat
+        .rsplit_once(')')
+        .map(|(_, rest)| rest.split_whitespace().collect::<Vec<_>>())
+        .unwrap_or_default();
+    let ticks = |index: usize| {
+        fields
+            .get(index)
+            .and_then(|field| field.parse::<f64>().ok())
+            .unwrap_or(0.0)
+    };
+    // Fields 14 and 15 of stat(5); `fields[0]` is field 3.
+    (ticks(11) + ticks(12)) / 100.0
+}
+
+/// Peak resident memory of this process in GB (`VmHWM`).
+fn peak_rss_gb() -> f64 {
+    std::fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|status| {
+            status
+                .lines()
+                .find(|line| line.starts_with("VmHWM:"))
+                .and_then(|line| line.split_whitespace().nth(1)?.parse::<f64>().ok())
+        })
+        .unwrap_or(0.0)
+        / 1048576.0
+}
+
+/// The pruning modes of a drill (`VAKINT_TEST_PRUNE_MODES`, default
+/// `off,end,early`).
+fn drill_prune_modes() -> Vec<ZeroPrune> {
+    std::env::var("VAKINT_TEST_PRUNE_MODES")
+        .unwrap_or_else(|_| "off,end,early".into())
+        .split(',')
+        .map(|mode| match mode.trim() {
+            "off" => ZeroPrune::Off,
+            "end" => ZeroPrune::End,
+            "early" => ZeroPrune::Early,
+            "check" => ZeroPrune::Check,
+            other => panic!("VAKINT_TEST_PRUNE_MODES: {other}"),
+        })
+        .collect()
+}
+
+/// The JSON of one lowering's [`super::super::p_lowering::DirectStats`].
+fn direct_stats_json(stats: &super::super::p_lowering::DirectStats) -> serde_json::Value {
+    serde_json::json!({
+        "numerator_terms": stats.numerator_terms, "canonical_terms": stats.canonical_terms,
+        "merged_terms": stats.merged_terms, "distinct_monomials": stats.distinct_monomials,
+        "lowered": stats.lowered, "folded": stats.folded, "slot_products": stats.slot_products,
+        "pruned_early": stats.pruned_early, "pruned_end": stats.pruned_end,
+        "prune_known": stats.prune_known, "prune_unknown": stats.prune_unknown,
+        "prune_shared_channel": stats.prune_shared_channel, "prune_checked": stats.prune_checked,
+        "read_seconds": stats.read_seconds, "classify_seconds": stats.classify_seconds,
+        "scatter_seconds": stats.scatter_seconds, "finish_seconds": stats.finish_seconds,
+        "match_seconds": stats.match_seconds,
+    })
+}
+
+/// lane prune drill on massive-closure files (`pint6.massive-closure-request.v1`,
+/// zstd; graph 828's closures): every closure is lowered (no reduction) in
+/// each mode of `VAKINT_TEST_PRUNE_MODES` (default `off,end,early`),
+/// `VAKINT_TEST_PRUNE_REPEATS` times (default 1), and absorbed into one key
+/// plan per closing line and mode. With `off` and a pruning mode in one run,
+/// every pruned closure's fingerprint must equal the unpruned fingerprint
+/// without its zero-sector keys (asserted), and so must the absorbed plans.
+/// `VAKINT_TEST_PRUNE_ZERO_REDUCE=1`: the dropped keys of every closure are
+/// reduced (per channel) and must give zero. Environment:
+/// `VAKINT_TEST_PRUNE_CLOSURE_FILES` (`:`-separated), `VAKINT_TEST_PRUNE_OUT`
+/// (directory: `closures.jsonl`, `summary.json`), `VAKINT_TEST_P5L_DRILL_PACKAGE`.
+#[test]
+fn zero_sector_pruning_closure_drill() {
+    let (Some(files), Some(out)) = (
+        std::env::var_os("VAKINT_TEST_PRUNE_CLOSURE_FILES"),
+        std::env::var_os("VAKINT_TEST_PRUNE_OUT"),
+    ) else {
+        eprintln!("zero_sector_pruning_closure_drill: environment unset, skipped");
+        return;
+    };
+    let out = std::path::PathBuf::from(out);
+    std::fs::create_dir_all(&out).unwrap();
+    let started = std::time::Instant::now();
+    let mut engine = Vakint::new().unwrap();
+    if let Some(package) = std::env::var_os("VAKINT_TEST_P5L_DRILL_PACKAGE") {
+        engine
+            .load_p_library_directory(std::path::Path::new(&package), false)
+            .unwrap();
+    }
+    let handle = engine.p_library().unwrap();
+    let package_seconds = started.elapsed().as_secs_f64();
+    let modes = drill_prune_modes();
+    let repeats: usize = std::env::var("VAKINT_TEST_PRUNE_REPEATS")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(1);
+    let zero_reduce = std::env::var("VAKINT_TEST_PRUNE_ZERO_REDUCE").as_deref() == Ok("1");
+    let mut tables = PruneTables::new(&handle);
+    let counter = InstructionCounter::open();
+    let mut log = std::fs::File::create(out.join("closures.jsonl")).unwrap();
+    let mut plans = vec![Vec::<crate::p_integral::LoweredClosure>::new(); modes.len()];
+    let mut absorb_seconds = vec![0.0; modes.len()];
+    let mut absorb_instructions = vec![0_u64; modes.len()];
+    let (mut compared, mut read_seconds) = (0, 0.0);
+    let mut epsilon_terms = None;
+    for file in std::env::split_paths(&files) {
+        let reading = std::time::Instant::now();
+        let name = file
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .trim_end_matches(".zst")
+            .trim_end_matches(".txt")
+            .to_owned();
+        let raw = std::process::Command::new("zstd")
+            .args(["-qdc"])
+            .arg(&file)
+            .output()
+            .unwrap();
+        assert!(raw.status.success(), "{}: zstd failed", file.display());
+        let text = String::from_utf8(raw.stdout).unwrap();
+        let field = |key: &str| {
+            text.lines()
+                .find_map(|line| line.strip_prefix(key)?.strip_prefix(' '))
+                .unwrap_or_else(|| panic!("{name}: no {key}"))
+                .to_owned()
+        };
+        let mut settings = settings(RustRedMasterMode::Retain, None);
+        settings.epsilon_symbol = "gammalooprs::ε".into();
+        settings.mu_r_sq_symbol = "gammalooprs::μᵣ²".into();
+        settings.integral_normalization_factor = crate::LoopNormalizationFactor::MSbar;
+        settings.number_of_terms_in_epsilon_expansion = field("epsilon_terms").parse().unwrap();
+        settings.run_time_decimal_precision = 100;
+        settings.use_dot_product_notation = false;
+        settings.n_cores = 1;
+        settings.ordered_cache = crate::OrderedCacheSettings::off();
+        let terms = settings.number_of_terms_in_epsilon_expansion;
+        assert_eq!(
+            *epsilon_terms.get_or_insert(terms),
+            terms,
+            "{name}: epsilon terms"
+        );
+        let closure = crate::p_integral::MassiveClosure {
+            momentum: parse(&field("closure_momentum")),
+            mass_squared: parse(&field("closure_mass_squared")),
+            power: field("closure_power").parse().unwrap(),
+        };
+        let input = parse(&field("input"));
+        let symbolica::atom::AtomView::Mul(product) = input.as_view() else {
+            panic!("{name}: input is not numerator * topo");
+        };
+        let mut topology = Atom::num(1);
+        let mut numerator = Atom::num(1);
+        for factor in product.iter() {
+            match factor {
+                symbolica::atom::AtomView::Fun(function)
+                    if function.get_symbol() == crate::symbols::S.topo =>
+                {
+                    topology = factor.to_owned()
+                }
+                _ => numerator = numerator * factor.to_owned(),
+            }
+        }
+        let loops: i64 = text
+            .lines()
+            .find_map(|line| line.strip_prefix("p_loops ")?.trim().parse().ok())
+            .unwrap_or(5);
+        let mut routing = (1..=loops)
+            .map(|i| (parse(&format!("k({i})")), parse(&format!("k({i})"))))
+            .collect::<Vec<_>>();
+        routing.push((closure.momentum.clone(), closure.momentum.clone()));
+        let input = crate::p_integral::DirectClosureInput {
+            topology,
+            routing,
+            numerator,
+        };
+        drop(text);
+        read_seconds += reading.elapsed().as_secs_f64();
+        let mut texts = vec![None::<String>; modes.len()];
+        for repeat in 0..repeats {
+            for (slot, mode) in modes.iter().enumerate() {
+                let mut stats = super::super::p_lowering::DirectStats::default();
+                let instructions = counter.as_ref().map(InstructionCounter::read);
+                let (wall, cpu) = (std::time::Instant::now(), process_cpu_seconds());
+                let lowered = with_zero_prune(*mode, || {
+                    closure.lower_direct_explained(&engine, &settings, &input, &mut stats)
+                })
+                .unwrap()
+                .unwrap_or_else(|reason| panic!("{name}: declined: {reason}"));
+                let (wall, cpu) = (wall.elapsed().as_secs_f64(), process_cpu_seconds() - cpu);
+                let instructions = counter
+                    .as_ref()
+                    .zip(instructions)
+                    .map(|(counter, before)| counter.read() - before);
+                let entries = folded_entries(lowered.folded());
+                let pairs = lowered
+                    .folded()
+                    .values()
+                    .map(|inputs| {
+                        inputs
+                            .by_basis
+                            .values()
+                            .flat_map(BTreeMap::keys)
+                            .collect::<BTreeSet<_>>()
+                            .len()
+                    })
+                    .sum::<usize>();
+                let mut record = serde_json::json!({
+                    "closure": name, "mode": mode.as_str(), "repeat": repeat, "wall": wall, "cpu": cpu,
+                    "instructions": instructions,
+                    "entries": entries, "pairs": pairs, "channels": lowered.folded().len(),
+                    "stats": direct_stats_json(&stats),
+                });
+                if repeat == 0 {
+                    if *mode == ZeroPrune::Off {
+                        let (kept, removed) = tables.split(lowered.folded());
+                        record["zero_entries"] = folded_entries(&removed).into();
+                        if zero_reduce && !removed.is_empty() {
+                            let reducing = std::time::Instant::now();
+                            let values = reduce_folded_channels(
+                                &engine,
+                                &settings,
+                                &handle,
+                                removed,
+                                None,
+                                FoldMode::Coefficient,
+                                true,
+                            )
+                            .unwrap();
+                            assert!(
+                                values.is_empty(),
+                                "{name}: dropped keys reduce to {values:?}"
+                            );
+                            record["zero_reduce_seconds"] = reducing.elapsed().as_secs_f64().into();
+                        }
+                        texts[slot] = Some(format!(
+                            "{:?}|{}",
+                            lowered.closing_key(),
+                            folded_text(&kept)
+                        ));
+                    } else {
+                        assert_eq!(
+                            format!(
+                                "{:?}|{}",
+                                lowered.closing_key(),
+                                folded_text(lowered.folded())
+                            ),
+                            lowered.fingerprint(),
+                            "{name}: the drill's text is the fingerprint"
+                        );
+                        texts[slot] = Some(lowered.fingerprint());
+                    }
+                    let absorbing = std::time::Instant::now();
+                    let absorb_start = counter.as_ref().map(InstructionCounter::read);
+                    let mut lowered = Some(lowered);
+                    for class in plans[slot].iter_mut() {
+                        match class.absorb(lowered.take().unwrap()) {
+                            Ok(()) => break,
+                            Err(back) => lowered = Some(back),
+                        }
+                    }
+                    plans[slot].extend(lowered);
+                    absorb_seconds[slot] += absorbing.elapsed().as_secs_f64();
+                    if let (Some(counter), Some(start)) = (&counter, absorb_start) {
+                        absorb_instructions[slot] += counter.read() - start;
+                    }
+                }
+                record["peak_rss_gb"] = peak_rss_gb().into();
+                use std::io::Write as _;
+                writeln!(log, "{record}").unwrap();
+                eprintln!("ZERO_PRUNE_DRILL {record}");
+            }
+        }
+        if let Some(off) = modes.iter().position(|mode| *mode == ZeroPrune::Off) {
+            for (slot, mode) in modes.iter().enumerate() {
+                if slot != off {
+                    assert!(
+                        texts[slot] == texts[off],
+                        "{name}: {mode:?} differs from off without its zero keys"
+                    );
+                    compared += 1;
+                }
+            }
+        }
+    }
+    // The absorbed key plans: off without its zero keys = every pruned mode.
+    let plan_texts = plans
+        .iter()
+        .zip(&modes)
+        .map(|(classes, mode)| {
+            classes
+                .iter()
+                .map(|class| {
+                    if *mode == ZeroPrune::Off {
+                        format!(
+                            "{:?}|{}",
+                            class.closing_key(),
+                            folded_text(&tables.split(class.folded()).0)
+                        )
+                    } else {
+                        class.fingerprint()
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let plans_identical =
+        modes.contains(&ZeroPrune::Off) && plan_texts.iter().all(|texts| *texts == plan_texts[0]);
+    if modes.contains(&ZeroPrune::Off) {
+        assert!(plans_identical, "absorbed key plans differ");
+    }
+    let plan_entries = plans
+        .iter()
+        .map(|classes| {
+            classes
+                .iter()
+                .map(|class| folded_entries(class.folded()))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    // VAKINT_TEST_PRUNE_REDUCE=1: every mode's key plans reduced once
+    // (Retain and Symbolic finalized), the sums written as
+    // `sum.<mode>.<master mode>.sym` and compared between the modes.
+    let mut reductions = Vec::new();
+    if std::env::var("VAKINT_TEST_PRUNE_REDUCE").as_deref() == Ok("1")
+        && let Some(terms) = epsilon_terms
+    {
+        let make = |master: RustRedMasterMode| {
+            let mut settings = settings(master, None);
+            settings.epsilon_symbol = "gammalooprs::ε".into();
+            settings.mu_r_sq_symbol = "gammalooprs::μᵣ²".into();
+            settings.integral_normalization_factor = crate::LoopNormalizationFactor::MSbar;
+            settings.number_of_terms_in_epsilon_expansion = terms;
+            settings.run_time_decimal_precision = 100;
+            settings.use_dot_product_notation = false;
+            settings.n_cores = 1;
+            settings.ordered_cache = crate::OrderedCacheSettings::off();
+            settings
+        };
+        let (retain, symbolic) = (
+            make(RustRedMasterMode::Retain),
+            make(RustRedMasterMode::Symbolic),
+        );
+        let mut sums = Vec::new();
+        for (slot, mode) in modes.iter().enumerate() {
+            let before = last_stats();
+            let instructions = counter.as_ref().map(InstructionCounter::read);
+            let (wall, cpu) = (std::time::Instant::now(), process_cpu_seconds());
+            let mut values = [Atom::Zero, Atom::Zero];
+            for class in std::mem::take(&mut plans[slot]) {
+                let results = with_zero_prune(*mode, || {
+                    class.evaluate_modes(&engine, &[&retain, &symbolic])
+                })
+                .unwrap();
+                for (value, result) in values.iter_mut().zip(results) {
+                    *value += result;
+                }
+            }
+            let (wall, cpu) = (wall.elapsed().as_secs_f64(), process_cpu_seconds() - cpu);
+            let after = last_stats();
+            let texts = values
+                .iter()
+                .map(|value| value.expand().to_canonical_string())
+                .collect::<Vec<_>>();
+            for (master, text) in ["retain", "symbolic"].iter().zip(&texts) {
+                std::fs::write(
+                    out.join(format!("sum.{}.{master}.sym", mode.as_str())),
+                    text,
+                )
+                .unwrap();
+            }
+            let record = serde_json::json!({
+                "mode": mode.as_str(), "wall": wall, "cpu": cpu,
+                "instructions": counter.as_ref().zip(instructions).map(|(counter, before)| counter.read() - before),
+                "pairs": after.pairs - before.pairs, "reductions": after.reductions - before.reductions,
+                "prepare_seconds": after.prepare_seconds - before.prepare_seconds,
+                "library_seconds": after.library_seconds - before.library_seconds,
+                "render_seconds": after.render_seconds - before.render_seconds,
+                "result_bytes": texts.iter().map(String::len).collect::<Vec<_>>(),
+                "peak_rss_gb": peak_rss_gb(),
+            });
+            eprintln!("ZERO_PRUNE_DRILL reduce {record}");
+            reductions.push(record);
+            sums.push(texts);
+        }
+        assert!(
+            sums.iter().all(|texts| *texts == sums[0]),
+            "the reduced sums differ between the modes"
+        );
+    }
+    let summary = serde_json::json!({
+        "modes": modes.iter().map(|mode| mode.as_str()).collect::<Vec<_>>(),
+        "repeats": repeats, "package_seconds": package_seconds, "read_seconds": read_seconds,
+        "closure_comparisons": compared, "plans_identical": plans_identical,
+        "absorb_seconds": absorb_seconds, "absorb_instructions": absorb_instructions,
+        "plan_entries": plan_entries, "reductions": reductions,
+        "peak_rss_gb": peak_rss_gb(), "total_seconds": started.elapsed().as_secs_f64(),
+    });
+    std::fs::write(out.join("summary.json"), summary.to_string()).unwrap();
+    eprintln!("ZERO_PRUNE_DRILL summary {summary}");
+}
+
+/// lane prune drill on a remainder-boundary record (graph 1237): the boundary
+/// is lowered in each mode of `VAKINT_TEST_PRUNE_MODES` (fingerprints of its
+/// key plans: off without its zero keys = every pruning mode, asserted), then
+/// the `VAKINT_TEST_PRUNE_UNITS` (default 2) smallest channels of plan
+/// `VAKINT_TEST_PRUNE_PLAN` (default 0, sizes of the off lowering) are reduced
+/// in each mode (Retain and Symbolic, one reduction) and their values written
+/// and compared (asserted byte-identical). Environment:
+/// `VAKINT_TEST_PRUNE_BOUNDARY` (header), `VAKINT_TEST_PRUNE_OUT`,
+/// `VAKINT_TEST_P5L_DRILL_PACKAGE`; `VAKINT_TEST_ORDERED_CACHE=off`.
+#[test]
+fn zero_sector_pruning_boundary_drill() {
+    let (Some(header), Some(out)) = (
+        std::env::var_os("VAKINT_TEST_PRUNE_BOUNDARY"),
+        std::env::var_os("VAKINT_TEST_PRUNE_OUT"),
+    ) else {
+        eprintln!("zero_sector_pruning_boundary_drill: environment unset, skipped");
+        return;
+    };
+    let header = std::path::PathBuf::from(header);
+    let out = std::path::PathBuf::from(out);
+    std::fs::create_dir_all(&out).unwrap();
+    let started = std::time::Instant::now();
+    let mut engine = Vakint::new().unwrap();
+    if let Some(package) = std::env::var_os("VAKINT_TEST_P5L_DRILL_PACKAGE") {
+        engine
+            .load_p_library_directory(std::path::Path::new(&package), false)
+            .unwrap();
+    }
+    let handle = engine.p_library().unwrap();
+    let package_seconds = started.elapsed().as_secs_f64();
+    let record = crate::p_integral::read_boundary_record(&header).unwrap();
+    let header_text = std::fs::read_to_string(&header).unwrap();
+    let epsilon_terms: i64 = header_text
+        .lines()
+        .find_map(|line| line.strip_prefix("epsilon_terms "))
+        .expect("epsilon_terms in the header")
+        .trim()
+        .parse()
+        .unwrap();
+    let make = |mode: RustRedMasterMode| {
+        let mut settings = settings(mode, None);
+        settings.epsilon_symbol = "gammalooprs::ε".into();
+        settings.mu_r_sq_symbol = "gammalooprs::μᵣ²".into();
+        settings.integral_normalization_factor = crate::LoopNormalizationFactor::MSbar;
+        settings.number_of_terms_in_epsilon_expansion = epsilon_terms;
+        settings.run_time_decimal_precision = 100;
+        settings.use_dot_product_notation = false;
+        settings.n_cores = 1;
+        if std::env::var("VAKINT_TEST_ORDERED_CACHE").as_deref() == Ok("off") {
+            settings.ordered_cache = crate::OrderedCacheSettings::off();
+        }
+        settings
+    };
+    let (retain, symbolic) = (
+        make(RustRedMasterMode::Retain),
+        make(RustRedMasterMode::Symbolic),
+    );
+    let modes = drill_prune_modes();
+    let plan_index: usize = std::env::var("VAKINT_TEST_PRUNE_PLAN")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(0);
+    let units: usize = std::env::var("VAKINT_TEST_PRUNE_UNITS")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(2);
+    let mut tables = PruneTables::new(&handle);
+    let counter = InstructionCounter::open();
+    let mut records = Vec::new();
+    let mut texts = Vec::new();
+    let mut lowered_plans = Vec::new();
+    for mode in &modes {
+        let instructions = counter.as_ref().map(InstructionCounter::read);
+        let (wall, cpu) = (std::time::Instant::now(), process_cpu_seconds());
+        let (plans, stats) = with_zero_prune(*mode, || {
+            record.boundary.lower_with_stats(
+                &engine,
+                &symbolic,
+                crate::p_integral::BoundaryOptions { strict: true },
+            )
+        })
+        .unwrap();
+        let (wall, cpu) = (wall.elapsed().as_secs_f64(), process_cpu_seconds() - cpu);
+        let plan_texts = plans
+            .iter()
+            .map(|plan| {
+                if *mode == ZeroPrune::Off {
+                    format!(
+                        "{:?}|{}",
+                        plan.closing_key(),
+                        folded_text(&tables.split(plan.folded()).0)
+                    )
+                } else {
+                    plan.fingerprint()
+                }
+            })
+            .collect::<Vec<_>>();
+        let record = serde_json::json!({
+            "mode": mode.as_str(), "lower_wall": wall, "lower_cpu": cpu,
+            "lower_instructions": counter.as_ref().zip(instructions).map(|(counter, before)| counter.read() - before),
+            "plans": plans.iter().map(|plan| serde_json::json!({
+                "channels": plan.folded().len(), "entries": folded_entries(plan.folded())})).collect::<Vec<_>>(),
+            "boundary_stats": format!("{stats:?}"), "peak_rss_gb": peak_rss_gb(),
+        });
+        eprintln!("ZERO_PRUNE_BOUNDARY lowered {record}");
+        records.push(record);
+        texts.push(plan_texts);
+        lowered_plans.push(plans);
+    }
+    let identical = texts.iter().all(|plan_texts| *plan_texts == texts[0]);
+    if modes.contains(&ZeroPrune::Off) {
+        assert!(
+            identical,
+            "the key plans differ from off without its zero keys"
+        );
+    }
+    // The units: the smallest channels of the plan in the first mode (off).
+    let reference = &lowered_plans[0][plan_index];
+    let mut sizes = reference
+        .folded()
+        .iter()
+        .map(|(channel, inputs)| {
+            (
+                inputs.by_basis.values().map(BTreeMap::len).sum::<usize>(),
+                channel.clone(),
+            )
+        })
+        .collect::<Vec<_>>();
+    sizes.sort();
+    let chosen = sizes.into_iter().take(units).collect::<Vec<_>>();
+    let mut values = Vec::new();
+    for (mode, mut plans) in modes.iter().zip(lowered_plans) {
+        let plan = plans.swap_remove(plan_index);
+        drop(plans);
+        let mut unit_values = Vec::new();
+        for (unit, (size, channel)) in chosen.iter().enumerate() {
+            let mut one = plan.clone();
+            one.retain_channels(|candidate| candidate == channel);
+            let entries = folded_entries(one.folded());
+            let before = last_stats();
+            let instructions = counter.as_ref().map(InstructionCounter::read);
+            let (wall, cpu) = (std::time::Instant::now(), process_cpu_seconds());
+            let results =
+                with_zero_prune(*mode, || one.evaluate_modes(&engine, &[&retain, &symbolic]))
+                    .unwrap();
+            let (wall, cpu) = (wall.elapsed().as_secs_f64(), process_cpu_seconds() - cpu);
+            let after = last_stats();
+            let texts = results
+                .iter()
+                .map(|value| value.to_canonical_string())
+                .collect::<Vec<_>>();
+            for (master, text) in ["retain", "symbolic"].iter().zip(&texts) {
+                std::fs::write(
+                    out.join(format!("unit{}.{}.{master}.sym", unit + 1, mode.as_str())),
+                    text,
+                )
+                .unwrap();
+            }
+            let record = serde_json::json!({
+                "mode": mode.as_str(), "unit": unit + 1, "off_entries": size, "entries": entries,
+                "channel": format!("{} scale_power={} coefficient={}", channel.loops, channel.scale_power, channel.coefficient),
+                "wall": wall, "cpu": cpu, "pairs": after.pairs - before.pairs,
+                "instructions": counter.as_ref().zip(instructions).map(|(counter, before)| counter.read() - before),
+                "prepare_seconds": after.prepare_seconds - before.prepare_seconds,
+                "library_seconds": after.library_seconds - before.library_seconds,
+                "render_seconds": after.render_seconds - before.render_seconds,
+                "peak_rss_gb": peak_rss_gb(),
+            });
+            eprintln!("ZERO_PRUNE_BOUNDARY unit {record}");
+            records.push(record);
+            unit_values.push(texts);
+        }
+        values.push(unit_values);
+    }
+    let values_identical = values.iter().all(|unit_values| *unit_values == values[0]);
+    let summary = serde_json::json!({
+        "header": header.to_string_lossy(), "package_seconds": package_seconds,
+        "plans_identical": identical, "values_identical": values_identical,
+        "records": records, "total_seconds": started.elapsed().as_secs_f64(), "peak_rss_gb": peak_rss_gb(),
+    });
+    std::fs::write(
+        out.join("boundary_summary.json"),
+        serde_json::to_string_pretty(&summary).unwrap(),
+    )
+    .unwrap();
+    assert!(values_identical, "unit values differ between modes");
+    eprintln!(
+        "ZERO_PRUNE_BOUNDARY done in {:.1} s",
+        started.elapsed().as_secs_f64()
+    );
+}

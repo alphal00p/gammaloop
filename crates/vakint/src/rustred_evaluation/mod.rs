@@ -49,6 +49,7 @@ mod materialize;
 pub(crate) mod monitor;
 mod numerator;
 mod ordered;
+pub mod p_contract;
 pub(crate) mod p_data;
 pub mod p_gate;
 pub(crate) mod p_integral;
@@ -57,6 +58,7 @@ pub(crate) mod p_relations;
 pub(crate) mod p_shipped_cache;
 #[cfg(test)]
 mod p_shipped_cache_tests;
+pub(crate) mod p_zero;
 pub(crate) mod parallel;
 #[cfg(test)]
 mod postprocessing_profile_tests;

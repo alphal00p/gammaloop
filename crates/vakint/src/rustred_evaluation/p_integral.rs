@@ -727,6 +727,8 @@ struct RequestKey {
     powers: Vec<i64>,
     external: Atom,
     numerator: Atom,
+    /// lane prune: the direct lowering drops zero-sector keys in this mode.
+    zero_prune: super::p_zero::ZeroPrune,
 }
 
 /// Estimated resident bytes of one lowered input pair (key, rational,
@@ -830,6 +832,7 @@ fn fold_request(
         powers: request.powers.to_vec(),
         external: request.external.clone(),
         numerator: request.canonical_numerator.to_owned(),
+        zero_prune: super::p_zero::zero_prune(),
     });
     if let Some(key) = &key
         && let Some(found) = handle.request_memo().get(key)

@@ -294,6 +294,14 @@ fn map_invariants(value: &Atom, adjoint_dimension: &Atom, fundamental_dimension:
         .with(Atom::var(s.tf) * Atom::var(s.na) / Atom::var(s.cf))
 }
 
+/// [`map_invariants`] on a value whose representations already carry this
+/// chain's dimensions (`N_A`, `N_R`): the colour coefficient of the numerator
+/// engine's harness ([`crate::engine_gate::refpath_colour`]).
+pub(crate) fn named_invariants(value: &Atom) -> Atom {
+    let s = &*SYMBOLS;
+    map_invariants(value, &Atom::var(s.na), &Atom::var(s.nr))
+}
+
 /// The colour branches of a diagram by the input type's colour split
 /// (`vakint::p_integral::factorized::{split_local_colour, colour_coefficient}`
 /// in `ColourMode::Invariants`, the helper's one implementation), the
@@ -489,7 +497,7 @@ fn contract_branch(
 /// sum over the colour branches weighted by their coefficients, with the beta
 /// normalisation `1/(i q²)` (metric and transverse also `1/(D-1)`), couplings
 /// expanded and `gs = 1`.
-fn contract(
+pub fn contract(
     diagram: &FeynmanDiagram,
     branches: &[ColourBranch],
     momentum: &Atom,
