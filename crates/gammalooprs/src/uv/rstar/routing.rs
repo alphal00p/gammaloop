@@ -132,6 +132,8 @@ struct Guide {
     steiner_edges: Vec<EdgeIndex>,
     terminals: usize,
     exact: bool,
+    /// Spanning trees evaluated (enumeration modes; 0 otherwise).
+    trees: usize,
 }
 
 /// One propagator of the shrunken remainder between two (identified) nodes.
@@ -359,6 +361,7 @@ where
         steiner_edges,
         terminals: terminals.len(),
         exact,
+        trees: 0,
     })
 }
 
@@ -435,11 +438,22 @@ pub(crate) fn guided_shrunken_sub_lmb(
             matches!(pair, HedgePair::Paired { source, .. } if lmb.tree.includes(source))
         })
     };
+    let started = std::time::Instant::now();
     let found = if rule.enumerates() {
         enumerate_guide(&contracted, &remainder, &contracted_externals, marked, rule)
     } else {
         guide(&contracted, &remainder, &contracted_externals, &weight, &preferred)
     };
+    if rule.enumerates() && log_level() >= 1 {
+        eprintln!(
+            "RR_ENUM graph={} mode={} trees={} exact={} ms={:.3}",
+            graph.name,
+            rule.as_str(),
+            found.as_ref().map_or(0, |g| g.trees),
+            found.as_ref().is_some_and(|g| g.exact),
+            started.elapsed().as_secs_f64() * 1e3,
+        );
+    }
     let Some(guide) = found else {
         return Ok(None);
     };
@@ -999,5 +1013,6 @@ fn enumerate_guide<G: GraphAccess>(
         steiner_edges: Vec::new(),
         terminals: terminals.len(),
         exact: count < MAX_TREES,
+        trees: count,
     })
 }
