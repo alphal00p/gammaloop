@@ -115,12 +115,11 @@ fn main() {
         #[cfg(feature = "reference-cases")]
         if phases {
             let input = atom.clone();
-            let ((), measurement) =
-                idenso::reference_cases::timing::measure("replay", || {
-                    let inferred = SymbolicTensor::infer_indexed(input).unwrap();
-                    let simplified = inferred.simplify_algebra(&settings).unwrap();
-                    let _ = simplified.to_dots().unwrap();
-                });
+            let ((), measurement) = idenso::reference_cases::timing::measure("replay", || {
+                let inferred = SymbolicTensor::infer_indexed(input).unwrap();
+                let simplified = inferred.simplify_algebra(&settings).unwrap();
+                let _ = simplified.to_dots().unwrap();
+            });
             phase_json = measurement.to_string();
         }
         let stage = |index: usize| {
@@ -150,7 +149,10 @@ fn main() {
         .unwrap();
         out.flush().unwrap();
         if identical == Some(false) {
-            eprintln!("[algebra_replay] {}: output differs from .out", path.display());
+            eprintln!(
+                "[algebra_replay] {}: output differs from .out",
+                path.display()
+            );
         }
     }
 }

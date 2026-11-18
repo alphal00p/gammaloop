@@ -142,13 +142,17 @@ pub fn match_lines(
         return Ok(Matched::Scaleless);
     }
     if term.numerator != Atom::num(1) {
-        return Ok(Matched::Declined("a normalisation factor of the graph".into()));
+        return Ok(Matched::Declined(
+            "a normalisation factor of the graph".into(),
+        ));
     }
     let k1 = function!(S.k, 1);
     term.numerator = function!(S.dot, &k1, &k1);
     let Some(front) = vakint.match_topologies_for_settings(settings, term.integral.as_view())?
     else {
-        return Ok(Matched::Declined("the graph's topology is not recognised".into()));
+        return Ok(Matched::Declined(
+            "the graph's topology is not recognised".into(),
+        ));
     };
     term.canonicalize_expanding(settings, &front, false, false)?;
     if term.numerator.is_zero() {

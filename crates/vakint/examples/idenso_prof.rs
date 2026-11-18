@@ -406,10 +406,7 @@ fn contract_staged(
     let i_q2 = Atom::i() * q_squared;
     let mut out = Vec::new();
     if metric_only {
-        out.push((
-            "metric",
-            couplings(&g_sum / (&d - Atom::num(1)) / &i_q2),
-        ));
+        out.push(("metric", couplings(&g_sum / (&d - Atom::num(1)) / &i_q2)));
     } else {
         out.push((
             "transverse",
@@ -436,7 +433,9 @@ fn colour_staged(
         )?);
     }
     for (_, _, edge) in diagram.edges() {
-        locals.push(split_local_colour(&NumeratorInterface::export(&edge.numerator).0)?);
+        locals.push(split_local_colour(
+            &NumeratorInterface::export(&edge.numerator).0,
+        )?);
     }
     let mut partial: Vec<Atom> = vec![Atom::num(1)];
     for rows in &locals {
@@ -576,7 +575,10 @@ fn main() -> eyre::Result<()> {
             template.load_p_library_directory(library, false)?;
         }
         // warm-up (process-wide lazy statics) on a fresh engine, untimed
-        eprintln!("[idenso_prof] p library loaded in {:.3} s", started.elapsed().as_secs_f64());
+        eprintln!(
+            "[idenso_prof] p library loaded in {:.3} s",
+            started.elapsed().as_secs_f64()
+        );
         Some(template)
     } else {
         None
@@ -598,12 +600,20 @@ fn main() -> eyre::Result<()> {
         let diagram = FeynmanDiagram::from_dot(Arc::clone(&model), &dot)?;
         let parse = started.elapsed().as_secs_f64();
         if refpath::scaleless_contact(&diagram) {
-            writeln!(out, "{}", json!({"graph": graph, "stem": stem, "zero": "scaleless"}))?;
+            writeln!(
+                out,
+                "{}",
+                json!({"graph": graph, "stem": stem, "zero": "scaleless"})
+            )?;
             continue;
         }
         let (branches, total) = refpath::colour_branches(&diagram)?;
         if branches.is_empty() {
-            writeln!(out, "{}", json!({"graph": graph, "stem": stem, "zero": "colour", "branches_total": total}))?;
+            writeln!(
+                out,
+                "{}",
+                json!({"graph": graph, "stem": stem, "zero": "colour", "branches_total": total})
+            )?;
             continue;
         }
         let dimension = Atom::var(refpath::SYMBOLS.d);
@@ -626,13 +636,15 @@ fn main() -> eyre::Result<()> {
         let mut equal = true;
         let staged_reps = if no_staged { 0 } else { reps };
         for rep in 0..staged_reps {
-            let run_whole = |whole: &mut Vec<(f64, f64)>| -> eyre::Result<Vec<(&'static str, Atom)>> {
-                let wall = Instant::now();
-                let cpu = cpu_seconds();
-                let value = refpath::contract(&diagram, &branches, &momentum, &q_squared, projection)?;
-                whole.push((wall.elapsed().as_secs_f64(), cpu_seconds() - cpu));
-                Ok(value)
-            };
+            let run_whole =
+                |whole: &mut Vec<(f64, f64)>| -> eyre::Result<Vec<(&'static str, Atom)>> {
+                    let wall = Instant::now();
+                    let cpu = cpu_seconds();
+                    let value =
+                        refpath::contract(&diagram, &branches, &momentum, &q_squared, projection)?;
+                    whole.push((wall.elapsed().as_secs_f64(), cpu_seconds() - cpu));
+                    Ok(value)
+                };
             let mut clocks = Clocks::default();
             let mut rep_sizes = Sizes::default();
             let mut dump = (rep == 0 && dump_dir.is_some()).then(Vec::new);
@@ -672,7 +684,8 @@ fn main() -> eyre::Result<()> {
                 }
             }
             if reference.is_none() {
-                reference_terms = Some(value_whole.iter().map(|(_, v)| terms_of(&v.expand())).sum());
+                reference_terms =
+                    Some(value_whole.iter().map(|(_, v)| terms_of(&v.expand())).sum());
                 reference = Some(value_whole);
             }
             sizes = rep_sizes;
@@ -699,8 +712,16 @@ fn main() -> eyre::Result<()> {
                 let wall = Instant::now();
                 let cpu = cpu_seconds();
                 let value = refpath::direct::contract_edges(
-                    &diagram, &terms, &momentum, &q_squared, projection,
-                    refpath::direct::DirectOptions { dots: r3_dots, routed: r3_routed, compact: false },
+                    &diagram,
+                    &terms,
+                    &momentum,
+                    &q_squared,
+                    projection,
+                    refpath::direct::DirectOptions {
+                        dots: r3_dots,
+                        routed: r3_routed,
+                        compact: false,
+                    },
                     None,
                 )?;
                 edge_runs.push((wall.elapsed().as_secs_f64(), cpu_seconds() - cpu));
@@ -729,7 +750,10 @@ fn main() -> eyre::Result<()> {
                     walls.push(t.elapsed().as_secs_f64());
                     values = result.map(|v| v.len()).unwrap_or(usize::MAX);
                 }
-                engine.insert(name.into(), json!({"wall": median(walls), "values": values}));
+                engine.insert(
+                    name.into(),
+                    json!({"wall": median(walls), "values": values}),
+                );
             }
         }
         #[allow(unused_mut)]
@@ -760,7 +784,13 @@ fn main() -> eyre::Result<()> {
                 contract_only: false,
             };
             let mut runs = Vec::new();
-            let mut reference: Option<Vec<(&'static str, vakint::rustred_evaluation::p_gate::GateView, Atom)>> = None;
+            let mut reference: Option<
+                Vec<(
+                    &'static str,
+                    vakint::rustred_evaluation::p_gate::GateView,
+                    Atom,
+                )>,
+            > = None;
             let mut direct_runs = Vec::new();
             let mut direct_gate = serde_json::Value::Null;
             let mut direct_terms = 0usize;
@@ -787,7 +817,9 @@ fn main() -> eyre::Result<()> {
                             reference = Some(
                                 run.results
                                     .iter()
-                                    .map(|r| (r.projection, refpath::gate_view(r).0, r.value.clone()))
+                                    .map(|r| {
+                                        (r.projection, refpath::gate_view(r).0, r.value.clone())
+                                    })
                                     .collect(),
                             );
                         }
@@ -806,9 +838,20 @@ fn main() -> eyre::Result<()> {
                         let (terms, _) = refpath::direct::colour_terms(&diagram, merge_colour)?;
                         let colour_seconds = colour_started.elapsed().as_secs_f64();
                         let outcome = refpath::direct::lower_graph(
-                            &engine, &settings, &diagram, &terms, &momentum, &q_squared,
-                            &weight, projection, true,
-                            refpath::direct::DirectOptions { dots: r3_dots, routed: r3_routed, compact: r3_compact },
+                            &engine,
+                            &settings,
+                            &diagram,
+                            &terms,
+                            &momentum,
+                            &q_squared,
+                            &weight,
+                            projection,
+                            true,
+                            refpath::direct::DirectOptions {
+                                dots: r3_dots,
+                                routed: r3_routed,
+                                compact: r3_compact,
+                            },
                             &mut seconds,
                         )?;
                         direct_terms = terms.len();
@@ -816,11 +859,16 @@ fn main() -> eyre::Result<()> {
                         let (wall, cpu) = (wall.elapsed().as_secs_f64(), cpu_seconds() - cpu);
                         let mut views = Vec::new();
                         let status = match &outcome {
-                            refpath::direct::DirectOutcome::Zero(reason) => format!("zero: {reason}"),
-                            refpath::direct::DirectOutcome::Declined(reason) => format!("declined: {reason}"),
+                            refpath::direct::DirectOutcome::Zero(reason) => {
+                                format!("zero: {reason}")
+                            }
+                            refpath::direct::DirectOutcome::Declined(reason) => {
+                                format!("declined: {reason}")
+                            }
                             refpath::direct::DirectOutcome::Lowered(projections) => {
                                 for p in projections {
-                                    let (view, _) = refpath::direct::gate_view(&engine, &settings, p)?;
+                                    let (view, _) =
+                                        refpath::direct::gate_view(&engine, &settings, p)?;
                                     views.push((p.projection, view, p.value.clone()));
                                     let c = p.counts();
                                     direct_counts = json!({
@@ -847,13 +895,17 @@ fn main() -> eyre::Result<()> {
                 for (name, view, value) in views {
                     match reference.iter().find(|(n, _, _)| n == name) {
                         Some((_, rview, rvalue)) => {
-                            let difference = vakint::rustred_evaluation::p_gate::compare_gate_views(rview, view);
+                            let difference =
+                                vakint::rustred_evaluation::p_gate::compare_gate_views(rview, view);
                             if difference.is_empty() {
                                 identical += 1;
                             } else {
                                 differing.push(format!("{name}: {difference:?}"));
                             }
-                            if value.as_ref().is_some_and(|v| refpath::direct::values_equal(v, rvalue)) {
+                            if value
+                                .as_ref()
+                                .is_some_and(|v| refpath::direct::values_equal(v, rvalue))
+                            {
                                 values_equal += 1;
                             }
                         }
@@ -869,9 +921,14 @@ fn main() -> eyre::Result<()> {
                         let file = dir.join("gate").join(format!("{stem}.{name}.gate"));
                         match std::fs::read_to_string(&file) {
                             Ok(text) => {
-                                let (sview, _) = vakint::rustred_evaluation::p_gate::read_gate_view(&text)
-                                    .map_err(|e| eyre::eyre!(e))?;
-                                if vakint::rustred_evaluation::p_gate::compare_gate_views(&sview, view).is_empty() {
+                                let (sview, _) =
+                                    vakint::rustred_evaluation::p_gate::read_gate_view(&text)
+                                        .map_err(|e| eyre::eyre!(e))?;
+                                if vakint::rustred_evaluation::p_gate::compare_gate_views(
+                                    &sview, view,
+                                )
+                                .is_empty()
+                                {
                                     stored_identical += 1;
                                 } else {
                                     differing.push(format!("{name}: differs from the stored dump"));
@@ -883,10 +940,14 @@ fn main() -> eyre::Result<()> {
                     stored = json!({"identical": stored_identical, "missing": stored_missing});
                 }
                 let r2_nonzero = reference.iter().filter(|(_, v, _)| !v.is_empty()).count();
-                let pass = status == "lowered" && differing.is_empty() && identical == reference.len()
-                    || (status.starts_with("zero") && r2_nonzero == 0);
+                let pass =
+                    status == "lowered" && differing.is_empty() && identical == reference.len()
+                        || (status.starts_with("zero") && r2_nonzero == 0);
                 if !pass {
-                    eprintln!("[idenso_prof] R3 GATE FAIL graph {stem}: {status} {differing:?} (R2 projections {})", reference.len());
+                    eprintln!(
+                        "[idenso_prof] R3 GATE FAIL graph {stem}: {status} {differing:?} (R2 projections {})",
+                        reference.len()
+                    );
                 }
                 let d = |f: &dyn Fn(&refpath::direct::DirectSeconds) -> f64| {
                     median(direct_runs.iter().map(|r| f(&r.0)).collect())
