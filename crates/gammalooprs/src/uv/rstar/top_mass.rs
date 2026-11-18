@@ -301,7 +301,7 @@ pub(super) fn compensate_where(
 }
 
 /// `GAMMALOOP_IR_OUTER=generic|analytic|check` (unset: generic, no log).
-/// `analytic`: an IR correction term of the top-level root integrates each
+/// `analytic`: an IR correction term (of any R* root) integrates each
 /// distinct closed hard coefficient once, as a fixed-mass vacuum integral
 /// `h(ε) (M²)^{a-εL}`, multiplies it by the hard-loop-free quotient
 /// counterterm times the root closure, and applies the compensated outer

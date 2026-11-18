@@ -993,14 +993,12 @@ impl<'a> Evaluation<'a> {
                 let downstream_started = Instant::now();
                 let quotient_before = self.quotient_elapsed;
                 let integration_before = self.integration_elapsed;
-                // GAMMALOOP_IR_OUTER (top-level root, closed moments only).
+                // GAMMALOOP_IR_OUTER (any R* root; closed moments only).
                 let outer = top_mass::ir_outer()?;
                 let analytic =
                     if outer == top_mass::IrOuter::Analytic || outer == top_mass::IrOuter::Check {
                         let started = Instant::now();
-                        let outcome = if self.top_mass.is_none() {
-                            Err("child_root".to_owned())
-                        } else if !use_closed {
+                        let outcome = if !use_closed {
                             Err("not_closed".to_owned())
                         } else {
                             self.ir_outer_analytic(&hard, &correction.forest, &moments)?
@@ -1108,9 +1106,10 @@ impl<'a> Evaluation<'a> {
         moments: &[(Atom, Atom)],
     ) -> Result<std::result::Result<(Atom, String), String>> {
         use symbolica::{function, id::Replacement, poly::series::SeriesDepth};
-        let Some(projector) = self.root_projector else {
-            return Ok(Err("no_root_projector".into()));
-        };
+        // As on the generic path: a projected root is projected and regulated
+        // after the Taylor step; an unprojected one (a child root, a
+        // propagator-insertion pole part) goes to the tensor finish as is.
+        let projector = self.root_projector;
         if self.epsilon != GS.dim_epsilon {
             return Ok(Err("epsilon_symbol".into()));
         }
@@ -1194,7 +1193,7 @@ impl<'a> Evaluation<'a> {
                 self.uv_settings,
                 &settings,
                 self.integration_id,
-                true,
+                projector.is_some(),
             )? {
                 Ok(integral) => integral,
                 Err(reason) => return Ok(Err(reason)),
@@ -1246,9 +1245,13 @@ impl<'a> Evaluation<'a> {
             let sum = Atom::add_many(assembled.iter());
             let simplified = RStarIntegrand::simplify_summands(sum.as_view())
                 .wrap_err("while simplifying an analytic IR outer polynomial")?;
-            let projected = projector(&simplified)
-                .wrap_err("while projecting an analytic IR outer polynomial")?;
-            let regulated = Integrated::dimensionally_regularized(&projected);
+            let regulated = match projector {
+                Some(projector) => Integrated::dimensionally_regularized(
+                    &projector(&simplified)
+                        .wrap_err("while projecting an analytic IR outer polynomial")?,
+                ),
+                None => simplified,
+            };
             let finished = RStarIntegrand::finish_tensor(regulated, id)?;
             let replacements = integrals
                 .iter()
