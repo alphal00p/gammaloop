@@ -707,6 +707,41 @@ pub fn read_boundary_record(path: &std::path::Path) -> Result<BoundaryRecord, Va
             .parse()
             .map_err(|_| super::invalid(format!("{}: bad {name} count {text:?}", path.display())))
     };
+    // Key policy (Astra acceptance 2026-11-18): a single-valued field occurs
+    // at most once (a repeat is an error even when the values agree); an
+    // indexed row occurs at most once per index; a field name occurs at most
+    // once inside a row; a row of the wrong arity and an unknown key are
+    // errors. INFORMATIONAL single-valued keys are accepted and not
+    // interpreted.
+    const SINGLE: &[&str] = &[
+        "label",
+        "closure_momentum",
+        "closure_mass_squared",
+        "epsilon_terms",
+        "p_loops",
+        "blocks",
+        "patterns",
+        "routing",
+        "classes",
+        "end",
+    ];
+    const INFORMATIONAL: &[&str] = &[
+        "sequence",
+        "context",
+        "integration_id",
+        "vacuum_loops",
+        "evaluated",
+        "taylor_degree",
+        "colour_basis",
+        "colour_branch",
+        "colour_coefficient",
+        "colour_coefficient_symbolic",
+        "normalisation",
+        "counts",
+        "zero_patterns",
+    ];
+    let mut seen_single = std::collections::BTreeSet::<&str>::new();
+    let mut seen_rows = std::collections::BTreeSet::<(String, usize, Option<usize>)>::new();
     for line in lines {
         if ended {
             if line.trim().is_empty() {
@@ -716,21 +751,67 @@ pub fn read_boundary_record(path: &std::path::Path) -> Result<BoundaryRecord, Va
         }
         let (key, rest) = line.split_once([' ', '\t']).unwrap_or((line.trim(), ""));
         let fields = rest.split('\t').collect::<Vec<_>>();
+        if let Some(single) = SINGLE.iter().chain(INFORMATIONAL).find(|k| **k == key)
+            && !seen_single.insert(*single)
+        {
+            return Err(bad(format!("field {key} occurs more than once")));
+        }
+        {
+            let mut names = std::collections::BTreeSet::new();
+            for name in fields
+                .iter()
+                .skip(1)
+                .filter_map(|f| f.split_once('=').map(|(n, _)| n))
+            {
+                if !name.is_empty()
+                    && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+                    && !names.insert(name)
+                {
+                    return Err(bad(format!(
+                        "{key} row: field {name} occurs more than once"
+                    )));
+                }
+            }
+        }
+        let arity = |n: usize| -> Result<(), VakintError> {
+            if fields.len() == n {
+                Ok(())
+            } else {
+                Err(bad(format!(
+                    "{key} row with {} fields, {n} expected: {:.80}",
+                    fields.len(),
+                    line
+                )))
+            }
+        };
+        let mut row = |second: Option<usize>| -> Result<(), VakintError> {
+            let first = index(fields[0])?;
+            if !seen_rows.insert((key.to_string(), first, second)) {
+                return Err(bad(format!(
+                    "{key} {first}{} occurs more than once",
+                    second.map_or(String::new(), |s| format!(" {s}"))
+                )));
+            }
+            Ok(())
+        };
         match key {
             "end" => ended = true,
             "label" => label = rest.to_string(),
             "closure_momentum" => momentum = Some(parse_atom(rest)?),
             "closure_mass_squared" => mass = Some(parse_atom(rest)?),
-            "epsilon_terms" => epsilon_terms = rest.trim().parse().ok(),
-            "p_loops" => p_loops = rest.trim().parse().ok(),
+            "epsilon_terms" => epsilon_terms = Some(count("epsilon_terms", rest)? as i64),
+            "p_loops" => p_loops = Some(count("p_loops", rest)? as i64),
             "blocks" => n_blocks = Some(count("blocks", rest)?),
             "patterns" => n_patterns = Some(count("patterns", rest)?),
             "routing" => n_routing = Some(count("routing", rest)?),
             "classes" => n_classes = Some(count("classes", rest)?),
-            "route" if fields.len() == 2 => {
+            k if INFORMATIONAL.contains(&k) => {}
+            "route" => {
+                arity(2)?;
                 routing.push((parse_atom(fields[0])?, parse_atom(fields[1])?))
             }
             "block" => {
+                row(None)?;
                 let g = index(fields[0])?;
                 let file = field(&fields, "file").unwrap_or_else(|| "inline".into());
                 let expect = BlockExpectation {
@@ -743,25 +824,21 @@ pub fn read_boundary_record(path: &std::path::Path) -> Result<BoundaryRecord, Va
                         .transpose()?,
                     sha256: None,
                 };
-                if block_files.insert(g, (file, expect)).is_some() {
-                    return Err(bad(format!("block {g} declared twice")));
-                }
+                block_files.insert(g, (file, expect));
             }
-            "block_atom" if fields.len() == 2 => {
-                let g = index(fields[0])?;
-                if block_atoms.insert(g, parse_atom(fields[1])?).is_some() {
-                    return Err(bad(format!("block_atom {g} declared twice")));
-                }
+            "block_atom" => {
+                arity(2)?;
+                row(None)?;
+                block_atoms.insert(index(fields[0])?, parse_atom(fields[1])?);
             }
             "pattern" => {
+                row(None)?;
                 let pi = index(fields[0])?;
                 let power = field(&fields, "closure_power")
                     .and_then(|power| power.parse().ok())
                     .ok_or_else(|| bad(format!("pattern {pi} without closure_power")))?;
                 let reference = field(&fields, "ref_closure").filter(|seq| seq != "none");
-                if powers.insert(pi, (power, reference)).is_some() {
-                    return Err(bad(format!("pattern {pi} declared twice")));
-                }
+                powers.insert(pi, (power, reference));
                 if let Some(n) = field(&fields, "terms") {
                     declared_terms.insert(pi, count("terms", &n)?);
                 }
@@ -769,29 +846,37 @@ pub fn read_boundary_record(path: &std::path::Path) -> Result<BoundaryRecord, Va
                     declared_lines.insert(pi, count("lines", &n)?);
                 }
             }
-            "pattern_topology" if fields.len() == 2 => {
-                let pi = index(fields[0])?;
-                if topologies.insert(pi, parse_atom(fields[1])?).is_some() {
-                    return Err(bad(format!("pattern_topology {pi} declared twice")));
-                }
+            "pattern_topology" => {
+                arity(2)?;
+                row(None)?;
+                topologies.insert(index(fields[0])?, parse_atom(fields[1])?);
             }
-            "pattern_prop" => *props.entry(index(fields[0])?).or_default() += 1,
-            "pattern_term" if fields.len() == 3 => {
+            "pattern_integral" | "vacuum" | "class" => row(None)?,
+            "pattern_prop" => {
+                if fields.len() < 2 {
+                    return Err(bad(format!("{key} row too short: {:.80}", line)));
+                }
+                row(Some(index(fields[1])?))?;
+                *props.entry(index(fields[0])?).or_default() += 1;
+            }
+            "pattern_term" => {
+                arity(3)?;
+                row(Some(index(fields[1])?))?;
                 terms
                     .entry(index(fields[0])?)
                     .or_default()
                     .push((index(fields[1])?, parse_atom(fields[2])?));
             }
-            "class" => {
-                let members = field(&fields, "patterns").unwrap_or_default();
-                let members = members
-                    .split(',')
-                    .filter(|m| !m.trim().is_empty())
-                    .map(index)
-                    .collect::<Result<Vec<_>, _>>()?;
-                class_patterns.push(members);
-            }
-            _ => {}
+            other => return Err(bad(format!("unknown field {other:?}"))),
+        }
+        if key == "class" {
+            let members = field(&fields, "patterns").unwrap_or_default();
+            let members = members
+                .split(',')
+                .filter(|m| !m.trim().is_empty())
+                .map(index)
+                .collect::<Result<Vec<_>, _>>()?;
+            class_patterns.push(members);
         }
     }
     if !ended {
@@ -1313,7 +1398,67 @@ mod tests {
             full.replacen(&topology, &format!("{topology}\n{topology}"), 1),
         )
         .unwrap();
-        assert!(error("duplicate topology").contains("twice"));
+        assert!(error("duplicate topology").contains("more than once"));
+        // (g) single-valued fields at most once, unknown fields refused
+        // (Astra acceptance: two contradictory closure_mass_squared lines
+        // were read, the last one winning).
+        for (case, extra, needle) in [
+            (
+                "duplicate contradictory",
+                "closure_mass_squared 7",
+                "closure_mass_squared occurs more than once",
+            ),
+            (
+                "duplicate identical",
+                "closure_mass_squared 1",
+                "closure_mass_squared occurs more than once",
+            ),
+            (
+                "duplicate epsilon_terms",
+                "epsilon_terms 3",
+                "epsilon_terms occurs more than once",
+            ),
+            (
+                "duplicate route count",
+                "routing 2",
+                "routing occurs more than once",
+            ),
+            ("unknown field", "closure_mass 1", "unknown field"),
+        ] {
+            write();
+            let full = text();
+            std::fs::write(
+                &header,
+                full.replacen("blocks 2", &format!("{extra}\nblocks 2"), 1),
+            )
+            .unwrap();
+            let message = error(case);
+            assert!(message.contains(needle), "{case}: {message}");
+        }
+        write();
+        let full = text();
+        let row = full
+            .lines()
+            .find(|l| l.starts_with("pattern 0"))
+            .unwrap()
+            .to_string();
+        std::fs::write(
+            &header,
+            full.replacen(&row, &format!("{row}\tclosure_power=2"), 1),
+        )
+        .unwrap();
+        assert!(
+            error("field repeated inside a row").contains("closure_power occurs more than once")
+        );
+        write();
+        let full = text();
+        let term = full
+            .lines()
+            .find(|l| l.starts_with("pattern_term"))
+            .unwrap()
+            .to_string();
+        std::fs::write(&header, full.replacen(&term, &format!("{term}\textra"), 1)).unwrap();
+        assert!(error("row arity").contains("fields, 3 expected"));
         // (f) SHA256SUMS: the intact record reads; a changed block is refused.
         write();
         let sums = [header.clone(), block(0), block(1)]
