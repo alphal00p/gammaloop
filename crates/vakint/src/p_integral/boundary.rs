@@ -659,7 +659,7 @@ pub fn read_boundary_record(path: &std::path::Path) -> Result<BoundaryRecord, Va
         let name = name_of(path);
         let digest = sums
             .get(&name)
-            .ok_or_else(|| bad(format!("not listed in SHA256SUMS")))?;
+            .ok_or_else(|| bad("not listed in SHA256SUMS".to_string()))?;
         let found = file_sha256(path)?;
         if &found != digest {
             return Err(bad(format!(

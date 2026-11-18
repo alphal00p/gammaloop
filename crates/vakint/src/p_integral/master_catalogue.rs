@@ -747,7 +747,7 @@ impl PMasterCatalogue {
             let mut hasher = Sha256::new();
             hasher.update(self.content_digest.as_bytes());
             hasher.update(b"\0");
-            hasher.update(masters_value_text(&masters_json).as_bytes());
+            hasher.update(masters_value_text(masters_json).as_bytes());
             format!("{:x}", hasher.finalize())
         };
         let mut ids: BTreeMap<String, String> = self
