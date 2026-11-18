@@ -317,6 +317,7 @@ pub struct MergedColourTerm {
 }
 
 /// An exact rational number atom (`None`: a symbol, a complex or a float).
+#[cfg_attr(not(feature = "feynkit-ingress"), allow(dead_code))]
 pub(crate) fn rational_number(view: AtomView<'_>) -> Option<Rational> {
     use symbolica::coefficient::CoefficientView;
     let AtomView::Num(number) = view else {

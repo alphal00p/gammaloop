@@ -51,6 +51,8 @@ mod numerator;
 mod ordered;
 pub(crate) mod p_data;
 pub mod p_gate;
+// Used by refpath::direct (feature feynkit-ingress) today; shared lowering for later callers.
+#[cfg_attr(not(feature = "feynkit-ingress"), allow(dead_code))]
 pub mod p_handover;
 pub(crate) mod p_integral;
 pub(crate) mod p_lowering;
