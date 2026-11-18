@@ -611,6 +611,8 @@ fn monomial_term(
 /// the Γ functions of the prefactor, and `prefactor` is a product of rational
 /// factors, Γ functions and exponentials. Any other dependence on these
 /// symbols is an error, never a result that still contains them.
+/// (Production callers use [`expand_with`] with their master source.)
+#[cfg(test)]
 pub(crate) fn expand(
     prefactor: &Atom,
     reduced: &Atom,

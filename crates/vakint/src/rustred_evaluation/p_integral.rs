@@ -2425,7 +2425,7 @@ pub(crate) const P_CHECKPOINT_VERSION: &str = "vk5l-physrun.p-checkpoint.v1";
 /// on sixteen and vice versa. At one thread this is the arithmetic itself, so
 /// the keys of checkpoints written before this change (all on one thread) are
 /// unchanged.
-pub(crate) fn checkpoint_arithmetic(options: &PRequestOptions) -> OrderedWeightArithmetic {
+fn checkpoint_arithmetic(options: &PRequestOptions) -> OrderedWeightArithmetic {
     options.arithmetic_for(5).with_threads(1)
 }
 

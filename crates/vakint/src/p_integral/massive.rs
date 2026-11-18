@@ -192,7 +192,7 @@ impl LoweredClosure {
         for ((loops, _), values) in reduced {
             let value = self
                 .closure
-                .finalize(&values, loops, &self.head, settings, mode)?;
+                .finalize(vakint, &values, loops, &self.head, settings, mode)?;
             if mode == RustRedMasterMode::Numerical {
                 numerical += value;
             } else {
@@ -241,13 +241,28 @@ impl LoweredClosure {
             format!("{:?}\n{:?}", handle.cache, handle.relations_root),
         )
         .map(|c| {
+            // gl-gate13: plan entries hold FINALISED values: the key binds the
+            // finaliser version, the p master catalogue's content and, per
+            // stored mode, every setting the finalisation reads
+            // ([`finalisation_key`]); the salt holds the library identity and
+            // relation root, the fingerprint the request. Entries written
+            // before (no finaliser line) are never read again. Channel
+            // entries (reduced, not finalised) do not depend on these and stay
+            // reusable across depths and modes.
+            let catalogue = vakint
+                .p_master_catalogue()
+                .map(|catalogue| {
+                    blake3::hash(format!("{catalogue:?}").as_bytes())
+                        .to_hex()
+                        .to_string()
+                })
+                .unwrap_or_else(|| "none".into());
+            let finalizer = format!("{MASSIVE_FINALIZER_VERSION} catalogue {catalogue}");
             let key = c.key(
                 "plan",
-                &mut std::iter::once(self.fingerprint()).chain(
-                    settings
-                        .iter()
-                        .map(|s| format!("{:?} {}", mode_of(s), s.epsilon_symbol)),
-                ),
+                &mut [self.fingerprint(), finalizer]
+                    .into_iter()
+                    .chain(settings.iter().map(|s| finalisation_key(mode_of(s), s))),
             );
             (c, key)
         });
@@ -279,7 +294,7 @@ impl LoweredClosure {
             for ((loops, _), values) in &reduced {
                 let value = self
                     .closure
-                    .finalize(values, *loops, &self.head, settings, mode)?;
+                    .finalize(vakint, values, *loops, &self.head, settings, mode)?;
                 if mode == RustRedMasterMode::Numerical {
                     numerical += value;
                 } else {
@@ -520,7 +535,7 @@ impl MassiveClosure {
         let mut values = 0;
         for ((loops, _), list) in reduced {
             values += list.len();
-            value += self.finalize(&list, loops, head, settings, mode)?;
+            value += self.finalize(vakint, &list, loops, head, settings, mode)?;
         }
         let finalize_seconds = finalizing.elapsed().as_secs_f64();
         let finalize_peak = status_kib("VmHWM:").saturating_sub(base);
@@ -976,7 +991,7 @@ impl MassiveClosure {
         let mut result = Atom::Zero;
         let mut numerical = Atom::Zero;
         for ((loops, _), values) in reduced {
-            let value = self.finalize(&values, loops, &head, settings, mode)?;
+            let value = self.finalize(vakint, &values, loops, &head, settings, mode)?;
             if mode == RustRedMasterMode::Numerical {
                 numerical += value;
             } else {
@@ -1239,6 +1254,7 @@ impl MassiveClosure {
             for (topology, numerator) in by_topology {
                 if topology == Atom::one() {
                     let value = closure.finalize(
+                        vakint,
                         &[ReducedPropagatorValue {
                             scale_power: 0,
                             reduced: Vakint::convert_to_dot_notation(numerator.as_view()),
@@ -1422,6 +1438,7 @@ impl MassiveClosure {
                 stage_mark("reduce", &mut clock);
                 for ((loops, _), values) in reduced {
                     let value = inputs[owner].0.finalize(
+                        vakint,
                         &values,
                         loops,
                         &heads[owner],
@@ -1457,9 +1474,10 @@ impl MassiveClosure {
         }
         let values = forcer::reduce_inputs(&forcer_requests, settings)?;
         for ((owner, loops), values) in forcer_owners.iter().copied().zip(values) {
-            let value = inputs[owner]
-                .0
-                .finalize(&values, loops, &heads[owner], settings, mode)?;
+            let value =
+                inputs[owner]
+                    .0
+                    .finalize(vakint, &values, loops, &heads[owner], settings, mode)?;
             if mode == RustRedMasterMode::Numerical {
                 numerical[owner] += value;
             } else {
@@ -1552,6 +1570,7 @@ impl MassiveClosure {
             for (topology, numerator) in input.coefficient_list::<i16>(&topologies) {
                 if topology == Atom::one() {
                     let value = self.finalize(
+                        vakint,
                         &[ReducedPropagatorValue {
                             scale_power: 0,
                             reduced: Vakint::convert_to_dot_notation(numerator.as_view()),
@@ -1621,8 +1640,14 @@ impl MassiveClosure {
                         .flatten()
                         .collect()
                     };
-                    let value =
-                        self.finalize(&values, request.family.loops, &head, settings, term_mode)?;
+                    let value = self.finalize(
+                        vakint,
+                        &values,
+                        request.family.loops,
+                        &head,
+                        settings,
+                        term_mode,
+                    )?;
                     if term_mode == RustRedMasterMode::Numerical {
                         numerical += value;
                     } else {
@@ -1689,8 +1714,40 @@ impl MassiveClosure {
         super::compare::check_symbols(coefficient)
     }
 
+    ///
+    /// `PResidual` terminals (gl-gate13; as the plain p finalizer
+    /// [`super::finalize::finalize_with`]): `Retain` keeps them; `Symbolic`
+    /// and `Numerical` replace them by the master map rows of the loop
+    /// count's p master catalogue BEFORE the Laurent expansion, and refuse a
+    /// terminal without a row, naming it. (Before, a residual was expanded as
+    /// an order-zero symbol and the truncation dropped orders its poles need.)
     fn finalize(
         &self,
+        vakint: &crate::Vakint,
+        values: &[ReducedPropagatorValue],
+        cut_loops: usize,
+        head: &Atom,
+        settings: &crate::VakintSettings,
+        mode: RustRedMasterMode,
+    ) -> Result<Atom, VakintError> {
+        // The engine's p master catalogue whatever the cut loop count: a
+        // `PResidual(node, key..)` names its own integral, so its row applies
+        // wherever the terminal occurs (a closure input may carry one too).
+        let catalogue = vakint.p_master_catalogue();
+        self.finalize_with_catalogue(
+            catalogue.as_deref(),
+            values,
+            cut_loops,
+            head,
+            settings,
+            mode,
+        )
+    }
+
+    /// [`Self::finalize`] with the p master `catalogue` of the cut loop count.
+    fn finalize_with_catalogue(
+        &self,
+        catalogue: Option<&super::master_catalogue::PMasterCatalogue>,
         values: &[ReducedPropagatorValue],
         cut_loops: usize,
         head: &Atom,
@@ -1701,10 +1758,17 @@ impl MassiveClosure {
         let loops = cut_loops as i64 + 1;
         let target = settings.number_of_terms_in_epsilon_expansion - loops - 1;
         let mut result = Atom::Zero;
+        let request = format!(
+            "a massive closure of {cut_loops}-loop p-integrals of external {head} (closing mass {})",
+            self.mass_squared
+        );
+        let source = super::master_catalogue::PMasterSource::new(catalogue, &request);
         // The radial prefactor depends only on the scale power.
         let mut prefactors = std::collections::BTreeMap::<i64, Atom>::new();
         for value in values {
             if mode != RustRedMasterMode::Retain
+                && !has_residual(&value.reduced)
+                && !value.spectator.as_ref().is_some_and(has_epsilon_tag)
                 && let Some(spectator) = &value.spectator
                 && let Some(finalized) = self.finalize_factored(
                     &value.reduced,
@@ -1731,7 +1795,12 @@ impl MassiveClosure {
                 result += if mode == RustRedMasterMode::Retain {
                     simplify_real((prefactor * coefficient).as_view())
                 } else {
-                    laurent::expand(prefactor, &coefficient, epsilon, target)?
+                    let coefficient = source.resolve_terminals(&coefficient, mode, epsilon)?;
+                    source.require_coefficients(&coefficient, mode)?;
+                    super::compare::check_symbols_with(&coefficient, &source.extra_names())?;
+                    laurent::expand_with(prefactor, &coefficient, epsilon, target, &|name, e| {
+                        source.expansion(name, e)
+                    })?
                 };
             }
         }
@@ -1740,9 +1809,10 @@ impl MassiveClosure {
                 &result,
                 epsilon,
                 Some(target),
-                "Forcer massive closure",
-                crate::truncation_guard::plain_name,
+                &source.backend("Forcer massive closure"),
+                |master| source.describe(master),
             )?;
+            result = source.resolve_values(result, mode, settings.run_time_decimal_precision)?;
         }
         let mu = Atom::var(vk_symbol!(&settings.mu_r_sq_symbol));
         Ok(simplify_real(result.as_view())
@@ -1914,6 +1984,171 @@ mod tests {
         );
     }
 
+    /// gl-gate13 (Astra's review): a `PResidual` terminal of the cut graph is
+    /// resolved through the p master catalogue BEFORE the Laurent expansion
+    /// (Symbolic / Numerical) and refused, named, without a row; `Retain`
+    /// keeps it. The row `T900(3,1,0) = PG(0,0)^5` has an ε^-5 pole and is
+    /// known to all orders: the value equals the closure of the row itself.
+    #[test]
+    fn massive_closure_resolves_residual_terminals_before_the_expansion() {
+        use super::super::master_catalogue::PMasterCatalogue;
+        Vakint::initialize_vakint_symbols();
+        let mut fixture = super::super::master_catalogue::tests::fixture();
+        fixture["terminals"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!(
+            {"node": "T900", "key": [3, 1, 0], "status": "mapped",
+             "combination": [{"master": null, "coefficient": "PG(0,0)^5"}]}));
+        let with_row = PMasterCatalogue::from_json("test catalogue", &fixture.to_string()).unwrap();
+        let mut without = fixture.clone();
+        without["terminals"]
+            .as_array_mut()
+            .unwrap()
+            .retain(|row| row["key"] != serde_json::json!([3, 1, 0]));
+        let without_row =
+            PMasterCatalogue::from_json("test catalogue", &without.to_string()).unwrap();
+        let residual = parse("PResidual(T900,3,1,0)");
+        let head = parse("p(1)");
+        let values = [ReducedPropagatorValue {
+            scale_power: 0,
+            reduced: residual.clone(),
+            spectator: None,
+        }];
+        let settings = settings(8);
+        let closure = closure(2);
+        let run = |catalogue: Option<&PMasterCatalogue>, mode| {
+            closure.finalize_with_catalogue(catalogue, &values, 5, &head, &settings, mode)
+        };
+        // Retain keeps the terminal, with or without a row.
+        for catalogue in [Some(&with_row), Some(&without_row), None] {
+            let kept = run(catalogue, RustRedMasterMode::Retain).unwrap();
+            assert!(
+                kept.contains_symbol(super::super::p_residual_symbol()),
+                "{kept}"
+            );
+        }
+        // Symbolic / Numerical without a row (or without a catalogue): an error naming the terminal.
+        for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Numerical] {
+            for catalogue in [Some(&without_row), None] {
+                let error = run(catalogue, mode).unwrap_err().to_string();
+                assert!(error.contains("PResidual(T900,3,1,0)"), "{mode}: {error}");
+            }
+        }
+        // Symbolic with the row: no residual left, and equal to the closure of
+        // the row's value itself (PG(0,0)^5 is a known tag of every order).
+        let resolved = run(Some(&with_row), RustRedMasterMode::Symbolic).unwrap();
+        assert!(
+            !resolved.contains_symbol(super::super::p_residual_symbol()),
+            "{resolved}"
+        );
+        let direct = closure
+            .finalize_with_catalogue(
+                None,
+                &[ReducedPropagatorValue {
+                    scale_power: 0,
+                    reduced: parse("PG(0,0)^5"),
+                    spectator: None,
+                }],
+                5,
+                &head,
+                &settings,
+                RustRedMasterMode::Symbolic,
+            )
+            .unwrap();
+        assert_equal(&resolved, &direct);
+    }
+
+    /// gl-gate13: the reviewer's factored-path control (review 2026-11-18, O2
+    /// orders): an ε-dependent tag in the spectator (`ε^3 PG(0,0)`, `PG(0,0)
+    /// = 1/ε + O(1)`) must not be truncated as an order-zero factor: to three
+    /// ε terms it equals `ε^2` (the prefactor's double pole leaves only the
+    /// ε^2 coefficient at ε^0). Before the fix it returned 0.
+    #[test]
+    fn massive_closure_expands_epsilon_tags_of_the_spectator_jointly() {
+        let mut settings = settings(3);
+        settings.evaluation_order = EvaluationOrder(vec![EvaluationMethod::RustRed(
+            crate::RustRedEvaluationOptions {
+                master_mode: RustRedMasterMode::Symbolic,
+            },
+        )]);
+        let engine = Vakint::new().unwrap();
+        let bubble = "topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))";
+        let massive = closure(2);
+        let value = |numerator: &str| {
+            massive
+                .evaluate(
+                    &engine,
+                    &settings,
+                    parse(&format!("({numerator})*{bubble}")).as_view(),
+                )
+                .unwrap()
+        };
+        let tagged = value("ε^3*PG(0,0)");
+        let plain = value("ε^2");
+        assert!(!plain.expand().is_zero(), "control is zero");
+        assert_equal(&tagged, &plain);
+    }
+
+    /// gl-gate13: Astra's four-row control (review 2026-11-18, O1) through the
+    /// public evaluate on a fresh engine (cold caches): a massless one-loop
+    /// bubble closed by a massive line of power 2, three ε terms, RustRed
+    /// Symbolic. Row 1 `ε^5 PResidual(T160 corner)` (catalogue row
+    /// `(d-3)^-5 ggppss_int(72)`, int72 = ζ(3)/(5ε³) + ...) equals row 2
+    /// `ε² ζ(3)/5` to the requested order and is NOT zero (it was 0 before the
+    /// fix); row 3 `ε²` is the prefactor control; row 4 `PResidual(T002e,1^5)`
+    /// returns no residual or is refused naming it. Without a catalogue, row 1
+    /// is refused naming the terminal.
+    #[test]
+    fn massive_closure_residual_control_rows() {
+        let mut settings = settings(3);
+        settings.evaluation_order = EvaluationOrder(vec![EvaluationMethod::RustRed(
+            crate::RustRedEvaluationOptions {
+                master_mode: RustRedMasterMode::Symbolic,
+            },
+        )]);
+        let engine = Vakint::new().unwrap();
+        let bubble = "topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))";
+        let t160 = "PResidual(T160,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0)";
+        let massive = closure(2);
+        let value = |engine: &Vakint, numerator: &str| {
+            massive.evaluate(
+                engine,
+                &settings,
+                parse(&format!("({numerator})*{bubble}")).as_view(),
+            )
+        };
+        let row1 = value(&engine, &format!("ε^5*{t160}")).unwrap();
+        let row2 = value(&engine, "ε^2*zeta(3)/5").unwrap();
+        let row3 = value(&engine, "ε^2").unwrap();
+        assert!(
+            !row1.contains_symbol(super::super::p_residual_symbol()),
+            "{row1}"
+        );
+        assert!(!row1.expand().is_zero(), "row 1 is zero");
+        assert!(!row3.expand().is_zero(), "row 3 is zero");
+        assert_equal(&row1, &row2);
+        match value(&engine, "PResidual(T002e,1,1,1,1,1)") {
+            Ok(row4) => assert!(
+                !row4.contains_symbol(super::super::p_residual_symbol()),
+                "{row4}"
+            ),
+            Err(error) => assert!(
+                error.to_string().contains("PResidual(T002e,1,1,1,1,1)"),
+                "{error}"
+            ),
+        }
+        let mut without = Vakint::new().unwrap();
+        without.disable_default_p_master_catalogue();
+        let error = value(&without, &format!("ε^5*{t160}"))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("PResidual(T160,1,1,1,1,1,1,1,1,1,1,0,0,0"),
+            "{error}"
+        );
+    }
+
     #[test]
     fn massive_closure_preserves_tadpole_poles_finite_and_higher_orders() {
         let settings = settings(5);
@@ -2018,6 +2253,7 @@ mod tests {
         for spectator in ["p(1,mu)", "dot(p(1),p(2))", "dot(k(1),k(1))"] {
             let value = closure(2)
                 .finalize(
+                    &VAKINT,
                     &[ReducedPropagatorValue {
                         scale_power: 0,
                         reduced: Atom::Zero,
@@ -2038,6 +2274,7 @@ mod tests {
         let settings = settings(5);
         let value = closure(2)
             .finalize(
+                &VAKINT,
                 &[ReducedPropagatorValue {
                     scale_power: 0,
                     reduced: parse("1/ε"),
@@ -2085,6 +2322,7 @@ mod tests {
         let reduced = parse("PG(1,0)^2*PG(2,0)");
         let value = closure(2)
             .finalize(
+                &VAKINT,
                 &[ReducedPropagatorValue {
                     scale_power: 0,
                     reduced,
@@ -2100,6 +2338,7 @@ mod tests {
             * super::super::finalize::pg_value(2, 0, vk_symbol!("ε"));
         let reference = closure(2)
             .finalize(
+                &VAKINT,
                 &[ReducedPropagatorValue {
                     scale_power: 0,
                     reduced: gamma_value,
@@ -2118,6 +2357,7 @@ mod tests {
     fn massive_closure_checks_master_depth_after_the_extra_loop_pole() {
         let error = closure(2)
             .finalize(
+                &VAKINT,
                 &[ReducedPropagatorValue {
                     scale_power: 0,
                     reduced: parse("PMaster(no)"),
@@ -2194,6 +2434,7 @@ mod tests {
                         .fold(Atom::Zero, |sum, ((loops, _), values)| {
                             sum + massive
                                 .finalize(
+                                    &VAKINT,
                                     &values,
                                     loops,
                                     &head,
@@ -2425,6 +2666,7 @@ mod tests {
         let massive = closure(2);
         let expected = massive
             .finalize(
+                &VAKINT,
                 &[ReducedPropagatorValue {
                     scale_power: 0,
                     reduced: parse("1/ε"),
@@ -2474,4 +2716,66 @@ fn direct_sum_reduce_line(
         after.reductions - before.reductions,
         after.pairs - before.pairs
     );
+}
+
+/// Version of [`MassiveClosure::finalize`]'s output, part of the key of the
+/// finalised-plan checkpoints (gl-gate13: v2 resolves `PResidual` terminals
+/// through the p master catalogue before the Laurent expansion).
+const MASSIVE_FINALIZER_VERSION: &str = "massive-finalize.v2";
+
+/// Everything the finalisation of one mode reads from `settings`, for the
+/// key of a finalised-plan checkpoint (gl-gate13). The worker count and the
+/// arithmetic's thread budget are left out on purpose: they never change a
+/// value.
+pub(crate) fn finalisation_key(mode: RustRedMasterMode, s: &crate::VakintSettings) -> String {
+    format!(
+        "mode {mode:?}|eps {}|terms {}|normalisation {:?}|mu {}|dot {}|digits {}|basis {:?}|uncovered {:?}|outside {:?}|unknown {}",
+        s.epsilon_symbol,
+        s.number_of_terms_in_epsilon_expansion,
+        s.integral_normalization_factor,
+        s.mu_r_sq_symbol,
+        s.use_dot_product_notation,
+        s.run_time_decimal_precision,
+        s.p_master_basis,
+        s.rustred_p_uncovered,
+        s.rustred_p_outside,
+        s.allow_unknown_integrals,
+    )
+}
+
+/// `expression` holds an ε-dependent tag (`PG`, `PGamma`, `PMaster`,
+/// `PResidual`): the factored fast path expands a spectator as a rational
+/// function of ε only, so such a spectator goes through the joint expansion
+/// (gl-gate13, reviewer's control: `ε^3 PG(0,0)` gave 0).
+fn has_epsilon_tag(expression: &Atom) -> bool {
+    let tags = [
+        super::pg_symbol(),
+        super::p_gamma_symbol(),
+        super::p_master_symbol(),
+        super::p_residual_symbol(),
+    ];
+    let mut found = false;
+    expression.visitor(&mut |part| {
+        if let AtomView::Fun(function) = part
+            && tags.contains(&function.get_symbol())
+        {
+            found = true;
+        }
+        !found
+    });
+    found
+}
+
+/// `expression` holds a `PResidual(..)` terminal.
+fn has_residual(expression: &Atom) -> bool {
+    let mut found = false;
+    expression.visitor(&mut |part| {
+        if let AtomView::Fun(function) = part
+            && function.get_symbol() == super::p_residual_symbol()
+        {
+            found = true;
+        }
+        !found
+    });
+    found
 }

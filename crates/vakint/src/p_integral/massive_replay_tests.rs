@@ -149,6 +149,7 @@ fn closure_replay() {
                 let started = Instant::now();
                 let value = closure
                     .finalize(
+                        &vakint,
                         values,
                         cut_loops,
                         &head,

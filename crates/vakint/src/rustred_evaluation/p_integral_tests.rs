@@ -5168,6 +5168,106 @@ fn zero_sector_pruning_boundary_drill() {
 /// VAKINT_TEST_P5L_DRILL_PACKAGE, optional VAKINT_TEST_BOUNDARY_PLANS
 /// (comma-separated key-plan indices; default all), VAKINT_TEST_ORDERED_CACHE=off.
 /// Modes: Retain and the record's own (Symbolic), reduced once per key plan.
+/// gl-gate13: the reviewer's finalised-plan checkpoint control (review
+/// 2026-11-18, O2): one boundary record (a massless one-loop bubble closed by
+/// a massive line of power 2) at depth 2 then depth 3 in ONE checkpoint
+/// directory: the deep value must equal a cold deep run (it returned the
+/// shallow value before: the plan key ignored the depth); a cold shallow run
+/// equals the first; a different numerator gets its own key and equals its
+/// cold value; a warm run at another worker count reuses the plan (thread
+/// independence). Values: Retain and Symbolic, as boundary_showcase.
+#[test]
+fn boundary_plan_checkpoints_bind_the_finalisation() {
+    let root = std::env::temp_dir().join(format!(
+        "vakint-gl-gate13-plan-ckpt-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    let engine = Vakint::new().unwrap();
+    let run = |depth: i64, directory: &str, coefficient: i64, cores: usize| {
+        let header = root.join(format!("header-{depth}-{coefficient}.txt"));
+        std::fs::write(
+            &header,
+            format!(
+                "schema pint6.remainder-boundary.v1\nlabel gate13 bubble\nepsilon_terms {depth}\np_loops 1\n\
+                 closure_momentum p(1)\nclosure_mass_squared 1\nrouting 0\nblocks 1\n\
+                 block 0\tsummands=1\tfile=inline\nblock_atom 0\t1\npatterns 1\n\
+                 pattern 0\tclosure_power=2\tterms=1\tref_closure=none\n\
+                 pattern_topology 0\ttopo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))\n\
+                 pattern_term 0\t0\t{coefficient}\nend\n"
+            ),
+        )
+        .unwrap();
+        let record = crate::p_integral::read_boundary_record(&header).unwrap();
+        let make = |mode: RustRedMasterMode| {
+            let mut s = settings(mode, None);
+            s.epsilon_symbol = "gammalooprs::ε".into();
+            s.mu_r_sq_symbol = "gammalooprs::μᵣ²".into();
+            s.integral_normalization_factor = crate::LoopNormalizationFactor::MSbar;
+            s.number_of_terms_in_epsilon_expansion = depth;
+            s.run_time_decimal_precision = 100;
+            s.use_dot_product_notation = false;
+            s.n_cores = cores;
+            s.ordered_cache = crate::OrderedCacheSettings::off();
+            s.p_checkpoint_dir = Some(root.join(directory));
+            s
+        };
+        let (symbolic, retain) = (
+            make(RustRedMasterMode::Symbolic),
+            make(RustRedMasterMode::Retain),
+        );
+        let (plans, _) = record
+            .boundary
+            .lower_with_stats(
+                &engine,
+                &symbolic,
+                crate::p_integral::BoundaryOptions { strict: true },
+            )
+            .unwrap();
+        let before = last_stats();
+        let mut values = vec![Atom::Zero, Atom::Zero];
+        for plan in plans {
+            for (value, result) in values
+                .iter_mut()
+                .zip(plan.evaluate_modes(&engine, &[&retain, &symbolic]).unwrap())
+            {
+                *value += result;
+            }
+        }
+        let resumed = last_stats().checkpoints_resumed - before.checkpoints_resumed;
+        (
+            values.into_iter().map(|v| v.expand()).collect::<Vec<_>>(),
+            resumed,
+        )
+    };
+    let same = |a: &[Atom], b: &[Atom]| a.iter().zip(b).all(|(x, y)| (x - y).expand().is_zero());
+    let (shallow, _) = run(2, "shared", 1, 1);
+    let (warm_deep, _) = run(3, "shared", 1, 1);
+    let (cold_deep, _) = run(3, "clean", 1, 1);
+    let (cold_shallow, _) = run(2, "second", 1, 1);
+    let (different, _) = run(3, "shared", 2, 1);
+    let (cold_different, _) = run(3, "different", 2, 1);
+    assert!(
+        same(&warm_deep, &cold_deep),
+        "warm deep {warm_deep:?} != cold deep {cold_deep:?}"
+    );
+    assert!(
+        !same(&shallow, &cold_deep),
+        "depth 2 and 3 agree: the control is void"
+    );
+    assert!(same(&shallow, &cold_shallow));
+    assert!(same(&different, &cold_different));
+    // Thread independence: the depth-3 plan written at one worker is read at four.
+    let (threads, resumed) = run(3, "clean", 1, 4);
+    assert!(resumed > 0, "the plan was not reused at four workers");
+    assert!(same(&threads, &cold_deep));
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 #[test]
 fn boundary_showcase() {
     let (Some(header), Some(out)) = (
