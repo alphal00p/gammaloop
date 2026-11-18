@@ -514,7 +514,10 @@ fn main() -> eyre::Result<()> {
                     numerator.to_canonical_string().len()
                 ));
             }
-            std::fs::write(dump.join("values").join(format!("{graph}.txt")), values_text)?;
+            std::fs::write(
+                dump.join("values").join(format!("{graph}.txt")),
+                values_text,
+            )?;
         }
         let mut gates = Vec::new();
         let mut graph_pass = true;

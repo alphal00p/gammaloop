@@ -454,9 +454,11 @@ mod tests {
             .unwrap_or_else(|_| PathBuf::from("/common/ben/beta/results/prepared"));
         let directory = root.join("L4");
         let library = std::env::var_os("VAKINT_TEST_P_LIBRARY_1_4");
-        let (Some(library), true) = (library, directory.join("diagram-000427.dot").exists())
-        else {
-            eprintln!("SKIP: no L4 DOT data under {} or no VAKINT_TEST_P_LIBRARY_1_4", root.display());
+        let (Some(library), true) = (library, directory.join("diagram-000427.dot").exists()) else {
+            eprintln!(
+                "SKIP: no L4 DOT data under {} or no VAKINT_TEST_P_LIBRARY_1_4",
+                root.display()
+            );
             return;
         };
         let model = refpath::load_model(&directory).unwrap();
@@ -489,8 +491,13 @@ mod tests {
                 reduce: false,
                 ..Default::default()
             };
-            let engine = run_graph(&refpath::fresh_engine(&template).unwrap(), &model, &dot, &options)
-                .unwrap();
+            let engine = run_graph(
+                &refpath::fresh_engine(&template).unwrap(),
+                &model,
+                &dot,
+                &options,
+            )
+            .unwrap();
             let reference = refpath::run_graph(
                 &refpath::fresh_engine(&template).unwrap(),
                 &model,

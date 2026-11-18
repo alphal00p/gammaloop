@@ -2464,7 +2464,11 @@ fn fold_requests_is_the_inline_fold() {
         check(&engine, &settings, std::slice::from_ref(request));
     }
     check(&engine, &settings, &requests);
-    let doubled = requests.iter().chain(&requests).cloned().collect::<Vec<_>>();
+    let doubled = requests
+        .iter()
+        .chain(&requests)
+        .cloned()
+        .collect::<Vec<_>>();
     check(&engine, &settings, &doubled);
 
     let engine = engine_one_loop();
@@ -2476,7 +2480,10 @@ fn fold_requests_is_the_inline_fold() {
         ("ε/(1-ε)^2", "bubble_22_n1"),
     ];
     let numerators = terms.map(|(coefficient, name)| {
-        parse(&format!("({coefficient})*({})", case(&fixture, name).numerator))
+        parse(&format!(
+            "({coefficient})*({})",
+            case(&fixture, name).numerator
+        ))
     });
     let requests = terms
         .iter()

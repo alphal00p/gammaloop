@@ -373,7 +373,11 @@ pub fn write_gate_view(view: &GateView, header: &BTreeMap<String, String>) -> St
         let _ = writeln!(text, "# {key} {}", value.replace('\n', " "));
     }
     let _ = writeln!(text, "# keys {}", view.len());
-    let _ = writeln!(text, "# dimension {}", Atom::var(gate_dimension()).to_canonical_string());
+    let _ = writeln!(
+        text,
+        "# dimension {}",
+        Atom::var(gate_dimension()).to_canonical_string()
+    );
     for (key, value) in view {
         let powers = key
             .powers
@@ -399,7 +403,11 @@ pub fn read_gate_view(text: &str) -> Result<(GateView, BTreeMap<String, String>)
     let mut lines = text.lines();
     match lines.next() {
         Some(GATE_VIEW_SCHEMA) => {}
-        other => return Err(format!("not a {GATE_VIEW_SCHEMA} file (first line {other:?})")),
+        other => {
+            return Err(format!(
+                "not a {GATE_VIEW_SCHEMA} file (first line {other:?})"
+            ));
+        }
     }
     let mut view = GateView::new();
     let mut header = BTreeMap::new();
@@ -516,8 +524,14 @@ mod tests {
         let d = Atom::var(gate_dimension());
         let ca = Atom::var(symbolica::symbol!("vakint_gate_test::CA"));
         let mut view = GateView::new();
-        view.insert(key(2, &[1, 1, 0, -1]), normalise_value(&(&ca * (&d - Atom::num(4)) / (&d - Atom::num(1)))));
-        view.insert(key(2, &[1, 1, 1, 0]), normalise_value(&(Atom::num(7) / Atom::num(3))));
+        view.insert(
+            key(2, &[1, 1, 0, -1]),
+            normalise_value(&(&ca * (&d - Atom::num(4)) / (&d - Atom::num(1)))),
+        );
+        view.insert(
+            key(2, &[1, 1, 1, 0]),
+            normalise_value(&(Atom::num(7) / Atom::num(3))),
+        );
         let header = BTreeMap::from([("graph".to_string(), "test".to_string())]);
         let text = write_gate_view(&view, &header);
         let (read, read_header) = read_gate_view(&text).unwrap();

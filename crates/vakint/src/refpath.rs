@@ -311,10 +311,14 @@ pub fn colour_branches(diagram: &FeynmanDiagram) -> Result<(Vec<ColourBranch>, u
     use crate::p_integral::factorized::{ColourMode, colour_coefficient, split_local_colour};
     let mut locals = Vec::new();
     for (_, vertex) in diagram.vertices() {
-        locals.push(split_local_colour(&NumeratorInterface::export(&vertex.numerator).0)?);
+        locals.push(split_local_colour(
+            &NumeratorInterface::export(&vertex.numerator).0,
+        )?);
     }
     for (_, _, edge) in diagram.edges() {
-        locals.push(split_local_colour(&NumeratorInterface::export(&edge.numerator).0)?);
+        locals.push(split_local_colour(
+            &NumeratorInterface::export(&edge.numerator).0,
+        )?);
     }
     let mut partial: Vec<(Atom, Vec<Atom>)> = vec![(Atom::num(1), Vec::new())];
     for rows in &locals {
@@ -423,11 +427,7 @@ fn indexed(momentum: &Atom, slot: &Atom) -> Result<Atom> {
 /// The two contracted scalars of one branch: `S_g` (metric between the two
 /// external Lorentz ports) and, unless `metric_only`, `S_qq` (`q^μ q^ν`),
 /// from one simplification of `T·g + L·q q` (tags `T`, `L`).
-fn contract_branch(
-    product: &Atom,
-    momentum: &Atom,
-    metric_only: bool,
-) -> Result<(Atom, Atom)> {
+fn contract_branch(product: &Atom, momentum: &Atom, metric_only: bool) -> Result<(Atom, Atom)> {
     let s = &*SYMBOLS;
     let cooking = CookSettings::indices()
         .with_mode(CookMode::ReversibleEncoding)
@@ -474,7 +474,9 @@ fn contract_branch(
     }
     let scalar = cooking.uncook(reduced.expression().as_view());
     ensure!(
-        scalar.list_dangling::<AbstractIndex>().is_ok_and(|ports| ports.is_empty()),
+        scalar
+            .list_dangling::<AbstractIndex>()
+            .is_ok_and(|ports| ports.is_empty()),
         "the contraction kept open indices"
     );
     if metric_only {
@@ -553,7 +555,9 @@ fn reset_peak_rss() -> bool {
 /// This process's peak RSS since the last reset, in bytes.
 pub fn peak_rss_bytes() -> Option<u64> {
     let status = std::fs::read_to_string("/proc/self/status").ok()?;
-    let line = status.lines().find_map(|line| line.strip_prefix("VmHWM:"))?;
+    let line = status
+        .lines()
+        .find_map(|line| line.strip_prefix("VmHWM:"))?;
     let kilobytes: u64 = line.trim().trim_end_matches("kB").trim().parse().ok()?;
     Some(kilobytes * 1024)
 }
@@ -642,7 +646,9 @@ pub fn run_graph(
     let kinematics = Kinematics::in_dimension(&dimension)?;
     let family = diagram.propagator_family(&kinematics)?;
     let [momentum] = family.external_momenta() else {
-        return Err(eyre!("a two-point graph needs one independent external momentum"));
+        return Err(eyre!(
+            "a two-point graph needs one independent external momentum"
+        ));
     };
     let momentum = momentum.clone();
     let q_squared = Kinematics::in_dimension(&dimension)?
@@ -650,7 +656,13 @@ pub fn run_graph(
         .scalar_product(&momentum, &momentum)?;
 
     let started = Instant::now();
-    let numerators = contract(&diagram, &branches, &momentum, &q_squared, options.projection)?;
+    let numerators = contract(
+        &diagram,
+        &branches,
+        &momentum,
+        &q_squared,
+        options.projection,
+    )?;
     run.seconds.contract = started.elapsed().as_secs_f64();
     let weight = overall_factor * Atom::var(s.nf).pow(Atom::num(quark_loops as i64));
     run.numerators = numerators
@@ -700,8 +712,7 @@ pub fn run_graph(
         };
         let input = input.replace(Atom::var(s.d)).with(in_epsilon.clone());
         let ingress = started.elapsed().as_secs_f64();
-        let (value, observation) =
-            p_gate::observe(|| vakint.evaluate(&settings, input.as_view()));
+        let (value, observation) = p_gate::observe(|| vakint.evaluate(&settings, input.as_view()));
         let total = started.elapsed().as_secs_f64();
         let value = value?;
         let seconds = &mut run.seconds;
@@ -734,7 +745,12 @@ pub fn gate_view(result: &ProjectedResult) -> (GateView, ZeroSectorCount) {
 
 /// The coefficients of a Laurent expansion in `epsilon` from `ε^low` to
 /// `ε^high`, each expanded (colour invariants and `n_f` symbolic).
-pub fn laurent_coefficients(value: &Atom, epsilon: Symbol, low: i64, high: i64) -> Vec<(i64, Atom)> {
+pub fn laurent_coefficients(
+    value: &Atom,
+    epsilon: Symbol,
+    low: i64,
+    high: i64,
+) -> Vec<(i64, Atom)> {
     let expanded = value.expand();
     (low..=high)
         .map(|order| {

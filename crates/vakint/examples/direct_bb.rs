@@ -59,7 +59,12 @@ fn cpu_seconds() -> f64 {
         .rsplit_once(')')
         .map(|(_, rest)| rest.split_whitespace().collect::<Vec<_>>())
         .unwrap_or_default();
-    let tick = |i: usize| fields.get(i).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);
+    let tick = |i: usize| {
+        fields
+            .get(i)
+            .and_then(|v| v.parse::<f64>().ok())
+            .unwrap_or(0.0)
+    };
     (tick(11) + tick(12)) / 100.0
 }
 
@@ -151,9 +156,17 @@ fn main() -> eyre::Result<()> {
             if files.iter().any(|p| stem(p).contains('.')) {
                 eyre::bail!("--graphs needs plain diagram-NNNNNN.dot names");
             }
-            let by_number = files.iter().map(|p| (number(p), p.clone())).collect::<BTreeMap<_, _>>();
+            let by_number = files
+                .iter()
+                .map(|p| (number(p), p.clone()))
+                .collect::<BTreeMap<_, _>>();
             list.iter()
-                .map(|n| by_number.get(n).cloned().ok_or_else(|| eyre::eyre!("no diagram {n}")))
+                .map(|n| {
+                    by_number
+                        .get(n)
+                        .cloned()
+                        .ok_or_else(|| eyre::eyre!("no diagram {n}"))
+                })
                 .collect::<eyre::Result<Vec<_>>>()?
         }
         None => files.clone(),
@@ -180,14 +193,21 @@ fn main() -> eyre::Result<()> {
         let engine = refpath::fresh_engine(&engine)?;
         let started = Instant::now();
         let _ = refpath::run_graph(&engine, &model, &std::fs::read_to_string(path)?, &options);
-        eprintln!("[direct_bb] warm-up on {} in {:.3} s", path.display(), started.elapsed().as_secs_f64());
+        eprintln!(
+            "[direct_bb] warm-up on {} in {:.3} s",
+            path.display(),
+            started.elapsed().as_secs_f64()
+        );
     }
     let setup = Instant::now();
     let mut template = Vakint::new()?;
     if let Some(library) = &library {
         template.load_p_library_directory(library, false)?;
     }
-    eprintln!("[direct_bb] engine and p library loaded in {:.3} s", setup.elapsed().as_secs_f64());
+    eprintln!(
+        "[direct_bb] engine and p library loaded in {:.3} s",
+        setup.elapsed().as_secs_f64()
+    );
     for path in &selected {
         let graph_started = Instant::now();
         let dot = std::fs::read_to_string(path)?;
@@ -264,10 +284,14 @@ fn main() -> eyre::Result<()> {
                     ("zero_sectors_dropped".to_string(), count.zero.to_string()),
                     ("keys_before_drop".to_string(), count.total.to_string()),
                     ("census_unknown_kept".to_string(), count.unknown.to_string()),
-                    ("producer".to_string(), "vakint refpath R2 (helper VH lane refpath)".to_string()),
+                    (
+                        "producer".to_string(),
+                        "vakint refpath R2 (helper VH lane refpath)".to_string(),
+                    ),
                 ]);
                 std::fs::write(
-                    out.join("gate").join(format!("{id}.{}.gate", result.projection)),
+                    out.join("gate")
+                        .join(format!("{id}.{}.gate", result.projection)),
                     p_gate::write_gate_view(&view, &header),
                 )?;
             }
@@ -292,7 +316,10 @@ fn main() -> eyre::Result<()> {
             }));
         }
         for (name, numerator) in &run.numerators {
-            values_text.push_str(&format!("numerator.{name}.bytes\t{}\n", numerator.to_canonical_string().len()));
+            values_text.push_str(&format!(
+                "numerator.{name}.bytes\t{}\n",
+                numerator.to_canonical_string().len()
+            ));
         }
         std::fs::write(out.join("values").join(format!("{id}.txt")), values_text)?;
         let post_seconds = post.elapsed().as_secs_f64();
