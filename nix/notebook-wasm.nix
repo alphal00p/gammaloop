@@ -67,7 +67,7 @@
   cargoVendorDir = crossCrane.vendorCargoDeps {
     cargoLock = workspaceRoot + "/${hostRoot}/Cargo.lock";
     overrideVendorGitCheckout = packages: drv:
-      if lib.any (dependency: dependency.name == "symbolica-typst-atom-payload") packages
+      if lib.any (dependency: dependency.name == "symbolica-typst-plugin") packages
       then
         drv.overrideAttrs (_: {
           src = builtins.fetchTree {

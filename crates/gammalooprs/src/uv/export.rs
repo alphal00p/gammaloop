@@ -377,13 +377,7 @@ fn export_legacy_forest(
     let orientation = orientation.ok_or_else(|| {
         eyre!("Computed UV forest export requires its stored production CFF expression")
     })?;
-    compute_legacy_forest(
-        graph,
-        model,
-        &mut cut_forests,
-        orientation,
-        generation_settings,
-    )?;
+    compute_legacy_forest(graph, &mut cut_forests, orientation, generation_settings)?;
     let forest = cut_forests
         .forests
         .first()

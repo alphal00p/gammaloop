@@ -4,12 +4,15 @@
 = Using Linnet from Python
 
 Symbolica Community exposes native Linnet graphs as `symbolica.community.graph`.
-Build and install the complete Community wheel, or use the repository's notebook host:
+Build and install the complete Community wheel, or run these commands from the repository
+root to install its locked notebook host. Retain `.venv/.nix-python/symbolica` while using
+the Nix-built host: its native libraries remain in the Nix store.
 
 // docs-example: syntax
 ```sh
-python -m pip install "maturin>=1.13,<2"
-maturin develop --locked --manifest-path examples/notebooks/symbolica-host/Cargo.toml
+python -m venv .venv
+nix develop -c just python-develop community --python .venv/bin/python
+. .venv/bin/activate
 ```
 
 Graph rendering uses native Rust geometry and direct MathML labels. Notebook

@@ -39,6 +39,8 @@ EXECUTION_TRACKING = r"""(() => {
                         window.notebookCompletedRuns = 0;
                         window.notebookCellStarts = new Map();
                         window.notebookCellTimings = new Map();
+                        window.notebookCellStatuses = new Map();
+                        window.notebookWorkerEvents = [];
                         const NotebookWorker = window.Worker;
                         window.Worker = class extends NotebookWorker {
                             constructor(...args) {
@@ -47,11 +49,22 @@ EXECUTION_TRACKING = r"""(() => {
                                     const rpc = data.data;
                                     if (rpc?.id !== "kernelMessage") return;
                                     const message = JSON.parse(rpc.payload.message);
+                                    if (["completed-run", "cell-op"].includes(message.op)) {
+                                        window.notebookWorkerEvents.push({
+                                            op: message.op,
+                                            cell: message.data?.cell_id,
+                                            status: message.data?.status,
+                                        });
+                                        if (window.notebookWorkerEvents.length > 20)
+                                            window.notebookWorkerEvents.shift();
+                                    }
                                     if (message.op === "completed-run") {
                                         window.notebookRunCompleted = true;
                                         window.notebookCompletedRuns += 1;
                                     } else if (message.op === "cell-op") {
                                         const {cell_id, status, timestamp} = message.data;
+                                        if (status !== undefined)
+                                            window.notebookCellStatuses.set(cell_id, status);
                                         if (status === "queued") {
                                             window.notebookCellStarts.delete(cell_id);
                                             window.notebookCellTimings.delete(cell_id);
@@ -1069,6 +1082,30 @@ def notebook_loader_smoke(browser, base_url: str) -> None:
             page.close()
 
 
+def notebook_run_state(picker) -> dict[str, object]:
+    """Capture bounded UI and worker evidence at a representative switch."""
+    state = picker.evaluate("""el => ({
+        value: el.value,
+        initialValue: el.getAttribute('data-initial-value'),
+        completedRuns: window.notebookCompletedRuns,
+        runCompleted: window.notebookRunCompleted,
+        workerCellStatuses: [...(window.notebookCellStatuses || [])],
+        workerCellTimingsMs: [...(window.notebookCellTimings || [])],
+        recentWorkerEvents: window.notebookWorkerEvents,
+        cells: [...document.querySelectorAll('marimo-island')].map(cell => ({
+            id: cell.cellId,
+            status: cell.dataset.status,
+            executed: window.notebookExecutedCells?.has(cell.cellId),
+        })),
+        errors: [...document.querySelectorAll('marimo-island [role="alert"]')]
+            .map(error => error.textContent.trim().slice(0, 1200)).slice(0, 8),
+    })""")
+    # Playwright pierces the custom element's shadow root; querySelector does not.
+    state["selectedLabel"] = picker.locator("button").inner_text()
+    state["observedAtSeconds"] = time.time()
+    return state
+
+
 def browser_smoke(
     base_url: str,
     artifacts: Sequence[tuple[Notebook, Path]],
@@ -1751,16 +1788,44 @@ def browser_smoke(
                             for value in labels
                             if f": {name} — {content}" in value
                         )
+                        before = notebook_run_state(picker)
+                        switch_started = time.perf_counter()
+                        print(
+                            f"Browser representative starting: {artifact.name} "
+                            f"requested={label!r} state={json.dumps(before, sort_keys=True)}",
+                            flush=True,
+                        )
                         completed = page.evaluate("window.notebookCompletedRuns")
                         picker.locator("button").click()
                         page.locator("input[cmdk-input]").fill(name)
                         page.get_by_role("option", name=label, exact=True).click()
-                        page.wait_for_function(
-                            "previous => window.notebookCompletedRuns > previous",
-                            arg=completed,
-                            timeout=timeout,
+                        print(
+                            f"Browser representative selected: {artifact.name} "
+                            f"requested={label!r} state="
+                            f"{json.dumps(notebook_run_state(picker), sort_keys=True)}",
+                            flush=True,
                         )
+                        try:
+                            page.wait_for_function(
+                                "previous => window.notebookCompletedRuns > previous",
+                                arg=completed,
+                                timeout=timeout,
+                            )
+                        except BrowserTimeoutError as error:
+                            after = notebook_run_state(picker)
+                            raise RuntimeError(
+                                f"Notebook representative rerun timed out: {artifact.name} "
+                                f"requested={label!r}; elapsed={time.perf_counter() - switch_started:.1f}s; "
+                                f"before={json.dumps(before, sort_keys=True)}; "
+                                f"after={json.dumps(after, sort_keys=True)}"
+                            ) from error
                         wait_for_cells(page, artifact.name)
+                        print(
+                            f"Browser representative passed: {artifact.name} "
+                            f"requested={label!r} elapsed={time.perf_counter() - switch_started:.1f}s state="
+                            f"{json.dumps(notebook_run_state(picker), sort_keys=True)}",
+                            flush=True,
+                        )
                 if docs and notebook.ready_value == "08_numerical_cff_ltd_marimo":
                     # Every topology in the source picker must execute, including
                     # both three-loop examples. Select through the upstream UI.

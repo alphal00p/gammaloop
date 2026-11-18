@@ -138,6 +138,12 @@ threads-required = "num-test-threads"
 
 # Integration workers and evaluator-heavy fixtures retain their existing budgets.
 
+# Full-site documentation tests pass within the existing deadline alone, but
+# concurrent catalog generation and rendering can exhaust that deadline.
+[[profile.default.overrides]]
+filter = "package(alphal00p-docs-builder) and (test(=provenance_tests::each_build_captures_one_revision_before_rendering) or test(=tests::every_product_orients_rust_to_native_rustdoc_and_keeps_legacy_redirects))"
+threads-required = "num-test-threads"
+
 # Previously unmeasured slow generators may allocate large evaluators or share
 # fixture directories. Run one at a time within a worker; main shards use
 # isolated workers. The measured scalar family already reserves all slots.

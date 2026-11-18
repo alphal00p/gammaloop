@@ -65,7 +65,7 @@
   cargoVendorDir = craneLib.vendorCargoDeps {
     cargoLock = (workspaceRoot + "/Cargo.lock");
     overrideVendorGitCheckout = packages: drv:
-      if lib.any (package: package.name == "symbolica-typst-atom-payload") packages
+      if lib.any (package: package.name == "symbolica-typst-plugin") packages
       then
         drv.overrideAttrs (_: {
           # Fetch the exact Cargo.lock revision even if upstream branches move;

@@ -413,6 +413,7 @@ export default {
             activate();
             let fitFrame;
             const fit = () => {
+              owner.win.cancelAnimationFrame(fitFrame);
               fitFrame = 0;
               if (!mounted.isConnected || signal.aborted) return;
               const height = `${Math.ceil(doc.body.getBoundingClientRect().height)}px`;
@@ -426,6 +427,10 @@ export default {
             });
             signal.addEventListener('abort', () => owner.win.cancelAnimationFrame(fitFrame), {once: true});
             resize.observe(doc.body);
+            // Font replacement can change layout after the resize notification
+            // for this frame. Fit at that lifecycle boundary as well, without
+            // waiting for exact fonts before displaying the snapshot.
+            doc.fonts.addEventListener('loadingdone', fit, {signal});
             // Snapshot controls and fallback-font layout are ready now. Exact
             // measurement still waits for STIX separately; displaying a graph
             // must never wait for an unanswered font comm or fonts.ready.
@@ -445,8 +450,10 @@ export default {
                 for (const face of doc.fonts) {
                   if (face.family.replace(/["']/g, '') === 'Linnet Offline Math') face.display = 'swap';
                 }
-                // The existing ResizeObserver fits any changed font metrics.
+                // Installing the family can change fallback metrics before the
+                // face finishes loading. Fit both that layout and loadingdone.
                 // Keep this document and its selection/camera state intact.
+                fit();
               }).catch(() => { /* Keep the visible fallback-font snapshot. */ });
             }
             mounted.style.removeProperty('visibility');

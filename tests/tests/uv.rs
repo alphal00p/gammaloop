@@ -5823,7 +5823,6 @@ fn sunrise_pole_part_matches_muv_inspect() -> Result<()> {
 mod slow {
     use super::*;
     use gammalooprs::model::ModelGammaLoopExt;
-    use gammalooprs::model::ModelGammaLoopExt;
 
     #[test]
     fn soft_ir_4d_representations_layouts_and_forests_match() -> Result<()> {

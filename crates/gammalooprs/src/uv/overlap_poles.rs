@@ -2,6 +2,7 @@
 //! Never resolve retained graph numerators into the complete forest expression.
 
 use super::*;
+use crate::uv::approx::projected_4d::Local4dProjectionContext;
 use crate::{
     graph::FeynmanGraph,
     uv::{Integrands, approx::direct_3d::physical_full_h_fixture},

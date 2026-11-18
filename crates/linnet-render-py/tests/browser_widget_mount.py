@@ -160,8 +160,19 @@ CHECK = r"""async ({javascript, controls, css, font, mode, theme}) => {
     assert(doc.querySelector('.linnet-control-row').getBoundingClientRect().bottom <= svg.getBoundingClientRect().top + 1,
       'navigation row overlaps graph labels');
     if (mode === 'delayed') {
+      let completedFontFits;
+      doc.fonts.addEventListener('loadingdone', () => {
+        // Check after all loadingdone listeners, before a deferred resize fit.
+        queueMicrotask(() => {
+          completedFontFits = parseFloat(frame.style.height) >= doc.body.getBoundingClientRect().height;
+        });
+      }, {once:true});
       publish('font', {key:state.request.font_key, css:font});
       await waitFor(() => doc.querySelector('style[data-linnet-font]'), 'late font CSS never arrived');
+      // Font decoding is asynchronous and need not finish within two frames.
+      // Exercise its actual completion boundary, including the immediate fit.
+      await waitFor(() => completedFontFits !== undefined, 'late font never completed');
+      assert(completedFontFits, 'font completion deferred frame sizing until another resize turn');
       await tick(); await tick();
       assert([...doc.fonts].some(face => face.family.replace(/["']/g, '') === 'Linnet Offline Math'
         && face.display === 'swap'), 'late font can suppress fallback label paint');

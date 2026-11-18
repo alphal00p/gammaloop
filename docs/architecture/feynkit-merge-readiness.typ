@@ -1,5 +1,36 @@
 = FeynKit merge readiness and performance
 
+== Main integration preparation
+
+The local preparation retains main's ordered CFF/LTD representations, physical
+threshold boundaries and explicit sample-to-observable accumulation alongside
+FeynKit's indexed tensor definitions. Evaluator construction receives the
+retained numerator store belonging to the selected representation. Scalar
+definitions are resolved before dispatch; diagnostic traversal inspects the
+stored factorized roots and bodies without distributing numerators.
+
+Full-state format22 combines the two incompatible predecessor layouts: main20
+and published FeynKit21. The existing manifest version guard rejects both
+before model parsing, symbolic import or process deserialization. Old full
+states must be regenerated; standalone archive versioning remains independent.
+Parameter builders encode authoritative entries and rebuild their derived
+function map on load. Omitting that rebuildable cache makes resume fingerprints
+stable through the format22 roundtrip; the strict generated-integrand guard
+and observable/checkpoint assertions remain unchanged.
+Parameter-pair serialization retains slot/range order and fully qualified
+symbolic identity across fresh-process import. Floating coefficient leaves stay
+in native binary so canonical skeletons preserve component precision without
+rounding through display text.
+Finite-field coefficients retain their value and modulus, and rational-polynomial
+coefficients retain exact integer terms and fully qualified variables. Neither
+domain depends on parsing bracketed coefficient display text as an atom or on
+process-local registry indices in the fingerprint input.
+
+Historical qualification below belongs to its named source revisions. It does
+not qualify this combined source or authorize publication. The integration
+requires fresh scientific, browser, documentation and paired performance gates.
+
+
 == Fully indexed GammaLoop continuation
 
 === NinjaRS integration review, 19 October 2026

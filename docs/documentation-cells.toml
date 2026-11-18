@@ -138,9 +138,12 @@ reason = "Requires the user-provided models/sm UFO model and derived diagram/amp
 reason = "Requires native GammaLoopAPI and its generated evaluator/state files; the browser Symbolica host does not contain gammaloop."
 
 [cell."docs/products/gammaloop/content/api.typ:2"]
-reason = "Requires native GammaLoopAPI and its generated evaluator/state files; the browser Symbolica host does not contain gammaloop."
+reason = "Requires native GammaLoop HistogramAccumulator; the pinned browser Symbolica host does not register gammaloop."
 
 [cell."docs/products/gammaloop/content/api.typ:3"]
+reason = "Requires native GammaLoopAPI and its generated evaluator/state files; the browser Symbolica host does not contain gammaloop."
+
+[cell."docs/products/gammaloop/content/api.typ:4"]
 reason = "Requires native GammaLoopAPI and its generated evaluator/state files; the browser Symbolica host does not contain gammaloop."
 
 [cell."docs/products/gammaloop/content/events.typ:1"]

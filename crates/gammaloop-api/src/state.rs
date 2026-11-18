@@ -3776,6 +3776,7 @@ mod tests {
         }
         state.save(temp.path(), true, false).unwrap();
         let manifest = load_state_manifest(temp.path()).unwrap();
+        assert_eq!(manifest.version, 22);
         assert!(manifest
             .ufo_print_symbols
             .contains(&"orphan_ufo_printer".to_owned()));
@@ -5102,6 +5103,37 @@ commands = ["quit -n"]
     }
 
     #[test]
+    fn state_load_rejects_previous_branch_layouts_before_deserialization() {
+        for version in [20, 21] {
+            let temp = tempdir().unwrap();
+            fs::write(
+                temp.path().join(STATE_MANIFEST_FILE),
+                format!("version = {version}\n"),
+            )
+            .unwrap();
+            // Every payload is deliberately unreadable. The version guard must
+            // win before model parsing, symbolic import or positional decoding.
+            fs::write(temp.path().join("model.json"), b"invalid model").unwrap();
+            fs::write(temp.path().join("symbolica_state.bin"), b"invalid archive").unwrap();
+            fs::create_dir(temp.path().join("processes")).unwrap();
+            fs::write(
+                temp.path().join("processes/processes.bin"),
+                b"invalid processes",
+            )
+            .unwrap();
+
+            let error = match State::load(temp.path().to_path_buf(), None, None) {
+                Ok(_) => panic!("previous branch layout {version} must be rejected"),
+                Err(error) => error,
+            };
+            let message = error.to_string();
+            assert!(message.contains(&format!("State version {version}")));
+            assert!(message.contains("supported version 22"));
+            assert!(message.contains("regenerate the saved state"));
+        }
+    }
+
+    #[test]
     fn state_manifest_requires_an_explicit_version() {
         let temp = tempdir().unwrap();
         fs::write(temp.path().join(STATE_MANIFEST_FILE), "").unwrap();
@@ -5112,7 +5144,7 @@ commands = ["quit -n"]
 
     #[test]
     fn state_save_rejects_legacy_target_before_writing() {
-        for version in [1, 20] {
+        for version in [1, 20, 21] {
             let temp = tempdir().unwrap();
             let symbolica_state = temp.path().join("symbolica_state.bin");
             fs::write(
