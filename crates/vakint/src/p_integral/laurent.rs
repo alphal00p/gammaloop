@@ -159,6 +159,131 @@ impl Laurent {
     }
 }
 
+/// A tabulated master `PMaster(name)`: its known Laurent coefficients and,
+/// when the table stops, its first unknown order `k` (the table's tail
+/// `ε^k·Oep(k, PMaster(name))`).
+///
+/// The tail stands for every order from `k` on, not for one coefficient:
+/// [`TabulatedMaster::through`] writes each unknown order `j >= k` that a
+/// product needs as its own marker `ε^j·Oep(j, PMaster(name))`. Distinct
+/// unknown coefficients are distinct symbols, so a marker cancels between
+/// terms only where the unknown coefficient itself cancels, and every other
+/// one survives truncation for the guard
+/// ([`crate::truncation_guard::ensure_known_orders`]).
+#[derive(Clone, Debug)]
+struct TabulatedMaster {
+    /// The known coefficients (orders below `k`).
+    known: Laurent,
+    /// `(k, PMaster(name))` when the table has an unknown tail.
+    tail: Option<(i64, Atom)>,
+    /// The lowest order of the table (known or the tail): a lower bound of
+    /// the master's valuation.
+    valuation: i64,
+}
+
+impl TabulatedMaster {
+    /// Split a table entry (an expanded Laurent polynomial in `ε`, at most
+    /// one term `ε^k·Oep(k, master)`) into known coefficients and tail.
+    fn new(expression: &Atom, epsilon: Symbol) -> Result<Self, VakintError> {
+        let expanded = expression.expand();
+        let parts: Vec<Atom> = match expanded.as_view() {
+            AtomView::Add(sum) => sum.iter().map(|term| term.to_owned()).collect(),
+            _ => vec![expanded.clone()],
+        };
+        let marker = crate::truncation_guard::unknown_tail_symbol();
+        let mut known = Atom::Zero;
+        let mut tail = None;
+        for term in parts {
+            if !term.contains_symbol(marker) {
+                known += term;
+                continue;
+            }
+            let found = Self::tail_of(&term, epsilon)
+                .ok_or_else(|| failure(format!("malformed unknown master tail {term}")))?;
+            if tail.replace(found).is_some() {
+                return Err(failure(format!(
+                    "more than one unknown tail in the master table entry {expression}"
+                )));
+            }
+        }
+        let known = Laurent::from_polynomial(&known, epsilon)?;
+        let known_valuation = (!known.coefficients.is_empty()).then_some(known.valuation);
+        if let (Some((k, _)), false) = (&tail, known.coefficients.is_empty())
+            && known.order() >= *k
+        {
+            return Err(failure(format!(
+                "the master table entry {expression} has known coefficients at or beyond its unknown tail"
+            )));
+        }
+        let valuation = match (known_valuation, &tail) {
+            (Some(v), _) => v,
+            (None, Some((k, _))) => *k,
+            (None, None) => 0,
+        };
+        Ok(TabulatedMaster {
+            known,
+            tail,
+            valuation,
+        })
+    }
+
+    /// `(k, master)` of a term exactly `ε^k·Oep(k, master)`.
+    fn tail_of(term: &Atom, epsilon: Symbol) -> Option<(i64, Atom)> {
+        let mut marker = None;
+        let mut markers = 0;
+        term.visitor(&mut |part| {
+            if let AtomView::Fun(function) = part
+                && function.get_symbol() == crate::truncation_guard::unknown_tail_symbol()
+            {
+                markers += 1;
+                marker = Some(part.to_owned());
+                return false;
+            }
+            true
+        });
+        let marker = marker.filter(|_| markers == 1)?;
+        let AtomView::Fun(function) = marker.as_view() else {
+            return None;
+        };
+        let arguments: Vec<_> = function.iter().collect();
+        let [k, master] = arguments.as_slice() else {
+            return None;
+        };
+        let k = get_integer_from_atom(*k)?;
+        let rest = (term / &marker - Atom::var(epsilon).pow(Atom::num(k))).expand();
+        (rest.is_zero() && !master.contains_symbol(epsilon)).then(|| (k, master.to_owned()))
+    }
+
+    /// The master through `ε^through`: known coefficients, zero between the
+    /// last known order and the tail, and `Oep(j, master)` for every unknown
+    /// order `j` up to `through`. Empty (exactly zero through `through`) when
+    /// `through` is below the valuation.
+    fn through(&self, through: i64) -> Laurent {
+        let length = (through - self.valuation + 1).max(0) as usize;
+        let coefficients = (0..length)
+            .map(|index| {
+                let power = self.valuation + index as i64;
+                match &self.tail {
+                    Some((k, master)) if power >= *k => {
+                        crate::truncation_guard::unknown_tail_marker(power, master)
+                    }
+                    _ => self
+                        .known
+                        .coefficients
+                        .get((power - self.known.valuation) as usize)
+                        .filter(|_| power >= self.known.valuation)
+                        .cloned()
+                        .unwrap_or_default(),
+                }
+            })
+            .collect();
+        Laurent {
+            valuation: self.valuation,
+            coefficients,
+        }
+    }
+}
+
 /// The power of `ε` in a monomial, if it is an integer.
 fn epsilon_power(term: AtomView, epsilon: Symbol) -> Option<i64> {
     match term {
@@ -479,7 +604,9 @@ fn monomial_term(
     // The Γ form of the PG factors joins the prefactor; PMaster factors
     // are tabulated Laurent polynomials.
     let mut product = prefactor * coefficient;
-    let mut tabulated: Option<Laurent> = None;
+    // Each occurrence of a tabulated master, expanded only once every
+    // factor's valuation is known (see `TabulatedMaster`).
+    let mut tabulated: Vec<TabulatedMaster> = Vec::new();
     let factors = match monomial.as_view() {
         AtomView::Mul(product) => product.iter().map(|f| f.to_owned()).collect(),
         _ => vec![monomial.clone()],
@@ -528,12 +655,9 @@ fn monomial_term(
         } else {
             let name = masters::p_master_name(base.as_view())
                 .ok_or_else(|| failure(format!("invalid {base}")))?;
-            let value = Laurent::from_polynomial(&master(&name, epsilon)?, epsilon)?;
+            let value = TabulatedMaster::new(&master(&name, epsilon)?, epsilon)?;
             for _ in 0..power {
-                tabulated = Some(match tabulated {
-                    None => value.clone(),
-                    Some(tabulated) => tabulated.mul(&value, i64::MAX / 4),
-                });
+                tabulated.push(value.clone());
             }
         }
     }
@@ -553,7 +677,7 @@ fn monomial_term(
                 &split.rational,
                 epsilon,
                 monomial,
-                order - tabulated.as_ref().map_or(0, |t| t.valuation),
+                order - tabulated.iter().map(|t| t.valuation).sum::<i64>(),
                 "relative_valuation",
                 false,
                 || valuation(&split.rational, epsilon),
@@ -563,7 +687,7 @@ fn monomial_term(
     let Some(rational_valuation) = rational_valuation else {
         return Ok(None);
     };
-    let tabulated_valuation = tabulated.as_ref().map_or(0, |t| t.valuation);
+    let tabulated_valuation = tabulated.iter().map(|t| t.valuation).sum::<i64>();
     let depth = order - rational_valuation - tabulated_valuation;
     if depth < 0 {
         return Ok(None);
@@ -594,11 +718,20 @@ fn monomial_term(
     };
     let exponential = Laurent::exp(&split.exponent(depth), depth);
     let mut term = rational.mul(&exponential, order - tabulated_valuation);
-    if let Some(mut tabulated) = tabulated {
-        // Through ε^(order - rational_valuation); a tabulated unknown
-        // tail inside that range survives as its Oep marker.
-        tabulated.coefficients.truncate(depth as usize + 1);
-        term = term.mul(&tabulated, order);
+    // Every occurrence of a master is needed through its own valuation plus
+    // `depth` = order minus the valuations of ALL other factors (rational
+    // part, Γ and PG factors, the prefactor and the other masters): each is
+    // expanded exactly that far, an unknown order as its own marker
+    // `Oep(j, master)`, so that the product is exact through `ε^order`.
+    for master in &tabulated {
+        let factor = master.through(master.valuation + depth);
+        term = term.mul(&factor, order);
+    }
+    if term.order() < order {
+        return Err(failure(format!(
+            "the expansion of {monomial} ends at ε^{} below the requested ε^{order}",
+            term.order()
+        )));
     }
     Ok(Some(term))
 }
@@ -1260,5 +1393,185 @@ mod tests {
             !exponent[0].contains_symbol(vk_symbol!("log_mu_sq")),
             "{exponent:?}"
         );
+    }
+
+    /// Lane laurent-depth (reviewer O2 "orders", 2026-11-18): a table's tail
+    /// `ε^k·Oep(k, M)` stands for every order from `k` on. Two terms of the
+    /// same master whose leading unknown orders cancel must not lose the
+    /// orders after it: `ε^-4·M·(ε·PG(0,0) - 1 + ε^9) = ε^5·M` exactly, and
+    /// `ε^-4·M·(ε·PG(0,0) - 1 + ε) = ε^-3·M` is refused like `ε^-3·M`.
+    #[test]
+    fn cancelling_leading_unknown_orders_keep_the_later_ones() {
+        Vakint::initialize_vakint_symbols();
+        let e = vk_symbol!("ε");
+        let one = Atom::num(1);
+        let no = function!(p_master_symbol(), Atom::var(vk_symbol!("no")));
+        let pg = function!(pg_symbol(), Atom::num(0), Atom::num(0));
+        let ep = Atom::var(e);
+        let pow = |n: i64| ep.pow(Atom::num(n));
+        // `no` is tabulated through ε^7, its tail is ε^8·Oep(8, PMaster(no)).
+        let control = expand(&one, &(pow(5) * &no), e, 4).unwrap();
+        assert!(!control.is_zero());
+        assert!(!crate::truncation_guard::has_unknown_tail(control.as_view()));
+        let cancel = (pow(-4) * &no * (&ep * &pg - (Atom::num(1) - pow(9)))).expand();
+        let value = expand(&one, &cancel, e, 4).unwrap();
+        assert_eq!(value.to_canonical_string(), control.to_canonical_string());
+        let guard = |value: &Atom| {
+            crate::truncation_guard::ensure_known_orders(
+                value,
+                e,
+                Some(4),
+                "test",
+                crate::truncation_guard::plain_name,
+            )
+        };
+        let alarm = guard(&expand(&one, &(pow(-3) * &no), e, 4).unwrap()).unwrap_err();
+        let cancel_missing = (pow(-4) * &no * (&ep * &pg - (Atom::num(1) - &ep))).expand();
+        let missing = guard(&expand(&one, &cancel_missing, e, 4).unwrap()).unwrap_err();
+        assert_eq!(missing, alarm);
+        assert_eq!(alarm.masters.len(), 1);
+        assert_eq!(
+            (
+                alarm.masters[0].first_missing_order,
+                alarm.masters[0].last_needed_order,
+                alarm.masters[0].first_affected_result_order
+            ),
+            (8, Some(8), 4)
+        );
+        // A deeper pole needs several unknown orders: one entry, k..last.
+        let deep = guard(&expand(&one, &(pow(-5) * &no), e, 4).unwrap()).unwrap_err();
+        assert_eq!(deep.masters.len(), 1);
+        assert_eq!(
+            (
+                deep.masters[0].first_missing_order,
+                deep.masters[0].last_needed_order
+            ),
+            (8, Some(10))
+        );
+    }
+
+    /// Property: for random small sums of products of rational functions of
+    /// ε, PG factors and tabulated masters with unknown tails (with terms
+    /// built to cancel), the expansion through `ε^N` is the exact product
+    /// truncated at `N`, where the reference writes every unknown master
+    /// coefficient as its own symbol `Oep(j, M)` far beyond any needed
+    /// order; the guard fires exactly when an unknown order survives.
+    #[test]
+    fn products_with_unknown_tails_expand_exactly() {
+        Vakint::initialize_vakint_symbols();
+        let e = vk_symbol!("ε");
+        let ep = Atom::var(e);
+        let pow = |n: i64| ep.pow(Atom::num(n));
+        let mut state: u64 = 0x5eed_1a0e_0de9_7a11;
+        let mut next = move |n: u64| {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            ((state >> 33) % n) as i64
+        };
+        // Three masters: (valuation, first unknown order k), known
+        // coefficients random integers (some zero), or fully exact (no tail).
+        let shapes = [("ma", -2, 1), ("mb", 0, 2), ("mc", -1, 4), ("md", 0, -1)];
+        let mut tables = std::collections::BTreeMap::<String, (Atom, Atom)>::new();
+        for (name, valuation, k) in shapes {
+            let master = function!(p_master_symbol(), Atom::var(vk_symbol!(name)));
+            let last = if k < 0 { 2 } else { k - 1 };
+            let mut known = Atom::Zero;
+            for j in valuation..=last {
+                known += Atom::num(next(7) - 2) * pow(j);
+            }
+            known += pow(valuation) * Atom::num(1 + next(3));
+            let (table, reference) = if k < 0 {
+                (known.clone(), known)
+            } else {
+                let mut reference = known.clone();
+                for j in k..=k + 30 {
+                    reference += pow(j) * crate::truncation_guard::unknown_tail_marker(j, &master);
+                }
+                (
+                    known + crate::truncation_guard::unknown_tail(e, k, &master),
+                    reference,
+                )
+            };
+            tables.insert(name.to_string(), (table, reference));
+        }
+        let table = |name: &str, epsilon: symbolica::atom::Symbol| {
+            assert_eq!(epsilon, e);
+            Ok(tables[name].0.clone())
+        };
+        let master = |name: &str| function!(p_master_symbol(), Atom::var(vk_symbol!(name)));
+        let names = ["ma", "mb", "mc", "md"];
+        let pg = |x1: i64, x2: i64| function!(pg_symbol(), Atom::num(x1), Atom::num(x2));
+        let mut fired = 0;
+        let mut clean = 0;
+        for trial in 0..48 {
+            let mut reduced = Atom::Zero;
+            for _ in 0..1 + next(3) {
+                // coefficient ε^p·(a + bε + cε²)/(1 - dε)
+                let coefficient = pow(next(7) - 4)
+                    * (Atom::num(1 + next(3)) + Atom::num(next(5) - 2) * &ep
+                        + Atom::num(next(5) - 2) * pow(2))
+                    / (Atom::num(1) - Atom::num(next(3)) * &ep);
+                let mut monomial = master(names[next(4) as usize]);
+                if next(2) == 1 {
+                    monomial *= master(names[next(4) as usize]);
+                }
+                match next(4) {
+                    0 => monomial *= pg(0, 0),
+                    1 => monomial *= pg(1, 0),
+                    _ => {}
+                }
+                let term = &coefficient * &monomial;
+                reduced += &term;
+                // A partner cancelling the leading orders of the term
+                // (ε·PG(0,0) = 1 exactly), but not all of them.
+                if next(2) == 1 {
+                    let shift = next(4);
+                    reduced -= &coefficient * &monomial * &ep * pg(0, 0)
+                        * (Atom::num(1) - pow(1 + shift));
+                }
+            }
+            let reduced = reduced.expand();
+            let order = next(4) - 1;
+            let prefactor = if trial % 3 == 0 {
+                Vakint::normalize_gamma_functions(
+                    vk_parse!("Gamma(1+ε)*Gamma(1-ε)^2/Gamma(2-2*ε)*exp(-logQ2mu)^ε")
+                        .unwrap()
+                        .as_view(),
+                )
+            } else {
+                Atom::num(1)
+            };
+            let value = super::expand_with(&prefactor, &reduced, e, order, &table).unwrap();
+            let mut exact = reduced.clone();
+            for name in names {
+                exact = exact
+                    .replace(master(name).to_pattern())
+                    .with(tables[name].1.to_pattern());
+            }
+            for (x1, x2) in [(0, 0), (1, 0)] {
+                exact = exact
+                    .replace(pg(x1, x2).to_pattern())
+                    .with(pg_value(x1, x2, e).to_pattern());
+            }
+            let reference = gamma_series(&(&prefactor * &exact), e, order).unwrap();
+            assert_same(value.clone(), reference.clone());
+            let guard = crate::truncation_guard::ensure_known_orders(
+                &value,
+                e,
+                Some(order),
+                "test",
+                crate::truncation_guard::plain_name,
+            );
+            let unknown = crate::truncation_guard::has_unknown_tail(reference.expand().as_view());
+            assert_eq!(guard.is_err(), unknown, "trial {trial}: {reduced} through ε^{order}");
+            if unknown {
+                fired += 1;
+            } else {
+                clean += 1;
+            }
+        }
+        // Both outcomes are exercised.
+        assert!(fired > 0 && clean > 0, "fired {fired}, clean {clean}");
     }
 }

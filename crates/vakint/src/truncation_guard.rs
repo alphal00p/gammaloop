@@ -207,8 +207,11 @@ fn missing_orders(
     backend: &str,
     describe: impl Fn(&Atom) -> String,
 ) -> MissingMasterOrders {
-    // (master, first missing order) -> lowest affected result order
-    let mut tails = BTreeMap::<(String, i64), i64>::new();
+    // master -> (first missing order, last surviving order, lowest affected
+    // result order). The p-integral expansion writes every unknown order j of
+    // a master as its own marker Oep(j, master) (a table's single tail
+    // Oep(k, master) stands for all orders from k on); one entry per master.
+    let mut tails = BTreeMap::<String, (i64, i64, i64)>::new();
     let expanded = expression.expand();
     let terms: Vec<AtomView> = match expanded.as_view() {
         AtomView::Add(sum) => sum.iter().collect(),
@@ -229,9 +232,13 @@ fn missing_orders(
                 // the order where it appears.
                 let order = order.unwrap_or(power);
                 tails
-                    .entry((describe(&master), order))
-                    .and_modify(|lowest| *lowest = (*lowest).min(power))
-                    .or_insert(power);
+                    .entry(describe(&master))
+                    .and_modify(|(first, last, lowest)| {
+                        *first = (*first).min(order);
+                        *last = (*last).max(order);
+                        *lowest = (*lowest).min(power);
+                    })
+                    .or_insert((order, order, power));
                 return false;
             }
             true
@@ -240,16 +247,20 @@ fn missing_orders(
     let masters = tails
         .into_iter()
         .map(
-            |((master, first_missing_order), first_affected_result_order)| MissingMasterOrder {
-                master,
-                first_missing_order,
-                // A coefficient multiplying ε^k·Oep(k,M) at result order j
-                // needs master orders k..k+(n-j) for a result through ε^n.
-                last_needed_order: requested_order.map(|requested| {
-                    first_missing_order
-                        + requested.saturating_sub(first_affected_result_order).max(0)
-                }),
-                first_affected_result_order,
+            |(master, (first_missing_order, last_marker, first_affected_result_order))| {
+                MissingMasterOrder {
+                    master,
+                    first_missing_order,
+                    // A coefficient multiplying ε^k·Oep(k,M) at result order j
+                    // needs master orders k..k+(n-j) for a result through ε^n;
+                    // a surviving later marker Oep(j,M) needs at least j.
+                    last_needed_order: requested_order.map(|requested| {
+                        (first_missing_order
+                            + requested.saturating_sub(first_affected_result_order).max(0))
+                        .max(last_marker)
+                    }),
+                    first_affected_result_order,
+                }
             },
         )
         .collect();

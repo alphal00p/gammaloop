@@ -5406,3 +5406,35 @@ fn boundary_showcase() {
         started.elapsed().as_secs_f64()
     );
 }
+
+/// Lane laurent-depth (reviewer O2 "orders", 2026-11-18), through the
+/// ordinary `Vakint::evaluate` in Symbolic mode: inputs equal by
+/// `ε·PG(0,0) = 1` give equal results. `ε^-4·PMaster(no)·(ε·PG(0,0) - 1 +
+/// ε^9)` is `ε^5·PMaster(no)` (it returned 0: the leading unknown orders of
+/// the two terms cancelled and the clipped terms lost the known ε^4), and
+/// `ε^-4·PMaster(no)·(ε·PG(0,0) - 1 + ε)` is refused exactly like
+/// `ε^-3·PMaster(no)` (it returned a polynomial one order short).
+#[test]
+fn equal_inputs_with_cancelling_unknown_master_orders_agree() {
+    let engine = engine();
+    let mut settings = settings(RustRedMasterMode::Symbolic, None);
+    settings.number_of_terms_in_epsilon_expansion = 6;
+    let top = "topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))";
+    let evaluate = |numerator: &str| {
+        engine.evaluate(&settings, parse(&format!("({numerator})*{top}")).as_view())
+    };
+    let control = evaluate("ε^5*PMaster(no)").unwrap();
+    let known = evaluate("ε^5*20*zeta(5)").unwrap();
+    assert!(!control.is_zero());
+    assert!((&control - &known).expand().is_zero(), "{control} vs {known}");
+    let cancel = evaluate("ε^(-4)*PMaster(no)*(ε*PG(0,0)-(1-ε^9))").unwrap();
+    assert!((&cancel - &control).expand().is_zero(), "{cancel} vs {control}");
+    let refusal = |numerator: &str| match evaluate(numerator) {
+        Err(crate::VakintError::MissingMasterOrders(missing)) => missing,
+        other => panic!("{numerator}: expected MissingMasterOrders, got {other:?}"),
+    };
+    let alarm = refusal("ε^(-3)*PMaster(no)");
+    assert_eq!(refusal("ε^(-4)*PMaster(no)*(ε*PG(0,0)-(1-ε))"), alarm);
+    assert_eq!(alarm.masters.len(), 1);
+    assert_eq!(alarm.masters[0].first_missing_order, 8);
+}
