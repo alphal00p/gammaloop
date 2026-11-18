@@ -16,6 +16,7 @@ mod catalogue;
 #[doc(hidden)]
 pub mod compare;
 mod dot;
+pub mod factorized;
 pub(crate) mod finalize;
 pub(crate) mod forcer;
 #[cfg(test)]
@@ -52,6 +53,7 @@ pub use boundary::{
 };
 pub(crate) use catalogue::{PMatch, match_graph_preferring};
 pub use dot::to_dot;
+pub use factorized::{FACTORIZED_SCHEMA, FactorizedError, FactorizedNumerator, FactorizedParts};
 /// FORM run record for the benchmark harness (not part of the API).
 #[cfg(feature = "experimental-rustred")]
 #[doc(hidden)]
