@@ -464,7 +464,7 @@ mod tests {
         let model = refpath::load_model(&directory).unwrap();
         let mut template = Vakint::new().unwrap();
         template
-            .load_p_library_directory(&PathBuf::from(library), false)
+            .load_p_library_directory(PathBuf::from(library), false)
             .unwrap();
         for graph in ["000427", "000443"] {
             let dot =
