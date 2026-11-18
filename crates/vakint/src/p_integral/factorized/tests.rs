@@ -575,6 +575,19 @@ fn merged_colour_terms_reconstruct_every_channel() {
             );
         }
     }
+    // Imaginary channel coefficients (a quark loop with three gluons) merge
+    // with real weights: the imaginary unit is part of the colour monomial.
+    let i = Atom::i();
+    let imaginary = vec![
+        (vec![0], &i * q(-3, 4)),
+        (vec![1], &i * q(3, 8)),
+        (vec![2], &i * q(3, 8)),
+    ];
+    let merged = merge_colour_channels(&[3], &imaginary).expect("mergeable");
+    assert_eq!(merged.len(), 1);
+    for (key, expected) in &imaginary {
+        assert!((expected - merged_value(&merged, key)).expand().is_zero());
+    }
     // A non-rational number refuses the merge.
     assert!(merge_colour_channels(&[2], &[(vec![0], Atom::num(1.5)), (vec![1], n(1))]).is_none());
 }

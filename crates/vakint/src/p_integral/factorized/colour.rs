@@ -329,9 +329,28 @@ pub(crate) fn rational_number(view: AtomView<'_>) -> Option<Rational> {
     }
 }
 
+/// An exact complex rational number atom `(re, im)` (`None`: a float).
+fn complex_number(view: AtomView<'_>) -> Option<(Rational, Rational)> {
+    use symbolica::coefficient::CoefficientView;
+    let AtomView::Num(number) = view else {
+        return None;
+    };
+    match number.get_coeff_view() {
+        CoefficientView::Natural(n, d, ni, di) => {
+            Some((Rational::from((n, d)), Rational::from((ni, di))))
+        }
+        CoefficientView::Large(re, im) => Some((re.to_rat(), im.to_rat())),
+        _ => None,
+    }
+}
+
 /// `coefficient = Σ_m c_m M_m`: the colour monomials `M_m` (products of
 /// invariants, `1` in SU(3) mode) with exact rational `c_m`, keyed by the
-/// canonical string of `M_m`. `None` when a term's number is not a rational.
+/// canonical string of `M_m`. The imaginary unit is treated as one more
+/// factor of a monomial (`(a + b 𝑖) M = a M + b (𝑖 M)`): the weights stay
+/// real rationals (a quark loop with three gluons gives imaginary channel
+/// coefficients, `Tr(T^a T^b T^c) ∝ d^{abc} + 𝑖 f^{abc}`). `None` when a
+/// term's number is not exact.
 fn colour_monomials(coefficient: &Atom) -> Option<BTreeMap<String, (Atom, Rational)>> {
     let expanded = coefficient.expand();
     let mut out = BTreeMap::<String, (Atom, Rational)>::new();
@@ -340,18 +359,30 @@ fn colour_monomials(coefficient: &Atom) -> Option<BTreeMap<String, (Atom, Ration
             AtomView::Mul(m) => m.iter().collect::<Vec<_>>(),
             other => vec![other],
         };
-        let mut value = Rational::one();
+        let (mut re, mut im) = (Rational::one(), Rational::zero());
         let mut monomial = Atom::num(1);
         for factor in factors {
             match factor {
-                AtomView::Num(_) => value = &value * &rational_number(factor)?,
+                AtomView::Num(_) => {
+                    let (a, b) = complex_number(factor)?;
+                    // (re + im i)(a + b i)
+                    let next_re = &(&re * &a) - &(&im * &b);
+                    let next_im = &(&re * &b) + &(&im * &a);
+                    (re, im) = (next_re, next_im);
+                }
                 other => monomial *= other.to_owned(),
             }
         }
-        let entry = out
-            .entry(monomial.to_canonical_string())
-            .or_insert_with(|| (monomial, Rational::zero()));
-        entry.1 += &value;
+        for (value, unit) in [(re, Atom::num(1)), (im, Atom::i())] {
+            if value.is_zero() {
+                continue;
+            }
+            let monomial = &monomial * unit;
+            let entry = out
+                .entry(monomial.to_canonical_string())
+                .or_insert_with(|| (monomial, Rational::zero()));
+            entry.1 += &value;
+        }
         Some(())
     };
     match expanded.as_view() {

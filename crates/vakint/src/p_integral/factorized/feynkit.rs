@@ -186,8 +186,23 @@ fn merged_terms(
             )
         })
         .collect::<Vec<_>>();
-    let merged = merge_colour_channels(&dims, &channels)?;
+    let debug = std::env::var_os("VAKINT_SHARE_MERGE_DEBUG").is_some();
+    let Some(merged) = merge_colour_channels(&dims, &channels) else {
+        if debug {
+            eprintln!(
+                "[merge] refused: a coefficient is not an exact number combination: {channels:?}"
+            );
+        }
+        return None;
+    };
     if merged.len() >= branches.len() {
+        if debug {
+            eprintln!(
+                "[merge] {} terms for {} channels (dims {dims:?}): kept",
+                merged.len(),
+                branches.len()
+            );
+        }
         return None;
     }
     let split = |residual: &Atom| {
@@ -222,7 +237,16 @@ fn merged_terms(
                         symbolica::domains::rational::Rational::one()
                     }
                     Some(reference) => {
-                        super::colour::rational_number((&s / reference).expand().as_view())?
+                        let ratio = (&s / reference).expand();
+                        let Some(ratio) = super::colour::rational_number(ratio.as_view()) else {
+                            if debug {
+                                eprintln!(
+                                    "[merge] refused: row scalars {s} / {reference} = {ratio}"
+                                );
+                            }
+                            return None;
+                        };
+                        ratio
                     }
                 };
                 sum.push(Atom::num(weight * &ratio) * tensor);
