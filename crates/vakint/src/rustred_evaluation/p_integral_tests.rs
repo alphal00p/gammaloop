@@ -4429,7 +4429,7 @@ fn zero_sector_pruning_closure_drill() {
                 {
                     topology = factor.to_owned()
                 }
-                _ => numerator = numerator * factor.to_owned(),
+                _ => numerator *= factor.to_owned(),
             }
         }
         let loops: i64 = text

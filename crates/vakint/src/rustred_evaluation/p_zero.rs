@@ -201,7 +201,7 @@ impl ZeroSectors {
             }
             let mut rest = support;
             while rest != 0 {
-                let line = rest & rest.wrapping_neg();
+                let line = rest.isolate_lowest_one();
                 rest ^= line;
                 if !self.is_zero(support ^ line) {
                     return Some((support, support ^ line));
