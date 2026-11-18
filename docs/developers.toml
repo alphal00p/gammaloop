@@ -1783,7 +1783,8 @@ anchor = "ci-checks-and-upload:"
 # cachePublication.local selection for both uploads and builds. Independent
 # review cleared the recipe; differing-schedule fixture tests cover both
 # added and removed selected jobs. Scientific/runtime boundaries stay intact.
-digest = "912fad2e71048f53f498d64c0c208e345cf84eed"
+# Reviewed 2026-11-19 against 27ba0987: Local preparation reports jobs, cores, timestamped Nix events and scratch headroom while preserving the exact schedule and upload roots.
+digest = "567085476d1d1c98a9680ec67201712111ccfea7"
 
 [[section.note]]
 id = "feynkit-merge-readiness"

@@ -82,7 +82,7 @@ jobs:
           producer_roots="$RUNNER_TEMP/nix-shared-artifacts"
           mkdir -p "$producer_roots"
           producer_output_lines=$(
-            nix --option post-build-hook "" build \
+            bash .github/scripts/observe-nix-build.sh --option post-build-hook "" build \
               --impure \
               --keep-going \
               --out-link "$producer_roots/result" \
