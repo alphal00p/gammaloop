@@ -2613,7 +2613,7 @@ dependencies = [
 [[package]]
 name = "graphica"
 version = "3.0.1"
-source = "git+https://github.com/symbolica-dev/symbolica?rev=9cd57678d8817ec33c05cacba4925162f1c86b0b#9cd57678d8817ec33c05cacba4925162f1c86b0b"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=ea79121915464c24d10adb710e50c267360e879f#ea79121915464c24d10adb710e50c267360e879f"
 dependencies = [
  "ahash 0.8.12",
  "dyn-clone",
@@ -4312,7 +4312,7 @@ dependencies = [
 [[package]]
 name = "numerica"
 version = "3.0.1"
-source = "git+https://github.com/symbolica-dev/symbolica?rev=9cd57678d8817ec33c05cacba4925162f1c86b0b#9cd57678d8817ec33c05cacba4925162f1c86b0b"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=ea79121915464c24d10adb710e50c267360e879f#ea79121915464c24d10adb710e50c267360e879f"
 dependencies = [
  "ahash 0.8.12",
  "astro-float",
@@ -5794,7 +5794,7 @@ dependencies = [
 [[package]]
 name = "rustred"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?rev=d5b63a659b759f558f0def8d9e8c491aec9b42cc#d5b63a659b759f558f0def8d9e8c491aec9b42cc"
+source = "git+https://github.com/alphal00p/rustred?rev=4abbb449b7f2e8fe3989a077d22b8d400bde6975#4abbb449b7f2e8fe3989a077d22b8d400bde6975"
 dependencies = [
  "bincode 2.0.1",
  "blake3",
@@ -5815,7 +5815,7 @@ dependencies = [
 [[package]]
 name = "rustred-app"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?rev=d5b63a659b759f558f0def8d9e8c491aec9b42cc#d5b63a659b759f558f0def8d9e8c491aec9b42cc"
+source = "git+https://github.com/alphal00p/rustred?rev=4abbb449b7f2e8fe3989a077d22b8d400bde6975#4abbb449b7f2e8fe3989a077d22b8d400bde6975"
 dependencies = [
  "bincode 2.0.1",
  "blake3",
@@ -5831,7 +5831,7 @@ dependencies = [
 [[package]]
 name = "rustred-campaign-contract"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?rev=d5b63a659b759f558f0def8d9e8c491aec9b42cc#d5b63a659b759f558f0def8d9e8c491aec9b42cc"
+source = "git+https://github.com/alphal00p/rustred?rev=4abbb449b7f2e8fe3989a077d22b8d400bde6975#4abbb449b7f2e8fe3989a077d22b8d400bde6975"
 dependencies = [
  "blake3",
  "serde",
@@ -5841,12 +5841,12 @@ dependencies = [
 [[package]]
 name = "rustred-order"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?rev=d5b63a659b759f558f0def8d9e8c491aec9b42cc#d5b63a659b759f558f0def8d9e8c491aec9b42cc"
+source = "git+https://github.com/alphal00p/rustred?rev=4abbb449b7f2e8fe3989a077d22b8d400bde6975#4abbb449b7f2e8fe3989a077d22b8d400bde6975"
 
 [[package]]
 name = "rustred-topology"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?rev=d5b63a659b759f558f0def8d9e8c491aec9b42cc#d5b63a659b759f558f0def8d9e8c491aec9b42cc"
+source = "git+https://github.com/alphal00p/rustred?rev=4abbb449b7f2e8fe3989a077d22b8d400bde6975#4abbb449b7f2e8fe3989a077d22b8d400bde6975"
 dependencies = [
  "graphica",
  "serde",
@@ -6629,7 +6629,7 @@ dependencies = [
 [[package]]
 name = "symbolica"
 version = "3.0.1"
-source = "git+https://github.com/symbolica-dev/symbolica?rev=9cd57678d8817ec33c05cacba4925162f1c86b0b#9cd57678d8817ec33c05cacba4925162f1c86b0b"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=ea79121915464c24d10adb710e50c267360e879f#ea79121915464c24d10adb710e50c267360e879f"
 dependencies = [
  "ahash 0.8.12",
  "append-only-vec",

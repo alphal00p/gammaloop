@@ -63,8 +63,8 @@ rand = "0.9.4"
 ratatui = "0.30.0"
 rayon = "1.5"
 regex = "1.12.3"
-rustred = { git = "https://github.com/alphal00p/rustred", rev = "d5b63a659b759f558f0def8d9e8c491aec9b42cc", default-features = false }
-rustred-app = { git = "https://github.com/alphal00p/rustred", rev = "d5b63a659b759f558f0def8d9e8c491aec9b42cc", default-features = false }
+rustred = { git = "https://github.com/alphal00p/rustred", rev = "4abbb449b7f2e8fe3989a077d22b8d400bde6975", default-features = false }
+rustred-app = { git = "https://github.com/alphal00p/rustred", rev = "4abbb449b7f2e8fe3989a077d22b8d400bde6975", default-features = false }
 schemars = "1.2.1"
 serde = "1.0.228"
 self_cell = "1.2.2"
@@ -100,9 +100,9 @@ clarabel = { git = "https://github.com/oxfordcontrol/Clarabel.rs", rev = "14ad0f
 typst-library = { git = "https://github.com/alphal00p/gammaloop", branch = "preserve-canonical-numerator-interfaces" }
 typst-svg = { git = "https://github.com/alphal00p/gammaloop", branch = "preserve-canonical-numerator-interfaces" }
 symbolica-typst-plugin = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "57b7455b37c30f4f87353c0073e49f5225e937ab" }
-graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "9cd57678d8817ec33c05cacba4925162f1c86b0b" }
-numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "9cd57678d8817ec33c05cacba4925162f1c86b0b" }
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "9cd57678d8817ec33c05cacba4925162f1c86b0b" }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ea79121915464c24d10adb710e50c267360e879f" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ea79121915464c24d10adb710e50c267360e879f" }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ea79121915464c24d10adb710e50c267360e879f" }
 
 # Share the maintained FeynKit owner with local GammaLoop consumers.
 [patch."https://github.com/alphal00p/gammaloop"]
