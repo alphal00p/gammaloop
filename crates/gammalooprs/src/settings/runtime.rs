@@ -22,11 +22,16 @@ use crate::{
     observables::ObservableFileFormat,
     settings::runtime::kinematic::{Externals, improvement::generate_default_momenta},
     utils::{
-        ApproxEq, DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, F, FloatLike, format_uncertainty,
+        ApproxEq, DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, DEFAULT_ZERO_MODE_ENERGY_ESCALATION_FACTOR,
+        DEFAULT_ZERO_MODE_HIERARCHY_ESCALATION_FACTOR,
+        DEFAULT_ZERO_MODE_HIERARCHY_QUAD_ESCALATION_FACTOR, F, FloatLike, format_uncertainty,
         serde_utils::{
             _default_rotation_axis, _default_stability_levels, IsDefault,
             deserialize_nonnegative_finite_f64, is_default_esurface_existence_threshold,
-            is_default_rotation_axis, is_default_stability_levels, is_false, is_float, is_true,
+            is_default_rotation_axis, is_default_stability_levels,
+            is_default_zero_mode_energy_escalation_factor,
+            is_default_zero_mode_hierarchy_escalation_factor,
+            is_default_zero_mode_hierarchy_quad_escalation_factor, is_false, is_float, is_true,
             is_u64, is_usize, show_defaults_helper,
         },
     },
@@ -1042,6 +1047,43 @@ mod tests {
     }
 
     #[test]
+    fn zero_mode_escalation_factors_default_and_roundtrip() {
+        let _guard = ShowDefaultsGuard::new(false);
+        let defaults = StabilitySettings::default();
+        assert_eq!(
+            [
+                defaults.zero_mode_energy_escalation_factor,
+                defaults.zero_mode_hierarchy_quad_escalation_factor,
+                defaults.zero_mode_hierarchy_escalation_factor,
+            ],
+            [1e-2, 5e-3, 5e-6]
+        );
+        assert!(!toml::to_string(&defaults).unwrap().contains("zero_mode"));
+        let declared = StabilitySettings {
+            zero_mode_energy_escalation_factor: -1.0,
+            zero_mode_hierarchy_quad_escalation_factor: 1e-4,
+            zero_mode_hierarchy_escalation_factor: -1.0,
+            ..defaults
+        };
+        let serialized = toml::to_string(&declared).unwrap();
+        for field in [
+            "zero_mode_energy_escalation_factor",
+            "zero_mode_hierarchy_quad_escalation_factor",
+            "zero_mode_hierarchy_escalation_factor",
+        ] {
+            assert!(serialized.contains(&format!("{field} = ")), "{field}");
+        }
+        assert_eq!(
+            toml::from_str::<StabilitySettings>(&serialized).unwrap(),
+            declared
+        );
+        drop(_guard);
+        let _guard = ShowDefaultsGuard::new(true);
+        let shown = serde_json::to_value(StabilitySettings::default()).unwrap();
+        assert_eq!(shown["zero_mode_hierarchy_quad_escalation_factor"], 5e-3);
+    }
+
+    #[test]
     fn stability_ecm_relative_tolerances_reject_invalid_values() {
         let _guard = ShowDefaultsGuard::new(false);
         let defaults = toml::to_string(&StabilityLevelSetting::default_arb()).unwrap();
@@ -1274,6 +1316,38 @@ pub struct StabilitySettings {
     /// Escalate when the loop-momentum norm exceeds this factor; a negative value disables it.
     #[serde(skip_serializing_if = "is_float::<-1>")]
     pub loop_momenta_norm_escalation_factor: f64,
+    /// Skip double precision, for a graph whose integrand subtracts a thermal
+    /// zero mode, when an internal massless boson without a chemical potential
+    /// has an on-shell energy below this factor times the temperature; a
+    /// negative value disables it. A
+    /// zero-mode subtraction cancels the integrand there to a far smaller
+    /// remainder, whose double-precision error, set by rounding the soft
+    /// momentum against the hard ones, often recurs identically at the
+    /// rotated point.
+    #[serde(skip_serializing_if = "is_default_zero_mode_energy_escalation_factor")]
+    pub zero_mode_energy_escalation_factor: f64,
+    /// Skip double precision, for a graph whose integrand subtracts a thermal
+    /// zero mode, when an internal massless line of any species has an
+    /// on-shell energy below this factor times the sum of the loop-momentum
+    /// norms; a negative value disables it.
+    /// The double-precision error of a zero-mode subtraction's remainder, set
+    /// by rounding the soft momenta against the hard ones, grows with this
+    /// hierarchy and largely recurs at the rotated point. A massless quark
+    /// softer than the static boson amplifies it further. When both hierarchy
+    /// factors are positive, this one must be above
+    /// `zero_mode_hierarchy_escalation_factor`.
+    #[serde(skip_serializing_if = "is_default_zero_mode_hierarchy_quad_escalation_factor")]
+    pub zero_mode_hierarchy_quad_escalation_factor: f64,
+    /// Start at the last stability level, normally arbitrary precision, for a
+    /// graph whose integrand subtracts a thermal zero mode, when an internal
+    /// massless line of any species has an on-shell energy below this factor
+    /// times the sum of the loop-momentum norms; a negative value disables
+    /// it. At such a hierarchy
+    /// the rounding of the soft momenta against the hard ones sets the error
+    /// of a zero-mode subtraction's remainder in quadruple precision too, and
+    /// it recurs identically at the rotated point.
+    #[serde(skip_serializing_if = "is_default_zero_mode_hierarchy_escalation_factor")]
+    pub zero_mode_hierarchy_escalation_factor: f64,
     /// Optional diagnostics retained for rotated, escalated, and high-precision evaluations.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub recording: Option<StabilityRecordingSettings>,
@@ -1289,6 +1363,10 @@ impl Default for StabilitySettings {
             escalate_if_exact_zero: false,
             min_abs_wgt_for_escalation: 0.0,
             loop_momenta_norm_escalation_factor: -1.0,
+            zero_mode_energy_escalation_factor: DEFAULT_ZERO_MODE_ENERGY_ESCALATION_FACTOR,
+            zero_mode_hierarchy_quad_escalation_factor:
+                DEFAULT_ZERO_MODE_HIERARCHY_QUAD_ESCALATION_FACTOR,
+            zero_mode_hierarchy_escalation_factor: DEFAULT_ZERO_MODE_HIERARCHY_ESCALATION_FACTOR,
             recording: None,
         }
     }

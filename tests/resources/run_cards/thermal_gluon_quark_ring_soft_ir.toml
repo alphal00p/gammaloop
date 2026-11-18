@@ -11,6 +11,17 @@ commands = [
 ]
 
 [[command_blocks]]
+# Bare control on the identical LMB and rays: subtract_uv=false generates in about a second.
+name = "generate_bare"
+commands = [
+  "set global kv global.generation.uv.subtract_uv=false",
+  "run generate",
+]
+
+[[command_blocks]]
+# Expected to fail: under MUV no zero-mode host subtracts the static soft set {e0,e1} of
+# the q-gluons, so the scheme validation stops generation with the hostless error, which
+# names renormalization_prescription.massless_power_divergent = IR.
 name = "generate_muv"
 commands = [
   "set global kv global.generation.uv.renormalization_prescription.massless_power_divergent=MUV",
@@ -31,9 +42,11 @@ commands = [
 ]
 
 [[command_blocks]]
+# One profile call per limit: the sampled ray depends on the whole select string and
+# n_points. With the n_points of the slow lane (thermal_soft_ct) these blocks reproduce its rays.
 name = "profile_soft"
 commands = [
-  "profile bulk -p thermal_gluon_quark_ring -i thermal_gluon_quark_ring --select 'thermal_gluon_quark_ring S(e0)' --min-scaling=-2 --max-scaling=-5 --n-points 15 --seed 1337",
+  "profile bulk -p thermal_gluon_quark_ring -i thermal_gluon_quark_ring --select 'thermal_gluon_quark_ring S(e0)' --min-scaling=-2 --max-scaling=-5 --n-points 8 --seed 1337",
 ]
 
 [[command_blocks]]
@@ -46,7 +59,7 @@ commands = [
 [[command_blocks]]
 name = "profile_joint_soft"
 commands = [
-  "profile bulk -p thermal_gluon_quark_ring -i thermal_gluon_quark_ring --select 'thermal_gluon_quark_ring S(e0)S(e4)' --min-scaling=-2 --max-scaling=-5 --n-points 15 --seed 1337",
+  "profile bulk -p thermal_gluon_quark_ring -i thermal_gluon_quark_ring --select 'thermal_gluon_quark_ring S(e0)S(e4)' --min-scaling=-2 --max-scaling=-5 --n-points 8 --seed 1337",
 ]
 
 [[command_blocks]]
@@ -79,9 +92,10 @@ orchestrator = "hedge_poset"
 [cli_settings.global.generation.uv.renormalization_prescription]
 log_divergent = "MUV"
 massive_power_divergent = "MUV"
-# The containing power-divergent components must use IR as well as each bubble.
-# Vacuum subtraction keeps the all-loop counterterm only as the plain U that subtracts
-# the reduced cograph of each frozen soft branch; on all other branches it vanishes.
+# The IR prescription lets the zero-mode policy host the static soft set of the q-gluons:
+# an IR spinney without a zero-mode region becomes a plain MUV U, and the whole-graph U
+# stays as the U of the hosts' static cographs. MUV leaves the soft set hostless
+# (see generate_muv).
 massless_power_divergent = "IR"
 
 [cli_settings.global.generation.threshold_subtraction]

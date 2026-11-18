@@ -100,6 +100,11 @@ pub enum LmbError {
     },
     #[error("split edge on full graph")]
     SplitEdgeOnFullGraph,
+    #[error("edge {edge} takes a nonzero sign from two flows of the external edge {external}")]
+    ConflictingExternalFlows {
+        edge: EdgeIndex,
+        external: EdgeIndex,
+    },
     #[error("failed to build edge-signature vector")]
     EdgeSignatureVector(#[source] HedgeGraphError),
     #[error(
@@ -583,6 +588,61 @@ pub(crate) fn no_filter(_pair: &HedgePair) -> bool {
     true
 }
 
+/// The external columns of a basis, one per external edge, built from its
+/// external flows.
+///
+/// A crown line that joins two components of a disconnected subgraph, like a
+/// line between the two bubbles of a ring, has one flow in each component: its
+/// momentum leaves one component and enters the other, each time routed
+/// through that component's own tree. Both flows carry the momentum of the
+/// same edge, so they share its column.
+struct ExternalColumns {
+    /// The edge of every column, in the order of its first flow.
+    edges: TiVec<ExternalIndex, EdgeIndex>,
+    /// The column of every flow.
+    of_flow: TiVec<ExternalIndex, ExternalIndex>,
+}
+
+impl ExternalColumns {
+    fn new(flow_edges: &TiVec<ExternalIndex, EdgeIndex>) -> Self {
+        let mut edges: TiVec<ExternalIndex, EdgeIndex> = TiVec::new();
+        let of_flow = flow_edges
+            .iter()
+            .map(|edge| {
+                edges
+                    .position(|column| column == edge)
+                    .unwrap_or_else(|| edges.push_and_get_key(*edge))
+            })
+            .collect();
+        Self { edges, of_flow }
+    }
+
+    /// The column signs of `edge` from the signs it takes from each flow.
+    ///
+    /// # Errors
+    ///
+    /// Two flows of one column give `edge` a nonzero sign. The flows of a
+    /// column lie in different components and `edge` lies in one of them, so
+    /// a basis built from its flows never does this.
+    fn merge(&self, edge: EdgeIndex, flow_signs: &[SignOrZero]) -> LmbResult<Vec<SignOrZero>> {
+        let mut signs: TiVec<ExternalIndex, SignOrZero> =
+            vec![SignOrZero::Zero; self.edges.len()].into();
+        for (column, sign) in self.of_flow.iter().zip(flow_signs) {
+            if *sign == SignOrZero::Zero {
+                continue;
+            }
+            if signs[*column] != SignOrZero::Zero {
+                return Err(LmbError::ConflictingExternalFlows {
+                    edge,
+                    external: self.edges[*column],
+                });
+            }
+            signs[*column] = *sign;
+        }
+        Ok(signs.raw)
+    }
+}
+
 impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
     fn empty_lmb(&self) -> LoopMomentumBasis {
         LoopMomentumBasis {
@@ -874,7 +934,8 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
 
         // External flows are signed paths (one half-edge per direction). A boundary
         // flow contains the dependent external; a paired crown flow joins its two
-        // incidences without changing the net external momentum.
+        // incidences without changing the net external momentum. A crown line that
+        // joins two components has a boundary flow in each; both share its column.
         let external_edge_order = self
             .iter_edges_of(&externals)
             .map(|(_, edge_id, _)| edge_id)
@@ -882,7 +943,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
             .collect_vec();
 
         let mut external_flows: TiVec<ExternalIndex, _> = vec![].into();
-        let mut ext_edges: TiVec<ExternalIndex, EdgeIndex> = vec![].into();
+        let mut flow_edges: TiVec<ExternalIndex, EdgeIndex> = vec![].into();
 
         let mut loop_edges: TiVec<LoopIndex, EdgeIndex> = vec![].into();
         let mut cycles = vec![];
@@ -974,7 +1035,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                                 }
                             }
                             external_flows.push((ext_sign, path_to_dep));
-                            ext_edges.push(e);
+                            flow_edges.push(e);
                         }
                         HedgePair::Unpaired { hedge, flow } => {
                             let ext_sign: SignOrZero = flow.into();
@@ -997,7 +1058,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                                     }
                                 }
                             }
-                            ext_edges.push(e);
+                            flow_edges.push(e);
                             external_flows.push((ext_sign, path_to_dep));
                         }
                         HedgePair::Paired { source, sink } => {
@@ -1018,7 +1079,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                                 }
                             }
                             external_flows.push((Flow::Source.into(), path_to_dep));
-                            ext_edges.push(e);
+                            flow_edges.push(e);
                         }
                     }
                 }
@@ -1122,11 +1183,12 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
         //     println!(
         //         "//Ext flow {} for {}: \n{}",
         //         e.0,
-        //         ext_edges[ExternalIndex(i)],
+        //         flow_edges[ExternalIndex(i)],
         //         self.dot(&e.1)
         //     );
         // }
 
+        let columns = ExternalColumns::new(&flow_edges);
         let signature = self
             .new_edgevec_from_iter(
                 self.iter_edges()
@@ -1157,7 +1219,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                                 }
                                 if subgraph.intersects(&p) {
                                     for (i, (s, e)) in external_flows.iter_enumerated() {
-                                        if ext_edges[i] == eid {
+                                        if flow_edges[i] == eid {
                                             if e.includes(&source) || e.includes(&sink) {
                                                 external.push(SignOrZero::Zero); //This is the dependent momentum
                                             } else {
@@ -1178,7 +1240,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                             HedgePair::Unpaired { hedge, flow } => {
                                 if subgraph.includes(&hedge) {
                                     for (i, (s, e)) in external_flows.iter_enumerated() {
-                                        if ext_edges[i] == eid {
+                                        if flow_edges[i] == eid {
                                             if e.includes(&hedge) {
                                                 external.push(SignOrZero::Zero); //This is the dependent momentum
                                             } else {
@@ -1199,7 +1261,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                                     external = empty_external;
                                     if externals.includes(&hedge)
                                         && let Some((e, _)) =
-                                            ext_edges.iter().find_position(|a| *a == &eid)
+                                            flow_edges.iter().find_position(|a| *a == &eid)
                                     {
                                         external[e] = SignOrZero::Plus;
                                     };
@@ -1213,7 +1275,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
 
                         Ok(LoopExtSignature {
                             internal: SignatureLike::from_iter(internal),
-                            external: SignatureLike::from_iter(external),
+                            external: SignatureLike::from_iter(columns.merge(eid, &external)?),
                         })
                     })
                     .collect::<LmbResult<Vec<_>>>()?,
@@ -1223,7 +1285,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
         let mut lmb = LoopMomentumBasis {
             tree: forest_edge,
             edge_signatures: signature,
-            ext_edges,
+            ext_edges: columns.edges,
             loop_edges,
         };
         lmb.canonicalize_external_order(&external_edge_order);
@@ -1848,7 +1910,9 @@ pub mod test {
     use linnet::{
         half_edge::{
             involution::{EdgeIndex, Hedge},
-            subgraph::{Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubSetOps},
+            subgraph::{
+                Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps,
+            },
         },
         parser::DotGraph,
     };
@@ -1859,6 +1923,8 @@ pub mod test {
         initialisation::test_initialise,
         momentum::SignOrZero,
     };
+
+    use super::LoopMomentumBasis;
 
     static SHRUNKEN_LMB_TEST_INIT: std::sync::Once = std::sync::Once::new();
     static SHRUNKEN_LMB_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -2149,10 +2215,7 @@ pub mod test {
         ] {
             let physical = &graph.loop_momentum_basis;
             for edges in edge_sets {
-                let mut subgraph = graph.empty_subgraph::<SuBitGraph>();
-                for edge in &edges {
-                    subgraph.union_with(&graph.get_edge_subgraph(EdgeIndex::from(*edge)));
-                }
+                let subgraph = graph.edge_subgraph(&edges);
                 let mut bases = graph.generate_loop_momentum_bases_of(&subgraph).raw;
                 bases.push(
                     graph
@@ -2162,39 +2225,147 @@ pub mod test {
                 for basis in bases {
                     for edge in &edges {
                         let edge = EdgeIndex::from(*edge);
-                        let signature = &basis.edge_signatures[edge];
-                        let mut routed =
-                            vec![0; physical.loop_edges.len() + physical.ext_edges.len()];
-                        for (carrier, coefficient) in basis
-                            .loop_edges
-                            .iter()
-                            .zip(signature.internal.iter())
-                            .chain(basis.ext_edges.iter().zip(signature.external.iter()))
-                        {
-                            let physical_carrier = &physical.edge_signatures[*carrier];
-                            for (value, sign) in routed.iter_mut().zip(
-                                physical_carrier
-                                    .internal
-                                    .iter()
-                                    .chain(physical_carrier.external.iter()),
-                            ) {
-                                *value += *coefficient * (*sign * 1_i32);
-                            }
-                        }
-                        let expected = &physical.edge_signatures[edge];
                         assert_eq!(
-                            routed,
-                            expected
-                                .internal
-                                .iter()
-                                .chain(expected.external.iter())
-                                .map(|sign| *sign * 1_i32)
-                                .collect::<Vec<_>>(),
+                            physical_routing(physical, &basis, edge),
+                            physical_signature(physical, edge),
                             "{} subgraph {edges:?}, loops {:?}, edge {edge}: the sub-LMB must retain every physical crown momentum",
                             graph.name,
                             basis.loop_edges,
                         );
                     }
+                }
+            }
+        }
+    }
+
+    /// The momentum of `edge` in `basis`, with every loop and external
+    /// carrier of `basis` replaced by its momentum in the `physical` basis, as
+    /// integer coefficients of the physical loop and external momenta.
+    fn physical_routing(
+        physical: &LoopMomentumBasis,
+        basis: &LoopMomentumBasis,
+        edge: EdgeIndex,
+    ) -> Vec<i32> {
+        let signature = &basis.edge_signatures[edge];
+        let mut routed = vec![0; physical.loop_edges.len() + physical.ext_edges.len()];
+        for (carrier, coefficient) in basis
+            .loop_edges
+            .iter()
+            .zip(signature.internal.iter())
+            .chain(basis.ext_edges.iter().zip(signature.external.iter()))
+        {
+            for (value, sign) in routed
+                .iter_mut()
+                .zip(physical_signature(physical, *carrier))
+            {
+                *value += *coefficient * sign;
+            }
+        }
+        routed
+    }
+
+    /// The momentum of `edge` in the `physical` basis, as integer
+    /// coefficients of its loop and external momenta.
+    fn physical_signature(physical: &LoopMomentumBasis, edge: EdgeIndex) -> Vec<i32> {
+        let signature = &physical.edge_signatures[edge];
+        signature
+            .internal
+            .iter()
+            .chain(signature.external.iter())
+            .map(|sign| *sign * 1_i32)
+            .collect()
+    }
+
+    /// A crown line that joins two components of a disconnected subgraph
+    /// carries its momentum through both. Two bubbles A = {e2, e3} and
+    /// B = {e4, e5, e6} of a ring share the crown lines e0 and e1, with and
+    /// without external legs. The canonical basis of their union, every
+    /// basis generated from its spanning forests, and the bases left after
+    /// shrinking the tree line e6 of B, with and without a parent basis,
+    /// reproduce the physical momentum of every remaining edge. In
+    /// particular, a line of each bubble carries the crown momentum.
+    #[test]
+    fn union_sub_lmbs_route_shared_crown_lines_through_every_component() {
+        let _guard = SHRUNKEN_LMB_TEST_LOCK.lock().unwrap();
+        SHRUNKEN_LMB_TEST_INIT.call_once(|| test_initialise().unwrap());
+        let vacuum: Graph = dot!(digraph union_ring {
+            edge[num=1 mass=1]
+            node[num=1]
+            a2 -> b1 [id=0 lmb_id=0]
+            b2 -> a1 [id=1]
+            a1 -> a2 [id=2 lmb_id=1]
+            a2 -> a1 [id=3]
+            b1 -> b2 [id=4 lmb_id=2]
+            b2 -> b3 [id=5]
+            b3 -> b1 [id=6]
+        })
+        .unwrap();
+        let scattering: Graph = dot!(digraph union_ring_with_legs {
+            edge[num=1 mass=1]
+            node[num=1]
+            incoming[style=invis]
+            outgoing[style=invis]
+            a2 -> b1 [id=0 lmb_id=0]
+            b2 -> a1 [id=1]
+            a1 -> a2 [id=2 lmb_id=1]
+            a2 -> a1 [id=3]
+            b1 -> b2 [id=4 lmb_id=2]
+            b2 -> b3 [id=5]
+            b3 -> b1 [id=6]
+            incoming -> a1 [id=7]
+            b3 -> outgoing [id=8]
+        })
+        .unwrap();
+
+        for graph in [vacuum, scattering] {
+            let physical = &graph.loop_momentum_basis;
+            let union = graph.edge_subgraph(&[2, 3, 4, 5, 6]);
+            let shrunken =
+                InternalSubGraph::try_new(graph.edge_subgraph(&[6]), &graph.underlying).unwrap();
+
+            let canonical = graph.canonical_component_lmb(&union).unwrap();
+            let mut loop_edges = canonical.loop_edges.iter().copied().collect::<Vec<_>>();
+            loop_edges.sort();
+            assert_eq!(loop_edges, [EdgeIndex(2), EdgeIndex(4)]);
+            assert_eq!(canonical.tree.size(), graph.n_hedges());
+            assert!(!canonical.tree.is_empty() && union.includes(&canonical.tree));
+
+            let mut bases = vec![("canonical", vec![2, 3, 4, 5, 6], canonical)];
+            bases.extend(
+                graph
+                    .generate_loop_momentum_bases_of(&union)
+                    .into_iter()
+                    .map(|basis| ("generated", vec![2, 3, 4, 5, 6], basis)),
+            );
+            for (name, parent) in [("shrunken", None), ("shrunken in parent", Some(physical))] {
+                let basis = graph
+                    .shrunken_sub_lmb(&union, &shrunken, graph.full_crown(&union), parent)
+                    .unwrap();
+                bases.push((name, vec![2, 3, 4, 5], basis));
+            }
+            for (name, edges, basis) in bases {
+                for component in [[2, 3], [4, 5]] {
+                    assert!(
+                        component.into_iter().any(|edge| {
+                            basis.edge_signatures[EdgeIndex::from(edge)]
+                                .external
+                                .iter()
+                                .any(|sign| *sign != SignOrZero::Zero)
+                        }),
+                        "{} {name} basis, loops {:?}: no edge of {component:?} carries the crown \
+                         momentum",
+                        graph.name,
+                        basis.loop_edges,
+                    );
+                }
+                for edge in edges.into_iter().map(EdgeIndex::from) {
+                    assert_eq!(
+                        physical_routing(physical, &basis, edge),
+                        physical_signature(physical, edge),
+                        "{} {name} basis, loops {:?}, edge {edge}",
+                        graph.name,
+                        basis.loop_edges,
+                    );
                 }
             }
         }
@@ -2438,8 +2609,6 @@ pub mod test {
 
     #[test]
     fn shrunken_whole_component_retains_only_surviving_external_endpoints() {
-        use linnet::half_edge::subgraph::SubSetLike;
-
         let _guard = SHRUNKEN_LMB_TEST_LOCK.lock().unwrap();
         SHRUNKEN_LMB_TEST_INIT.call_once(|| test_initialise().unwrap());
         let g: Graph = dot!(digraph {

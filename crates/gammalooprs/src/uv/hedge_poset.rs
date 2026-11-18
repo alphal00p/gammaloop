@@ -14,8 +14,10 @@ use crate::{
 #[cfg(test)]
 use std::cmp::Reverse;
 
+use std::collections::btree_map::Entry;
+
 use ahash::AHashMap;
-use eyre::{WrapErr, eyre};
+use eyre::{WrapErr, ensure, eyre};
 use gammaloop_tracing_filter::LogMessage;
 use idenso::{color::ColorSimplifier, shorthands::schoonschip::Schoonschip};
 use itertools::Itertools;
@@ -36,6 +38,8 @@ use symbolica::{
 use tracing::debug;
 use vakint::Vakint;
 
+use crate::uv::spinney::WoodRole;
+use crate::uv::thermal_zero_mode::{ThermalZeroModeRegion, ZeroModeHostError, ZeroModeHostKind};
 use crate::{
     debug_tags,
     graph::{
@@ -178,42 +182,40 @@ impl Wood {
         graph: &Graph,
         settings: &GenerationSettings,
     ) -> Result<Self> {
-        let mut subgraph = graph.full_filter();
-        subgraph.subtract_with(&graph.initial_state_cut.left);
         let mut spinneys = Vec::new();
-
-        for (cut_index, cut) in cuts.cuts.iter().enumerate() {
-            let cut_sub = subgraph.subtract(&cut.union);
-            spinneys.extend(
-                graph
-                    .classified_spinneys(&cut_sub, &settings.uv, &graph.loop_momentum_basis)
-                    .wrap_err_with(|| {
-                        format!(
-                            "graph '{}' cut {cut_index}: failed to classify UV counterterm components",
-                            graph.name
-                        )
-                    })?,
-            );
+        for cut_spinneys in graph.classified_cut_spinneys(&cuts, &settings.uv, &settings.medium) {
+            spinneys.extend(cut_spinneys?);
         }
-        graph.restrict_full_observable_spinney(&mut spinneys, &settings.uv, &settings.medium);
 
-        Ok(Self::from_spinneys(spinneys, graph, cuts, &settings.uv))
+        Self::from_spinneys(spinneys, graph, cuts, &settings.uv).wrap_err_with(|| {
+            format!(
+                "graph '{}': failed to build the hedge-poset wood",
+                graph.name
+            )
+        })
     }
 
+    /// Builds the wood of `s`, one node per subgraph and [`WoodRole`]: the
+    /// first spinney of each subgraph and role is kept. A zero-mode union host
+    /// is a second node on the subgraph of its plain factorized join, above
+    /// it, and one collective operation.
+    ///
+    /// # Errors
+    ///
+    /// Duplicates of one node with different zero-mode regions, and a union
+    /// host whose scope equals that of a collective plain union.
     pub(crate) fn from_spinneys<I: IntoIterator<Item = Spinney>>(
         s: I,
         graph: &Graph,
         cuts: CutStructure,
         settings: &UVgenerationSettings,
-    ) -> Self {
-        let mut max_loops = 0;
-        let mut spinneys = BTreeMap::new();
-        for spinney in s {
-            max_loops = max_loops.max(graph.n_loops(spinney.filter()));
-            spinneys.entry(spinney.filter().clone()).or_insert(spinney);
-        }
-        let empty = Spinney::empty(graph);
-        spinneys.entry(empty.filter().clone()).or_insert(empty);
+    ) -> Result<Self> {
+        let spinneys = Self::nodes(s, graph)?;
+        let max_loops = spinneys
+            .values()
+            .map(|spinney| graph.n_loops(spinney.filter()))
+            .max()
+            .unwrap_or(0);
         let mut vakint_settings = settings.vakint.true_settings();
         vakint_settings.project_onto_tensor_integrals =
             settings.project_integrated_uv_cts_onto_tensor_integrals;
@@ -258,6 +260,7 @@ impl Wood {
             .iter_nodes()
             .map(|(_, _, spinney)| spinney.filter().clone())
             .collect::<BTreeSet<_>>();
+        let mut factorized_scopes = BTreeSet::new();
 
         // Not quite transitive closure. A disconnected target factorizes only when every
         // connected component is both an independently classified UV spinney and supplied by
@@ -268,7 +271,11 @@ impl Wood {
         // complement remains available from the edge's source/sink nodes, while using it as
         // the trace order would incorrectly make a collective operation commute with its
         // nested prefix and could coalesce distinct forests into a false factorized join.
-        for u in unions {
+        // A zero-mode union host is always collective: its operation S0 acts on its whole
+        // subgraph. The transitions from its factors and its plain twin make it a union, so
+        // every transition into it, from those, the nested prefixes of its factors and the
+        // root, gets its scope here; the transition from the root already carries it.
+        for &u in &unions {
             let collective_scope = poset[u].subgraph.filter.clone();
             let comps: BTreeSet<_> = graph
                 .as_ref()
@@ -288,7 +295,10 @@ impl Wood {
             let independently_classified = comps
                 .iter()
                 .all(|component| classified_filters.contains(component));
-            if independently_classified && supplied == comps {
+            let factorized = poset[u].wood_role() == WoodRole::Plain
+                && independently_classified
+                && supplied == comps;
+            if factorized {
                 for c in incoming {
                     if comps.contains(&poset[poset[&c]]) {
                         continue;
@@ -296,6 +306,7 @@ impl Wood {
                     to_remove.add(c);
                     to_remove.add(poset.inv(c));
                 }
+                factorized_scopes.insert(collective_scope);
             } else {
                 for c in incoming {
                     let edge = poset[&c];
@@ -304,18 +315,92 @@ impl Wood {
             }
         }
 
+        Self::check_union_host_scopes(&poset, &unions, &factorized_scopes, graph)?;
+
         poset.delete_hedges(&to_remove);
         let root = poset
             .iter_nodes()
             .find(|(_, _, s)| s.subgraph.is_empty())
-            .map(|(n, _, _)| n);
+            .map(|(n, _, _)| n)
+            .ok_or_else(|| eyre!("internal error: the hedge-poset wood has no empty spinney"))?;
 
-        Wood {
+        Ok(Wood {
             graph: poset,
-            root: root.expect("no empty spinney found"),
+            root,
             cuts,
             vakint_settings,
+        })
+    }
+
+    /// The nodes of the wood of `spinneys`, with the empty spinney, keyed by
+    /// subgraph and [`WoodRole`]: the first spinney of each key is kept.
+    ///
+    /// # Errors
+    ///
+    /// Two spinneys of one key with different zero-mode regions, an internal
+    /// error.
+    fn nodes(
+        spinneys: impl IntoIterator<Item = Spinney>,
+        graph: &Graph,
+    ) -> Result<BTreeMap<(SuBitGraph, WoodRole), Spinney>> {
+        let mut nodes = BTreeMap::new();
+        for spinney in spinneys {
+            match nodes.entry((spinney.filter().clone(), spinney.wood_role())) {
+                Entry::Vacant(entry) => {
+                    entry.insert(spinney);
+                }
+                Entry::Occupied(entry) => ensure!(
+                    entry.get().thermal_zero_mode() == spinney.thermal_zero_mode(),
+                    "internal error: the spinney {} occurs with different zero-mode regions",
+                    spinney.filter().string_label()
+                ),
+            }
         }
+        let empty = Spinney::empty(graph);
+        nodes
+            .entry((empty.filter().clone(), empty.wood_role()))
+            .or_insert(empty);
+        Ok(nodes)
+    }
+
+    /// Trace operations are told apart by their scope alone, so a union host
+    /// and a collective plain union of one subgraph would merge. Every union
+    /// host of `poset` must be one of its `unions`, and its scope one of the
+    /// `factorized_scopes` whenever a plain node shares it.
+    ///
+    /// # Errors
+    ///
+    /// A union host without a transition from its plain twin or a factor, an
+    /// internal error, and a union host whose scope equals that of a
+    /// collective plain union.
+    fn check_union_host_scopes(
+        poset: &HedgeGraph<SuBitGraph, Spinney>,
+        unions: &BTreeSet<NodeIndex>,
+        factorized_scopes: &BTreeSet<SuBitGraph>,
+        graph: &Graph,
+    ) -> Result<()> {
+        for (host, _, spinney) in poset.iter_nodes() {
+            if spinney.wood_role() != WoodRole::UnionHost {
+                continue;
+            }
+            let scope = spinney.filter();
+            ensure!(
+                unions.contains(&host),
+                "internal error: the zero-mode union host {} has no transition from its plain \
+                 twin or a factor",
+                scope.string_label()
+            );
+            let collective_twin = poset.iter_nodes().any(|(_, _, spinney)| {
+                spinney.wood_role() == WoodRole::Plain && spinney.filter() == scope
+            }) && !factorized_scopes.contains(scope);
+            if collective_twin {
+                return Err(ZeroModeHostError::CollectiveUnionScope {
+                    host: graph.paired_edges(scope).into_iter().collect(),
+                }
+                .into());
+            }
+        }
+        Ok(())
     }
 
     fn unfold_with_cached_node_label_atoms(self, cache_node_label_atoms: bool) -> Forests {
@@ -349,11 +434,18 @@ impl Wood {
             wood: self,
         };
 
-        if cache_node_label_atoms {
+        let forests = if cache_node_label_atoms {
             forests.with_cached_node_label_atoms()
         } else {
             forests
-        }
+        };
+        debug_tags!(#uv, #generation, #wood;
+            trace_nodes = forests.graph.n_nodes(),
+            file.wood = %forests.wood,
+            file.forest = %forests,
+            "Unfolded the hedge-poset wood"
+        );
+        forests
     }
 
     pub fn unfold(self) -> Forests {
@@ -362,6 +454,13 @@ impl Wood {
 
     pub fn unfold_uncached(self) -> Forests {
         self.unfold_with_cached_node_label_atoms(false)
+    }
+
+    /// Whether some node of this wood hosts a thermal zero-mode region.
+    pub(crate) fn hosts_zero_mode(&self) -> bool {
+        self.graph
+            .iter_nodes()
+            .any(|(_, _, spinney)| spinney.thermal_zero_mode().is_some())
     }
 }
 
@@ -373,7 +472,13 @@ impl Display for Wood {
             "start=2;\n",
             &|_| None,
             &|a| Some(format!("label=\"{}\"", a.string_label())),
-            &|v| Some(format!("label=\"{}\"", v.subgraph.string_label())),
+            &|v| {
+                let role = match v.wood_role() {
+                    WoodRole::Plain => "",
+                    WoodRole::UnionHost => " (union host)",
+                };
+                Some(format!("label=\"{}{role}\"", v.subgraph.string_label()))
+            },
         )
     }
 }
@@ -523,6 +628,9 @@ impl ForestNodeLike for ForestNode<'_> {
     fn topo_order(&self) -> usize {
         self.topo_order
     }
+    fn thermal_zero_mode(&self) -> Option<&ThermalZeroModeRegion> {
+        self.spinney.thermal_zero_mode()
+    }
 }
 
 impl LogMessage for OwnedForestNode {
@@ -562,6 +670,10 @@ impl ForestNodeLike for OwnedForestNode {
 
     fn topo_order(&self) -> usize {
         self.topo_order
+    }
+
+    fn thermal_zero_mode(&self) -> Option<&ThermalZeroModeRegion> {
+        self.spinney.thermal_zero_mode()
     }
 }
 
@@ -604,7 +716,22 @@ impl OperationNode {
         acc
     }
 
-    fn forest_node(&self, graph: &Graph, topo_order: usize) -> Result<OwnedForestNode> {
+    /// The node of this operation's cover, for its integrated value. It is a
+    /// plain spinney, so `source`, the wood node the operation ends on, must
+    /// not host a zero-mode region that it would drop.
+    fn forest_node(
+        &self,
+        graph: &Graph,
+        source: &Spinney,
+        topo_order: usize,
+    ) -> Result<OwnedForestNode> {
+        ensure!(
+            source.thermal_zero_mode().is_none(),
+            "graph '{}': operation {self} ends on the zero-mode host {}, whose region a forest \
+             node of its cover would drop",
+            graph.name,
+            source.filter().string_label()
+        );
         let spinney = match self.covers() {
             Some(cover) if !cover.is_empty() => {
                 let subgraph = InternalSubGraph::cleaned_filter_optimist(cover, graph.as_ref());
@@ -983,7 +1110,69 @@ impl Forests {
             .ok_or_else(|| eyre!("{operation} is not in the unfolded forest"))
     }
 
-    fn union_replay_states(&self, node: NodeIndex) -> Result<Vec<UnionReplayState>> {
+    /// Orders the factors `components` of a factorized join for replay. A
+    /// factor holding a connected zero-mode host whose soft set meets another
+    /// factor replays first: the host's zero mode keeps the static lines of
+    /// that factor, whose own U then acts on it (`U_B S0_A`), while a U of
+    /// the factor before the host leaves it no zero mode (`S0_A U_B = 0`).
+    /// Unconstrained factors keep their order.
+    ///
+    /// # Errors
+    ///
+    /// Factors that must each replay before another one.
+    fn pinned_replay_order(
+        &self,
+        graph: &Graph,
+        mut pending: Vec<NodeIndex>,
+    ) -> Result<Vec<NodeIndex>, ZeroModeHostError> {
+        let hosts = self
+            .wood
+            .graph
+            .iter_nodes()
+            .filter_map(|(_, _, spinney)| {
+                spinney
+                    .thermal_zero_mode()
+                    .filter(|region| region.kind() == ZeroModeHostKind::Connected)
+                    .map(|region| (spinney.filter(), region.sigma()))
+            })
+            .collect::<Vec<_>>();
+        let precedes = |first: NodeIndex, second: NodeIndex| {
+            let factor = self.source_spinney(first).filter();
+            let other = graph.paired_edges(self.source_spinney(second).filter());
+            hosts.iter().any(|(host, sigma)| {
+                factor.includes(*host) && other.iter().any(|edge| sigma.contains(edge))
+            })
+        };
+
+        let mut ordered = Vec::with_capacity(pending.len());
+        while !pending.is_empty() {
+            let Some(next) = pending.iter().position(|candidate| {
+                !pending
+                    .iter()
+                    .any(|other| other != candidate && precedes(*other, *candidate))
+            }) else {
+                return Err(ZeroModeHostError::MutuallyCoveringJoin {
+                    factors: pending
+                        .iter()
+                        .map(|component| {
+                            graph
+                                .paired_edges(self.source_spinney(*component).filter())
+                                .into_iter()
+                                .collect()
+                        })
+                        .collect(),
+                });
+            };
+            ordered.push(pending.remove(next));
+        }
+        Ok(ordered)
+    }
+
+    /// The replay states of `node`: each pairs an integrated prefix with the
+    /// local operations replayed on it, in order. The factors of a
+    /// factorized join replay in their pinned order
+    /// ([`Self::pinned_replay_order`]).
+    fn union_replay_states(&self, graph: &Graph, node: NodeIndex) -> Result<Vec<UnionReplayState>> {
         let operation = &self.graph[node];
         if operation.key.is_empty() {
             return Ok(vec![UnionReplayState {
@@ -997,7 +1186,7 @@ impl Forests {
                 .graph
                 .unique_parent(node)
                 .ok_or_else(|| eyre!("{operation} has no unique replay parent"))?;
-            let mut states = self.union_replay_states(parent)?;
+            let mut states = self.union_replay_states(graph, parent)?;
             for state in &mut states {
                 state.local_edges.push(edge);
             }
@@ -1008,10 +1197,12 @@ impl Forests {
             return Ok(states);
         }
 
+        let components = self.disconnected_component_nodes(node)?;
         let component_states = self
-            .disconnected_component_nodes(node)?
+            .pinned_replay_order(graph, components)
+            .wrap_err_with(|| format!("while ordering the factors of {operation} for replay"))?
             .into_iter()
-            .map(|component| self.union_replay_states(component))
+            .map(|component| self.union_replay_states(graph, component))
             .collect::<Result<Vec<_>>>()?;
         let mut states = Vec::new();
         for components in component_states
@@ -1132,7 +1323,7 @@ impl Forests {
             // changes selector materialization only, not this construction.
             let mut active_sectors = Vec::new();
             for state in self
-                .union_replay_states(node)?
+                .union_replay_states(graph, node)?
                 .into_iter()
                 .filter(|state| !state.local_edges.is_empty())
             {
@@ -1562,7 +1753,8 @@ impl Forests {
                 continue;
             }
 
-            let forest_node = key.forest_node(graph, key.key.op_count())?;
+            let forest_node =
+                key.forest_node(graph, self.source_spinney(node), key.key.op_count())?;
             // A disconnected terminal can combine components with different schemes. Select
             // each component's projection before multiplying; the aggregate integrated value
             // only represents the homogeneous all-finite and all-pole projections.
@@ -1691,7 +1883,44 @@ mod tests {
     use idenso::shorthands::metric::MetricSimplifier;
 
     use super::*;
+    use crate::uv::test_fixtures::{Ring, edge_set, ring_uv_settings, thermal_medium};
+    use crate::uv::thermal_zero_mode::tests::{connected_region, zero_mode_policy};
     use color_eyre::Result;
+
+    /// The unfolded wood of a thermal ring under the zero-mode host policy:
+    /// the IR prescription on the direct local-3D route at finite temperature,
+    /// with vacuum subtraction.
+    fn thermal_ring_forests(graph: &Graph) -> Result<Forests> {
+        let settings = GenerationSettings {
+            uv: ring_uv_settings(ApproximationType::IR),
+            medium: thermal_medium(true),
+            ..Default::default()
+        };
+        Ok(Wood::new(CutStructure::empty(graph), graph, &settings)?.unfold())
+    }
+
+    /// The Foata levels of the trace at `node`, in order of application, each
+    /// as the set of its operation scopes.
+    fn trace_levels(forests: &Forests, node: NodeIndex) -> Vec<BTreeSet<SuBitGraph>> {
+        forests.graph[node]
+            .key
+            .iter_levels_top_down()
+            .map(|level| level.iter_leaf_ops().map(|op| op.order.clone()).collect())
+            .collect()
+    }
+
+    /// The factorized join of the plain union `union` of a ring's bubbles.
+    fn ring_join(forests: &Forests, union: &SuBitGraph) -> NodeIndex {
+        forests
+            .graph
+            .iter_nodes()
+            .find_map(|(node, _, _)| {
+                (forests.graph.is_disjoint_union(node)
+                    && forests.source_spinney(node).filter() == union)
+                    .then_some(node)
+            })
+            .expect("the ring has the factorized join of its two bubbles")
+    }
 
     impl Forests {
         fn normalized_node_label(&self, node: NodeIndex) -> String {
@@ -1985,11 +2214,7 @@ mod tests {
                             &settings.uv,
                             &graph.loop_momentum_basis,
                         )?;
-                        graph.restrict_full_observable_spinney(
-                            &mut spinneys,
-                            &settings.uv,
-                            &settings.medium,
-                        );
+                        graph.restrict_full_observable_spinney(&mut spinneys, &settings.medium)?;
                         assert_eq!(
                             &spinneys
                                 .iter()
@@ -2135,6 +2360,251 @@ mod tests {
     }
 
     #[test]
+    fn union_host_sits_above_the_factorized_join() -> Result<()> {
+        test_initialise()?;
+        // The mixed ring is the design case; the others share the union host.
+        // The tadpole ring has three two-loop spinneys instead of four.
+        for (ring, trace_nodes) in [
+            (Ring::Mixed, 32),
+            (Ring::Quark, 32),
+            (Ring::Ghost, 32),
+            (Ring::Tadpole, 28),
+        ] {
+            let graph = ring.physical_graph()?;
+            let forests = thermal_ring_forests(&graph)?;
+            let second = ring.second_loop_edges();
+            let a = graph.edge_subgraph(&[2, 3]);
+            let b = graph.edge_subgraph(second);
+            let h = graph.edge_subgraph(&[[2, 3].as_slice(), second].concat());
+            let g = graph.edge_subgraph(&(0..graph.underlying.n_edges()).collect::<Vec<_>>());
+            let level = |scopes: &[&SuBitGraph]| {
+                scopes
+                    .iter()
+                    .map(|scope| (*scope).clone())
+                    .collect::<BTreeSet<_>>()
+            };
+
+            // The host sub-forest, each chain also under the whole-graph U:
+            // the union host acts after the empty prefix, A, B and their
+            // product.
+            let traces = forests
+                .graph
+                .iter_nodes()
+                .map(|(node, _, _)| trace_levels(&forests, node))
+                .collect::<BTreeSet<_>>();
+            let chains = [
+                vec![level(&[&a])],
+                vec![level(&[&b])],
+                vec![level(&[&a, &b])],
+                vec![level(&[&h])],
+                vec![level(&[&a]), level(&[&h])],
+                vec![level(&[&b]), level(&[&h])],
+                vec![level(&[&a, &b]), level(&[&h])],
+            ];
+            for chain in chains {
+                let mut enclosed = chain.clone();
+                enclosed.push(level(&[&g]));
+                assert!(traces.contains(&chain), "{ring:?}: missing {chain:?}");
+                assert!(traces.contains(&enclosed), "{ring:?}: missing {enclosed:?}");
+            }
+            // The ordinary forests and the 8 chains that end on, or pass, the
+            // host.
+            assert_eq!(forests.graph.n_nodes(), trace_nodes, "{ring:?}: {forests}");
+            let host_steps = forests
+                .graph
+                .iter_nodes()
+                .filter_map(|(node, _, operation)| {
+                    trace_levels(&forests, node)
+                        .iter()
+                        .any(|level| level.contains(&h))
+                        .then_some((node, operation))
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(host_steps.len(), 8, "{ring:?}");
+            for (node, operation) in host_steps {
+                let source = forests.source_spinney(node);
+                if source.filter() == &h {
+                    assert_eq!(source.wood_role(), WoodRole::UnionHost, "{operation}");
+                } else {
+                    assert_eq!(source.filter(), &g, "{operation}");
+                }
+            }
+
+            // The host is one collective operation: no join of its factors,
+            // and every transition into it carries its whole scope.
+            let wood = &forests.wood;
+            let node_of = |filter: &SuBitGraph, role: WoodRole| {
+                wood.graph
+                    .iter_nodes()
+                    .find_map(|(node, _, spinney)| {
+                        (spinney.filter() == filter && spinney.wood_role() == role).then_some(node)
+                    })
+                    .expect("the wood has the node")
+            };
+            let host = node_of(&h, WoodRole::UnionHost);
+            assert!(wood.join_factors(host).is_none(), "{ring:?}");
+            assert_eq!(
+                wood.join_factors(node_of(&h, WoodRole::Plain)),
+                Some(BTreeSet::from([a.clone(), b.clone()])),
+                "{ring:?}"
+            );
+            let incoming = wood
+                .graph
+                .iter_crown(host)
+                .filter(|hedge| wood.graph.flow(*hedge) == Flow::Sink)
+                .map(|hedge| {
+                    assert_eq!(wood.graph[wood.graph[&hedge]], h, "{ring:?}");
+                    let source = &wood.graph[wood
+                        .graph
+                        .involved_node_id(hedge)
+                        .expect("a wood edge is paired")];
+                    (source.filter().clone(), source.wood_role())
+                })
+                .collect::<BTreeSet<_>>();
+            assert_eq!(
+                incoming,
+                BTreeSet::from([
+                    (graph.empty_subgraph::<SuBitGraph>(), WoodRole::Plain),
+                    (a, WoodRole::Plain),
+                    (b, WoodRole::Plain),
+                    (h, WoodRole::Plain),
+                ]),
+                "{ring:?}"
+            );
+            assert_eq!(
+                forests.graph.validate_invariant::<SuBitGraph>(),
+                Ok(()),
+                "{ring:?}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn factorized_join_replays_the_covering_host_first() -> Result<()> {
+        test_initialise()?;
+        for ring in [Ring::Mixed, Ring::Ghost] {
+            let graph = ring.physical_graph()?;
+            let forests = thermal_ring_forests(&graph)?;
+            let a = graph.edge_subgraph(&[2, 3]);
+            let b = graph.edge_subgraph(&[4, 5]);
+            let join = ring_join(&forests, &graph.edge_subgraph(&[2, 3, 4, 5]));
+            // The unmodified fixtures list B first, so the order is pinned
+            // rather than inherited.
+            let factors = forests
+                .disconnected_component_nodes(join)?
+                .into_iter()
+                .map(|component| forests.source_spinney(component).filter().clone())
+                .collect::<Vec<_>>();
+            assert_eq!(factors, [b.clone(), a.clone()], "{ring:?}");
+
+            // The soft set of the connected host A meets B: H_A replays before
+            // U_B, which then acts on the zero mode of A.
+            let scope = |edge: EdgeIndex| {
+                forests
+                    .wood
+                    .current_given_pair(edge, 0)
+                    .0
+                    .subgraph()
+                    .clone()
+            };
+            let replays = forests
+                .union_replay_states(&graph, join)?
+                .into_iter()
+                .filter(|state| !state.local_edges.is_empty())
+                .map(|state| {
+                    (
+                        trace_levels(&forests, state.integrated),
+                        state
+                            .local_edges
+                            .iter()
+                            .map(|edge| scope(*edge))
+                            .collect::<Vec<_>>(),
+                    )
+                })
+                .collect::<BTreeSet<_>>();
+            assert_eq!(
+                replays,
+                BTreeSet::from([
+                    (Vec::new(), vec![a.clone(), b.clone()]),
+                    (vec![BTreeSet::from([b.clone()])], vec![a.clone()]),
+                    (vec![BTreeSet::from([a.clone()])], vec![b.clone()]),
+                ]),
+                "{ring:?}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn mutually_covering_hosts_in_a_join_are_rejected() -> Result<()> {
+        test_initialise()?;
+        let graph = Ring::Mixed.physical_graph()?;
+        let settings = ring_uv_settings(ApproximationType::IR);
+        let b = graph.edge_subgraph(&[4, 5]);
+        // A synthetic connected host on B whose soft set meets A, as the soft
+        // set of the host A meets B: neither factor can replay first.
+        let spinneys = zero_mode_policy(&graph, &settings, &thermal_medium(true))?
+            .into_iter()
+            .map(|spinney| {
+                if spinney.filter() == &b {
+                    spinney.with_thermal_zero_mode(connected_region(&[0, 1, 2, 3]))
+                } else {
+                    spinney
+                }
+            })
+            .collect::<Vec<_>>();
+        let forests =
+            Wood::from_spinneys(spinneys, &graph, CutStructure::empty(&graph), &settings)?.unfold();
+        let join = ring_join(&forests, &graph.edge_subgraph(&[2, 3, 4, 5]));
+        let Err(error) = forests.union_replay_states(&graph, join) else {
+            panic!("mutually covering hosts must not replay");
+        };
+        let Some(ZeroModeHostError::MutuallyCoveringJoin { factors }) =
+            error.root_cause().downcast_ref::<ZeroModeHostError>()
+        else {
+            panic!("unexpected error: {error:#}");
+        };
+        assert_eq!(
+            factors.iter().cloned().collect::<BTreeSet<_>>(),
+            BTreeSet::from([edge_set(&[2, 3]), edge_set(&[4, 5])])
+        );
+        assert!(
+            format!("{error:#}").contains("incompatible zero-mode hosts in a factorized join"),
+            "{error:#}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn collective_host_scope_cannot_equal_a_collective_union_scope() -> Result<()> {
+        test_initialise()?;
+        let graph = Ring::Mixed.physical_graph()?;
+        let settings = ring_uv_settings(ApproximationType::IR);
+        let b = graph.edge_subgraph(&[4, 5]);
+        // Without B, the plain union {A, B} is a collective region whose
+        // trace operations carry the scope of the union host.
+        let spinneys = zero_mode_policy(&graph, &settings, &thermal_medium(true))?
+            .into_iter()
+            .filter(|spinney| spinney.filter() != &b)
+            .collect::<Vec<_>>();
+        let Err(error) =
+            Wood::from_spinneys(spinneys, &graph, CutStructure::empty(&graph), &settings)
+        else {
+            panic!("a union host must not share the scope of a collective union");
+        };
+        assert!(
+            matches!(
+                error.root_cause().downcast_ref::<ZeroModeHostError>(),
+                Some(ZeroModeHostError::CollectiveUnionScope { host })
+                    if *host == edge_set(&[2, 3, 4, 5])
+            ),
+            "{error:#}"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn local_leaf_operations_follow_dependency_frontiers() -> Result<()> {
         test_initialise().unwrap();
         let dumbell: Graph = dot!(
@@ -2234,7 +2704,7 @@ mod tests {
                 ("36".to_string(), "∅".to_string())
             ]
         );
-        let replay_states = forests.union_replay_states(dependent_disconnected)?;
+        let replay_states = forests.union_replay_states(&dumbell, dependent_disconnected)?;
         assert_eq!(replay_states.len(), 6);
         assert_eq!(
             replay_states
@@ -2452,7 +2922,7 @@ mod tests {
             &settings.uv,
             &mut Local4dProjectionContext::default(),
         )?;
-        let replay_states = forests.union_replay_states(dependent_disconnected)?;
+        let replay_states = forests.union_replay_states(&graph, dependent_disconnected)?;
         let state = replay_states
             .iter()
             .find(|state| {
@@ -3015,7 +3485,7 @@ mod tests {
             f.disconnected_component_nodes(three_component_union)?.len(),
             3
         );
-        let replay_states = f.union_replay_states(three_component_union)?;
+        let replay_states = f.union_replay_states(&dumbell, three_component_union)?;
         assert_eq!(replay_states.len(), 8);
         assert_eq!(
             replay_states
@@ -3414,7 +3884,7 @@ mod tests {
             ),
         );
         let replay_states = f
-            .union_replay_states(union)?
+            .union_replay_states(&spectacles, union)?
             .into_iter()
             .filter(|state| !state.local_edges.is_empty())
             .collect::<Vec<_>>();

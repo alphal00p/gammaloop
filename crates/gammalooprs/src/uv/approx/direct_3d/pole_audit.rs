@@ -398,23 +398,14 @@ fn physical_full_h_scalar_cancellation_certificates() -> Result<()> {
                 unchanged_pairs += 1;
                 continue;
             }
-            let mut keys = BTreeSet::new();
-            for atom in [before, after] {
-                atom.visitor(&mut |part| {
-                    if let AtomView::Fun(fun) = part
-                        && fun.get_symbol() == symbol!("gammalooprs::uv::numerator_family")
-                    {
-                        // Mirror production: closed homogeneous factors are
-                        // scalar indeterminates, not numerator keys.
-                        if !is_factor_call(part) {
-                            keys.insert(part.to_owned());
-                        }
-                        return false;
-                    }
-                    true
-                });
-            }
-            let keys = keys.into_iter().collect_vec();
+            // Mirror production: closed homogeneous factors are scalar
+            // indeterminates, not numerator keys.
+            let keys = [before, after]
+                .into_iter()
+                .flat_map(|atom| numerator_family_calls(atom.as_view()))
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect_vec();
             let (Some(before_groups), Some(after_groups)) = (
                 Capture::groups(before, &keys),
                 Capture::groups(after, &keys),

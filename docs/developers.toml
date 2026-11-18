@@ -354,7 +354,7 @@ digest = "1067ce0970fbbb3fbb03dcedb0a82161a5b4851a"
 [[section.note]]
 id = "uv-renormalization"
 title = "UV renormalization architecture"
-summary = "Orchestrator ownership, sign conventions, projections, disconnected composition, and current boundaries."
+summary = "Orchestrator ownership, sign conventions, projections, disconnected composition, finite-temperature zero-mode subtraction, and current boundaries."
 source = "docs/architecture/uv-renormalization.typ"
 kind = "System architecture"
 status = "Implemented"

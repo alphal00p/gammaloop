@@ -7,7 +7,7 @@ use symbolica::atom::{Atom, AtomCore, AtomView};
 use symbolica::function;
 use three_dimensional_reps::{MediumMode, ThermalDistributionCall, ThermalDistributionFactor};
 
-use crate::graph::LoopMomentumBasis;
+use crate::graph::{Graph, LoopMomentumBasis};
 use crate::integrands::process::param_builder::ParamBuilderGraph;
 use crate::utils::{GS, W_};
 use crate::uv::approx::UVCtx;
@@ -15,6 +15,7 @@ use crate::uv::uv_graph::UVE;
 
 use super::{
     Direct3dApproximation, DirectResidueBranches, LOCAL_3D_SOFT_SCOPE, Local3DDeformation,
+    ZERO_MODE_ORDER, ZERO_MODE_TEMPERATURE, zero_mode_class_representative, zero_mode_temperature,
 };
 
 /// Decode a component owner written as the `S_<label>` symbol of its support.
@@ -34,6 +35,13 @@ pub(super) fn soft_branch_scope(support: &SuBitGraph) -> Atom {
     function!(*LOCAL_3D_SOFT_SCOPE, support.symbol())
 }
 
+/// Whether `support` contains the frequency class whose representative edge
+/// `representative` names.
+fn contains_class(graph: &Graph, support: &SuBitGraph, representative: AtomView<'_>) -> bool {
+    zero_mode_class_representative(graph, representative)
+        .is_some_and(|edge| support.includes(&graph.get_edge_subgraph(edge)))
+}
+
 /// Relation of a completed thermal soft branch to one local operation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum SoftBranchRole {
@@ -50,31 +58,33 @@ pub(super) enum SoftBranchRole {
 ///
 /// A branch carries its owner in two places: its masses are multiplied by
 /// [`soft_branch_scope`], and every on-shell energy it expanded uses the
-/// owner's `S_<label>` symbol in place of an integer route owner.
+/// owner's `S_<label>` symbol in place of an integer route owner. A completed
+/// zero-mode branch also owns the zero-mode temperatures of the classes
+/// inside its support and its order tag.
 #[derive(Clone, Copy)]
 pub(super) struct SoftBranches<'a> {
+    graph: &'a Graph,
     support: &'a SuBitGraph,
-    n_hedges: usize,
-    acts_on_own_branch: bool,
+    deformation: Local3DDeformation,
 }
 
 impl<'a> SoftBranches<'a> {
     pub(super) fn new(
+        graph: &'a Graph,
         support: &'a SuBitGraph,
-        n_hedges: usize,
         deformation: Local3DDeformation,
     ) -> Self {
         Self {
+            graph,
             support,
-            n_hedges,
-            acts_on_own_branch: deformation == Local3DDeformation::OrdinaryOnSoftBranch,
+            deformation,
         }
     }
 
     pub(super) fn role(&self, owner: &SuBitGraph) -> Result<SoftBranchRole> {
         if owner == self.support {
             // Only the component's own U revisits the support of its soft branch.
-            return if self.acts_on_own_branch {
+            return if self.deformation == Local3DDeformation::OrdinaryOnSoftBranch {
                 Ok(SoftBranchRole::Own)
             } else {
                 Err(eyre!(
@@ -96,19 +106,37 @@ impl<'a> SoftBranches<'a> {
         }
     }
 
-    /// The role of a soft-branch mass scope or energy owner, if `view` is one.
+    /// The role of a branch tag, if `view` is one: a soft-branch mass scope,
+    /// an energy owned by a branch, or the zero-mode temperature or order tag
+    /// of a completed zero-mode branch. The zero-mode temperature of a
+    /// frequency class, named by its representative edge, is not yet owned by
+    /// a branch.
     pub(super) fn tag_role(&self, view: AtomView<'_>) -> Result<Option<SoftBranchRole>> {
         let AtomView::Fun(call) = view else {
             return Ok(None);
         };
-        let owner = if call.get_symbol() == *LOCAL_3D_SOFT_SCOPE {
+        let symbol = call.get_symbol();
+        let n_hedges = self.graph.n_hedges();
+        let owner = if symbol == *LOCAL_3D_SOFT_SCOPE || symbol == *ZERO_MODE_ORDER {
             (call.get_nargs() == 1)
-                .then(|| component_owner(call.get(0), self.n_hedges))
+                .then(|| component_owner(call.get(0), n_hedges))
                 .flatten()
-                .ok_or_else(|| eyre!("a thermal soft-branch scope has no valid owner: {view}"))?
-        } else if call.get_symbol() == GS.on_shell_energy && call.get_nargs() == 2 {
+                .ok_or_else(|| eyre!("a thermal soft-branch tag has no valid owner: {view}"))?
+        } else if symbol == *ZERO_MODE_TEMPERATURE {
+            let owner = (call.get_nargs() == 1)
+                .then(|| call.get(0))
+                .ok_or_else(|| eyre!("a zero-mode temperature has no owner: {view}"))?;
+            match component_owner(owner, n_hedges) {
+                Some(owner) => owner,
+                // A class temperature, which no branch owns yet.
+                None if zero_mode_class_representative(self.graph, owner).is_some() => {
+                    return Ok(None);
+                }
+                None => return Err(eyre!("a zero-mode temperature has no valid owner: {view}")),
+            }
+        } else if symbol == GS.on_shell_energy && call.get_nargs() == 2 {
             // Integer route owners belong to ordinary operations.
-            let Some(owner) = component_owner(call.get(0), self.n_hedges) else {
+            let Some(owner) = component_owner(call.get(0), n_hedges) else {
                 return Ok(None);
             };
             owner
@@ -116,6 +144,51 @@ impl<'a> SoftBranches<'a> {
             return Ok(None);
         };
         self.role(&owner).map(Some)
+    }
+
+    /// Whether this operation multiplies the tag `view` by its Taylor
+    /// parameter, as it does its loop momenta:
+    /// - the mass scope or zero-mode temperature of a completed branch iff
+    ///   the branch is frozen, being a vertex whose scales follow those
+    ///   momenta; the U of a zero-mode branch's own support never sees its
+    ///   zero-mode temperature, which only an enclosing zero-mode branch
+    ///   takes over;
+    /// - the order tag of a frozen zero-mode branch only in an ordinary
+    ///   chart, where it compensates the degree of the vertex so that the
+    ///   static cograph is expanded at its own degree; a zero-mode chart
+    ///   already co-scales the whole vertex;
+    /// - the zero-mode temperature of a class iff a zero-mode chart contains
+    ///   the class, whose static loop is then part of the hard part it
+    ///   expands.
+    ///
+    /// # Errors
+    ///
+    /// A tag without a valid owner, a branch partially overlapping the
+    /// operation, and a zero-mode temperature in the role of the operation's
+    /// own branch.
+    pub(super) fn co_scales(&self, view: AtomView<'_>) -> Result<bool> {
+        let AtomView::Fun(call) = view else {
+            return Ok(false);
+        };
+        let symbol = call.get_symbol();
+        if ![
+            *LOCAL_3D_SOFT_SCOPE,
+            *ZERO_MODE_TEMPERATURE,
+            *ZERO_MODE_ORDER,
+        ]
+        .contains(&symbol)
+        {
+            return Ok(false);
+        }
+        let zero_mode_chart = matches!(self.deformation, Local3DDeformation::ZeroMode { .. });
+        match self.tag_role(view)? {
+            Some(SoftBranchRole::Frozen) => Ok(symbol != *ZERO_MODE_ORDER || !zero_mode_chart),
+            Some(SoftBranchRole::Own) if symbol == *ZERO_MODE_TEMPERATURE => Err(eyre!(
+                "internal error: the zero-mode temperature {view} reached the U of its own branch"
+            )),
+            Some(SoftBranchRole::Own | SoftBranchRole::Disjoint) => Ok(false),
+            None => Ok(zero_mode_chart && contains_class(self.graph, self.support, call.get(0))),
+        }
     }
 
     /// Whether `atom` depends on a frozen soft branch.
@@ -152,7 +225,7 @@ impl Direct3dApproximation<'_> {
         support: &SuBitGraph,
         deformation: Local3DDeformation,
     ) -> Result<Atom> {
-        let soft_branches = SoftBranches::new(support, ctx.graph.n_hedges(), deformation);
+        let soft_branches = SoftBranches::new(ctx.graph, support, deformation);
         let active_edges = ctx
             .graph
             .iter_edges_of(support)
@@ -171,19 +244,29 @@ impl Direct3dApproximation<'_> {
     /// Hand a completed thermal soft branch to enclosing operations as a frozen
     /// vertex. Its mass scope becomes the branch scope, and every on-shell energy
     /// this operation expanded becomes owned by the support's symbol. Branches
-    /// that were already frozen inside it keep their own owners.
+    /// that were already frozen inside it keep their own owners. A zero-mode
+    /// branch also takes over the zero-mode temperatures of the classes and
+    /// of the zero-mode branches inside its support, and absorbs the order
+    /// tags of the latter: its own order tag now counts the order of the
+    /// whole vertex.
     pub(super) fn freeze_soft_branch(
         branch: &DirectResidueBranches,
+        graph: &Graph,
         support: &SuBitGraph,
         lmb: &LoopMomentumBasis,
         mass_scope: &Atom,
     ) -> Result<DirectResidueBranches> {
-        branch.map_expressions(|atom| Ok(Self::freeze_soft_atom(atom, support, lmb, mass_scope)))
+        branch.map_expressions(|atom| {
+            Ok(Self::freeze_soft_atom(
+                atom, graph, support, lmb, mass_scope,
+            ))
+        })
     }
 
     /// [`Self::freeze_soft_branch`] for one atom.
     pub(super) fn freeze_soft_atom(
         atom: &Atom,
+        graph: &Graph,
         support: &SuBitGraph,
         lmb: &LoopMomentumBasis,
         mass_scope: &Atom,
@@ -201,7 +284,31 @@ impl Direct3dApproximation<'_> {
                 ))
                 .with(function!(GS.on_shell_energy, owner.clone(), W_.prop_));
         }
-        frozen
+        frozen.replace_map(|view, _, output| {
+            let AtomView::Fun(call) = view else {
+                return;
+            };
+            let symbol = call.get_symbol();
+            if call.get_nargs() != 1
+                || ![*ZERO_MODE_TEMPERATURE, *ZERO_MODE_ORDER].contains(&symbol)
+            {
+                return;
+            }
+            let tag_owner = call.get(0);
+            let inside = match component_owner(tag_owner, graph.n_hedges()) {
+                Some(inner) => inner != *support && support.includes(&inner),
+                None => {
+                    symbol == *ZERO_MODE_TEMPERATURE && contains_class(graph, support, tag_owner)
+                }
+            };
+            if inside {
+                **output = if symbol == *ZERO_MODE_TEMPERATURE {
+                    zero_mode_temperature(owner.clone())
+                } else {
+                    Atom::num(1)
+                };
+            }
+        })
     }
 
     /// Express the soft chart at fixed physical temperature and chemical potential.
@@ -210,10 +317,11 @@ impl Direct3dApproximation<'_> {
     /// exposes the external-momentum Taylor series. The factor h^-d retains
     /// the derivative's engineering dimension in the existing Laurent counting.
     ///
-    /// The soft deformation compensates every occupation of its active
-    /// component. Any deformation also compensates the occupations retained by
-    /// a frozen soft branch, keeping their owners, since that branch is a vertex
-    /// whose temperature and chemical potential scale with its loop momenta.
+    /// A soft or zero-mode chart compensates every occupation of its active
+    /// support, a union host included. Any deformation also compensates the
+    /// occupations retained by a frozen soft branch, keeping their owners,
+    /// since that branch is a vertex whose temperature and chemical potential
+    /// scale with its loop momenta.
     pub(super) fn compensate_thermal_distributions(
         ctx: &UVCtx<'_>,
         active_subgraph: &SuBitGraph,
@@ -222,12 +330,14 @@ impl Direct3dApproximation<'_> {
         soft_branches: SoftBranches<'_>,
     ) -> Result<Atom> {
         // N is the same function for equal statistics and chemical potential.
-        // Choose its representative within this active component so coincident
-        // energies cancel symbolically. Ownership of the branch lives in the
-        // energy's owner, not in this representative; disjoint components and
-        // their occupations remain unchanged.
+        // Choose its representative within this active support so coincident
+        // energies cancel symbolically, also between the components of a union
+        // host: the Landau pairs of the CFF variants then cancel in each
+        // Taylor coefficient. Ownership of the branch lives in the energy's
+        // owner, not in this representative; disjoint components and their
+        // occupations remain unchanged.
         let mut representatives = BTreeMap::new();
-        let owners = if deformation == Local3DDeformation::Soft {
+        let owners = if deformation.is_soft() {
             ctx.graph
                 .iter_edges_of(active_subgraph)
                 .filter_map(|(pair, edge, _)| {

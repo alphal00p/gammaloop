@@ -1,0 +1,149 @@
+commands = []
+
+[[command_blocks]]
+name = "generate"
+commands = [
+  "import model sm-thermal",
+  "set model aS=1.0 muB=0.0",
+  "remove processes",
+  "import graphs ./tests/resources/graphs/thermal_tadpole_quark_ring.dot -p thermal_tadpole_quark_ring -i thermal_tadpole_quark_ring",
+  "generate existing -p thermal_tadpole_quark_ring -i thermal_tadpole_quark_ring",
+]
+
+[[command_blocks]]
+# Bare control on the identical LMB and rays: subtract_uv=false generates in about a second.
+name = "generate_bare"
+commands = [
+  "set global kv global.generation.uv.subtract_uv=false",
+  "run generate",
+]
+
+[[command_blocks]]
+# Expected to fail: under MUV no zero-mode host subtracts the static soft set {e0,e1} of
+# the q-gluons, so the scheme validation stops generation with the hostless error, which
+# names renormalization_prescription.massless_power_divergent = IR.
+name = "generate_muv"
+commands = [
+  "set global kv global.generation.uv.renormalization_prescription.massless_power_divergent=MUV",
+  "run generate",
+]
+
+[[command_blocks]]
+# Without vacuum subtraction, which stays supported, the hosts drop their vacuum-soft
+# order and the whole-graph U also subtracts the all-hard vacuum divergence.
+name = "generate_novacsub"
+commands = [
+  "set global kv global.generation.medium.vacuum_subtraction=false",
+  "run generate",
+]
+
+[[command_blocks]]
+name = "profile_uv"
+commands = [
+  "profile ultra-violet -p thermal_tadpole_quark_ring -i thermal_tadpole_quark_ring --selected-limits only-divergent --min-scaling=3 --max-scaling=6 --n-points 8 --seed 1337 --use_f128 --allow-vanishing-missing-fits",
+]
+
+[[command_blocks]]
+name = "profile_uv_finite_mu"
+commands = [
+  "set model muB=3.0",
+  "run profile_uv",
+]
+
+[[command_blocks]]
+# One profile call per limit: the sampled ray depends on the whole select string and
+# n_points. With the n_points of the slow lane (thermal_soft_ct) these blocks reproduce its rays.
+name = "profile_soft"
+commands = [
+  "profile bulk -p thermal_tadpole_quark_ring -i thermal_tadpole_quark_ring --select 'thermal_tadpole_quark_ring S(e0)' --min-scaling=-2 --max-scaling=-5 --n-points 15 --seed 1337",
+]
+
+[[command_blocks]]
+name = "profile_soft_finite_mu"
+commands = [
+  "set model muB=3.0",
+  "run profile_soft",
+]
+
+[[command_blocks]]
+# Single soft lines that the static-gluon subtraction must leave integrable.
+name = "profile_single_soft"
+commands = [
+  "profile bulk -p thermal_tadpole_quark_ring -i thermal_tadpole_quark_ring --select 'thermal_tadpole_quark_ring S(e2)' --min-scaling=-2 --max-scaling=-5 --n-points 15 --seed 1337",
+  "profile bulk -p thermal_tadpole_quark_ring -i thermal_tadpole_quark_ring --select 'thermal_tadpole_quark_ring S(e3)' --min-scaling=-2 --max-scaling=-5 --n-points 15 --seed 1337",
+  "profile bulk -p thermal_tadpole_quark_ring -i thermal_tadpole_quark_ring --select 'thermal_tadpole_quark_ring S(e4)' --min-scaling=-2 --max-scaling=-5 --n-points 15 --seed 1337",
+]
+
+[[command_blocks]]
+name = "profile_joint_soft"
+commands = [
+  "profile bulk -p thermal_tadpole_quark_ring -i thermal_tadpole_quark_ring --select 'thermal_tadpole_quark_ring S(e0)S(e4)' --min-scaling=-2 --max-scaling=-5 --n-points 15 --seed 1337",
+]
+
+[[command_blocks]]
+name = "profile_joint_soft_finite_mu"
+commands = [
+  "set model muB=3.0",
+  "run profile_joint_soft",
+]
+
+[[command_blocks]]
+# Smooth bare regions; a correct subtraction introduces no collinear spurious poles.
+name = "profile_collinear"
+commands = [
+  "profile bulk -p thermal_tadpole_quark_ring -i thermal_tadpole_quark_ring --select 'thermal_tadpole_quark_ring C[e2,e3]' --min-scaling=-2 --max-scaling=-5 --n-points 10 --seed 1337",
+  "profile bulk -p thermal_tadpole_quark_ring -i thermal_tadpole_quark_ring --select 'thermal_tadpole_quark_ring C[e0,e2]' --min-scaling=-2 --max-scaling=-5 --n-points 10 --seed 1337",
+  "profile bulk -p thermal_tadpole_quark_ring -i thermal_tadpole_quark_ring --select 'thermal_tadpole_quark_ring C[e0,e4]' --min-scaling=-2 --max-scaling=-5 --n-points 10 --seed 1337",
+  "profile bulk -p thermal_tadpole_quark_ring -i thermal_tadpole_quark_ring --select 'thermal_tadpole_quark_ring C[e2,e4]' --min-scaling=-2 --max-scaling=-5 --n-points 10 --seed 1337",
+]
+
+[[command_blocks]]
+name = "approach_soft"
+commands = [
+  "approach -p thermal_tadpole_quark_ring -i thermal_tadpole_quark_ring --momentum-space -x 0,0,0,0.71,0.23,0.43,-0.37,0.61,0.29 --approach-axis 1,0.2,-0.3,0,0,0,0,0,0 --n-points 12 --logarithmic --min-abs-t 1e-5 --max-abs-t 1e-2 --skip-midpoint --use_arb_prec",
+]
+
+[cli_settings.global.generation]
+override_lmb_heuristics = true
+
+[cli_settings.global.generation.medium]
+mode = "thermodynamic_equilibrium"
+vacuum_subtraction = true
+
+[cli_settings.global.generation.uv]
+subtract_uv = true
+generate_integrated = false
+add_marker = false
+inner_products = true
+orchestrator = "hedge_poset"
+
+[cli_settings.global.generation.uv.renormalization_prescription]
+log_divergent = "MUV"
+massive_power_divergent = "MUV"
+# The IR prescription lets the zero-mode policy host the static soft set of the q-gluons:
+# an IR spinney without a zero-mode region becomes a plain MUV U, and the whole-graph U
+# stays as the U of the hosts' static cographs. MUV leaves the soft set hostless
+# (see generate_muv).
+massless_power_divergent = "IR"
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+
+[cli_settings.global.generation.tropical_subgraph_table]
+disable_tropical_generation = true
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = false
+compile = false
+
+[default_runtime_settings.general]
+inverse_temperature = 1.0
+evaluator_method = "SingleParametric"
+m_uv = 1.0
+mu_r = 2.0
+
+[default_runtime_settings.kinematics]
+e_cm = 1.0
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true

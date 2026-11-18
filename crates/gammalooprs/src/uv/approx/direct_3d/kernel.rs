@@ -1,10 +1,11 @@
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::sync::LazyLock;
 
 use color_eyre::Result;
-use eyre::eyre;
-use idenso::color::{ColorSimplifier, ColorSimplifySettings};
+use eyre::{WrapErr, ensure, eyre};
 use itertools::Itertools;
+use linnet::half_edge::involution::EdgeIndex;
 use linnet::half_edge::subgraph::{Inclusion, InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps};
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
@@ -12,14 +13,15 @@ use symbolica::{
 };
 use three_dimensional_reps::MediumMode;
 
+use crate::uv::thermal_zero_mode::{ThermalZeroModeRegion, ZeroModeHostKind, ZeroModeTuple};
 use crate::{
     debug_tags,
-    graph::{LMBext, LmbError, LoopMomentumBasis},
+    graph::{Graph, LMBext, LmbError, LoopMomentumBasis},
     integrands::process::param_builder::ParamBuilderGraph,
     numerator::symbolica_ext::NumeratorAtomExt,
     utils::{GS, W_},
     uv::{
-        ApproximationType, UltravioletGraph,
+        ApproximationType,
         approx::{ForestNodeLike, OrientationProjection, UVCtx},
         uv_graph::UVE,
     },
@@ -29,9 +31,11 @@ use crate::{
 use crate::uv::approx::local_3d::Local3DLoopRescaling;
 
 use super::{
-    branches::DirectResidueBranches, coefficients::is_factor_call, forest::Direct3dApproximation,
+    branches::DirectResidueBranches, coefficients::numerator_family_calls,
+    forest::Direct3dApproximation,
 };
 use thermal_soft::{SoftBranchRole, SoftBranches};
+use zero_mode::{ZeroModeClass, ZeroModeProjection};
 
 /// One independently framed connected part of a direct forest sector.
 /// Disconnected replay keeps these frames separate until an enclosing Taylor
@@ -146,25 +150,15 @@ pub(super) fn coordinate_lmb<S: ForestNodeLike>(
     // the component route induced by the graph-canonical basis, so an
     // equivalent child representation cannot select a different parent
     // Taylor chart.  Only genuine retained coordinates may force the stable
-    // fallback below.
-    let canonical_component_lmb = if current.subgraph() == &full_internal
-        && graph.n_loops(&full_internal) == graph.loop_momentum_basis.loop_edges.len()
-    {
-        graph.loop_momentum_basis.clone()
-    } else {
-        graph
-            .try_compatible_sub_lmb(
-                current.subgraph(),
-                graph.dummy_less_full_crown(current.subgraph()),
-                &graph.loop_momentum_basis,
+    // fallback below. A zero-mode host records the same basis as its chart.
+    let canonical_component_lmb = graph
+        .canonical_component_lmb(current.subgraph())
+        .wrap_err_with(|| {
+            format!(
+                "failed to induce the graph-canonical direct local-3D route for component {}",
+                current.subgraph().string_label(),
             )
-            .map_err(|error| {
-                eyre!(
-                    "failed to induce the graph-canonical direct local-3D route for component {}: {error}",
-                    current.subgraph().string_label(),
-                )
-            })?
-    };
+        })?;
 
     let quotient_lmb = if given.subgraph().is_empty() {
         canonical_component_lmb.clone()
@@ -321,7 +315,17 @@ enum Local3DDeformation {
     /// branch scope replaces the mass scope, so enclosing operations co-scale
     /// the result together with the soft branch it subtracts from.
     OrdinaryOnSoftBranch,
+    /// The co-scaled soft chart of the vacuum and zero-temperature IR
+    /// subtraction, through relative order `dod - 1`.
     Soft,
+    /// The Taylor chart of a finite-temperature zero-mode host: the soft
+    /// chart at fixed physical temperature through the absolute `endpoint`
+    /// `J - dod` of its order tuple. It also co-scales the zero-mode
+    /// temperature of every class inside its support, and writes the order
+    /// tag of the host in place of its Taylor parameter.
+    ZeroMode {
+        endpoint: i64,
+    },
 }
 
 impl Local3DDeformation {
@@ -329,9 +333,30 @@ impl Local3DDeformation {
         matches!(self, Self::Ordinary | Self::OrdinaryOnSoftBranch)
     }
 
+    /// Whether the chart expands in the external momenta at fixed masses,
+    /// temperature and chemical potential, co-scaling the component's mass
+    /// scope with its loop momenta.
+    fn is_soft(self) -> bool {
+        matches!(self, Self::Soft | Self::ZeroMode { .. })
+    }
+
     /// Last retained power of the inverted Taylor parameter.
     fn series_endpoint(self) -> i64 {
-        if self.is_ordinary() { 0 } else { -1 }
+        match self {
+            Self::Ordinary | Self::OrdinaryOnSoftBranch => 0,
+            Self::Soft => -1,
+            Self::ZeroMode { endpoint } => endpoint,
+        }
+    }
+
+    /// The value of the Taylor parameter in the finished series on
+    /// `support`: one, or the order tag of the zero-mode host, so that its
+    /// term of relative order `j` carries `lambda^(j - dod)`.
+    fn order_tag(self, support: &SuBitGraph) -> Atom {
+        match self {
+            Self::ZeroMode { .. } => zero_mode_order(Atom::var(support.symbol())),
+            Self::Ordinary | Self::OrdinaryOnSoftBranch | Self::Soft => Atom::num(1),
+        }
     }
 }
 
@@ -393,13 +418,137 @@ pub(crate) static LOCAL_3D_MASS_SCOPE: LazyLock<Symbol> =
 pub(crate) static LOCAL_3D_SOFT_SCOPE: LazyLock<Symbol> =
     LazyLock::new(|| symbol!("gammalooprs::local_3d_soft_scope"));
 
+/// Temperature `T_zm` of a static Matsubara mode, retained until the last
+/// local forest operation.
+///
+/// A zero-mode projection writes the temperature of the frequencies it makes
+/// static as this tag, so that local operations can scale it apart from the
+/// temperature of the remaining occupations. The argument is the
+/// representative edge of the projected frequency class, or the `S_<label>`
+/// owner of the completed zero-mode branch that took the class over.
+/// Final-integrand construction replaces the tag by `1/beta`.
+pub(crate) static ZERO_MODE_TEMPERATURE: LazyLock<Symbol> =
+    LazyLock::new(|| symbol!("gammalooprs::zero_mode_temperature"));
+
+/// The zero-mode temperature [`ZERO_MODE_TEMPERATURE`] of `owner`: the
+/// representative edge of a frequency class as an integer, or the `S_<label>`
+/// owner of the completed zero-mode branch that took the class over.
+pub(super) fn zero_mode_temperature(owner: Atom) -> Atom {
+    function!(*ZERO_MODE_TEMPERATURE, owner)
+}
+
+/// The zero-mode temperature of the frequency class whose representative
+/// edge is `representative`.
+pub(super) fn class_zero_mode_temperature(representative: EdgeIndex) -> Atom {
+    zero_mode_temperature(Atom::num(usize::from(representative)))
+}
+
+/// The representative edge of `graph` that the owner argument of a
+/// zero-mode temperature names, if it names a frequency class rather than a
+/// completed branch.
+pub(super) fn zero_mode_class_representative(
+    graph: &Graph,
+    owner: AtomView<'_>,
+) -> Option<EdgeIndex> {
+    usize::try_from(owner)
+        .ok()
+        .filter(|edge| *edge < graph.underlying.n_edges())
+        .map(EdgeIndex)
+}
+
+/// Unit-valued Taylor-order tag `lambda` of a completed zero-mode branch.
+///
+/// The argument is the `S_<label>` owner of the branch. A term of relative
+/// Taylor order `j` of a branch whose support has superficial degree `dod`
+/// carries `lambda^(j - dod)`, so that an enclosing operation expands the
+/// frozen branch at the degree of its static cograph. Final-integrand
+/// construction replaces the tag by one.
+pub(crate) static ZERO_MODE_ORDER: LazyLock<Symbol> =
+    LazyLock::new(|| symbol!("gammalooprs::zero_mode_order"));
+
+/// The order tag [`ZERO_MODE_ORDER`] of the zero-mode branch `owner`, the
+/// `S_<label>` symbol of its support.
+pub(super) fn zero_mode_order(owner: Atom) -> Atom {
+    function!(*ZERO_MODE_ORDER, owner)
+}
+
+/// The final values of the tags local operations keep apart while they are
+/// composed: the mass scopes, the soft scopes and the zero-mode order tags
+/// are one, and the zero-mode temperatures are the temperature `1/beta`.
+pub(crate) fn normalize_local_tags(atom: &Atom) -> Atom {
+    atom.replace(function!(*LOCAL_3D_MASS_SCOPE, W_.a_))
+        .with(Atom::one())
+        .replace(function!(*LOCAL_3D_SOFT_SCOPE, W_.a_))
+        .with(Atom::one())
+        .replace(function!(*ZERO_MODE_ORDER, W_.a_))
+        .with(Atom::one())
+        .replace(function!(*ZERO_MODE_TEMPERATURE, W_.a_))
+        .with(Atom::var(GS.inverse_temperature).pow(-1))
+}
+
+/// The local operation of one forest node.
+#[derive(Clone, Copy)]
+enum NodeOperation<'r> {
+    /// The ordinary Taylor projection U.
+    Ordinary,
+    /// `S + U - U S` with the co-scaled soft chart of the vacuum and
+    /// zero-temperature IR subtraction.
+    Soft,
+    /// The zero-mode operation `S0` of a finite-temperature host, followed
+    /// by `U - U S0` on a connected host.
+    ZeroMode(&'r ThermalZeroModeRegion),
+}
+
+impl<'r> NodeOperation<'r> {
+    /// The operation of `current` in `medium_mode`.
+    ///
+    /// # Errors
+    ///
+    /// Internal errors: at finite temperature an IR node of positive degree
+    /// without the zero-mode region that the direct local-3D hedge-poset
+    /// policy assigns, which demotes every other IR node, and a region
+    /// outside finite temperature or on a non-IR node.
+    ///
+    /// # Panics
+    ///
+    /// For the deferred local on-shell scheme and for unsubtracted nodes,
+    /// which never enter the wood.
+    fn of<S: ForestNodeLike>(current: &'r S, medium_mode: MediumMode) -> Result<Self> {
+        let finite_temperature = medium_mode.is_finite_temperature();
+        if let Some(region) = current.thermal_zero_mode() {
+            ensure!(
+                finite_temperature && current.renormalization_scheme() == ApproximationType::IR,
+                "internal error: the zero-mode host {} reached a {medium_mode:?} operation with \
+                 scheme {:?}",
+                current.subgraph().string_label(),
+                current.renormalization_scheme(),
+            );
+            return Ok(Self::ZeroMode(region));
+        }
+        match current.renormalization_scheme() {
+            ApproximationType::MUV | ApproximationType::PolePart => Ok(Self::Ordinary),
+            ApproximationType::IR if current.dod() == 0 => Ok(Self::Ordinary),
+            ApproximationType::IR if finite_temperature => Err(eyre!(
+                "internal error: thermal soft subtraction needs a zero-mode host from the direct \
+                 local-3D hedge-poset policy: the IR component {} of degree {} hosts no \
+                 zero-mode region",
+                current.subgraph().string_label(),
+                current.dod(),
+            )),
+            ApproximationType::IR => Ok(Self::Soft),
+            ApproximationType::OS => unimplemented!(
+                "local on-shell counterterms are deferred until local counterterms can be derived from the 4D expanded representation"
+            ),
+            ApproximationType::Unsubtracted => panic!("should have been kept out of the wood"),
+        }
+    }
+}
+
 /// Apply one local-3D Taylor operation to a complete residue-map family.
 /// Selectors remain outside the atoms. Newly attached factors share one
 /// coefficient-parametric body and retain each complete key's argument row.
 /// This kernel does not add the current operation's subtraction minus;
 /// forest composition supplies it once, retaining signs already in the branch.
-// Keep the forest operation, coordinate frame, and residue family explicit.
-#[allow(clippy::too_many_arguments)]
 pub(super) fn apply_taylor<S: ForestNodeLike>(
     ctx: &UVCtx<'_>,
     orientation: OrientationProjection<'_>,
@@ -412,44 +561,133 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
     let active_subgraph = active_subgraph
         .as_ref()
         .map(|active| active.intersection(current.subgraph()));
+    let support = active_subgraph
+        .as_ref()
+        .unwrap_or_else(|| current.subgraph());
     let medium_mode = orientation.cff_options()?.medium_mode;
-    let ordinary_only = match current.renormalization_scheme() {
-        ApproximationType::MUV | ApproximationType::PolePart => true,
-        ApproximationType::IR => current.dod() == 0,
-        ApproximationType::OS | ApproximationType::Unsubtracted => false,
+    let operation = NodeOperation::of(current, medium_mode)?;
+    match operation {
+        NodeOperation::Ordinary if medium_mode.is_finite_temperature() => {
+            // U first projects every unfrozen active occupation to vacuum.
+            // When that annihilates the input, as for the whole-graph U on a
+            // chain without a frozen soft branch, skip the numerator and
+            // Taylor work.
+            let projected = integrands.fallible_map(|_, atom| {
+                Direct3dApproximation::project_unfrozen_occupations(
+                    ctx,
+                    atom,
+                    support,
+                    Local3DDeformation::Ordinary,
+                )
+            })?;
+            if projected.is_zero() {
+                return Ok(projected);
+            }
+        }
+        NodeOperation::ZeroMode(region) => {
+            // A sector whose integrated prefix covers part of the host, for
+            // instance one bubble of a union host, is zero there.
+            if integrands.is_zero() {
+                return Ok(integrands.clone());
+            }
+            ensure_zero_mode_chart(ctx, current, region, support, lmb)?;
+        }
+        NodeOperation::Ordinary | NodeOperation::Soft => {}
+    }
+    let started = start_family(
+        ctx,
+        orientation,
+        current,
+        given,
+        active_subgraph.as_ref(),
+        lmb,
+        integrands,
+    )?;
+    let ordinary = |deformation, integrands: &DirectResidueBranches| {
+        Direct3dApproximation::t(
+            deformation,
+            ctx,
+            current,
+            given,
+            integrands,
+            active_subgraph.as_ref(),
+            lmb,
+        )
     };
-    if medium_mode.is_finite_temperature() && ordinary_only {
-        // U first projects every unfrozen active occupation to vacuum. When
-        // that annihilates the input, as for the whole-graph U on a chain
-        // without a frozen soft branch, skip the numerator and Taylor work.
-        let support = active_subgraph
-            .as_ref()
-            .unwrap_or_else(|| current.subgraph());
-        let projected = integrands.fallible_map(|_, atom| {
-            Direct3dApproximation::project_unfrozen_occupations(
-                ctx,
-                atom,
-                support,
-                Local3DDeformation::Ordinary,
-            )
-        })?;
-        if projected
-            .iter_keys()
-            .all(|(_, roots)| roots.iter().all(|(_, atom)| atom.is_zero()))
-        {
-            return Ok(projected);
+    match operation {
+        NodeOperation::Ordinary => ordinary(Local3DDeformation::Ordinary, &started.branches),
+        NodeOperation::Soft => {
+            let soft = ordinary(Local3DDeformation::Soft, &started.branches)?;
+            // The Taylor projector U is linear, so
+            // U(X) + S(X) - U(S(X)) = S(X) + U(X - S(X)). Applying U
+            // once to the completed soft remainder preserves the exact
+            // U/S/US forest algebra while avoiding two separately
+            // materialized, nearly cancelling UV branches.
+            let soft_remainder = started.branches.zip_add(&-soft.clone())?;
+            let uv_remainder = ordinary(Local3DDeformation::Ordinary, &soft_remainder)?;
+            soft.zip_add(&uv_remainder)
+        }
+        NodeOperation::ZeroMode(region) => {
+            let terms =
+                ZeroModeTerm::expand(ctx, orientation, current, given, region, lmb, &started)?;
+            let soft = ZeroModeTerm::restore(&terms, |term| Ok(Cow::Borrowed(&term.frozen)))?;
+            match region.kind() {
+                // The U of each factor precedes a union host in the forest.
+                ZeroModeHostKind::Union => Ok(soft),
+                // The zero-mode branch is a frozen vertex for every enclosing
+                // operation, whose U therefore subtracts only the reduced
+                // cograph. U(X) and U(S0(X)) must keep separate expansion
+                // scopes: the ordinary scope stays fixed under enclosing
+                // operations, the branch scope is co-scaled with it.
+                ZeroModeHostKind::Connected => {
+                    let uv = ordinary(Local3DDeformation::Ordinary, &started.branches)?;
+                    let uv_on_soft = ZeroModeTerm::restore(&terms, |term| {
+                        Ok(Cow::Owned(ordinary(
+                            Local3DDeformation::OrdinaryOnSoftBranch,
+                            &term.frozen,
+                        )?))
+                    })?;
+                    soft.zip_add(&uv)?.zip_add(&-uv_on_soft)
+                }
+            }
         }
     }
+}
+
+/// The input of every chart of the operation of a node on its active
+/// support.
+struct StartedFamily {
+    /// The residue family with the numerator that the node adds to its
+    /// given prefix attached and its active energies started.
+    branches: DirectResidueBranches,
+    /// The mass scope of the operation.
+    mass_scope: Atom,
+}
+
+/// The [`StartedFamily`] of the operation of `current` on `integrands`. A
+/// zero-temperature medium first takes the vacuum limit of the added
+/// occupations.
+fn start_family<S: ForestNodeLike>(
+    ctx: &UVCtx<'_>,
+    orientation: OrientationProjection<'_>,
+    current: &S,
+    given: &S,
+    active_subgraph: Option<&SuBitGraph>,
+    lmb: &LoopMomentumBasis,
+    integrands: &DirectResidueBranches,
+) -> Result<StartedFamily> {
+    let medium_mode = orientation.cff_options()?.medium_mode;
     let reduced = current.reduced_subgraph(given);
     let mut numerator = ctx
         .graph
-        .numerator(&reduced, given.subgraph())
-        .get_single_atom()
-        .expect("graph numerator should be available")
-        .simplify_color_with(ColorSimplifySettings {
-            simplify_non_color: false,
-            ..Default::default()
-        });
+        .color_reduced_numerator(&reduced, given.subgraph())
+        .wrap_err_with(|| {
+            format!(
+                "the numerator of {} relative to {} is not available",
+                reduced.string_label(),
+                given.subgraph().string_label(),
+            )
+        })?;
     let lmb_id = lmb
         .loop_edges
         .first()
@@ -472,9 +710,10 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
     for mass in physical_masses {
         numerator = numerator.replace(mass.clone()).with(mass * &mass_scope);
     }
-    // Finite-temperature S Taylor-expands the occupations together with the
-    // completed CFF. Defer their vacuum limit to U; other medium modes retain
-    // the existing vacuum soft counterterm.
+    // At finite temperature the zero-mode operation S0 reads the occupations
+    // of the completed CFF, and U projects the unfrozen ones to vacuum
+    // itself. A zero-temperature medium takes the vacuum limit of the
+    // occupations this component adds here.
     let vacuum_integrands;
     let integrands = if medium_mode == MediumMode::Vacuum || medium_mode.is_finite_temperature() {
         integrands
@@ -499,104 +738,199 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
         branch_count = integrands.iter_keys().count(),
         "Prepared a shared numerator before its Taylor kernel"
     );
-    let started = integrands.map_expressions(|atom| {
-        start(
-            ctx,
-            current,
-            atom,
-            &Atom::one(),
-            active_subgraph.as_ref(),
-            lmb,
-        )
-    })?;
-    match current.renormalization_scheme() {
-        ApproximationType::MUV | ApproximationType::PolePart => Direct3dApproximation::t(
-            Local3DDeformation::Ordinary,
-            ctx,
-            current,
-            given,
-            &started,
-            active_subgraph.as_ref(),
-            lmb,
-        ),
-        ApproximationType::IR => {
-            if current.dod() == 0 {
-                return Direct3dApproximation::t(
-                    Local3DDeformation::Ordinary,
+    let branches = integrands
+        .map_expressions(|atom| start(ctx, current, atom, &Atom::one(), active_subgraph, lmb))?;
+    Ok(StartedFamily {
+        branches,
+        mass_scope,
+    })
+}
+
+/// Every nonzero sector of a zero-mode host expands its whole support in the
+/// host's canonical chart, which the zero bins and enclosing hosts that
+/// cancel against it share, and keeps the soft set outside its support.
+fn ensure_zero_mode_chart<S: ForestNodeLike>(
+    ctx: &UVCtx<'_>,
+    current: &S,
+    region: &ThermalZeroModeRegion,
+    support: &SuBitGraph,
+    lmb: &LoopMomentumBasis,
+) -> Result<()> {
+    let host = current.subgraph().string_label();
+    ensure!(
+        support == current.subgraph(),
+        "internal error: a nonzero sector reaches the zero-mode host {host} on the partial \
+         support {}",
+        support.string_label(),
+    );
+    let loop_edges = lmb.loop_edges.iter().copied().collect::<BTreeSet<_>>();
+    let canonical = region
+        .coordinate_loop_edges()
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    ensure!(
+        loop_edges == canonical,
+        "internal error: the zero-mode host {host} must expand in its canonical chart {:?}, \
+         not in {:?}",
+        canonical,
+        loop_edges,
+    );
+    let static_lines = ctx
+        .graph
+        .iter_edges_of(support)
+        .filter(|(pair, edge, _)| pair.is_paired() && region.sigma().contains(edge))
+        .map(|(_, edge, _)| edge)
+        .collect_vec();
+    ensure!(
+        static_lines.is_empty(),
+        "internal error: the soft lines {static_lines:?} of the zero-mode host {host} lie in its \
+         rescaled support",
+    );
+    Ok(())
+}
+
+/// One order tuple of a zero-mode operation `S0`: its Taylor coefficient,
+/// re-keyed and frozen, and the static class propagators it multiplies.
+///
+/// The propagators stay apart while the host's own charts act on the
+/// coefficient. They do not depend on the Taylor parameter, and multiplied
+/// in only afterwards they remain top-level factors of every summand, which
+/// an enclosing projection reads off without expanding a frozen branch again.
+struct ZeroModeTerm {
+    frozen: DirectResidueBranches,
+    propagators: Atom,
+}
+
+impl ZeroModeTerm {
+    /// The terms of `S0` of the zero-mode host `current` with its `region` on
+    /// its `started` sector: for each tuple of the region, the zero-mode
+    /// coefficient of its sector, Taylor-expanded through its order `J`,
+    /// re-keyed to static soft energies and frozen.
+    ///
+    /// The region has one order per class in each tuple, as
+    /// [`ThermalZeroModeRegion`] builds them.
+    ///
+    /// # Errors
+    ///
+    /// The projection, Taylor series, re-keying or freezing fails, in the
+    /// context of the host and its tuple.
+    fn expand<S: ForestNodeLike>(
+        ctx: &UVCtx<'_>,
+        orientation: OrientationProjection<'_>,
+        current: &S,
+        given: &S,
+        region: &ThermalZeroModeRegion,
+        lmb: &LoopMomentumBasis,
+        started: &StartedFamily,
+    ) -> Result<Vec<Self>> {
+        let graph = ctx.graph;
+        let support = current.subgraph();
+        let host = support.string_label();
+        debug_assert!(
+            region
+                .tuples()
+                .iter()
+                .all(|tuple| tuple.orders().len() == region.classes().len()),
+            "an order tuple of the zero-mode host {host} has one order per class",
+        );
+        let sectors = region
+            .tuples()
+            .iter()
+            .map(ZeroModeTuple::sector)
+            .collect::<BTreeSet<_>>();
+        let mut terms = Vec::new();
+        for sector in sectors {
+            let tuples = region
+                .tuples()
+                .iter()
+                .filter(|tuple| tuple.sector() == sector)
+                .collect_vec();
+            let projection = region
+                .classes()
+                .iter()
+                .enumerate()
+                .map(|(index, class)| {
+                    ZeroModeClass::new(
+                        graph,
+                        class.edges().iter().copied(),
+                        tuples.iter().map(|tuple| tuple.orders()[index]),
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()
+                .and_then(|classes| ZeroModeProjection::new(classes, sector))
+                .wrap_err_with(|| {
+                    format!("the {sector:?} zero-mode projection of the host {host} is invalid")
+                })?;
+            let mut coefficients = projection
+                .stripped_coefficients(graph, &started.branches)
+                .wrap_err_with(|| {
+                    format!("the {sector:?} zero-mode projection of the host {host} failed")
+                })?;
+            for tuple in tuples {
+                let context = || format!("the order {tuple} of the zero-mode host {host}");
+                // The chart's series sees the coefficient's scalars resolved.
+                // As shared bodies they would bound the valuation of each
+                // root only through their probes, several orders below the
+                // root's own: the CFF variants of a bubble have poles at its
+                // coincident energies that cancel only in their sum.
+                let coefficient = coefficients
+                    .remove(tuple.orders())
+                    .ok_or_else(|| {
+                        eyre!("internal error: the zero-mode projection of {host} omits {tuple}")
+                    })?
+                    .resolved_scalars()
+                    .wrap_err_with(context)?;
+                let deformation = Local3DDeformation::ZeroMode {
+                    endpoint: tuple.taylor_order() - i64::from(current.dod()),
+                };
+                let frozen = Direct3dApproximation::t(
+                    deformation,
                     ctx,
                     current,
                     given,
-                    &started,
-                    active_subgraph.as_ref(),
+                    &coefficient,
+                    Some(support),
                     lmb,
-                );
+                )
+                .and_then(|expanded| expanded.rekey_static(orientation, region.sigma()))
+                .and_then(|expanded| {
+                    Direct3dApproximation::freeze_soft_branch(
+                        &expanded,
+                        graph,
+                        support,
+                        lmb,
+                        &started.mass_scope,
+                    )
+                })
+                .wrap_err_with(context)?;
+                terms.push(Self {
+                    frozen,
+                    propagators: projection.class_propagators(tuple.orders()),
+                });
             }
-            if medium_mode.is_finite_temperature() && ctx.settings.generate_integrated {
-                return Err(eyre!(
-                    "thermal soft counterterms require generate_integrated = false"
-                ));
-            }
-            let soft = Direct3dApproximation::t(
-                Local3DDeformation::Soft,
-                ctx,
-                current,
-                given,
-                &started,
-                active_subgraph.as_ref(),
-                lmb,
-            )?;
-            if medium_mode.is_finite_temperature() {
-                // The soft branch is a frozen vertex for every enclosing
-                // operation, whose U therefore subtracts only the reduced
-                // cograph. U(X) and U(S(X)) must keep separate expansion
-                // scopes: the ordinary scope stays fixed under enclosing
-                // operations, the branch scope is co-scaled with it.
-                let support = active_subgraph
-                    .as_ref()
-                    .unwrap_or_else(|| current.subgraph());
-                let soft =
-                    Direct3dApproximation::freeze_soft_branch(&soft, support, lmb, &mass_scope)?;
-                let uv = Direct3dApproximation::t(
-                    Local3DDeformation::Ordinary,
-                    ctx,
-                    current,
-                    given,
-                    &started,
-                    active_subgraph.as_ref(),
-                    lmb,
-                )?;
-                let uv_on_soft = Direct3dApproximation::t(
-                    Local3DDeformation::OrdinaryOnSoftBranch,
-                    ctx,
-                    current,
-                    given,
-                    &soft,
-                    active_subgraph.as_ref(),
-                    lmb,
-                )?;
-                return soft.zip_add(&uv)?.zip_add(&-uv_on_soft);
-            }
-            // The Taylor projector U is linear, so
-            // U(X) + S(X) - U(S(X)) = S(X) + U(X - S(X)). Applying U
-            // once to the completed soft remainder preserves the exact
-            // U/S/US forest algebra while avoiding two separately
-            // materialized, nearly cancelling UV branches.
-            let soft_remainder = started.zip_add(&-soft.clone())?;
-            let uv_remainder = Direct3dApproximation::t(
-                Local3DDeformation::Ordinary,
-                ctx,
-                current,
-                given,
-                &soft_remainder,
-                active_subgraph.as_ref(),
-                lmb,
-            )?;
-            soft.zip_add(&uv_remainder)
         }
-        ApproximationType::OS => unimplemented!(
-            "local on-shell counterterms are deferred until local counterterms can be derived from the 4D expanded representation"
-        ),
-        ApproximationType::Unsubtracted => panic!("should have been kept out of the wood"),
+        Ok(terms)
+    }
+
+    /// The sum of `map` of every term times its static propagators.
+    ///
+    /// # Errors
+    ///
+    /// `map` fails, or there is no term.
+    fn restore<'t>(
+        terms: &'t [Self],
+        mut map: impl FnMut(&'t Self) -> Result<Cow<'t, DirectResidueBranches>>,
+    ) -> Result<DirectResidueBranches> {
+        let mut restored = terms
+            .iter()
+            .map(|term| Ok(map(term)?.map(|root| root * &term.propagators)));
+        let first = restored
+            .next()
+            .ok_or_else(|| eyre!("internal error: a zero-mode host requests no order"))??;
+        restored.try_fold(first, |sum, term: Result<DirectResidueBranches>| {
+            sum.zip_add(&term?)
+        })
     }
 }
 
@@ -766,7 +1100,8 @@ impl Local3DLoopRescaling {
             ?deformation,
             "After series in local 3D hard parameter"
         );
-        let a = series_atom.replace(GS.rescale).with(Atom::num(1));
+        let order_tag = deformation.order_tag(rescaled_subgraph).to_pattern();
+        let a = series_atom.replace(GS.rescale).with(&order_tag);
 
         debug_tags!(#generation, #profile, #uv, #local, #summary;
             stage = "local_3d_t_output",
@@ -797,7 +1132,7 @@ impl Direct3dApproximation<'_> {
         let graph = ctx.graph;
         let reduced = current.reduced_subgraph(given);
         let rescaled_subgraph = active_subgraph.unwrap_or_else(|| current.subgraph());
-        let soft_branches = SoftBranches::new(rescaled_subgraph, graph.n_hedges(), deformation);
+        let soft_branches = SoftBranches::new(graph, rescaled_subgraph, deformation);
         // U takes the vacuum limit of every active occupation except those
         // retained by a frozen soft branch, whose temperature is co-scaled
         // below instead. Disjoint thermal coefficients keep their owners.
@@ -874,24 +1209,24 @@ impl Direct3dApproximation<'_> {
                 atomarg = atomarg.replace(momentum).with(rescaled);
             }
         }
-        if matches!(deformation, Local3DDeformation::Soft) {
+        if deformation.is_soft() {
             atomarg = atomarg
                 .replace(mass_scope.clone())
                 .with(mass_scope.clone() * GS.rescale);
         }
-        // A frozen soft branch is a vertex of this operation: its masses scale
-        // with the loop momenta, as the soft deformation scaled them.
+        // A frozen soft branch is a vertex of this operation: its masses and
+        // zero-mode temperatures scale with the loop momenta, as the soft
+        // deformation scaled them. A zero-mode chart also co-scales the
+        // temperature of every static class inside it, whose loop is part of
+        // the hard part it expands.
         let mut tag_error = None;
         atomarg = atomarg.replace_map(|view, _, output| {
-            let AtomView::Fun(scope) = view else {
-                return;
-            };
-            if tag_error.is_some() || scope.get_symbol() != *LOCAL_3D_SOFT_SCOPE {
+            if tag_error.is_some() {
                 return;
             }
-            match soft_branches.tag_role(view) {
-                Ok(Some(SoftBranchRole::Frozen)) => **output = view.to_owned() * GS.rescale,
-                Ok(_) => {}
+            match soft_branches.co_scales(view) {
+                Ok(true) => **output = view.to_owned() * GS.rescale,
+                Ok(false) => {}
                 Err(error) => tag_error = Some(error),
             }
         });
@@ -1030,7 +1365,6 @@ impl Direct3dApproximation<'_> {
         Ok(compact)
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn t<S: ForestNodeLike>(
         deformation: Local3DDeformation,
         ctx: &UVCtx<'_>,
@@ -1066,9 +1400,21 @@ impl Direct3dApproximation<'_> {
                 )
             })?;
         let endpoint = deformation.series_endpoint();
-        let series = rescaled.series_preserving_numerators(
-            GS.rescale, Atom::Zero.as_view(), endpoint, DirectResidueBranches::numerator_scope().1,
-        ).map_err(|error| eyre!(
+        let scope = DirectResidueBranches::numerator_scope().1;
+        let center = Atom::Zero;
+        // A zero-mode chart keeps a few negative orders only; its roots are
+        // probed through its endpoint.
+        let series = if matches!(deformation, Local3DDeformation::ZeroMode { .. }) {
+            rescaled.series_preserving_numerators_to_depth(
+                GS.rescale,
+                center.as_view(),
+                endpoint,
+                scope,
+            )
+        } else {
+            rescaled.series_preserving_numerators(GS.rescale, center.as_view(), endpoint, scope)
+        }
+        .map_err(|error| eyre!(
             "local 3D {deformation:?} Taylor series through order {endpoint} failed for graph `{}` at {} given {}, in loop coordinates {:?}: {error}",
             ctx.graph.name, current.subgraph().string_label(),
             given.subgraph().string_label(), lmb.loop_edges,
@@ -1093,22 +1439,7 @@ impl Direct3dApproximation<'_> {
                 };
                 let result =
                     Atom::add_many(coefficients.into_iter().map(|(power, coefficient)| {
-                        let mut keys = BTreeSet::new();
-                        let family = symbol!("gammalooprs::uv::numerator_family");
-                        coefficient.visitor(&mut |part| {
-                            if let AtomView::Fun(call) = part
-                                && call.get_symbol() == family
-                            {
-                                // Homogeneous factors are closed scalars:
-                                // plain function indeterminates to together().
-                                if !is_factor_call(part) {
-                                    keys.insert(part.to_owned());
-                                }
-                                return false;
-                            }
-                            true
-                        });
-                        let keys = keys.into_iter().collect_vec();
+                        let keys = numerator_family_calls(coefficient.as_view());
                         power * coefficient.cancel_scalar_poles(&keys)
                     }));
                 let result = if result.as_view().get_byte_size() < atom.as_view().get_byte_size() {
@@ -1140,10 +1471,13 @@ impl Direct3dApproximation<'_> {
         } else {
             series
         };
+        let order_tag = deformation
+            .order_tag(active_subgraph.unwrap_or_else(|| current.subgraph()))
+            .to_pattern();
         series.map_expressions(|atom| {
             let a = atom
                 .replace(GS.rescale)
-                .with(Atom::num(1))
+                .with(&order_tag)
                 .collect_compact_factors();
             debug_tags!(#uv, #local; log.expr = a, "Local 3D approximation");
             Ok(a)
@@ -1155,8 +1489,15 @@ impl Direct3dApproximation<'_> {
 #[path = "soft_tests.rs"]
 mod soft_tests;
 
+#[cfg(test)]
+#[path = "test_support.rs"]
+mod test_support;
+
 #[path = "thermal_soft.rs"]
 mod thermal_soft;
+
+#[path = "zero_mode.rs"]
+mod zero_mode;
 
 #[cfg(test)]
 #[path = "pole_audit.rs"]

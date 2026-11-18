@@ -361,6 +361,18 @@ pub fn is_default_esurface_existence_threshold(val: &f64) -> bool {
     show_defaults_helper(*val == super::DEFAULT_ESURFACE_EXISTENCE_THRESHOLD)
 }
 
+pub(crate) fn is_default_zero_mode_energy_escalation_factor(val: &f64) -> bool {
+    show_defaults_helper(*val == super::DEFAULT_ZERO_MODE_ENERGY_ESCALATION_FACTOR)
+}
+
+pub(crate) fn is_default_zero_mode_hierarchy_quad_escalation_factor(val: &f64) -> bool {
+    show_defaults_helper(*val == super::DEFAULT_ZERO_MODE_HIERARCHY_QUAD_ESCALATION_FACTOR)
+}
+
+pub(crate) fn is_default_zero_mode_hierarchy_escalation_factor(val: &f64) -> bool {
+    show_defaults_helper(*val == super::DEFAULT_ZERO_MODE_HIERARCHY_ESCALATION_FACTOR)
+}
+
 pub fn is_default_vakint_normalization(val: &String) -> bool {
     show_defaults_helper(val == "MSbar")
 }

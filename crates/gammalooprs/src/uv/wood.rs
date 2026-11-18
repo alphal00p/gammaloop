@@ -5,15 +5,12 @@ use crate::{
     uv::{Spinney, approx::CutStructure, forest::CutForests},
 };
 use color_eyre::Result;
-use eyre::WrapErr;
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
 use slotmap::SecondaryMap;
 use std::collections::VecDeque;
 
-use linnet::half_edge::{
-    HedgeGraph,
-    subgraph::{InternalSubGraph, SubSetOps},
-};
+use linnet::half_edge::HedgeGraph;
+use linnet::half_edge::subgraph::InternalSubGraph;
 
 // use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
@@ -38,20 +35,10 @@ impl CutWoods {
     ) -> Result<Self> {
         let mut woods = vec![];
         let mut vakint_settings = vec![];
-        for (cut_index, cut) in cuts.cuts.iter().enumerate() {
-            let mut subgraph = graph.full_filter();
-            subgraph.subtract_with(&graph.initial_state_cut.left);
-            subgraph.subtract_with(&cut.union);
-
-            let mut spinneys = graph
-                .classified_spinneys(&subgraph, &settings.uv, &graph.loop_momentum_basis)
-                .wrap_err_with(|| {
-                    format!(
-                        "graph '{}' cut {cut_index}: failed to classify UV counterterm components",
-                        graph.name
-                    )
-                })?;
-            graph.restrict_full_observable_spinney(&mut spinneys, &settings.uv, &settings.medium);
+        // The zero-mode host policy never runs on this route.
+        let classified = graph.classified_cut_spinneys(&cuts, &settings.uv, &settings.medium);
+        for (cut, spinneys) in cuts.cuts.iter().zip(classified) {
+            let spinneys = spinneys?;
 
             for spinney in spinneys.iter() {
                 debug_tags!(#uv, #graph, #spinney,#generation;

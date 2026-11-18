@@ -274,6 +274,319 @@ not as numerator tensor components.
 
 Requesting LTD requires local UV counterterms from expanded four-dimensional integrands and a complete orientation sum. Mixed CFF/LTD generation uses that same UV setting for both representations. Individual raised threshold residue-order coefficients may differ between CFF and LTD. Their complete contribution for each physical degenerate cut/residue must agree locally, with all pieces multiplying the same observable function grouped together. LTD threshold localization uses its own denominator factors and never reconstructs CFF to fix those individual coefficients.
 
+== Finite-temperature zero-mode subtraction
+<finite-temperature-zero-mode-subtraction>
+At finite temperature a massless boson without a chemical potential keeps an
+ungapped static Matsubara mode, which makes soft regions of the loop momenta
+divergent. The local soft subtraction follows the effective-theory regions: it
+keeps the static mode of the soft lines exact, Taylor-expands the gapped hard part
+jointly in their momenta at fixed temperature, and adds nested zero bins where the
+hard part itself contains a static line. Ownership and data flow are summarized in
+#link("architecture-current.typ#3-2-three-dimensional-representations-and-numerator-energy-ownership")[the current architecture].
+The host policy lives in `uv/thermal_zero_mode.rs`, the projection in
+`uv/approx/direct_3d/zero_mode.rs`, the chart and node dispatch in `kernel.rs`, and
+the frozen-branch tag rules in `thermal_soft.rs`. The examples below use the
+three-loop ring graphs `tests/resources/graphs/thermal_*_ring.dot`: a quark bubble $A$
+(loop $p$) and a second bubble $B$ (loop $k$: quark, gluon or ghost; a gluon tadpole
+for the tadpole ring) joined by two static gluons carrying $q$; $h = A union B$,
+and $G$ is the whole graph.
+
+=== Soft sets, classes and orders
+<zero-mode-soft-sets-classes-and-orders>
+The soft set $Sigma(gamma)$ of a candidate host $gamma$ consists of the loop lines of
+the cut subgraph outside $gamma$; bridges carry no loop momentum. It is eligible when
+it is nonempty, every line is massless, has a zero mode (`UVE::zero_mode`: a boson,
+ghosts included, without a chemical potential) and carries loop momentum but no
+graph-external momentum, and it has $L_Sigma = L - L(gamma) >= 1$ loops, with $L$
+the loop count of the cut subgraph. Its static infrared degree
+(`UltravioletGraph::static_ir_degree`) is
+
+$ omega(Sigma) = 3 L_Sigma + sum_(e in Sigma) "dod"(e) + sum_(v subset Sigma) "dod"(v), $
+
+where the vertex sum runs over vertices whose every half-edge is a paired line of
+$Sigma$, with the edge and vertex degrees of `local_dod`. The static mode diverges
+iff $omega(Sigma) <= 0$.
+
+Raised edge groups of $Sigma$ carry one Matsubara frequency at one on-shell energy
+and form its frequency classes $c$ (`ZeroModeClassSpec`): $nu_c$ is the number of
+edges and the smallest edge $r_c$ represents the class. Classes are taken by
+decreasing $nu_c$, then $r_c$, while their signatures in a loop basis of the cut
+subgraph with $gamma$ contracted stay independent, until there are $L_Sigma$. The
+other lines of $Sigma$ are static conditions implied by the classes: they keep their
+on-shell energies and receive no further temperature.
+
+A host requests order tuples $a = (a_c)$ (`ZeroModeTuple`), each with the relative
+Taylor order of the hard part
+
+$ J(a) = -omega(Sigma) - sum_c (2 nu_c - a_c). $
+
+- The static tuple $a_c = 2 nu_c$ reads the `ZeroModeSector::Complete` sector at
+  $J = -omega(Sigma)$. A static mode with $J < 0$ converges and gets no host.
+- Under vacuum subtraction a single class also has the odd vacuum-soft pole
+  $a = 2 nu - 1$, read from the `ZeroModeSector::HardVacuum` sector, in which every
+  distribution outside the class is at its vacuum value, at $J = -omega(Sigma) - 1$
+  when that is nonnegative. The full thermal integrand is even in each class
+  energy $x_c$, while the four-dimensional soft region of its vacuum part gives at
+  most the pole $x_c^(1 - 2 nu_c)$, so tuples mixing static and odd orders vanish.
+- `vacuum_subtraction = false` is supported: hosts then request only the static
+  tuple.
+- The projection is exact only for $a_c in {2 nu_c, 2 nu_c - 1}$. A host that needs
+  a lower order (`UnsupportedOrders::BelowVacuumPole`) or the vacuum pole of several
+  classes at once (`UnsupportedOrders::MultiClassVacuumPole`) is an error.
+
+On the rings, the soft set of $h$ is the static gluon pair (one class, $nu = 2$),
+with $omega = -1$: tuple $(4)$ at $J = 1$, plus $(3)$ at $J = 0$ under vacuum
+subtraction. On the gluon and ghost rings the quark bubble $A$ also hosts
+$Sigma(A)$, the static pair and the second bubble, with $omega = 0$ and the single
+tuple $(4, 2)$ at $J = 0$.
+
+=== Hosts and forest
+<zero-mode-hosts-and-forest>
+Candidates are connected `IR` spinneys of positive degree and disjoint unions whose
+every component is one; `classified_spinneys` tags such unions `MUV`, so their
+components decide. Hosts therefore need
+`renormalization_prescription.massless_power_divergent = IR`. Per cut subgraph,
+`assign_zero_mode_hosts`:
+
++ computes each candidate's canonical chart (`Graph::canonical_component_lmb`; its
+  loop edges are stored as `coordinate_loop_edges`) and accepts candidates from the
+  inside out. A line of the candidate with a static mode that carries crown momentum
+  in this chart cannot be Taylor-expanded; it must lie in the soft set of an accepted
+  inner host, its zero bin, or the candidate gets no region;
++ prunes an inner host contained in an outer host when its extra soft lines are safe
+  in the outer chart, its static order does not exceed the outer one and it is no
+  zero bin. Then $S^0_"out" S^0_"in" = S^0_"in"$ and its forest terms cancel; this
+  removes the quark-bubble host of the tadpole ring;
++ requires the hosts to form a chain under inclusion, in which only a union host
+  contains another, as one of its components, on a single uncut structure;
++ takes every cycle union, and the empty subgraph, as a hard part: an eligible soft
+  set $Sigma'$ with $omega(Sigma') <= 0$ must be the soft set of a host, or contain
+  the soft set of a host $gamma$ whose chart keeps the extra lines safe and with
+  $omega(Sigma') + J_gamma + 1 > 0$, where $J_gamma$ is the host's static order;
++ installs the `ThermalZeroModeRegion` of a connected host on its spinney and that of
+  a union host on an `IR` copy of the union (the plain union stays `MUV`), and
+  demotes every other `IR` spinney to `MUV`.
+
+The pass runs iff `subtract_uv` and
+`UVgenerationSettings::freezes_thermal_soft_branches` hold: finite temperature,
+`hedge_poset`, a 3D final integrand and `generate_integrated = false`. It does not
+depend on vacuum subtraction. `Graph::restrict_full_observable_spinney` then keeps
+the full-observable spinney under vacuum subtraction as a plain `MUV` U when a host
+exists, and drops it otherwise; without vacuum subtraction the spinney keeps its
+ordinary U. A host always needs it: its static cograph is logarithmically divergent
+at the top Taylor order, and the whole-graph U is its local R\* subtraction. A host
+without the retained spinney is an error.
+
+A connected host and a union host $h$ apply
+
+$ H_gamma = S^0_gamma + U_gamma - U_gamma S^0_gamma, quad H_h = S^0_h. $
+
+The connected host's own U acts on its frozen terms in the
+`Local3DDeformation::OrdinaryOnSoftBranch` role, with the branch scope that
+enclosing operations co-scale, before the class propagators are multiplied in.
+
+The union host is a second wood node (`WoodRole::UnionHost`) on the subgraph of its
+plain factorized join, above it, and always one collective operation: every
+transition into it carries its full scope. The U of each factor precedes it, and
+the trace order applies $S^0_h$ to the outputs of the factors' U chains, which
+supplies its UV subtraction. A factorized join replays its factors in a pinned
+order: a factor holding a connected host whose soft set meets another factor
+replays first, so the other factor's U acts on the zero mode ($U_B S^0_A$; the
+reverse order gives $S^0_A U_B = 0$). Factors that must each precede another are
+an error (`ZeroModeHostError::MutuallyCoveringJoin`). On the gluon and ghost rings
+the host chains therefore sum to
+
+$ (1 - S^0_h)(1 - U_B)(1 - H_A) F = (1 - S^0_h)(1 - U_B)(1 - U_A)(1 - S^0_A) F $
+
+without any commutation assumption. The two-loop spinneys and the whole-graph U
+complete the forest.
+
+=== The zero-mode operation
+<the-zero-mode-operation>
+`apply_taylor` returns an all-zero input unchanged, as for an integrated prefix
+covering one component of a union host. A nonzero input must expand the whole host
+support in its stored canonical chart, with no soft line in the rescaled support;
+violations are internal errors. For each tuple, `ZeroModeTerm::expand` then:
+
++ projects the tuple's sector. In the completed thermal CFF, the energies of all
+  edges of class $c$ are set to one auxiliary energy $x_c$ in residue roots,
+  numerator bodies and distribution arguments, and the class distributions become
+  Laurent polynomials in $x_c$. The static mode is the pole $T \/ x_c^(2 nu_c)$
+  times the static remainder; the other Matsubara modes are analytic at $x_c = 0$,
+  since numerators and contact surfaces are polynomial in $x_c$. The projection is
+  the Laurent coefficient
+  $ P_(c, a) X = "OSE"(r_c)^(-a) [x_c^(-a)] X, $
+  and $P_(c, 2 nu_c)$ selects the zero mode. Classes are projected in turn; the
+  iterated coefficients are the joint Laurent coefficients. The temperature of the
+  projected mode is written as the tag $T_("zm")(r_c)$. A summand of the form
+  $f dot.op "OSE"(r_c)^(-a)$, with $f$ free of class energies, is read off
+  unchanged, so the projection is idempotent; a frozen branch that would reach a `HardVacuum`
+  projection unprojected is an internal error (`ZeroModeError::FrozenHardVacuum`);
++ Taylor-expands the coefficient, with the class propagators held apart, in the
+  chart `Local3DDeformation::ZeroMode { endpoint }` with
+  $"endpoint" = J - "dod"(gamma)$: the soft chart of the whole host support at fixed
+  physical temperature and chemical potentials, through relative order $J$. It
+  compensates every occupation of the support with one representative per
+  statistics and chemical potential across all components of a union host, so the
+  Landau pairs of the CFF variants cancel within each coefficient; the chart's series
+  then cancels the momentum-dependent denominators of each coefficient symbolically,
+  per numerator monomial (`NumeratorAtomExt::cancel_momentum_poles`), so the
+  $1 \/ (p dot q)$ poles it creates never reach floating point. It co-scales the
+  $T_"zm"$ of every class inside the support. A union host is one joint expansion of
+  its components, a product truncated at total degree $J$, never a product of
+  separate component expansions. On the rings the endpoints are $-3$ and $-4$ for
+  $h$ (degree 4) and $-2$ for $A$ (degree 2);
++ re-keys every residue row to static soft energies
+  (`DirectResidueBranches::rekey_static`), so numerators attached later see the soft
+  lines at zero energy;
++ freezes the branch (`freeze_soft_branch`) and multiplies the class propagators
+  back in as top-level factors, which an enclosing projection reads off without
+  expanding the branch again.
+
+=== Zero-mode tags and minimal depth
+<zero-mode-tags-and-minimal-depth>
+Two tags, defined next to `LOCAL_3D_SOFT_SCOPE` in `kernel.rs`, keep the static
+structure visible until final assembly, which sets the temperature tag to $1 \/ beta$
+and the order tag to one:
+
+- `ZERO_MODE_TEMPERATURE` (`gammalooprs::zero_mode_temperature`), $T_"zm"$: the
+  temperature of a static mode. Its argument is a class representative edge, as an
+  integer, or the `S_<label>` owner of the completed zero-mode branch that took the
+  class over.
+- `ZERO_MODE_ORDER` (`gammalooprs::zero_mode_order`), $lambda_gamma$, with the
+  `S_<label>` owner of $gamma$: the zero-mode chart writes it for the Taylor
+  parameter of its finished series, so a term of relative order $j$ carries
+  $lambda_gamma^(j - "dod"(gamma))$.
+
+`normalize_local_tags` sets $lambda = 1$ and $T_"zm" = 1 \/ beta$ in the final
+integrand; the overlap proof treats both tags as unfinished. Freezing a branch
+re-owns the $T_"zm"$ of the classes inside its support, and those of strictly
+nested zero-mode branches, to its own owner, and sets the strictly nested $lambda$
+to one, so its own $lambda$ counts the whole vertex. A later operation multiplies a
+tag by its Taylor parameter, like its loop momenta, according to the tag's role
+(`SoftBranches::co_scales`; frozen means owned by a branch strictly inside the
+operation's support):
+
+#table(
+  columns: (auto, 1fr, 1fr),
+  table.header([Tag], [Zero-mode chart], [Ordinary charts]),
+  [$T_("zm")(r)$], [co-scaled iff the class lies in the support], [fixed],
+  [$T_("zm")(S_eta)$], [co-scaled iff frozen], [co-scaled iff frozen; an internal error on the own branch's U],
+  [$lambda_eta$], [fixed], [co-scaled iff frozen; fixed on the own or a disjoint branch],
+)
+
+A frozen term $f_j q^j$ of relative order $j$, with its retained occupations and
+carrier measure, is homogeneous of degree $"dod"(gamma) - j$ in every enclosing
+chart under the co-scaling of frozen branches; the co-scaled
+$lambda^(j - "dod"(gamma))$ compensates that degree, so only $q^j$ counts. An
+enclosing U, whose series ends at order zero, thus expands unfrozen rows at their
+four-dimensional depth and frozen rows at the UV degree of the static reduced
+cograph, in one series call. On the rings: $U_G S^0_A$ has depth 0, $U_B S^0_A$
+depth 1, the triangle spinneys give $U_D S^0_A = U_D U_A S^0_A = U_G U_D S^0_A = 0$,
+and $U_G S^0_h$ expands a term of order $j$ at depth $j - 1$, so only the $q$-linear
+term and the vacuum-soft term (depth 0) survive.
+
+This minimal depth is a scheme choice, not a finiteness condition. It gives the
+minimal add-back, the one of the dimensionally reduced effective theory, and the
+depths of cancelling pairs coincide by construction. Expanding frozen rows at the
+co-scaled four-dimensional depth would also leave a finite remainder, the
+whole-graph U then covering the nonzero $U_D S^0_A$, but its add-back gains
+$integral U_G U_D S^0_A$ and depth-two mass terms. Since a depth error stays UV
+finite, UV profiles cannot detect it; the exact unit pins
+`enclosing_u_acts_on_frozen_s0_at_the_static_cograph_degree`,
+`minimal_depth_annihilates_subcritical_cographs` and
+`vacuum_soft_term_gets_its_ring_u` fix the U images of the frozen branches.
+
+=== Integrated add-back
+<zero-mode-integrated-add-back>
+The integrated add-back of the zero-mode subtraction is not generated: with
+`generate_integrated = true` the host policy does not run, and scheme validation
+rejects every positive-degree finite-temperature `IR` component. The local remainder
+$R$ needs no add-back to be integrable, but $integral R$ depends on the vacuum mass
+$M$ (`mUV`) until the add-back is supplied. On the rings, with $Pi_X$ the integrand
+of bubble $X$ at static external $q$ after its Matsubara sum, $Pi_X^((i))$ its
+order-$i$ Taylor term in $q$, $Pi_X^v$ its vacuum part, $N_0(k, q)$ the numerator
+of the second bubble's vertices at zero energies, and $S^0_(h, 3)$ the vacuum-soft
+tuple of $S^0_h$:
+
+- Scaleless, with zero integral: $S^0_h$ and its $U_A$, $U_B$ variants
+  ($integral q^(j - 4)$ and $integral |q|^(-3)$); $S^0_A$, whose UV and IR poles
+  cancel (the two-loop logarithm of the static theory); $S^0_h S^0_A$,
+  $U_A S^0_A$ and $U_B S^0_A$; and the odd whole-graph images $U_G S^0_h$ at
+  $j = 1$, $U_G S^0_h S^0_A$ and $U_G S^0_h U_B S^0_A$.
+- Nonzero and $M$-dependent:
+  - on the gluon and ghost rings,
+    $ U_G (1 - U_A)(1 - U_B) S^0_A = & T^2 [integral_p (1 - U_A) Pi_A^((0))]
+      integral_q integral_k \{ frac(N_0(k, q), (q^2 + M^2)^2 (k^2 + M^2) ((k - q)^2 + M^2)) \
+      & - frac(N_0(k, 0), (q^2 + M^2)^2 (k^2 + M^2)^2) - (q"-linear") \}, $
+    with a $1 \/ epsilon$ pole and $log M$, the matching pole of the static theory;
+  - under vacuum subtraction, $U_G S^0_(h, 3) U_A U_B$, independent of $T$, with
+    the $1 \/ epsilon$ pole of $integral (q^2 + M^2)^(-3 \/ 2)$;
+  - the ordinary vacuum add-backs of the U of $A$, $B$, the two-loop spinneys and
+    $G$.
+
+No integration-level check of $d integral R \/ d M$ exists yet.
+
+=== Limitations
+<zero-mode-limitations>
+- On the gluon and ghost rings the joint soft remainder ($q, k -> 0$ together)
+  scales with power $+1$, from a term odd under $(q, k) -> (-q, -k)$; its
+  parity-even part scales with $+2$. The integral converges, but with per-loop
+  spherical maps the Monte Carlo variance of the odd term diverges
+  logarithmically. Antithetic $(q, k) -> (-q, -k)$ sampling is not implemented.
+- $omega(Sigma)$ ignores the suppression of a ghost vertex whose momentum factor is
+  soft. It never misses a divergence, but on other graphs it can flag a convergent
+  soft set containing ghost lines, which then gets an unnecessary but harmless
+  counterterm or a spurious hostless error.
+- A host needs the retained whole-graph spinney
+  (`ZeroModeHostError::MissingEnclosingSpinney`), so graphs whose full-graph degree is
+  negative are rejected: their static cograph has no local R\* subtraction.
+- Near a soft static mode the remainder's rounding error comes from rounding the soft
+  momenta against the hard ones and recurs at the rotated point, so the stability
+  rotations cannot certify it. Evaluation therefore escalates up front at every point
+  of a graph whose integrand subtracts a zero mode, that is, one where some counterterm
+  hosts a zero-mode region; other finite-temperature graphs, bare ones included, keep
+  the ordinary stability ladder. It starts in quadruple precision when
+  the softest such line has an on-shell energy below
+  `runtime.stability.zero_mode_energy_escalation_factor` times the temperature
+  (default $10^(-2)$), or when the softest internal massless line of any species has
+  one below `runtime.stability.zero_mode_hierarchy_quad_escalation_factor` times the
+  sum $Sigma$ of the loop-momentum norms (default $5 dot 10^(-3)$). It starts at the
+  last stability level when that line is below
+  `runtime.stability.zero_mode_hierarchy_escalation_factor` times $Sigma$ (default
+  $5 dot 10^(-6)$). The factors must be finite, and the quadruple-precision factor
+  must be the larger one.
+- These thresholds are measured on the four rings, with the static lines at an energy
+  $E$ near $0.6 T$ and the default tolerance $10^(-5)$:
+  - In double precision the remainder's error grows roughly like $(Sigma / E)^4$. With
+    vacuum subtraction it first exceeds the tolerance at $E / Sigma$ between
+    $1.4 dot 10^(-3)$ and $3.8 dot 10^(-3)$, depending on ring and ray, and stays below
+    $2 dot 10^(-6)$ at $E / Sigma >= 5 dot 10^(-3)$.
+  - A massless quark of energy $kappa < E$ multiplies that error by about $E / kappa$
+    with vacuum subtraction and $(E / kappa)^2$ without it, without bound at a fixed
+    $Sigma / E$: it is the bare integrand's own rounding loss, which grows like
+    $kappa^(-2)$, amplified by the cancellation. Measured on the quark ring at
+    $E / Sigma approx 6 dot 10^(-3)$, a quark at $kappa = 10^(-4) T$ already gives
+    $10^(-4)$ with vacuum subtraction and $0.1$ without. That growth is slower than
+    the growth in $Sigma / E$, so comparing the softest line of any species with $Sigma$
+    keeps the error of every point left in double precision within that of a static
+    line at the threshold.
+  - Quadruple precision exceeds the tolerance from $E / Sigma approx 3 dot 10^(-6)$
+    without vacuum subtraction and $3 dot 10^(-7)$ with it, and far earlier next to a
+    soft quark.
+  - Without vacuum subtraction, double precision still misses the tolerance by up to a
+    factor of three just above the threshold, at $E / Sigma approx 6 dot 10^(-3)$, on a
+    few rays with a hard second loop. The vacuum UV subtraction of the same graph,
+    which has no static line, loses as much on those rays, so this is the rounding of
+    the ordinary UV subtraction, which no a priori tier covers.
+- Errors name the offending edge sets: a divergent soft set without a host
+  (`Hostless`, naming `renormalization_prescription.massless_power_divergent = IR`),
+  hosts that are not nested (`IncompatibleHosts`) or nested other than as a
+  component of a union host (`UnsupportedNesting`), unsupported orders
+  (`UnsupportedOrders`), and a host on a structure with cuts (`NonTrivialCut`).
+  `CollectiveUnionScope`, `ClassRank` and the chart and tag checks of the kernel
+  report internal errors.
+
 == Marker Representation
 <marker-representation>
 UV markers are diagnostic symbolic structure. Approximation,
@@ -355,13 +668,20 @@ For accepted tails, tables label the sparse terminal-zero evidence as `zero tail
 - Local three-dimensional, local four-dimensional, and integrated counterterms
   support `MUV`, `PolePart`, and `IR` within the supported wood assignments.
   Positive-degree `IR` uses the completed soft prescription H; degree-zero H
-  reduces to U. Integrated `IR` uses the signed finite projection described above.
+  reduces to U. At finite temperature, positive-degree `IR` is the operation of a
+  zero-mode host, described in
+  #link(<finite-temperature-zero-mode-subtraction>)[Finite-temperature zero-mode subtraction],
+  whose integrated add-back is not generated. Integrated `IR` uses the signed finite
+  projection described above.
 - Scheme validation rejects a positive-degree MUV parent containing a
   positive-degree IR child: its reduced-cograph subtraction lacks the containing
-  soft branch. The exception is a finite-temperature hedge-poset direct-3D forest
-  without integrated counterterms, where every enclosing operation treats the
-  completed soft branch as a frozen vertex, so the parent's U is that local
-  subtraction; integrated thermal soft counterterms are rejected up front. It also rejects IR and PolePart components in one nested or
+  soft branch. At finite temperature on the hedge-poset direct-3D route without
+  integrated counterterms, the zero-mode host policy runs first: only zero-mode
+  hosts keep `IR`, every other `IR` spinney becomes a plain U, and every enclosing
+  operation treats a completed zero-mode branch as a frozen vertex, so a parent's U
+  is the local subtraction of its static reduced cograph. On every other route a
+  positive-degree finite-temperature `IR` component is rejected up front, including
+  with integrated counterterms. It also rejects IR and PolePart components in one nested or
   disconnected UV wood until their combined integrated policy is implemented.
   Components that cannot occur together in a wood do not trigger this rejection.
 - Local `OS` dispatch remains deferred, and requesting integrated OS is rejected

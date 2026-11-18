@@ -144,11 +144,25 @@ filter = "test(=cool_qm_eos::cool_qm_eos_nlo_matches_example_target)"
 test-group = "integration"
 
 [[profile.default.overrides]]
-# Full mixed-ring generation and UV/soft scans take tens of minutes in ci-optim.
-# Run both chemical potentials serially in the main slow lane.
+# One zero-mode subtraction test per thermal ring and vacuum-subtraction setting
+# (the mixed ring with vacuum subtraction only), each against its bare control,
+# run serially in the main slow lane. At load 120-240 in dev-optim the mixed ring
+# took 44 min, the ghost ring 5.6 and 4.1 min, the quark ring 3.5 and 3.0 min, the
+# tadpole ring and the quark bubble under a minute each. The
+# `thermal_quark_ring_default_stability_levels*` tests, which check the quark
+# ring's default stability levels against arb at widely separated scales, took
+# about 1 and 2-3 min.
 filter = "binary(=thermal_soft_ct)"
 test-group = "soft-ct-serial"
 slow-timeout = { period = "10m", terminate-after = 12, on-timeout = "fail" }
+
+[[profile.default.overrides]]
+# Bare thermal-ring generation takes seconds; each ring's IR and UV scans at two
+# chemical potentials and its MUV-prescription error, raised in the scheme validation,
+# stay in the fast lane. The names do not match `integration`.
+# The slowest, the mixed ring, took 110 s serially on a heavily loaded machine.
+filter = "binary(=thermal_ring_power_counting)"
+test-group = "integration"
 
 [[profile.default.overrides]]
 filter = "test(/(^|::)epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes$/) or test(/(^|::)epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_routes$/) or test(/(^|::)gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections$/) or test(/(^|::)gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections$/) or test(=test_integrated_uv_cts::scalar_bubble_integrated) or test(=sunrise_scalar_1_uv) or test(=dotted_sunrise_uv) or test(=thermal_sunrise_uv)"

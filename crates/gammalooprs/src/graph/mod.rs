@@ -70,6 +70,11 @@ pub struct Graph {
     pub polarizations: Vec<(PolDef, Atom)>,
     /// Compact graph-local threshold-counterterm directives from the DOT input.
     pub threshold_counterterms: autogen::Autogen<threshold_counterterms::ThresholdCountertermSpec>,
+    /// Whether the generated integrand subtracts a thermal zero mode, set by
+    /// the UV generation when some counterterm hosts a zero-mode region. Only
+    /// such integrands need the zero-mode precision escalation
+    /// ([`Graph::soft_line_energies`]).
+    pub(crate) zero_mode_subtracted: bool,
 }
 
 impl LogMessage for Graph {
@@ -460,6 +465,17 @@ impl Graph {
         }
 
         subgraph
+    }
+
+    /// The union of the edge subgraphs of the edges with the ids `edges`, the
+    /// way test fixtures name them.
+    #[cfg(test)]
+    pub(crate) fn edge_subgraph(&self, edges: &[usize]) -> SuBitGraph {
+        edges
+            .iter()
+            .fold(self.underlying.empty_subgraph(), |subgraph, &edge| {
+                subgraph.union(&self.get_edge_subgraph(EdgeIndex(edge)))
+            })
     }
 
     pub(crate) fn iter_loop_edges(

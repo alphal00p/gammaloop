@@ -39,6 +39,7 @@ use symbolica::{
     function,
 };
 
+use crate::uv::thermal_zero_mode::ThermalZeroModeRegion;
 use linnet::half_edge::involution::EdgeIndex;
 #[cfg(test)]
 use linnet::half_edge::involution::{EdgeVec, Orientation};
@@ -64,7 +65,7 @@ pub trait Rooted {
     fn root() -> Self;
 }
 
-pub trait ForestNodeLike: LogMessage {
+pub(crate) trait ForestNodeLike: LogMessage {
     fn subgraph(&self) -> &SuBitGraph;
     fn lmb(&self) -> &LoopMomentumBasis;
     fn lmb_id(&self) -> EdgeIndex {
@@ -75,6 +76,11 @@ pub trait ForestNodeLike: LogMessage {
     fn renormalization_scheme(&self) -> ApproximationType;
     fn topo_order(&self) -> usize;
     fn reduced_subgraph(&self, given: &Self) -> SuBitGraph;
+    /// The finite-temperature zero-mode region this node hosts. Only spinneys
+    /// of the direct local-3D hedge-poset wood carry one.
+    fn thermal_zero_mode(&self) -> Option<&ThermalZeroModeRegion> {
+        None
+    }
 }
 
 pub struct UVCtx<'a> {
@@ -379,6 +385,25 @@ impl<'a> OrientationProjection<'a> {
         }
     }
 
+    /// The stored production orientation that `selector_id` selects, which
+    /// owns its complete residue energy map.
+    ///
+    /// # Errors
+    ///
+    /// Four-dimensional-only renormalization has no residue maps, and the
+    /// production expression must contain the selected orientation.
+    pub(crate) fn production_orientation(
+        self,
+        selector_id: OrientationID,
+    ) -> Result<&'a OrientationExpression> {
+        self.exact_orientations()?.get(selector_id).ok_or_else(|| {
+            eyre!(
+                "missing production energy map for orientation {}",
+                selector_id.0
+            )
+        })
+    }
+
     /// Apply one branch-owned exact energy map only to the newly owned
     /// numerator fragment. The source map, when present, is authoritative;
     /// otherwise the production selector also owns the numerator map.
@@ -389,12 +414,7 @@ impl<'a> OrientationProjection<'a> {
         source_edge_energy_map: Option<&[LinearEnergyExpr]>,
         numerator: &Atom,
     ) -> Result<Atom> {
-        let orientation = self.exact_orientations()?.get(selector_id).ok_or_else(|| {
-            eyre!(
-                "missing production energy map for orientation {}",
-                selector_id.0
-            )
-        })?;
+        let orientation = self.production_orientation(selector_id)?;
         let replacements = source_edge_energy_map.map_or_else(
             || orientation.energy_replacements_gs(graph),
             |edge_energy_map| {
@@ -413,6 +433,12 @@ impl CutStructure {
         Self {
             cuts: vec![CutSet::empty(graph.n_hedges())],
         }
+    }
+
+    /// Whether the structure is one uncut subgraph, as for vacuum graphs and
+    /// amplitudes without threshold cuts.
+    pub(crate) fn is_trivial(&self) -> bool {
+        matches!(self.cuts.as_slice(), [cut] if cut.union.is_empty())
     }
 }
 

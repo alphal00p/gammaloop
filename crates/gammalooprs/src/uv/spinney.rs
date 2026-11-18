@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 
 use color_eyre::Result;
@@ -9,6 +10,8 @@ use linnet::half_edge::{
 };
 use tracing::debug;
 
+use crate::debug_tags;
+use crate::uv::thermal_zero_mode::{ThermalZeroModeRegion, ZeroModeHostKind};
 use crate::{
     graph::{LMBext, LoopMomentumBasis, cuts::CutSet},
     uv::{ApproximationType, UltravioletGraph},
@@ -22,17 +25,37 @@ pub struct Spinney {
     pub lmb: LoopMomentumBasis,
     /// Disconnected unions use `MUV` as a neutral tag; their component factors
     /// carry the renormalization schemes that determine the approximation.
+    /// A union that hosts a thermal zero-mode region is the exception: its
+    /// copy carries `IR` and the region.
     pub renormalization_scheme: ApproximationType,
     max_comp_loop_count: usize,
+    /// The finite-temperature zero-mode region this spinney hosts, if any.
+    thermal_zero_mode: Option<ThermalZeroModeRegion>,
+}
+
+/// The node a spinney becomes in the hedge-poset wood. A union host shares
+/// its subgraph with the plain factorized join of its components, and sits
+/// above it. The wood keys its nodes on the subgraph and this role, and
+/// treats a union host as one collective operation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub(crate) enum WoodRole {
+    Plain,
+    UnionHost,
 }
 
 impl LogMessage for Spinney {
     fn log_display(&self) -> String {
+        let region = self
+            .thermal_zero_mode
+            .as_ref()
+            .map(|region| format!(", thermal_zero_mode: {region}"))
+            .unwrap_or_default();
         format!(
-            "Spinney {{ dod: {}, components: {}, max_comp_loop_count: {},subgraph: {} }}",
+            "Spinney {{ dod: {}, components: {}, max_comp_loop_count: {}, scheme: {}, subgraph: {}{region} }}",
             self.dod,
             self.components.len(),
             self.max_comp_loop_count,
+            self.renormalization_scheme,
             self.subgraph.string_label(),
         )
     }
@@ -51,6 +74,7 @@ impl Spinney {
             lmb: g.empty_lmb(),
             renormalization_scheme: ApproximationType::MUV,
             max_comp_loop_count: 0,
+            thermal_zero_mode: None,
         }
     }
 
@@ -109,7 +133,42 @@ impl Spinney {
             subgraph,
             renormalization_scheme,
             max_comp_loop_count,
+            thermal_zero_mode: None,
         }))
+    }
+
+    /// This spinney as the host of `region`. A host is subtracted by the
+    /// zero-mode operation, so its scheme is `IR`; a union host is a copy of
+    /// the plain union, which keeps its neutral scheme.
+    pub(crate) fn with_thermal_zero_mode(mut self, region: ThermalZeroModeRegion) -> Self {
+        self.renormalization_scheme = ApproximationType::IR;
+        self.thermal_zero_mode = Some(region);
+        debug_tags!(#uv, #generation, #zero_mode;
+            log.spinney = self,
+            "Assigned a thermal zero-mode region"
+        );
+        self
+    }
+
+    /// This spinney as a plain `MUV` U. A zero-mode host is subtracted by its
+    /// zero-mode operation and keeps `IR`.
+    ///
+    /// # Panics
+    ///
+    /// If this spinney hosts a zero-mode region: its callers demote only
+    /// spinneys that host none.
+    pub(crate) fn demote_to_muv(&mut self) {
+        assert!(
+            self.thermal_zero_mode.is_none(),
+            "the zero-mode host {} keeps its IR scheme",
+            self.subgraph.string_label()
+        );
+        self.renormalization_scheme = ApproximationType::MUV;
+    }
+
+    /// The finite-temperature zero-mode region this spinney hosts, if any.
+    pub(crate) fn thermal_zero_mode(&self) -> Option<&ThermalZeroModeRegion> {
+        self.thermal_zero_mode.as_ref()
     }
 
     pub fn filter(&self) -> &SuBitGraph {
@@ -123,28 +182,50 @@ impl Spinney {
     pub fn n_components(&self) -> usize {
         self.components.len()
     }
+
+    /// The connected components of the subgraph.
+    pub(crate) fn components(&self) -> &[SuBitGraph] {
+        &self.components
+    }
+
+    /// The node this spinney becomes in the hedge-poset wood.
+    pub(crate) fn wood_role(&self) -> WoodRole {
+        match self
+            .thermal_zero_mode
+            .as_ref()
+            .map(ThermalZeroModeRegion::kind)
+        {
+            Some(ZeroModeHostKind::Union) => WoodRole::UnionHost,
+            Some(ZeroModeHostKind::Connected) | None => WoodRole::Plain,
+        }
+    }
 }
 
 impl Hash for Spinney {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.subgraph.hash(state);
+        self.wood_role().hash(state);
     }
 }
 
+/// Spinneys are equal when they are the same wood node: the same subgraph
+/// in the same role.
 impl PartialEq for Spinney {
     fn eq(&self, other: &Self) -> bool {
-        self.subgraph == other.subgraph
+        self.subgraph == other.subgraph && self.wood_role() == other.wood_role()
     }
 }
 
+/// Inclusion of subgraphs; for one subgraph, the plain node precedes its
+/// union host.
 impl PartialOrd for Spinney {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         if self.subgraph == other.subgraph {
-            Some(std::cmp::Ordering::Equal)
+            Some(self.wood_role().cmp(&other.wood_role()))
         } else if self.subgraph.includes(&other.subgraph) {
-            Some(std::cmp::Ordering::Greater)
+            Some(Ordering::Greater)
         } else if other.subgraph.includes(&self.subgraph) {
-            Some(std::cmp::Ordering::Less)
+            Some(Ordering::Less)
         } else {
             None
         }

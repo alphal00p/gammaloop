@@ -356,29 +356,43 @@ so zero or uniform-scale samples never set the chemical-potential sign. Residue
 map identities and labels distinguish both the pole directions and the samples.
 
 Medium modes use direct local 3D UV subtraction. The ordinary operator `U`
-takes the active distributions' vacuum limit. The experimental finite-temperature
-soft operator `S` retains them. Under the auxiliary hard rescaling, it represents
-`N_d(E_h)` as `h^(-d) N_d(E_h/h)`: since
-`E_h = h E(k + q/h,m)`, the energy argument exposes the external soft expansion
-at fixed physical temperature and chemical potential. Equal active occupations
-are identified by statistics and chemical potential; contour offsets are separated
-from their occupation before expansion. No damping, loop-count restriction, or
-additional disjoint counterterm is included. This minimal construction is under
-investigation and requires `generate_integrated = false`; local finiteness is not
-established.
+takes the active distributions' vacuum limit. At finite temperature the soft
+subtraction is the experimental Matsubara zero-mode subtraction owned by
+`uv/thermal_zero_mode.rs`. A set `Σ` of massless bosonic loop lines without a
+chemical potential can carry its static Matsubara mode while the rest of the graph
+stays hard; a non-positive static infrared degree `ω(Σ)` makes it divergent. Per
+cut, the host policy assigns each divergent soft set to the complementary `IR`
+spinney, its zero-mode host, and records a `ThermalZeroModeRegion`: the frequency
+classes of `Σ`, the requested orders and the host's canonical chart. A connected
+host materializes `S0(X) + U(X) - U(S0(X))`. A disjoint union of `IR` spinneys
+hosts the joint region of its components as a separate wood node above their
+factorized join, whose operation is `S0` alone. `S0` projects the Matsubara zero
+mode of each class and Taylor-expands the gapped hard part in its soft momenta at
+fixed physical temperature and chemical potential, through the relative order
+`-ω(Σ)`; under vacuum subtraction a single-class set with `ω(Σ) <= -1` also keeps
+its vacuum-soft term, at relative order `-ω(Σ)-1`. Every `IR` spinney without a region is demoted to a plain `MUV` U. On this
+route a divergent soft set without a host is an error that names
+`renormalization_prescription.massless_power_divergent = IR`, so with the default
+`MUV` such a graph is rejected at finite temperature. Only the hedge-poset direct-3D
+route without integrated counterterms freezes completed branches and runs this
+policy; the other routes reject finite-temperature `IR` components of positive
+degree but do not search for soft sets without a host. Vacuum subtraction is
+optional. The orders, tags, minimal depth of enclosing operations, add-back
+bookkeeping and known limitations are documented in
+#link("uv-renormalization.typ#finite-temperature-zero-mode-subtraction")[the UV renormalization architecture].
 
-At finite temperature the completed soft branch is a frozen vertex for every
+At finite temperature the completed zero-mode branch is a frozen vertex for every
 strictly enclosing operation. After its series, the branch replaces its mass scope
 by `local_3d_soft_scope(S_<label>)` of its support and the owner of each on-shell
 energy it expanded by that support's `S_<label>` symbol; retained occupations are
-recognized through these energies. An enclosing `U` or `S` co-scales the soft scope,
-normalizes the branch's energies as `S` does, and co-scales the temperature and
-chemical potential of its occupations instead of projecting them, so an enclosing
-`U` expands only the reduced cograph. A positive-degree `IR` node therefore
-materializes `S(X) + U(X) - U(S(X))`: `U(X)` keeps the ordinary scope, which
-enclosing operations hold fixed, while the node's own `U` acts on its frozen
-branch with the branch scope, which they co-scale. In vacuum and at zero
-temperature the node keeps the single pass `S(X) + U(X - S(X))`.
+recognized through these energies. The branch also carries zero-mode temperatures
+`zero_mode_temperature(..)` and its order tag `zero_mode_order(S_<label>)`, which the
+final integrand sets to `1/β` and one. An enclosing `U` co-scales the soft scope, the
+order tag and the zero-mode temperatures the branch owns (those of its static lines
+stay fixed), normalizes the branch's energies, and co-scales the temperature and
+chemical potential of its occupations instead of projecting them, so it expands
+only the static reduced cograph, at its minimal depth. In vacuum and at zero
+temperature a positive-degree `IR` node keeps the single pass `S(X) + U(X - S(X))`.
 CFF conversion wraps each completed medium coefficient as `thermal_weight(W)`;
 optional vacuum subtraction replaces it with `thermal_weight(W - V(W))` before
 local UV operations. The wrapper follows the identity under differentiation,
@@ -387,10 +401,11 @@ then the evaluator function map resolves it as the identity. Only
 With vacuum subtraction enabled, the spinney covering all loop edges is excluded
 before both 4D and 3D counterterm computation, including when bridges remain in the
 graph; there are no separate vacuum-subtraction forest branches. The exception is a
-finite-temperature hedge-poset direct-3D forest without integrated counterterms that
-contains a positive-degree `IR` component: there the spinney is kept as a plain `U`,
-the subtraction of each frozen soft branch's reduced cograph. On every other branch
-it vanishes identically, and its node returns zero before numerator or Taylor work.
+forest with a zero-mode host: there the spinney is kept as a plain `U`, the
+subtraction of each frozen zero-mode branch's static reduced cograph, and a host
+without that retained spinney is an error. On every other branch it vanishes
+identically, and its node returns zero before numerator or Taylor work. Without
+vacuum subtraction the spinney keeps its ordinary `U`.
 Vacuum mode emits a plain unit without a thermal wrapper. Generation validation
 rejects combining vacuum mode with vacuum subtraction and rejects
 `local_uv_cts_from_expanded_4d_integrands` for either medium mode.

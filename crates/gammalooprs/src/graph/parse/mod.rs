@@ -801,6 +801,7 @@ impl Graph {
             is_group_master: initial_data.is_group_master,
             param_builder,
             threshold_counterterms: initial_data.threshold_counterterms,
+            zero_mode_subtracted: false,
         };
 
         g.threshold_counterterms.validate_for_graph(&g)?;

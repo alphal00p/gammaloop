@@ -1,6 +1,10 @@
 use super::super::branches::{DirectResidueBranches, DirectResidueKey};
+use super::test_support::{ThermalCff, empty_forest_node, forest_node, host_node};
 use super::*;
 use crate::cff::expression::OrientationID;
+use crate::uv::hedge_poset::OwnedForestNode;
+use crate::uv::test_fixtures::local_3d_settings;
+use crate::uv::thermal_zero_mode::tests::connected_region;
 use crate::{
     dot,
     graph::parse::IntoGraph,
@@ -9,7 +13,7 @@ use crate::{
     settings::global::OrientationPattern,
     utils::GS,
     uv::{
-        Integrands, UVgenerationSettings,
+        Integrands, UVgenerationSettings, UltravioletGraph,
         approx::{
             OrientationProjection, Rooted,
             direct_3d::{Direct3dCts, DirectSector},
@@ -22,10 +26,8 @@ use crate::{
 };
 use gammaloop_tracing_filter::LogMessage;
 use idenso::shorthands::metric::MetricSimplifier;
-use linnet::half_edge::{
-    involution::EdgeIndex,
-    subgraph::{ModifySubSet, SubSetOps},
-};
+use linnet::half_edge::involution::EdgeIndex;
+use linnet::half_edge::subgraph::SubSetOps;
 use spenso::{
     network::tags::SPENSO_TAG,
     structure::representation::{Minkowski, RepName},
@@ -491,8 +493,7 @@ fn integrated_mass_vertex_keeps_its_soft_weight_and_scalar_logs() -> Result<()> 
         }
     )?;
     let current = two_point_node(&graph, 1);
-    let mut child_subgraph = graph.empty_subgraph::<SuBitGraph>();
-    child_subgraph.add(graph[&EdgeIndex(4)].1);
+    let child_subgraph = graph.edge_subgraph(&[4]);
     let child = TestNode {
         lmb: graph.lmb_of(&child_subgraph),
         subgraph: child_subgraph,
@@ -618,26 +619,21 @@ fn disconnected_finite_mass_vertex_keeps_its_sibling_mass_inert() -> Result<()> 
             B -> C [id=6];
         }
     )?;
-    let mut inside_subgraph = graph.empty_subgraph::<SuBitGraph>();
-    inside_subgraph.add(graph[&EdgeIndex(4)].1);
+    let inside_subgraph = graph.edge_subgraph(&[4]);
     let inside = TestNode {
         lmb: graph.lmb_of(&inside_subgraph),
         subgraph: inside_subgraph,
         dod: 1,
         scheme: ApproximationType::IR,
     };
-    let mut outside_subgraph = graph.empty_subgraph::<SuBitGraph>();
-    outside_subgraph.add(graph[&EdgeIndex(5)].1);
+    let outside_subgraph = graph.edge_subgraph(&[5]);
     let outside = TestNode {
         lmb: graph.lmb_of(&outside_subgraph),
         subgraph: outside_subgraph,
         dod: 2,
         scheme: ApproximationType::IR,
     };
-    let mut parent_subgraph = inside.subgraph.clone();
-    for edge in [EdgeIndex(2), EdgeIndex(3)] {
-        parent_subgraph.add(graph[&edge].1);
-    }
+    let parent_subgraph = graph.edge_subgraph(&[2, 3, 4]);
     let current = TestNode {
         lmb: graph.lmb_of(&parent_subgraph),
         subgraph: parent_subgraph,
@@ -1071,10 +1067,7 @@ fn nested_soft_projection_scales_only_the_component_boundary_after_routing() -> 
     let graph: Graph =
         include_str!("../../../../../../tests/resources/graphs/gamma_star_ddbar_top_bubble.dot")
             .into_graph(&crate::utils::load_generic_model("sm"))?;
-    let mut child_subgraph = graph.empty_subgraph::<SuBitGraph>();
-    for edge in [EdgeIndex(7), EdgeIndex(8)] {
-        child_subgraph.add(graph[&edge].1);
-    }
+    let child_subgraph = graph.edge_subgraph(&[7, 8]);
     let child = TestNode {
         lmb: graph.try_compatible_sub_lmb(
             &child_subgraph,
@@ -1085,10 +1078,7 @@ fn nested_soft_projection_scales_only_the_component_boundary_after_routing() -> 
         dod: 1,
         scheme: ApproximationType::IR,
     };
-    let mut parent_subgraph = graph.empty_subgraph::<SuBitGraph>();
-    for edge in [3, 4, 5, 6, 7, 8].map(EdgeIndex) {
-        parent_subgraph.add(graph[&edge].1);
-    }
+    let parent_subgraph = graph.edge_subgraph(&[3, 4, 5, 6, 7, 8]);
     let parent_lmb = graph.try_compatible_sub_lmb(
         &parent_subgraph,
         graph.dummy_less_full_crown(&parent_subgraph),
@@ -1148,10 +1138,7 @@ fn appendix_b1_nested_routes_keep_the_graph_canonical_enclosing_chart() -> Resul
         "../../../../../../tests/resources/graphs/paper_appendix_b1_nested_gluon_self_energy.dot"
     )
     .into_graph(&crate::utils::load_generic_model("sm"))?;
-    let mut parent_subgraph = graph.empty_subgraph::<SuBitGraph>();
-    for edge in [2, 3, 4, 5, 6].map(EdgeIndex) {
-        parent_subgraph.add(graph[&edge].1);
-    }
+    let parent_subgraph = graph.edge_subgraph(&[2, 3, 4, 5, 6]);
     let parent = TestNode {
         lmb: graph.try_compatible_sub_lmb(
             &parent_subgraph,
@@ -1169,10 +1156,7 @@ fn appendix_b1_nested_routes_keep_the_graph_canonical_enclosing_chart() -> Resul
         (&[3, 4][..], vec![EdgeIndex(3)]),
         (&[2, 3, 5, 6][..], vec![EdgeIndex(2)]),
     ] {
-        let mut child_subgraph = graph.empty_subgraph::<SuBitGraph>();
-        for edge in child_edges.iter().copied().map(EdgeIndex) {
-            child_subgraph.add(graph[&edge].1);
-        }
+        let child_subgraph = graph.edge_subgraph(child_edges);
         let child = TestNode {
             lmb: graph.try_compatible_sub_lmb(
                 &child_subgraph,
@@ -1223,15 +1207,8 @@ fn nested_banana_retains_quotient_carriers_after_an_integrated_prefix() -> Resul
         },
         "scalars"
     )?;
-    let subgraph = |edges: &[usize]| {
-        let mut subgraph = graph.empty_subgraph::<SuBitGraph>();
-        for edge in edges.iter().copied().map(EdgeIndex) {
-            subgraph.add(graph[&edge].1);
-        }
-        subgraph
-    };
     let node = |edges: &[usize]| {
-        let subgraph = subgraph(edges);
+        let subgraph = graph.edge_subgraph(edges);
         TestNode {
             lmb: graph.lmb_of(&subgraph),
             subgraph,
@@ -1324,10 +1301,7 @@ fn nested_route_rejects_a_retained_affine_graph_external_carrier() -> Result<()>
         },
         "scalars"
     )?;
-    let mut child_subgraph = graph.empty_subgraph::<SuBitGraph>();
-    for edge in [2, 3, 5, 6].map(EdgeIndex) {
-        child_subgraph.add(graph[&edge].1);
-    }
+    let child_subgraph = graph.edge_subgraph(&[2, 3, 5, 6]);
     let affine_carrier = EdgeIndex(2);
     assert!(
         graph.loop_momentum_basis.edge_signatures[affine_carrier]
@@ -1363,8 +1337,7 @@ fn nested_route_rejects_a_retained_affine_graph_external_carrier() -> Result<()>
     let ctx = UVCtx::new(&graph, &settings);
     // Integrating an unrelated tadpole does not change this carrier's affine
     // routing. A nonempty inactive prefix must not switch off the guard.
-    let mut tadpole = graph.empty_subgraph::<SuBitGraph>();
-    tadpole.add(graph[&EdgeIndex(7)].1);
+    let tadpole = graph.edge_subgraph(&[7]);
     for inactive in [graph.empty_subgraph(), tadpole] {
         let given = TestNode {
             subgraph: child.subgraph.union(&inactive),
@@ -1397,10 +1370,7 @@ fn nested_route_rejects_a_retained_affine_graph_external_carrier() -> Result<()>
 fn production_ir_dispatch_composes_h_for_d0_d1_d2() -> Result<()> {
     test_initialise().unwrap();
     let mut graph = scalar_two_point_graph();
-    let settings = UVgenerationSettings {
-        generate_integrated: false,
-        ..Default::default()
-    };
+    let settings = local_3d_settings();
     let options = graph.denominator_only_cff_3d_expression_options();
     let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
     let production = graph.generate_3d_expression_for_integrand(
@@ -1632,9 +1602,8 @@ fn one_orientation_ir_dispatch_stores_one_combined_h_atom_per_residue() -> Resul
         "the empty-cut one-orientation fixture must have exactly one residue"
     );
     let settings = UVgenerationSettings {
-        generate_integrated: false,
         add_marker: false,
-        ..Default::default()
+        ..local_3d_settings()
     };
     let active_subgraph = current.reduced_subgraph(&root);
     let expected = {
@@ -1786,10 +1755,7 @@ fn local_3d_os_dispatch_is_unconditionally_deferred() {
     let orientation_pattern = OrientationPattern::default();
     let cutset = CutSet::empty(1);
     let localizer = Localizer::new(&cutset, OrientationProjection::four_d(&orientation_pattern));
-    let settings = UVgenerationSettings {
-        generate_integrated: false,
-        ..Default::default()
-    };
+    let settings = local_3d_settings();
 
     Direct3dApproximation::new(localizer, &mut graph, &settings)
         .run_local(
@@ -2115,23 +2081,6 @@ fn thermal_soft_forest() -> Result<Graph> {
     )?)
 }
 
-fn thermal_soft_node(graph: &Graph, edges: &[usize], dod: i32) -> TestNode {
-    let mut subgraph = graph.empty_subgraph::<SuBitGraph>();
-    for &edge in edges {
-        subgraph.add(graph[&EdgeIndex(edge)].1);
-    }
-    TestNode {
-        lmb: graph.compatible_sub_lmb(
-            &subgraph,
-            graph.dummy_less_full_crown(&subgraph),
-            &graph.loop_momentum_basis,
-        ),
-        subgraph,
-        dod,
-        scheme: ApproximationType::IR,
-    }
-}
-
 /// The on-shell energy of `edge` started by the operation owning `owner`.
 fn scoped_energy(edge: EdgeIndex, owner: EdgeIndex, mass: Atom) -> Atom {
     let invariant = (1..=3)
@@ -2175,19 +2124,19 @@ fn reduced_line_uv(parent_carrier: EdgeIndex, mass: &Atom, parent_scope: &Atom) 
 fn thermal_soft_completed_child_is_frozen_in_two_loop_parent_and_inert_in_sibling() -> Result<()> {
     test_initialise()?;
     let graph = thermal_soft_forest()?;
-    let child = thermal_soft_node(&graph, &[1, 2], 2);
-    let parent = thermal_soft_node(&graph, &[0, 1, 2], 2);
-    let sibling = thermal_soft_node(&graph, &[3], 0);
+    let child = forest_node(&graph, &[1, 2], ApproximationType::IR, 2)?;
+    let parent = forest_node(&graph, &[0, 1, 2], ApproximationType::IR, 2)?;
+    let sibling = forest_node(&graph, &[3], ApproximationType::IR, 0)?;
     assert_eq!(
-        parent.lmb.loop_edges.len(),
+        parent.lmb().loop_edges.len(),
         2,
         "the enclosing operation must scale both loops"
     );
-    let root = root_node(&graph);
+    let root = empty_forest_node(&graph);
     let settings = UVgenerationSettings::default();
     let ctx = UVCtx::new(&graph, &settings);
-    let child_carrier = *child.lmb.loop_edges.first().unwrap();
-    let parent_carrier = *parent.lmb.loop_edges.first().unwrap();
+    let child_carrier = *child.lmb().loop_edges.first().unwrap();
+    let parent_carrier = *parent.lmb().loop_edges.first().unwrap();
     let child_scope = function!(*LOCAL_3D_MASS_SCOPE, child_carrier.0);
     let parent_scope = function!(*LOCAL_3D_MASS_SCOPE, parent_carrier.0);
     let sibling_scope = function!(*LOCAL_3D_MASS_SCOPE, 3);
@@ -2231,6 +2180,7 @@ fn thermal_soft_completed_child_is_frozen_in_two_loop_parent_and_inert_in_siblin
     // At finite temperature the completed branch is handed on as a frozen vertex.
     let frozen_child = Direct3dApproximation::freeze_soft_atom(
         &completed_child,
+        &graph,
         child.subgraph(),
         child.lmb(),
         &child_scope,
@@ -2315,13 +2265,13 @@ fn thermal_soft_completed_child_is_frozen_in_two_loop_parent_and_inert_in_siblin
 fn thermal_soft_own_u_keeps_the_branch_scope_that_an_enclosing_u_co_scales() -> Result<()> {
     test_initialise()?;
     let graph = thermal_soft_forest()?;
-    let child = thermal_soft_node(&graph, &[1, 2], 2);
-    let parent = thermal_soft_node(&graph, &[0, 1, 2], 2);
-    let root = root_node(&graph);
+    let child = forest_node(&graph, &[1, 2], ApproximationType::IR, 2)?;
+    let parent = forest_node(&graph, &[0, 1, 2], ApproximationType::IR, 2)?;
+    let root = empty_forest_node(&graph);
     let settings = UVgenerationSettings::default();
     let ctx = UVCtx::new(&graph, &settings);
-    let child_carrier = *child.lmb.loop_edges.first().unwrap();
-    let parent_carrier = *parent.lmb.loop_edges.first().unwrap();
+    let child_carrier = *child.lmb().loop_edges.first().unwrap();
+    let parent_carrier = *parent.lmb().loop_edges.first().unwrap();
     let child_scope = function!(*LOCAL_3D_MASS_SCOPE, child_carrier.0);
     let parent_scope = function!(*LOCAL_3D_MASS_SCOPE, parent_carrier.0);
     let child_owner = Atom::var(child.subgraph().symbol());
@@ -2340,8 +2290,13 @@ fn thermal_soft_own_u_keeps_the_branch_scope_that_an_enclosing_u_co_scales() -> 
         None,
         child.lmb(),
     )?;
-    let frozen =
-        Direct3dApproximation::freeze_soft_atom(&soft, child.subgraph(), child.lmb(), &child_scope);
+    let frozen = Direct3dApproximation::freeze_soft_atom(
+        &soft,
+        &graph,
+        child.subgraph(),
+        child.lmb(),
+        &child_scope,
+    );
 
     // U_c(S_c X): the child's own U projects its retained occupation and
     // expands its own energies with MUV in the branch scope.
@@ -2428,56 +2383,100 @@ fn thermal_soft_own_u_keeps_the_branch_scope_that_an_enclosing_u_co_scales() -> 
     Ok(())
 }
 
+/// The zero-mode tags of a completed child follow its soft scope: the
+/// parent's U co-scales the child's zero-mode temperature and order tag with
+/// its loop momenta, as for a frozen vertex, while a disjoint sibling's U
+/// keeps them fixed. Both ordinary charts keep the temperature of a frequency
+/// class fixed, since it couples a static cograph.
+#[test]
+fn zero_mode_tags_are_frozen_in_the_parent_and_inert_in_the_sibling() -> Result<()> {
+    test_initialise()?;
+    let graph = thermal_soft_forest()?;
+    let child = forest_node(&graph, &[1, 2], ApproximationType::IR, 2)?;
+    let parent = forest_node(&graph, &[0, 1, 2], ApproximationType::IR, 2)?;
+    let sibling = forest_node(&graph, &[3], ApproximationType::IR, 0)?;
+    let root = empty_forest_node(&graph);
+    let settings = UVgenerationSettings::default();
+    let ctx = UVCtx::new(&graph, &settings);
+    let owner = Atom::var(child.subgraph().symbol());
+    let order_tag = zero_mode_order(owner.clone());
+    let branch_temperature = zero_mode_temperature(owner);
+    let class_temperature = class_zero_mode_temperature(EdgeIndex(0));
+    let rescale = |current: &OwnedForestNode, given: &OwnedForestNode, tag: &Atom| {
+        Direct3dApproximation::t_rescale(
+            Local3DDeformation::Ordinary,
+            &ctx,
+            current,
+            given,
+            tag,
+            Some(current.subgraph()),
+            current.lmb(),
+            false,
+        )
+    };
+    for tag in [&branch_temperature, &order_tag] {
+        assert_eq!(
+            rescale(&parent, &child, tag)?,
+            tag / Atom::var(GS.rescale),
+            "the parent's U co-scales the frozen tag {tag}"
+        );
+        assert_eq!(
+            &rescale(&sibling, &root, tag)?,
+            tag,
+            "a disjoint U keeps the tag {tag} fixed"
+        );
+    }
+    for (current, given) in [(&parent, &child), (&sibling, &root)] {
+        assert_eq!(
+            rescale(current, given, &class_temperature)?,
+            class_temperature,
+            "an ordinary chart keeps the class temperature fixed"
+        );
+    }
+    Ok(())
+}
+
+/// A one-loop residue family `N / E^(3 - dod)` of the two-point graph in
+/// `mode`, homogeneous of degree `dod`, with an occupation `N` unless `mode`
+/// is the vacuum.
+fn two_point_source(graph: &Graph, current: &TestNode, mode: MediumMode) -> Result<Atom> {
+    let loop_edge = *current.lmb.loop_edges.first().unwrap();
+    let mass = graph[loop_edge].mass_atom() * function!(*LOCAL_3D_MASS_SCOPE, loop_edge.0);
+    let energy = GS.ose_full(loop_edge, loop_edge, mass, None);
+    let distribution = if mode == MediumMode::Vacuum {
+        Atom::one()
+    } else {
+        ThermalDistributionCall::atom_at_energy(
+            loop_edge.0,
+            0,
+            i64::from(mode.is_finite_temperature()),
+            1,
+            1,
+            &energy,
+        )
+    };
+    Ok(distribution / energy.pow(3 - i64::from(current.dod)))
+}
+
+/// The dispatch by medium and zero-mode region. In vacuum and at zero
+/// temperature every scheme is the plain U of its node, and a zero-mode
+/// region, which only the finite-temperature host policy assigns, is an
+/// internal error. At finite temperature a region marks an IR host, whose
+/// zero-mode operation the zero-mode kernel tests, and
+/// `finite_temperature_ir_without_host` covers the nodes without one.
 #[test]
 fn thermal_soft_dispatch_preserves_the_vacuum_and_zero_temperature_modes() -> Result<()> {
     test_initialise()?;
     let mut graph = scalar_two_point_graph();
-    let settings = UVgenerationSettings {
-        generate_integrated: false,
-        ..Default::default()
-    };
-    let orientation_pattern = OrientationPattern::default();
-    for mode in [
-        MediumMode::Vacuum,
-        MediumMode::ThermodynamicEquilibrium,
-        MediumMode::ZeroTemperatureEquilibrium,
-    ] {
-        graph.set_medium_mode(mode)?;
-        let mut options = graph.denominator_only_cff_3d_expression_options();
-        options.medium_mode = mode;
-        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
-        let production = graph.generate_3d_expression_for_integrand(
-            &[],
-            &canonization,
-            &options,
-            Some(&Atom::one()),
-        )?;
-        let orientation = OrientationProjection::exact_expression(
-            &production,
-            &options,
-            &orientation_pattern,
-            false,
-        );
+    let settings = local_3d_settings();
+    for mode in [MediumMode::Vacuum, MediumMode::ZeroTemperatureEquilibrium] {
+        let cff = ThermalCff::in_medium(&mut graph, mode)?;
+        let orientation = cff.orientation(false);
         let ctx = UVCtx::new(&graph, &settings);
         let root = root_node(&graph);
         for dod in 0..=2 {
             let current = two_point_node(&graph, dod);
-            let loop_edge = *current.lmb.loop_edges.first().unwrap();
-            let mass = graph[loop_edge].mass_atom() * function!(*LOCAL_3D_MASS_SCOPE, loop_edge.0);
-            let energy = GS.ose_full(loop_edge, loop_edge, mass, None);
-            let distribution = if mode == MediumMode::Vacuum {
-                Atom::one()
-            } else {
-                ThermalDistributionCall::atom_at_energy(
-                    loop_edge.0,
-                    0,
-                    i64::from(mode.is_finite_temperature()),
-                    1,
-                    1,
-                    &energy,
-                )
-            };
-            let source = distribution / energy.pow(3 - i64::from(dod));
+            let source = two_point_source(&graph, &current, mode)?;
             let input = Integrands::root().map(|_| source.clone());
             let input = DirectResidueBranches::production(OrientationID(0), input)?;
             let actual = apply_taylor(
@@ -2492,12 +2491,11 @@ fn thermal_soft_dispatch_preserves_the_vacuum_and_zero_temperature_modes() -> Re
             .materialize(false)?
             .resolved()?;
             let actual = actual.iter().next().unwrap().1;
-            assert_eq!(
-                actual.contains_symbol(GS.thermal_distribution),
-                mode.is_finite_temperature() && dod > 0,
+            assert!(
+                !actual.contains_symbol(GS.thermal_distribution),
                 "mode={mode:?}, d={dod}"
             );
-            // Only a thermal soft branch is frozen for enclosing operations.
+            // No mode here produces a frozen branch for enclosing operations.
             let mut frozen = actual.contains_symbol(*LOCAL_3D_SOFT_SCOPE);
             actual.visitor(&mut |view| {
                 if let AtomView::Fun(call) = view
@@ -2508,17 +2506,77 @@ fn thermal_soft_dispatch_preserves_the_vacuum_and_zero_temperature_modes() -> Re
                 }
                 !frozen
             });
-            assert_eq!(
-                frozen,
-                mode.is_finite_temperature() && dod > 0,
-                "frozen soft branch in mode={mode:?}, d={dod}"
-            );
+            assert!(!frozen, "frozen soft branch in mode={mode:?}, d={dod}");
             assert!(!actual.contains_symbol(GS.rescale));
             assert!(
                 !actual.is_zero(),
                 "the vacuum coefficient must remain in mode={mode:?}, d={dod}"
             );
+
+            let host = host_node(&graph, &[2, 3], dod, connected_region(&[]))?;
+            let empty = empty_forest_node(&graph);
+            let error = apply_taylor(&ctx, orientation, &host, &empty, None, host.lmb(), &input)
+                .expect_err("a zero-mode region outside finite temperature is an internal error");
+            assert!(
+                format!("{error:?}")
+                    .contains(&format!("reached a {mode:?} operation with scheme IR")),
+                "d={dod}: {error:?}"
+            );
         }
+    }
+    Ok(())
+}
+
+/// At finite temperature an IR node without a zero-mode host is
+/// the plain U of its MUV twin at degree zero, and an error at positive
+/// degree, which only the zero-mode policy can subtract.
+#[test]
+fn finite_temperature_ir_without_host() -> Result<()> {
+    test_initialise()?;
+    let mut graph = scalar_two_point_graph();
+    let settings = local_3d_settings();
+    let mode = MediumMode::ThermodynamicEquilibrium;
+    let cff = ThermalCff::in_medium(&mut graph, mode)?;
+    let orientation = cff.orientation(false);
+    let ctx = UVCtx::new(&graph, &settings);
+    let root = root_node(&graph);
+    for dod in 0..=2 {
+        let current = two_point_node(&graph, dod);
+        let source = two_point_source(&graph, &current, mode)?;
+        let input = DirectResidueBranches::production(
+            OrientationID(0),
+            Integrands::root().map(|_| source.clone()),
+        )?;
+        let operation = |node: &TestNode| {
+            apply_taylor(&ctx, orientation, node, &root, None, node.lmb(), &input)
+        };
+        if dod == 0 {
+            let value = |node: &TestNode| -> Result<Atom> {
+                let resolved = operation(node)?.materialize(false)?.resolved()?;
+                Ok(resolved.iter().map(|(_, atom)| atom).sum())
+            };
+            let ir = value(&current)?;
+            let muv = value(&TestNode {
+                scheme: ApproximationType::MUV,
+                ..two_point_node(&graph, dod)
+            })?;
+            let difference = (&ir - muv).expand();
+            assert!(
+                difference.is_zero(),
+                "IR at degree zero is the plain U: {difference}"
+            );
+            assert!(!ir.is_zero(), "the vacuum coefficient must remain");
+            assert!(!ir.contains_symbol(GS.thermal_distribution));
+            continue;
+        }
+        let error = operation(&current).expect_err("a positive-degree IR node needs a host");
+        assert!(
+            format!("{error:?}").contains(
+                "thermal soft subtraction needs a zero-mode host from the direct local-3D \
+                 hedge-poset policy"
+            ),
+            "d={dod}: {error:?}"
+        );
     }
     Ok(())
 }

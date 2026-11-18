@@ -12,15 +12,16 @@ use crate::{
         Integrands, UVgenerationSettings, UltravioletGraph,
         approx::{
             ForestNodeLike,
-            direct_3d::{Direct3dCts, DirectResidueBranches, LOCAL_3D_SOFT_SCOPE},
+            direct_3d::{Direct3dCts, DirectResidueBranches, normalize_local_tags},
             integrated::IntegratedCts,
-            local_3d::{LOCAL_3D_MASS_SCOPE, Localizer},
+            local_3d::Localizer,
             projected_4d::Projected4dCts,
         },
         marker::UvMarker,
     },
 };
 use color_eyre::Result;
+use eyre::WrapErr;
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
 use idenso::{
     color::{ColorSimplifier, ColorSimplifySettings},
@@ -193,7 +194,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
             counterterms
                 .iter_keys()
                 .flat_map(|(_, integrands)| integrands.expressions()),
-        );
+        )?;
         let final_branches = counterterms.multiply_key_mapped(
             self.localizer.orientation,
             graph,
@@ -268,7 +269,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
                         .chain([&sector.frozen_factor])
                 })
                 .chain([&integrated_counterterm]),
-        );
+        )?;
         let localizer = self.localizer.with_independent_source_sum();
         // Only the projected local-4D route reaches this assembly boundary.
         // Its child Taylor coefficient deliberately omits the untouched
@@ -530,15 +531,10 @@ impl<'a> FinalIntegrandBuilder<'a> {
         current: &SuBitGraph,
         global_num: Atom,
         counterterms: impl IntoIterator<Item = &'c Atom>,
-    ) -> Atom {
+    ) -> Result<Atom> {
         let resnum = graph
-            .numerator(reduced, current)
-            .get_single_atom()
-            .expect("graph numerator should be available")
-            .simplify_color_with(ColorSimplifySettings {
-                simplify_non_color: false,
-                ..Default::default()
-            })
+            .color_reduced_numerator(reduced, current)
+            .wrap_err("the cograph numerator is not available")?
             * global_num;
         let resnum = Aind::private_indices_apart(
             resnum,
@@ -551,7 +547,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
             file.atom = %resnum.to_canonical_string(),
             "Cograph numerator before residue mapping"
         );
-        resnum
+        Ok(resnum)
     }
 
     fn simplify_final(
@@ -582,14 +578,11 @@ impl<'a> FinalIntegrandBuilder<'a> {
             })
             .collect::<Vec<_>>();
         move |atom| {
-            // Mass-support tags distinguish equal physical or UV masses while
-            // nested/disconnected local operators are still being composed.
-            // They are mathematically one and disappear only on this final evaluator copy.
-            let mut atom = atom
-                .replace(function!(*LOCAL_3D_MASS_SCOPE, W_.a_))
-                .with(Atom::one())
-                .replace(function!(*LOCAL_3D_SOFT_SCOPE, W_.a_))
-                .with(Atom::one())
+            // Mass-support, soft-scope and zero-mode tags distinguish equal
+            // physical scales while nested/disconnected local operators are still
+            // being composed. They take their final values only on this final
+            // evaluator copy.
+            let mut atom = normalize_local_tags(atom)
                 .replace_multiple(&energy_replacements)
                 .replace(function!(GS.ose, W_.mass_, W_.prop_))
                 .with(W_.prop_)
@@ -1206,7 +1199,7 @@ mod tests {
             &current,
             graph.global_atom(),
             [&counterterm(1_000_000)],
-        );
+        )?;
 
         let canonical = |atom: Atom| atom.expand().canonize(Aind::Dummy).unwrap();
         assert_eq!(

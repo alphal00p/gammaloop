@@ -277,6 +277,13 @@ pub struct GammaloopSymbols {
     pub thermal_distribution: Symbol,
     pub thermal_weight_wrapper: Symbol,
     pub inverse_temperature: Symbol,
+    /// Auxiliary energy x of a Matsubara zero-mode projection. It replaces the
+    /// on-shell energies of one frequency class while that class is projected
+    /// and is gone from every coefficient the projection returns.
+    pub zero_mode_energy: Symbol,
+    /// Opaque head marking the first omitted Laurent term of a truncated
+    /// zero-mode distribution; it must never reach a requested coefficient.
+    pub zero_mode_remainder: Symbol,
 }
 
 impl GammaloopSymbols {
@@ -1283,6 +1290,8 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
     thermal_distribution: three_dimensional_reps::symbols::thermal_distribution_symbol(),
     thermal_weight_wrapper: *three_dimensional_reps::symbols::THERMAL_WEIGHT_WRAPPER,
     inverse_temperature: symbol!("β"),
+    zero_mode_energy: symbol!("gammalooprs::uv::zero_mode_energy"),
+    zero_mode_remainder: symbol!("gammalooprs::uv::zero_mode_remainder"),
 };
 }
 

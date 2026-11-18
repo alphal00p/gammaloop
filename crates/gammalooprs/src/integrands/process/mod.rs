@@ -4,6 +4,7 @@ use std::path::Path;
 use std::result::Result as StdResult;
 
 use crate::cff::expression::OrientationID;
+use crate::graph::feynman_graph::SoftLineEnergies;
 use crate::graph::{FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis};
 use crate::integrands::evaluation::{
     EvaluationMetaData, EvaluationResult, GenericEvaluationResult, GraphEvaluationResult,
@@ -3567,6 +3568,29 @@ pub(crate) fn validate_process_runtime_settings(
             "E_cm-relative stability requires finite positive `runtime.kinematics.e_cm`"
         ));
     }
+    let quad_hierarchy = settings
+        .stability
+        .zero_mode_hierarchy_quad_escalation_factor;
+    let arb_hierarchy = settings.stability.zero_mode_hierarchy_escalation_factor;
+    for (name, factor) in [
+        (
+            "zero_mode_energy_escalation_factor",
+            settings.stability.zero_mode_energy_escalation_factor,
+        ),
+        ("zero_mode_hierarchy_quad_escalation_factor", quad_hierarchy),
+        ("zero_mode_hierarchy_escalation_factor", arb_hierarchy),
+    ] {
+        if !factor.is_finite() {
+            return Err(eyre!(
+                "`runtime.stability.{name}` must be finite; got {factor}; set it to a negative value to disable it"
+            ));
+        }
+    }
+    if quad_hierarchy > 0.0 && arb_hierarchy > 0.0 && quad_hierarchy <= arb_hierarchy {
+        return Err(eyre!(
+            "`runtime.stability.zero_mode_hierarchy_quad_escalation_factor` ({quad_hierarchy:e}) must be above `runtime.stability.zero_mode_hierarchy_escalation_factor` ({arb_hierarchy:e}) when both are positive, since every hierarchy it would catch already starts at the last stability level; set it to a negative value to disable it"
+        ));
+    }
     // The shared process parameter layout always includes M, even when unused.
     if settings.general.numerator_sampling_scale == 0.0 {
         return Err(eyre!(
@@ -5022,6 +5046,58 @@ impl<'a> EvaluationSource<'a> {
         }
         // Inspect only canonical momenta: a norm prepass must not reject an
         // otherwise usable Arb draw because its Jacobian is outside f64 range.
+        self.inspect_canonical_sample(integrand, metadata, |_, sample| {
+            let zero = sample.get_default_sample().zero();
+            sample
+                .groups
+                .iter()
+                .flat_map(|(_, rows)| rows)
+                .map(|row| {
+                    row.sample
+                        .loop_moms()
+                        .0
+                        .iter()
+                        .fold(zero.clone(), |sum, momentum| sum + momentum.norm())
+                })
+                .fold(zero.clone(), |a, b| if a > b { a } else { b })
+                .into_ff64()
+        })
+    }
+
+    /// The on-shell energies of the softest internal massless lines, with a
+    /// static Matsubara mode and of any species, over every participating row
+    /// ([`Graph::soft_line_energies`]), read from the canonical momenta, or
+    /// `None` when no row's graph subtracts a zero mode with such a line.
+    fn soft_line_energies<I: ProcessIntegrandImpl>(
+        &self,
+        integrand: &mut I,
+        metadata: &mut EvaluationMetaData,
+    ) -> Result<Option<SoftLineEnergies<F<f64>>>> {
+        self.inspect_canonical_sample(integrand, metadata, |integrand, sample| {
+            sample
+                .groups
+                .iter()
+                .flat_map(|(_, rows)| rows)
+                .filter_map(|row| {
+                    integrand
+                        .get_graph(row.graph_id)
+                        .get_graph()
+                        .soft_line_energies(row.sample.loop_moms(), row.sample.external_moms())
+                })
+                .reduce(SoftLineEnergies::min)
+                .map(SoftLineEnergies::into_ff64)
+        })
+    }
+
+    /// Apply `inspect` to the canonical sample of this source, its prepared
+    /// rows, preparing the draw first when it has none. The inspection counts
+    /// as parameterization time.
+    fn inspect_canonical_sample<I: ProcessIntegrandImpl, R>(
+        &self,
+        integrand: &mut I,
+        metadata: &mut EvaluationMetaData,
+        inspect: impl FnOnce(&I, &GammaLoopSample<ArbPrec>) -> R,
+    ) -> Result<R> {
         let prepared = if self.canonical_sample().is_none() {
             self.prepare_draw(integrand, metadata)?
         } else {
@@ -5032,21 +5108,9 @@ impl<'a> EvaluationSource<'a> {
             .or(prepared.as_ref())
             .expect("mapped source has prepared rows");
         let started = Instant::now();
-        let zero = sample.get_default_sample().zero();
-        let largest = sample
-            .groups
-            .iter()
-            .flat_map(|(_, rows)| rows)
-            .map(|row| {
-                row.sample
-                    .loop_moms()
-                    .0
-                    .iter()
-                    .fold(zero.clone(), |sum, momentum| sum + momentum.norm())
-            })
-            .fold(zero.clone(), |a, b| if a > b { a } else { b });
+        let inspected = inspect(integrand, sample);
         metadata.parameterization_time += started.elapsed();
-        Ok(largest.into_ff64())
+        Ok(inspected)
     }
 
     fn debug_sample<I: ProcessIntegrandImpl>(
@@ -5676,17 +5740,110 @@ fn stability_iterator_for_source<I: ProcessIntegrandImpl>(
             });
         }
         if sum_norm > threshold {
-            let escalated_level_index = stability_iterator
-                .iter()
-                .position(|level| level.precision == Precision::Quad)
-                .or_else(|| stability_iterator.len().checked_sub(1));
-            if let Some(level_index) = escalated_level_index {
-                stability_iterator = stability_iterator[level_index..].to_vec();
+            skip_to(&mut stability_iterator, Precision::Quad);
+        }
+    }
+    let stability = &integrand.get_settings().stability;
+    let hierarchy_escalation = stability.zero_mode_hierarchy_quad_escalation_factor > 0.0
+        || stability.zero_mode_hierarchy_escalation_factor > 0.0;
+    if (stability.zero_mode_energy_escalation_factor > 0.0 || hierarchy_escalation)
+        && stability_iterator.len() > 1
+        && stability_iterator
+            .first()
+            .is_some_and(|level| level.precision != Precision::Arb)
+        && let Ok(Some(energies)) = source.soft_line_energies(integrand, metadata)
+    {
+        let loop_norm_sum = if hierarchy_escalation {
+            source.loop_norm_sum(integrand, metadata).ok()
+        } else {
+            None
+        };
+        let settings = integrand.get_settings();
+        let soft_zero_mode = SoftZeroMode {
+            energies,
+            temperature: settings.general.inverse_temperature.recip(),
+            loop_norm_sum,
+        };
+        match soft_zero_mode.start_precision(&settings.stability) {
+            Some(Precision::Quad)
+                if stability_iterator
+                    .first()
+                    .is_some_and(|level| level.precision == Precision::Double) =>
+            {
+                skip_to(&mut stability_iterator, Precision::Quad);
             }
+            Some(Precision::Arb) => skip_to(&mut stability_iterator, Precision::Arb),
+            Some(Precision::Double | Precision::Quad) | None => {}
         }
     }
 
     (stability_iterator, loop_momenta_escalation)
+}
+
+/// A point of a graph whose integrand subtracts a thermal zero mode, with an
+/// internal massless boson without a chemical potential, a line with a static
+/// Matsubara mode.
+struct SoftZeroMode {
+    /// The on-shell energies of the softest such line and of the softest
+    /// massless line of any species.
+    energies: SoftLineEnergies<F<f64>>,
+    temperature: f64,
+    /// The sum of the loop-momentum norms, where a hierarchy escalation
+    /// needs it.
+    loop_norm_sum: Option<F<f64>>,
+}
+
+impl SoftZeroMode {
+    /// The precision at which the stability levels of this point start, when
+    /// it must skip the lower ones. Rotations cannot certify the remainder of
+    /// a zero-mode subtraction near a soft static mode: its error comes from
+    /// rounding the soft momenta against the hard ones and often recurs
+    /// identically at the rotated point.
+    /// - A static line softer than a fraction of the temperature
+    ///   ([`StabilitySettings::zero_mode_energy_escalation_factor`]) starts in
+    ///   quadruple precision.
+    /// - So does a hierarchy: a massless line of any species softer than a
+    ///   fraction of the sum of the loop-momentum norms
+    ///   ([`StabilitySettings::zero_mode_hierarchy_quad_escalation_factor`]),
+    ///   and below a far smaller fraction
+    ///   ([`StabilitySettings::zero_mode_hierarchy_escalation_factor`]) the
+    ///   point starts at the last level. The remainder's error grows with a
+    ///   power of the static line's hierarchy, and a softer line of another
+    ///   species, such as a soft massless quark, amplifies it without bound
+    ///   at a fixed static hierarchy; measured, it grows more slowly with
+    ///   that line's softness than with the static line's.
+    fn start_precision(&self, stability: &StabilitySettings) -> Option<Precision> {
+        if self.is_below_hierarchy(stability.zero_mode_hierarchy_escalation_factor) {
+            return Some(Precision::Arb);
+        }
+        let soft = stability.zero_mode_energy_escalation_factor;
+        (self.is_below_hierarchy(stability.zero_mode_hierarchy_quad_escalation_factor)
+            || (soft > 0.0
+                && self.energies.zero_mode < F::<f64>::from_f64(soft * self.temperature)))
+        .then_some(Precision::Quad)
+    }
+
+    /// Whether the softest massless line lies below `factor` times the sum
+    /// of the loop-momentum norms; never for a non-positive (disabled)
+    /// `factor` or without the sum.
+    fn is_below_hierarchy(&self, factor: f64) -> bool {
+        factor > 0.0
+            && self
+                .loop_norm_sum
+                .is_some_and(|sum| self.energies.massless < F::<f64>::from_f64(factor) * sum)
+    }
+}
+
+/// Start the stability levels at the first level of `precision`, or at the
+/// last level when there is none.
+fn skip_to(stability_iterator: &mut Vec<StabilityLevelSetting>, precision: Precision) {
+    let escalated_level_index = stability_iterator
+        .iter()
+        .position(|level| level.precision == precision)
+        .or_else(|| stability_iterator.len().checked_sub(1));
+    if let Some(level_index) = escalated_level_index {
+        stability_iterator.drain(..level_index);
+    }
 }
 
 fn finalize_precise_evaluation_result<T: FloatLike>(
@@ -5891,9 +6048,9 @@ fn evaluate_momentum_configuration_precise<I: ProcessIntegrandImpl>(
 pub(crate) mod tests {
     use super::{
         GraphTerm, LmbMultiChannelingSetup, RuntimeCache, SamplingChannelCompileContext,
-        SamplingChannelId, SamplingSelectionError, create_stability_iterator,
-        filtered_orientation_count, resolve_sampling_channel_selection,
-        resolve_visible_orientation_id, validate_orientation_catalog_group,
+        SamplingChannelId, SamplingSelectionError, SoftLineEnergies, SoftZeroMode,
+        create_stability_iterator, filtered_orientation_count, resolve_sampling_channel_selection,
+        resolve_visible_orientation_id, skip_to, validate_orientation_catalog_group,
         validate_process_runtime_settings,
     };
     use crate::cff::expression::OrientationID;
@@ -5916,7 +6073,7 @@ pub(crate) mod tests {
                 DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, HFunctionSettings,
                 MultiChannelingSettings, ParameterizationSettings, Precision,
                 SamplingChannelDefinition, SamplingChannelSelection, SamplingSettings,
-                StabilitySettings,
+                StabilityLevelSetting, StabilitySettings,
             },
         },
         utils::F,
@@ -7526,7 +7683,6 @@ pub(crate) mod tests {
     #[test]
     fn real_only_stability_ignores_inactive_imaginary_probe() {
         use super::StabilityFailureReason;
-        use crate::settings::runtime::StabilityLevelSetting;
         use spenso::algebra::complex::Complex;
 
         let level = StabilityLevelSetting::default_double();
@@ -7575,7 +7731,6 @@ pub(crate) mod tests {
     #[test]
     fn negligible_weight_waiver_requires_ten_percent_absolute_estimate() {
         use super::StabilityFailureReason;
-        use crate::settings::runtime::StabilityLevelSetting;
         use spenso::algebra::complex::Complex;
 
         let level = StabilityLevelSetting::default_double();
@@ -7906,7 +8061,6 @@ pub(crate) mod tests {
 
     #[test]
     fn stability_ecm_tolerance_bounds_the_returned_components() {
-        use crate::settings::runtime::StabilityLevelSetting;
         use spenso::algebra::complex::Complex;
 
         let scale = F(1.0);
@@ -8509,7 +8663,6 @@ pub(crate) mod tests {
 
     #[test]
     fn absolute_channel_instability_cannot_hide_behind_signed_cancellation() {
-        use crate::settings::runtime::StabilityLevelSetting;
         use spenso::algebra::complex::Complex;
 
         let mut level = StabilityLevelSetting::default_double();
@@ -8605,6 +8758,78 @@ pub(crate) mod tests {
         let error = validate_process_runtime_settings(&settings, false, &[RepresentationMode::Cff])
             .unwrap_err();
         assert!(error.to_string().contains("runtime.stability.levels"));
+    }
+
+    #[test]
+    fn zero_mode_escalation_factors_must_be_finite_and_ordered() {
+        let validate = |quad: f64, arb: f64| {
+            let mut settings = RuntimeSettings::default();
+            settings
+                .stability
+                .zero_mode_hierarchy_quad_escalation_factor = quad;
+            settings.stability.zero_mode_hierarchy_escalation_factor = arb;
+            validate_process_runtime_settings(&settings, false, &[RepresentationMode::Cff])
+        };
+        let defaults = StabilitySettings::default();
+        validate(
+            defaults.zero_mode_hierarchy_quad_escalation_factor,
+            defaults.zero_mode_hierarchy_escalation_factor,
+        )
+        .unwrap();
+        for (quad, arb) in [(1e-5, 1e-6), (-1.0, 1e-6), (1e-7, -1.0), (0.0, 1e-6)] {
+            validate(quad, arb).unwrap();
+        }
+        // Equal factors leave the quadruple-precision tier as dead as a smaller one.
+        for (quad, arb) in [(1e-7, 1e-6), (1e-6, 1e-6)] {
+            let error = validate(quad, arb).unwrap_err().to_string();
+            assert!(
+                error.contains(&format!(
+                    "zero_mode_hierarchy_quad_escalation_factor` ({quad:e}) must be above"
+                )),
+                "{error}"
+            );
+        }
+        // A NaN would silently disable a tier and an infinite factor would
+        // escalate every finite-temperature point.
+        for factor in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let defaults = StabilitySettings::default();
+            for (name, stability) in [
+                (
+                    "zero_mode_energy_escalation_factor",
+                    StabilitySettings {
+                        zero_mode_energy_escalation_factor: factor,
+                        ..defaults.clone()
+                    },
+                ),
+                (
+                    "zero_mode_hierarchy_quad_escalation_factor",
+                    StabilitySettings {
+                        zero_mode_hierarchy_quad_escalation_factor: factor,
+                        ..defaults.clone()
+                    },
+                ),
+                (
+                    "zero_mode_hierarchy_escalation_factor",
+                    StabilitySettings {
+                        zero_mode_hierarchy_escalation_factor: factor,
+                        ..defaults.clone()
+                    },
+                ),
+            ] {
+                let settings = RuntimeSettings {
+                    stability,
+                    ..RuntimeSettings::default()
+                };
+                let error =
+                    validate_process_runtime_settings(&settings, false, &[RepresentationMode::Cff])
+                        .unwrap_err()
+                        .to_string();
+                assert!(
+                    error.contains(&format!("`runtime.stability.{name}` must be finite")),
+                    "{name} = {factor}: {error}"
+                );
+            }
+        }
     }
 
     #[test]
@@ -8717,8 +8942,6 @@ pub(crate) mod tests {
 
     #[test]
     fn representation_fallback_keeps_repeated_precisions_and_forced_arb_choice() {
-        use crate::settings::runtime::StabilityLevelSetting;
-
         let ltd = StabilityLevelSetting {
             three_dimensional_representation: Some(RepresentationMode::Ltd),
             ..StabilityLevelSetting::default_double()
@@ -8749,6 +8972,197 @@ pub(crate) mod tests {
                 .unwrap(),
             RepresentationMode::Ltd
         );
+    }
+
+    /// The a priori escalation near a soft static Matsubara mode (T = 1).
+    /// Each tier alone escalates strictly below its threshold. With the
+    /// defaults, at the validators' and reviewers' points: a hard point keeps
+    /// double precision; a zero-mode line softer than 1e-2 T, or a massless
+    /// line softer than 5e-3 of the summed loop-momentum norms, starts at
+    /// quadruple precision, where double precision accepted wrong remainders
+    /// that a rotation reproduced (|q| = 0.58 against |p| = 1e5 and 500, and
+    /// against |p| = 159 on the tadpole ring, |q| = 1e-2 against |k| = 1e2,
+    /// |q| = 0.0116 against |p| = 30 and 100, a quark |k| = 5e-3 against
+    /// |p| = 200); one softer than 5e-6 of
+    /// the norms starts at the last level, where quadruple precision did or
+    /// came within a factor of a few of the tolerance (|q| = 5.8e-6 against
+    /// |p| = 7.8e4, |q| = 0.58 against |p| = 3e5 and |k| = 2e6, a quark
+    /// |k| = 2e-6 against |p| = 5e5), or where a soft quark makes double
+    /// precision fail at a modest static hierarchy (|k| = 1e-4 against
+    /// |p| = 100).
+    #[test]
+    fn soft_zero_modes_start_at_the_precision_of_their_tier() {
+        let point = |energy: f64, loop_norm_sum: f64| SoftZeroMode {
+            energies: SoftLineEnergies {
+                zero_mode: F(energy),
+                massless: F(energy),
+            },
+            temperature: 1.0,
+            loop_norm_sum: Some(F(loop_norm_sum)),
+        };
+        // A static line of energy 0.58 next to a softer massless quark.
+        let soft_quark = |quark_energy: f64, loop_norm_sum: f64| SoftZeroMode {
+            energies: SoftLineEnergies {
+                zero_mode: F(0.58),
+                massless: F(quark_energy),
+            },
+            ..point(0.58, loop_norm_sum)
+        };
+        let just_below = |threshold: f64| threshold * (1.0 - f64::EPSILON);
+        let disabled = StabilitySettings {
+            zero_mode_energy_escalation_factor: -1.0,
+            zero_mode_hierarchy_quad_escalation_factor: -1.0,
+            zero_mode_hierarchy_escalation_factor: -1.0,
+            ..StabilitySettings::default()
+        };
+        let defaults = StabilitySettings::default();
+
+        let energy_tier = StabilitySettings {
+            zero_mode_energy_escalation_factor: defaults.zero_mode_energy_escalation_factor,
+            ..disabled.clone()
+        };
+        let threshold = defaults.zero_mode_energy_escalation_factor;
+        assert_eq!(point(threshold, 1e9).start_precision(&energy_tier), None);
+        assert_eq!(
+            point(just_below(threshold), 1e9).start_precision(&energy_tier),
+            Some(Precision::Quad)
+        );
+        let quad_hierarchy_tier = StabilitySettings {
+            zero_mode_hierarchy_quad_escalation_factor: defaults
+                .zero_mode_hierarchy_quad_escalation_factor,
+            ..disabled.clone()
+        };
+        let threshold = defaults.zero_mode_hierarchy_quad_escalation_factor * 100.0;
+        assert_eq!(
+            point(threshold, 100.0).start_precision(&quad_hierarchy_tier),
+            None
+        );
+        assert_eq!(
+            point(just_below(threshold), 100.0).start_precision(&quad_hierarchy_tier),
+            Some(Precision::Quad)
+        );
+        let arb_hierarchy_tier = StabilitySettings {
+            zero_mode_hierarchy_escalation_factor: defaults.zero_mode_hierarchy_escalation_factor,
+            ..disabled.clone()
+        };
+        let threshold = defaults.zero_mode_hierarchy_escalation_factor * 1e6;
+        assert_eq!(
+            point(threshold, 1e6).start_precision(&arb_hierarchy_tier),
+            None
+        );
+        assert_eq!(
+            point(just_below(threshold), 1e6).start_precision(&arb_hierarchy_tier),
+            Some(Precision::Arb)
+        );
+        assert_eq!(point(5.8e-6, 7.8e4).start_precision(&disabled), None);
+
+        // The default tiers combined, at the boundaries between them.
+        let threshold = defaults.zero_mode_hierarchy_escalation_factor * 1e6;
+        assert_eq!(
+            point(threshold, 1e6).start_precision(&defaults),
+            Some(Precision::Quad)
+        );
+        assert_eq!(
+            point(just_below(threshold), 1e6).start_precision(&defaults),
+            Some(Precision::Arb)
+        );
+        let threshold = defaults.zero_mode_hierarchy_quad_escalation_factor * 100.0;
+        assert_eq!(point(threshold, 100.0).start_precision(&defaults), None);
+        assert_eq!(
+            point(just_below(threshold), 100.0).start_precision(&defaults),
+            Some(Precision::Quad)
+        );
+        let threshold = defaults.zero_mode_energy_escalation_factor;
+        assert_eq!(point(threshold, 1.0).start_precision(&defaults), None);
+        assert_eq!(
+            point(just_below(threshold), 1.0).start_precision(&defaults),
+            Some(Precision::Quad)
+        );
+
+        // The hierarchy tiers compare the softest massless line of any
+        // species; the energy tier only the static line.
+        let threshold = defaults.zero_mode_hierarchy_quad_escalation_factor * 100.0;
+        assert_eq!(
+            soft_quark(threshold, 100.0).start_precision(&quad_hierarchy_tier),
+            None
+        );
+        assert_eq!(
+            soft_quark(just_below(threshold), 100.0).start_precision(&quad_hierarchy_tier),
+            Some(Precision::Quad)
+        );
+        let threshold = defaults.zero_mode_hierarchy_escalation_factor * 1e6;
+        assert_eq!(
+            soft_quark(just_below(threshold), 1e6).start_precision(&arb_hierarchy_tier),
+            Some(Precision::Arb)
+        );
+        assert_eq!(soft_quark(1e-9, 1.0).start_precision(&energy_tier), None);
+
+        // The default tiers at the validators' and reviewers' points.
+        assert_eq!(point(0.58, 2.0).start_precision(&defaults), None);
+        assert_eq!(soft_quark(0.3, 2.0).start_precision(&defaults), None);
+        for (energy, loop_norm_sum) in [
+            (1e-3, 0.5),
+            (1e-5, 1.5),
+            (0.58, 1e5 + 1.2),
+            (0.58, 500.0 + 1.2),
+            (0.58, 159.0 + 1.2),
+            (1e-2, 1e2 + 0.7),
+            (0.0116, 30.0),
+            (0.0116, 100.0),
+        ] {
+            assert_eq!(
+                point(energy, loop_norm_sum).start_precision(&defaults),
+                Some(Precision::Quad),
+                "|q| = {energy}, sum of norms {loop_norm_sum}"
+            );
+        }
+        assert_eq!(
+            soft_quark(5e-3, 200.6).start_precision(&defaults),
+            Some(Precision::Quad)
+        );
+        for (energy, loop_norm_sum) in [(5.8e-6, 7.8e4), (0.58, 3e5 + 1.2), (0.58, 2.0e6)] {
+            assert_eq!(
+                point(energy, loop_norm_sum).start_precision(&defaults),
+                Some(Precision::Arb),
+                "|q| = {energy}, sum of norms {loop_norm_sum}"
+            );
+        }
+        for (quark_energy, loop_norm_sum) in [(2e-6, 5e5 + 0.6), (1e-4, 100.6)] {
+            assert_eq!(
+                soft_quark(quark_energy, loop_norm_sum).start_precision(&defaults),
+                Some(Precision::Arb),
+                "quark |k| = {quark_energy}, sum of norms {loop_norm_sum}"
+            );
+        }
+        // Without the sum of the norms only the energy tier applies.
+        let without_norms = |energy: f64| SoftZeroMode {
+            loop_norm_sum: None,
+            ..point(energy, 1.0)
+        };
+        assert_eq!(
+            without_norms(5.8e-6).start_precision(&defaults),
+            Some(Precision::Quad)
+        );
+        assert_eq!(without_norms(0.58).start_precision(&defaults), None);
+
+        let precisions = |levels: &[StabilityLevelSetting]| {
+            levels
+                .iter()
+                .map(|level| level.precision)
+                .collect::<Vec<_>>()
+        };
+        let mut levels = defaults.levels.clone();
+        skip_to(&mut levels, Precision::Quad);
+        assert_eq!(precisions(&levels), [Precision::Quad, Precision::Arb]);
+        let mut levels = defaults.levels.clone();
+        skip_to(&mut levels, Precision::Arb);
+        assert_eq!(precisions(&levels), [Precision::Arb]);
+        let mut levels = vec![
+            StabilityLevelSetting::default_double(),
+            StabilityLevelSetting::default_quad(),
+        ];
+        skip_to(&mut levels, Precision::Arb);
+        assert_eq!(precisions(&levels), [Precision::Quad]);
     }
 
     #[test]

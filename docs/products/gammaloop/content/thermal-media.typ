@@ -17,7 +17,9 @@ LTD supports vacuum integrands only; requests containing LTD, including mixed CF
 generation, are rejected.
 
 #boundary("Infrared safety and thresholds", [
-  Thermal soft subtraction is experimental and has not established local finiteness.
+  Thermal zero-mode subtraction is experimental: local finiteness is validated only on
+  two-bubble ring graphs, and near soft static modes the evaluation needs higher precision
+  (see Local soft subtraction).
   GammaLoop has no thermal resummation, so only infrared-safe
   fixed-order amplitudes can be evaluated. At finite temperature, soft bosonic modes, whose
   occupation grows like `T/E`, eventually require resummation that GammaLoop does not perform.
@@ -122,16 +124,43 @@ momenta. For coincident poles with the same routing, regenerate
 with a shared mass parameter so generation can use the derivative treatment. The check uses
 exact equality; nearly coincident poles remain a numerical issue.
 
+== Local soft subtraction
+
+At finite temperature the Matsubara zero mode of massless bosonic lines without a chemical
+potential makes soft regions such as a static gluon between two polarization loops
+divergent. GammaLoop subtracts them locally on the default hedge-poset route with
+`generate_integrated = false`: each divergent static soft set is assigned to a zero-mode
+host, the subgraph that stays hard; its counterterm keeps the zero-frequency mode of the soft
+lines and expands the hard part in their momenta. Hosts are `IR` subgraphs, so this needs
+`renormalization_prescription.massless_power_divergent = IR`; every other `IR` subgraph
+receives a plain UV counterterm. On this route a divergent static soft set without a supported
+host is an error that names this setting, so with the default `MUV` prescription such graphs
+are rejected at finite temperature. With the default `generate_integrated = true` no
+zero-mode subtraction runs and, with the default `MUV` prescription, no error is raised: the
+static soft divergence remains in the integrand. The subtraction works with and without
+vacuum subtraction. Its integrated add-back is not generated yet, so integrated results still
+depend on the UV reference mass `runtime.general.m_uv`. Near a soft static mode the
+remainder's rounding error cannot be estimated by rotations, so in graphs with a zero-mode
+subtraction evaluation starts at higher precision when the softest static line is soft
+against the temperature
+(`runtime.stability.zero_mode_energy_escalation_factor`), or when the softest massless line of
+any species, such as a soft quark, is soft against the loop momenta
+(`runtime.stability.zero_mode_hierarchy_quad_escalation_factor` for quadruple precision,
+`runtime.stability.zero_mode_hierarchy_escalation_factor` for the last stability level). The
+construction, its orders and
+its known limitations are described in the
+#developer-link("uv-renormalization", "uv-renormalization.typ", "UV renormalization architecture").
+
 == Vacuum subtraction and the pressure
 
 With
 #link("reference/cli/settings/cli/global/generation/medium/#setting-cli-global-generation-medium-vacuum-subtraction-622cb5e219356a31")[`vacuum_subtraction = true`],
 only the medium-dependent part is generated: each distribution weight is replaced by its
 difference from the vacuum limit, and UV counterterms covering all loops are omitted,
-including when bridges remain in the graph. At finite temperature with local soft (`IR`)
-counterterms and `generate_integrated = false`, the all-loop counterterm is instead kept as a
-plain UV operation: it subtracts the UV divergence of each soft counterterm's reduced
-cograph, whose soft coefficient enclosing operations treat as a fixed vertex.
+including when bridges remain in the graph. When a zero-mode host subtracts a static soft mode
+(see above), the all-loop counterterm is instead kept as a plain UV operation: it subtracts
+the UV divergence of each host's static reduced cograph, whose zero-mode coefficient
+enclosing operations treat as a fixed vertex.
 This option requires a medium mode.
 
 GammaLoop keeps equilibrium vacuum amplitudes in its Minkowski convention. For the complete
