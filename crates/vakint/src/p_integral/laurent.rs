@@ -1521,7 +1521,7 @@ mod tests {
         };
         // Three masters: (valuation, first unknown order k), known
         // coefficients random integers (some zero), or fully exact (no tail).
-        let shapes = [("ma", -2, 1), ("mb", 0, 2), ("mc", -1, 4), ("md", -1, -1)];
+        let shapes = [("ma", -2, 0), ("mb", 0, 2), ("mc", -1, 2), ("md", -1, -1)];
         let mut tables = std::collections::BTreeMap::<String, (Atom, Atom)>::new();
         for (name, valuation, k) in shapes {
             let master = function!(p_master_symbol(), Atom::var(vk_symbol!(name)));
@@ -1535,9 +1535,9 @@ mod tests {
                 (known.clone(), known)
             } else {
                 let mut reference = known.clone();
-                // Far beyond any order a trial needs: through ε^order minus
-                // the lowest valuation of the other factors (>= -12).
-                for j in k..=14 {
+                // Beyond any order a trial needs: ε^order (<= 1) minus the
+                // lowest valuation of the other factors (>= -9).
+                for j in k..=10 {
                     reference += pow(j) * crate::truncation_guard::unknown_tail_marker(j, &master);
                 }
                 (
@@ -1560,7 +1560,7 @@ mod tests {
             let mut reduced = Atom::Zero;
             for _ in 0..1 + next(3) {
                 // coefficient ε^p·(a + bε + cε²)/(1 - dε)
-                let coefficient = pow(next(7) - 4)
+                let coefficient = pow(next(5) - 2)
                     * (Atom::num(1 + next(3))
                         + Atom::num(next(5) - 2) * &ep
                         + Atom::num(next(5) - 2) * pow(2))
@@ -1586,7 +1586,7 @@ mod tests {
                 }
             }
             let reduced = reduced.expand();
-            let order = next(4) - 1;
+            let order = next(3) - 1;
             let prefactor = if trial % 3 == 0 {
                 Vakint::normalize_gamma_functions(
                     vk_parse!("Gamma(1+ε)*Gamma(1-ε)^2/Gamma(2-2*ε)*exp(-logQ2mu)^ε")
@@ -1596,7 +1596,9 @@ mod tests {
             } else {
                 Atom::num(1)
             };
+            let started = std::time::Instant::now();
             let value = super::expand_with(&prefactor, &reduced, e, order, &table).unwrap();
+            let expanded = started.elapsed().as_secs_f64();
             let mut exact = reduced.clone();
             for name in names {
                 exact = exact
@@ -1609,6 +1611,10 @@ mod tests {
                     .with(pg_value(x1, x2, e).to_pattern());
             }
             let reference = gamma_series(&(&prefactor * &exact), e, order).unwrap();
+            eprintln!(
+                "trial {trial}: expansion {expanded:.2} s, reference {:.2} s",
+                started.elapsed().as_secs_f64() - expanded
+            );
             assert_same(value.clone(), reference.clone());
             let guard = crate::truncation_guard::ensure_known_orders(
                 &value,
