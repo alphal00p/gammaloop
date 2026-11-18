@@ -30,7 +30,7 @@
 
 use std::time::Instant;
 
-use symbolica::atom::{Atom, AtomCore, AtomView};
+use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder};
 
 use super::{Endpoint, FactorizedError, FactorizedKind, FactorizedNumerator, Result, names};
 use crate::symbols::S;
@@ -156,6 +156,63 @@ pub fn contract_to_vakint_dots(value: &FactorizedNumerator) -> Result<(Atom, f64
     if let Some((a, b)) = unknown.get() {
         return Err(evaluation(format!("a dot of unknown edges {a}, {b}")));
     }
+    // Open ports (no projector; D6, helper VH): an edge momentum carrying a
+    // port index, `Q(e, mink(D, i))`, becomes the edge's vakint momentum with
+    // that index (`k(j, i)`, `±p(1, i)`), a metric between two ports
+    // `g(mink(D, a), mink(D, b))` vakint's `g(a, b)`; vakint's tensor prepass
+    // reduces them after its denominator match. With a projector every index
+    // is contracted and this changes nothing.
+    let mapped = if value.projector.is_none() && !value.ports.is_empty() {
+        let port_index = |view: AtomView<'_>| match view {
+            AtomView::Fun(rep) if rep.get_symbol().get_name() == names::MINK && rep.get_nargs() == 2 => {
+                rep.iter().nth(1).map(|index| index.to_owned())
+            }
+            _ => None,
+        };
+        let indexed = |momentum: &Atom, index: &Atom| {
+            momentum.replace_map(|term, _, out| {
+                if let AtomView::Fun(vector) = term
+                    && (vector.get_symbol() == S.k || vector.get_symbol() == S.p)
+                    && vector.get_nargs() == 1
+                {
+                    **out = FunctionBuilder::new(vector.get_symbol())
+                        .add_arg(vector.iter().next().unwrap())
+                        .add_arg(index)
+                        .finish();
+                }
+            })
+        };
+        let unknown = std::cell::Cell::new(None);
+        let open = mapped.replace_map(|part, _, out| {
+            let AtomView::Fun(function) = part else {
+                return;
+            };
+            let symbol = function.get_symbol();
+            let name = symbol.get_name();
+            let args = function.iter().collect::<Vec<_>>();
+            if args.len() != 2 {
+                return;
+            }
+            if name == names::METRIC
+                && let (Some(a), Some(b)) = (port_index(args[0]), port_index(args[1]))
+            {
+                **out = FunctionBuilder::new(S.g).add_arg(&a).add_arg(&b).finish();
+            } else if name == names::MOMENTUM
+                && let (Ok(edge), Some(index)) = (i64::try_from(args[0]), port_index(args[1]))
+            {
+                match lookup(edge) {
+                    Some(momentum) => **out = indexed(&momentum, &index),
+                    None => unknown.set(Some(edge)),
+                }
+            }
+        });
+        if let Some(edge) = unknown.get() {
+            return Err(evaluation(format!("an open index on the unknown edge {edge}")));
+        }
+        open
+    } else {
+        mapped
+    };
     // Nothing of the tensor notation may survive.
     let mut leftover = None;
     mapped.as_view().visitor(&mut |part| {

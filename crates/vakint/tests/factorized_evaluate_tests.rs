@@ -16,6 +16,9 @@
 //! the DOT data the test prints SKIP and passes; without an archive it checks
 //! the live comparison only.
 #![cfg(feature = "feynkit-ingress")]
+#[path = "support/open_indices.rs"]
+mod open_indices;
+
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -347,4 +350,102 @@ fn the_acceptance_fixture_bare_graph_equals_refpath() {
         assert_eq!(loops, 3);
         eprintln!("FIXTURE 185 {}: {total}", projection.name());
     }
+}
+
+/// D6 (helper VH, lane d6-open-indices): the user's input form, the FeynKit
+/// graph, with NO projector (`ProjectorChoice::None`: the two external
+/// Lorentz ports are detected by `from_feynkit` and stay open), through the
+/// adapter: the open tensor `Pi^{mu nu}` summed over the colour branches,
+/// closed AFTERWARDS with refpath's three projections, equals refpath's
+/// projected values exactly through the last order of the reference:
+/// `g . Pi = (D-1) i q^2 metric`, `(g - p p/q^2) . Pi = (D-1) i q^2 transverse`,
+/// `p p . Pi = i q^4 longitudinal`; L1 and L2.
+#[test]
+fn open_ports_close_to_refpath_on_every_l1_and_l2_graph() {
+    let Some(root) = root() else { return };
+    let vakint = engine();
+    let mut checked = 0;
+    for level in ["L1", "L2"] {
+        let directory = root.join(level);
+        let model = refpath::load_model(&directory).unwrap();
+        for path in dots(&directory) {
+            let text = std::fs::read_to_string(&path).unwrap();
+            let mut references = BTreeMap::new();
+            let mut loops = 0;
+            for projection in [Projection::Metric, Projection::Both] {
+                let run = refpath::run_graph(
+                    &vakint,
+                    &model,
+                    &text,
+                    &RunOptions {
+                        projection,
+                        extra_terms: 1,
+                        count_terms: false,
+                        contract_only: false,
+                    },
+                )
+                .unwrap();
+                loops = run.loops;
+                for result in run.results {
+                    references.insert(result.projection, result.value);
+                }
+            }
+            let settings = refpath::vakint_settings(loops as i64 + 1);
+            let epsilon = vakint::vakint_symbol!(settings.epsilon_symbol.as_str());
+            let diagram = FeynmanDiagram::from_dot(Arc::clone(&model), &text).unwrap();
+            let values = FactorizedNumerator::from_feynkit(
+                &diagram,
+                &model,
+                &FromFeynkitOptions {
+                    projector: ProjectorChoice::None,
+                    ..FromFeynkitOptions::default()
+                },
+            )
+            .unwrap();
+            let Some(first) = values.first() else {
+                // Every colour branch vanishes: so do refpath's projections.
+                assert!(references.values().all(|value| value.expand().is_zero()));
+                checked += 1;
+                continue;
+            };
+            assert_eq!(first.ports.len(), 2, "{}: ports {:?}", path.display(), first.ports);
+            let index = |port: &Atom| match port.as_view() {
+                symbolica::atom::AtomView::Fun(slot) => slot.iter().nth(1).unwrap().to_owned(),
+                _ => panic!("port {port}"),
+            };
+            let (a, b) = (index(&first.ports[0]), index(&first.ports[1]));
+            let mut open = Atom::Zero;
+            for value in &values {
+                assert!(value.projector.is_none());
+                let prefactor = refpath_prefactor(&model, value);
+                open += evaluate_factorized(&vakint, &settings, value, &prefactor)
+                    .unwrap_or_else(|error| panic!("{}: {error}", path.display()))
+                    .value;
+            }
+            let p = |index: &Atom| symbolica::function!(vakint::symbols::S.p, 1, index);
+            let g = symbolica::function!(vakint::symbols::S.g, &a, &b);
+            let pp = p(&a) * p(&b);
+            let q2 = vakint::vakint_parse!("dot(p(1),p(1))").unwrap();
+            let d = Atom::num(4) - Atom::num(2) * Atom::var(epsilon);
+            let i = Atom::i();
+            for (name, closing, factor) in [
+                ("metric", g.clone(), (&d - Atom::num(1)) * &i * &q2),
+                ("transverse", &g - &pp / &q2, (&d - Atom::num(1)) * &i * &q2),
+                ("longitudinal", pp.clone(), &i * &q2 * &q2),
+            ] {
+                let reference = references.get(name).cloned().unwrap_or(Atom::Zero);
+                let closed = open_indices::close_indices(&(&open * &closing), epsilon);
+                open_indices::assert_series_through(
+                    &closed,
+                    &(&factor * &reference),
+                    open_indices::last_order(&reference, &closed, epsilon),
+                    &format!("{} {name}", path.display()),
+                    epsilon,
+                );
+            }
+            checked += 1;
+        }
+    }
+    eprintln!("factorized_evaluate D6: {checked} graphs with open ports closed to refpath");
+    assert_eq!(checked, 3 + 29);
 }
