@@ -69,6 +69,7 @@ pub mod tensor;
 pub mod color;
 pub mod cook;
 pub mod dirac;
+pub mod edge_output;
 pub mod epsilon;
 mod index_diagnostics;
 // pub mod parsing_ind;
