@@ -36,8 +36,11 @@ use crate::rustred_evaluation::p_lowering::DirectStats;
 use crate::utils::vakint_macros::vk_symbol;
 use crate::{Vakint, VakintSettings};
 
-/// Choices of R3's idenso call (defaults: edge basis, `Fully` + `to_dots`).
-#[derive(Clone, Copy, Debug, Default)]
+/// Choices of R3's idenso call. DEFAULT ([`Default`] below): `compact`
+/// routing (the spanning tree of the fewest loop + root terms, routed before
+/// idenso), `Fully` + `to_dots`. The edge basis (no routing) is
+/// `compact: false, routed: false`.
+#[derive(Clone, Copy, Debug)]
 pub struct DirectOptions {
     /// `AlgebraContraction::Dots` instead of `Fully` followed by `to_dots`.
     pub dots: bool,
@@ -50,6 +53,21 @@ pub struct DirectOptions {
     /// over the lines (exact enumeration; the beta thread's `compact-free`
     /// key) instead of FeynKit's stored basis. Implies routing before idenso.
     pub compact: bool,
+}
+
+/// The hand-over path's default: `compact` ON (helper coordinator's decision of
+/// 2026-11-18, agreed with the effort's coordinator, after lane routing-study:
+/// contraction + lowering 0.55x at L4, 0.56x at L5, never more than 5 % worse
+/// than the stored basis at L5). Gate request 3 already gated every set with
+/// compact on: the folded inputs are R2's key by key.
+impl Default for DirectOptions {
+    fn default() -> Self {
+        Self {
+            dots: false,
+            routed: false,
+            compact: true,
+        }
+    }
 }
 
 /// Pseudo-edge id of FeynKit's loop momentum `K(i)` in the hand-over tables.
@@ -1015,11 +1033,18 @@ mod tests {
             return;
         };
         let variants = [
-            (false, DirectOptions::default()),
+            (
+                false,
+                DirectOptions {
+                    compact: false,
+                    ..Default::default()
+                },
+            ),
             (
                 false,
                 DirectOptions {
                     routed: true,
+                    compact: false,
                     ..Default::default()
                 },
             ),
@@ -1039,6 +1064,7 @@ mod tests {
                     dots: true,
                 },
             ),
+            (true, DirectOptions::default()),
         ];
         let mut lowered = 0;
         for dir in fixture_dirs() {
@@ -1113,8 +1139,8 @@ mod tests {
             }
         }
         // 7 of the 10 fixtures have a non-zero metric projection (the other 3 are
-        // exact zeros on both sides), each lowered in all 4 option combinations.
-        assert_eq!(lowered, 4 * 7, "lowered projections");
+        // exact zeros on both sides), each lowered in all 5 option combinations.
+        assert_eq!(lowered, 5 * 7, "lowered projections");
     }
 
     /// The hand-over refuses (never reads silently) an unidentified vector and
