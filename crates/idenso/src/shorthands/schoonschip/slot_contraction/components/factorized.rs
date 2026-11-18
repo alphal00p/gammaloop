@@ -245,6 +245,24 @@ fn scalar_facts(observed: &DomainObservations) -> bool {
 /// ones are merged lazily (see [`frontier_sum`]).
 const LAZY_SOURCE_TERMS: usize = 32;
 
+/// `IDENSO_FRONTIER_TRACE=1`: print one line per frontier step and per emission
+/// (states, terms, coefficient storage, time, process RSS) to stderr.
+static FRONTIER_TRACE: std::sync::LazyLock<bool> =
+    std::sync::LazyLock::new(|| std::env::var_os("IDENSO_FRONTIER_TRACE").is_some());
+
+fn trace_rss_mib() -> u64 {
+    std::fs::read_to_string("/proc/self/statm")
+        .ok()
+        .and_then(|s| s.split_whitespace().nth(1).and_then(|v| v.parse::<u64>().ok()))
+        .map_or(0, |pages| pages * 4096 / (1 << 20))
+}
+
+/// Exponent and inline coefficient storage of one frontier coefficient.
+fn trace_poly_bytes(polynomial: &ScalarPolynomial) -> usize {
+    polynomial.exponents.len() * std::mem::size_of::<u32>()
+        + polynomial.coefficients.len() * std::mem::size_of::<Rational>()
+}
+
 /// One contribution to a frontier target: a source state times one monomial,
 /// `coefficient` times the variables of the shared map raised to `shift`.
 struct Contribution {
@@ -2219,11 +2237,28 @@ impl<'a> ComponentSum<'a, '_> {
         let mut scalar_form = Some(false);
         #[cfg(feature = "reference-cases")]
         let mut generated = 0usize;
-        for &selected in order {
+        let trace = *FRONTIER_TRACE;
+        let trace_start = std::time::Instant::now();
+        if trace {
+            eprintln!(
+                "FRONTIER begin order={} factors={} rss_mib={}",
+                order.len(),
+                states[0].0.factors.len(),
+                trace_rss_mib()
+            );
+        }
+        for (trace_step, &selected) in order.iter().enumerate() {
+            let step_start = std::time::Instant::now();
             if self.factor_roots[selected].is_none() {
                 self.factor_roots[selected] = Some(compile(self, selected)?);
             }
             let terms = self.factor_terms(selected)?;
+            let trace_in = trace.then(|| {
+                (
+                    states.len(),
+                    states.iter().map(|(_, w)| w.nterms()).sum::<usize>(),
+                )
+            });
             // Measure generated coefficient storage without placing an
             // automatic work limit on the selected contraction.
             #[cfg(feature = "reference-cases")]
@@ -2468,6 +2503,12 @@ impl<'a> ComponentSum<'a, '_> {
                 }
             }
             self.overrides.clear();
+            let trace_contributions = if trace {
+                next.iter().map(|(_, c, _)| c.len()).sum::<usize>()
+            } else {
+                0
+            };
+            let trace_generate = step_start.elapsed();
             let mut sources: Vec<Option<ScalarPolynomial>> = std::mem::take(&mut states)
                 .into_iter()
                 .map(|(_, weight)| Some(weight))
@@ -2523,8 +2564,40 @@ impl<'a> ComponentSum<'a, '_> {
                     states.push((remaining, weight));
                 }
             }
+            if let Some((in_states, in_terms)) = trace_in {
+                let terms_out = states.iter().map(|(_, w)| w.nterms()).collect::<Vec<_>>();
+                let bytes = states.iter().map(|(_, w)| trace_poly_bytes(w)).sum::<usize>();
+                eprintln!(
+                    "FRONTIER step={trace_step} selected={selected} local_terms={} in_states={in_states} in_terms={in_terms} out_states={} out_terms={} max_state_terms={} nvars={} coeff_bytes={bytes} contributions={trace_contributions} gen_s={:.3} merge_s={:.3} rss_mib={}",
+                    terms.len(),
+                    states.len(),
+                    terms_out.iter().sum::<usize>(),
+                    terms_out.iter().max().copied().unwrap_or(0),
+                    shared.map.len(),
+                    trace_generate.as_secs_f64(),
+                    (step_start.elapsed() - trace_generate).as_secs_f64(),
+                    trace_rss_mib(),
+                );
+            }
         }
         self.overrides.clear();
+        let emit_start = std::time::Instant::now();
+        let mut trace_emit_poly = std::time::Duration::ZERO;
+        if trace {
+            eprintln!(
+                "FRONTIER states_done states={} terms={} nvars={} states_s={:.3} rss_mib={}",
+                states.len(),
+                states.iter().map(|(_, w)| w.nterms()).sum::<usize>(),
+                shared.map.len(),
+                trace_start.elapsed().as_secs_f64(),
+                trace_rss_mib()
+            );
+            if std::env::var_os("IDENSO_FRONTIER_TRACE_VARS").is_some() {
+                for (i, a) in shared.atoms.iter().enumerate() {
+                    eprintln!("FRONTIER var {i} {}", a.to_canonical_string());
+                }
+            }
+        }
         #[cfg(feature = "reference-cases")]
         let _emission_timing = crate::reference_cases::timing::scope(
             crate::reference_cases::timing::Phase::ContractionEmission,
@@ -2536,7 +2609,20 @@ impl<'a> ComponentSum<'a, '_> {
         let mut any_open = false;
         let mut terminal = true;
         for (remaining, weight) in states {
+            let poly_start = std::time::Instant::now();
+            let trace_terms = weight.nterms();
             let mut factors = vec![shared.emit(weight)?];
+            trace_emit_poly += poly_start.elapsed();
+            if trace {
+                eprintln!(
+                    "FRONTIER emit_state terms={trace_terms} remaining={} residual={} atom_bytes={} emit_s={:.3} rss_mib={}",
+                    remaining.factors.len(),
+                    remaining.residual.len(),
+                    factors[0].as_view().get_byte_size(),
+                    poly_start.elapsed().as_secs_f64(),
+                    trace_rss_mib()
+                );
+            }
             let mut state_slots = Vec::new();
             for (position, arguments) in remaining.factors {
                 scalar_form = scalar_form
@@ -2587,8 +2673,21 @@ impl<'a> ComponentSum<'a, '_> {
             (Some(slots), Some(needs_dots)) if any_open && terminal => Some((slots, needs_dots)),
             _ => None,
         };
+        let add_start = std::time::Instant::now();
+        let root = Atom::add_many(terms);
+        if trace {
+            eprintln!(
+                "FRONTIER emitted bytes={} emit_poly_s={:.3} add_many_s={:.3} emission_s={:.3} total_s={:.3} rss_mib={}",
+                root.as_view().get_byte_size(),
+                trace_emit_poly.as_secs_f64(),
+                add_start.elapsed().as_secs_f64(),
+                emit_start.elapsed().as_secs_f64(),
+                trace_start.elapsed().as_secs_f64(),
+                trace_rss_mib()
+            );
+        }
         Some(FactorizedContraction {
-            root: Atom::add_many(terms),
+            root,
             status: ReductionStatus::Complete,
             // Open slots leave a tensor, never a closed scalar.
             observations: scalar_form
