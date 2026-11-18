@@ -11,7 +11,6 @@
 //!     [--no-count]            skip the term count of the expanded numerator
 //!     [--contract-only]       stop after the contraction
 //!     [--warmup]              one untimed run of the first graph before the timed ones
-//!     [--compare-colour]      only compare the lane's colour split with the input type's, branch by branch
 //!     [--no-gate]             do not write gate dumps
 //! ```
 //!
@@ -74,7 +73,6 @@ fn main() -> eyre::Result<()> {
     let mut library = std::env::var_os("VAKINT_TEST_P_LIBRARY_1_4").map(PathBuf::from);
     let mut gate = true;
     let mut warmup = false;
-    let mut compare_colour = false;
     let mut index = 0;
     while index < args.len() {
         let value = || args.get(index + 1).cloned().expect("missing value");
@@ -117,7 +115,6 @@ fn main() -> eyre::Result<()> {
             "--contract-only" => options.contract_only = true,
             "--no-gate" => gate = false,
             "--warmup" => warmup = true,
-            "--compare-colour" => compare_colour = true,
             other if directory.is_none() && !other.starts_with("--") => {
                 directory = Some(PathBuf::from(other))
             }
@@ -175,41 +172,6 @@ fn main() -> eyre::Result<()> {
         let started = Instant::now();
         let _ = refpath::run_graph(&engine, &model, &std::fs::read_to_string(path)?, &options);
         eprintln!("[direct_bb] warm-up on {} in {:.3} s", path.display(), started.elapsed().as_secs_f64());
-    }
-    if compare_colour {
-        // Branch-by-branch comparison of the lane's colour split with the input
-        // type's (refpath::compare_colour_splits); no evaluation.
-        let mut log = std::fs::File::create(out.join("colour-compare.jsonl"))?;
-        let (mut same, mut differ) = (0, 0);
-        for path in &selected {
-            let graph = number(path);
-            let diagram = feynkit_graph::FeynmanDiagram::from_dot(
-                std::sync::Arc::clone(&model),
-                &std::fs::read_to_string(path)?,
-            )?;
-            let started = Instant::now();
-            let c = refpath::compare_colour_splits(&diagram)?;
-            let ok = c.lane_nonzero == c.input_nonzero
-                && c.only_lane == 0
-                && c.only_input == 0
-                && c.coefficient_differs.is_empty()
-                && c.content_differs == 0;
-            if ok { same += 1 } else { differ += 1 }
-            let record = json!({
-                "graph": graph, "identical": ok,
-                "lane_total": c.lane_total, "lane_nonzero": c.lane_nonzero,
-                "input_total": c.input_total, "input_nonzero": c.input_nonzero,
-                "only_lane": c.only_lane, "only_input": c.only_input,
-                "coefficient_differs": c.coefficient_differs, "content_differs": c.content_differs,
-                "seconds": started.elapsed().as_secs_f64(),
-            });
-            writeln!(log, "{record}")?;
-            if !ok {
-                eprintln!("[direct_bb] colour split differs on diagram {graph}: {record}");
-            }
-        }
-        eprintln!("[direct_bb] colour splits: {same} identical, {differ} differ");
-        return Ok(());
     }
     let setup = Instant::now();
     let mut template = Vakint::new()?;

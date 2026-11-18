@@ -5,14 +5,15 @@
 //! only, with the stage times and the gate view of what RustRed receives.
 //!
 //! 1. parse: `Model::from_json`, `FeynmanDiagram::from_dot`;
-//! 2. colour: every local tensor is split into its colour rows
-//!    (`coefficient_list` over the colour representations, as the beta
-//!    thread's `color.rs` `split_local`); the Cartesian product of the rows
-//!    gives the colour branches (a quartic vertex has three); each branch's
-//!    closed colour network (rows × δ of the two external adjoint ports) is
-//!    reduced to SU(N) invariants with idenso's
-//!    `try_reduce_closed_color_network` and divided by `N_A`; branches with a
-//!    zero coefficient are dropped;
+//! 2. colour: the input type's colour split
+//!    (`vakint::p_integral::factorized::{split_local_colour,
+//!    colour_coefficient}`, the helper's one implementation: every local in
+//!    source notation split into colour rows as the beta thread's `color.rs`
+//!    `split_local`; the Cartesian product of the rows gives the branches, a
+//!    quartic vertex has three; each branch's closed colour network, with the δ
+//!    of the two external adjoint ports, reduced by idenso's
+//!    `try_reduce_closed_color_network`, over `N_A`), written in this chain's
+//!    symbols; branches with a zero coefficient are dropped;
 //! 3. contract: per branch, the product of the Lorentz/Dirac residuals is
 //!    routed onto FeynKit's loop-momentum basis, continued to `D` dimensions
 //!    (`mink(4)` → `mink(D)`), cooked as gammaloop's R* simplifier cooks
@@ -44,13 +45,11 @@ use feynkit_kinematics::Kinematics;
 use feynkit_model::Model;
 use idenso::color::CS;
 use idenso::dirac::GammaSimplifySettings;
-use idenso::representations::{ColorAdjoint, ColorFundamental, ColorSextet};
+use idenso::representations::{ColorAdjoint, ColorFundamental};
 use idenso::tensor::{AlgebraSettings, SymbolicTensor};
 use idenso::{CookMode, CookSettings, IndexTooling, W_};
 use spenso::network::library::symbolic::ETS;
-use spenso::shadowing::TensorCollectFilter;
 use spenso::structure::abstract_index::AbstractIndex;
-use spenso::structure::partial::PartialStructure;
 use spenso::structure::representation::{LibrarySlot, Minkowski, RepName};
 use spenso::structure::slot::IsAbstractSlot;
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
@@ -60,8 +59,6 @@ use crate::diagram_integral::DiagramIntegralOptions;
 use crate::rustred_evaluation::p_gate::{self, GateObservation, GateView, ZeroSectorCount};
 use crate::utils::vakint_macros::vk_symbol;
 use crate::{Vakint, VakintExpression, VakintSettings};
-
-type Tensor = SymbolicTensor<PartialStructure>;
 
 /// The symbols of the reference path's output.
 pub struct RefpathSymbols {
@@ -242,74 +239,6 @@ pub fn load_model(directory: &std::path::Path) -> Result<Arc<Model>> {
     Ok(Arc::new(Model::from_json(&text)?))
 }
 
-fn colour_filter() -> TensorCollectFilter<3> {
-    TensorCollectFilter::Reps([
-        ColorAdjoint {}.into(),
-        ColorFundamental {}.into(),
-        ColorSextet {}.into(),
-    ])
-}
-
-/// The colour rows `(colour, residual)` of one local tensor; a local without
-/// colour gives one row `(1, local)`.
-fn split_local(tensor: &Tensor) -> Result<Vec<(Atom, Atom)>> {
-    let rows = tensor.coefficient_list(colour_filter())?;
-    if rows.is_empty() {
-        return Ok(vec![(Atom::num(1), NumeratorInterface::export(tensor).0)]);
-    }
-    let mut out = Vec::with_capacity(rows.len());
-    for (colour, residual) in rows {
-        let residual_rows = residual.coefficient_list(colour_filter())?;
-        ensure!(
-            residual_rows
-                .iter()
-                .all(|(selected, _)| selected.expression().is_one()),
-            "a colour row kept a colour tensor in its residual"
-        );
-        out.push((
-            NumeratorInterface::export(&colour).0,
-            NumeratorInterface::export(&residual).0,
-        ));
-    }
-    Ok(out)
-}
-
-/// `coad(8, i)` → `coad(N_A, i)`, `cof(3, i)` → `cof(N_R, i)`: symbolic SU(N).
-fn symbolic_colour_dimensions(colour: &Atom) -> Atom {
-    let s = &*SYMBOLS;
-    colour
-        .replace(ColorAdjoint {}.to_symbolic([Atom::num(8), Atom::var(W_.a___)]))
-        .with(ColorAdjoint {}.to_symbolic([Atom::var(s.na), Atom::var(W_.a___)]))
-        .replace(ColorFundamental {}.to_symbolic([Atom::num(3), Atom::var(W_.a___)]))
-        .with(ColorFundamental {}.to_symbolic([Atom::var(s.nr), Atom::var(W_.a___)]))
-}
-
-/// The adjoint slots `coad(N, i)` of a product of colour factors that occur
-/// once (the external ports).
-fn open_adjoint_slots(product: &Atom) -> Vec<Atom> {
-    let adjoint = ColorAdjoint {}.to_symbolic([Atom::var(W_.a_), Atom::var(W_.b_)]);
-    let symbol = match adjoint.as_view() {
-        AtomView::Fun(f) => f.get_symbol(),
-        _ => unreachable!(),
-    };
-    let mut counts = BTreeMap::<Atom, usize>::new();
-    product.visitor(&mut |part| {
-        if let AtomView::Fun(f) = part
-            && f.get_symbol() == symbol
-            && f.get_nargs() == 2
-        {
-            *counts.entry(part.to_owned()).or_default() += 1;
-            return false;
-        }
-        true
-    });
-    counts
-        .into_iter()
-        .filter(|(_, count)| *count == 1)
-        .map(|(slot, _)| slot)
-        .collect()
-}
-
 /// The name of a higher invariant `name(args)` (idenso's color.h names, `gram`)
 /// as a plain symbol `refpath::<name>_<args>`, an argument `coad(N_A)` written
 /// `A`, `cof(N_R)` written `R`, a number as it is: e.g. `gram(3, cof, cof)` →
@@ -365,37 +294,6 @@ fn map_invariants(value: &Atom, adjoint_dimension: &Atom, fundamental_dimension:
         .with(Atom::var(s.tf) * Atom::var(s.na) / Atom::var(s.cf))
 }
 
-fn named_invariants(value: &Atom) -> Atom {
-    let s = &*SYMBOLS;
-    map_invariants(value, &Atom::var(s.na), &Atom::var(s.nr))
-}
-
-/// The colour coefficient of a branch (lane's split): its closed network with
-/// the external δ, reduced to invariants, over `N_A`.
-fn colour_coefficient_lane(colour: &Atom) -> Result<Atom> {
-    let colour = symbolic_colour_dimensions(colour);
-    if colour.is_zero() {
-        return Ok(Atom::Zero);
-    }
-    let ports = open_adjoint_slots(&colour);
-    ensure!(
-        ports.len() == 2,
-        "a colour branch with {} open adjoint slots: {colour}",
-        ports.len()
-    );
-    let closed = &colour * ETS.metric(&ports[0], &ports[1]);
-    let reduced = idenso::color::network::try_reduce_closed_color_network(closed.as_view())
-        .map_err(|error| eyre!("colour network: {error}"))?
-        .ok_or_else(|| eyre!("not a closed colour network: {closed}"))?;
-    let coefficient = (named_invariants(&reduced) / Atom::var(SYMBOLS.na))
-        .expand()
-        .together();
-    // Higher invariants (four loops on) stay as idenso's named functions of
-    // the representations; an open colour tensor cannot survive a complete
-    // closed-network reduction (`Some` above).
-    Ok(coefficient)
-}
-
 /// The colour branches of a diagram by the input type's colour split
 /// (`vakint::p_integral::factorized::{split_local_colour, colour_coefficient}`
 /// in `ColourMode::Invariants`, the helper's one implementation), the
@@ -446,186 +344,6 @@ pub fn colour_branches(diagram: &FeynmanDiagram) -> Result<(Vec<ColourBranch>, u
         }
     }
     Ok((branches, total))
-}
-
-/// The lane's own colour split (idenso `coefficient_list` on the cooked
-/// tensors, 2026-11-18 until the switch to the input type's split): kept only
-/// for [`compare_colour_splits`].
-pub fn colour_branches_lane(diagram: &FeynmanDiagram) -> Result<(Vec<ColourBranch>, usize)> {
-    let mut locals = Vec::new();
-    for (_, vertex) in diagram.vertices() {
-        locals.push(split_local(&vertex.numerator)?);
-    }
-    for (_, _, edge) in diagram.edges() {
-        locals.push(split_local(&edge.numerator)?);
-    }
-    // Cartesian product of the rows.
-    let mut partial: Vec<(Atom, Vec<Atom>)> = vec![(Atom::num(1), Vec::new())];
-    for rows in &locals {
-        let mut next = Vec::with_capacity(partial.len() * rows.len());
-        for (colour, residuals) in &partial {
-            for (row_colour, row_residual) in rows {
-                let mut residuals = residuals.clone();
-                residuals.push(row_residual.clone());
-                next.push((colour * row_colour, residuals));
-            }
-        }
-        partial = next;
-    }
-    let total = partial.len();
-    let mut branches = Vec::new();
-    for (colour, residuals) in partial {
-        let coefficient = colour_coefficient_lane(&colour)?;
-        if !coefficient.is_zero() {
-            branches.push(ColourBranch {
-                coefficient,
-                residuals,
-            });
-        }
-    }
-    Ok((branches, total))
-}
-
-/// The numeric factor of a product and the product without it.
-fn split_number(atom: &Atom) -> (Atom, Atom) {
-    match atom.as_view() {
-        AtomView::Num(_) => (atom.clone(), Atom::num(1)),
-        AtomView::Mul(m) => {
-            let (mut number, mut rest) = (Atom::num(1), Atom::num(1));
-            for part in m.iter() {
-                if let AtomView::Num(_) = part {
-                    number *= part.to_owned();
-                } else {
-                    rest *= part.to_owned();
-                }
-            }
-            (number, rest)
-        }
-        _ => (Atom::num(1), atom.clone()),
-    }
-}
-
-/// The branch-by-branch comparison of the lane's colour split with the input
-/// type's on one diagram.
-#[derive(Clone, Debug, Default)]
-pub struct ColourSplitComparison {
-    pub lane_total: usize,
-    pub lane_nonzero: usize,
-    pub input_total: usize,
-    pub input_nonzero: usize,
-    /// Non-zero branches present in one split only (by the colour key: the
-    /// canonical strings of the colour rows without their numeric factors).
-    pub only_lane: usize,
-    pub only_input: usize,
-    /// Branches in both whose coefficient per unit colour product differs.
-    pub coefficient_differs: Vec<(String, String, String)>,
-    /// Branches in both whose full content `coefficient × Π residuals`
-    /// differs (expanded difference non-zero).
-    pub content_differs: usize,
-}
-
-/// Compare the lane's colour split ([`colour_branches_lane`]) with the input
-/// type's ([`colour_branches`]) on `diagram`, branch by branch: branches are
-/// matched by their colour rows (canonical strings without numeric factors);
-/// per matched branch the coefficient per unit colour product
-/// (`coefficient / numeric factor of the colour product`) and the full
-/// content `coefficient × Π residuals` (expanded) are compared exactly.
-pub fn compare_colour_splits(diagram: &FeynmanDiagram) -> Result<ColourSplitComparison> {
-    use crate::p_integral::factorized::{ColourMode, colour_coefficient, split_local_colour};
-    let s = &*SYMBOLS;
-    let mut comparison = ColourSplitComparison::default();
-    // Rows of both splits, per local, with their keys.
-    let locals = diagram
-        .vertices()
-        .map(|(_, v)| &v.numerator)
-        .chain(diagram.edges().map(|(_, _, e)| &e.numerator))
-        .collect::<Vec<_>>();
-    type Rows = Vec<(String, Atom, Atom, Atom)>; // key, number, unit colour, residual
-    let mut lane_rows = Vec::<Rows>::new();
-    let mut input_rows = Vec::<Rows>::new();
-    for local in &locals {
-        let mut rows = Rows::new();
-        for (colour, residual) in split_local(local)? {
-            let (number, unit) = split_number(&colour);
-            rows.push((unit.to_canonical_string(), number, unit, residual));
-        }
-        lane_rows.push(rows);
-        let mut rows = Rows::new();
-        for row in split_local_colour(&NumeratorInterface::export(*local).0)? {
-            let (number, unit) = split_number(&row.colour);
-            rows.push((unit.to_canonical_string(), number, unit, row.residual));
-        }
-        input_rows.push(rows);
-    }
-    let adjoint = Atom::var(symbol!("spenso::dA"));
-    let fundamental = Atom::var(CS.nc);
-    // key -> (coefficient per unit colour, content)
-    let branches = |rows: &[Rows], lane: bool| -> Result<(BTreeMap<Vec<String>, (Atom, Atom)>, usize)> {
-        let mut partial: Vec<(Vec<String>, Atom, Atom, Atom)> =
-            vec![(Vec::new(), Atom::num(1), Atom::num(1), Atom::num(1))];
-        for local in rows {
-            let mut next = Vec::new();
-            for (keys, number, unit, residual) in &partial {
-                for (key, n, u, r) in local {
-                    let mut keys = keys.clone();
-                    keys.push(key.clone());
-                    next.push((keys, number * n, unit * u, residual * r));
-                }
-            }
-            partial = next;
-        }
-        let total = partial.len();
-        let mut out = BTreeMap::new();
-        for (keys, number, unit, residual) in partial {
-            let colour = &number * &unit;
-            let coefficient = if lane {
-                colour_coefficient_lane(&colour)?
-            } else {
-                map_invariants(
-                    &colour_coefficient(&colour, ColourMode::Invariants)?,
-                    &adjoint,
-                    &fundamental,
-                )
-                .expand()
-                .together()
-            };
-            if coefficient.is_zero() {
-                continue;
-            }
-            let per_unit = (&coefficient / &number).expand().together();
-            let content = &coefficient * residual;
-            out.insert(keys, (per_unit, content));
-        }
-        Ok((out, total))
-    };
-    let (lane, lane_total) = branches(&lane_rows, true)?;
-    let (input, input_total) = branches(&input_rows, false)?;
-    comparison.lane_total = lane_total;
-    comparison.input_total = input_total;
-    comparison.lane_nonzero = lane.len();
-    comparison.input_nonzero = input.len();
-    comparison.only_lane = lane.keys().filter(|k| !input.contains_key(*k)).count();
-    comparison.only_input = input.keys().filter(|k| !lane.contains_key(*k)).count();
-    let continued = |atom: &Atom| {
-        atom.replace(Minkowski {}.to_symbolic([Atom::var(W_.d_), Atom::var(W_.a___)]))
-            .with(Minkowski {}.to_symbolic([Atom::var(s.d), Atom::var(W_.a___)]))
-    };
-    for (keys, (lane_unit, lane_content)) in &lane {
-        let Some((input_unit, input_content)) = input.get(keys) else {
-            continue;
-        };
-        if !(lane_unit - input_unit).expand().together().is_zero() {
-            comparison.coefficient_differs.push((
-                keys.join(" * "),
-                lane_unit.to_canonical_string(),
-                input_unit.to_canonical_string(),
-            ));
-        }
-        if !(continued(lane_content) - continued(input_content)).expand().is_zero() {
-            comparison.content_differs += 1;
-        }
-    }
-    Ok(comparison)
 }
 
 /// Closed quark loops of a diagram (components of the quark subgraph).
