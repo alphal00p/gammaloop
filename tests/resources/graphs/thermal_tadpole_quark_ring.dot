@@ -1,0 +1,21 @@
+digraph thermal_tadpole_quark_ring {
+  // A d-quark polarization and a gluon tadpole on a four-gluon vertex,
+  // joined by gluons carrying q. Endpoint exchange of the quark bubble
+  // (which swaps e0 and e1 at the quartic vertex) and reversal of the
+  // tadpole self-loop give four automorphisms. There is one closed fermion loop.
+  // thermal_ring_power_counting.rs checks this graph against the generator's
+  // three-loop vacuum diagram GL64 at muB = 0 and 3, to a relative 1e-12.
+  num = "1";
+  overall_factor = "(AutG(4))^(-1)*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)";
+  overall_factor_evaluated = "-1/4";
+  projector = "1";
+
+  // Compatible independent loop momenta are [q, p, k] = [e0, e2, e4].
+  // Profiling S(e0) also makes e1 soft; these are not independent soft limits.
+  // The tadpole momentum k does not flow through any other edge.
+  a1:0 -> c0:1 [id=0 dir=none particle=g lmb_id=0 lmb_rep="K(0,a___)"];
+  c0:2 -> a0:3 [id=1 dir=none particle=g lmb_rep="K(0,a___)"];
+  a0:4 -> a1:5 [id=2 particle=d lmb_id=1 lmb_rep="K(1,a___)"];
+  a1:6 -> a0:7 [id=3 particle=d lmb_rep="K(1,a___)-K(0,a___)"];
+  c0:8 -> c0:9 [id=4 dir=none particle=g lmb_id=2 lmb_rep="K(2,a___)"];
+}

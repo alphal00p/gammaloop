@@ -22,7 +22,10 @@ use crate::{
     },
     utils::{GS, W_},
     uv::{
-        approx::direct_3d::{DirectResidueBranches, LOCAL_3D_MASS_SCOPE, LOCAL_3D_SOFT_SCOPE},
+        approx::direct_3d::{
+            DirectResidueBranches, LOCAL_3D_MASS_SCOPE, LOCAL_3D_SOFT_SCOPE, ZERO_MODE_ORDER,
+            ZERO_MODE_TEMPERATURE,
+        },
         overlap_control::ExactControlPoint,
         uv_graph::UVE,
     },
@@ -118,9 +121,14 @@ impl PhysicalSoftMap {
         let mut unfinished = None;
         physical.visitor(&mut |view| {
             if let AtomView::Fun(call) = view {
-                if call.get_symbol() == GS.m_uv_vacuum
-                    || call.get_symbol() == *LOCAL_3D_MASS_SCOPE
-                    || call.get_symbol() == *LOCAL_3D_SOFT_SCOPE
+                if [
+                    GS.m_uv_vacuum,
+                    *LOCAL_3D_MASS_SCOPE,
+                    *LOCAL_3D_SOFT_SCOPE,
+                    *ZERO_MODE_ORDER,
+                    *ZERO_MODE_TEMPERATURE,
+                ]
+                .contains(&call.get_symbol())
                 {
                     unfinished = Some(view.to_owned());
                 }

@@ -18,7 +18,8 @@ use crate::{
     numerator::aind::Aind,
     processes::GraphGenerationStats,
     uv::{
-        Integrands, RenormalizationPart, UVOrchestrator, UVgenerationSettings, UltravioletGraph,
+        ApproximationType, Integrands, RenormalizationPart, UVOrchestrator, UVgenerationSettings,
+        UltravioletGraph,
         approx::{
             CutStructure, OrientationProjection, local_3d::Localizer,
             projected_4d::Local4dProjectionContext,
@@ -141,55 +142,53 @@ pub(crate) fn validate_local_counterterm_schemes(
         return Ok(());
     }
 
-    let mut uncut = graph.full_filter();
-    uncut.subtract_with(&graph.initial_state_cut.left);
-    for (cut_index, cut) in cuts.cuts.iter().enumerate() {
-        let subgraph = uncut.subtract(&cut.union);
-        let mut spinneys = graph
-            .classified_spinneys(&subgraph, settings, &graph.loop_momentum_basis)
-            .wrap_err_with(|| {
-                format!(
-                    "graph '{}' cut {cut_index}: failed to classify UV counterterm components",
-                    graph.name
-                )
-            })?;
-        graph.restrict_full_observable_spinney(&mut spinneys, settings, medium);
-        let ir_components = spinneys.iter().filter(|spinney| {
-            spinney.n_components() == 1
-                && spinney.renormalization_scheme == crate::uv::ApproximationType::IR
-        });
-        let os_components = spinneys.iter().filter(|spinney| {
-            spinney.n_components() == 1
-                && spinney.renormalization_scheme == crate::uv::ApproximationType::OS
-        });
-        let pole_components = spinneys.iter().filter(|spinney| {
-            spinney.n_components() == 1
-                && spinney.renormalization_scheme == crate::uv::ApproximationType::PolePart
-        });
-        // The direct local-3D kernel has no integrated thermal soft branch.
+    // A frozen soft branch makes the enclosing U the local subtraction of
+    // the soft component's reduced cograph.
+    let freezes_soft_branches = settings.freezes_thermal_soft_branches(medium);
+    for (cut_index, spinneys) in graph
+        .classified_cut_spinneys(cuts, settings, medium)
+        .enumerate()
+    {
+        let spinneys = spinneys?;
+        // Only the zero-mode operation of the direct local-3D hedge-poset
+        // route without integrated counterterms subtracts a thermal soft
+        // component. Elsewhere the host policy leaves the classification
+        // unchanged, and vacuum subtraction only omits the full observable,
+        // whose U vanishes on completed thermal weights.
         if medium.mode.is_finite_temperature()
-            && settings.generate_integrated
-            && settings.final_integrand == FinalIntegrandDimension::ThreeD
-            && let Some(soft) = ir_components.clone().find(|spinney| spinney.dod > 0)
+            && !freezes_soft_branches
+            && let Some(soft) = spinneys.iter().find(|spinney| {
+                spinney.renormalization_scheme == ApproximationType::IR && spinney.dod > 0
+            })
         {
             return Err(eyre!(
-                "graph '{}' cut {cut_index}: thermal soft counterterm component {} (d={}) is local-only; set uv.generate_integrated=false",
+                "graph '{}' cut {cut_index}: thermal soft counterterm component {} (d={}) is local-only and needs frozen thermal soft branches; set uv.orchestrator=hedge_poset, uv.final_integrand=3D and uv.generate_integrated=false",
                 graph.name,
                 soft.filter().string_label(),
                 soft.dod,
             ));
         }
-        // A frozen soft branch makes the enclosing U the local subtraction of
-        // the soft component's reduced cograph.
-        let ordinary_parent_is_local = settings.freezes_thermal_soft_branches(medium);
+        // Where soft branches freeze, only zero-mode hosts keep `IR`, and a
+        // union host is disconnected.
+        let ir_components = spinneys.iter().filter(|spinney| {
+            spinney.renormalization_scheme == ApproximationType::IR
+                && (spinney.n_components() == 1 || spinney.thermal_zero_mode().is_some())
+        });
+        let os_components = spinneys.iter().filter(|spinney| {
+            spinney.n_components() == 1 && spinney.renormalization_scheme == ApproximationType::OS
+        });
+        let pole_components = spinneys.iter().filter(|spinney| {
+            spinney.n_components() == 1
+                && spinney.renormalization_scheme == ApproximationType::PolePart
+        });
         if let Some((child, parent)) = ir_components.clone().find_map(|child| {
-            (!ordinary_parent_is_local && child.dod > 0).then(|| {
+            (!freezes_soft_branches && child.dod > 0).then(|| {
                 spinneys
                     .iter()
                     .find(|parent| {
                         parent.n_components() == 1
                             && parent.dod > 0
-                            && parent.renormalization_scheme == crate::uv::ApproximationType::MUV
+                            && parent.renormalization_scheme == ApproximationType::MUV
                             && parent.filter().includes(child.filter())
                             && parent.filter() != child.filter()
                     })
@@ -283,6 +282,7 @@ fn hedge_poset_parametric_integrands(
     stats: &mut GraphGenerationStats,
 ) -> Result<BTreeMap<RepresentationMode, Vec<ParametricIntegrands>>> {
     let wood = HedgePosetWood::new(cut_structure, graph, settings)?;
+    graph.zero_mode_subtracted = wood.hosts_zero_mode();
     let mut forests = wood.unfold();
     let mut projection_context = Local4dProjectionContext::default();
     orientations
@@ -540,12 +540,15 @@ impl<'a> ComparableExpr<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::uv::thermal_zero_mode::assign_zero_mode_hosts;
     use crate::{
         dot,
         graph::parse::IntoGraph,
         initialisation::test_initialise,
         utils::load_generic_model,
-        uv::{ApproximationType, CTRenormalizationRule, RenormalizationPrescriptionSettings},
+        uv::{
+            ApproximationType, CTRenormalizationRule, RenormalizationPrescriptionSettings, Spinney,
+        },
     };
     use idenso::{bis, gamma};
     use linnet::half_edge::involution::EdgeIndex;
@@ -767,32 +770,55 @@ mod tests {
         validate_local_counterterm_schemes(&graph, &cuts, &settings, &medium)
             .expect("the omitted full-observable counterterm must not constrain its IR child");
 
-        // At finite temperature an enclosing U freezes the soft child, so the
-        // full-graph U is the local subtraction of its reduced cograph.
+        // At finite temperature the quark bubble hosts no zero-mode region:
+        // its soft gluon has the static degree +1. It becomes a plain U, which
+        // the finite-temperature full-graph U may contain.
         medium = MediumSettings {
             mode: MediumMode::ThermodynamicEquilibrium,
             vacuum_subtraction: false,
         };
         validate_local_counterterm_schemes(&graph, &cuts, &settings, &medium)
-            .expect("a finite-temperature U parent must accept its frozen soft child");
+            .expect("a finite-temperature U parent must accept the demoted quark bubble");
         medium.vacuum_subtraction = true;
         validate_local_counterterm_schemes(&graph, &cuts, &settings, &medium)
-            .expect("the retained full-graph U must accept its frozen soft child");
-        let mut retained = spinneys.clone();
-        graph.restrict_full_observable_spinney(&mut retained, &settings, &medium);
+            .expect("vacuum subtraction must accept the demoted quark bubble");
+        let restricted = |mut spinneys: Vec<Spinney>, settings: &UVgenerationSettings| {
+            assign_zero_mode_hosts(
+                &graph,
+                &graph.full_filter(),
+                &mut spinneys,
+                settings,
+                &medium,
+                &cuts,
+            )
+            .unwrap();
+            graph
+                .restrict_full_observable_spinney(&mut spinneys, &medium)
+                .unwrap();
+            spinneys
+        };
+        let retained = restricted(spinneys.clone(), &settings);
+        assert!(
+            retained
+                .iter()
+                .all(|spinney| spinney.thermal_zero_mode().is_none())
+        );
         assert!(
             retained.iter().any(|spinney| {
-                spinney.filter() == &graph.full_filter()
+                spinney.filter() == &child
                     && spinney.renormalization_scheme == ApproximationType::MUV
             }),
-            "vacuum subtraction must keep the full-graph U above a thermal soft child"
+            "the quark bubble without a zero-mode region must become a plain U"
         );
-        assert!(retained.iter().any(|spinney| {
-            spinney.filter() == &child && spinney.renormalization_scheme == ApproximationType::IR
-        }));
+        assert!(
+            retained
+                .iter()
+                .all(|spinney| spinney.filter() != &graph.full_filter()),
+            "without a zero-mode host, vacuum subtraction must omit the full-graph U"
+        );
 
-        // A full graph classified IR keeps only its U: without external
-        // momenta, its soft expansion would reproduce the integrand.
+        // A full graph classified IR has no soft set, so it is demoted as well,
+        // and omitted without a host.
         let full_ir_settings = UVgenerationSettings {
             renormalization_prescription: RenormalizationPrescriptionSettings {
                 overrides: vec![
@@ -806,22 +832,21 @@ mod tests {
             },
             ..settings.clone()
         };
-        let mut retained = graph
+        let classified = graph
             .classified_spinneys(
                 &graph.full_filter(),
                 &full_ir_settings,
                 &graph.loop_momentum_basis,
             )
             .unwrap();
-        assert!(retained.iter().any(|spinney| {
+        assert!(classified.iter().any(|spinney| {
             spinney.filter() == &graph.full_filter()
                 && spinney.renormalization_scheme == ApproximationType::IR
         }));
-        graph.restrict_full_observable_spinney(&mut retained, &full_ir_settings, &medium);
-        assert!(retained.iter().any(|spinney| {
-            spinney.filter() == &graph.full_filter()
-                && spinney.renormalization_scheme == ApproximationType::MUV
-        }));
+        let retained = restricted(classified, &full_ir_settings);
+        assert!(retained.iter().all(|spinney| spinney.renormalization_scheme
+            == ApproximationType::MUV
+            && spinney.filter() != &graph.full_filter()));
 
         // Without a soft component, or on a route that does not freeze soft
         // branches, the full-graph counterterm is omitted as before.
@@ -836,7 +861,9 @@ mod tests {
                 &graph.loop_momentum_basis,
             )
             .unwrap();
-        graph.restrict_full_observable_spinney(&mut retained, &ordinary_settings, &medium);
+        graph
+            .restrict_full_observable_spinney(&mut retained, &medium)
+            .unwrap();
         assert!(
             retained
                 .iter()
@@ -847,16 +874,24 @@ mod tests {
             ..settings.clone()
         };
         let mut retained = spinneys;
-        graph.restrict_full_observable_spinney(&mut retained, &legacy_settings, &medium);
+        graph
+            .restrict_full_observable_spinney(&mut retained, &medium)
+            .unwrap();
         assert!(
             retained
                 .iter()
                 .all(|spinney| spinney.filter() != &graph.full_filter())
         );
+        // Only the direct local-3D hedge-poset route has frozen soft branches.
         medium.vacuum_subtraction = false;
         let error = validate_local_counterterm_schemes(&graph, &cuts, &legacy_settings, &medium)
             .expect_err("the legacy forest has no frozen soft branch");
-        assert!(error.to_string().contains("positive-degree MUV component"));
+        let message = error.to_string();
+        assert!(
+            message.contains("thermal soft counterterm component"),
+            "{message}"
+        );
+        assert!(message.contains("uv.orchestrator=hedge_poset"), "{message}");
 
         // Integrated thermal soft counterterms are rejected before any forest work.
         let integrated_settings = UVgenerationSettings {
@@ -974,7 +1009,9 @@ mod tests {
             vacuum_subtraction: true,
         };
         let mut retained = classified;
-        graph.restrict_full_observable_spinney(&mut retained, &settings, &medium);
+        graph
+            .restrict_full_observable_spinney(&mut retained, &medium)
+            .unwrap();
         assert!(
             retained
                 .iter()
@@ -989,8 +1026,8 @@ mod tests {
         .expect_err("a retained positive-degree MUV parent must still reject its IR child");
         assert!(error.to_string().contains("positive-degree MUV component"));
 
-        // At finite temperature the parent's U freezes the soft child and is
-        // therefore the local subtraction of its reduced cograph.
+        // At finite temperature the child hosts no zero-mode region, since its
+        // soft lines are massive, and becomes a plain U inside the parent.
         medium.mode = MediumMode::ThermodynamicEquilibrium;
         validate_local_counterterm_schemes(
             &graph,
@@ -998,7 +1035,7 @@ mod tests {
             &settings,
             &medium,
         )
-        .expect("a finite-temperature U parent must accept its frozen soft child");
+        .expect("a finite-temperature U parent must accept its demoted child");
     }
 
     #[test]

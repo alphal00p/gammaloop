@@ -38,7 +38,8 @@ pub use surface::{
     LinearEnergyExpr, LinearSurface, LinearSurfaceID, LinearSurfaceKind, SurfaceAtom, SurfaceCache,
 };
 pub use thermal::{
-    MediumMode, ThermalDistributionCall, ThermalDistributionFactor, ThermalNumerator, ThermalWeight,
+    MediumMode, ThermalDistributionCall, ThermalDistributionCallError, ThermalDistributionFactor,
+    ThermalNumerator, ThermalWeight,
 };
 pub use utils::StringSerializedAtom;
 pub use validator::{GraphValidation, validate_parsed_graph};

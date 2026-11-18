@@ -1,3 +1,4 @@
+use std::time::Instant;
 use std::{ops::Deref, sync::Arc};
 
 use color_eyre::eyre::{bail, ensure};
@@ -21,6 +22,7 @@ use symbolica::{
     poly::{polynomial::MultivariatePolynomial, series::SeriesDepth},
     symbol,
 };
+use tracing::warn;
 
 use crate::{
     cff::expression::OrientationID,
@@ -55,6 +57,27 @@ pub trait NumeratorAtomExt {
     /// Rational normalization requires exact rational coefficients, has a
     /// preflight algebra budget and must reduce size.
     fn cancel_scalar_poles(&self, numerator_keys: &[Atom]) -> Atom;
+
+    /// Cancel every scalar denominator that depends on momenta outside
+    /// on-shell energies against its numerator, per monomial of the opaque
+    /// numerator calls `numerator_keys`. A Taylor coefficient divides by the
+    /// leading coefficient of each expanded energy difference: for a
+    /// difference that vanishes at the expansion point, such as the
+    /// `|p| - |p - q|` of a Landau pair, a linear form like `p.q`, whose
+    /// poles cancel only in the sum. Unlike [`Self::cancel_scalar_poles`]
+    /// this is a precision requirement rather than an optimization: it has no
+    /// size budget on its result, keeps the cancelled form even when it is
+    /// larger, and distributes products of sums of numerator calls, such as
+    /// the jets of an earlier operation times a new numerator. Medium weights
+    /// are unwrapped in a coefficient it cancels, because their opaque
+    /// arguments would hide the relations between occupations.
+    /// Guards, inexact numbers, non-integer powers and tensors leave a
+    /// coefficient unchanged. Only the algebra budgets of its input remain:
+    /// more than `MAX_NUMERATOR_KEYS` numerator calls, or a collection beyond
+    /// the budgets of [`Self::coefficient_list_exact`], leaves the input
+    /// unchanged with a warning, because its momentum poles then cancel only
+    /// in floating point.
+    fn cancel_momentum_poles(&self, numerator_keys: &[Atom]) -> Atom;
 
     /// Truncate through an absolute integer order, preserving an existing root
     /// product's variable-independent factors outside the coefficient sum.
@@ -91,6 +114,10 @@ impl NumeratorAtomExt for Atom {
 
     fn cancel_scalar_poles(&self, numerator_keys: &[Atom]) -> Atom {
         self.as_view().cancel_scalar_poles(numerator_keys)
+    }
+
+    fn cancel_momentum_poles(&self, numerator_keys: &[Atom]) -> Atom {
+        self.as_view().cancel_momentum_poles(numerator_keys)
     }
 
     fn collect_compact_factors(&self) -> Atom {
@@ -135,6 +162,27 @@ impl NumeratorAtomExt for Atom {
     }
 }
 
+/// The most numerator calls whose monomials an exact coefficient collection
+/// or a pole cancellation separates.
+const MAX_NUMERATOR_KEYS: usize = 128;
+/// The most monomials of the numerator calls in an exact coefficient
+/// collection, and in the input of the bounded pole cancellation.
+const MAX_NUMERATOR_MONOMIALS: usize = 128;
+/// The largest input of the bounded pole cancellation, an optimization.
+const MAX_BOUNDED_INPUT_BYTES: usize = 256 * 1024;
+
+/// How a scalar coefficient's poles are cancelled between the monomials of
+/// its opaque numerator calls.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PoleCancellation {
+    /// [`NumeratorAtomExt::cancel_scalar_poles`]: an optimization within
+    /// algebra budgets, kept only where it shrinks the expression.
+    Bounded,
+    /// [`NumeratorAtomExt::cancel_momentum_poles`]: every coefficient with a
+    /// momentum-dependent denominator, without a size budget.
+    MomentumDenominators,
+}
+
 /// Upper bounds before rational polynomial conversion, including the expanded
 /// denominator of a sum. Saturating arithmetic makes compact high powers cheap
 /// to reject; a post-conversion byte limit would be too late.
@@ -146,7 +194,21 @@ struct ScalarRationalSize {
 }
 
 impl ScalarRationalSize {
+    /// The size of `atom` as a rational function, if it lies in the exact
+    /// rational domain and within the algebra budget.
     fn estimate(atom: AtomView<'_>) -> Option<Self> {
+        Self::measure(atom, PoleCancellation::Bounded)
+    }
+
+    /// Whether `atom` lies in the exact rational domain of rational
+    /// normalization, whatever its size: rational numbers, integer powers,
+    /// and no tensors.
+    fn is_exact(atom: AtomView<'_>) -> bool {
+        Self::measure(atom, PoleCancellation::MomentumDenominators).is_some()
+    }
+
+    /// The size of `atom`, checked against the algebra budget of `mode`.
+    fn measure(atom: AtomView<'_>, mode: PoleCancellation) -> Option<Self> {
         let leaf = Self {
             numerator_terms: 1,
             denominator_terms: 1,
@@ -181,7 +243,7 @@ impl ScalarRationalSize {
                 if exponent.unsigned_abs() > 64 {
                     return None;
                 }
-                let mut base = Self::estimate(power.get_base())?;
+                let mut base = Self::measure(power.get_base(), mode)?;
                 if exponent < 0 {
                     std::mem::swap(&mut base.numerator_terms, &mut base.denominator_terms);
                     std::mem::swap(&mut base.numerator_degree, &mut base.denominator_degree);
@@ -200,9 +262,9 @@ impl ScalarRationalSize {
                     AtomView::Mul(product) => (false, product.iter()),
                     _ => unreachable!(),
                 };
-                let first = Self::estimate(arguments.next()?)?;
+                let first = Self::measure(arguments.next()?, mode)?;
                 arguments.try_fold(first, |left, right| {
-                    let right = Self::estimate(right)?;
+                    let right = Self::measure(right, mode)?;
                     Self {
                         numerator_terms: if add {
                             left.numerator_terms
@@ -231,11 +293,19 @@ impl ScalarRationalSize {
                             .denominator_degree
                             .saturating_add(right.denominator_degree),
                     }
-                    .bounded()
+                    .within(mode)
                 })?
             }
         };
-        size.bounded()
+        size.within(mode)
+    }
+
+    /// `self` within the algebra budget of `mode`.
+    fn within(self, mode: PoleCancellation) -> Option<Self> {
+        match mode {
+            PoleCancellation::Bounded => self.bounded(),
+            PoleCancellation::MomentumDenominators => Some(self),
+        }
     }
 
     fn bounded(self) -> Option<Self> {
@@ -266,7 +336,7 @@ impl NumeratorAtomExt for AtomView<'_> {
                     let mut result = template.zero();
                     for term in sum {
                         let term = collect(term, keys, template)?;
-                        if result.nterms().checked_add(term.nterms())? > 128 {
+                        if result.nterms().checked_add(term.nterms())? > MAX_NUMERATOR_MONOMIALS {
                             return None;
                         }
                         result = &result + &term;
@@ -277,7 +347,7 @@ impl NumeratorAtomExt for AtomView<'_> {
                     let mut result = template.one();
                     for factor in product {
                         let factor = collect(factor, keys, template)?;
-                        if result.nterms().checked_mul(factor.nterms())? > 128 {
+                        if result.nterms().checked_mul(factor.nterms())? > MAX_NUMERATOR_MONOMIALS {
                             return None;
                         }
                         for left in result.exponents_iter() {
@@ -314,7 +384,7 @@ impl NumeratorAtomExt for AtomView<'_> {
         }
 
         if self.get_byte_size() > 1024 * 1024
-            || keys.len() > 128
+            || keys.len() > MAX_NUMERATOR_KEYS
             || keys.iter().enumerate().any(|(index, key)| {
                 !matches!(key.as_view(), AtomView::Var(_) | AtomView::Fun(_))
                     || keys[..index]
@@ -363,115 +433,15 @@ impl NumeratorAtomExt for AtomView<'_> {
     }
 
     fn cancel_scalar_poles(&self, numerator_keys: &[Atom]) -> Atom {
-        // These are optimization budgets, never Taylor truncation cutoffs.
-        // Bound family collection as well as the later rational conversion.
-        if self.get_byte_size() > 256 * 1024 || numerator_keys.len() > 128 {
-            return self.to_owned();
-        }
-        // Even a fixed residue key can contain inner lazy guards. Never pull a
-        // denominator out of its guarded evaluation context.
-        if [
-            OrientationID::symbol(),
-            GS.theta,
-            GS.orientation_delta,
-            Symbol::IF,
-        ]
-        .into_iter()
-        .any(|symbol| self.contains_symbol(symbol))
-        {
-            return self.to_owned();
-        }
-        let started = std::time::Instant::now();
-        let contains_family =
-            |part: AtomView<'_>| numerator_keys.iter().any(|key| part.contains(key));
-        let literal_family =
-            |part: AtomView<'_>| numerator_keys.iter().any(|key| key.as_view() == part);
-        let monomial_factor = |part: AtomView<'_>| {
-            literal_family(part)
-                || matches!(part, AtomView::Pow(power)
-                if literal_family(power.get_base())
-                    && i64::try_from(power.get_exp()).is_ok_and(|n| (0..=64).contains(&n)))
-        };
-        let mut eligible = numerator_keys
-            .iter()
-            .all(|key| matches!(key.as_view(), AtomView::Var(_) | AtomView::Fun(_)));
-        let mut monomials = 1usize;
-        self.visitor(&mut |part| {
-            if !eligible || literal_family(part) || !contains_family(part) {
-                return false;
-            }
-            match part {
-                AtomView::Add(sum) => {
-                    monomials = monomials.saturating_add(sum.get_nargs().saturating_sub(1));
-                    eligible = monomials <= 128;
-                }
-                AtomView::Mul(product) => {
-                    let factors = product
-                        .iter()
-                        .filter(|factor| contains_family(*factor))
-                        .collect::<Vec<_>>();
-                    // One sum with scalar spectators is a linear jet. Multiple
-                    // numerator factors must already be literal monomials.
-                    eligible = factors.len() <= 1 || factors.into_iter().all(monomial_factor);
-                }
-                AtomView::Pow(_) => eligible = monomial_factor(part),
-                _ => eligible = false,
-            }
-            eligible
-        });
-        if !eligible {
-            return self.to_owned();
-        }
-        let Some(groups) = self.coefficient_list_exact(numerator_keys) else {
-            return self.to_owned();
-        };
-        let mut attempted = 0usize;
-        let mut reduced = 0usize;
-        let result = Atom::add_many(groups.into_iter().map(|(key, scalar)| {
-            let mut has_inverse = false;
-            scalar.visitor(&mut |part| match part {
-                AtomView::Fun(_) => false,
-                AtomView::Pow(power) => {
-                    has_inverse |= i64::try_from(power.get_exp()).is_ok_and(|n| n < 0);
-                    true
-                }
-                _ => true,
-            });
-            let coefficient = if has_inverse
-                && scalar.as_view().get_byte_size() <= 16 * 1024
-                && ScalarRationalSize::estimate(scalar.as_view()).is_some()
-            {
-                attempted += 1;
-                // Functions are indeterminates to rational normalization: in
-                // particular, E(owner, P)^2 is never replaced by P here.
-                // In this exact domain, together already cancels common
-                // factors; cancel would repeat rational conversion and GCDs.
-                let cancelled = scalar.together().collect_compact_factors();
-                if cancelled.is_zero()
-                    || cancelled.as_view().get_byte_size() < scalar.as_view().get_byte_size()
-                {
-                    reduced += 1;
-                    cancelled
-                } else {
-                    scalar
-                }
-            } else {
-                scalar
-            };
-            key * coefficient
-        }));
-        let result = if result.as_view().get_byte_size() < self.get_byte_size() {
-            result
-        } else {
-            self.to_owned()
-        };
-        crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
-            stage = "scalar_pole_cancellation", attempted, reduced,
-            input_bytes = self.get_byte_size(), output_bytes = result.as_view().get_byte_size(),
-            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
-            "Bounded scalar coefficient cancellation"
-        );
-        result
+        cancel_grouped_scalar_poles(*self, numerator_keys, PoleCancellation::Bounded)
+    }
+
+    fn cancel_momentum_poles(&self, numerator_keys: &[Atom]) -> Atom {
+        cancel_grouped_scalar_poles(
+            *self,
+            numerator_keys,
+            PoleCancellation::MomentumDenominators,
+        )
     }
 
     fn collect_compact_factors(&self) -> Atom {
@@ -716,6 +686,222 @@ impl NumeratorAtomExt for AtomView<'_> {
 
     //     ParsingNet::try_from_view(*self, &lib);
     // }
+}
+
+/// Whether `atom` divides by an expression of momenta outside on-shell
+/// energies, which can vanish where the energies cannot: the inverse of a
+/// sum or product containing a spatial or external momentum that is not an
+/// on-shell energy's invariant. Function arguments other than those of a
+/// momentum are opaque.
+fn has_momentum_denominator(atom: AtomView<'_>) -> bool {
+    let momentum_heads = [GS.emr_mom, GS.emr_vec, GS.external_mom];
+    let depends_on_momenta = |base: AtomView<'_>| {
+        let mut found = false;
+        base.visitor(&mut |part| {
+            if found {
+                return false;
+            }
+            match part {
+                AtomView::Fun(call) if momentum_heads.contains(&call.get_symbol()) => {
+                    found = true;
+                    false
+                }
+                AtomView::Fun(_) => false,
+                _ => true,
+            }
+        });
+        found
+    };
+    let mut found = false;
+    atom.visitor(&mut |part| {
+        if found {
+            return false;
+        }
+        match part {
+            AtomView::Fun(_) => false,
+            AtomView::Pow(power) => {
+                found = i64::try_from(power.get_exp()).is_ok_and(|n| n < 0)
+                    && depends_on_momenta(power.get_base());
+                !found
+            }
+            _ => true,
+        }
+    });
+    found
+}
+
+/// Collect `atom` as a polynomial in the opaque numerator calls
+/// `numerator_keys` and normalize the rational scalar coefficient of each
+/// monomial as `mode` requires. Guards and function arguments retain their
+/// boundaries. The bounded optimization never distributes products or powers
+/// of sums of the calls; the precision requirement does, within the exact
+/// collection's budget.
+fn cancel_grouped_scalar_poles(
+    atom: AtomView<'_>,
+    numerator_keys: &[Atom],
+    mode: PoleCancellation,
+) -> Atom {
+    // Leave `atom` unchanged, tracing a precision requirement left unmet.
+    let skip = |reason: &str| {
+        if mode == PoleCancellation::MomentumDenominators && has_momentum_denominator(atom) {
+            crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+                stage = "momentum_pole_cancellation_skipped", reason,
+                input_bytes = atom.get_byte_size(), keys = numerator_keys.len(),
+                "Momentum poles left uncancelled"
+            );
+        }
+        atom.to_owned()
+    };
+    // A precision requirement left unmet by an algebra budget, unlike a
+    // documented exception such as a guard, is a warning: its momentum poles
+    // then cancel only in floating point.
+    let exceed_budget = |reason: &str| {
+        if mode == PoleCancellation::MomentumDenominators && has_momentum_denominator(atom) {
+            warn!(
+                "Momentum poles left uncancelled ({reason}: {} bytes, {} numerator calls); \
+                 they cancel only in floating point",
+                atom.get_byte_size(),
+                numerator_keys.len()
+            );
+        }
+        skip(reason)
+    };
+    // These are optimization budgets, never Taylor truncation cutoffs. Bound
+    // family collection as well as the later rational conversion; the key
+    // count also bounds the polynomial collection of a precision requirement.
+    if (mode == PoleCancellation::Bounded && atom.get_byte_size() > MAX_BOUNDED_INPUT_BYTES)
+        || numerator_keys.len() > MAX_NUMERATOR_KEYS
+    {
+        return exceed_budget("numerator key budget");
+    }
+    // Even a fixed residue key can contain inner lazy guards. Never pull a
+    // denominator out of its guarded evaluation context.
+    if [
+        OrientationID::symbol(),
+        GS.theta,
+        GS.orientation_delta,
+        Symbol::IF,
+    ]
+    .into_iter()
+    .any(|symbol| atom.contains_symbol(symbol))
+    {
+        return skip("guarded");
+    }
+    let started = Instant::now();
+    let contains_family = |part: AtomView<'_>| numerator_keys.iter().any(|key| part.contains(key));
+    let literal_family =
+        |part: AtomView<'_>| numerator_keys.iter().any(|key| key.as_view() == part);
+    let monomial_factor = |part: AtomView<'_>| {
+        literal_family(part)
+            || matches!(part, AtomView::Pow(power)
+            if literal_family(power.get_base())
+                && i64::try_from(power.get_exp()).is_ok_and(|n| (0..=64).contains(&n)))
+    };
+    let mut eligible = numerator_keys
+        .iter()
+        .all(|key| matches!(key.as_view(), AtomView::Var(_) | AtomView::Fun(_)));
+    let mut monomials = 1usize;
+    atom.visitor(&mut |part| {
+        if !eligible || literal_family(part) || !contains_family(part) {
+            return false;
+        }
+        match part {
+            AtomView::Add(sum) => {
+                monomials = monomials.saturating_add(sum.get_nargs().saturating_sub(1));
+                eligible = monomials <= MAX_NUMERATOR_MONOMIALS;
+            }
+            AtomView::Mul(product) => {
+                let factors = product
+                    .iter()
+                    .filter(|factor| contains_family(*factor))
+                    .collect::<Vec<_>>();
+                // One sum with scalar spectators is a linear jet. Multiple
+                // numerator factors must already be literal monomials.
+                eligible = factors.len() <= 1 || factors.into_iter().all(monomial_factor);
+            }
+            AtomView::Pow(_) => eligible = monomial_factor(part),
+            _ => eligible = false,
+        }
+        eligible
+    });
+    // A precision requirement distributes products of numerator sums, such as
+    // the jets of an earlier operation times this operation's numerator, within
+    // the bounded exact collection.
+    if !eligible && mode == PoleCancellation::Bounded {
+        return skip("numerator monomials");
+    }
+    let Some(groups) = atom.coefficient_list_exact(numerator_keys) else {
+        return exceed_budget("coefficient collection");
+    };
+    let mut attempted = 0usize;
+    let mut reduced = 0usize;
+    let mut inexact = 0usize;
+    let result = Atom::add_many(groups.into_iter().map(|(key, scalar)| {
+        // Functions are indeterminates to rational normalization: in
+        // particular, E(owner, P)^2 is never replaced by P here. In this
+        // exact domain, together already cancels common factors; cancel
+        // would repeat rational conversion and GCDs.
+        let coefficient = match mode {
+            PoleCancellation::Bounded => {
+                let mut has_inverse = false;
+                scalar.visitor(&mut |part| match part {
+                    AtomView::Fun(_) => false,
+                    AtomView::Pow(power) => {
+                        has_inverse |= i64::try_from(power.get_exp()).is_ok_and(|n| n < 0);
+                        true
+                    }
+                    _ => true,
+                });
+                if has_inverse
+                    && scalar.as_view().get_byte_size() <= 16 * 1024
+                    && ScalarRationalSize::estimate(scalar.as_view()).is_some()
+                {
+                    attempted += 1;
+                    let cancelled = scalar.together().collect_compact_factors();
+                    if cancelled.is_zero()
+                        || cancelled.as_view().get_byte_size() < scalar.as_view().get_byte_size()
+                    {
+                        reduced += 1;
+                        cancelled
+                    } else {
+                        scalar
+                    }
+                } else {
+                    scalar
+                }
+            }
+            PoleCancellation::MomentumDenominators
+                if has_momentum_denominator(scalar.as_view()) =>
+            {
+                // The weights are numerically the identity; their opaque
+                // arguments would hide the occupations from the cancellation.
+                let unwrapped = scalar.unwrap_function(GS.thermal_weight_wrapper);
+                if ScalarRationalSize::is_exact(unwrapped.as_view()) {
+                    attempted += 1;
+                    reduced += 1;
+                    unwrapped.together().collect_compact_factors()
+                } else {
+                    inexact += 1;
+                    scalar
+                }
+            }
+            PoleCancellation::MomentumDenominators => scalar,
+        };
+        key * coefficient
+    }));
+    let result = match mode {
+        PoleCancellation::Bounded if result.as_view().get_byte_size() >= atom.get_byte_size() => {
+            atom.to_owned()
+        }
+        PoleCancellation::Bounded | PoleCancellation::MomentumDenominators => result,
+    };
+    crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
+        stage = "scalar_pole_cancellation", mode = ?mode, attempted, reduced, inexact,
+        input_bytes = atom.get_byte_size(), output_bytes = result.as_view().get_byte_size(),
+        elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+        "Scalar coefficient pole cancellation"
+    );
+    result
 }
 
 #[cfg(test)]

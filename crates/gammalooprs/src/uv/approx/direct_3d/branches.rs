@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     collections::{BTreeMap, BTreeSet},
     ops::Neg,
     sync::{
@@ -9,6 +10,7 @@ use std::{
 
 use color_eyre::Result;
 use eyre::{ensure, eyre};
+use linnet::half_edge::involution::EdgeIndex;
 use spenso::shadowing::{ANTISYM, CYCLIC, SYM};
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Indeterminate, Symbol, SymbolAttribute, SymbolBuilder},
@@ -33,9 +35,41 @@ use crate::{
     },
 };
 
-use super::coefficients::{ScalarCoefficients, is_factor_call};
+use super::coefficients::{ScalarCoefficients, is_factor_call, numerator_family_calls};
 
 static NUMERATOR_SCOPE: AtomicUsize = AtomicUsize::new(0);
+
+/// What a shared Taylor series does with the coefficients of its residue
+/// roots.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RootCoefficients {
+    /// The native series coefficients.
+    Native,
+    /// The native coefficients with their momentum-dependent denominators
+    /// cancelled symbolically, per retained numerator monomial
+    /// ([`NumeratorAtomExt::cancel_momentum_poles`]).
+    MomentumPolesCancelled,
+}
+
+/// The truncation of a shared Taylor series and the treatment of its residue
+/// roots.
+#[derive(Clone, Copy, Debug)]
+struct SeriesTruncation {
+    /// The last retained order.
+    depth: i64,
+    /// The order through which the residue roots are probed.
+    root_probe_depth: i64,
+    /// What the series does with the coefficients of the residue roots.
+    root_coefficients: RootCoefficients,
+}
+
+/// `series` with the momentum poles of each coefficient cancelled, per
+/// monomial of the retained numerator calls it contains.
+fn cancel_coefficient_momentum_poles(series: &Series<AtomField>) -> Series<AtomField> {
+    series.map_coeff(|coefficient| {
+        coefficient.cancel_momentum_poles(&numerator_family_calls(coefficient.as_view()))
+    })
+}
 
 /// The energy substitution belonging to one complete generalized residue key.
 ///
@@ -91,6 +125,18 @@ impl DirectResidueKey {
             DirectEnergyMap::Production => None,
             DirectEnergyMap::Source(map) => Some(map),
         }
+    }
+
+    /// The complete affine energy map of this key: its source map, or else
+    /// the production map of its selector host, which must exist either way.
+    fn edge_energy_map<'a>(
+        &'a self,
+        orientation: OrientationProjection<'a>,
+    ) -> Result<&'a [LinearEnergyExpr]> {
+        let production = orientation.production_orientation(self.selector_host)?;
+        Ok(self
+            .source_edge_energy_map()
+            .unwrap_or(&production.edge_energy_map))
     }
 
     fn selector(&self, materialize_key_selector: bool) -> Atom {
@@ -171,6 +217,58 @@ impl DirectResidueBranches {
         self.0.iter().map(|(key, integrands)| (key, integrands))
     }
 
+    /// Key every residue row to the static energies of the edges in `sigma`.
+    /// Their entries of the complete energy map become zero, sampling scale
+    /// and constant included, and their on-shell energies leave every other
+    /// entry, so numerators attached later see these edges at zero energy.
+    /// Each row starts from its own source map or its production map and
+    /// keeps the result as a source map. Re-keying again changes nothing,
+    /// and rows whose keys coincide add.
+    ///
+    /// # Errors
+    ///
+    /// Every selector host needs its production energy map, and every edge
+    /// of `sigma` an entry in each row's map.
+    pub(crate) fn rekey_static(
+        &self,
+        orientation: OrientationProjection<'_>,
+        sigma: &BTreeSet<EdgeIndex>,
+    ) -> Result<Self> {
+        Self::from_keyed(
+            self.iter_keys()
+                .map(|(key, integrands)| {
+                    let map = key.edge_energy_map(orientation)?;
+                    if let Some(edge) = sigma.iter().find(|edge| usize::from(**edge) >= map.len()) {
+                        return Err(eyre!(
+                            "static edge {edge} has no entry in the {}-edge energy map of \
+                             orientation {}",
+                            map.len(),
+                            key.selector_host.0
+                        ));
+                    }
+                    let map = map
+                        .iter()
+                        .enumerate()
+                        .map(|(slot, energy)| {
+                            if sigma.contains(&EdgeIndex(slot)) {
+                                return LinearEnergyExpr::zero();
+                            }
+                            let mut energy = energy.clone();
+                            energy
+                                .internal_terms
+                                .retain(|(edge, _)| !sigma.contains(edge));
+                            energy.canonical()
+                        })
+                        .collect();
+                    Ok((
+                        DirectResidueKey::source(key.selector_host, map),
+                        integrands.clone(),
+                    ))
+                })
+                .collect::<Result<Vec<_>>>()?,
+        )
+    }
+
     /// Prepare one numerator with Taylor-inert coefficients of the complete
     /// affine energy maps. The returned tuple is `(numerator, parameters, rows)`;
     /// each row retains its complete residue key and ordered numeric arguments.
@@ -184,20 +282,9 @@ impl DirectResidueBranches {
         numerator: &Atom,
         scope: usize,
     ) -> Result<(Atom, Vec<Atom>, Vec<(DirectResidueKey, Vec<Atom>)>)> {
-        let orientations = orientation.exact_orientations()?;
         let maps = self
             .iter_keys()
-            .map(|(key, _)| {
-                let production = orientations.get(key.selector_host).ok_or_else(|| {
-                    eyre!(
-                        "missing production energy map for orientation {}",
-                        key.selector_host.0
-                    )
-                })?;
-                Ok(key
-                    .source_edge_energy_map()
-                    .unwrap_or(&production.edge_energy_map))
-            })
+            .map(|(key, _)| key.edge_energy_map(orientation))
             .collect::<Result<Vec<_>>>()?;
         let edge_count = maps[0].len();
         if maps.iter().any(|map| map.len() != edge_count) {
@@ -336,6 +423,12 @@ impl DirectResidueBranches {
             .sum()
     }
 
+    /// Whether every residue root of every row is zero.
+    pub(crate) fn is_zero(&self) -> bool {
+        self.iter_keys()
+            .all(|(_, roots)| roots.iter().all(|(_, root)| root.is_zero()))
+    }
+
     pub(crate) fn zip_add(&self, other: &Self) -> Result<Self> {
         Self::from_keyed(
             self.iter_keys()
@@ -463,6 +556,74 @@ impl DirectResidueBranches {
             .fallible_map(|_, atom| map(atom))
     }
 
+    /// Homogeneous factors of an earlier operation were transformed with
+    /// every other body. Inline those whose definitions `select` accepts into
+    /// roots and bodies and drop their definitions: in a new expansion
+    /// variable they are ordinary dependent subexpressions, which that
+    /// expansion extracts again. The others stay shared.
+    pub(crate) fn inline_factors(
+        &self,
+        select: impl Fn(&FnMapEntry) -> bool,
+    ) -> Result<Cow<'_, Self>> {
+        let inlined = self
+            .factor_definitions()
+            .into_iter()
+            .filter(|(_, entry)| select(entry))
+            .collect::<BTreeMap<_, _>>();
+        if inlined.is_empty() {
+            return Ok(Cow::Borrowed(self));
+        }
+        let factor_inline = inlined
+            .values()
+            .map(|entry| entry.replacement())
+            .collect::<Vec<_>>();
+        Self::from_keyed(
+            self.iter_keys()
+                .map(|(key, roots)| {
+                    let numerators = roots
+                        .numerators()
+                        .iter()
+                        .filter(|entry| !inlined.contains_key(&entry.lhs))
+                        .map(|entry| {
+                            let rhs = entry.rhs.replace_multiple(&factor_inline);
+                            if rhs == entry.rhs {
+                                Arc::clone(entry)
+                            } else {
+                                Arc::new(FnMapEntry {
+                                    rhs,
+                                    ..entry.as_ref().clone()
+                                })
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    Ok((
+                        key.clone(),
+                        roots
+                            .map(|atom| atom.replace_multiple(&factor_inline))
+                            .with_numerators(numerators)?,
+                    ))
+                })
+                .collect::<Result<Vec<_>>>()?,
+        )
+        .map(Cow::Owned)
+    }
+
+    /// One definition per distinct numerator family, keyed by its binding;
+    /// a family repeated across residue rows keeps its last definition.
+    pub(super) fn numerator_definitions(&self) -> BTreeMap<&Atom, &FnMapEntry> {
+        self.iter_keys()
+            .flat_map(|(_, roots)| roots.numerators().iter())
+            .map(|entry| (&entry.lhs, entry.as_ref()))
+            .collect()
+    }
+
+    /// [`Self::numerator_definitions`] of the homogeneous-factor families.
+    fn factor_definitions(&self) -> BTreeMap<&Atom, &FnMapEntry> {
+        let mut definitions = self.numerator_definitions();
+        definitions.retain(|lhs, _| is_factor_call(lhs.as_view()));
+        definitions
+    }
+
     pub(crate) fn multiply_key_mapped(
         &self,
         orientation: OrientationProjection<'_>,
@@ -532,10 +693,65 @@ impl DirectResidueBranches {
         depth: i64,
         scope: Atom,
     ) -> Result<Self> {
+        self.native_series_preserving_numerators(
+            variable,
+            center,
+            SeriesTruncation {
+                depth,
+                root_probe_depth: depth.max(0),
+                root_coefficients: RootCoefficients::Native,
+            },
+            scope,
+        )
+    }
+
+    /// [`Self::series_preserving_numerators`] with the residue roots probed
+    /// only through `depth`, as the exact path probes them, rather than
+    /// through at least order zero. A probe through `depth` bounds every
+    /// retained order, and the roots of a zero-mode chart, which keeps only
+    /// negative orders, would otherwise be expanded several orders further.
+    ///
+    /// The coefficients of each root also have their momentum-dependent
+    /// denominators cancelled symbolically. A zero-mode chart expands the
+    /// energy differences of the CFF variants of a bubble, such as
+    /// `|p| - |p - q|`, which vanish at its expansion point. The
+    /// series of a quotient by one divides by its leading coefficient, a
+    /// linear form like `p.q`, so each coefficient carries the per-variant
+    /// Landau-pair poles `1/(p.q)^n` that cancel only in the sum of the
+    /// variants. They share one residue root, so its coefficients cancel
+    /// them exactly, and no evaluation loses digits near `p.q = 0`.
+    pub(crate) fn series_preserving_numerators_to_depth(
+        &self,
+        variable: Symbol,
+        center: AtomView<'_>,
+        depth: i64,
+        scope: Atom,
+    ) -> Result<Self> {
+        self.native_series_preserving_numerators(
+            variable,
+            center,
+            SeriesTruncation {
+                depth,
+                root_probe_depth: depth,
+                root_coefficients: RootCoefficients::MomentumPolesCancelled,
+            },
+            scope,
+        )
+    }
+
+    /// The native series path with the given truncation.
+    fn native_series_preserving_numerators(
+        &self,
+        variable: Symbol,
+        center: AtomView<'_>,
+        truncation: SeriesTruncation,
+        scope: Atom,
+    ) -> Result<Self> {
+        let depth = truncation.depth;
         self.series_preserving_numerators_with(
             variable,
             center,
-            (depth, depth.max(0)),
+            truncation,
             scope,
             |atom, order| Ok(atom.series(variable, center, SeriesDepth::absolute(order))?),
             |atom| atom.series_preserving_factors(variable, center, depth, &[]),
@@ -558,7 +774,11 @@ impl DirectResidueBranches {
         self.series_preserving_numerators_with(
             variable,
             center,
-            (depth, depth),
+            SeriesTruncation {
+                depth,
+                root_probe_depth: depth,
+                root_coefficients: RootCoefficients::Native,
+            },
             scope,
             |atom, order| ExactSoftJet::series(atom, variable, order),
             |atom| {
@@ -586,11 +806,16 @@ impl DirectResidueBranches {
         &self,
         variable: Symbol,
         center: AtomView<'_>,
-        (depth, root_probe_depth): (i64, i64),
+        truncation: SeriesTruncation,
         scope: Atom,
         mut expand: impl FnMut(&Atom, Rational) -> Result<Series<AtomField>>,
         mut finish: impl FnMut(&Atom) -> Result<Atom>,
     ) -> Result<Self> {
+        let SeriesTruncation {
+            depth,
+            root_probe_depth,
+            root_coefficients,
+        } = truncation;
         // Each instantiated scalar call owns its Laurent valuation: identical
         // templates at different arguments can have different leading poles.
         // Feed one temporary parameter-free family per call into the existing
@@ -604,35 +829,19 @@ impl DirectResidueBranches {
             self.iter_keys()
                 .flat_map(|(_, roots)| roots.scalar_definitions().iter().cloned()),
         )?;
-        let family = symbol!("gammalooprs::uv::numerator_family");
-        // Homogeneous factors of an earlier operation were transformed with
-        // every other body. Inline them here: in this operation's variable they
-        // are ordinary dependent subexpressions, extracted again below.
-        let factor_inline = self
-            .iter_keys()
-            .flat_map(|(_, roots)| roots.numerators().iter())
-            .filter(|entry| is_factor_call(entry.lhs.as_view()))
-            .map(|entry| (entry.lhs.clone(), entry.replacement()))
-            .collect::<BTreeMap<_, _>>()
-            .into_values()
-            .collect::<Vec<_>>();
-        let inline_factors = |atom: &Atom| {
-            if factor_inline.is_empty() {
-                atom.clone()
-            } else {
-                atom.replace_multiple(&factor_inline)
-            }
-        };
+        let family = Integrands::family_symbol();
+        let incoming_factors = self.factor_definitions().len();
         let mut scalar_sources = BTreeMap::<Atom, Arc<FnMapEntry>>::new();
         let mut scalar_families = BTreeSet::new();
-        let sources = self.map_numerators(|entry| resolve(&inline_factors(&entry.rhs)))?;
+        let sources = self
+            .inline_factors(|_| true)?
+            .map_numerators(|entry| resolve(&entry.rhs))?;
         let sources = Self::from_keyed(
             sources
                 .iter_keys()
                 .map(|(key, roots)| {
                     let mut used = BTreeSet::new();
                     let roots = roots.fallible_map(|atom| {
-                        let atom = inline_factors(atom);
                         let mut error = None;
                         let result = atom.replace_map(|view, _, out| {
                             if error.is_some() {
@@ -677,7 +886,6 @@ impl DirectResidueBranches {
                     let definitions = roots
                         .numerators()
                         .iter()
-                        .filter(|entry| !is_factor_call(entry.lhs.as_view()))
                         .cloned()
                         .chain(used.iter().map(|call| Arc::clone(&scalar_sources[call])))
                         .collect::<Vec<_>>();
@@ -707,8 +915,16 @@ impl DirectResidueBranches {
             "Starting shared Taylor construction"
         );
         if definitions.is_empty() {
-            let result =
-                sources.fallible_map(|_, atom| Ok(scalar_coefficients.retain(&finish(atom)?)))?;
+            let result = sources.fallible_map(|_, atom| {
+                let series = match root_coefficients {
+                    RootCoefficients::Native => finish(atom)?,
+                    RootCoefficients::MomentumPolesCancelled => finish(
+                        &cancel_coefficient_momentum_poles(&expand(atom, Rational::from(depth))?)
+                            .to_atom(),
+                    )?,
+                };
+                Ok(scalar_coefficients.retain(&series))
+            })?;
             return result
                 .with_scalar_definitions(scalar_coefficients.definitions().iter().cloned());
         }
@@ -972,10 +1188,12 @@ impl DirectResidueBranches {
                     "Residue-root Laurent probe input"
                 );
                 let started = std::time::Instant::now();
-                // The native route keeps its existing probe through at least
-                // zero. The exact audit needs only the requested endpoint:
-                // normalized family substitutions have nonnegative powers, so
-                // an empty root probe cannot acquire a lower-order coefficient.
+                // Roots are probed through `root_probe_depth`: at least zero
+                // for the ordinary charts, the endpoint for the exact audit and
+                // the zero-mode chart. Normalized family substitutions have
+                // nonnegative powers, so no probe term beyond the endpoint
+                // reaches a retained order, and an empty root probe cannot
+                // acquire a lower-order coefficient.
                 let probe = expand(&proxy, Rational::from(root_probe_depth))?;
                 crate::debug_tags!(#generation, #profile, #uv, #numerator, #summary;
                     stage = "shared_taylor_root_probe_done", scope = %scope, branch_index, ?cut,
@@ -1097,7 +1315,7 @@ impl DirectResidueBranches {
             coefficient_families = coefficients.values().map(Vec::len).sum::<usize>(),
             source_body_bytes = definitions.iter().map(|entry| entry.rhs.as_view().get_byte_size()).sum::<usize>(),
             coefficient_body_bytes = coefficients.values().flatten().map(|entry| entry.rhs.as_view().get_byte_size()).sum::<usize>(),
-            incoming_factors = factor_inline.len(),
+            incoming_factors,
             factor_count = scalar_coefficients.factor_definitions().len(),
             factor_body_bytes = scalar_coefficients.factor_definitions().iter().map(|entry| entry.rhs.as_view().get_byte_size()).sum::<usize>(),
             scalar_definition_bytes = scalar_coefficients.definitions().iter().map(|entry| entry.rhs.as_view().get_byte_size()).sum::<usize>(),
@@ -1120,7 +1338,12 @@ impl DirectResidueBranches {
                                 // Scalar denominators and energies in these
                                 // coefficients are now Taylor-independent. Only
                                 // the retained numerator polynomials are composed.
-                                let probed = probe.to_atom();
+                                let probed = match root_coefficients {
+                                    RootCoefficients::Native => probe.to_atom(),
+                                    RootCoefficients::MomentumPolesCancelled => {
+                                        cancel_coefficient_momentum_poles(&probe).to_atom()
+                                    }
+                                };
                                 // Native probes established precision. Keep scalar
                                 // coefficients shared during regular jet composition
                                 // and across subsequent momentum/mass transformations.

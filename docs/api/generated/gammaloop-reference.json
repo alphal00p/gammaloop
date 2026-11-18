@@ -19362,6 +19362,30 @@
       ]
     },
     {
+      "path": "runtime.stability.zero_mode_energy_escalation_factor",
+      "value_type": "number",
+      "description": "Skip double precision, for a graph whose integrand subtracts a thermal\nzero mode, when an internal massless boson without a chemical potential\nhas an on-shell energy below this factor times the temperature; a\nnegative value disables it. A\nzero-mode subtraction cancels the integrand there to a far smaller\nremainder, whose double-precision error, set by rounding the soft\nmomentum against the hard ones, often recurs identically at the\nrotated point.",
+      "required": false,
+      "default": 0.01,
+      "possible_values": []
+    },
+    {
+      "path": "runtime.stability.zero_mode_hierarchy_escalation_factor",
+      "value_type": "number",
+      "description": "Start at the last stability level, normally arbitrary precision, for a\ngraph whose integrand subtracts a thermal zero mode, when an internal\nmassless line of any species has an on-shell energy below this factor\ntimes the sum of the loop-momentum norms; a negative value disables\nit. At such a hierarchy\nthe rounding of the soft momenta against the hard ones sets the error\nof a zero-mode subtraction's remainder in quadruple precision too, and\nit recurs identically at the rotated point.",
+      "required": false,
+      "default": 5e-6,
+      "possible_values": []
+    },
+    {
+      "path": "runtime.stability.zero_mode_hierarchy_quad_escalation_factor",
+      "value_type": "number",
+      "description": "Skip double precision, for a graph whose integrand subtracts a thermal\nzero mode, when an internal massless line of any species has an\non-shell energy below this factor times the sum of the loop-momentum\nnorms; a negative value disables it.\nThe double-precision error of a zero-mode subtraction's remainder, set\nby rounding the soft momenta against the hard ones, grows with this\nhierarchy and largely recurs at the rotated point. A massless quark\nsofter than the static boson amplifies it further. When both hierarchy\nfactors are positive, this one must be above\n`zero_mode_hierarchy_escalation_factor`.",
+      "required": false,
+      "default": 0.005,
+      "possible_values": []
+    },
+    {
       "path": "runtime.subtraction.disable_threshold_subtraction",
       "value_type": "boolean",
       "description": "Disable local threshold subtraction while leaving the original integrand unchanged.",

@@ -3,7 +3,8 @@
 //! Native series owns Laurent valuations and precision. Physical functions remain
 //! complete actual arguments; templates contain only arithmetic in scalar formals.
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 #[cfg(test)]
 use color_eyre::eyre::{Result, ensure};
@@ -40,6 +41,26 @@ pub(super) fn factor_symbol() -> Symbol {
 /// Whether `view` is a closed homogeneous-factor family call.
 pub(super) fn is_factor_call(view: AtomView<'_>) -> bool {
     Integrands::factor_tag(view).is_some()
+}
+
+/// The distinct retained numerator family calls of `view`, the opaque keys
+/// of its scalar pole cancellation. Homogeneous factors are closed scalars:
+/// plain function indeterminates to rational normalization.
+pub(super) fn numerator_family_calls(view: AtomView<'_>) -> Vec<Atom> {
+    let family = Integrands::family_symbol();
+    let mut keys = BTreeSet::new();
+    view.visitor(&mut |part| {
+        if let AtomView::Fun(call) = part
+            && call.get_symbol() == family
+        {
+            if !is_factor_call(part) {
+                keys.insert(part.to_owned());
+            }
+            return false;
+        }
+        true
+    });
+    keys.into_iter().collect()
 }
 
 impl ScalarCoefficients {
@@ -132,8 +153,34 @@ impl ScalarCoefficients {
             return atom.clone();
         }
         atom.replace_map(|view, _, out| {
-            if self.scalar(view) {
-                **out = self.call(view.to_owned());
+            if let AtomView::Mul(product) = view {
+                // Static propagators stay visible factors of the product, and
+                // a scalar sum of terms with one is retained term by term.
+                let (scalar, other): (Vec<_>, Vec<_>) = product.iter().partition(|factor| {
+                    self.scalar(*factor) && !Self::contains_static_propagator(*factor)
+                });
+                let scalar = Atom::mul_many(scalar);
+                let retained = self.call(scalar.clone());
+                if retained != scalar || self.scalar(view) {
+                    let other = other
+                        .into_iter()
+                        .map(|factor| match factor {
+                            AtomView::Add(_) if self.scalar(factor) => {
+                                self.retain(&factor.to_owned())
+                            }
+                            _ => factor.to_owned(),
+                        })
+                        .collect::<Vec<_>>();
+                    **out = retained * Atom::mul_many(other);
+                }
+            } else if self.scalar(view) {
+                if !Self::contains_static_propagator(view) {
+                    **out = self.call(view.to_owned());
+                } else if !matches!(view, AtomView::Add(_)) {
+                    // A static propagator, or a scalar function of one, stays
+                    // whole; a sum is retained term by term.
+                    **out = view.to_owned();
+                }
             } else if matches!(view, AtomView::Fun(_))
                 || matches!(view, AtomView::Pow(power) if !Rational::try_from(power.get_exp())
                     .is_ok_and(|power| power.is_integer() && !power.is_negative()))
@@ -141,16 +188,25 @@ impl ScalarCoefficients {
                 // Calls must be polynomial factors in the root. In particular,
                 // never hide leading cancellations under an enclosing inverse.
                 **out = view.to_owned();
-            } else if let AtomView::Mul(product) = view {
-                let (scalar, other): (Vec<_>, Vec<_>) =
-                    product.iter().partition(|factor| self.scalar(*factor));
-                let scalar = Atom::mul_many(scalar);
-                let retained = self.call(scalar.clone());
-                if retained != scalar {
-                    **out = retained * Atom::mul_many(other);
-                }
             }
         })
+    }
+
+    /// Whether `view` contains a static propagator: the plain on-shell energy
+    /// `OSE(e)` of a line that no operation has started yet. A zero-mode
+    /// projection restores its static class propagators as powers of it,
+    /// which an enclosing projection reads off only while they stay outside
+    /// every retained call.
+    fn contains_static_propagator(view: AtomView<'_>) -> bool {
+        let mut found = false;
+        view.visitor(&mut |inner| {
+            found |= matches!(
+                inner,
+                AtomView::Fun(call) if call.get_symbol() == GS.ose && call.get_nargs() == 1
+            );
+            !found
+        });
+        found
     }
 
     /// Degree of `view` as an exactly homogeneous function of the Taylor
@@ -452,6 +508,44 @@ mod tests {
             assert_eq!(
                 coefficients.restore(&retained.replace(from.to_pattern()).with(to.to_pattern()))?,
                 source.replace(from.to_pattern()).with(to.to_pattern())
+            );
+        }
+        Ok(())
+    }
+
+    /// A numerator-free sum whose terms carry static propagators `OSE(e)^-a`,
+    /// as the root and as a factor of a Taylor-dependent product: every
+    /// propagator stays outside the retained calls, which take only the large
+    /// scalar coefficients, and restoring the calls gives the source back.
+    #[test]
+    fn static_propagators_stay_outside_retained_scalar_sums() -> Result<()> {
+        test_initialise()?;
+        let t = symbol!("coefficient_t");
+        let sum = function!(GS.ose, 0).pow(-4) * coefficient()
+            + function!(GS.ose, 4).pow(-2)
+                * coefficient()
+                    .replace(parse_lit!(mass))
+                    .with(parse_lit!(other_mass));
+        for source in [sum.clone(), Atom::var(t) * &sum] {
+            let mut coefficients = ScalarCoefficients::new(t, Atom::num(0));
+            let retained = coefficients.retain(&source);
+            assert_eq!(coefficients.len(), 2, "{retained}");
+            let mut hidden = false;
+            retained.as_view().visitor(&mut |view| match view {
+                AtomView::Fun(call) if call.get_symbol() == ScalarCoefficients::head() => {
+                    hidden |= view.contains_symbol(GS.ose);
+                    false
+                }
+                _ => true,
+            });
+            assert!(
+                !hidden && retained.contains_symbol(GS.ose),
+                "a retained call hides a static propagator: {retained}"
+            );
+            assert!(
+                (coefficients.restore(&retained)? - &source)
+                    .expand()
+                    .is_zero()
             );
         }
         Ok(())

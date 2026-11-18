@@ -1,7 +1,8 @@
 use std::collections::BTreeSet;
 
 use color_eyre::eyre::{Result, WrapErr, ensure, eyre};
-use three_dimensional_reps::{ThermalDistributionFactor, utils::rank_i64};
+use three_dimensional_reps::ThermalDistributionFactor;
+use three_dimensional_reps::utils::{extend_independent_rows, rank_i64};
 
 use crate::{
     graph::{Graph, LoopMomentumBasis, lmb::LMBwithEdges},
@@ -89,30 +90,27 @@ impl FermiSurfaceProduct {
         // before choosing arbitrary spanning-tree chords. Otherwise an
         // untouched occupation step can acquire an artificial dependence on
         // a localized radius (e.g. the other fermion of a dotted sunset).
-        let mut basis_edges = selected_edges.clone();
-        for (pair, edge_id, edge) in graph.iter_edges() {
-            if basis_edges.len() == parent.loop_edges.len() {
-                break;
-            }
-            if !pair.is_paired()
-                || !edge.data.is_fermion()
-                || edge.data.chemical_potential_atom().is_none()
-            {
-                continue;
-            }
-            rows.push(
-                parent.edge_signatures[edge_id]
+        let occupation_routes = graph
+            .iter_edges()
+            .filter(|(pair, _, edge)| {
+                pair.is_paired()
+                    && edge.data.is_fermion()
+                    && edge.data.chemical_potential_atom().is_some()
+            })
+            .map(|(_, edge_id, _)| {
+                let row = parent.edge_signatures[edge_id]
                     .internal
                     .iter()
                     .map(|sign| *sign * 1_i64)
-                    .collect(),
-            );
-            if rank_i64(&rows) == rows.len() {
-                basis_edges.push(edge_id);
-            } else {
-                rows.pop();
-            }
-        }
+                    .collect();
+                (edge_id, row)
+            });
+        let mut basis_edges = selected_edges.clone();
+        basis_edges.extend(extend_independent_rows(
+            &mut rows,
+            occupation_routes,
+            parent.loop_edges.len(),
+        ));
         let mut lmb = graph
             .lmb_with_loop_edges(basis_edges.as_slice())
             .wrap_err("Could not construct an independent Fermi-surface basis")?;

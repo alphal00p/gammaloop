@@ -285,6 +285,17 @@ const MAX_DIMENSION: usize = MAX_LOOP * 3;
 pub(crate) const ESURFACE_SHIFT_THRESHOLD: f64 = 1.0e-13;
 /// Default dimensionless tolerance for E-surface invariant-mass-squared margins.
 pub const DEFAULT_ESURFACE_EXISTENCE_THRESHOLD: f64 = 1.0e-7;
+/// Default ratio of a soft zero-mode line energy to the temperature below
+/// which a finite-temperature evaluation skips double precision.
+pub(crate) const DEFAULT_ZERO_MODE_ENERGY_ESCALATION_FACTOR: f64 = 1.0e-2;
+/// Default ratio of the softest massless line energy to the sum of the
+/// loop-momentum norms below which a finite-temperature evaluation with a
+/// zero-mode line skips double precision.
+pub(crate) const DEFAULT_ZERO_MODE_HIERARCHY_QUAD_ESCALATION_FACTOR: f64 = 5.0e-3;
+/// Default ratio of the softest massless line energy to the sum of the
+/// loop-momentum norms below which a finite-temperature evaluation with a
+/// zero-mode line starts at its last stability level.
+pub(crate) const DEFAULT_ZERO_MODE_HIERARCHY_ESCALATION_FACTOR: f64 = 5.0e-6;
 
 pub const LEFT: usize = 0;
 pub const RIGHT: usize = 1;
@@ -2782,6 +2793,10 @@ use delegate::delegate;
 impl<T: FloatLike> F<T> {
     pub(crate) fn max(self, other: F<T>) -> F<T> {
         if self < other { other } else { self }
+    }
+
+    pub(crate) fn min(self, other: F<T>) -> F<T> {
+        if other < self { other } else { self }
     }
 
     pub fn negate(&mut self) {

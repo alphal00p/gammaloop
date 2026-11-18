@@ -1,3 +1,4 @@
+use crate::uv::thermal_zero_mode::{ThermalZeroModeRegion, ZeroModeHostKind};
 use crate::{
     graph::LoopMomentumBasis,
     uv::{
@@ -39,6 +40,7 @@ pub(crate) enum Local3DMaterialization {
     /// the exact linear identity S(X) + U(X-S(X)). At finite temperature the
     /// soft branch is frozen first and US(X) is the component's own U acting
     /// on it with the branch scope, so U(X) and US(X) are separate terms.
+    /// A zero-mode union host materializes its frozen S(X) alone.
     FactorizedSoft,
 }
 
@@ -132,33 +134,40 @@ impl Local3DLoopRescaling {
                 })
                 .collect::<Vec<_>>()
         };
+        let signed = |branch, coefficient| Local3DSignedBranch {
+            branch,
+            coefficient,
+        };
+        let soft_and_hard = || {
+            (
+                vec![
+                    signed(Local3DConceptualBranch::U, 1),
+                    signed(Local3DConceptualBranch::S, 1),
+                    signed(Local3DConceptualBranch::US, -1),
+                ],
+                Local3DMaterialization::FactorizedSoft,
+            )
+        };
         let (conceptual_branches, materialization) =
-            if current.renormalization_scheme() == ApproximationType::IR && current.dod() > 0 {
-                (
-                    vec![
-                        Local3DSignedBranch {
-                            branch: Local3DConceptualBranch::U,
-                            coefficient: 1,
-                        },
-                        Local3DSignedBranch {
-                            branch: Local3DConceptualBranch::S,
-                            coefficient: 1,
-                        },
-                        Local3DSignedBranch {
-                            branch: Local3DConceptualBranch::US,
-                            coefficient: -1,
-                        },
-                    ],
+            match current.thermal_zero_mode().map(ThermalZeroModeRegion::kind) {
+                // A connected zero-mode host subtracts its zero mode and the UV of
+                // its hard part: S0 + U - U S0.
+                Some(ZeroModeHostKind::Connected) => soft_and_hard(),
+                // A union host applies S0 alone; the U of each factor precedes it
+                // in the forest.
+                Some(ZeroModeHostKind::Union) => (
+                    vec![signed(Local3DConceptualBranch::S, 1)],
                     Local3DMaterialization::FactorizedSoft,
-                )
-            } else {
-                (
-                    vec![Local3DSignedBranch {
-                        branch: Local3DConceptualBranch::U,
-                        coefficient: 1,
-                    }],
+                ),
+                None if current.renormalization_scheme() == ApproximationType::IR
+                    && current.dod() > 0 =>
+                {
+                    soft_and_hard()
+                }
+                None => (
+                    vec![signed(Local3DConceptualBranch::U, 1)],
                     Local3DMaterialization::DirectU,
-                )
+                ),
             };
 
         Local3DProjectionStep {

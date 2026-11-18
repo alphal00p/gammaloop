@@ -12,15 +12,16 @@ use crate::{
         Integrands, UVgenerationSettings, UltravioletGraph,
         approx::{
             ForestNodeLike,
-            direct_3d::{Direct3dCts, DirectResidueBranches, LOCAL_3D_SOFT_SCOPE},
+            direct_3d::{Direct3dCts, DirectResidueBranches, normalize_local_tags},
             integrated::IntegratedCts,
-            local_3d::{LOCAL_3D_MASS_SCOPE, Localizer},
+            local_3d::Localizer,
             projected_4d::Projected4dCts,
         },
         marker::UvMarker,
     },
 };
 use color_eyre::Result;
+use eyre::WrapErr;
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
 use idenso::{
     color::{ColorSimplifier, ColorSimplifySettings},
@@ -175,13 +176,8 @@ impl<'a> FinalIntegrandBuilder<'a> {
         // momentum numerator. The final pass still closes attached UV/projector
         // color indices that remain open at this boundary.
         let resnum = graph
-            .numerator(&reduced, current.subgraph())
-            .get_single_atom()
-            .expect("graph numerator should be available")
-            .simplify_color_with(ColorSimplifySettings {
-                simplify_non_color: false,
-                ..Default::default()
-            })
+            .color_reduced_numerator(&reduced, current.subgraph())
+            .wrap_err("the cograph numerator is not available")?
             * global_num;
         debug_tags!(#generation, #profile, #uv, #numerator, #dump;
             stage = "final_cograph_numerator_ready",
@@ -264,13 +260,8 @@ impl<'a> FinalIntegrandBuilder<'a> {
             "Computed global numerator"
         );
         let resnum = graph
-            .numerator(&reduced, current.subgraph())
-            .get_single_atom()
-            .expect("graph numerator should be available")
-            .simplify_color_with(ColorSimplifySettings {
-                simplify_non_color: false,
-                ..Default::default()
-            })
+            .color_reduced_numerator(&reduced, current.subgraph())
+            .wrap_err("the cograph numerator is not available")?
             * global_num;
         let localizer = self.localizer.with_independent_source_sum();
         debug_tags!(#generation, #profile, #uv, #numerator, #dump;
@@ -558,14 +549,11 @@ impl<'a> FinalIntegrandBuilder<'a> {
             })
             .collect::<Vec<_>>();
         move |atom| {
-            // Mass-support tags distinguish equal physical or UV masses while
-            // nested/disconnected local operators are still being composed.
-            // They are mathematically one and disappear only on this final evaluator copy.
-            let mut atom = atom
-                .replace(function!(*LOCAL_3D_MASS_SCOPE, W_.a_))
-                .with(Atom::one())
-                .replace(function!(*LOCAL_3D_SOFT_SCOPE, W_.a_))
-                .with(Atom::one())
+            // Mass-support, soft-scope and zero-mode tags distinguish equal
+            // physical scales while nested/disconnected local operators are still
+            // being composed. They take their final values only on this final
+            // evaluator copy.
+            let mut atom = normalize_local_tags(atom)
                 .replace_multiple(&energy_replacements)
                 .replace(function!(GS.ose, W_.mass_, W_.prop_))
                 .with(W_.prop_)

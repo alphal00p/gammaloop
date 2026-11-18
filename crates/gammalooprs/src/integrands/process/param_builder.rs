@@ -119,6 +119,24 @@ pub trait ParamBuilderGraph {
         orientation_sign: Atom,
         limit: MediumMode,
     ) -> Result<Atom>;
+    /// The Laurent polynomial of a bosonic distribution about its Matsubara
+    /// zero mode, at the auxiliary energy `energy`. The order-zero body is
+    /// `(s + coth(beta x/2))/2`; its `derivative_order`-th energy derivative
+    /// has the pole `(-1)^d d! T/x^(d+1)` with `T = 1/beta`, and the polynomial
+    /// keeps `relative_order` further orders, through `x^(relative_order-d-1)`.
+    ///
+    /// # Errors
+    ///
+    /// Fermions have antiperiodic frequencies and a chemical potential shifts
+    /// the bosonic ones, so neither has a zero mode.
+    fn zero_mode_distribution_laurent(
+        &self,
+        edge: EdgeIndex,
+        derivative_order: usize,
+        thermal_sign: Atom,
+        energy: Symbol,
+        relative_order: usize,
+    ) -> Result<Atom>;
     fn make_thermal_distributions_explicit(
         &self,
         atom: &Atom,
@@ -143,35 +161,9 @@ pub trait ParamBuilderGraph {
         &self,
         atom: &Atom,
         limit: MediumMode,
-        mut select: impl FnMut(&ThermalDistributionCall) -> Result<bool>,
+        select: impl FnMut(&ThermalDistributionCall) -> Result<bool>,
     ) -> Result<Atom> {
-        let mut error = None;
-        let explicit = atom.replace_map(|term, _, out| {
-            if error.is_some() {
-                return;
-            }
-
-            let AtomView::Fun(function) = term else {
-                return;
-            };
-            if function.get_symbol() != GS.thermal_distribution {
-                return;
-            }
-            let call = match ThermalDistributionCall::try_from(term) {
-                Ok(call) => call,
-                Err(parse_error) => {
-                    error = Some(parse_error.into());
-                    return;
-                }
-            };
-            match select(&call) {
-                Ok(true) => {}
-                Ok(false) => return,
-                Err(select_error) => {
-                    error = Some(select_error);
-                    return;
-                }
-            }
+        ThermalDistributionCall::replace_selected(atom.as_view(), select, |call| {
             let ThermalDistributionCall {
                 edge,
                 derivative_order,
@@ -180,22 +172,17 @@ pub trait ParamBuilderGraph {
                 energy,
                 ..
             } = call;
-            match self.explicit_thermal_distribution_atom(
-                edge,
-                derivative_order,
-                thermal_sign,
-                orientation_sign,
-                limit,
-            ) {
-                Ok(replacement) => **out = replacement.replace(GS.ose(edge)).with(energy),
-                Err(distribution_error) => error = Some(distribution_error),
-            }
-        });
-
-        match error {
-            Some(error) => Err(error),
-            None => Ok(explicit),
-        }
+            Ok(self
+                .explicit_thermal_distribution_atom(
+                    edge,
+                    derivative_order,
+                    thermal_sign,
+                    orientation_sign,
+                    limit,
+                )?
+                .replace(GS.ose(edge))
+                .with(energy))
+        })
     }
     fn get_ose_replacements(&self) -> Vec<Replacement>;
 }

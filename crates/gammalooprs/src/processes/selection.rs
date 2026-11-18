@@ -1751,17 +1751,6 @@ mod tests {
         Ok(graph)
     }
 
-    fn subgraph_from_edge_ids(graph: &Graph, edge_ids: &[usize]) -> SuBitGraph {
-        let wanted = edge_ids.iter().copied().collect::<BTreeSet<_>>();
-        let mut subgraph: SuBitGraph = graph.underlying.empty_subgraph();
-        for (pair, edge_id, _) in graph.underlying.iter_edges() {
-            if wanted.contains(&edge_id.0) {
-                subgraph.add(pair);
-            }
-        }
-        subgraph
-    }
-
     fn vertex_test_subjects_by_graph_id(
         graph_id: usize,
         graph: &Graph,
@@ -1769,7 +1758,7 @@ mod tests {
         let edge_ids = if graph_id == 0 { &[0][..] } else { &[1][..] };
         Ok(vec![GraphSelectionSubject::subgraph(
             graph,
-            subgraph_from_edge_ids(graph, edge_ids),
+            graph.edge_subgraph(edge_ids),
         )])
     }
 
@@ -1780,7 +1769,7 @@ mod tests {
         let edge_ids = if graph_id == 0 { &[0][..] } else { &[2][..] };
         Ok(vec![GraphCutSelectionSubject::new(
             graph,
-            subgraph_from_edge_ids(graph, edge_ids),
+            graph.edge_subgraph(edge_ids),
         )])
     }
 
@@ -1791,7 +1780,7 @@ mod tests {
         let subject = if graph_id == 0 {
             GraphSelectionSubject::whole_graph(graph)
         } else {
-            GraphSelectionSubject::subgraph(graph, subgraph_from_edge_ids(graph, &[0, 2]))
+            GraphSelectionSubject::subgraph(graph, graph.edge_subgraph(&[0, 2]))
         };
         Ok(vec![subject])
     }
@@ -1869,9 +1858,9 @@ mod tests {
     fn subgraph_raised_signature_only_uses_edges_in_view() -> Result<()> {
         let graph = raised_test_graph()?;
         let repeated_side =
-            GraphSelectionSubject::subgraph(&graph, subgraph_from_edge_ids(&graph, &[0, 1, 2]));
+            GraphSelectionSubject::subgraph(&graph, graph.edge_subgraph(&[0, 1, 2]));
         let cut_edge_removed_side =
-            GraphSelectionSubject::subgraph(&graph, subgraph_from_edge_ids(&graph, &[0, 2]));
+            GraphSelectionSubject::subgraph(&graph, graph.edge_subgraph(&[0, 2]));
 
         assert_eq!(
             "[2]",
@@ -1892,7 +1881,7 @@ mod tests {
     #[test]
     fn cut_side_amplitude_raised_signature_includes_tree_like_internal_edges() -> Result<()> {
         let graph = tree_raised_test_graph()?;
-        let tree_raised_edges = subgraph_from_edge_ids(&graph, &[0, 1]);
+        let tree_raised_edges = graph.edge_subgraph(&[0, 1]);
         let normal_subject = GraphSelectionSubject::subgraph(&graph, tree_raised_edges.clone());
         let cut_side_subject =
             GraphSelectionSubject::cut_side_amplitude_subgraph(&graph, tree_raised_edges.clone());
@@ -1925,25 +1914,25 @@ mod tests {
 
         assert_eq!(
             "[2]",
-            GraphCutSelectionSubject::new(&graph, subgraph_from_edge_ids(&graph, &[0]))
+            GraphCutSelectionSubject::new(&graph, graph.edge_subgraph(&[0]))
                 .raised_cut_signature(RaisedPropagatorScope::All)
                 .canonical()
         );
         assert_eq!(
             "[2]",
-            GraphCutSelectionSubject::new(&graph, subgraph_from_edge_ids(&graph, &[0, 1]))
+            GraphCutSelectionSubject::new(&graph, graph.edge_subgraph(&[0, 1]))
                 .raised_cut_signature(RaisedPropagatorScope::All)
                 .canonical()
         );
         assert_eq!(
             "[2,2]",
-            GraphCutSelectionSubject::new(&graph, subgraph_from_edge_ids(&graph, &[0, 5]))
+            GraphCutSelectionSubject::new(&graph, graph.edge_subgraph(&[0, 5]))
                 .raised_cut_signature(RaisedPropagatorScope::All)
                 .canonical()
         );
         assert_eq!(
             "[]",
-            GraphCutSelectionSubject::new(&graph, subgraph_from_edge_ids(&graph, &[2]))
+            GraphCutSelectionSubject::new(&graph, graph.edge_subgraph(&[2]))
                 .raised_cut_signature(RaisedPropagatorScope::All)
                 .canonical()
         );
@@ -1954,8 +1943,7 @@ mod tests {
     #[test]
     fn raised_cut_signature_respects_mass_scope() -> Result<()> {
         let graph = raised_test_graph()?;
-        let cut_subject =
-            GraphCutSelectionSubject::new(&graph, subgraph_from_edge_ids(&graph, &[0, 5]));
+        let cut_subject = GraphCutSelectionSubject::new(&graph, graph.edge_subgraph(&[0, 5]));
 
         assert_eq!(
             "[2,2]",
@@ -2075,7 +2063,7 @@ mod tests {
         let graph = cycle_test_graph()?;
         let full_subject = GraphSelectionSubject::whole_graph(&graph);
         let cut_side_subject =
-            GraphSelectionSubject::subgraph(&graph, subgraph_from_edge_ids(&graph, &[0, 1]));
+            GraphSelectionSubject::subgraph(&graph, graph.edge_subgraph(&[0, 1]));
 
         assert!(!full_subject.cycle_requirements().is_empty());
         assert!(cut_side_subject.cycle_requirements().is_empty());
@@ -2109,7 +2097,7 @@ mod tests {
     #[test]
     fn subgraph_vertex_signature_counts_only_vertices_in_view() -> Result<()> {
         let graph = graph_with_vertex_rules("g0", &["V_A", "V_B", "V_C"])?;
-        let subject = GraphSelectionSubject::subgraph(&graph, subgraph_from_edge_ids(&graph, &[0]));
+        let subject = GraphSelectionSubject::subgraph(&graph, graph.edge_subgraph(&[0]));
         let counts = subject.vertex_rule_name_counts();
 
         assert_eq!(counts.values().copied().sum::<usize>(), 2);
@@ -2128,7 +2116,7 @@ mod tests {
     #[test]
     fn subgraph_particle_signature_counts_only_particles_in_view() -> Result<()> {
         let graph = particle_test_graph("g0")?;
-        let subject = GraphSelectionSubject::subgraph(&graph, subgraph_from_edge_ids(&graph, &[0]));
+        let subject = GraphSelectionSubject::subgraph(&graph, graph.edge_subgraph(&[0]));
         let scalar_0 = scalar_model().try_get_particle("scalar_0")?.pdg_code.abs();
         let scalar_1 = scalar_model().try_get_particle("scalar_1")?.pdg_code.abs();
 

@@ -102,6 +102,41 @@ pub fn rank_i64(rows: &[Vec<i64>]) -> usize {
     rational_matrix_from_i64(rows).map_or(0, |matrix| matrix.rank())
 }
 
+/// Greedily extend the linearly independent integer rows `basis` with the
+/// `candidates` whose rows raise its rank, in order, until `basis` holds
+/// `rank` rows. Candidates after that point are not inspected.
+///
+/// Returns the keys of the accepted candidates, in order.
+///
+/// ```
+/// use three_dimensional_reps::utils::extend_independent_rows;
+///
+/// let mut basis = vec![vec![1, 0, 0]];
+/// let candidates = [("again", vec![2, 0, 0]), ("y", vec![0, 1, 0]), ("z", vec![0, 0, 1])];
+/// // A multiple of a basis row is skipped; the rank is full after "y".
+/// assert_eq!(extend_independent_rows(&mut basis, candidates, 2), ["y"]);
+/// assert_eq!(basis, [vec![1, 0, 0], vec![0, 1, 0]]);
+/// ```
+pub fn extend_independent_rows<K>(
+    basis: &mut Vec<Vec<i64>>,
+    candidates: impl IntoIterator<Item = (K, Vec<i64>)>,
+    rank: usize,
+) -> Vec<K> {
+    let mut accepted = Vec::new();
+    for (key, row) in candidates {
+        if basis.len() >= rank {
+            break;
+        }
+        basis.push(row);
+        if rank_i64(basis) == basis.len() {
+            accepted.push(key);
+        } else {
+            basis.pop();
+        }
+    }
+    accepted
+}
+
 pub(crate) fn rank_rational(rows: &[Vec<Rational>]) -> usize {
     rational_matrix_from_rows(rows).map_or(0, |matrix| matrix.rank())
 }

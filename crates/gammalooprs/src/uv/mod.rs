@@ -94,14 +94,18 @@ impl Integrands {
         symbol!("gammalooprs::uv::homogeneous_factor"; Scalar)
     }
 
+    /// Head of a retained numerator family call, whose shared tensor body
+    /// lives in the numerator definitions.
+    pub(crate) fn family_symbol() -> Symbol {
+        symbol!("gammalooprs::uv::numerator_family")
+    }
+
     /// The bare tag of a closed homogeneous-factor family call.
     pub(crate) fn factor_tag(view: AtomView<'_>) -> Option<AtomView<'_>> {
         let AtomView::Fun(call) = view else {
             return None;
         };
-        if call.get_symbol() != symbol!("gammalooprs::uv::numerator_family")
-            || call.get_nargs() != 1
-        {
+        if call.get_symbol() != Self::family_symbol() || call.get_nargs() != 1 {
             return None;
         }
         let tag = call.get(0);
@@ -269,7 +273,7 @@ impl Integrands {
         mut self,
         numerators: impl IntoIterator<Item = Arc<FnMapEntry>>,
     ) -> Result<Self> {
-        let family = symbol!("gammalooprs::uv::numerator_family");
+        let family = Self::family_symbol();
         let mut definitions: BTreeMap<Vec<Atom>, Arc<FnMapEntry>> = BTreeMap::new();
         for numerator in numerators {
             let parameters = numerator
@@ -357,7 +361,7 @@ impl Integrands {
             .map(|entry| entry.replacement())
             .collect::<Vec<_>>();
         let mut resolved = validated.map(|atom| atom.replace_multiple(&replacements));
-        let family = symbol!("gammalooprs::uv::numerator_family");
+        let family = Self::family_symbol();
         if resolved
             .iter()
             .any(|(_, atom)| atom.contains_symbol(family))
@@ -505,6 +509,7 @@ pub use settings::{
     ApproximationType, CTIdentifier, CTRenormalizationRule, RenormalizationPrescriptionSettings,
     UVOrchestrator, UVgenerationSettings,
 };
+pub(crate) mod thermal_zero_mode;
 pub mod uv_graph;
 pub use uv_graph::UltravioletGraph;
 
@@ -527,5 +532,7 @@ pub use forest::Forest;
 pub mod profile;
 pub use profile::{UVProfile, UVProfileAnalysis, UVProfilePassFail};
 
+#[cfg(test)]
+mod test_fixtures;
 #[cfg(test)]
 mod tests;

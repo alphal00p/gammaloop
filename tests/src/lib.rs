@@ -3,6 +3,7 @@
 #![allow(unused_variables)]
 
 pub mod evaluation_comparison;
+pub mod thermal_rings;
 
 use color_eyre::Result;
 

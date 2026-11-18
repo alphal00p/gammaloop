@@ -1,0 +1,23 @@
+digraph thermal_ghost_quark_ring {
+  // A d-quark polarization and a ghost polarization joined by gluons carrying q.
+  // Simultaneous endpoint exchange of both bubbles is the only nontrivial
+  // automorphism: the ghost is a complex field, so the ghost bubble has no
+  // internal exchange. The closed quark and ghost loops each give one
+  // Grassmann minus, so InternalFermionLoopSign is +1.
+  // thermal_ring_power_counting.rs checks this graph against the generator's
+  // three-loop vacuum diagram GL30 at muB = 0 and 3, to a relative 1e-12.
+  num = "1";
+  overall_factor = "(AutG(2))^(-1)*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(1)";
+  overall_factor_evaluated = "1/2";
+  projector = "1";
+
+  // Compatible independent loop momenta are [q, p, k] = [e0, e2, e4].
+  // Profiling S(e0) also makes e1 soft; these are not independent soft limits.
+  // Ghost edges follow the ghost-number flow b0 -> b1 -> b0.
+  a1:0 -> b0:1 [id=0 dir=none particle=g lmb_id=0 lmb_rep="K(0,a___)"];
+  b1:2 -> a0:3 [id=1 dir=none particle=g lmb_rep="K(0,a___)"];
+  a0:4 -> a1:5 [id=2 particle=d lmb_id=1 lmb_rep="K(1,a___)"];
+  a1:6 -> a0:7 [id=3 particle=d lmb_rep="K(1,a___)-K(0,a___)"];
+  b0:8 -> b1:9 [id=4 particle=ghG lmb_id=2 lmb_rep="K(2,a___)"];
+  b1:10 -> b0:11 [id=5 particle=ghG lmb_rep="K(2,a___)-K(0,a___)"];
+}

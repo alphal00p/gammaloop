@@ -1,3 +1,4 @@
+use linnet::half_edge::involution::EdgeIndex;
 use spenso::algebra::complex::Complex;
 use symbolica::{
     atom::{Atom, AtomCore, Symbol},
@@ -15,7 +16,7 @@ use crate::{
     utils::{F, GS},
 };
 
-use super::NumeratorAtomExt;
+use super::{NumeratorAtomExt, has_momentum_denominator};
 
 #[test]
 fn scalar_poles_preserve_floating_coefficients_in_arithmetic() {
@@ -406,4 +407,71 @@ fn exact_coefficients_refuse_non_laurent_key_dependence() {
             "unsupported dependence was hidden in a coefficient: {source}"
         );
     }
+}
+
+/// The Landau-pair quotient `(w(E) - f(E3))/(E - E3)` of a Taylor chart, with
+/// the energy difference `E - E3 = t p.q - t^2 c` vanishing at `t = 0` and a
+/// medium weight `w(E) = thermal_weight(f(E))`: the series divides each
+/// coefficient by the momentum form `p.q`, and the poles cancel within
+/// each coefficient. Momentum-pole cancellation removes all of them,
+/// unwrapping the weight that hides `w(E) = f(E)` at order `-1`, and leaves
+/// energy-only denominators and guarded expressions unchanged.
+#[test]
+fn momentum_poles_cancel_in_landau_pair_coefficients() {
+    let t_symbol = symbol!("pole_landau::t");
+    let t = Atom::var(t_symbol);
+    let energy = function!(GS.on_shell_energy, 2, parse_lit!(pole_landau::invariant));
+    let c = parse_lit!(pole_landau::c);
+    let momentum = |edge: usize, axis: usize| GS.emr_mom(EdgeIndex(edge), GS.cind(axis));
+    let pq = (1..=3)
+        .map(|axis| momentum(2, axis) * momentum(0, axis))
+        .sum::<Atom>();
+    let f = symbol!("pole_landau::f");
+    let family = function!(symbol!("pole_landau::N"; Scalar), 1);
+    let keys = std::slice::from_ref(&family);
+    let shifted = &energy - &t * &pq + t.pow(2) * &c;
+    let weight = function!(GS.thermal_weight_wrapper, function!(f, &energy));
+    let source = &family * (weight - function!(f, &shifted)) / (&energy - &shifted);
+    let series = source
+        .series(t_symbol, Atom::Zero, SeriesDepth::absolute(2))
+        .unwrap();
+    // The jets of an earlier numerator times this one: a product of a sum of
+    // numerator calls and a call, which the bounded optimization never
+    // distributes.
+    let earlier = symbol!("pole_landau::A"; Scalar);
+    let jets = function!(earlier, 0) + function!(earlier, 1);
+    let jet_keys = [family.clone(), function!(earlier, 0), function!(earlier, 1)];
+    let mut poles = 0;
+    for (power, coefficient) in series.terms() {
+        poles += usize::from(has_momentum_denominator(coefficient.as_view()));
+        let reduced = coefficient.cancel_momentum_poles(keys);
+        assert!(
+            !has_momentum_denominator(reduced.as_view()),
+            "t^{power}: a momentum pole remains in {reduced}"
+        );
+        let unwrapped = coefficient.unwrap_function(GS.thermal_weight_wrapper);
+        assert_scalar_coefficients_equal(&reduced, &unwrapped, keys);
+        let with_jets = &jets * coefficient;
+        let reduced_with_jets = with_jets.cancel_momentum_poles(&jet_keys);
+        assert!(
+            !has_momentum_denominator(reduced_with_jets.as_view()),
+            "t^{power}: a momentum pole remains after the jets in {reduced_with_jets}"
+        );
+        assert_scalar_coefficients_equal(&reduced_with_jets, &(&jets * &unwrapped), &jet_keys);
+        if power < 0 {
+            assert!(reduced.is_zero(), "t^{power}: w(E) - f(E) must cancel");
+        } else {
+            assert!(
+                reduced.contains(&family),
+                "t^{power}: the numerator call was lost"
+            );
+        }
+    }
+    assert!(poles >= 2, "the coefficients divide by p.q: {poles}");
+
+    let energy_only = &family * function!(f, &energy) / (&energy + function!(f, &energy));
+    assert_eq!(energy_only.cancel_momentum_poles(keys), energy_only);
+    let removable = &family * (pq.pow(2) + &pq) / &pq;
+    let guarded = &removable * Symbol::IF.call_args([c.clone(), Atom::one(), Atom::Zero]);
+    assert_eq!(guarded.cancel_momentum_poles(keys), guarded);
 }

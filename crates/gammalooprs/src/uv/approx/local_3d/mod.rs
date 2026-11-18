@@ -16,7 +16,6 @@ use crate::{
 
 mod integrated_localizer;
 mod provenance;
-pub(crate) use super::direct_3d::LOCAL_3D_MASS_SCOPE;
 pub(in crate::uv) use provenance::paths_with_step;
 #[cfg(test)]
 pub(crate) use provenance::{Local3DConceptualBranch, Local3DMaterialization, Local3DSignedBranch};

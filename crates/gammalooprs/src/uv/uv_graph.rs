@@ -2,7 +2,8 @@ use std::{cell::RefCell, collections::BTreeSet, ops::Deref};
 
 use ahash::{AHashMap, AHashSet};
 use color_eyre::Result;
-use eyre::eyre;
+use eyre::{WrapErr, eyre};
+use idenso::color::{ColorSimplifier, ColorSimplifySettings};
 use idenso::shorthands::schoonschip::Schoonschip;
 use linnet::half_edge::{
     HedgeGraph, PowersetIterator,
@@ -18,13 +19,18 @@ use symbolica::{
     function,
     poly::series::Series,
 };
+use thiserror::Error;
 use tracing::debug;
 
+use crate::graph::LmbError;
+use crate::graph::cuts::CutSet;
+use crate::uv::approx::CutStructure;
+use crate::uv::thermal_zero_mode::{ZeroModeHostError, assign_zero_mode_hosts};
 use crate::{
     graph::{Edge, FeynmanGraph, Graph, HedgeData, LMBext, LoopMomentumBasis, Vertex},
     integrands::process::param_builder::ParamBuilderGraph,
     momentum::sample::LoopIndex,
-    numerator::{AppliedFeynmanRule, Numerator},
+    numerator::{AppliedFeynmanRule, Numerator, NumeratorStateError},
     settings::global::MediumSettings,
     utils::{GS, W_, symbolica_ext::DOD},
     uv::{ApproximationType, UVgenerationSettings, settings::CTIdentifier},
@@ -210,54 +216,6 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         Ok(classified)
     }
 
-    /// Restrict the operation covering every loop under vacuum subtraction.
-    ///
-    /// It is omitted, unless thermal soft branches are frozen and a soft
-    /// component exists; it is then kept as a plain U.
-    fn restrict_full_observable_spinney<E, V, H>(
-        &self,
-        spinneys: &mut Vec<Spinney>,
-        settings: &UVgenerationSettings,
-        medium: &MediumSettings,
-    ) where
-        Self: AsRef<HedgeGraph<E, V, H>>,
-    {
-        if !medium.vacuum_subtraction {
-            return;
-        }
-
-        // Completed thermal weights already carry (1 - V). An operation covering
-        // all loops leaves no medium dependence, even when tree edges survive,
-        // so its U vanishes on every branch that projects all occupations.
-        // Spinneys contain no bridges.
-        let graph = self.as_ref();
-        let full_observable =
-            InternalSubGraph::cleaned_filter_pessimist(graph.non_bridges(), graph);
-        // A frozen soft component is a vertex for every enclosing operation,
-        // so the whole-graph U is the UV subtraction of its reduced cograph.
-        // Keep that U alone: without external momenta, the whole graph's soft
-        // expansion would reproduce the integrand.
-        let has_soft_component = settings.freezes_thermal_soft_branches(medium)
-            && spinneys.iter().any(|spinney| {
-                spinney.renormalization_scheme == ApproximationType::IR
-                    && spinney.dod > 0
-                    && spinney.subgraph != full_observable
-            });
-        if has_soft_component {
-            for spinney in spinneys
-                .iter_mut()
-                .filter(|spinney| spinney.subgraph == full_observable)
-            {
-                spinney.renormalization_scheme = ApproximationType::MUV;
-            }
-        } else {
-            // Omit it before either 4D or 3D computation.
-            spinneys.retain(|spinney| {
-                spinney.subgraph.is_empty() || spinney.subgraph != full_observable
-            });
-        }
-    }
-
     fn all_cycle_unions<E, V, H, S: SubGraphLike<Base = SuBitGraph>>(
         &self,
         subgraph: &S,
@@ -379,6 +337,18 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
 
     fn local_dod<S: SubGraphLike>(&self, subgraph: &S) -> i32;
 
+    /// The static infrared degree `ω(Σ)` of a soft set `Σ`, whose momenta
+    /// span `loops` independent loops once the rest of the graph is hard.
+    ///
+    /// It counts `3` per loop for the static spatial measure, the degree of
+    /// every paired edge of `sigma`, and the degree of every vertex all of
+    /// whose half-edges are paired and lie in `sigma`, with the edge and
+    /// vertex degrees of [`Self::local_dod`]. A vertex touching a hard line
+    /// belongs to the hard part. The loop count is an input because a soft
+    /// set need not contain its own cycles: the soft lines of a polarization
+    /// ring form a path.
+    fn static_ir_degree<S: SubGraphLike>(&self, sigma: &S, loops: usize) -> i32;
+
     fn spinneys<E, V, H, S: SubGraphLike<Base = SuBitGraph>>(
         &self,
         subgraph: &S,
@@ -436,6 +406,202 @@ impl AsRef<HedgeGraph<Edge, Vertex, HedgeData>> for Graph {
 }
 
 impl Graph {
+    /// The UV spinneys of every cut of `cuts`, in order: the classified
+    /// spinneys of its uncut subgraph, with their thermal zero-mode hosts
+    /// assigned and the full observable restricted. Each cut is classified
+    /// when the iterator reaches it.
+    ///
+    /// Zero-mode hosts need a single uncut structure, so restricting each cut
+    /// is the restriction of the spinneys of all cuts together.
+    ///
+    /// # Errors
+    ///
+    /// Each item fails with the classification, zero-mode host and
+    /// full-observable restriction errors of its cut, in the context of the
+    /// graph and the cut.
+    pub(crate) fn classified_cut_spinneys<'a>(
+        &'a self,
+        cuts: &'a CutStructure,
+        settings: &'a UVgenerationSettings,
+        medium: &'a MediumSettings,
+    ) -> impl Iterator<Item = Result<Vec<Spinney>>> + 'a {
+        cuts.cuts.iter().enumerate().map(move |(cut_index, cut)| {
+            self.classified_spinneys_of_cut(cuts, cut_index, cut, settings, medium)
+        })
+    }
+
+    /// The UV spinneys of `cut`, the cut `cut_index` of `cuts`.
+    fn classified_spinneys_of_cut(
+        &self,
+        cuts: &CutStructure,
+        cut_index: usize,
+        cut: &CutSet,
+        settings: &UVgenerationSettings,
+        medium: &MediumSettings,
+    ) -> Result<Vec<Spinney>> {
+        let cut_subgraph = self
+            .full_filter()
+            .subtract(&self.initial_state_cut.left)
+            .subtract(&cut.union);
+        let mut spinneys = self
+            .classified_spinneys(&cut_subgraph, settings, &self.loop_momentum_basis)
+            .wrap_err_with(|| {
+                format!(
+                    "graph '{}' cut {cut_index}: failed to classify UV counterterm components",
+                    self.name
+                )
+            })?;
+        assign_zero_mode_hosts(self, &cut_subgraph, &mut spinneys, settings, medium, cuts)
+            .wrap_err_with(|| {
+                format!(
+                    "graph '{}' cut {cut_index}: failed to assign thermal zero-mode hosts",
+                    self.name
+                )
+            })?;
+        self.restrict_full_observable_spinney(&mut spinneys, medium)
+            .wrap_err_with(|| {
+                format!(
+                    "graph '{}' cut {cut_index}: failed to restrict the full-observable UV counterterm",
+                    self.name
+                )
+            })?;
+        Ok(spinneys)
+    }
+
+    /// Restrict the operation covering every loop under vacuum subtraction,
+    /// and check that every thermal zero-mode host keeps its enclosing
+    /// whole-graph U.
+    ///
+    /// Under vacuum subtraction the full-observable spinney is omitted, unless
+    /// some spinney hosts a zero-mode region; it is then kept as a plain U.
+    /// Without vacuum subtraction the classification is unchanged.
+    ///
+    /// # Errors
+    ///
+    /// In either vacuum-subtraction mode, a zero-mode host whose full
+    /// observable is not retained: the host's static cograph is
+    /// log-divergent at its top Taylor order, and only the whole-graph U
+    /// subtracts it.
+    pub(crate) fn restrict_full_observable_spinney(
+        &self,
+        spinneys: &mut Vec<Spinney>,
+        medium: &MediumSettings,
+    ) -> Result<(), ZeroModeHostError> {
+        // Spinneys contain no bridges.
+        let full_observable = InternalSubGraph::cleaned_filter_pessimist(
+            self.underlying.non_bridges(),
+            self.as_ref(),
+        );
+        let has_zero_mode_host = spinneys
+            .iter()
+            .any(|spinney| spinney.thermal_zero_mode().is_some());
+        if medium.vacuum_subtraction {
+            // Completed thermal weights already carry (1 - V). An operation
+            // covering all loops leaves no medium dependence, even when tree
+            // edges survive, so its U vanishes on every branch that projects
+            // all occupations. A frozen zero-mode branch is a vertex for every
+            // enclosing operation, so the whole-graph U is the UV subtraction
+            // of its static cograph. Keep that U alone: without external
+            // momenta, the whole graph's soft expansion would reproduce the
+            // integrand.
+            if has_zero_mode_host {
+                // The full observable leaves no soft set, so it hosts nothing.
+                for spinney in spinneys
+                    .iter_mut()
+                    .filter(|spinney| spinney.subgraph == full_observable)
+                {
+                    spinney.demote_to_muv();
+                }
+            } else {
+                // Omit it before either 4D or 3D computation.
+                spinneys.retain(|spinney| {
+                    spinney.subgraph.is_empty() || spinney.subgraph != full_observable
+                });
+            }
+        }
+
+        if let Some(host) = spinneys
+            .iter()
+            .find(|spinney| spinney.thermal_zero_mode().is_some())
+            && !spinneys
+                .iter()
+                .any(|spinney| spinney.subgraph == full_observable)
+        {
+            return Err(ZeroModeHostError::MissingEnclosingSpinney {
+                host: self
+                    .underlying
+                    .paired_edges(host.filter())
+                    .into_iter()
+                    .collect(),
+                dod: self.compute_dod(&full_observable.filter),
+            });
+        }
+        Ok(())
+    }
+
+    /// The graph-canonical loop-momentum basis of `subgraph`: the route the
+    /// graph's own basis induces on it, with the crown of the subgraph less
+    /// dummy edges as its external flows. The whole internal graph keeps the
+    /// graph's basis. Every Taylor chart of a direct local-3D operation, and
+    /// the coordinates of a thermal zero-mode host, start from this basis.
+    ///
+    /// # Errors
+    ///
+    /// The graph's basis induces no basis on `subgraph`.
+    pub(crate) fn canonical_component_lmb(
+        &self,
+        subgraph: &SuBitGraph,
+    ) -> Result<LoopMomentumBasis, LmbError> {
+        let external: SuBitGraph = self.external_filter();
+        let full_internal = self.full_filter().subtract(&external);
+        if *subgraph == full_internal
+            && self.n_loops(&full_internal) == self.loop_momentum_basis.loop_edges.len()
+        {
+            return Ok(self.loop_momentum_basis.clone());
+        }
+        self.try_compatible_sub_lmb(
+            subgraph,
+            self.dummy_less_full_crown(subgraph),
+            &self.loop_momentum_basis,
+        )
+    }
+
+    /// The Feynman-rule numerator that the edges of `subgraph` add to
+    /// `given`, with its colour algebra closed before a residue map repeats
+    /// it across rows. Its Lorentz and spinor structure stays as it is.
+    ///
+    /// # Errors
+    ///
+    /// The applied numerator is not a single expression.
+    pub(crate) fn color_reduced_numerator(
+        &self,
+        subgraph: &SuBitGraph,
+        given: &SuBitGraph,
+    ) -> Result<Atom, NumeratorStateError> {
+        Ok(self
+            .numerator(subgraph, given)
+            .get_single_atom()?
+            .simplify_color_with(ColorSimplifySettings {
+                simplify_non_color: false,
+                ..Default::default()
+            }))
+    }
+
+    /// The degree of the measures of `loops` loops, `per_loop` each.
+    fn loop_measure_degree(per_loop: i32, loops: usize) -> i32 {
+        per_loop * i32::try_from(loops).expect("a graph has fewer than 2^31 loops")
+    }
+
+    /// The degree of the paired edges of `subgraph`: its propagators and
+    /// their numerators.
+    fn paired_edge_degree<S: SubGraphLike>(&self, subgraph: &S) -> i32 {
+        self.underlying
+            .iter_edges_of(subgraph)
+            .filter(|(pair, _, _)| pair.is_paired())
+            .map(|(_, _, edge)| *edge.data.dod.deref())
+            .sum()
+    }
+
     /// Reject source integrals whose loop-energy contours do not vanish at
     /// infinity. Check the existing unpruned cycle-union inventory so this
     /// source-level contract does not depend on UV-spinney pruning.
@@ -584,19 +750,37 @@ impl UltravioletGraph for Graph {
     }
 
     fn local_dod<S: SubGraphLike>(&self, subgraph: &S) -> i32 {
-        let mut dod: i32 = 4 * self.n_loops(subgraph) as i32;
-        for (p, _, e) in self.underlying.iter_edges_of(subgraph) {
-            if p.is_paired() {
-                dod += e.data.dod.deref();
-            }
-        }
-
+        let mut dod = Self::loop_measure_degree(4, self.n_loops(subgraph))
+            + self.paired_edge_degree(subgraph);
         for (_, _, n) in self.underlying.iter_nodes_of(subgraph) {
             dod += n.dod.deref();
         }
 
         dod
     }
+
+    fn static_ir_degree<S: SubGraphLike>(&self, sigma: &S, loops: usize) -> i32 {
+        let mut degree = Self::loop_measure_degree(3, loops) + self.paired_edge_degree(sigma);
+        for (_, mut crown, vertex) in self.underlying.iter_nodes_of(sigma) {
+            if crown.all(|hedge| {
+                let partner = self.underlying.inv(hedge);
+                partner != hedge && sigma.includes(&hedge) && sigma.includes(&partner)
+            }) {
+                degree += vertex.dod.deref();
+            }
+        }
+
+        degree
+    }
+}
+
+/// Why a line has no Matsubara zero mode.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Error)]
+pub enum NoZeroMode {
+    #[error("is a fermion, whose antiperiodic frequencies have no zero mode")]
+    Fermion,
+    #[error("has a chemical potential, which shifts its frequencies off zero")]
+    ChemicalPotential,
 }
 
 pub trait UVE {
@@ -605,4 +789,21 @@ pub trait UVE {
     fn is_massive(&self) -> bool;
     fn is_fermion(&self) -> bool;
     fn chemical_potential_atom(&self) -> Option<Atom>;
+
+    /// Whether the line has a Matsubara zero mode: only a boson without a
+    /// chemical potential has periodic, unshifted frequencies, one of which
+    /// vanishes.
+    ///
+    /// # Errors
+    ///
+    /// Why the line has none.
+    fn zero_mode(&self) -> Result<(), NoZeroMode> {
+        if self.is_fermion() {
+            Err(NoZeroMode::Fermion)
+        } else if self.chemical_potential_atom().is_some() {
+            Err(NoZeroMode::ChemicalPotential)
+        } else {
+            Ok(())
+        }
+    }
 }

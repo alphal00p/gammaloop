@@ -88,6 +88,61 @@ impl ThermalDistributionCall {
             .add_arg(energy)
             .finish()
     }
+
+    /// Replace each distribution call accepted by `select` with `body(call)`.
+    /// Rejected calls and all other subexpressions are left unchanged; a
+    /// replaced call is not searched again.
+    ///
+    /// ```
+    /// use symbolica::prelude::*;
+    /// use three_dimensional_reps::{ThermalDistributionCall, ThermalDistributionCallError};
+    /// let energy = symbol!("thermal_replace_example_energy");
+    /// let hard = ThermalDistributionCall::atom_at_energy(0, 0, 1, -1, 1, energy);
+    /// let soft = ThermalDistributionCall::atom_at_energy(1, 0, 1, -1, 1, energy);
+    /// let replaced = ThermalDistributionCall::replace_selected(
+    ///     (&hard + &soft).as_view(),
+    ///     |call| Ok::<_, ThermalDistributionCallError>(call.edge.0 == 1),
+    ///     |call| Ok(call.energy),
+    /// )?;
+    /// assert_eq!(replaced, hard + Atom::var(energy));
+    /// # Ok::<(), ThermalDistributionCallError>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns the first error from parsing a distribution call, from
+    /// `select`, or from `body`; no partial result is returned.
+    pub fn replace_selected<E: From<ThermalDistributionCallError>>(
+        atom: AtomView<'_>,
+        mut select: impl FnMut(&Self) -> Result<bool, E>,
+        mut body: impl FnMut(Self) -> Result<Atom, E>,
+    ) -> Result<Atom, E> {
+        let mut error = None;
+        let replaced = atom.replace_map(|term, _, out| {
+            if error.is_some() {
+                return;
+            }
+            let AtomView::Fun(function) = term else {
+                return;
+            };
+            if function.get_symbol() != thermal_distribution_symbol() {
+                return;
+            }
+            let replacement = Self::try_from(term).map_err(E::from).and_then(|call| {
+                if select(&call)? {
+                    body(call).map(Some)
+                } else {
+                    Ok(None)
+                }
+            });
+            match replacement {
+                Ok(Some(replacement)) => **out = replacement,
+                Ok(None) => {}
+                Err(replacement_error) => error = Some(replacement_error),
+            }
+        });
+        error.map_or(Ok(replaced), Err)
+    }
 }
 
 impl TryFrom<AtomView<'_>> for ThermalDistributionCall {

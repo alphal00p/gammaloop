@@ -18,7 +18,7 @@ use spenso::{
 };
 // use petgraph::Direction::Outgoing;
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Indeterminate},
+    atom::{Atom, AtomCore, AtomView, Indeterminate, Symbol},
     evaluate::{FunctionMap, InliningPolicy},
     function,
     id::Replacement,
@@ -93,6 +93,36 @@ pub trait FeynmanGraph {
         target_nodes: HedgeNode,
         initial_state_tree: &SuBitGraph,
     ) -> Vec<(SuBitGraph, OrientedCut, SuBitGraph)>;
+}
+
+/// The on-shell energies of a graph's softest internal massless lines at a
+/// point ([`Graph::soft_line_energies`]).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct SoftLineEnergies<E> {
+    /// The softest line with a static Matsubara mode, a boson without a
+    /// chemical potential. Its occupation grows like `T/E` as the energy
+    /// vanishes, which a zero-mode subtraction cancels.
+    pub(crate) zero_mode: E,
+    /// The softest line of any species, at most `zero_mode`.
+    pub(crate) massless: E,
+}
+
+impl<T: FloatLike> SoftLineEnergies<F<T>> {
+    /// The softer of each pair of energies, as over the rows of one point.
+    pub(crate) fn min(self, other: Self) -> Self {
+        Self {
+            zero_mode: self.zero_mode.min(other.zero_mode),
+            massless: self.massless.min(other.massless),
+        }
+    }
+
+    /// The energies rounded to double precision.
+    pub(crate) fn into_ff64(self) -> SoftLineEnergies<F<f64>> {
+        SoftLineEnergies {
+            zero_mode: self.zero_mode.into_ff64(),
+            massless: self.massless.into_ff64(),
+        }
+    }
 }
 
 impl Graph {
@@ -209,6 +239,45 @@ impl Graph {
         self.param_builder.reps = entries;
         self.param_builder.medium_mode = medium_mode;
         Ok(())
+    }
+
+    /// The on-shell energies of the softest internal massless lines at the
+    /// point given in this graph's loop momentum basis. `None` unless the
+    /// integrand subtracts a zero mode ([`Graph::zero_mode_subtracted`]) in a
+    /// finite-temperature medium, and without a line with a static Matsubara
+    /// mode, a boson without a chemical potential: only the remainder of a
+    /// zero-mode subtraction loses precision near such a soft line.
+    pub(crate) fn soft_line_energies<T: FloatLike>(
+        &self,
+        loop_moms: &LoopMomenta<F<T>>,
+        external_moms: &ExternalFourMomenta<F<T>>,
+    ) -> Option<SoftLineEnergies<F<T>>> {
+        if !self.zero_mode_subtracted || !self.param_builder.medium_mode.is_finite_temperature() {
+            return None;
+        }
+        let energies = self
+            .iter_loop_edges()
+            .filter(|(_, _, edge)| !edge.data.is_massive())
+            .map(|(_, edge, data)| {
+                let energy = self.loop_momentum_basis.edge_signatures[edge]
+                    .compute_three_momentum_from_four(loop_moms, external_moms)
+                    .norm();
+                (energy, data.data.zero_mode().is_ok())
+            })
+            .collect::<Vec<_>>();
+        let zero_mode = energies
+            .iter()
+            .filter(|(_, has_zero_mode)| *has_zero_mode)
+            .map(|(energy, _)| energy.clone())
+            .reduce(F::min)?;
+        let massless = energies
+            .into_iter()
+            .map(|(energy, _)| energy)
+            .fold(zero_mode.clone(), F::min);
+        Some(SoftLineEnergies {
+            zero_mode,
+            massless,
+        })
     }
 
     /// Bind finite-temperature derivatives actually emitted by local Taylor operations.
@@ -567,6 +636,23 @@ where
         )
     }
 
+    fn zero_mode_distribution_laurent(
+        &self,
+        edge: EdgeIndex,
+        derivative_order: usize,
+        thermal_sign: Atom,
+        energy: Symbol,
+        relative_order: usize,
+    ) -> Result<Atom> {
+        self.1.zero_mode_distribution_laurent(
+            edge,
+            derivative_order,
+            thermal_sign,
+            energy,
+            relative_order,
+        )
+    }
+
     fn loop_mom_params(&self, lmb: &LoopMomentumBasis) -> Vec<Atom> {
         lmb.loop_edges
             .iter()
@@ -708,6 +794,35 @@ where
         }
     }
 
+    fn zero_mode_distribution_laurent(
+        &self,
+        edge: EdgeIndex,
+        derivative_order: usize,
+        thermal_sign: Atom,
+        energy: Symbol,
+        relative_order: usize,
+    ) -> Result<Atom> {
+        self[edge]
+            .zero_mode()
+            .map_err(|reason| eyre!("edge {edge} {reason}"))?;
+        // Never expand the order-zero equilibrium body: its abs and exp
+        // factorization is not analytic at x = 0. Keep the orders of
+        // coth(beta x/2)/2 that survive d derivatives, through x^(r-d-1).
+        let depth = i64::try_from(relative_order)? - 1;
+        let argument = Atom::var(GS.inverse_temperature) * Atom::var(energy) / Atom::num(2);
+        let half_coth = coth().call_args([argument]) / Atom::num(2);
+        let mut laurent = half_coth.series(energy, Atom::Zero, depth)?.to_atom();
+        // The contour offset s/2 is the x^0 term of the order-zero body and
+        // the only one that does not survive a derivative.
+        if derivative_order == 0 && relative_order > 0 {
+            laurent += thermal_sign / Atom::num(2);
+        }
+        for _ in 0..derivative_order {
+            laurent = laurent.derivative(energy);
+        }
+        Ok(laurent.expand())
+    }
+
     fn loop_mom_params(&self, lmb: &LoopMomentumBasis) -> Vec<Atom> {
         lmb.loop_edges
             .iter()
@@ -804,6 +919,23 @@ impl ParamBuilderGraph for Graph {
             thermal_sign,
             orientation_sign,
             limit,
+        )
+    }
+
+    fn zero_mode_distribution_laurent(
+        &self,
+        edge: EdgeIndex,
+        derivative_order: usize,
+        thermal_sign: Atom,
+        energy: Symbol,
+        relative_order: usize,
+    ) -> Result<Atom> {
+        self.underlying.zero_mode_distribution_laurent(
+            edge,
+            derivative_order,
+            thermal_sign,
+            energy,
+            relative_order,
         )
     }
 
@@ -1317,10 +1449,13 @@ impl FeynmanGraph for Graph {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::array;
+
     use crate::{
         dot,
         graph::parse::from_dot::IntoGraph,
         initialisation::test_initialise,
+        momentum::ThreeMomentum,
         utils::{ArbPrec, load_generic_model},
     };
     use symbolica::{
@@ -1418,6 +1553,188 @@ mod tests {
         ] {
             assert!(graph.ensure_thermal_distribution_calls([&invalid]).is_err());
         }
+        Ok(())
+    }
+
+    #[test]
+    fn zero_mode_laurent_series_follow_the_bernoulli_expansion() -> Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(
+            digraph zero_mode_statistics {
+                node [num=1]; edge [num=1];
+                A -> A [id=0 particle=g];
+                A -> A [id=1 particle=ghG];
+                A -> A [id=2 particle=d];
+                A -> A [id=3 particle="G+"];
+            }
+        )?;
+        let x = symbol!("zero_mode_laurent_energy");
+        let temperature = Atom::var(GS.inverse_temperature).pow(-1);
+        // (s + coth(x/2T))/2 = s/2 + T/x + x/(12T) - x^3/(720T^3) + x^5/(30240T^5) + O(x^7).
+        let bernoulli = |sign: i64| {
+            Atom::num(sign) / Atom::num(2)
+                + &temperature / Atom::var(x)
+                + Atom::var(x) / (Atom::num(12) * &temperature)
+                - Atom::var(x).pow(3) / (Atom::num(720) * temperature.pow(3))
+                + Atom::var(x).pow(5) / (Atom::num(30240) * temperature.pow(5))
+        };
+        // Relative order 6 keeps exactly the five terms above, through x^5,
+        // and their derivatives.
+        for sign in [-1, 0, 1] {
+            let mut expected = bernoulli(sign);
+            for derivative_order in 0..=3 {
+                for edge in [EdgeIndex(0), EdgeIndex(1)] {
+                    // Ghosts are periodic: spin, not Grassmann parity, fixes the statistics.
+                    let actual = graph.zero_mode_distribution_laurent(
+                        edge,
+                        derivative_order,
+                        Atom::num(sign),
+                        x,
+                        6,
+                    )?;
+                    assert_eq!(
+                        (actual - &expected).expand(),
+                        Atom::Zero,
+                        "edge {edge}, s={sign}, d={derivative_order}"
+                    );
+                }
+                expected = expected.derivative(x);
+            }
+        }
+        // Relative order zero keeps only the leading pole (-1)^d d! T/x^(d+1):
+        // the contour offset s/2 is an omitted x^0 term even for d = 0.
+        for derivative_order in 0..=3_usize {
+            let leading = graph.zero_mode_distribution_laurent(
+                EdgeIndex(0),
+                derivative_order,
+                Atom::num(-1),
+                x,
+                0,
+            )?;
+            let order = i64::try_from(derivative_order)?;
+            let factorial = (1..=order).product::<i64>();
+            let sign = if derivative_order % 2 == 0 { 1 } else { -1 };
+            assert_eq!(
+                (leading
+                    - Atom::num(sign * factorial) * &temperature / Atom::var(x).pow(order + 1))
+                .expand(),
+                Atom::Zero,
+                "d={derivative_order}"
+            );
+        }
+        // h(x) = (1/2 + n_B(x))/x = T/x^2 + 1/(12T) - x^2/(720T^3) + O(x^4).
+        let h =
+            graph.zero_mode_distribution_laurent(EdgeIndex(0), 0, Atom::Zero, x, 4)? / Atom::var(x);
+        let expected = &temperature / Atom::var(x).pow(2)
+            + Atom::one() / (Atom::num(12) * &temperature)
+            - Atom::var(x).pow(2) / (Atom::num(720) * temperature.pow(3));
+        assert_eq!((h - expected).expand(), Atom::Zero);
+        for (edge, statistics) in [
+            (EdgeIndex(2), "fermion"),
+            (EdgeIndex(3), "chemical potential"),
+        ] {
+            let error = graph
+                .zero_mode_distribution_laurent(edge, 0, Atom::num(-1), x, 2)
+                .expect_err("only periodic bosons without chemical potential have a zero mode")
+                .to_string();
+            assert!(error.contains(statistics), "{error}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn soft_line_energies_separate_zero_modes_from_other_massless_lines() -> Result<()> {
+        test_initialise()?;
+        // Two bubbles on a ring of gluons carrying q: a quark bubble in p and
+        // a gluon bubble in k. The quarks are massless unless `quark_mass`
+        // keeps the model's d-quark mass.
+        let ring = |quark_mass: &str| -> Result<Graph> {
+            format!(
+                "digraph soft_zero_mode_ring {{
+                    node [num=1]; edge [num=1];
+                    a1 -> b0 [id=0 dir=none particle=g lmb_id=0];
+                    b1 -> a0 [id=1 dir=none particle=g];
+                    a0 -> a1 [id=2 particle=d lmb_id=1 {quark_mass}];
+                    a1 -> a0 [id=3 particle=d {quark_mass}];
+                    b0 -> b1 [id=4 dir=none particle=g lmb_id=2];
+                    b1 -> b0 [id=5 dir=none particle=g];
+                }}"
+            )
+            .into_graph(&load_generic_model("sm"))
+        };
+        let mut graph = ring("mass=0")?;
+        let externals = ExternalFourMomenta::<F<f64>>::new();
+        let smallest = |graph: &Graph, momenta: [[f64; 3]; 3]| {
+            let loop_moms = momenta
+                .into_iter()
+                .map(|[x, y, z]| ThreeMomentum::new(F(x), F(y), F(z)))
+                .collect::<LoopMomenta<_>>();
+            graph
+                .soft_line_energies(&loop_moms, &externals)
+                .map(|energies| [energies.zero_mode.0, energies.massless.0])
+        };
+        let norm = |vector: [f64; 3]| vector.iter().map(|c| c * c).sum::<f64>().sqrt();
+        let hard = [[0.31, -0.42, 0.25], [0.7, 0.1, -0.33], [-0.21, 0.45, 0.38]];
+        let [q, p, k] = hard;
+        let soft = [1e-4, -2e-4, 3e-4];
+        let shifted = |base: [f64; 3]| array::from_fn(|i| base[i] + soft[i]);
+        graph.zero_mode_subtracted = true;
+        assert_eq!(smallest(&graph, [soft, p, k]), None, "a vacuum medium");
+        graph.set_medium_mode(MediumMode::ThermodynamicEquilibrium)?;
+        graph.zero_mode_subtracted = false;
+        assert_eq!(
+            smallest(&graph, [soft, p, k]),
+            None,
+            "an integrand without a zero-mode subtraction"
+        );
+        graph.zero_mode_subtracted = true;
+        let hard_minimum = norm(q)
+            .min(norm(k))
+            .min(norm(array::from_fn(|i| k[i] - q[i])));
+        let hard_quark_minimum = norm(p).min(norm(array::from_fn(|i| p[i] - q[i])));
+        for (momenta, expected, context) in [
+            (
+                hard,
+                [hard_minimum, hard_minimum.min(hard_quark_minimum)],
+                "hard point",
+            ),
+            ([soft, p, k], [norm(soft); 2], "soft ring gluons"),
+            ([q, p, shifted(q)], [norm(soft); 2], "soft k - q gluon"),
+            // The quark lines have no zero mode, but they are massless.
+            (
+                [q, shifted(q), k],
+                [hard_minimum, norm(soft)],
+                "soft p - q quark",
+            ),
+            ([q, soft, k], [hard_minimum, norm(soft)], "soft p quark"),
+        ] {
+            let energies = smallest(&graph, momenta).expect("the ring has massless gluons");
+            for (energy, expected, line) in [
+                (energies[0], expected[0], "zero-mode"),
+                (energies[1], expected[1], "massless"),
+            ] {
+                assert!(
+                    (energy / expected - 1.0).abs() < 1e-12,
+                    "{context}, softest {line} line: {energy} vs {expected}"
+                );
+            }
+        }
+        let rows = |zero_mode: f64, massless: f64| SoftLineEnergies {
+            zero_mode: F(zero_mode),
+            massless: F(massless),
+        };
+        assert_eq!(rows(0.5, 1e-3).min(rows(0.2, 0.2)), rows(0.2, 1e-3));
+        // A massive quark is never soft.
+        let mut massive = ring("")?;
+        massive.set_medium_mode(MediumMode::ThermodynamicEquilibrium)?;
+        massive.zero_mode_subtracted = true;
+        let energies = smallest(&massive, [q, soft, k]).expect("the ring has massless gluons");
+        assert!(
+            (energies[1] / hard_minimum - 1.0).abs() < 1e-12,
+            "{energies:?}"
+        );
+        graph.set_medium_mode(MediumMode::ZeroTemperatureEquilibrium)?;
+        assert_eq!(smallest(&graph, [soft, p, k]), None, "zero temperature");
         Ok(())
     }
 
