@@ -131,12 +131,39 @@ fn truncation_degree_follows_the_mode_the_scope_and_the_order() {
             usize::try_from(order).ok()
         );
     }
-    assert_eq!(ChildTruncate::parse(None), Off);
-    for value in ["0", "", "off", "2", "Graded"] {
-        assert_eq!(ChildTruncate::parse(Some(value)), Off, "{value}");
+}
+
+#[test]
+fn the_switch_accepts_only_its_modes() {
+    use ChildTruncate::*;
+    assert_eq!(ChildTruncate::parse(None), Ok(Off));
+    for (value, mode) in [
+        ("", Off),
+        ("  ", Off),
+        ("0", Off),
+        (" 0\n", Off),
+        ("1", DegreeZero),
+        (" 1 ", DegreeZero),
+        ("graded", Graded),
+        ("\tgraded ", Graded),
+    ] {
+        assert_eq!(ChildTruncate::parse(Some(value)), Ok(mode), "{value:?}");
     }
-    assert_eq!(ChildTruncate::parse(Some("1")), DegreeZero);
-    assert_eq!(ChildTruncate::parse(Some(" graded ")), Graded);
+    for value in ["off", "on", "2", "01", "true", "Graded", "GRADED", "1 graded", "graded=1"] {
+        let error = ChildTruncate::parse(Some(value)).expect_err(value);
+        assert!(error.contains("GAMMALOOP_UV_CHILD_TRUNCATE"), "{error}");
+        assert!(error.contains(value.trim()), "{error}");
+    }
+    // One line per process, only when on: the off-mode logs are unchanged.
+    assert_eq!(Off.mode_line(32), None);
+    assert_eq!(
+        DegreeZero.mode_line(32).as_deref(),
+        Some("UV_TRUNCATE_MODE mode=1 max_parts=32")
+    );
+    assert_eq!(
+        Graded.mode_line(7).as_deref(),
+        Some("UV_TRUNCATE_MODE mode=graded max_parts=7")
+    );
 }
 
 #[test]
@@ -189,9 +216,9 @@ fn cache_key_suffix_is_present_only_when_on() {
         called = true;
         0
     });
-    match std::env::var("GAMMALOOP_UV_CHILD_TRUNCATE").ok().as_deref() {
-        None | Some("0") => assert!(suffix.is_none() && !called),
-        Some(_) => assert!(suffix.is_some() == called),
+    match ChildTruncate::parse(std::env::var("GAMMALOOP_UV_CHILD_TRUNCATE").ok().as_deref()) {
+        Ok(Off) => assert!(suffix.is_none() && !called),
+        _ => assert!(suffix.is_some() && called),
     }
 }
 

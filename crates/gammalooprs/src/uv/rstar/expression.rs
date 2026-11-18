@@ -369,11 +369,16 @@ fn uv_child_edge_remainder() -> bool {
 /// so a term with more than `d` root momenta never survives it, and the
 /// contraction commutes with the grading (results/uv-degree-truncation).
 ///
-/// - unset or `0`: off; nothing changes, the cache keys included;
+/// - unset, empty or `0`: off; nothing changes, the cache keys, the logs and
+///   the pint6 closure records included;
 /// - `1`: only children of Taylor order 0, whose root momenta are zeroed;
 /// - `graded`: every degree, a child of degree `d >= 1` as the graded parts
 ///   `Π_i f_i^(g_i)` (`Σ g_i <= d`) of its dependent factors, at most
 ///   `GAMMALOOP_UV_CHILD_TRUNCATE_MAX_PARTS` (default 32) of them.
+///
+/// Any other value (after trimming) is an error at the first use, naming the
+/// variable. A mode that is on prints one `UV_TRUNCATE_MODE` line per process
+/// at its first use.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum ChildTruncate {
     Off,
@@ -382,12 +387,27 @@ pub(super) enum ChildTruncate {
 }
 
 impl ChildTruncate {
-    fn parse(value: Option<&str>) -> Self {
+    /// The mode of a `GAMMALOOP_UV_CHILD_TRUNCATE` value (`None`: unset).
+    fn parse(value: Option<&str>) -> std::result::Result<Self, String> {
         match value.map(str::trim) {
-            Some("1") => Self::DegreeZero,
-            Some("graded") => Self::Graded,
-            _ => Self::Off,
+            None | Some("" | "0") => Ok(Self::Off),
+            Some("1") => Ok(Self::DegreeZero),
+            Some("graded") => Ok(Self::Graded),
+            Some(other) => Err(format!(
+                "GAMMALOOP_UV_CHILD_TRUNCATE={other:?} is not a mode: expected unset, \"\", \"0\", \"1\" or \"graded\""
+            )),
         }
+    }
+
+    /// The process line of a mode that is on; `None` when off, so that the
+    /// off-mode logs stay unchanged.
+    fn mode_line(self, max_parts: usize) -> Option<String> {
+        (self != Self::Off).then(|| {
+            format!(
+                "UV_TRUNCATE_MODE mode={} max_parts={max_parts}",
+                self.name()
+            )
+        })
     }
 
     /// The spelling of the mode in the cache key and the log lines.
@@ -401,7 +421,17 @@ impl ChildTruncate {
 }
 
 static UV_CHILD_TRUNCATE: LazyLock<ChildTruncate> = LazyLock::new(|| {
-    ChildTruncate::parse(std::env::var("GAMMALOOP_UV_CHILD_TRUNCATE").ok().as_deref())
+    let value = std::env::var_os("GAMMALOOP_UV_CHILD_TRUNCATE");
+    let mode = match value.as_deref().map(std::ffi::OsStr::to_str) {
+        None => ChildTruncate::parse(None),
+        Some(Some(value)) => ChildTruncate::parse(Some(value)),
+        Some(None) => Err("GAMMALOOP_UV_CHILD_TRUNCATE is not valid unicode".to_string()),
+    }
+    .unwrap_or_else(|error| panic!("{error}"));
+    if let Some(line) = mode.mode_line(uv_child_truncate_max_parts()) {
+        eprintln!("{line}");
+    }
+    mode
 });
 
 fn uv_child_truncate_max_parts() -> usize {
