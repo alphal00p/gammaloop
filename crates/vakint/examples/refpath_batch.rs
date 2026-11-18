@@ -939,15 +939,16 @@ fn evaluate_r3(
             // a graph scaleless after the match: the integral is 0, no reduction
             let (value, observation) = p_gate::observe(|| match projection {
                 Some(projection) => {
-                    refpath::direct::reduce_projection(engine, &vakint_settings, projection)
+                    refpath::direct::reduce_projection_timed(engine, &vakint_settings, projection)
                 }
-                None => Ok(Atom::Zero),
+                None => Ok((Atom::Zero, Default::default())),
             });
             let wall = started.elapsed().as_secs_f64();
             let cpu = cpu_seconds() - cpu_start;
-            let value = value.map_err(|e| eyre::eyre!("{name} {mode}: {e}"))?;
-            let reduce = observation.prepare_seconds + observation.library_seconds;
-            let finalise = observation.render_seconds + observation.finalize_seconds;
+            let (value, timed) = value.map_err(|e| eyre::eyre!("{name} {mode}: {e}"))?;
+            // R3 reduces outside the ordinary path's observed stages: its own clocks
+            let reduce = timed.reduce;
+            let finalise = timed.finalise;
             let (_, rustred) = rustred_stats_since(before);
             let text = value.to_canonical_string();
             let file = format!("{id}.{name}.{mode}.txt");

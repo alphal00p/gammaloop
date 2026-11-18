@@ -370,6 +370,18 @@ impl HandOver {
         handle: &PLibraryHandle,
         folded: BTreeMap<Channel, FoldedInputs>,
     ) -> Result<Atom, VakintError> {
+        Ok(self.reduce_timed(vakint, settings, handle, folded)?.0)
+    }
+
+    /// [`Self::reduce`] with the seconds of the reduction
+    /// (`reduce_folded_channels`) and of the finalisation (`finalize_reduced`).
+    pub(crate) fn reduce_timed(
+        &self,
+        vakint: &Vakint,
+        settings: &VakintSettings,
+        handle: &PLibraryHandle,
+        folded: BTreeMap<Channel, FoldedInputs>,
+    ) -> Result<(Atom, f64, f64), VakintError> {
         use super::p_integral::{FoldMode, finalize_reduced, fold_mode, reduce_folded_channels};
         let mode = settings
             .evaluation_order
@@ -384,8 +396,12 @@ impl HandOver {
             FoldMode::Off => FoldMode::Coefficient,
             other => other,
         };
+        let started = std::time::Instant::now();
         let reduced = reduce_folded_channels(vakint, settings, handle, folded, None, fold, false)?;
-        finalize_reduced(vakint, settings, reduced, &self.names, mode)
+        let reduce = started.elapsed().as_secs_f64();
+        let started = std::time::Instant::now();
+        let value = finalize_reduced(vakint, settings, reduced, &self.names, mode)?;
+        Ok((value, reduce, started.elapsed().as_secs_f64()))
     }
 }
 

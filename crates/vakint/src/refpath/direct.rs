@@ -919,13 +919,34 @@ pub fn reduce_projection(
     settings: &VakintSettings,
     projection: &DirectProjection,
 ) -> Result<Atom> {
+    Ok(reduce_projection_timed(vakint, settings, projection)?.0)
+}
+
+/// [`reduce_projection`] with the seconds of the reduction (RustRed, per
+/// folded channel) and of the finalisation.
+pub fn reduce_projection_timed(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    projection: &DirectProjection,
+) -> Result<(Atom, ReduceSeconds)> {
     if projection.folded.is_empty() {
-        return Ok(Atom::Zero);
+        return Ok((Atom::Zero, ReduceSeconds::default()));
     }
     let handle = vakint.p_library().map_err(crate::VakintError::from)?;
-    Ok(projection
-        .handover
-        .reduce(vakint, settings, &handle, projection.folded.clone())?)
+    let (value, reduce, finalise) =
+        projection
+            .handover
+            .reduce_timed(vakint, settings, &handle, projection.folded.clone())?;
+    Ok((value, ReduceSeconds { reduce, finalise }))
+}
+
+/// Seconds of one [`reduce_projection_timed`] call.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ReduceSeconds {
+    /// `reduce_folded_channels` (RustRed's reductions of the folded channels).
+    pub reduce: f64,
+    /// `finalize_reduced` (masters, Laurent expansion or Retain form).
+    pub finalise: f64,
 }
 
 /// The gate view of one R3 projection without its zero-sector keys (the form
