@@ -300,6 +300,39 @@ pub(super) fn compensate_where(
     })
 }
 
+/// `GAMMALOOP_IR_QUOTIENT=massive|rstar|auto|check` (unset: massive). The
+/// decorated IR quotient counterterm `Z̃_F(G/γ; E)`: by the massive R
+/// operation (mUV tadpoles, at most four loops), or by R* on the same
+/// decorated graph (the recursive-R* children's route: massless p-integrals),
+/// `auto` = R* only above four loops; `check` computes both, compares them
+/// and uses the massive value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IrQuotient {
+    Unset,
+    Massive,
+    Rstar,
+    Auto,
+    Check,
+}
+
+static IR_QUOTIENT: LazyLock<std::result::Result<IrQuotient, String>> = LazyLock::new(|| {
+    parse(
+        "GAMMALOOP_IR_QUOTIENT",
+        &[
+            ("massive", IrQuotient::Massive),
+            ("rstar", IrQuotient::Rstar),
+            ("auto", IrQuotient::Auto),
+            ("check", IrQuotient::Check),
+        ],
+        IrQuotient::Unset,
+    )
+});
+
+/// `GAMMALOOP_IR_QUOTIENT`, read once; a bad value is an error at first use.
+pub fn ir_quotient() -> Result<IrQuotient> {
+    IR_QUOTIENT.clone().map_err(|error| eyre!(error))
+}
+
 /// `GAMMALOOP_IR_OUTER=generic|analytic|check` (unset: generic, no log).
 /// `analytic`: an IR correction term (of any R* root) integrates each
 /// distinct closed hard coefficient once, as a fixed-mass vacuum integral

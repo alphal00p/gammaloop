@@ -943,7 +943,7 @@ impl RStarPlan {
     }
 
     /// The structural requirements of an R* root on a proper support.
-    fn admits_support_root(graph: &Graph, support: &SuBitGraph) -> bool {
+    pub(super) fn admits_support_root(graph: &Graph, support: &SuBitGraph) -> bool {
         graph.is_connected(support)
             && graph.n_loops(support) > 0
             && graph.bridges_of(support).is_empty()
