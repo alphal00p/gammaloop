@@ -182,19 +182,18 @@ pub fn colour_terms(diagram: &FeynmanDiagram, merge: bool) -> Result<(Vec<Colour
     Ok((out, total))
 }
 
-/// R2's `contract_branch` (refpath.rs), with an option: `dots` asks idenso's
-/// frontier for dot notation directly (`AlgebraContraction::Dots`) instead of
-/// `Fully` followed by a separate `to_dots` rewrite. The scalar is the same
-/// polynomial; its atom form may differ (the reader does not care).
+/// R2's `contract_branch` (refpath.rs): the same idenso calls and the same
+/// scalar, without R2's final `list_dangling` check (the hand-over refuses
+/// leftover notation itself). Option `dots` asks idenso's frontier for dot
+/// notation directly (`AlgebraContraction::Dots`) instead of `Fully` followed
+/// by a separate `to_dots` rewrite: the same polynomial, possibly another atom
+/// form (the reader does not care).
 fn contract_branch_edges(
     product: &Atom,
     momentum: &Atom,
     metric_only: bool,
     dots: bool,
 ) -> Result<(Atom, Atom)> {
-    if !dots {
-        return super::contract_branch(product, momentum, metric_only);
-    }
     use idenso::dirac::GammaSimplifySettings;
     use idenso::tensor::{AlgebraContraction, AlgebraSettings, SymbolicTensor};
     use idenso::{CookMode, CookSettings, IndexTooling};
@@ -231,11 +230,22 @@ fn contract_branch_edges(
         &AlgebraSettings {
             gamma: Some(GammaSimplifySettings::canonical()),
             epsilon: true,
-            contract: AlgebraContraction::Dots,
+            contract: if dots {
+                AlgebraContraction::Dots
+            } else {
+                AlgebraContraction::Fully
+            },
             ..Default::default()
         },
     )?;
-    let scalar = cooking.uncook(simplified.expression().as_view());
+    let reduced = if dots {
+        simplified
+    } else {
+        simplified.to_dots()?
+    };
+    // No `list_dangling` check of the scalar here (R2 builds a network for
+    // it): the hand-over's rename refuses any leftover tensor notation.
+    let scalar = cooking.uncook(reduced.expression().as_view());
     if metric_only {
         return Ok((scalar, Atom::Zero));
     }
@@ -267,11 +277,21 @@ pub fn contract_edges(
     let metric_only = projection == Projection::Metric;
     let mut g_sum = Atom::Zero;
     let mut qq_sum = Atom::Zero;
+    // The couplings are expanded (and gs = 1) in every residual BEFORE the
+    // contraction, not on the contracted scalar as R2 does: a scalar
+    // substitution commutes with the contraction, and the residuals are small.
+    let couplings = |value: &Atom| {
+        diagram
+            .model()
+            .expand_couplings(value)
+            .replace(Atom::var(symbolica::symbol!("UFO::gs")))
+            .with(Atom::num(1))
+    };
     for branch in branches {
         let product = branch
             .residuals
             .iter()
-            .fold(Atom::num(1), |product, residual| product * residual);
+            .fold(Atom::num(1), |product, residual| product * couplings(residual));
         let product = if options.routed {
             basis.route_expression(&product)
         } else {
@@ -284,13 +304,7 @@ pub fn contract_edges(
         g_sum += &branch.coefficient * g;
         qq_sum += &branch.coefficient * qq;
     }
-    let couplings = |value: Atom| {
-        diagram
-            .model()
-            .expand_couplings(&value)
-            .replace(Atom::var(symbolica::symbol!("UFO::gs")))
-            .with(Atom::num(1))
-    };
+    let couplings = |value: Atom| value;
     let i_q2 = Atom::i() * q_squared;
     let mut out = Vec::new();
     let transverse = || (&g_sum - &qq_sum / q_squared) / (&d - Atom::num(1)) / &i_q2;
