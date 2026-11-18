@@ -662,7 +662,23 @@ impl CookSettings {
             use std::fmt::Write;
             write!(&mut name, "{byte:02x}").unwrap();
         }
-        let symbol = self.build_symbol(name, None, self.output_tags.explicit_tags())?;
+        // The symbol carries the explicit output tags as attributes: two settings
+        // with different tags must not name the same symbol (Symbolica refuses a
+        // redefinition with other attributes). The tag set enters the name as
+        // `_t<hex of the tags, each followed by a 0 byte>`; untagged settings keep
+        // the plain name (hex digits never contain `t`, so the payload is still the
+        // part before `_t`).
+        let tags = self.output_tags.explicit_tags();
+        if !tags.is_empty() {
+            use std::fmt::Write;
+            name.push_str("_t");
+            for tag in tags {
+                for byte in tag.bytes().chain([0]) {
+                    write!(&mut name, "{byte:02x}").unwrap();
+                }
+            }
+        }
+        let symbol = self.build_symbol(name, None, tags)?;
         Self::remember_dimension_payload(symbol, dimension);
         Ok(Some(Atom::var(symbol)))
     }
@@ -700,7 +716,9 @@ impl CookSettings {
     pub fn dimension_payload(symbol: Symbol) -> Option<Atom> {
         let hex = symbol
             .get_name()
-            .strip_prefix("idenso::cooked_dimension_v1_")?;
+            .strip_prefix("idenso::cooked_dimension_v1_")?
+            .split("_t")
+            .next()?;
         if let Some(payload) = DIMENSION_PAYLOADS.with(|cache| cache.borrow().get(&symbol).cloned())
         {
             return Some(payload);
@@ -1382,6 +1400,39 @@ mod tests {
             super::DIMENSION_PAYLOADS
                 .with(|cache| { !cache.borrow().contains_key(&forged.get_symbol().unwrap()) })
         );
+    }
+
+    /// Two settings that cook the same dimension with different output tags
+    /// (e.g. `reversible()` with `[idenso::cooked]` and `indices()` with none)
+    /// in one process name different symbols (no Symbolica redefinition
+    /// panic), both uncook to the dimension, and the untagged name is the
+    /// plain one (helper VH lane idenso-audit; idenso-concert's request R3).
+    #[test]
+    fn cooked_dimension_symbols_of_different_tag_sets_coexist() {
+        use crate::CookMode;
+        use symbolica::atom::AtomCore;
+
+        test_initialize();
+        let dimension = parse_lit!(idenso::tag_collision_n ^ 2 - 1);
+        let tagged = CookSettings::reversible()
+            .cook_dimension(dimension.as_view())
+            .unwrap()
+            .unwrap();
+        let plain = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .cook_dimension(dimension.as_view())
+            .unwrap()
+            .unwrap();
+        assert_ne!(tagged, plain);
+        let plain_name = plain.get_symbol().unwrap().get_name().to_string();
+        assert!(!plain_name.contains("_t"), "{plain_name}");
+        assert!(tagged.get_symbol().unwrap().get_name().contains("_t"));
+        for symbol in [tagged.get_symbol().unwrap(), plain.get_symbol().unwrap()] {
+            assert_eq!(
+                CookSettings::dimension_payload(symbol),
+                Some(dimension.clone())
+            );
+        }
     }
 
     #[test]
