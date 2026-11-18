@@ -78,7 +78,7 @@ pub fn close_indices(expression: &Atom, epsilon: Symbol) -> Atom {
                     let id = arguments.next().unwrap().to_owned();
                     vectors.push((id, index_of(arguments.next().unwrap())));
                 }
-                _ => scalar = scalar * factor,
+                _ => scalar *= factor,
             }
         }
         // Walk chains from every vector, then the remaining metric cycles.
@@ -100,11 +100,10 @@ pub fn close_indices(expression: &Atom, epsilon: Symbol) -> Atom {
                             .add_arg(id)
                             .finish()
                     };
-                    scalar = scalar
-                        * FunctionBuilder::new(vakint_symbol!("dot"))
-                            .add_arg(head(&vectors[start].0))
-                            .add_arg(head(&vectors[other].0))
-                            .finish();
+                    scalar *= FunctionBuilder::new(vakint_symbol!("dot"))
+                        .add_arg(head(&vectors[start].0))
+                        .add_arg(head(&vectors[other].0))
+                        .finish();
                     break;
                 }
                 let Some(next) = (0..metrics.len())
@@ -138,9 +137,9 @@ pub fn close_indices(expression: &Atom, epsilon: Symbol) -> Atom {
                     metrics[next].0.clone()
                 };
             }
-            scalar = scalar * &dimension;
+            scalar *= &dimension;
         }
-        total = total + scalar;
+        total += scalar;
     }
     total
 }
@@ -175,7 +174,7 @@ pub fn epsilon_coefficients(value: &Atom, epsilon: Symbol) -> BTreeMap<i64, Atom
                 {
                     order += i64::try_from(power.get_base_exp().1).unwrap();
                 }
-                _ => rest = rest * factor,
+                _ => rest *= factor,
             }
         }
         let entry = coefficients.entry(order).or_insert(Atom::Zero);

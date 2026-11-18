@@ -4063,7 +4063,7 @@ impl VakintTerm {
             .add_arg(dimension)
             .finish();
         let compact = FunctionBuilder::new(head.get_symbol())
-            .add_args(&head.iter().collect::<Vec<_>>())
+            .add_args(head.iter().collect::<Vec<_>>())
             .add_arg(representation)
             .finish();
         idenso::CookSettings::indices()
