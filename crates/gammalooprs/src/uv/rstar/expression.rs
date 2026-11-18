@@ -2913,6 +2913,111 @@ impl RStarIntegrand {
         Ok(sum)
     }
 
+    /// `GAMMALOOP_IR_OUTER=analytic`: the outer Taylor orders `[λ^0..λ^degree]`
+    /// of a hard-loop-free factor `z` (a quotient counterterm times the root
+    /// closure), routed and scaled exactly as [`Self::outer_taylor`] does, at
+    /// fixed reference mass. A decline (`Err(reason)`) when `z` still carries
+    /// a hard loop momentum, a denominator or the reference mass.
+    pub(super) fn ir_outer_orders(
+        &self,
+        z: &Atom,
+        root_edges: &[EdgeIndex],
+        degree: usize,
+        reference_mass_squared: Symbol,
+    ) -> Result<std::result::Result<Vec<Atom>, String>> {
+        if !self.combination_ids().is_empty() {
+            return Ok(Err("kept_edges".into()));
+        }
+        if z.contains_symbol(GS.den) {
+            return Ok(Err("den_in_quotient".into()));
+        }
+        if z.contains_symbol(reference_mass_squared) {
+            return Ok(Err("reference_mass_in_quotient".into()));
+        }
+        let parameter = symbol!("rstar_outer_taylor"; Scalar);
+        let mut timing = IntegrationTimings::new();
+        let scaled = self.outer_scaled(z, root_edges, parameter, &mut timing)?;
+        let loop_edges = self
+            .basis
+            .loop_edges
+            .iter()
+            .map(|edge| usize::from(*edge))
+            .collect::<BTreeSet<_>>();
+        let mut hard_loop = false;
+        scaled.visitor(&mut |part| {
+            if let AtomView::Fun(momentum) = part
+                && momentum.get_symbol() == GS.emr_mom
+                && let Ok(edge) = usize::try_from(momentum.get(0))
+                && loop_edges.contains(&edge)
+            {
+                hard_loop = true;
+            }
+            !hard_loop
+        });
+        if hard_loop {
+            return Ok(Err("hard_loop_in_quotient".into()));
+        }
+        Ok(Ok(TaylorExpansion::new(parameter, degree).orders(&scaled)?))
+    }
+
+    /// `GAMMALOOP_IR_OUTER=analytic`: the integral of one closed hard
+    /// coefficient `c` over this component's loops at fixed auxiliary mass
+    /// (the reference mass renamed, no compensation), with `terms` Laurent
+    /// terms requested from the integration helper (raised there by `c`'s own
+    /// pole order), finished as [`Self::integrate`] finishes. `regulate`: the
+    /// dimension is replaced by `4-2ε` first (as the root projector path
+    /// does). A decline when `c` is not a closed scalar or carries a root
+    /// momentum.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn integrate_hard_coefficient(
+        &self,
+        c: &Atom,
+        root_graph: &Graph,
+        root_edges: &[EdgeIndex],
+        reference_mass_squared: Symbol,
+        auxiliary_mass_squared: &Atom,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+        vakint_settings: &VakintSettings,
+        unique_id: usize,
+        regulate: bool,
+    ) -> Result<std::result::Result<Atom, String>> {
+        if !self.combination_ids().is_empty() {
+            return Ok(Err("kept_edges".into()));
+        }
+        if !closed_dot_scalar(c.as_view()) {
+            return Ok(Err("open_hard_coefficient".into()));
+        }
+        let parameter = symbol!("rstar_outer_taylor"; Scalar);
+        let mut timing = IntegrationTimings::new();
+        let scaled = self.outer_scaled(c, root_edges, parameter, &mut timing)?;
+        if scaled.contains_symbol(parameter) {
+            return Ok(Err("root_momentum_in_hard_coefficient".into()));
+        }
+        let fixed = scaled
+            .replace(reference_mass_squared)
+            .with(auxiliary_mass_squared.clone());
+        drop(scaled);
+        let expanded = Self::simplify_summands(fixed.as_view())
+            .wrap_err("while simplifying an analytic IR hard coefficient")?;
+        let expanded = if regulate {
+            Integrated::dimensionally_regularized(&expanded)
+        } else {
+            expanded
+        };
+        timing.algebra = timing.lap();
+        Ok(Ok(self.integrate_polynomial(
+            expanded,
+            root_graph,
+            vakint,
+            uv_settings,
+            vakint_settings,
+            unique_id,
+            None,
+            &mut timing,
+        )?))
+    }
+
     /// The outer Taylor polynomial of `expression` as [`Self::integrate`]
     /// takes it: routed in this component's basis, the root edges scaled by
     /// the Taylor parameter, the reference mass compensated, truncated at total

@@ -17,6 +17,7 @@ use symbolica::{
 };
 use vakint::{Vakint, VakintSettings};
 
+use crate::uv::approx::integrated::Integrated;
 use crate::{
     debug_tags,
     graph::Graph,
@@ -992,17 +993,82 @@ impl<'a> Evaluation<'a> {
                 let downstream_started = Instant::now();
                 let quotient_before = self.quotient_elapsed;
                 let integration_before = self.integration_elapsed;
-                for forest in &correction.forest {
-                    let mut expression = Atom::Zero;
-                    for (coefficient, insertion) in &moments {
-                        expression += coefficient * self.ir_forest(forest, insertion)?;
+                // GAMMALOOP_IR_OUTER (top-level root, closed moments only).
+                let outer = top_mass::ir_outer()?;
+                let analytic =
+                    if outer == top_mass::IrOuter::Analytic || outer == top_mass::IrOuter::Check {
+                        let started = Instant::now();
+                        let outcome = if self.top_mass.is_none() {
+                            Err("child_root".to_owned())
+                        } else if !use_closed {
+                            Err("not_closed".to_owned())
+                        } else {
+                            self.ir_outer_analytic(&hard, &correction.forest, &moments)?
+                        };
+                        Some((outcome, started.elapsed().as_secs_f64()))
+                    } else {
+                        None
+                    };
+                let generic_started = Instant::now();
+                let analytic_value = match &analytic {
+                    Some((Ok((value, _)), _)) if outer == top_mass::IrOuter::Analytic => {
+                        Some(value.clone())
                     }
-                    if !expression.is_zero() {
-                        if let Some(closure) = &self.root_closure {
-                            expression *= closure;
+                    _ => None,
+                };
+                let generic_value = if let Some(value) = analytic_value {
+                    prepared += value;
+                    None
+                } else {
+                    let mut generic = Atom::Zero;
+                    for forest in &correction.forest {
+                        let mut expression = Atom::Zero;
+                        for (coefficient, insertion) in &moments {
+                            expression += coefficient * self.ir_forest(forest, insertion)?;
                         }
-                        prepared += self.integrate(&hard, &expression)?;
+                        if !expression.is_zero() {
+                            if let Some(closure) = &self.root_closure {
+                                expression *= closure;
+                            }
+                            generic += self.integrate(&hard, &expression)?;
+                        }
                     }
+                    prepared += &generic;
+                    Some(generic)
+                };
+                let generic_seconds = generic_started.elapsed().as_secs_f64();
+                if outer != top_mass::IrOuter::Unset {
+                    let (outcome, stats, analytic_seconds) = match &analytic {
+                        None => ("generic".to_owned(), String::new(), 0.0),
+                        Some((Ok((_, stats)), seconds)) => {
+                            ("analytic".to_owned(), stats.clone(), *seconds)
+                        }
+                        Some((Err(reason), seconds)) => {
+                            (format!("declined:{reason}"), String::new(), *seconds)
+                        }
+                    };
+                    let check = match (&analytic, &generic_value) {
+                        (Some((Ok((value, _)), _)), Some(generic))
+                            if outer == top_mass::IrOuter::Check =>
+                        {
+                            let difference = self.poles(&(generic - value))?;
+                            let equal = difference.is_zero();
+                            ensure!(
+                                equal,
+                                "GAMMALOOP_IR_OUTER=check: the analytic IR outer Taylor differs for {} corr={correction_index} term={term_index}: poles {difference}",
+                                self.graph.name
+                            );
+                            " check=equal"
+                        }
+                        _ => "",
+                    };
+                    eprintln!(
+                        "IR_OUTER graph={} corr={correction_index} term={term_index} rem_loops={} order={order} moments={} forests={} outcome={outcome}{stats}{check} analytic_s={analytic_seconds:.3} generic_s={generic_seconds:.3}",
+                        self.graph.name,
+                        term.remainder.loops,
+                        moments.len(),
+                        correction.forest.len(),
+                    );
                 }
                 if ir_hard_keys() {
                     eprintln!(
@@ -1021,6 +1087,192 @@ impl<'a> Evaluation<'a> {
         self.log_top_level();
         self.log_timing();
         Ok(result)
+    }
+
+    /// `GAMMALOOP_IR_OUTER=analytic` for one IR correction term of the
+    /// top-level root: `Σ_F Σ_j T_comp[c_j Z̃_F(E_j) closure]` with each
+    /// distinct hard coefficient `c_j` integrated once at fixed mass
+    /// (`h (M²)^{a-εL}`), the quotient counterterms and the closure computed
+    /// exactly as on the generic path, and the compensated outer Taylor
+    /// applied analytically ([`top_mass::compensation_factor`]); then the
+    /// generic path's summand simplification, root projection, regulation
+    /// and tensor finish. `Err(reason)` declines the term (generic path).
+    /// The hard integrals are requested deep enough for the poles of the
+    /// product: the generic path's depth, raised by the pole order of the
+    /// quotient factor.
+    #[allow(clippy::type_complexity)]
+    fn ir_outer_analytic(
+        &mut self,
+        hard: &RStarIntegrand,
+        forests: &[IrForestTerm],
+        moments: &[(Atom, Atom)],
+    ) -> Result<std::result::Result<(Atom, String), String>> {
+        use symbolica::{function, id::Replacement, poly::series::SeriesDepth};
+        let Some(projector) = self.root_projector else {
+            return Ok(Err("no_root_projector".into()));
+        };
+        if self.epsilon != GS.dim_epsilon {
+            return Ok(Err("epsilon_symbol".into()));
+        }
+        let mode = self.top_mass.unwrap_or(TopMassTerms::Keep);
+        let degree = usize::try_from(self.plan.taylor_order)?;
+        let loops = hard.region.loops;
+        let started = Instant::now();
+        // The quotient factors' orders, per use of a distinct coefficient.
+        let mut distinct = Vec::<Atom>::new();
+        let mut index = std::collections::HashMap::<Atom, usize>::new();
+        let mut uses = Vec::<(usize, Vec<Atom>)>::new();
+        for forest in forests {
+            for (coefficient, insertion) in moments {
+                if coefficient.is_zero() {
+                    continue;
+                }
+                let mut z = self.ir_forest(forest, insertion)?;
+                if z.is_zero() {
+                    continue;
+                }
+                if let Some(closure) = &self.root_closure {
+                    z *= closure;
+                }
+                let orders = match hard.ir_outer_orders(
+                    &z,
+                    &self.root_edges,
+                    degree,
+                    self.reference_mass_squared,
+                )? {
+                    Ok(orders) => orders,
+                    Err(reason) => return Ok(Err(reason)),
+                };
+                if orders.iter().all(Atom::is_zero) {
+                    continue;
+                }
+                let i = *index.entry(coefficient.clone()).or_insert_with(|| {
+                    distinct.push(coefficient.clone());
+                    distinct.len() - 1
+                });
+                uses.push((i, orders));
+            }
+        }
+        let quotient_seconds = started.elapsed().as_secs_f64();
+        // Depth: the lowest ε power of each coefficient's quotient factors.
+        let mut valuation = vec![0_i64; distinct.len()];
+        for (i, orders) in &uses {
+            for order in orders.iter().filter(|order| !order.is_zero()) {
+                let regulated = Integrated::dimensionally_regularized(order);
+                let series = regulated
+                    .series(GS.dim_epsilon, 0, SeriesDepth::relative(1))
+                    .wrap_err("could not find the Laurent order of an IR quotient factor")?;
+                if series.is_zero() {
+                    continue;
+                }
+                let exponent = series.get_trailing_exponent();
+                let Some(power) = exponent
+                    .is_integer()
+                    .then(|| exponent.numerator().to_i64())
+                    .flatten()
+                else {
+                    return Ok(Err("quotient_epsilon_power".into()));
+                };
+                valuation[*i] = valuation[*i].min(power);
+            }
+        }
+        let hard_started = Instant::now();
+        let mass = top_mass::auxiliary_mass_squared();
+        let mut integrals = Vec::with_capacity(distinct.len());
+        for (i, coefficient) in distinct.iter().enumerate() {
+            self.integration_id += 1;
+            let mut settings = self.settings.clone();
+            settings.number_of_terms_in_epsilon_expansion =
+                i64::try_from(loops)? - valuation[i].min(0);
+            let integral = match hard.integrate_hard_coefficient(
+                coefficient,
+                self.graph,
+                &self.root_edges,
+                self.reference_mass_squared,
+                &self.auxiliary_mass_squared,
+                self.vakint,
+                self.uv_settings,
+                &settings,
+                self.integration_id,
+                true,
+            )? {
+                Ok(integral) => integral,
+                Err(reason) => return Ok(Err(reason)),
+            };
+            let power = if integral.is_zero() {
+                0
+            } else {
+                match top_mass::mass_power(&integral, mass) {
+                    Some(power) => power,
+                    None => return Ok(Err("mass_power".into())),
+                }
+            };
+            integrals.push((integral, power));
+        }
+        let hard_seconds = hard_started.elapsed().as_secs_f64();
+        self.integration_elapsed += hard_started.elapsed();
+        let assemble_started = Instant::now();
+        let placeholder = symbolica::symbol!("top_mass_ir_hard_integral");
+        let mut assembled = Vec::new();
+        for (i, orders) in &uses {
+            let (integral, power) = &integrals[*i];
+            if integral.is_zero() {
+                continue;
+            }
+            let h = function!(placeholder, Atom::num(*i as i64));
+            for (order, value) in orders.iter().enumerate() {
+                if value.is_zero() {
+                    continue;
+                }
+                let factor = top_mass::compensation_factor(
+                    mode,
+                    *power,
+                    loops,
+                    order,
+                    degree,
+                    GS.dim_epsilon,
+                );
+                if factor.is_zero() {
+                    continue;
+                }
+                assembled.push(&h * factor * value);
+            }
+        }
+        self.integration_id += 1;
+        let id = self.integration_id;
+        let value = if assembled.is_empty() {
+            Atom::Zero
+        } else {
+            let sum = Atom::add_many(assembled.iter());
+            let simplified = RStarIntegrand::simplify_summands(sum.as_view())
+                .wrap_err("while simplifying an analytic IR outer polynomial")?;
+            let projected = projector(&simplified)
+                .wrap_err("while projecting an analytic IR outer polynomial")?;
+            let regulated = Integrated::dimensionally_regularized(&projected);
+            let finished = RStarIntegrand::finish_tensor(regulated, id)?;
+            let replacements = integrals
+                .iter()
+                .enumerate()
+                .map(|(i, (integral, _))| {
+                    Replacement::new(
+                        function!(placeholder, Atom::num(i as i64)).to_pattern(),
+                        integral.clone(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            finished.replace_multiple(&replacements)
+        };
+        let stats = format!(
+            " distinct={} uses={} quotient_s={quotient_seconds:.3} hard_s={hard_seconds:.3} assemble_s={:.3} powers={:?}",
+            distinct.len(),
+            uses.len(),
+            assemble_started.elapsed().as_secs_f64(),
+            integrals
+                .iter()
+                .map(|(_, power)| *power)
+                .collect::<std::collections::BTreeSet<_>>(),
+        );
+        Ok(Ok((value, stats)))
     }
 
     /// `GAMMALOOP_IR_HARD_KEYS`: one `IR_HARD` line per IR preparation term of

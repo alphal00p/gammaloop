@@ -300,6 +300,112 @@ pub(super) fn compensate_where(
     })
 }
 
+/// `GAMMALOOP_IR_OUTER=generic|analytic|check` (unset: generic, no log).
+/// `analytic`: an IR correction term of the top-level root integrates each
+/// distinct closed hard coefficient once, as a fixed-mass vacuum integral
+/// `h(ε) (M²)^{a-εL}`, multiplies it by the hard-loop-free quotient
+/// counterterm times the root closure, and applies the compensated outer
+/// Taylor analytically: the `p`-orders `b ≤ D` of that factor, times
+/// `Σ_{k ≤ (D-b)/2} (-1)^k binom(a-εL, k)` (results/ir-hard-design §2.4,
+/// §2.5). Declines fall back to the generic path per term. `check`: both,
+/// with the pole parts compared (an error when they differ).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IrOuter {
+    Unset,
+    Generic,
+    Analytic,
+    Check,
+}
+
+static IR_OUTER: LazyLock<std::result::Result<IrOuter, String>> = LazyLock::new(|| {
+    parse(
+        "GAMMALOOP_IR_OUTER",
+        &[("generic", IrOuter::Generic), ("analytic", IrOuter::Analytic), ("check", IrOuter::Check)],
+        IrOuter::Unset,
+    )
+});
+
+/// `GAMMALOOP_IR_OUTER`, read once; a bad value is an error at first use.
+pub fn ir_outer() -> Result<IrOuter> {
+    IR_OUTER.clone().map_err(|error| eyre!(error))
+}
+
+/// The power `a` of `mass` in a single-mass vacuum integral `h (M²)^{a-εL}`
+/// as integrated (its `ε` expansion carries `log(M²)`): the unique power of
+/// `mass` over the summands once `log(mass)` is hidden; `None` when `mass`
+/// occurs in any other way or with two powers.
+pub(super) fn mass_power(integral: &Atom, mass: Symbol) -> Option<i64> {
+    use symbolica::{function, id::Replacement};
+    let log = function!(Symbol::LOG, Atom::var(mass));
+    let placeholder = Atom::var(symbolica::symbol!("top_mass_log_mass_power"));
+    let hidden = integral
+        .replace_multiple(&[Replacement::new(log.to_pattern(), placeholder)])
+        .expand();
+    let mut powers = std::collections::BTreeSet::new();
+    let summands = match hidden.as_view() {
+        AtomView::Add(sum) => sum.iter().collect::<Vec<_>>(),
+        view if view.is_zero() => Vec::new(),
+        view => vec![view],
+    };
+    for summand in summands {
+        let factors = match summand {
+            AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+            view => vec![view],
+        };
+        let mut power = 0_i64;
+        for factor in factors {
+            match factor {
+                AtomView::Var(variable) if variable.get_symbol() == mass => power += 1,
+                AtomView::Pow(pow) => {
+                    let (base, exponent) = pow.get_base_exp();
+                    match base {
+                        AtomView::Var(variable) if variable.get_symbol() == mass => {
+                            power += i64::try_from(exponent).ok()?;
+                        }
+                        _ if factor.contains_symbol(mass) => return None,
+                        _ => {}
+                    }
+                }
+                _ if factor.contains_symbol(mass) => return None,
+                _ => {}
+            }
+        }
+        powers.insert(power);
+    }
+    match powers.len() {
+        1 => powers.into_iter().next(),
+        _ => None,
+    }
+}
+
+/// The analytic compensated outer Taylor factor of a `p`-order `b` of an
+/// integral `∝ (M²)^{a-εL}` at total degree `degree` under `mode`:
+/// `Σ_k (-1)^k binom(a-εL, k)` over the `k ≤ (degree-b)/2` the mode keeps
+/// (`keep`: all; `drop`/`drop-odd`: `k = 0` when the order `b` is kept).
+pub(super) fn compensation_factor(
+    mode: TopMassTerms,
+    a: i64,
+    loops: usize,
+    order: usize,
+    degree: usize,
+    epsilon: Symbol,
+) -> Atom {
+    let x = Atom::num(a) - Atom::num(loops as i64) * Atom::var(epsilon);
+    let mut sum = Atom::Zero;
+    let mut binomial = Atom::one();
+    let mut k = 0;
+    while order + 2 * k <= degree {
+        if mode.keeps_order(order + 2 * k) && (k == 0 || mode.compensates()) {
+            let sign = if k % 2 == 0 { 1 } else { -1 };
+            sum = sum + Atom::num(sign) * &binomial;
+        }
+        // binom(x, k+1) = binom(x, k) (x-k)/(k+1)
+        binomial = binomial * (&x - Atom::num(k as i64)) / Atom::num(k as i64 + 1);
+        k += 1;
+    }
+    sum
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -336,5 +442,43 @@ mod tests {
         );
         assert!(RStarTerms::Nonbare.keeps(true) && !RStarTerms::Nonbare.keeps(false));
         assert!(!RStarTerms::Bare.keeps(true) && RStarTerms::Bare.keeps(false));
+    }
+}
+
+#[cfg(test)]
+mod ir_outer_tests {
+    use super::*;
+    use symbolica::{parse, symbol};
+
+    #[test]
+    fn compensation_factor_is_the_truncated_binomial_series() {
+        let eps = symbol!("top_mass_test_eps");
+        // keep, D = 2: b = 0 -> 1 - (a - εL); b = 1, 2 -> 1.
+        let x = Atom::num(1) - Atom::num(3) * Atom::var(eps);
+        assert_eq!(
+            compensation_factor(TopMassTerms::Keep, 1, 3, 0, 2, eps),
+            Atom::one() - &x
+        );
+        assert_eq!(compensation_factor(TopMassTerms::Keep, 1, 3, 1, 2, eps), Atom::one());
+        assert_eq!(compensation_factor(TopMassTerms::Keep, 1, 3, 2, 2, eps), Atom::one());
+        // drop: no b = 0 term and no compensation; drop-odd: no odd b.
+        assert!(compensation_factor(TopMassTerms::Drop, 1, 3, 0, 2, eps).is_zero());
+        assert_eq!(compensation_factor(TopMassTerms::Drop, 1, 3, 1, 2, eps), Atom::one());
+        assert!(compensation_factor(TopMassTerms::DropOdd, 1, 3, 1, 2, eps).is_zero());
+        // D = 4, b = 0: 1 - x + x(x-1)/2.
+        let expected = (Atom::one() - &x + &x * (&x - Atom::one()) / Atom::num(2)).expand();
+        assert_eq!(
+            compensation_factor(TopMassTerms::Keep, 1, 3, 0, 4, eps).expand(),
+            expected
+        );
+    }
+
+    #[test]
+    fn mass_power_reads_the_unique_power_beside_logarithms() {
+        let m = symbol!("top_mass_test_m2");
+        assert_eq!(mass_power(&parse!("top_mass_test_m2^2*(3+log(top_mass_test_m2)*e)"), m), Some(2));
+        assert_eq!(mass_power(&parse!("5*e"), m), Some(0));
+        assert_eq!(mass_power(&parse!("top_mass_test_m2+e"), m), None);
+        assert_eq!(mass_power(&parse!("sqrt(top_mass_test_m2)"), m), None);
     }
 }
