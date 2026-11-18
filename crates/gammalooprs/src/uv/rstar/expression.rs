@@ -267,6 +267,73 @@ pub(crate) fn in_uv_child_scope<T>(taylor_order: i32, f: impl FnOnce() -> T) -> 
     f()
 }
 
+thread_local! {
+    static IR_HARD_FIXED_MASS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// `GAMMALOOP_IR_HARD=child`: run `f` as the integration of one IR hard part
+/// `H(γ)` evaluated as its own support root (results/ir-hard-child): the
+/// outer Taylor step keeps the reference mass fixed (renamed to the auxiliary
+/// one, no compensation, every order kept) and the remainders are contracted
+/// in the edge basis when `edge_basis` (the UV child scope). Both flags are
+/// restored on unwinding too.
+pub(super) fn in_ir_hard_scope<T>(edge_basis: bool, f: impl FnOnce() -> T) -> T {
+    struct Restore(bool, bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let (edge, fixed) = (self.0, self.1);
+            UV_CHILD_SCOPE.with(|scope| scope.set(edge));
+            IR_HARD_FIXED_MASS.with(|scope| scope.set(fixed));
+        }
+    }
+    let _restore = Restore(
+        UV_CHILD_SCOPE.with(|scope| scope.replace(edge_basis)),
+        IR_HARD_FIXED_MASS.with(|scope| scope.replace(true)),
+    );
+    f()
+}
+
+fn ir_hard_fixed_mass() -> bool {
+    IR_HARD_FIXED_MASS.with(|scope| scope.get())
+}
+
+/// `GAMMALOOP_IR_HARD_CHILD_EDGE=all|1|0` (default `all`): whether the
+/// remainders of `H(γ)` of hard Taylor order `omega` are contracted in the
+/// edge basis (`all`: every order; `1`: order 0 only, as
+/// `GAMMALOOP_UV_CHILD_EDGE_REMAINDER=1` does for UV children; `0`: never).
+pub(super) fn ir_hard_child_edge_basis(omega: i32) -> bool {
+    static MODE: LazyLock<ChildEdgeRemainder> = LazyLock::new(|| {
+        match std::env::var("GAMMALOOP_IR_HARD_CHILD_EDGE")
+            .as_deref()
+            .map(str::trim)
+        {
+            Ok("0" | "off") => ChildEdgeRemainder::Off,
+            Ok("1") => ChildEdgeRemainder::DegreeZero,
+            _ => ChildEdgeRemainder::All,
+        }
+    });
+    child_edge_basis(*MODE, omega)
+}
+
+/// `GAMMALOOP_IR_HARD_CHILD_TRUNCATE=graded|1|0` (default `graded`): the
+/// root truncation of the remainders of `H(γ)` to grade at most `ω` in the
+/// boundary momenta before the contraction (as `GAMMALOOP_UV_CHILD_TRUNCATE`
+/// does for UV children; exact for the same reason: the fixed-mass outer
+/// Taylor step keeps total degree `ω` in those momenta).
+fn ir_hard_child_truncate() -> ChildTruncate {
+    static MODE: LazyLock<ChildTruncate> = LazyLock::new(|| {
+        match std::env::var("GAMMALOOP_IR_HARD_CHILD_TRUNCATE")
+            .as_deref()
+            .map(str::trim)
+        {
+            Ok("0" | "off") => ChildTruncate::Off,
+            Ok("1") => ChildTruncate::DegreeZero,
+            _ => ChildTruncate::Graded,
+        }
+    });
+    *MODE
+}
+
 /// Whether a child of `taylor_order` contracts its ordinary remainders in the
 /// edge basis under `mode`.
 fn child_edge_basis(mode: ChildEdgeRemainder, taylor_order: i32) -> bool {
@@ -842,6 +909,16 @@ fn edge_fallback_bytes() -> u64 {
 }
 
 /// Resident set size of this process (Linux `/proc/self/statm`).
+/// The allocator release hook of [`set_memory_release`] and the process RSS
+/// (for the `GAMMALOOP_IR_HARD=child` budget guard).
+pub(super) fn memory_release() -> Option<fn()> {
+    MEMORY_RELEASE.get().copied()
+}
+
+pub(super) fn process_rss_now() -> Option<u64> {
+    process_rss_bytes()
+}
+
 fn process_rss_bytes() -> Option<u64> {
     let statm = std::fs::read_to_string("/proc/self/statm").ok()?;
     let pages: u64 = statm.split_whitespace().nth(1)?.parse().ok()?;
@@ -1511,6 +1588,23 @@ impl RStarIntegrand {
         )
     }
 
+    /// `GAMMALOOP_IR_HARD=child`: the root truncation of one remainder of an
+    /// IR hard part `H(γ)` (its boundary momenta `root_edges`, hard Taylor
+    /// order `omega`) under `GAMMALOOP_IR_HARD_CHILD_TRUNCATE`.
+    pub(super) fn with_ir_hard_truncation(
+        self,
+        root_edges: &[EdgeIndex],
+        omega: i32,
+    ) -> Result<Self> {
+        self.with_root_truncation_in(
+            ir_hard_child_truncate(),
+            uv_child_truncate_max_parts(),
+            true,
+            root_edges,
+            omega,
+        )
+    }
+
     /// [`Self::with_root_truncation`] under an explicit mode and part cap.
     fn with_root_truncation_in(
         mut self,
@@ -1637,6 +1731,14 @@ impl RStarIntegrand {
             Some(truncation) => &truncation.parts,
             None => std::slice::from_ref(&self.routed),
         }
+    }
+
+    /// The bytes of what the contraction contracts ([`Self::contraction_inputs`]).
+    pub(super) fn routed_bytes(&self) -> usize {
+        self.contraction_inputs()
+            .iter()
+            .map(|input| input.as_view().get_byte_size())
+            .sum()
     }
 
     pub fn soft_edges(&self) -> &[EdgeIndex] {
@@ -3037,6 +3139,20 @@ impl RStarIntegrand {
         let parameter = symbol!("rstar_outer_taylor"; Scalar);
         let taylor = TaylorExpansion::new(parameter, degree);
         let scaled = self.outer_scaled(expression, root_edges, parameter, timing)?;
+        // GAMMALOOP_IR_HARD=child: an IR hard part H(γ) is integrated at the
+        // fixed reference mass (renamed to the auxiliary one, as at λ=0) with
+        // every order kept; the root's compensation acts on it analytically.
+        if ir_hard_fixed_mass() {
+            let fixed = scaled
+                .replace(reference_mass_squared)
+                .with(auxiliary_mass_squared.clone());
+            drop(scaled);
+            streamed::guard_checkpoint("the outer-Taylor expansion")?;
+            let polynomial = taylor.evaluate(&fixed)?;
+            drop(fixed);
+            timing.taylor = timing.lap();
+            return Ok(polynomial);
+        }
         // GAMMALOOP_RSTAR_TOP_MASS_TERMS=drop|drop-odd at the top-level root:
         // no compensation (the reference mass is renamed to the auxiliary one
         // as at λ=0) and the λ^0 (and odd) coefficients are discarded right

@@ -76,9 +76,40 @@ pub fn closed_mode() -> ClosedMode {
             .as_deref()
             .map(str::trim)
         {
-            Some("closed") => ClosedMode::On,
+            // `child`/`child-check`: the closed path is the fallback and the
+            // reference of the hard-part-as-child route.
+            Some("closed" | "child" | "child-check") => ClosedMode::On,
             Some("check") => ClosedMode::Check,
             _ => ClosedMode::Off,
+        }
+    });
+    *MODE
+}
+
+/// `GAMMALOOP_IR_HARD=child|child-check` (results/ir-hard-child): each IR
+/// correction's integrated hard part `H(γ) = Σ_σ ∫ T_ω[γ/σ Π Δ(σ_i)]` is
+/// computed as its own support root (the UV children's remainder path at
+/// fixed reference mass, no `K`), read off as `Σ_j h_j E_j`, and multiplied
+/// by the unchanged quotient counterterms with the analytic outer Taylor.
+/// A decline computes that correction on the closed path. `child-check`
+/// computes both and requires equal pole parts (the closed value is used).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChildMode {
+    Off,
+    On,
+    Check,
+}
+
+pub fn child_mode() -> ChildMode {
+    static MODE: LazyLock<ChildMode> = LazyLock::new(|| {
+        match std::env::var("GAMMALOOP_IR_HARD")
+            .ok()
+            .as_deref()
+            .map(str::trim)
+        {
+            Some("child") => ChildMode::On,
+            Some("child-check") => ChildMode::Check,
+            _ => ChildMode::Off,
         }
     });
     *MODE
