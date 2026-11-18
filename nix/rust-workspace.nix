@@ -2010,15 +2010,7 @@
     mkdir -p "$out"
   '';
 
-  mergeCargoArtifacts = name: artifacts: let
-    artifactList = lib.unique (lib.filter (artifact: artifact != null) artifacts);
-  in
-    if builtins.length artifactList == 1
-    then builtins.head artifactList
-    else pkgs.runCommand name {
-      nativeBuildInputs = [pkgs.rsync pkgs.zstd pkgs.gnutar craneLib.installCargoArtifactsHook];
-      doCompressAndInstallFullArchive = true;
-    } ''
+  cargoArtifactMergeScript = artifacts: overwriteDirectories: ''
       mkdir -p target
 
       make_target_writable() {
@@ -2043,7 +2035,7 @@
           make_target_writable
         elif [ -d "$artifact" ]; then
           make_target_writable
-          rsync -a --chmod=u+w "$artifact/" target/
+          rsync -a --chmod=u+w${lib.optionalString overwriteDirectories " --ignore-times"} "$artifact/" target/
           make_target_writable
         else
           echo "unsupported cargo artifact path: $artifact" >&2
@@ -2051,16 +2043,40 @@
         fi
       }
 
-      ${lib.concatMapStringsSep "\n" (artifact: "unpack_artifact ${artifact}") artifactList}
+      ${lib.concatMapStringsSep "\n" (artifact: "unpack_artifact ${artifact}") artifacts}
 
       # Crane deletes inherited Cargo locks before using an artifact tree.
       # Remove them here while the merged files are still ordinary files.
       find target -name '.cargo*lock' -delete
 
-      # Keep the merged closure compressed without retaining its input archives.
-      # Crane normalizes archive timestamps to epoch 1 for Cargo freshness.
-      compressAndInstallCargoArtifactsDir "$out" target ""
-    '';
+  '';
+
+  mergeCargoArtifacts = name: inputs: let
+    artifacts = lib.unique (lib.filter (artifact: artifact != null) inputs);
+  in
+    if builtins.length artifacts == 1
+    then {cargoArtifacts = builtins.head artifacts;}
+    else if name == "gammaloop-crate-alphal00p-docs-examples-dependency-deps-inputs"
+      || name == "gammaloop-crate-alphal00p-docs-examples-dependency-inputs"
+    then {
+      # Both consumers already publish a full archive after stripping dummy
+      # artifacts. Restore the ordered inputs directly and normalize timestamps
+      # as Crane would through the intermediate archive.
+      mergeCargoArtifactsPostPatch = ''
+        ${cargoArtifactMergeScript artifacts true}
+        find target -exec touch -h -d @1 {} +
+      '';
+    }
+    else {
+      cargoArtifacts = pkgs.runCommand name {
+        nativeBuildInputs = [pkgs.rsync pkgs.zstd pkgs.gnutar craneLib.installCargoArtifactsHook];
+        doCompressAndInstallFullArchive = true;
+      } (cargoArtifactMergeScript artifacts false + ''
+        # Keep the merged closure compressed without retaining its input archives.
+        # Crane normalizes archive timestamps to epoch 1 for Cargo freshness.
+        compressAndInstallCargoArtifactsDir "$out" target ""
+      '');
+    };
 
   workspacePackageCargoArtifactNames = package: let
     manifest = workspaceManifestFor workspaceMemberPackageDirs.${package};
@@ -2110,13 +2126,16 @@
   # after constructing the derivation to keep Crane's dummy-source behavior
   # and build per-crate dependency archives incrementally from earlier archives.
   buildDepsOnlyWithArtifacts = {
+    mergeCargoArtifactsPostPatch ? null,
     preBuildWorkspaceArtifactStripPackages ? [],
     preservedWorkspaceArtifactPackages ? [],
     keepIncrementalState ? false,
     previousArtifacts ? null,
     ...
-  } @ args: let
+  } @ args:
+    assert mergeCargoArtifactsPostPatch == null || (args.stripWorkspaceArtifacts or false); let
     cleanedArgs = builtins.removeAttrs args [
+      "mergeCargoArtifactsPostPatch"
       "keepIncrementalState"
       "previousArtifacts"
       "preBuildWorkspaceArtifactStripPackages"
@@ -2136,6 +2155,8 @@
       }
       // {
         doNotLinkInheritedArtifacts = args.doNotLinkInheritedArtifacts or true;
+        nativeBuildInputs = (args.nativeBuildInputs or [])
+          ++ lib.optionals (mergeCargoArtifactsPostPatch != null) [pkgs.rsync pkgs.zstd pkgs.gnutar];
         doCheck = false;
         checkPhaseCargoCommand = "";
 
@@ -2153,7 +2174,7 @@
           + ''
 
             ${normalizeWorkspaceHackBuildScriptTimestampScript}
-          '';
+          '' + lib.optionalString (mergeCargoArtifactsPostPatch != null) mergeCargoArtifactsPostPatch;
 
         preBuild =
           (args.preBuild or "")
@@ -2276,12 +2297,12 @@
           lib.filter workspacePackageIsProcMacro dependencySourcePackages;
       in
         buildDepsOnlyWithArtifacts ((builtins.removeAttrs ciArgs ["src"])
-          // {
-            cargoArtifacts = mergeCargoArtifacts "gammaloop-crate-${package}-dependency-deps-inputs" (
+          // (mergeCargoArtifacts "gammaloop-crate-${package}-dependency-deps-inputs" (
               [cargoArtifacts]
               ++ rootPackageDependencyArtifactsFor package
               ++ map dependencyArtifactFor dependencySourcePackages
-            );
+            ))
+          // {
             pname = "gammaloop-crate-${package}-dependency-deps";
             src = workspacePackageSrcForSourcePackages {
               sourcePackages = dependencySourcePackages;
@@ -2311,11 +2332,11 @@
         preservedWorkspaceArtifactPackages = sourcePackages;
       in
         buildDepsOnlyWithArtifacts ((builtins.removeAttrs ciArgs ["src"])
-          // {
-            cargoArtifacts = mergeCargoArtifacts "gammaloop-crate-${package}-dependency-inputs" (
+          // (mergeCargoArtifacts "gammaloop-crate-${package}-dependency-inputs" (
               [cranePackageDependencyModeDependencyArtifacts.${package}]
               ++ map dependencyArtifactFor (lib.filter (sourcePackage: sourcePackage != package) sourcePackages)
-            );
+            ))
+          // {
             pname = "gammaloop-crate-${package}-dependency";
             src = workspacePackageSrcForSourcePackages {
               inherit sourcePackages;
@@ -2473,13 +2494,13 @@
         '';
       in
         buildDepsOnlyWithArtifacts ((builtins.removeAttrs ciArgs ["src"])
-          // {
-            cargoArtifacts = mergeCargoArtifacts "gammaloop-crate-test-dependencies-${context.key}-inputs" (
+          // (mergeCargoArtifacts "gammaloop-crate-test-dependencies-${context.key}-inputs" (
               (if dependencyFrontier == []
                 then [cargoArtifacts workspaceHackBuildArtifacts]
                 else map (dependencyContext: self.${dependencyContext.key}) dependencyFrontier)
               ++ map (package: cranePackageDependencyArtifacts.${package}) nativeDependencyFrontier
-            );
+            ))
+          // {
             pname = "gammaloop-crate-test-dependencies-${context.key}";
             keepIncrementalState = true;
             previousArtifacts =
