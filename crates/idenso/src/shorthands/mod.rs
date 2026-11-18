@@ -27,8 +27,9 @@ impl SymbolicTensor<PartialStructure> {
         // A terminal polynomial its producer emitted in dot notation is in
         // the normal form this rewrite produces (`IDENSO_EDGE_OUTPUT=dots`).
         if crate::edge_output::enabled("dots")
-            && observed
-                .is_some_and(|facts| facts.is_terminal_polynomial() && !facts.needs_dot_normalization())
+            && observed.is_some_and(|facts| {
+                facts.is_terminal_polynomial() && !facts.needs_dot_normalization()
+            })
         {
             return Ok(self.clone());
         }

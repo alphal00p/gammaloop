@@ -11,7 +11,9 @@ fn relabel_fresh_dummies(printed: String) -> String {
     let mut relabeled = String::with_capacity(printed.len());
     let mut i = 0;
     while i < chars.len() {
-        if chars[i] == 'd' && chars.get(i + 1) == Some(&'_') && (i == 0 || !identifier(chars[i - 1]))
+        if chars[i] == 'd'
+            && chars.get(i + 1) == Some(&'_')
+            && (i == 0 || !identifier(chars[i - 1]))
         {
             let mut end = i + 2;
             while end < chars.len() && chars[end].is_ascii_digit() {

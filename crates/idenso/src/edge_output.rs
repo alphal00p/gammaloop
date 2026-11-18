@@ -31,5 +31,7 @@ static SWITCHES: LazyLock<Vec<String>> = LazyLock::new(|| {
 
 /// Whether `IDENSO_EDGE_OUTPUT` names `switch` (or `all`).
 pub fn enabled(switch: &str) -> bool {
-    SWITCHES.iter().any(|entry| entry == switch || entry == "all")
+    SWITCHES
+        .iter()
+        .any(|entry| entry == switch || entry == "all")
 }
