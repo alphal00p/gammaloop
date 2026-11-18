@@ -356,4 +356,117 @@ mod tests {
             Err(TensorReductionError::ExternalGram(_))
         ));
     }
+
+    /// D6 (helper VH): the reduction with one external vector is the
+    /// projection onto the tensors built from the metric and `p`, characterised
+    /// by `T . reduce(K) = T . K` for every such tensor `T` over the open
+    /// indices (a set of indices carried by `p`, a metric pairing of the
+    /// others). Ranks 1 to 6, repeated and distinct loop vectors, odd ranks.
+    /// Prints the wall time of `reduce` per case (a cost column, not asserted).
+    #[test]
+    fn the_external_projection_is_exact_through_rank_six() {
+        let d = symbol!("external_identity::D");
+        let rep = Minkowski {}.new_rep(d);
+        let [k, q, p] = [
+            spenso::vector_symbol!("external_identity::k"),
+            spenso::vector_symbol!("external_identity::q"),
+            spenso::vector_symbol!("external_identity::p"),
+        ]
+        .map(|head| rep.vector(head.to_atom().as_view(), []));
+        let reducer = TensorReducer::new(d.to_atom())
+            .with_integrated_vector(k.clone())
+            .unwrap()
+            .with_integrated_vector(q.clone())
+            .unwrap()
+            .with_external_vector(p.clone())
+            .unwrap();
+        let indices = (0..6)
+            .map(|i| symbol!(&format!("external_identity::mu{i}")).to_atom())
+            .collect::<Vec<_>>();
+        fn pairings(points: &[usize]) -> Vec<Vec<(usize, usize)>> {
+            if points.is_empty() {
+                return vec![vec![]];
+            }
+            let mut out = Vec::new();
+            for i in 1..points.len() {
+                let rest = points[1..i]
+                    .iter()
+                    .chain(&points[i + 1..])
+                    .copied()
+                    .collect::<Vec<_>>();
+                for mut pairing in pairings(&rest) {
+                    pairing.push((points[0], points[i]));
+                    out.push(pairing);
+                }
+            }
+            out
+        }
+        let close = |expression: Atom| {
+            SymbolicTensor::infer(expression)
+                .unwrap()
+                .contract(idenso::tensor::ContractSettings::default())
+                .unwrap()
+                .to_dots()
+                .unwrap()
+                .expression()
+                .clone()
+        };
+        let cases: [&[&Atom]; 9] = [
+            &[&k],
+            &[&k, &k],
+            &[&k, &q],
+            &[&k, &k, &k],
+            &[&k, &k, &q],
+            &[&k, &k, &q, &q],
+            &[&k, &q, &q, &q],
+            &[&k, &k, &k, &q, &q],
+            &[&k, &k, &k, &q, &q, &q],
+        ];
+        for vectors in cases {
+            let n = vectors.len();
+            let mut tensor = Atom::one();
+            for (vector, index) in vectors.iter().zip(&indices) {
+                tensor *= indexed_vector(vector, index);
+            }
+            let started = std::time::Instant::now();
+            let reduced = reducer
+                .reduce(&SymbolicTensor::infer(tensor.clone()).unwrap())
+                .unwrap()
+                .into_expression()
+                .unwrap()
+                .into_expression();
+            let seconds = started.elapsed().as_secs_f64();
+            let mut structures = 0;
+            for mask in 0u32..(1 << n) {
+                let rest = (0..n).filter(|i| mask & (1 << i) == 0).collect::<Vec<_>>();
+                if rest.len() % 2 == 1 {
+                    continue;
+                }
+                for pairing in pairings(&rest) {
+                    structures += 1;
+                    let mut closing = Atom::one();
+                    for i in (0..n).filter(|i| mask & (1 << i) != 0) {
+                        closing *= indexed_vector(&p, &indices[i]);
+                    }
+                    for (a, b) in &pairing {
+                        closing *= function!(
+                            ETS.metric,
+                            rep.pattern(indices[*a].clone()),
+                            rep.pattern(indices[*b].clone())
+                        );
+                    }
+                    let left = close(&reduced * &closing);
+                    let right = close(&tensor * &closing);
+                    assert!(
+                        (&left - &right).together().is_zero(),
+                        "rank {n}: T = {closing}: T.reduce(K) = {left}, T.K = {right}"
+                    );
+                }
+            }
+            println!(
+                "D6_EXTERNAL_IDENTITY rank={n} vectors={} structures={structures} reduce_seconds={seconds:.4}",
+                vectors.iter().map(|v| if **v == k { "k" } else { "q" }).collect::<String>()
+            );
+        }
+    }
 }
