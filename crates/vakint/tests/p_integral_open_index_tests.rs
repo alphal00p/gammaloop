@@ -157,8 +157,8 @@ fn the_rank_one_bubble_is_half_the_external_momentum() {
     let scalar = evaluate(&engine, &settings, BUBBLE_11);
     assert_closed_case(
         &open,
-        &parse("g(1,2)"),
-        &(scalar * parse("p(1,2)") / Atom::num(2)),
+        &parse("p(1,1)"),
+        &(scalar * parse("dot(p(1),p(1))") / Atom::num(2)),
         epsilon(&settings),
         "rank-one bubble",
     );
@@ -262,7 +262,7 @@ fn the_default_configuration_without_form_runs_open_indices() {
     let engine = engine();
     for input in [
         format!("k(1,1)*k(1,2)*{BUBBLE_11}"),
-        format!("k(2,1)*{KITE}"),
+        format!("k(1,1)*{KITE}"),
         "k(1,1)*k(1,2)*topo(prop(1,edge(1,1),k(1),muvsq,2))".to_owned(),
     ] {
         let value = evaluate(&engine, &settings, &input);
@@ -281,9 +281,12 @@ fn the_default_configuration_without_form_runs_open_indices() {
 fn the_vacuum_input_scope_is_accepted() {
     let engine = engine();
     let settings = settings(3);
+    // Metrics carry symbolic indices: vakint's dot-notation pass reads an
+    // integer-labelled metric `g(1,3)` as a vector `g(1)` with index 3 (a
+    // pre-existing ambiguity of the notation; it fails with an error).
     for (numerator, indices) in [
-        ("g(1,2)*k(1,2)*k(1,3)", &["1", "3"][..]),
-        ("g(2,3)*k(1,2)*k(1,3)*k(1,1)", &["1"][..]),
+        ("g(mu1,mu2)*k(1,mu2)*k(1,mu3)", &["mu1", "mu3"][..]),
+        ("g(mu2,mu3)*k(1,mu2)*k(1,mu3)*k(1,mu1)", &["mu1"][..]),
         ("k(1,1)*k(1,2)*dot(k(1),p(2))", &["1", "2"][..]),
         ("k(1,1)*p(2,2)", &["1", "2"][..]),
     ] {
@@ -340,4 +343,46 @@ fn the_scope_edges_are_refused() {
         let message = error(input.clone());
         assert!(!message.starts_with("accepted"), "{input}: {message}");
     }
+}
+
+/// Analytic control at two loops (exact by symmetry): in the sunset
+/// `P2L(p, 1,1,0,0,1)` (lines `k1`, `k2`, `k1+k2+p`) the three lines are
+/// permuted by its symmetries, so `∫ k1^μ = ∫ k2^μ = -∫ (k1+k2+p)^μ`, hence
+/// `∫ k1^μ / (k1² k2² (k1+k2+p)²) = -(p^μ/3) × sunset`.
+#[test]
+fn the_rank_one_sunset_is_minus_a_third_of_the_external_momentum() {
+    let engine = engine();
+    let settings = settings(3);
+    let sunset = "topo(P2L(p(1),1,1,0,0,1))";
+    let open = evaluate(&engine, &settings, &format!("k(1,1)*{sunset}"));
+    let scalar = evaluate(&engine, &settings, sunset);
+    assert_closed_case(
+        &open,
+        &parse("p(1,1)"),
+        &(scalar * parse("dot(p(1),p(1))") / Atom::num(-3)),
+        epsilon(&settings),
+        "rank-one sunset",
+    );
+}
+
+/// Analytic controls at two loops (exact by the left-right reflection of the
+/// symmetric kite, which exchanges lines 1 <-> 4 and 3 <-> 5 of
+/// `P2L(p, 1,1,1,1,1)`): `k1.p = (D4 - D1 - p²)/2` and
+/// `k2.p = (D5 - D3 - D4 + D1)/2`, the differences integrate to zero, so
+/// `∫ k1^μ = -(p^μ/2) × kite` and `∫ k2^μ = 0`.
+#[test]
+fn the_rank_one_symmetric_kite_follows_from_its_reflection() {
+    let engine = engine();
+    let settings = settings(3);
+    let kite = evaluate(&engine, &settings, KITE);
+    let first = evaluate(&engine, &settings, &format!("k(1,1)*{KITE}"));
+    assert_closed_case(
+        &first,
+        &parse("p(1,1)"),
+        &(&kite * parse("dot(p(1),p(1))") / Atom::num(-2)),
+        epsilon(&settings),
+        "kite k1",
+    );
+    let second = evaluate(&engine, &settings, &format!("k(2,1)*{KITE}"));
+    assert!(second.expand().is_zero(), "kite k2: {second}");
 }
