@@ -5445,6 +5445,14 @@ fn equal_inputs_with_cancelling_unknown_master_orders_agree() {
         Err(crate::VakintError::MissingMasterOrders(missing)) => missing,
         other => panic!("{numerator}: expected MissingMasterOrders, got {other:?}"),
     };
+    // Reviewer control: three factors of a master with a pole (no1 starts
+    // at -5·ζ(5)/ε): only the leading orders contribute.
+    let cubic = evaluate("ε^8*PMaster(no1)^3").unwrap();
+    let expected = parse("-125*zeta(5)^3*ε^4");
+    assert!(
+        (&cubic - &expected).expand().is_zero(),
+        "{cubic} vs {expected}"
+    );
     let alarm = refusal("ε^(-3)*PMaster(no)");
     assert_eq!(refusal("ε^(-4)*PMaster(no)*(ε*PG(0,0)-(1-ε))"), alarm);
     assert_eq!(alarm.masters.len(), 1);

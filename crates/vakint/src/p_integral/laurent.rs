@@ -744,14 +744,17 @@ fn monomial_term(
     }) {
         TAIL_IN_RANGE_TERMS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
-    // The masters' product first (through tabulated_valuation + depth, no
-    // intermediate clip), then the term.
+    // The masters' product first, then the term. No cap on a partial
+    // product: with factors through v_i + depth, a product of any prefix is
+    // exact through (its valuations) + depth, which Laurent::mul keeps; a cap
+    // at the final valuation would cut a prefix whose remaining factors have
+    // negative valuations (reviewer, three factors of PMaster(no1)).
     let mut masters: Option<Laurent> = None;
     for master in &tabulated {
         let factor = master.through(master.valuation + depth);
         masters = Some(match masters {
             None => factor,
-            Some(product) => product.mul(&factor, tabulated_valuation + depth),
+            Some(product) => product.mul(&factor, i64::MAX / 4),
         });
     }
     if let Some(masters) = masters {
@@ -1518,7 +1521,7 @@ mod tests {
         };
         // Three masters: (valuation, first unknown order k), known
         // coefficients random integers (some zero), or fully exact (no tail).
-        let shapes = [("ma", -2, 1), ("mb", 0, 2), ("mc", -1, 4), ("md", 0, -1)];
+        let shapes = [("ma", -2, 1), ("mb", 0, 2), ("mc", -1, 4), ("md", -1, -1)];
         let mut tables = std::collections::BTreeMap::<String, (Atom, Atom)>::new();
         for (name, valuation, k) in shapes {
             let master = function!(p_master_symbol(), Atom::var(vk_symbol!(name)));
@@ -1551,7 +1554,7 @@ mod tests {
         let pg = |x1: i64, x2: i64| function!(pg_symbol(), Atom::num(x1), Atom::num(x2));
         let mut fired = 0;
         let mut clean = 0;
-        for trial in 0..48 {
+        for trial in 0..96 {
             let mut reduced = Atom::Zero;
             for _ in 0..1 + next(3) {
                 // coefficient ε^p·(a + bε + cε²)/(1 - dε)
@@ -1560,8 +1563,9 @@ mod tests {
                         + Atom::num(next(5) - 2) * &ep
                         + Atom::num(next(5) - 2) * pow(2))
                     / (Atom::num(1) - Atom::num(next(3)) * &ep);
+                // Products of 1 to 4 master factors (repeats = powers).
                 let mut monomial = master(names[next(4) as usize]);
-                if next(2) == 1 {
+                for _ in 0..next(4) {
                     monomial *= master(names[next(4) as usize]);
                 }
                 match next(4) {
