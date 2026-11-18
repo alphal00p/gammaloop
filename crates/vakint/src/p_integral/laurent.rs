@@ -591,6 +591,7 @@ struct SeriesCounts {
 static TAIL_IN_RANGE_TERMS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// See [`TAIL_IN_RANGE_TERMS`].
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn tail_in_range_terms() -> u64 {
     TAIL_IN_RANGE_TERMS.load(std::sync::atomic::Ordering::Relaxed)
 }
@@ -743,9 +744,18 @@ fn monomial_term(
     }) {
         TAIL_IN_RANGE_TERMS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
+    // The masters' product first (through tabulated_valuation + depth, no
+    // intermediate clip), then the term.
+    let mut masters: Option<Laurent> = None;
     for master in &tabulated {
         let factor = master.through(master.valuation + depth);
-        term = term.mul(&factor, order);
+        masters = Some(match masters {
+            None => factor,
+            Some(product) => product.mul(&factor, tabulated_valuation + depth),
+        });
+    }
+    if let Some(masters) = masters {
+        term = term.mul(&masters, order);
     }
     if term.order() < order {
         return Err(failure(format!(
@@ -1429,25 +1439,36 @@ mod tests {
         let pg = function!(pg_symbol(), Atom::num(0), Atom::num(0));
         let ep = Atom::var(e);
         let pow = |n: i64| ep.pow(Atom::num(n));
-        // `no` is tabulated through ε^7, its tail is ε^8·Oep(8, PMaster(no)).
-        let control = expand(&one, &(pow(5) * &no), e, 4).unwrap();
+        // The orders follow from the table: valuation v, first unknown k.
+        let table =
+            super::TabulatedMaster::new(&masters::p_master_expansion("no", e).unwrap(), e).unwrap();
+        let (v, k) = (table.valuation, table.tail.as_ref().unwrap().0);
+        let n = 4;
+        // ε^(n-v)·no needs only the leading (known) order of no.
+        let control = expand(&one, &(pow(n - v) * &no), e, n).unwrap();
         assert!(!control.is_zero());
-        assert!(!crate::truncation_guard::has_unknown_tail(control.as_view()));
-        let cancel = (pow(-4) * &no * (&ep * &pg - (Atom::num(1) - pow(9)))).expand();
-        let value = expand(&one, &cancel, e, 4).unwrap();
+        assert!(!crate::truncation_guard::has_unknown_tail(
+            control.as_view()
+        ));
+        // ε^(n-k-1)·no·(ε·PG(0,0) - 1 + ε^(k+1-v)) = ε^(n-v)·no: each term
+        // needs no through k+1, the unknown orders cancel exactly.
+        let cancel =
+            (pow(n - k - 1) * &no * (&ep * &pg - (Atom::num(1) - pow(k + 1 - v)))).expand();
+        let value = expand(&one, &cancel, e, n).unwrap();
         assert_eq!(value.to_canonical_string(), control.to_canonical_string());
         let guard = |value: &Atom| {
             crate::truncation_guard::ensure_known_orders(
                 value,
                 e,
-                Some(4),
+                Some(n),
                 "test",
                 crate::truncation_guard::plain_name,
             )
         };
-        let alarm = guard(&expand(&one, &(pow(-3) * &no), e, 4).unwrap()).unwrap_err();
-        let cancel_missing = (pow(-4) * &no * (&ep * &pg - (Atom::num(1) - &ep))).expand();
-        let missing = guard(&expand(&one, &cancel_missing, e, 4).unwrap()).unwrap_err();
+        // ε^(n-k)·no needs no's first unknown order k at ε^n.
+        let alarm = guard(&expand(&one, &(pow(n - k) * &no), e, n).unwrap()).unwrap_err();
+        let cancel_missing = (pow(n - k - 1) * &no * (&ep * &pg - (Atom::num(1) - &ep))).expand();
+        let missing = guard(&expand(&one, &cancel_missing, e, n).unwrap()).unwrap_err();
         assert_eq!(missing, alarm);
         assert_eq!(alarm.masters.len(), 1);
         assert_eq!(
@@ -1456,18 +1477,24 @@ mod tests {
                 alarm.masters[0].last_needed_order,
                 alarm.masters[0].first_affected_result_order
             ),
-            (8, Some(8), 4)
+            (k, Some(k), n)
         );
-        // A deeper pole needs several unknown orders: one entry, k..last.
-        let deep = guard(&expand(&one, &(pow(-5) * &no), e, 4).unwrap()).unwrap_err();
+        // Two orders deeper: one entry, k..k+2.
+        let deep = guard(&expand(&one, &(pow(n - k - 2) * &no), e, n).unwrap()).unwrap_err();
         assert_eq!(deep.masters.len(), 1);
         assert_eq!(
             (
                 deep.masters[0].first_missing_order,
-                deep.masters[0].last_needed_order
+                deep.masters[0].last_needed_order,
+                deep.masters[0].first_affected_result_order
             ),
-            (8, Some(10))
+            (k, Some(k + 2), n - 2)
         );
+        // A master squared needs each factor through k + 1 here.
+        let square = (pow(n - k - v - 1) * no.pow(Atom::num(2))).expand();
+        let squared = guard(&expand(&one, &square, e, n).unwrap()).unwrap_err();
+        assert_eq!(squared.masters[0].first_missing_order, k);
+        assert_eq!(squared.masters[0].last_needed_order, Some(k + 1));
     }
 
     /// Property: for random small sums of products of rational functions of
@@ -1529,7 +1556,8 @@ mod tests {
             for _ in 0..1 + next(3) {
                 // coefficient ε^p·(a + bε + cε²)/(1 - dε)
                 let coefficient = pow(next(7) - 4)
-                    * (Atom::num(1 + next(3)) + Atom::num(next(5) - 2) * &ep
+                    * (Atom::num(1 + next(3))
+                        + Atom::num(next(5) - 2) * &ep
                         + Atom::num(next(5) - 2) * pow(2))
                     / (Atom::num(1) - Atom::num(next(3)) * &ep);
                 let mut monomial = master(names[next(4) as usize]);
@@ -1547,8 +1575,8 @@ mod tests {
                 // (ε·PG(0,0) = 1 exactly), but not all of them.
                 if next(2) == 1 {
                     let shift = next(4);
-                    reduced -= &coefficient * &monomial * &ep * pg(0, 0)
-                        * (Atom::num(1) - pow(1 + shift));
+                    reduced -=
+                        &coefficient * &monomial * &ep * pg(0, 0) * (Atom::num(1) - pow(1 + shift));
                 }
             }
             let reduced = reduced.expand();
@@ -1584,7 +1612,11 @@ mod tests {
                 crate::truncation_guard::plain_name,
             );
             let unknown = crate::truncation_guard::has_unknown_tail(reference.expand().as_view());
-            assert_eq!(guard.is_err(), unknown, "trial {trial}: {reduced} through ε^{order}");
+            assert_eq!(
+                guard.is_err(),
+                unknown,
+                "trial {trial}: {reduced} through ε^{order}"
+            );
             if unknown {
                 fired += 1;
             } else {

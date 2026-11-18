@@ -5432,9 +5432,15 @@ fn equal_inputs_with_cancelling_unknown_master_orders_agree() {
     let control = evaluate("ε^5*PMaster(no)").unwrap();
     let known = evaluate("ε^5*20*zeta(5)").unwrap();
     assert!(!control.is_zero());
-    assert!((&control - &known).expand().is_zero(), "{control} vs {known}");
+    assert!(
+        (&control - &known).expand().is_zero(),
+        "{control} vs {known}"
+    );
     let cancel = evaluate("ε^(-4)*PMaster(no)*(ε*PG(0,0)-(1-ε^9))").unwrap();
-    assert!((&cancel - &control).expand().is_zero(), "{cancel} vs {control}");
+    assert!(
+        (&cancel - &control).expand().is_zero(),
+        "{cancel} vs {control}"
+    );
     let refusal = |numerator: &str| match evaluate(numerator) {
         Err(crate::VakintError::MissingMasterOrders(missing)) => missing,
         other => panic!("{numerator}: expected MissingMasterOrders, got {other:?}"),

@@ -799,7 +799,10 @@ fn extended_catalogues_are_cached_per_catalogue_content() {
     let extended_first = basis.extended_catalogue(&first).unwrap();
     let extended_second = basis.extended_catalogue(&second).unwrap();
     assert!(!Arc::ptr_eq(&extended_first, &extended_second));
-    assert!(Arc::ptr_eq(&extended_first, &basis.extended_catalogue(&first).unwrap()));
+    assert!(Arc::ptr_eq(
+        &extended_first,
+        &basis.extended_catalogue(&first).unwrap()
+    ));
     let mut differing = 0;
     for (symbol, _) in second.masters_ids() {
         let value = |catalogue: &PMasterCatalogue| format!("{:?}", catalogue.master(symbol));
