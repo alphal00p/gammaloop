@@ -1761,6 +1761,7 @@ impl<'a> Evaluation<'a> {
             channel: self.channel.0,
             taylor_order: i64::from(self.plan.taylor_order),
             normalisation: self.channel.1,
+            uv_child_truncate: remainder.truncation_dump_label(),
         };
         let degree = usize::try_from(self.plan.taylor_order)?;
         let (graph, root_edges, reference, auxiliary, vakint, uv_settings, projector) = (
@@ -1820,6 +1821,7 @@ impl<'a> Evaluation<'a> {
             channel: self.channel.0,
             taylor_order: i64::from(self.plan.taylor_order),
             normalisation: self.channel.1,
+            uv_child_truncate: remainder.truncation_dump_label(),
         };
         let result = super::pint6_dump::with_channel(channel, || {
             remainder.integrate(
@@ -1861,6 +1863,7 @@ impl<'a> Evaluation<'a> {
                     channel: self.channel.0,
                     taylor_order: i64::from(self.plan.taylor_order),
                     normalisation: self.channel.1,
+                    uv_child_truncate: super::expression::untruncated_dump_label(),
                 };
                 super::pint6_dump::with_channel(channel, || {
                     super::pint6_dump::write_v1_from_boundary(dump, settings, built)
