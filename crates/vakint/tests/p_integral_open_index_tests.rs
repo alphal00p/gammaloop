@@ -406,3 +406,89 @@ fn integer_labelled_metrics_are_metrics() {
     let worked = evaluate(&engine, &settings, &format!("g(1,2)*k(1,1)*k(1,2)*{BUBBLE_12}"));
     assert!((&worked - &evaluate(&engine, &settings, &format!("dot(k(1),k(1))*{BUBBLE_12}"))).expand().is_zero());
 }
+
+/// Three open indices from a Taylor derivative of a propagator graph (an
+/// N-point vertex with one leg at zero momentum is such a derivative; here it
+/// is written directly, no soft-leg declaration involved). For
+/// `F^{μν}(p) = ∫ N^{μν} / Π D_i`, the derivative `∂F^{μν}/∂p_ρ` differentiates
+/// every p-dependent propagator: `∂_ρ (q²)^{-1} = -2 q_ρ (q²)^{-2}` for a line
+/// of momentum `q = ... ± p`. Checks: (i) the closed-case identity for every
+/// rank-3 metric/p closing tensor; (ii) Euler: `F` is homogeneous of degree `w`
+/// in `p` (`w = L d + rank - 2 Σ a`), so `p_ρ ∂F^{μν}/∂p_ρ = w F^{μν}`, closed
+/// with every rank-2 tensor.
+fn assert_taylor_derivative(
+    engine: &Vakint,
+    settings: &VakintSettings,
+    function: &str,
+    derivative: &str,
+    degree: Atom,
+) {
+    let epsilon = epsilon(settings);
+    let three = evaluate(engine, settings, derivative);
+    for closing in closing_tensors(&["mu", "nu", "rho"]) {
+        let input = derivative
+            .split(" + ")
+            .map(|term| format!("({closing})*{term}"))
+            .collect::<Vec<_>>()
+            .join(" + ");
+        let scalar = evaluate(engine, settings, &input);
+        assert_closed_case(&three, &parse(&closing), &scalar, epsilon, "Taylor derivative");
+    }
+    let two = evaluate(engine, settings, function);
+    // Closing multiplies the truncated open values by polynomials in ε (a
+    // metric trace gives d): the closed series are exact through the last
+    // order of the OPEN values, which is where the comparison stops.
+    let last_of = |value: &Atom| {
+        epsilon_coefficients(value, epsilon)
+            .keys()
+            .next_back()
+            .copied()
+            .unwrap_or(0)
+    };
+    let last = last_of(&three).min(last_of(&two));
+    for closing in closing_tensors(&["mu", "nu"]) {
+        let left = close_indices(&(&three * parse(&closing) * parse("p(1,rho)")), epsilon);
+        let right = close_indices(&(&two * parse(&closing)), epsilon) * &degree;
+        assert_series_through(&left, &right, last, &format!("Euler, closing {closing}"), epsilon);
+    }
+}
+
+#[test]
+fn three_open_indices_from_a_one_loop_taylor_derivative() {
+    let engine = engine();
+    let settings = settings(3);
+    let d = Atom::num(4) - Atom::num(2) * Atom::var(epsilon(&settings));
+    // F = ∫ k^μ k^ν / (k² (k-p)²): w = d + 2 - 4.
+    assert_taylor_derivative(
+        &engine,
+        &settings,
+        "k(1,mu)*k(1,nu)*topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))",
+        "2*k(1,mu)*k(1,nu)*(k(1,rho)-p(1,rho))*topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-p(1),0,2))",
+        &d - Atom::num(2),
+    );
+}
+
+#[test]
+fn three_open_indices_from_a_two_loop_taylor_derivative() {
+    let engine = engine();
+    let settings = settings(3);
+    let d = Atom::num(4) - Atom::num(2) * Atom::var(epsilon(&settings));
+    let lines = |a4: i64, a5: i64| {
+        format!(
+            "topo(prop(1,edge(2,4),k(1),0,1)*prop(2,edge(3,4),k(2),0,1)*prop(3,edge(4,1),k(1)+k(2),0,1)\
+             *prop(4,edge(3,2),k(1)+p(1),0,{a4})*prop(5,edge(1,3),k(1)+k(2)+p(1),0,{a5}))"
+        )
+    };
+    // F = ∫ k1^μ k2^ν / (D1..D5) (the kite): w = 2 d + 2 - 10.
+    assert_taylor_derivative(
+        &engine,
+        &settings,
+        &format!("k(1,mu)*k(2,nu)*{}", lines(1, 1)),
+        &format!(
+            "-2*k(1,mu)*k(2,nu)*(k(1,rho)+p(1,rho))*{} + -2*k(1,mu)*k(2,nu)*(k(1,rho)+k(2,rho)+p(1,rho))*{}",
+            lines(2, 1),
+            lines(1, 2)
+        ),
+        Atom::num(2) * &d - Atom::num(8),
+    );
+}
