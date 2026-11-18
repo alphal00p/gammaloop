@@ -1733,6 +1733,34 @@ impl RStarIntegrand {
         }
     }
 
+    /// The routed product (numerator × insertions × closure / denominators).
+    pub(super) fn routed_expression(&self) -> &Atom {
+        &self.routed
+    }
+
+    /// Diagnostics (`GAMMALOOP_IR_HARD_DECLARE`): the loop edges of this
+    /// component's R* basis and, per paired remaining edge, its routed
+    /// momentum (loop part + boundary part) as written into its `den`.
+    pub(super) fn route_table(&self) -> (Vec<usize>, Vec<(usize, String)>) {
+        let loops = self
+            .basis
+            .loop_edges
+            .iter()
+            .map(|edge| usize::from(*edge))
+            .collect();
+        let routes = self
+            .graph
+            .iter_edges_of(&self.region.remaining)
+            .filter(|(pair, _, _)| pair.is_paired())
+            .map(|(_, edge, _)| {
+                let momentum = self.basis.loop_atom::<Atom>(edge, GS.emr_mom, &[], true)
+                    + self.basis.ext_atom::<Atom>(edge, GS.emr_mom, &[], true);
+                (usize::from(edge), momentum.to_canonical_string())
+            })
+            .collect();
+        (loops, routes)
+    }
+
     /// The bytes of what the contraction contracts ([`Self::contraction_inputs`]).
     pub(super) fn routed_bytes(&self) -> usize {
         self.contraction_inputs()

@@ -45,6 +45,31 @@ fn ir_hard_keys() -> bool {
     *KEYS
 }
 
+/// `GAMMALOOP_IR_HARD_CENSUS=1|only` (diagnostics): one `IR_HARD_CENSUS`
+/// line per IR correction of every R* plan evaluated; `only` also skips the
+/// bare-term export of `pint6_dump` after the census. `Some(only)` when set.
+fn ir_hard_census() -> Option<bool> {
+    static MODE: std::sync::LazyLock<Option<bool>> = std::sync::LazyLock::new(|| {
+        match std::env::var("GAMMALOOP_IR_HARD_CENSUS")
+            .as_deref()
+            .map(str::trim)
+        {
+            Ok("1") => Some(false),
+            Ok("only") => Some(true),
+            _ => None,
+        }
+    });
+    *MODE
+}
+
+/// `GAMMALOOP_IR_HARD_DECLARE` (any value): one `IR_HARD_DECL` line per IR
+/// hard term on today's path (diagnostics).
+fn ir_hard_declare() -> bool {
+    static ON: std::sync::LazyLock<bool> =
+        std::sync::LazyLock::new(|| std::env::var_os("GAMMALOOP_IR_HARD_DECLARE").is_some());
+    *ON
+}
+
 /// `GAMMALOOP_IR_HARD_DRYRUN` (any value): plan only. Every R* counterterm is
 /// returned as zero after its `IR_HARD` lines; results are meaningless.
 fn ir_hard_dryrun() -> bool {
@@ -405,6 +430,14 @@ impl RStarPlan {
             evaluation = evaluation.closing_root()?;
         }
         evaluation.closed_root = closed_root;
+        // GAMMALOOP_IR_HARD_CENSUS: the plan's IR corrections (`only`: and
+        // nothing else; the bare terms are not integrated).
+        if let Some(only) = ir_hard_census() {
+            evaluation.log_ir_hard_census();
+            if only {
+                return Ok(0);
+            }
+        }
         let mut count = 0;
         for term in &self.ordinary_uv {
             if !term.counterterms.is_empty() || term.remainder.is_scaleless(graph, self.marked_edge)
@@ -901,6 +934,9 @@ impl<'a> Evaluation<'a> {
         if ir_hard_keys() {
             self.log_ir_hard_keys();
         }
+        if ir_hard_census().is_some() {
+            self.log_ir_hard_census();
+        }
         if ir_hard_dryrun() {
             self.log_timing();
             return Ok(Atom::Zero);
@@ -985,6 +1021,9 @@ impl<'a> Evaluation<'a> {
         let today = if use_closed {
             None
         } else {
+            if ir_hard_declare() {
+                self.log_ir_hard_declaration(correction_index, correction, term_index, term, &hard);
+            }
             let cost_started = Instant::now();
             let polynomial = hard
                 .taylor(order)
@@ -1725,6 +1764,203 @@ impl<'a> Evaluation<'a> {
     /// this evaluation, with the canonical identity of its hard component
     /// (marked line coloured; `key_nomark` without it) and of the term (the
     /// contracted spinney coloured as well). Plan-only: no Taylor operation.
+    /// `GAMMALOOP_IR_HARD_CENSUS=1|only` (diagnostics, plan level): one
+    /// `IR_HARD_CENSUS` line per IR correction of this evaluation's plan,
+    /// from the insertion-free (σ = ∅) hard remainder: its open boundary
+    /// slots by representation, the boundary vectors (crown edges; root legs
+    /// among them; those present in the routed product), ω and the loops.
+    fn log_ir_hard_census(&self) {
+        let scope = if self.plan.root_boundary.is_some() {
+            "child"
+        } else {
+            "root"
+        };
+        let external = self
+            .graph
+            .iter_edges_of(&self.graph.external_filter::<SuBitGraph>())
+            .map(|(_, edge, _)| usize::from(edge))
+            .collect::<std::collections::BTreeSet<_>>();
+        for (correction_index, correction) in self.plan.ir.iter().enumerate() {
+            let bare = correction
+                .preparation
+                .iter()
+                .find(|term| term.counterterms.is_empty());
+            let fields = match bare.map(|term| self.open_remainder(term)) {
+                None => "slots=na reason=no_bare_term".to_owned(),
+                Some(Err(error)) => format!(
+                    "slots=na reason={}",
+                    format!("{error}").replace(char::is_whitespace, "_")
+                ),
+                Some(Ok(hard)) => {
+                    let routed = hard.routed_expression();
+                    let soft = hard
+                        .soft_edges()
+                        .iter()
+                        .map(|edge| usize::from(*edge))
+                        .collect::<Vec<_>>();
+                    let present = soft
+                        .iter()
+                        .filter(|edge| {
+                            let mut found = false;
+                            routed.visitor(&mut |part| {
+                                if let symbolica::atom::AtomView::Fun(momentum) = part
+                                    && momentum.get_symbol() == GS.emr_mom
+                                    && usize::try_from(momentum.get(0)).ok() == Some(**edge)
+                                {
+                                    found = true;
+                                }
+                                !found
+                            });
+                            found
+                        })
+                        .count();
+                    let roots = soft.iter().filter(|edge| external.contains(edge)).count();
+                    let (slots, reps) = match super::closed::open_slot_list(routed) {
+                        Ok(list) => {
+                            let mut by_rep = BTreeMap::<String, usize>::new();
+                            for (rep, _) in &list {
+                                *by_rep.entry(rep.clone()).or_default() += 1;
+                            }
+                            (
+                                list.len().to_string(),
+                                by_rep
+                                    .iter()
+                                    .map(|(rep, n)| format!("{rep}:{n}"))
+                                    .collect::<Vec<_>>()
+                                    .join(","),
+                            )
+                        }
+                        Err(reason) => ("na".to_owned(), reason.replace(char::is_whitespace, "_")),
+                    };
+                    let mink = super::closed::open_slot_list(routed)
+                        .map(|list| {
+                            list.iter()
+                                .filter(|(rep, _)| rep.contains("mink"))
+                                .count()
+                                .to_string()
+                        })
+                        .unwrap_or_else(|_| "na".to_owned());
+                    let spinor = super::closed::open_slot_list(routed)
+                        .map(|list| {
+                            list.iter()
+                                .filter(|(rep, _)| rep.contains("bis"))
+                                .count()
+                                .to_string()
+                        })
+                        .unwrap_or_else(|_| "na".to_owned());
+                    format!(
+                        "slots={slots} mink_slots={mink} spinor_slots={spinor} slot_reps={reps} softs={} roots={roots} soft_present={present} soft_edges={soft:?}",
+                        soft.len()
+                    )
+                }
+            };
+            eprintln!(
+                "IR_HARD_CENSUS graph={} scope={scope} support_loops={} marked={} corr={correction_index} hard_loops={} omega={} terms={} live_terms={} forests={} {fields}",
+                self.graph.name,
+                self.graph.n_loops(&self.plan.support),
+                usize::from(self.plan.marked_edge),
+                self.graph.n_loops(&correction.hard),
+                correction.taylor_order,
+                correction.preparation.len(),
+                correction
+                    .preparation
+                    .iter()
+                    .filter(|term| !term
+                        .remainder
+                        .is_scaleless(self.graph, self.plan.marked_edge))
+                    .count(),
+                correction.forest.len(),
+            );
+        }
+    }
+
+    /// `GAMMALOOP_IR_HARD_DECLARE=1` (diagnostics): the boundary declaration
+    /// of one IR hard term on today's path, printed just before its hard
+    /// Taylor step, with the number of the next `GAMMALOOP_ALGEBRA_DUMP` file
+    /// (its `hard_routed-<n>` dump when that stage is dumped).
+    fn log_ir_hard_declaration(
+        &self,
+        correction_index: usize,
+        correction: &IrCorrection,
+        term_index: usize,
+        term: &UvPreparationTerm,
+        hard: &RStarIntegrand,
+    ) {
+        let routed = hard.routed_expression();
+        let external = self
+            .graph
+            .iter_edges_of(&self.graph.external_filter::<SuBitGraph>())
+            .map(|(_, edge, _)| usize::from(edge))
+            .collect::<std::collections::BTreeSet<_>>();
+        let slots = match super::closed::open_slot_list(routed) {
+            Ok(list) => list
+                .iter()
+                .map(|(rep, slot)| format!("{rep}|{slot}"))
+                .collect::<Vec<_>>()
+                .join(";"),
+            Err(reason) => format!("error:{reason}"),
+        };
+        let softs = hard
+            .soft_edges()
+            .iter()
+            .map(|edge| {
+                let edge = usize::from(*edge);
+                format!(
+                    "{edge}:{}",
+                    if external.contains(&edge) {
+                        "root"
+                    } else {
+                        "soft"
+                    }
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        let degree = usize::try_from(correction.taylor_order).unwrap_or(0);
+        let sectors = match super::closed::taylor_sectors(routed, hard.soft_edges(), degree) {
+            Ok(sectors) => sectors
+                .iter()
+                .map(|(edges, nonzero)| {
+                    format!(
+                        "[{}]{}",
+                        edges
+                            .iter()
+                            .map(usize::to_string)
+                            .collect::<Vec<_>>()
+                            .join(","),
+                        if *nonzero { "" } else { "=0" }
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(";"),
+            Err(error) => format!(
+                "error:{}",
+                format!("{error}").replace(char::is_whitespace, "_")
+            ),
+        };
+        let (loop_edges, routes) = hard.route_table();
+        eprintln!(
+            "IR_HARD_DECL graph={} next_dump={} corr={correction_index} term={term_index} hard_loops={} rem_loops={} children={:?} omega={} marked={} reference_mass={} slots={slots} softs={softs} sectors={sectors} loop_edges={loop_edges:?} routes={} routed_bytes={}",
+            self.graph.name,
+            crate::uv::approx::streamed::dump_next(),
+            self.graph.n_loops(&correction.hard),
+            term.remainder.loops,
+            term.counterterms
+                .iter()
+                .map(|call| call.argument.support.string_label())
+                .collect::<Vec<_>>(),
+            correction.taylor_order,
+            usize::from(self.plan.marked_edge),
+            self.reference_mass_squared,
+            routes
+                .iter()
+                .map(|(edge, momentum)| format!("{edge}:{momentum}"))
+                .collect::<Vec<_>>()
+                .join(";"),
+            routed.as_view().get_byte_size(),
+        );
+    }
+
     fn log_ir_hard_keys(&self) {
         let scope = if self.plan.root_boundary.is_some() {
             "child"
