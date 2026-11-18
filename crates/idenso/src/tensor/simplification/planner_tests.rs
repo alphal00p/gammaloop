@@ -1170,12 +1170,14 @@ fn public_certificates_report_producer_facts_without_scanning() {
     let open = reps.mink_d.to_symbolic([Atom::num(99752)]);
     let component = |index, port: &Atom| symbolica::function!(vector, Atom::num(index), port);
     let closed = SymbolicTensor::infer(
-        (component(0, &inner) + component(1, &inner)) * (component(2, &inner) + component(3, &inner)),
+        (component(0, &inner) + component(1, &inner))
+            * (component(2, &inner) + component(3, &inner)),
     )
     .unwrap();
     let terminal = SymbolicTensor::infer(
         (component(0, &inner) + component(1, &inner))
-            * (component(2, &inner) * component(3, &open) + component(4, &inner) * component(5, &open)),
+            * (component(2, &inner) * component(3, &open)
+                + component(4, &inner) * component(5, &open)),
     )
     .unwrap();
     // No producer facts yet: the accessors must not scan to find out.

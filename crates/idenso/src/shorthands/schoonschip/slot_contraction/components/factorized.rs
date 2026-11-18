@@ -255,7 +255,11 @@ static FRONTIER_TRACE: std::sync::LazyLock<bool> =
 fn trace_rss_mib() -> u64 {
     std::fs::read_to_string("/proc/self/statm")
         .ok()
-        .and_then(|s| s.split_whitespace().nth(1).and_then(|v| v.parse::<u64>().ok()))
+        .and_then(|s| {
+            s.split_whitespace()
+                .nth(1)
+                .and_then(|v| v.parse::<u64>().ok())
+        })
         .map_or(0, |pages| pages * 4096 / (1 << 20))
 }
 
@@ -2568,7 +2572,10 @@ impl<'a> ComponentSum<'a, '_> {
             }
             if let Some((in_states, in_terms)) = trace_in {
                 let terms_out = states.iter().map(|(_, w)| w.nterms()).collect::<Vec<_>>();
-                let bytes = states.iter().map(|(_, w)| trace_poly_bytes(w)).sum::<usize>();
+                let bytes = states
+                    .iter()
+                    .map(|(_, w)| trace_poly_bytes(w))
+                    .sum::<usize>();
                 eprintln!(
                     "FRONTIER step={trace_step} selected={selected} local_terms={} in_states={in_states} in_terms={in_terms} out_states={} out_terms={} max_state_terms={} nvars={} coeff_bytes={bytes} contributions={trace_contributions} gen_s={:.3} merge_s={:.3} rss_mib={}",
                     terms.len(),

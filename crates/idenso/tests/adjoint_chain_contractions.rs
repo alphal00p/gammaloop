@@ -165,8 +165,14 @@ fn crossed_adjoint_line_pairs_reduce_to_the_metric() {
     // the other's generators. Found in the integrated poles of
     // factorized_growth_matches_quartic_gluon (round 2 of the local_4d flake).
     let cases = [
-        (vec![("a", "b", vec!["q", "c"]), ("c", "p", vec!["a", "b"])], true),
-        (vec![("a", "p", vec!["q", "e"]), ("c", "e", vec!["a", "c"])], true),
+        (
+            vec![("a", "b", vec!["q", "c"]), ("c", "p", vec!["a", "b"])],
+            true,
+        ),
+        (
+            vec![("a", "p", vec!["q", "e"]), ("c", "e", vec!["a", "c"])],
+            true,
+        ),
     ];
     let mut failures = Vec::new();
     for (lines, two_ports) in cases {
@@ -269,13 +275,12 @@ impl Network {
     }
 
     fn structure_constants(&self, names: &Names) -> Atom {
-        self.lines(names)
-            .iter()
-            .enumerate()
-            .fold(Atom::one(), |product, (k, (start, end, labels))| {
-                product
-                    * structure_constants(start, end, labels, &format!("{}{k}", names.internal))
-            })
+        self.lines(names).iter().enumerate().fold(
+            Atom::one(),
+            |product, (k, (start, end, labels))| {
+                product * structure_constants(start, end, labels, &format!("{}{k}", names.internal))
+            },
+        )
     }
 
     /// `None` when idenso reduces the lines to group invariants (times the
@@ -390,7 +395,13 @@ fn pair_up(slots: &mut Vec<usize>, next: usize, out: &mut Vec<Vec<usize>>) {
 fn connected(slots: &[usize], line_of: &[usize], lines: usize) -> bool {
     let mut parent: Vec<usize> = (0..lines).collect();
     fn find(parent: &mut [usize], x: usize) -> usize {
-        if parent[x] == x { x } else { let root = find(parent, parent[x]); parent[x] = root; root }
+        if parent[x] == x {
+            x
+        } else {
+            let root = find(parent, parent[x]);
+            parent[x] = root;
+            root
+        }
     }
     for (i, &label) in slots.iter().enumerate() {
         if PORT.contains(&label) {
@@ -423,7 +434,12 @@ fn line_permutations(lengths: &[usize]) -> Vec<Vec<usize>> {
     }
     let mut all = Vec::new();
     permute(&mut (0..lengths.len()).collect(), &mut Vec::new(), &mut all);
-    all.retain(|order| order.iter().enumerate().all(|(k, &line)| lengths[k] == lengths[line]));
+    all.retain(|order| {
+        order
+            .iter()
+            .enumerate()
+            .all(|(k, &line)| lengths[k] == lengths[line])
+    });
     all
 }
 
@@ -463,14 +479,22 @@ fn check_networks(lengths: &[usize]) {
     let mut failures = Vec::new();
     let (mut closed, mut open) = (0, 0);
     for network in &all {
-        if network.two_ports() { open += 1 } else { closed += 1 }
+        if network.two_ports() {
+            open += 1
+        } else {
+            closed += 1
+        }
         for names in &NAMES {
             if let Some(failure) = network.check(names) {
                 failures.push(failure);
             }
         }
     }
-    let tag = lengths.iter().map(|l| l.to_string()).collect::<Vec<_>>().join("-");
+    let tag = lengths
+        .iter()
+        .map(|l| l.to_string())
+        .collect::<Vec<_>>()
+        .join("-");
     let summary = format!(
         "lines {tag}: {} networks ({closed} closed, {open} with two ports), {} checks, {} failed",
         all.len(),
@@ -482,7 +506,16 @@ fn check_networks(lengths: &[usize]) {
         let path = std::path::Path::new(&dir).join(format!("lines-{tag}.txt"));
         std::fs::write(path, format!("{summary}\n{}\n", failures.join("\n"))).unwrap();
     }
-    assert!(failures.is_empty(), "{summary}\n{}", failures.iter().take(20).cloned().collect::<Vec<_>>().join("\n"));
+    assert!(
+        failures.is_empty(),
+        "{summary}\n{}",
+        failures
+            .iter()
+            .take(20)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
 }
 
 #[test]

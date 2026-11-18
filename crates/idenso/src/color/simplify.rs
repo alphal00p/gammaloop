@@ -292,7 +292,10 @@ pub(crate) fn has_odd_chain_between_symmetric_legs(expression: AtomView<'_>) -> 
         term => vec![term],
     };
     terms.into_iter().any(|term| {
-        ColorAlgebraSimplifier::simplify_odd_adjoint_chain_on_symmetric_legs(&ProductView::parse(term)).is_some()
+        ColorAlgebraSimplifier::simplify_odd_adjoint_chain_on_symmetric_legs(&ProductView::parse(
+            term,
+        ))
+        .is_some()
     })
 }
 
@@ -448,7 +451,10 @@ impl ColorAlgebraSimplifier {
             let (colour, spectators): (Vec<_>, Vec<_>) = multiplicative_factor_views(term)
                 .into_iter()
                 .partition(|factor| is_closed_network_factor(*factor));
-            if spectators.iter().any(|spectator| atom_contains_color_port_or_work(*spectator)) {
+            if spectators
+                .iter()
+                .any(|spectator| atom_contains_color_port_or_work(*spectator))
+            {
                 return None;
             }
             if colour.is_empty() {
@@ -466,7 +472,9 @@ impl ColorAlgebraSimplifier {
                 Some(network) => network.reduce().ok()?,
                 None => Atom::num(1),
             };
-            reduced.push(Atom::mul_many(spectators.into_iter().chain([value.as_view()])));
+            reduced.push(Atom::mul_many(
+                spectators.into_iter().chain([value.as_view()]),
+            ));
         }
         Some(Atom::add_many(reduced))
     }
@@ -5205,8 +5213,7 @@ mod reconstruction_tests {
         // The open component is the crossed pair of lines: its labels are
         // summed within it except for the ports d_3 and open, so it is an
         // invariant times their metric (Schur's lemma), here C_A^2/2.
-        let crossed = adjoint_casimir_for_dimension(Atom::num(8)).pow(Atom::num(2))
-            / Atom::num(2)
+        let crossed = adjoint_casimir_for_dimension(Atom::num(8)).pow(Atom::num(2)) / Atom::num(2)
             * color_metric(d3.clone(), open.clone());
         for whole_term in [false, true] {
             let result = connection(&open_source, whole_term)
@@ -5239,10 +5246,8 @@ mod reconstruction_tests {
             let dummies = ParseState::default();
             dummies.reserve_indices(expression.as_view());
             let simplifier = ColorAlgebraSimplifier::new(Default::default(), dummies);
-            simplifier.simplify_adjoint_chain_connection(
-                &ProductView::parse(expression.as_view()),
-                false,
-            )
+            simplifier
+                .simplify_adjoint_chain_connection(&ProductView::parse(expression.as_view()), false)
         };
         for expression in [
             network(&x, &b) * function!(foreign, &a),
