@@ -38,6 +38,7 @@ pub(crate) fn enabled() -> bool {
     tracing::enabled!(target: "vakint::stage_timing", tracing::Level::INFO)
         || crate::uv::rstar::pint6_dump::enabled()
         || vakint::census::enabled()
+        || crate::uv::rstar::top_mass_split_enabled()
 }
 
 /// The sequence number of a counted `to_vakint_integrand` call (per process).
@@ -70,6 +71,12 @@ pub(crate) fn publish(counts: &serde_json::Value) {
 /// The counts of this thread's last counted conversion (one JSON line).
 pub(crate) fn last_counts() -> Option<String> {
     LAST_COUNTS.with(|cell| cell.borrow().clone())
+}
+
+/// Forget this thread's last counted conversion (a caller that reads
+/// [`last_counts`] for one conversion of its own).
+pub(crate) fn clear_last_counts() {
+    LAST_COUNTS.with(|cell| *cell.borrow_mut() = None);
 }
 
 fn unit(degree: usize) -> Vec<f64> {
@@ -177,6 +184,7 @@ fn is_denominator(factor: AtomView<'_>) -> bool {
 /// - `d_orders[j]`: summands of the expanded `D_j` (summed over the distinct
 ///   `D` of a non-factorized remainder);
 /// - `den_patterns`: distinct products of `den` powers in the expanded `D_j`;
+/// - `pair_by_order[n]`: `Σ_{i+j=n} |P_i| |D_j|` (the share of each Taylor order);
 /// - `pair_estimate`: `Σ_{i+j<=degree} |P_i| |D_j|`, the summands of the
 ///   expanded Taylor polynomial before like terms merge.
 pub(crate) fn taylor_shape(
@@ -191,6 +199,7 @@ pub(crate) fn taylor_shape(
     let mut p_orders = vec![0.0; degree + 1];
     let mut d_orders = vec![0.0; degree + 1];
     let mut pair_estimate = 0.0;
+    let mut pair_by_order = vec![0.0; degree + 1];
     let mut patterns = HashSet::<Vec<Vec<u8>>>::new();
     let mut distinct_d = HashMap::<Vec<u8>, Vec<f64>>::new();
     let (mut p_summands, mut p_bytes, mut d_factors) = (0_usize, 0_usize, 0_usize);
@@ -225,6 +234,9 @@ pub(crate) fn taylor_shape(
                 p_orders[i] += value;
             }
             pair_estimate += p.iter().sum::<f64>();
+            for (i, value) in p.iter().enumerate() {
+                pair_by_order[i] += value;
+            }
             if summands.len() == 1 {
                 d_orders = d;
             }
@@ -266,8 +278,9 @@ pub(crate) fn taylor_shape(
             .clone();
         for (i, value) in p.iter().enumerate() {
             p_orders[i] += value;
-            for d_value in d.iter().take(degree + 1 - i) {
+            for (j, d_value) in d.iter().enumerate().take(degree + 1 - i) {
                 pair_estimate += value * d_value;
+                pair_by_order[i + j] += value * d_value;
             }
         }
         if summands.len() == 1 || distinct_d.len() == 1 {
@@ -301,5 +314,6 @@ pub(crate) fn taylor_shape(
         "d_orders": d_orders,
         "den_patterns": patterns.len(),
         "pair_estimate": pair_estimate,
+        "pair_by_order": pair_by_order,
     })
 }

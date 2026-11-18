@@ -54,6 +54,7 @@ mod scalar;
 mod taylor;
 #[cfg(test)]
 mod tests;
+mod top_mass;
 mod uv;
 
 pub use crate::uv::counterterm_cache::{
@@ -123,4 +124,9 @@ pub use physical::{PhysicalUvGroup, PhysicalUvKey, PreparedPhysicalUvTerm};
 pub use plan::*;
 pub use propagator::integrate_propagator;
 pub use taylor::TaylorExpansion;
+pub use top_mass::{
+    RStarTerms, TopMassTerms, auxiliary_mass_squared, rstar_terms, split_auxiliary_mass,
+    split_enabled as top_mass_split_enabled, top_level_switches_line,
+    top_level_switches_provenance, top_mass_terms, validate_top_level_switches,
+};
 pub use uv::MassiveUvEvaluator;
