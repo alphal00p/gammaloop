@@ -1560,6 +1560,37 @@ pub(crate) fn scalar_numerator_with(
     external: &Atom,
     expand: bool,
 ) -> Result<Atom, VakintError> {
+    match admit_numerator(numerator, external, expand)? {
+        Admitted::Scalar(scalar) => Ok(scalar),
+        Admitted::Tensor { detail, .. } => Err(VakintError::InvalidNumerator(format!(
+            "p-integral: tensor p-integrals are not supported yet: {detail}"
+        ))),
+    }
+}
+
+/// A p-integral numerator after the scalar admission of [`admit_numerator`].
+pub(crate) enum Admitted {
+    /// A polynomial in scalar products of the loop momenta and the external
+    /// momentum (loop-free factors may carry other vectors and indices).
+    Scalar(Atom),
+    /// The numerator still carries loop-momentum tensor rank: an open loop
+    /// index, or a loop momentum contracted with a vector other than the
+    /// external momentum. `numerator` is its dot-notation form, for the
+    /// tensor reduction with the external momentum declared
+    /// ([`crate::VakintTerm::tensor_reduce`]); `detail` names the first such
+    /// factor found.
+    Tensor { numerator: Atom, detail: String },
+}
+
+/// The scalar admission of a p-integral numerator ([`scalar_numerator_with`]),
+/// telling a tensor numerator apart from a scalar one instead of refusing it.
+/// A loop momentum outside every scalar product and without an index is
+/// malformed and stays an error.
+pub(crate) fn admit_numerator(
+    numerator: AtomView,
+    external: &Atom,
+    expand: bool,
+) -> Result<Admitted, VakintError> {
     let _stage = StageSpan::new("p_integral.scalar_admission");
     let scalar = if expand || crate::Vakint::has_indexed_vectors(numerator) {
         crate::Vakint::convert_to_dot_notation(numerator)
@@ -1567,15 +1598,16 @@ pub(crate) fn scalar_numerator_with(
         numerator.to_owned()
     };
     let mut tensor = None;
+    let mut malformed = None;
     scalar.visitor(&mut |view| {
-        if tensor.is_some() {
+        if malformed.is_some() {
             return false;
         }
         let AtomView::Fun(function) = view else {
             return true;
         };
         if function.get_symbol() == S.dot {
-            if view.contains_symbol(S.k) {
+            if tensor.is_none() && view.contains_symbol(S.k) {
                 let mut foreign = None;
                 view.visitor(&mut |part| {
                     if let AtomView::Fun(vector) = part
@@ -1595,21 +1627,27 @@ pub(crate) fn scalar_numerator_with(
             return false;
         }
         if function.get_symbol() == S.k {
-            tensor = Some(if function.get_nargs() == 1 {
-                format!("loop momentum {view} outside a scalar product")
-            } else {
-                format!("open loop index in {view}")
-            });
+            if function.get_nargs() == 1 {
+                malformed = Some(format!("loop momentum {view} outside a scalar product"));
+            } else if tensor.is_none() {
+                tensor = Some(format!("open loop index in {view}"));
+            }
             return false;
         }
         true
     });
-    match tensor {
-        Some(detail) => Err(VakintError::InvalidNumerator(format!(
+    if let Some(detail) = malformed {
+        return Err(VakintError::InvalidNumerator(format!(
             "p-integral: tensor p-integrals are not supported yet: {detail}"
-        ))),
-        None => Ok(scalar),
+        )));
     }
+    Ok(match tensor {
+        Some(detail) => Admitted::Tensor {
+            numerator: scalar,
+            detail,
+        },
+        None => Admitted::Scalar(scalar),
+    })
 }
 
 impl VakintTerm {
