@@ -9,6 +9,7 @@ use symbolica::atom::{Atom, AtomCore};
 use super::trace::{IdensoTrace, Letter, NaiveTrace, TraceEngine};
 use super::*;
 use crate::p_integral::factorized::FactorizedNumerator;
+use crate::rustred_evaluation::p_gate;
 
 const GLUON: &str = include_str!("../../p_integral/factorized/fixtures/l1-gluon-bubble.txt");
 const QUARK: &str = include_str!("../../p_integral/factorized/fixtures/l1-quark-bubble.txt");

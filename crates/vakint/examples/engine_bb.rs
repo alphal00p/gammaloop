@@ -64,6 +64,79 @@ fn cpu_seconds() -> f64 {
     spec.tv_sec as f64 + spec.tv_nsec as f64 * 1e-9
 }
 
+/// User-space instructions retired by this thread (Linux `perf_event_open`,
+/// `PERF_COUNT_HW_INSTRUCTIONS`, kernel and hypervisor excluded; lane prune's
+/// counter); `None` when the counter cannot be opened.
+struct InstructionCounter(i32);
+
+impl InstructionCounter {
+    fn open() -> Option<Self> {
+        #[repr(C)]
+        #[derive(Default)]
+        struct Attributes {
+            kind: u32,
+            size: u32,
+            config: u64,
+            sample_period: u64,
+            sample_type: u64,
+            read_format: u64,
+            flags: u64,
+            wakeup_events: u32,
+            bp_type: u32,
+            config1: u64,
+            config2: u64,
+            branch_sample_type: u64,
+            sample_regs_user: u64,
+            sample_stack_user: u32,
+            clockid: i32,
+            sample_regs_intr: u64,
+            aux_watermark: u32,
+            sample_max_stack: u16,
+            reserved2: u16,
+            aux_sample_size: u32,
+            reserved3: u32,
+            sig_data: u64,
+            config3: u64,
+        }
+        let attributes = Attributes {
+            kind: 0,
+            size: std::mem::size_of::<Attributes>() as u32,
+            config: 1,
+            flags: (1 << 5) | (1 << 6),
+            ..Default::default()
+        };
+        // SAFETY: a valid attribute struct of the stated size; this thread,
+        // any CPU, no group, no flags.
+        let fd = unsafe {
+            libc::syscall(
+                libc::SYS_perf_event_open,
+                &attributes as *const Attributes,
+                0,
+                -1,
+                -1,
+                0,
+            )
+        };
+        (fd >= 0).then_some(Self(fd as i32))
+    }
+
+    fn read(&self) -> u64 {
+        let mut value = 0_u64;
+        // SAFETY: reads 8 bytes into a u64 from the counter's descriptor.
+        let read = unsafe { libc::read(self.0, (&mut value as *mut u64).cast(), 8) };
+        if read == 8 { value } else { 0 }
+    }
+}
+
+impl Drop for InstructionCounter {
+    fn drop(&mut self) {
+        // SAFETY: closes the descriptor this value owns.
+        unsafe {
+            libc::close(self.0);
+        }
+    }
+}
+
 fn difference_json(difference: &GateDifference, keys: usize) -> serde_json::Value {
     json!({
         "pass": difference.is_empty(),
@@ -260,6 +333,15 @@ fn main() -> eyre::Result<()> {
         }
     }
     let (mut passed, mut failed, mut errors) = (0usize, 0usize, 0usize);
+    let counter = InstructionCounter::open();
+    eprintln!(
+        "[engine_bb] instruction counter: {}",
+        if counter.is_some() {
+            "open"
+        } else {
+            "unavailable"
+        }
+    );
     for path in &selected {
         let dot = std::fs::read_to_string(path)?;
         let graph = id_of(path);
@@ -269,6 +351,10 @@ fn main() -> eyre::Result<()> {
         let mut engine_cpu = Vec::new();
         let mut ref_wall = Vec::new();
         let mut ref_cpu = Vec::new();
+        let mut engine_rss = Vec::new();
+        let mut engine_ins = Vec::new();
+        let mut ref_ins = Vec::new();
+        let mut ref_rss = Vec::new();
         let mut error = None;
         for rep in 0..reps {
             let order: &[bool] = if rep % 2 == 0 {
@@ -279,20 +365,59 @@ fn main() -> eyre::Result<()> {
             for &engine_turn in order {
                 if engine_turn {
                     let engine = refpath::fresh_engine(&template)?;
+                    refpath::start_peak_rss();
+                    let start_ins = counter.as_ref().map_or(0, InstructionCounter::read);
+                    let mut marks = BTreeMap::<&'static str, u64>::new();
                     let (wall, cpu) = (Instant::now(), cpu_seconds());
-                    let run = engine_gate::run_graph(&engine, &model, &dot, &options);
+                    let run = engine_gate::run_graph_marked(
+                        &engine,
+                        &model,
+                        &dot,
+                        &options,
+                        &mut |label| {
+                            if let Some(counter) = &counter {
+                                let now = counter.read();
+                                let entry = marks.entry(label).or_insert(0);
+                                // Opening marks subtract, closing marks add: the
+                                // sums are the instructions inside the stages.
+                                if label.ends_with('d') {
+                                    *entry += now
+                                } else {
+                                    *entry = entry.wrapping_sub(now)
+                                }
+                            }
+                        },
+                    );
+                    let total_ins =
+                        counter.as_ref().map_or(0, InstructionCounter::read) - start_ins;
+                    let lower_ins = marks
+                        .get("lower")
+                        .copied()
+                        .unwrap_or(0)
+                        .wrapping_add(marks.get("lowered").copied().unwrap_or(0));
+                    let reduce_ins = marks
+                        .get("reduce")
+                        .copied()
+                        .unwrap_or(0)
+                        .wrapping_add(marks.get("reduced").copied().unwrap_or(0));
+                    engine_ins.push([total_ins, lower_ins, reduce_ins]);
                     engine_wall.push(wall.elapsed().as_secs_f64());
                     engine_cpu.push(cpu_seconds() - cpu);
+                    engine_rss.push(refpath::peak_rss_bytes().unwrap_or(0));
                     match run {
                         Ok(run) => engine_runs.push(run),
                         Err(e) => error = Some(format!("engine: {e:?}")),
                     }
                 } else if live {
                     let engine = refpath::fresh_engine(&template)?;
+                    refpath::start_peak_rss();
+                    let start_ins = counter.as_ref().map_or(0, InstructionCounter::read);
                     let (wall, cpu) = (Instant::now(), cpu_seconds());
                     let run = refpath::run_graph(&engine, &model, &dot, &ref_options);
+                    ref_ins.push(counter.as_ref().map_or(0, InstructionCounter::read) - start_ins);
                     ref_wall.push(wall.elapsed().as_secs_f64());
                     ref_cpu.push(cpu_seconds() - cpu);
+                    ref_rss.push(refpath::peak_rss_bytes().unwrap_or(0));
                     match run {
                         Ok(run) => ref_runs.push(run),
                         Err(e) => error = Some(format!("reference: {e:?}")),
@@ -370,8 +495,11 @@ fn main() -> eyre::Result<()> {
                         entry["value_equal_live"] = json!(equal);
                     }
                 } else if reference.zero_reason.is_none() {
-                    graph_pass = false;
-                    entry["live"] = json!("reference has no such projection");
+                    // The reference skips a numerator that sums to zero over
+                    // the colour branches: the engine's inputs must be empty.
+                    let empty = result.view.is_empty();
+                    graph_pass &= empty;
+                    entry["live"] = json!({"pass": empty, "reference": "zero numerator (not evaluated)", "engine_keys": result.view.len()});
                 }
             }
             if let Some(dir) = &ref_dir {
@@ -396,7 +524,12 @@ fn main() -> eyre::Result<()> {
                         }
                         entry["stored"] = difference_json(&difference, view.len());
                     }
-                    Err(_) => entry["stored"] = json!("no stored dump"),
+                    Err(_) => {
+                        // lane refpath writes no dump for a zero numerator.
+                        let empty = result.view.is_empty();
+                        graph_pass &= empty;
+                        entry["stored"] = json!({"pass": empty, "reference": "no stored dump", "engine_keys": result.view.len()});
+                    }
                 }
                 let values = dir.join("values").join(format!("{graph}.txt"));
                 if let (Some(value), Ok(text)) = (&result.value, std::fs::read_to_string(&values)) {
@@ -419,6 +552,8 @@ fn main() -> eyre::Result<()> {
                 "peak_terms": stats.peak_terms, "final_terms": stats.final_terms, "formed": stats.formed,
                 "dropped": stats.dropped, "emitted": stats.emitted, "oracle": stats.oracle,
                 "values": result.inputs.values, "zero_values": result.inputs.zeros,
+                "seconds": {"match": stats.match_seconds, "prepare": stats.prepare_seconds, "trace": stats.trace_seconds,
+                            "contract": stats.contract_seconds, "fold": stats.fold_seconds},
             });
             if steps {
                 entry["steps"] = json!(
@@ -504,6 +639,8 @@ fn main() -> eyre::Result<()> {
             }) },
             "ref_reps": ref_runs.iter().map(|r| json!([r.seconds.parse, r.seconds.colour, r.seconds.contract, r.seconds.lower, r.seconds.reduce, r.seconds.finalise])).collect::<Vec<_>>(),
             "ref_wall_reps": ref_wall, "ref_cpu_reps": ref_cpu,
+            "engine_peak_rss": engine_rss.iter().max(), "ref_peak_rss": ref_rss.iter().max(),
+            "engine_instructions_reps": engine_ins, "ref_instructions_reps": ref_ins,
             "host": host.trim(),
         });
         writeln!(results, "{record}")?;

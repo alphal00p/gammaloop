@@ -462,31 +462,62 @@ pub(crate) fn match_denominators(
     value: &FactorizedNumerator,
 ) -> Result<Option<DenominatorMatch>> {
     let (topology, orientation) = r2_topology(value)?;
+    // The steps of `p_lowering::match_cut` (normalise, match with numerator 1,
+    // propagator request, head, scaleless split), without its per-call
+    // `validate_settings` (a property of the settings, not of the graph: it
+    // expands the G-scheme normalisation series every call; the caller's
+    // evaluation validates them once).
     let mut term = VakintTerm {
-        integral: topology.clone(),
+        integral: topology,
         numerator: Atom::num(1),
         vectors: Vec::new(),
     };
     if !term.normalize_propagator()? {
         return Ok(None);
     }
-    let external = term
+    let factor = term.numerator.clone();
+    if factor != Atom::num(1) {
+        return Err(format!(
+            "a normalisation factor {factor} of the graph (tree parts, negative powers)"
+        )
+        .into());
+    }
+    let _external = term
         .propagator_external()?
         .ok_or("the normalised graph is not a p-integral")?;
-    let cut = match super::p_lowering::match_cut(vakint, settings, &topology, &external)? {
-        Ok(Some(cut)) => cut,
-        Ok(None) => return Ok(None),
-        Err(declined) => return Err(format!("match: {}", declined.0).into()),
+    let rules = term.prepare_integral_specs(vakint, settings, None)?;
+    if !matches!(rules.canonical_topology, crate::Topology::Propagator(_)) {
+        return Err("not a p-integral topology".into());
+    }
+    match vakint.evaluation_method(settings, &rules.canonical_topology) {
+        Some(crate::EvaluationMethod::RustRed(_))
+            if crate::p_integral::massive::rustred_max_rank().is_none() => {}
+        _ => return Err("not reduced by RustRed alone".into()),
+    }
+    let one = Atom::num(1);
+    let request = rules
+        .propagator_request(one.as_view())
+        .ok_or("a p-integral match without a propagator request")?;
+    let (head, sigma) = crate::p_integral::external_head(&request.external)?;
+    let scaleless = crate::p_integral::parts::split(
+        request.family,
+        request.powers,
+        Atom::num(1).as_view(),
+        &request.external,
+    )?
+    .is_none();
+    let cut = super::p_lowering::MatchedCut {
+        request_family: request.family,
+        powers: request.powers.to_vec(),
+        external: request.external.clone(),
+        head,
+        sigma,
+        factor,
+        rules: rules.clone(),
+        scaleless,
     };
     if cut.scaleless {
         return Ok(None);
-    }
-    if cut.factor != Atom::num(1) {
-        return Err(format!(
-            "a normalisation factor {} of the graph (tree parts, negative powers)",
-            cut.factor
-        )
-        .into());
     }
     if cut.powers.iter().any(|power| *power < 0) {
         return Err("a negative line power".into());
@@ -701,13 +732,66 @@ pub fn contract_and_lower(
     prefactor: &Atom,
     options: &ContractOptions,
 ) -> Result<ContractedInputs> {
+    contract_and_lower_with(
+        vakint,
+        settings,
+        value,
+        prefactor,
+        options,
+        &mut GraphMemo::default(),
+    )
+}
+
+/// What the values of one graph share (its colour branches have the same
+/// denominators): the match on the denominators, keyed by the R2 topology.
+#[derive(Default)]
+pub struct GraphMemo {
+    matches: HashMap<String, Option<std::sync::Arc<DenominatorMatch>>>,
+    /// Per matched graph: the canonical kinematics (slot forms of the
+    /// presentation, interned vectors, pair-form memo) and the vector of every
+    /// edge id.
+    setups: HashMap<String, (Kinematics, HashMap<i64, Option<u16>>)>,
+    /// Matches served from the memo / computed.
+    pub hits: usize,
+    pub misses: usize,
+}
+
+impl GraphMemo {
+    fn matched(
+        &mut self,
+        vakint: &Vakint,
+        settings: &VakintSettings,
+        value: &FactorizedNumerator,
+    ) -> Result<(String, Option<std::sync::Arc<DenominatorMatch>>)> {
+        let (topology, _) = r2_topology(value)?;
+        let key = topology.to_canonical_string();
+        if let Some(found) = self.matches.get(&key) {
+            self.hits += 1;
+            return Ok((key, found.clone()));
+        }
+        self.misses += 1;
+        let found = match_denominators(vakint, settings, value)?.map(std::sync::Arc::new);
+        self.matches.insert(key.clone(), found.clone());
+        Ok((key, found))
+    }
+}
+
+/// [`contract_and_lower`] with a memo shared by the values of one graph.
+pub fn contract_and_lower_with(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    value: &FactorizedNumerator,
+    prefactor: &Atom,
+    options: &ContractOptions,
+    memo: &mut GraphMemo,
+) -> Result<ContractedInputs> {
     let mut out = ContractedInputs {
         values: 1,
         ..Default::default()
     };
     let mut stats = ContractStats::default();
     let started = Instant::now();
-    let matched = match_denominators(vakint, settings, value)?;
+    let (key, matched) = memo.matched(vakint, settings, value)?;
     stats.match_seconds = started.elapsed().as_secs_f64();
     let Some(matched) = matched else {
         out.zeros = 1;
@@ -746,17 +830,23 @@ pub fn contract_and_lower(
         }
     };
     let slots = Slots::new(top.arity, top.line_count, base, zero, options.prune)?;
-    let forms = canonical_forms(presentation, loops)?;
-    let mut kinematics = Kinematics::new(loops, matched.sigma, forms);
+    if !memo.setups.contains_key(&key) {
+        let forms = canonical_forms(presentation, loops)?;
+        let mut kinematics = Kinematics::new(loops, matched.sigma, forms);
+        let mut edge_vectors = HashMap::default();
+        for (id, vector) in &matched.edge_vectors {
+            let interned = kinematics.intern(vector.clone())?;
+            edge_vectors.insert(*id as i64, interned);
+        }
+        memo.setups.insert(key.clone(), (kinematics, edge_vectors));
+    }
+    let (kinematics, edge_vectors) = memo.setups.get_mut(&key).expect("inserted above");
+    let kinematics = &mut *kinematics;
     let mut parser = Parser {
         dimension: value.dimension,
-        edge_vectors: HashMap::default(),
+        edge_vectors: edge_vectors.clone(),
         indices: HashMap::default(),
     };
-    for (id, vector) in &matched.edge_vectors {
-        let interned = kinematics.intern(vector.clone())?;
-        parser.edge_vectors.insert(*id as i64, interned);
-    }
     let mut counters = KernelCounters::default();
     let (edges, others, renames) = metric_renames(value);
     stats.renames = renames;
@@ -800,7 +890,7 @@ pub fn contract_and_lower(
         }
     }
     for (label, atom) in lorentz {
-        let tensor = parser.parse(atom.as_view(), &mut kinematics, &slots, &mut counters)?;
+        let tensor = parser.parse(atom.as_view(), kinematics, &slots, &mut counters)?;
         factors.push(Factor { label, tensor });
     }
     stats.prepare_seconds = started.elapsed().as_secs_f64();
@@ -823,11 +913,11 @@ pub fn contract_and_lower(
         stats.trace_lengths.push(word.len());
         let started = Instant::now();
         let mut tensor = parser
-            .parse(traced.as_view(), &mut kinematics, &slots, &mut counters)
+            .parse(traced.as_view(), kinematics, &slots, &mut counters)
             .map_err(|error| format!("trace {index}: {error}"))?;
         for atom in rest {
-            let part = parser.parse(atom.as_view(), &mut kinematics, &slots, &mut counters)?;
-            tensor = contract(&tensor, &part, &mut kinematics, &slots, &mut counters)?;
+            let part = parser.parse(atom.as_view(), kinematics, &slots, &mut counters)?;
+            tensor = contract(&tensor, &part, kinematics, &slots, &mut counters)?;
         }
         stats.prepare_seconds += started.elapsed().as_secs_f64();
         factors.push(Factor {
@@ -848,13 +938,7 @@ pub fn contract_and_lower(
             .take()
             .ok_or("a factor used twice")?;
         let (formed, dropped) = (counters.formed, counters.dropped);
-        running = contract(
-            &running,
-            &factor.tensor,
-            &mut kinematics,
-            &slots,
-            &mut counters,
-        )?;
+        running = contract(&running, &factor.tensor, kinematics, &slots, &mut counters)?;
         for index in factor.tensor.open_indices() {
             if !open.remove(&index) {
                 open.insert(index);

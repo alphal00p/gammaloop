@@ -226,6 +226,20 @@ pub fn run_graph(
     dot: &str,
     options: &EngineRunOptions,
 ) -> Result<EngineRun> {
+    run_graph_marked(vakint, model, dot, options, &mut |_| {})
+}
+
+/// [`run_graph`] with stage marks for an outside counter: `mark` is called
+/// with `"lower"` / `"lowered"` around the engine (match, contraction,
+/// lowering of every branch) and `"reduce"` / `"reduced"` around the
+/// reduction and finalisation, once per projection.
+pub fn run_graph_marked(
+    vakint: &Vakint,
+    model: &Arc<Model>,
+    dot: &str,
+    options: &EngineRunOptions,
+    mark: &mut dyn FnMut(&'static str),
+) -> Result<EngineRun> {
     let started = Instant::now();
     let diagram = FeynmanDiagram::from_dot(Arc::clone(model), dot)?;
     let mut seconds = EngineSeconds {
@@ -256,24 +270,30 @@ pub fn run_graph(
             run.zero_reason = Some("every colour branch vanishes".into());
             break;
         }
+        mark("lower");
         let mut total = ContractedInputs::default();
+        let mut memo = p_contract::GraphMemo::default();
         for value in &values {
             let prefactor = refpath_prefactor(model, value, projection);
-            let inputs = p_contract::contract_and_lower(
+            let inputs = p_contract::contract_and_lower_with(
                 vakint,
                 &settings,
                 value,
                 &prefactor,
                 &options.contract,
+                &mut memo,
             )?;
             total.absorb(inputs);
         }
+        mark("lowered");
         seconds.matching += total.stats.match_seconds;
         seconds.lower += total.stats.lower_seconds();
         seconds.trace += total.stats.trace_seconds;
         let (view, zero) = total.gate_view(vakint, &settings)?;
         let (value, reductions) = if options.reduce {
+            mark("reduce");
             let (value, reduce) = total.reduce(vakint, &settings)?;
+            mark("reduced");
             seconds.reduce += reduce.reduce;
             seconds.prepare += reduce.prepare;
             seconds.library += reduce.library;
