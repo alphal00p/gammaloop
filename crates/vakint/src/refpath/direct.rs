@@ -101,6 +101,9 @@ pub struct DirectProjection {
     pub value: Option<Atom>,
     pub(crate) stats: DirectStats,
     distinct_dots: usize,
+    /// The graph's hand-over (match, routing, master names): what
+    /// [`reduce_projection`] needs to reduce `folded` again.
+    handover: std::sync::Arc<p_handover::HandOver>,
 }
 
 /// Counters of one projection's lowering (the direct reader's statistics) and
@@ -840,7 +843,7 @@ pub fn lower_graph(
     seconds.contract += started.elapsed().as_secs_f64();
     let started = Instant::now();
     let matched = match match_lines(vakint, settings, lines.loops, &lines.lines, &lines.edges)? {
-        Matched::Ready(matched) => matched,
+        Matched::Ready(matched) => std::sync::Arc::<p_handover::HandOver>::from(matched),
         Matched::Scaleless => return Ok(DirectOutcome::Zero("scaleless after the match")),
         Matched::Declined(reason) => return Ok(DirectOutcome::Declined(reason)),
     };
@@ -897,12 +900,32 @@ pub fn lower_graph(
             value,
             stats,
             distinct_dots: dots.len(),
+            handover: std::sync::Arc::clone(&matched),
         });
     }
     if out.is_empty() {
         return Ok(DirectOutcome::Zero("zero numerator"));
     }
     Ok(DirectOutcome::Lowered(out))
+}
+
+/// The reduction and finalisation of one lowered projection under `settings`
+/// (its master mode from `settings.evaluation_order`), exactly as
+/// [`lower_graph`] with `reduce`: for a caller that lowers a graph once and
+/// reduces it per master mode (Retain, then Symbolic). An empty projection
+/// (every key pruned) is 0.
+pub fn reduce_projection(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    projection: &DirectProjection,
+) -> Result<Atom> {
+    if projection.folded.is_empty() {
+        return Ok(Atom::Zero);
+    }
+    let handle = vakint.p_library().map_err(crate::VakintError::from)?;
+    Ok(projection
+        .handover
+        .reduce(vakint, settings, &handle, projection.folded.clone())?)
 }
 
 /// The gate view of one R3 projection without its zero-sector keys (the form
