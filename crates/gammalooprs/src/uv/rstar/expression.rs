@@ -1692,23 +1692,39 @@ impl RStarIntegrand {
             return Ok(contracted);
         }
         let started = Instant::now();
-        let contracted = {
+        let contract = |routed: &Atom| -> Result<(Atom, bool)> {
             let _algebra = StageSpan::new("gamma.remainder.algebra");
-            if keeps_remainder() {
+            Ok(if keeps_remainder() {
                 (
-                    self.contract_keeping_edges(&self.routed)
+                    self.contract_keeping_edges(routed)
                         .wrap_err("while preparing the routed R* tensor expression")?,
                     false,
                 )
             } else if edge_contraction("remainder") || uv_child_edge_remainder() {
                 (
-                    Self::simplify_edge_basis(&self.routed)
+                    Self::simplify_edge_basis(routed)
                         .wrap_err("while preparing the routed R* tensor expression")?,
                     false,
                 )
             } else {
-                Self::simplify_view_certified(self.routed.as_view())
+                Self::simplify_view_certified(routed.as_view())
                     .wrap_err("while preparing the routed R* tensor expression")?
+            })
+        };
+        // A root-truncated remainder contracts its graded parts one by one
+        // (each a product, as the routed form is) and adds them up; it is
+        // certified when every part is. No part: the remainder vanishes.
+        let contracted = match self.contraction_inputs() {
+            [routed] => contract(routed)?,
+            parts => {
+                let mut sum = streamed::SumAccumulator::default();
+                let mut certified = !parts.is_empty();
+                for part in parts {
+                    let (contracted, part_certified) = contract(part)?;
+                    certified &= part_certified;
+                    sum.push(contracted);
+                }
+                (sum.finish(), certified)
             }
         };
         if vakint::census::enabled() {
@@ -2474,6 +2490,11 @@ impl RStarIntegrand {
         unique_id: usize,
         root_projector: Option<&RootProjector<'_>>,
     ) -> Result<Atom> {
+        self.check_truncation(root_edges, degree)?;
+        if self.truncation.is_some() && expression.is_zero() {
+            // A root-truncated remainder that vanishes at grade <= degree.
+            return Ok(Atom::Zero);
+        }
         let mut timing = IntegrationTimings::new();
         let polynomial = self.outer_taylor(
             expression,
@@ -2575,6 +2596,7 @@ impl RStarIntegrand {
         auxiliary_mass_squared: &Atom,
         timing: &mut IntegrationTimings,
     ) -> Result<Atom> {
+        self.check_truncation(root_edges, degree)?;
         // The root's boundary carriers: the graph's external edges, or the full
         // crown of a proper support evaluated as its own R* root.
         // Quotient UV maps return original Q labels. Route newly introduced
@@ -2886,11 +2908,60 @@ impl RStarIntegrand {
         {
             return Ok(false);
         }
+        match self.contraction_inputs() {
+            [routed] => self.stream_input(routed, mode, sink),
+            parts => self.stream_parts(parts, mode, sink),
+        }
+    }
+
+    /// [`Self::stream_contracted`] of a root-truncated remainder in several
+    /// graded parts (or none): each part is streamed on its own; a part the
+    /// stream declines is contracted whole and emitted as one batch, unless
+    /// no part streams, in which case nothing has been emitted and the whole
+    /// path follows.
+    fn stream_parts(
+        &self,
+        parts: &[Atom],
+        mode: UvStream,
+        sink: &mut dyn FnMut(Atom) -> Result<()>,
+    ) -> Result<bool> {
+        let mut declined = Vec::new();
+        let mut streamed_any = false;
+        for part in parts {
+            if self.stream_input(part, mode, sink)? {
+                streamed_any = true;
+            } else {
+                declined.push(part);
+            }
+        }
+        if !streamed_any {
+            return Ok(false);
+        }
+        for part in declined {
+            let contracted = {
+                let _algebra = StageSpan::new("gamma.remainder.algebra");
+                Self::simplify_edge_basis(part)
+                    .wrap_err("while preparing the routed R* tensor expression")?
+            };
+            sink(contracted)?;
+        }
+        Ok(true)
+    }
+
+    /// [`Self::stream_contracted`] of one routed product `routed` (the
+    /// remainder's routed form or one truncated part): false, having emitted
+    /// nothing, when the stream does not apply to it.
+    fn stream_input(
+        &self,
+        routed: &Atom,
+        mode: UvStream,
+        sink: &mut dyn FnMut(Atom) -> Result<()>,
+    ) -> Result<bool> {
         let _algebra = StageSpan::new("gamma.remainder.algebra");
-        let renamed = Self::edge_rename(&self.routed);
+        let renamed = Self::edge_rename(routed);
         let input = match &renamed {
             Some((renamed, _)) => renamed.as_view(),
-            None => self.routed.as_view(),
+            None => routed.as_view(),
         };
         let rules = renamed
             .as_ref()
