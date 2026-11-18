@@ -139,7 +139,11 @@ impl<'a> MassiveUvEvaluator<'a> {
             .with(GS.m_uv_vacuum))
     }
 
-    fn decorated_graph(&self, region: &GraphRegion, insertions: &[Atom]) -> Result<Graph> {
+    pub(super) fn decorated_graph(
+        &self,
+        region: &GraphRegion,
+        insertions: &[Atom],
+    ) -> Result<Graph> {
         let mut graph = self.graph.clone();
         let mut contracted: SuBitGraph = graph.empty_subgraph();
         for slot in &region.insertions {

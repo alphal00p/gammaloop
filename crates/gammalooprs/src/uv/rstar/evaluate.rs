@@ -1585,18 +1585,126 @@ impl<'a> Evaluation<'a> {
             return Ok(value.clone());
         }
         let started = Instant::now();
-        let result = self
-            .uv
-            .counterterm(call, std::slice::from_ref(insertion))
-            .wrap_err_with(|| {
-                format!(
-                    "while applying massive R to the decorated quotient {}",
+        // GAMMALOOP_IR_QUOTIENT: the massive R operation (default) or R* on
+        // the same decorated graph.
+        let mode = top_mass::ir_quotient()?;
+        let massive = |this: &Self| -> Result<Atom> {
+            this.uv
+                .counterterm(call, std::slice::from_ref(insertion))
+                .wrap_err_with(|| {
+                    format!(
+                        "while applying massive R to the decorated quotient {}",
+                        call.argument.remaining.string_label()
+                    )
+                })
+        };
+        let use_rstar = match mode {
+            top_mass::IrQuotient::Rstar => true,
+            top_mass::IrQuotient::Auto => call.argument.loops > 4,
+            _ => false,
+        };
+        let (result, route) = match mode {
+            top_mass::IrQuotient::Check => {
+                let reference = massive(self)?;
+                let massive_seconds = started.elapsed().as_secs_f64();
+                let rstar_started = Instant::now();
+                let outcome = match self.quotient_rstar(call, insertion)? {
+                    Ok(value) => {
+                        let difference = (&reference - &value).expand();
+                        let without_muv =
+                            difference.replace(GS.m_uv_vacuum).with(Atom::Zero).expand();
+                        format!(
+                            "equal={} equal_without_muv={} massive_has_muv={} massive_s={massive_seconds:.3} rstar_s={:.3}",
+                            difference.is_zero(),
+                            without_muv.is_zero(),
+                            reference.contains_symbol(GS.m_uv_vacuum),
+                            rstar_started.elapsed().as_secs_f64()
+                        )
+                    }
+                    Err(reason) => format!("declined:{reason}"),
+                };
+                eprintln!(
+                    "IR_QUOTIENT_CHECK graph={} loops={} support={} {outcome}",
+                    self.graph.name,
+                    call.argument.loops,
                     call.argument.remaining.string_label()
-                )
-            })?;
+                );
+                (reference, "massive")
+            }
+            _ if use_rstar => match self.quotient_rstar(call, insertion)? {
+                Ok(value) => (value, "rstar"),
+                Err(reason) => {
+                    eprintln!(
+                        "IR_QUOTIENT graph={} loops={} declined={reason}",
+                        self.graph.name, call.argument.loops
+                    );
+                    (massive(self)?, "massive_declined")
+                }
+            },
+            _ => (massive(self)?, "massive"),
+        };
+        if mode != top_mass::IrQuotient::Unset && mode != top_mass::IrQuotient::Check {
+            eprintln!(
+                "IR_QUOTIENT graph={} loops={} route={route} seconds={:.3}",
+                self.graph.name,
+                call.argument.loops,
+                started.elapsed().as_secs_f64()
+            );
+        }
         self.quotient_elapsed += started.elapsed();
         self.quotient_counterterms.insert(key, result.clone());
         Ok(result)
+    }
+
+    /// `GAMMALOOP_IR_QUOTIENT=rstar|auto|check`: the decorated quotient
+    /// counterterm by R* on the decorated graph the massive route builds
+    /// (the contracted hard part is one vertex carrying the insertion
+    /// polynomial), through [`RStarPlan::rstar_child_counterterm`] (automatic
+    /// marked line, recursive R* children, Δ-cache under the R* route's key).
+    /// `Err(reason)` when the quotient is not an admissible R* support root.
+    fn quotient_rstar(
+        &self,
+        call: &CountertermCall,
+        insertion: &Atom,
+    ) -> Result<std::result::Result<Atom, String>> {
+        if call.argument.loops == 0 || insertion.is_zero() {
+            return Ok(Ok(Atom::Zero));
+        }
+        let graph = self
+            .uv
+            .decorated_graph(&call.argument, std::slice::from_ref(insertion))?;
+        let support = &call.argument.remaining;
+        if graph.compute_dod(support) < 0 {
+            return Ok(Ok(Atom::Zero));
+        }
+        if !RStarPlan::admits_support_root(&graph, support) {
+            return Ok(Err("support_structure".into()));
+        }
+        let cache =
+            self.plan.counterterm_cache.clone().unwrap_or_else(|| {
+                Arc::new(crate::uv::counterterm_cache::CountertermCache::default())
+            });
+        let route = match self.plan.uv_children {
+            UvChildrenRoute::Massive => UvChildrenRoute::Rstar { min_loops: 1 },
+            route => route,
+        };
+        let delta = RStarPlan::rstar_child_counterterm(
+            &cache,
+            &graph,
+            support,
+            self.model,
+            self.vakint,
+            self.uv_settings,
+            route,
+            self.plan.uv_child_closure,
+        )
+        .wrap_err_with(|| {
+            format!(
+                "while applying R* to the decorated quotient {}",
+                call.argument.remaining.string_label()
+            )
+        })?;
+        Ok(Ok(delta))
     }
 
     fn ir_forest(&mut self, forest: &IrForestTerm, insertion: &Atom) -> Result<Atom> {
