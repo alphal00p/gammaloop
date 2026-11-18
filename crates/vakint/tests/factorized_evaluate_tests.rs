@@ -185,7 +185,7 @@ fn compare_graph(
     path: &Path,
     projection: Projection,
     choice: ProjectorChoice,
-) -> (String, Atom, usize) {
+) -> (String, Atom, Atom, usize) {
     let graph = path
         .file_stem()
         .unwrap()
@@ -239,7 +239,7 @@ fn compare_graph(
         "{graph} {}: gate views differ: {difference:?}",
         projection.name()
     );
-    (graph, total, reference.loops)
+    (graph, total, expected, reference.loops)
 }
 
 const PROJECTIONS: [(Projection, ProjectorChoice); 3] = [
@@ -254,6 +254,9 @@ fn the_adapter_equals_refpath_on_every_l1_and_l2_graph() {
     let vakint = engine();
     let mut checked = 0;
     let mut archived_checked = 0;
+    let mut live_form_identical = 0;
+    let mut adapter_form_identical = 0;
+    let mut form_changes = Vec::<String>::new();
     for level in ["L1", "L2"] {
         let directory = root.join(level);
         let model = refpath::load_model(&directory).unwrap();
@@ -261,7 +264,8 @@ fn the_adapter_equals_refpath_on_every_l1_and_l2_graph() {
             let set = format!("{level}-{}", projection.name());
             let archive = archived(&set);
             for path in dots(&directory) {
-                let (graph, total, _) = compare_graph(&vakint, &model, &path, projection, choice);
+                let (graph, total, live, _) =
+                    compare_graph(&vakint, &model, &path, projection, choice);
                 if let Some(archive) = &archive {
                     let stored = archive
                         .get(&graph)
@@ -274,6 +278,19 @@ fn the_adapter_equals_refpath_on_every_l1_and_l2_graph() {
                         projection.name()
                     );
                     archived_checked += 1;
+                    // The archive's printed form against today's (pins may change the
+                    // form of an equal value): counted, listed, not asserted.
+                    let form = |a: &Atom| a.expand().to_canonical_string();
+                    if form(&live) == form(&stored) {
+                        live_form_identical += 1;
+                    } else {
+                        form_changes.push(format!("{set} {graph} (refpath live)"));
+                    }
+                    if form(&total) == form(&stored) {
+                        adapter_form_identical += 1;
+                    } else {
+                        form_changes.push(format!("{set} {graph} (adapter)"));
+                    }
                 }
                 checked += 1;
             }
@@ -290,6 +307,9 @@ fn the_adapter_equals_refpath_on_every_l1_and_l2_graph() {
     }
     eprintln!(
         "factorized_evaluate: {checked} graph projections equal to refpath, {archived_checked} also to the archive"
+    );
+    eprintln!(
+        "factorized_evaluate: archived string form identical (expanded, canonical): refpath live {live_form_identical}/{archived_checked}, adapter {adapter_form_identical}/{archived_checked}; equal value, other form: {form_changes:?}"
     );
     assert_eq!(checked, 3 * (3 + 29));
 }
@@ -323,7 +343,7 @@ fn the_acceptance_fixture_bare_graph_equals_refpath() {
         assert_eq!(value.prefactor.nf_power, 1);
     }
     for (projection, choice) in PROJECTIONS {
-        let (_, total, loops) = compare_graph(&vakint, &model, &path, projection, choice);
+        let (_, total, _, loops) = compare_graph(&vakint, &model, &path, projection, choice);
         assert_eq!(loops, 3);
         eprintln!("FIXTURE 185 {}: {total}", projection.name());
     }
