@@ -818,16 +818,21 @@ impl FactorizedNumerator {
         Ok(values)
     }
 
-    /// The Lorentz slots `mink(D, hedge(h, k))` of external half-edges that
-    /// occur in the factors, sorted by canonical string.
-    fn open_lorentz_ports(&self) -> Vec<Atom> {
+    /// The Lorentz slots `mink(D, hedge(h, k))` that occur in the factors and
+    /// are open: those of external half-edges, and (reader rule 1: derived,
+    /// not declared) those of half-edges the graph does not have at all that
+    /// occur exactly once (a graph cut out of a larger one, e.g. an R* hard
+    /// part without its boundary legs); sorted by canonical string.
+    pub(crate) fn open_lorentz_ports(&self) -> Vec<Atom> {
         let external_hedges = self
             .edges
             .iter()
             .filter(|e| e.is_external())
             .flat_map(|e| e.source_hedge.into_iter().chain(e.target_hedge))
             .collect::<std::collections::BTreeSet<_>>();
+        let present = self.hedges();
         let mut ports = BTreeMap::new();
+        let mut absent = BTreeMap::<String, (usize, Atom)>::new();
         let factors = self
             .edges
             .iter()
@@ -837,12 +842,21 @@ impl FactorizedNumerator {
             factor.visitor(&mut |part| {
                 if let Some(slot) = super::as_slot(part)
                     && slot.rep == names::MINK
-                    && slot.hedge().is_some_and(|h| external_hedges.contains(&h))
+                    && let Some(h) = slot.hedge()
                 {
-                    ports.insert(slot.key(), slot.atom);
+                    if external_hedges.contains(&h) {
+                        ports.insert(slot.key(), slot.atom);
+                    } else if !present.contains(&h) {
+                        absent.entry(slot.key()).or_insert((0, slot.atom)).0 += 1;
+                    }
                 }
                 true
             });
+        }
+        for (key, (count, atom)) in absent {
+            if count == 1 {
+                ports.insert(key, atom);
+            }
         }
         ports.into_values().collect()
     }

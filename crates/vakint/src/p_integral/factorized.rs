@@ -781,12 +781,16 @@ impl FactorRules<'_> {
                 let edge = i64::try_from(args[0])
                     .ok()
                     .and_then(|e| usize::try_from(e).ok());
-                let known = edge.and_then(|e| self.edges.get(&e));
-                let Some(known) = known else {
+                let Some(edge) = edge else {
                     return Err(FactorizedError::UnknownEdge {
                         location: self.loc(),
                         edge: args[0].to_owned().to_canonical_string(),
                     });
+                };
+                // `Q(x, ..)` of an edge that is not in the graph is a constant
+                // external vector (reader rule 2: derived, not declared).
+                let Some(known) = self.edges.get(&edge) else {
+                    return Ok(slots);
                 };
                 if self.location == Location::Projector && !known.is_external() {
                     return Err(FactorizedError::UnsupportedTensor {
@@ -1230,6 +1234,46 @@ impl FactorizedNumerator {
         Ok(())
     }
 
+    /// Every half-edge of the graph (both ends of every edge that has them).
+    pub(crate) fn hedges(&self) -> BTreeSet<usize> {
+        self.edges
+            .iter()
+            .flat_map(|e| e.source_hedge.into_iter().chain(e.target_hedge))
+            .collect()
+    }
+
+    /// The CONSTANT EXTERNAL VECTORS: the ids `x` of `Q(x, ..)` in the factors
+    /// and the projector with `x` not an edge of the graph (reader rule 2),
+    /// sorted. A vacuum value takes them as the external vectors after the
+    /// graph's own external momenta.
+    pub fn constant_vectors(&self) -> Vec<usize> {
+        let mut ids = BTreeSet::new();
+        let factors = self
+            .edges
+            .iter()
+            .map(|e| &e.factor)
+            .chain(self.vertices.iter().map(|v| &v.factor))
+            .chain(self.projector.iter().map(|p| &p.tensor));
+        for factor in factors {
+            factor.visitor(&mut |part| {
+                if let AtomView::Fun(f) = part
+                    && f.get_symbol().get_name() == names::MOMENTUM
+                    && f.get_nargs() == 2
+                    && let Some(x) = f
+                        .iter()
+                        .next()
+                        .and_then(|a| i64::try_from(a).ok())
+                        .and_then(|a| usize::try_from(a).ok())
+                    && self.edge(x).is_none()
+                {
+                    ids.insert(x);
+                }
+                true
+            });
+        }
+        ids.into_iter().collect()
+    }
+
     /// Half-edges at a location: an edge's own two, a vertex's incident ones.
     fn local_hedges(&self, location: Location) -> BTreeSet<usize> {
         match location {
@@ -1253,13 +1297,23 @@ impl FactorizedNumerator {
     /// Every free index of an edge / vertex factor is a half-edge index of
     /// that location.
     fn check_locality(&self, analysed: &[(Location, IndexSets, Elements)]) -> Result<()> {
+        let present = self.hedges();
+        let ports = self
+            .ports
+            .iter()
+            .map(|p| p.to_canonical_string())
+            .collect::<BTreeSet<_>>();
         for (location, sets, _) in analysed {
             if *location == Location::Projector {
                 continue;
             }
             let local = self.local_hedges(*location);
             for (key, slot) in &sets.free {
-                if !slot.hedge().is_some_and(|h| local.contains(&h)) {
+                // A slot of a half-edge the graph does not have is an open port
+                // (reader rule 1), accepted when it is one of the ports.
+                let absent_port =
+                    slot.hedge().is_some_and(|h| !present.contains(&h)) && ports.contains(key);
+                if !absent_port && !slot.hedge().is_some_and(|h| local.contains(&h)) {
                     return Err(FactorizedError::IndexNotLocal {
                         slot: key.clone(),
                         location: location.to_string(),

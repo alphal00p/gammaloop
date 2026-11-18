@@ -9,8 +9,12 @@
 //! OPEN INDICES are the declared `ports` (`mink(D, ..)` slots of the factor
 //! product); EXTERNAL VECTORS are the independent external momenta `p(j)`,
 //! written in the factors as `Q(x, ..)` of the external leg `x` with momentum
-//! `p(j)`. The same declaration serves the propagator case (lane d6) and the
-//! R* hard parts (D5 section 14).
+//! `p(j)`, and the CONSTANT external vectors `Q(x, ..)` of edges `x` that are
+//! not in the graph (reader rule 2; after the legs' `p(j)`, in id order). The
+//! same declaration serves the propagator case (lane d6) and the R* hard parts
+//! (D5 section 14), in the leg form and in the flag-free form (the hard part as
+//! a vacuum graph of its own lines: slots of its absent boundary half-edges
+//! are ports, reader rule 1 of the FeynKit ingress and of `validate`).
 //!
 //! 1. CONTRACT with idenso: `projector · PROD factors` through
 //!    [`super::contract_with_idenso`] (cook, `infer_indexed`,
@@ -82,15 +86,90 @@ pub struct VacuumValue {
     pub input: Atom,
     /// The back end the lines selected.
     pub backend: VacuumBackend,
+    /// The size predictor of the uncontracted network ([`distributed_lorentz_monomials`]).
+    pub predicted_monomials: f64,
     /// Wall seconds of the idenso contraction and of the vakint evaluation.
     pub contract_seconds: f64,
     pub evaluate_seconds: f64,
 }
 
+/// The SIZE PREDICTOR of an uncontracted network (D5-HARD-KIND 8.2): the
+/// number of Lorentz monomials a full distribution of it would create, read off
+/// the expression tree in one pass without expanding: a sum that carries a
+/// Minkowski slot adds its terms' counts, a sum free of one counts 1 (a scalar
+/// coefficient), a product multiplies, `x^n` (n > 0) raises to n, negative or
+/// symbolic powers and `denom(..)` count 1, any other function multiplies its
+/// arguments' counts. Equal to the number of expanded monomials when no two of
+/// them merge, an upper bound otherwise; saturates at `f64::MAX`.
+pub fn distributed_lorentz_monomials(expression: AtomView<'_>) -> f64 {
+    fn walk(view: AtomView<'_>) -> (f64, bool) {
+        match view {
+            AtomView::Num(_) | AtomView::Var(_) => (1.0, false),
+            AtomView::Fun(f) => {
+                let symbol = f.get_symbol();
+                let name = symbol.get_name();
+                if name == names::MINK {
+                    return (1.0, true);
+                }
+                if name.ends_with("::denom") {
+                    return (1.0, false);
+                }
+                f.iter()
+                    .map(walk)
+                    .fold((1.0, false), |(d, l), (x, y)| (d * x, l || y))
+            }
+            AtomView::Add(a) => {
+                let children = a.iter().map(walk).collect::<Vec<_>>();
+                if children.iter().any(|(_, l)| *l) {
+                    (children.iter().map(|(d, _)| d).sum(), true)
+                } else {
+                    (1.0, false)
+                }
+            }
+            AtomView::Mul(m) => m
+                .iter()
+                .map(walk)
+                .fold((1.0, false), |(d, l), (x, y)| (d * x, l || y)),
+            AtomView::Pow(p) => {
+                let (base, exponent) = p.get_base_exp();
+                match i64::try_from(exponent) {
+                    Ok(n) if n > 0 => {
+                        let (d, l) = walk(base);
+                        (d.powi(n.min(i64::from(i32::MAX)) as i32), l)
+                    }
+                    _ => (1.0, false),
+                }
+            }
+        }
+    }
+    walk(expression).0.min(f64::MAX)
+}
+
+/// The resource guard's memory bound for the contract-first order: `60 MB +
+/// 350 bytes x D` (D = [`distributed_lorentz_monomials`]), the envelope of
+/// the four measured R* hard Taylor polynomials of nf0 #32 (peaks 58 MB,
+/// 166 MB, 10.2 GB, 20.4 GB at D = 3.4e4, 5.3e5, 3.2e7, 1.4e8; D5-HARD-KIND 8.1).
+pub fn contract_first_bound_bytes(monomials: f64) -> f64 {
+    60.0e6 + 350.0 * monomials
+}
+
 /// The vakint momentum `SUM c_i k(i) + SUM d_j p(j)` of every edge, with an
-/// optional raw index on every vector.
+/// optional raw index on every vector; for an id that is not an edge of the
+/// graph, its CONSTANT EXTERNAL VECTOR (reader rule 2): `p(X + 1 + position)`
+/// after the graph's `X` external momenta, in the order of
+/// [`FactorizedNumerator::constant_vectors`].
 fn momentum(value: &FactorizedNumerator, id: i64, index: Option<i64>) -> Option<Atom> {
-    let edge = value.edges.iter().find(|edge| edge.id as i64 == id)?;
+    let Some(edge) = value.edges.iter().find(|edge| edge.id as i64 == id) else {
+        let position = value
+            .constant_vectors()
+            .iter()
+            .position(|x| *x as i64 == id)?;
+        let n = Atom::num((value.externals() + 1 + position) as i64);
+        return Some(match index {
+            Some(index) => function!(S.p, n, Atom::num(index)),
+            None => function!(S.p, n),
+        });
+    };
     let loops = value.loops();
     let mut out = Atom::Zero;
     for (i, c) in edge.momentum.iter().enumerate() {
@@ -669,7 +748,8 @@ pub fn vakint_vacuum_input(
 
 /// The vakint-notation value mapped back to the caller's notation: raw port
 /// indices to the port slots, `p(j)` to `Q(x_j, ..)` of the external leg of
-/// `p(j)`; an external vector without a leg stays `p(j)`.
+/// `p(j)` or of the constant external vector `x_j` (an edge outside the
+/// graph); an external vector without either stays `p(j)`.
 pub fn to_caller_notation(value: &FactorizedNumerator, vakint_value: &Atom) -> Atom {
     let q = symbolica::symbol!(names::MOMENTUM);
     let rep = value.ports.first().and_then(|port| match port.as_view() {
@@ -690,11 +770,15 @@ pub fn to_caller_notation(value: &FactorizedNumerator, vakint_value: &Atom) -> A
         raw.and_then(|i| usize::try_from(i - PORT).ok())
             .and_then(|i| value.ports.get(i).cloned())
     };
+    let constant = value.constant_vectors();
     let leg = |j: AtomView<'_>| {
-        i64::try_from(j)
+        let j = i64::try_from(j)
             .ok()
-            .and_then(|j| usize::try_from(j - 1).ok())
-            .and_then(|j| value.external_edges.get(j).copied().flatten())
+            .and_then(|j| usize::try_from(j - 1).ok())?;
+        match value.external_edges.get(j) {
+            Some(leg) => *leg,
+            None => constant.get(j - value.externals()).copied(),
+        }
     };
     vakint_value.replace_map(|part, _, out| {
         let AtomView::Fun(function) = part else {
@@ -737,6 +821,21 @@ pub fn evaluate_factorized_vacuum(
     value: &FactorizedNumerator,
     prefactor: &Atom,
 ) -> Result<VacuumValue> {
+    // the resource guard (H2): refuse, naming the predicted size, rather than
+    // run into the caller's process memory budget
+    let mut network = value.factor_product();
+    if let Some(projector) = &value.projector {
+        network *= &projector.tensor;
+    }
+    let predicted_monomials = distributed_lorentz_monomials(network.as_view());
+    if let Some(limit) = settings.rustred_resources.max_process_rss_bytes {
+        let bound = contract_first_bound_bytes(predicted_monomials);
+        if bound > limit as f64 {
+            return Err(error(format!(
+                "the uncontracted network distributes to D = {predicted_monomials:.3e} Lorentz monomials; its contraction is bounded by {bound:.3e} bytes, above the budget of {limit} bytes"
+            )));
+        }
+    }
     let (input, contract_seconds) = vakint_vacuum_input(settings, value, prefactor)?;
     let backend = vacuum_backend(&vacuum_lines(value), value.loops())?;
     let started = Instant::now();
@@ -753,6 +852,7 @@ pub fn evaluate_factorized_vacuum(
         vakint_value,
         input,
         backend,
+        predicted_monomials,
         contract_seconds,
         evaluate_seconds,
     })

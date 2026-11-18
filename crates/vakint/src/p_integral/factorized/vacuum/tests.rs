@@ -343,6 +343,141 @@ fn three_loop_parent_open_indices() {
     check(&v, "k(1,9001)*k(2,9002)*dot(k(1),k(1))");
 }
 
+/// The FLAG-FREE form of the reader rules (the beta's hard part as a vacuum
+/// graph of its own lines): the boundary appears only in the factors, as slots
+/// of half-edges the graph does not have (rule 1: open ports) and as `Q(x)` of
+/// an edge that is not in the graph (rule 2: a constant external vector). The
+/// leg form of `one_loop_open_indices_and_an_external_vector` and this form
+/// give the same value, in vakint's and in the caller's notation; the
+/// flag-free value validates with its ports and does not without them.
+#[test]
+fn the_flag_free_form_equals_the_leg_form() {
+    let factor = format!(
+        "{}*{}*{}*{}*{}*{}",
+        q(1, &hedge(10)),
+        q(1, &hedge(11)),
+        q(1, &index(1, 8)),
+        q(20, &index(1, 8)),
+        q(1, &index(1, 9)),
+        q(20, &index(1, 9))
+    );
+    let ports = vec![atom(&hedge(10)), atom(&hedge(11))];
+    let leg_form = value(
+        vec![Some(1)],
+        vec![Some(20)],
+        vec![
+            edge(1, 0, 0, (1, 2), &[1, 0], LineKind::Scalar, 3, Atom::num(1)),
+            leg(20, 0, 1, 1, 1),
+        ],
+        vec![vertex(0, atom(&factor))],
+        ports.clone(),
+    );
+    let mut flag_free = value(
+        vec![Some(1)],
+        Vec::new(),
+        vec![edge(
+            1,
+            0,
+            0,
+            (1, 2),
+            &[1],
+            LineKind::Scalar,
+            3,
+            Atom::num(1),
+        )],
+        vec![vertex(0, atom(&factor))],
+        ports,
+    );
+    flag_free.label = "1L flag-free k^mu k^nu (k.Q20)^2".into();
+    assert_eq!(flag_free.constant_vectors(), vec![20]);
+    assert!(leg_form.constant_vectors().is_empty());
+    flag_free
+        .validate()
+        .unwrap_or_else(|e| panic!("the flag-free form validates: {e}"));
+    let mut undeclared = flag_free.clone();
+    undeclared.ports.clear();
+    assert!(undeclared.validate().is_err());
+    // the FeynKit ingress derives exactly these ports (rule 1)
+    #[cfg(feature = "feynkit-ingress")]
+    assert_eq!(undeclared.open_lorentz_ports(), flag_free.ports);
+    let vakint = Vakint::new().unwrap();
+    let settings = no_form_settings();
+    let leg = evaluate_factorized_vacuum(&vakint, &settings, &leg_form, &Atom::num(1)).unwrap();
+    let free = evaluate_factorized_vacuum(&vakint, &settings, &flag_free, &Atom::num(1)).unwrap();
+    assert!(!leg.vakint_value.is_zero());
+    assert!((&leg.vakint_value - &free.vakint_value).expand().is_zero());
+    assert!(
+        (&leg.value - &free.value).expand().is_zero(),
+        "caller notation: leg form {}\nflag-free {}",
+        leg.value,
+        free.value
+    );
+    assert!(!free.value.contains_symbol(S.p));
+}
+
+/// The size predictor (H2, D5-HARD-KIND 8.2): the exact number of expanded
+/// Lorentz monomials when none merge, an upper bound when they do; a sum free
+/// of Minkowski slots is a coefficient (counted once). The resource guard
+/// refuses, naming D, when the contract-first bound exceeds the caller's
+/// process memory budget, and records D otherwise.
+#[test]
+fn the_size_predictor_and_the_resource_guard() {
+    let terms = |a: &Atom| match a.as_view() {
+        AtomView::Add(sum) => sum.iter().count(),
+        _ => 1,
+    };
+    let product = atom(&format!(
+        "({}+{}+{})*({}+{})*{METRIC}({},{})",
+        q(1, &hedge(10)),
+        q(2, &hedge(10)),
+        q(3, &hedge(10)),
+        q(1, &hedge(11)),
+        q(4, &hedge(11)),
+        hedge(12),
+        hedge(13)
+    ));
+    assert_eq!(distributed_lorentz_monomials(product.as_view()), 6.0);
+    assert_eq!(terms(&product.expand()), 6);
+    let scalar = atom(&format!("(x+y+z)*{}", q(1, &hedge(10))));
+    assert_eq!(distributed_lorentz_monomials(scalar.as_view()), 1.0);
+    let square = atom(&format!("({}+{})^2", q(1, &hedge(10)), q(2, &hedge(10))));
+    assert_eq!(distributed_lorentz_monomials(square.as_view()), 4.0);
+    assert!(terms(&square.expand()) <= 4);
+    let v = value(
+        vec![Some(1)],
+        vec![Some(20)],
+        vec![
+            edge(1, 0, 0, (1, 2), &[1, 0], LineKind::Scalar, 3, Atom::num(1)),
+            leg(20, 0, 1, 1, 1),
+        ],
+        vec![vertex(
+            0,
+            atom(&format!(
+                "({}+{})*{}",
+                q(1, &hedge(10)),
+                q(20, &hedge(10)),
+                q(1, &hedge(11))
+            )),
+        )],
+        vec![atom(&hedge(10)), atom(&hedge(11))],
+    );
+    let vakint = Vakint::new().unwrap();
+    let mut settings = no_form_settings();
+    let got = evaluate_factorized_vacuum(&vakint, &settings, &v, &Atom::num(1)).unwrap();
+    assert_eq!(got.predicted_monomials, 2.0);
+    settings.rustred_resources = crate::ResourceLimits {
+        max_process_rss_bytes: Some(1_000_000),
+        ..Default::default()
+    };
+    let refused = evaluate_factorized_vacuum(&vakint, &settings, &v, &Atom::num(1))
+        .unwrap_err()
+        .to_string();
+    assert!(
+        refused.contains("D = 2.000e0 Lorentz monomials"),
+        "{refused}"
+    );
+}
+
 /// A massless line (the closure tests).
 fn massless(mut edge: FactorizedEdge) -> FactorizedEdge {
     edge.mass_squared = Atom::Zero;
