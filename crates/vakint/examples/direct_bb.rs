@@ -287,6 +287,8 @@ fn main() -> eyre::Result<()> {
                 "pairs": result.observation.pairs,
                 "folded_channels": result.observation.folded,
                 "split_channels": result.observation.channels,
+                "direct_lowered": result.observation.direct_lowered,
+                "direct_declined": result.observation.direct_declined,
             }));
         }
         for (name, numerator) in &run.numerators {

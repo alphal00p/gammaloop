@@ -844,9 +844,12 @@ fn fold_request(
     if direct_requests_enabled() {
         let started = std::time::Instant::now();
         let mut direct_stats = super::p_lowering::DirectStats::default();
-        if let Ok(folded) =
-            super::p_lowering::lower_request(settings, handle, request, &mut direct_stats)?
-        {
+        let lowered =
+            super::p_lowering::lower_request(settings, handle, request, &mut direct_stats)?;
+        // Helper VH lane refpath: which requests the direct lowering takes
+        // (`None`) or declines (the reason), for an active gate observer.
+        super::p_gate::observe_direct(lowered.as_ref().err().map(|declined| declined.0));
+        if let Ok(folded) = lowered {
             let split_channels = folded.len();
             let mut pairs = 0;
             let targets = folded

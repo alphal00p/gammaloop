@@ -75,6 +75,11 @@ pub struct GateObservation {
     pub channels: usize,
     pub folded: usize,
     pub memo_hits: usize,
+    /// Plain requests the direct lowering (`p_lowering::lower_request`) took,
+    /// and those it declined by reason (the ordinary split and lowering ran);
+    /// requests served by the request memo are in neither.
+    pub direct_lowered: usize,
+    pub direct_declined: BTreeMap<&'static str, usize>,
 }
 
 /// One observed batch: its folded channels and the zero sectors of its library.
@@ -219,6 +224,19 @@ pub(crate) fn observe_stats(stats: &PReduceStats) {
             observation.channels += stats.channels;
             observation.folded += stats.folded;
             observation.memo_hits += stats.memo_hits;
+        }
+    });
+}
+
+/// Hook of `fold_request`: the direct lowering took a plain request (`None`)
+/// or declined it (`Some(reason)`).
+pub(crate) fn observe_direct(declined: Option<&'static str>) {
+    OBSERVER.with(|observer| {
+        if let Some(observation) = observer.borrow_mut().as_mut() {
+            match declined {
+                None => observation.direct_lowered += 1,
+                Some(reason) => *observation.direct_declined.entry(reason).or_default() += 1,
+            }
         }
     });
 }
