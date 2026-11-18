@@ -276,6 +276,15 @@ impl PreparedInputManifest {
             return Err("prepared input has invalid historical preparation timings".into());
         }
         let mut conditions = self.nonzero_conditions.clone();
+        // The projector's nonzero conditions in d: the three factors d, d - 1, d + 2.
+        // Their product d (d - 1)(d + 2) = -2d + d^2 + d^3 is implied by them: inputs
+        // prepared with the earlier TensorReducer list it too, the reducer with the
+        // row fixes does not. Both forms state the same conditions.
+        if self.projection == Projection::QuadraticTransverse {
+            conditions.retain(|condition| {
+                condition != "-2*rustred::{}::d+rustred::{}::d^2+rustred::{}::d^3"
+            });
+        }
         conditions.sort();
         let mut expected = match self.projection {
             Projection::QuadraticTransverse => vec![
@@ -283,7 +292,6 @@ impl PreparedInputManifest {
                 "rustred::{}::d".to_owned(),
                 "-1+rustred::{}::d".to_owned(),
                 "2+rustred::{}::d".to_owned(),
-                "-2*rustred::{}::d+rustred::{}::d^2+rustred::{}::d^3".to_owned(),
             ],
             Projection::ZeroMomentumMetric => vec![],
         };
@@ -646,7 +654,11 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         fixture().save_prepared(directory.path()).unwrap();
         edit_manifest(directory.path(), |value| {
-            value["nonzero_conditions"].as_array_mut().unwrap().pop();
+            // drop a factor: the implied product d (d - 1)(d + 2) alone may be absent
+            let conditions = value["nonzero_conditions"].as_array_mut().unwrap();
+            let before = conditions.len();
+            conditions.retain(|condition| condition.as_str() != Some("-1+rustred::{}::d"));
+            assert_eq!(conditions.len(), before - 1);
             let text = value["nonzero_conditions"]
                 .as_array()
                 .unwrap()
