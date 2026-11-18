@@ -58,6 +58,18 @@ pub(crate) enum RootRouting {
     CompactRoots,
     /// Smallest total routing, the marked edge only as a tie-break.
     CompactFree,
+    /// Numerator-aware (numerator-routing lane): den terms plus the routed
+    /// terms of every numerator momentum weighted by its maximal power.
+    NumSum,
+    /// Numerator-aware: compact-free's total first, the weighted numerator
+    /// terms as the tie-break.
+    NumLex,
+    /// Numerator-aware: the estimate Σ_{i+j<=deg} |P_i| |D_j| of the routed
+    /// numerator times the den-product Taylor, then compact-free's key.
+    NumEst,
+    /// As `NumEst`, with the den terms added to the estimate's weight:
+    /// estimate x (1 + den terms / dens).
+    NumEstDen,
 }
 
 impl RootRouting {
@@ -72,6 +84,10 @@ impl RootRouting {
             RootRouting::CompactLoops => "compact-loops",
             RootRouting::CompactRoots => "compact-roots",
             RootRouting::CompactFree => "compact-free",
+            RootRouting::NumSum => "num-sum",
+            RootRouting::NumLex => "num-lex",
+            RootRouting::NumEst => "num-est",
+            RootRouting::NumEstDen => "num-est-den",
         }
     }
 
@@ -97,8 +113,12 @@ fn parse_mode(value: Option<&str>) -> std::result::Result<RootRouting, String> {
         Some("compact-loops") => Ok(RootRouting::CompactLoops),
         Some("compact-roots") => Ok(RootRouting::CompactRoots),
         Some("compact-free") => Ok(RootRouting::CompactFree),
+        Some("num-sum") => Ok(RootRouting::NumSum),
+        Some("num-lex") => Ok(RootRouting::NumLex),
+        Some("num-est") => Ok(RootRouting::NumEst),
+        Some("num-est-den") => Ok(RootRouting::NumEstDen),
         Some(other) => Err(format!(
-            "GAMMALOOP_ROOT_ROUTING={other:?}: expected default, shortest, shortest-avoid-marked, shortest-prefer-marked, strict-avoid-marked, compact, compact-loops, compact-roots or compact-free"
+            "GAMMALOOP_ROOT_ROUTING={other:?}: expected default, shortest, shortest-avoid-marked, shortest-prefer-marked, strict-avoid-marked, compact, compact-loops, compact-roots, compact-free, num-sum, num-lex, num-est or num-est-den"
         )),
     }
 }
@@ -414,6 +434,7 @@ pub(crate) fn guided_shrunken_sub_lmb(
     externals: SuBitGraph,
     rule: RootRouting,
     marked: Option<EdgeIndex>,
+    numerator: Option<symbolica::atom::AtomView<'_>>,
 ) -> Result<Option<(LoopMomentumBasis, SteinerReport)>> {
     let g = &graph.underlying;
     let remainder = outer.subtract(&shrunken.filter);
@@ -439,19 +460,39 @@ pub(crate) fn guided_shrunken_sub_lmb(
         })
     };
     let started = std::time::Instant::now();
+    let profile = numerator
+        .filter(|_| rule.uses_numerator())
+        .map(super::routing_num::NumeratorProfile::new);
+    let profile_ms = started.elapsed().as_secs_f64() * 1e3;
+    let mut extra = String::new();
     let found = if rule.enumerates() {
-        enumerate_guide(&contracted, &remainder, &contracted_externals, marked, rule)
+        enumerate_guide(
+            &contracted,
+            &remainder,
+            &contracted_externals,
+            marked,
+            rule,
+            profile.as_ref(),
+            &mut extra,
+        )
     } else {
         guide(&contracted, &remainder, &contracted_externals, &weight, &preferred)
     };
     if rule.enumerates() && log_level() >= 1 {
         eprintln!(
-            "RR_ENUM graph={} mode={} trees={} exact={} ms={:.3}",
+            "RR_ENUM graph={} mode={} trees={} exact={} ms={:.3} profile_ms={profile_ms:.3}{}{extra}",
             graph.name,
             rule.as_str(),
             found.as_ref().map_or(0, |g| g.trees),
             found.as_ref().is_some_and(|g| g.exact),
             started.elapsed().as_secs_f64() * 1e3,
+            profile.as_ref().map_or(String::new(), |p| format!(
+                " num_edges={} num_degree={} circuit_nodes={} circuit_monomials={}",
+                p.max_power.len(),
+                p.max_degree,
+                p.nodes,
+                p.monomials
+            )),
         );
     }
     let Some(guide) = found else {
@@ -495,7 +536,11 @@ pub(crate) fn minimal_report(
             );
         }
     }
-    let rule = if rule == RootRouting::Default { RootRouting::Shortest } else { rule };
+    let rule = if rule == RootRouting::Default || rule.enumerates() {
+        RootRouting::Shortest
+    } else {
+        rule
+    };
     let weight = |edge: EdgeIndex| rule.weight(edge, marked);
     let guide = guide(&contracted, &remainder, &contracted_externals, &weight, &|_| false)?;
     Some(SteinerReport {
@@ -514,11 +559,19 @@ pub(crate) fn remainder_basis(
     shrunken: &InternalSubGraph,
     externals: SuBitGraph,
     marked: Option<EdgeIndex>,
+    numerator: Option<symbolica::atom::AtomView<'_>>,
 ) -> Result<LoopMomentumBasis> {
     let rule = mode()?;
     if rule != RootRouting::Default
-        && let Some((lmb, _)) =
-            guided_shrunken_sub_lmb(graph, outer, shrunken, externals.clone(), rule, marked)?
+        && let Some((lmb, _)) = guided_shrunken_sub_lmb(
+            graph,
+            outer,
+            shrunken,
+            externals.clone(),
+            rule,
+            marked,
+            numerator,
+        )?
     {
         return Ok(lmb);
     }
@@ -827,8 +880,25 @@ impl RootRouting {
                 | RootRouting::CompactLoops
                 | RootRouting::CompactRoots
                 | RootRouting::CompactFree
+                | RootRouting::NumSum
+                | RootRouting::NumLex
+                | RootRouting::NumEst
+                | RootRouting::NumEstDen
         )
     }
+
+    /// Whether the key reads the remainder numerator.
+    pub(crate) fn uses_numerator(self) -> bool {
+        matches!(
+            self,
+            RootRouting::NumSum | RootRouting::NumLex | RootRouting::NumEst | RootRouting::NumEstDen
+        )
+    }
+}
+
+/// Whether the current mode reads the remainder numerator.
+pub(crate) fn needs_numerator() -> bool {
+    mode().is_ok_and(|m| m.uses_numerator())
 }
 
 /// The maximum number of spanning trees [`enumerate_guide`] evaluates; the
@@ -841,6 +911,9 @@ struct TreeCost {
     root_dens: usize,
     root_terms: usize,
     loop_terms: usize,
+    /// Per arc: loop momenta and boundary momenta in its routed momentum.
+    arc_loops: Vec<u32>,
+    arc_roots: Vec<u32>,
 }
 
 fn tree_cost(
@@ -872,11 +945,14 @@ fn tree_cost(
         }
     }
     let mut on_path = vec![false; arcs.len()];
+    let mut arc_roots = vec![0u32; arcs.len()];
+    let mut arc_loops = vec![0u32; arcs.len()];
     let mut root_terms = 0;
     for &s in sources {
         let mut x = s;
         while let Some((p, a)) = parent[x] {
             on_path[a] = true;
+            arc_roots[a] += 1;
             root_terms += 1;
             x = p;
         }
@@ -892,11 +968,16 @@ fn tree_cost(
         }
         let (mut x, mut y) = (arc.u, arc.v);
         let mut length = 1;
+        arc_loops[i] += 1;
         while x != y {
             if depth[x] >= depth[y] {
-                x = parent[x].map_or(x, |(p, _)| p);
-            } else {
-                y = parent[y].map_or(y, |(p, _)| p);
+                if let Some((p, a)) = parent[x] {
+                    arc_loops[a] += 1;
+                    x = p;
+                }
+            } else if let Some((p, a)) = parent[y] {
+                arc_loops[a] += 1;
+                y = p;
             }
             length += 1;
         }
@@ -907,6 +988,8 @@ fn tree_cost(
         root_dens: on_path.iter().filter(|p| **p).count(),
         root_terms,
         loop_terms,
+        arc_loops,
+        arc_roots,
     }
 }
 
@@ -917,6 +1000,8 @@ fn enumerate_guide<G: GraphAccess>(
     externals: &SuBitGraph,
     marked: Option<EdgeIndex>,
     rule: RootRouting,
+    profile: Option<&super::routing_num::NumeratorProfile>,
+    extra: &mut String,
 ) -> Option<Guide> {
     let mut nodes = BTreeMap::new();
     let node_of = |node: usize, nodes: &mut BTreeMap<usize, usize>| {
@@ -924,11 +1009,14 @@ fn enumerate_guide<G: GraphAccess>(
         *nodes.entry(node).or_insert(next)
     };
     let mut arcs = Vec::new();
+    let mut self_loops: Vec<EdgeIndex> = Vec::new();
     for (pair, edge) in contracted.paired_edges(remainder) {
         let (a, b) = contracted.ends(&pair)?;
         let (u, v) = (node_of(a, &mut nodes), node_of(b, &mut nodes));
         if u != v {
             arcs.push(Arc { u, v, edge, pair, weight: 1000 });
+        } else {
+            self_loops.push(edge);
         }
     }
     let hedges: Vec<_> = externals.included_iter().collect();
@@ -947,17 +1035,86 @@ fn enumerate_guide<G: GraphAccess>(
         return None;
     }
     arcs.sort_by_key(|arc| usize::from(arc.edge));
-    let key = |c: &TreeCost| -> (usize, usize, usize, usize) {
-        let m = usize::from(c.marked_root);
-        let total = c.loop_terms + c.root_terms;
+    // Numerator weights (num-* modes): arc position per edge, the estimate
+    // degree (superficial degree of the remainder, clamped to 0..=4).
+    let mut arc_of: BTreeMap<u32, usize> = BTreeMap::new();
+    for (i, arc) in arcs.iter().enumerate() {
+        arc_of.insert(usize::from(arc.edge) as u32, i);
+    }
+    let self_loop_set: Vec<u32> = self_loops.iter().map(|e| usize::from(*e) as u32).collect();
+    let track = profile.is_some() && log_level() >= 1;
+    let loops = (arcs.len() + self_loops.len() + 1).saturating_sub(n);
+    let dens = arcs.len() + self_loops.len();
+    let degree = profile.map_or(0, |p| {
+        (4 * loops as i64 - 2 * dens as i64 + i64::from(p.max_degree)).clamp(0, 4) as usize
+    });
+    let numerics = |c: &TreeCost| -> (u64, f64) {
+        let Some(p) = profile else {
+            return (0, 0.0);
+        };
+        let lr = |e: u32| -> (f64, f64) {
+            if let Some(&i) = arc_of.get(&e) {
+                (f64::from(c.arc_loops[i]), f64::from(c.arc_roots[i]))
+            } else if self_loop_set.contains(&e) {
+                (1.0, 0.0)
+            } else {
+                (0.0, 1.0)
+            }
+        };
+        let numw: u64 = p
+            .max_power
+            .iter()
+            .map(|(e, k)| {
+                let (l, r) = lr(*e);
+                u64::from(*k) * (l + r) as u64
+            })
+            .sum();
+        if !track && !matches!(rule, RootRouting::NumEst | RootRouting::NumEstDen) {
+            return (numw, 0.0);
+        }
+        let porders = p.orders(&lr, degree);
+        let dens_lr: Vec<(f64, f64)> = (0..arcs.len())
+            .map(|i| (f64::from(c.arc_loops[i]), f64::from(c.arc_roots[i])))
+            .collect();
+        let dorders = super::routing_num::den_orders(&dens_lr, degree);
+        let mut est = 0.0;
+        for (i, pi) in porders.iter().enumerate() {
+            for (j, dj) in dorders.iter().enumerate() {
+                if i + j <= degree {
+                    est += pi * dj;
+                }
+            }
+        }
+        if rule == RootRouting::NumEstDen {
+            let total = (c.loop_terms + c.root_terms + self_loops.len()) as f64;
+            est *= total / dens.max(1) as f64;
+        }
+        (numw, est)
+    };
+    let key = |c: &TreeCost, numw: u64, est: f64| -> (u64, u64, u64, u64, u64) {
+        let m = u64::from(c.marked_root);
+        let total = (c.loop_terms + c.root_terms) as u64;
+        let (rd, lt, rt) = (c.root_dens as u64, c.loop_terms as u64, c.root_terms as u64);
+        // a non-negative f64 orders as its bits
+        let e = est.max(0.0).to_bits();
         match rule {
-            RootRouting::CompactLoops => (m, c.loop_terms, c.root_terms, c.root_dens),
-            RootRouting::CompactRoots => (m, c.root_dens, c.loop_terms, c.root_terms),
-            RootRouting::CompactFree => (total, m, c.root_dens, c.loop_terms),
-            _ => (m, total, c.root_dens, c.loop_terms),
+            RootRouting::CompactLoops => (m, lt, rt, rd, 0),
+            RootRouting::CompactRoots => (m, rd, lt, rt, 0),
+            RootRouting::CompactFree => (total, m, rd, lt, 0),
+            RootRouting::NumSum => (total + numw, m, rd, lt, 0),
+            RootRouting::NumLex => (total, numw, m, rd, lt),
+            RootRouting::NumEst | RootRouting::NumEstDen => (e, total, m, rd, lt),
+            _ => (m, total, rd, lt, 0),
         }
     };
-    let mut best: Option<((usize, usize, usize, usize), Vec<usize>, usize)> = None;
+    let cf_key = |c: &TreeCost| -> (u64, u64, u64, u64, u64) {
+        let total = (c.loop_terms + c.root_terms) as u64;
+        (total, u64::from(c.marked_root), c.root_dens as u64, c.loop_terms as u64, 0)
+    };
+    // (key, tree, total, numw, est) of the best tree and of compact-free's.
+    type Best = ((u64, u64, u64, u64, u64), Vec<usize>, u64, u64, f64);
+    let mut cf_best: Option<Best> = None;
+    let mut best: Option<Best> = None;
     let mut count = 0usize;
     // Backtracking over arcs: include (if acyclic) or exclude.
     fn walk(
@@ -990,13 +1147,28 @@ fn enumerate_guide<G: GraphAccess>(
     }
     let mut visit = |tree: &[usize]| {
         let cost = tree_cost(&arcs, n, tree, root, &sources, marked);
-        let k = key(&cost);
-        if best.as_ref().is_none_or(|(b, _, _)| k < *b) {
-            best = Some((k, tree.to_vec(), cost.root_dens));
+        let (numw, est) = numerics(&cost);
+        let k = key(&cost, numw, est);
+        let total = (cost.loop_terms + cost.root_terms) as u64;
+        if best.as_ref().is_none_or(|(b, ..)| k < *b) {
+            best = Some((k, tree.to_vec(), total, numw, est));
+        }
+        if track {
+            let ck = cf_key(&cost);
+            if cf_best.as_ref().is_none_or(|(b, ..)| ck < *b) {
+                cf_best = Some((ck, tree.to_vec(), total, numw, est));
+            }
         }
     };
     walk(0, &mut Vec::new(), &UnionFind::new(n), &arcs, n, &mut count, &mut visit);
-    let (_, tree, root_dens) = best?;
+    let (_, tree, best_total, best_numw, best_est) = best?;
+    if let Some((_, cf_tree, cf_total, cf_numw, cf_est)) = &cf_best {
+        extra.push_str(&format!(
+            " loops={loops} dens={dens} deg_est={degree} same_tree={} cf_total={cf_total} cf_numw={cf_numw} cf_est={cf_est:.0} best_total={best_total} best_numw={best_numw} best_est={best_est:.0}",
+            *cf_tree == tree
+        ));
+    }
+    let root_dens = 0usize;
     let mut in_tree = vec![false; arcs.len()];
     for a in &tree {
         in_tree[*a] = true;

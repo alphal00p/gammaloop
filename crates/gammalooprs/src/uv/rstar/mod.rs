@@ -36,6 +36,7 @@ mod propagator;
 #[cfg(test)]
 mod recursive_tests;
 mod routing;
+mod routing_num;
 #[cfg(test)]
 mod scalar;
 mod taylor;

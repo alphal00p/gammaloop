@@ -1377,6 +1377,7 @@ impl RStarIntegrand {
                 &contracted,
                 region.boundary.clone(),
                 Some(marked),
+                Some(expression.as_view()),
             )
             .wrap_err("could not route an R* prepared component")?
         };
